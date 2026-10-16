@@ -654,7 +654,7 @@ mod tests {
         let picker = files(&[
             "misc/置闰法.txt",
             "template.typ",
-            "天門真境.txt",
+            "初雪紀行.txt",
             "設定/人物.md",
             "設定/深/再深.md",
         ]);
@@ -664,7 +664,7 @@ mod tests {
             shown,
             [
                 "template.typ",
-                "天門真境.txt",
+                "初雪紀行.txt",
                 "misc/置闰法.txt",
                 "設定/人物.md",
                 "設定/深/再深.md",

@@ -1103,19 +1103,92 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
     ed.execute(":s/很早/極早/").unwrap();
     ed.execute(":diff").unwrap();
     let listing = ed.current_buffer().text();
+    // **兩稿並排，一行一列**（2026-10-16）：號碼照它自己那一稿算，`-`/`+` 說
+    // 哪一稿，兩個記號都畫不出來。檔名不在行上——整份報告說的就是這一個檔。
+    // 早 is shared, because with no dictionary loaded the words are characters.
     assert_eq!(
         listing.trim_end(),
-        "ch01.txt:2: 那年冬天，雪下得[-很-]{+極+}早。",
-        "the line as it stands now, with the one word marked — and 早 is \
-         shared, because with no dictionary loaded the words are characters"
+        "2-  那年冬天，雪下得[-很-]早。\n2+  那年冬天，雪下得{+極+}早。"
     );
-    // The listing is jumpable, like `:grep`'s.
-    ed.set_cursor(0);
-    press(&mut ed, "gf");
-    assert_eq!(ed.current_buffer().display_name(), "ch01.txt");
-    assert_eq!(ed.cursor_line(), 1);
+    // **兩列都跳得走，都跳到這一處改動現在在哪。**
+    for row in [0, 1] {
+        ed.show_buffer_at(1);
+        ed.goto_line(row + 1);
+        press(&mut ed, "gf");
+        assert_eq!(ed.current_buffer().display_name(), "ch01.txt", "第 {row} 列");
+        assert_eq!(ed.cursor_line(), 1, "第 {row} 列");
+    }
 
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **一份報告是讀的，不是寫的**（2026-10-16 定）。
+///
+/// 原話：「should not display any info panel (wiki), and should not expand to
+/// show raw markup when the cursor it on the markup. It just be a rendered,
+/// readonly, fixed, clean buffer for checking diffs.」
+#[test]
+fn a_report_is_rendered_to_the_end_and_says_nothing_of_its_own() {
+    let dir = tmp().join(format!("yumete-clean-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("ch01.txt");
+    std::fs::write(&file, "那年冬天，雪下得很早。\n第二行\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute(":s/很早/極早/").unwrap();
+    ed.execute(":diff").unwrap();
+    assert!(ed.current_buffer().is_computed(), "算出來的");
+    assert!(ed.current_buffer().is_readonly(), "改不了");
+
+    // **光標走到哪兒，藏起來的都是同一批。** 從前站到記號上它就露出來了。
+    let hidden_at = |ed: &mut Editor, at: usize| {
+        ed.set_cursor(at);
+        (0..ed.current_buffer().rope().len_lines())
+            .map(|line| ed.hidden_on_line(line))
+            .collect::<Vec<_>>()
+    };
+    let first = hidden_at(&mut ed, 0);
+    for at in [1, 8, 14, 20] {
+        assert_eq!(hidden_at(&mut ed, at), first, "光標停在 {at} 上就露出來了");
+    }
+
+    // 即時那一格不跟着走；問出來的那一種照舊答。
+    ed.set_cursor(14);
+    assert_eq!(ed.info_now(), None, "報告裏不自己冒出來");
+    assert!(ed.look_up_afloat("極"), "按還是按得出來");
+    assert_eq!(ed.info_now(), Some(crate::sidebar::Info::Dictionary));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **整篇重寫也比得出來**（2026-10-16 修）。
+///
+/// 原話：「This means that I cannot see the git diff when the diff is many?
+/// That is very inconvienent.」從前詞流一口氣比到底，`D` 過了 `MAX_D` 就整個
+/// 投降；現在先配行，`D` 以行計。
+#[test]
+fn a_wholesale_rewrite_still_comes_out_as_a_diff() {
+    let seg: &dyn Fn(&str) -> Vec<(usize, usize)> =
+        &|line: &str| (0..line.chars().count()).map(|i| (i, i + 1)).collect();
+    let old: Vec<String> =
+        (0..120).map(|i| format!("那年冬天雪下得很早第{i}行。")).collect();
+    let new: Vec<String> =
+        (0..120).map(|i| format!("春風又綠江南岸明月何時照第{i}行。")).collect();
+    let (a, b): (Vec<&str>, Vec<&str>) = (
+        old.iter().map(String::as_str).collect(),
+        new.iter().map(String::as_str).collect(),
+    );
+    // 詞流那一條投降了——這正是報上來的那一幀。
+    let (one, two) = (old.join("\n"), new.join("\n"));
+    let (wa, wb) = (crate::diff::tokens(&one, seg), crate::diff::tokens(&two, seg));
+    assert!(crate::diff::script(&wa, &wb).is_none(), "逐詞比不出來");
+    // 配行那一條比得出來，一行一對，而號碼各照各的那一稿。
+    let rows = crate::diff::drafts(&a, 1, &b, 1, seg).expect("配行比得出來");
+    assert_eq!(crate::diff::changed_lines(&rows), 120);
+    assert_eq!(rows.len(), 240, "一行兩列");
+    assert!(rows[0].gone && !rows[1].gone, "舊的在前，新的在後");
+    assert_eq!((rows[0].line, rows[1].line), (1, 1));
 }
 
 #[test]

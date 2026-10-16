@@ -900,43 +900,78 @@ impl Editor {
         self.show_word_diff(&old, commit);
     }
 
-    /// 兩份正文，逐詞比出來，畫成那一份報告。`against` 是「跟誰比」的名字。
+    /// 兩份正文，比出來，畫成那一份報告。`against` 是「跟誰比」的名字。
+    ///
+    /// **一條改動三行**（2026-10-16 改，原話：「It first list the paragraph
+    /// before and after, than mark the words changed in brighter colors」）：
+    /// `檔:行:` 一行，舊稿一行，新稿一行。從前只有一行，而那一行是兩稿的混合
+    /// 句——改得多了讀到的是一句從來沒有人寫過的話。
+    ///
+    /// 行頭那個 `-`/`+` 是記號，畫不出來（`diff::spans`）；留在文字裏是為了這
+    /// 一份報告拿出去還是一份讀得懂的 diff。
     fn show_word_diff(&mut self, old: &str, against: &str) {
         let new = self.current_buffer().rope().to_string();
         // The editor's segmenter, handed one line at a time — which is how its
         // own cache is keyed, so most of these lines are already answered.
         let segment = |line: &str| self.segmenter.segment(line);
-        let (a, b) = (
-            crate::diff::tokens(old, &segment),
-            crate::diff::tokens(&new, &segment),
-        );
-        let Some(ops) = crate::diff::script(&a, &b) else {
+        let (a, b): (Vec<&str>, Vec<&str>) = (old.split('\n').collect(), new.split('\n').collect());
+        let Some(rows) = crate::diff::drafts(&a, 1, &b, 1, &segment) else {
             self.status = say!("diff.too-far", against);
             return;
         };
-        let changes = crate::diff::line_changes(&ops);
-        if changes.is_empty() {
+        if rows.is_empty() {
             self.status = say!("diff.same", against);
             return;
         }
+        // **檔名只在緩衝區的名字上寫一次**（2026-10-16 定）。從前每一行都帶一
+        // 份，而整份報告說的就是這一個檔——原話：「why `文.md:` is needed if the
+        // `git-diff` shows the diff for only one file」。長檔名一行吃掉二十幾
+        // 格，而這幾行是長段落，讀的人正要把兩句話對着看。
         let name = self
             .current_buffer()
             .path()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| self.current_buffer().display_name().to_string());
-        let n = changes.len();
+        let n = crate::diff::changed_lines(&rows);
+        // **號碼靠右對齊**，所以每一行的字都從同一欄起；寬度照最大的那個號。
+        let digits = rows.iter().map(|r| r.line).max().unwrap_or(1).to_string().len();
         let mut listing = String::new();
-        for change in changes.iter().take(LISTING_LIMIT) {
-            listing.push_str(&say!("diff.line", name, change.line + 1, change.marked));
-            listing.push('\n');
+        let mut counted = 0usize;
+        // 每一行跳到現在這份檔的第幾行：新稿那一行跳它自己，舊稿那一行跳它配
+        // 對的那一行——它在現在這份檔裏已經沒有了。
+        let mut jumps: Vec<usize> = Vec::new();
+        for (i, row) in rows.iter().enumerate() {
+            // 數的是行，不是列：一對兩列算一行，而這一刀要落在一對之間。
+            let ends = !row.gone || rows.get(i + 1).is_none_or(|next| next.gone);
+            if counted >= LISTING_LIMIT {
+                break;
+            }
+            let mark = match row.gone {
+                true => '-',
+                false => '+',
+            };
+            listing.push_str(&format!(
+                "{:>digits$}{mark}  {}\n",
+                row.line,
+                crate::diff::marked(row)
+            ));
+            jumps.push(match row.gone {
+                false => row.line,
+                // 配對的那一行就在下一列；沒有配對的話，跳到頂替它的那一行。
+                true => rows.get(i + 1).filter(|next| !next.gone).map_or(row.line, |n| n.line),
+            });
+            counted += usize::from(ends);
         }
         // **Its own syntax** (#499): the markers are drawn, not read.
+        let here = self.current_buffer().path().map(Path::to_path_buf);
         self.show_listing_as(
             listing,
             say!("diff.results", name, against),
             Some(crate::syntax::Syntax::Diff),
         );
+        // 跳轉的去處由這裏答，不由行上的字答——行上沒有檔名了。
+        self.listing_jumps = here.map(|path| (path, jumps));
         // The count and the listing have to agree: saying "1,200 lines differ"
         // over a buffer holding 500 of them sends the reader looking for rows
         // that were never written.

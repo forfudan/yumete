@@ -2720,11 +2720,11 @@ mod timing {
         let seg = ime.segmenter();
         println!("segmenter():        {:.1?}  (available: {})", t.elapsed(), seg.is_available());
         let t = Instant::now();
-        let words = yumete_cjk::Segmenter::segment(&seg, "那年冬天下雪以後，岳復山聽到了如竹笛般清脆的聲音。");
+        let words = yumete_cjk::Segmenter::segment(&seg, "那年冬天下雪以後，她聽到了如竹笛般清脆的聲音。");
         println!("first segment:      {:.1?}  ({} words)", t.elapsed(), words.len());
         let t = Instant::now();
         for _ in 0..100 {
-            let _ = yumete_cjk::Segmenter::segment(&seg, "那年冬天下雪以後，岳復山聽到了如竹笛般清脆的聲音。");
+            let _ = yumete_cjk::Segmenter::segment(&seg, "那年冬天下雪以後，她聽到了如竹笛般清脆的聲音。");
         }
         println!("100 more segments:  {:.1?}", t.elapsed());
         let t = Instant::now();

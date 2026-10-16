@@ -1448,6 +1448,20 @@ impl Editor {
     /// and every construct between the two ends has to be shown or the
     /// highlight would cover fewer characters than `d` takes.
     pub(super) fn selected_columns(&self, line: usize) -> Option<(usize, usize)> {
+        // **一份算出來的報告裏沒有「光標站上去就露出來」這回事**（2026-10-16
+        // 定，原話：「should not expand to show raw markup when the cursor it
+        // on the markup. It just be a rendered, readonly, fixed, clean buffer
+        // ……Anything beyond this would become noise.」）。
+        //
+        // 露出來是為了**改得了**：`**` 是稿子自己的字，光標要站進去纔編輯得到
+        // 它。報告改不了（`is_readonly`），而它那幾個記號是這一支自己一分鐘前
+        // 寫下去說「這一段變了」的——露出來只是把腳手架搬到讀者眼前。
+        //
+        // 這一格是**整個「藏什麼／露什麼」那一族共用的那一問**，所以堵在這裏，
+        // 一處管住折行、註號、衝突記號和 `:diff` 的標記。
+        if self.current_buffer().is_computed() {
+            return None;
+        }
         let rope = self.current_buffer().rope();
         if line >= rope.len_lines() {
             return None;

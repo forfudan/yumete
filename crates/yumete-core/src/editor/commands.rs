@@ -24,6 +24,7 @@ impl Editor {
         // 地方，而改一下就掛上「改過没存」那個 `+`，`:q` 於是攔着不讓走——為一份
         // 編輯器自己算出來的東西。`:readonly off` 照舊解得開。
         buffer.set_readonly(true);
+        buffer.set_computed(true);
         self.add_buffer(buffer);
         self.set_cursor(0);
     }

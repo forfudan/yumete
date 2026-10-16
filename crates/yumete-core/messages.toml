@@ -3816,13 +3816,6 @@ zhs = "git 那边没有 {0} 的这一份：{1}"
 en = "git has no copy at {0}: {1}"
 
 [[message]]
-# :diff 結果裏的一行：行號加上標了改動的那一行
-key = "diff.line"
-zht = "{0}:{1}: {2}"
-zhs = "{0}:{1}: {2}"
-en = "{0}:{1}: {2}"
-
-[[message]]
 # :diff 而這個緩衝區没有檔案，也没説要比誰
 key = "diff.no-file"
 zht = "這一份還没有文件，要比就説跟誰比：`:diff <文件名>`"

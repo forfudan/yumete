@@ -55,6 +55,194 @@ const NEW: (&str, &str) = ("{+", "+}");
 /// invisible change is the one a writer cannot check.
 const BREAK: &str = "⏎";
 
+/// **One row of one draft** — half of a 「before and after」 pair (2026-10-16).
+///
+/// 原話：「It first list the paragraph before and after, than mark the words
+/// changed in brighter colors.」
+///
+/// **一份，三處畫**：`空格 x` 的浮窗、`空格 X` 的邊欄、`:git-diff` 的報告。三
+/// 處從前各算各的，於是行號、記號、底色的響度和折不折行四樣都不一樣（作者
+/// 2026-10-16 逐條報來）。所以算在這裏，畫在那三處，差別只剩「怎麽畫」。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DraftRow {
+    /// 1-based line number **in its own draft** — the old file's for a `gone`
+    /// row, the new file's for the other.
+    ///
+    /// 兩個號都留着，因為它們本來就不是一個數：一段往下挪過四行，`537` 與
+    /// `533` 之差正是那四行。跳轉不照這個號走，照「這一處改動現在在哪」走
+    /// （`gf`，2026-10-16 定，同 magit／fugitive 那一族）。
+    pub line: usize,
+    /// The old draft's row (`-`) rather than the new one's (`+`).
+    pub gone: bool,
+    /// 這一行的字，不帶行號也不帶記號——那兩樣各處自己加。
+    pub text: String,
+    /// 這一行裏改掉的那幾段，相對 [`Self::text`] 的**字節**區間。
+    ///
+    /// 連着的同命 token 併成一段：`[-很早-][-很早-]` 讀起來是兩處改動。
+    pub marks: Vec<std::ops::Range<usize>>,
+}
+
+/// **Every changed row of both drafts, paired** — what all three views draw.
+///
+/// Two passes. The first is Myers over **lines**, which is cheap: `D` counted
+/// in lines is tens even for an afternoon that rewrote every paragraph, where
+/// `D` counted in words ran past [`MAX_D`] and the whole command answered
+/// 「差得太遠」 (reported 2026-10-16: 「I cannot see the git diff when the diff
+/// is many? That is very inconvienent.」). The second is Myers over the
+/// **words** of one paired line, where `D` cannot exceed the line.
+///
+/// Rows come back in reading order, a pair at a time: the old row then the new
+/// one. A line that was only added or only taken away is one row, not two.
+///
+/// Warning: **一段切成兩段，從前讀成一筆插入，現在讀成一行改寫加一行新增。** 詞流那
+/// 一套把換行也當一個詞，所以看得出「這裏多了一個換行」；配行先走就看不出了。
+/// 這是這一刀的代價，作者 2026-10-16 選的。
+///
+/// `old_at`/`new_at` are the 1-based numbers of each side's first line — `1`
+/// for a whole file, the hunk's own start for `空格 x`.
+///
+/// `None` only when the two differ by more than [`MAX_D`] **lines**, which is
+/// a different file rather than another draft of this one.
+pub fn drafts(
+    old: &[&str],
+    old_at: usize,
+    new: &[&str],
+    new_at: usize,
+    segment: &dyn Fn(&str) -> Vec<(usize, usize)>,
+) -> Option<Vec<DraftRow>> {
+    let ops = script(old, new)?;
+    let mut out: Vec<DraftRow> = Vec::new();
+    let (mut was, mut now) = (old_at, new_at);
+    let mut gone: Vec<&str> = Vec::new();
+    let mut added: Vec<&str> = Vec::new();
+
+    for op in &ops {
+        match *op {
+            Op::Same(_) => {
+                settle(&mut out, &mut was, &mut now, &mut gone, &mut added, segment);
+                was += 1;
+                now += 1;
+            }
+            Op::Gone(t) => gone.push(t),
+            Op::New(t) => added.push(t),
+        }
+    }
+    settle(&mut out, &mut was, &mut now, &mut gone, &mut added, segment);
+    Some(out)
+}
+
+/// One block of 「these old lines became those new ones」, paired off.
+///
+/// Pairing is positional, which is what a reader expects of a block of
+/// rewritten paragraphs: the first old line is the first new one's earlier
+/// draft. Whatever is left over at either end was only added or only taken
+/// away, and gets one row rather than two.
+fn settle(
+    out: &mut Vec<DraftRow>,
+    was: &mut usize,
+    now: &mut usize,
+    gone: &mut Vec<&str>,
+    added: &mut Vec<&str>,
+    segment: &dyn Fn(&str) -> Vec<(usize, usize)>,
+) {
+    for i in 0..gone.len().max(added.len()) {
+        let (old, new) = (gone.get(i).copied(), added.get(i).copied());
+        // Both halves in hand: mark each side with its own losses and gains.
+        let (lost, got) = match (old, new) {
+            (Some(o), Some(w)) => two_drafts(o, w, segment),
+            // One side only — the whole row is the change, and saying so a
+            // second time word by word is saying it twice.
+            _ => (Vec::new(), Vec::new()),
+        };
+        if let Some(text) = old {
+            out.push(DraftRow { line: *was + i, gone: true, text: text.to_string(), marks: lost });
+        }
+        if let Some(text) = new {
+            out.push(DraftRow { line: *now + i, gone: false, text: text.to_string(), marks: got });
+        }
+    }
+    *was += gone.len();
+    *now += added.len();
+    gone.clear();
+    added.clear();
+}
+
+/// Two drafts of one line: which byte ranges each side lost and gained.
+fn two_drafts(
+    old: &str,
+    new: &str,
+    segment: &dyn Fn(&str) -> Vec<(usize, usize)>,
+) -> (Vec<std::ops::Range<usize>>, Vec<std::ops::Range<usize>>) {
+    let (a, b) = (tokens(old, segment), tokens(new, segment));
+    // One line more than `MAX_D` words from the other is not a redraft of it:
+    // the whole row is the change, which the row's own ground already says.
+    let Some(ops) = script(&a, &b) else {
+        return (Vec::new(), Vec::new());
+    };
+    let (mut lost, mut got) = (Vec::new(), Vec::new());
+    let (mut at_old, mut at_new) = (0usize, 0usize);
+    // 連着的同命 token 併成一段。
+    let mark = |runs: &mut Vec<std::ops::Range<usize>>, span: std::ops::Range<usize>| {
+        match runs.last_mut() {
+            Some(last) if last.end == span.start => last.end = span.end,
+            _ => runs.push(span),
+        }
+    };
+    for op in &ops {
+        match *op {
+            Op::Same(t) => {
+                at_old += t.len();
+                at_new += t.len();
+            }
+            Op::Gone(t) => {
+                mark(&mut lost, at_old..at_old + t.len());
+                at_old += t.len();
+            }
+            Op::New(t) => {
+                mark(&mut got, at_new..at_new + t.len());
+                at_new += t.len();
+            }
+        }
+    }
+    (lost, got)
+}
+
+/// **這一份報告裏有幾行和那一稿不一樣**——一對算一行。
+pub fn changed_lines(rows: &[DraftRow]) -> usize {
+    rows.iter()
+        .enumerate()
+        .filter(|(i, row)| !row.gone || rows.get(i + 1).is_none_or(|next| next.gone))
+        .count()
+}
+
+/// One row written out with its changed runs wrapped, the way the listing
+/// holds them: `[-走了-]` on an old row, `{+來了+}` on a new one.
+///
+/// The listing is **text** and stays text, so it can be yanked, searched and
+/// read by anything that reads a file; the markers are what [`spans`] reads
+/// back to paint it (#499).
+pub fn marked(row: &DraftRow) -> String {
+    let marks = match row.gone {
+        true => GONE,
+        false => NEW,
+    };
+    let mut out = String::new();
+    let mut at = 0usize;
+    for span in &row.marks {
+        let (start, end) = (span.start.min(row.text.len()), span.end.min(row.text.len()));
+        if start < at || start >= end {
+            continue;
+        }
+        out.push_str(&row.text[at..start]);
+        out.push_str(marks.0);
+        out.push_str(&row.text[start..end]);
+        out.push_str(marks.1);
+        at = end;
+    }
+    out.push_str(&row.text[at..]);
+    out
+}
+
 /// The coloured runs of one line of a `:diff` listing (#499).
 ///
 /// The listing is **text**, and stays text: `[-走了-]{+來了+}` is what the
@@ -74,6 +262,58 @@ pub fn spans(line: &str) -> Vec<crate::markdown::Span> {
     let mut out = Vec::new();
     let mut at = 0usize;
     let mut construct = 0usize;
+    // **行號後面那一個 `-`/`+` 說這一整行是哪一稿**（2026-10-16）。`537-` 是
+    // 舊稿、`533+` 是新稿，同 `空格 x` 那一扇；號碼靠右對齊，所以記號在前導的
+    // 空格與數字之後。記號本身**不**畫出來——同 `[-`，它是報告的腳手架。
+    let sigil = chars
+        .iter()
+        .position(|c| !c.is_ascii_digit() && *c != ' ')
+        .filter(|&i| i > 0 || chars.first().is_some_and(|c| *c == '-' || *c == '+'));
+    let row = sigil.and_then(|i| match chars.get(i) {
+        Some('-') => Some((i, Kind::GoneRow)),
+        Some('+') => Some((i, Kind::AddedRow)),
+        _ => None,
+    });
+    if let Some((mark, kind)) = row {
+        // Warning: **`-`/`+` 本身是畫出來的，不是記號。** 它和號碼一起，就是
+        // `空格 x` 那一扇裏的同一截（2026-10-16 作者更正：「in yumete, `space
+        // x` put + and - before the paragraph」）。畫不出來的只有 `[-`／`{+`
+        // 那四個——它們是這一支一分鐘前寫下去的腳手架，而顏色說得更好。
+        //
+        // 底色從行頭鋪到行尾，號碼和記號也在上面：一整行是一稿。
+        at = mark + 1;
+        // **底色鋪在沒有標記的那幾截上**，不鋪在標記上：改過的詞自己那一層更
+        // 響（`short_wash` 對 `washed`），兩層疊在一格上誰贏要看畫的次序，而
+        // 不疊就不必問。
+        let mut plain = 0;
+        let mut walk = at;
+        let marked = |i: usize| -> Option<usize> {
+            let pair = [(('[', '-'), ('-', ']')), (('{', '+'), ('+', '}'))]
+                .into_iter()
+                .find(|&(open, _)| chars.get(i) == Some(&open.0) && chars.get(i + 1) == Some(&open.1))?;
+            let text = i + 2;
+            let end = (text..chars.len().saturating_sub(1))
+                .find(|&j| chars[j] == pair.1 .0 && chars[j + 1] == pair.1 .1)?;
+            (end > text).then_some(end + 2)
+        };
+        while walk < chars.len() {
+            match marked(walk) {
+                Some(after) => {
+                    if walk > plain {
+                        out.push(Span { start: plain, end: walk, kind, construct, depth: 0 });
+                        construct += 1;
+                    }
+                    walk = after;
+                    plain = after;
+                }
+                None => walk += 1,
+            }
+        }
+        if plain < chars.len() {
+            out.push(Span { start: plain, end: chars.len(), kind, construct, depth: 0 });
+            construct += 1;
+        }
+    }
     // A pair is two characters each side, and the inside may not be empty:
     // `line_changes` never writes an empty run, and treating `[--]` as one
     // would put a zero-width span on the page.

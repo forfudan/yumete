@@ -7755,11 +7755,25 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         // already knows. The ink says which and the ground says *where* — a
         // changed 的 is one character wide, and one character of coloured ink
         // in a paragraph is not findable.
+        // Warning: **走 `vcs`，不走 `short_wash`**（2026-10-16 對齊三處時改）。這幾個
+        // 字坐在**整行那一層淡底上**，不是坐在白紙上——而 `panel.rs` 那一頭量
+        // 過：「中間那一檔（`short_wash`，1.5）量過，離淡底太近，一眼分不出
+        // 來」。照片上也是這樣，改過的那幾個字和整行一個顏色。浮窗一直用的就
+        // 是這一檔，報告從前沒跟上。
         Kind::Gone => Style::default()
-            .bg(ink.short_wash(crate::theme::Accent::Mark))
+            .bg(ink.vcs(crate::theme::Accent::Mark))
             .fg(ink.text()),
         Kind::Added => Style::default()
-            .bg(ink.short_wash(crate::theme::Accent::Green))
+            .bg(ink.vcs(crate::theme::Accent::Green))
+            .fg(ink.text()),
+        // **一整行的底，比詞那一層淡**（2026-10-16）。兩稿並排讀，行是「哪一
+        // 稿」，詞是「改了哪幾個」——同一個顏色兩個響度，而 `washed` 正是「攤
+        // 在一大片上」那一檔（它的註釋寫着一片 1.5:1 的色「髒的要死」）。
+        Kind::GoneRow => Style::default()
+            .bg(ink.washed(crate::theme::Accent::Mark))
+            .fg(ink.text()),
+        Kind::AddedRow => Style::default()
+            .bg(ink.washed(crate::theme::Accent::Green))
             .fg(ink.text()),
         // Not part of the book: set back, but never hidden and never below
         // reading — a note you cannot see is a note you will not act on, and
@@ -13635,23 +13649,35 @@ fn squeezed(text: &str) -> String {
 
         let config = Config::default();
         let buf = render(&editor, &config, 60, 8);
-        let line = (0..8)
-            .map(|y| row_text(&buf, y))
-            .find(|row| row.contains('很'))
-            .expect("改動那一行在頁面上");
+        let rows: Vec<String> = (0..8).map(|y| row_text(&buf, y)).collect();
+        // **兩稿各一行**（2026-10-16）：舊的在上，新的在下。
+        let was = rows.iter().position(|r| r.contains('很')).expect("舊稿那一行");
+        let now = rows.iter().position(|r| r.contains('極')).expect("新稿那一行");
+        assert_eq!(now, was + 1, "{rows:#?}");
+        // 記號一個都不在頁面上，行頭那個 `-`/`+` 也不在。
         for marker in ["[-", "-]", "{+", "+}"] {
-            assert!(!line.contains(marker), "記號撤下頁面了：{line:?}");
+            for row in [&rows[was], &rows[now]] {
+                assert!(!row.contains(marker), "記號撤下頁面了：{row:?}");
+            }
         }
-        assert!(line.contains('很') && line.contains('極'), "兩邊都畫：{line:?}");
+        assert!(!rows[was].trim_start().starts_with('-'), "{:?}", rows[was]);
+        assert!(!rows[now].trim_start().starts_with('+'), "{:?}", rows[now]);
 
-        let y = (0..8).position(|y| row_text(&buf, y).contains('很')).unwrap() as u16;
-        let text = row_text(&buf, y);
-        let gone = buf[(column_of(&text, "很"), y)].style().bg;
-        let added = buf[(column_of(&text, "極"), y)].style().bg;
-        let page = buf[(column_of(&text, "年"), y)].style().bg;
-        assert_ne!(gone, page, "刪掉的那一段有自己的底");
-        assert_ne!(added, page, "新增的那一段也有");
+        // **四層底色**：改過的那個字最響，整行淡一層，頁面什麽都沒有。
+        let (wy, ny) = (was as u16, now as u16);
+        let gone = buf[(column_of(&rows[was], "很"), wy)].style().bg;
+        let added = buf[(column_of(&rows[now], "極"), ny)].style().bg;
+        let gone_row = buf[(column_of(&rows[was], "年"), wy)].style().bg;
+        let added_row = buf[(column_of(&rows[now], "年"), ny)].style().bg;
+        let page = buf[(0, 0)].style().bg;
+        assert_ne!(gone, page, "刪掉的那個字有自己的底");
+        assert_ne!(added, page, "新增的那個字也有");
         assert_ne!(gone, added, "而且兩種底分得開");
+        assert_ne!(gone_row, page, "舊稿那一整行有一層淡底");
+        assert_ne!(added_row, page, "新稿那一行也有");
+        assert_ne!(gone_row, added_row, "兩行的底分得開");
+        assert_ne!(gone_row, gone, "行是淡的那一層，詞是響的那一層");
+        assert_ne!(added_row, added);
 
         std::fs::remove_dir_all(&dir).ok();
     }

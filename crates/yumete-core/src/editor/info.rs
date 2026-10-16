@@ -57,6 +57,16 @@ impl Editor {
         if let Some(one) = self.info_asked_now() {
             return Some(one);
         }
+        // **報告裏，即時那一種不跟着光標走**（2026-10-16 定，原話：「should not
+        // display any info panel (wiki)……Anything beyond this would become
+        // noise」）。問出來的那一種照舊答——`空格 n` 按在一個漢字上，字典還是
+        // 給你看（「不自己冒出來，按還是按得出來」）。
+        //
+        // 即時那一種問的是「光標底下這個詞是什麽」，而報告裏光標底下那些字是
+        // 這一支自己拼出來的兩稿，不是稿子。
+        if self.current_buffer().is_computed() {
+            return None;
+        }
         let one = self.info_live();
         self.info_has_body(one).then_some(one)
     }

@@ -76,6 +76,16 @@ pub enum Kind {
     Gone,
     /// `{+什麼來了+}` in a `:diff` listing — the new draft's words.
     Added,
+    /// **The whole of an old row in a `:diff` listing** (2026-10-16).
+    ///
+    /// A changed line is drawn as two rows, the draft before and the draft
+    /// after, and the row itself carries a faint ground so the pair reads as a
+    /// pair before a word of it is read. The words that actually changed sit
+    /// on [`Gone`](Kind::Gone) / [`Added`](Kind::Added), which is the louder
+    /// step of the same colour — 「mark the words changed in brighter colors」.
+    GoneRow,
+    /// The whole of a new row — see [`GoneRow`](Kind::GoneRow).
+    AddedRow,
     /// A heading's hashes.
     ///
     /// A [`Marker`](Kind::Marker) that is never hidden: a terminal cannot make
@@ -1785,6 +1795,8 @@ mod typst_tests {
                 // Neither `spans` makes these — they are `diff::spans`'.
                 Kind::Gone => '-',
                 Kind::Added => '+',
+                Kind::GoneRow => '<',
+                Kind::AddedRow => '>',
                 Kind::Math => '$',
                 Kind::Ref => '@',
                 Kind::Label => '<',
@@ -2130,6 +2142,8 @@ mod tests {
                 // Neither `spans` makes these — they are `diff::spans`'.
                 Kind::Gone => '-',
                 Kind::Added => '+',
+                Kind::GoneRow => '<',
+                Kind::AddedRow => '>',
                 // Only a fence's grammar makes these (`code::highlight`).
                 Kind::Token(_) => '~',
                 // Typst 那一支的三個（2026-09-28）。

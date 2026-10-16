@@ -21,6 +21,31 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- Warning: **`:git-diff` and `:diff` now show the paragraph before and after, not one
+  hybrid line — and a wholesale rewrite no longer refuses to diff at all.** The word
+  diff used to run over the whole file at once and give up past 1200 word-edits with
+  「差得太遠」, which is what an afternoon of rewriting costs; and what it drew was a
+  single line carrying both drafts' marks, a sentence nobody ever wrote. It now pairs
+  the lines first and diffs the words inside each pair, so there is no practical
+  ceiling, and each change is two rows:
+
+  ```
+  2-  她伸手去碰，指尖一涼。
+  2+  她伸手去碰了碰，指尖一涼，那朵花就化了。
+  ```
+
+  the old draft's line number on the `-` row and the new one's on the `+`, each row on
+  a faint ground and the changed words brighter — the same four colours `空格 x` has
+  always used. `gf` from **either** row goes to where that change is now.
+
+  The filename is gone from the rows: the whole report is about one file, which the
+  buffer's own name already says, and repeating it cost 25 cells of every row on a
+  long filename.
+- **A generated report is read, not edited.** `:git-diff`, `:diff`, `:check-punct`,
+  `:count-progress` and the `:write` verification stay fully rendered wherever the
+  cursor is — the markup no longer opens up under it — and no info panel follows the
+  cursor in one. `空格 n` still answers if you ask it.
+
 - Warning: **Breaking: the candidate bar has three places now, and the two commands are
   spelled differently.** `:yume-panel full|off` is `:yume-panel box|bottom|inline`, and
   `:yume-preedit header|code|top` is

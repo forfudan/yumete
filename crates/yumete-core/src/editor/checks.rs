@@ -523,6 +523,7 @@ impl Editor {
         buffer.name_as(&name);
         // 同 [`Editor::open_report`]：算出來的單子没有檔案，改它改不到任何地方。
         buffer.set_readonly(true);
+        buffer.set_computed(true);
         if let Some(syntax) = syntax {
             buffer.set_syntax(syntax);
         }
@@ -531,6 +532,10 @@ impl Editor {
             .path()
             .and_then(|p| p.parent())
             .map(Path::to_path_buf);
+        // **每一份新報告自己說跳到哪**：不說的就回到「讀行上那個 `檔:行:`」那
+        // 條老路（`:grep`、`:check-punct` 都在那條路上）。`:git-diff` 寫在它
+        // 自己那一支裏，就在這一句之後。
+        self.listing_jumps = None;
         self.add_buffer(buffer);
         self.set_cursor(0);
     }

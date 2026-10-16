@@ -3337,6 +3337,17 @@ pub struct Editor {
     /// 於是 `:check` 出一張單子、中間按一下 `空格 f`，再回去 `gf` 就解錯了地
     /// 方。挑選器的根現在存在 `Picker::root` 上。
     listing_root: Option<PathBuf>,
+    /// **這一份報告說的是哪一個檔，每一行又跳到它的第幾行**（2026-10-16）。
+    ///
+    /// `:git-diff` 的行上沒有檔名了——整份報告說的就是這一個檔，每一行再寫一
+    /// 遍是把緩衝區自己的名字抄四十遍（原話：「why `文.md:` is needed if the
+    /// `git-diff` shows the diff for only one file」）。所以跳轉改由這裏答。
+    ///
+    /// 第二個數是**現在這份檔**的行號，1-based，`0` ＝ 這一行跳不了。舊稿那一
+    /// 行印的是它在 `HEAD` 裏的號（`537`），而那一行在現在這份檔裏已經沒有
+    /// 了，所以它跳到「這一處改動現在在哪」——同 magit／fugitive（2026-10-16
+    /// 定，§5.12.66）。
+    listing_jumps: Option<(PathBuf, Vec<usize>)>,
     /// **The files this session has been in, newest first** (2026-09-18).
     ///
     /// What `空格 f` puts at the top of its list. Alphabetical is chapter
@@ -3909,6 +3920,7 @@ impl Editor {
             default_syntax: None,
             syntax_by_name: HashMap::new(),
             listing_root: None,
+            listing_jumps: None,
             visited: Vec::new(),
             usage_groups: Vec::new(),
             opened_with: HashMap::new(),

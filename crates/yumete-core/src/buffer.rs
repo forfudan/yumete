@@ -249,6 +249,17 @@ pub struct Buffer {
     /// itself when the file's permissions say so — which until now was only
     /// discovered at `:w`, after an afternoon of typing.
     readonly: bool,
+    /// **Whether the editor wrote this, rather than a disk** (2026-10-16).
+    ///
+    /// `:git-diff`, `:diff`, `:check-punct`, `:count-progress` and the `:write`
+    /// verification all open one. They are read-only like a locked file, but
+    /// they are not a *file*: there is nothing behind them to edit, nothing to
+    /// look up, and no markup to reveal — the markers in them are the report's
+    /// own and they are drawn, not read.
+    ///
+    /// 原話（2026-10-16）：「It just be a rendered, readonly, fixed, clean
+    /// buffer for checking diffs. Anything beyond this would become noise.」
+    computed: bool,
     /// …and a hash of the text that was there.
     ///
     /// The stamp above is the fast question — "might this have changed?" — and
@@ -362,6 +373,7 @@ impl Buffer {
             beyond_the_file: false,
             scratch_swap: None,
             readonly: false,
+            computed: false,
         }
     }
 
@@ -423,6 +435,7 @@ impl Buffer {
             beyond_the_file: false,
             scratch_swap: None,
             readonly: false,
+            computed: false,
         }
     }
 
@@ -542,12 +555,23 @@ impl Buffer {
             // this user cannot write either — still opens unlocked, and still
             // says so at `:w`.
             readonly: fs::metadata(path).is_ok_and(|m| m.permissions().readonly()),
+            computed: false,
         })
     }
 
     /// Whether this buffer refuses to be edited (Feature #213).
     pub fn is_readonly(&self) -> bool {
         self.readonly
+    }
+
+    /// Whether the editor wrote this page itself — see [`Self::computed`].
+    pub fn is_computed(&self) -> bool {
+        self.computed
+    }
+
+    /// Say so. Set once, where the report is built; nothing turns it off.
+    pub fn set_computed(&mut self, on: bool) {
+        self.computed = on;
     }
 
     /// Lock the buffer against editing, or unlock it.

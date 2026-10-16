@@ -1138,6 +1138,22 @@ impl Editor {
         if self.follow_wiki() {
             return;
         }
+        // **一份報告自己說跳到哪**（2026-10-16）。`:git-diff` 的行上沒有檔名
+        // ——整份報告說的就是那一個檔，每一行再寫一遍是把緩衝區的名字抄幾十
+        // 遍。舊稿那一行印的是它在 `HEAD` 裏的號，而那一行現在不在了，所以跳
+        // 的是「這一處改動現在在哪」（同 magit／fugitive）。
+        if let Some((path, jumps)) = self.listing_jumps.clone() {
+            let rope = self.current_buffer().rope();
+            let row = rope.char_to_line(self.sel.head());
+            if let Some(&at) = jumps.get(row).filter(|at| **at > 0) {
+                if let Err(err) = self.open_file(&path) {
+                    self.status = say!("buffer.cannot-open", path.display(), err);
+                    return;
+                }
+                self.goto_line(at);
+                return;
+            }
+        }
         let rope = self.current_buffer().rope();
         let line = rope.line(rope.char_to_line(self.sel.head())).to_string();
         let text = line.trim();
