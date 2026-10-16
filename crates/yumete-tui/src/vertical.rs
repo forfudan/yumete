@@ -1741,23 +1741,30 @@ pub fn draw(
     let cursor_x = at_cursor.map(|p| p.x).unwrap_or(area.x);
     let cursor_y = (at_cursor.map(|p| p.top).unwrap_or(text_top) + cursor_pos.slot as u16)
         .min((area.y + area.height).saturating_sub(1));
-    // Insert leaves the page alone: the caret is the terminal's own cursor, set
-    // to an underscore — a thin horizontal rule, which is the bar of a
-    // horizontal editor turned the quarter turn the text turned. Drawing it into
-    // the page instead would have to recolour a character to show it.
+    // **插入態的那條橫線自己畫，終端光標只當輸入法的錨**（2026-10-16 定）。
     //
-    // It goes on the slot **above** the cursor's. Typing inserts *before* the
-    // character the cursor is on, pushing it down, so the boundary the text
-    // arrives at is that character's top edge — and an underscore is drawn at
-    // the bottom of the cell it is in. Put it on the cursor's own slot and it
-    // sits one boundary too low, which reads as "insert after this character"
-    // and is not where the text appears.
-    let mut caret_y = cursor_y;
+    // The rule is the bar of a horizontal editor turned the quarter turn the
+    // text turned, and it goes on the boundary the text arrives at: typing
+    // inserts *before* the character the cursor is on, pushing it down, so the
+    // boundary is that character's **top** edge — drawn here as an underline on
+    // the slot above it.
+    //
+    // Warning: **它從前是終端自己的下劃線光標，擺在上面那一格**。線畫對了，而光標
+    // **格**就落在上面那個字上——macOS 的系統輸入法把 inline preedit 畫在光標格
+    // 上，於是蓋住了上面那個字，而該蓋的是下面那個（文字就出現在它那裏）。原話：
+    // 「在「餅」上按 i 鍵，cursor 應該在「餅」上，實際在「蛋」上……終端會在
+    // cursor 的位置畫 inline preedit，於是把「蛋」蓋住了」。
+    //
+    // 沒有「上劃線」這種光標形狀，所以兩件事拆開：線是我們的筆，光標交給輸入法，
+    // 並且**藏起來**（[`crate::backend::keep_the_cursor_hidden`]）。`caret_y` 從此
+    // 就是光標自己那一格。
+    let caret_y = cursor_y;
     if cursor_column < visible && editor.mode() == Mode::Insert {
-        caret_y = cursor_y.saturating_sub(1).max(area.y);
-        // A terminal sizes its cursor to the grapheme it sits on, so on a blank
-        // slot the rule would be one cell — half the 縱 — and read as lopsided.
-        // An ideographic space is two cells and shows nothing.
+        let rule_y = cursor_y.saturating_sub(1).max(area.y);
+        // A blank slot would show no rule at all — an underline is drawn under
+        // a cell's glyph, and an empty cell has none to draw under. An
+        // ideographic space is two cells and shows nothing, which gives the
+        // rule the width of the 縱.
         //
         // *Both* cells decide whether the slot is blank. A half-width character
         // hangs against the slot's right edge, so asking only the left one says
@@ -1765,11 +1772,16 @@ pub fn draw(
         // The character comes back the moment the caret moves on, which is what
         // "I typed 1 and got a space" looks like.
         let occupied = |x: u16| {
-            buf.cell((x, caret_y))
+            buf.cell((x, rule_y))
                 .is_some_and(|c| !c.symbol().trim().is_empty())
         };
         if !occupied(cursor_x) && !occupied(cursor_x + 1) {
-            put_slot(buf, cursor_x, caret_y, "\u{3000}", Style::default());
+            put_slot(buf, cursor_x, rule_y, "\u{3000}", Style::default());
+        }
+        for x in cursor_x..cursor_x + SLOT_WIDTH {
+            if let Some(cell) = buf.cell_mut((x, rule_y)) {
+                cell.set_style(cell.style().add_modifier(Modifier::UNDERLINED));
+            }
         }
     }
     // Warning: **光標不重畫已經有標籤的那一格**（#406，2026-09-28 報的：「竪排的 aa 為什麽

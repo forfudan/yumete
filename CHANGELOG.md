@@ -47,6 +47,13 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **A system input method composing on a vertical page no longer covers the wrong
+  character.** The rule that marks the insertion point sits on the boundary above the
+  character you are typing in front of, and it used to *be* the terminal's own cursor,
+  put one slot up so that the line it draws at the bottom of its cell landed on that
+  boundary. That left the cursor on the character above, and macOS draws its inline
+  preedit wherever the cursor is. The rule is now painted into the page and the cursor
+  stays, hidden, on the character the text will appear at.
 - **A 字根 is drawn two cells wide.** Characters in a Private Use Area — which is where
   the 字根 Yuniversus carries live — were given one cell, because Annex #11 calls the
   whole area Ambiguous and the editor had no reason to think otherwise. Every glyph in

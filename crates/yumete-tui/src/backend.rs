@@ -27,6 +27,31 @@ use ratatui::style::Modifier;
 /// take bits 0–8.
 pub const DOTTED: Modifier = Modifier::from_bits_retain(1 << 9);
 
+/// **Move the cursor where the system input method should type, and keep it
+/// out of sight.**
+///
+/// 竪排插入態 draws its own caret — a rule on the boundary the text arrives at
+/// — and the terminal's cursor is then not a caret at all: it is the anchor a
+/// macOS input method draws its inline preedit on. Those two want different
+/// cells. The rule belongs on the boundary *above* the character the text goes
+/// in front of; the preedit belongs **on that character**, because that is
+/// where the text it is composing will appear (2026-10-16: 「在「餅」上按 i
+/// 鍵，cursor 應該在「餅」上，實際在「蛋」上……終端會在 cursor 的位置畫 inline
+/// preedit，於是把「蛋」蓋住了」).
+///
+/// So the cursor goes on the character and this flag hides it, leaving the rule
+/// the only caret on the page.
+///
+/// A process-wide flag because the backend is built in `run` and the question
+/// is answered a frame at a time, deep inside the draw.
+static HIDE_THE_CURSOR: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether the terminal's cursor is to be moved but not shown. See
+/// [`HIDE_THE_CURSOR`].
+pub fn keep_the_cursor_hidden(hidden: bool) {
+    HIDE_THE_CURSOR.store(hidden, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// The crossterm backend, with dotted underlines.
 pub struct Dotted<W: Write> {
     inner: CrosstermBackend<W>,
@@ -119,7 +144,13 @@ impl<W: Write> Backend for Dotted<W> {
         self.inner.hide_cursor()
     }
     fn show_cursor(&mut self) -> io::Result<()> {
-        self.inner.show_cursor()
+        // ratatui shows the cursor whenever a frame set its position, and a
+        // frame has to set it for the input method to find it — see
+        // [`HIDE_THE_CURSOR`].
+        match HIDE_THE_CURSOR.load(std::sync::atomic::Ordering::Relaxed) {
+            true => self.inner.hide_cursor(),
+            false => self.inner.show_cursor(),
+        }
     }
     fn get_cursor_position(&mut self) -> io::Result<Position> {
         self.inner.get_cursor_position()

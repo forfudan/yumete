@@ -4921,6 +4921,10 @@ fn draw(
         // nature, nothing about them is wrong, and the terminal blinks and
         // shapes them the way the reader set it up to.
         let vertical = editor.layout() == WritingLayout::Vertical;
+        // **竪排插入態的光標只是輸入法的錨**（2026-10-16）：那條橫線由
+        // `vertical.rs` 自己畫在插入邊界上，而終端光標擺在**文字會出現的那一個
+        // 字**上並藏起來，不然系統輸入法的 inline preedit 會蓋錯字。
+        crate::backend::keep_the_cursor_hidden(vertical && editor.mode() == Mode::Insert);
         let shape = caret_shape(editor.mode(), vertical, editor.is_extending());
         match matches!(shape, SetCursorStyle::SteadyBlock) {
             true => paint_the_caret_block(
@@ -14023,6 +14027,9 @@ fn squeezed(text: &str) -> String {
         w: u16,
         h: u16,
     ) -> (ratatui::buffer::Buffer, Option<Position>) {
+        // **明暗要先定下來**，同 `render_caret`（見那裏的說明）：`painted_caret`
+        // 問調色板，而調色板在明暗定下來之前問不得。
+        crate::theme::settle(config, None);
         editor.set_layout(WritingLayout::Vertical);
         editor.set_ruby(yumete_core::ruby::Dialects::NONE);
         let lines = editor.current_buffer().line_count();
@@ -16513,19 +16520,20 @@ fn squeezed(text: &str) -> String {
         assert_eq!(at(&buffer, 15, 1), "丁");
     }
 
+    /// **Insert leaves the character alone.** The rule is drawn on the boundary
+    /// above it; the character itself keeps the page's own ink and no block.
     #[test]
-    fn the_insert_caret_is_the_terminals_own_cursor() {
+    fn the_insert_caret_does_not_repaint_the_character() {
         let mut editor = editor_with("甲乙丙");
         editor.set_layout(WritingLayout::Vertical);
-        editor.on_key(Key::Char('i')); // Insert
+        editor.on_key(Key::Char('j')); // onto 乙, so the rule has a slot above
+        editor.on_key(Key::Char('i'));
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 20, 12);
 
-        // Nothing in the page is repainted for the caret: the character keeps
-        // its own colour and is not underlined.
-        let style = buffer[(18, 0)].style();
-        assert!(!style.add_modifier.contains(Modifier::REVERSED));
-        assert!(!style.add_modifier.contains(Modifier::UNDERLINED));
+        let style = buffer[(18, 1)].style();
+        assert!(!style.add_modifier.contains(Modifier::REVERSED), "no block in Insert");
+        assert!(!style.add_modifier.contains(Modifier::UNDERLINED), "the rule is not on it");
         assert_eq!(
             style.fg,
             ink(&config).page().fg,
@@ -16534,10 +16542,17 @@ fn squeezed(text: &str) -> String {
     }
 
     /// Typing inserts *before* the character the cursor is on, so the boundary
-    /// the text arrives at is that character's top edge — and an underscore is
-    /// drawn at the bottom of the cell it is in. The caret therefore belongs on
-    /// the slot above; on the cursor's own it reads as "insert after this
-    /// character", which is not where the text appears.
+    /// the text arrives at is that character's **top** edge — drawn here as an
+    /// underline on the slot above it.
+    ///
+    /// Warning: **The rule and the terminal's cursor are two different things now**
+    /// (2026-10-16). They used to be one: the terminal's underscore cursor,
+    /// put on the slot above so that the line it draws at the bottom of its
+    /// cell landed on the boundary. That left the cursor *cell* on the wrong
+    /// character, and a macOS input method draws its inline preedit there —
+    /// over the character above the one being typed in front of. So the rule
+    /// is painted into the page and the cursor stays where the text will
+    /// appear, hidden (`backend::keep_the_cursor_hidden`).
     #[test]
     fn the_insert_caret_marks_the_boundary_text_arrives_at() {
         let mut editor = editor_with("甲乙丙");
@@ -16547,9 +16562,15 @@ fn squeezed(text: &str) -> String {
         let config = vertical_config();
         let (buffer, caret) = render_vertical_caret(&mut editor, &config, 20, 12);
 
-        // 乙 is row 1; the rule sits under 甲, at the boundary between them.
+        // 乙 is row 1, and the rule is the underline on 甲's slot above it.
         assert_eq!(at(&buffer, 18, 1), "乙");
-        assert_eq!(caret.map(|p| p.y), Some(0), "one row up from the cursor");
+        let underlined = |y: u16| {
+            (0..20u16).any(|x| buffer[(x, y)].style().add_modifier.contains(Modifier::UNDERLINED))
+        };
+        assert!(underlined(0), "the rule is on the boundary above 乙");
+        assert!(!underlined(1), "and not under 乙, which would read as 「after it」");
+        // The anchor is on 乙 — where what you type will appear.
+        assert_eq!(caret.map(|p| p.y), Some(1), "on the character, not above it");
         assert_eq!(caret.map(|p| p.x), Some(18));
     }
 
@@ -21742,6 +21763,43 @@ fn squeezed(text: &str) -> String {
         assert_eq!(han[6], "B", "{han:?}");
         assert_eq!(root[5], " ", "and so does a 字根: {root:?}");
         assert_eq!(root[6], "B", "{root:?}");
+    }
+
+    /// **竪排插入態：線在邊界上，光標在字上**（2026-10-16 報的）。
+    ///
+    /// 「在「餅」上按 i 鍵，cursor 應該在「餅」上，實際在「蛋」上……終端會在
+    /// cursor 的位置畫 inline preedit，於是把「蛋」蓋住了」。The rule and the
+    /// anchor want different cells, so the rule is painted and the terminal's
+    /// cursor is left on the character the text will appear at.
+    #[test]
+    fn the_vertical_insert_rule_sits_above_the_character_the_caret_is_on() {
+        let mut editor = editor_with("雞蛋餅");
+        // Warning: **Turn the page first.** `render_vertical_caret` sets the layout
+        // when it draws, and `j` on a page that is still across moves by
+        // *line* — on a one-line fixture, nowhere at all.
+        editor.execute(":vertical").expect("the page turns");
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('i'));
+        let config = vertical_config();
+        let (buffer, caret) = render_vertical_caret(&mut editor, &config, 20, 8);
+        let rows: Vec<String> = (0..8).map(|y| row_text(&buffer, y)).collect();
+        let row_of = |c: &str| {
+            (0..8u16).find(|&y| rows[y as usize].contains(c)).unwrap_or_else(|| panic!("{rows:?}"))
+        };
+        let (egg, cake) = (row_of("蛋"), row_of("餅"));
+        assert_eq!(cake, egg + 1, "餅 is the slot under 蛋: {rows:?}");
+        // The rule is an underline on 蛋 — the boundary 餅 will be pushed down
+        // from — and it is in the page, so a photograph has it.
+        let underlined = |y: u16| {
+            (0..20u16).any(|x| buffer[(x, y)].style().add_modifier.contains(Modifier::UNDERLINED))
+        };
+        assert!(underlined(egg), "the rule is on 蛋's slot: {rows:?}");
+        assert!(!underlined(cake), "and not on 餅's: {rows:?}");
+        // Warning: **而光標那一格在「餅」上**，不在「蛋」上：系統輸入法把 preedit 畫在
+        // 光標格上，而文字出現的地方是「餅」。
+        let at = caret.expect("insert leaves the terminal a cursor to anchor on");
+        assert_eq!(at.y, cake, "the anchor is on 餅: {rows:?}");
     }
 
     /// **The status line's readout lines up on a 字根 too** (2026-10-16 報的).
