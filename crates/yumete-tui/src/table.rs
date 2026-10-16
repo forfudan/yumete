@@ -171,15 +171,6 @@ fn scroll_columns(widths: &[usize], room: usize, cell: usize, left: &mut usize) 
     *left = (*left).max(first);
 }
 
-/// The banded style on the cursor's row, the plain one elsewhere.
-fn band_if(on: bool, band: Style, plain: Style) -> Style {
-    if on {
-        band
-    } else {
-        plain
-    }
-}
-
 /// Draw the grid, returning where the terminal's caret belongs.
 /// **Where a click landed, in a grid.**
 ///
@@ -480,11 +471,15 @@ pub fn draw(
     };
     // The seam, and the ground of anything that is not a cell.
     let page = ink.page();
-    // The row the cursor is on. Across twenty-eight columns the eye loses which
-    // row it was reading the moment it looks sideways, and this is the cheapest
-    // possible answer to that — a rung above the columns, so it still reads as
-    // one row when every column is a band.
-    let band = ink.ground(yumete_config::rung::HEAD);
+    // Warning: **光標那一行沒有底色了**（2026-10-17 作者報的）。從前它鋪一層
+    // `rung::HEAD`，而選中的那一塊鋪的是它隔壁那一鬥——量出來：選中在平常那幾
+    // 行上是 1.98:1，落在這一條帶子上只剩 1.37:1，而這個檔自己的註釋寫着
+    // 1.11–1.20 就是看不見。正在編輯的那一行恰恰是看不清選中的那一行。
+    //
+    // 梯子上擠不出第三層（`HEAD` 815 與 `SELECTION` 700 在紙那一頭只差 5%），
+    // 所以照 2026-09-12 給**格**的那一刀再切一次：底色歸選中一個人，「在哪一
+    // 行」挪到邊上去說——行號點成金的，和欄的標題同一種說法。試算表都是這麼
+    // 分的（Excel／Numbers／Sheets：選中吃底色，當前格靠兩頭的表頭點亮）。
     // **Every other row** (#449). The columns are banded, and banding the
     // columns alone leaves nothing saying where one row ends — worst exactly
     // where this mode is most useful: with 折行 on, a cell that wraps to three
@@ -716,12 +711,18 @@ pub fn draw(
                     ),
                     _ => String::new(),
                 };
-                let style = match (ragged, peek.is_some() && line == cursor_row) {
-                    (true, _) => gutter_style.patch(torn),
+                let style = match (ragged, peek.is_some(), line == cursor_row) {
+                    (true, ..) => gutter_style.patch(torn),
                     // The row the hit is on, so 「在哪一行」 is answered before
                     // the eye has found the cell.
-                    (false, true) => gutter_style.fg(ink.mark()).add_modifier(Modifier::BOLD),
-                    (false, false) => gutter_style,
+                    (false, true, true) => {
+                        gutter_style.fg(ink.mark()).add_modifier(Modifier::BOLD)
+                    }
+                    // **哪一行，和哪一欄同一種說法**（2026-10-17）。欄早就這麽
+                    // 說了——它的號和它的標題都點成金的；行從前只有底色，而底
+                    // 色是選中的那一塊的（見 `band` 那一段的註釋）。
+                    (false, false, true) => head_style,
+                    _ => gutter_style,
                 };
                 for x in area.x..area.x + gutter {
                     if let Some(cell) = buf.cell_mut((x, y)) {
@@ -746,15 +747,15 @@ pub fn draw(
                     match peek {
                         // The row's own band: the selection is painted over it
                         // below, and the lit column number says which cell.
-                        None => band_if(true, band, banded(line, text)),
+                        None => banded(line, text),
                         // 朱's own wash, the same mark the prose page gives the
                         // hit you are standing on.
                         Some(_) => Style::default().bg(ink.wash()),
                     }
                 } else if ragged && i >= columns {
-                    band_if(line == cursor_row, band, banded(line, text)).patch(torn)
+                    banded(line, text).patch(torn)
                 } else {
-                    band_if(line == cursor_row, band, banded(line, text))
+                    banded(line, text)
                 };
                 // The cell's ground runs the column's full width, so the
                 // highlight is a *cell* — a box you are inside — and not just
@@ -860,7 +861,7 @@ pub fn draw(
                 // while the same table read in a chapter is banded straight
                 // across. The seam is *inside* the table.
                 let seam = if w == 0 { 0 } else { GAP as u16 };
-                let ground = band_if(line == cursor_row, band, banded(line, page));
+                let ground = banded(line, page);
                 for cx in (x + w)..(x + w + seam).min(right) {
                     if let Some(cell) = buf.cell_mut((cx, y)) {
                         match stroke {
@@ -907,8 +908,7 @@ pub fn draw(
             // rather than drawing columns that are not there.
             for cx in x.min(right)..right {
                 if let Some(cell) = buf.cell_mut((cx, y)) {
-                    cell.set_symbol(" ")
-                        .set_style(band_if(line == cursor_row, band, banded(line, page)));
+                    cell.set_symbol(" ").set_style(banded(line, page));
                 }
             }
             if ragged && cells.len() < columns && k == 0 {

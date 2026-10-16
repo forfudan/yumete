@@ -154,6 +154,17 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **A selection inside a table cell is visible again.** The caret's cell and the caret's
+  row each painted a ground, and the selection's own ground is one rung away from
+  them — measured on the rendered frame, a selection read at 1.98:1 on a plain row and
+  **1.37:1** on the row you were working in, which is the one place it matters. The
+  grid dropped the cell's ground in September for this reason and kept the row's; the
+  `|` table in a chapter added the two 金 walls for it and kept the cell's. Both
+  grounds are gone now: the cell is its two walls, the row is its line number lit gold
+  the way its column number already was, and the only thing on a table using a ground
+  is the selection — back to 1.98:1 everywhere. This is the spreadsheet rule, where
+  the fill belongs to the selection and the active cell is said at the two headers.
+
 - **Under the vim keymap, the right arrow in insert mode reaches the end of the line.**
   It was clamped to the *last character* — vim's Normal-mode rule, where the caret may
   not sit on the newline — so in insert mode you could not move the caret past the last

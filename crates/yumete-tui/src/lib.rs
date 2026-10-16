@@ -10788,7 +10788,6 @@ fn draw_horizontal(
         // somebody else's buffer — the cursor is not in it.
         false => None,
     };
-    let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
     let show_segmentation = editor.segmentation_visible();
     let mark = editor.word_mark();
     let show_markup = editor.markup_visible();
@@ -11345,25 +11344,19 @@ fn draw_horizontal(
             if to > row.start && from < row_end {
                 let a = from.saturating_sub(row.start).min(chars.len());
                 let b = to.saturating_sub(row.start).min(chars.len());
-                for (i, style) in styles.iter_mut().enumerate().take(b).skip(a) {
-                    // Never over a `==highlight==`. The band and the word tint
-                    // are quieter than the cell and give way to it, but a
-                    // highlight exists *to be* a ground — the same reason the
-                    // word tint above steps around it.
-                    if highlighted.iter().any(|&(x, y)| i >= x && i < y) {
-                        continue;
-                    }
-                    *style = style.patch(cell_style);
-                }
-                // **And the wall on each side, in 金** (#407). The cell's own
-                // ground is `HEAD` and the selection's is `SELECTION`, one rung
-                // apart at the paper end — far enough to measure and not far
-                // enough to read, which is what the writer saw: 「w 選擇詞的
-                // 背景色和格子的選擇色一樣，導致我不知道選區是什麼」。The
-                // ladder has no third ground to give, so which cell you are in
-                // is said by a *mark* instead: the two walls beside it, drawn
-                // in the one colour on the page that is not a quantity of ink.
-                // Then the only thing still using a ground is the selection.
+                // **The cell is the two walls, and nothing in between**
+                // (#407, finished 2026-10-17). The ground was `HEAD` and the
+                // selection's is `SELECTION`, one rung apart at the paper end
+                // — far enough to measure and not far enough to read, which is
+                // what the writer saw: 「w 選擇詞的背景色和格子的選擇色一樣，
+                // 導致我不知道選區是什麼」。#407 answered it by adding the two
+                // 金 walls **and keeping the ground**, so a selection still
+                // read at 1.37:1 inside the cell against 1.98:1 outside it;
+                // 2026-10-17 the ground went, the way the grid's did on
+                // 2026-09-12. Which cell you are in is said by a *mark* — the
+                // two walls, in the one colour on the page that is not a
+                // quantity of ink — and the only thing using a ground is the
+                // selection.
                 let gold = Style::default().fg(ink.gold());
                 for edge in [a.checked_sub(1), (b < styles.len()).then_some(b)] {
                     if let Some(style) = edge.and_then(|i| styles.get_mut(i)) {
@@ -11525,17 +11518,9 @@ fn draw_horizontal(
                 // the column it is squaring up to stays bare — the one place
                 // the drawing is *about* alignment is the one place it would
                 // have looked ragged.
-                let base = run_style(runs[gi].ink);
-                let style = match cell {
-                    Some((from, to)) => {
-                        let col = row.start + runs[gi].column;
-                        match col >= from && col <= to {
-                            true => base.patch(cell_style),
-                            false => base,
-                        }
-                    }
-                    None => base,
-                };
+                // 格子沒有底色了（見上面那一段），所以補白也不必另算——它從
+                // 前跟着格子的底走，好讓底色鋪滿對齊出來的那一截。
+                let style = run_style(runs[gi].ink);
                 spans.push(Span::styled(runs[gi].text.clone(), style));
                 gi += 1;
             }
@@ -19022,15 +19007,17 @@ fn squeezed(text: &str) -> String {
                     panic!("{needle:?}: {:?}", (0..8).map(|y| row_text(buf, y)).collect::<Vec<_>>())
                 })
         };
-        // Inside the callout, and the ground is there. The character *beside*
-        // the cursor, because the block cursor paints its own slot last.
+        // **Inside the callout, and the cell has no ground of its own**
+        // (2026-10-17): the callout's wash is what the characters wear, and
+        // the cell is said by its two walls. The character *beside* the
+        // cursor, because the block cursor paints its own slot last.
         let buf = render(&editor, &config, 30, 8);
         let y = row_with(&buf, "木頭");
         let text = row_text(&buf, y);
-        assert_eq!(buf[(column_of(&text, "頭"), y)].bg, want, "{text:?}");
+        assert_ne!(buf[(column_of(&text, "頭"), y)].bg, want, "格子不該有自己的底：{text:?}");
 
         // Now into the highlighted cell. A highlighter's ground is the answer
-        // to「this is marked」and the cell must not rub it out.
+        // to「this is marked」and nothing may rub it out.
         editor.on_key(Key::Char('l'));
         let buf = render(&editor, &config, 30, 8);
         let y = row_with(&buf, "mu");
@@ -19050,7 +19037,9 @@ fn squeezed(text: &str) -> String {
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
         let ink = ink(&config);
-        let want = ink.at(yumete_config::rung::HEAD);
+        // **格子說的是兩道金牆，不是一層底**（2026-10-17）。底色讓給選中那一塊
+        // 了，所以這一條問的從「有沒有那層底」換成「有沒有那兩道牆」。
+        let want = ink.gold();
         let mut editor = Editor::new();
         editor
             .current_buffer_mut()
@@ -19084,16 +19073,17 @@ fn squeezed(text: &str) -> String {
                     panic!("{needle:?}: {:?}", (0..8).map(|y| row_text(buf, y)).collect::<Vec<_>>())
                 })
         };
-        // Standing in the table, the ground is there — otherwise the two
-        // assertions below would pass on a renderer that never draws it.
+        // 金牆數一數：這一行上有，別的行上一道都沒有。
+        let walls = |buf: &ratatui::buffer::Buffer, y: u16| -> usize {
+            (0..30u16).filter(|&x| buf[(x, y)].fg == want).count()
+        };
+        // Standing in the table, the walls are there — otherwise the two
+        // assertions below would pass on a renderer that never draws them.
         let buf = render(&editor, &config, 30, 8);
         // With its pipe: the pane lists the cells, so a bare `木` is on the
         // page twice and the first one is not in the table.
         let y = row_with(&buf, "| 木");
-        let text = row_text(&buf, y);
-        // Warning: **Past the caret** — it stands in this very cell, and its block is
-        // painted into the page (2026-10-16).
-        assert_eq!(ground_at(&buf, &config, column_of(&text, "木"), y), Some(want), "{text:?}");
+        assert_eq!(walls(&buf, y), 2, "一格兩道牆：{:?}", row_text(&buf, y));
 
         // Out of the table altogether. `ge` is not a table motion, so this is
         // the ordinary prose under it — no cell of anything.
@@ -19102,9 +19092,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.cursor_line(), 3, "on the prose: {}", editor.status());
         let buf = render(&editor, &config, 30, 8);
         let y = row_with(&buf, "見");
-        for x in 0..30u16 {
-            assert_ne!(buf[(x, y)].bg, want, "column {x} of the prose row: {:?}", row_text(&buf, y));
-        }
+        assert_eq!(walls(&buf, y), 0, "散文那一行：{:?}", row_text(&buf, y));
 
         // …and onto the rule. `clear_cell` refuses it and `move_cell_row`
         // steps over it, so nothing may say an edit lands in it.
@@ -19114,9 +19102,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.cursor_line(), 1, "on the rule: {}", editor.status());
         let buf = render(&editor, &config, 30, 8);
         let y = row_with(&buf, "---");
-        for x in 0..30u16 {
-            assert_ne!(buf[(x, y)].bg, want, "column {x} of the rule row");
-        }
+        assert_eq!(walls(&buf, y), 0, "對齊那一行：{:?}", row_text(&buf, y));
     }
 
     /// The cell is `HEAD` and a selection is `SELECTION`, one rung louder and
@@ -19168,10 +19154,12 @@ fn squeezed(text: &str) -> String {
         );
     }
 
-    /// The padding that squares the page up (#212) is *inside* the cell, so it
-    /// wears the cell's ground. Without this the tint stops at the last
-    /// character the file actually holds, and the one drawing that is about
-    /// alignment is the one that looks ragged.
+    /// The padding that squares the page up (#212) is *inside* the cell, so
+    /// the wall on the right stands past it, at the pipe — not up against the
+    /// last character the file actually holds.
+    ///
+    /// Warning: **牆，不是底**（2026-10-17）。從前格子鋪一層底，這一條問的是「補白
+    /// 也鋪到了嗎」；底色讓給選中那一塊之後，同一件事問的是牆站在哪。
     #[test]
     fn the_padding_inside_the_cell_is_part_of_the_cell() {
         let mut config = Config::default();
@@ -19202,20 +19190,20 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let buf = render(&editor, &config, 30, 8);
-        let want = ink.at(yumete_config::rung::HEAD);
+        let want = ink.gold();
         let row = row_holding(&buf, "| 木");
         let text = row_text(&buf, row);
         let mu = column_of(&text, "mu");
-        // `mu` itself, then the two columns of padding after it, all one cell.
-        // Warning: **Not the cells the caret stands on** — see the twin test above.
-        for x in (mu..mu + 4).filter(|&x| !under_the_caret(&buf, &config, x, row)) {
-            assert_eq!(buf[(x, row)].bg, want, "column {x} of {text:?}");
-        }
-        // …and it stops at the pipe. **The pipe**, not `mu + 4`: the box holds
-        // the space on either side of the content as well as the padding, so
-        // counting columns off the content lands inside it.
+        // 兩道牆，一左一右。
+        let walls: Vec<u16> = (0..30u16).filter(|&x| buf[(x, row)].fg == want).collect();
+        assert_eq!(walls.len(), 2, "一格兩道牆：{text:?}");
+        // 左邊那一道在 `mu` 前面，右邊那一道在**補白之後**——補白是格子的一
+        // 部分，牆要站過它去，不然那一截就被說成不屬於這一格。
+        assert!(walls[0] < mu, "左牆在字前面：{walls:?} / {text:?}");
+        assert!(walls[1] >= mu + 4, "右牆站過補白：{walls:?} / {text:?}");
+        // …而且不超過那根豎線：格子到此為止。
         let bar = last_column_of(&text, "|");
-        assert_ne!(buf[(bar, row)].bg, want, "and it stops at the pipe: {text:?}");
+        assert!(walls[1] <= bar, "牆不越過豎線：{walls:?} / {text:?}");
     }
 
     /// The 縱書 page draws the ground under the same three rules as the
