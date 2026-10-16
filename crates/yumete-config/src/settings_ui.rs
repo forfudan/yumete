@@ -234,6 +234,16 @@ const EDITOR_TABS_WAYS: &[Choice] = &[
     Choice { word: "never", label: "set.pick.tabs.never" },
 ];
 
+/// 上屏方式的三檔。**名字借命令那一套**（`commit.name.*`）：同一件事在設置頁和
+/// 在 `:yume-commit` 的回話裏得叫同一個名字，兩張表就會各自漂走。
+const IME_COMMIT_WAYS: &[Choice] = &[
+    // **`default` 打頭，因為它是出廠那一檔**：寫下去等於不寫，由方案自己說了算。
+    Choice { word: "default", label: "commit.name.default" },
+    Choice { word: "delayed", label: "commit.name.delayed" },
+    Choice { word: "unique", label: "commit.name.unique" },
+    Choice { word: "fluency", label: "commit.name.fluency" },
+];
+
 const PANEL_DISPLAY_WAYS: &[Choice] = &[
     Choice { word: "box", label: "set.pick.display.box" },
     Choice { word: "bottom", label: "set.pick.display.bottom" },
@@ -533,15 +543,6 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
-        key: "show_chaifen",
-        group: Group::Marks,
-        kind: Kind::Tick,
-        label: "set.editor.show-chaifen",
-        hint: "set.editor.show-chaifen.hint",
-        factory: "false",
-    },
-    Setting {
-        table: "editor",
         key: "indent_hint",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_INDENT_HINT_WAYS),
@@ -675,6 +676,18 @@ pub const SETTINGS: &[Setting] = &[
         hint: "set.ime.scheme.hint",
         factory: r#""lingming""#,
     },
+    // **上屏方式也有一行**（2026-10-16 補）。`[ime] commit` 從前只有命令與配置
+    // 檔，而設置頁是 `[ime]` 那一張表上唯一缺的一格。出廠「未設」，同
+    // `ImeConfig::commit` 是 `Option<String>`：不寫就由方案自己定。
+    Setting {
+        table: "ime",
+        key: "commit",
+        group: Group::Ime,
+        kind: Kind::Pick(IME_COMMIT_WAYS),
+        label: "set.ime.commit",
+        hint: "set.ime.commit.hint",
+        factory: r#""default""#,
+    },
     Setting {
         table: "ime",
         key: "start",
@@ -736,6 +749,18 @@ pub const SETTINGS: &[Setting] = &[
         label: "set.panel.markers",
         hint: "set.panel.markers.hint",
         factory: r#""１２３４５６７８９""#,
+    },
+    Setting {
+        table: "editor",
+        key: "show_chaifen",
+        // **拆分歸「輸入法」，不歸「標記」**（2026-10-16 定）。它只在打字的時候
+        // 說得上話，而且撐寬每一條候選——那是候選欄的事；「標記」問的是稿子自己
+        // 畫出什麼（注音、詞界、縮排提示）。
+        group: Group::Ime,
+        kind: Kind::Tick,
+        label: "set.editor.show-chaifen",
+        hint: "set.editor.show-chaifen.hint",
+        factory: "false",
     },
     Setting {
         table: "editor",
@@ -894,7 +919,6 @@ pub const LATER: &[&str] = &[
     "theme.lime_light",
     "panel.ink",
     "panel.paper",
-    "ime.commit",
     "ime.data_dirs",
     "export.page",
 ];

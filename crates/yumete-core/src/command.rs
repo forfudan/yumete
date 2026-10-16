@@ -1832,6 +1832,16 @@ const ENGAGEMENT: &[Word] = &[
 ];
 
 const COMMITS: &[Word] = &[
+    // **`default` 是「算了，認方案的」**（2026-10-16 加）。從前撥過一次上屏方式
+    // 就回不去了：三個詞都是一個具體的方式，而「這個方案自己說了算」是配置不寫
+    // 那一格的意思，命令行上說不出來。
+    //
+    // Warning: `d` 從此認不出一個——`def` 與 `del` 纔分得開。
+    Word {
+        name: "default",
+        help: "cmd.commits.default",
+        needs: &[],
+    },
     Word {
         name: "delayed",
         help: "cmd.commits.delayed",

@@ -1839,6 +1839,14 @@ en = "the Yume input engine's switch: on 中文, off, abc English"
 find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin yo"
 
 [[message]]
+# : 命令選單裏 default 那一項的説明(commits 組)
+key = "cmd.commits.default"
+zht = "預設：這個方案自己說了算，和配置檔不寫 commit 那一格一樣"
+zhs = "预设：这个方案自己说了算，和配置档不写 commit 那一格一样"
+en = "the scheme's own: the same as leaving commit out of the config"
+find = "上屏 預設 预设 default"
+
+[[message]]
 # : 命令選單裏 delayed 那一項的説明(commits 組)
 key = "cmd.commits.delayed"
 zht = "延遲上屏(頂字)：碼成立了先等着，下一鍵拼不成碼才把前面那段頂上去"
@@ -3232,9 +3240,9 @@ find = "輸入法 输入法 拆分 注解 部件 chaifen"
 [[message]]
 # : 命令選單裏 commit 那一項的説明(yume 組)
 key = "cmd.yume.commit"
-zht = "上屏方式：延遲(頂字)、唯一、整句"
-zhs = "上屏方式：延迟(顶字)、唯一、整句"
-en = "commit method: delayed (頂字), unique, whole-sentence"
+zht = "上屏方式：預設、延遲(頂字)、唯一、整句"
+zhs = "上屏方式：预设、延迟(顶字)、唯一、整句"
+en = "commit method: default (the scheme's own), delayed (頂字), unique, whole-sentence"
 find = "輸入法 输入法 上屏 頂字 顶字 整句 commit"
 
 [[message]]
@@ -3379,6 +3387,13 @@ zhs = "纯文本没有注释"
 en = "plain text has no comment"
 
 [[message]]
+# 上屏方式的名字：预设（由方案自己说了算）
+key = "commit.name.default"
+zht = "預設"
+zhs = "预设"
+en = "the scheme's own"
+
+[[message]]
 # 上屏方式的名字：延遲
 key = "commit.name.delayed"
 zht = "延遲(頂字)"
@@ -3402,9 +3417,9 @@ en = "unique"
 [[message]]
 # 没有這種上屏方式
 key = "commit.no-such-method"
-zht = "没有「{0}」這種上屏方式——delayed、unique、fluency"
-zhs = "没有「{0}」这种上屏方式——delayed、unique、fluency"
-en = "no commit method '{0}' — delayed, unique, fluency"
+zht = "没有「{0}」這種上屏方式——default、delayed、unique、fluency"
+zhs = "没有「{0}」这种上屏方式——default、delayed、unique、fluency"
+en = "no commit method '{0}' — default, delayed, unique, fluency"
 
 [[message]]
 # 這個方案只能整句上屏
@@ -9673,6 +9688,20 @@ key = "set.group.not-yet"
 zht = "這一組還没填——先在 config.toml 裏寫"
 zhs = "这一组还没填——先在 config.toml 里写"
 en = "not filled in yet — write it in config.toml for now"
+
+[[message]]
+# 設置：上屏方式
+key = "set.ime.commit"
+zht = "上屏方式"
+zhs = "上屏方式"
+en = "commit method"
+
+[[message]]
+# 設置：上屏方式——一句話
+key = "set.ime.commit.hint"
+zht = "碼打完了什麽時候上屏：等下一鍵、只有一個候選就上，還是攢成整句"
+zhs = "码打完了什么时候上屏：等下一键、只有一个候选就上，还是攒成整句"
+en = "when a finished code goes to the page"
 
 [[message]]
 # 設置：输入方案

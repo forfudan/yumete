@@ -1995,11 +1995,23 @@ fn parse_page(value: &str) -> Option<(u32, u32)> {
 /// the same thing in the input method's own panel on every platform.
 fn commit_tag(written: &str) -> Option<&'static str> {
     match written {
+        // **`default` is a word, and it means 「leave it unset」**
+        // (2026-10-16). Written down it resolves to `None`, exactly as leaving
+        // the key out does — which is what the setting means: 「這個方案自己說
+        // 了算」. Without it there was no way back: once an 上屏方式 was set,
+        // only editing the file by hand took it off again.
+        "default" => None,
         "delayed" => Some("delayed"),
         "unique" | "auto" => Some("unique"),
         "fluency" => Some("fluency"),
         _ => None,
     }
+}
+
+/// Whether a written 上屏方式 is a word at all — `default` resolves to nothing
+/// and is still spelt right, so [`commit_tag`] alone cannot answer this.
+fn commit_is_a_word(written: &str) -> bool {
+    written == "default" || commit_tag(written).is_some()
 }
 
 impl Config {
@@ -2130,9 +2142,9 @@ impl Config {
         // dropped either way — `into_config` reads it through the same list —
         // and this is where it is said out loud.
         if let Some(mode) = raw.ime.commit.as_deref() {
-            if commit_tag(mode).is_none() {
+            if !commit_is_a_word(mode) {
                 problems.push(format!(
-                    "[ime] commit = \"{mode}\" 不是上屏方式——delayed、unique（auto）、fluency"
+                    "[ime] commit = \"{mode}\" 不是上屏方式——default、delayed、unique（auto）、fluency"
                 ));
             }
         }

@@ -57,6 +57,16 @@ in `docs/development.md` §5.2.
   row's mapping in 橫排 and `↓`/`↑` to move, `←`/`→` to page in 竪排. Past the last
   candidate the highlight runs on into the next page. All of these used to be
   swallowed.
+- **`:yume-commit default` hands the 上屏方式 back to the scheme.** The three methods
+  are each a particular one, so once you had set one there was no way back to 「this
+  scheme decides」 — which is what leaving `[ime] commit` out of the config has always
+  meant — short of editing the file. `default` is that word, in the command and in the
+  config alike.
+- **The 設置 page has the 上屏方式, and 候選旁的拆分 moved into 輸入法.** `[ime] commit`
+  was the one `[ime]` key with no row; it is the second row of the group now, factory
+  `預設`. 候選旁的拆分 (`:yume-chaifen`) sat under 標記, which is about what the
+  manuscript draws — it only does anything while you are typing, so it is with the
+  candidate bar now.
 - **`:yume-panel`, `:yume-inline-preedit` and `:yume-menu-size` no longer ask for a
   碼表.** All three say where things are drawn and how many of them, which is a setting
   the session carries whether or not a table is loaded — the config file sets all three

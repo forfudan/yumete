@@ -3459,15 +3459,23 @@ fn commit_name(cs: CommitStrategy) -> String {
     }
 }
 
-/// `:yume-commit [delayed|unique|fluency]` — **when** a finished code goes to
-/// the page (Feature #209).
+/// `:yume-commit [default|delayed|unique|fluency]` — **when** a finished code
+/// goes to the page (Feature #209).
 ///
-/// The three are yume's own, merged in yume's own core, so what is chosen here
-/// is what the same word means in the input method everywhere else. A scheme
-/// that can only be typed as whole sentences — 拼音 has no 碼表 to look a
-/// segment up in — says so rather than pretending the choice took.
+/// The three methods are yume's own, merged in yume's own core, so what is
+/// chosen here is what the same word means in the input method everywhere
+/// else. A scheme that can only be typed as whole sentences — 拼音 has no 碼表
+/// to look a segment up in — says so rather than pretending the choice took.
+///
+/// **`default` 是第四個詞，意思是「沒有覆蓋」**（2026-10-16 加）：撥回去，由那個
+/// 方案自己說了算，同配置檔不寫 `[ime] commit` 那一格。從前撥過一次就回不去了。
 fn commit_method(ime: &mut ImeSession, mode: &str) -> String {
     if mode.is_empty() {
+        return say!("commit.set", commit_name(ime.commit_strategy()));
+    }
+    if mode == "default" {
+        ime.set_commit_strategy(None);
+        // 撥掉覆蓋之後方案自己答什麼，就報什麼——報「預設」等於什麼都沒說。
         return say!("commit.set", commit_name(ime.commit_strategy()));
     }
     let Some(cs) = CommitStrategy::from_str_tag(mode) else {
@@ -18006,6 +18014,25 @@ fn squeezed(text: &str) -> String {
         ime.input('b');
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
         assert_eq!(editor.take_dictionary_query(), Some("吧".to_string()));
+    }
+
+    /// **`:yume-commit default` 撥掉覆蓋**（2026-10-16 加）。
+    ///
+    /// 從前三個詞都是一個具體的方式，撥過一次就回不去了；配置檔不寫 `[ime]
+    /// commit` 那一格的意思（「這個方案自己說了算」）命令行上說不出來。
+    #[test]
+    fn the_commit_method_can_be_handed_back_to_the_scheme() {
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        let scheme_says = ime.commit_strategy();
+        commit_method(&mut ime, "fluency");
+        assert_eq!(ime.commit_strategy(), CommitStrategy::Fluency);
+        let said = commit_method(&mut ime, "default");
+        assert_eq!(ime.commit_strategy(), scheme_says, "{said}");
+        // 報的是方案自己答的那一個，不是「預設」——報「預設」等於什麼都沒說。
+        assert!(said.contains(&commit_name(scheme_says)), "{said}");
+        // 打錯的字照舊是打錯的字，而名單上多了一個。
+        let said = commit_method(&mut ime, "defualt");
+        assert!(said.contains("defualt") && said.contains("default"), "{said}");
     }
 
     /// #211: the setting, the command, and the question, in the writer's words.
