@@ -889,23 +889,23 @@ en = "a tab does not go in a cell"
 [[message]]
 # :lint 查一張拆分表，某一行拆出來的部件在表裏找不到
 key = "chaifen.component-not-found"
-zht = "{0}:{1}: 部件「{2}」查無此行"
-zhs = "{0}:{1}: 部件「{2}」查无此行"
-en = "{0}:{1}: no row for the component 「{2}」"
+zht = "{0}: 部件「{1}」查無此行"
+zhs = "{0}: 部件「{1}」查无此行"
+en = "{0}: no row for the component 「{1}」"
 
 [[message]]
 # :lint 查一張拆分表，兩行用了同一個行名
 key = "chaifen.duplicate-row-name"
-zht = "{0}:{1}: 行名「{2}」和第 {3} 行重了"
-zhs = "{0}:{1}: 行名「{2}」和第 {3} 行重了"
-en = "{0}:{1}: the name 「{2}」 is already row {3}"
+zht = "{0}: 行名「{1}」和第 {2} 行重了"
+zhs = "{0}: 行名「{1}」和第 {2} 行重了"
+en = "{0}: the name 「{1}」 is already row {2}"
 
 [[message]]
 # :check table 走到一行，它的引號没關上——下一行是同一條記錄
 key = "chaifen.field-runs-on"
-zht = "{0}:{1}: 引號没關上——下一行還是同一條記錄，這張表一行只讀一條"
-zhs = "{0}:{1}: 引号没关上——下一行还是同一条记录，这张表一行只读一条"
-en = "{0}:{1}: this quote is never closed — the next line is the same record, and this grid reads one to a line"
+zht = "{0}: 引號没關上——下一行還是同一條記錄，這張表一行只讀一條"
+zhs = "{0}: 引号没关上——下一行还是同一条记录，这张表一行只读一条"
+en = "{0}: this quote is never closed — the next line is the same record, and this grid reads one to a line"
 
 [[message]]
 # :lint 的結果那一份緩衝區的名字
@@ -938,9 +938,9 @@ en = "chaifen unavailable for this scheme"
 [[message]]
 # :lint 查一張拆分表，某一行的欄數和表頭對不上
 key = "chaifen.wrong-column-count"
-zht = "{0}:{1}: 這一行是 {2} 欄，該是 {3} 欄"
-zhs = "{0}:{1}: 这一行是 {2} 栏，该是 {3} 栏"
-en = "{0}:{1}: {2} columns here, {3} expected"
+zht = "{0}: 這一行是 {1} 欄，該是 {2} 欄"
+zhs = "{0}: 这一行是 {1} 栏，该是 {2} 栏"
+en = "{0}: {1} columns here, {2} expected"
 
 # ── check ─────────────────────────────────────────────────────────────
 
@@ -975,9 +975,9 @@ en = "no 字集 data — load a scheme first with :yume-scheme"
 [[message]]
 # :check-charset 結果裏的一行：這個字不在任何字集裏
 key = "check.charset-outside"
-zht = "{0}:{1}: 「{2}」不在任何字集裏({3})，全文 {4} 處"
-zhs = "{0}:{1}: 「{2}」不在任何字集里({3})，全文 {4} 处"
-en = "{0}:{1}: 「{2}」 is in no standard ({3}), {4} time(s) in all"
+zht = "{0}: 「{1}」不在任何字集裏({2})，全文 {3} 處"
+zhs = "{0}: 「{1}」不在任何字集里({2})，全文 {3} 处"
+en = "{0}: 「{1}」 is in no standard ({2}), {3} time(s) in all"
 
 [[message]]
 # :check-charset 的結果那一份緩衝區的名字
@@ -1031,9 +1031,9 @@ en = "names in {0}"
 [[message]]
 # :check-names 查出來的一處：這裏寫的、百科裏的名字、以及差的那一個字
 key = "check.names-slip"
-zht = "{0}:{1}: 這裏是「{2}」，百科裏是「{3}」({4} → {5}，同音)"
-zhs = "{0}:{1}: 这里是「{2}」，百科里是「{3}」({4} → {5}，同音)"
-en = "{0}:{1}: 「{2}」 here, 「{3}」 in the wiki ({4} → {5}, same sound)"
+zht = "{0}: 這裏是「{1}」，百科裏是「{2}」({3} → {4}，同音)"
+zhs = "{0}: 这里是「{1}」，百科里是「{2}」({3} → {4}，同音)"
+en = "{0}: 「{1}」 here, 「{2}」 in the wiki ({3} → {4}, same sound)"
 
 [[message]]
 # :check-names 查出來的太多，只列了前面那些
@@ -1052,9 +1052,9 @@ en = "{0}: punctuation is clean"
 [[message]]
 # :check-punct 結果裏的一行：半角的三點該是六點省略號
 key = "check.punct-ellipsis"
-zht = "{0}:{1}: 「{2}」該是「……」"
-zhs = "{0}:{1}: 「{2}」该是「……」"
-en = "{0}:{1}: 「{2}」 should be 「……」"
+zht = "{0}: 「{1}」該是「……」"
+zhs = "{0}: 「{1}」该是「……」"
+en = "{0}: 「{1}」 should be 「……」"
 
 [[message]]
 # :check-punct 查出了要看一眼的標點
@@ -1066,9 +1066,9 @@ en = "{0} mark(s) to look at again — gf goes to the line"
 [[message]]
 # :check-punct 結果裏的一行：中文裏的半角標點
 key = "check.punct-half"
-zht = "{0}:{1}: 半角「{2}」該是「{3}」"
-zhs = "{0}:{1}: 半角「{2}」该是「{3}」"
-en = "{0}:{1}: half-width 「{2}」 should be 「{3}」"
+zht = "{0}: 半角「{1}」該是「{2}」"
+zhs = "{0}: 半角「{1}」该是「{2}」"
+en = "{0}: half-width 「{1}」 should be 「{2}」"
 
 [[message]]
 # :check-punct 的結果那一份緩衝區的名字
@@ -1087,16 +1087,16 @@ en = "{0}+ marks to look at (first {0} listed) — gf goes to the line"
 [[message]]
 # :check-punct 結果裏的一行：開了口没有收尾的引號或括號
 key = "check.punct-unclosed"
-zht = "{0}:{1}: 「{2}」没有收尾的「{3}」"
-zhs = "{0}:{1}: 「{2}」没有收尾的「{3}」"
-en = "{0}:{1}: 「{2}」 is never closed by 「{3}」"
+zht = "{0}: 「{1}」没有收尾的「{2}」"
+zhs = "{0}: 「{1}」没有收尾的「{2}」"
+en = "{0}: 「{1}」 is never closed by 「{2}」"
 
 [[message]]
 # :check-punct 結果裏的一行：收尾的標點前面没有開口
 key = "check.punct-unopened"
-zht = "{0}:{1}: 「{2}」前面没有「{3}」"
-zhs = "{0}:{1}: 「{2}」前面没有「{3}」"
-en = "{0}:{1}: 「{2}」 with no 「{3}」 before it"
+zht = "{0}: 「{1}」前面没有「{2}」"
+zhs = "{0}: 「{1}」前面没有「{2}」"
+en = "{0}: 「{1}」 with no 「{2}」 before it"
 
 [[message]]
 # :check-usage 查完，全文用字一致
@@ -1122,9 +1122,9 @@ en = "[usage {0}]"
 [[message]]
 # :check-usage 結果裏的一行：這裏寫的和全文多數不一樣
 key = "check.usage-slip"
-zht = "{0}:{1}: 這裏是「{2}」{4} 次，全文多用「{3}」{5} 次"
-zhs = "{0}:{1}: 这里是「{2}」{4} 次，全文多用「{3}」{5} 次"
-en = "{0}:{1}: 「{2}」 here ({4}), 「{3}」 in the rest ({5})"
+zht = "{0}: 這裏是「{1}」{3} 次，全文多用「{2}」{4} 次"
+zhs = "{0}: 这里是「{1}」{3} 次，全文多用「{2}」{4} 次"
+en = "{0}: 「{1}」 here ({3}), 「{2}」 in the rest ({4})"
 
 [[message]]
 # :check-usage 查出來的太多，只列了前面那些
@@ -12176,9 +12176,9 @@ en = "{0} word(s) leaned on — gf goes to the line"
 [[message]]
 # :word-habit 結果裏的一行：這個詞説了幾次，比尋常文章多幾倍
 key = "words.habit"
-zht = "{0}:{1}: 「{2}」{3} 次——比尋常文章多 {4} 倍"
-zhs = "{0}:{1}: 「{2}」{3} 次——比寻常文章多 {4} 倍"
-en = "{0}:{1}: 「{2}」 {3}× — {4} times more often than prose"
+zht = "{0}: 「{1}」{2} 次——比尋常文章多 {3} 倍"
+zhs = "{0}: 「{1}」{2} 次——比寻常文章多 {3} 倍"
+en = "{0}: 「{1}」 {2}× — {3} times more often than prose"
 
 [[message]]
 # :word-habit 但手上這份分詞器没有詞頻表，問不了「尋常文章説幾次」

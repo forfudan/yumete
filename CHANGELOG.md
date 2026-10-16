@@ -50,6 +50,12 @@ in `docs/development.md` §5.2.
   same builder: `537-` / `533+`, a faint ground per row, the changed words brighter,
   each line against its own earlier draft, and the float wraps the way the page does
   (禁則 included), continuation rows indented to the text column.
+- **A report about one file no longer repeats the filename on every row.** `:check-punct`,
+  `:check-usage`, `:check-charset`, `:check-names`, `:table-check` and 習慣詞 all said
+  `ch01.txt:12: …` on every line of a report that was about `ch01.txt` and nothing else;
+  the buffer's own name already says which file. The row is now `12: …` and `gf` still
+  goes there. `:grep` and `:diagnostics-all` keep the name — they span files, so there
+  it is the thing that differs.
 - **A generated report is read, not edited.** `:git-diff`, `:diff`, `:check-punct`,
   `:count-progress` and the `:write` verification stay fully rendered wherever the
   cursor is — the markup no longer opens up under it — and no info panel follows the

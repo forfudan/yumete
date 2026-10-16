@@ -98,11 +98,10 @@ impl Editor {
                 Separator::Delimiter(d) => crate::table::field_runs_on(&text, d),
             };
             if runs_on {
-                found.push(say!("chaifen.field-runs-on", name, line + 1));
+                found.push(say!("chaifen.field-runs-on", line + 1));
             } else if spans.len() != want {
                 found.push(say!(
                     "chaifen.wrong-column-count",
-                    name,
                     line + 1,
                     spans.len(),
                     want
@@ -114,7 +113,6 @@ impl Editor {
                     if let Some(&was) = seen.get(&k) {
                         found.push(say!(
                             "chaifen.duplicate-row-name",
-                            name,
                             line + 1,
                             k,
                             was + 1
@@ -155,7 +153,7 @@ impl Editor {
             }
             if !missing.is_empty() {
                 let list: String = missing.iter().collect();
-                found.push(say!("chaifen.component-not-found", name, line + 1, list));
+                found.push(say!("chaifen.component-not-found", line + 1, list));
             }
             if found.len() >= LISTING_LIMIT {
                 break;
@@ -229,7 +227,6 @@ impl Editor {
         for slip in slips.iter().take(LISTING_LIMIT) {
             listing.push_str(&say!(
                 "check.usage-slip",
-                name,
                 slip.line + 1,
                 slip.written,
                 slip.instead,
@@ -305,7 +302,6 @@ impl Editor {
         for slip in slips.iter().take(LISTING_LIMIT) {
             listing.push_str(&say!(
                 "check.names-slip",
-                name,
                 slip.line + 1,
                 slip.written,
                 slip.name,
@@ -438,7 +434,6 @@ impl Editor {
         for word in found.iter().take(LISTING_LIMIT) {
             listing.push_str(&say!(
                 "words.habit",
-                name,
                 word.line + 1,
                 word.word,
                 word.count,
@@ -532,10 +527,29 @@ impl Editor {
             .path()
             .and_then(|p| p.parent())
             .map(Path::to_path_buf);
-        // **每一份新報告自己說跳到哪**：不說的就回到「讀行上那個 `檔:行:`」那
-        // 條老路（`:grep`、`:check-punct` 都在那條路上）。`:git-diff` 寫在它
-        // 自己那一支裏，就在這一句之後。
-        self.listing_jumps = None;
+        // **每一份報告自己說跳到哪**（2026-10-16）。
+        //
+        // 一份報告說的是哪一個檔，緩衝區的名字已經寫着，所以行上不再抄一遍
+        // （原話：「why `文.md:` is needed if the `git-diff` shows the diff for
+        // only one file」）。行頭那個數字就是去處，這一句把它們收成一張表。
+        //
+        // Warning: **跨檔的那幾份不受影響**：`:grep` 的行是 `路徑:行:`，行頭不是數
+        // 字，這裏記 `0`，`gf` 就落回「讀行上那個檔名」那條老路。`:git-diff`
+        // 另有一張（舊稿那一行要跳到它配對的那一行），寫在它自己那一支裏。
+        self.listing_jumps = self.current_buffer().path().map(|path| {
+            let jumps = listing
+                .lines()
+                .map(|line| {
+                    let digits: String =
+                        line.trim_start().chars().take_while(char::is_ascii_digit).collect();
+                    match line.trim_start().chars().nth(digits.len()) {
+                        Some(':') => digits.parse().unwrap_or(0),
+                        _ => 0,
+                    }
+                })
+                .collect();
+            (path.to_path_buf(), jumps)
+        });
         self.add_buffer(buffer);
         self.set_cursor(0);
     }
@@ -573,16 +587,16 @@ impl Editor {
             let at = slip.line + 1;
             listing.push_str(&match slip.kind {
                 crate::punct::Kind::HalfWidth => {
-                    say!("check.punct-half", name, at, slip.written, slip.wanted)
+                    say!("check.punct-half", at, slip.written, slip.wanted)
                 }
                 crate::punct::Kind::Ellipsis => {
-                    say!("check.punct-ellipsis", name, at, slip.written)
+                    say!("check.punct-ellipsis", at, slip.written)
                 }
                 crate::punct::Kind::Unclosed => {
-                    say!("check.punct-unclosed", name, at, slip.written, slip.wanted)
+                    say!("check.punct-unclosed", at, slip.written, slip.wanted)
                 }
                 crate::punct::Kind::Unopened => {
-                    say!("check.punct-unopened", name, at, slip.written, slip.wanted)
+                    say!("check.punct-unopened", at, slip.written, slip.wanted)
                 }
             });
             listing.push('\n');
@@ -663,7 +677,6 @@ impl Editor {
             let (line, count, block) = &seen[ch];
             listing.push_str(&say!(
                 "check.charset-outside",
-                name,
                 line + 1,
                 ch,
                 block,

@@ -1122,6 +1122,33 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **檔名從報告的行上去掉了，而 `gf` 照樣跳得走**（2026-10-16）。
+///
+/// 原話：「why `文.md:` is needed if the `git-diff` shows the diff for only one
+/// file」。一份報告說的就是那一個檔，緩衝區的名字已經寫着；行頭那個號就是去
+/// 處。跨檔那幾份不受影響——`:grep` 的行頭不是數字，`gf` 落回老路。
+#[test]
+fn a_one_file_report_drops_the_name_and_gf_still_goes() {
+    let dir = tmp().join(format!("yumete-noname-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("ch01.txt");
+    std::fs::write(&file, "第一行。\n她說,好。\n第三行。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.execute(":check-punct").unwrap();
+
+    let out = ed.current_buffer().text();
+    assert!(out.starts_with("2: "), "行頭是號碼，不是檔名：{out}");
+    assert!(!out.contains("ch01.txt"), "檔名不該在行上：{out}");
+    // 跳回去還是那一行。
+    press(&mut ed, "gf");
+    assert_eq!(ed.current_buffer().display_name(), "ch01.txt");
+    assert_eq!(ed.cursor_line(), 1);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **一份報告是讀的，不是寫的**（2026-10-16 定）。
 ///
 /// 原話：「should not display any info panel (wiki), and should not expand to
@@ -7632,9 +7659,12 @@ fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     ed.open_file(&csv).unwrap();
     assert!(ed.execute("table-check").is_ok());
     let out = ed.current_buffer().text();
-    assert!(out.contains("c.csv:2:") && out.contains("卵"), "{out}");
-    assert!(out.contains("c.csv:3:") && out.contains("欄"), "{out}");
-    assert!(out.contains("c.csv:5:") && out.contains("重了"), "{out}");
+    // **檔名不在行上**（2026-10-16）：整份報告說的就是這一個檔，緩衝區的名字
+    // 已經寫着。行頭那個號就是去處，`gf` 讀它。
+    assert!(out.contains("\n2: ") && out.contains("卵"), "{out}");
+    assert!(out.starts_with("3: ") && out.contains("欄"), "{out}");
+    assert!(out.contains("\n5: ") && out.contains("重了"), "{out}");
+    assert!(!out.contains("c.csv"), "檔名不該在行上：{out}");
     // ⿰ is grammar, so it is not reported as a missing component.
     assert!(!out.contains('⿰'), "{out}");
     // A clean table says so and opens nothing.
@@ -7655,7 +7685,7 @@ fn check_usage_lists_the_slips_and_says_when_it_stopped_listing() {
     let mut ed = typed("那裏很冷。\n他站在裏面。\n她走進屋裡。\n");
     assert!(ed.execute("check-usage").is_ok());
     let out = ed.current_buffer().text();
-    assert!(out.contains(":3:") && out.contains('裡') && out.contains('裏'), "{out}");
+    assert!(out.starts_with("3: ") && out.contains('裡') && out.contains('裏'), "{out}");
     assert!(ed.status().contains('1'), "{}", ed.status());
 
     // Past `LISTING_LIMIT` the buffer holds the first five hundred and the
@@ -7710,7 +7740,7 @@ fn check_charset_reports_each_character_once() {
     assert!(ed.execute("check-charset").is_ok());
     let out = ed.current_buffer().text();
     assert_eq!(out.lines().count(), 1, "one line per character: {out}");
-    assert!(out.contains('𠮷') && out.contains(":2:"), "{out}");
+    assert!(out.contains('𠮷') && out.starts_with("2: "), "{out}");
     assert!(out.contains('2'), "how many times, not just where: {out}");
     // 龘 is rare — `:ruby-auto rare` annotates it — but 古籍 is a standard
     // and carries it, so it is not this command's finding.
@@ -7757,8 +7787,8 @@ fn check_punct_finds_the_quote_that_never_closes() {
     let mut ed = typed("他說,好。\n她問：「你回來了。\n這一行没事。\n");
     assert!(ed.execute("check-punct").is_ok());
     let out = ed.current_buffer().text();
-    assert!(out.contains(":1:") && out.contains('，'), "{out}");
-    assert!(out.contains(":2:") && out.contains('」'), "{out}");
+    assert!(out.starts_with("1: ") && out.contains('，'), "{out}");
+    assert!(out.contains("\n2: ") && out.contains('」'), "{out}");
     assert_eq!(out.lines().count(), 2, "{out}");
 
     // Nothing to say is said, rather than an empty buffer being opened.
@@ -13912,10 +13942,11 @@ fn a_record_that_runs_on_is_named_by_the_check() {
     assert!(ed.enter_table(), "{}", ed.status());
     ed.execute(":table-check").unwrap();
     let listing = ed.current_buffer().text();
-    assert!(listing.contains("people.csv:3"), "{listing:?}");
+    assert!(listing.starts_with("3: "), "{listing:?}");
     assert!(listing.contains("引號没關上"), "{listing:?}");
     // …and the quoted name on line 2 is not reported at all: it is one field.
-    assert!(!listing.contains("people.csv:2"), "{listing:?}");
+    assert!(!listing.contains("2: "), "{listing:?}");
+    assert!(!listing.contains("people.csv"), "檔名不該在行上：{listing:?}");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -20500,7 +20531,7 @@ fn check_names_finds_a_wiki_name_written_one_homophone_out() {
     assert!(listing.contains("醉翁停"), "the homophone is found: {listing}");
     assert!(listing.contains("醉翁亭"), "and what the wiki has: {listing}");
     assert_eq!(listing.lines().count(), 1, "醉翁路 is a different word: {listing}");
-    assert!(listing.contains(":2:"), "with the line it is on: {listing}");
+    assert!(listing.contains("2: "), "with the line it is on: {listing}");
     std::fs::remove_dir_all(&dir).ok();
 }
 
