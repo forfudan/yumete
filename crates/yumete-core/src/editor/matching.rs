@@ -1161,7 +1161,24 @@ impl Editor {
         };
         let rope = self.current_buffer().rope();
         let here = self.sel.head();
-        let (first, last) = (motion::line_start(rope, here), motion::line_last(rope, here));
+        // **插入態坐得上行末那一格**（2026-10-17 報的）。vim 的普通模式停不到換
+        // 行符上，所以普通態的右邊界是**最後一個字**（`line_last`）；插入態不
+        // 是——那一格正是打字的地方，一行的虛擬欄是 `len+1`。
+        //
+        // 從前兩態共用普通態那個界，於是 vim 鍵位下插入態按 `→` 卡在最後一個字
+        // 上：原話「I cannot use right arrow to navigate to the right side of
+        // the last character of the document」。而且不只末尾——一行的末字就走
+        // 不過去，多行檔裏 `→` 從此一步也前進不了，要退回普通態按 `a`。
+        //
+        // nvim --clean 實測（`abc`，插入態從第一欄起，按完插一個 `X` 看落點）：
+        // 一下 `aXbc`、兩下 `abXc`、三下 `abcX`、四下還是 `abcX`——到行末停住，
+        // 不跨行（出廠 `whichwrap` 不含 `]`）。下面那一段 `across` 管的正是跨不
+        // 跨，所以這裏只要把界放對。
+        let first = motion::line_start(rope, here);
+        let last = match self.mode {
+            crate::editor::Mode::Insert => motion::line_end(rope, here),
+            _ => motion::line_last(rope, here),
+        };
         if (first..=last).contains(&pos) {
             return pos;
         }

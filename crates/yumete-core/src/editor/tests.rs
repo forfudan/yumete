@@ -26028,6 +26028,51 @@ fn space_k_after_an_esc_opens_the_doc_again_without_moving() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **插入態的 `→` 走得到行末那一格**（2026-10-17 報的）。
+///
+/// 原話：「In vim keymap and insert mode, I cannot use right arrow to navigate
+/// to the right side of the last character of the document……You have to go
+/// back to the normal mode and use `A` or `a` to go there.」
+///
+/// 普通態停不到換行符上是 vim 自己的規矩（`line_last`），而插入態不是——那一
+/// 格正是打字的地方。從前兩態共用普通態那個界，於是一行的末字就走不過去，多行
+/// 檔裏 `→` 一步也前進不了。
+///
+/// 數字照 nvim --clean 量的（`abc`，插入態從第一欄起，按完插一個 `X` 看落點）：
+/// 一下 `aXbc`、兩下 `abXc`、三下 `abcX`、四下還是 `abcX`。
+#[test]
+fn the_right_arrow_reaches_the_end_of_the_line_while_typing() {
+    let after = |presses: usize| -> String {
+        let mut ed = typed("abc\ndef");
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        ed.execute("goto 1").unwrap();
+        ed.on_key(Key::Char('i'));
+        for _ in 0..presses {
+            ed.on_key(Key::Right);
+        }
+        ed.on_key(Key::Char('X'));
+        ed.current_buffer().text().lines().next().unwrap_or_default().to_string()
+    };
+    assert_eq!(after(1), "aXbc");
+    assert_eq!(after(2), "abXc");
+    // 這一格是從前到不了的那一格。
+    assert_eq!(after(3), "abcX");
+    // …而且到了就停住：出廠 `whichwrap` 不含 `]`，不跨到下一行去。
+    assert_eq!(after(4), "abcX");
+    assert_eq!(after(9), "abcX");
+
+    // 普通態一個字都沒變：那裏的界還是最後一個字。
+    let mut ed = typed("abc\ndef");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.execute("goto 1").unwrap();
+    for _ in 0..9 {
+        ed.on_key(Key::Right);
+    }
+    ed.on_key(Key::Char('a'));
+    ed.on_key(Key::Char('X'));
+    assert_eq!(ed.current_buffer().text().lines().next().unwrap_or_default(), "abcX");
+}
+
 /// **vim 的 `whichwrap`：哪些鍵走得出一行的兩頭**（2026-10-10 用戶提的）。
 ///
 /// 出廠和 vim 出廠一樣（`b`，也就是只有普通模式的退格跨得出去）；`h` `l` `<` `>`

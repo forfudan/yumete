@@ -154,6 +154,13 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Under the vim keymap, the right arrow in insert mode reaches the end of the line.**
+  It was clamped to the *last character* — vim's Normal-mode rule, where the caret may
+  not sit on the newline — so in insert mode you could not move the caret past the last
+  character of a line at all, let alone of the document, and had to go back to Normal
+  and press `a`/`A`. Measured against `nvim --clean`: on `abc`, three presses now land
+  after the `c`, and a fourth stays there, because `]` is not in the factory
+  `whichwrap`. Normal mode is unchanged.
 - **A system input method composing on a vertical page no longer covers the wrong
   character.** The rule that marks the insertion point sits on the boundary above the
   character you are typing in front of, and it used to *be* the terminal's own cursor,
