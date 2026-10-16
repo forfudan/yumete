@@ -469,20 +469,21 @@ pub enum Command {
     /// `:yume-commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
-    /// `:yume-panel full|off` — 候選面板畫不畫（yume 管它叫「空空如也」）。
+    /// `:yume-panel on|off` — 候選面板是光標邊上那個框，還是命令行上那一條。
     /// `None` asks which one is in force.
     ///
     /// Independent of [`Command::YumeCommit`]: **when** a word lands on the
     /// page and **where** you read the candidate are two questions, and the
     /// nine combinations are all sensible (Feature #211).
     YumePanel(Option<String>),
-    /// `:yume-preedit header|code|top` — 正在打的那一段寫在面板第一列，還是寫
-    /// 進正文；寫進正文的時候寫編碼還是寫首選。`None` 是問現在是哪一檔。
+    /// `:yume-inline-preedit off|composition|preview` — 正在打的那一段寫在候選
+    /// 欄的頭上，還是寫進正文；寫進正文的時候寫編碼還是寫首選。`None` 是問現在
+    /// 是哪一檔。
     ///
     /// **和 [`Command::YumePanel`] 各管各的**（2026-09-27 定，原話：「你搞错了
     /// layout 和 inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面
     /// 板 ＋ 正文裏站着首選」這個組合按不出來。
-    YumePreedit(Option<String>),
+    YumeInlinePreedit(Option<String>),
     /// `:theme-fill [on|off]` — whether a 品色 run also gets a ground.
     ///
     /// Off: the backtick and the `>` are drawn already, so the run's extent is
@@ -1360,7 +1361,7 @@ const FORCEABLE: &[&str] = &[
     "yume-chaifen!",
     "yume-commit!",
     "yume-panel!",
-    "yume-preedit!",
+    "yume-inline-preedit!",
     "yume-menu-size!",
     "yume-autocompletion!",
     "view-bands!",
@@ -1853,8 +1854,8 @@ const COMMITS: &[Word] = &[
 
 const PANELS: &[Word] = &[
     Word {
-        name: "full",
-        help: "cmd.panels.full",
+        name: "on",
+        help: "cmd.panels.on",
         needs: &[],
     },
     Word {
@@ -1864,21 +1865,21 @@ const PANELS: &[Word] = &[
     },
 ];
 
-/// 正在打的那一段寫在哪、寫什麼——`:yume-preedit` 的三個詞（2026-09-27）。
+/// 正在打的那一段寫在哪、寫什麼——`:yume-inline-preedit` 的三個詞（2026-09-27）。
 const PREEDITS: &[Word] = &[
     Word {
-        name: "header",
-        help: "cmd.preedits.header",
+        name: "off",
+        help: "cmd.inline-preedits.off",
         needs: &[],
     },
     Word {
-        name: "code",
-        help: "cmd.preedits.code",
+        name: "composition",
+        help: "cmd.inline-preedits.composition",
         needs: &[],
     },
     Word {
-        name: "top",
-        help: "cmd.preedits.top",
+        name: "preview",
+        help: "cmd.inline-preedits.preview",
         needs: &[],
     },
 ];
@@ -3496,12 +3497,12 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "yume-preedit",
+        name: "yume-inline-preedit",
         aliases: &[],
-        help: "cmd.yume.preedit",
+        help: "cmd.yume.inline-preedit",
         needs: &[Need::Scheme],
         params: &[Param::Words { of: PREEDITS, default: None }],
-        build: Some(|p| Ok(Command::YumePreedit(p.arg(0).map(|w| w.to_string())))),
+        build: Some(|p| Ok(Command::YumeInlinePreedit(p.arg(0).map(|w| w.to_string())))),
     },
     Entry {
         name: "yume-menu-size",
@@ -6143,22 +6144,31 @@ mod tests {
             parse(":yume-panel off"),
             Ok(Command::YumePanel(Some("off".into())))
         );
-        // Warning: `:yume-p` 從 2026-09-27 起兩頭都認（`yume-panel`/`yume-preedit`），
-        // 所以最短的寫法多了一個字母。前綴規矩没變：認兩個就是誰都不認。
+        // `:yume-p` 又是 `yume-panel` 一個人的了（2026-10-16）：2026-09-27 和它
+        // 搶這個頭的 `yume-preedit` 改叫 `yume-inline-preedit` 了。
+        // Warning: `on` 與 `off` 同一個頭，所以參數那一頭最短是 `on` 和 `of`。
         assert_eq!(
-            parse(":yume-pa f"),
-            Ok(Command::YumePanel(Some("full".into())))
+            parse(":yume-p of"),
+            Ok(Command::YumePanel(Some("off".into())))
+        );
+        assert_eq!(
+            parse(":yume-p on"),
+            Ok(Command::YumePanel(Some("on".into())))
         );
         // 2026-09-27 分出來的那一格：面板畫不畫，和正在打的那一段寫在哪，兩件事。
-        assert_eq!(parse(":yume-preedit"), Ok(Command::YumePreedit(None)));
         assert_eq!(
-            parse(":yume-pr t"),
-            Ok(Command::YumePreedit(Some("top".into())))
+            parse(":yume-inline-preedit"),
+            Ok(Command::YumeInlinePreedit(None))
+        );
+        // `:yume-in` 還撞着 `yume-installed`，`:yume-inl` 纔是它一個人的。
+        assert_eq!(
+            parse(":yume-inl p"),
+            Ok(Command::YumeInlinePreedit(Some("preview".into())))
         );
         assert!(matches!(
-            parse(":yume-preedit inline"),
+            parse(":yume-inline-preedit inline"),
             Err(CommandError::InvalidArgument {
-                command: "yume-preedit",
+                command: "yume-inline-preedit",
                 ..
             })
         ));
@@ -7279,7 +7289,9 @@ mod tests {
         for (word, sent_to) in [
             ("bands", "`:view-bands`"),
             ("hanging", "`:view-hanging`"),
-            ("preview", "`:view-preview`"),
+            // Two owners since 2026-10-16: `preview` is also the word that
+            // puts the first candidate in the text.
+            ("preview", "`:yume-inline-preedit preview` `:view-preview`"),
             ("progress", "`:count-progress`"),
             ("merge", "`:check-merge`"),
         ] {

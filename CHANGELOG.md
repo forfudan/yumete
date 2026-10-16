@@ -21,6 +21,37 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- Warning: **Breaking: `:yume-panel off` now draws the candidates on the command row,
+  and the two commands are spelled differently.** `:yume-panel full|off` is
+  `:yume-panel on|off`, and `:yume-preedit header|code|top` is
+  `:yume-inline-preedit off|composition|preview`; the config keys are `[panel] display`
+  (`"on"`/`"off"`) and `[panel] inline_preedit`. The old spellings are gone, not
+  aliased.
+
+  `off` used to draw nothing at all, and `Tab` summoned the box for one word. It now
+  moves the same bar to the **command row** — the last row of the window, which is
+  reserved whether you are typing or not, so the manuscript loses nothing. The same
+  markers, the same ink, the same highlight; `1`–`9` pick, `=`/`-` page. What it drops
+  is the 拆分 and 注解 a bordered row has space for — a row at the foot carries the
+  number and the character and nothing else. How many fit is measured against the
+  width, so a narrow window shows fewer; `[panel] page_size` is still the ceiling.
+
+  With no command row (`[editor] command_line = false`, or a window too short for two
+  rows) the candidates go on the status line while you compose. A `:`, a `/` or a
+  picker takes that row for itself, so the bordered box comes back while you type into
+  one of those.
+- **`Tab` asks the 字典 on the first press, whatever the panel setting is.** With the
+  candidates always on screen there is nothing left for it to summon, so the two-press
+  detour under `off` is gone.
+- **The arrow keys walk the candidate list.** Two of them move the highlight and two
+  page, and which two follows what is drawn: the box in 橫排 is a column, so `↓`/`↑`
+  move and `→`/`←` page; the box in 竪排 runs right to left, so `←`/`→` move and
+  `↓`/`↑` page; the row at the foot runs left to right in both layouts, so `→`/`←`
+  move and `↓`/`↑` page. Past the last candidate the highlight runs on into the next
+  page. They used to be swallowed.
+- **The code is drawn in one place.** It used to appear beside the caret and at the
+  right end of the status line whenever the panel was off and nothing was inline; it
+  now heads the candidates, wherever they are.
 - **A word anywhere in a command's name now finds it.** A name is a path of
   hyphen-separated words, so typing `panel` offers `:yume-panel` and `:wiki-panel`
   alongside the `:panel-…` family rather than only the ones that begin with it, and

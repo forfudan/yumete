@@ -2063,6 +2063,30 @@ en = "indent width: the spaces Tab types, and how far > and < shift"
 find = "縮進 缩进 寬度 宽度 空格 indent width"
 
 [[message]]
+# : 命令選單裏 composition 那一項的説明(inline-preedits 組)
+key = "cmd.inline-preedits.composition"
+zht = "正文裏寫編碼：碼站在它要上屏的地方，面板不再寫一遍"
+zhs = "正文里写编码：码站在它要上屏的地方，面板不再写一遍"
+en = "the code, in the text where it will land; the panel stops repeating it"
+find = "編碼 编码 內嵌 内嵌 code"
+
+[[message]]
+# : 命令選單裏 off 那一項的説明(inline-preedits 組)
+key = "cmd.inline-preedits.off"
+zht = "候選欄裏：不內嵌。編碼寫在候選的前頭，候選欄在哪它就在哪"
+zhs = "候选栏里：不内嵌。编码写在候选的前头，候选栏在哪它就在哪"
+en = "in the candidate bar — not inline; the code heads the candidates, wherever they are"
+find = "編碼 编码 面板 候選欄 候选栏 off"
+
+[[message]]
+# : 命令選單裏 preview 那一項的説明(inline-preedits 組)
+key = "cmd.inline-preedits.preview"
+zht = "正文裏寫首選：讀的是句子不是碼，所以編碼哪兒都不顯示"
+zhs = "正文里写首选：读的是句子不是码，所以编码哪儿都不显示"
+en = "the first candidate, in the text — so the code is not shown anywhere"
+find = "首選 首选 內嵌 内嵌 top"
+
+[[message]]
 # :keymap-actions 做什麼
 key = "cmd.keymap.actions"
 zht = "列出每個能綁的動作名"
@@ -2268,44 +2292,20 @@ zhs = "把这一格挪到右边(不写名字就是手上这一格)"
 en = "move this panel to the right"
 
 [[message]]
-# : 命令選單裏 full 那一項的説明(panels 組)
-key = "cmd.panels.full"
+# : 命令選單裏 off 那一項的説明(panels 組)
+key = "cmd.panels.off"
+zht = "底行：候選橫着排在窗口最下面那一行，整頁留給稿子"
+zhs = "底行：候选横着排在窗口最下面那一行，整页留给稿子"
+en = "the command row: the candidates run across the foot, the page is yours"
+find = "候選 候选 面板 空空如也 底行 off"
+
+[[message]]
+# : 命令選單裏 on 那一項的説明(panels 組)
+key = "cmd.panels.on"
 zht = "候選框：光標旁邊的那張帶框的表"
 zhs = "候选框：光标旁边的那张带框的表"
 en = "候選框: the bordered list beside the caret"
-find = "候選 候选 面板 候選框 候选框 full"
-
-[[message]]
-# : 命令選單裏 off 那一項的説明(panels 組)
-key = "cmd.panels.off"
-zht = "不畫候選框，把整頁留給稿子；Tab 能為手上這一個詞把它召出來"
-zhs = "不画候选框，把整页留给稿子；Tab 能为手上这一个词把它召出来"
-en = "no list at all — the page is yours; Tab summons it for the word in hand"
-find = "候選 候选 面板 空空如也 off"
-
-[[message]]
-# : 命令選單裏 code 那一項的説明(preedits 組)
-key = "cmd.preedits.code"
-zht = "正文裏寫編碼：碼站在它要上屏的地方，面板不再寫一遍"
-zhs = "正文里写编码：码站在它要上屏的地方，面板不再写一遍"
-en = "the code, in the text where it will land; the panel stops repeating it"
-find = "編碼 编码 內嵌 内嵌 code"
-
-[[message]]
-# : 命令選單裏 header 那一項的説明(preedits 組)
-key = "cmd.preedits.header"
-zht = "面板第一列：不內嵌。面板關着的時候編碼畫在光標下那一格浮窗裏"
-zhs = "面板第一列：不内嵌。面板关着的时候编码画在光标下那一格浮窗里"
-en = "in the panel — not inline; with no panel the code goes under the caret"
-find = "編碼 编码 面板 header"
-
-[[message]]
-# : 命令選單裏 top 那一項的説明(preedits 組)
-key = "cmd.preedits.top"
-zht = "正文裏寫首選：讀的是句子不是碼，所以編碼哪兒都不顯示"
-zhs = "正文里写首选：读的是句子不是码，所以编码哪儿都不显示"
-en = "the first candidate, in the text — so the code is not shown anywhere"
-find = "首選 首选 內嵌 内嵌 top"
+find = "候選 候选 面板 候選框 候选框 on"
 
 [[message]]
 # :quit-all —— 全部關掉再走；短寫 :qa
@@ -3230,6 +3230,14 @@ en = "commit method: delayed (頂字), unique, whole-sentence"
 find = "輸入法 输入法 上屏 頂字 顶字 整句 commit"
 
 [[message]]
+# : 命令選單裏 inline-preedit 那一項的説明(yume 組)
+key = "cmd.yume.inline-preedit"
+zht = "正在打的那一段寫在哪：off 候選欄裏，composition 正文裏寫編碼，preview 正文裏寫首選"
+zhs = "正在打的那一段写在哪：off 候选栏里，composition 正文里写编码，preview 正文里写首选"
+en = "where the composition shows: off in the candidate bar, composition or preview in the text"
+find = "輸入法 输入法 編碼 编码 內嵌 内嵌 preedit inline"
+
+[[message]]
 # : 命令選單裏 installed 那一項的説明(yume 組)
 key = "cmd.yume.installed"
 zht = "改用系統裝的那份碼表(builtin 的反面)"
@@ -3264,18 +3272,10 @@ find = "輸入法 输入法 中文 打字 on"
 [[message]]
 # : 命令選單裏 panel 那一項的説明(yume 組)
 key = "cmd.yume.panel"
-zht = "候選面板畫不畫：full 畫，off 不畫"
-zhs = "候选面板画不画：full 画，off 不画"
-en = "whether the candidate list is drawn: full draws it, off does not"
+zht = "候選畫在哪：on 光標旁邊的候選框，off 窗口最下面那一行"
+zhs = "候选画在哪：on 光标旁边的候选框，off 窗口最下面那一行"
+en = "where the candidates are drawn: on the box by the caret, off the command row"
 find = "輸入法 输入法 候選 候选 面板 panel"
-
-[[message]]
-# : 命令選單裏 preedit 那一項的説明(yume 組)
-key = "cmd.yume.preedit"
-zht = "正在打的那一段寫在哪：header 面板第一列，code 正文裏寫編碼，top 正文裏寫首選"
-zhs = "正在打的那一段写在哪：header 面板第一列，code 正文里写编码，top 正文里写首选"
-en = "where the composition shows: header in the panel, code or top in the text"
-find = "輸入法 输入法 編碼 编码 內嵌 内嵌 preedit inline"
 
 [[message]]
 # : 命令選單裏 scheme 那一項的説明(yume 組)
@@ -6505,6 +6505,41 @@ zhs = "PgUp/PgDn 翻页"
 en = "PgUp/PgDn to page"
 
 [[message]]
+# 正在打的那一段的名字：正文里写编码
+key = "inline-preedit.name.composition"
+zht = "正文裏寫編碼"
+zhs = "正文里写编码"
+en = "the code, in the text"
+
+[[message]]
+# 正在打的那一段的名字：候选栏里
+key = "inline-preedit.name.off"
+zht = "候選欄裏"
+zhs = "候选栏里"
+en = "in the candidate bar"
+
+[[message]]
+# 正在打的那一段的名字：正文里写首选
+key = "inline-preedit.name.preview"
+zht = "正文裏寫首選"
+zhs = "正文里写首选"
+en = "the first candidate, in the text"
+
+[[message]]
+# 没有这种写法
+key = "inline-preedit.no-such"
+zht = "没有「{0}」這種寫法——off、composition、preview"
+zhs = "没有「{0}」这种写法——off、composition、preview"
+en = "no inline preedit '{0}' — off, composition, preview"
+
+[[message]]
+# 正在打的那一段写在哪，换好了
+key = "inline-preedit.set"
+zht = "正在打的那一段：{0}"
+zhs = "正在打的那一段：{0}"
+en = "preedit: {0}"
+
+[[message]]
 # 開場屏：空格 ? 做什麼
 key = "intro.all-commands"
 zht = "顯示命令列表"
@@ -7576,25 +7611,25 @@ zhs = "那一半的文件已经关掉了"
 en = "the file that half was showing is closed"
 
 [[message]]
+# 候選面板的名字：底行
+key = "panel.name.off"
+zht = "底行"
+zhs = "底行"
+en = "the command row"
+
+[[message]]
 # 候選面板的名字：候選框
-key = "panel.name.full"
+key = "panel.name.on"
 zht = "候選框"
 zhs = "候选框"
 en = "the bordered list (候選框)"
 
 [[message]]
-# 候選面板的名字：不畫
-key = "panel.name.off"
-zht = "不畫"
-zhs = "不画"
-en = "off"
-
-[[message]]
 # 没有這種候選面板
 key = "panel.no-such-panel"
-zht = "没有「{0}」這種候選面板——full、off"
-zhs = "没有「{0}」这种候选面板——full、off"
-en = "no candidate panel '{0}' — full, off"
+zht = "没有「{0}」這種候選面板——on、off"
+zhs = "没有「{0}」这种候选面板——on、off"
+en = "no candidate panel '{0}' — on, off"
 
 [[message]]
 # 候選面板換好了
@@ -7650,41 +7685,6 @@ key = "picker.wiki"
 zht = "詞條"
 zhs = "词条"
 en = "entries"
-
-[[message]]
-# 正在打的那一段的名字：正文里写编码
-key = "preedit.name.code"
-zht = "正文裏寫編碼"
-zhs = "正文里写编码"
-en = "the code, in the text"
-
-[[message]]
-# 正在打的那一段的名字：面板第一列
-key = "preedit.name.header"
-zht = "面板第一列"
-zhs = "面板第一列"
-en = "in the panel"
-
-[[message]]
-# 正在打的那一段的名字：正文里写首选
-key = "preedit.name.top"
-zht = "正文裏寫首選"
-zhs = "正文里写首选"
-en = "the first candidate, in the text"
-
-[[message]]
-# 没有这种写法
-key = "preedit.no-such-preedit"
-zht = "没有「{0}」這種寫法——header、code、top"
-zhs = "没有「{0}」这种写法——header、code、top"
-en = "no preedit '{0}' — header, code, top"
-
-[[message]]
-# 正在打的那一段写在哪，换好了
-key = "preedit.set"
-zht = "正在打的那一段：{0}"
-zhs = "正在打的那一段：{0}"
-en = "preedit: {0}"
 
 [[message]]
 # :view-preview 做不出那一頁
@@ -9830,9 +9830,23 @@ en = "display"
 [[message]]
 # 設置：候选怎么画——一句話
 key = "set.panel.display.hint"
-zht = "打字的時候畫不畫那個候選框。關掉之後 Tab 還能為這一個詞把它叫出來"
-zhs = "打字的时候画不画那个候选框。关掉之后 Tab 还能为这一个词把它叫出来"
+zht = "打字的時候候選畫在哪：光標旁邊的候選框，還是窗口最下面那一行"
+zhs = "打字的时候候选画在哪：光标旁边的候选框，还是窗口最下面那一行"
 en = "display"
+
+[[message]]
+# 設置：正在打的那一段写在哪
+key = "set.panel.inline-preedit"
+zht = "正在打的那一段"
+zhs = "正在打的那一段"
+en = "preedit"
+
+[[message]]
+# 設置：正在打的那一段写在哪——一句话
+key = "set.panel.inline-preedit.hint"
+zht = "正在打的那一段寫在候選欄裏，還是寫進正文；寫進正文的時候寫編碼還是寫首選"
+zhs = "正在打的那一段写在候选栏里，还是写进正文；写进正文的时候写编码还是写首选"
+en = "preedit"
 
 [[message]]
 # 設置：候选的序号
@@ -9861,20 +9875,6 @@ key = "set.panel.page-size.hint"
 zht = "候選框一頁列幾個字"
 zhs = "候选框一页列几个字"
 en = "page size"
-
-[[message]]
-# 設置：正在打的那一段写在哪
-key = "set.panel.preedit"
-zht = "正在打的那一段"
-zhs = "正在打的那一段"
-en = "preedit"
-
-[[message]]
-# 設置：正在打的那一段写在哪——一句话
-key = "set.panel.preedit.hint"
-zht = "正在打的那一段寫在面板第一列，還是寫進正文；寫進正文的時候寫編碼還是寫首選"
-zhs = "正在打的那一段写在面板第一列，还是写进正文；写进正文的时候写编码还是写首选"
-en = "preedit"
 
 [[message]]
 # 設置：面板圆角
@@ -9919,18 +9919,18 @@ zhs = "两格"
 en = "ambiguous width.wide"
 
 [[message]]
+# 設置：候选怎么画——底行
+key = "set.pick.display.off"
+zht = "底行"
+zhs = "底行"
+en = "display.off"
+
+[[message]]
 # 設置：候选怎么画——候选框
-key = "set.pick.display.full"
+key = "set.pick.display.on"
 zht = "候選框"
 zhs = "候选框"
 en = "display.full"
-
-[[message]]
-# 設置：候选怎么画——不画
-key = "set.pick.display.off"
-zht = "不畫"
-zhs = "不画"
-en = "display.off"
 
 [[message]]
 # 設置：纸面——自己画纸
@@ -9966,6 +9966,27 @@ key = "set.pick.indent-hint.symbol"
 zht = "畫符號"
 zhs = "画符号"
 en = "indent hint.symbol"
+
+[[message]]
+# 設置：正在打的那一段——正文里写编码
+key = "set.pick.inline-preedit.composition"
+zht = "正文裏寫編碼"
+zhs = "正文里写编码"
+en = "preedit.code"
+
+[[message]]
+# 設置：正在打的那一段——候选栏里
+key = "set.pick.inline-preedit.off"
+zht = "候選欄裏"
+zhs = "候选栏里"
+en = "inline-preedit.off"
+
+[[message]]
+# 設置：正在打的那一段——正文里写首选
+key = "set.pick.inline-preedit.preview"
+zht = "正文裏寫首選"
+zhs = "正文里写首选"
+en = "preedit.top"
 
 [[message]]
 # 設置：界面语言——English
@@ -10029,27 +10050,6 @@ key = "set.pick.mode.light"
 zht = "淺色"
 zhs = "浅色"
 en = "mode.light"
-
-[[message]]
-# 設置：正在打的那一段——正文里写编码
-key = "set.pick.preedit.code"
-zht = "正文裏寫編碼"
-zhs = "正文里写编码"
-en = "preedit.code"
-
-[[message]]
-# 設置：正在打的那一段——面板第一列
-key = "set.pick.preedit.header"
-zht = "面板第一列"
-zhs = "面板第一列"
-en = "preedit.header"
-
-[[message]]
-# 設置：正在打的那一段——正文里写首选
-key = "set.pick.preedit.top"
-zht = "正文裏寫首選"
-zhs = "正文里写首选"
-en = "preedit.top"
 
 [[message]]
 # 設置：鍵位那一套——helix

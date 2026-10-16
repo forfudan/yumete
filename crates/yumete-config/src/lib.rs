@@ -658,7 +658,7 @@ pub struct PanelConfig {
     /// Whether the panel is drawn at all (Feature #211).
     pub display: PanelDisplay,
     /// Where the composition in progress is shown, and what it says.
-    pub preedit: Preedit,
+    pub inline_preedit: InlinePreedit,
 }
 
 /// **候選面板畫不畫**——yume 管這一格叫「空空如也」。
@@ -668,15 +668,17 @@ pub struct PanelConfig {
 /// 本來就知道的事。所以關得掉，而 `Tab` 照舊能把面板為某一個詞叫出來。
 ///
 /// Warning: **這一格只管面板在不在，不管正在打的那一段寫在哪。** 那是
-/// [`Preedit`] 的事，兩件事各走各的（2026-09-27 定，原話：「你搞错了 layout 和
+/// [`InlinePreedit`] 的事，兩件事各走各的（2026-09-27 定，原話：「你搞错了 layout 和
 /// inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面板 ＋ 正在打的那
 /// 一段寫進正文」這個組合按不出來。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PanelDisplay {
     /// 光標邊上那個帶框的候選列表。
     #[default]
-    Full,
-    /// 不畫。`Tab` 還能把它為這一個詞叫出來。
+    On,
+    /// No box by the caret. The candidates are still there — they are drawn
+    /// across the command row at the foot of the window, which costs the
+    /// manuscript nothing because that row is reserved already (2026-10-16).
     Off,
 }
 
@@ -685,7 +687,7 @@ impl PanelDisplay {
     /// line — one word, both places.
     pub fn tag(self) -> &'static str {
         match self {
-            PanelDisplay::Full => "full",
+            PanelDisplay::On => "on",
             PanelDisplay::Off => "off",
         }
     }
@@ -693,7 +695,7 @@ impl PanelDisplay {
     /// Read a name, or `None` — an unknown word is a typo, not a third mode.
     pub fn parse(word: &str) -> Option<PanelDisplay> {
         match word {
-            "full" => Some(PanelDisplay::Full),
+            "on" => Some(PanelDisplay::On),
             "off" => Some(PanelDisplay::Off),
             _ => None,
         }
@@ -708,42 +710,43 @@ impl PanelDisplay {
 /// 所以這一格有三檔，而不是一個布爾：不內嵌、內嵌寫編碼、內嵌寫首選。
 ///
 /// Warning: **內嵌寫首選的時候，編碼哪兒都不顯示。** 這是這一檔的本意：正文裏站着的就是
-/// 要上屏的那幾個字，看的人讀的是句子，不是碼。要看碼就選 [`Preedit::Code`]。
+/// 要上屏的那幾個字，看的人讀的是句子，不是碼。要看碼就選 [`InlinePreedit::Composition`]。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Preedit {
-    /// 不內嵌：編碼畫在面板第一列；面板關着的時候畫在光標下那一格浮窗裏。
+pub enum InlinePreedit {
+    /// 不內嵌：編碼畫在候選欄的頭上——面板開着是它的第一列，面板關着是命令行
+    /// 那一行的左端。
     #[default]
-    Header,
-    /// 內嵌，寫的是**編碼**。面板不再畫編碼那一列。
-    Code,
+    Off,
+    /// 內嵌，寫的是**編碼**。候選欄不再畫編碼那一格。
+    Composition,
     /// 內嵌，寫的是**首選**——確切說是高亮那一個，所以移動高亮就是在改正文裏的字。
-    Top,
+    Preview,
 }
 
-impl Preedit {
+impl InlinePreedit {
     /// The name this is written with, in the config file and on the command
     /// line — one word, both places.
     pub fn tag(self) -> &'static str {
         match self {
-            Preedit::Header => "header",
-            Preedit::Code => "code",
-            Preedit::Top => "top",
+            InlinePreedit::Off => "off",
+            InlinePreedit::Composition => "composition",
+            InlinePreedit::Preview => "preview",
         }
     }
 
     /// Read a name, or `None` — an unknown word is a typo, not a fourth mode.
-    pub fn parse(word: &str) -> Option<Preedit> {
+    pub fn parse(word: &str) -> Option<InlinePreedit> {
         match word {
-            "header" => Some(Preedit::Header),
-            "code" => Some(Preedit::Code),
-            "top" => Some(Preedit::Top),
+            "off" => Some(InlinePreedit::Off),
+            "composition" => Some(InlinePreedit::Composition),
+            "preview" => Some(InlinePreedit::Preview),
             _ => None,
         }
     }
 
-    /// Whether the code is drawn as the panel's own column.
+    /// Whether the code is drawn by the candidate bar itself.
     pub fn in_the_panel(self) -> bool {
-        self == Preedit::Header
+        self == InlinePreedit::Off
     }
 }
 
@@ -757,8 +760,8 @@ impl Default for PanelConfig {
             paper: (0x26, 0x2A, 0x27),
             page_size: 6,
             rounded: true,
-            display: PanelDisplay::Full,
-            preedit: Preedit::default(),
+            display: PanelDisplay::On,
+            inline_preedit: InlinePreedit::default(),
         }
     }
 }
@@ -2280,9 +2283,9 @@ impl Config {
                 problems.push(format!("[panel] display = \"{word}\" 不是候選面板的畫法"));
             }
         }
-        if let Some(word) = raw.panel.preedit.as_deref() {
-            if Preedit::parse(word).is_none() {
-                problems.push(format!("[panel] preedit = \"{word}\" 不是編碼的擺法"));
+        if let Some(word) = raw.panel.inline_preedit.as_deref() {
+            if InlinePreedit::parse(word).is_none() {
+                problems.push(format!("[panel] inline_preedit = \"{word}\" 不是編碼的擺法"));
             }
         }
 
@@ -2910,7 +2913,7 @@ struct RawPanel {
     page_size: Option<usize>,
     rounded: Option<bool>,
     display: Option<String>,
-    preedit: Option<String>,
+    inline_preedit: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -3223,8 +3226,8 @@ impl RawConfig {
         if other.panel.display.is_some() {
             self.panel.display = other.panel.display.clone();
         }
-        if other.panel.preedit.is_some() {
-            self.panel.preedit = other.panel.preedit.clone();
+        if other.panel.inline_preedit.is_some() {
+            self.panel.inline_preedit = other.panel.inline_preedit.clone();
         }
         if other.export.page.is_some() {
             self.export.page = other.export.page;
@@ -3699,8 +3702,8 @@ impl RawConfig {
         if let Some(display) = self.panel.display.as_deref().and_then(PanelDisplay::parse) {
             config.panel.display = display;
         }
-        if let Some(preedit) = self.panel.preedit.as_deref().and_then(Preedit::parse) {
-            config.panel.preedit = preedit;
+        if let Some(inline) = self.panel.inline_preedit.as_deref().and_then(InlinePreedit::parse) {
+            config.panel.inline_preedit = inline;
         }
         if let Some(page) = self.export.page.as_deref().and_then(parse_page) {
             config.export.page = page;
@@ -4086,12 +4089,12 @@ mod tests {
     /// 的第一個按鍵起就想要。
     #[test]
     fn the_panel_can_be_asked_to_get_out_of_the_way() {
-        assert_eq!(PanelConfig::default().display, PanelDisplay::Full);
+        assert_eq!(PanelConfig::default().display, PanelDisplay::On);
         let c = Config::from_toml("[panel]\ndisplay = \"off\"\n");
         assert_eq!(c.panel.display, PanelDisplay::Off);
         // A typo is a typo, not a third mode: the panel stays.
         let c = Config::from_toml("[panel]\ndisplay = \"invisible\"\n");
-        assert_eq!(c.panel.display, PanelDisplay::Full);
+        assert_eq!(c.panel.display, PanelDisplay::On);
         assert_eq!(PanelDisplay::Off.tag(), "off");
     }
 
@@ -4099,17 +4102,20 @@ mod tests {
     /// 組合都要按得出來，從前只有兩個。
     #[test]
     fn where_the_composition_shows_is_its_own_setting() {
-        assert_eq!(PanelConfig::default().preedit, Preedit::Header);
-        let c = Config::from_toml("[panel]\ndisplay = \"full\"\npreedit = \"top\"\n");
-        assert_eq!(c.panel.display, PanelDisplay::Full, "面板照畫");
-        assert_eq!(c.panel.preedit, Preedit::Top, "而正在打的那一段寫進正文");
+        assert_eq!(PanelConfig::default().inline_preedit, InlinePreedit::Off);
+        let c = Config::from_toml("[panel]\ndisplay = \"on\"\ninline_preedit = \"preview\"\n");
+        assert_eq!(c.panel.display, PanelDisplay::On, "面板照畫");
+        assert_eq!(c.panel.inline_preedit, InlinePreedit::Preview, "而正在打的那一段寫進正文");
         // 從前的 `display = "bare"` 是這兩格一起：面板不畫，正文裏是首選。
-        let c = Config::from_toml("[panel]\ndisplay = \"off\"\npreedit = \"top\"\n");
-        assert_eq!((c.panel.display, c.panel.preedit), (PanelDisplay::Off, Preedit::Top));
+        let c = Config::from_toml("[panel]\ndisplay = \"off\"\ninline_preedit = \"preview\"\n");
+        assert_eq!(
+            (c.panel.display, c.panel.inline_preedit),
+            (PanelDisplay::Off, InlinePreedit::Preview)
+        );
         // 打錯的字留着默認，同上面那一條。
-        let c = Config::from_toml("[panel]\npreedit = \"inline\"\n");
-        assert_eq!(c.panel.preedit, Preedit::Header);
-        assert_eq!(Preedit::Code.tag(), "code");
+        let c = Config::from_toml("[panel]\ninline_preedit = \"inline\"\n");
+        assert_eq!(c.panel.inline_preedit, InlinePreedit::Off);
+        assert_eq!(InlinePreedit::Composition.tag(), "composition");
     }
 
     #[test]
@@ -4450,7 +4456,7 @@ mod a_typo_is_said_out_loud {
             ("[editor]\nambiguous_width = \"wde\"\n", "ambiguous_width"),
             ("[editor]\nlanguage = \"zhh\"\n", "language"),
             ("[panel]\ndisplay = \"ful\"\n", "[panel] display"),
-            ("[panel]\npreedit = \"nowhere\"\n", "[panel] preedit"),
+            ("[panel]\ninline_preedit = \"nowhere\"\n", "[panel] inline_preedit"),
         ] {
             let problems = said(text);
             assert!(

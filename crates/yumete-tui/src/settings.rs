@@ -209,7 +209,7 @@ pub fn apply(
 pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
     ime.set_page_size(config.panel.page_size);
     ime.set_panel_display(config.panel.display);
-    ime.set_preedit(config.panel.preedit);
+    ime.set_inline_preedit(config.panel.inline_preedit);
     // **上屏方式也在這裏推**（2026-10-07 審出來的）。從前只有啓動那一趟推它
     // （`main.rs` 的 `load`），於是面板裏改了上屏方式、存了、`:reload-config`，
     // 屏幕上說「設定重讀了」而那一格原封不動。

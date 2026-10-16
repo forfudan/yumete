@@ -794,7 +794,7 @@ fn main() -> ExitCode {
     // real answer, not「ask the scheme」.
     let panel = config.panel.display;
     // 正在打的那一段寫在哪——面板畫不畫之外的另一格（2026-09-27）。
-    let preedit = config.panel.preedit;
+    let preedit = config.panel.inline_preedit;
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let load = move |ime: &mut ImeSession| -> String {
@@ -811,7 +811,7 @@ fn main() -> ExitCode {
         // wholesale with one built from the installed tables.
         ime.set_commit_strategy(commit);
         ime.set_panel_display(panel);
-        ime.set_preedit(preedit);
+        ime.set_inline_preedit(preedit);
         said
     };
     // A preview prints and exits: there is no frame to be after, so it is read
@@ -949,14 +949,15 @@ fn main() -> ExitCode {
             editor.set_reader(Box::new(ime.reader()));
             // Warning: **那三個配置也要補上**（2026-10-03 一輪審查報來的）。`load` 那一支
             // 在換完方案之後緊跟着撥這三格，而這裏是另一條路——不撥的話
-            // `[ime] commit`、`[panel] display`、`[panel] preedit` 離屏整個不生
-            // 效：九種 `preedit × display` 的組合畫出來**逐字節相同**，而真機各
+            // `[ime] commit`、`[panel] display`、`[panel] inline_preedit` 離屏整
+            // 個不生效：六種 `inline_preedit × display` 的組合畫出來**逐字節相
+            // 同**，而真機各
             // 畫各的。配置那一族的畫面從此離屏審不了。
             ime.set_commit_strategy(commit);
             ime.set_panel_display(panel);
-            ime.set_preedit(preedit);
+            ime.set_inline_preedit(preedit);
             // Warning: **還要告訴編輯器輸入法在不在。** 這一格是 `Need::Scheme` 那一道閘
-            // 問的（`words.rs`），不補的話離屏下 `:yume-panel`/`:yume-preedit`/
+            // 問的（`words.rs`），不補的話離屏下 `:yume-panel`/`:yume-inline-preedit`/
             // `:chaifen` 一律答「還不行，需要：載入碼表」，而同一幀的狀態欄已經
             // 寫着 `[中 靈明]`。互動那一支每一輪都撥一次。
             editor.set_ime_available(ime.available());
@@ -1060,7 +1061,9 @@ fn main() -> ExitCode {
                 rest if rest.starts_with("lang:") => ":yume".to_string(),
                 rest if rest.starts_with("commit:") => ":yume-commit".to_string(),
                 rest if rest.starts_with("panel:") => ":yume-panel".to_string(),
-                rest if rest.starts_with("preedit:") => ":yume-preedit".to_string(),
+                rest if rest.starts_with("inline-preedit:") => {
+                    ":yume-inline-preedit".to_string()
+                }
                 rest => match rest.strip_prefix('=') {
                     Some(path) => format!(":yume-table {path}"),
                     None => format!(":yume-scheme {rest}"),

@@ -41,7 +41,7 @@ use yume_core::{
 
 pub use reading::YumeReader;
 pub use segment::YumeSegmenter;
-pub use yumete_config::{PanelDisplay, Preedit};
+pub use yumete_config::{PanelDisplay, InlinePreedit};
 // A frontend that reads [`DataProblem`] has to be able to name its `kind`, and
 // it has no yume-core of its own.
 pub use yume_core::data_manifest::{DataFile, DataKind};
@@ -484,7 +484,7 @@ pub struct ImeSession {
     /// (2026-09-27). Its own dial: the panel being drawn and the code being
     /// written into the text are two questions, and every one of the six
     /// combinations is a state somebody asks for.
-    preedit: Preedit,
+    preedit: InlinePreedit,
     /// Whether yume has the keyboard at all — the **outer** switch, above
     /// 中/ABC (#290).
     ///
@@ -496,12 +496,6 @@ pub struct ImeSession {
     /// Shift visible is the same flag that stops macOS's input method from
     /// composing: it can be held exactly while this is true.
     engaged: bool,
-    /// Whether `Tab` has summoned the full panel for the composition in hand.
-    ///
-    /// It dies with that composition: [`Self::input`] clears it when a new one
-    /// begins, so 「這一個詞我要看清楚」 never turns into a setting nobody
-    /// remembers changing.
-    summoned: bool,
     /// **這扇窗畫得下一個候選嗎**，前端每一幀報一次（2026-10-03）。
     ///
     /// 頁的大小已經按窗口縮過了（`page_for_window`），可它最後那一下「至少一個」
@@ -539,8 +533,7 @@ impl ImeSession {
             table_skipped: 0,
             problems,
             display: PanelDisplay::default(),
-            preedit: Preedit::default(),
-            summoned: false,
+            preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
         }
@@ -595,8 +588,7 @@ impl ImeSession {
             table_skipped: skipped,
             problems,
             display: PanelDisplay::default(),
-            preedit: Preedit::default(),
-            summoned: false,
+            preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
         })
@@ -642,8 +634,7 @@ impl ImeSession {
             table_skipped: 0,
             problems,
             display: PanelDisplay::default(),
-            preedit: Preedit::default(),
-            summoned: false,
+            preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
         }
@@ -745,8 +736,7 @@ impl ImeSession {
             table_skipped: 0,
             problems,
             display: PanelDisplay::default(),
-            preedit: Preedit::default(),
-            summoned: false,
+            preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
         }
@@ -770,8 +760,7 @@ impl ImeSession {
             table_skipped: 0,
             problems: Vec::new(),
             display: PanelDisplay::default(),
-            preedit: Preedit::default(),
-            summoned: false,
+            preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
         }
@@ -791,8 +780,7 @@ impl ImeSession {
             table_skipped: 0,
             problems: Vec::new(),
             display: PanelDisplay::default(),
-            preedit: Preedit::default(),
-            summoned: false,
+            preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
         }
@@ -817,8 +805,7 @@ impl ImeSession {
             table_skipped: 0,
             problems: Vec::new(),
             display: PanelDisplay::default(),
-            preedit: Preedit::default(),
-            summoned: false,
+            preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
         }
@@ -907,21 +894,7 @@ impl ImeSession {
 
     /// Feed one printable character to the engine.
     pub fn input(&mut self, ch: char) {
-        // A new composition starts with the panel the *setting* asks for:
-        // `Tab` was asked for one word, not for the rest of the session.
-        if !self.is_composing() {
-            self.summoned = false;
-        }
-        // **A word landing is the event, not the buffer emptying.** Under
-        // 頂功 and 整句 the engine commits the head of the buffer and goes on
-        // composing the tail in the same call, so it is never *not* composing
-        // between two words — and a panel summoned for 靈 stayed up for the
-        // whole of a paragraph typed without a space.
-        let landed = self.engine.committed().len();
         self.engine.input(ch);
-        if self.engine.committed().len() != landed {
-            self.summoned = false;
-        }
     }
 
     /// Space: commit the highlighted candidate (or the raw buffer if none).
@@ -1399,50 +1372,33 @@ impl ImeSession {
         self.panel_room
     }
 
-    /// Set it, forgetting any panel `Tab` had summoned.
+    /// Set it.
     pub fn set_panel_display(&mut self, display: PanelDisplay) {
         self.display = display;
-        self.summoned = false;
     }
 
     /// Where the composition in progress is shown — the setting.
-    pub fn preedit(&self) -> Preedit {
+    pub fn inline_preedit(&self) -> InlinePreedit {
         self.preedit
     }
 
     /// Set it.
-    pub fn set_preedit(&mut self, preedit: Preedit) {
+    pub fn set_inline_preedit(&mut self, preedit: InlinePreedit) {
         self.preedit = preedit;
     }
 
-    /// Whether the bordered panel is drawn on **this** frame.
+    /// Whether the bordered box is drawn on **this** frame.
     ///
-    /// 面板關着的時候按 `Tab`：列表為手上這一段碼出來一次，跟着這一段碼一起走。
-    /// 這一問歸會話答而不歸繪製那一邊自己算，是因為它同時定兩件事——畫不畫面板，
-    /// 以及編碼還有沒有別的地方可待。
+    /// `false` does not mean the candidates are nowhere: with the box off they
+    /// are drawn across the command row instead (2026-10-16). This question is
+    /// the session's rather than the renderer's because it settles two things
+    /// at once — which of the two shapes the candidates take, and where the
+    /// code has left to stand.
     pub fn panel_is_full(&self) -> bool {
         // 快捷符號 has no inline form — 「一個分號」 is not a preview of
         // anything, and the letters to press are only on the panel. So that
         // mode draws its panel whatever the setting says.
-        self.is_shortcut()
-            || self.display == PanelDisplay::Full
-            || (self.summoned && self.is_composing())
-    }
-
-    /// `Tab`: show me the whole list for this one word — and `Tab` again to
-    /// put it away.
-    ///
-    /// A toggle, because a key that only goes one way is one you cannot undo:
-    /// a `Tab` pressed by mistake would have covered the page until the word
-    /// ended. Nothing when there is no composition to summon it for, so a
-    /// `Tab` that fell through cannot leave the panel armed for whatever is
-    /// typed next.
-    pub fn summon_panel(&mut self) -> bool {
-        if self.display == PanelDisplay::Full || !self.is_composing() {
-            return false;
-        }
-        self.summoned = !self.summoned;
-        true
+        self.is_shortcut() || self.display == PanelDisplay::On
     }
 
     /// The candidate that would land on the page if you pressed Space now.
@@ -1465,19 +1421,19 @@ impl ImeSession {
     ///
     /// 三檔（2026-09-27 定，原話：「inline-preedit: 候选面板的 header（編碼栏）不
     /// 显示，而是直接在编辑区显示。分为两种，一种是显示編碼，一种是显示首个候选」）：
-    /// [`Preedit::Header`] 不內嵌，[`Preedit::Code`] 寫編碼，[`Preedit::Top`] 寫
+    /// [`InlinePreedit::Off`] 不內嵌，[`InlinePreedit::Composition`] 寫編碼，[`InlinePreedit::Preview`] 寫
     /// 首選。
     ///
     /// Warning: **與面板畫不畫無關。** 面板照畫而正文裏站着首選，是一個合法的組合，也正
     /// 是 2026-09-27 報的那個缺口。
-    pub fn inline_preedit(&self) -> String {
+    pub fn inline_text(&self) -> String {
         if !self.is_composing() {
             return String::new();
         }
         match self.preedit {
-            Preedit::Header => String::new(),
-            Preedit::Code => self.display_buffer(),
-            Preedit::Top => self.top_candidate(),
+            InlinePreedit::Off => String::new(),
+            InlinePreedit::Composition => self.display_buffer(),
+            InlinePreedit::Preview => self.top_candidate(),
         }
     }
 
@@ -2308,14 +2264,14 @@ mod tests {
     #[test]
     fn the_inline_candidate_follows_the_highlight() {
         let mut ime = synthetic_session();
-        ime.set_preedit(Preedit::Top);
-        assert_eq!(ime.inline_preedit(), "", "nothing composed, nothing shown");
+        ime.set_inline_preedit(InlinePreedit::Preview);
+        assert_eq!(ime.inline_text(), "", "nothing composed, nothing shown");
         ime.input('b');
-        assert_eq!(ime.inline_preedit(), "吧");
+        assert_eq!(ime.inline_text(), "吧");
         ime.move_highlight(1);
-        assert_eq!(ime.inline_preedit(), "八");
+        assert_eq!(ime.inline_text(), "八");
         ime.escape();
-        assert_eq!(ime.inline_preedit(), "");
+        assert_eq!(ime.inline_text(), "");
     }
 
     /// **三檔各寫各的，而且和面板畫不畫無關**（2026-09-27 定）。
@@ -2324,45 +2280,29 @@ mod tests {
         let mut ime = synthetic_session();
         ime.input('b');
         // 出廠：不內嵌，編碼在面板第一列。
-        assert_eq!(ime.inline_preedit(), "");
+        assert_eq!(ime.inline_text(), "");
         assert!(ime.panel_shows_the_code());
         assert!(ime.panel_is_full(), "面板照畫");
 
-        ime.set_preedit(Preedit::Code);
-        assert_eq!(ime.inline_preedit(), ime.display_buffer());
+        ime.set_inline_preedit(InlinePreedit::Composition);
+        assert_eq!(ime.inline_text(), ime.display_buffer());
         assert!(!ime.panel_shows_the_code(), "正文裏有了，面板不再寫一遍");
         assert!(ime.panel_is_full(), "內嵌不把面板關掉——這正是 2026-09-27 報的缺口");
 
-        ime.set_preedit(Preedit::Top);
-        assert_eq!(ime.inline_preedit(), "吧");
+        ime.set_inline_preedit(InlinePreedit::Preview);
+        assert_eq!(ime.inline_text(), "吧");
         assert!(ime.panel_is_full());
     }
 
-    /// #211: `Tab` is for one word, and it cannot be armed for the next.
+    /// 2026-10-16: with the box off the candidates are on the command row, so
+    /// there is nothing left for a key to summon — `Tab` is the 字典 now.
     #[test]
-    fn a_summoned_panel_dies_with_the_word_it_was_summoned_for() {
+    fn the_box_is_the_setting_and_nothing_else() {
         let mut ime = synthetic_session();
         ime.set_panel_display(PanelDisplay::Off);
-        // Nothing to summon it for: a `Tab` that fell through must not leave
-        // the panel waiting for whatever is typed next.
-        assert!(!ime.summon_panel());
         ime.input('b');
-        assert!(ime.summon_panel());
-        assert!(ime.panel_is_full());
-        // A second `Tab` takes it back down — a key that cannot be un-pressed
-        // is a trap.
-        assert!(ime.summon_panel());
-        assert!(!ime.panel_is_full(), "Tab again puts it away");
-        assert!(ime.summon_panel());
-        assert!(ime.panel_is_full(), "and again brings it back");
-        ime.space();
-        assert_eq!(ime.take_committed(), "吧");
-        assert!(!ime.panel_is_full(), "gone with the word");
-        ime.input('b');
-        assert!(!ime.panel_is_full(), "and not inherited by the next one");
-        // Under `full` there is nothing to summon, and the setting outranks it.
-        ime.set_panel_display(PanelDisplay::Full);
-        assert!(!ime.summon_panel());
+        assert!(!ime.panel_is_full(), "the candidates are on the command row");
+        ime.set_panel_display(PanelDisplay::On);
         assert!(ime.panel_is_full());
     }
 

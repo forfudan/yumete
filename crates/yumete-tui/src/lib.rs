@@ -50,8 +50,8 @@ use yumete_core::wrap::{self, Anchor as WrapAnchor};
 use yumete_core::zong::{Anchor, Layout as WritingLayout};
 use yumete_core::{diag, say, Editor, Key, KeyOutcome, Mode, ShotJob, TextStore};
 use yumete_ime::{
-    CommitStrategy, DataFault, DataProblem, FuncKey, ImeSession, ModifierTap, PanelDisplay, Preedit,
-    Scheme,
+    Candidate, CommitStrategy, DataFault, DataProblem, FuncKey, ImeSession, InlinePreedit,
+    ModifierTap, PanelDisplay, Scheme,
 };
 
 /// Run the interactive editor until the user quits.
@@ -448,7 +448,24 @@ pub fn fit_the_page(
     settle_the_wrap(editor, config, areas.panes[editor.live_pane().min(1)]);
     // 兩行框 ＋ 一行編碼之後還剩得下一行嗎。剩不下就一個候選都畫不出來，而數字
     // 鍵那一道閘要知道這件事（見 `ImeSession::panel_has_room`）。
-    ime.set_panel_has_room(usize::from(room) > 3);
+    //
+    // 底行那一條畫得下總有一個：它只佔一行，而那一行本來就在。
+    let boxed = the_box_is_up(editor, ime);
+    ime.set_panel_has_room(!boxed || usize::from(room) > 3);
+    // **底行是按寬度縮，框是按高度縮**（2026-10-16）。寬度要量真的候選，所以先
+    // 把頁開到使用者要的那麼大，問一次，再縮——縮過的頁讀不回原來要的是幾個，
+    // 同 `PAGE_WISH` 那一段。沒在打字就不必問，省掉每一幀一次的候選複製。
+    let fits = match boxed || !ime.is_composing() {
+        true => fits,
+        false => {
+            ime.set_page_size(wish);
+            let head = match inline_text(editor, ime).is_empty() {
+                true => ime.display_buffer(),
+                false => String::new(),
+            };
+            candidates_across(config, &head, &ime.page_candidates(), width)
+        }
+    };
     if ime.page_size() != fits {
         ime.set_page_size(fits);
     }
@@ -3467,19 +3484,19 @@ fn panel_method(ime: &mut ImeSession, mode: &str) -> String {
     say!("panel.set", panel_name(display))
 }
 
-/// `:yume-preedit header|code|top` —— 正在打的那一段寫在哪、寫什麼。
+/// `:yume-inline-preedit off|composition|preview` —— 正在打的那一段寫在哪、寫什麼。
 ///
 /// 2026-09-27 從 `:yume-panel` 裏分出來。原話：「你搞错了 layout 和
 /// inline-preedit」——面板畫不畫，和正在打的那一段寫在哪，是兩件事。
-fn preedit_method(ime: &mut ImeSession, mode: &str) -> String {
+fn inline_preedit_method(ime: &mut ImeSession, mode: &str) -> String {
     if mode.is_empty() {
-        return say!("preedit.set", preedit_name(ime.preedit()));
+        return say!("inline-preedit.set", preedit_name(ime.inline_preedit()));
     }
-    let Some(preedit) = Preedit::parse(mode) else {
-        return say!("preedit.no-such-preedit", mode);
+    let Some(preedit) = InlinePreedit::parse(mode) else {
+        return say!("inline-preedit.no-such", mode);
     };
-    ime.set_preedit(preedit);
-    say!("preedit.set", preedit_name(preedit))
+    ime.set_inline_preedit(preedit);
+    say!("inline-preedit.set", preedit_name(preedit))
 }
 
 /// `:yume-menu-size` — how many candidates a page holds.
@@ -3517,17 +3534,17 @@ fn autocompletion(ime: &mut ImeSession, want: &str) -> String {
 /// The name a 候選面板 is called by, in the language the writer reads.
 fn panel_name(display: PanelDisplay) -> String {
     match display {
-        PanelDisplay::Full => say!("panel.name.full"),
+        PanelDisplay::On => say!("panel.name.on"),
         PanelDisplay::Off => say!("panel.name.off"),
     }
 }
 
 /// 正在打的那一段寫在哪，用讀的人看得懂的話說。
-fn preedit_name(preedit: Preedit) -> String {
+fn preedit_name(preedit: InlinePreedit) -> String {
     match preedit {
-        Preedit::Header => say!("preedit.name.header"),
-        Preedit::Code => say!("preedit.name.code"),
-        Preedit::Top => say!("preedit.name.top"),
+        InlinePreedit::Off => say!("inline-preedit.name.off"),
+        InlinePreedit::Composition => say!("inline-preedit.name.composition"),
+        InlinePreedit::Preview => say!("inline-preedit.name.preview"),
     }
 }
 
@@ -3582,7 +3599,7 @@ fn data_faults(ime: &ImeSession) -> String {
 /// **Not in a prompt.** A `/` search composes on the status line, which has no
 /// page to draw into; the panel comes up there whatever this setting says.
 fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
-    let want = inline_preedit(editor, ime);
+    let want = inline_text(editor, ime);
     // A page with no candidate on it pays nothing — and must not be marked
     // dirty by a `set_candidate` that changes nothing, since both layout memos are
     // keyed on the runs.
@@ -3601,8 +3618,8 @@ fn settle_inline_candidate(editor: &mut Editor, ime: &ImeSession) {
 /// Warning: **不問面板畫不畫**（2026-09-27 改）。面板照畫而正文裏站着首選，是一個合法
 /// 的組合——從前這裏拿 `panel_is_full()` 當閘，於是「有面板 ＋ 內嵌」按不出來。
 /// 寫不寫得下由頁面答（[`page_can_hold_a_candidate`]），寫什麼由會話答
-/// （`ImeSession::inline_preedit`）。
-fn inline_preedit(editor: &Editor, ime: &ImeSession) -> String {
+/// （`ImeSession::inline_text`）。
+fn inline_text(editor: &Editor, ime: &ImeSession) -> String {
     if !composes_here(editor)
         || !page_can_hold_a_candidate(editor)
         || !ime.available()
@@ -3621,7 +3638,7 @@ fn inline_preedit(editor: &Editor, ime: &ImeSession) -> String {
     {
         return String::new();
     }
-    ime.inline_preedit()
+    ime.inline_text()
 }
 
 /// Whether what is on screen is a page that drawn text can be drawn into.
@@ -3640,6 +3657,24 @@ fn inline_preedit(editor: &Editor, ime: &ImeSession) -> String {
 /// In both, `bare` gives the panel back rather than showing nothing at all.
 fn page_can_hold_a_candidate(editor: &Editor) -> bool {
     editor.prompt().is_none() && !editor.grid_has_the_pane()
+}
+
+/// **Which of the two shapes the candidates take on this frame** — the
+/// bordered box beside the caret, or the row across the foot (2026-10-16).
+///
+/// Asked in two places that have to agree: [`fit_the_page`], before the key,
+/// to settle how many candidates a page may hold; and [`draw`], to settle
+/// where they go. Disagreeing would put a digit under a candidate that was
+/// never drawn, which is the bug #516 was about.
+///
+/// The box wins over the setting in three places, all of them 「there is no
+/// command row free, or no page to read the row against」: a prompt and a grid
+/// (both [`page_can_hold_a_candidate`]), a picker, and a box inside a panel.
+fn the_box_is_up(editor: &Editor, ime: &ImeSession) -> bool {
+    ime.panel_is_full()
+        || !page_can_hold_a_candidate(editor)
+        || editor.picker().is_some()
+        || editor.mode() == Mode::Field
 }
 
 /// Switch the IME to the named scheme, and say what happened.
@@ -3835,12 +3870,12 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         // and wonders where it went is the only one who needs telling, and the
         // line is already four clauses long (Feature #211).
         let head = match ime.panel_display() {
-            PanelDisplay::Full => head,
+            PanelDisplay::On => head,
             display => format!("{head} · {}", say!("scheme.panel-is", panel_name(display))),
         };
         // 內嵌也只在不是出廠那一檔的時候纔報，理由同上：出廠的樣子不用告訴人。
-        let head = match ime.preedit() {
-            Preedit::Header => head,
+        let head = match ime.inline_preedit() {
+            InlinePreedit::Off => head,
             preedit => format!("{head} · {}", say!("scheme.preedit-is", preedit_name(preedit))),
         };
         // The one thing `:yume` could not say before #220: a file that is
@@ -3858,8 +3893,8 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     if let Some(mode) = tag.strip_prefix("panel:") {
         return panel_method(ime, mode);
     }
-    if let Some(mode) = tag.strip_prefix("preedit:") {
-        return preedit_method(ime, mode);
+    if let Some(mode) = tag.strip_prefix("inline-preedit:") {
+        return inline_preedit_method(ime, mode);
     }
     if let Some(n) = tag.strip_prefix("menu:") {
         return menu_size(ime, n);
@@ -3874,7 +3909,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 table.set_page_size(ime.page_size());
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
-                table.set_preedit(ime.preedit());
+                table.set_inline_preedit(ime.inline_preedit());
                 let skipped = table.table_skipped();
                 *ime = table;
                 let loaded = say!("ime.table-loaded", path.display());
@@ -3919,7 +3954,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
-        full.set_preedit(ime.preedit());
+        full.set_inline_preedit(ime.inline_preedit());
         *ime = full;
         return say!("ime.scheme-from-system", ime.scheme_name());
     }
@@ -3942,7 +3977,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         full.set_annotations(ime.annotations_enabled());
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
-        full.set_preedit(ime.preedit());
+        full.set_inline_preedit(ime.inline_preedit());
         *ime = full;
         return say!("ime.builtin-scheme", ime.scheme_name());
     }
@@ -3967,7 +4002,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             full.set_commit_strategy(ime.commit_override());
             full.set_annotations(ime.annotations_enabled());
             full.set_panel_display(ime.panel_display());
-            full.set_preedit(ime.preedit());
+            full.set_inline_preedit(ime.inline_preedit());
             let name = full.scheme_name().to_string();
             *ime = full;
             return say!("ime.scheme-now", name);
@@ -4120,9 +4155,24 @@ fn ime_handle(
                 return false;
             }
         }
-        // Nothing else reaches the editor mid-composition. An arrow key used to
-        // fall through and move the cursor while the code stayed in the engine,
-        // so the characters committed afterwards landed somewhere else.
+        // **方向鍵走候選欄**（2026-10-16 定，原話：「users can still use arrow
+        // keys to navigate and use =- to paging」）。兩個走候選，兩個翻頁，哪兩
+        // 個由候選排在哪一軸上定——見 [`candidate_step`]。
+        //
+        // 從前四個方向鍵一律吞掉，而那之前它們會穿過去把光標挪走，碼還留在引擎
+        // 裏，於是後面上屏的字落到了別處。現在它們有事做了，照樣不穿過去。
+        KeyCode::Left | KeyCode::Right | KeyCode::Up | KeyCode::Down
+            if composing && !ime.is_shortcut() =>
+        {
+            match candidate_step(editor, ime, code) {
+                Some(CandidateStep::Next) => ime.move_highlight(1),
+                Some(CandidateStep::Previous) => ime.move_highlight(-1),
+                Some(CandidateStep::NextPage) => ime.page_down(),
+                Some(CandidateStep::PreviousPage) => ime.page_up(),
+                None => {}
+            }
+        }
+        // Nothing else reaches the editor mid-composition.
         KeyCode::Left
         | KeyCode::Right
         | KeyCode::Up
@@ -4134,22 +4184,19 @@ fn ime_handle(
         | KeyCode::Delete
         | KeyCode::BackTab
             if composing => {}
-        // 空空如也 with a way out: `Tab` brings the whole list up for the one
-        // word that needs it, and it goes away with that word (Feature #211).
-        // Swallowed either way — a Tab typed mid-composition has never been an
-        // indent.
+        // `Tab` is the 字典 on the candidate the highlight is on (#215) — the
+        // candidate bar has one line per candidate and spends it on 拆分 and a
+        // code, and this is where the rest of what the 拆分表 knows about that
+        // character is. A 詞 is asked about by its first character: a 拆分 is a
+        // thing a single 字 has. Swallowed either way — a Tab typed
+        // mid-composition has never been an indent.
         //
-        // With the list already up, `Tab` is the 字典 on the candidate the
-        // highlight is on (#215) — the panel has one line per candidate and
-        // spends it on 拆分 and a code, and this is where the rest of what the
-        // 拆分表 knows about that character is. A 詞 is asked about by its
-        // first character: a 拆分 is a thing a single 字 has.
-        //
-        // So under `full` `Tab` is the 字典 at once, and under `bare` it takes
-        // two — you cannot ask about a candidate you cannot see. The cost is
-        // that a panel summoned by mistake can no longer be put away with a
-        // second `Tab`; it goes away with the word, which is as long as the
-        // undo ever bought.
+        // **It no longer takes two presses with the box off** (2026-10-16:
+        // 「the tab key can now directly open the dict because the candidate
+        // list is always shown」). `Tab` used to summon the box for one word
+        // first, because you cannot ask about a candidate you cannot see; the
+        // candidates are on the command row now, so there is nothing to summon
+        // and the 字典 answers on the first press whatever the setting is.
         //
         // Warning: **It floats unless the sidebar is already showing info** (2026-10-15:
         // 「the tab key on yume candidate panel forcely open the dict sidebar
@@ -4160,18 +4207,13 @@ fn ime_handle(
         // typing a word. `look_up_afloat` is `空格 n`: it draws into the info
         // slot when that slot is open and floats by the caret when it is not,
         // and it never opens or closes the sidebar itself.
-        KeyCode::Tab if composing => match ime.panel_is_full() {
-            true => {
-                // 一個候選的頭一個**字簇**，不是頭一個碼位：帶變體選擇符的
-                // 候選（`🈚️`）按碼位切出來是殘的，查不着。
-                if let Some(ch) = yumete_cjk::graphemes(&ime.top_candidate()).next() {
-                    let _ = editor.look_up_afloat(ch);
-                }
+        KeyCode::Tab if composing => {
+            // 一個候選的頭一個**字簇**，不是頭一個碼位：帶變體選擇符的
+            // 候選（`🈚️`）按碼位切出來是殘的，查不着。
+            if let Some(ch) = yumete_cjk::graphemes(&ime.top_candidate()).next() {
+                let _ = editor.look_up_afloat(ch);
             }
-            false => {
-                ime.summon_panel();
-            }
-        },
+        }
         // Any other printable character (letters start/continue a composition;
         // punctuation and digits are handled by the engine). A literal space
         // with no composition falls through to the editor.
@@ -4186,6 +4228,59 @@ fn ime_handle(
         editor.insert_committed(&committed);
     }
     true
+}
+
+/// **一個方向鍵在候選欄上是什麼意思**（2026-10-16 定）。
+///
+/// 兩個鍵走候選，另兩個翻頁，而**哪兩個要看候選排在哪一軸上**（原話：「ensure
+/// that the direction is correct according to the positions of candidates」）。
+/// 候選欄有三種擺法，所以這張表有三行：
+///
+/// | 擺在哪 | 候選順着 | 下一個 | 上一個 | 下一頁 | 上一頁 |
+/// | --- | --- | --- | --- | --- | --- |
+/// | 框，橫排 | 往下一列 | `↓` | `↑` | `→` | `←` |
+/// | 框，竪排 | 自右往左 | `←` | `→` | `↓` | `↑` |
+/// | 底行 | 自左往右 | `→` | `←` | `↓` | `↑` |
+///
+/// 走到這一頁的末一個再走，自己落到下一頁的頭一個上（`move_highlight` 本來就跨
+/// 頁繞）——原話：「at the last candidate, Left lands on the next page」。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CandidateStep {
+    Next,
+    Previous,
+    NextPage,
+    PreviousPage,
+}
+
+fn candidate_step(editor: &Editor, ime: &ImeSession, code: KeyCode) -> Option<CandidateStep> {
+    use KeyCode::{Down, Left, Right, Up};
+    // 指着「下一個候選」的那一個鍵。
+    let forward = match (the_box_is_up(editor, ime), editor.layout()) {
+        // 橫排的框是一列，從上往下讀。
+        (true, WritingLayout::Horizontal) => Down,
+        // 竪排的框跟着頁面排版走：首選在最右（`vertical_candidate_panel_runs_right_to_left`）。
+        (true, WritingLayout::Vertical) => Left,
+        // 底行那一條是窗飾，窗飾一律自左往右——竪排也一樣（2026-10-16 定）。
+        (false, _) => Right,
+    };
+    let back = match forward {
+        Down => Up,
+        Up => Down,
+        Left => Right,
+        _ => Left,
+    };
+    // 翻頁走另一軸，順着讀的方向的那一頭是下一頁。
+    let (ahead, behind) = match forward {
+        Down | Up => (Right, Left),
+        _ => (Down, Up),
+    };
+    match code {
+        c if c == forward => Some(CandidateStep::Next),
+        c if c == back => Some(CandidateStep::Previous),
+        c if c == ahead => Some(CandidateStep::NextPage),
+        c if c == behind => Some(CandidateStep::PreviousPage),
+        _ => None,
+    }
 }
 
 /// **把一個 [`Key`] 交給真正的那一支輸入法派發**，回「它收下了沒有」。
@@ -4844,17 +4939,14 @@ fn draw(
     // Warning: `panel_caret.is_some()` too: the inline preview writes into the
     // *manuscript's* cells, and the characters being typed are in a box in a
     // panel. Previewing them on the page would put them where they are not.
-    let panel = ime.panel_is_full()
-        || picker_caret.is_some()
-        || panel_caret.is_some()
-        || !page_can_hold_a_candidate(editor);
-    let candidate_panel = panel && composes_here(editor) && ime.available() && ime.is_composing();
+    let panel = the_box_is_up(editor, ime) || picker_caret.is_some() || panel_caret.is_some();
+    let composing_here = composes_here(editor) && ime.available() && ime.is_composing();
+    let candidate_panel = panel && composing_here;
     // …and the same string beside the caret, where the eyes are.
     draw_hud(
         frame,
         editor,
         config,
-        ime,
         text_area,
         spot,
         &panels,
@@ -4979,7 +5071,7 @@ fn draw(
         // **編碼那一列畫不畫**：這一幀沒有把它寫進正文，纔輪到面板寫
         // （2026-09-27）。問的是這一幀真寫了沒有，不是設置說什麼——命令行開着的
         // 時候正文寫不下，那時編碼要回到面板上來。
-        let show_code = inline_preedit(editor, ime).is_empty();
+        let show_code = inline_text(editor, ime).is_empty();
         match editor.layout() {
             WritingLayout::Horizontal => {
                 draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
@@ -4988,6 +5080,19 @@ fn draw(
                 vertical::draw_candidate_panel(frame, ime, config, room, at_x, at_y, show_code)
             }
         }
+    } else if composing_here {
+        // **The box is off, so the candidates are on the command row**
+        // (2026-10-16). One row, left to right in both writing layouts — the
+        // 竖排 box runs right to left because it is set the way the page is,
+        // and a single line at the foot is chrome, which reads the way the
+        // status line and the `:` prompt read.
+        //
+        // `prompt_area` rather than `command_area`: with `[editor]
+        // command_line = false`, or a window too short for two rows, the
+        // status line is where everything that row would have carried goes,
+        // and the candidates are now one of those things.
+        let show_code = inline_text(editor, ime).is_empty();
+        draw_candidate_row(frame, ime, config, prompt_area, show_code);
     }
     // **按「那裏寫的什麼」跳的候選面板**（`go`/`gu`，§5.73）。
     //
@@ -5802,25 +5907,12 @@ fn draw_list(
 /// Two callers with one answer — the HUD row and the status line's right edge —
 /// so the two surfaces can never disagree about what is being typed.
 ///
-/// They cannot both be true at once: `typed_so_far` is Normal mode's, and a
-/// composition is Insert's. In `full` the code is the panel's first row and
-/// this stays empty, which is why the mark is not simply always drawn — in
-/// Normal, while prose is being typed, nothing may flicker beside the
-/// characters.
-fn hud_line(editor: &Editor, ime: &ImeSession) -> String {
+/// **編碼不走這一支**（2026-10-16）。從前面板關着而且沒有內嵌的時候，編碼沒有別
+/// 的地方可待，於是這裏寫一份、狀態行右端再寫一份。現在它站在底行那一條候選的前
+/// 頭，三處各寫一遍就只是同一串碼畫三次。
+fn hud_line(editor: &Editor) -> String {
     if editor.prompt().is_some() {
         return String::new();
-    }
-    // **編碼沒有別的地方可待的時候，纔畫在這裏。** 面板關着而且沒有內嵌，就是那
-    // 個時候。內嵌寫編碼的人正文裏已經有一份，內嵌寫首選的人是自己要的「只看句
-    // 子，不看碼」（2026-09-27 定，同 yume 空空如也那一檔）。
-    if composes_here(editor)
-        && ime.available()
-        && ime.is_composing()
-        && !ime.panel_is_full()
-        && inline_preedit(editor, ime).is_empty()
-    {
-        return ime.display_buffer();
     }
     match editor.mode() {
         Mode::Normal => editor.typed_so_far(),
@@ -5839,7 +5931,6 @@ fn draw_hud(
     frame: &mut Frame,
     editor: &Editor,
     config: &Config,
-    ime: &ImeSession,
     page: Rect,
     caret: crate::chrome::Spot,
     panels: &[Rect],
@@ -5849,7 +5940,7 @@ fn draw_hud(
     if how == Hud::Off {
         return;
     }
-    let typed = hud_line(editor, ime);
+    let typed = hud_line(editor);
     if typed.is_empty() || page.height < 2 {
         return;
     }
@@ -11764,7 +11855,7 @@ fn draw_status(
     // right now you are in the middle of saying something.
     // The same string the HUD carries — and the reason the HUD may give up on
     // finding a row: whatever happens beside the caret, it is also here.
-    let typed = hud_line(editor, ime);
+    let typed = hud_line(editor);
     let right = match typed.is_empty() {
         true => char_info(editor, config),
         false => [typed, String::new(), String::new()],
@@ -12914,6 +13005,127 @@ fn draw_candidate_panel(
 
     let what = Floating { rows, lit: Some(highlight), keep_off_the_caret: true };
     draw_panel_rows(frame, config, area, cursor_x, cursor_y, what);
+}
+
+/// 候選與候選之間，和編碼與第一個候選之間，隔這麼多格。
+const CANDIDATE_GAP: usize = 2;
+
+/// One candidate as it is written on the command row: `１ 的`.
+///
+/// The mark is `[panel] markers`, the same setting the box uses — a reader who
+/// set 圈碼 does not want ASCII digits back because the list moved to the foot.
+fn candidate_cell(config: &Config, i: usize, text: &str) -> String {
+    format!("{} {}", vertical::index_mark(&config.panel.markers, i), text)
+}
+
+/// **How many of these candidates fit on one row `width` cells wide.**
+///
+/// The answer moves as you type, because it is measured against the candidates
+/// actually in hand (2026-10-16: 「The number of candidate is auto-adjusted to
+/// fit to the line width」). `[panel] page_size` is still the ceiling, the same
+/// way it is a ceiling for a short window (#516) — this only ever shrinks the
+/// page, never grows it past what the reader asked for.
+///
+/// At least one, like [`page_for_window`]: a candidate too wide for the whole
+/// row is clipped with an ellipsis rather than left out, because a page with
+/// nothing on it cannot be typed from.
+fn candidates_across(config: &Config, head: &str, cands: &[Candidate], width: u16) -> usize {
+    let mut used = match head.is_empty() {
+        true => 0,
+        false => yumete_cjk::str_width(head),
+    };
+    let mut fits = 0;
+    for (i, cand) in cands.iter().enumerate() {
+        let need = CANDIDATE_GAP + yumete_cjk::str_width(&candidate_cell(config, i, &cand.text));
+        if used + need > width as usize {
+            break;
+        }
+        used += need;
+        fits += 1;
+    }
+    fits.max(1)
+}
+
+/// **候選欄畫在命令行那一行上**（2026-10-16 定）。
+///
+/// `:yume-panel off` 從前什麼都不畫，`Tab` 纔為手上這一個詞把框叫出來。現在候選
+/// 橫着排在窗口最下面那一行（原話：「I want to make the candidate list still
+/// shown even when `yume-panel off`」）——那一行本來就空着，`:` 與 `/` 佔的是它，
+/// 所以一行稿子都不少，而九成按鍵取首選的人也不必再為看一眼候選攤開九行。
+///
+/// **就是把那扇面板擺到了底下**（原話：「it is just like we put the panel into
+/// the bottom line」）：同一張 `[panel] markers`、同一塊 `[panel] ink`/`paper`、
+/// 同一個高亮，數字鍵、`=`/`-` 翻頁、方向鍵走高亮都照舊。一條里只有編號和字，
+/// 拆分與注解不進來（2026-10-16 定）——那些東西按 `Tab` 查字典。
+///
+/// 命令行那一行不在的時候（`[editor] command_line = false`，或者窗口矮到只剩一
+/// 行），這一條畫在狀態行上，同 `:` 與訊息走的那條路（見 [`draw_status`]）。
+fn draw_candidate_row(
+    frame: &mut Frame,
+    ime: &ImeSession,
+    config: &Config,
+    row: Rect,
+    show_code: bool,
+) {
+    if row.width == 0 || row.height == 0 {
+        return;
+    }
+    let candidates = ime.page_candidates();
+    let code = match show_code {
+        true => ime.display_buffer(),
+        false => String::new(),
+    };
+    if candidates.is_empty() && code.is_empty() {
+        return;
+    }
+    let skin = vertical::Skin::from(config);
+    let ground = Style::default().bg(skin.paper()).fg(skin.text());
+    let lit = ime.highlight();
+    let room = row.width as usize;
+    let mut spans: Vec<Span<'static>> = Vec::with_capacity(candidates.len() * 2 + 1);
+    let mut used = 0usize;
+    if !code.is_empty() {
+        used = yumete_cjk::str_width(&code);
+        spans.push(Span::styled(code, Style::default().bg(skin.paper()).fg(skin.helper())));
+    }
+    for (i, cand) in candidates.iter().enumerate() {
+        let cell = candidate_cell(config, i, &cand.text);
+        let style = match i == lit {
+            true => Style::default().bg(skin.highlight()).fg(skin.on_highlight()),
+            false => Style::default().bg(skin.paper()).fg(skin.text()),
+        };
+        let gap = match spans.is_empty() {
+            true => 0,
+            false => CANDIDATE_GAP,
+        };
+        // **放不下就省略號，別一聲不吭地切掉**，同 [`draw_panel_rows`]：讀者是照
+        // 着畫出來的那一條按的。頁已經按寬度縮過（[`candidates_across`]），所以
+        // 走到這一枝的只有「一條都放不下」那一種。
+        if used + gap + yumete_cjk::str_width(&cell) > room {
+            if spans.is_empty() {
+                spans.push(Span::styled(crate::panel::clip(&cell, room), style));
+            }
+            break;
+        }
+        if gap > 0 {
+            spans.push(Span::styled(" ".repeat(gap), ground));
+            used += gap;
+        }
+        used += yumete_cjk::str_width(&cell);
+        spans.push(Span::styled(cell, style));
+    }
+    // **先把那一行擦乾淨**：`Paragraph` 的 `style` 只改樣式不改字符（ratatui 的
+    // `set_style`），於是 [`draw_command`] 已經寫在這一行上的東西——鍵位提示、
+    // 右端那個簽名——留在候選中間。那一行畫過了纔輪到這一條（兩支的次序在
+    // [`draw`] 裏定），所以這裏要自己抹。
+    let buf = frame.buffer_mut();
+    for x in row.x..row.x + row.width {
+        if let Some(cell) = buf.cell_mut((x, row.y)) {
+            cell.set_symbol(" ").set_style(ground);
+        }
+    }
+    let line = room_for_private_use(Line::from(spans));
+    frame.render_widget(Paragraph::new(line).style(ground), row);
 }
 
 /// 快捷符號's rows: `鍵 文本` cells packed across `room` columns.
@@ -16978,7 +17190,7 @@ fn squeezed(text: &str) -> String {
         // is the `;;` exit and would leave nothing to draw.
         bare.escape();
         bare.set_panel_display(PanelDisplay::Off);
-        bare.set_preedit(Preedit::Top);
+        bare.set_inline_preedit(InlinePreedit::Preview);
         bare.input(';');
         assert!(bare.panel_is_full(), "bare 也要出這個面板");
     }
@@ -17257,7 +17469,7 @@ fn squeezed(text: &str) -> String {
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
         ime.set_panel_display(PanelDisplay::Off);
-        ime.set_preedit(Preedit::Top);
+        ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
 
@@ -17281,14 +17493,22 @@ fn squeezed(text: &str) -> String {
         // far right of the row *below*, half a screen away, which is what
         // the reported screenshot was of.
         assert_eq!(rows[0].trim_end(), "1  吧", "{:?}", rows[0]);
-        // No panel: the second and third candidates are nowhere on the screen.
+        // No box: nothing is drawn beside the caret. The rest of the page is
+        // the manuscript, and the candidates are on the last row of all.
+        let page = &rows[..rows.len() - 1];
         assert!(
-            !rows.iter().any(|r| r.contains('八') || r.contains('巴')),
+            !page.iter().any(|r| r.contains('八') || r.contains('巴')),
             "{rows:#?}"
+        );
+        // **底行那一條**（2026-10-16）：首選也在裏面，它本來就是候選的頭一個。
+        let foot = rows.last().expect("有底行").clone();
+        assert!(
+            foot.contains('吧') && foot.contains('八') && foot.contains('巴'),
+            "{foot:?}"
         );
         // Warning: **編碼哪兒都不顯示**（2026-09-27 改）。這一檔寫進正文的是首選，讀
         // 的人讀的是句子；要看碼是另一檔（下面那一條）。
-        assert_eq!(hud_line(&editor, &ime), "");
+        assert_eq!(hud_line(&editor), "");
         assert!(!rows.iter().any(|r| r.contains("─ b")), "{rows:#?}");
     }
 
@@ -17303,14 +17523,14 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
         ime.set_panel_display(PanelDisplay::Off);
-        ime.set_preedit(Preedit::Code);
+        ime.set_inline_preedit(InlinePreedit::Composition);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
 
         assert_eq!(editor.current_buffer().text(), "", "文件裏一個字節都沒有");
         assert_eq!(editor.drawn_on_line(0), vec![(0, "b".to_string())]);
         // 正文裏有了，浮窗就不再寫一遍。
-        assert_eq!(hud_line(&editor, &ime), "");
+        assert_eq!(hud_line(&editor), "");
     }
 
     /// **面板照畫，而正文裏站着首選**（2026-09-27 報的缺口）。
@@ -17323,7 +17543,7 @@ fn squeezed(text: &str) -> String {
         editor.set_hud(Hud::Basic);
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
-        ime.set_preedit(Preedit::Top);
+        ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
 
@@ -17371,37 +17591,173 @@ fn squeezed(text: &str) -> String {
         assert!(rows(&editor).contains("[只讀]"), "{}", rows(&editor));
     }
 
-    /// #211: `Tab` is the way back to the whole list, for one word.
+    /// **候選橫着排在命令行那一行上**（2026-10-16）。
+    ///
+    /// 原話：「I want to make the candidate list still shown even when
+    /// `yume-panel off`.」整頁還是稿子，候選在最下面那一行——那一行本來就空着。
     #[test]
-    fn tab_summons_the_panel_and_it_leaves_with_the_word() {
+    fn the_candidates_run_across_the_command_row() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.input('b');
+
+        let config = Config::default();
+        let buffer = render_with(&editor, &config, &ime, 40, 10);
+        let foot = command_line(&buffer);
+        // 編碼在前頭（不內嵌那一檔），三個候選跟在後面。
+        assert!(foot.trim_start().starts_with('b'), "{foot:?}");
+        for want in ['吧', '八', '巴'] {
+            assert!(foot.contains(want), "{want} 不在底行：{foot:?}");
+        }
+        // 一道框線都沒有——那扇框是另一檔。
+        let page = buffer_text(&buffer);
+        assert!(!page.contains('╭') && !page.contains('┌'), "{page}");
+        // 狀態行還是狀態行，編碼不在上面再寫一遍（2026-10-16 改）。
+        assert!(!status_line(&buffer).contains('b'), "{:?}", status_line(&buffer));
+    }
+
+    /// **內嵌的時候底行不再寫一遍編碼**，同框裏那一列的規矩。
+    #[test]
+    fn the_row_drops_the_code_when_the_text_has_it() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_inline_preedit(InlinePreedit::Composition);
+        ime.input('b');
+        settle_inline_candidate(&mut editor, &ime);
+
+        let buffer = render_with(&editor, &Config::default(), &ime, 40, 10);
+        let foot = command_line(&buffer);
+        assert!(foot.contains('吧'), "候選照畫：{foot:?}");
+        assert!(!foot.trim_start().starts_with('b'), "碼在正文裏了：{foot:?}");
+    }
+
+    /// **底行畫得下幾個，就是一頁幾個**（2026-10-16）。
+    ///
+    /// 同 #516 的高度那一條：按窗口縮，`[panel] page_size` 是上限不是定數。
+    #[test]
+    fn the_row_holds_as_many_as_the_width_allows() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴 芭 疤 捌\n");
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.input('b');
+        let config = Config::default();
+
+        fit_the_page(&mut ime, &mut editor, &config, 80, 10);
+        let wide = ime.page_size();
+        assert_eq!(wide, config.panel.page_size, "寬窗口給到上限");
+        fit_the_page(&mut ime, &mut editor, &config, 20, 10);
+        let narrow = ime.page_size();
+        assert!(narrow < wide && narrow >= 1, "窄窗口要縮：{narrow} vs {wide}");
+        // 畫出來的和頁裏的一樣多——數字鍵問的是頁，眼睛看的是畫面。
+        let buffer = render_with(&editor, &config, &ime, 20, 10);
+        let foot = command_line(&buffer);
+        let drawn = ime.page_candidates().iter().filter(|c| foot.contains(&c.text)).count();
+        assert_eq!(drawn, narrow, "{foot:?}");
+    }
+
+    /// **命令行那一行不在，候選就上狀態行**（2026-10-16 定）。
+    ///
+    /// `[editor] command_line = false` 底下狀態行本來就收着那一行該說的話
+    /// （`:`、訊息、邊欄的鍵），候選是第四樣。
+    #[test]
+    fn with_no_command_row_the_candidates_take_the_status_line() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.input('b');
+        let mut config = Config::default();
+        config.editor.command_line = false;
+
+        let buffer = render_with(&editor, &config, &ime, 40, 10);
+        // 狀態行在最下面那一行（沒有命令行就沒有第二行）。
+        let foot = command_line(&buffer);
+        assert!(foot.contains('吧') && foot.contains('八'), "{foot:?}");
+    }
+
+    /// **方向鍵走候選，而方向要和畫出來的對得上**（2026-10-16 定）。
+    ///
+    /// 原話：「ensure that the direction is correct according to the positions
+    /// of candidates」。三種擺法三套答案，見 [`candidate_step`]。
+    #[test]
+    fn an_arrow_walks_the_list_the_way_it_is_drawn() {
+        use CandidateStep::{Next, NextPage, Previous, PreviousPage};
+        let table = [
+            // 框，橫排：一列，從上往下。
+            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Down, Next),
+            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Up, Previous),
+            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Right, NextPage),
+            (PanelDisplay::On, WritingLayout::Horizontal, KeyCode::Left, PreviousPage),
+            // 框，竪排：首選在最右，所以往左是往下一個。
+            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Left, Next),
+            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Right, Previous),
+            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Down, NextPage),
+            (PanelDisplay::On, WritingLayout::Vertical, KeyCode::Up, PreviousPage),
+            // 底行：自左往右，竪排也一樣。
+            (PanelDisplay::Off, WritingLayout::Horizontal, KeyCode::Right, Next),
+            (PanelDisplay::Off, WritingLayout::Vertical, KeyCode::Right, Next),
+            (PanelDisplay::Off, WritingLayout::Vertical, KeyCode::Left, Previous),
+            (PanelDisplay::Off, WritingLayout::Vertical, KeyCode::Down, NextPage),
+        ];
+        for (display, layout, key, want) in table {
+            let mut editor = Editor::new();
+            editor.set_layout(layout);
+            let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+            ime.set_panel_display(display);
+            ime.input('b');
+            assert_eq!(
+                candidate_step(&editor, &ime, key),
+                Some(want),
+                "{display:?} {layout:?} {key:?}"
+            );
+        }
+    }
+
+    /// 走到末一個再走，自己落到下一頁的頭一個上。
+    #[test]
+    fn an_arrow_runs_on_into_the_next_page() {
+        let mut editor = Editor::new();
+        editor.on_key(Key::Char('i'));
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
+        ime.set_panel_display(PanelDisplay::Off);
+        ime.set_page_size(2);
+        ime.input('b');
+        assert_eq!(ime.highlight(), 0);
+        for _ in 0..2 {
+            ime_handle(&mut ime, &mut editor, KeyCode::Right, KeyModifiers::NONE);
+        }
+        // 第三個候選在第二頁上，而它現在是高亮的那一個。
+        assert_eq!(ime.top_candidate(), "巴");
+        // 稿子一個字都沒動。
+        assert_eq!(editor.current_buffer().text(), "");
+    }
+
+    /// 2026-10-16: with the candidates on the command row there is nothing
+    /// left for `Tab` to summon, so it is the 字典 on the first press — and
+    /// the box setting is untouched by it.
+    #[test]
+    fn tab_does_not_summon_a_box_any_more() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
         ime.set_panel_display(PanelDisplay::Off);
-        ime.set_preedit(Preedit::Top);
+        ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
         assert!(!ime.panel_is_full());
 
-        assert!(ime_handle(
-            &mut ime,
-            &mut editor,
-            KeyCode::Tab,
-            KeyModifiers::NONE
-        ));
-        assert!(ime.panel_is_full(), "the whole list, for this one word");
-        // Warning: **正文裏那一個照舊站着**（2026-09-27 改）。`Tab` 動的是面板那一格，
-        // 內嵌是另一格——從前兩者焊在一起，所以召出面板等於把正文裏那個字收走。
+        assert!(ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE));
+        assert!(!ime.panel_is_full(), "Tab 不再把框叫出來");
+        assert_eq!(editor.take_dictionary_query(), Some("吧".to_string()));
+        // Warning: **正文裏那一個照舊站着**（2026-09-27 改）。`Tab` 動的是字典那一格，
+        // 內嵌是另一格。
         settle_inline_candidate(&mut editor, &ime);
-        assert!(editor.has_candidate(), "Tab 管面板，管不着內嵌");
-
-        // The word lands, and the panel goes with it.
-        ime.space();
-        editor.insert_committed(&ime.take_committed());
-        assert_eq!(editor.current_buffer().text(), "吧");
-        assert!(!ime.panel_is_full());
-        ime.input('b');
-        assert!(!ime.panel_is_full(), "a new word starts空空如也 again");
+        assert!(editor.has_candidate(), "Tab 查字典，管不着內嵌");
     }
 
     /// #215: what the 字典 panel looks like on the page.
@@ -17486,23 +17842,18 @@ fn squeezed(text: &str) -> String {
         assert!(code.contains("WSGu") && !code.contains('…'), "{code:?}");
     }
 
-    /// #215: with the list up, `Tab` asks the 字典 about the highlighted one.
+    /// #215: `Tab` asks the 字典 about the highlighted candidate.
     ///
-    /// Under `bare` that is the second press — the first brings the list up,
-    /// and you cannot ask about a candidate you cannot see. Under `full` the
-    /// list is always up, so it is the first.
+    /// One press either way since 2026-10-16: the candidates are on the
+    /// command row when the box is off, so there is never one you cannot see.
     #[test]
     fn tab_on_a_candidate_asks_the_dictionary_about_it() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
         ime.set_panel_display(PanelDisplay::Off);
-        ime.set_preedit(Preedit::Top);
+        ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
-
-        ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
-        assert!(ime.panel_is_full(), "the first press is still the panel");
-        assert_eq!(editor.take_dictionary_query(), None, "…and only the panel");
 
         ime_handle(&mut ime, &mut editor, KeyCode::Tab, KeyModifiers::NONE);
         assert_eq!(editor.take_dictionary_query(), Some("吧".to_string()));
@@ -17512,7 +17863,7 @@ fn squeezed(text: &str) -> String {
         assert!(!editor.sidebar_focused());
         assert!(ime.is_composing(), "…and the word is still being written");
 
-        // Under `full` there is nothing to summon, so one press does it.
+        // …and the same with the box on.
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴\n");
@@ -17529,12 +17880,12 @@ fn squeezed(text: &str) -> String {
         let said = panel_method(&mut ime, "");
         assert!(said.contains("候選框"), "{said}");
         let said = panel_method(&mut ime, "off");
-        assert!(said.contains("不畫"), "{said}");
+        assert!(said.contains("底行"), "{said}");
         assert_eq!(ime.panel_display(), PanelDisplay::Off);
-        // …and `:yume` says so, because a page with no candidate list on it is
-        // the thing a writer asks about.
+        // …and `:yume` says so, because where the candidates are is the thing
+        // a writer asks about.
         let said = switch_scheme(&mut ime, "?", &Config::default());
-        assert!(said.contains("面板 不畫"), "{said}");
+        assert!(said.contains("面板 底行"), "{said}");
         // A word it cannot read names the two rather than picking one.
         let said = panel_method(&mut ime, "invisible");
         assert!(said.contains("invisible") && said.contains("off"), "{said}");
@@ -17570,18 +17921,18 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_preedit_says_where_it_is_writing() {
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
-        let said = preedit_method(&mut ime, "");
-        assert!(said.contains("面板第一列"), "{said}");
-        let said = preedit_method(&mut ime, "top");
+        let said = inline_preedit_method(&mut ime, "");
+        assert!(said.contains("候選欄裏"), "{said}");
+        let said = inline_preedit_method(&mut ime, "preview");
         assert!(said.contains("首選"), "{said}");
-        assert_eq!(ime.preedit(), Preedit::Top);
+        assert_eq!(ime.inline_preedit(), InlinePreedit::Preview);
         let said = switch_scheme(&mut ime, "?", &Config::default());
         assert!(said.contains("正在打的那一段"), "{said}");
         // 面板那一格沒被動過——這正是分成兩格的意思。
-        assert_eq!(ime.panel_display(), PanelDisplay::Full);
-        let said = preedit_method(&mut ime, "inline");
-        assert!(said.contains("inline") && said.contains("code"), "{said}");
-        assert_eq!(ime.preedit(), Preedit::Top, "unchanged");
+        assert_eq!(ime.panel_display(), PanelDisplay::On);
+        let said = inline_preedit_method(&mut ime, "inline");
+        assert!(said.contains("inline") && said.contains("composition"), "{said}");
+        assert_eq!(ime.inline_preedit(), InlinePreedit::Preview, "unchanged");
     }
 
     /// #211: a `/` search composes on the status line, which has no page to
@@ -17594,11 +17945,11 @@ fn squeezed(text: &str) -> String {
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八 巴
 ");
         ime.set_panel_display(PanelDisplay::Off);
-        ime.set_preedit(Preedit::Top);
+        ime.set_inline_preedit(InlinePreedit::Preview);
         ime.input('b');
         settle_inline_candidate(&mut editor, &ime);
         assert!(!editor.has_candidate(), "nothing goes into the manuscript");
-        assert_eq!(hud_line(&editor, &ime), "", "nor beside the caret");
+        assert_eq!(hud_line(&editor), "", "nor beside the caret");
 
         let config = Config::default();
         let buffer = render_with(&editor, &config, &ime, 40, 8);

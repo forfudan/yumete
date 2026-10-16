@@ -235,14 +235,14 @@ const EDITOR_TABS_WAYS: &[Choice] = &[
 ];
 
 const PANEL_DISPLAY_WAYS: &[Choice] = &[
-    Choice { word: "full", label: "set.pick.display.full" },
+    Choice { word: "on", label: "set.pick.display.on" },
     Choice { word: "off", label: "set.pick.display.off" },
 ];
 
 const PANEL_PREEDIT_WAYS: &[Choice] = &[
-    Choice { word: "header", label: "set.pick.preedit.header" },
-    Choice { word: "code", label: "set.pick.preedit.code" },
-    Choice { word: "top", label: "set.pick.preedit.top" },
+    Choice { word: "off", label: "set.pick.inline-preedit.off" },
+    Choice { word: "composition", label: "set.pick.inline-preedit.composition" },
+    Choice { word: "preview", label: "set.pick.inline-preedit.preview" },
 ];
 
 const THEME_MODE_WAYS: &[Choice] = &[
@@ -707,16 +707,16 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Pick(PANEL_DISPLAY_WAYS),
         label: "set.panel.display",
         hint: "set.panel.display.hint",
-        factory: r#""full""#,
+        factory: r#""on""#,
     },
     Setting {
         table: "panel",
-        key: "preedit",
+        key: "inline_preedit",
         group: Group::Ime,
         kind: Kind::Pick(PANEL_PREEDIT_WAYS),
-        label: "set.panel.preedit",
-        hint: "set.panel.preedit.hint",
-        factory: r#""header""#,
+        label: "set.panel.inline-preedit",
+        hint: "set.panel.inline-preedit.hint",
+        factory: r#""off""#,
     },
     Setting {
         table: "panel",
