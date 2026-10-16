@@ -1132,22 +1132,21 @@ pub fn draw(
     // says which cell Insert is confined to. `HEAD`, one rung quieter than a
     // selection, so a selection inside the cell still reads first.
     //
-    // The padding of #212 is horizontal-only (`table_padding_on`), so here the
-    // box holds nothing the file does not: the spaces around the content are
-    // the ones that were typed.
+    // Warning: **竪排的格子沒有底色了**（2026-10-17 作者提）。原話：「the vertical
+    // tables are all readonly, so we do not need to show a wall? The cursor
+    // itself is enough?」——對，而且理由比「夠用」更硬：
     //
-    // Asked of the **region**, the same as the horizontal page: `h`, `G` and a
-    // search all walk out of the table without putting `:table` away, and the
-    // rule row is drawn rather than edited. Either kind of region (#216).
-    let cell = match peek.is_none() && editor.table().is_some_and(|t| !t.takes_the_pane()) {
-        true => editor.prose_region().and_then(|region| {
-            editor
-                .cell_position()
-                .filter(|&(line, _)| region.holds(line) && !region.is_rule(line))
-                .and_then(|(line, at)| editor.cell_box(line, at))
-        }),
-        false => None,
-    };
+    // 一、**這一頭的表本來就是只讀的**（2026-09-19 作者定，見
+    //    `Editor::table_view_opens_itself` 那一段：「進入表格後還是只讀狀態，
+    //    必須 tt 才能編輯」，而 `t t` 把頁面轉平了纔編）。那層底說的是「改動
+    //    會落在這裏」，而這裏不落。
+    // 二、**這一頭的表自己畫格線**（`│` 與 `────┼───`），每一格四邊都圍着，
+    //    不像橫排那一頭要靠兩道金牆說。
+    // 三、它和選中那一塊擠在梯子相鄰的兩鬥上，量出來選中落在格子裏只剩
+    //    1.37:1——同橫排 2026-10-17 那一刀的理由。
+    //
+    // 所以這裏不必像橫排那樣「底換成牆」，直接沒有：底色歸選中一個人，位置由
+    // 光標說（竪排的光標是頁面自己畫的方塊，看得見）。
     let show_segmentation = editor.segmentation_visible();
     let mark = editor.word_mark();
     let cursor_line = editor.cursor_line();
@@ -1228,7 +1227,6 @@ pub fn draw(
         // the poem, so they sit on the rung the line numbers do rather than in
         // the reading's own shade, which belongs to something the *file* says.
         let tone_style = Style::default().fg(ink.furniture());
-        let cell_style = Style::default().bg(ink.at(yumete_config::rung::HEAD));
         // Which band this 縱 landed in decides where its first slot is drawn.
         let text_top = placed.top;
         // Room for a tick: a 縱 that carries a reading or a hung mark has a
@@ -1549,15 +1547,13 @@ pub fn draw(
             let column = at - line_start;
             let mut style = crate::block_style(markup.block(zong.line), ink).unwrap_or_default();
 
-            // Whether a `==highlight==` covers this slot, so the cell ground
-            // steps around it — the horizontal page has done so since #229 and
-            // this page had not. A highlight exists *to be* a ground.
-            let mut highlighted = false;
             // A slot is one display unit and may hold several characters — a
             // ruby group, or a 緃中横 pair — so it takes the style of any run it
             // overlaps. `runs` is empty when markup is not being rendered.
+            //
+            // 從前這裏還記一格「這一格上有沒有 `==標記==`」，給格子的底色讓
+            // 路；格子沒有底色了（見上面那一段），讓路的那一方也就沒有了。
             for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
-                highlighted |= run.kind == yumete_core::markdown::Kind::Highlight;
                 style = style.patch(crate::markup_style(run.kind, ink));
             }
 
@@ -1658,13 +1654,6 @@ pub fn draw(
             // word marking all colour off this 縱's own palette already.
             if stands_back && style.fg.is_none() {
                 style = style.fg(ink.text());
-            }
-
-            // The cell first, so the selection still goes over it.
-            if let Some((from, to)) = cell {
-                if !highlighted && at < to && at + len > from {
-                    style = style.patch(cell_style);
-                }
             }
 
             // 次選區墊在主選區之前。不變式保證不重疊，寫成這個次序是因為「主選區壓在

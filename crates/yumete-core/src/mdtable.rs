@@ -1264,12 +1264,24 @@ pub fn padding(
             let short = target[c].saturating_sub(drawn_room[i][c]);
             // The colons of `:---:` are the alignment: the dashes grow between
             // them, never over them.
+            // Warning: **補白掛在豎線上，不插在內容和它自己的尾空格中間**
+            // （2026-10-17 報的）。從前它掛在**內容**的兩頭（`from`/`to`），而
+            // 格子裏 `to` 之後常常還有檔案自己的那一個空格——補白插在中間，於
+            // 是那一個空格被推到十七欄之外。畫出來一模一樣（都是空格），可
+            // 「檔案的第幾個字 → 螢幕第幾欄」那張圖斷了：`w` 選到末一個詞，選
+            // 中那一塊在螢幕上成了兩截，中間隔着補白（原話：「when selecting
+            // the last word of a cell with w, it also mark something in gray
+            // at the left side of the pipe」）。掛在 `start`/`end` 上，檔案自
+            // 己那幾個字就連着了。
+            //
+            // 對齊那一行另算：`:---:` 的冒號是對齊記號，橫槓在它們**中間**長，
+            // 不許長到它們外面去。
             let (at_lead, at_trail) = match ruled {
                 true => (
                     from + usize::from(line.get(from) == Some(&':')),
                     to - usize::from(to > from && line.get(to - 1) == Some(&':')),
                 ),
-                false => (from, to),
+                false => (start, end),
             };
             // The rule row is dashes either way round, so it goes on one side
             // and stays one run.

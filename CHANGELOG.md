@@ -154,6 +154,17 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Selecting the last word of a table cell no longer leaves a grey mark beside the
+  pipe.** The padding that squares a table up hung on the end of the cell's *content*,
+  so the cell's own trailing space was drawn seventeen columns further right, past all
+  of it — and a selection covering both was drawn as two pieces with a hole between
+  them. The padding now hangs against the pipe, which looks identical (it is all
+  spaces) and keeps the file's own characters next to each other.
+- **A 竪排 table no longer grounds the cell the caret is in.** Tables there are
+  read-only by design — `t t` turns the page flat to edit one — and the 竪排 table
+  draws its own rules around every cell, so the caret is enough; the ground was only
+  competing with the selection.
+
 - **A selection inside a table cell is visible again.** The caret's cell and the caret's
   row each painted a ground, and the selection's own ground is one rung away from
   them — measured on the rendered frame, a selection read at 1.98:1 on a plain row and

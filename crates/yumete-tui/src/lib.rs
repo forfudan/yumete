@@ -14477,7 +14477,7 @@ fn squeezed(text: &str) -> String {
     /// as「the ground is wrong」rather than「you asked two different
     /// questions」.
     ///
-    /// `the_vertical_page_keeps_the_cell_to_the_table` was red this way from
+    /// `the_vertical_page_grounds_nothing_but_a_highlight` was red this way from
     /// 2026-09-10 to 2026-09-27 — seventeen days in which the thing it checks
     /// (that a 縱書 table cell does not rub out a `==highlight==`) was not
     /// being checked at all. Same family as `render_with`'s own Warning: , one floor
@@ -19206,14 +19206,14 @@ fn squeezed(text: &str) -> String {
         assert!(walls[1] <= bar, "牆不越過豎線：{walls:?} / {text:?}");
     }
 
-    /// The 縱書 page draws the ground under the same three rules as the
-    /// horizontal one: not on prose, not on the rule row, not over a
-    /// `==highlight==`.
+    /// **竪排這一頭沒有任何東西在鋪格子的底**，散文上、對齊那一行上、
+    /// `==標記==` 上都沒有——標記自己那一層照舊在（2026-10-17 改）。
     ///
-    /// The region guard landed on both pages; the highlight guard landed only
-    /// on the horizontal one, and nothing here would have said so.
+    /// 格子的底 2026-10-17 整個拿掉了（見下一條），所以這三問從「底色收不收
+    /// 得住」變成「有沒有人又把它畫回來」。標記那一問照舊是真的：它那一層底
+    /// 是「這裏標過」的答案，誰都不許抹掉。
     #[test]
-    fn the_vertical_page_keeps_the_cell_to_the_table() {
+    fn the_vertical_page_grounds_nothing_but_a_highlight() {
         let mut editor = editor_with(
             "| 字 | 讀音 |\n| --- | --- |\n| 木頭 | ==mu== |\n見上表 | 附註",
         );
@@ -19267,15 +19267,15 @@ fn squeezed(text: &str) -> String {
         assert_ne!(buffer[(x, y)].bg, want, "the prose is not a cell");
     }
 
-    /// 縱書 keeps its page for **表格操作** — `turn_for_table` turns the page
-    /// only for 真表格顯示, which draws a grid and cannot draw one down the
-    /// page; `t n` leaves the pipes and the commas where they are, and turning
-    /// a whole chapter sideways to mend three lines of it throws away
-    /// everything around them. So the vertical page is the **only** surface
-    /// that ever says which cell Insert is confined to, and #229 has to reach
-    /// it too.
+    /// **竪排的格子不畫底色**（2026-10-17 作者提）。原話：「the vertical tables
+    /// are all readonly, so we do not need to show a wall? The cursor itself
+    /// is enough?」
+    ///
+    /// 三條理由，記在 `vertical.rs` 那一段：這一頭的表是只讀的（2026-09-19
+    /// 定，`t t` 轉平了纔編）、它自己畫格線、而那層底和選中擠在相鄰兩鬥上。
+    /// 所以竪排不必像橫排那樣「底換成牆」，直接沒有。
     #[test]
-    fn the_vertical_page_draws_the_cell_as_well() {
+    fn the_vertical_page_draws_no_cell_ground() {
         // Two characters in the first cell, because the cursor's own slot is
         // painted over by the block cursor last of all — the character *beside*
         // it is where the cell's ground has to show through.
@@ -19306,11 +19306,11 @@ fn squeezed(text: &str) -> String {
                 .find(|&(x, y)| at(&buffer, x, y) == ch)
                 .unwrap_or_else(|| panic!("{ch} is on the page"))
         };
+        // 光標那一格和旁邊那一格一樣——底色留給選中那一塊。
         let head = find("頭");
-        assert_eq!(buffer[(head.0, head.1)].bg, want, "the cell it is in is drawn");
-        // …and the cell beside it, in the same row, is not.
+        assert_ne!(buffer[(head.0, head.1)].bg, want, "格子不該有自己的底");
         let other = find("m");
-        assert_ne!(buffer[(other.0, other.1)].bg, want, "the cell beside it is not");
+        assert_ne!(buffer[(other.0, other.1)].bg, want, "旁邊那一格也沒有");
     }
 
     #[test]
