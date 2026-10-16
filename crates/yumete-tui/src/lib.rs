@@ -4912,6 +4912,8 @@ fn draw(
         // the caret; in Normal the block is painted into the page and a second,
         // half-width cursor on top of it would only confuse.
         frame.set_cursor_position(Position::new(cursor_x, cursor_y));
+        finish_the_block_on_a_wide_glyph(frame, editor, config, (cursor_x, cursor_y), areas.panes
+            [editor.live_pane().min(1)]);
     }
 
     if candidate_panel {
@@ -12486,6 +12488,54 @@ fn draw_command(
 /// `box_in` paints that one, and the two shapes then say the same thing
 /// everywhere — **bar means the next key is a character, block means it is a
 /// command**.
+/// Paint the second cell of a block cursor standing on a private-use character.
+///
+/// **The terminal's block is as wide as the terminal thinks the character is.**
+/// For a 字根 it thinks one cell — Annex #11 calls the whole private-use area
+/// Ambiguous — while this editor and the font that carries them both say two
+/// ([`yumete_cjk::is_private_use`]). So the block covered the left half of the
+/// glyph and the right half stayed page colour, which is what was reported on
+/// 2026-10-16: 「when the cursor is moved onto that PUA, it highlighted only
+/// half (left cell), in the horizontal layout」.
+///
+/// There is no asking the terminal to draw its own cursor wider, so the other
+/// half is painted here, in the colours the vertical page already paints its
+/// whole block with — that page has always drawn its own and is right for the
+/// same reason (see [`caret_shape`]).
+///
+/// Warning: **Only under a block.** Insert is a bar and 延伸 an underscore, and half a
+/// block standing next to either of those says something that is not true.
+///
+/// Warning: **Only inside the page.** A 字根 in the last column would otherwise paint
+/// its other half onto the sidebar's first cell.
+fn finish_the_block_on_a_wide_glyph(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    (cursor_x, cursor_y): (u16, u16),
+    page: Rect,
+) {
+    let shape = caret_shape(editor.mode(), false, editor.is_extending());
+    if !matches!(shape, SetCursorStyle::SteadyBlock) {
+        return;
+    }
+    let on_a_root = editor
+        .grapheme_at_cursor()
+        .and_then(|g| g.chars().next())
+        .is_some_and(yumete_cjk::is_private_use);
+    if !on_a_root {
+        return;
+    }
+    let other = cursor_x + 1;
+    if other >= page.x + page.width {
+        return;
+    }
+    let ink = crate::theme::Palette::of(config);
+    if let Some(cell) = frame.buffer_mut().cell_mut((other, cursor_y)) {
+        cell.set_style(ink.reversed(Style::default()));
+    }
+}
+
 fn caret_shape(mode: Mode, vertical: bool, extending: bool) -> SetCursorStyle {
     // Warning: **從前這裏還有一道「挑選器的列表層是方塊」**（2026-10-02 加）。挑選器
     // 2026-10-08 只剩打字那一層，`is_prompt()` 交出的豎線就是對的那一個。
@@ -21562,6 +21612,36 @@ fn squeezed(text: &str) -> String {
         assert_eq!(han[6], "B", "{han:?}");
         assert_eq!(root[5], " ", "and so does a 字根: {root:?}");
         assert_eq!(root[6], "B", "{root:?}");
+    }
+
+    /// **A block cursor on a 字根 covers both of its cells** (2026-10-16).
+    ///
+    /// Reported as 「when the cursor is moved onto that PUA, it highlighted only
+    /// half (left cell), in the horizontal layout」. The terminal draws its own
+    /// block as wide as *it* thinks the character is, and it thinks one cell;
+    /// the other one is painted into the page.
+    #[test]
+    fn a_block_cursor_on_a_private_use_character_covers_both_cells() {
+        let painted = |text: &str, keys: &[Key]| {
+            let mut editor = editor_with(text);
+            for key in keys {
+                editor.on_key(*key);
+            }
+            let buffer = render(&editor, &Config::default(), 24, 4);
+            buffer[(5, 0)].style()
+        };
+        // Cell 5 is the second half of the character at cell 4.
+        let plain = painted("A\u{e000}B", &[]);
+        let under = painted("A\u{e000}B", &[Key::Char('l')]);
+        assert_ne!(under, plain, "the other half is painted when the caret is on it");
+        // Warning: **Only under a block.** In Insert the caret is a bar, and half a
+        // block beside a bar says something that is not true.
+        let typing = painted("A\u{e000}B", &[Key::Char('l'), Key::Char('i')]);
+        assert_eq!(typing, plain, "a bar paints nothing");
+        // And a 漢字 needs none of it — the terminal knows that one is wide.
+        let han = painted("A\u{4e00}B", &[]);
+        let han_under = painted("A\u{4e00}B", &[Key::Char('l')]);
+        assert_eq!(han_under, han, "nothing is painted for a 漢字");
     }
 
     /// Draw the `:` menu at a real size, for looking at.
