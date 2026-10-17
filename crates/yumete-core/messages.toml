@@ -11023,6 +11023,13 @@ zhs = "当前位置非空行，请在空行中使用此命令"
 en = "this line is not empty — use this command on a blank line"
 
 [[message]]
+# ] 空格 / [ 空格 想在表格中間插一個空行
+key = "table.no-blank-line-inside"
+zht = "空行會把表格斷成兩張——用 t r 加一行"
+zhs = "空行会把表格断成两张——用 t r 加一行"
+en = "a blank line would cut the table in two — t r adds a row"
+
+[[message]]
 # :table-pipe：看不出什麼在分欄
 key = "table.no-delimiter-in-sight"
 zht = "無法自動檢測分隔符，請手動聲明，例如 :convert-table , pipe 或 :convert-table tab pipe"
@@ -11091,6 +11098,13 @@ key = "table.not-in-a-table"
 zht = "不是表格——先 :table-render full"
 zhs = "不是表格——先 :table-render full"
 en = "not a table — :table-render full first"
+
+[[message]]
+# 在表格裏往格子外面打字（牆上、補空裏）
+key = "table.not-inside-a-cell"
+zht = "這裏不在格子裏——按 Tab 進格子"
+zhs = "这里不在格子里——按 Tab 进格子"
+en = "this is not inside a cell — Tab steps into one"
 
 [[message]]
 # 想在標題行上面加一行
