@@ -1216,6 +1216,47 @@ fn an_empty_cell_keeps_the_one_place_it_has() {
     assert!(seen.contains(&Some(1)), "第 2 欄停得上：{seen:?}");
 }
 
+/// **全窗裏「這一行」是「這一格」，行號是表格的行號**（2026-10-17 作者定）。
+#[test]
+fn the_pane_reads_a_line_as_a_cell_and_a_number_as_a_row() {
+    let mut ed = typed("前文\n\n| who | verb |\n| --- | --- |\n| some people | love me |\n| x | y |\n");
+    ed.execute("goto 5").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    // 走到第二格中間。
+    for _ in 0..14 {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "在第二格裏");
+    // `g h` / `g l` / `g s` 是這一格的兩頭，不是這一行的。
+    press(&mut ed, "gl");
+    assert_eq!(text(&ed), "e", "格尾：{}", ed.status());
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1));
+    press(&mut ed, "gh");
+    assert_eq!(text(&ed), "l", "格頭：{}", ed.status());
+    press(&mut ed, "gl");
+    ed.on_key(Key::Home);
+    assert_eq!(text(&ed), "l", "Home 同 g h");
+    ed.on_key(Key::End);
+    assert_eq!(text(&ed), "e", "End 同 g l");
+
+    // 行號數的是表格畫出來的那個：這張表從檔案第 5 行起。
+    press(&mut ed, "1G");
+    assert_eq!(ed.table_row_number(), 1, "{}", ed.status());
+    assert_eq!(ed.cursor_line(), 4, "檔案的第 5 行");
+    press(&mut ed, "2G");
+    assert_eq!(ed.table_row_number(), 2, "{}", ed.status());
+
+    // 正文裏一點不變。
+    press(&mut ed, " to");
+    press(&mut ed, "2G");
+    assert_eq!(ed.cursor_line(), 1, "正文裏還是檔案行號：{}", ed.status());
+}
+
 /// **全窗裏按詞走的那幾個鍵不出這一格**（2026-10-17 作者定）。
 ///
 /// 原話：「还是按字符，不跨格。这样的话格子只能通过 hjkl tab/S-tab 来移动。」
@@ -6974,15 +7015,29 @@ fn the_window_holds_the_table_it_was_opened_on() {
     assert_eq!((first, last), (5, 7), "rows are lines 6, 7 and 8");
     assert_eq!(ed.table_row_base(), first, "the window counts from its first row");
 
-    // `gg` is the table's first row, not the file's first line.
+    // `gg` is the table's first row, not the file's first line, and `ge` its
+    // last. Warning: **they mean that outright now** (2026-10-17) rather than
+    // running off the file and being dragged back by 「窗子拉得住你」 — so
+    // they no longer say it, and `ge` lands in a cell instead of on the last
+    // row's trailing `|`. The message is still there for the keys that really
+    // do try to leave.
     press(&mut ed, "gg");
     assert_eq!(ed.cursor_line(), first, "{}", ed.status());
     assert_eq!(ed.table_row_number(), 1, "and it is row 1 in the window");
-    assert!(ed.status().contains("t q"), "it says so: {}", ed.status());
-    // `ge` is its last row, not the file's last line.
     press(&mut ed, "ge");
     assert_eq!(ed.cursor_line(), last, "{}", ed.status());
     assert_eq!(ed.table_row_number(), 3);
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0), "落在格子裏，不是牆上");
+
+    // **`<n>G` counts the rows the gutter draws**, not the file's lines — the
+    // table starts on line 6 here, so `2G` is the second row and not the
+    // blank line above the table (2026-10-17 作者定).
+    press(&mut ed, "2G");
+    assert_eq!(ed.cursor_line(), first + 1, "{}", ed.status());
+    press(&mut ed, "1G");
+    assert_eq!(ed.cursor_line(), first, "{}", ed.status());
+    press(&mut ed, "99G");
+    assert_eq!(ed.cursor_line(), last, "past the end is the last row");
     // `t<n>g` counts the same rows the gutter draws.
     press(&mut ed, " t1g");
     assert_eq!(ed.cursor_line(), first, "{}", ed.status());

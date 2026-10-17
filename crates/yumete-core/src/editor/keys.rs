@@ -1918,12 +1918,17 @@ impl Editor {
                     false => self.repeat(count, |e| e.move_vertical(up)),
                 }
             }
+            // 全窗裏這兩個也是這一格的兩頭——同 `g h`/`g l`，見 `cell_edge`。
             Key::Home => {
-                let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
+                let pos = self.cell_edge(false).unwrap_or_else(|| {
+                    motion::line_start(self.current_buffer().rope(), self.sel.head())
+                });
                 self.move_head(pos);
             }
             Key::End => {
-                let pos = motion::line_last(self.current_buffer().rope(), self.sel.head());
+                let pos = self.cell_edge(true).unwrap_or_else(|| {
+                    motion::line_last(self.current_buffer().rope(), self.sel.head())
+                });
                 self.move_head(pos);
             }
             // **`Enter`, `+` and `-`** — vim's three ways of saying 「the next
@@ -2772,7 +2777,8 @@ impl Editor {
                 match operator_count.is_some() {
                     true => {
                         self.remember_jump();
-                        self.goto_line(count);
+                        // 全窗裏數的是表格的行，見 `goto_row`。
+                        self.goto_grid_row(count);
                     }
                     false if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                         self.remember_jump();
@@ -2920,7 +2926,7 @@ impl Editor {
             // `g30g` — the sequence's own argument — and `30gg`, vi's order.
             let line = self.sequence_span().map(|(n, _)| n).or(self.operator_count.take());
             if let Some(n) = line.filter(|&n| n > 0) {
-                return self.goto_line(n);
+                return self.goto_grid_row(n);
             }
         }
         // **`g` 那一層的四個字母一個都不轉**（2026-10-13 定）。2026-09-17 到
@@ -2948,6 +2954,35 @@ impl Editor {
         // and then a letter. The consumer is unchanged: a goto **collapses**
         // (`move_head`), which is exactly the reading `jump_to` wraps.
         let go = |e: &mut Self, what: motion::Motion| {
+            // **全窗裏「這一行」是「這一格」**（2026-10-17 作者定）。`g h`/`g l`
+            // /`g s` — and so vim's `0`/`$`/`^`, which expand to them — used to
+            // run to the row's own ends and park on a wall. 全窗 is a view of
+            // the content; the ends it has are the cell's.
+            let edge = match what {
+                motion::Motion::LineStart | motion::Motion::LineFirstNonBlank => {
+                    e.cell_edge(false)
+                }
+                motion::Motion::LineEnd => e.cell_edge(true),
+                _ => None,
+            };
+            if let Some(at) = edge {
+                e.move_head(at);
+                return;
+            }
+            // **And the file's two ends are the table's two rows** (2026-10-17).
+            // 全窗 is a window onto one table and nothing walks out of it, so
+            // `g g` and `g e` already ended inside it — but by way of 「the
+            // window holds you」, which drags the caret back without placing
+            // it: `g e` landed on the last row's trailing `|`. Asking for the
+            // row by number lands in a cell.
+            let rows = e.grid_has_the_pane().then(|| e.table_row_span()).flatten();
+            if let Some((first, last)) = rows {
+                match what {
+                    motion::Motion::FileStart => return e.goto_grid_row(1),
+                    motion::Motion::FileEnd => return e.goto_grid_row(last - first + 1),
+                    _ => {}
+                }
+            }
             let span = e.run_motion(what);
             e.jump_to(span);
         };

@@ -3011,6 +3011,44 @@ impl Editor {
         self.cell_span(line, cell)
     }
 
+    /// **全窗裏行號是表格自己的行號**（2026-10-17 作者定），左邊畫的那一個。
+    ///
+    /// 格子窗的欄位從 1 數起，數的是**資料行**——標題由 schema 畫在凍住的那一
+    /// 條上，`| --- |` 根本不畫。而 `3G` 從前走的是檔案行號，於是在一張開頭有
+    /// 兩行前文的 `.md` 裏，`3G` 落到的是「畫着 1 的那一行」之外的某處，再被
+    /// 「窗子拉得住你」那一條硬拖回來（實測 `2G` 落在第 1 行）。
+    ///
+    /// 不在全窗就照檔案行號走——那三層畫的本來就是檔案。
+    pub(super) fn goto_grid_row(&mut self, n: usize) {
+        let span = match self.grid_has_the_pane() {
+            true => self.table_row_span(),
+            false => None,
+        };
+        match span {
+            Some((first, last)) => {
+                let want = first.saturating_add(n.saturating_sub(1)).min(last);
+                self.goto_line(want + 1);
+                self.snap_to_cell();
+            }
+            None => self.goto_line(n),
+        }
+    }
+
+    /// **全窗裏「這一行」就是「這一格」**（2026-10-17 作者定）——`g h`／`g l`／
+    /// `g s`（vim 的 `0`／`$`／`^`）與 `Home`／`End` 落在哪。
+    ///
+    /// `end` ＝ 要的是格尾。格尾是這一格**最後一個字**，不是它後面那一格：那
+    /// 一格是牆帶走的空格，光標停上去畫不出來。空格子只有一個位置，頭尾同一個。
+    ///
+    /// `None` 在別的層：那三層是文本，一行就是一行。
+    pub(super) fn cell_edge(&self, end: bool) -> Option<usize> {
+        let (first, last) = self.cell_the_caret_is_in()?;
+        Some(match end {
+            true => last.saturating_sub(1).max(first),
+            false => first,
+        })
+    }
+
     /// The buffer range one cell covers, **for something that is about to
     /// change it** — `None`, with a reason on the status line, when writing
     /// this row back would break it (#307).
