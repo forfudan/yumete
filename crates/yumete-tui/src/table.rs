@@ -873,10 +873,15 @@ pub fn draw(
                         // Clip the selection to this cell. An empty cell is a
                         // single offset, so it lights when the selection
                         // reaches across it rather than when it covers width.
-                        (a <= to && from <= b).then(|| (from, to, a.max(from), b.min(to)))
+                        // `b` is clipped below; `past` keeps the raw end,
+                        // because 「does the selection go **beyond** this
+                        // cell」 is a different question from 「does it reach
+                        // the end of it」 — see `runs_on`.
+                        let past = b > to;
+                        (a <= to && from <= b).then(|| (from, to, a.max(from), b.min(to), past))
                     },
                 );
-                if let Some((from, to, a, b)) = lit {
+                if let Some((from, to, a, b, past)) = lit {
                     // **The selection, over the cell's own ground.** Only the
                     // background is touched: a heading inside a selection is
                     // still a heading, which is the rule everywhere else too.
@@ -901,7 +906,15 @@ pub fn draw(
                         // says the highlight is a cell you are inside, and a
                         // row selection that stopped at each cell's last 字
                         // came out as stripes with gaps where the padding is.
-                        let runs_on = b >= to;
+                        //
+                        // Warning: **Past it, not up to it** (2026-10-17 作者報的:
+                        // 「I press `w` on 拼, the word is selected but also
+                        // the empty region after it」). The test was `b >= to`
+                        // against the *clipped* end, which every selection
+                        // that stops at a cell's last character satisfies —
+                        // so `w` on the tail of a cell lit the padding behind
+                        // it as though the selection ran on into the wall.
+                        let runs_on = past;
                         let c1 = match (lb == k, runs_on, whole_cell) {
                             (true, false, false) => (cb as u16).saturating_sub(slid),
                             _ => w,

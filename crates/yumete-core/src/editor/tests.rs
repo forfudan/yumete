@@ -1360,7 +1360,10 @@ fn the_older_holes_the_review_found_are_shut() {
 /// **帶引號的 CSV 欄位：逗號在引號裏就是欄位裏的字**（2026-10-17，審查找出來的）。
 #[test]
 fn a_quoted_comma_is_not_a_wall() {
-    let dir = tmp().join(format!("yumete-quoted-{}", std::process::id()));
+    // 名字不許和別的測試撞:同一個進程裏兩條測試共用一個臨時目錄,就會互相
+    // 刪掉對方的夾具( 用的是
+    // `yumete-quoted-`)。
+    let dir = tmp().join(format!("yumete-quoted-comma-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("q.csv");
