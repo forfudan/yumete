@@ -365,6 +365,9 @@ impl Editor {
             Pending::UndoBreak | Pending::SwapRange | Pending::None => "",
             Pending::Goto => "g",
             Pending::Space => "␣",
+            // 輸入法那一組：`␣z`，再按一個字母就進了它的值那一層。
+            Pending::Yume => "␣z",
+            Pending::YumeValue(_) => "␣z…",
             // 區域那一組：光標旁邊那個牌子寫 `C-w`（它有兩扇門，這一個短）。
             Pending::Region => "C-w",
             Pending::Find(FindKind::Forward) => "f",

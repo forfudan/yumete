@@ -5887,13 +5887,6 @@ zhs = "显示汉字信息(边栏)"
 en = "show info of character (sidebar)"
 
 [[message]]
-# 空格選單：空格 空格
-key = "hint.space.ime"
-zht = "開關輸入法"
-zhs = "开关输入法"
-en = "turn the IME on or off"
-
-[[message]]
 # space f：open a file
 # 開啟文件
 key = "hint.space.open-file"
@@ -5995,6 +5988,13 @@ key = "hint.space.what-is-this-panel"
 zht = "顯示定義文檔(邊欄)"
 zhs = "显示定义文档(边栏)"
 en = "show docs of definition (sidebar)"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.space.yume"
+zht = "輸入法"
+zhs = "输入法"
+en = "the IME"
 
 [[message]]
 # 表格提示：加一欄
@@ -6332,6 +6332,167 @@ key = "hint.vim-operator-more"
 zht = "{0}{1} 還没説完"
 zhs = "{0}{1} 还没説完"
 en = "{0}{1} is not finished"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.after-z"
+zht = "␣z 後面：{0}"
+zhs = "␣z 后面：{0}"
+en = "after 空格 z: {0}"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.chaifen"
+zht = "候選旁的拆分注解"
+zhs = "候选旁的拆分注解"
+en = "the 拆分 beside a candidate"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.commit"
+zht = "上屏方式"
+zhs = "上屏方式"
+en = "when a word commits"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.commit-default"
+zht = "預設——方案自己說了算"
+zhs = "预设——方案自己说了算"
+en = "default — the scheme decides"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.commit-delayed"
+zht = "頂字"
+zhs = "顶字"
+en = "delayed"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.commit-fluency"
+zht = "整句"
+zhs = "整句"
+en = "fluency"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.commit-unique"
+zht = "唯一"
+zhs = "唯一"
+en = "unique"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.menu-size"
+zht = "一頁幾條"
+zhs = "一页几条"
+en = "candidates on a page"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.next-scheme"
+zht = "下一個方案"
+zhs = "下一个方案"
+en = "the next scheme"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.panel"
+zht = "候選欄畫在哪"
+zhs = "候选栏画在哪"
+en = "where the candidates are drawn"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.panel-bottom"
+zht = "bottom——窗口最下面那一行"
+zhs = "bottom——窗口最下面那一行"
+en = "bottom — the foot of the window"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.panel-box"
+zht = "box——光標旁的框"
+zhs = "box——光标旁的框"
+en = "box — beside the caret"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.panel-inline"
+zht = "inline——光標的下一行"
+zhs = "inline——光标的下一行"
+en = "inline — the line under the caret"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.predict"
+zht = "輸入預測 開/關"
+zhs = "输入预测 开/关"
+en = "prediction on or off"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.preedit"
+zht = "正在打的那一段寫在哪"
+zhs = "正在打的那一段写在哪"
+en = "where what you are typing is written"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.preedit-composition"
+zht = "composition——正文裏寫編碼"
+zhs = "composition——正文里写编码"
+en = "composition — the code, in the text"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.preedit-off"
+zht = "off——寫在候選欄裏"
+zhs = "off——写在候选栏里"
+en = "off — in the candidate bar"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.preedit-preview"
+zht = "preview——正文裏寫首選"
+zhs = "preview——正文里写首选"
+en = "preview — the first candidate, in the text"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.scheme"
+zht = "選方案"
+zhs = "选方案"
+en = "pick a scheme"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.table"
+zht = "換碼表源"
+zhs = "换码表源"
+en = "where the 碼表 comes from"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.title"
+zht = "輸入法"
+zhs = "输入法"
+en = "the IME"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.toggle"
+zht = "中 / ABC / 關"
+zhs = "中 / ABC / 关"
+en = "中 / ABC / off"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.which-where"
+zht = "用的是哪個 / 六層在哪"
+zhs = "用的是哪个 / 六层在哪"
+en = "which scheme / where the data is"
 
 [[message]]
 # :view-hud basic(出廠)——也是 :view-hud 不帶參數時的回答

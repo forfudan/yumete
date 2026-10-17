@@ -554,6 +554,12 @@ impl Editor {
             // used to be `md_region().is_none()`, which is *also* true of a
             // Markdown table nobody has opened yet — so standing in one of
             // 手冊's own tables offered the delimited file's keys.
+            // 輸入法那一組（2026-10-17）——`空格 z`，以及它底下那三個有值的。
+            Pending::Yume => (say!("hint.yume.title"), Self::said(Editor::YUME_KEYS.to_vec())),
+            Pending::YumeValue(subject) => (
+                say!("hint.yume.title"),
+                Self::said(Editor::yume_values(subject).to_vec()),
+            ),
             Pending::Table => {
                 let inside = match self.table.as_ref().map(|v| v.bounds) {
                     Some(Bounds::Block) if self.block_region().is_some() => Some(Bounds::Block),

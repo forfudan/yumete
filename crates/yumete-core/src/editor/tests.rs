@@ -1386,6 +1386,56 @@ fn a_quoted_comma_is_not_a_wall() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **`空格 z` ——輸入法那一組，字母跟 Yume 的 ⌃⇧ 對齊**（2026-10-17 作者定）。
+///
+/// 原話：「In Yume, we have many shortcuts too with (shift + control + a
+/// letter). I want them to be aligned as much as possible.」所以 `m` 是上屏方
+/// 式（Yume 的 ⌃⇧M）、`y` 輸入預測（⌃⇧Y）、`i` 選方案（⌃⇧I）、`n` 下一個方
+/// 案（⌃⇧N）、`/` 注解（⌃⇧/）、`3`–`9` 一頁幾條（⌃⇧3–9）。
+#[test]
+fn the_yume_group_asks_the_front_end_what_each_key_means() {
+    let ask = |keys: &str| {
+        let mut ed = typed("那年冬天。\n");
+        press(&mut ed, keys);
+        ed.take_scheme_request()
+    };
+    for (keys, want) in [
+        (" zz", "lang:toggle"),
+        (" zm0", "commit:default"),
+        (" zmd", "commit:delayed"),
+        (" zmu", "commit:unique"),
+        (" zmf", "commit:fluency"),
+        (" zpb", "panel:box"),
+        (" zpm", "panel:bottom"),
+        (" zpi", "panel:inline"),
+        (" zeo", "inline-preedit:off"),
+        (" zec", "inline-preedit:composition"),
+        (" zep", "inline-preedit:preview"),
+        (" zy", "predict:"),
+        (" zi", "scheme:"),
+        (" zn", "scheme:next"),
+        (" z/", "comment:"),
+        (" zt", "~"),
+        (" zw", "?"),
+        (" zW", "where"),
+        (" z3", "menu:3"),
+        (" z9", "menu:9"),
+    ] {
+        assert_eq!(ask(keys).as_deref(), Some(want), "`{keys}`");
+    }
+
+    // **`空格 空格` 撤了**，不留別名（2026-10-17 作者定）。
+    assert_eq!(ask("  "), None, "`空格 空格` 不再是開關");
+
+    // 按錯的那一下說得出後面可以按什麽，而不是默默吞掉。
+    let mut ed = typed("那年冬天。\n");
+    press(&mut ed, " zQ");
+    assert!(ed.status().contains("\u{2423}z"), "{}", ed.status());
+    let mut ed = typed("那年冬天。\n");
+    press(&mut ed, " zpQ");
+    assert!(ed.status().contains('b') && ed.status().contains('i'), "{}", ed.status());
+}
+
 /// **`mi c` 是光標所在的那一格**（2026-10-17 作者定）。
 ///
 /// 原話：「`mi c` = 这一格」。按字之後，「把這一格整個換掉」是表格裏最常用的
