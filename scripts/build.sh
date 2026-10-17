@@ -79,7 +79,7 @@ fi
 #
 # **The file list here must match `yume_core::data_manifest`**, which is the one
 # place that says what a complete Yume data set is (see yume's
-# docs/development.md §4.1.1). `yumete-ime` loads by walking that manifest, so
+# local/development.md §4.1.1). `yumete-ime` loads by walking that manifest, so
 # anything this script fails to produce is silently skipped at run time and only
 # shows up as worse candidates — which is exactly the failure the manifest was
 # introduced to stop. When yume adds a data file, add it here too.

@@ -83,7 +83,7 @@ fixture() {
     case "$1" in
         TABLE) printf '| 名 | 說明 | 數 |\n| --- | --- | --- |\n| 甲 | 第一條 | 12 |\n| 乙 | 第二條，長一些 | 345 |\n| ⚠️ | 有警告 | 6 |\n' ;;
         RUBY)  printf '那<ruby>韋<rt>wéi</rt></ruby>字念什麼。\n她伸手去碰，指尖一涼。\n' ;;
-        MANUAL) sed -n '1,60p' docs/manual_tc.md ;;
+        MANUAL) sed -n '1,60p' docs/manual.md ;;
         RUST)  printf '// 一個小程序\nfn counted(text: &str) -> usize {\n    text.chars().count()\n}\n\nfn main() {\n    println!("{}", counted("那年冬天"));\n}\n' ;;
         MOJO)  printf '# 一個小程序\n@value\nstruct Greeter(Movable):\n    var name: String\n\n    fn hello(self) raises -> None:\n        print("你好，", self.name)\n' ;;
         CONFLICT) printf '上面這一行兩邊都有。\n<<<<<<< HEAD\n我這邊寫的。\n=======\n他那邊寫的。\n>>>>>>> 別人\n下面這一行兩邊都有。\n' ;;

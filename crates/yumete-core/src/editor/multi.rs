@@ -1,4 +1,4 @@
-//! **多選區的那幾個鍵**（#405，方案在 `docs/development.md §5.13`）。
+//! **多選區的那幾個鍵**（#405，方案在 `local/development.md §5.13`）。
 //!
 //! 造出第二段的是 `C`/`A-C`，收回去的是 `,`。語義照 helix
 //! （`helix-term/src/commands.rs` 的 `copy_selection_on_line`，基準 commit `079a789e8`），

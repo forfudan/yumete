@@ -15044,7 +15044,7 @@ fn squeezed(text: &str) -> String {
     ///     -- --ignored --nocapture
     /// ```
     ///
-    /// It walks the roadmap table in `docs/development.md` and a synthetic one
+    /// It walks the roadmap table in `local/development.md` and a synthetic one
     /// whose 備註 column is 7,000 characters wide — the shape the roadmap had
     /// before #296's footnotes — twice each: one row at a time, and in jumps of
     /// a hundred. Keys and drawing are timed apart, because they answer
@@ -15118,7 +15118,7 @@ fn squeezed(text: &str) -> String {
 
         let fat = fat.to_string_lossy().to_string();
         println!("\n{:<20}{:>12}{:>12}{:>12}", "", "keys", "draw 摺", "draw 折行");
-        for (name, file) in [("roadmap", "../../docs/development.md"), ("7,000 字一格", fat.as_str())] {
+        for (name, file) in [("roadmap", "../../local/development.md"), ("7,000 字一格", fat.as_str())] {
             for jump in [false, true] {
                 let off = run(file, false, jump);
                 let on = run(file, true, jump);
@@ -15146,7 +15146,7 @@ fn squeezed(text: &str) -> String {
     #[ignore]
     fn the_cost_of_a_flick() {
         use std::time::Instant;
-        let doc = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/development.md");
+        let doc = concat!(env!("CARGO_MANIFEST_DIR"), "/../../local/development.md");
         let ime = no_ime();
         let config = Config::default();
         let (w, h) = (200u16, 50u16);
@@ -16830,7 +16830,7 @@ fn squeezed(text: &str) -> String {
         use std::time::Instant;
         let config = Config::default();
         let (w, h) = (120u16, 50u16);
-        let file = concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/development.md");
+        let file = concat!(env!("CARGO_MANIFEST_DIR"), "/../../local/development.md");
 
         let mut editor = Editor::new();
         editor.set_diff_gutter(true);

@@ -7,7 +7,7 @@
 //! ## 為什麼是喊 `git`，不是引一個 git 庫
 //!
 //! `gix` 與 `git2` 都是一整條供應鏈——`git2` 底下是 libgit2 的 C 代碼，`gix` 是
-//! 幾十個 crate。這個編輯器現在的依賴一隻手數得完（`docs/development.md` §6442
+//! 幾十個 crate。這個編輯器現在的依賴一隻手數得完（`local/development.md` §6442
 //! 為了「自動更新」拒過同一件事：「不要為它引一條網絡供應鏈……它要做的事 `curl`
 //! 和 `unzip` 已經會了」）。這裏要的東西比那個還小：**一串 `@@ -a,b +c,d @@`**。
 //! 而且喊 `git` 有一個庫給不了的好處——使用者的 `.gitattributes`、`core.autocrlf`、

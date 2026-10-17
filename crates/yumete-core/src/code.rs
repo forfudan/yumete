@@ -559,7 +559,7 @@ impl Language {
     ///
     /// Warning: **第一期只有 `@indent` 和 `@outdent`。** helix 那一支還認 `@align`、
     /// `@extend`、`#not-same-line?` 那幾個謂詞，以及「賦值右邊」「`.await` 鏈」這些
-    /// 專門的形狀——1502 行。那些留給下一期，見 `docs/development.md` §5.117。
+    /// 專門的形狀——1502 行。那些留給下一期，見 `local/development.md` §5.117。
     fn indents(self) -> &'static str {
         match self {
             // 括號那三族 ＋ 塊。`token_tree` 是宏裏面，照樣要縮。
