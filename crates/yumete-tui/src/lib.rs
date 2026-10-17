@@ -14546,20 +14546,19 @@ fn squeezed(text: &str) -> String {
                 row.contains(key),
                 "typing {key} left nothing on the page:\n{row}"
             );
-            // **And the cursor is not standing on a mark.** A cell is reserved
-            // at each end for them, so the caret has its own.
+            // **And the cursor is not standing on the mark.** Room is kept
+            // behind the cell for it, so the caret has its own place.
             assert!(
-                under != yumete_core::mdtable::FOLD_MARK
-                    && under != yumete_core::mdtable::HEAD_MARK,
+                under != yumete_core::mdtable::FOLD_MARK,
                 "the caret is sitting on the {under} that says the cell is cut:\n{row}"
             );
         }
-        // Once it has scrolled, the cell says so at the front.
+        // It really did scroll: the head of the cell is off the page, and
+        // nothing is drawn in its place (2026-10-17 作者定, the `<` is gone).
         let (row, _) = look(&editor, &mut seats);
-        assert!(
-            row.contains(yumete_core::mdtable::HEAD_MARK),
-            "a scrolled cell says its head is behind it:\n{row}"
-        );
+        assert!(!row.contains('一'), "the head has scrolled away:\n{row}");
+        assert!(row.contains('癸'), "and the tail is on the page:\n{row}");
+        assert!(!row.contains('<'), "with no mark in front of it:\n{row}");
     }
 
     /// Type `text` into a fresh editor and return to Normal mode.
