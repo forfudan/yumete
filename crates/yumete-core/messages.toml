@@ -3312,9 +3312,9 @@ find = "輸入法 输入法 碼表 码表 詞庫 词库 rime dict"
 [[message]]
 # 碼表和字料到哪裏找的：六層，各層有什麽
 key = "cmd.yume.where"
-zht = "碼表和字料到哪裏找的：六層，各層有什麽"
-zhs = "码表和字料到哪里找的：六层，各层有什么"
-en = "where 碼表 and 字料 are looked for: six layers, and what each one holds"
+zht = "碼表和字料之數據源及回退順序"
+zhs = "码表和字料之数据源及回退顺序"
+en = "where the yume data is located and the fallback path"
 find = "输入法 数据 在哪 找不到 路径 where data path"
 
 [[message]]
@@ -6489,10 +6489,17 @@ en = "中 / ABC / off"
 
 [[message]]
 # ␣z 輸入法那一組（2026-10-17）
-key = "hint.yume.which-where"
-zht = "用的是哪個 / 六層在哪"
-zhs = "用的是哪个 / 六层在哪"
-en = "which scheme / where the data is"
+key = "hint.yume.where"
+zht = "數據位置"
+zhs = "数据位置"
+en = "where the data is"
+
+[[message]]
+# ␣z 輸入法那一組（2026-10-17）
+key = "hint.yume.which"
+zht = "碼表源"
+zhs = "码表源"
+en = "which scheme source"
 
 [[message]]
 # :view-hud basic(出廠)——也是 :view-hud 不帶參數時的回答
