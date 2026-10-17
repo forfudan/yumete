@@ -344,11 +344,14 @@ jobs:
           # keeps its repository path, so `README.md`'s own link to
           # `docs/manual.md` still resolves inside the tarball.
           #
-          # **Both scripts.** The editor speaks 简体 (`yumete --lang=zhs`) and
-          # the 简体 manual is kept in lockstep with the 繁體 one; shipping only
-          # one of them would leave half the readers reading the other half's
-          # characters.
-          cp docs/manual.md docs/manual_sc.md "${STAGE}/docs/"
+          # Warning: **English only now** (2026-10-17 作者定). It used to carry the 简体
+          # manual too, 「so half the readers are not reading the other half's
+          # characters」 — but the two Chinese manuals left the repository that
+          # day (they live in `local/`, which git does not track), so a CI
+          # checkout has nothing to copy and the build stopped here. The
+          # Chinese manuals are on the website; the English one is the source
+          # text and travels with the binary.
+          cp docs/manual.md "${STAGE}/docs/"
           # See the header for why Windows gets a zip. `7z` is on that image;
           # `-mx=9` because this travels over a package manager's network, not
           # ours.
