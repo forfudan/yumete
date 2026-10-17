@@ -1281,6 +1281,108 @@ fn five_doors_that_broke_a_table_are_shut() {
     assert_eq!(ed.status(), say!("table.no-blank-line-inside"));
 }
 
+/// **兩份審查裏那些與今天無關的舊洞**（2026-10-17）。
+#[test]
+fn the_older_holes_the_review_found_are_shut() {
+    let three = "| who | verb | what |\n| --- | --- | --- |\n| cat | eats | fish |\n| dog | digs | bone |\n| owl | sees | mice |\n";
+
+    // ① 單欄表：有分隔行就是一張表。從前進得去、報「表格：1 欄」，而渲染與護欄
+    //    那一套不認它，於是 `x d` 把標題剪掉也没人攔。
+    let one = "| only |\n| --- |\n| aa |\n| bb |\n";
+    let mut ed = typed(one);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "xd");
+    assert_eq!(ed.current_buffer().text(), one, "標題剪不走：{}", ed.status());
+    assert_eq!(ed.status(), say!("table.header-cannot-be-deleted"));
+
+    // ② 標題行說自己那一句，不說通用那一句。
+    let mut ed = typed(three);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "xd");
+    assert_eq!(ed.status(), say!("table.header-cannot-be-deleted"), "{}", ed.status());
+    // 而標題行裏改一個欄名照舊（另起一個，上面那一下 `x` 的選區還撐着）。
+    let mut ed = typed(three);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "lld");
+    assert!(
+        ed.current_buffer().text().starts_with("| wh "),
+        "{}",
+        ed.current_buffer().text()
+    );
+
+    // ③ 整張表剪得走——剪完一張表都没有了，弄不壞什麽。
+    let mut ed = typed(three);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "%d");
+    assert_eq!(ed.current_buffer().text(), "", "{}", ed.status());
+
+    // ④ 破行：同一欄的下一格比較窄時，光標落在那一格裏，不落在行尾那道牆上。
+    let ragged = "| a | b | c |\n| --- | --- | --- |\n| one | two | three |\n| short |\n";
+    let mut ed = typed(ragged);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    while ed.cell_position().map(|(_, c)| c) != Some(2) {
+        ed.on_key(Key::Char('l'));
+    }
+    ed.on_key(Key::Char('j'));
+    let (from, to) = ed.selection();
+    let at = ed.current_buffer().rope().slice(from..to).to_string();
+    assert_ne!(at, "|", "落在格子裏，不落在牆上：{}", ed.status());
+
+    // ⑤ 全窗裏 `I`/`A` 是這一格的兩頭，不是這一行的（那兩頭是牆）。
+    let mut ed = typed(three);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " ttAZ");
+    ed.on_key(Key::Esc);
+    assert!(ed.current_buffer().text().contains("| catZ |"), "{}", ed.current_buffer().text());
+    let mut ed = typed(three);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " ttIZ");
+    ed.on_key(Key::Esc);
+    assert!(ed.current_buffer().text().contains("| Zcat |"), "{}", ed.current_buffer().text());
+
+    // ⑥ 數目超出剩下的行數，選區不塌——`4x` 在三行的表上等於 `3x`。
+    let mut ed = typed(three);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt4xd");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "| who | verb | what |\n| --- | --- | --- |\n",
+        "三行一起走：{}",
+        ed.status()
+    );
+}
+
+/// **帶引號的 CSV 欄位：逗號在引號裏就是欄位裏的字**（2026-10-17，審查找出來的）。
+#[test]
+fn a_quoted_comma_is_not_a_wall() {
+    let dir = tmp().join(format!("yumete-quoted-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("q.csv");
+    let text = "name,note,n\nalpha,\"one, two\",1\nbeta,plain,2\n";
+    std::fs::write(&csv, text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+
+    // 完整那一層從前在 `"one, two"` 中間畫了一道牆，全窗與基本都畫對。
+    press(&mut ed, " tq");
+    assert_eq!(ed.grid_on_line(1).len(), 2, "三格兩道牆：{:?}", ed.grid_on_line(1));
+
+    // 剪一行再貼回來——從前貼不回去，那一行就丟了。
+    press(&mut ed, " tt");
+    press(&mut ed, "xd");
+    assert!(!ed.current_buffer().text().contains("alpha"), "剪走了");
+    press(&mut ed, "P");
+    assert_eq!(ed.current_buffer().text(), text, "貼得回來：{}", ed.status());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **`mi c` 是光標所在的那一格**（2026-10-17 作者定）。
 ///
 /// 原話：「`mi c` = 这一格」。按字之後，「把這一格整個換掉」是表格裏最常用的

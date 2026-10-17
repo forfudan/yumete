@@ -814,10 +814,21 @@ impl Editor {
         // 已經選滿了就往下再吃一行（連按 `x` 一次多一行），否則就是「把這一行
         // 整個選上」。Warning: **兩個 `match` 加起來永遠是 `+1` 的寫法等於没寫**，
         // 2026-10-11 第一版就是那樣，trace 打出 `covers=true next=1` 纔看出來。
-        let next_line = match covers_whole_lines {
+        let mut next_line = match covers_whole_lines {
             true => cursor_line + 2,
             false => cursor_line + 1,
         };
+        // **In 全窗 it stops at the table's last row** (2026-10-17, found in
+        // review). `4x` on a table with three rows left ran off the end, and
+        // 「窗子拉得住你」 then pulled the caret back and **collapsed the
+        // selection** — so the `d` that followed deleted a single character
+        // from a reader who had asked for four rows. `3x` was right, so the
+        // only thing missing was the ceiling.
+        if self.grid_has_the_pane() {
+            if let Some((_, bottom)) = self.table_row_span() {
+                next_line = next_line.min(bottom + 1);
+            }
+        }
         let sel_end = if next_line > last {
             rope.len_chars()
         } else {

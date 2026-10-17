@@ -11058,6 +11058,13 @@ zhs = "后面没有表格了"
 en = "no table after this one"
 
 [[message]]
+# 全窗裏 mm：另一半括號不在這一格
+key = "table.no-pair-in-this-cell"
+zht = "這一格裏配不上另一半"
+zhs = "这一格里配不上另一半"
+en = "the other half of the pair is not in this cell"
+
+[[message]]
 # 前面没有表格了
 key = "table.no-previous"
 zht = "前面没有表格了"

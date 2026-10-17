@@ -707,6 +707,23 @@ impl Editor {
         if self.table.is_none() && problems.is_empty() && self.names_itself_a_grid(&path) {
             self.enter_table();
         }
+        // **The caret starts on a row, never on the header the grid freezes**
+        // (2026-10-17, found in review). `enter_table_as` has checked this
+        // since #356 — 「進得去、用不了的表格」 — but a schema beside the data
+        // builds its view right here and never went through that door. The
+        // frozen header is drawn at the top out of the schema, so a caret on
+        // it is a caret the grid cannot show: the status line read out the
+        // header's first letter, `l` walked along the column names, and only
+        // `i` put things right by snapping into a row behind the reader's
+        // back.
+        if self.grid_has_the_pane() {
+            if let Some((first, _)) = self.table_row_span() {
+                if self.cursor_line() < first {
+                    self.goto_line(first + 1);
+                }
+            }
+            self.seat_in_a_cell();
+        }
         if self.table.is_none() && self.table_view_opens_itself() && self.syntax() == crate::syntax::Syntax::Markdown {
             if let Some(first) = self.first_md_table_line() {
                 let header = self.line_text(first).unwrap_or_default();
@@ -1297,7 +1314,19 @@ impl Editor {
     /// separately, and disagreed about exactly those two cases.
     fn md_table_parses(&self, region: &crate::mdtable::Region) -> bool {
         let header = self.line_text(region.first).unwrap_or_default();
-        region.rule.is_some() && crate::mdtable::cells(&header).len() >= 2
+        // Warning: **One column is a table when it has a rule row** (2026-10-17, found
+        // in review). The test used to want two, and the reason written below
+        // is 「a single-column line that merely opens with a pipe is prose」 —
+        // true, and about a line with **no** `| --- |` under it, which the
+        // first half of this test already turns away. With the rule there
+        // nothing is being guessed: prose does not write `| --- |`.
+        //
+        // The two halves of the editor disagreed about it. `enter_md_table_at`
+        // built a view and said 「表格：1 欄」, while this — which the
+        // renderer, the guards and `:s` all ask — said no, so the mode was
+        // entered and then protected nothing: `x d` cut the header off and
+        // left an orphan `| --- |`, with no refusal and no grid ever drawn.
+        region.rule.is_some() && !crate::mdtable::cells(&header).is_empty()
     }
 
     /// Every `|` table in the file that **parses as one**, walked once per
@@ -1484,11 +1513,17 @@ impl Editor {
             // and there is no character before the start of a line — passing
             // `true` here quietly ate the opening wall of every row.
             Separator::Pipe => crate::mdtable::pipes_from(&text, false),
-            Separator::Delimiter(c) => text
-                .chars()
-                .enumerate()
-                .filter(|&(_, ch)| ch == c)
-                .map(|(i, _)| i)
+            // Warning: **Not every one of them** (2026-10-17, found in review). A
+            // delimiter inside a quoted field is a character in that field,
+            // which the parser has always known and `mdtable::Wall::at`
+            // exists to say — its own comment names this bug (#391, 「a wall
+            // through 「"Smith, John"」 that the file does not have」). This
+            // call site was the one that never got it: 全窗 and 基本 drew
+            // `alpha,"one, two",1` as three cells, 完整 drew four, and the
+            // walls then stood where no column was.
+            Separator::Delimiter(c) => crate::mdtable::Wall::Between(c)
+                .at(&text)
+                .into_iter()
                 .collect(),
         }
     }
@@ -5176,6 +5211,38 @@ impl Editor {
         }
     }
 
+    /// **Taking the whole table is not damaging a table** (2026-10-17, found
+    /// in review).
+    ///
+    /// `cut_takes_whole_rows` asks about *data* rows, so any cut that reached
+    /// the header failed it — and `%d` in a document holding a table, or in a
+    /// whole `.csv`, answered 「格與格之間的分隔符刪不掉」. A reader could not
+    /// empty a `.csv` in this editor. There is nothing left to be damaged, so
+    /// the invariant has nothing to say.
+    fn cut_takes_the_whole_table(&self, range: &std::ops::Range<usize>) -> bool {
+        let rope = self.current_buffer().rope();
+        let last = rope.len_chars();
+        if range.start >= range.end {
+            return false;
+        }
+        let head = rope.char_to_line(range.start.min(last));
+        let tail = rope.char_to_line(range.end.saturating_sub(1).min(last));
+        let Some(region) = self.prose_region_at(head).or_else(|| self.prose_region_at(tail)) else {
+            // A `.csv` is a table with no region of its own: it is the file.
+            return matches!(self.table.as_ref().map(|v| v.bounds), Some(Bounds::WholeFile))
+                && range.start == 0
+                && range.end >= last;
+        };
+        head <= region.first && region.last <= tail
+    }
+
+    /// Whether this cut stays inside one cell — so the header's refusal does
+    /// not fire on an ordinary edit to a column name (2026-10-17).
+    fn cut_is_inside_one_cell(&self, range: &std::ops::Range<usize>) -> bool {
+        self.cell_here()
+            .is_some_and(|(from, to)| from <= range.start && range.end <= to)
+    }
+
     /// **Whole rows, and nothing but whole rows** — the one shape of edit a
     /// grid lets through unasked (2026-10-17 作者定).
     ///
@@ -5235,9 +5302,16 @@ impl Editor {
         let Some(at) = at else {
             return false;
         };
-        if !text.ends_with('\n') {
-            return false;
-        }
+        // Whole rows either way round. Warning: **the leading break counts too**
+        // (2026-10-17, found in review): pasting after a last line that
+        // carries no newline, `paste` moves the break to the front, and this
+        // then saw 「not whole rows」 and let the bare-pipe refusal answer —
+        // telling the reader to escape a pipe they had not typed.
+        let text = match (text.ends_with('\n'), text.starts_with('\n')) {
+            (true, _) => text.trim_end_matches('\n'),
+            (false, true) => text.trim_start_matches('\n'),
+            (false, false) => return false,
+        };
         let Some(view) = self.table.as_ref() else {
             return false;
         };
@@ -5264,7 +5338,12 @@ impl Editor {
             Separator::Pipe => {
                 crate::mdtable::is_row(row) && crate::mdtable::split(row).len() == wide
             }
-            Separator::Delimiter(d) => row.matches(d).count() + 1 == wide,
+            // Warning: **Counted the way the file is read** (2026-10-17, found in
+            // review). It used to count raw delimiters, while everything else
+            // splits with `table::cells`, which honours quotes — so a row
+            // holding `"one, two"` was judged one cell too wide and its own
+            // table refused to take it back.
+            Separator::Delimiter(d) => crate::table::cells(row, d).len() == wide,
         })
     }
 
@@ -5273,8 +5352,16 @@ impl Editor {
         if self.table_bypass.get() || !self.cut_reaches_a_grid(&range) {
             return None;
         }
-        if self.cut_takes_whole_rows(&range) {
+        if self.cut_takes_whole_rows(&range) || self.cut_takes_the_whole_table(&range) {
             return None;
+        }
+        // **The header says its own reason** (2026-10-17, found in review).
+        // §5.12.70 promised 「標題行、分隔行照舊各說各的理由」; the rule row
+        // did, and the header fell through to the stock 「分隔符删不掉」
+        // although `table.header-cannot-be-deleted` was written for it and
+        // `t d` has always printed it.
+        if self.on_header_row() && !self.cut_is_inside_one_cell(&range) {
+            return Some(say!("table.header-cannot-be-deleted"));
         }
         if self.md_rule_here() {
             return Some(say!("table.rule-row-is-drawn"));
