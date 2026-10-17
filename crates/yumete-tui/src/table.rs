@@ -1227,12 +1227,30 @@ fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
     if yumete_cjk::str_width(line) <= room {
         return (line.to_string(), caret, false);
     }
+    // **The caret's own glyph is one column or two** (2026-10-17, found in
+    // review). `caret` is where it *starts*, so a 漢字 reaches `caret + 1`;
+    // measured against `caret` alone, a wide glyph sitting in the last column
+    // before the mark's reserved one counted as 「still inside」 and the caret
+    // was then drawn **on** the `>` — which this function's own promise says
+    // can never happen. ASCII was right all along, which is why it took a
+    // 漢字 column to show.
+    let caret_end = caret
+        + yumete_cjk::graphemes(line)
+            .scan(0usize, |at, g| {
+                let was = *at;
+                *at += yumete_cjk::grapheme_width(g).max(1);
+                Some((was, yumete_cjk::grapheme_width(g).max(1)))
+            })
+            .find(|&(at, _)| at == caret)
+            .map(|(_, w)| w)
+            .unwrap_or(1)
+            .saturating_sub(1);
     // Nothing to do while the caret is still inside the room — and nothing
     // that *can* be done once the two marks would leave it no cell to stand in.
-    if caret + fold < room || room <= head + fold {
+    if caret_end + fold < room || room <= head + fold {
         return (line.to_string(), caret, false);
     }
-    let want = caret + head + fold + 1 - room;
+    let want = caret_end + head + fold + 1 - room;
     let (mut dropped, mut from) = (0usize, 0usize);
     for g in yumete_cjk::graphemes(line) {
         if dropped >= want {

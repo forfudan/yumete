@@ -2472,16 +2472,27 @@ impl Editor {
                 }
                 self.type_it_again(count, None);
             }
+            // **全窗裏這兩個也是這一格的兩頭**（2026-10-17，審查找出來的）。
+            // 「這一行」在全窗裏就是「這一格」——`g h`/`g l`/`Home`/`End` 早
+            // 就這樣了，而這兩個還對準着行的兩端，也就是那兩道牆：`A` 在行尾
+            // 那道牆後面打字，打出了第四格；`I` 在行首那道牆前面打字，那一行
+            // 當場不再是一行記錄。現在它們問 `cell_edge`。
             Key::Char('I') => {
                 self.snapshot();
-                let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
+                let pos = self.cell_edge(false).unwrap_or_else(|| {
+                    motion::line_start(self.current_buffer().rope(), self.sel.head())
+                });
                 self.set_cursor(pos);
                 self.enter_insert();
                 self.type_it_again(count, None);
             }
             Key::Char('A') => {
                 self.snapshot();
-                let pos = motion::line_end(self.current_buffer().rope(), self.sel.head());
+                // 格尾那一頭追加，所以要的是內容的開區間末端，不是末一個字。
+                let pos = match self.cell_the_caret_is_in() {
+                    Some((_, to)) => to,
+                    None => motion::line_end(self.current_buffer().rope(), self.sel.head()),
+                };
                 self.set_cursor(pos);
                 self.enter_insert();
                 self.type_it_again(count, None);

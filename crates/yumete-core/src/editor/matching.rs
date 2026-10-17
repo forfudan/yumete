@@ -80,8 +80,16 @@ impl Editor {
     /// **跳的那一格和畫成金的那一格是同一個答案**（2026-10-08）：兩支寫兩遍就意味
     /// 着頁面指着一格而 `mm` 跳到另一格。
     pub(super) fn goto_matching_bracket(&mut self) {
-        if let Some(pos) = self.matching_bracket() {
-            self.move_head(pos);
+        match self.matching_bracket() {
+            Some(pos) => self.move_head(pos),
+            // **A key that does nothing says why** (2026-10-17, found in
+            // review). The arm that confines a pair to its cell claimed
+            // 「saying so is better than jumping out of the record」 and then
+            // dropped the `None` on the floor.
+            None if self.cell_the_caret_is_in().is_some() => {
+                self.status = say!("table.no-pair-in-this-cell")
+            }
+            None => {}
         }
     }
 
@@ -1163,7 +1171,14 @@ impl Editor {
         let Some(want) = self.next_row(line, !up) else {
             return false;
         };
-        let Some((a, b)) = self.cell_span(want, cell) else {
+        // **A row with fewer cells keeps the caret in its last one**
+        // (2026-10-17, found in review). This used to give up when the row
+        // below had no column of that number, and the generic vertical
+        // motion then dropped the caret on that row's closing `|` — a place
+        // 全窗 says it never stands, and the grid drew it inside the cell, so
+        // nothing warned before the next keystroke.
+        let width = self.row_cells(want).len();
+        let Some((a, b)) = self.cell_span(want, cell.min(width.saturating_sub(1))) else {
             return false;
         };
         // **Onto a character of that cell, not past its last one**

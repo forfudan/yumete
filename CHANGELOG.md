@@ -233,6 +233,33 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Eleven older faults the review turned up, mostly around tables.**
+  - A one-column table with a `| --- |` rule row is a table. Two halves of the editor
+    disagreed: the door entered the mode and said 「表格：1 欄」, while the renderer
+    and the guards said no — so the mode protected nothing and `x d` cut the header
+    off, leaving an orphan rule row.
+  - A `.csv` with a schema beside it opens on its first row of data. It used to open
+    on the frozen header: the status line read out a column name and the arrow keys
+    walked along it.
+  - A comma inside a quoted field is a character in that field. 完整 drew a wall
+    through `"one, two"` (the other two levels never did), and a row holding one
+    could be cut but not pasted back, because the two counted cells differently.
+  - Deleting a whole table is allowed — nothing is left to damage. `%d` in a document
+    holding a table, or in a whole `.csv`, used to be refused.
+  - The header row refuses with its own reason instead of the divider's.
+  - `I` and `A` in the full window go to the ends of the cell, not the ends of the
+    row, which are walls.
+  - Walking down a column into a narrower cell stays in that cell instead of landing
+    on the row's closing `|`.
+  - A count larger than the rows that are left selects the rows that are left: `4x`
+    on three rows is `3x`, and the `d` after it takes three rows rather than one
+    character.
+  - A wide glyph no longer carries the caret onto the `>` mark; the cell scrolls, as
+    it already did for Latin letters.
+  - Pasting a row back into a table whose last line has no trailing newline works.
+  - `m m` says when the other half of a pair is in another cell, instead of doing
+    nothing in silence.
+
 - **Six things the day's own table work had broken.** A `.csv` read in the full
   window now hides its comma the way a `|` table hides its wall — the caret used to
   stand on the separator, where the row reports the cell *before* it, so a forward
