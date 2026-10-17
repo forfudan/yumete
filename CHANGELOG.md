@@ -9,6 +9,11 @@ in `docs/development.md` §5.2.
 
 ## 未發布 · Unreleased
 
+## 0.9.0 · 2026-10-17
+
+Forty-seven commits since 0.8.0. The table modes, the candidate bar's three places,
+and a diff that shows both drafts.
+
 ### Added
 
 - **`mi c` takes the table cell the cursor is in** — `mi c c` replaces the whole
