@@ -9,6 +9,20 @@ in `docs/development.md` §5.2.
 
 ## 未發布 · Unreleased
 
+### Changed
+
+- Warning: **Breaking: the IME's keys are one group now, `空格 z`, and `空格 空格` is
+  gone.** The letter under `z` is **the letter Yume gives the same thing on its own
+  ⌃⇧ chord**, so a hand that knows one knows the other: `m` when a word commits
+  (⌃⇧M), `y` prediction (⌃⇧Y), `i` pick a scheme (⌃⇧I), `n` the next scheme (⌃⇧N),
+  `/` the 拆分 beside a candidate (⌃⇧/), `3`–`9` candidates on a page (⌃⇧3–9). The
+  three settings with more than two values put them one level down: `z p b`/`m`/`i`
+  for the candidate bar, `z e o`/`c`/`p` for the preedit, `z m 0`/`d`/`u`/`f` for the
+  commit method. `空格 z z` turns the engine on and off, which is what `空格 空格`
+  did. The letters Yume uses for things this editor has no answer for — `O U D L H K
+  J A .` and `0` — are left empty, so the day one of them arrives the key is already
+  the same on both sides.
+
 ## 0.9.0 · 2026-10-17
 
 Forty-seven commits since 0.8.0. The table modes, the candidate bar's three places,

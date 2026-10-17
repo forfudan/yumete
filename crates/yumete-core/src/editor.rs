@@ -222,6 +222,18 @@ enum Pending {
     SurroundTo(char),
     /// `t` in a table, awaiting the structural edit it opens.
     Table,
+    /// **`空格 z` — 輸入法那一組**，等着它底下那個字母（2026-10-17 作者定）。
+    ///
+    /// 原話：「In Yume, we have many shortcuts too with (shift + control + a
+    /// letter). I want them to be aligned as much as possible.」所以這一層的
+    /// 字母**抄 Yume 的 ⌃⇧ 那一張表**：`m` 上屏方式（⌃⇧M）、`y` 輸入預測
+    /// （⌃⇧Y）、`i` 選方案（⌃⇧I）、`n` 下一個方案（⌃⇧N）、`/` 注解（⌃⇧/）、
+    /// `3`–`9` 一頁幾條（⌃⇧3–9）。Yume 沒有的那幾樣另取，而 Yume 有、yumete
+    /// 還沒有的那些字母**留着不挪用**，省得哪天做了還要再改一次手。
+    Yume,
+    /// `空格 z` 底下那個字母按完了，等着它的值——`m` 上屏方式、`p` 候選欄、
+    /// `e` 預編輯，三樣各有三四個值。
+    YumeValue(char),
     /// `M` awaiting the letter to name this place by.
     Mark,
     /// `'` awaiting the letter of a place to go back to.
@@ -295,6 +307,8 @@ impl Pending {
             Pending::UndoBreak
             | Pending::Confirm | Pending::SwapRange | Pending::None
             | Pending::Goto
+            | Pending::Yume
+            | Pending::YumeValue(_)
             | Pending::Space
             | Pending::Register
             | Pending::Case

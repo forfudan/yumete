@@ -1461,6 +1461,16 @@ impl Editor {
                 self.handle_space(key);
                 return;
             }
+            Pending::Yume => {
+                self.pending = Pending::None;
+                self.handle_yume(key);
+                return;
+            }
+            Pending::YumeValue(subject) => {
+                self.pending = Pending::None;
+                self.handle_yume_value(subject, key);
+                return;
+            }
             // The five that are waiting for a character of the manuscript.
             // They answer in one place because the character may arrive as a
             // key or as an IME commit (#414), and the two used to be written
@@ -3244,6 +3254,62 @@ impl Editor {
     // The keys `Space` opens, and what each of them is for — the list the
     // which-key overlay draws, so what is offered and what happens cannot
     // drift apart.
+    /// **`空格 z` — 輸入法那一組**（2026-10-17 作者定）。
+    ///
+    /// 原話：「In Yume, we have many shortcuts too with (shift + control + a
+    /// letter). I want them to be aligned as much as possible.」So the letter
+    /// under `z` is **Yume's own ⌃⇧ letter** wherever Yume has one, and the
+    /// value under it is a letter of that value's own name. Measured off
+    /// Yume's factory table (`yume-core/src/hotkeys.rs`, 26 rows) that day:
+    ///
+    /// ```text
+    /// ⌃⇧M 上屏方式   ⌃⇧Y 輸入預測   ⌃⇧I 選方案   ⌃⇧N 下一個方案
+    /// ⌃⇧/ 注解       ⌃⇧3–9 一頁幾條
+    /// ```
+    ///
+    /// Warning: **The letters Yume uses and yumete has no answer for stay empty** —
+    /// `O U D L H K J A .` and `0`. Lining the two up is only worth doing if
+    /// the day yumete grows one of those, the letter is already the same on
+    /// both sides and nobody's hand has to change.
+    ///
+    /// Warning: **`空格 空格` is gone**, and this group's `z` is what it was. Two
+    /// spellings for one thing is what this repo does not keep.
+    pub const YUME_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("z", "hint.yume.toggle"),
+        ("m", "hint.yume.commit"),
+        ("p", "hint.yume.panel"),
+        ("e", "hint.yume.preedit"),
+        ("y", "hint.yume.predict"),
+        ("i", "hint.yume.scheme"),
+        ("n", "hint.yume.next-scheme"),
+        ("3-9", "hint.yume.menu-size"),
+        ("/", "hint.yume.chaifen"),
+        ("t", "hint.yume.table"),
+        ("w W", "hint.yume.which-where"),
+    ];
+
+    /// The values under the three letters that have any — `m`, `p`, `e`.
+    pub fn yume_values(subject: char) -> &'static [(&'static str, &'static str)] {
+        match subject {
+            'm' => &[
+                ("0", "hint.yume.commit-default"),
+                ("d", "hint.yume.commit-delayed"),
+                ("u", "hint.yume.commit-unique"),
+                ("f", "hint.yume.commit-fluency"),
+            ],
+            'p' => &[
+                ("b", "hint.yume.panel-box"),
+                ("m", "hint.yume.panel-bottom"),
+                ("i", "hint.yume.panel-inline"),
+            ],
+            _ => &[
+                ("o", "hint.yume.preedit-off"),
+                ("c", "hint.yume.preedit-composition"),
+                ("p", "hint.yume.preedit-preview"),
+            ],
+        }
+    }
+
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
         ('f', "hint.space.open-file"),  // project dir
         ('F', "hint.space.open-file-here"),  // working dir
@@ -3268,7 +3334,7 @@ impl Editor {
         ('c', "hint.space.comment-line"),
         ('C', "hint.space.comment-block"),
         ('m', "hint.conflict.title"),
-        (' ', "hint.space.ime"),
+        ('z', "hint.space.yume"),
         ('/', "hint.space.advanced-search"),
         ('?', "hint.space.all-commands"),
     ];
@@ -3584,6 +3650,12 @@ impl Editor {
     /// 根本不存在的 `n`，`1s 1S` 抄成了 `s S`——而「光按 `t s` 什麽都不會發生」
     /// 正是 `documented_keys.rs` 的 `DISOWNED_KEYS` 記着的那一條
     /// （2026-09-23 審出來的）。按錯鍵的人看見的就這一行，它不能是另一份說法。
+    /// 「這一組後面可以按這些」——從那張真表生出來，同 `table_keys_say`。
+    pub(super) fn said_keys(keys: &[(&'static str, &'static str)]) -> String {
+        let keys: Vec<&str> = keys.iter().map(|&(k, _)| k).collect();
+        say!("hint.yume.after-z", keys.join(" "))
+    }
+
     pub(super) fn table_keys_say(inside: Option<Bounds>) -> String {
         let keys: Vec<&str> = Self::table_keys(inside).into_iter().map(|(k, _)| k).collect();
         say!("hint.table.after-t", keys.join(" "))
@@ -3667,6 +3739,64 @@ impl Editor {
     }
 
     /// Run one key of a `Space` sequence.
+    /// **`空格 z` 底下那一個字母**（2026-10-17 作者定）——見 [`Editor::YUME_KEYS`].
+    ///
+    /// Three of them take a value and so open one more level
+    /// ([`Pending::YumeValue`]); the rest act at once. Everything here rides
+    /// `scheme_request`, the same string the `:yume-…` commands set: the
+    /// front end is the one holding the IME session, and a key is not a
+    /// second way of asking it.
+    fn handle_yume(&mut self, key: Key) {
+        let ask = |e: &mut Self, what: &str| e.scheme_request = Some(what.to_string());
+        match key {
+            // 中 / ABC / 關 — what `空格 空格` was until today.
+            Key::Char('z') => ask(self, "lang:toggle"),
+            Key::Char('m' | 'p' | 'e') => {
+                if let Key::Char(c) = key {
+                    self.pending = Pending::YumeValue(c);
+                }
+            }
+            Key::Char('y') => ask(self, "predict:"),
+            Key::Char('i') => ask(self, "scheme:"),
+            Key::Char('n') => ask(self, "scheme:next"),
+            Key::Char('/') => ask(self, "comment:"),
+            Key::Char('t') => ask(self, "~"),
+            Key::Char('w') => ask(self, "?"),
+            Key::Char('W') => ask(self, "where"),
+            Key::Char(n @ '3'..='9') => ask(self, &format!("menu:{n}")),
+            Key::Esc => {}
+            _ => self.status = Self::said_keys(Self::YUME_KEYS),
+        }
+    }
+
+    /// The value under `空格 z m` / `p` / `e`.
+    fn handle_yume_value(&mut self, subject: char, key: Key) {
+        let ask = |e: &mut Self, what: String| e.scheme_request = Some(what);
+        let Key::Char(c) = key else {
+            if key != Key::Esc {
+                self.status = Self::said_keys(Self::yume_values(subject));
+            }
+            return;
+        };
+        let what = match (subject, c) {
+            ('m', '0') => Some("commit:default".to_string()),
+            ('m', 'd') => Some("commit:delayed".to_string()),
+            ('m', 'u') => Some("commit:unique".to_string()),
+            ('m', 'f') => Some("commit:fluency".to_string()),
+            ('p', 'b') => Some("panel:box".to_string()),
+            ('p', 'm') => Some("panel:bottom".to_string()),
+            ('p', 'i') => Some("panel:inline".to_string()),
+            ('e', 'o') => Some("inline-preedit:off".to_string()),
+            ('e', 'c') => Some("inline-preedit:composition".to_string()),
+            ('e', 'p') => Some("inline-preedit:preview".to_string()),
+            _ => None,
+        };
+        match what {
+            Some(what) => ask(self, what),
+            None => self.status = Self::said_keys(Self::yume_values(subject)),
+        }
+    }
+
     fn handle_space(&mut self, key: Key) {
         match key {
             // **`空格 w` 是區域那一組的門**（2026-09-30 定）。從前這一層躺着三
@@ -3742,7 +3872,7 @@ impl Editor {
             // **記錄**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
             // 格的事），這一對是順手。
             // 切哪一頭由前端定——它手裏纔有「此刻挂着没有」。
-            Key::Char(' ') => self.scheme_request = Some("lang:toggle".to_string()),
+            Key::Char('z') => self.pending = Pending::Yume,
             Key::Char('i') => self.show_the_record_here(true),
             Key::Char('I') => self.show_the_record_here(false),
             Key::Char('"') => self.open_paste_picker(),
