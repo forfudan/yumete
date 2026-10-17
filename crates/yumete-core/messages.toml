@@ -1495,6 +1495,30 @@ en = "read-only: lock this one against editing"
 find = "只讀 只读 鎖住 锁住 保護 保护 lock"
 
 [[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "cmd.commands.recent-files"
+zht = "最近開過的檔（這個項目）"
+zhs = "最近开过的档（这个项目）"
+en = "files opened under this project, newest first"
+find = "最近 最近開過 最近开过 歷史 历史 檔案 文件 recent files history"
+
+[[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "cmd.commands.recent-files-global"
+zht = "最近開過的檔（全部項目）"
+zhs = "最近开过的档（全部项目）"
+en = "files opened anywhere, newest first"
+find = "最近 全部 全局 所有項目 所有项目 recent files global everywhere all"
+
+[[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "cmd.commands.recent-projects"
+zht = "最近開過的項目"
+zhs = "最近开过的项目"
+en = "the directories a session was kept for"
+find = "最近 項目 项目 目錄 目录 工作區 工作区 recent projects directory workspace"
+
+[[message]]
 # : 命令選單裏 recover 那一項的説明(commands 組)
 key = "cmd.commands.recover"
 zht = "問要不要用搶救稿"
@@ -1557,6 +1581,14 @@ zht = "在工作路徑中替換"
 zhs = "在工作路径中替换"
 en = "search and replace in the working directory"
 find = "替換 替换 replace 工作 路徑 路径 目錄 目录 working cwd"
+
+[[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "cmd.commands.resume"
+zht = "接着上次：把這個目錄上次開着的那幾個加進來"
+zhs = "接着上次：把这个目录上次开着的那几个加进来"
+en = "take up this directory's last session — adds, closes nothing"
+find = "接着上次 繼續 继续 恢復 恢复 會話 会话 上次 resume continue session last"
 
 [[message]]
 # : 命令選單裏 ruby 那一項的説明(commands 組)
@@ -5523,6 +5555,41 @@ zhs = "m"
 en = "m"
 
 [[message]]
+# ␣o 開上次的那一組（2026-10-18）
+key = "hint.open.recent-files"
+zht = "最近開過的檔"
+zhs = "最近开过的档"
+en = "recent files"
+
+[[message]]
+# ␣o 開上次的那一組（2026-10-18）
+key = "hint.open.recent-files-global"
+zht = "最近開過的檔（全部項目）"
+zhs = "最近开过的档（全部项目）"
+en = "recent files, everywhere"
+
+[[message]]
+# ␣o 開上次的那一組（2026-10-18）
+key = "hint.open.recent-projects"
+zht = "最近開過的項目"
+zhs = "最近开过的项目"
+en = "recent projects"
+
+[[message]]
+# ␣o 開上次的那一組（2026-10-18）
+key = "hint.open.resume"
+zht = "接着上次"
+zhs = "接着上次"
+en = "take up the last session"
+
+[[message]]
+# ␣o 開上次的那一組（2026-10-18）
+key = "hint.open.title"
+zht = "開上次的"
+zhs = "开上次的"
+en = "open something recent"
+
+[[message]]
 # 提示：蓋掉
 key = "hint.overwrite"
 zht = "蓋掉"
@@ -5901,6 +5968,13 @@ key = "hint.space.open-file-here"
 zht = "文件挑選器(工作路徑)"
 zhs = "文件挑选器(工作路径)"
 en = "open file picker (working dir)"
+
+[[message]]
+# ␣o 開上次的那一組（2026-10-18）
+key = "hint.space.open-recent"
+zht = "開上次的"
+zhs = "开上次的"
+en = "open something recent"
 
 [[message]]
 # space g: outline 
@@ -6490,15 +6564,15 @@ en = "中 / ABC / off"
 [[message]]
 # ␣z 輸入法那一組（2026-10-17）
 key = "hint.yume.where"
-zht = "數據位置"
-zhs = "数据位置"
+zht = "查看數據位置"
+zhs = "查看数据位置"
 en = "where the data is"
 
 [[message]]
 # ␣z 輸入法那一組（2026-10-17）
 key = "hint.yume.which"
-zht = "碼表源"
-zhs = "码表源"
+zht = "查看碼表源"
+zhs = "查看码表源"
 en = "which scheme source"
 
 [[message]]
@@ -7878,6 +7952,27 @@ en = "registers"
 # ── preview ───────────────────────────────────────────────────────────
 
 [[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "picker.recent-everywhere"
+zht = "最近開過的檔（全部項目）"
+zhs = "最近开过的档（全部项目）"
+en = "recent files, everywhere"
+
+[[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "picker.recent-here"
+zht = "最近開過的檔"
+zhs = "最近开过的档"
+en = "recent files"
+
+[[message]]
+# 最近開過的檔／項目（2026-10-18）
+key = "picker.recent-projects"
+zht = "最近開過的項目"
+zhs = "最近开过的项目"
+en = "recent projects"
+
+[[message]]
 # 挑詞條那扇面板的標題
 key = "picker.wiki"
 zht = "詞條"
@@ -8118,6 +8213,34 @@ en = "read-only: {0}"
 
 
 # ── recover ───────────────────────────────────────────────────────────
+
+[[message]]
+# ␣o p 換項目，去不了
+key = "recent.cannot-go-there"
+zht = "去不了 {0}：{1}"
+zhs = "去不了 {0}：{1}"
+en = "cannot go to {0}: {1}"
+
+[[message]]
+# 最近開過的檔／項目（2026-10-18）
+key = "recent.no-session-there"
+zht = "那裏還没有會話"
+zhs = "那里还没有会话"
+en = "no session there yet"
+
+[[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "recent.nothing-to-resume"
+zht = "這個目錄没有上次"
+zhs = "这个目录没有上次"
+en = "no last session here"
+
+[[message]]
+# 最近開過的檔／項目，接着上次（2026-10-18）
+key = "recent.nothing-yet"
+zht = "還没有記錄"
+zhs = "还没有记录"
+en = "nothing recorded yet"
 
 [[message]]
 # 開檔那一問的第二個選項：把草稿删掉

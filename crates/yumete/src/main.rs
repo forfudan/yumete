@@ -61,6 +61,18 @@ fn write_the_first_config() {
     let _ = std::fs::write(&path, "[keys]\npreset = \"vim\"\n");
 }
 
+/// **Start again in `there`** — the other half of `空格 o p` (2026-10-18).
+///
+/// Only ever returns on failure: on success this process *is* the new one.
+fn reopen_in(there: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::process::CommandExt;
+    std::env::set_current_dir(there)?;
+    let me = std::env::current_exe()?;
+    // `--resume` rather than nothing: the point of going there is the work
+    // that was left there, and `[editor] session` may well be off.
+    Err(std::process::Command::new(me).arg("--resume").exec())
+}
+
 fn main() -> ExitCode {
     // **第一次打開就問一次**，在任何東西碰數據目錄之前（見 `first_time_ever`）。
     let brand_new = first_time_ever();
@@ -165,7 +177,7 @@ fn main() -> ExitCode {
             "--table" => force_table = true,
             "--readonly" => readonly = true,
             "--new" => fresh = true,
-            "--continue" => resume = true,
+            "--resume" => resume = true,
             // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
             "--grep" => owed = Some("--grep"),
             s if s.starts_with("--grep=") => grep = Some(s["--grep=".len()..].to_string()),
@@ -322,7 +334,7 @@ fn main() -> ExitCode {
                     "-t" => "--table",
                     "-v" => "--vertical",
                     "-R" => "--readonly",
-                    "-c" => "--continue",
+                    "-c" => "--resume",
                     "-n" => "--new",
                     "-p" => "--preview",
                     "-s" => "--syntax",
@@ -1192,6 +1204,21 @@ fn main() -> ExitCode {
     // Written on the way out, whichever way out it was: an editor that only
     // remembered a clean exit would forget the session you most wanted back.
     editor.save_session();
+    // **`空格 o p` — 換個項目接着幹**（2026-10-18 作者定）。
+    //
+    // 作者問的是「能不能不用按回車」。能，而且不必印一條命令讓人自己貼：這一趟
+    // 的會話剛寫過、終端已經還原，剩下的就是**走過去，把自己換成那邊的
+    // yumete**。`exec` 不開第二個進程，所以終端上看不出中間有過一步。
+    //
+    // Warning: **`chdir` 失敗要在 `exec` 之前查出來。** 目錄被刪了、權限不夠，這兩種
+    // 在 `exec` 之後都無處可報——人看到的會是一個空白的終端。
+    if let Some(there) = editor.take_reopen_request() {
+        if let Err(err) = reopen_in(&there) {
+            eprintln!("yumete: {}", yumete_core::say!("recent.cannot-go-there",
+                there.display().to_string(), err.to_string()));
+            return ExitCode::FAILURE;
+        }
+    }
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
@@ -2063,7 +2090,7 @@ USAGE:
 ARGS:
     FILE    One or more files to open. Each is loaded into its own buffer;
             a file that does not yet exist opens an empty buffer bound to it.
-            With no FILE, an empty scratch buffer; --continue (or `[editor]
+            With no FILE, an empty scratch buffer; --resume (or `[editor]
             session = true`) opens again what was open last time in this
             directory, each at the line it was left on.
 
@@ -2079,7 +2106,8 @@ OPTIONS:
                      the config. --horizontal forces the ordinary layout.
         --readonly   Open locked: nothing this run opens can be typed into.
                      `:readonly off` unlocks the one you are looking at.
-        --continue   Reopen the files that were open last time here.
+        --resume     Reopen the files that were open last time here, each at
+                     the line it was left on. `:resume` does it from inside.
         --new        Start on an empty buffer even when `[editor] session` is
                      on.
         --tutor      Open the lesson (the same as `:tutor` inside the editor).

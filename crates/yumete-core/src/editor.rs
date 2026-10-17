@@ -222,6 +222,8 @@ enum Pending {
     SurroundTo(char),
     /// `t` in a table, awaiting the structural edit it opens.
     Table,
+    /// **`空格 o` — 開上次的那一組**，等着它底下那個字母（2026-10-18 作者定）。
+    Open,
     /// **`空格 z` — 輸入法那一組**，等着它底下那個字母（2026-10-17 作者定）。
     ///
     /// 原話：「In Yume, we have many shortcuts too with (shift + control + a
@@ -309,6 +311,7 @@ impl Pending {
             | Pending::Goto
             | Pending::Yume
             | Pending::YumeValue(_)
+            | Pending::Open
             | Pending::Space
             | Pending::Register
             | Pending::Case
@@ -2706,6 +2709,18 @@ pub struct Editor {
     chaifen_request: Option<bool>,
     /// A pending `:scheme` request, waiting for the front end to reach the IME.
     scheme_request: Option<String>,
+    /// **這一趟的項目根。** 會話檔名是它的哈希，所以名字本身要另記一份——
+    /// 見 `session.rs` 的 `PROJECTS_FILE`（2026-10-18）。
+    session_root: Option<PathBuf>,
+    /// **換到那個項目去接着幹**（2026-10-18 作者定）。
+    ///
+    /// 核心答不了這一件：yumete 是終端裏的一個進程，換項目就是換工作路徑，而
+    /// 工作路徑、項目配置、`:grep` 的範圍、LSP 全掛在進程上。所以核心只把
+    /// 「去哪」放在這裏，前端收拾乾淨（存會話、救草稿、還原終端），`chdir`
+    /// 過去，再 `exec` 它自己——進程被換掉，終端上直接就是那邊的 yumete，一個
+    /// 回車都不用按。作者問的正是這一句：「Do you think that we can
+    /// automatically run this command?」
+    reopen_request: Option<PathBuf>,
     /// **`:info` 在等前端把那一頁擺出來**（2026-10-08）。
     ///
     /// 同 `scheme_request`：表上有一行只有前端答得出來（哪幾個語言服務器在看着這
@@ -3781,6 +3796,8 @@ impl Editor {
             tab_spaces: true,
             chaifen_request: None,
             scheme_request: None,
+            session_root: None,
+            reopen_request: None,
             file_info_request: false,
             signature: None,
             signature_query: None,

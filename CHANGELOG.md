@@ -9,6 +9,29 @@ in `docs/development.md` §5.2.
 
 ## 未發布 · Unreleased
 
+### Added
+
+- **`空格 o` opens something you had open before.** `o f` the files you have opened
+  under this project, newest first; `o g` the same list with every project in it;
+  `o p` the projects you have worked in — choosing one goes there and starts again,
+  with that project's files already open, no command to copy and no Enter to press;
+  `o r` takes up this directory's last session and **adds** it, so nothing you have
+  open is closed. The commands are `:recent-files`, `:recent-files-global`,
+  `:recent-projects` and `:resume`.
+
+  Almost nothing new is written down for it: the file list is the one yumete has kept
+  since it learned to put you back on the line you left, and the project list is one
+  line per directory beside it. Two pickers for the files rather than one with a
+  switch, because a picker is in Insert from the moment it opens — a digit typed
+  there is a digit in the query, not a key.
+
+### Changed
+
+- Warning: **Breaking: `--continue` is now `--resume`.** One word for one thing, and it
+  is the word that still reads correctly as a command inside a running editor:
+  `:resume` takes up a session that was interrupted, where `:continue` would be
+  asking to continue something that never stopped.
+
 ### Changed
 
 - Warning: **Breaking: the IME's keys are one group now, `空格 z`, and `空格 空格` is
