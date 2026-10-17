@@ -21,6 +21,25 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Every key stands on the wall between two cells, and whole rows can be cut and
+  pasted.** Three changes with one rule behind them: in a table a character you can
+  see is a character the caret can sit on, and an edit is allowed when the table is
+  still a table afterwards.
+  - `h`/`l` now stop on the `┆` between two cells, once, instead of crossing it in a
+    press — it is drawn, so it is a place. The space either side of it is drawn
+    nowhere and is still skipped, so a wall costs exactly one press.
+  - `j`/`k` now stop on the `| --- |` rule row wherever it is drawn (`t b`, `t f`).
+    `d` there says 「分隔行是畫出來的——用 t < = > 改對齊」, which names the keys that
+    do change it — a message the generic refusal used to print over the top of.
+  - `x d`, `2x d` and `3x d` take whole rows out and `p` puts them back. Taking a row
+    takes its own walls with it and leaves every surviving row whole, so nothing is
+    damaged; a wall taken out of the *middle* of a row still is, and still refuses.
+    `t d` now puts the row it took in the register on a Markdown table as well as on a
+    `.csv`, so `t d` then `p` moves a row.
+  - **全窗表格 `t t` is the exception, by design**: there the separators are not part
+    of the text at all, so no motion stops on one. 「`to`, `tb`, `tf` are about the
+    texts (content + separators though rendered), and `tt` is only about the content.」
+
 - Warning: **`:git-diff` and `:diff` now show the paragraph before and after, not one
   hybrid line — and a wholesale rewrite no longer refuses to diff at all.** The word
   diff used to run over the whole file at once and give up past 1200 word-edits with
