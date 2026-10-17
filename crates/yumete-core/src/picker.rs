@@ -44,13 +44,19 @@ pub enum Item {
     /// is saved, and an index would go stale between opening this list and
     /// choosing from it. The name is the feature's own key (`Wiki::by_name`).
     Wiki(String, String),
+    /// **A project to carry on in** — `:recent-projects` (2026-10-18 作者定).
+    ///
+    /// Not a file: choosing one means leaving this directory for that one.
+    /// yumete is one process in one terminal, so it does that by **going
+    /// there and starting again** — see `Editor::reopen_request`.
+    Project(String),
 }
 
 impl Item {
     /// The text shown in the list, and matched against.
     pub fn label(&self) -> &str {
         match self {
-            Item::File(path) => path,
+            Item::File(path) | Item::Project(path) => path,
             Item::Buffer(_, name) | Item::Row(_, name) | Item::Paste(_, name) => name,
             Item::Wiki(name, _) => name,
         }

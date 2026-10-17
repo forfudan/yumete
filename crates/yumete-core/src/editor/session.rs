@@ -8,6 +8,19 @@ use super::*;
 /// **那份「我在哪裏」的檔名**，放在數據目錄裏（全局一份）。
 const PLACES_FILE: &str = "places.txt";
 
+/// **那份「我在哪些項目裏幹過活」**，同一個目錄，同一種形狀（2026-10-18）。
+///
+/// Warning: **為什麽不寫進會話檔自己的頭一行。** 提案的時候我傾向那樣——一份數據
+/// 一個地方。寫的時候改了主意，兩條理由：`restore_session` 把每一行都當
+/// `路徑⇥行號` 讀，而一個真的以 `#` 開頭的路徑就會被讀成那一行的注解；而且改了
+/// 會話檔的格式，舊版 yumete 讀新會話就要多一條「這一行是什麽」的判斷。這一份
+/// 和 `places.txt` 形狀一模一樣（`路徑⇥次數`，新的在前），兩份一起讀、一起寫、
+/// 一起封頂，是同一段代碼的兩個用法。
+const PROJECTS_FILE: &str = "projects.txt";
+
+/// **記多少個項目。** 比檔少一位數：一個人同時在手的項目是幾十個，不是幾千個。
+const PROJECTS: usize = 100;
+
 /// **記多少個檔**（2026-10-05 定）。vim 的 viminfo 出廠是一百；一千行純文本幾十
 /// KB，一本長篇的全部章節加筆記都裝得下。
 const PLACES: usize = 1000;
@@ -355,6 +368,8 @@ impl Editor {
         project.hash(&mut hasher);
         let key = format!("{:016x}", hasher.finish());
         self.session_file = Some(dir.join(format!("{key}.txt")));
+        // 名字是哈希，所以根本身也要記下來——見 `PROJECTS_FILE`。
+        self.session_root = Some(project.to_path_buf());
     }
 
     /// **那份「我在哪裏」在哪**（`places.txt`），没有數據目錄就是没有。
@@ -403,6 +418,85 @@ impl Editor {
         let _ = std::fs::write(&file, out.join("\n") + "\n");
     }
 
+    /// **The files this editor has opened, newest first** (2026-10-18 作者定).
+    ///
+    /// `places.txt` has been an MRU list since 2026-10-05 — it is written on
+    /// the way out of every session so that `ye 某個檔` can go back to the
+    /// line you left. Nothing ever showed it to the reader. This is that
+    /// list, which is why 「最近開過的檔」 needed no new storage at all.
+    ///
+    /// `under` keeps only what lives inside that directory — 「one for this
+    /// project/directory, and another one for global files」. A file that has
+    /// since been moved or deleted is left out: a list of things you cannot
+    /// open is not a list.
+    pub fn recent_files(&self, under: Option<&Path>) -> Vec<PathBuf> {
+        let Some(file) = self.places_file() else {
+            return Vec::new();
+        };
+        let Ok(text) = std::fs::read_to_string(file) else {
+            return Vec::new();
+        };
+        text.lines()
+            .filter_map(|line| line.split_once('\t').map(|(p, _)| PathBuf::from(p)))
+            .filter(|path| under.is_none_or(|root| path.starts_with(root)))
+            .filter(|path| path.is_file())
+            .collect()
+    }
+
+    /// **那個項目的會話裏開着哪幾個檔** — what the project picker previews.
+    ///
+    /// The same hash `keep_session_in` computes, so the two cannot disagree
+    /// about which file belongs to which root.
+    pub fn session_files_of(&self, project: &Path) -> Vec<PathBuf> {
+        let Some(dir) = self.session_file.as_ref().and_then(|f| f.parent()) else {
+            return Vec::new();
+        };
+        let mut hasher = DefaultHasher::new();
+        project.hash(&mut hasher);
+        let key = format!("{:016x}", hasher.finish());
+        let Ok(text) = std::fs::read_to_string(dir.join(format!("{key}.txt"))) else {
+            return Vec::new();
+        };
+        text.lines()
+            .map(|line| PathBuf::from(line.split_once('\t').map_or(line, |(p, _)| p)))
+            .collect()
+    }
+
+    /// **幹過活的那些項目，最近的在前**（2026-10-18 作者定）。
+    ///
+    /// 會話檔是按項目根的**哈希**命名的（`0a91fa3b….txt`），所以單看那個目錄
+    /// 反推不出項目叫什麽——這一份補的就是那個名字。不存在了的目錄不列：列出
+    /// 一個去不了的地方不算一條記錄。
+    pub fn recent_projects(&self) -> Vec<PathBuf> {
+        let Some(dir) = self.where_data.as_ref() else {
+            return Vec::new();
+        };
+        let Ok(text) = std::fs::read_to_string(dir.join(PROJECTS_FILE)) else {
+            return Vec::new();
+        };
+        text.lines()
+            .map(PathBuf::from)
+            .filter(|p| p.is_dir())
+            .collect()
+    }
+
+    /// 記下「這一趟是在哪個項目裏」，最近的排在前面。
+    fn remember_this_project(&self) {
+        let (Some(dir), Some(here)) = (self.where_data.as_ref(), self.session_root.as_ref())
+        else {
+            return;
+        };
+        let here = here.display().to_string();
+        let mut out = vec![here.clone()];
+        let file = dir.join(PROJECTS_FILE);
+        if let Ok(text) = std::fs::read_to_string(&file) {
+            out.extend(text.lines().filter(|l| **l != here).map(str::to_string));
+        }
+        out.truncate(PROJECTS);
+        let _ = std::fs::create_dir_all(dir);
+        let _ = std::fs::write(&file, out.join("\n") + "\n");
+    }
+
     /// **開檔之後回到上次那一行。** 不知道就不動。
     pub(super) fn go_back_to_where_i_was(&mut self, path: &Path) {
         if let Some(line) = self.where_i_was(path) {
@@ -437,6 +531,7 @@ impl Editor {
             .collect();
         if !places.is_empty() {
             self.remember_where_i_was(&places);
+            self.remember_this_project();
         }
         let Some(file) = self.session_file.clone() else {
             return;

@@ -638,6 +638,28 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            // **`:resume` — 把這個目錄上次開着的那幾個加進來**（2026-10-18
+            // 作者定）。只加不關，所以按下去丟不了任何東西。
+            Command::Resume => {
+                let opened = self.restore_session();
+                self.status = match opened {
+                    0 => say!("recent.nothing-to-resume"),
+                    n => say!("cli.picked-up-where-you-left-off", n),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::RecentFiles => {
+                self.open_recent_picker(true);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::RecentFilesGlobal => {
+                self.open_recent_picker(false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::RecentProjects => {
+                self.open_project_picker();
+                Ok(CommandOutcome::Continue)
+            }
             Command::Tutor => {
                 self.open_tutor();
                 Ok(CommandOutcome::Continue)

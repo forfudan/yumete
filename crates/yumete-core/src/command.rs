@@ -571,6 +571,19 @@ pub enum Command {
     Settings,
     /// `:tutor` — a lesson, written into a file of the reader's own.
     Tutor,
+    /// **`:resume` — take up this directory's last session** (2026-10-18 作者定).
+    ///
+    /// The same thing `--resume` does at startup, from inside and without
+    /// restarting: 「This is particularly useful when we have to quit and
+    /// update the yumete during working.」 It **adds** — nothing open is
+    /// closed, so nothing can be lost by pressing it.
+    Resume,
+    /// `:recent-files` — the files opened under this project, newest first.
+    RecentFiles,
+    /// `:recent-files-global` — the same list, every project at once.
+    RecentFilesGlobal,
+    /// `:recent-projects` — the directories a session was ever kept for.
+    RecentProjects,
     /// `:toc [n]` — list the headings, or go to the nth.
     Outline(Option<usize>),
     /// `:table-jump 木` — go to the row this table names by that character.
@@ -4579,6 +4592,38 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Settings)),
+    },
+    Entry {
+        name: "resume",
+        aliases: &[],
+        help: "cmd.commands.resume",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Resume)),
+    },
+    Entry {
+        name: "recent-files",
+        aliases: &[],
+        help: "cmd.commands.recent-files",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::RecentFiles)),
+    },
+    Entry {
+        name: "recent-files-global",
+        aliases: &[],
+        help: "cmd.commands.recent-files-global",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::RecentFilesGlobal)),
+    },
+    Entry {
+        name: "recent-projects",
+        aliases: &[],
+        help: "cmd.commands.recent-projects",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::RecentProjects)),
     },
     Entry {
         name: "tutor",

@@ -1436,6 +1436,67 @@ fn the_yume_group_asks_the_front_end_what_each_key_means() {
     assert!(ed.status().contains('b') && ed.status().contains('i'), "{}", ed.status());
 }
 
+/// **開上次的那一組**（2026-10-18 作者定）：最近的檔、最近的項目、接着上次。
+///
+/// 原話：「he can quickly find out the recently opened cmd or files」與
+/// 「a command `:resume` which restore all the buffers the last time we closed
+/// ……This is particularly useful when we have to quit and update the yumete
+/// during working.」
+#[test]
+fn the_recent_lists_are_written_and_read_back() {
+    let dir = tmp().join(format!("yumete-recent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (data, work) = (dir.join("data"), dir.join("work"));
+    std::fs::create_dir_all(work.join("卷一")).unwrap();
+    std::fs::create_dir_all(&data).unwrap();
+    let one = work.join("卷一").join("初雪.md");
+    let two = work.join("後記.md");
+    std::fs::write(&one, "那年冬天。\n").unwrap();
+    std::fs::write(&two, "後來又下了一場。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.knows_its_paths(dir.join("config"), data.clone());
+    ed.keep_session_in(data.join("sessions"), &work);
+    ed.open_file(&one).unwrap();
+    ed.open_file(&two).unwrap();
+    ed.save_session();
+
+    // **兩份清單都寫出來了**，而且都没有新格式：一行一個。
+    assert!(data.join("places.txt").is_file(), "最近的檔");
+    assert!(data.join("projects.txt").is_file(), "最近的項目");
+
+    // 最近的檔：全部，與這個項目底下的。
+    let all = ed.recent_files(None);
+    assert!(all.contains(&two) && all.contains(&one), "{all:?}");
+    let here = ed.recent_files(Some(&work.join("卷一")));
+    assert_eq!(here, vec![one.clone()], "只列那個子目錄底下的");
+
+    // 最近的項目：這一個就在眼前，所以它自己不在單子上。
+    assert_eq!(ed.recent_projects(), vec![work.clone()]);
+
+    // 那個項目的會話裏開着哪幾個——挑選器右邊預覽的就是它。
+    let files = ed.session_files_of(&work);
+    assert!(files.contains(&two), "{files:?}");
+
+    // **`:resume` 只加不關。** 先關到只剩一個，再 resume，兩個都回來了。
+    let mut ed = Editor::new();
+    ed.knows_its_paths(dir.join("config"), data.clone());
+    ed.keep_session_in(data.join("sessions"), &work);
+    ed.open_file(&one).unwrap();
+    let before = ed.buffer_count();
+    assert!(ed.execute("resume").is_ok(), "{}", ed.status());
+    assert!(ed.buffer_count() > before, "加進來了：{}", ed.status());
+    assert!(
+        (0..ed.buffer_count()).any(|i| {
+            ed.show_buffer(i);
+            ed.current_buffer().path() == Some(two.as_path())
+        }),
+        "後記.md 也在"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **`mi c` 是光標所在的那一格**（2026-10-17 作者定）。
 ///
 /// 原話：「`mi c` = 这一格」。按字之後，「把這一格整個換掉」是表格裏最常用的

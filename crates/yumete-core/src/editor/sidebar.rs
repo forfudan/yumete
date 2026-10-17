@@ -1475,6 +1475,15 @@ impl Editor {
             text.lines().take(rows).map(|l| l.replace('\t', "    ")).collect()
         };
         match item {
+            // 預覽一個項目：它的會話裏開着哪幾個檔。
+            crate::picker::Item::Project(path) => {
+                let files = self.session_files_of(Path::new(&path));
+                let shown = match files.is_empty() {
+                    true => vec![say!("recent.no-session-there")],
+                    false => files.iter().take(rows).map(|p| p.display().to_string()).collect(),
+                };
+                Some((path, shown))
+            }
             crate::picker::Item::File(path) => {
                 let full = match self.picker.as_ref().and_then(|p| p.root.as_ref()) {
                     Some(root) => root.join(&path),
@@ -1568,6 +1577,10 @@ impl Editor {
                 if let Err(err) = self.open_file(&full) {
                     self.status = say!("buffer.cannot-open", path, err);
                 }
+            }
+            // **換項目＝去那裏重新開始**，由前端 `chdir` ＋ `exec`。
+            Some(crate::picker::Item::Project(path)) => {
+                self.reopen_request = Some(PathBuf::from(path));
             }
             Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
             // The picker belongs to whichever key opened it, so choosing from
@@ -1870,6 +1883,60 @@ impl Editor {
             .collect();
         self.picker = Some(crate::picker::Picker::new(&say!("picker.buffers"), items));
         self.mode = Mode::Picker;
+    }
+
+    /// **最近開過的檔** — `:recent-files` / `:recent-files-global`
+    /// (2026-10-18 作者定).
+    ///
+    /// Two pickers rather than one with a switch, because **a picker is in
+    /// Insert from the moment it opens** (`PIC.INS`): a digit typed in there
+    /// is a digit in the query, not a key. 作者 2026-10-18：「We are in the
+    /// insert mode only, so number keys cannot be used as shortcut. My
+    /// suggestion is to have two pickers.」 Measured first: `空格 f` then `2`
+    /// puts 「搜: 2」 in the box.
+    pub(super) fn open_recent_picker(&mut self, here: bool) {
+        let root = match here {
+            true => Some(self.project_root()),
+            false => None,
+        };
+        let items: Vec<crate::picker::Item> = self
+            .recent_files(root.as_deref())
+            .into_iter()
+            .map(|p| crate::picker::Item::File(p.display().to_string()))
+            .collect();
+        if items.is_empty() {
+            self.status = say!("recent.nothing-yet");
+            return;
+        }
+        let title = match here {
+            true => say!("picker.recent-here"),
+            false => say!("picker.recent-everywhere"),
+        };
+        self.picker = Some(crate::picker::Picker::new(&title, items));
+        self.mode = Mode::Picker;
+    }
+
+    /// **最近開過的項目** — `:recent-projects` (2026-10-18 作者定).
+    pub(super) fn open_project_picker(&mut self) {
+        let here = self.session_root.clone();
+        let items: Vec<crate::picker::Item> = self
+            .recent_projects()
+            .into_iter()
+            // 這一個就在眼前，列它等於列一條「原地不動」。
+            .filter(|p| Some(p) != here.as_ref())
+            .map(|p| crate::picker::Item::Project(p.display().to_string()))
+            .collect();
+        if items.is_empty() {
+            self.status = say!("recent.nothing-yet");
+            return;
+        }
+        self.picker = Some(crate::picker::Picker::new(&say!("picker.recent-projects"), items));
+        self.mode = Mode::Picker;
+    }
+
+    /// **Where the front end should start again**, taken once (2026-10-18).
+    pub fn take_reopen_request(&mut self) -> Option<PathBuf> {
+        self.reopen_request.take()
     }
 
     /// Whether `Space` is waiting for the key that says what to do — which is

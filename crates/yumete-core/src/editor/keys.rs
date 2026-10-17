@@ -1466,6 +1466,11 @@ impl Editor {
                 self.handle_yume(key);
                 return;
             }
+            Pending::Open => {
+                self.pending = Pending::None;
+                self.handle_open_recent(key);
+                return;
+            }
             Pending::YumeValue(subject) => {
                 self.pending = Pending::None;
                 self.handle_yume_value(subject, key);
@@ -3254,6 +3259,22 @@ impl Editor {
     // The keys `Space` opens, and what each of them is for — the list the
     // which-key overlay draws, so what is offered and what happens cannot
     // drift apart.
+    /// **`空格 o` — 開上次的那一組**（2026-10-18 作者定）。
+    ///
+    /// 三件事，三份不同的清單——這也是別家編輯器一致的形狀（VS Code 的
+    /// 「Open Recent」列文件夾、`⌘P` 列檔，而「重開上次的窗」是第三件；vim 的
+    /// `:oldfiles` 和 `:mksession` 同理）。yumete 的數據本來就是這麼分的：
+    /// `places.txt` 是檔，`sessions/` 是每個項目開着哪幾個。
+    ///
+    /// **兩個檔的挑選器而不是一個帶開關的**，因為挑選器一開門就是插入態
+    /// （`PIC.INS`），數字鍵在裏面是查詢裏的字，不是鍵。
+    pub const OPEN_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("f", "hint.open.recent-files"),
+        ("g", "hint.open.recent-files-global"),
+        ("p", "hint.open.recent-projects"),
+        ("r", "hint.open.resume"),
+    ];
+
     /// **`空格 z` — 輸入法那一組**（2026-10-17 作者定）。
     ///
     /// 原話：「In Yume, we have many shortcuts too with (shift + control + a
@@ -3335,6 +3356,7 @@ impl Editor {
         ('c', "hint.space.comment-line"),
         ('C', "hint.space.comment-block"),
         ('m', "hint.conflict.title"),
+        ('o', "hint.space.open-recent"),
         ('z', "hint.space.yume"),
         ('/', "hint.space.advanced-search"),
         ('?', "hint.space.all-commands"),
@@ -3740,6 +3762,24 @@ impl Editor {
     }
 
     /// Run one key of a `Space` sequence.
+    /// **`空格 o` 底下那一個字母**（2026-10-18 作者定）——見 [`Editor::OPEN_KEYS`].
+    fn handle_open_recent(&mut self, key: Key) {
+        match key {
+            Key::Char('f') => self.open_recent_picker(true),
+            Key::Char('g') => self.open_recent_picker(false),
+            Key::Char('p') => self.open_project_picker(),
+            Key::Char('r') => {
+                let opened = self.restore_session();
+                self.status = match opened {
+                    0 => say!("recent.nothing-to-resume"),
+                    n => say!("cli.picked-up-where-you-left-off", n),
+                };
+            }
+            Key::Esc => {}
+            _ => self.status = Self::said_keys(Self::OPEN_KEYS),
+        }
+    }
+
     /// **`空格 z` 底下那一個字母**（2026-10-17 作者定）——見 [`Editor::YUME_KEYS`].
     ///
     /// Three of them take a value and so open one more level
@@ -3873,6 +3913,7 @@ impl Editor {
             // **記錄**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
             // 格的事），這一對是順手。
             // 切哪一頭由前端定——它手裏纔有「此刻挂着没有」。
+            Key::Char('o') => self.pending = Pending::Open,
             Key::Char('z') => self.pending = Pending::Yume,
             Key::Char('i') => self.show_the_record_here(true),
             Key::Char('I') => self.show_the_record_here(false),
