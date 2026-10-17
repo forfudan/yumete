@@ -3454,16 +3454,17 @@ impl Editor {
             // cell on every row a table has, because no two rows are the same
             // width. Half a page from column 5 landed in column 10.
             //
-            // `H`/`L` are back and onward here even on a 縱書 page, where the
-            // rest of the editor reads `H` as onward because leftward is
-            // onward down there. A table is read across whatever the file's
-            // layout is — `h` is already the column to the left rather than
-            // the next 縱 — so the four capitals follow the table, not the
-            // page, and mean what they mean when it is laid out across.
-            Key::Char('J') => self.move_cell_page(count, true, 0.5),
-            Key::Char('K') => self.move_cell_page(count, false, 0.5),
-            Key::Char('L') => self.move_cell_page(count, true, 1.0),
-            Key::Char('H') => self.move_cell_page(count, false, 1.0),
+            // Warning: **`J`/`K`/`L`/`H` are not among them** (2026-10-17 作者報的:
+            // 「These four seem to be incompatible with non-table mode」). They
+            // were, and that was this table carrying on after the rest of the
+            // editor had already moved paging off them: 「既然對齊就干脆點……
+            // JK 本质上也是和弦（上档）。因此 Ctrl n / p 并不比 JK 更难按。」
+            // Outside a grid the four mean 合併行 / 篩選多重選區 / 句子向前 /
+            // 句子向後, and a key that changes meaning with where the cursor
+            // stands is what `manual.md:2640` promises never happens. Paging
+            // is the six Ctrl keys, here as everywhere.
+            Key::Ctrl('n') => self.move_cell_page(count, true, 2.0 / 3.0),
+            Key::Ctrl('p') => self.move_cell_page(count, false, 2.0 / 3.0),
             Key::Ctrl('d') => self.move_cell_page(count, true, 0.5),
             Key::Ctrl('u') => self.move_cell_page(count, false, 0.5),
             Key::Ctrl('f') | Key::PageDown => self.move_cell_page(count, true, 1.0),

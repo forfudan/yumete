@@ -21,6 +21,20 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **An empty cell can be walked into again, and the grid pages with the same keys as
+  everything else.** Two things on the way to 全窗表格 becoming a view that only ever
+  touches content:
+  - `| one |  | three |` — the blank cell is reported at a single offset, and that
+    offset was one of the two spaces drawn as part of the wall beside it, so it was
+    hidden along with the wall: `l` ran `one` → `three` and the middle column could
+    not be reached from the keyboard at all. On a 拆分表, four cells in five are
+    blank. No run of hidden characters may now swallow the place a cell begins.
+  - `J` `K` `L` `H` no longer page in a grid. Outside one they are 合併行, 篩選多重
+    選區 and the two sentence motions, and paging moved off them everywhere else long
+    ago. The grid now pages with the same six keys as the rest of the editor — `C-n`
+    `C-p` (two thirds), `C-d` `C-u` (half), `C-f` `C-b` (whole) — of which it was
+    missing the first two.
+
 - **Every key stands on the wall between two cells, and whole rows can be cut and
   pasted.** Three changes with one rule behind them: in a table a character you can
   see is a character the caret can sit on, and an edit is allowed when the table is
