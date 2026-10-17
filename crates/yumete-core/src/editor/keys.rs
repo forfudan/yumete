@@ -3285,7 +3285,8 @@ impl Editor {
         ("3-9", "hint.yume.menu-size"),
         ("/", "hint.yume.chaifen"),
         ("t", "hint.yume.table"),
-        ("w W", "hint.yume.which-where"),
+        ("w", "hint.yume.which"),
+        ("W", "hint.yume.where"),
     ];
 
     /// The values under the three letters that have any — `m`, `p`, `e`.
