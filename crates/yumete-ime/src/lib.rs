@@ -8,7 +8,7 @@
 //!
 //! **Which files make up a data set is not decided here.** `yume_core::data_manifest`
 //! is the one place that says so, precisely so every frontend stops keeping a
-//! copy that quietly rots — see yume's `docs/development.md` §4.1.1. This crate
+//! copy that quietly rots — see yume's `local/development.md` §4.1.1. This crate
 //! walks that manifest, so when yume adds a table yumete picks it up with no
 //! change beyond `scripts/build.sh`, which compiles the same list.
 //!

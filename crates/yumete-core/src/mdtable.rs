@@ -653,7 +653,7 @@ pub fn parse(lines: &[String]) -> Parts {
 /// eye does: two closing `|` in the same screen column read as a straight
 /// edge. A column 8,000 squares wide has no such edge — no window holds it,
 /// no reader ever sees where it ends — and padding every row out to it writes
-/// megabytes of spaces that git then keeps for good. `docs/development.md`
+/// megabytes of spaces that git then keeps for good. `local/development.md`
 /// went from 425,694 bytes to 2,945,642 in one keystroke this way.
 ///
 /// The old ceiling was 32 and was removed for a good reason that still holds:
@@ -2044,7 +2044,7 @@ mod tests {
     #[test]
     fn a_column_no_window_holds_is_left_exactly_as_it_was() {
         // #292, on the shape that actually bit: the roadmap table in this
-        // project's own `docs/development.md`, whose 備註 column holds
+        // project's own `local/development.md`, whose 備註 column holds
         // paragraphs. Lining it up padded 298 rows out to the widest of them
         // and took the file from 425,694 bytes to 2,945,642 — 2.5 MB of
         // trailing spaces, in one keystroke, with nothing to show for it.
@@ -2121,7 +2121,7 @@ mod proof_292 {
     ///
     /// The file that did it is the one this test reads. Its roadmap table's
     /// 備註 column held 7,000-square paragraphs, and squaring 298 rows up to
-    /// the widest of them took `docs/development.md` from 425,694 bytes to
+    /// the widest of them took `local/development.md` from 425,694 bytes to
     /// 2,945,642 — **2.5 MB of trailing spaces**, in one keystroke, with
     /// nothing on any screen to show for it.
     ///
@@ -2186,7 +2186,7 @@ mod proof_292 {
         // 句量的是「整個文檔集加起來」，它**隨文檔一起長**，於是每隔一陣就要調大一次
         // ——一條注定被反覆消音的護欄。
         //
-        // Warning: **而它順帶露出一件真事**：`docs/development.md:511` 那張功能表**一張就
+        // Warning: **而它順帶露出一件真事**：`local/development.md:511` 那張功能表**一張就
         // 99,138 字節**，佔全部的一半，**貼着上面那條「單張不許過十萬」的線**。下一個
         // 功能行就會把那一句（真正要緊的那一句）撞紅。
         //

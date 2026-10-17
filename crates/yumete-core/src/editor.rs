@@ -2152,7 +2152,7 @@ pub struct Editor {
     buffers: Vec<Buffer>,
     current: usize,
     mode: Mode,
-    /// **選區——複數的那一個**（#405，方案在 `docs/development.md §5.13`）。
+    /// **選區——複數的那一個**（#405，方案在 `local/development.md §5.13`）。
     ///
     /// Warning: **Phase 0 裏它永遠只裝一段**，行為和從前的 `cursor`/`anchor` 兩個欄位一字不差
     /// ——這一期的驗收條件就是「`scripts/frames.sh` 那二十幀逐字節不變」。

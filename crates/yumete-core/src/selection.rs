@@ -1,4 +1,4 @@
-//! **選區——複數的那一個**（#405，方案在 `docs/development.md §5.13`）。
+//! **選區——複數的那一個**（#405，方案在 `local/development.md §5.13`）。
 //!
 //! 語義逐條照 helix（`helix-core/src/selection.rs`，基準 commit `079a789e8`），只抄語義，
 //! 不依賴它那個 crate——理由在 §5.13.5：`helix-core` 會拖進 `helix-loader`、tree-sitter，
