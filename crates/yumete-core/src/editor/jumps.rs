@@ -261,7 +261,17 @@ impl Editor {
             nth,
         );
         self.sel.set_head(was);
-        if span == crate::motion::Span::Missed {
+        // **全窗裏這一行是這一格**（2026-10-17 作者定）。`f`/`t` 是按詞走的那
+        // 一族，所以它們看不見格子外面——找不到就說找不到，而不是把光標挪到格
+        // 子邊上（`select_span` 那條夾在這裏是錯的：讀者按的是「跳到那個字」，
+        // 沒有那個字就該一動不動）。
+        let outside = match (span, self.cell_the_caret_is_in()) {
+            (crate::motion::Span::Over { head, .. }, Some((first, last))) => {
+                !(first..=last).contains(&head)
+            }
+            _ => false,
+        };
+        if span == crate::motion::Span::Missed || outside {
             self.status = say!("find.no-such-character-on-this-line", target);
             return;
         }

@@ -21,6 +21,15 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **In the full-window grid, a word motion stays in its cell.** `w` `b` `e`, `f` `t`
+  `F` `T`, the sentence pair `H` `L`, `{` `}` and the text objects all stop at the
+  cell they started in — they used to run across the wall into the next column and
+  drag the separator into the selection. Crossing is what the fine keys are for:
+  `h`/`l` a character at a time, `j`/`k` a row, `Tab`/`S-Tab` a cell. `f` and `t`
+  simply do not find a character in another cell, rather than moving part of the way
+  there, and a bracket has no match outside the cell. The three levels drawn in the
+  document (`t o`, `t b`, `t f`) are unchanged: there the separators are text.
+
 - **A record selected in the full-window grid lights as one band.** `x` selects the
   row, and the highlight used to appear on the caret's cell alone, so the rest of the
   record looked untouched; a selection that reached across a wall was drawn nowhere

@@ -1216,6 +1216,78 @@ fn an_empty_cell_keeps_the_one_place_it_has() {
     assert!(seen.contains(&Some(1)), "第 2 欄停得上：{seen:?}");
 }
 
+/// **全窗裏按詞走的那幾個鍵不出這一格**（2026-10-17 作者定）。
+///
+/// 原話：「还是按字符，不跨格。这样的话格子只能通过 hjkl tab/S-tab 来移动。」
+/// 所以細的鍵跨格（`h`/`l` 一個字、`j`/`k` 一行、`Tab` 一格），按詞或更大的一
+/// 律留在出發那一格裏。`t o`／`t b`／`t f` 不受這一條管——那三層是文本。
+#[test]
+fn word_motions_do_not_leave_a_cell_in_the_pane() {
+    let table = "| who | verb |\n| --- | --- |\n| some people | love me |\n| x | y |\n";
+    let column = |ed: &Editor| ed.cell_position().map(|(_, c)| c);
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    let pane = || {
+        let mut ed = typed(table);
+        ed.execute("goto 3").unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, " tt");
+        ed
+    };
+
+    // `w` 走到格尾就停，再按不動。
+    let mut ed = pane();
+    for _ in 0..6 {
+        ed.on_key(Key::Char('w'));
+        assert_eq!(column(&ed), Some(0), "`w` 出格了：{}", text(&ed));
+    }
+    assert_eq!(text(&ed), "e", "停在這一格的末一個字上");
+
+    // `b` 同理，停在格頭。
+    let mut ed = pane();
+    for _ in 0..12 {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(column(&ed), Some(1), "先走到第二格");
+    for _ in 0..6 {
+        ed.on_key(Key::Char('b'));
+        assert_eq!(column(&ed), Some(1), "`b` 出格了：{}", text(&ed));
+    }
+
+    // `f` 看不見格子外面——找不到就說找不到，而不是挪到格子邊上。
+    let mut ed = pane();
+    let was = ed.selection();
+    press(&mut ed, "fv"); // `v` 只在下一格的 `love` 裏
+    assert_eq!(ed.selection(), was, "一動不動：{}", ed.status());
+    press(&mut ed, "fp"); // 本格裏有
+    // helix 的 `f` 是「從這裏選到那個字」，所以比的是選區的末一個字。
+    assert!(text(&ed).ends_with('p'), "本格裏的照樣找得到：{}", text(&ed));
+
+    // 而跨格的那三個照舊跨得過去。
+    let mut ed = pane();
+    for _ in 0..12 {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(column(&ed), Some(1), "`l` 跨得過去");
+    let mut ed = pane();
+    ed.on_key(Key::Tab);
+    assert_eq!(column(&ed), Some(1), "`Tab` 跨得過去");
+    let mut ed = pane();
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.cursor_line(), 3, "`j` 換得了行");
+
+    // **`t f` 不受這一條管**：那一層是文本，`w` 照舊走過牆去。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    for _ in 0..6 {
+        ed.on_key(Key::Char('w'));
+    }
+    assert_eq!(column(&ed), Some(1), "`t f` 裏 `w` 照舊跨得過去");
+}
+
 /// **全窗那一層沒有牆可站**（2026-10-17 作者定）。
 ///
 /// 原話：「to, tb, tf are about the texts (content + separators though
@@ -27205,6 +27277,7 @@ fn replacing_a_whole_file_asks_in_the_middle_of_the_page() {
     ed.on_key(Key::Char('y'));
     assert_eq!(ed.search().total, 0, "{}", ed.status());
 }
+
 
 
 
