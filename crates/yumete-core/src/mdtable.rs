@@ -975,6 +975,31 @@ pub const MAX_COLUMN: usize = 32;
 /// carries on, and it is one cell in every terminal there is.
 pub const FOLD_MARK: &str = ">";
 
+/// The mark that stands where a cell's **head** has been scrolled past.
+///
+/// The mirror of [`FOLD_MARK`], and ASCII for the same reason. It appears only
+/// in the cell the caret is in, and only once the caret has been carried past
+/// the column's width: the cell then scrolls inside itself so that what is
+/// being typed stays on the page, and this says the cell did not begin here.
+///
+/// Warning: **`>` alone does not cover it** (settled 2026-10-17 by looking at a real
+/// frame). It was taken out that day as noise — 「I do not understand the usage
+/// of `<`……`>` is sufficient showing folded content」 — and put back the same
+/// day once the gap was drawn out. `>` says 「the tail is not all here」, and
+/// while the caret is mid-cell both marks show, so it does cover that case.
+/// What it cannot say is 「the head is behind you and the tail is all here」,
+/// which is exactly where the caret sits at the end of a long cell: a 27-character
+/// 說明 column capped at 32 draws
+///
+/// ```text
+/// 光標在第 20 個字  ┆很長很長很長很長很長很長很長很 >┆   `>` 說得出沒給全
+/// 光標在第 27 個字  ┆長很長很長很長很長很長的說明文字┆   兩頭都沒有記號
+/// ```
+///
+/// and the second row is indistinguishable from a cell whose whole value is
+/// those sixteen characters, with eleven more scrolled off to the left.
+pub const HEAD_MARK: &str = "<";
+
 /// The tail of each cell of `line` that is drawn wider than `cap`.
 ///
 /// Spans of the **file's own characters**, to be hidden — the same currency
