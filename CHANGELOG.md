@@ -21,6 +21,17 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **A record selected in the full-window grid lights as one band.** `x` selects the
+  row, and the highlight used to appear on the caret's cell alone, so the rest of the
+  record looked untouched; a selection that reached across a wall was drawn nowhere
+  at all. Every cell the selection reaches is now lit, the gap between two selected
+  cells with it, and a cell the selection runs past is lit to its box rather than to
+  the end of its letters. Two cells of the same drawing were wrong with it: a caret
+  resting outside a cell's content (which `x` leaves on the row's last `|`) is drawn
+  on that cell's last character instead of scrolling the cell, and a cell that fits
+  its column is never scrolled at all — `reads` in a five-wide column used to turn
+  into `<ads` the moment the caret stood on its last letter.
+
 - **`l` no longer wastes a press at the end of a row in the full-window grid.** It
   used to land on the line's newline — a place the grid has no column for, so the
   cell scrolled inside itself and drew `dog` as `<g`; a second `l` then went on to

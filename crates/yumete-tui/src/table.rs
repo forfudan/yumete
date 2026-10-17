@@ -769,13 +769,34 @@ pub fn draw(
                 // drawn** — because it decides *which part of it* is drawn.
                 // `None` unless the caret is in this cell and on this one of
                 // its lines.
+                //
+                // Warning: **Clamped into the cell** (2026-10-17). The caret's file
+                // offset is not always inside the cell the row says it is in:
+                // `x` selects the whole line and leaves the head on the row's
+                // last `|`, which is past the last cell's content. Counting
+                // from the cell's start then gave a step beyond its text, and
+                // `window_at` read that as 「the caret has been carried past
+                // the column」 and scrolled the cell — `dog` drew as `<g` for
+                // a row nobody was typing in. 全窗 is a view of the content,
+                // so a caret anywhere else is drawn at the nearest place in
+                // the content.
                 let step_here = here
                     .then(|| {
-                        let from = editor
+                        let (from, to) = editor
                             .cell_span(line, i)
-                            .map(|(a, _)| a)
-                            .unwrap_or(usize::MAX);
-                        caret_in(&parts[i], editor.cursor().saturating_sub(from))
+                            .unwrap_or((usize::MAX, usize::MAX));
+                        let at = editor.cursor();
+                        // Inside the cell it counts for itself — that is the
+                        // caret being typed with, and a cell exactly as wide
+                        // as its column must still scroll to show it. Outside
+                        // it, the caret is not in the content at all, so it is
+                        // drawn on the cell's last character and the cell
+                        // stays put.
+                        let into = match (from..=to).contains(&at) {
+                            true => at - from,
+                            false => to.saturating_sub(1).max(from) - from,
+                        };
+                        caret_in(&parts[i], into)
                     })
                     .filter(|(at, _)| *at == k)
                     .map(|(_, step)| step);
@@ -818,20 +839,39 @@ pub fn draw(
                         style.fg(ink.gold()).add_modifier(Modifier::BOLD),
                     );
                 }
-                if here && peek.is_none() {
+                // **Every cell the selection reaches, not just the caret's**
+                // (2026-10-17). The test used to be `here`, so a selection
+                // wider than one cell was painted on one cell: `x` lit the
+                // last cell of the row and left the rest of the record
+                // looking untouched, and a selection standing on a wall was
+                // drawn nowhere at all (§5.12.69).
+                let lit = editor.cell_span(line, i).filter(|_| peek.is_none()).and_then(
+                    |(from, to)| {
+                        let (a, b) = editor.selection();
+                        // Clip the selection to this cell. An empty cell is a
+                        // single offset, so it lights when the selection
+                        // reaches across it rather than when it covers width.
+                        (a <= to && from <= b).then(|| (from, to, a.max(from), b.min(to)))
+                    },
+                );
+                if let Some((from, to, a, b)) = lit {
                     // **The selection, over the cell's own ground.** Only the
                     // background is touched: a heading inside a selection is
                     // still a heading, which is the rule everywhere else too.
-                    let from = editor
-                        .cell_span(line, i)
-                        .map(|(a, _)| a)
-                        .unwrap_or(usize::MAX);
-                    let (a, b) = editor.selection();
-                    let (la, ca) = caret_in(&parts[i], a.saturating_sub(from));
-                    let (lb, cb) = caret_in(&parts[i], b.saturating_sub(from));
+                    let (la, ca) = caret_in(&parts[i], a - from);
+                    let (lb, cb) = caret_in(&parts[i], b - from);
                     if la <= k && k <= lb {
                         let c0 = if la == k { ca as u16 } else { 0 };
-                        let c1 = if lb == k { cb as u16 } else { w };
+                        // **A cell the selection runs past is lit to its box**,
+                        // not to the end of its letters — the comment above
+                        // says the highlight is a cell you are inside, and a
+                        // row selection that stopped at each cell's last 字
+                        // came out as stripes with gaps where the padding is.
+                        let runs_on = b >= to;
+                        let c1 = match (lb == k, runs_on) {
+                            (true, false) => cb as u16,
+                            _ => w,
+                        };
                         let stop = (x + c1).min(x + w).min(right);
                         for cx in (x + c0).min(stop)..stop {
                             if let Some(cell) = buf.cell_mut((cx, y)) {
@@ -862,6 +902,21 @@ pub fn draw(
                 // across. The seam is *inside* the table.
                 let seam = if w == 0 { 0 } else { GAP as u16 };
                 let ground = banded(line, page);
+                // **And it takes the selection when the selection crosses it**
+                // (2026-10-17), for the same reason the band does: a record
+                // the reader selected is one thing, and a gap of page colour
+                // every few columns says it is several.
+                let crossed = editor
+                    .cell_span(line, i)
+                    .zip(editor.cell_span(line, i + 1))
+                    .is_some_and(|((_, to), (next, _))| {
+                        let (a, b) = editor.selection();
+                        peek.is_none() && a <= to && next <= b
+                    });
+                let ground = match crossed {
+                    true => ground.patch(on),
+                    false => ground,
+                };
                 for cx in (x + w)..(x + w + seam).min(right) {
                     if let Some(cell) = buf.cell_mut((cx, y)) {
                         match stroke {
@@ -1130,6 +1185,14 @@ pub fn draw_detail(
 fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
     let head = yumete_cjk::str_width(yumete_core::mdtable::HEAD_MARK);
     let fold = yumete_cjk::str_width(yumete_core::mdtable::FOLD_MARK);
+    // **A cell that fits is never scrolled** (2026-10-17). The two tests
+    // below are about the caret, and both say yes for a caret on the last
+    // character of a cell exactly as wide as its column — so `reads` in a
+    // five-wide column scrolled to `<ads` the moment the caret stood on its
+    // `s`, with no tail to fold and nothing gained. Ask the cell first.
+    if yumete_cjk::str_width(line) <= room {
+        return (line.to_string(), caret, false);
+    }
     // Nothing to do while the caret is still inside the room — and nothing
     // that *can* be done once the two marks would leave it no cell to stand in.
     if caret + fold < room || room <= head + fold {

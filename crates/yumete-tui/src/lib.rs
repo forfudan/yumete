@@ -14505,6 +14505,61 @@ fn squeezed(text: &str) -> String {
         config
     }
 
+    /// **全窗裏一行記錄選起來是一條，不是幾段**（2026-10-17）。
+    ///
+    /// 兩件一起：底色從前只上在**光標那一格**上，所以 `x` 選一整行，亮的只有最
+    /// 後一格；而光標落在行尾那道牆上（`x` 把頭放在那裏），按格子的起點去數就
+    /// 數過了格子的內容，`window_at` 當成「光標被帶出欄外」把那一格捲了——`dog`
+    /// 畫成 `<g`，而那一行根本沒人在打字。
+    #[test]
+    fn a_record_selected_in_the_pane_lights_as_one_band() {
+        let config = Config::default();
+        let ink = ink(&config);
+        // **ASCII only.** `TestBackend` leaves the second cell of a wide
+        // glyph `Reset`, so a 漢字 row reads as 「第 二 條」 and every other
+        // cell of the band looks unlit.
+        let mut editor = editor_with("| who | verb |\n| --- | --- |\n| ann | sings |\n| bob | reads |\n");
+        let mut seats = Seats::default();
+        let (w, h) = (40u16, 8u16);
+        let row_of = |editor: &Editor, seats: &mut Seats| -> (String, Vec<bool>) {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| draw(frame, editor, &config, no_ime(), seats, None))
+                .unwrap();
+            let y = caret_of(&mut terminal, &config).y;
+            let buffer = terminal.backend().buffer().clone();
+            let text: String = (0..w).map(|x| buffer[(x, y)].symbol()).collect();
+            let lit = (0..w)
+                .map(|x| buffer[(x, y)].style().bg == Some(ink.selection()))
+                .collect();
+            (text, lit)
+        };
+
+        for key in [' ', 't', 't', 'j', 'x'] {
+            editor.on_key(Key::Char(key));
+        }
+        let (text, lit) = row_of(&editor, &mut seats);
+        // **沒有被捲。** 那一格原樣畫着，`<` 不在這一行上。
+        assert!(text.contains("reads"), "那一格原樣畫着：{text}");
+        assert!(!text.contains('<'), "沒有被捲：{text}");
+        // **亮的是一條，中間不斷。** 取頭尾之間每一格，一格不亮就是斷了。
+        let first = lit.iter().position(|&on| on).expect("總得亮一段");
+        let last = lit.iter().rposition(|&on| on).expect("總得亮一段");
+        assert!(last > first + 4, "一整行記錄，不是一格：{text}");
+        assert!(
+            lit[first..=last].iter().all(|&on| on),
+            "中間斷了：\n{text}\n{}",
+            lit.iter().map(|&on| if on { '#' } else { '.' }).collect::<String>()
+        );
+        // 兩格都在裏面——牆兩邊的字都亮着。
+        let band: String = (first..=last).map(|x| text[..].chars().nth(x).unwrap_or(' ')).collect();
+        // 光標那一格畫的是光標,不是選中的底,所以帶子停在它前面一格。
+        assert!(
+            band.contains("bob") && band.contains("rea"),
+            "兩格都在帶子裏：{band}"
+        );
+    }
+
     /// #726, reported 2026-10-09: 「The cursor location in the table is
     /// incorrect (insert mode)」.
     ///
