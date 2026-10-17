@@ -233,6 +233,22 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- Warning: **Five ways to break a table are shut, with the rule the cuts already
+  follow**: an edit goes through only if the table is still a table afterwards.
+  - After cutting a row, the caret was left on the next row's leading `|` — and the
+    grid draws a caret outside a cell on that cell's last character, so it looked
+    like an ordinary in-cell cursor. One `i` then wrote before the pipe and the table
+    split in two.
+  - `o` and `O` inside a `|` table opened a blank row and put the caret on **its**
+    leading `|`, with the same result; `O` on the header row also wedged the new row
+    between the header and its `| --- |`, which Markdown needs adjacent. Both now go
+    the way `t r` already went.
+  - `:%s/---/xxx/g` was accepted because every row kept its cell count — and the file
+    stopped being a table at all. A rule row now has to stay a rule row.
+  - `] 空格` put a blank line between two rows, leaving a headerless second table.
+  - And the insert side now asks **where** the text lands, not only what it is, so a
+    caret outside a cell refuses the keystroke instead of damaging the row.
+
 - **`w` in a table no longer drags the selection across the cell wall.** In `空格 t f`
   and `空格 t t`, a word motion from a cell's last word swallowed the trailing space,
   the wall and the next cell's cushion, and left the caret in the next cell — so `w` on

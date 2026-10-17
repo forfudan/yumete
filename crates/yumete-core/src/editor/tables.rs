@@ -2383,7 +2383,7 @@ impl Editor {
     }
 
     /// Put a new row in below the cursor's (or above it).
-    fn md_new_row(&mut self, below: bool) {
+    pub(super) fn md_new_row(&mut self, below: bool) {
         let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
@@ -2818,6 +2818,53 @@ impl Editor {
         if let Some((line, cell)) = self.cell_position() {
             self.go_to_cell(line, cell);
         }
+    }
+
+    /// Whether `at` is inside one of its row's cells (2026-10-17).
+    ///
+    /// The insert half of the structure test §5.12.70 gave to cuts. A cut now
+    /// asks 「is it still a table afterwards」; an insert only ever asked
+    /// 「what character is this」, so **where** the text landed was nobody's
+    /// question — and text landing before a row's leading `|` is a line that
+    /// stops being a row, which is the same damage by the other door.
+    ///
+    /// A line that is not a row of this table answers `true`: not knowing is
+    /// not a reason to refuse.
+    pub(super) fn inside_a_cell(&self, at: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let at = at.min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        let start = rope.line_to_char(line);
+        let cells = self.row_cells(line);
+        if cells.is_empty() {
+            return true;
+        }
+        cells.iter().any(|&(a, b)| (start + a..=start + b).contains(&at))
+    }
+
+    /// **Put the caret back inside a cell** after an edit moved it somewhere a
+    /// cell does not reach (2026-10-17, found in review).
+    ///
+    /// The row cut that §5.12.70 opened up leaves the head at the line's own
+    /// start — which in a `|` table is the row's **leading wall**. 全窗 then
+    /// draws it on the first cell's last character, because that is where a
+    /// caret outside the content is drawn, so the reader sees an ordinary
+    /// in-cell cursor; the next `i` writes before the pipe, the line stops
+    /// being a row and the table splits in two. Measured:
+    /// `空格 t t` → `x d` → `i Z` gave `Z| dog | reads | book |`.
+    ///
+    /// Every edit that moves the caret as part of its work calls this. It is
+    /// a no-op outside a table and wherever the caret is already in a cell.
+    pub(super) fn seat_in_a_cell(&mut self) {
+        if !self.table_here() {
+            return;
+        }
+        let at = self.sel.head();
+        if self.cell_here().is_some_and(|(from, to)| (from..=to).contains(&at)) {
+            return;
+        }
+        self.snap_to_cell();
+        self.sel.set_anchor(self.sel.head());
     }
 
     /// Step to the next cell, wrapping to the next row at the end of one.
@@ -5039,6 +5086,10 @@ impl Editor {
         }
         if self.put_takes_whole_rows(at, text) {
             return None;
+        }
+        // **And where it lands, not only what it is** — see `inside_a_cell`.
+        if at.is_some_and(|at| !self.inside_a_cell(at)) {
+            return Some(say!("table.not-inside-a-cell"));
         }
         if self.md_rule_here() {
             return Some(say!("table.rule-row-is-drawn"));

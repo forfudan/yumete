@@ -1216,6 +1216,71 @@ fn an_empty_cell_keeps_the_one_place_it_has() {
     assert!(seen.contains(&Some(1)), "第 2 欄停得上：{seen:?}");
 }
 
+/// **五道能把表格弄壞的門，一條判準關上**（2026-10-17，兩份審查找出來的）。
+///
+/// 判準是 §5.12.70 給剪那一半定的那一條：**改完還是不是一張表**。今天把它擴到
+/// 插那一半——從前插入只問「要打的是什麼字」，從不問「打在哪」。
+#[test]
+fn five_doors_that_broke_a_table_are_shut() {
+    let table = "| who | verb |\n| --- | --- |\n| cat | eats |\n| dog | digs |\n";
+
+    // ① 整行剪走之後，光標留在下一行的**行首那道牆**上，而全窗把它畫在第一格
+    //    的末字上——看起來是個正常的格内光標，`i` 一按就寫到了牆外面。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    press(&mut ed, "xd");
+    press(&mut ed, "iZ");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("| Zdog | digs |"),
+        "寫進了格子裏：{}",
+        ed.current_buffer().text()
+    );
+
+    // ② `o` 開的新行，光標從前落在它自己的行首那道牆上。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    press(&mut ed, "owl");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("| wl "),
+        "開的是一行，不是半行：{}",
+        ed.current_buffer().text()
+    );
+
+    // ③ 標題行上按 `O`，從前把分隔行擠到了第三行——markdown 要它緊跟標題。
+    let mut ed = typed(table);
+    ed.execute("goto 1").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " ttO");
+    ed.on_key(Key::Esc);
+    let whole = ed.current_buffer().text();
+    let lines: Vec<&str> = whole.lines().collect();
+    assert!(lines[0].contains("who"), "標題還在第一行：{lines:?}");
+    assert!(crate::mdtable::rule_of(lines[1]).is_some(), "分隔行還在第二行：{lines:?}");
+
+    // ④ `:s` 把分隔行改成別的——格數一個不少，從前就這麼過去了。
+    let mut ed = typed(table);
+    assert!(ed.execute("%s/---/xxx/g").is_ok());
+    assert_eq!(ed.current_buffer().text(), table, "一個字沒動");
+    assert_eq!(ed.status(), say!("table.rule-row-is-drawn"));
+    // 而有用的那一半照舊。
+    assert!(ed.execute("%s/cat/CAT/").is_ok());
+    assert!(ed.current_buffer().text().contains("| CAT |"), "{}", ed.status());
+
+    // ⑤ `] 空格` 在兩行之間插一個空行，把一張表斷成兩張。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "] ");
+    assert_eq!(ed.current_buffer().text(), table, "一個字沒動");
+    assert_eq!(ed.status(), say!("table.no-blank-line-inside"));
+}
+
 /// **`mi c` 是光標所在的那一格**（2026-10-17 作者定）。
 ///
 /// 原話：「`mi c` = 这一格」。按字之後，「把這一格整個換掉」是表格裏最常用的

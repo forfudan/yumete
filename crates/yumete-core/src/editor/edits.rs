@@ -73,6 +73,21 @@ impl Editor {
                 })
                 .collect()
         };
+        // **And a rule row has to stay one** (2026-10-17, found in review).
+        // The counts above are cells, and `| --- |` → `| xxx |` keeps every
+        // one of them — so `:%s/---/xxx/g` went through, and the file stopped
+        // being a table at all: no header, no columns, prose. Markdown knows
+        // that row by its shape, not by its width, so the shape is what has
+        // to be asked about.
+        if rows_only {
+            let rule = |text: &str| -> Vec<bool> {
+                text.lines().map(|l| crate::mdtable::rule_of(l).is_some()).collect()
+            };
+            let (was, now) = (rule(&before), rule(rebuilt));
+            if was.iter().zip(&now).any(|(a, b)| *a && !*b) {
+                return Some(say!("table.rule-row-is-drawn"));
+            }
+        }
         let (was, now) = (count(&before), count(rebuilt));
         if was.len() != now.len() {
             return Some(say!(
@@ -379,6 +394,9 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
+        if self.open_a_row(true) {
+            return;
+        }
         let end = motion::line_end(self.current_buffer().rope(), self.sel.head());
         let row = self.blank_row();
         // 縮進跟着下來，同 vim 的 `o`（2026-10-08）。
@@ -396,9 +414,42 @@ impl Editor {
         self.enter_insert();
     }
 
+    /// **`o`/`O` inside a `|` table open a *row*, the way `t r` does**
+    /// (2026-10-17, found in review).
+    ///
+    /// Opening a line here used to write `{ending}{indent}{blank row}` and
+    /// then put the caret on the **first character of what it inserted** —
+    /// the row's leading wall. The first key typed therefore landed before
+    /// the pipe and the new line stopped being a row: `空格 t t` → `o` →
+    /// `wl` wrote `wl|  |  |  |` and the table split in two. `O` on the
+    /// header was worse: it wedged a blank row between the header and its
+    /// `| --- |`, and Markdown needs those adjacent, so the file stopped
+    /// being that table at all.
+    ///
+    /// `md_new_row` has known all of this since it was written — it rebuilds
+    /// the region from its parsed parts, so the header and the rule keep
+    /// their places and the caret lands in a cell. `t r`/`t R` already used
+    /// it; these two did not. A delimited file has no header problem and no
+    /// leading delimiter, so it keeps the plain path.
+    ///
+    /// Answers whether it handled the key.
+    fn open_a_row(&mut self, below: bool) -> bool {
+        if self.md_region().is_none() || !self.table_here() {
+            return false;
+        }
+        self.snapshot();
+        self.md_new_row(below);
+        self.seat_in_a_cell();
+        self.enter_insert();
+        true
+    }
+
     /// Open a new line above the cursor and enter Insert mode (`O`).
     pub(super) fn open_line_above(&mut self) {
         if self.refuse_readonly() {
+            return;
+        }
+        if self.open_a_row(false) {
             return;
         }
         let start = motion::line_start(self.current_buffer().rope(), self.sel.head());
@@ -452,6 +503,24 @@ impl Editor {
             true => rope.line_to_char((last + 1).min(rope.len_lines())),
             false => rope.line_to_char(first),
         };
+        // **A blank line inside a table cuts it in two** (2026-10-17, found in
+        // review). A table ends where its rows end, so `] 空格` between two
+        // rows left a headerless, ruleless second table below the gap — and
+        // it did it through `without_cell_guard`, where no other door could
+        // see it. `t r` is the key that adds a row, which is what this one
+        // means here.
+        let rows = self.table_row_span_at(rope.char_to_line(from));
+        let splits = rows.is_some_and(|(top, bottom)| {
+            let line = match below {
+                true => last,
+                false => first.saturating_sub(1),
+            };
+            self.table_here() && (top..bottom).contains(&line)
+        });
+        if splits {
+            self.status = say!("table.no-blank-line-inside");
+            return;
+        }
         let ending = self.current_buffer().ending().to_string();
         let breaks = ending.repeat(count.max(1));
         let grew = breaks.chars().count();
@@ -872,6 +941,9 @@ impl Editor {
         self.sel.set_anchor(start);
         self.extend = false;
         self.clamp_cursor();
+        // A whole-row cut leaves the head on the next row's leading wall —
+        // see `seat_in_a_cell`, which is where that story is told.
+        self.seat_in_a_cell();
         self.refresh_goal_column();
     }
 
