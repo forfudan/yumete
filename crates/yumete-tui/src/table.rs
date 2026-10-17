@@ -1121,23 +1121,21 @@ pub fn draw_detail(
 /// inside itself, which is what a spreadsheet's active cell does — and what
 /// this editor's own query boxes already do ([`crate::window_on`]).
 ///
-/// Room is reserved behind for [`FOLD_MARK`], so the caret never stands on it.
+/// A cell is reserved at each end: [`HEAD_MARK`] in front, and the room
+/// [`FOLD_MARK`] needs behind, so the caret is never standing on a mark.
 ///
-/// Warning: **There is no mark in front** (2026-10-17 作者定). A `<` stood here
-/// saying 「this cell did not begin where you see it begin」, and it was read as
-/// noise: 「I do not understand the usage of `<`……`>` is sufficient showing
-/// folded content. `<` is not needed to be frank.」 The scrolling itself — which
-/// is what 2026-10-09's 「the cursor location in the table is incorrect」 asked
-/// for — is untouched; only the marker is gone, and the cell gets that column
-/// back.
+/// Warning: **Both marks earn their column** — see [`HEAD_MARK`], which was taken
+/// out on 2026-10-17 and put back the same day once a real frame showed what
+/// `>` alone cannot say.
 fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
+    let head = yumete_cjk::str_width(yumete_core::mdtable::HEAD_MARK);
     let fold = yumete_cjk::str_width(yumete_core::mdtable::FOLD_MARK);
     // Nothing to do while the caret is still inside the room — and nothing
-    // that *can* be done once the mark would leave it no cell to stand in.
-    if caret + fold < room || room <= fold {
+    // that *can* be done once the two marks would leave it no cell to stand in.
+    if caret + fold < room || room <= head + fold {
         return (line.to_string(), caret, false);
     }
-    let want = caret + fold + 1 - room;
+    let want = caret + head + fold + 1 - room;
     let (mut dropped, mut from) = (0usize, 0usize);
     for g in yumete_cjk::graphemes(line) {
         if dropped >= want {
@@ -1149,7 +1147,11 @@ fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
         dropped += yumete_cjk::grapheme_width(g).max(1);
         from += g.len();
     }
-    (line[from..].to_string(), caret - dropped, true)
+    (
+        format!("{}{}", yumete_core::mdtable::HEAD_MARK, &line[from..]),
+        caret + head - dropped,
+        true,
+    )
 }
 
 /// Which line of a wrapped cell the caret is on, and how far into it.
