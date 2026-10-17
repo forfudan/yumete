@@ -1166,7 +1166,17 @@ impl Editor {
         let Some((a, b)) = self.cell_span(want, cell) else {
             return false;
         };
-        self.move_head((a + into).min(b));
+        // **Onto a character of that cell, not past its last one**
+        // (2026-10-17). `b` is the content's end, so a column walked down into
+        // a shorter cell parked the caret on the space beside the wall: 「同
+        // 一欄下一格比較短時，光標停在內容後面的空位上，不是最後一個字上」.
+        // Insert keeps the far end — that is where appending happens, and it
+        // is the same split `on_this_line_under_vim` makes for a line.
+        let last = match self.mode {
+            crate::editor::Mode::Insert => b,
+            _ => crate::motion::prev_grapheme(self.current_buffer().rope(), b).max(a),
+        };
+        self.move_head((a + into).min(last));
         true
     }
 

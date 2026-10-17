@@ -28,6 +28,11 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Walking down a column lands on a character, not past one.** `j` from a long cell
+  into a short one in the same column used to park the caret on the space beside the
+  wall — drawn, but not a character of the cell. It now stops on that cell's last
+  character. Insert mode keeps the far end, which is where appending happens.
+
 - **In the full-window grid a line is a cell, and a line number is a row.** `g h`,
   `g l` and `g s` — and so vim's `0`, `$` and `^` — go to the ends of the cell
   rather than the ends of the row, where they used to park on a wall; `Home` and

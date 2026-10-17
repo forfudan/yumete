@@ -14194,14 +14194,19 @@ fn j_and_k_in_a_grid_keep_the_cell_they_are_in() {
     ed.on_key(Key::Char('k'));
     assert_eq!(ed.cursor(), from + 2, "k comes back");
 
-    // Into a cell too narrow to hold that offset, the caret stops at the
-    // cell's end rather than spilling into the one after it.
+    // Into a cell too narrow to hold that offset, the caret stops on that
+    // cell's **last character** rather than spilling into the one after it.
+    // Warning: **On the character, not past it** (2026-10-17 作者報的). It used to
+    // clamp to the content's end, which is the space beside the wall — drawn,
+    // but not a character of the cell, and 全窗 is a view of the content.
     ed.on_key(Key::Char('j'));
     ed.on_key(Key::Char('j'));
     let (last, cell) = ed.cell_position().unwrap();
     assert_eq!(cell, 1, "still the same cell");
     let (a, b) = ed.cell_span(last, 1).unwrap();
-    assert_eq!(ed.cursor(), (a + 2).min(b), "clamped, not spilled");
+    let on_the_last = motion::prev_grapheme(ed.current_buffer().rope(), b).max(a);
+    assert_eq!(ed.cursor(), (a + 2).min(on_the_last), "clamped, not spilled");
+    assert_ne!(ed.cursor(), b, "不停在内容後面那一格");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
