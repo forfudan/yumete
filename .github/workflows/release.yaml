@@ -338,7 +338,14 @@ jobs:
           # the README, so the day LICENSE moved, an Apache-2.0 project would
           # have shipped tarballs with no licence text and a green build.
           # `set -e` and a loud failure is the right answer.
-          cp LICENSE README.md CHANGELOG.md "${STAGE}/"
+          #
+          # **The licence and nothing else** (2026-10-17 作者定：「Why dont we
+          # just put only the binary in the release package? It is just a beta
+          # stage.」). The README and the changelog are a click away on the
+          # page this tarball is attached to. The licence is not optional in
+          # the same way: Apache-2.0 §4(a) says a copy travels with the thing
+          # you hand over, so it stays however early the version is.
+          cp LICENSE "${STAGE}/"
           # The manual travels with it: this editor's keys are not vi's, and a
           # reader who installed it from a tap has nowhere else to look. It
           # keeps its repository path, so `README.md`'s own link to
