@@ -17,8 +17,6 @@ brew install forfudan/tap/yumete
 
 **[docs/manual.md](docs/manual.md)** is the user manual — what the keys and
 commands do, how vertical layout works, and how to configure it.
-[docs/development.md](docs/development.md) has the design, the reasoning, and
-the feature roadmap.
 
 > Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
 > What changed lately is in **[CHANGELOG.md](CHANGELOG.md)**.
@@ -27,12 +25,11 @@ the feature roadmap.
 
 ## Status
 
-A working editor, used daily by its author, and not finished. **v0.3.0** is the
+A working editor, used daily by its author, and not finished. **v0.9.0** is the
 current release: `brew install forfudan/tap/yumete`, or a tarball from the
 [releases page](https://github.com/forfudan/yumete/releases), or build it from
-source (below). What is done, planned and dropped is
-tracked feature by feature in [`docs/development.md`](docs/development.md) §5,
-and what each release changed is in [CHANGELOG.md](CHANGELOG.md).
+source (below). What each release changed is in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## What it does
 
@@ -329,8 +326,8 @@ YUMETE_BIN_DIR=/usr/local/bin scripts/build.sh
 
 # Try it:
 ./yumete --help
-./yumete docs/development.md          # interactive editor (in a terminal)
-./yumete --preview docs/development.md # non-interactive preview
+./yumete docs/manual.md          # interactive editor (in a terminal)
+./yumete --preview docs/manual.md # non-interactive preview
 ```
 
 `yume` must sit **beside** `yumete` (`../yume`): `yumete-ime` depends on
