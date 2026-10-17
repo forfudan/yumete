@@ -62,11 +62,17 @@ impl Editor {
             return None;
         }
         let c = rope.char(here);
-        if let Some(close) = closing_of(c) {
-            return find_forward(rope, here, c, close);
+        let half = match closing_of(c) {
+            Some(close) => find_forward(rope, here, c, close),
+            None => find_backward(rope, here, opening_of(c)?, c),
+        }?;
+        // **全窗裏配對也不出這一格.** The other half of a pair in another cell
+        // is not a pair the reader can act on here, and saying so is better
+        // than jumping out of the record they are reading.
+        match self.cell_the_caret_is_in() {
+            Some((first, last)) if !(first..=last).contains(&half) => None,
+            _ => Some(half),
         }
-        let open = opening_of(c)?;
-        find_backward(rope, here, open, c)
     }
 
     /// Link to the bracket matching the one under the cursor (`mm`).
@@ -1601,7 +1607,32 @@ impl Editor {
     /// old caret instead dragged the previous word's last character — and the
     /// punctuation between them — along with it (#304).
     pub(super) fn select_span(&mut self, from: usize, to: usize) {
+        // **全窗裏按詞走的那幾個鍵不出這一格**（2026-10-17 作者定）——見
+        // [`Editor::cell_the_caret_is_in`]. This is the one door they all go
+        // through: `w W e E b B`, `f F t T`, `H L`, `{ }` and the text
+        // objects, so the rule is stated once.
+        // **全窗裏按詞走的那幾個鍵不出這一格**（2026-10-17 作者定）——見
+        // [`Editor::cell_the_caret_is_in`]. This is the one door they all go
+        // through: `w W e E b B`, `f F t T`, `H L`, `{ }` and the text
+        // objects, so the rule is stated once.
+        //
+        // **After the dead-zone step, and short of the cell's end.** Before it,
+        // the step undid the clamp — the cell's end is the space beside the
+        // wall, which 全窗 hides, so a `to` clamped to it was pushed straight
+        // on into the next cell. And the end itself is one short of the span,
+        // so the head always stands on a character of this cell: the next
+        // press reads its bounds off that head, and a head parked on the
+        // boundary read the *next* cell's bounds and escaped on the second
+        // press.
+        let held = self.cell_the_caret_is_in();
         let to = self.past_what_a_table_keeps_off(to, to > self.sel.head(), Stepping::Edge);
+        let (from, to) = match held {
+            Some((first, last)) => {
+                let last = last.saturating_sub(1).max(first);
+                (from.clamp(first, last), to.clamp(first, last))
+            }
+            None => (from, to),
+        };
         if !self.extend {
             self.sel.set_anchor(from);
         }

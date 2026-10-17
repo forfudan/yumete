@@ -2990,6 +2990,27 @@ impl Editor {
         Some((start + a, start + b))
     }
 
+    /// **The cell the caret is in — only in 全窗, and only for the keys that
+    /// must not leave it** (2026-10-17 作者定).
+    ///
+    /// 原話：「还是按字符，不跨格。这样的话格子只能通过 hjkl tab/S-tab 来移
+    /// 动。」So the fine-grained keys cross — `h`/`l` a character at a time,
+    /// `j`/`k` a row, `Tab` a cell — and everything that moves by a *word or
+    /// more* stays in the cell it started in. A word motion that crosses is a
+    /// selection that holds a wall, and in a view that is only about content
+    /// there is no wall to hold.
+    ///
+    /// `None` at every other level: `t o`/`t b`/`t f` are the text, walls and
+    /// all, and there a word motion crossing a `|` is the same thing it is in
+    /// any other file (§5.12.70).
+    pub(super) fn cell_the_caret_is_in(&self) -> Option<(usize, usize)> {
+        if !self.grid_has_the_pane() {
+            return None;
+        }
+        let (line, cell) = self.cell_position()?;
+        self.cell_span(line, cell)
+    }
+
     /// The buffer range one cell covers, **for something that is about to
     /// change it** — `None`, with a reason on the status line, when writing
     /// this row back would break it (#307).
