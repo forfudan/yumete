@@ -1216,6 +1216,69 @@ fn an_empty_cell_keeps_the_one_place_it_has() {
     assert!(seen.contains(&Some(1)), "第 2 欄停得上：{seen:?}");
 }
 
+/// **`mi c` 是光標所在的那一格**（2026-10-17 作者定）。
+///
+/// 原話：「`mi c` = 这一格」。按字之後，「把這一格整個換掉」是表格裏最常用的
+/// 動作，而它本來一個鍵都沒有。
+#[test]
+fn mi_c_takes_the_cell_and_still_takes_a_comment_in_code() {
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    let table = "| who | verb |\n| --- | --- |\n| some people | love me |\n| x |  |\n";
+
+    // 全窗：第二格整格。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    for _ in 0..12 {
+        ed.on_key(Key::Char('l'));
+    }
+    press(&mut ed, "mic");
+    assert_eq!(text(&ed), "love me", "{}", ed.status());
+    press(&mut ed, "d");
+    assert!(
+        ed.current_buffer().text().contains("| some people |  |"),
+        "清空了這一格：{}",
+        ed.current_buffer().text()
+    );
+
+    // **每一層都算數**，不只全窗：`t f` 裏同樣是這一格。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "mic");
+    assert_eq!(text(&ed), "some people", "{}", ed.status());
+
+    // 空格子也選得中它那一個位置，接着就打得了字。
+    let mut ed = typed(table);
+    ed.execute("goto 4").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    for _ in 0..3 {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "在空格子裏");
+    press(&mut ed, "micc填上");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("填上"),
+        "{}",
+        ed.current_buffer().text()
+    );
+
+    // **代碼檔裏照舊是註釋**（helix 的 `mi c`）。
+    let mut ed = typed("fn main() {\n    // a comment here\n    let x = 1;\n}\n");
+    ed.execute(":syntax rust").unwrap();
+    ed.execute("goto 2").unwrap();
+    for _ in 0..8 {
+        ed.on_key(Key::Char('l'));
+    }
+    press(&mut ed, "mic");
+    assert!(text(&ed).contains("comment"), "註釋：{:?}", text(&ed));
+}
+
 /// **全窗裏「這一行」是「這一格」，行號是表格的行號**（2026-10-17 作者定）。
 #[test]
 fn the_pane_reads_a_line_as_a_cell_and_a_number_as_a_row() {

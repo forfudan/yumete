@@ -11,6 +11,13 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`mi c` takes the table cell the cursor is in** — `mi c c` replaces the whole
+  cell, `mi c d` empties it, `mi c y` copies it. Replacing a cell outright is the
+  commonest edit a table gets and it had no key at all; now it has the one Helix
+  spells for "the thing I am inside". It works at every level a table is read at,
+  an empty cell counts as a place (so `mi c c` fills one in), and in a code file
+  the same keys still take the comment.
+
 - **A count gets a hint panel of its own.** Type `10` and a small table appears, the way
   `空格` and `g` already do: `J` welds ten lines into one, `gg`/`G` go to line ten,
   `gt`/`gc`/`gb` take the tenth row on the screen, `A-.` (`;` under the vim keymap)

@@ -119,6 +119,18 @@ impl Editor {
             // **`mi a` 參數、`mi c` 註釋**（2026-10-06，helix 的同兩個字母）。用的
             // 是我們自己寫的那份查詢（`code::Language::objects`），不是 helix 的
             // `textobjects.scm`——授權的事見那裏。
+            // **`mi c`：光標所在的那一格**（2026-10-17 作者定）。原話：「`mi c`
+            // = 这一格」——按字之後，「把這一格整個換掉」是表格裏最常用的動
+            // 作，而它本來一個鍵都沒有。
+            //
+            // Warning: **和註釋那一條不撞。** `'c' if writes_code()` 認的是
+            // `Syntax::Code`，而 `.md`／`.csv` 都不是，所以 `mi c` 在表格裏本
+            // 來就是空的。真要在一個 `.rs` 裏把一段制表符文字讀成表（`t t`），
+            // 格子贏——那是讀者剛剛親手開的那個模式。
+            //
+            // `ma c` 和 `mi c` 是同一段：一格沒有「連着外面那層」可言，同
+            // `mi f`／`mi t`。外面那層是牆，而牆不歸這一格。
+            'c' if self.cell_here().is_some() => return self.select_the_cell(),
             'a' if self.writes_code() => return self.select_object(crate::code::Object::Parameter),
             'c' if self.writes_code() => return self.select_object(crate::code::Object::Comment),
             c => match pair_of(c) {
@@ -164,6 +176,23 @@ impl Editor {
     ///
     /// 取**最裏面**那一個：巢狀的函數、`impl` 裏的方法，光標站在哪一層就取哪一層
     /// ——和 `mi(` 在同族括號之間挑的規矩一樣。
+    /// **`mi c`／`ma c`：光標所在的那一格**（2026-10-17 作者定）。
+    ///
+    /// 空格子選得中它那一個位置——`row_cells` 把空格子報在一個偏移上，選區收
+    /// 在那裏，接着按 `c` 就在那一格裏打字。
+    fn select_the_cell(&mut self) {
+        // 到不了：那一條 match 臂已經問過 `cell_here()` 了。
+        let Some((from, to)) = self.cell_here() else {
+            self.status = say!("table.not-in-a-table");
+            return;
+        };
+        let head = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
+        self.sel.set_anchor(from);
+        self.sel.set_head(head);
+        self.extend = false;
+        self.refresh_goal_column();
+    }
+
     fn select_definition(&mut self, function: bool) {
         let want = match function {
             true => crate::code::Define::Function,
