@@ -3004,9 +3004,13 @@ impl Editor {
     /// all, and there a word motion crossing a `|` is the same thing it is in
     /// any other file (§5.12.70).
     pub(super) fn cell_the_caret_is_in(&self) -> Option<(usize, usize)> {
-        if !self.grid_has_the_pane() {
-            return None;
-        }
+        self.grid_has_the_pane().then(|| self.cell_here()).flatten()
+    }
+
+    /// The same span **at every level a table is being read at** — what
+    /// `mi c` takes (2026-10-17). A cell is a cell in `t b` and `t f` too;
+    /// only `t o` has none, and there `self.table` is `None`.
+    pub(super) fn cell_here(&self) -> Option<(usize, usize)> {
         let (line, cell) = self.cell_position()?;
         self.cell_span(line, cell)
     }
