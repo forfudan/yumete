@@ -21,6 +21,16 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`<` is gone from the grid, and `l` no longer wastes a press at the end of a row.**
+  The two were the same fault. `l` off the last cell of a row used to land on the
+  line's newline — a place the full-window grid has no column for, so the cell
+  scrolled inside itself and drew `dog` as `<g`; a second `l` then went on to the
+  next row. Now one press goes from the last cell straight into the next row's first
+  cell, and the `<` that marked a scrolled head is removed as noise: `>` already says
+  a cell is showing less than it holds. The scrolling itself stays, so typing past a
+  column's width still keeps what you are typing on the page, and the cell gets back
+  the column the mark was using.
+
 - **An empty cell can be walked into again, and the grid pages with the same keys as
   everything else.** Two things on the way to 全窗表格 becoming a view that only ever
   touches content:

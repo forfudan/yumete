@@ -1149,9 +1149,19 @@ impl Editor {
         motion: fn(&ropey::Rope, usize) -> usize,
         flag: Option<char>,
     ) {
-        let pos = motion(self.current_buffer().rope(), self.sel.head());
-        let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head(), Stepping::Caret);
-        self.move_head(self.on_this_line_under_vim(pos, flag));
+        let here = self.sel.head();
+        let pos = motion(self.current_buffer().rope(), here);
+        let forward = pos >= here;
+        // **Three steps, and the order is the whole of it** (2026-10-17).
+        // Step clear of what the table keeps off; *then* let the line clamp
+        // say whether running off the end crosses to the next row or stops;
+        // *then* find a place on whichever row that left us. It used to be
+        // the first two only, so the clamp put the caret back **on** the
+        // row's last wall — a place 全窗 has no column for, which makes
+        // `window_at` scroll the cell inside itself and draw `dog` as `<g`.
+        let pos = self.past_what_a_table_keeps_off(pos, forward, Stepping::Caret);
+        let pos = self.on_this_line_under_vim(pos, flag);
+        self.move_head(self.a_place_for_the_caret(pos, forward));
     }
 
     /// **vim 鍵位下 `h`/`l` 不出這一行**（`:h l`；2026-10-02 定照參考實現）。
@@ -1243,10 +1253,8 @@ impl Editor {
     /// Only what a table keeps — see [`Editor::cell_hidden_on_line`]. Markup
     /// hidden by 所見即所得 comes back for the caret, so walking into it is
     /// the point rather than a mistake.
-    fn past_what_a_table_keeps_off(&self, at: usize, forward: bool, what: Stepping) -> usize {
+    fn kept_off_on_line(&self, line: usize, what: Stepping) -> Vec<(usize, usize)> {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(at.min(rope.len_chars()));
-        let start = rope.line_to_char(line);
         let mut hidden = self.cell_hidden_on_line(line);
         // **And the padding either side of a wall** (2026-09-12, narrowed
         // 2026-10-17). A `|` and the spaces around it are three characters of
@@ -1337,6 +1345,19 @@ impl Editor {
             }
             hidden = split;
         }
+        hidden
+    }
+
+    /// Step `at` clear of those spans, in the direction of travel.
+    ///
+    /// The answer may leave the line — forward off its end, or back past its
+    /// start — and that is the caller's cue that this line has nowhere to
+    /// stand that way ([`Self::a_place_for_the_caret`]).
+    fn past_what_a_table_keeps_off(&self, at: usize, forward: bool, what: Stepping) -> usize {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(at.min(rope.len_chars()));
+        let start = rope.line_to_char(line);
+        let hidden = self.kept_off_on_line(line, what);
         if hidden.is_empty() {
             return at;
         }
@@ -1345,18 +1366,86 @@ impl Editor {
         let mut at = at;
         while let Some(&(from, upto)) = hidden
             .iter()
-            .find(|&&(from, upto)| (from..upto).contains(&(at - start)))
+            .find(|&&(from, upto)| (from..upto).contains(&(at.saturating_sub(start))))
         {
             match forward {
                 true => at = start + upto,
                 // The character *before* the span: its first is still hidden.
-                false if from == 0 => return start,
+                // `start` itself is the answer 「nothing before this on the
+                // line」, which the caller reads as 「look the other way」.
+                false if from == 0 => return start.saturating_sub(1),
                 false => at = start + from - 1,
             }
         }
         at
     }
 
+    /// **Where the caret may actually stand** (2026-10-17).
+    ///
+    /// The row's last wall is the case this exists for. `l` off the end of a
+    /// cell steps clear of the wall's span and lands on the line's newline —
+    /// a place 全窗 has no column for, so `window_at` decides the cell must
+    /// scroll inside itself and draws `dog` as `<g`. A second `l` then went
+    /// on to the next row, so every row cost one press that moved nothing
+    /// and drew wrongly.
+    ///
+    /// Running out of places on this line is therefore not a reason to stand
+    /// still: it is the end of the row, and the next row's first cell is
+    /// where the key was going. The table's own rows bound that — walking out
+    /// into the prose under a table is what `j` is for, and the pane has no
+    /// prose at all.
+    fn a_place_for_the_caret(&self, at: usize, forward: bool) -> usize {
+        let rope = self.current_buffer().rope();
+        let at = at.min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        if self.kept_off_on_line(line, Stepping::Caret).is_empty() {
+            return at;
+        }
+        // **The line's characters, not its terminator.** A caret left on the
+        // newline is a caret the grid cannot place, which is the whole of the
+        // fault above.
+        let ends = |line: usize| {
+            let start = rope.line_to_char(line);
+            let mut last = crate::motion::line_last(rope, start);
+            if last > start && last < rope.len_chars() && rope.char(last) == '\n' {
+                last -= 1;
+            }
+            (start, last)
+        };
+        let (start, last) = ends(line);
+        let here = at.clamp(start, last);
+        let out = self.past_what_a_table_keeps_off(here, forward, Stepping::Caret);
+        if (start..=last).contains(&out) {
+            return out;
+        }
+        // Off the end of the row. The next one along, if it is still a row of
+        // this table.
+        let next = match forward {
+            true => line + 1,
+            false => line.checked_sub(1).unwrap_or(line),
+        };
+        let rows = self.table_row_span_at(line);
+        let stays = next != line
+            && rows.is_some_and(|(first, upto)| (first..=upto).contains(&next))
+            && rows == self.table_row_span_at(next);
+        if stays {
+            let (from, to) = ends(next);
+            let edge = match forward {
+                true => from,
+                false => to,
+            };
+            let out = self.past_what_a_table_keeps_off(edge, forward, Stepping::Caret);
+            if (from..=to).contains(&out) {
+                return out;
+            }
+        }
+        // Nowhere onward: the nearest place back the way we came.
+        let back = self.past_what_a_table_keeps_off(here, !forward, Stepping::Caret);
+        match (start..=last).contains(&back) {
+            true => back,
+            false => here,
+        }
+    }
     /// Apply a vertical motion, preserving the goal column and moving the head.
     ///
     /// With soft wrap on, `j` and `k` step one *screen* row rather than one
