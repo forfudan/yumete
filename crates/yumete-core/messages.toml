@@ -4174,6 +4174,13 @@ zhs = "{0}：{1}"
 en = "{0}: {1}"
 
 [[message]]
+# f/F 在全窗表格的本格裏找不到那個字（全窗裏「這一行」是「這一格」）
+key = "find.no-such-character-in-this-cell"
+zht = "這一格裏没有「{0}」"
+zhs = "这一格里没有「{0}」"
+en = "no '{0}' in this cell"
+
+[[message]]
 # f/F 在本行找不到那個字
 key = "find.no-such-character-on-this-line"
 zht = "這一行上没有「{0}」"

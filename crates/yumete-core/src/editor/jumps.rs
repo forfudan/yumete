@@ -272,7 +272,11 @@ impl Editor {
             _ => false,
         };
         if span == crate::motion::Span::Missed || outside {
-            self.status = say!("find.no-such-character-on-this-line", target);
+            // 全窗裏「這一行」是「這一格」，所以話也要說那一個（2026-10-17 作者定）。
+            self.status = match self.cell_the_caret_is_in().is_some() {
+                true => say!("find.no-such-character-in-this-cell", target),
+                false => say!("find.no-such-character-on-this-line", target),
+            };
             return;
         }
         // 錨點是你**出發**的地方，不是讓開之後那一格。
