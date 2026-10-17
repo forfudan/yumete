@@ -1122,17 +1122,18 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **表格裏按詞走停得上那道牆，一格一格走照舊跳過去**（2026-10-17 作者定）。
+/// **表格裏每一個鍵都停得上那道牆，一道牆一下**（2026-10-17 作者定）。
 ///
 /// 原話：「the border of the table in tf and tt mode **can be selected**
 /// (one-cell selection) but cannot be modified……something like working on
 /// `people,love`」——而這正是同一張表**沒進表格模式**時早就有的樣子。
 ///
-/// 2026-09-12 把接縫整個藏了起來（`Seams`），理由是「一步看不見就不算一步」。
-/// 那一條對 `l` 成立（三個檔案位置躲在一個 `┆` 後面），對 `w` 不成立：它只落一
-/// 次，落在一個看得見的字形上，而藏起來的代價是選區跨過了那道牆。
+/// 2026-09-12 把接縫整個藏了起來，理由是「一步看不見就不算一步」。那一條沒
+/// 錯，用錯了地方：三個檔案字元 `space | space` 畫成一個 `┆`，占着一欄的是那
+/// 個 `|`，兩邊的空格一欄也不占。所以藏的是空格，停的是牆——通則本身，不是
+/// 例外。代價量過：過一道牆多按一下 `l`。
 #[test]
-fn a_word_motion_stands_on_the_table_wall_and_a_step_still_skips_it() {
+fn every_motion_stands_on_the_table_wall_once() {
     let text = |ed: &Editor| {
         let (from, to) = ed.selection();
         ed.current_buffer().rope().slice(from..to).to_string()
@@ -1148,14 +1149,15 @@ fn a_word_motion_stands_on_the_table_wall_and_a_step_still_skips_it() {
         ed.on_key(Key::Char('l'));
         assert!(ed.cursor_line() == 2, "走過頭了：{:?}", text(&ed));
     }
-    // 每一步是「那一個詞加它後面那個空格」，helix 的 `w` 本來就是這樣；畫出來
-    // 讀作「people、那道牆、love」，光標各停在後面那個空格上。
+    // 每一步是「那一個詞加它後面那個空格」，helix 的 `w` 本來就是這樣。牆兩邊
+    // 那個空格在畫面上不占欄，所以畫出來讀作「people、那道牆、love」——選區的
+    // 邊停在那裏不動（[`Stepping::Edge`]），往前推會把牆也染上。
     for want in ["people ", "| ", "love "] {
         ed.on_key(Key::Char('w'));
         assert_eq!(text(&ed), want, "一步一個詞，牆也算一個");
     }
 
-    // …而一格一格走的那幾個鍵照舊一步跨過整道牆（2026-09-12 那一條）。
+    // …而一格一格走的那幾個鍵停在牆上**一下**：空格不占欄，牆占一欄。
     let mut ed = typed(table);
     ed.execute("goto 3").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
@@ -1168,7 +1170,125 @@ fn a_word_motion_stands_on_the_table_wall_and_a_step_still_skips_it() {
     }
     assert_eq!(text(&ed), "e", "停在 `people` 的末一個字母上");
     ed.on_key(Key::Char('l'));
-    assert_eq!(text(&ed), "l", "一步跨過 `space | space`，不停在裏面");
+    assert_eq!(text(&ed), "|", "一下站上那道牆");
+    ed.on_key(Key::Char('l'));
+    assert_eq!(text(&ed), "l", "再一下進下一格，牆兩邊的空格一個也不停");
+}
+
+/// **全窗那一層沒有牆可站**（2026-10-17 作者定）。
+///
+/// 原話：「to, tb, tf are about the texts (content + separators though
+/// rendered), and tt is only about the content (we handle the content in a
+/// special app)」。所以同一道 `space | space`，在 `t f` 是三個字元、中間那個
+/// 占一欄，在 `t t` 一個也不是——`l` 從一格的末字直接進下一格。
+#[test]
+fn the_pane_has_no_wall_to_stand_on() {
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    let table = "| a | b |\n| --- | --- |\n| some people | love me |\n";
+    let to_the_last_letter = |ed: &mut Editor| {
+        let last = ed.current_buffer().text().find("people").expect("fixture") + 5;
+        while ed.selection().0 < last {
+            ed.on_key(Key::Char('l'));
+        }
+        assert_eq!(text(ed), "e");
+    };
+
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    to_the_last_letter(&mut ed);
+    ed.on_key(Key::Char('l'));
+    assert_eq!(text(&ed), "|", "`t f`：牆是字，占一欄");
+
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    assert!(ed.grid_has_the_pane(), "{}", ed.status());
+    to_the_last_letter(&mut ed);
+    ed.on_key(Key::Char('l'));
+    assert_eq!(text(&ed), "l", "`t t`：牆不是東西，一步進下一格");
+}
+
+/// **整行拿得走，也貼得回來**（2026-10-17 作者定）。
+///
+/// 原話：「Shall we allow users to delete the border using `d`? So that they
+/// can delete, cut, paste the whole row easily (currently it is not possible
+/// to cut one or more rows and paste somewhere else).」
+///
+/// 判準不是「這一刀裏有沒有 `|`」，是「切完還是不是一張表」。整行連它自己那
+/// 幾道牆一起走，活下來的每一行一道牆都不少；從一行中間挖掉一道牆不是。
+#[test]
+fn whole_rows_are_the_one_cut_a_grid_lets_through() {
+    let table = "| a | b |\n| --- | --- |\n| one | two |\n| three | four |\n";
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // 一行：`x` 選整行，`d` 拿走，`p` 貼回來。
+    press(&mut ed, "xd");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "| a | b |\n| --- | --- |\n| three | four |\n",
+        "{}",
+        ed.status()
+    );
+    // `P` 貼在當前行之前，正好貼回它原來那一格。
+    press(&mut ed, "P");
+    assert_eq!(ed.current_buffer().text(), table, "{}", ed.status());
+
+    // 兩行一起也行。
+    ed.execute("goto 3").unwrap();
+    press(&mut ed, "2xd");
+    assert_eq!(ed.current_buffer().text(), "| a | b |\n| --- | --- |\n", "{}", ed.status());
+
+    // 而標題、分隔行、一行中間那道牆照舊拿不走，各說各的理由。
+    let mut ed = typed(table);
+    ed.execute("goto 1").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "xd");
+    assert_eq!(ed.current_buffer().text(), table, "標題：{}", ed.status());
+    ed.execute("goto 2").unwrap();
+    press(&mut ed, "xd");
+    assert_eq!(ed.current_buffer().text(), table, "分隔行：{}", ed.status());
+    assert_eq!(ed.status(), say!("table.rule-row-is-drawn"), "說得出改對齊的鍵");
+    ed.execute("goto 3").unwrap();
+    // `| one | two |`：光標從行首那道牆起步，四下 `l` 正落在格與格之間那一道
+    // （中間兩個空格一欄也不占，所以過不去的只有牆本身）。
+    press(&mut ed, "llll");
+    assert_eq!(
+        ed.current_buffer().rope().char(ed.selection().0),
+        '|',
+        "站在中間那道牆上"
+    );
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), table, "行中間那道牆：{}", ed.status());
+    assert_eq!(ed.status(), say!("table.divider-cannot-be-deleted"));
+}
+
+/// **`t d` 兩條路都把拿走的那一行放進剪貼簿**（2026-10-17）。
+///
+/// 分隔符那條路（`drop_row`）一直有 `store`，Markdown 那條（`md_drop_row`）
+/// 没有——於是 `t d` 之後按 `p`，`.md` 答「没有取過東西」。一個鍵一個承諾。
+#[test]
+fn dropping_a_row_puts_it_in_the_register_on_both_paths() {
+    let table = "| a | b |\n| --- | --- |\n| one | two |\n| three | four |\n";
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " td");
+    // `t d` 寫回去的時候順手把表排齊了，所以比的是排齊之後那一份。
+    let lined_up = "| a     | b    |\n| ----- | ---- |\n| three | four |\n";
+    assert_eq!(ed.current_buffer().text(), lined_up, "{}", ed.status());
+    press(&mut ed, "P");
+    assert!(
+        ed.current_buffer().text().contains("| one | two |"),
+        "拿走的那一行回得來：{}",
+        ed.current_buffer().text()
+    );
 }
 
 /// **檔名從報告的行上去掉了，而 `gf` 照樣跳得走**（2026-10-16）。
@@ -7037,13 +7157,16 @@ fn moving_down_a_column_steps_over_the_rule_and_walks_out_the_far_side() {
     // 「ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）」
     // — 2026-09-05. A table drawn *in* a document is part of
     // it, so the row after the last one is the paragraph under the table.
-    // The rule row is still stepped over: it is drawn, not written.
+    // The rule row is a stop of its own (2026-10-17): it owns a line of the
+    // page at this level, so a motion may stand on it. `t t` is the one place
+    // it stays skipped, because the pane does not draw it.
     let mut ed = with_md_table();
     assert!(ed.enter_table());
     ed.goto_line(2);
     ed.enter_table();
     press(&mut ed, "j");
-    // Line 3 is the `|---|` rule, which is drawn rather than written.
+    assert_eq!(ed.cell_position().map(|(l, _)| l), Some(2), "the `|---|` rule");
+    press(&mut ed, "j");
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3));
     press(&mut ed, "j");
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "the last row");
@@ -7052,7 +7175,7 @@ fn moving_down_a_column_steps_over_the_rule_and_walks_out_the_far_side() {
     assert!(ed.md_region().is_none(), "where the grid's rules do not apply");
     // Back in, over the rule again, and out the top — where `hjkl` are
     // letters again, which is what makes the mode safe to leave on.
-    press(&mut ed, "kkk");
+    press(&mut ed, "kkkk");
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "the header");
     press(&mut ed, "k");
     assert_eq!(ed.cursor_line(), 0, "and out above it");
@@ -8262,9 +8385,13 @@ fn the_grid_never_stands_on_the_header_it_draws() {
     press(&mut ed, "k");
     assert_eq!(ed.cursor_line(), 3, "{}", ed.status());
 
-    // 表格操作 keeps the header on the page, so there it is a line like any
-    // other and `k` walks onto it.
+    // 表格操作 keeps the header *and* the rule row on the page, so there each
+    // is a line like any other and `k` walks onto both in turn
+    // (2026-10-17: a row that owns a line of the page is a row a motion may
+    // stand on).
     press(&mut ed, " tb");
+    press(&mut ed, "k");
+    assert_eq!(ed.cursor_line(), 2, "the rule row is drawn: {}", ed.status());
     press(&mut ed, "k");
     assert_eq!(ed.cursor_line(), 1, "{}", ed.status());
 }
@@ -9137,9 +9264,16 @@ fn no_route_at_all_gets_a_delimiter_into_a_cell() {
     press(&mut ed, "c");
     ed.on_key(Key::Esc);
     assert_eq!(ed.current_buffer().text(), clean, "changed an empty cell");
+    // **A whole row is the one cut that goes through** (2026-10-17): it takes
+    // every delimiter it owns with it and leaves every surviving row intact,
+    // so the table is still a table. Which is what makes 「cut one or more
+    // rows and paste somewhere else」 possible at all.
     press(&mut ed, "x");
     press(&mut ed, "d");
-    assert_eq!(ed.current_buffer().text(), clean, "selected the line and cut");
+    assert_eq!(ed.current_buffer().text(), "char,ids_y,ids_g\n", "the row is gone");
+    press(&mut ed, "p");
+    assert_eq!(ed.current_buffer().text(), clean, "and goes back whole");
+    ed.goto_line(2);
 
     // And a substitution that only changes what is *inside* cells is the
     // useful kind, so it still runs.
@@ -27028,3 +27162,4 @@ fn replacing_a_whole_file_asks_in_the_middle_of_the_page() {
     ed.on_key(Key::Char('y'));
     assert_eq!(ed.search().total, 0, "{}", ed.status());
 }
+

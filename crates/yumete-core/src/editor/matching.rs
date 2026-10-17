@@ -7,32 +7,32 @@
 
 use super::*;
 
-/// **一格一格走的鍵跳過接縫，按詞走的鍵停得上去**（2026-10-17 作者定）。
+/// **What is being stepped clear of a table's dead zones** — a caret, or the
+/// far edge of a selection (2026-10-17).
 ///
-/// 接縫是 `space? | space?`——檔案裏三個字元，`t f`／`t t` 底下畫成一個 `┆`。
+/// A dead zone is a run of file characters that owns no column on the page:
+/// folded tails, the file's surplus alignment spaces, and the one space
+/// either side of a `|` wall, which is drawn as part of the single `┆`.
 ///
-/// 2026-09-12 把它整個藏了起來，理由寫着「a step the reader cannot see is not a
-/// step」，而那句話說的是 `l`：三個檔案位置躲在一個字形後面，按一下光標不動，再
-/// 按一下忽然換了一欄。那一條**照舊**（[`Seams::Skip`]）。
+/// The two need opposite treatment and both are right:
 ///
-/// 同一段註釋還寫着「`w` made it worse by landing there in one press」——這一句
-/// 2026-10-17 作者推翻了。`w` 落上去只落一次，而且落在一個**看得見**的字形上；
-/// 藏起來的代價反而是選區跨過了那道牆：在 `people` 的 `p` 上按一下 `w`，選中的
-/// 是「eople ┆ 」而光標跑到了下一格的 `l`（實測）。原話：「the border of the
-/// table……**can be selected** (one-cell selection) but cannot be modified……
-/// something like working on `people,love`」。
+/// * A **caret** must come out of every one of them, onward with the travel.
+///   A key that moves the caret somewhere invisible is a key that did nothing
+///   — 2026-09-11：「既然没有显示，就应该允许用户直接跳过去。」
+/// * A selection's **edge** may rest in the space beside a wall. It is drawn
+///   exactly where the last visible character is, so moving it changes
+///   nothing on the page and everything about what `d` takes: pushed onward
+///   it paints the wall as selected and makes `w` then `d` answer
+///   「分隔符删不掉」 for a word that holds no wall; pulled back it sticks,
+///   and `w` stops advancing at the end of a cell.
 ///
-/// 而這正是同一張表**沒進表格模式**時早就有的樣子（實測：`w` 依次給
-/// `people`、`|`、`love`、`me`），也正是 `page.rs` 那一段寫着的本意：「The `|`
-/// stays: it is the character the band rule is drawn from.」刪不掉那一條也早就
-/// 在（`格與格之間的分隔符删不掉`）。所以這一刀是把 `t f`／`t t` 撥回去，不是
-/// 新定一條規矩。
+/// The wall itself is in neither list. It owns its column, so **every** key
+/// stands on it — that is the whole of 2026-10-17's change, and the reason
+/// this enum is now about the spaces rather than about the wall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Seams {
-    /// 跳過去——一格一格走的那幾個鍵（`h`/`l`/方向鍵）。
-    Skip,
-    /// 停得上去——按詞走的那幾個鍵（`w`/`b`/`e`、`f`/`t`、文本對象）。
-    Stand,
+pub(super) enum Stepping {
+    Caret,
+    Edge,
 }
 
 impl Editor {
@@ -1150,9 +1150,7 @@ impl Editor {
         flag: Option<char>,
     ) {
         let pos = motion(self.current_buffer().rope(), self.sel.head());
-        // 一格一格走的那幾個鍵跳過接縫——三個字元畫成一個 `┆`，停在裏面看着
-        // 像沒動（2026-09-12）。
-        let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head(), Seams::Skip);
+        let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head(), Stepping::Caret);
         self.move_head(self.on_this_line_under_vim(pos, flag));
     }
 
@@ -1232,46 +1230,56 @@ impl Editor {
     }
 
     /// Step `at` clear of anything a table is keeping off the page, in the
-    /// direction of travel (#379), and whether the seam counts as 「kept off」
-    /// ([`Seams`]).
+    /// direction of travel, for a caret or for an edge ([`Stepping`], #379).
     ///
-    /// **A step the reader cannot see is not a step.** Under `t f` the file's
-    /// own padding comes off the page (`cell_slack_against`), so `l` through a
-    /// cell's trailing spaces moved the caret and moved nothing on the screen:
-    /// it sat still for four presses and then jumped a column.
+    /// **A step the reader cannot see is not a step**, and its converse:
+    /// a character that owns a drawn column is a character every motion may
+    /// stand on. Under `t f` the file's own padding comes off the page
+    /// (`cell_slack_against`), so `l` through a cell's trailing spaces moved
+    /// the caret and moved nothing on the screen: it sat still for four
+    /// presses and then jumped a column.
     /// 2026-09-11：「既然没有显示，就应该允许用户直接跳过去。」
     ///
     /// Only what a table keeps — see [`Editor::cell_hidden_on_line`]. Markup
     /// hidden by 所見即所得 comes back for the caret, so walking into it is
     /// the point rather than a mistake.
-    fn past_what_a_table_keeps_off(&self, at: usize, forward: bool, seams: Seams) -> usize {
+    fn past_what_a_table_keeps_off(&self, at: usize, forward: bool, what: Stepping) -> usize {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(at.min(rope.len_chars()));
         let start = rope.line_to_char(line);
         let mut hidden = self.cell_hidden_on_line(line);
-        // **And the seams between the cells** (2026-09-12). A `|` and the
-        // spaces around it are three characters of the file drawn as one `┆`,
-        // so a caret parked in there is a caret the reader cannot see: press
-        // `l` at the end of a cell and it sits still, press it again and it is
-        // suddenly in the next column. `w` made it worse by landing there in
-        // one press. Same rule as the padding above — **a step the reader
-        // cannot see is not a step** — and the same rule the grid itself lives
-        // by: `row_cells` already leaves the padding out of a cell's span, so
-        // whatever falls between two spans is seam.
+        // **And the padding either side of a wall** (2026-09-12, narrowed
+        // 2026-10-17). A `|` and the spaces around it are three characters of
+        // the file drawn as one `┆`, and the rule above decides each of the
+        // three on its own: the wall owns that column, so it is a stop; the
+        // two spaces own none, so they are not. Hiding all three is what
+        // 2026-09-12 did, and it made `l` change column in one press while
+        // the wall stayed on the page unvisitable — the only place in a table
+        // where the caret's file position and its drawn position came apart.
         // Warning: **A `|` table only.** There the separator is three characters of
-        // the file — `space pipe space` — drawn as one `┆`, so a caret in it is
-        // a caret nowhere. A delimited file's separator is a single comma or
-        // tab, and its **empty cells sit at the same offset as the separator
-        // after them** (`一,,木目`: the blank cell and the second comma are both
-        // at 2), so hiding seams there costs the one thing a table editor is
-        // most for — putting the caret in a blank cell to fill it in.
-        if seams == Seams::Skip && self.grid_is_drawn() && self.grid_separator_is_a_pipe() {
-            // **The wall itself, and the space either side of it.** Not the
-            // whole gap between two cell spans — `row_cells` reports content
-            // only, so that gap also holds the cell's own padding, and padding
-            // is the cell's (`cell_hidden_on_line` above already says which of
-            // it is off the page). What is drawn as one rule is exactly
-            // `space? | space?`, and that is what is hidden.
+        // the file — `space pipe space` — drawn as one `┆`. A delimited file's
+        // separator is a single comma or tab, and its **empty cells sit at the
+        // same offset as the separator after them** (`一,,木目`: the blank cell
+        // and the second comma are both at 2), so hiding anything there costs
+        // the one thing a table editor is most for — putting the caret in a
+        // blank cell to fill it in.
+        // **The pane is a different kind of thing** (2026-10-17 作者定):
+        // 「to, tb, tf are about the texts (content + separators though
+        // rendered), and tt is only about the content (we handle the content
+        // in a special app)」. So in 全窗 the wall is not an object at all —
+        // the whole `space | space` stays off every motion, caret and edge
+        // alike. At 全 it is text that happens to be drawn as a rule, and the
+        // rule above applies: the `|` owns its column, the spaces do not.
+        let pane = self.grid_has_the_pane();
+        if (pane || what == Stepping::Caret)
+            && self.grid_is_drawn()
+            && self.grid_separator_is_a_pipe()
+        {
+            // Not the whole gap between two cell spans — `row_cells` reports
+            // content only, so that gap also holds the cell's own padding, and
+            // padding is the cell's (`cell_hidden_on_line` above already says
+            // which of it is off the page). What the wall takes with it is
+            // exactly the one space either side.
             let text = crate::motion::line_text(rope, line);
             let chars: Vec<char> = text.chars().collect();
             for at in crate::mdtable::pipes_from(&text, false) {
@@ -1283,7 +1291,17 @@ impl Editor {
                     true => at + 2,
                     false => at + 1,
                 };
-                hidden.push((from, upto));
+                match pane {
+                    true => hidden.push((from, upto)),
+                    false => {
+                        if from < at {
+                            hidden.push((from, at));
+                        }
+                        if upto > at + 1 {
+                            hidden.push((at + 1, upto));
+                        }
+                    }
+                }
             }
             hidden.sort_unstable();
         }
@@ -1462,8 +1480,7 @@ impl Editor {
     /// old caret instead dragged the previous word's last character — and the
     /// punctuation between them — along with it (#304).
     pub(super) fn select_span(&mut self, from: usize, to: usize) {
-        // **按詞走的那幾個鍵停得上接縫**（2026-10-17 作者定）——見 [`Seams`]。
-        let to = self.past_what_a_table_keeps_off(to, to > self.sel.head(), Seams::Stand);
+        let to = self.past_what_a_table_keeps_off(to, to > self.sel.head(), Stepping::Edge);
         if !self.extend {
             self.sel.set_anchor(from);
         }

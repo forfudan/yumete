@@ -846,8 +846,14 @@ impl Editor {
     fn cut_range(&mut self, (start, end): (usize, usize), yanks: bool) {
         if end > start {
             // Deleting yanks, as it does in Helix: `d` then `p` moves text.
-            if self.cell_refuses_cut(start..end).is_some() {
-                self.status = say!("table.divider-cannot-be-deleted");
+            // **Say the reason it gave**, not a stock one. `cell_refuses_cut`
+            // answers with the refusal that fits — the rule row's names
+            // `t < = >`, which is the way through — and this threw it away
+            // and printed 「分隔符删不掉」 over the top, so the one message
+            // that tells the reader what to press instead was unreachable
+            // from `d` (found 2026-10-17 once `j` could stand on that row).
+            if let Some(why) = self.cell_refuses_cut(start..end) {
+                self.status = why;
                 return;
             }
             if yanks {

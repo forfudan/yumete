@@ -2393,14 +2393,25 @@ impl Editor {
         self.status = say!("table.row-added");
     }
 
-    /// Take the cursor's row out.
+    /// Take the cursor's row out, **into the register**.
+    ///
+    /// The delimited half of this (`drop_row`) has stored what it took since
+    /// it was written; this one did not, so `t d` then `p` answered 「没有取
+    /// 過東西」 on a Markdown table and 「貼回來」 was a thing only CSV could
+    /// do. Two paths, one key, one promise (2026-10-17).
     fn md_drop_row(&mut self) {
         let Some((region, mut parts)) = self.md_parts_to_edit() else {
             return;
         };
         let (row, cell) = self.md_at(&region);
+        let taken = {
+            let rope = self.current_buffer().rope();
+            let line = self.cursor_line().min(crate::motion::last_line(rope));
+            rope.line(line).to_string()
+        };
         match parts.remove_row(row) {
             Ok(at) => {
+                self.store(taken);
                 self.md_write(&region, &parts, at, cell);
                 self.status = say!("table.row-deleted");
             }
@@ -2870,7 +2881,21 @@ impl Editor {
         }
     }
 
-    /// The next line of the table that holds data — the rule row is skipped.
+    /// The next line of the table, **rule row and all where it is drawn**.
+    ///
+    /// Same rule as the wall between two cells (`past_what_a_table_keeps_off`):
+    /// a row that owns a line of the page is a row a motion may stand on, and
+    /// the rule row owns one at every level that draws it — `| --- |` printed
+    /// as itself at 基本, `├┄┄┼┄┄┤` at 全. It cannot be typed into
+    /// (`md_rule_here` refuses, naming `t < = >`), which is a reason to say so
+    /// when the reader is on it, not a reason to make it unreachable.
+    /// 2026-10-17 作者：「`j` `k` cannot (they skip the separator)……check
+    /// whether we can align the model so that they can also select the
+    /// border.」
+    ///
+    /// **The pane is the one place it stays skipped**: `t t` draws no rule row
+    /// at all, so landing there would be the invisible step 2026-09-11 ruled
+    /// out.
     fn md_next_row(
         &self,
         region: &crate::mdtable::Region,
@@ -2878,7 +2903,7 @@ impl Editor {
         down: bool,
     ) -> Option<usize> {
         let mut want = if down { line + 1 } else { line.checked_sub(1)? };
-        if region.is_rule(want) {
+        if region.is_rule(want) && self.grid_has_the_pane() {
             want = if down { want + 1 } else { want.checked_sub(1)? };
         }
         // **The header is not a row in the grid.** It is drawn frozen at the
@@ -4948,8 +4973,11 @@ impl Editor {
         if self.table_bypass.get() || !self.table_here() {
             return None;
         }
+        if self.put_takes_whole_rows(at, text) {
+            return None;
+        }
         if self.md_rule_here() {
-            return Some("分隔行是畫出來的——用 t < = > 改對齊".to_string());
+            return Some(say!("table.rule-row-is-drawn"));
         }
         if view.separator == Separator::Pipe {
             let escaped = at.is_some_and(|a| self.backslash_before(a));
@@ -5017,13 +5045,108 @@ impl Editor {
         }
     }
 
+    /// **Whole rows, and nothing but whole rows** — the one shape of edit a
+    /// grid lets through unasked (2026-10-17 作者定).
+    ///
+    /// 原話：「Shall we allow users to delete the border using `d`? So that
+    /// they can delete, cut, paste the whole row easily (currently it is not
+    /// possible to cut one or more rows and paste somewhere else).」
+    ///
+    /// The guard this sits in front of was a **character** test standing in
+    /// for a **structure** test: refuse any cut holding a bare `|` or a
+    /// newline. That proxy says no to the one edit that cannot damage a
+    /// table. The honest question is whether the table is still a table
+    /// afterwards, and taking whole rows always leaves it one — every
+    /// surviving row keeps every delimiter it had, and the rule row and the
+    /// header are not in the span.
+    ///
+    /// A wall taken out of the *middle* of a row stays refused: that merges
+    /// two cells and leaves the row a column short of every other one, with
+    /// the file's own text off the page where `t f` cannot show what changed.
+    /// `t o` is one keystroke away and there a `|` is an ordinary character.
+    fn cut_takes_whole_rows(&self, range: &std::ops::Range<usize>) -> bool {
+        let rope = self.current_buffer().rope();
+        let last = rope.len_chars();
+        if range.start >= range.end || range.start > last {
+            return false;
+        }
+        let head = rope.char_to_line(range.start);
+        if rope.line_to_char(head) != range.start {
+            return false;
+        }
+        let end = range.end.min(last);
+        let tail = rope.char_to_line(end.saturating_sub(1));
+        // A row boundary at the far end too: the head of the next line, or
+        // the end of a last line that carries no break after it.
+        if rope.line_to_char(tail) + rope.line(tail).len_chars() != end {
+            return false;
+        }
+        let Some(span) = self.table_row_span_at(head) else {
+            return false;
+        };
+        // Data rows of **one** table. `table_row_span_at` leaves the header
+        // and the `| --- |` out of the pair it reports, so asking that both
+        // ends fall inside it is the whole of the check — and asking the far
+        // end for its own span keeps two tables in one document from being
+        // cut across.
+        (span.0..=span.1).contains(&head)
+            && (span.0..=span.1).contains(&tail)
+            && self.table_row_span_at(tail) == Some(span)
+    }
+
+    /// The other half: whole rows going **in** at a row boundary.
+    ///
+    /// Same invariant read forwards — see [`Self::cut_takes_whole_rows`]. The
+    /// rows must be as wide as the table they land in, because a short row is
+    /// a row the grid has to mark as damaged on the next keystroke; that is
+    /// the one thing a paste can do here that a cut cannot.
+    fn put_takes_whole_rows(&self, at: Option<usize>, text: &str) -> bool {
+        let Some(at) = at else {
+            return false;
+        };
+        if !text.ends_with('\n') {
+            return false;
+        }
+        let Some(view) = self.table.as_ref() else {
+            return false;
+        };
+        let rope = self.current_buffer().rope();
+        if at > rope.len_chars() {
+            return false;
+        }
+        let line = rope.char_to_line(at);
+        if rope.line_to_char(line) != at {
+            return false;
+        }
+        // Where the rows would land: inside the data rows, or just past the
+        // last of them. `line` itself may be the line after the table, which
+        // is what `p` on the bottom row asks for.
+        let span = self
+            .table_row_span_at(line)
+            .or_else(|| self.table_row_span_at(line.saturating_sub(1)))
+            .filter(|&(first, last)| (first..=last + 1).contains(&line));
+        let Some((first, _)) = span else {
+            return false;
+        };
+        let wide = self.table_column_count_at(first);
+        text.lines().all(|row| match view.separator {
+            Separator::Pipe => {
+                crate::mdtable::is_row(row) && crate::mdtable::split(row).len() == wide
+            }
+            Separator::Delimiter(d) => row.matches(d).count() + 1 == wide,
+        })
+    }
+
     /// The reason this range may not be cut out, if there is one.
     pub(super) fn cell_refuses_cut(&self, range: std::ops::Range<usize>) -> Option<String> {
         if self.table_bypass.get() || !self.cut_reaches_a_grid(&range) {
             return None;
         }
+        if self.cut_takes_whole_rows(&range) {
+            return None;
+        }
         if self.md_rule_here() {
-            return Some("分隔行是畫出來的——用 t < = > 改對齊".to_string());
+            return Some(say!("table.rule-row-is-drawn"));
         }
         let rope = self.current_buffer().rope();
         let range = range.start.min(rope.len_chars())..range.end.min(rope.len_chars());
@@ -5037,12 +5160,12 @@ impl Editor {
             let text = rope.slice(range).to_string();
             return (crate::mdtable::has_bare_pipe(&text, escaped)
                 || text.contains(['\n', '\r']))
-            .then(|| "格與格之間的分隔符刪不掉".to_string());
+            .then(|| say!("table.divider-cannot-be-deleted"));
         }
         rope.slice(range)
             .chars()
             .find_map(|c| self.cell_refuses(c))
-            .map(|_| "格與格之間的分隔符刪不掉".to_string())
+            .map(|_| say!("table.divider-cannot-be-deleted"))
     }
 
     /// An empty row of this table: every delimiter, and nothing between them.
