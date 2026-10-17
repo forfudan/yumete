@@ -27,7 +27,8 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
-- Warning: **Breaking: `--continue` is now `--resume`.** One word for one thing, and it
+- Warning: **Breaking: `--continue` is now `--resume`, and `-r` is its short name.** One
+  word for one thing, and it
   is the word that still reads correctly as a command inside a running editor:
   `:resume` takes up a session that was interrupted, where `:continue` would be
   asking to continue something that never stopped.

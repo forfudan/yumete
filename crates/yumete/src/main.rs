@@ -177,7 +177,24 @@ fn main() -> ExitCode {
             "--table" => force_table = true,
             "--readonly" => readonly = true,
             "--new" => fresh = true,
-            "--resume" => resume = true,
+            // **`-r` 是 `--resume` 的短名**（2026-10-18 作者定：「make an alias
+            // for resume for cli so that we can do ye -r easily」）。
+            //
+            // Warning: **它排在那一簇串得起來的短名前面**，否則 `-r` 長度大於一，會被
+            // 讀成「第一個字母帶值、後面貼着要找的詞」。
+            //
+            // 選它而不選 `-R`（按下面那一簇的規矩，入口該用大寫）是因為 `-R`
+            // 從前是 `--readonly`：讓它改口是把一個「只讀」默默變成「可寫」，
+            // 而 `-r` 在這個倉裏從來没有過意思。
+            //
+            // rg 的 `-r` 是 `--replace`，這裏把它花掉了——**而那不是一條反對的
+            // 理由**（2026-10-18 作者定）：「although we implement some
+            // functionalities of ripgrep, but we are finally a text editor, so
+            // we should make a balance. We should only give short alias for
+            // very common commands for cli grep, and then align with helix for
+            // some other important functionalities.」字母表是編輯器的，rg 只在
+            // 它那幾個**最常用的搜索**開關上說得上話。
+            "-r" | "--resume" => resume = true,
             // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
             "--grep" => owed = Some("--grep"),
             s if s.starts_with("--grep=") => grep = Some(s["--grep=".len()..].to_string()),
@@ -2095,9 +2112,9 @@ ARGS:
             directory, each at the line it was left on.
 
 OPTIONS:
-    Single-letter flags are gone for now, -h and -V aside: they are the
-    scarcest thing a command line has, and which ones are worth spending is
-    a question to answer once the search flags below have settled.
+    Single-letter flags are scarce and mostly unspent: -h, -V, -r, and the
+    search cluster below. Which of the rest are worth spending is a question
+    to answer once the search flags have settled.
 
         --table      Read the file as a grid. A schema in .yumete/tables/ names
                      the columns; without one, the file's own header row does.
@@ -2106,7 +2123,7 @@ OPTIONS:
                      the config. --horizontal forces the ordinary layout.
         --readonly   Open locked: nothing this run opens can be typed into.
                      `:readonly off` unlocks the one you are looking at.
-        --resume     Reopen the files that were open last time here, each at
+    -r, --resume     Reopen the files that were open last time here, each at
                      the line it was left on. `:resume` does it from inside.
         --new        Start on an empty buffer even when `[editor] session` is
                      on.
