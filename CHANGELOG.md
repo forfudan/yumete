@@ -267,7 +267,9 @@ in `docs/development.md` §5.2.
   there was decided for `j`/`k`, which walk lines; `Tab` walks cells and that row has
   none). A selection on a wrapped row lights every line of the record instead of
   leaving holes where the short cells are, and a selection inside a cell that has
-  scrolled is painted where the characters actually are. In Insert, `→` can reach the
+  scrolled is painted where the characters actually are — and a selection that merely
+  *reaches* a cell's last character stops there, where only one that runs on past the
+  cell lights the empty part of its box. In Insert, `→` can reach the
   place at the end of a cell where appending happens. And in a `.csv` the caret is
   drawn on the last cell's last character rather than one column past it.
 
