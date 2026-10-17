@@ -175,7 +175,18 @@ fn a_table_is_measured_over_what_is_on_the_page() {
 /// 模式都是按字走的不是按格走的」. A comment cannot fail; this can.
 #[test]
 fn the_levels_leave_hjkl_alone() {
-    for level in [" to", " tb", " tf", " tt"] {
+    // Warning: **全窗 is the one level that skips the separator** (2026-10-17 作者定):
+    // 「to, tb, tf are about the texts (content + separators though
+    // rendered), and tt is only about the content」. `l` there still walks
+    // characters — one press, one character — it just never stands on the
+    // tab, so the walk is the same list with that offset left out. Which is
+    // the thing this test is really for: the letters do not become cells.
+    for (level, want) in [
+        (" to", vec![0, 1, 2, 3]),
+        (" tb", vec![0, 1, 2, 3]),
+        (" tf", vec![0, 1, 2, 3]),
+        (" tt", vec![0, 1, 3, 3]),
+    ] {
         let mut ed = typed("ch\t錐\nbkd\t蜘\n");
         press(&mut ed, level);
         let mut walk = vec![ed.cursor()];
@@ -183,7 +194,7 @@ fn the_levels_leave_hjkl_alone() {
             ed.on_key(Key::Char('l'));
             walk.push(ed.cursor());
         }
-        assert_eq!(walk, vec![0, 1, 2, 3], "{level} walks characters");
+        assert_eq!(walk, want, "{level} walks characters");
     }
 }
 
