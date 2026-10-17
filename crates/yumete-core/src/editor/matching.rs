@@ -1305,6 +1305,38 @@ impl Editor {
             }
             hidden.sort_unstable();
         }
+        // **An empty cell keeps its one place** (2026-10-17). `| one |  |`
+        // draws a cell between the two walls, and `row_cells` reports it at a
+        // single offset — one of the two spaces a wall takes with it. Hide
+        // that space and the cell has no slot at all: measured, `l` ran
+        // `one` → `three` and column 2 was unreachable from the keyboard,
+        // which on a 拆分表 (four cells in five are empty) is most of the
+        // table. Putting the caret in a blank cell to fill it in is the one
+        // thing a table editor is most for, so no span may swallow the offset
+        // a cell begins at.
+        let keep: Vec<usize> = self
+            .row_cells(line)
+            .into_iter()
+            .map(|(from, _)| from)
+            .collect();
+        if !keep.is_empty() {
+            let mut split = Vec::with_capacity(hidden.len());
+            for (from, upto) in hidden {
+                let mut at = from;
+                for &slot in &keep {
+                    if (at..upto).contains(&slot) {
+                        if slot > at {
+                            split.push((at, slot));
+                        }
+                        at = slot + 1;
+                    }
+                }
+                if at < upto {
+                    split.push((at, upto));
+                }
+            }
+            hidden = split;
+        }
         if hidden.is_empty() {
             return at;
         }

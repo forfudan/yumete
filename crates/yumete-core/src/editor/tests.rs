@@ -1175,6 +1175,47 @@ fn every_motion_stands_on_the_table_wall_once() {
     assert_eq!(text(&ed), "l", "再一下進下一格，牆兩邊的空格一個也不停");
 }
 
+/// **空格子保得住它那一個落點**（2026-10-17）。
+///
+/// `| one |  | three |` 中間那一格是空的，`row_cells` 把它報在一個位置上，而那
+/// 個位置正是牆帶走的兩個空格之一。藏掉它，那一格就一個落點都没有了：實測 `l`
+/// 從 `one` 一步跨到 `three`，第 2 欄按鍵根本到不了。拆分表上五格裏四格是空的，
+/// 所以這不是邊角——把光標放進空格子填東西，正是表格編輯器最主要的用處。
+#[test]
+fn an_empty_cell_keeps_the_one_place_it_has() {
+    let table = "| a | b | c |\n| --- | --- | --- |\n| one |  | three |\n";
+    let column = |ed: &Editor| ed.cell_position().map(|(_, c)| c);
+
+    // 全窗：牆不是東西，所以 `one` 的末字之後下一步就是那個空格子。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    while column(&ed) == Some(0) {
+        ed.on_key(Key::Char('l'));
+    }
+    assert_eq!(column(&ed), Some(1), "空格子進得去：{}", ed.status());
+    // 進得去，也寫得進。
+    press(&mut ed, "iTWO");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("| one | TWO | three |"),
+        "{}",
+        ed.current_buffer().text()
+    );
+
+    // 全：牆是字，所以那一格由「左牆、它自己、右牆」三個落點說出來。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    let mut seen = Vec::new();
+    for _ in 0..6 {
+        ed.on_key(Key::Char('l'));
+        seen.push(column(&ed));
+    }
+    assert!(seen.contains(&Some(1)), "第 2 欄停得上：{seen:?}");
+}
+
 /// **全窗那一層沒有牆可站**（2026-10-17 作者定）。
 ///
 /// 原話：「to, tb, tf are about the texts (content + separators though
@@ -7192,9 +7233,10 @@ fn paging_a_column_stops_at_the_table_edge_even_though_a_step_does_not() {
     ed.goto_line(2);
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, " tT"); // #356: 這一條測的是格
-    press(&mut ed, "J");
+    // 翻頁是六個 Ctrl 鍵，不是 `J`/`K`（2026-10-17，見 `table_motion`）。
+    ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "{}", ed.status());
-    press(&mut ed, "K");
+    ed.on_key(Key::Ctrl('u'));
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "{}", ed.status());
 }
 
@@ -8227,15 +8269,15 @@ fn paging_through_a_table_keeps_to_the_column() {
     press(&mut ed, "ll");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "column c");
     let row = ed.cursor_line();
-    ed.on_key(Key::Char('J'));
+    ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "still column c");
     assert!(ed.cursor_line() > row + 1, "and it moved several rows");
-    ed.on_key(Key::Char('K'));
+    ed.on_key(Key::Ctrl('u'));
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "and coming back");
     assert_eq!(ed.cursor_line(), row, "to the row it started on");
     ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "C-d is the same motion");
-    ed.on_key(Key::Char('L'));
+    ed.on_key(Key::Ctrl('f'));
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "and a whole page of it");
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -8267,7 +8309,7 @@ fn paging_through_a_pipe_table_stops_at_its_last_row() {
     // this runs off the end — and stops on the last row, in its column,
     // rather than carrying on into the prose under the table.
     for _ in 0..3 {
-        ed.on_key(Key::Char('J'));
+        ed.on_key(Key::Ctrl('d'));
         assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "still column c");
     }
     assert_eq!(ed.cursor_line(), region.last, "and stopped at the last row");
@@ -8275,7 +8317,7 @@ fn paging_through_a_pipe_table_stops_at_its_last_row() {
     // …and up again, which stops at the header rather than in the blank
     // line above it. `C-f` and `C-b` are the same motion by another name.
     for _ in 0..3 {
-        ed.on_key(Key::Char('K'));
+        ed.on_key(Key::Ctrl('u'));
         assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "coming back");
     }
     assert_eq!(ed.cursor_line(), region.first, "the header is the top");
@@ -8289,12 +8331,13 @@ fn paging_through_a_pipe_table_stops_at_its_last_row() {
     }
     assert_eq!(ed.cursor_line(), region.first, "and C-b back");
 
-    // `L` and `H` are the whole page rather than half of it, and page the
-    // same way — down and up the rows, not across the columns.
-    ed.on_key(Key::Char('L'));
+    // `C-f`/`C-b` are the whole page rather than half of it, and page the
+    // same way — down and up the rows, not across the columns. (`L`/`H` did
+    // this until 2026-10-17; outside a grid they are the sentence motions.)
+    ed.on_key(Key::Ctrl('f'));
     assert_eq!(ed.cursor_line(), region.last, "a whole page down");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "in its column");
-    ed.on_key(Key::Char('H'));
+    ed.on_key(Key::Ctrl('b'));
     assert_eq!(ed.cursor_line(), region.first, "and a whole page back");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2));
 }
@@ -27162,4 +27205,5 @@ fn replacing_a_whole_file_asks_in_the_middle_of_the_page() {
     ed.on_key(Key::Char('y'));
     assert_eq!(ed.search().total, 0, "{}", ed.status());
 }
+
 
