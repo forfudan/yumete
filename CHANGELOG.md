@@ -154,6 +154,16 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **`w` in a table no longer drags the selection across the cell wall.** In `空格 t f`
+  and `空格 t t`, a word motion from a cell's last word swallowed the trailing space,
+  the wall and the next cell's cushion, and left the caret in the next cell — so `w` on
+  the `p` of `| some people | love me |` selected `eople ┆ ` and landed on the `l`. The
+  wall is a stop of its own now, exactly as it already was in a table you have not
+  entered: `w` gives `people`, then the wall, then `love`, like the comma in
+  `people,love`. Deleting the wall is still refused, as before. `h`, `l` and the arrows
+  still cross it in one press — three file characters behind one `┆`, and a caret
+  parked inside them looks stuck.
+
 - **Selecting the last word of a table cell no longer leaves a grey mark beside the
   pipe.** The padding that squares a table up hung on the end of the cell's *content*,
   so the cell's own trailing space was drawn seventeen columns further right, past all

@@ -1122,6 +1122,55 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **表格裏按詞走停得上那道牆，一格一格走照舊跳過去**（2026-10-17 作者定）。
+///
+/// 原話：「the border of the table in tf and tt mode **can be selected**
+/// (one-cell selection) but cannot be modified……something like working on
+/// `people,love`」——而這正是同一張表**沒進表格模式**時早就有的樣子。
+///
+/// 2026-09-12 把接縫整個藏了起來（`Seams`），理由是「一步看不見就不算一步」。
+/// 那一條對 `l` 成立（三個檔案位置躲在一個 `┆` 後面），對 `w` 不成立：它只落一
+/// 次，落在一個看得見的字形上，而藏起來的代價是選區跨過了那道牆。
+#[test]
+fn a_word_motion_stands_on_the_table_wall_and_a_step_still_skips_it() {
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    let table = "| a | b |\n| --- | --- |\n| some people | love me |\n";
+
+    // 進了表格模式：`w` 依次給「people」、那道牆、「love」。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    // 走到 `people` 的頭一個字母上。
+    while text(&ed) != "p" {
+        ed.on_key(Key::Char('l'));
+        assert!(ed.cursor_line() == 2, "走過頭了：{:?}", text(&ed));
+    }
+    // 每一步是「那一個詞加它後面那個空格」，helix 的 `w` 本來就是這樣；畫出來
+    // 讀作「people、那道牆、love」，光標各停在後面那個空格上。
+    for want in ["people ", "| ", "love "] {
+        ed.on_key(Key::Char('w'));
+        assert_eq!(text(&ed), want, "一步一個詞，牆也算一個");
+    }
+
+    // …而一格一格走的那幾個鍵照舊一步跨過整道牆（2026-09-12 那一條）。
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    // 走到 `people` 的**末**一個字母上——算出來的位置，不數按鍵：進表格那一
+    // 下本身會把光標挪進第一格。
+    let last = ed.current_buffer().text().find("people").expect("fixture") + 5;
+    while ed.selection().0 < last {
+        ed.on_key(Key::Char('l'));
+        assert!(ed.cursor_line() == 2, "走過頭了");
+    }
+    assert_eq!(text(&ed), "e", "停在 `people` 的末一個字母上");
+    ed.on_key(Key::Char('l'));
+    assert_eq!(text(&ed), "l", "一步跨過 `space | space`，不停在裏面");
+}
+
 /// **檔名從報告的行上去掉了，而 `gf` 照樣跳得走**（2026-10-16）。
 ///
 /// 原話：「why `文.md:` is needed if the `git-diff` shows the diff for only one

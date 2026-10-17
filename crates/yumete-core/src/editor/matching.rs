@@ -7,6 +7,34 @@
 
 use super::*;
 
+/// **一格一格走的鍵跳過接縫，按詞走的鍵停得上去**（2026-10-17 作者定）。
+///
+/// 接縫是 `space? | space?`——檔案裏三個字元，`t f`／`t t` 底下畫成一個 `┆`。
+///
+/// 2026-09-12 把它整個藏了起來，理由寫着「a step the reader cannot see is not a
+/// step」，而那句話說的是 `l`：三個檔案位置躲在一個字形後面，按一下光標不動，再
+/// 按一下忽然換了一欄。那一條**照舊**（[`Seams::Skip`]）。
+///
+/// 同一段註釋還寫着「`w` made it worse by landing there in one press」——這一句
+/// 2026-10-17 作者推翻了。`w` 落上去只落一次，而且落在一個**看得見**的字形上；
+/// 藏起來的代價反而是選區跨過了那道牆：在 `people` 的 `p` 上按一下 `w`，選中的
+/// 是「eople ┆ 」而光標跑到了下一格的 `l`（實測）。原話：「the border of the
+/// table……**can be selected** (one-cell selection) but cannot be modified……
+/// something like working on `people,love`」。
+///
+/// 而這正是同一張表**沒進表格模式**時早就有的樣子（實測：`w` 依次給
+/// `people`、`|`、`love`、`me`），也正是 `page.rs` 那一段寫着的本意：「The `|`
+/// stays: it is the character the band rule is drawn from.」刪不掉那一條也早就
+/// 在（`格與格之間的分隔符删不掉`）。所以這一刀是把 `t f`／`t t` 撥回去，不是
+/// 新定一條規矩。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Seams {
+    /// 跳過去——一格一格走的那幾個鍵（`h`/`l`/方向鍵）。
+    Skip,
+    /// 停得上去——按詞走的那幾個鍵（`w`/`b`/`e`、`f`/`t`、文本對象）。
+    Stand,
+}
+
 impl Editor {
     // ---- Match mode (Helix `m`) -------------------------------------------
 
@@ -1122,7 +1150,9 @@ impl Editor {
         flag: Option<char>,
     ) {
         let pos = motion(self.current_buffer().rope(), self.sel.head());
-        let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head());
+        // 一格一格走的那幾個鍵跳過接縫——三個字元畫成一個 `┆`，停在裏面看着
+        // 像沒動（2026-09-12）。
+        let pos = self.past_what_a_table_keeps_off(pos, pos > self.sel.head(), Seams::Skip);
         self.move_head(self.on_this_line_under_vim(pos, flag));
     }
 
@@ -1202,7 +1232,8 @@ impl Editor {
     }
 
     /// Step `at` clear of anything a table is keeping off the page, in the
-    /// direction of travel (#379).
+    /// direction of travel (#379), and whether the seam counts as 「kept off」
+    /// ([`Seams`]).
     ///
     /// **A step the reader cannot see is not a step.** Under `t f` the file's
     /// own padding comes off the page (`cell_slack_against`), so `l` through a
@@ -1213,7 +1244,7 @@ impl Editor {
     /// Only what a table keeps — see [`Editor::cell_hidden_on_line`]. Markup
     /// hidden by 所見即所得 comes back for the caret, so walking into it is
     /// the point rather than a mistake.
-    fn past_what_a_table_keeps_off(&self, at: usize, forward: bool) -> usize {
+    fn past_what_a_table_keeps_off(&self, at: usize, forward: bool, seams: Seams) -> usize {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(at.min(rope.len_chars()));
         let start = rope.line_to_char(line);
@@ -1234,7 +1265,7 @@ impl Editor {
         // after them** (`一,,木目`: the blank cell and the second comma are both
         // at 2), so hiding seams there costs the one thing a table editor is
         // most for — putting the caret in a blank cell to fill it in.
-        if self.grid_is_drawn() && self.grid_separator_is_a_pipe() {
+        if seams == Seams::Skip && self.grid_is_drawn() && self.grid_separator_is_a_pipe() {
             // **The wall itself, and the space either side of it.** Not the
             // whole gap between two cell spans — `row_cells` reports content
             // only, so that gap also holds the cell's own padding, and padding
@@ -1431,7 +1462,8 @@ impl Editor {
     /// old caret instead dragged the previous word's last character — and the
     /// punctuation between them — along with it (#304).
     pub(super) fn select_span(&mut self, from: usize, to: usize) {
-        let to = self.past_what_a_table_keeps_off(to, to > self.sel.head());
+        // **按詞走的那幾個鍵停得上接縫**（2026-10-17 作者定）——見 [`Seams`]。
+        let to = self.past_what_a_table_keeps_off(to, to > self.sel.head(), Seams::Stand);
         if !self.extend {
             self.sel.set_anchor(from);
         }
