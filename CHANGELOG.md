@@ -21,6 +21,14 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **In the full-window grid a line is a cell, and a line number is a row.** `g h`,
+  `g l` and `g s` — and so vim's `0`, `$` and `^` — go to the ends of the cell
+  rather than the ends of the row, where they used to park on a wall; `Home` and
+  `End` with them. `1G`, `2G` and `g g`/`g e` count the rows the gutter draws
+  instead of the file's lines, so `2G` is the second record even when the table
+  starts halfway down a chapter, and `g e` lands in a cell instead of on the last
+  row's `|`. Outside the window nothing changes.
+
 - **In the full-window grid, a word motion stays in its cell.** `w` `b` `e`, `f` `t`
   `F` `T`, the sentence pair `H` `L`, `{` `}` and the text objects all stop at the
   cell they started in — they used to run across the wall into the next column and
