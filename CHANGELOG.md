@@ -233,6 +233,17 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Six things the day's own table work had broken.** A `.csv` read in the full
+  window now hides its comma the way a `|` table hides its wall — the caret used to
+  stand on the separator, where the row reports the cell *before* it, so a forward
+  `w` was dragged backwards. `Tab` no longer stops in the `| --- |` row (standing
+  there was decided for `j`/`k`, which walk lines; `Tab` walks cells and that row has
+  none). A selection on a wrapped row lights every line of the record instead of
+  leaving holes where the short cells are, and a selection inside a cell that has
+  scrolled is painted where the characters actually are. In Insert, `→` can reach the
+  place at the end of a cell where appending happens. And in a `.csv` the caret is
+  drawn on the last cell's last character rather than one column past it.
+
 - Warning: **Five ways to break a table are shut, with the rule the cuts already
   follow**: an edit goes through only if the table is still a table afterwards.
   - After cutting a row, the caret was left on the next row's leading `|` — and the

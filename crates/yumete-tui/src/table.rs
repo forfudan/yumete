@@ -792,7 +792,20 @@ pub fn draw(
                         // it, the caret is not in the content at all, so it is
                         // drawn on the cell's last character and the cell
                         // stays put.
-                        let into = match (from..=to).contains(&at) {
+                        //
+                        // Warning: **`to` is inside only while appending** (2026-10-17,
+                        // found in review). It is the content's *exclusive*
+                        // end, so in Normal a caret resting there is one past
+                        // the last character — `x` in a `.csv` drew the cursor
+                        // on the padding after the last cell's `1` instead of
+                        // on the `1`. In Insert it is the place appending
+                        // happens and must be drawn.
+                        let appending = editor.mode() == yumete_core::input::Mode::Insert;
+                        let content = match appending || to == from {
+                            true => from..=to,
+                            false => from..=to.saturating_sub(1).max(from),
+                        };
+                        let into = match content.contains(&at) {
                             true => at - from,
                             false => to.saturating_sub(1).max(from) - from,
                         };
@@ -805,10 +818,19 @@ pub fn draw(
                 // A cell that merely holds the other pane's search hit does
                 // not: nothing is being typed there, and its head is what a
                 // reader needs to recognise the row by.
+                // `slid` is how many columns the cell scrolled off its own
+                // front. The caret is translated by `window_at`; the selection
+                // band has to be translated by the same amount or it paints
+                // the columns the selected characters *would* have been in
+                // (2026-10-17, found in review: with the caret at the end of a
+                // 36-character cell, `v` + nine `h` lit `01234` and the `>`
+                // while the nine selected characters were off screen).
+                let mut slid = 0u16;
                 let (shown, step_here) = match step_here.filter(|_| peek.is_none()) {
                     Some(step) => {
-                        let (shown, step, _) = window_at(whole, step, w as usize);
-                        (shown, Some(step))
+                        let (shown, moved, _) = window_at(whole, step, w as usize);
+                        slid = (step as u16).saturating_sub(moved as u16);
+                        (shown, Some(moved))
                     }
                     None => (whole.to_string(), step_here),
                 };
@@ -860,16 +882,28 @@ pub fn draw(
                     // still a heading, which is the rule everywhere else too.
                     let (la, ca) = caret_in(&parts[i], a - from);
                     let (lb, cb) = caret_in(&parts[i], b - from);
-                    if la <= k && k <= lb {
-                        let c0 = if la == k { ca as u16 } else { 0 };
+                    // **A cell the selection covers whole is lit on every
+                    // line of the row** (2026-10-17, found in review). The
+                    // line test below asks which of *this cell's* lines the
+                    // selection touches, and a one-line cell has no second
+                    // line — so on a wrapped row the short cells went dark
+                    // while the seams between them stayed lit, and the band
+                    // came out as holes with bridges. A record is one thing on
+                    // every line it occupies.
+                    let whole_cell = a <= from && to <= b;
+                    if whole_cell || (la <= k && k <= lb) {
+                        let c0 = match (la == k, whole_cell) {
+                            (true, false) => (ca as u16).saturating_sub(slid),
+                            _ => 0,
+                        };
                         // **A cell the selection runs past is lit to its box**,
                         // not to the end of its letters — the comment above
                         // says the highlight is a cell you are inside, and a
                         // row selection that stopped at each cell's last 字
                         // came out as stripes with gaps where the padding is.
                         let runs_on = b >= to;
-                        let c1 = match (lb == k, runs_on) {
-                            (true, false) => cb as u16,
+                        let c1 = match (lb == k, runs_on, whole_cell) {
+                            (true, false, false) => (cb as u16).saturating_sub(slid),
                             _ => w,
                         };
                         let stop = (x + c1).min(x + w).min(right);

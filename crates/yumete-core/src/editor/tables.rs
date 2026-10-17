@@ -2887,7 +2887,7 @@ impl Editor {
         } else if !forward && cell > 0 {
             self.go_to_cell(line, cell - 1);
         } else {
-            match (self.next_row(line, forward), forward) {
+            match (self.next_row_for(line, forward, false), forward) {
                 (Some(l), true) => self.go_to_cell(l, 0),
                 (Some(l), false) => {
                     let last = self.row_cells(l).len().saturating_sub(1);
@@ -2917,8 +2917,24 @@ impl Editor {
 
     /// The next line of the grid that holds data.
     pub(super) fn next_row(&self, line: usize, down: bool) -> Option<usize> {
+        self.next_row_for(line, down, true)
+    }
+
+    /// The same, told whether the rule row counts as a row to stop on.
+    ///
+    /// **`Tab` says no** (2026-10-17, found in review). Standing on the rule
+    /// row was decided for `j`/`k`, which walk the page a line at a time and
+    /// so have to account for every line the page draws. `Tab` walks *cells*,
+    /// and the rule row has none worth filling in — every keystroke there is
+    /// refused — so inheriting the decision cost three presses of nothing
+    /// between the header and the first row of data.
+    pub(super) fn next_row_for(&self, line: usize, down: bool, rule_counts: bool) -> Option<usize> {
         if let Some(region) = self.prose_region() {
-            return self.md_next_row(&region, line, down);
+            let mut want = self.md_next_row(&region, line, down)?;
+            if !rule_counts && region.is_rule(want) {
+                want = self.md_next_row(&region, want, down)?;
+            }
+            return Some(want);
         }
         let last = motion::last_line(self.current_buffer().rope());
         if down {

@@ -5846,8 +5846,11 @@ fn t_says_whether_a_step_is_a_cell_or_a_character() {
     assert_eq!(ed.char_at_cursor(), Some('目'));
 
     // Back to the head of the cell, still one character at a time.
+    // Warning: **one `l`, not two** (2026-10-17). The comma used to be a stop of its
+    // own; in 全窗 the separator is not an object at all, for a delimited
+    // file as for a `|` one — see `kept_off_on_line`.
     ed.goto_line(2);
-    press(&mut ed, "ll");
+    press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('⿰'));
 
     // `T` back, and the cursor snaps to cells again.
@@ -5995,7 +5998,11 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     // The one that asks it is `t?`, two lines below.
     let was = ed.peeked_line();
     ed.execute("3").unwrap();
-    press(&mut ed, "l");
+    // Warning: **no `l` before the `Tab`** (2026-10-17). It used to take one press to
+    // reach the comma and a `Tab` to cross it; in 全窗 the separator is not
+    // an object, so that `l` was already in cell 2 and the `Tab` wrapped to
+    // the row below. `Tab` alone is what 「the next cell」 was always meant to
+    // be here.
     ed.on_key(Key::Tab);
     press(&mut ed, "ll");
     assert_eq!(ed.char_at_cursor(), Some('目'));

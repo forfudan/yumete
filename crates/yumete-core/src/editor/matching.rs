@@ -1323,7 +1323,26 @@ impl Editor {
         // the whole `space | space` stays off every motion, caret and edge
         // alike. At 全 it is text that happens to be drawn as a rule, and the
         // rule above applies: the `|` owns its column, the spaces do not.
+        //
+        // **A delimited file's separator counts too, in the pane** (2026-10-17,
+        // found in review). The warning above said 「a `|` table only」 because
+        // an empty cell in `一,,木目` sits at the same offset as the comma
+        // after it, and hiding the comma hid the one slot there is for filling
+        // that cell in. The `keep` split below now protects every cell's start
+        // outright, so that reason is spent — and leaving the comma a stop
+        // broke the pane's own rule twice over: the caret stood on a `┆`, and
+        // `cell_position` reported the cell *before* it, so `select_span`'s
+        // clamp dragged a forward `w` **backwards** (measured: `lll` onto the
+        // comma, then `w` back onto `t`).
         let pane = self.grid_has_the_pane();
+        if pane && self.grid_is_drawn() && !self.grid_separator_is_a_pipe() {
+            if let Some(Separator::Delimiter(d)) = self.table.as_ref().map(|v| v.separator) {
+                let text = crate::motion::line_text(rope, line);
+                for (at, _) in text.chars().enumerate().filter(|&(_, c)| c == d) {
+                    hidden.push((at, at + 1));
+                }
+            }
+        }
         if (pane || what == Stepping::Caret)
             && self.grid_is_drawn()
             && self.grid_separator_is_a_pipe()
@@ -1367,10 +1386,20 @@ impl Editor {
         // table. Putting the caret in a blank cell to fill it in is the one
         // thing a table editor is most for, so no span may swallow the offset
         // a cell begins at.
+        // **In Insert the cell's far end is kept too** (2026-10-17, found in
+        // review). That offset is the space beside the wall, which the pane
+        // hides — and it is also the one place appending happens, so `→` in
+        // Insert could never reach the end of a cell: it stepped from the
+        // last character straight into the next column. `step_grid_row` got
+        // the same exception for `j`/`k` when it was written.
+        let appending = self.mode == crate::editor::Mode::Insert;
         let keep: Vec<usize> = self
             .row_cells(line)
             .into_iter()
-            .map(|(from, _)| from)
+            .flat_map(|(from, to)| match appending && to > from {
+                true => vec![from, to],
+                false => vec![from],
+            })
             .collect();
         if !keep.is_empty() {
             let mut split = Vec::with_capacity(hidden.len());
@@ -1663,7 +1692,13 @@ impl Editor {
         // press reads its bounds off that head, and a head parked on the
         // boundary read the *next* cell's bounds and escaped on the second
         // press.
-        let held = self.cell_the_caret_is_in();
+        // Only when the caret really is in the cell its row reports. A caret
+        // sitting on a separator reports the cell *before* it, and clamping to
+        // that one turns a forward motion into a backward one.
+        let here = self.sel.head();
+        let held = self
+            .cell_the_caret_is_in()
+            .filter(|&(first, last)| (first..=last).contains(&here));
         let to = self.past_what_a_table_keeps_off(to, to > self.sel.head(), Stepping::Edge);
         let (from, to) = match held {
             Some((first, last)) => {
