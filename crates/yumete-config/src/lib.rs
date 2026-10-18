@@ -2762,17 +2762,25 @@ pub fn data_search_dirs() -> Vec<PathBuf> {
 /// somebody put the data there」: what the reader named beats what a convention
 /// found, and what was installed *for yumete* beats another application's.
 /// `:yume-where` prints the layers under these names, because a reader whose
-/// data is not being picked up cannot otherwise see which of six places the
+/// data is not being picked up cannot otherwise see which of the places the
 /// editor looked.
+///
+/// Warning: **`~/.local/share/yumete` is not one of them** (2026-10-18). It was,
+/// and it outranked the 宇浩 input method's own directory — so a reader who
+/// once copied tables there kept using that copy for ever, while the IME's
+/// package updated underneath him and nothing said a word. A Linux reader hit
+/// exactly that: `yuman yume update` fetched a current package and his 拼音
+/// stayed broken, because a year-old copy sat one layer above it. The
+/// directory is still yumete's own (the word list and the sessions live
+/// there); it is no longer somewhere 碼表 are looked for. A reader who wants
+/// to name a directory says so in `[ime] data_dirs`, which cannot happen by
+/// dropping files anywhere.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataSource {
     /// `[ime] data_dirs` — the reader said so in the config.
     Config,
     /// `$YUMETE_DATA_DIR` — the reader said so for this run.
     Env,
-    /// `~/.local/share/yumete` — yumete's own data directory, which
-    /// `scripts/build.sh` fills.
-    Own,
     /// `<prefix>/share/yumete` — installed beside the binary, which is where
     /// a `yume-data` formula lands.
     Prefix,
@@ -2797,7 +2805,6 @@ pub fn data_search_layers() -> Vec<SearchDir> {
     };
     add(DataSource::Config, NAMED_DATA_DIRS.get().cloned().unwrap_or_default());
     add(DataSource::Env, env_data_dirs());
-    add(DataSource::Own, vec![data_dir()]);
     add(DataSource::Prefix, installed_data_dirs());
     #[cfg(windows)]
     add(
@@ -4344,7 +4351,11 @@ mod tests {
     #[test]
     fn named_directories_are_searched_before_the_conventional_ones() {
         let dirs = data_search_dirs();
-        assert!(dirs.contains(&data_dir()), "{dirs:?}");
+        // Warning: **`data_dir()` is not among them** (2026-10-18). It is yumete's own
+        // directory — the word list and the sessions live there — and it used to
+        // be searched for 碼表 as well, one layer above the input method's. A
+        // stale copy dropped there then shadowed a package that kept updating.
+        assert!(!dirs.contains(&data_dir()), "碼表不在那裏找：{dirs:?}");
         let mut seen = std::collections::HashSet::new();
         assert!(
             dirs.iter().all(|d| seen.insert(d.clone())),

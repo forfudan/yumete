@@ -5,7 +5,10 @@
 # a Homebrew tap.
 #
 # By default it also compiles the Yume IME data tables and installs them into the
-# user data directory (~/.local/share/yumete) so CJK input works in the editor.
+# user data directory (~/.local/share/yumete). Warning: **that directory is no longer
+# searched for 碼表** (2026-10-18) — it shadowed the input method's own copy —
+# so unless the 宇浩 IME is installed, name it under `[ime] data_dirs`; this
+# script prints the line. The word list there is still read from it.
 # Pass --no-data (or set YUMETE_SKIP_DATA=1) to build only the binary.
 #
 # Finally it points ~/.local/bin/yumete — and ~/.local/bin/ye, the short name —
@@ -255,6 +258,43 @@ install_ime_data() {
 
   echo "==> IME data installed ($(ls -1 "$schemes"/*.ytab 2>/dev/null | wc -l | tr -d ' ') table(s), \
 $(ls -1 "$schemes"/*.toml 2>/dev/null | wc -l | tr -d ' ') scheme(s) in $dest)"
+
+  # Warning: **yumete 不再把這個目錄當碼表的來源**（2026-10-18）。它從前排在搜索順序
+  # 的最前面，於是誰往裏拷過一份，那一份就永遠壓着宇浩輸入法自己那份——而後者是
+  # 跟着安裝包更新的。一位 Linux 用戶正是這麼卡住的：包更新了，拼音照樣不能用。
+  #
+  # 詞表還在這裏讀（`keep_word_list_in`），所以這一步照舊；只有碼表那一半要自己
+  # 指一句。裝了宇浩輸入法的人什麼都不用做——那一層本來就找得到。
+  #
+  # ⚠ **不替人改 config.toml**：TOML 的鍵歸最近的表頭，追加一段 `[ime]` 會把後面
+  # 本來屬於別的表頭的鍵吃掉。印出來讓人自己貼。
+  if ! yumete_config_names_the_data_dir "$dest"; then
+    echo "    碼表要被讀到，還差一句——裝了宇浩輸入法就不用管，没裝就往"
+    echo "    $(config_file) 裏寫："
+    echo ""
+    echo "      [ime]"
+    echo "      data_dirs = [\"$dest\"]"
+    echo ""
+  fi
+}
+
+# 配置檔在哪——和 `yumete_config::config_dir` 同一條規矩。
+config_file() {
+  if [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+    echo "$XDG_CONFIG_HOME/yumete/config.toml"
+  elif [[ "$WINDOWS" == "1" && -n "${APPDATA:-}" ]]; then
+    echo "$(to_unix_path "$APPDATA")/yumete/config.toml"
+  else
+    echo "$HOME/.config/yumete/config.toml"
+  fi
+}
+
+# `[ime] data_dirs` 裏已經有這個目錄了嗎 —— 問得粗（只看字面），因為答錯的代價
+# 只是多印四行提示。
+yumete_config_names_the_data_dir() {
+  local dir="$1" file
+  file="$(config_file)"
+  [[ -f "$file" ]] && grep -q "data_dirs" "$file" && grep -qF "$dir" "$file"
 }
 
 # **Data first, then the build.** Both `build.rs`es read the installed tables

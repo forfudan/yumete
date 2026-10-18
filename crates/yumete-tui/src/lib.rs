@@ -3864,13 +3864,23 @@ fn where_report(ime: &ImeSession) -> String {
     let _ = writeln!(out, "{}\n", say!("yume.where.head"));
     let mut last: Option<DataSource> = None;
     let mut nth = 0;
-    for found in yumete_config::data_search_layers() {
+    // **The first layer is drawn even when it is empty** (2026-10-18). It is the
+    // one place a reader may name for himself, and the page is where he finds
+    // out that he can: an unset layer that is simply missing teaches nothing,
+    // and the layer it replaced — `~/.local/share/yumete` — taught the wrong
+    // thing by being writable with a file copy.
+    let layers = yumete_config::data_search_layers();
+    if !layers.iter().any(|l| l.source == DataSource::Config) {
+        nth += 1;
+        let _ = writeln!(out, "{}", say!("yume.where.layer", nth, say!("yume.where.from.config")));
+        let _ = writeln!(out, "    {}", say!("yume.where.not-named"));
+    }
+    for found in layers {
         if last != Some(found.source) {
             nth += 1;
             let label = match found.source {
                 DataSource::Config => say!("yume.where.from.config"),
                 DataSource::Env => say!("yume.where.from.env"),
-                DataSource::Own => say!("yume.where.from.own"),
                 DataSource::Prefix => say!("yume.where.from.prefix"),
                 DataSource::BesideExe => say!("yume.where.from.beside-exe"),
                 DataSource::Yume => say!("yume.where.from.yume"),
@@ -4112,11 +4122,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             *ime = full;
             return say!("ime.scheme-now", name);
         }
-        return say!(
-            "scheme.table-not-installed",
-            tag,
-            yumete_config::data_dir().display()
-        );
+        return say!("scheme.table-not-installed", tag);
     }
     let was = ime.scheme();
     if ime.set_scheme(scheme) {
@@ -4124,11 +4130,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     }
     // Put back what was working rather than leaving the writer unable to type.
     ime.set_scheme(was);
-    say!(
-        "scheme.table-not-installed",
-        tag,
-        yumete_config::data_dir().display()
-    )
+    say!("scheme.table-not-installed", tag)
 }
 
 /// Route one Insert-mode key press to the IME. Returns `true` when the IME

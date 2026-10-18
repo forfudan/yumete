@@ -8643,14 +8643,11 @@ zhs = "正在打的那一段 {0}"
 en = "preedit {0}"
 
 [[message]]
-# 換方案時碼表没裝
+# 這個方案的碼表没有裝——怎麼裝
 key = "scheme.table-not-installed"
-zht = "{0} 的碼表没有裝——放進 {1}，或者把自己的碼表放進 .yumete/"
-zhs = "{0} 的码表没有装——放进 {1}，或者把自己的码表放进 .yumete/"
-en = "{0}'s table is not installed — put it in {1}, or a table of your own in .yumete/"
-
-
-# ── search ────────────────────────────────────────────────────────────
+zht = "{0} 的碼表没有裝——裝一份宇浩輸入法，或者在 `[ime] data_dirs` 裏寫上碼表所在的目錄"
+zhs = "{0} 的码表没有装——装一份宇浩输入法，或者在 `[ime] data_dirs` 里写上码表所在的目录"
+en = "no 碼表 installed for {0} — install the 宇浩 input method, or name the directory your tables are in under `[ime] data_dirs`"
 
 [[message]]
 # 跨檔替換做到一半按了 Esc：接着做下去的那一條
@@ -12660,13 +12657,6 @@ zhs = "环境变量 $YUMETE_DATA_DIR"
 en = "$YUMETE_DATA_DIR"
 
 [[message]]
-# `:yume-where`：yumete 自己的數據目録(scripts/build.sh 裝在這裏)
-key = "yume.where.from.own"
-zht = "yumete 自己的數據目録(scripts/build.sh 裝在這裏)"
-zhs = "yumete 自己的数据目录(scripts/build.sh 装在这里)"
-en = "yumete's own data directory (scripts/build.sh fills it)"
-
-[[message]]
 # `:yume-where`：裝在可執行文件的 prefix 裏(brew install yume-data)
 key = "yume.where.from.prefix"
 zht = "裝在可執行文件的 prefix 裏(brew install yume-data)"
@@ -12707,6 +12697,13 @@ key = "yume.where.no-table"
 zht = "未掛載碼表"
 zhs = "未挂载码表"
 en = "no 碼表 mounted"
+
+[[message]]
+# `:yume-where`：第一層空着——那一層只有自己寫配置纔有，所以順帶說怎麼寫
+key = "yume.where.not-named"
+zht = "(没有寫——要自己指一個目錄，就在 `[ime] data_dirs` 裏寫)"
+zhs = "(没有写——要自己指一个目录，就在 `[ime] data_dirs` 里写)"
+en = "(not named — to point at a directory of your own, set `[ime] data_dirs`)"
 
 [[message]]
 # `:yume-where`：(没有)
