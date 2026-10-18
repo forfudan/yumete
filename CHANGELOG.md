@@ -7,7 +7,11 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## 未發布 · Unreleased
+## 0.10.0 · 2026-10-18
+
+Seven commits, the day after 0.9.0. The input method's keys gathered under one
+`空格` group, a second group for what you had open before, and a data page that
+says enough to diagnose an install from a screenshot.
 
 ### Added
 
@@ -33,8 +37,6 @@ in `docs/development.md` §5.2.
   `:resume` takes up a session that was interrupted, where `:continue` would be
   asking to continue something that never stopped.
 
-### Changed
-
 - Warning: **Breaking: the IME's keys are one group now, `空格 z`, and `空格 空格` is
   gone.** The letter under `z` is **the letter Yume gives the same thing on its own
   ⌃⇧ chord**, so a hand that knows one knows the other: `m` when a word commits
@@ -46,6 +48,25 @@ in `docs/development.md` §5.2.
   did. The letters Yume uses for things this editor has no answer for — `O U D L H K
   J A .` and `0` — are left empty, so the day one of them arrives the key is already
   the same on both sides.
+
+- **`:yume-where` names every file it found, and the format stamp each one carries.**
+  The page used to fold the list after four names (「… 共 19 個」), and the four it
+  kept were never the ones in question: a reader whose 拼音 has gone missing needs to
+  see `data/pinyin.yflb` on the list, not a count. Each line is now the path **as it
+  was found**, so the two layouts in the wild are told apart at a glance — 宇浩's own
+  tree and the macOS bundle keep `data/pinyin.yflb`, an older Linux install lays the
+  same file flat — followed by the file's magic (`YTB20260828`, `YFL20260913`). A
+  table one format generation behind is refused by the engine with nothing said but
+  「bad magic」; now the page says which generation it is, and a report about an
+  install that types no 拼音 can be one screenshot.
+
+### Fixed
+
+- **`--shot` waits for the file picker's walk.** `ye --files PAT --open --shot`
+  photographed 「没有符合的」 and a turning spinner on a tree the pipe walks in eleven
+  milliseconds: a still picture waited for the search's background walk but not the
+  picker's, which moved off the drawing thread three days later. Driving the picker
+  with `--keys` was never affected.
 
 ## 0.9.0 · 2026-10-17
 

@@ -25,7 +25,7 @@ commands do, how vertical layout works, and how to configure it.
 
 ## Status
 
-A working editor, used daily by its author, and not finished. **v0.9.0** is the
+A working editor, used daily by its author, and not finished. **v0.10.0** is the
 current release: `brew install forfudan/tap/yumete`, or a tarball from the
 [releases page](https://github.com/forfudan/yumete/releases), or build it from
 source (below). What each release changed is in
