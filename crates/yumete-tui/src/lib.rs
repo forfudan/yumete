@@ -5119,6 +5119,7 @@ fn draw(
         // ratatui 就把它藏起來（`Terminal::draw` 裏 `None => hide_cursor()`）。
         // 打字的時候由下面那一段設回來。
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
+        the_caret_reads_back(editor, config, area, viewport, (cursor_x, cursor_y));
         // **A block is painted into the page; a bar is the terminal's.**
         //
         // The vertical page has always painted its own block, and 2026-10-16
@@ -7584,6 +7585,66 @@ fn draw_lookfor_menu(
 /// Worked out the same way the page was drawn — the sidebar's columns, the tab
 /// bar's row, the gutter, and then the row model itself — rather than
 /// remembered from the last frame, which could be a frame out of date.
+/// **Does the cell the caret was painted in read back as the caret?**
+///
+/// The page maps a character forward to a cell, and the mouse maps a cell back
+/// to a character ([`text_at`]) — two walks over one page, which have to
+/// agree. 2026-10-19 they stopped agreeing and the only report possible was a
+/// photograph: the block stood a row below the character `d` would have
+/// deleted, at random, in a state nobody could open again. Nothing in the
+/// editor was wrong; one of the two walks was, and a picture cannot say which.
+///
+/// So the frame asks itself. In a build with debug assertions it is a panic,
+/// which makes **every `--shot` picture and every golden frame** a test of
+/// this; in a release build it is one line in the log with the keys that led
+/// there, so the next sighting arrives as state instead of a screenshot.
+///
+/// Warning: **The caret past the last character of its line is exempt.** There
+/// is no character under it to read back — `text_at` answers with the last one
+/// on the row, which is the right answer to 「what did I click」 and the wrong
+/// one to ask here.
+///
+/// One inverse walk per frame, on the page the reader is looking at.
+fn the_caret_reads_back(
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    seats: &Seats,
+    at: (u16, u16),
+) {
+    let rope = editor.current_buffer().rope();
+    let want = editor.cursor();
+    if want >= rope.len_chars() || rope.char(want) == '\n' {
+        return;
+    }
+    let mouse = ratatui::crossterm::event::MouseEvent {
+        kind: MouseEventKind::Moved,
+        column: at.0,
+        row: at.1,
+        modifiers: KeyModifiers::NONE,
+    };
+    let size = ratatui::layout::Size::new(area.width, area.height);
+    let Some(back) = text_at(editor, config, Some(size), seats, mouse) else {
+        return;
+    };
+    if back == want {
+        return;
+    }
+    let line = |c: usize| rope.char_to_line(c.min(rope.len_chars()));
+    let body = format!(
+        "painted at ({}, {}) for char {want} on line {}, \
+         but that cell reads back as char {back} on line {}\n\
+         keys: {}",
+        at.0,
+        at.1,
+        line(want) + 1,
+        line(back) + 1,
+        yumete_core::diag::recent_keys(),
+    );
+    debug_assert!(false, "{body}");
+    yumete_core::diag::note("caret drawn off the character it is on", &body);
+}
+
 fn text_at(
     editor: &Editor,
     config: &Config,
@@ -7597,7 +7658,16 @@ fn text_at(
     // how a click came to land a row or two from where it was pointed.
     // …and the work area it landed in, which with two of them is the one
     // question a click has to answer before any of the others.
-    let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0);
+    //
+    // Warning: **包括表頭那兩行**（2026-10-19，`the_caret_reads_back` 當場抓到
+    // 的）。這裏從前寫死 `0`，而 `draw` 給的是真的——於是 `|` 表的表頭一捲出
+    // 去，整頁往下兩行而點擊照舊按没有表頭算，**每一下都落在低兩行的那一行
+    // 上**。這一支和 `draw` 問的是同一句話，就要拿同一個答案。
+    let top = seats[editor.live_pane().min(1)].top.line;
+    let head_rows =
+        2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
+    let areas =
+        page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows);
     let live = editor.live_pane().min(1);
     let area = areas.panes[live];
     if mouse.column < area.x
@@ -10878,10 +10948,6 @@ fn draw_horizontal(
         Vec::new()
     };
 
-    let readings_above = wrap::rows_from(rope, *viewport, measure, cursor_row + 1)
-        .iter()
-        .filter(|row| row_has_reading(editor, rope, row))
-        .count();
     // 焦點模式 (#246): every row but the paragraph being written stands back a
     // rung — the same `faded()` a peeked pane recedes by, a row at a time.
     // **The 段, not the row**: a wrap point is not a unit of writing, and a
@@ -10907,6 +10973,27 @@ fn draw_horizontal(
         (Some((_, a)), Some((_, b))) => Some((a.start, b.end)),
         _ => None,
     };
+    // **The caret's screen row is read off the list the page was drawn from**
+    // (2026-10-19). It used to be worked out again — `wrap::distance`, then
+    // `page_inset`, then a correction loop, then a third walk counting the
+    // readings above — while the text came out of `on_screen`, which had
+    // already spent a screen row on every row and every reading. Two
+    // derivations of one rule, which is the same thing the caret's *column*
+    // was fixed for below, and they disagreed: the block was painted a row
+    // below the character the editor was standing on, so `d` deleted a
+    // character the caret was not drawn on.
+    //
+    // A row that is not on the page has no right answer — `rows_on_screen`
+    // drops the last row when its reading would not fit — so the caret goes
+    // to the bottom of what *was* drawn, which is where clamping used to put
+    // it anyway.
+    let caret_row = on_screen
+        .iter()
+        .find(|(_, row)| {
+            row.line == cursor_pos.line && row.index_in_line == cursor_pos.index_in_line
+        })
+        .or_else(|| on_screen.last())
+        .map_or(0, |&(y, _)| y);
     for (_, row) in on_screen {
         // Which palette this row is drawn off. Everything below asks `ink`, so
         // the whole of 焦點模式 is this one decision. The gutter goes with the
@@ -11813,11 +11900,11 @@ fn draw_horizontal(
         .min(text_area.width.saturating_sub(1) as usize);
     (
         text_area.x + x as u16,
-        // …in **screen** rows: a reading takes a row of its own above the row
-        // it reads, so a caret placed by wrap-row index sat one row high for
-        // every reading above it — and in Insert that is the terminal's own
-        // cursor, so the characters appeared on a different row from the bar.
-        text_area.y + (cursor_row + readings_above).min(last_row) as u16,
+        // …in **screen** rows, taken off `on_screen` where the page itself
+        // took them: a reading spends a row of its own above the row it
+        // reads, and counting those again here is what put the caret on the
+        // wrong row.
+        text_area.y + caret_row.min(last_row) as u16,
     )
 }
 
@@ -14686,6 +14773,24 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
         editor
+    }
+
+    /// **The net itself is not cut.** [`the_caret_reads_back`] runs on every
+    /// frame this crate draws, so all of these tests are its net — and a net
+    /// that stopped catching anything would look exactly like a green run.
+    /// This hands it a cell the caret is not in and expects it to say so.
+    #[test]
+    #[should_panic(expected = "reads back as")]
+    fn the_frame_says_so_when_the_caret_is_drawn_off_its_character() {
+        let config = Config::default();
+        let mut editor = editor_with("一行\n二行\n三行\n");
+        editor.set_wrap_width(20);
+        let area = Rect::new(0, 0, 24, 8);
+        let seats = Seats::default();
+        // The caret is on line 1; row 0 of the page is where it is drawn. Row
+        // 1 holds a different character, which is the whole complaint.
+        let at = (gutter_width(editor.current_buffer().line_count(), config.editor.line_numbers, false) as u16, 1);
+        the_caret_reads_back(&editor, &config, area, &seats, at);
     }
 
     /// #375/#377: the status line never hands the terminal a character it

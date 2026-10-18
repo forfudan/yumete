@@ -294,6 +294,8 @@ pub fn char_at(
             // the pointer is on rather than from its first.
             let want = mouse.column.saturating_sub(x) as usize;
             let held = parts.get(i).cloned().unwrap_or_default();
+            // **…plus what the cell scrolled off its own front** ([`slid_by`]).
+            let want = want + slid_by(editor, line, i, on, &held, w as usize);
             let before: usize = held.iter().take(on).map(|l| l.chars().count()).sum();
             let from = span.0 + before;
             let to = match held.get(on) {
@@ -781,36 +783,7 @@ pub fn draw(
                 // so a caret anywhere else is drawn at the nearest place in
                 // the content.
                 let step_here = here
-                    .then(|| {
-                        let (from, to) = editor
-                            .cell_span(line, i)
-                            .unwrap_or((usize::MAX, usize::MAX));
-                        let at = editor.cursor();
-                        // Inside the cell it counts for itself — that is the
-                        // caret being typed with, and a cell exactly as wide
-                        // as its column must still scroll to show it. Outside
-                        // it, the caret is not in the content at all, so it is
-                        // drawn on the cell's last character and the cell
-                        // stays put.
-                        //
-                        // Warning: **`to` is inside only while appending** (2026-10-17,
-                        // found in review). It is the content's *exclusive*
-                        // end, so in Normal a caret resting there is one past
-                        // the last character — `x` in a `.csv` drew the cursor
-                        // on the padding after the last cell's `1` instead of
-                        // on the `1`. In Insert it is the place appending
-                        // happens and must be drawn.
-                        let appending = editor.mode() == yumete_core::input::Mode::Insert;
-                        let content = match appending || to == from {
-                            true => from..=to,
-                            false => from..=to.saturating_sub(1).max(from),
-                        };
-                        let into = match content.contains(&at) {
-                            true => at - from,
-                            false => to.saturating_sub(1).max(from) - from,
-                        };
-                        caret_in(&parts[i], into)
-                    })
+                    .then(|| caret_step_in(editor, line, i, &parts[i]))
                     .filter(|(at, _)| *at == k)
                     .map(|(_, step)| step);
                 let whole = parts[i].get(k).map(String::as_str).unwrap_or("");
@@ -1229,6 +1202,62 @@ pub fn draw_detail(
 /// Warning: **Both marks earn their column** — see [`HEAD_MARK`], which was taken
 /// out on 2026-10-17 and put back the same day once a real frame showed what
 /// `>` alone cannot say.
+/// **Where the caret stands inside a cell** — which of the cell's drawn lines
+/// it is on, and how far into that line, in the cell's own characters.
+///
+/// One answer, because two things need it and they have to agree: the page
+/// scrolls the caret's own cell by it ([`window_at`]), and [`char_at`] has to
+/// take the same amount back off a click. They did not agree — the hit test
+/// had never heard of the scroll, so a click in a long cell the caret had
+/// scrolled landed on a character that was off the left edge (2026-10-19,
+/// caught by `the_caret_reads_back` the hour it was armed).
+///
+/// Warning: **Clamped into the cell** (2026-10-17). The caret's file offset is not
+/// always inside the cell the row says it is in: `x` selects the whole line
+/// and leaves the head on the row's last `|`, which is past the last cell's
+/// content. Counting from the cell's start then gave a step beyond its text,
+/// and `window_at` read that as 「the caret has been carried past the column」
+/// and scrolled the cell — `dog` drew as `<g` for a row nobody was typing in.
+/// 全窗 is a view of the content, so a caret anywhere else is drawn at the
+/// nearest place in the content.
+///
+/// Warning: **`to` is inside only while appending** (2026-10-17, found in review).
+/// It is the content's *exclusive* end, so in Normal a caret resting there is
+/// one past the last character — `x` in a `.csv` drew the cursor on the
+/// padding after the last cell's `1` instead of on the `1`. In Insert it is
+/// the place appending happens and must be drawn.
+fn caret_step_in(editor: &Editor, line: usize, cell: usize, parts: &[String]) -> (usize, usize) {
+    let (from, to) = editor.cell_span(line, cell).unwrap_or((usize::MAX, usize::MAX));
+    let at = editor.cursor();
+    let appending = editor.mode() == yumete_core::input::Mode::Insert;
+    let content = match appending || to == from {
+        true => from..=to,
+        false => from..=to.saturating_sub(1).max(from),
+    };
+    let into = match content.contains(&at) {
+        true => at - from,
+        false => to.saturating_sub(1).max(from) - from,
+    };
+    caret_in(parts, into)
+}
+
+/// **How far the caret's own cell has scrolled off its own front**, in cells.
+///
+/// Zero everywhere else: a cell nobody is typing in keeps its head, which is
+/// what a reader recognises the row by.
+fn slid_by(editor: &Editor, line: usize, cell: usize, on: usize, parts: &[String], room: usize) -> usize {
+    if editor.cell_position() != Some((line, cell)) {
+        return 0;
+    }
+    let (k, step) = caret_step_in(editor, line, cell, parts);
+    if k != on {
+        return 0;
+    }
+    let whole = parts.get(k).map(String::as_str).unwrap_or("");
+    let (_, moved, _) = window_at(whole, step, room);
+    step.saturating_sub(moved)
+}
+
 fn window_at(line: &str, caret: usize, room: usize) -> (String, usize, bool) {
     let head = yumete_cjk::str_width(yumete_core::mdtable::HEAD_MARK);
     let fold = yumete_cjk::str_width(yumete_core::mdtable::FOLD_MARK);
