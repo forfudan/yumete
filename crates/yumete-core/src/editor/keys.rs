@@ -1027,6 +1027,18 @@ impl Editor {
                 let head = motion::prev_grapheme(rope, start);
                 match rope.char(head.min(rope.len_chars().saturating_sub(1))) == '\n' {
                     false => motion::Span::Over { anchor: target, head },
+                    // Warning: **上一行是空的就別再退**（2026-10-18 拿 nvim 量出來的）。
+                    // 退那一步是為了 `j0db`：上一行有字，終點該落在它的末一**格**，
+                    // 而不是那個換行符。上一行空着的時候，那個換行符**就是**整行，
+                    // 退過去就連下一個換行一起吃，兩行焊成一行——`))d(` 156 條錯的
+                    // 都是這個。
+                    true if motion::line_start(rope, head) == head => {
+                        // 那一行整個就是一個換行符，取的正是「一整行（空的）」，
+                        // 所以交給整行那一支——零寬的跨度會被底下那道閘擋掉，
+                        // 做出「按了没反應」。
+                        let line = rope.char_to_line(head);
+                        return self.do_vim_lines(op, line, line);
+                    }
                     true => motion::Span::Over {
                         anchor: target,
                         head: motion::prev_grapheme(rope, head),
@@ -1059,7 +1071,29 @@ impl Editor {
                     let span = motion::Span::Over { anchor: start.min(at), head: at };
                     return self.do_vim_span(op, span, Shape::Lines);
                 }
-                let end = match crossed {
+                // Warning: **行末那道夾子是給詞的，不是通則**（2026-10-18 拿 nvim 量
+                // 出來的）。`:h word-motions` 那一條只說「最後走過的那個**詞**在行
+                // 末」，而這裏把它套在了每一個往前的排他動作上，於是 `d}` 184 條全
+                // 錯、`d)` 錯 148 條——兩個都該走到下一段/下一句的頭上，卻被收回起
+                // 點那一行的末尾。
+                //
+                // 其餘排他動作走 vim 自己的通則（`:h exclusive`）：終點落在第 1 欄，
+                // 終點退到**終點前一行**的末尾、動作變成包含式；起點又在首個非空白
+                // 之前的話，整個變成整行。注意退的是**終點**前一行，不是起點那一行
+                // ——兩者在跨一行的時候恰好相同，所以這個錯在 `dw` 上看不出來。
+                let word = matches!(step.motion, motion::Motion::WordForward(_));
+                let lands_on_col_1 = target == motion::line_start(rope, target);
+                if !word && crossed && lands_on_col_1 {
+                    let above = rope.char_to_line(target) - 1;
+                    let first = motion::line_first_non_blank(rope, start);
+                    if start <= first {
+                        return self.do_vim_lines(op, rope.char_to_line(start), above);
+                    }
+                    let end = motion::line_end(rope, rope.line_to_char(above));
+                    let head = motion::prev_grapheme(rope, end).max(start);
+                    return self.do_vim(op, motion::Span::Over { anchor: start, head });
+                }
+                let end = match crossed && word {
                     true => motion::line_end(rope, before),
                     false => target,
                 };
