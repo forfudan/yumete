@@ -2064,7 +2064,24 @@ impl Editor {
             // 來的 `H` 又被上面那一支接住，`)` 跳到屏幕底下去了。自己一支最清楚。
             Key::Char(one @ ('(' | ')')) if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                 self.repeat(count, |e| {
-                    let span = e.run_motion(motion::Motion::Sentence { forward: one == ')' });
+                    // Warning: **`Reading::Caret`, not the selection reading** (2026-10-18).
+                    // vim's `)` *goes to* the next sentence's first character; this
+                    // editor's sentence motion *selects a sentence* (#404), which is
+                    // helix's reading and what `H`/`L` keep. Asking the selection
+                    // reading here left the caret on the full stop that ends the
+                    // sentence before, one cell short, and every operator built on it
+                    // inherited the error: against nvim, `d)` differed in 148 of 184
+                    // cases and `))d(` in all 184.
+                    //
+                    // **The two readings already exist** (B3) — `w` has the same split,
+                    // 「vim 的 `w` 獨立的時候是跳轉，在命令中是選詞」 — so this is the
+                    // question being put the way vim puts it, not a new behaviour. The
+                    // sentence *object* and helix's `H`/`L` are untouched, which is why
+                    // this did not have to wait on #404.
+                    let span = e.read_motion(
+                        motion::Motion::Sentence { forward: one == ')' },
+                        motion::Reading::Caret,
+                    );
                     e.take_span(span);
                 });
             }
