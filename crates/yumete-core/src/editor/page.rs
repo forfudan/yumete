@@ -529,8 +529,8 @@ impl Editor {
     /// 換掉了，所以一行寫着「`d`/`c` 不進寄存器」而 `d` 做着別的事，是做得到的。
     pub(super) fn flavor_report(&self) -> String {
         let state = match self.keymap_flavor {
-            true => say!("label.on"),
-            false => say!("label.off"),
+            true => say!("keys.flavor.on"),
+            false => say!("keys.flavor.off"),
         };
         // 一項一組鍵。集合長了就在這裏加一行，報告那一頭不用改。
         let taken: Vec<&str> = NO_YANK_KEYS
@@ -539,10 +539,10 @@ impl Editor {
             .filter(|key| self.user_aliases.contains_key(*key))
             .collect();
         let item = match taken.is_empty() {
-            true => say!("keys.flavor.no-yank"),
-            false => say!("keys.flavor.no-yank-taken", taken.join(" ")),
+            true => say!("keys.flavor.no-yank", state),
+            false => say!("keys.flavor.no-yank-taken", state, taken.join(" ")),
         };
-        say!("keys.flavor-is", state, item)
+        say!("keys.flavor-is", item)
     }
 
     /// Install the reader's own Normal-mode aliases (`[keys.normal]`).

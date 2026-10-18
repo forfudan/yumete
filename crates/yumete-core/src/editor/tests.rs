@@ -25255,7 +25255,7 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
     assert!(ed.yank_on_delete(), "出廠進寄存器，同 helix 同 vi");
     ed.execute(":keymap-yumete-flavor on").unwrap();
     assert!(!ed.yank_on_delete());
-    assert!(ed.status().contains(&say!("label.on")), "{}", ed.status());
+    assert!(ed.status().contains(&say!("keys.flavor.on")), "{}", ed.status());
 
     // `d` 只刪，寄存器裏還是剛複製的「甲」。
     press(&mut ed, "ggy");
@@ -25277,8 +25277,11 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
     // 不帶參數就報：開關 ＋ 集合裏有什麼，而且不許改它。
     let mut ed = typed("甲");
     ed.execute(":keymap-yumete-flavor").unwrap();
-    assert!(ed.status().contains(&say!("label.off")), "出廠關着：{}", ed.status());
-    assert!(ed.status().contains(&say!("keys.flavor.no-yank")), "集合裏那一項要列出來：{}", ed.status());
+    assert!(
+        ed.status().contains(&say!("keys.flavor.no-yank", say!("keys.flavor.off"))),
+        "出廠關着，而狀態寫在那一項後面：{}",
+        ed.status()
+    );
     assert!(ed.yank_on_delete(), "問一句不許改它");
 
     // **被 `[keys.normal]` 蓋過就要說出來**（2026-10-18）。一行寫着「`d` 不進寄
@@ -25287,7 +25290,7 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
     ed.set_key_aliases(std::collections::HashMap::from([("d".to_string(), "x".to_string())]));
     ed.execute(":keymap-yumete-flavor on").unwrap();
     assert!(
-        ed.status().contains(&say!("keys.flavor.no-yank-taken", "d")),
+        ed.status().contains(&say!("keys.flavor.no-yank-taken", say!("keys.flavor.on"), "d")),
         "配置綁了 d，報告要說它說了算：{}",
         ed.status()
     );
