@@ -6924,25 +6924,39 @@ zhs = "能绑定的动作"
 en = "actions"
 
 [[message]]
-# :keymap-yumete-flavor ——無參數時報：開關 ＋ 集合裏有什麼
+# :keymap-yumete-flavor ——無參數時報集合裏有什麼，狀態寫在每一項後面
 key = "keys.flavor-is"
-zht = "Yumete 鍵位風味：{0} · {1}"
-zhs = "Yumete 键位风味：{0} · {1}"
-en = "Yumete keymap flavour: {0} · {1}"
+zht = "Yumete 鍵位風味 · {0}"
+zhs = "Yumete 键位风味 · {0}"
+en = "Yumete keymap flavour · {0}"
 
 [[message]]
 # 風味集合裏的一項：`d`/`c` 不進寄存器
 key = "keys.flavor.no-yank"
-zht = "`d` `c` 不進寄存器，`A-d` `A-c` 是剪的那一對"
-zhs = "`d` `c` 不进寄存器，`A-d` `A-c` 是剪的那一对"
-en = "`d` and `c` do not fill the register; `A-d` and `A-c` are the cutting pair"
+zht = "`d` `c` 不進寄存器: {0}"
+zhs = "`d` `c` 不进寄存器: {0}"
+en = "`d` and `c` do not fill the register: {0}"
 
 [[message]]
 # 同上，但配置檔的 [keys.normal] 已經綁了它管的鍵——那一層在前面，說了算的是它
 key = "keys.flavor.no-yank-taken"
-zht = "`d` `c` 不進寄存器（`[keys.normal]` 綁了 {0}，此刻說了算的是它）"
-zhs = "`d` `c` 不进寄存器（`[keys.normal]` 绑了 {0}，此刻说了算的是它）"
-en = "`d` and `c` do not fill the register (`[keys.normal]` binds {0}, which wins)"
+zht = "`d` `c` 不進寄存器: {0}（`[keys.normal]` 綁了 {1}，此刻說了算的是它）"
+zhs = "`d` `c` 不进寄存器: {0}（`[keys.normal]` 绑了 {1}，此刻说了算的是它）"
+en = "`d` and `c` do not fill the register: {0} (`[keys.normal]` binds {1}, which wins)"
+
+[[message]]
+# 同上，關着那一頭
+key = "keys.flavor.off"
+zht = "關閉"
+zhs = "关闭"
+en = "off"
+
+[[message]]
+# 風味的兩個狀態詞——不用共用那對「開/關」，這一行是整句讀的
+key = "keys.flavor.on"
+zht = "開啟"
+zhs = "开启"
+en = "on"
 
 [[message]]
 # 按出來的那一串在這一層裏没有綁任何東西(2026-10-06 定的説法，所有的層共用)
