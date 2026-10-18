@@ -63,14 +63,33 @@ fn write_the_first_config() {
 
 /// **Start again in `there`** — the other half of `空格 o p` (2026-10-18).
 ///
-/// Only ever returns on failure: on success this process *is* the new one.
+/// Only ever returns on failure: on success this process either *is* the new
+/// one or has already waited for it and exited.
+///
+/// Warning: **`exec` is Unix-only**, and writing it without a `cfg` is how this
+/// shipped a tree that could not compile on Windows at all (2026-10-18 — CI
+/// caught it, four local gates did not, because none of them is a Windows
+/// build). Windows has no call that replaces the running image, so there the
+/// editor starts as a child and this process waits for it and leaves with its
+/// status: one extra process in the table, and the same thing seen from the
+/// shell that typed it.
 fn reopen_in(there: &std::path::Path) -> std::io::Result<()> {
-    use std::os::unix::process::CommandExt;
     std::env::set_current_dir(there)?;
     let me = std::env::current_exe()?;
     // `--resume` rather than nothing: the point of going there is the work
     // that was left there, and `[editor] session` may well be off.
-    Err(std::process::Command::new(me).arg("--resume").exec())
+    let mut born = std::process::Command::new(me);
+    born.arg("--resume");
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        Err(born.exec())
+    }
+    #[cfg(not(unix))]
+    {
+        let code = born.spawn()?.wait()?.code().unwrap_or(0);
+        std::process::exit(code)
+    }
 }
 
 fn main() -> ExitCode {
