@@ -10059,6 +10059,20 @@ zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 切换全
 en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  :q leave"
 
 [[message]]
+# 設置：Yumete 鍵位風味
+key = "set.keys.flavor"
+zht = "Yumete 鍵位風味"
+zhs = "Yumete 键位风味"
+en = "Yumete keymap flavour"
+
+[[message]]
+# 設置：Yumete 鍵位風味——一句話
+key = "set.keys.flavor.hint"
+zht = "開了之後 `d` `c` 只删不剪，要剪按 `A-d` `A-c`。剛複製好的那一段不再被一次隨手删除吃掉。`[keys.normal]` 蓋得過它"
+zhs = "开了之后 `d` `c` 只删不剪，要剪按 `A-d` `A-c`。刚复制好的那一段不再被一次随手删除吃掉。`[keys.normal]` 盖得过它"
+en = "with this on, `d` and `c` only delete and `A-d`/`A-c` are the ones that cut, so a tidy-up between a copy and a paste cannot eat the copy. `[keys.normal]` still wins"
+
+[[message]]
 # 設置：鍵位那一套
 key = "set.keys.preset"
 zht = "鍵位那一套"

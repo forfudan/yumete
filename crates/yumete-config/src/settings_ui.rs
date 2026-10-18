@@ -863,6 +863,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "keys",
+        key: "flavor",
+        group: Group::Keys,
+        kind: Kind::Tick,
+        label: "set.keys.flavor",
+        hint: "set.keys.flavor.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "keys",
         key: "preset",
         group: Group::Keys,
         kind: Kind::Pick(KEYS_PRESET_WAYS),
@@ -929,9 +938,7 @@ pub const LATER: &[&str] = &[
 pub const NOT_IN_THE_PANEL: &[&str] = &[
     "editor.screenshot",
     "editor.segmentation_threshold",
+    // **一張表，面板畫不出來**：勾和數字說不完「哪個鍵配哪個動作」。
+    // 2026-10-18 定：不進面板的只有它，風味那一格進（它只是一個勾）。
     "keys.normal",
-    // **鍵位的東西不進這扇面板**（2026-10-18 定，原話：「Don't put the keymap
-    // relevant settings in the settings TUI too」）。`keys.normal` 本來就不在，
-    // 風味跟它同一族：改鍵位是改配置檔的事，面板管的是能用勾和數字說完的設定。
-    "keys.flavor",
 ];
