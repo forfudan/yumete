@@ -1252,6 +1252,45 @@ pub fn prev_paragraph(rope: &Rope, pos: usize) -> usize {
     0
 }
 
+/// Whether a line holds no characters at all — vim's own test.
+///
+/// Not [`blank`]: a line of spaces separates nothing in vim (`:h paragraph`
+/// says 「after each empty line」, and measuring `nvim` on `a\n   \nb\nc` sends
+/// `}` straight past the spaces to the end of the file).
+fn empty(rope: &Rope, line: usize) -> bool {
+    line_text(rope, line).trim_end_matches('\n').is_empty()
+}
+
+/// **vim's `}`** — the next empty line.
+///
+/// Not [`next_paragraph`], which calls a logical line a paragraph: that is what
+/// a 中文 manuscript means by the word and what the rest of this editor works
+/// in, but vim has no soft wrap, so a vim paragraph is a run of lines with an
+/// empty one between them. The vim preset owes a vim hand that answer.
+pub fn vim_next_paragraph(rope: &Rope, pos: usize) -> usize {
+    let last = last_line(rope);
+    let mut line = line_of(rope, pos);
+    while line < last {
+        line += 1;
+        if empty(rope, line) {
+            return rope.line_to_char(line);
+        }
+    }
+    document_end(rope)
+}
+
+/// **vim's `{`** — the previous empty line, [`vim_next_paragraph`] backwards.
+pub fn vim_prev_paragraph(rope: &Rope, pos: usize) -> usize {
+    let mut line = line_of(rope, pos);
+    while line > 0 {
+        line -= 1;
+        if empty(rope, line) {
+            return rope.line_to_char(line);
+        }
+    }
+    0
+}
+
 /// Whether the character at `i` closes a sentence.
 ///
 /// The Chinese marks, and a full stop only when a space or a line end follows

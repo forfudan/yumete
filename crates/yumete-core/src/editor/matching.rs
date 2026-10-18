@@ -1795,10 +1795,19 @@ impl Editor {
             motion::Motion::WordBack(grain) if caret => {
                 at(motion::prev_word_start(rope, self.sel.head(), grain, seg))
             }
-            motion::Motion::Paragraph { forward } if caret => match forward {
-                true => at(motion::next_paragraph(rope, self.sel.head())),
-                false => at(motion::prev_paragraph(rope, self.sel.head())),
-            },
+            // **vim's paragraph is a run of lines, ours is one line** (2026-10-18).
+            // Same split as the sentence just below, and for the same reason:
+            // with soft wrap on, a logical line *is* the paragraph, while vim
+            // has no soft wrap and breaks on empty lines. `d}` was 184/184
+            // against nvim before this.
+            motion::Motion::Paragraph { forward } if caret => {
+                match (forward, self.key_preset == yumete_cjk::KeyPreset::Vim) {
+                    (true, true) => at(motion::vim_next_paragraph(rope, self.sel.head())),
+                    (false, true) => at(motion::vim_prev_paragraph(rope, self.sel.head())),
+                    (true, false) => at(motion::next_paragraph(rope, self.sel.head())),
+                    (false, false) => at(motion::prev_paragraph(rope, self.sel.head())),
+                }
+            }
             // **vim 的句子跨行，這個編輯器的不跨**（§5.97，2026-10-18）。兩端各對
             // 各的：`(`/`)` 只有 vim 鍵位按得到，`H`/`L` 只有 helix 鍵位按得到
             // （`keys.rs` 那三支的次序寫明了），所以問一句預設就把兩套分開了，
@@ -1839,11 +1848,22 @@ impl Editor {
             }
             // **Paragraphs and sentences keep the same forward rule as words**
             // (B1): it was written three times before this, once per unit.
-            motion::Motion::Paragraph { forward: true } => {
-                motion::unit_forward(rope, self.sel.head(), motion::next_paragraph)
-            }
-            motion::Motion::Paragraph { forward: false } => {
-                motion::unit_back(rope, self.sel.head(), motion::prev_paragraph)
+            motion::Motion::Paragraph { forward } => {
+                let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
+                match (forward, vim) {
+                    (true, true) => {
+                        motion::unit_forward(rope, self.sel.head(), motion::vim_next_paragraph)
+                    }
+                    (false, true) => {
+                        motion::unit_back(rope, self.sel.head(), motion::vim_prev_paragraph)
+                    }
+                    (true, false) => {
+                        motion::unit_forward(rope, self.sel.head(), motion::next_paragraph)
+                    }
+                    (false, false) => {
+                        motion::unit_back(rope, self.sel.head(), motion::prev_paragraph)
+                    }
+                }
             }
             motion::Motion::Sentence { forward: true } => {
                 motion::unit_forward(rope, self.sel.head(), motion::next_sentence)
@@ -1881,14 +1901,19 @@ impl Editor {
                     },
                 }
             }
+            // Warning: **A line motion that cannot move fails; it does not clamp**
+            // (2026-10-18 拿 nvim 量出來的). vim's `k` on the first line beeps,
+            // and a failed motion takes the whole operator with it — so `dk`
+            // there deletes nothing, while clamping made it delete the line
+            // the caret is on (184/184 against nvim).
             motion::Motion::Line { down } => {
                 let line = rope.char_to_line(self.sel.head());
                 let last = rope.len_lines().saturating_sub(1);
-                let want = match down {
-                    true => (line + 1).min(last),
-                    false => line.saturating_sub(1),
-                };
-                at(rope.line_to_char(want))
+                match down {
+                    true if line < last => at(rope.line_to_char(line + 1)),
+                    false if line > 0 => at(rope.line_to_char(line - 1)),
+                    _ => motion::Span::Missed,
+                }
             }
             motion::Motion::Object { what: motion::Object::Word { big }, around, count } => {
                 self.word_object_span(around, big, count)

@@ -20347,6 +20347,39 @@ fn vim_sentences_and_the_underscore_line() {
     assert_eq!(vim("一\n二\n三\n", "y_jp"), "一\n二\n一\n三\n");
 }
 
+/// **vim 的段落斷在空行上，這個編輯器的段落是一行**（2026-10-19）。
+///
+/// 兩個定義都對，各對各的鍵位：中文手稿一段一行、開了自動換行之後 `j`/`k` 走的
+/// 是視覺行，所以 helix 這一端的「一段」只能是邏輯行；vim 没有自動換行，它的一
+/// 段是空行隔開的那一叢（`:h paragraph`）。`d}` 對 nvim 184 格全不一樣，全是這
+/// 一條。同一支還釘住三件拿 nvim 量出來的規矩。
+#[test]
+fn vim_paragraphs_break_on_blank_lines() {
+    let vim = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed.current_buffer().text().to_string()
+    };
+    // `}` 走到空行上，而不是下一行上。
+    assert_eq!(vim("一行\n二行\n\n下一段\n", "d}"), "\n下一段\n");
+    // helix 鍵位下一段仍是一行：`}` 選中的到第一行為止，刪掉只少一行。
+    let mut ed = typed("一行\n二行\n\n下一段\n");
+    press(&mut ed, "gg}d");
+    assert_eq!(ed.current_buffer().text(), "二行\n\n下一段\n", "helix: 一段就是一行");
+    // 只有空白的一行不算邊界（nvim 實測：`a\n   \nb\nc` 上 `}` 直接走到檔尾）。
+    assert_eq!(vim("一行\n  \n二行\n", "d}"), "");
+    // 數目走不完，整個動作不做：只有一個空行的時候 `d3}` 一個字都不刪。
+    assert_eq!(vim("一行\n\n下一段\n", "d3}"), "一行\n\n下一段\n");
+    // 第一行上 `{` 退到檔首，第二下退不動——所以 `d2{` 什麼都不做。
+    assert_eq!(vim("一行\n\n下一段\n", "lld2{"), "一行\n\n下一段\n");
+    assert_eq!(vim("一行\n\n下一段\n", "lld{"), "行\n\n下一段\n");
+    // **動不了的動作把動詞一起廢掉**：第一行上 `k` 在 vim 裏是一聲響，`dk` 不刪。
+    assert_eq!(vim("一\n二\n三\n", "dk"), "一\n二\n三\n");
+    assert_eq!(vim("一\n二\n三\n", "jdk"), "三\n");
+}
+
 /// **vim 鍵位下 `q` 錄、`Q` 播，`~` 按完往前走**（2026-10-06）。
 ///
 /// 這個倉跟的是 helix 的規矩（`Q` 錄、`q` 播）。一個 vim 的手按 `q` 本來是「開始
