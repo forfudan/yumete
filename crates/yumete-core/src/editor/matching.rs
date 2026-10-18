@@ -1799,10 +1799,19 @@ impl Editor {
                 true => at(motion::next_paragraph(rope, self.sel.head())),
                 false => at(motion::prev_paragraph(rope, self.sel.head())),
             },
-            motion::Motion::Sentence { forward } if caret => match forward {
-                true => at(motion::next_sentence(rope, self.sel.head())),
-                false => at(motion::prev_sentence(rope, self.sel.head())),
-            },
+            // **vim 的句子跨行，這個編輯器的不跨**（§5.97，2026-10-18）。兩端各對
+            // 各的：`(`/`)` 只有 vim 鍵位按得到，`H`/`L` 只有 helix 鍵位按得到
+            // （`keys.rs` 那三支的次序寫明了），所以問一句預設就把兩套分開了，
+            // 不必動 #404 那個句子對象。
+            motion::Motion::Sentence { forward } if caret => {
+                let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
+                match (forward, vim) {
+                    (true, true) => at(motion::vim_next_sentence(rope, self.sel.head())),
+                    (false, true) => at(motion::vim_prev_sentence(rope, self.sel.head())),
+                    (true, false) => at(motion::next_sentence(rope, self.sel.head())),
+                    (false, false) => at(motion::prev_sentence(rope, self.sel.head())),
+                }
+            }
             motion::Motion::WordForward(grain) => {
                 motion::word_forward(rope, self.sel.head(), grain, seg)
             }

@@ -1274,6 +1274,126 @@ fn closes_a_quote(c: char) -> bool {
     )
 }
 
+/// **Does this line finish a sentence?** — trailing blanks off, then closers,
+/// and what is left must end the sentence.
+fn line_finishes_a_sentence(rope: &Rope, line: usize) -> bool {
+    let chars: Vec<char> = line_text(rope, line).chars().collect();
+    let mut end = chars.len();
+    while end > 0 && chars[end - 1].is_whitespace() {
+        end -= 1;
+    }
+    while end > 0 && closes_a_quote(chars[end - 1]) {
+        end -= 1;
+    }
+    end > 0 && ends_sentence(&chars, end - 1)
+}
+
+/// **Where a sentence begins, vim's way** — the starts on one line, given
+/// whether the line before it left a sentence open.
+///
+/// The difference from [`sentence_starts`] is the first one: there, every
+/// line's first non-blank opens a sentence, so a sentence can never cross a
+/// line break. vim's do (`:h sentence`): a sentence runs on until an ender, or
+/// until the paragraph does. `裏面` on a line of its own continues the sentence
+/// above it, and `d)` from the line above takes both — which is the whole of
+/// the 148 cases that separated this editor from nvim.
+///
+/// Warning: **the enders stay this editor's** ([`ends_sentence`]): 。！？ end a
+/// sentence with no space after them, and vim's rule — an ender *followed by*
+/// whitespace or end of line — would make 「一句。二句。」 one sentence. The
+/// structure is vim's; what counts as a full stop is Chinese.
+fn vim_sentence_starts(rope: &Rope, line: usize, chars: &[char]) -> Vec<usize> {
+    let mut starts = Vec::new();
+    // The line opens one only when nothing is carried over into it.
+    let carried = line > 0 && !blank(rope, line - 1) && !line_finishes_a_sentence(rope, line - 1);
+    // Warning: **column 0, not the first non-blank** (2026-10-18, measured against
+    // nvim). The indent belongs to the sentence it introduces: `d(` from inside
+    // the first word of `␣␣he said…` deletes the two spaces as well, and `)`
+    // from column 0 must not treat the first non-blank as somewhere to go —
+    // it is already inside that sentence. Writing it as the first non-blank
+    // cost 33 cases on `d(` and left `d)` deleting an indent and stopping.
+    if !carried && chars.iter().any(|c| !c.is_whitespace()) {
+        starts.push(0);
+    }
+    let mut i = 0;
+    while i < chars.len() {
+        if ends_sentence(chars, i) {
+            let mut j = i + 1;
+            while j < chars.len() && (closes_a_quote(chars[j]) || ends_sentence(chars, j)) {
+                j += 1;
+            }
+            while j < chars.len() && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j < chars.len() && Some(&j) != starts.last() {
+                starts.push(j);
+            }
+            i = j.max(i + 1);
+            continue;
+        }
+        i += 1;
+    }
+    starts.sort_unstable();
+    starts.dedup();
+    starts
+}
+
+/// **vim's `)`** — the next sentence's first character, or the blank line that
+/// ends the paragraph, whichever comes first.
+pub fn vim_next_sentence(rope: &Rope, pos: usize) -> usize {
+    let last = last_line(rope);
+    let mut line = line_of(rope, pos);
+    let mut after = Some(pos - rope.line_to_char(line));
+    loop {
+        let start = rope.line_to_char(line);
+        // **A blank line is a boundary**, and it is a place to stop at — vim
+        // leaves the caret on it rather than stepping over the paragraph.
+        if after.is_none() && blank(rope, line) {
+            return start;
+        }
+        let chars: Vec<char> = line_text(rope, line).chars().collect();
+        let here = after.unwrap_or(0);
+        if let Some(&at) = vim_sentence_starts(rope, line, &chars)
+            .iter()
+            .find(|&&at| at > here || after.is_none())
+        {
+            return start + at;
+        }
+        if line >= last {
+            return document_end(rope);
+        }
+        line += 1;
+        after = None;
+    }
+}
+
+/// **vim's `(`** — the first character of the sentence the caret is in, or of
+/// the one before it when the caret already sits on a first character.
+pub fn vim_prev_sentence(rope: &Rope, pos: usize) -> usize {
+    let mut line = line_of(rope, pos);
+    let mut here = Some(pos - rope.line_to_char(line));
+    loop {
+        let start = rope.line_to_char(line);
+        if here.is_none() && blank(rope, line) {
+            return start;
+        }
+        let chars: Vec<char> = line_text(rope, line).chars().collect();
+        let starts = vim_sentence_starts(rope, line, &chars);
+        let before = match here {
+            Some(col) => starts.iter().rev().find(|&&at| at < col).copied(),
+            None => starts.last().copied(),
+        };
+        if let Some(at) = before {
+            return start + at;
+        }
+        if line == 0 {
+            return 0;
+        }
+        line -= 1;
+        here = None;
+    }
+}
+
 /// Where every sentence of a line begins.
 ///
 /// `pub(crate)` because `:view-sentence` (Feature #237) lays a 縱書 page out one 句
