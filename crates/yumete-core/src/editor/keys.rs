@@ -966,6 +966,17 @@ impl Editor {
             // and `dt,` still takes that character — stopping here made `dt,`
             // do nothing at all.
             if i > 0 && head == self.sel.head() {
+                // Warning: **數目走不完，段落和句子就整個不做**（2026-10-18 拿 nvim
+                // 量出來的）。只有一個空行的時候 `d3}` 在 nvim 裏一個字都不刪，
+                // 而留着已經走成的那幾跳會讓它刪到檔尾（`d2{` 在第一行上 177
+                // 條錯的也是這個）。`f`/`t` 的數目不走這條路，它們一次問完
+                // （上面那個 `nth`），而 `w` 在檔尾是 vim 自己開的特例。
+                if matches!(
+                    step.motion,
+                    motion::Motion::Paragraph { .. } | motion::Motion::Sentence { .. }
+                ) {
+                    target = None;
+                }
                 break;
             }
             before = self.sel.head();
@@ -1066,7 +1077,16 @@ impl Editor {
                 //
                 // 交給 `Shape::Lines` 是因為這一段正是「一整行（空的）連它的行尾」，
                 // 而底下那道閘擋的是**量出來**零寬的那一種。
-                if crossed && motion::line_end(rope, before) == motion::line_start(rope, before) {
+                //
+                // Warning: **這一條也只給詞**（2026-10-18，和底下那一條同一天同一
+                // 個病）。它問的是「上一跳停在的那一行是不是空的」，而**每一個**
+                // 往前的排他動作走到空行上都會中——`d2}` 的第一跳正停在段落之間
+                // 的那個空行上，於是第二跳的落點被丟掉，刪到空行就停（184 條）。
+                let word = matches!(step.motion, motion::Motion::WordForward(_));
+                if word
+                    && crossed
+                    && motion::line_end(rope, before) == motion::line_start(rope, before)
+                {
                     let at = motion::line_start(rope, before);
                     let span = motion::Span::Over { anchor: start.min(at), head: at };
                     return self.do_vim_span(op, span, Shape::Lines);
@@ -1081,7 +1101,6 @@ impl Editor {
                 // 終點退到**終點前一行**的末尾、動作變成包含式；起點又在首個非空白
                 // 之前的話，整個變成整行。注意退的是**終點**前一行，不是起點那一行
                 // ——兩者在跨一行的時候恰好相同，所以這個錯在 `dw` 上看不出來。
-                let word = matches!(step.motion, motion::Motion::WordForward(_));
                 let lands_on_col_1 = target == motion::line_start(rope, target);
                 if !word && crossed && lands_on_col_1 {
                     let above = rope.char_to_line(target) - 1;
@@ -1097,10 +1116,29 @@ impl Editor {
                     true => motion::line_end(rope, before),
                     false => target,
                 };
-                motion::Span::Over {
-                    anchor: start,
-                    head: motion::prev_grapheme(rope, end).max(start),
+                let head = motion::prev_grapheme(rope, end).max(start);
+                // Warning: **vi 的那條怪規矩，只有 `d` 有。** vim 自己的註釋就叫它
+                // 「Imitate the strange Vi behaviour」（`op_delete`）：刪掉的跨過
+                // 一行以上，終點後面只剩空白，起點又在縮進裏，整段就變成整行。
+                // 手冊只寫了終點落在第 1 欄那一條（`:h exclusive-linewise`），這
+                // 一條只在代碼裏——`}` 走到檔尾的時候終點是**包含**的，第 1 欄那
+                // 條夠不着，而 nvim 照樣整行整行地刪（2026-10-18 逐欄量過：
+                // `  he said` 第 0/1/2 欄 `d}` 把整個檔刪空，第 3 欄留下 `  h`）。
+                // `c}` 和 `y}` 在同一處是逐字的，一併量過。
+                let tail_blank = || {
+                    let after = motion::next_grapheme(rope, head);
+                    let stop = motion::line_end(rope, head);
+                    after >= stop || rope.slice(after..stop).chars().all(char::is_whitespace)
+                };
+                if op == 'd'
+                    && rope.char_to_line(head) > rope.char_to_line(start)
+                    && start <= motion::line_first_non_blank(rope, start)
+                    && tail_blank()
+                {
+                    let (a, b) = (rope.char_to_line(start), rope.char_to_line(head));
+                    return self.do_vim_lines(op, a, b);
                 }
+                motion::Span::Over { anchor: start, head }
             }
         };
         self.do_vim(op, span);
