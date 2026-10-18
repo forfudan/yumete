@@ -304,6 +304,14 @@ fn frame_to(
         // 收一批——而一張靜照没有第二幀。不等就拍到一張空名單。
         editor.wait_for_the_search();
     }
+    // …and the picker's own walk, which moved off this thread three days after
+    // the search did (2026-10-09). `press` waits for it; this one did not, so
+    // `ye --files PAT --open --shot` — the picker opened by the command line
+    // rather than by a key — photographed 「没有符合的」 and `0/0+` with the
+    // spinner still turning, on a tree the pipe walks in eleven milliseconds.
+    // The same family as the two waits above: the loop collects a batch per
+    // frame, and a still picture has no second frame (2026-10-18).
+    editor.wait_for_the_picker();
     editor.refresh_the_edited_file();
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
     let page = areas.panes[editor.live_pane().min(1)];
@@ -25016,6 +25024,31 @@ fn squeezed(text: &str) -> String {
             }),
             "圈也收了：{done}"
         );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **一張靜照不許拍到空的挑選器**（2026-10-18）。
+    ///
+    /// `press` 等走查等到底，而 `frame_to` 從前只等搜索那一趟——於是
+    /// `ye --files PAT --open --shot`（挑選器是命令行開的，不是鍵開的）拍出來是
+    /// 「没有符合的」加 `0/0+`，圈還在轉，而同一棵樹命令行十一毫秒就走完了。
+    ///
+    /// Warning: **這一格與上面那一格說的是兩件事，别合**：那一格要的正是「還没收過」
+    /// 的樣子（`render_with` 不替人收），這一格要的是「照片裏是跑完的樣子」。
+    #[test]
+    fn a_still_picture_waits_for_the_pickers_walk() {
+        let dir = tmp().join(format!("yumete-picker-shot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("make the fixture");
+        std::fs::write(dir.join("一.md"), "一行\n").expect("write");
+        let config = Config::default();
+        let mut ed = Editor::new();
+        ed.set_root(&dir);
+        ed.on_key(Key::Char(' '));
+        ed.on_key(Key::Char('f'));
+        let shot = frame_to_text(&mut ed, &config, no_ime(), 80, 24, None);
+        assert!(shot.contains("1/1"), "照片裏走查是跑完的：{shot}");
+        assert!(!shot.contains("0/0+"), "不是空名單加一個加號：{shot}");
         std::fs::remove_dir_all(&dir).ok();
     }
 }
