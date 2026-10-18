@@ -5974,8 +5974,22 @@ en = "open something recent"
 # 大綱
 key = "hint.space.outline"
 zht = "顯示大綱"
-zhs = "顯示大纲"
+zhs = "显示大纲"
 en = "show outline"
+
+[[message]]
+# 空格選單：空格再按一下，往下一頁
+key = "hint.space.page-down"
+zht = "下一頁"
+zhs = "下一页"
+en = "page down"
+
+[[message]]
+# 空格選單：退格，往上一頁
+key = "hint.space.page-up"
+zht = "上一頁"
+zhs = "上一页"
+en = "page up"
 
 [[message]]
 # space P: 從系統剪貼簿貼在前面

@@ -328,6 +328,10 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
         if lead == '空' && key == "空格" {
             return Some((lead, " ".to_string()));
         }
+        // 同上，退格那一個：手冊寫 `空格 退格`，表裏它是那個控制字符。
+        if lead == '空' && key == "退格" {
+            return Some((lead, "\u{8}".to_string()));
+        }
         let mut key = key.chars();
         let first = key.next()?;
         let rest: String = key.collect();

@@ -3411,6 +3411,16 @@ impl Editor {
         ('z', "hint.space.yume"),
         ('/', "hint.space.advanced-search"),
         ('?', "hint.space.all-commands"),
+        // **空格 空格 / 空格 退格 翻頁**（2026-10-18 要的）。A reader holding a
+        // book with one hand reaches for the space bar, which is what every
+        // reader on every platform pages with; here the bar is this menu's
+        // own leader, so the page turn is the bar pressed twice.
+        //
+        // The whole page, not the half `J`/`K` take: `C-f`/`C-b` and
+        // `PageDown`/`PageUp` are the same turn, and these two are the ones a
+        // hand finds without leaving the home row.
+        (' ', "hint.space.page-down"),
+        ('\u{8}', "hint.space.page-up"),
     ];
 
     /// **What a bare count may be finished with** — only the keys where N means
@@ -3705,6 +3715,7 @@ impl Editor {
     pub(super) fn key_name(key: char) -> std::borrow::Cow<'static, str> {
         match key {
             ' ' => "␣".into(),
+            '\u{8}' => "⌫".into(),
             other => other.to_string().into(),
         }
     }
@@ -3993,6 +4004,10 @@ impl Editor {
             // **四個動詞，一個名詞**（2026-09-26 定的）。`w` 走一步、`W` 全開、
             // `q` 關這個、`Q` 只留一個工作區；`1`–`4` 是同一套坐標下的點名。
 
+            // 翻頁，見 [`Editor::SPACE_KEYS`]. 退格 reaches this menu because it
+            // is handed the whole `Key`, not the character a key may carry.
+            Key::Char(' ') => self.move_page(1, false, 1.0),
+            Key::Backspace => self.move_page(1, true, 1.0),
             Key::Char('y') => self.copy_to_clipboard(),
             Key::Char('p') => self.clipboard_paste(true),
             Key::Char('P') => self.clipboard_paste(false),
