@@ -131,7 +131,7 @@ pub fn apply(
     editor.set_which_wrap(config.editor.which_wrap.clone());
     // **`d`/`c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。和上面兩句同一族：
     // 鍵位那一層的事，所以擺在一起。
-    editor.set_yank_on_delete(config.editor.yank_on_delete);
+    editor.set_keymap_flavor(config.keys.flavor);
     editor.set_layout(layout.unwrap_or(config.editor.layout));
     // Warning: **這四個是「寫了纔算」**，不是「寫了零就當零」：出廠值在 `Editor` 那一
     // 頭，而配置裏的 0 是「沒說」。照抄啓動時的判準，一個字都不改。

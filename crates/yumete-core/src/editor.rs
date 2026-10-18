@@ -2287,15 +2287,20 @@ pub struct Editor {
     /// How much of the buffer is on screen: lines, and 縱 across. Set by the
     /// renderer, which is the only part that knows, so `C-d` can mean "half of
     /// what you can see" rather than a fixed number.
-    /// **`d` 和 `c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。
+    /// **yumete 風味**：鋪在當前鍵位之上的一小組departures
+    /// （`:keymap-yumete-flavor`，2026-10-18）。出廠關着。
     ///
-    /// 出廠進（helix 和 vi 都是這樣）。關掉是**對調**：`d`/`c` 刪而不進，
-    /// `A-d`/`A-c` 變成剪的那一對——正文和格子都照這一條（格子裏那四個鍵
-    /// 2026-10-08 剛對齊過，不許再分家）。
+    /// 今天集合裏只有一項：`d`/`c` 刪而不進寄存器，`A-d`/`A-c` 變成剪的那一對
+    /// ——正文和格子都照這一條（格子裏那四個鍵 2026-10-08 剛對齊過，不許再分家）。
     ///
-    /// Warning: **它不是鍵位表。** `[keys.normal]` 裏那四行做同一件事，而那一層在前面
-    /// 就把鍵換掉了，所以寫了那四行的人自然蓋過這個開關，不用在這裏寫特例。
-    yank_on_delete: bool,
+    /// Warning: **它不是第三套鍵位。** 一套預設是整張表，要一直跟着 helix 上游走；
+    /// 這是一張差異清單。2026-10-18 定（原話：「we only modify limited cases.
+    /// This keeps the majority of helix/vim keymap and is easy to maintain」），
+    /// 把 10-08 那個 `:yank-on-delete` 併了進來。
+    ///
+    /// Warning: **它不是鍵位表，`[keys.normal]` 照樣蓋得過它。** 那一層在前面就把鍵
+    /// 換掉了，所以寫了那四行的人自然蓋過這一格——命令報狀態時要把這件事說出來。
+    keymap_flavor: bool,
     page_lines: usize,
     /// Which line the page starts at — see [`Editor::set_page_top`].
     page_top: usize,
@@ -3691,7 +3696,7 @@ impl Editor {
             recording: None,
             macro_keys: Vec::new(),
             replaying: false,
-            yank_on_delete: true,
+            keymap_flavor: false,
             page_lines: 20,
             page_top: 0,
             select_the_seam: false,

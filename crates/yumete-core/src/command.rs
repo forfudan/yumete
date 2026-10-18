@@ -236,9 +236,9 @@ pub enum Command {
     /// 和 [`Command::YumeWhere`] 同一條路：答案是**一頁**，而且有一行只有前端答
     /// 得出來（哪幾個語言服務器在看着它）。
     FileInfo,
-    /// `:yank-on-delete [on|off]` — 「`d` 和 `c` 刪掉的東西進不進寄存器」
-    /// （2026-10-08）。`None` 是不帶參數，報當前這一格。
-    YankOnDelete(Option<bool>),
+    /// `:keymap-yumete-flavor [on|off]` —— Yumete 鍵位風味，鋪在當前鍵位之上的
+    /// 一小組改動（2026-10-18）。不帶參數就報它開着没有、裏頭有哪幾項。
+    KeymapYumeteFlavor(Option<bool>),
     /// `:vertical` / `:horizontal` — 把這一頁轉過去（Feature #61）。
     ///
     /// **一件事一種說法**（2026-10-12 定）：從前是 `:layout` 的兩個參數，加上一
@@ -3024,15 +3024,18 @@ pub const COMMANDS: &[Entry] = &[
         // **一條命令管一個開關**（2026-10-08 定，原話：「我覺得他很好用欸」）。
         //
         // Warning: **它是個設置，不是往配置檔裏寫那四行。** `[keys.normal]` 裏寫得出同一
-        // 件事（手冊那一節有那四行），可寫進去的是**鍵**：以後出廠值改了、第三套
-        // 鍵位來了，那四行還壓着。定的理由是這個（§5.113）。
-        name: "yank-on-delete",
+        // 件事（手冊那一節有那四行），可寫進去的是**鍵**：以後出廠值改了，那四行
+        // 還壓着（§5.113）。
+        // **也不是第三套鍵位**（2026-10-18 定，§5.110 那一條隨之作廢）：一套預設
+        // 是整張表、要一直跟着 helix 上游走，而這是一張差異清單。10-08 那個
+        // `:yank-on-delete` 併進來成了集合裏的第一項。
+        name: "keymap-yumete-flavor",
         aliases: &[],
-        help: "cmd.yank-on-delete",
+        help: "cmd.keymap-yumete-flavor",
         needs: &[],
         params: &[Param::Words { of: ON_OFF, default: None }],
         build: Some(|p| {
-            Ok(Command::YankOnDelete(match p.arg(0) {
+            Ok(Command::KeymapYumeteFlavor(match p.arg(0) {
                 None => None,
                 Some("on") => Some(true),
                 _ => Some(false),

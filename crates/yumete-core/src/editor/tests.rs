@@ -25243,18 +25243,19 @@ fn the_factory_keys_still_follow_helix() {
     assert_eq!(ed.current_buffer().text(), "甲丙乙", "出廠的 `d` 是剪，同 helix");
 }
 
-/// **一條命令撥得動那件事**（2026-10-08 定，原話：「我覺得他很好用欸」）。
+/// **一條命令撥得動那件事**（2026-10-08 定，原話：「我覺得他很好用欸」；
+/// 2026-10-18 併進 Yumete 鍵位風味，命令換成 `:keymap-yumete-flavor`）。
 ///
-/// `:yank-on-delete off` 把 `d`/`c` 和 `A-d`/`A-c` 對調——正文和格子一起管，而
+/// 風味開着就把 `d`/`c` 和 `A-d`/`A-c` 對調——正文和格子一起管，而
 /// `[keys.normal]` 那四行照舊蓋過它（別名那一層在前面就把鍵換掉了）。
 #[test]
-fn yank_on_delete_swaps_the_pair_in_prose_and_in_a_grid() {
+fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
     // 出廠：`d` 剪。
     let mut ed = typed("甲乙丙");
     assert!(ed.yank_on_delete(), "出廠進寄存器，同 helix 同 vi");
-    ed.execute(":yank-on-delete off").unwrap();
+    ed.execute(":keymap-yumete-flavor on").unwrap();
     assert!(!ed.yank_on_delete());
-    assert!(ed.status().contains(&say!("label.off")), "{}", ed.status());
+    assert!(ed.status().contains(&say!("label.on")), "{}", ed.status());
 
     // `d` 只刪，寄存器裏還是剛複製的「甲」。
     press(&mut ed, "ggy");
@@ -25266,18 +25267,30 @@ fn yank_on_delete_swaps_the_pair_in_prose_and_in_a_grid() {
 
     // 而 `A-d` 變成剪的那一個。
     let mut ed = typed("甲乙丙");
-    ed.execute(":yank-on-delete off").unwrap();
+    ed.execute(":keymap-yumete-flavor on").unwrap();
     press(&mut ed, "ggy");
     press(&mut ed, "l");
     ed.on_key(Key::Alt('d'));
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "甲丙乙", "`A-d` 剪");
 
-    // 不帶參數就報這一格現在是哪一邊。
+    // 不帶參數就報：開關 ＋ 集合裏有什麼，而且不許改它。
     let mut ed = typed("甲");
-    ed.execute(":yank-on-delete").unwrap();
-    assert!(ed.status().contains(&say!("label.on")), "{}", ed.status());
+    ed.execute(":keymap-yumete-flavor").unwrap();
+    assert!(ed.status().contains(&say!("label.off")), "出廠關着：{}", ed.status());
+    assert!(ed.status().contains(&say!("keys.flavor.no-yank")), "集合裏那一項要列出來：{}", ed.status());
     assert!(ed.yank_on_delete(), "問一句不許改它");
+
+    // **被 `[keys.normal]` 蓋過就要說出來**（2026-10-18）。一行寫着「`d` 不進寄
+    // 存器」而 `d` 做着別的事，是今天早上那個三層毛病的翻版。
+    let mut ed = typed("甲");
+    ed.set_key_aliases(std::collections::HashMap::from([("d".to_string(), "x".to_string())]));
+    ed.execute(":keymap-yumete-flavor on").unwrap();
+    assert!(
+        ed.status().contains(&say!("keys.flavor.no-yank-taken", "d")),
+        "配置綁了 d，報告要說它說了算：{}",
+        ed.status()
+    );
 }
 
 /// 格子裏那兩個鍵跟着同一個開關走——2026-10-08 剛把格子和正文對齊，不許再分家。
@@ -25286,7 +25299,7 @@ fn yank_on_delete_reaches_the_grid_too() {
     let table = "| 姓名 | 年紀 |\n| --- | --- |\n| 甲 | 三十 |\n";
     let cell_cleared_with = |key: Key, on: bool| -> Editor {
         let mut ed = typed(table);
-        ed.set_yank_on_delete(on);
+        ed.set_keymap_flavor(!on);
         ed.goto_line(3);
         press(&mut ed, " tb");
         press(&mut ed, " tT");

@@ -2127,6 +2127,14 @@ en = "the first candidate, in the text — so the code is not shown anywhere"
 find = "首選 首选 內嵌 内嵌 top"
 
 [[message]]
+# :keymap-yumete-flavor —— Yumete 鍵位風味：鋪在當前鍵位上的一小組改動
+key = "cmd.keymap-yumete-flavor"
+zht = "Yumete 鍵位風味：在 helix/vim 鍵位之上的一小組改動。不帶參數報當前狀態"
+zhs = "Yumete 键位风味：在 helix/vim 键位之上的一小组改动。不带参数报当前状态"
+en = "the Yumete keymap flavour: a small set of departures over helix/vim. Bare reports it"
+find = "風味 风味 鍵位 键位 寄存器 剪 剪切 删 删除 yank register cut delete flavor keymap"
+
+[[message]]
 # :keymap-actions 做什麼
 key = "cmd.keymap.actions"
 zht = "列出每個能綁的動作名"
@@ -3238,14 +3246,6 @@ en = "save under a new name and edit that one (`:w <path>` only copies)"
 find = "另存 改名 saveas rename"
 
 [[message]]
-# :yank-on-delete ——`d`/`c` 删掉的東西進不進寄存器
-key = "cmd.yank-on-delete"
-zht = "`d` `c` 删除時是否進寄存器。若關閉，則同 `A-d` `A-c` 功能對調"
-zhs = "`d` `c` 删除时是否进寄存器。若关闭，则同 `A-d` `A-c` 功能对调"
-en = "whether `d` and `c` fill the register. Off swaps them with `A-d` and `A-c`"
-find = "寄存器 剪 剪切 删 删除 剪貼板 剪贴板 yank register cut delete"
-
-[[message]]
 # : 命令選單裏 autocompletion 那一項的説明(yume 組)
 key = "cmd.yume.autocompletion"
 zht = "輸入預測：碼没打完就先給候選"
@@ -4013,13 +4013,6 @@ en = "yanked {0} character(s)"
 
 
 # ── export ────────────────────────────────────────────────────────────
-
-[[message]]
-# :yank-on-delete ——無參數時報當前狀態
-key = "editor.yank-on-delete-is"
-zht = "删除時進寄存器：{0}"
-zhs = "删除时进寄存器：{0}"
-en = "deleting fills the register: {0}"
 
 [[message]]
 # :export 給了不認得的格式
@@ -6929,6 +6922,27 @@ key = "keys.actions-title"
 zht = "能綁定的動作"
 zhs = "能绑定的动作"
 en = "actions"
+
+[[message]]
+# :keymap-yumete-flavor ——無參數時報：開關 ＋ 集合裏有什麼
+key = "keys.flavor-is"
+zht = "Yumete 鍵位風味：{0} · {1}"
+zhs = "Yumete 键位风味：{0} · {1}"
+en = "Yumete keymap flavour: {0} · {1}"
+
+[[message]]
+# 風味集合裏的一項：`d`/`c` 不進寄存器
+key = "keys.flavor.no-yank"
+zht = "`d` `c` 不進寄存器，`A-d` `A-c` 是剪的那一對"
+zhs = "`d` `c` 不进寄存器，`A-d` `A-c` 是剪的那一对"
+en = "`d` and `c` do not fill the register; `A-d` and `A-c` are the cutting pair"
+
+[[message]]
+# 同上，但配置檔的 [keys.normal] 已經綁了它管的鍵——那一層在前面，說了算的是它
+key = "keys.flavor.no-yank-taken"
+zht = "`d` `c` 不進寄存器（`[keys.normal]` 綁了 {0}，此刻說了算的是它）"
+zhs = "`d` `c` 不进寄存器（`[keys.normal]` 绑了 {0}，此刻说了算的是它）"
+en = "`d` and `c` do not fill the register (`[keys.normal]` binds {0}, which wins)"
 
 [[message]]
 # 按出來的那一串在這一層裏没有綁任何東西(2026-10-06 定的説法，所有的層共用)
@@ -9876,19 +9890,6 @@ zht = "詞語着色用哪一種畫法"
 zhs = "词语着色用哪一种画法"
 en = "word mark"
 
-[[message]]
-# 設置：删的時候進寄存器
-key = "set.editor.yank-on-delete"
-zht = "删除時進寄存器"
-zhs = "删除时进寄存器"
-en = "deleting fills the register"
-
-[[message]]
-# 設置：删的時候進寄存器——一句話
-key = "set.editor.yank-on-delete.hint"
-zht = "關掉之後 `d` `c` 只删不剪，要剪按 `A-d` `A-c`——剛複製好的那一段不再被一次隨手删除吃掉"
-zhs = "关掉之后 `d` `c` 只删不剪，要剪按 `A-d` `A-c`——刚复制好的那一段不再被一次随手删除吃掉"
-en = "with this off, `d` and `c` only delete; `A-d` and `A-c` are the ones that cut — so a tidy-up between a copy and a paste cannot eat the copy"
 [[message]]
 # 設置：縱間距
 key = "set.editor.zong-gap"
