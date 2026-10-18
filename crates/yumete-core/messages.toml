@@ -12666,13 +12666,6 @@ zhs = "{0}. {1}"
 en = "{0}. {1}"
 
 [[message]]
-# `:yume-where`：還有 {0} 個
-key = "yume.where.more"
-zht = "共 {0} 個"
-zhs = "共 {0} 个"
-en = "{0} in all"
-
-[[message]]
 # `:yume-where`：數據在哪
 key = "yume.where.name"
 zht = "數據在哪"

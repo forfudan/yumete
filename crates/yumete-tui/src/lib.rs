@@ -3821,6 +3821,30 @@ fn loading_the_table(tag: &str, ime: &ImeSession) -> bool {
     }
 }
 
+/// The ASCII stamp a 碼表 or 字料 file opens with, when it has one.
+///
+/// Every yume binary format starts with a magic carrying the day that format
+/// last changed — `YTB20260828` for a 碼表, `YFL20260913` for the 讀音表. The
+/// core refuses a file whose stamp it does not know, and the refusal reads as
+/// 「bad magic」, which says nothing about *which* generation the file is. On
+/// this page the stamp turns a bug report into one screenshot.
+///
+/// `None` for anything without one: text, fonts, and a file too short to hold a
+/// stamp. A stamp is ASCII alphanumerics from the first byte, and every format
+/// yume has ever written begins with `Y`.
+fn magic_of(path: &std::path::Path) -> Option<String> {
+    use std::io::Read as _;
+    let mut head = [0u8; 11];
+    let read = std::fs::File::open(path).ok()?.read(&mut head).ok()?;
+    let stamp: String = head[..read]
+        .iter()
+        .copied()
+        .take_while(u8::is_ascii_alphanumeric)
+        .map(char::from)
+        .collect();
+    (stamp.len() >= 4 && stamp.starts_with('Y')).then_some(stamp)
+}
+
 /// Where the editor looks for 碼表 and 字料, layer by layer, and what it found.
 ///
 /// **Why this is a command and not a comment.** Six directories are searched in
@@ -3854,24 +3878,44 @@ fn where_report(ime: &ImeSession) -> String {
             let _ = writeln!(out, "{}", say!("yume.where.layer", nth, label));
             last = Some(found.source);
         }
-        // **Name the files, do not count them.** 「7 個檔」 does not say whether
-        // the 語言模型 is among them, and that is the one a reader is usually
-        // missing.
-        let here: Vec<&str> = manifest
+        // **Name every file, and the generation stamp it carries.** This used
+        // to fold the list after four names (「… 共 19 個」), and the four it
+        // kept were never the ones in question: a reader whose 拼音 is gone
+        // needs to see `data/pinyin.yflb` on the list, not a count. The stamp
+        // is here for the same reason — 2026-10-18 a Linux reader's tables were
+        // one format generation behind (`YFL3` where the core wants
+        // `YFL20260913`), and settling that took downloading his package. With
+        // both on the page, one screenshot answers it.
+        //
+        // The name is the path **as it was found**, relative to the directory,
+        // because the two layouts in the wild differ exactly there: 宇浩's own
+        // tree and the macOS bundle keep `data/pinyin.yflb`, and an older Linux
+        // install lays the same file flat (see `data_paths_in`).
+        let here: Vec<String> = manifest
             .iter()
             // Warning: **同一條規矩問兩處**：找得到的與報得出的必須是同一批文件，
             // 否則這張單子會說「沒有」而輸入法明明讀到了（見 `data_paths_in`）。
-            .filter(|rel| {
-                yumete_ime::data_paths_in(&found.dir, rel).iter().any(|p| p.is_file())
+            .filter_map(|rel| {
+                let path =
+                    yumete_ime::data_paths_in(&found.dir, rel).into_iter().find(|p| p.is_file())?;
+                let shown = path.strip_prefix(&found.dir).unwrap_or(&path).display().to_string();
+                Some(match magic_of(&path) {
+                    Some(stamp) => format!("{shown}  {stamp}"),
+                    None => shown,
+                })
             })
-            .filter_map(|rel| std::path::Path::new(rel).file_name().and_then(|n| n.to_str()))
             .collect();
-        let said = match here.len() {
-            0 => say!("yume.where.nothing"),
-            n if n <= 4 => here.join(" "),
-            n => format!("{} … {}", here[..4].join(" "), say!("yume.where.more", n)),
-        };
-        let _ = writeln!(out, "    {}\n        {said}", found.dir.display());
+        let _ = writeln!(out, "    {}", found.dir.display());
+        match here.is_empty() {
+            true => {
+                let _ = writeln!(out, "        {}", say!("yume.where.nothing"));
+            }
+            false => {
+                for one in &here {
+                    let _ = writeln!(out, "        {one}");
+                }
+            }
+        }
     }
     let _ = writeln!(out, "{}", say!("yume.where.layer", nth + 1, say!("yume.where.builtin")));
     // **一家一行**（2026-10-08 定）。從前這裏寫死「靈明碼表 {版本}」，而 2026-10-07
