@@ -142,9 +142,30 @@ OBJECT_CASES = [
 ]
 
 
+# ── 有意不同的那幾格 ────────────────────────────────────────────────
+#
+# **不是待辦，是答案。** 這一支每跑一次就把它們印一遍，而印出來的東西看上去都像
+# bug——2026-10-18 為了幾條過期的記錄白查了六輪，同一個坑不留第二次。鍵是
+# 「式、固定裝置的頭一行、起點」，值是**為什麼**。
+#
+# ⚠ **全部是同一件事：中文分詞。** vim 只分「字母／數字／標點／其他」四類，整串
+# 漢字歸同一類，所以 `w` 一跳跨過整句中文；yumete 走分詞，`你也是` 和 `人類` 是
+# 兩個詞。要把這幾格抹平就得讓 `w` 在中文裏一跳跨過整段——那正是這個編輯器要修
+# 的那件事。
+KNOWN = {
+    ("dw", "  你也是人類, ok（不是）", 2): "分詞：vim 一跳跨過整串漢字，這裏跳一個詞",
+    ("dw", "  你也是人類, ok（不是）", 3): "同上",
+    ("dw", "  你也是人類, ok（不是）", 4): "同上",
+    ("db", "  你也是人類, ok（不是）", 6): "同上，往回",
+    ("db", "  你也是人類, ok（不是）", 7): "同上，往回",
+}
+
+
 def main(only):
     setup()
     bad = total = 0
+    seen_known: set = set()
+    stale: list = []
     sweeps = [(FIXTURES, only or CASES), (OBJECT_FIXTURES, only or OBJECT_CASES)]
     # ⚠ **每一式都要記下它咬着沒有。** 兩邊都原封不動的那一格證明不了任何事，而
     # 2026-10-02 這一支栽過一次：2,350 格全綠而一格都沒驗。末尾印出「在每一張
@@ -167,16 +188,30 @@ def main(only):
             bit.setdefault(c, False)
             if n != text or y != text:
                 bit[c] = True
+            key = (c, text.splitlines()[0], pos)
             if n != y:
+                if key in KNOWN:
+                    seen_known.add(key)
+                    continue
                 bad += 1
                 print(f"DIFF {c!r} at {pos} in {text.splitlines()[0]!r}")
                 print(f"  nvim   {n!r}")
                 print(f"  yumete {y!r}")
-    print(f"{total} cases, {bad} differ")
+            elif key in KNOWN:
+                # ⚠ **名單也會過期。** 一格上了名單又自己好了，名單就在替一個不存在
+                # 的分歧作證——下一次真的分歧出現在這一格上時它會被默默吃掉。
+                stale.append(key)
+    for key in stale:
+        print(f"已經不一樣了的那一格現在一樣了，把它從 KNOWN 裏刪掉：{key} — {KNOWN[key]}")
+    missing = sorted(set(KNOWN) - seen_known - set(stale))
+    if missing and not only:
+        print(f"KNOWN 裏這幾格這一趟没跑到：{missing}")
+    known = len(seen_known)
+    print(f"{total} cases, {bad} differ" + (f", {known} known" if known else ""))
     idle = sorted(c for c, hit in bit.items() if not hit)
     if idle:
         print(f"{len(idle)} never bit anywhere — they prove nothing: {idle}")
-    return 1 if bad else 0
+    return 1 if bad or stale else 0
 
 
 if __name__ == "__main__":
