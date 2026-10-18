@@ -22160,8 +22160,15 @@ fn squeezed(text: &str) -> String {
         // is discoverable without leaving the page.
         editor.on_key(Key::Char(' '));
         let text = page_text(&render_with(&editor, &config, no_ime(), 60, 24));
-        assert!(text.contains("挑選器"), "{text:?}");
+        // Warning: **每一格的字數隨着條數走**（2026-10-18）。`空格 空格`／`空格 退格`
+        // 把這張表從 27 條帶到 29 條，而 24 行的窗口給它 9 行深——27 條三欄剛好
+        // 鋪滿，29 條就得開第四欄，於是每一格窄了一截，「文件挑選器(項目路徑)」
+        // 畫成「文件挑選…」。斷言問的是「這張表列得出它收的鍵」，不是哪一格有
+        // 幾個字，所以問到鍵名為止。
+        assert!(text.contains("文件挑選"), "{text:?}");
         assert!(text.contains("緩衝區"), "{text:?}");
+        // 新來的那兩個也要在上面——這張表是 which-key，列不出就等於没有。
+        assert!(text.contains("下一頁") && text.contains("上一頁"), "{text:?}");
 
         // `b` replaces it with the picker, which names where you are in a list
         // it does not have to show all of.
