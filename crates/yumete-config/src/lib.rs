@@ -160,18 +160,6 @@ pub struct EditorConfig {
     /// On by default so the CJK word grouping is visible; toggle with
     /// `:word-show off` or set `show_segmentation = false`.
     pub show_segmentation: bool,
-    /// **Whether `d` and `c` fill the register** (`:yank-on-delete`, 2026-10-08).
-    ///
-    /// On by default, which is helix's answer and vi's. Off swaps the pair:
-    /// `d`/`c` take the text out and leave the register alone, and `A-d`/`A-c`
-    /// are the ones that cut. That is what a helix discussion with ninety-odd
-    /// votes asks for ([#10361]) — and the four lines in `[keys.normal]` that
-    /// thread names to keys do the same thing, which is why this switch is a
-    /// setting and not those four lines written into a file: a binding would
-    /// go on overriding whatever the defaults become.
-    ///
-    /// [#10361]: https://github.com/helix-editor/helix/discussions/10361
-    pub yank_on_delete: bool,
     /// How readily characters join into words: `strict`, `balanced`, `full`
     /// (Feature #24), the same three `:word-level` names.
     ///
@@ -437,7 +425,6 @@ impl Default for EditorConfig {
             table_rules: "line dash".to_string(),
             language_key: "C-^".to_string(),
             show_segmentation: true,
-            yank_on_delete: true,
             word_level: yumete_cjk::WordLevel::default(),
             word_mark: yumete_cjk::WordMark::default(),
             layout: Layout::Horizontal,
@@ -1653,6 +1640,20 @@ pub struct KeyConfig {
     pub normal: HashMap<String, String>,
     /// A whole table of such lines, shipped: `[keys] preset = "vim"`.
     pub preset: KeyPreset,
+    /// **The yumete flavour** — a small set of departures laid over whichever
+    /// preset is in use (`:keymap-yumete-flavor`, 2026-10-18). Factory off,
+    /// so both presets are their own upstream until somebody asks otherwise.
+    ///
+    /// A set rather than a third preset, because a preset is a whole table to
+    /// keep level with helix's own, while this is a short list of differences
+    /// — and because the majority of either keymap is not what is in dispute.
+    /// What is in it today: `d`/`c` do not fill the register, and `A-d`/`A-c`
+    /// become the cutting pair.
+    ///
+    /// Warning: **`[keys.normal]` still wins.** The alias layer rewrites a key
+    /// before anything here is read, which is why the command's report says so
+    /// of every item it lists.
+    pub flavor: bool,
 }
 
 /// **What a language can be told to run** (Feature #197).
@@ -2959,7 +2960,6 @@ struct RawEditor {
     table_rules: Option<String>,
     language_key: Option<String>,
     show_segmentation: Option<bool>,
-    yank_on_delete: Option<bool>,
     word_level: Option<String>,
     word_mark: Option<String>,
     vertical_keys: Option<String>,
@@ -3045,6 +3045,7 @@ struct RawKeys {
     #[serde(default)]
     normal: HashMap<String, String>,
     preset: Option<String>,
+    flavor: Option<bool>,
 }
 
 impl RawConfig {
@@ -3088,9 +3089,6 @@ impl RawConfig {
         }
         if other.editor.show_segmentation.is_some() {
             self.editor.show_segmentation = other.editor.show_segmentation;
-        }
-        if other.editor.yank_on_delete.is_some() {
-            self.editor.yank_on_delete = other.editor.yank_on_delete;
         }
         if other.editor.word_level.is_some() {
             self.editor.word_level = other.editor.word_level.clone();
@@ -3310,6 +3308,9 @@ impl RawConfig {
         if other.keys.preset.is_some() {
             self.keys.preset = other.keys.preset;
         }
+        if other.keys.flavor.is_some() {
+            self.keys.flavor = other.keys.flavor;
+        }
     }
 
     fn into_config(self) -> Config {
@@ -3406,9 +3407,6 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.show_segmentation {
             config.editor.show_segmentation = on;
-        }
-        if let Some(on) = self.editor.yank_on_delete {
-            config.editor.yank_on_delete = on;
         }
         if let Some(level) = self
             .editor
@@ -3744,6 +3742,9 @@ impl RawConfig {
             if !k.is_empty() && !v.is_empty() && !yumete_cjk::actions::misspelt(&v) {
                 config.keys.normal.insert(k, v);
             }
+        }
+        if let Some(on) = self.keys.flavor {
+            config.keys.flavor = on;
         }
         if let Some(preset) = self.keys.preset.as_deref().and_then(KeyPreset::parse) {
             config.keys.preset = preset;

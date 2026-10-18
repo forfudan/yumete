@@ -494,14 +494,55 @@ impl Editor {
         zong::position(self.current_buffer().rope(), self.caret(), grid)
     }
 
-    /// **`d`/`c` 進不進寄存器**（`:yank-on-delete`）。
-    pub fn yank_on_delete(&self) -> bool {
-        self.yank_on_delete
+}
+
+/// 「`d`/`c` 不進寄存器」那一項管的四個鍵——報告拿它問 `[keys.normal]`。
+const NO_YANK_KEYS: [&str; 4] = ["d", "c", "A-d", "A-c"];
+
+impl Editor {
+    /// **yumete 風味開着嗎**（`:keymap-yumete-flavor`）。
+    pub fn keymap_flavor(&self) -> bool {
+        self.keymap_flavor
     }
 
-    /// 撥那個開關。
-    pub fn set_yank_on_delete(&mut self, on: bool) {
-        self.yank_on_delete = on;
+    /// 撥它。
+    pub fn set_keymap_flavor(&mut self, on: bool) {
+        self.keymap_flavor = on;
+    }
+
+    /// **`d`/`c` 進不進寄存器** —— 風味集合裏的一項，這是它問出來的樣子。
+    ///
+    /// 一項一支，而不是讓呼叫處直接讀那一格：集合往後會長，而每一項該在哪幾個
+    /// 鍵上生效是這一層的事，不是按鍵處理那一層的事。
+    pub fn yank_on_delete(&self) -> bool {
+        !self.keymap_flavor
+    }
+
+    /// **風味現在是什麼樣子** —— 開着没有，裏頭有哪幾項，哪一項被配置蓋過了。
+    ///
+    /// Warning: **逐項不報開關**（2026-10-18 問出來的）：一個開關管整個集合，每一項
+    /// 的狀態就是風味自己的狀態，逐項再寫一遍是同一句話說 N 遍。報的是集合裏有
+    /// 什麼，以及**哪一項此刻說了不算**。
+    ///
+    /// Warning: **被蓋過要說出來**，否則這一行就是今天早上那個毛病的翻版：引擎自報
+    /// 「頂字」而實際跑的是上面一層留下的整句。`[keys.normal]` 在別名那一層就把鍵
+    /// 換掉了，所以一行寫着「`d`/`c` 不進寄存器」而 `d` 做着別的事，是做得到的。
+    pub(super) fn flavor_report(&self) -> String {
+        let state = match self.keymap_flavor {
+            true => say!("label.on"),
+            false => say!("label.off"),
+        };
+        // 一項一組鍵。集合長了就在這裏加一行，報告那一頭不用改。
+        let taken: Vec<&str> = NO_YANK_KEYS
+            .iter()
+            .copied()
+            .filter(|key| self.user_aliases.contains_key(*key))
+            .collect();
+        let item = match taken.is_empty() {
+            true => say!("keys.flavor.no-yank"),
+            false => say!("keys.flavor.no-yank-taken", taken.join(" ")),
+        };
+        say!("keys.flavor-is", state, item)
     }
 
     /// Install the reader's own Normal-mode aliases (`[keys.normal]`).
