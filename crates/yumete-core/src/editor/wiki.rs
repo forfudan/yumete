@@ -301,9 +301,16 @@ impl Editor {
     /// `:wiki panel` — put the 百科 page up (or take it down), and leave the
     /// keys where they are.
     /// `:wiki-panel [on|off]` — `None` 切換，和 `:word-show` 同一套。
-    fn show_wiki_panel(&mut self, want: Option<bool>) {
+    fn show_wiki_panel(&mut self, want: crate::command::Switch) {
         let open = self.showing(crate::sidebar::View::Info);
-        let want = want.unwrap_or(open.is_none());
+        let want = want.over(open.is_some());
+        // **It said nothing at all until 2026-10-19** — on, off and bare alike,
+        // while the panel plainly came and went. Every sibling switch names
+        // itself and its state; this one now does too.
+        self.status = match want {
+            true => say!("wiki.panel-on"),
+            false => say!("wiki.panel-off"),
+        };
         match (want, open) {
             (false, Some(side)) => self.close_panel(side),
             (true, None) => {

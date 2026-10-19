@@ -923,12 +923,15 @@ fn ruby_rendering_is_set_per_dialect() {
     ed.execute(":ruby-render full").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
     ed.execute(":ruby-render basic").unwrap();
+    // 裸的問，不改（2026-10-19 作者定）：這一刻 HTML 是關着的，問完還是關着的。
     ed.execute(":ruby-html").unwrap();
+    assert!(!ed.ruby().contains(Dialect::Html), "裸的只報告：{}", ed.status());
+    ed.execute(":ruby-html on").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
 
     // Dialects add up rather than replacing one another: a document may mix
     // them, so `:render-ruby-typst` does not turn HTML off.
-    ed.execute(":ruby-typst").unwrap();
+    ed.execute(":ruby-typst on").unwrap();
     assert!(ed.ruby().contains(Dialect::Typst));
     assert!(ed.ruby().contains(Dialect::Html));
     ed.execute(":ruby-html off").unwrap();
@@ -2114,14 +2117,17 @@ fn chaifen_command_leaves_a_request_for_the_ime() {
     assert_eq!(ed.take_chaifen_request(), None, "{}", ed.status());
     assert!(ed.status().contains("碼表"), "{}", ed.status());
     ed.set_ime_available(true);
+    // 裸的問（答的是此刻這一格），`on` 纔開（2026-10-19 作者定）。
     ed.execute(":yume-chaifen").unwrap();
+    assert_eq!(ed.take_chaifen_request(), Some(false), "{}", ed.status());
+    ed.execute(":yume-chaifen on").unwrap();
     assert_eq!(ed.take_chaifen_request(), Some(true));
     assert_eq!(ed.take_chaifen_request(), None, "taken once only");
-    // The toggle follows what the IME actually settled on, not the request:
-    // a scheme with no 拆分 layer refuses, and the next `:chaifen` still
-    // asks for "on" rather than flipping to "off".
+    // `toggle` follows what the IME actually settled on, not the request: a
+    // scheme with no 拆分 layer refuses, and the next `toggle` still asks for
+    // "on" rather than flipping to "off".
     ed.set_chaifen(false);
-    ed.execute(":yume-chaifen").unwrap();
+    ed.execute(":yume-chaifen toggle").unwrap();
     assert_eq!(ed.take_chaifen_request(), Some(true));
 }
 
@@ -6793,10 +6799,16 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
         assert!(ed.execute("view-hanging on").is_ok());
         assert!(ed.hanging, "`:view-hanging on` turned it off: {}", ed.status());
     }
-    // The bare word still means 「the other one」, and `of` is `off`'s
+    // **The bare word asks** (2026-10-19 作者定): it leaves the setting where
+    // it is, and `toggle` is the word for 「the other one」. `of` is `off`'s
     // shortest spelling — the one the menu prints.
+    assert!(ed.hanging, "set up by the loop above");
     assert!(ed.execute("view-hanging").is_ok());
-    assert!(!ed.hanging);
+    assert!(ed.hanging, "裸的只報告：{}", ed.status());
+    assert!(ed.execute("view-hanging toggle").is_ok());
+    assert!(!ed.hanging, "`toggle` 纔翻：{}", ed.status());
+    assert!(ed.execute("view-hanging toggle").is_ok());
+    assert!(ed.hanging);
     assert!(ed.execute("view-hanging on").is_ok());
     assert!(ed.execute("view-hanging of").is_ok());
     assert!(!ed.hanging, "`:view-hanging of` is what the menu offers");
@@ -14056,7 +14068,12 @@ fn a_second_preview_asks_where_the_first_one_is() {
 
     let mut ed = Editor::new();
     ed.open_file(&book).unwrap();
+    // **裸的問，`on` 纔開**（2026-10-19 作者定）：没有預覽在跑的時候那一問
+    // 答的是「沒開著」，而不是順手起一個排版器。
     ed.execute(":view-preview").unwrap();
+    assert_eq!(ed.take_preview_request(), None, "{}", ed.status());
+    assert!(ed.status().contains("預覽"), "{}", ed.status());
+    ed.execute(":view-preview on").unwrap();
     assert!(
         matches!(ed.take_preview_request(), Some(Preview::Start { .. })),
         "the first one starts a typesetter"
@@ -21141,11 +21158,11 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
         "### under ## reads as ## under the entry"
     );
 
-    ed.execute(":wiki-panel").unwrap();
+    ed.execute(":wiki-panel on").unwrap();
     assert!(ed.wiki_here().is_some());
     assert!(ed.wiki_floating().is_none(), "the sidebar page has it: it does not float too");
 
-    ed.execute(":wiki-panel").unwrap();
+    ed.execute(":wiki-panel off").unwrap();
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('d'));
@@ -21315,8 +21332,11 @@ fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
 #[test]
 fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     let mut ed = Editor::new();
-    ed.execute(":wiki-panel").unwrap();
+    ed.execute(":wiki-panel on").unwrap();
     assert!(ed.panel_focus().is_none(), "the keys stayed in the writing");
+    // 裸的只報告，不開不關（2026-10-19 作者定）。
+    ed.execute(":wiki-panel").unwrap();
+    assert!(ed.showing(crate::sidebar::View::Info).is_some(), "裸的只報告：{}", ed.status());
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel_focus().is_some(), "C-w walks into the panel");
@@ -21324,8 +21344,8 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     ed.on_key(Key::Char('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel_focus().is_none(), "空格 w walks back out");
-    ed.execute(":wiki-panel").unwrap();
-    assert!(ed.showing(crate::sidebar::View::Info).is_none(), "and again puts it away");
+    ed.execute(":wiki-panel off").unwrap();
+    assert!(ed.showing(crate::sidebar::View::Info).is_none(), "`off` puts it away");
 }
 
 /// **一扇挑選器一個狀態**（2026-10-08 定）：開門就在框裏打字，`Tab`/`S-Tab`、

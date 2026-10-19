@@ -8021,6 +8021,21 @@ zhs = "词条"
 en = "entries"
 
 [[message]]
+# 挑選器開不了：窗口窄過十欄
+key = "picker.window-too-narrow"
+zht = "窗口太窄，開不了挑選器"
+zhs = "窗口太窄，开不了挑选器"
+en = "the window is too narrow for the picker"
+
+[[message]]
+# 挑選器開不了：窗口矮過六行（2026-10-19 作者定的文案）。從前它照舊開着、照舊
+# 吃掉每一個鍵，而一格都不畫——打完查詢按 Enter 真會開一個檔。
+key = "picker.window-too-short"
+zht = "窗口太矮，開不了挑選器"
+zhs = "窗口太矮，开不了挑选器"
+en = "the window is too short for the picker"
+
+[[message]]
 # :view-preview 做不出那一頁
 key = "preview.failed"
 zht = "預覽：{0}"
@@ -8033,6 +8048,14 @@ key = "preview.made"
 zht = "預覽：{0}"
 zhs = "预览：{0}"
 en = "preview: {0}"
+
+[[message]]
+# 裸的 :view-preview，而没有預覽在跑（2026-10-19 作者定的文案）。帶地址的那幾則
+# 答不了這一句——它們都要一個地址。
+key = "preview.not-running"
+zht = "預覽：沒開著"
+zhs = "预览：没开着"
+en = "no preview is running"
 
 [[message]]
 # :view-preview 用在没有標記語法的檔案上
@@ -12301,6 +12324,20 @@ key = "wiki.panel-empty"
 zht = "光標停在一個詞條名上，這裏就是它的內容"
 zhs = "光标停在一个词条名上，这里就是它的内容"
 en = "stand on a wiki name and its entry is shown here"
+
+[[message]]
+# :wiki-panel 報告：同上
+key = "wiki.panel-off"
+zht = "詞條面板：關"
+zhs = "词条面板：关"
+en = "the entry panel is closed"
+
+[[message]]
+# :wiki-panel 報告（2026-10-19 作者定的文案）：從前這個命令開關都不出聲
+key = "wiki.panel-on"
+zht = "詞條面板：開"
+zhs = "词条面板：开"
+en = "the entry panel is open"
 
 [[message]]
 # :wiki 報告裏：讀到的一個檔和它給的詞條數
