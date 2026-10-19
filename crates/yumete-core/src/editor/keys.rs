@@ -1245,39 +1245,38 @@ impl Editor {
 
     /// **What the right-hand side of a binding says to do** (#429).
     ///
-    /// Three things, tried in this order:
+    /// Three kinds, each marked as what it is (see [`yumete_cjk::actions::bound`]):
     ///
     /// 1. `:something` — that command line, exactly as it would be typed.
-    /// 2. An **action's name** (`delete_selection`). Names are what a reader
-    ///    should write: `x = "delete_selection"` goes on meaning that after
-    ///    the day the editor's own `d` moves somewhere else, and it says what
-    ///    it does without the reader knowing which key does it today.
-    /// 3. Anything else is **keys**, played as though typed — layer one
-    ///    (#428), which is what the vim preset is made of.
+    /// 2. An **action's name** (`delete_selection`), bare. Names are what a
+    ///    reader should write: `x = "delete_selection"` goes on meaning that
+    ///    after the day the editor's own `d` moves somewhere else, and it says
+    ///    what it does without the reader knowing which key does it today.
+    /// 3. `@xxd` — **keys**, played as though typed (#428), which is what the
+    ///    vim preset is made of.
     ///
-    /// Warning: **A name wins over keys that spell it.** `search` is an action; it
-    /// is also six letters somebody could in principle want pressed one after
-    /// another. Nobody wants that, and the ambiguity is worth less than the
-    /// names being writable bare. A misspelt name is caught when the config is
-    /// read (an underscore means a name was meant), so it cannot quietly type
-    /// itself into a chapter.
+    /// Warning: **A right-hand side that is none of the three plays nothing.** It
+    /// used to fall through to 「then it must be keys」, and a misspelt name
+    /// therefore typed its own letters into the chapter. The config refuses such
+    /// a line and never installs it, so nothing should reach here — and if
+    /// something ever does, the manuscript is not where it gets to say so.
     fn run_binding(&mut self, bound: &str) {
-        if let Some(line) = bound.strip_prefix(':') {
-            let _ = self.execute(&format!(":{line}"));
-            return;
-        }
-        if let Some(action) = yumete_cjk::actions::action(bound) {
-            match action.how {
-                yumete_cjk::actions::How::Keys(keys) => return self.play_keys(keys),
+        match yumete_cjk::actions::bound(bound) {
+            Some(yumete_cjk::actions::Bound::Command(line)) => {
+                let _ = self.execute(&format!(":{line}"));
+            }
+            // `A-d`、`C-o` 這種寫法在這裏纔翻成內部拼法。
+            Some(yumete_cjk::actions::Bound::Keys(keys)) => {
+                self.play_keys(&yumete_cjk::actions::written(keys))
+            }
+            Some(yumete_cjk::actions::Bound::Named(action)) => match action.how {
+                yumete_cjk::actions::How::Keys(keys) => self.play_keys(keys),
                 yumete_cjk::actions::How::Command(line) => {
                     let _ = self.execute(&format!(":{line}"));
-                    return;
                 }
-            }
+            },
+            None => {}
         }
-        // 一串按鍵：`A-d`、`C-o` 這種寫法在這裏纔翻（`:` 那一檔和動作名已經先
-        // 走掉了，所以翻不到它們身上）。
-        self.play_keys(&yumete_cjk::actions::written(bound))
     }
 
     /// **按下這一串鍵，當作人按的**（2026-10-06，給 `::` 挑中一個快捷鍵用）。
@@ -1780,10 +1779,24 @@ impl Editor {
                     self.alias_held = held;
                     return;
                 }
-                match self.key_aliases.get(&held).cloned() {
-                    Some(keys) if held.chars().count() == 1 && keys.chars().count() == 1 => {
+                let found = self.key_aliases.get(&held).cloned();
+                // **一個鍵換一個鍵走正路**：換出來的那一下當作人按的接着處理，所以
+                // 數字前綴、模式、計數都還在它身上。`@` 底下那一串纔是鍵，所以剝掉
+                // 它再數（2026-10-19：從前右邊光着寫就是鍵，現在要說出來）。
+                let one_key = found.as_deref().and_then(|b| match yumete_cjk::actions::bound(b) {
+                    Some(yumete_cjk::actions::Bound::Keys(k)) => {
+                        let mut cs = k.chars();
+                        match (cs.next(), cs.next()) {
+                            (Some(c), None) => Some(c),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                });
+                match found {
+                    Some(_) if held.chars().count() == 1 && one_key.is_some() => {
                         self.settle_alias_count();
-                        Key::Char(keys.chars().next().unwrap())
+                        Key::Char(one_key.unwrap_or('\0'))
                     }
                     Some(bound) => {
                         self.settle_alias_count();

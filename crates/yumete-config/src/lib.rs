@@ -2134,8 +2134,9 @@ impl Config {
                             // Warning: **鍵位表也只認全域，而這一條是 2026-09-24 審出
                             // 來的一個真洞。** 上面那條註釋從前寫着「screenshot
                             // 是**唯一**經過 shell 的一條」，而那個推理不成立：
-                            // `[keys.normal]` 右邊是一串按鍵，**串裏可以放一整行
-                            // 命令行**。實測——本地配置寫
+                            // `[keys.normal]` 右邊**可以直接是一行命令行**（`:`
+                            // 開頭那一檔；一串按鍵裏也放得下一行）。實測——本地
+                            // 配置寫
                             //
                             // ```toml
                             // [keys.normal]
@@ -2371,20 +2372,6 @@ impl Config {
         if let Some(word) = raw.keys.preset.as_deref() {
             if KeyPreset::parse(word).is_none() {
                 problems.push(format!("[keys] preset = \"{word}\" 只能是 helix 或 vim"));
-            }
-        }
-
-        // **A misspelt action name would be played as keys** (#429), so it is
-        // said out loud here — and **not installed** (see `into`, which drops
-        // it on this same test). Saying it was not enough on its own: the
-        // warning scrolled past on the status line and the binding went in, so
-        // the key still typed `delete_slection` into a chapter, one letter at
-        // a time (2026-09-19, caught in review).
-        for (key, bound) in &raw.keys.normal {
-            if yumete_cjk::actions::misspelt(bound) {
-                problems.push(format!(
-                    "[keys.normal] {key} = \"{bound}\" 不是動作名，這一條没裝上——`:keymap-actions` 列出全部"
-                ));
             }
         }
 
@@ -3829,13 +3816,25 @@ impl RawConfig {
             config.export.page = page;
         }
         for (k, v) in self.keys.normal {
-            // Warning: **A name that is not one is left out**, not installed with a
-            // warning beside it: the fallback for a right-hand side is *keys*,
-            // and the keys a misspelt name spells are its own letters going
-            // into the manuscript. `check` names it; this is what makes the
-            // naming worth anything.
-            if !k.is_empty() && !v.is_empty() && !yumete_cjk::actions::misspelt(&v) {
+            // Warning: **Named and dropped in one place.** A right-hand side that is
+            // none of the three kinds is left out — keys used to be the
+            // *fallback*, and the keys a misspelt name spells are its own
+            // letters going into the manuscript. Saying so was not enough on
+            // its own either: the warning scrolled past on the status line
+            // while the binding went in, and the key still typed
+            // `delete_slection` into a chapter one letter at a time
+            // (2026-09-19, caught in review). The complaint used to live in
+            // `load`'s own walk of the raw table, two thousand lines from the
+            // line that drops it, with a comment on each asking the reader to
+            // keep them agreeing; 2026-10-19 they became one.
+            if k.is_empty() || v.is_empty() {
+            } else if yumete_cjk::actions::bound(&v).is_some() {
                 config.keys.normal.insert(k, v);
+            } else {
+                problems.push(format!(
+                    "[keys.normal] {k} = \"{v}\" 不是動作名，這一條没裝上——\
+                     動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{v}\""
+                ));
             }
         }
         if let Some(on) = self.keys.flavor {
@@ -4152,44 +4151,79 @@ mod tests {
         let c = Config::from_toml(
             r#"
             [keys.normal]
-            "j" = "h"
-            "J" = "kJ"
-            "toolong" = "x"
+            "j" = "@h"
+            "J" = "@kJ"
+            "toolong" = "@x"
             "#,
         );
-        assert_eq!(c.keys.normal.get("j").map(String::as_str), Some("h"));
+        assert_eq!(c.keys.normal.get("j").map(String::as_str), Some("@h"));
         // The right-hand side may be a whole sequence: one config line puts
         // vi's join back on `J` without the editor keeping two spellings.
-        assert_eq!(c.keys.normal.get("J").map(String::as_str), Some("kJ"));
+        assert_eq!(c.keys.normal.get("J").map(String::as_str), Some("@kJ"));
         // …and so may the left (#428).
-        assert_eq!(c.keys.normal.get("toolong").map(String::as_str), Some("x"));
+        assert_eq!(c.keys.normal.get("toolong").map(String::as_str), Some("@x"));
     }
 
-    /// **A misspelt action name is left out, not installed with a warning**
-    /// (2026-09-19, caught in review). The fallback for a right-hand side is
-    /// *keys*, so `delete_slection` went in and pressed itself — d, e, l, e,
-    /// t, e… into the chapter — while the warning scrolled past on the status
-    /// line. The two had to be one test, or one of them would keep no teeth.
+    /// **A right-hand side that is none of the three kinds is left out**, not
+    /// installed with a warning beside it (2026-09-19, caught in review): keys
+    /// used to be the *fallback*, so `delete_slection` went in and pressed
+    /// itself — d, e, l, e, t, e… into the chapter — while the warning scrolled
+    /// past on the status line. The two had to be one test, or one of them
+    /// would keep no teeth.
+    ///
+    /// **`"zz" = "save"` is the case that made the kinds explicit** (2026-10-19
+    /// 作者定): a misspelling of `save_file` with no underscore in it, which the
+    /// old guard's 「an underscore means a name was meant」 could not see. Keys
+    /// are written with an `@` now, so nothing is left over to fall back to.
     #[test]
-    fn a_misspelt_action_name_is_not_installed() {
+    fn a_right_hand_side_that_names_nothing_is_not_installed() {
         let c = Config::from_toml(
             r#"
             [keys.normal]
             "x" = "delete_slection"
             "y" = "delete_selection"
-            "z" = "kJ"
+            "z" = "@kJ"
             "Z" = ":write_all"
+            "w" = "save"
+            "W" = "kJ"
             "#,
         );
         assert_eq!(c.keys.normal.get("x"), None, "the typo was installed anyway");
         assert_eq!(c.keys.normal.get("y").map(String::as_str), Some("delete_selection"));
-        assert_eq!(c.keys.normal.get("z").map(String::as_str), Some("kJ"));
+        assert_eq!(c.keys.normal.get("z").map(String::as_str), Some("@kJ"));
         // A `:command` is not a name, so an underscore in one is not a typo.
         assert_eq!(c.keys.normal.get("Z").map(String::as_str), Some(":write_all"));
-        assert!(yumete_cjk::actions::misspelt("delete_slection"));
-        assert!(!yumete_cjk::actions::misspelt("delete_selection"));
-        assert!(!yumete_cjk::actions::misspelt("kJ"));
-        assert!(!yumete_cjk::actions::misspelt(":write_all"));
+        // The two that the underscore test could not tell apart: a typo with no
+        // underscore, and keys that forgot to say they were keys.
+        assert_eq!(c.keys.normal.get("w"), None, "`save` is not a name, and not keys either");
+        assert_eq!(c.keys.normal.get("W"), None, "keys have to say so: \"@kJ\"");
+
+        use yumete_cjk::actions::{Bound, bound};
+        assert!(bound("delete_slection").is_none());
+        assert!(bound("save").is_none(), "the 2026-10-19 case");
+        assert!(bound("kJ").is_none(), "bare keys are no longer a kind");
+        assert!(matches!(bound("delete_selection"), Some(Bound::Named(_))));
+        assert_eq!(bound("@kJ"), Some(Bound::Keys("kJ")));
+        assert_eq!(bound(":write_all"), Some(Bound::Command("write_all")));
+        // `@` with nothing after it presses nothing, and is not an error: the
+        // empty string is a run of no keys.
+        assert_eq!(bound("@"), Some(Bound::Keys("")));
+    }
+
+    /// The refusal says **both** ways to fix it — the names to look at, and the
+    /// `@` the reader probably meant (2026-10-19 作者定的文案).
+    #[test]
+    fn the_refusal_names_the_two_kinds_it_could_have_been() {
+        let (_, problems) = Config::from_toml_saying(
+            r#"
+            [keys.normal]
+            "zz" = "save"
+            "#,
+        );
+        let said = problems.join("\n");
+        assert!(said.contains("不是動作名"), "{said}");
+        assert!(said.contains(":keymap-actions"), "{said}");
+        assert!(said.contains("\"@save\""), "the @ form, with their own string: {said}");
     }
 
     #[test]
@@ -4385,14 +4419,14 @@ mod tests {
             line_numbers = "absolute"
 
             [keys.normal]
-            "a" = "b"
+            "a" = "@b"
         "#;
         let local = r#"
             [editor]
             tab_width = 8
 
             [keys.normal]
-            "c" = "d"
+            "c" = "@d"
         "#;
         let c = Config::from_sources(Some(global), Some(local));
         // Local overrides tab_width...
@@ -4400,8 +4434,8 @@ mod tests {
         // ...but keeps the global line_numbers it didn't touch...
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         // ...and the keymaps are merged.
-        assert_eq!(c.keys.normal.get("a").map(String::as_str), Some("b"));
-        assert_eq!(c.keys.normal.get("c").map(String::as_str), Some("d"));
+        assert_eq!(c.keys.normal.get("a").map(String::as_str), Some("@b"));
+        assert_eq!(c.keys.normal.get("c").map(String::as_str), Some("@d"));
     }
 
     #[test]

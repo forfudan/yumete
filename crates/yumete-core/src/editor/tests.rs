@@ -15083,9 +15083,9 @@ fn key_aliases_remap_normal_mode_keys() {
     type_keys(&mut ed, "abc");
     ed.on_key(Key::Esc);
 
-    // Remap `q` to behave as `d` (delete).
+    // Remap `q` to behave as `d` (delete). Keys say they are keys (`@`).
     let mut aliases = std::collections::HashMap::new();
-    aliases.insert("q".to_string(), "d".to_string());
+    aliases.insert("q".to_string(), "@d".to_string());
     ed.set_key_aliases(aliases);
 
     ed.on_key(Key::Char('g'));
@@ -15105,7 +15105,7 @@ fn a_binding_takes_an_action_name_or_a_command_or_keys() {
     let mut aliases = std::collections::HashMap::new();
     aliases.insert("q".to_string(), "delete_selection".to_string());
     aliases.insert("Z".to_string(), ":goto 1".to_string());
-    aliases.insert("Y".to_string(), "gl".to_string());
+    aliases.insert("Y".to_string(), "@gl".to_string());
     ed.set_key_aliases(aliases);
 
     // A name: what `d` does today, whatever key that is tomorrow.
@@ -15761,7 +15761,7 @@ fn a_key_alias_may_name_a_sequence() {
     let mut ed = typed("上一句\n下一句\n");
     ed.goto_line(2);
     let mut aliases = std::collections::HashMap::new();
-    aliases.insert("z".to_string(), "kJ".to_string());
+    aliases.insert("z".to_string(), "@kJ".to_string());
     ed.set_key_aliases(aliases);
     ed.on_key(Key::Char('z'));
     assert_eq!(ed.current_buffer().text(), "上一句下一句\n");
@@ -15773,7 +15773,7 @@ fn an_alias_that_names_itself_does_not_spin() {
     ed.goto_line(1);
     let mut aliases = std::collections::HashMap::new();
     // `x` stands for `xx` — which stands for `xx`, and so on.
-    aliases.insert("x".to_string(), "xx".to_string());
+    aliases.insert("x".to_string(), "@xx".to_string());
     ed.set_key_aliases(aliases);
     ed.on_key(Key::Char('x'));
     // It ran once, one level deep, and came back.
@@ -20132,7 +20132,7 @@ fn what_the_night_review_caught() {
     // ── 三、使用者自己綁的鍵不搶。
     let mut ed = typed("alpha beta\n");
     ed.execute(":keymap vim").unwrap();
-    ed.set_key_aliases([("p".to_string(), "gl".to_string())].into_iter().collect());
+    ed.set_key_aliases([("p".to_string(), "@gl".to_string())].into_iter().collect());
     press(&mut ed, "ggvlp");
     assert_eq!(ed.current_buffer().text(), "alpha beta\n", "走別名，不是換寄存器");
 
@@ -20921,8 +20921,9 @@ fn a_note_nobody_closed_stops_at_its_own_line() {
 fn a_prefix_can_be_rebound_because_the_right_hand_side_is_keys() {
     let mut ed = typed("alpha beta\n");
     let mut aliases = std::collections::HashMap::new();
-    aliases.insert(";".to_string(), " ".to_string());
-    aliases.insert(" ".to_string(), "l".to_string());
+    // `"@ "` is the at-sign and then a space: keys, one of which is 空格.
+    aliases.insert(";".to_string(), "@ ".to_string());
+    aliases.insert(" ".to_string(), "@l".to_string());
     ed.set_key_aliases(aliases);
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
@@ -25359,7 +25360,7 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
     // **被 `[keys.normal]` 蓋過就要說出來**（2026-10-18）。一行寫着「`d` 不進寄
     // 存器」而 `d` 做着別的事，是今天早上那個三層毛病的翻版。
     let mut ed = typed("甲");
-    ed.set_key_aliases(std::collections::HashMap::from([("d".to_string(), "x".to_string())]));
+    ed.set_key_aliases(std::collections::HashMap::from([("d".to_string(), "@x".to_string())]));
     ed.execute(":keymap-yumete-flavor on").unwrap();
     assert!(
         ed.status().contains(&say!("keys.flavor.no-yank-taken", say!("keys.flavor.on"), "d")),
@@ -27157,7 +27158,7 @@ fn an_alias_expansion_is_not_turned_with_the_typed_keys() {
     use crate::zong::Layout::Vertical;
     use yumete_cjk::VerticalKeys::Logical;
     let mut aliased = std::collections::HashMap::new();
-    aliased.insert("Q".to_string(), "l".to_string());
+    aliased.insert("Q".to_string(), "@l".to_string());
     let go = |alias: bool| {
         let mut ed = typed("第一行天地玄黃宇宙
 第二行天地玄黃宇宙
@@ -27401,7 +27402,7 @@ fn the_vim_preset_hides_two_helix_letters_but_keeps_the_motions() {
     // 別名也走得到：配置裏綁的、`::` 挑的，都是這條路。
     let mut ed = typed("abcde\nfghij\n");
     ed.set_key_preset(Vim);
-    ed.set_key_aliases([("X".to_string(), "gl".to_string())].into_iter().collect());
+    ed.set_key_aliases([("X".to_string(), "@gl".to_string())].into_iter().collect());
     press(&mut ed, "ggX");
     assert_eq!(ed.sel.head(), 4, "別名展開出來的 `gl` 照走");
 }
