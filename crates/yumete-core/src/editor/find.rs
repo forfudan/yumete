@@ -497,8 +497,6 @@ impl Editor {
             .collect();
         let mut hits = Vec::new();
         let mut total = 0usize;
-        let mut mine = 0usize;
-        let mut mine_total = 0usize;
         for i in order {
             let id = self.buffers[i].id();
             // 有名字的按工作路徑縮短，縮不動就印全名；没名字的印它在狀態欄上
@@ -529,14 +527,7 @@ impl Editor {
             if total > was {
                 self.search.files.push((Some(label), Some(id)));
             }
-            if i == self.current {
-                mine = hits.len();
-                mine_total = total;
-            }
         }
-        self.search.mine = mine;
-        self.search.mine_total = mine_total;
-        self.search.mine_is = Some(self.current_buffer().id());
         self.search.cut = false;
         self.search.root = None;
         self.search.hits = hits;
@@ -582,12 +573,6 @@ impl Editor {
             self.search.total = 0;
             self.search.selected = 0;
             self.search.looked_at = None;
-            // Warning: **那三個數也要歸零。** 名單空了而 `mine_total` 還留着上一次的
-            // 數，`rescan_the_open_one` 拿 `total - mine_total` 一減就是負數
-            // （`usize` 下溢，debug 當場 panic，release 畫出個天文數字）。
-            self.search.mine = 0;
-            self.search.mine_total = 0;
-            self.search.mine_is = None;
             self.search.cut = false;
             return;
         }
@@ -640,9 +625,6 @@ impl Editor {
             true => self.scan_the_open_one(&look, &mine, self.search.most()),
             false => (Vec::new(), 0),
         };
-        self.search.mine = hits.len();
-        self.search.mine_total = total;
-        self.search.mine_is = Some(self.current_buffer().id());
         if total > 0 {
             self.search.files.push((mine.clone(), None));
         }
@@ -666,12 +648,6 @@ impl Editor {
                 self.search.hits.clear();
                 self.search.files.clear();
                 self.search.total = 0;
-                // Warning: **同上，那兩個數要跟着歸零**（2026-10-02 審出來的）。這一支
-                // 在 `mine`/`mine_total` 已經填好之後纔走到，漏了它們就是一次
-                // 真的下溢：打一條寫錯的 glob，再在正文裏打一個字就撞上。
-                self.search.mine = 0;
-                self.search.mine_total = 0;
-                self.search.mine_is = None;
                 self.search.root = Some(root);
                 self.search.looked_at = Some(self.search_mark());
                 self.search.bad_glob = true;
@@ -1573,13 +1549,18 @@ impl Editor {
     /// 每一幀畫之前問一次。Warning: **不是每一幀都做事**：指紋對得上就立刻回來，而指紋
     /// 是三個整數的比較。
     ///
-    /// 走這條捷徑要三個條件都成立，否則照舊掛着「按 Enter 重新查找」：
+    /// Warning: **改的是哪一份都算，不只是開搜索那一刻寫着的那一份**（2026-10-19 報的：
+    /// 「I clicked enter into the buffer, and edit something, but the search list
+    /// is not refreshed. This causes the other search results go to the wrong
+    /// locations」）。從名單上按**檔名**找那一段來換，而不是認準開頭那一段，所以
+    /// 從結果裏跳進去的那一份改完也跟着更新。
     ///
-    /// 1. **換的不是稿子**（`buffer` 没變）。換一份稿子在寫，每一處命中身上的檔名
-    ///    都要重寫——那不是「重搜一份」，那是重搜。
-    /// 2. **動的只有正在寫的這一份**（`every` 的增量等於 `revision` 的增量）。
-    ///    別處也動了就交給整趟重搜，它知道怎麼把別人的那幾段也擺對。
-    /// 3. **名單没有被 `MOST` 砍過。** 砍過就不知道後面漏了哪些，接不回去。
+    /// 走這條捷徑要兩個條件都成立，否則照舊掛着「按 Enter 重新查找」：
+    ///
+    /// 1. **鍵没有換過稿子**（`buffer` 没變）。換了的話那一下自己不是改動，見下面
+    ///    「什麼都没改」那一段：戳跟着走，改動從新的那一份算起。
+    /// 2. **動的只有眼前這一份**（`every` 的增量等於 `revision` 的增量）。別處也動
+    ///    了就交給整趟重搜，它知道怎麼把別人的那幾段也擺對。
     pub fn refresh_the_edited_file(&mut self) {
         let Some(was) = self.search.looked_at else { return };
         // `stale` 是「框裏的詞改了、而這個範圍不邊打邊搜」，那件事等 Enter。
@@ -1590,21 +1571,29 @@ impl Editor {
         if now == was {
             return;
         }
-        // Warning: **`looked_at` 那個戳認不出「換了稿子」**（2026-10-07 審出來的）：面板
-        // 為了預覽打開另一個檔的時候它有意重蓋一次，於是 `now.buffer == was.buffer`
-        // 在那之後是真的，而 `mine`/`mine_total` 說的還是上一份。所以這裏問的是
-        // 那兩個數自己說的是哪一份——[`crate::search_panel::Search::mine_is`]。
-        let only_the_open_one = now.buffer == was.buffer
-            && self.search.mine_is == Some(now.buffer)
-            && now.every.wrapping_sub(was.every) == now.revision.wrapping_sub(was.revision);
-        if !only_the_open_one {
+        // **什麼都没改，只是鍵走到了另一份上**——戳跟着走。
+        //
+        // 改動次數之和没動，就是一個字都没改：換緩衝區（面板預覽、`␣w`、挑選器）
+        // 本身不是改動，而戳要是留在上一份身上，接下來真的改一個字就被讀成「兩份
+        // 都動過」，於是白白整趟重搜。
+        if now.every == was.every {
+            self.search.looked_at = Some(now);
             return;
         }
-        self.rescan_the_open_one();
+        let only_this_one = now.buffer == was.buffer
+            && now.every.wrapping_sub(was.every) == now.revision.wrapping_sub(was.revision);
+        if !only_this_one {
+            return;
+        }
+        self.rescan_the_edited_one();
     }
 
-    /// 把名單開頭那一段——正在寫的那一份的命中——換成新的。
-    fn rescan_the_open_one(&mut self) {
+    /// 把名單上**這一份**的那一段命中換成新的。
+    ///
+    /// 命中按檔分組，所以一份檔的命中是名單上連續的一段（[`Self::the_run_of`]）。
+    /// Warning: **那一段不一定在開頭**：從結果裏跳進另一個檔改字，要換的是它自己那
+    /// 一段（2026-10-19）。
+    fn rescan_the_edited_one(&mut self) {
         // Warning: **緩衝區那一檔不走這條快路**（2026-10-02 審出來的）。這一支拿
         // `my_label()` 給新命中貼名字，而那一支開頭就是 `search.root.as_ref()?`
         // ——緩衝區那一檔没有根（`scan_every_buffer` 有意設成 `None`），於是整
@@ -1618,15 +1607,22 @@ impl Editor {
         }
         let Some(look) = self.looker() else { return };
         let (mine, counts) = self.the_open_one_in_scope();
-        let was = self.search.mine.min(self.search.hits.len());
+        // **不在這一趟的範圍裏，改它就不關名單的事**——戳跟上就完了。整趟重搜在
+        // 這裏是純粹的浪費：它要走一遍磁碟，而答案一定和現在這一份一模一樣。
+        if !counts {
+            self.search.looked_at = Some(self.search_mark());
+            return;
+        }
+        let run = self.the_run_of(&mine);
+        let was = run.clone().map_or(0, |r| r.len());
         let others = self.search.hits.len() - was;
-        let (fresh, total) = match counts {
-            true => self.scan_the_open_one(&look, &mine, self.search.most().saturating_sub(others)),
-            false => (Vec::new(), 0),
-        };
+        let (fresh, total) = self.scan_the_open_one(&look, &mine, self.search.most().saturating_sub(others));
         // 砍過就接不回去：後面漏了哪些没人知道。整趟重跑，它自己會把數擺對。
+        //
+        // `self.search.total - was` 是「別人一共有幾處」：名單没被砍過的時候，每一
+        // 份檔擺出來的那一段就是它的全部，所以減得出來。砍過的話上一句先攔住了。
         let most = self.search.most();
-        if self.search.total > most || total + (self.search.total - self.search.mine_total) > most {
+        if self.search.total > most || total + (self.search.total - was) > most {
             return self.search_now();
         }
         // **站着的那一處，按它自己認回來**（2026-10-07 審出來的）。
@@ -1639,19 +1635,27 @@ impl Editor {
         // 重搜那一支（[`Self::look_again_and_stand_still`]）早就不按號碼放回去了，
         // 這一支照它辦：記下那一處命中本身，擺完名單再找回來。
         let standing = self.the_hit_under_the_highlight();
-        self.search.hits.splice(0..was, fresh);
-        self.search.total = self.search.total - self.search.mine_total + total;
-        self.search.mine = self.search.hits.len() - others;
-        self.search.mine_total = total;
+        // **原地換，不搬家**（2026-10-13 報的：「這個文件和他的匹配結果就直接一起
+        // 跳到了結果列表最上方……我又要向下移動找到剛剛的位置」）。一份檔本來在名
+        // 單第幾段，改完還在第幾段；只有從前一處都没有的那一份是新的一段，它跟着
+        // 整趟重搜的規矩擺在最前——那一趟也是先搜眼前這一份、再走磁碟。
+        match run {
+            Some(r) => drop(self.search.hits.splice(r, fresh)),
+            None => drop(self.search.hits.splice(0..0, fresh)),
+        }
+        self.search.total = self.search.total - was + total;
         // **那張「有命中的檔」也要跟着**（見 [`crate::search_panel::Search::files`]）。
         // 在正文裏打出第一個「霜」來，這一份就該進那張表；刪掉最後一個，就該出
         // 去。不跟的話 `R` 要麼漏掉眼前這一份，要麼為一個早就没有命中的檔白開一
         // 趟——而問句數的也是那張表。
         let me = (mine.clone(), None);
-        self.search.files.retain(|one| one != &me);
-        if total > 0 {
-            // 整趟重搜的時候它排在最前面（先搜內存再走磁碟），這裏也擺回去。
-            self.search.files.insert(0, me);
+        let had = self.search.files.iter().position(|one| one == &me);
+        match (had, total > 0) {
+            // 本來就在表上：原來第幾個，現在還是第幾個。
+            (Some(_), true) => {}
+            (Some(i), false) => drop(self.search.files.remove(i)),
+            (None, true) => self.search.files.insert(0, me),
+            (None, false) => {}
         }
         // 站在別人那一段上的時候，那一處原封不動，找回去就是原處；站在自己這一
         // 段裏的時候，那幾處剛被這一筆改動挪過，於是落在「它或它之後」的頭一處
@@ -1661,6 +1665,17 @@ impl Editor {
         let stood_at = self.search.selected;
         self.stand_on_that_hit(standing, stood_at);
         self.search.looked_at = Some(self.search_mark());
+    }
+
+    /// **名單上屬於這一份檔的那一段**，`None` ＝ 它一處都没有。
+    ///
+    /// 命中是按檔一組一組擺進名單的（先眼前這一份，再走查一個檔一個檔地加），
+    /// 所以同一個檔名的那幾處永遠是連續的一段——只重搜一份就是把這一段換掉。
+    fn the_run_of(&self, mine: &Option<PathBuf>) -> Option<std::ops::Range<usize>> {
+        let first = self.search.hits.iter().position(|hit| &hit.file == mine)?;
+        let len =
+            self.search.hits[first..].iter().take_while(|hit| &hit.file == mine).count();
+        Some(first..first + len)
     }
 
     /// **眼前這一份在這一趟裏算不算**，以及它在名單上叫什麼。
@@ -2646,27 +2661,29 @@ impl Editor {
             }
         }
         let rope = self.current_buffer().rope();
-        let len = rope.len_chars();
-        // Warning: **A hit in another file is placed by line, not by the offset.**
-        // Those offsets were counted in the text as it was read; the buffer
-        // just opened may have been edited since, and a stale offset would put
-        // the cursor in the middle of a word somewhere else.
+        // Warning: **A hit is placed by its line, not by its offset.** Those
+        // offsets were counted in the text as it was read; the buffer may have
+        // been edited since, and a stale offset would put the cursor in the
+        // middle of a word somewhere else.
         //
         // Warning: **落在行首不算「指給人看」**（2026-09-27 審出來的）：一本二十章的
         // 小說，每一章的第一處命中都只把光標放在那一行的開頭，那幾個字不反白，
         // 看圖的人自己找。行號靠不住而**這一行的文字是現成的**——所以在這一行上
         // 把同一個問題再問一遍，取第 `nth` 段，指到字上。問不出來纔退回行首。
-        let (at, end) = match elsewhere {
-            true => {
-                let line = hit.line.min(rope.len_lines().saturating_sub(1));
-                let head = rope.line_to_char(line);
-                let text: String = rope.line(line).chars().collect();
-                match self.looker().and_then(|look| look.spans(&text).get(hit.nth).copied()) {
-                    Some((a, b)) => (head + a, head + b),
-                    None => (head, head),
-                }
+        //
+        // Warning: **眼前這一份也照這條規矩放**（2026-10-19）。從前只有「別的檔」走它，
+        // 自己這一份按 `at`/`end` 兩個偏移放——而從結果裏跳進一個檔改過字之後，
+        // 那兩個偏移就是前一刻的尺：報來的原話是「It highlight a empty locaiton」
+        // ……「the other search results go to the wrong locations」。兩條路合成一條，
+        // 對錯就只有一種。
+        let (at, end) = {
+            let line = hit.line.min(rope.len_lines().saturating_sub(1));
+            let head = rope.line_to_char(line);
+            let text: String = rope.line(line).chars().collect();
+            match self.looker().and_then(|look| look.spans(&text).get(hit.nth).copied()) {
+                Some((a, b)) => (head + a, head + b),
+                None => (head, head),
             }
-            false => (hit.at.min(len), hit.end.min(len)),
         };
         self.sel.set_anchor(at);
         self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end.max(at)).max(at));
@@ -2681,7 +2698,16 @@ impl Editor {
         // 的，互動那一邊一模一樣（`j` 走過去就變）。
         //
         // 重新蓋一次戳是誠實的：這一下是面板自己做的，它知道自己什麼都没改。
-        self.search.looked_at = Some(self.search_mark());
+        //
+        // Warning: **只有「什麼都没改」纔蓋**（2026-10-19 修）。從前這一句是無條件的，
+        // 於是在正文裏改過字之後回名單按一下 `j`，過期那件事就被抹掉了：標題從
+        // 「按 Enter 重新查找」變回處數，而 `Enter`（「過期了先跑、不跳」那一條）
+        // 也就不再先跑——跳過去落在改動前的那個位置上。改動次數之和没動纔是
+        // 「什麼都没改」。
+        let now = self.search_mark();
+        if self.search.looked_at.is_none_or(|was| was.every == now.every) {
+            self.search.looked_at = Some(now);
+        }
         true
     }
 }

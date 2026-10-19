@@ -524,22 +524,9 @@ pub struct Search {
     /// （見 `search_now` 裏「An open file is read from its buffer」那一段）。
     pub looked_at: Option<Mark>,
 
-    /// **名單開頭有幾處是正在寫的那一份裏的。**
-    ///
-    /// `search_now` 先掃正在寫的那一份、再走磁盤，所以那一份的命中永遠是 `hits`
-    /// 開頭連續的一段。記下它有多長，只重搜那一份的時候就能把這一段換掉而不動
-    /// 後面（`Editor::rescan_the_open_one`）。
-    pub mine: usize,
-    /// 那一份裏一共有幾處——没有被 [`MOST`] 砍過的真數，`total` 要拿它加減。
-    pub mine_total: usize,
-    /// **上面那兩個數說的是哪一份緩衝**（2026-10-07 審出來的）。
-    ///
-    /// Warning: 少了這一格，快路會把一份稿子的命中接到另一份的位置上。`looked_at` 那
-    /// 個戳在「面板自己為了預覽打開另一個檔」的時候會**重蓋一次**（有意的，見
-    /// `Editor::go_to_hit`），於是「換的不是稿子」那道閘看着是過了，而 `mine`
-    /// 還說着上一份：在預覽出來的那一份裏打一個字，它的命中就被整段**插進**名
-    /// 單開頭，而它原來那幾處還在後面——同一個檔在名單上出現兩次。
-    pub mine_is: Option<u64>,
+    // **這裏從前有三格 `mine` / `mine_total` / `mine_is`**（2026-10-19 刪）：名單開頭
+    // 有幾處是「開搜索那一刻寫着的那一份」的。只重搜一份從此按**檔名**在名單上
+    // 找那一段（`Editor::the_run_of`），於是哪一份都換得了，也不必記着它是誰。
     /// Where the caret is in it, in characters.
     pub caret: usize,
     /// **記着的那個詞，畫成灰字**——`空格 /` 什麼都没選中的時候留下的。

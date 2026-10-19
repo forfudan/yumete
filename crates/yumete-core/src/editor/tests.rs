@@ -12030,9 +12030,10 @@ fn a_named_folder_is_reckoned_from_the_working_directory() {
 
 /// **一條寫錯的 glob 之後再改正文，從前會 `usize` 下溢**（2026-10-02 審出來的）。
 ///
-/// `search_now` 先填好 `mine`/`mine_total`，走到壞 glob 那一支纔把 `total` 歸零
-/// 卻漏了那兩個。接着在正文裏打一個字，`rescan_the_open_one` 算
-/// `total - mine_total` ＝ `0 - N`——debug 當場 panic，release 畫出個天文數字。
+/// `search_now` 先填好那幾個數，走到壞 glob 那一支纔把 `total` 歸零卻漏了它們。
+/// 接着在正文裏打一個字，只重搜一份那一支算 `total - 這一份的處數` ＝ `0 - N`
+/// ——debug 當場 panic，release 畫出個天文數字。那幾個數 2026-10-19 整個刪了
+/// （只重搜一份改成按檔名在名單上找那一段），這一支守的是同一條算式。
 #[test]
 fn a_bad_glob_leaves_the_three_numbers_agreeing() {
     let dir = a_little_book("badglob");
@@ -12043,15 +12044,14 @@ fn a_bad_glob_leaves_the_three_numbers_agreeing() {
     ed.on_key(Key::Char('霜'));
     ed.on_key(Key::Enter);
     ed.settle_search();
-    assert!(ed.search().mine_total > 0, "這一份裏有命中");
+    assert!(ed.search().total > 0, "這一份裏有命中");
 
     // 包含那一格打一條編譯不過的 glob。
     ed.search_for_test().include = "[".into();
     ed.on_key(Key::Enter);
     ed.settle_search();
     assert_eq!(ed.search().total, 0);
-    assert_eq!(ed.search().mine_total, 0, "名單空了，那幾個數也要歸零");
-    assert_eq!(ed.search().mine, 0);
+    assert!(ed.search().hits.is_empty(), "名單空了");
 
     // 從前下一行就是 `0 - N`。
     ed.on_key(Key::Esc);
@@ -25093,16 +25093,19 @@ fn the_outline_keeps_the_heading_it_was_standing_on() {
     assert_eq!(standing(&ed), "三", "高亮跟着那一條走，不是停在第三行");
 }
 
-/// **快路不許把一份稿子的命中接到另一份的位置上**（2026-10-07 審出來的）。
+/// **從結果裏跳進去改的那一份，名單跟着改**（2026-10-19 報的）。
 ///
-/// 兩件事碰在一起：① `mine`/`mine_total` 說的是「名單開頭那一段是正在寫的那一份
-/// 的」，② `looked_at` 那個戳在面板**為了預覽打開另一個檔**的時候有意重蓋一次
-/// （2026-10-03 修的，不然走一步標題就變「按 Enter 重新查找」）。於是「換的不是
-/// 稿子」那道閘看着是過了，而那兩個數還說着上一份——在預覽出來的那一份裏打一個
-/// 字，它的命中就被整段**插進**名單開頭，而它原來那幾處還在後面：同一個檔在名單
-/// 上出現兩次，處數也憑空多出來。
+/// 原話：「I clicked enter into the buffer, and edit something, but the search
+/// list is not refreshed. This causes the other search results go to the wrong
+/// locations」。只重搜一份從前認準名單**開頭**那一段（「正在寫的那一份」是開搜索
+/// 那一刻的那一份），於是從結果裏跳進去的檔改完一個字都不更新；而 `j` 預覽還會
+/// 把「過期了」那個戳抹掉，於是連「按 Enter 重新查找」都不說了，跳過去落在改動前
+/// 的位置上。
+///
+/// 2026-10-07 那一輪在同一處按出過另一個形狀：那兩個數說着上一份，於是命中被整段
+/// 插進名單開頭，同一個檔在名單上出現兩次。這一支一併守着。
 #[test]
-fn the_fast_rescan_refuses_when_the_counts_describe_another_buffer() {
+fn the_file_you_jumped_into_and_edited_is_rescanned() {
     let dir = tmp().join(format!("yumete-rescanmine-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -25135,13 +25138,23 @@ fn the_fast_rescan_refuses_when_the_counts_describe_another_buffer() {
     }
     ed.on_key(Key::Esc);
     ed.refresh_the_edited_file();
-    let listed: Vec<_> = ed.search().hits.iter().map(|h| (h.file.clone(), h.line)).collect();
+    let listed: Vec<_> =
+        ed.search().hits.iter().map(|h| (h.file.clone(), h.line, h.at)).collect();
     let mut once = listed.clone();
     once.sort();
     once.dedup();
     assert_eq!(listed.len(), once.len(), "一處都不許重：{listed:?}");
-    // 快路讓開了，於是名單照實說它過期了——面板上就是「按 Enter 重新查找」。
-    assert!(ed.search_is_stale(), "名單過期了，等 Enter");
+    assert_eq!(ed.search().total, 3, "剛打出來的那一處也在名單上：{listed:?}");
+    assert!(!ed.search_is_stale(), "改的那一份重搜過了，不必再按 Enter");
+
+    // **別的那幾處還指得準。** 回名單走到下一處，光標要落在「霜」上——從前落在
+    // 改動之前的那個偏移上，差的正是剛打進去的那一個字。
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('h'));
+    ed.on_key(Key::Char('j'));
+    let at = ed.cursor();
+    let rope = ed.current_buffer().rope();
+    assert_eq!(rope.char(at), '霜', "{:?}", ed.current_buffer().text());
     std::fs::remove_dir_all(&dir).ok();
 }
 
