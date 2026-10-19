@@ -189,20 +189,47 @@ pub fn action(name: &str) -> Option<&'static Action> {
     ALL.iter().find(|a| a.name == name)
 }
 
-/// **A right-hand side that meant an action and misspelt it** (#429).
+/// **What the right-hand side of a binding is**, told by its own spelling.
 ///
-/// Keys are the fallback, so `x = "delete_slection"` would be *pressed* —
-/// d, e, l, e, t, e… straight into the manuscript. Nothing the editor binds to
-/// a key is spelled with an underscore, so an underscore means a name was
-/// meant, and an unknown one is a typo rather than a key sequence.
+/// Three kinds, each with a mark of its own: `:write` is the command line,
+/// `@xxd` is keys pressed as if by hand, and a bare word is an action by name.
+/// `None` is 「none of the three」 — a name the editor does not know.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bound<'a> {
+    /// `:write` — the line, without its colon.
+    Command(&'a str),
+    /// `@xxd` — the keys, without the `@`, still in the written spelling.
+    Keys(&'a str),
+    /// `delete_selection` — this action.
+    Named(&'static Action),
+}
+
+/// Read a right-hand side, or `None` when it names nothing (#429).
 ///
-/// Warning: **One function, because two answers would drift.** The config says this
-/// out loud when it is read and **drops the binding** on the same test; they
-/// were two copies of the condition until 2026-09-19, and only one of them had
-/// teeth — the warning was printed and the binding installed anyway.
-/// A `:command` is not a name and never a typo of one.
-pub fn misspelt(bound: &str) -> bool {
-    !bound.starts_with(':') && bound.contains('_') && action(bound).is_none()
+/// Warning: **keys used to be the *fallback*, and that is what made a typo
+/// dangerous.** `x = "delete_slection"` was pressed — d, e, l, e, t, e… straight
+/// into the manuscript — because an unknown name fell through to 「then it must
+/// be keys」. The guard against it asked whether the name held an underscore,
+/// and 2026-10-19 an audit found the hole that leaves: `"zz" = "save"` is a
+/// misspelling of `save_file` with no underscore in it, so it went in and typed
+/// `s`, `a`, `v`, `e` — the `s` opening the search panel and `ave` landing in
+/// it. Fourteen of the eighty names have no underscore either, so the shape of
+/// a word cannot answer this.
+///
+/// So the kind is **said, not guessed** (2026-10-19 作者定). Measured on the two
+/// editors this one follows: helix takes a bare string as a command name only —
+/// `X = "xxd"` is refused with 「No command named 'xxd'」 — and writes keys with
+/// an `@`, which is the spelling borrowed here; vim has no name kind at all, so
+/// its right-hand side is always keys and there is nothing to typo. yumete was
+/// the only one of the three guessing between them.
+pub fn bound(rhs: &str) -> Option<Bound<'_>> {
+    if let Some(line) = rhs.strip_prefix(':') {
+        return Some(Bound::Command(line));
+    }
+    if let Some(keys) = rhs.strip_prefix('@') {
+        return Some(Bound::Keys(keys));
+    }
+    action(rhs).map(Bound::Named)
 }
 
 const fn keys(name: &'static str, help: &'static str, k: &'static str) -> Action {

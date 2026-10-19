@@ -35,6 +35,13 @@ impl KeyPreset {
     }
 
     /// The preset's lines, in `[keys.normal]`'s own shape.
+    ///
+    /// Warning: **the keys carry their `@`, like anyone else's** (2026-10-19). These
+    /// go into the same map a reader's own bindings do and are dispatched by the
+    /// same `run_binding`, so they are spelled the way a reader would have to
+    /// spell them — `("D", "@d$")` is keys, `("ZZ", ":x")` is a command line.
+    /// Exempting the table would mean the dispatcher had to guess again for one
+    /// of its two callers, which is the whole thing being removed.
     pub fn table(self) -> &'static [(&'static str, &'static str)] {
         match self {
             KeyPreset::Helix => &[],
@@ -43,7 +50,7 @@ impl KeyPreset {
             // word; vim's `x` after `w` cuts the one character under the
             // cursor.
             KeyPreset::Vim => &[
-                ("x", ";{n}D"),
+                ("x", "@;{n}D"),
                 // Warning: **`s` 是一筆，不是「剪掉 ＋ 插入」兩筆**（2026-10-13 報
                 // 的：「使用 2s 替換輸入時，會把 redo 動作變成兩步」）。從前它拼成
                 // `;{n}Di`，兩筆編輯就是兩次撤銷；vim 的 `s` 就是 `cl`（`:h s`：
@@ -51,7 +58,7 @@ impl KeyPreset {
                 //
                 // 2026-09-19 那一版寫成 `;c` 是錯的（`c` 成了算子之後 `;c` 會停下
                 // 來等一個動作），而 `c{n}l` 把動作一起給了它，不等。
-                ("s", "c{n}l"),
+                ("s", "@c{n}l"),
                 // Warning: **`dd` `dw` `cw` `yy` `cc` `yw` are not in this table
                 // any more** (#429, 2026-09-18). They were six lines of a
                 // grammar that has hundreds, and a table cannot spell the rest
@@ -62,14 +69,14 @@ impl KeyPreset {
                 // begins」** (B4, 2026-09-20). `Enter` is the same motion and
                 // cannot be spelled in this table — it has a key arm of its
                 // own — but `+` and `-` are characters and belong here.
-                ("+", "jgs"),
-                ("-", "kgs"),
-                ("^", "gs"),
-                ("$", "gl"),
-                ("0", "gh"),
+                ("+", "@jgs"),
+                ("-", "@kgs"),
+                ("^", "@gs"),
+                ("$", "@gl"),
+                ("0", "@gh"),
                 // 「this word, elsewhere」 — `g/` here, and the one vim key a
                 // hand reaches for without thinking.
-                ("*", "g/"),
+                ("*", "@g/"),
                 // Warning: **The ones that do something *else* here**, which is
                 // worse than doing nothing: `%` selects the whole file (vim
                 // jumps to the matching bracket), `D` and `C` cut the
@@ -93,10 +100,10 @@ impl KeyPreset {
                 // 段），那句話正是說這個。
                 //
                 // Warning: **展開出來的鍵不再過別名層**，所以這兩行不會互相咬。
-                ("q", "Q"),
-                ("Q", "q"),
-                ("K", " k"),
-                ("%", "mm"),
+                ("q", "@Q"),
+                ("Q", "@q"),
+                ("K", "@ k"),
+                ("%", "@mm"),
                 // **`(`/`)` 是句子**（2026-10-06）。這裏它們本來是「換主選區」，
                 // 而 vim 的手按的是上一句/下一句——這個編輯器把句子放在 `H`/
                 // `L` 上（#404）。換主選區在 vim 鍵位下没有鍵，多選區那一族本來
@@ -104,13 +111,13 @@ impl KeyPreset {
                 // **`m` 讓給設標記這件事不在這張表上**（2026-10-06）：它從前寫成
                 // `("m", "M")`，而 `M` 當天讓給了「屏幕中間」，換出來的 `M` 又分不出
                 // 是誰按的。改成編輯器自己一支 vim 專用的 `m`（`keys.rs`）。
-                ("D", "d$"),
-                ("C", "c$"),
+                ("D", "@d$"),
+                ("C", "@c$"),
                 // **`Y` ＝ `y$`，跟 nvim**（2026-10-06 定「我傾向 nvim」）。
                 // nvim 0.6 起的出廠值，理由是和 `D`（`d$`）`C`（`c$`）成一套。
                 // **一個鍵都没丟**：`yy` 一直是「複製整行」，兩種寫法都在。
-                ("Y", "y$"),
-                ("S", "cc"),
+                ("Y", "@y$"),
+                ("S", "@cc"),
                 // The two a hand presses on its way out of the editor.
                 ("ZZ", ":x"),
                 ("ZQ", ":quit!"),

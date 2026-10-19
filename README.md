@@ -162,7 +162,9 @@ written anywhere (`3dw`, `d3w`, `2d3w`), and `x s D C Y S % * ; , ZZ` mean what
 vim means. It is a translation, not a second editor — the motions underneath
 stay this editor's, and the manual lists key by key what it costs a helix hand.
 `[keys.normal]` also binds any key to a **named action** (`x =
-"delete_selection"`) or to a `:command`.
+"delete_selection"`), to a `:command`, or to a run of keys written with an `@`
+(`"dj" = "@xxd"`) — the mark is there so that a misspelt name is refused rather
+than typed into the manuscript.
 
 Twenty-odd commands is past the point where they can be guessed, so `:` on its
 own lists them in aligned columns with a line each, narrowing as you type; `::`
