@@ -10,6 +10,12 @@ version.workspace = true
 name = "yumete"
 path = "src/main.rs"
 
+[target.'cfg(unix)'.dev-dependencies]
+# The self-output test caps the child's file size, so a regression of the bug it
+# guards (a search that reads its own output) fails the test instead of filling
+# the disk the way it did on 2026-10-19.
+libc = "0.2"
+
 [dependencies]
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}

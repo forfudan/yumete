@@ -499,6 +499,10 @@ pub struct Search {
     /// 見 `editor::WALK_GRACE`：走查有一個地板加一隻錶，碰到頭就交出半截的答
     /// 案。從前它一聲不吭，於是一張短清單看着像是全部。
     pub cut: bool,
+    /// **一個檔没搜，因為它就是這一趟輸出要去的地方**，名字在這裏（2026-10-19）。
+    /// 同 [`Search::cut`]：漏掉一個檔，呼叫方有義務說出來。`ye --grep` 說在
+    /// stderr 上；編輯器裏開不出這一種（它的輸出不是檔）。
+    pub own_output: Option<String>,
     /// The files whose hits are folded away，按（名字, 號）這一對記，見 [`Row::File`]。
     pub folded: std::collections::BTreeSet<(std::path::PathBuf, Option<u64>)>,
     /// What the paths in [`Hit::file`] are relative to, so opening one can

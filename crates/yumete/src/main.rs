@@ -1729,6 +1729,18 @@ fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
         eprintln!("yumete: {what}: the walk stopped early; this is not the whole answer");
         incomplete = true;
     }
+    // **The file this output is going to was not searched** — it cannot be,
+    // and reading it would feed the search its own answers until the disk
+    // filled (2026-10-19: one such line reached 315 GB). Said, not silent: a
+    // search that skips a file and keeps quiet is the one thing this tool may
+    // not do. It does not make the answer incomplete in the sense above — the
+    // skipped file holds nothing but this run's own output — so the exit code
+    // is left alone.
+    if let Some(name) = search.own_output.as_deref() {
+        eprintln!(
+            "yumete: {what}: not searching {name} — it is where this output is going"
+        );
+    }
     incomplete
 }
 

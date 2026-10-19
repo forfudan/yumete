@@ -1827,10 +1827,14 @@ impl Progress {
 }
 
 /// 一趟走查交代了什麼。
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct Walked {
     /// **没走完就停了** —— 交出來的那張單子是半截的，呼叫方有義務說出來。
     pub cut: bool,
+    /// **跳過了一個檔：它就是這一趟的輸出要去的地方**（見 [`is_our_own_output`]）。
+    /// 名字留着，因為呼叫方要說出跳了哪一個——漏掉一個檔而不出聲是 `Walked`
+    /// 自己的註釋禁止的事。
+    pub own_output: Option<String>,
 }
 
 pub(crate) fn walk(root: &Path, f: &mut impl FnMut(&Path)) {
@@ -1973,6 +1977,20 @@ fn walk_inner(
         // words into a `.html` beside it, and `:grep` then found every one of
         // them twice — the second time in a file the writer cannot edit.
         if is_build_output(&entry.file_name().to_string_lossy()) {
+            continue;
+        }
+        // **And not where this very output is going** (2026-10-19). `ye --grep
+        // word . > out.txt`, run inside the directory it searches, reads
+        // `out.txt` as it writes it: every line written becomes a line to
+        // find, and the file grows for as long as the disk lasts. It cost
+        // **315 GB** and all but 1.6 GB of a 926 GB disk the day it was
+        // measured, and nothing said a word while it happened.
+        //
+        // GNU grep has refused this since forever (「input file X is also the
+        // output」). The test is the file's identity, not its name, so a
+        // symlink or a second path to it is caught too.
+        if is_our_own_output(path) {
+            walked.own_output = Some(entry.file_name().to_string_lossy().into_owned());
             continue;
         }
         // **「太大就不搜」那一道闸没有了**（2026-10-08 定）。從前超過 `GREP_MAX_BYTES`
@@ -4356,6 +4374,53 @@ struct Confirming {
 /// The manuscript's own words are *in* the export, so searching the export
 /// finds every hit twice — the second time in a file that cannot be edited and
 /// will be overwritten. The same goes for a typesetter's output.
+/// **Whether `path` is the file this process's own stdout is going to.**
+///
+/// `None` from [`our_output`] means stdout is a terminal or a pipe — nothing on
+/// disk can be it — so the walk pays one atomic read and moves on.
+fn is_our_own_output(path: &Path) -> bool {
+    let Some(ours) = our_output() else { return false };
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(path).is_ok_and(|m| (m.dev(), m.ino()) == ours)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, ours);
+        false
+    }
+}
+
+/// The device and inode of our stdout, **if it is a regular file**.
+///
+/// Asked once: a redirection cannot change under a running process, and the
+/// walk asks this per file.
+///
+/// Warning: **`fstat(1)`, not `stat("/dev/fd/1")`.** On macOS that path is a devfs
+/// entry: it reports the right inode and the **wrong device**, so the pair
+/// never matches and the guard silently never fires. Measured 2026-10-19:
+/// `/dev/fd/1` gave `dev 733833090`, the file itself `dev 16777230`.
+#[cfg(unix)]
+fn our_output() -> Option<(u64, u64)> {
+    static OURS: std::sync::OnceLock<Option<(u64, u64)>> = std::sync::OnceLock::new();
+    *OURS.get_or_init(|| unsafe {
+        let mut st: libc::stat = std::mem::zeroed();
+        if libc::fstat(1, &mut st) != 0 {
+            return None;
+        }
+        if st.st_mode & libc::S_IFMT != libc::S_IFREG {
+            return None;
+        }
+        Some((st.st_dev as u64, st.st_ino as u64))
+    })
+}
+
+#[cfg(not(unix))]
+fn our_output() -> Option<(u64, u64)> {
+    None
+}
+
 fn is_build_output(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     [".html", ".htm", ".pdf", ".epub", ".docx"]
