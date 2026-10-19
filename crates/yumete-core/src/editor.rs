@@ -2453,7 +2453,7 @@ pub struct Editor {
     /// Warning: **只在 Esc 没有別的事可做的時候。** Esc 先收窗口、先收選區；那幾件都
     /// 不是這一件，而一個鍵一次只該做一件事。
     say_it_again: bool,
-    /// **`:config-reload` 按過了** —— 前端下一趟取走（`take_config_reload`）。
+    /// **`:reload-config` 按過了** —— 前端下一趟取走（`take_config_reload`）。
     ///
     /// 核心不知道配置檔在哪，也不該知道：那是 XDG 的事，歸前端。核心只記「有人
     /// 要求了」，同十一支 `take_*_request` 一個形狀。

@@ -630,7 +630,7 @@ fn main() -> ExitCode {
         yumete_core::messages::set_language(language);
     }
     // **每一項設定推一遍，一處**（`yumete_tui::settings::apply`）。從前這裏攤着
-    // 一百多行 `editor.set_…`；抽出去是因為 `:config-reload` 要叫同一支——否則
+    // 一百多行 `editor.set_…`；抽出去是因為 `:reload-config` 要叫同一支——否則
     // 「啓動時認這個設定、重載時忘了它」是遲早的事。
     yumete_tui::settings::apply(&config, &mut editor, force_layout, force_language);
     // `--syntax` outranks the config and the extension both: it is this run's
@@ -1197,7 +1197,20 @@ fn main() -> ExitCode {
                 settings_page.as_ref(),
             ),
         };
-        print!("{picture}");
+        // **A reader that walks away is not an error.** `--shot | head -5`, or a
+        // `| grep -q`, closes the pipe as soon as it has what it came for, and
+        // `print!` *panics* on that — a Rust backtrace printed where the frame
+        // should be. `--grep` and `--files` have always answered a closed pipe
+        // with a quiet success; the frame answers the same way (2026-10-19).
+        let mut sink = io::stdout();
+        match write!(sink, "{picture}").and_then(|()| sink.flush()) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("yumete: --shot: {e}");
+                return ExitCode::from(2);
+            }
+        }
         return ExitCode::SUCCESS;
     }
     if printing {
