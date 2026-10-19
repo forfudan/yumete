@@ -3501,14 +3501,14 @@ en = "a heading in this file"
 # ── convert ───────────────────────────────────────────────────────────
 
 [[message]]
-# :config-reload 讀到的設定檔有毛病
+# :reload-config 讀到的設定檔有毛病
 key = "config.reload-said"
 zht = "設定重讀了，但有話説：{0}"
 zhs = "设置重读了，但有话説：{0}"
 en = "settings reloaded, with something to say: {0}"
 
 [[message]]
-# :config-reload 做完了
+# :reload-config 做完了
 key = "config.reloaded"
 zht = "設定重讀了"
 zhs = "设置重读了"
@@ -6204,19 +6204,18 @@ zhs = "格内"
 en = "in a cell"
 
 [[message]]
-# 表格提示：把這一行的數據開進邊欄(2026-09-30 定，原話「␣I 在侧栏打开」，
-# 「这个和其他四个信息面板的话术保持一致」——全樹寫的是「邊欄」，不是「側欄」)
+# Table record
 key = "hint.table.into-the-sidebar"
-zht = "在邊欄打開"
-zhs = "在边栏打开"
-en = "open it in the sidebar"
+zht = "在邊欄顯示行記錄"
+zhs = "在边栏显示行记录"
+en = "show record in sidebar"
 
 [[message]]
 # t 選單：t q 這一行(只在全窗表格模式下有用)
 key = "hint.table.leave-the-window"
 zht = "退出全窗視圖"
 zhs = "退出全窗视图"
-en = "leave the full-window view"
+en = "leave full-window view"
 
 [[message]]
 # 表格提示：重排對齊
@@ -6230,7 +6229,7 @@ en = "line it up again"
 key = "hint.table.menu"
 zht = "表格選單"
 zhs = "表格菜单"
-en = "the table menu"
+en = "table menu"
 
 [[message]]
 # 表格提示：這欄左移/右移
