@@ -4856,15 +4856,33 @@ pub const COMMANDS: &[Entry] = &[
 const RENAMED: &[(&str, &str)] = &[
     ("appearance", "theme"),
     ("bclose", "buffer-close"),
+    // **The short vi spellings** (2026-10-19). None of them shares a segment
+    // with the name it became, so the search below cannot find them — and
+    // `:cy` was worse than unfound: the prefix pass matched `cyanotype` in the
+    // theme list and sent a vi hand that wanted the clipboard to the theme
+    // switcher. A wrong signpost is worse than none.
+    ("bd", "buffer-close"),
+    ("buffers", "buffer"),
+    ("cf", "yume-chaifen"),
     ("conflicts", "check-merge"),
+    ("cp", "clipboard-paste"),
+    ("cy", "clipboard-yank"),
     // Two answers to one question it did not name; four answers now (2026-09-16).
     ("dense", "view-margin"),
+    ("layout", "vertical horizontal"),
+    ("ls", "buffer"),
+    // **The three that were values of one thing** — the fold they came out of
+    // is `:render off|basic|full`, so the thing is what the signpost names.
+    ("markup", "render"),
     ("note", "view-punct"),
+    ("nowrap", "view-wrap"),
     ("row", "table-jump"),
     ("sav", "write-as"),
     ("saveas", "write-as"),
+    ("source", "render"),
     ("view-dense", "view-margin"),
     ("wall", "write-all"),
+    ("wysiwyg", "render"),
 ];
 
 /// Where a word that is no longer a command went, if it went anywhere (#283).
@@ -4880,7 +4898,11 @@ const RENAMED: &[(&str, &str)] = &[
 /// answers at most: past that the word is too vague to be pointing anywhere.
 fn moved_to(word: &str) -> Option<String> {
     if let Some((_, to)) = RENAMED.iter().find(|(from, _)| *from == word) {
-        return Some(format!("`:{to}`"));
+        // **A name may have become two.** `:layout` was one command with a
+        // direction for an argument, and the two directions are each a thing
+        // now, so the signpost names both rather than picking one.
+        let each: Vec<String> = to.split_whitespace().map(|one| format!("`:{one}`")).collect();
+        return Some(each.join(" "));
     }
     let under = |matches: fn(&str, &str) -> bool| -> Vec<String> {
         let mut found = Vec::new();
@@ -4903,9 +4925,24 @@ fn moved_to(word: &str) -> Option<String> {
         }
         found
     };
+    let names_only = |matches: fn(&str, &str) -> bool| -> Vec<String> {
+        COMMANDS
+            .iter()
+            .filter(|entry| entry.name.split('-').skip(1).any(|part| matches(part, word)))
+            .map(|entry| format!("`:{}`", entry.name))
+            .collect()
+    };
+    let under_names_only = names_only;
     let mut found = under(|name, word| name == word);
     if found.is_empty() {
-        found = under(|name, word| name.starts_with(word));
+        // **Only a name's own segments are matched by prefix** (2026-10-19).
+        // An exact hit on a *value* is a real answer — 「where did `:cyanotype`
+        // go」 is `:theme cyanotype` — but a prefix hit on one is a
+        // coincidence: `:cy` used to come back 「你要的是 `:theme cyanotype`」,
+        // and it had been `:clipboard-yank`. Two letters will prefix something
+        // in a long enough word list every time, and a signpost pointing the
+        // wrong way is worse than a shrug.
+        found = under_names_only(|name, word| name.starts_with(word));
     }
     // Warning: **同一個去處只說一遍**（2026-09-26 報的：`:s` 答的是
     // 「你要的是 `:convert s` `:convert s`」）。`:convert` 的兩個位置參數用的是
@@ -7374,13 +7411,21 @@ mod tests {
                 matches!(parse(&format!(":{was}")), Err(CommandError::Unknown(_))),
                 "`:{was}` still parses, so the signpost is pointing away from a live command"
             );
-            assert!(
-                names_something(is).is_ok(),
-                "the signpost sends `:{was}` to `:{is}`, which is not a command"
-            );
+            // **A name may have become two** (`:layout` → `:vertical`
+            // `:horizontal`), and then both have to exist: half a signpost is
+            // the shape this test was written to catch.
+            let targets: Vec<&str> = is.split_whitespace().collect();
+            assert!(!targets.is_empty(), "`:{was}` points at nothing");
+            for one in &targets {
+                assert!(
+                    names_something(one).is_ok(),
+                    "the signpost sends `:{was}` to `:{one}`, which is not a command"
+                );
+            }
+            let said = targets.iter().map(|one| format!("`:{one}`")).collect::<Vec<_>>();
             assert_eq!(
                 moved_to(was).as_deref(),
-                Some(format!("`:{is}`").as_str()),
+                Some(said.join(" ").as_str()),
                 "`{was}` should be answered from RENAMED, not by the walk"
             );
         }

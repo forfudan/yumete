@@ -2361,7 +2361,7 @@ KEYS (Normal mode, Helix-style):
               :buffer|next|previous|close   the open files (gn / gp)
               :search-project <re>  :toc  across the project / this file's headings
               :export html|typst    write it out for a typesetter
-              :layout [horizontal|vertical]      :view-margin [never|dense|loose|always]
+              :vertical  :horizontal    :view-margin [never|dense|loose|always]
               :yume-chaifen   the 拆分 annotation beside candidates
               :yume-where     the six places 碼表 and 字料 are looked
                               for, and what each one holds
@@ -2371,19 +2371,22 @@ KEYS (Normal mode, Helix-style):
                           is whatever follows the s (:s#a/b#c#); ranges are
                           :%s :1-40s :1,5,9s :.-$s; flags g i, f is literal,
                           c asks at each match, and n counts only
-              :replace <new>   change what the last :grep found, everywhere
+              :replace [<scope>]   the search panel with a 「replace with」 row
               :write-all       save every file that changed
               :indent off|basic|full|<n>   first-line indent — a Chinese
                           paragraph's mark; full also folds the blank line
               :view-bands [n|off]   段組: divide the 縱書 page into bands
               :word-list-reload   reread .yumete/words.txt — this book's own names
               :word-habit      口頭禪: what this one says far more than prose does
-              :table [off|basic|full|check]   edit as a grid; check looks the
-                          whole over
+              :table <行>x<欄>   an empty table, the first row its headings
+              :table-render off|basic|full   how much of a grid is drawn
+              :table-check     look the whole over: repeated row names, parts
+                          no row has, rows whose column count is wrong
               :table-jump <char>  the row a table names by that character
-              :ruby [off|basic|full|<dialect>]  full lays the readings out,
+              :ruby-render off|basic|full   full lays the readings out,
                           basic keeps the markup on the page and still counts
-                          a reading as no 字, off is the source)
+                          a reading as no 字, off is the source
+              :ruby-html on|off   :ruby-typst on|off   which is drawn)
 
 In Insert mode C-w takes back a word and C-u the line. The `:` and `/` prompts
 are editable: arrows, Home/End, C-w, C-u, and Up/Down through what you typed
