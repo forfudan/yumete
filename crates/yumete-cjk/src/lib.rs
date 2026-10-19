@@ -60,7 +60,7 @@ pub use vertical::{
 };
 pub use width::{
     ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width, is_private_use,
-    set_ambiguous_wide, stored_width, str_width, tab_width_at,
+    needs_a_second_cell, set_ambiguous_wide, stored_width, str_width, tab_width_at,
 };
 pub use word::{
     is_han, is_segmentable, ranges_around_cjk, word_ranges, word_ranges_big, word_ranges_coarse,
