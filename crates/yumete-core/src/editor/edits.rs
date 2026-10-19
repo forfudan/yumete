@@ -1162,8 +1162,7 @@ impl Editor {
         if items.len() == 1 {
             self.status = say!("edit.nothing-yanked-yet");
         }
-        self.picker = Some(crate::picker::Picker::new(&say!("picker.paste"), items));
-        self.mode = Mode::Picker;
+        self.show_the_picker(crate::picker::Picker::new(&say!("picker.paste"), items));
     }
 
     /// Everything that could be pasted, newest first, for the picker to show.

@@ -225,54 +225,42 @@ impl Editor {
                 self.config_reload = true;
                 Ok(CommandOutcome::Continue)
             }
-            Command::ReloadAuto(on) => {
-                match on {
-                    Some(on) => {
-                        self.reload_auto = on;
-                        // Asked now, not at the next keystroke: turning it on
-                        // is usually a writer who already suspects the file
-                        // moved.
-                        self.last_disk_check = None;
-                        self.reload_warned = false;
-                        let word = if on { "on" } else { "off" };
-                        self.status = say!("autoreload.set", word);
-                    }
-                    None => {
-                        self.status = say!(
-                            "autoreload.set",
-                            if self.reload_auto { "on" } else { "off" }
-                        )
-                    }
+            Command::ReloadAuto(how) => {
+                let on = how.over(self.reload_auto);
+                if !how.is_a_question() {
+                    self.reload_auto = on;
+                    // Asked now, not at the next keystroke: turning it on
+                    // is usually a writer who already suspects the file
+                    // moved.
+                    self.last_disk_check = None;
+                    self.reload_warned = false;
                 }
+                self.status = say!("autoreload.set", if on { "on" } else { "off" });
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetReadonly(on) => {
-                match on {
-                    Some(on) => {
-                        self.current_buffer_mut().set_readonly(on);
-                        // **`off` lifts `-R` too.** The flag locks every file
-                        // the session opens, and a writer who has just said
-                        // 「no, I do mean to edit this」 should not find the
-                        // next `:open` locked again with no way to say it.
-                        if !on {
-                            self.readonly_default = false;
-                        }
-                        let word = if on { "on" } else { "off" };
-                        // Locking a buffer that has unsaved changes takes `u`
-                        // away with everything else, so say so once rather
-                        // than let it be discovered at the worst moment.
-                        self.status = match on && self.current_buffer().is_modified() {
-                            true => say!("readonly.on-with-unsaved"),
-                            false => say!("readonly.set", word),
-                        };
-                    }
-                    None => {
-                        self.status = say!(
-                            "readonly.set",
-                            if self.current_buffer().is_readonly() { "on" } else { "off" }
-                        )
+            Command::SetReadonly(how) => {
+                let on = how.over(self.current_buffer().is_readonly());
+                if !how.is_a_question() {
+                    self.current_buffer_mut().set_readonly(on);
+                    // **`off` lifts `-R` too.** The flag locks every file
+                    // the session opens, and a writer who has just said
+                    // 「no, I do mean to edit this」 should not find the
+                    // next `:open` locked again with no way to say it.
+                    if !on {
+                        self.readonly_default = false;
                     }
                 }
+                let word = if on { "on" } else { "off" };
+                // Locking a buffer that has unsaved changes takes `u` away
+                // with everything else, so say so once rather than let it be
+                // discovered at the worst moment.
+                self.status = match !how.is_a_question()
+                    && on
+                    && self.current_buffer().is_modified()
+                {
+                    true => say!("readonly.on-with-unsaved"),
+                    false => say!("readonly.set", word),
+                };
                 Ok(CommandOutcome::Continue)
             }
             // Warning: **面板開着時 `:q` 關的是面板，不是編輯器。** 一個人在設置頁上
@@ -388,7 +376,9 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::RenderRuby { dialect, on } => {
-                self.render_ruby(dialect, on);
+                if !on.is_a_question() {
+                    self.render_ruby(dialect, on.over(self.ruby.contains(dialect)));
+                }
                 let listed_names: Vec<String> =
                     self.ruby.iter().map(|d| d.name().to_string()).collect();
                 self.status = if listed_names.is_empty() {
@@ -467,21 +457,24 @@ impl Editor {
             Command::Word(what) => self.word_command(what),
             Command::Wiki(what) => self.wiki_command(what),
             Command::KeymapYumeteFlavor(how) => {
-                if let Some(on) = how {
-                    self.set_keymap_flavor(on);
+                if !how.is_a_question() {
+                    self.set_keymap_flavor(how.over(self.keymap_flavor()));
                 }
                 self.status = self.flavor_report();
                 Ok(CommandOutcome::Continue)
             }
             Command::SetBands(n) => {
-                self.set_bands(n);
+                match n {
+                    Some(n) => self.set_bands(n),
+                    None => self.status = self.bands_report(),
+                }
                 Ok(CommandOutcome::Continue)
             }
             Command::SetNumberFill(on) => {
                 // **裸的報告，帶參數的纔設**（2026-10-09 作者定）。從前裸的是輪替，
                 // 而兄弟那幾個（`:readonly`／`:reload-auto`／`:yank-on-delete`／
                 // `:view-code`）裸的都報告——於是這一個現在是開還是關，没有辦法問。
-                self.number_fill = on.unwrap_or(self.number_fill);
+                self.number_fill = on.over(self.number_fill);
                 self.status = match self.number_fill {
                     true => say!("layout.line-numbers-on-a-band"),
                     false => say!("layout.line-numbers-on-the-page"),
@@ -489,7 +482,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetDiffGutter(on) => {
-                self.set_diff_gutter(on.unwrap_or(!self.diff_gutter));
+                // Asking must not call the setter: turning the bands on walks
+                // git, and turning them off throws the answer away.
+                if !on.is_a_question() {
+                    self.set_diff_gutter(on.over(self.diff_gutter));
+                }
                 self.status = match self.diff_gutter {
                     // 開了卻什麼都没有的情形太容易被當成「壞了」：這個檔不在
                     // git 倉裏，或者倉裏還没有第一個提交，當場說出來。
@@ -671,8 +668,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetHanging(want) => {
-                let on = want.unwrap_or(!self.hanging);
-                self.set_hanging_punctuation(on);
+                let on = want.over(self.hanging);
+                if !want.is_a_question() {
+                    self.set_hanging_punctuation(on);
+                }
                 self.status = if on {
                     say!("layout.hung-punctuation-on")
                 } else {
@@ -804,14 +803,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::YumeAutocompletion(on) => {
-                self.scheme_request = Some(format!(
-                    "predict:{}",
-                    match on {
-                        Some(true) => "on",
-                        Some(false) => "off",
-                        None => "",
-                    }
-                ));
+                self.scheme_request = Some(format!("predict:{}", on.word()));
                 Ok(CommandOutcome::Continue)
             }
             // Taken by the front end **after the next frame**: the command
@@ -883,11 +875,21 @@ impl Editor {
                 self.convert(ask);
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetPreview(on) => {
+            Command::SetPreview(how) => {
+                let running = self.preview_at.is_some();
+                let on = how.over(running);
                 // Already running: the question 「where is it?」 is the one a
                 // writer actually asks, and the address was said once and lost.
-                if on && self.preview_at.is_some() {
+                // A bare `:view-preview` is exactly that question.
+                if on && running {
                     self.preview_request = Some(Preview::Show);
+                    return Ok(CommandOutcome::Continue);
+                }
+                // A question moves nothing. With no preview up there is no
+                // address to hand back, so it says so rather than stopping a
+                // typesetter that was never started.
+                if how.is_a_question() {
+                    self.status = say!("preview.not-running");
                     return Ok(CommandOutcome::Continue);
                 }
                 self.preview_request = Some(if on {
@@ -963,8 +965,8 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetSentences(on) => {
-                self.set_sentences(on);
+            Command::SetSentences(how) => {
+                self.set_sentences(how.over(self.sentences()));
                 Ok(CommandOutcome::Continue)
             }
             // The palette lives in the front end — the core does not know a
@@ -1027,8 +1029,8 @@ impl Editor {
                 //
                 // 報的是**讀者說過的話**（`show_detail`），不是此刻畫着没有
                 // （`detail_visible()`）；没說過話就報「這一格本來開不開」。
-                let want = want
-                    .unwrap_or_else(|| self.show_detail.unwrap_or_else(|| self.detail_opens_here()));
+                let now = self.show_detail.unwrap_or_else(|| self.detail_opens_here());
+                let want = want.over(now);
                 self.show_detail = Some(want);
                 self.status = match want {
                     true => say!("ui.detail-panel-on"),
@@ -1053,7 +1055,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTypewriter(want) => {
-                self.typewriter = want.unwrap_or(!self.typewriter);
+                self.typewriter = want.over(self.typewriter);
                 self.status = match self.typewriter {
                     true => say!("layout.typewriter-on"),
                     false => say!("layout.typewriter-off"),
@@ -1061,7 +1063,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetFocus(want) => {
-                self.focus = want.unwrap_or(!self.focus);
+                self.focus = want.over(self.focus);
                 self.status = match self.focus {
                     true => say!("layout.focus-on"),
                     false => say!("layout.focus-off"),
@@ -1069,7 +1071,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetMeter(want) => {
-                self.meter = want.unwrap_or(!self.meter);
+                self.meter = want.over(self.meter);
                 self.status = match (self.meter, self.reader.available()) {
                     // 平仄 come out of the 拆分表, and an editor without one
                     // would turn the mode on and draw an empty margin. Say
@@ -1082,7 +1084,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetNote(want) => {
-                self.notes = want.unwrap_or(!self.notes);
+                self.notes = want.over(self.notes);
                 self.status = match (self.notes, self.markup_visible()) {
                     // A note is drawn on the page, and `:render off` is the one
                     // setting that says 「draw nothing the file does not
@@ -1110,11 +1112,7 @@ impl Editor {
                 // switch, 「which am I on」 is a better use of the word than a
                 // second spelling of `on` — and it is where a reader asks why
                 // a block has no colours (below).
-                match want {
-                    None => {}
-                    Some(None) => self.code_colours = !self.code_colours,
-                    Some(Some(want)) => self.code_colours = want,
-                }
+                self.code_colours = want.over(self.code_colours);
                 let known = crate::code::Language::ALL
                     .iter()
                     .map(|l| l.name())
@@ -1195,7 +1193,7 @@ impl Editor {
             }
             Command::SetTableNumbers(want) => {
                 // 裸的報告，帶參數的纔設（2026-10-09 作者定）。
-                let on = want.unwrap_or(self.table_numbers);
+                let on = want.over(self.table_numbers);
                 self.table_numbers = on;
                 self.status = match on {
                     true => say!("table.column-numbers-on"),
@@ -1207,7 +1205,7 @@ impl Editor {
                 // 裸的報告，帶參數的纔設（2026-10-09 作者定）。`空格 t H` 那個**鍵**
                 // 照舊翻——規矩擺在這裏，不擺在 `set_table_header` 裏。
                 let now = self.table.as_ref().map(|view| view.schema.header);
-                self.set_table_header(want.or(now));
+                self.set_table_header(now.map(|now| want.over(now)));
                 Ok(CommandOutcome::Continue)
             }
             Command::OpenTableSchema => {
@@ -1366,7 +1364,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetChaifen(want) => {
-                self.chaifen = want.unwrap_or(!self.chaifen);
+                self.chaifen = want.over(self.chaifen);
                 self.chaifen_request = Some(self.chaifen);
                 Ok(CommandOutcome::Continue)
             }

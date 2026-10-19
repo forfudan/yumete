@@ -2373,7 +2373,9 @@ pub struct Editor {
     /// `:theme-fill` — whether a 品色 run gets a ground. The front end holds
     /// the colours, so it holds this too; `None` in the `Some` means 「the
     /// other one」.
-    fill_request: Option<Option<bool>>,
+    fill_request: Option<crate::command::Switch>,
+    /// Whether the window has room for a picker — see `note_picker_room`.
+    no_picker_room: Option<bool>,
     /// What the segmenter in force has already cut, held by the same handle it
     /// is (#321) — so `forget_the_words` can throw it away when the dictionary
     /// or the book's own list changes and the text does not.
@@ -3720,6 +3722,7 @@ impl Editor {
             detected_words: yumete_cjk::WordList::default(),
             detect_request: None,
             fill_request: None,
+            no_picker_room: None,
             word_memo: std::rc::Rc::new(RefCell::new(yumete_cjk::SegmentMemo::default())),
             show_segmentation: false,
             word_mark: yumete_cjk::WordMark::default(),

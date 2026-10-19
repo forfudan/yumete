@@ -402,11 +402,17 @@ impl Editor {
     /// Divide the vertical page into `n` bands.
     pub fn set_bands(&mut self, n: usize) {
         self.bands = n.clamp(1, 4);
-        self.status = match self.bands {
+        self.status = self.bands_report();
+    }
+
+    /// How many bands the page is in — what a bare `:view-bands` answers.
+    pub(super) fn bands_report(&self) -> String {
+        match self.bands {
             1 => say!("layout.bands-one"),
             n => say!("layout.bands", n),
-        };
+        }
     }
+
 
     /// Set the first-line indent, in squares.
     pub fn set_indent(&mut self, n: usize) {
@@ -2023,7 +2029,7 @@ impl Editor {
     }
 
     /// Take a pending `:theme-fill` — `Some(None)` is 「the other one」.
-    pub fn take_fill_request(&mut self) -> Option<Option<bool>> {
+    pub fn take_fill_request(&mut self) -> Option<crate::command::Switch> {
         self.fill_request.take()
     }
 

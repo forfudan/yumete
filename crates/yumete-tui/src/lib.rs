@@ -454,6 +454,14 @@ pub fn fit_the_page(
     // 來，别畫出來」——所以這裏只答折行，**不碰 `set_page`**：視口是另一件事，
     // 按鍵之前給了它會讓動作落在别處（見 `main.rs` 這一支的呼叫處）。
     settle_the_wrap(editor, config, areas.panes[editor.live_pane().min(1)]);
+    // **挑選器擺不下就不許開着**（2026-10-19，見 [`picker_box`]）。問在這裏，是
+    // 因為這一支是「每一幀一次、離屏那一支在按鍵之前一次」的那個鉤子——窄窗口
+    // 下的行為要 `--shot` 也看得見。
+    let for_a_picker = Rect::new(0, 0, width, areas.status.y.saturating_sub(area.y).max(1));
+    editor.note_picker_room(match picker_box(for_a_picker) {
+        Some(_) => None,
+        None => Some(picker_height(for_a_picker) > for_a_picker.height),
+    });
     // 兩行框 ＋ 一行編碼之後還剩得下一行嗎。剩不下就一個候選都畫不出來，而數字
     // 鍵那一道閘要知道這件事（見 `ImeSession::panel_has_room`）。
     //
@@ -3550,11 +3558,14 @@ fn menu_size(ime: &mut ImeSession, n: &str) -> String {
 
 /// `:yume-autocompletion` — 輸入預測 on, off, or (bare) the other one.
 fn autocompletion(ime: &mut ImeSession, want: &str) -> String {
+    let now = ime.prediction_enabled();
     let on = match want {
         "on" => true,
         "off" => false,
-        // Bare toggles, the way `:yume-chaifen` does.
-        _ => !ime.prediction_enabled(),
+        "toggle" => !now,
+        // The bare command asks, like every other switch (2026-10-19). It used
+        // to flip, and then there was no way to ask.
+        _ => now,
     };
     ime.set_prediction_enabled(on);
     say!(
@@ -9931,6 +9942,25 @@ fn picker_height(area: Rect) -> u16 {
     ((area.height * 3 / 4).max(10) + 3).min(area.height).max(4)
 }
 
+/// The box a picker would take, or `None` when the window cannot hold one.
+///
+/// **One answer, two callers**: the drawing places this box, and
+/// [`fit_the_page`] asks beforehand whether there is room at all. That second
+/// question is the point — a picker that cannot be drawn used to **stay open**
+/// (2026-10-19 審出來的), and an open picker owns every key: under six rows
+/// the reader got no box, no query line and no 「没有符合的」, typed a query
+/// into nothing, and `Enter` opened a file they never saw.
+///
+/// The two refusals are [`crate::chrome::place`]'s own: a box narrower than
+/// eight cells, and one taller than the room it is given. `picker_height`
+/// never goes below four rows (border, query, one name, border), so a window
+/// of three rows or fewer is the short case.
+fn picker_box(area: Rect) -> Option<(u16, u16)> {
+    let rows = picker_height(area);
+    let wide = (area.width * 4 / 5).clamp(24, 160).min(area.width.saturating_sub(2));
+    (wide >= 8 && rows <= area.height).then_some((wide, rows))
+}
+
 /// 名單那一列有幾行：扣掉上下邊框、查詢框、橫線和腳注。
 ///
 /// 矮下去的時候橫線和腳注一樣樣讓（`rows >= 6`／`rows >= 5`），見
@@ -10035,8 +10065,7 @@ fn draw_picker(
     // Warning: **寬度那個上限從 120 提到 160**：4/5 在 160 欄的終端上是 128，從前被那個
     // 上限砍成 120，看着像「沒到 4/5」。上限本身留着——超寬顯示器上一條 200 欄的
     // 名字要眼睛橫着掃一趟。
-    let rows = picker_height(area);
-    let wide = (area.width * 4 / 5).clamp(24, 160).min(area.width.saturating_sub(2));
+    let (wide, rows) = picker_box(area)?;
     let box_ = crate::chrome::place(area, (wide, rows), crate::chrome::Anchor::Centre)?;
     // Two fifths for the names, the rest for the preview — and a window too
     // narrow for both gives the whole of itself to the names.
@@ -20604,7 +20633,7 @@ fn squeezed(text: &str) -> String {
         // Nothing is stood back until it is asked for.
         assert_eq!(ink(&lit, 0), ink(&lit, 1), "{:?}", ink(&lit, 0));
 
-        editor.execute(":view-focus").unwrap();
+        editor.execute(":view-focus on").unwrap();
         let focused = render_wrapped(&mut editor, &config, 30, 8);
         // The cursor's own 段 is drawn exactly as it was.
         assert_eq!(ink(&focused, 1), ink(&lit, 1));
@@ -20800,7 +20829,7 @@ fn squeezed(text: &str) -> String {
         let middle = 5;
         let mut seats = Seats::default();
 
-        editor.execute(":view-typewriter").unwrap();
+        editor.execute(":view-typewriter on").unwrap();
         editor.execute(":20").unwrap();
         assert_eq!(
             caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),

@@ -1636,8 +1636,7 @@ impl Editor {
         for c in name.chars() {
             picker.push(c);
         }
-        self.picker = Some(picker);
-        self.mode = Mode::Picker;
+        self.show_the_picker(picker);
     }
 
     /// Open a picker over the files of the project (`Space f`).
@@ -1761,8 +1760,9 @@ impl Editor {
         picker.root = Some(root.clone());
         // 篩子也存在它身上：`A-h` 轉一格要知道此刻跳過的是哪些，提示行要寫出來。
         picker.sieve = Some(sieve.clone());
-        self.picker = Some(picker);
-        self.mode = Mode::Picker;
+        if !self.show_the_picker(picker) {
+            return;
+        }
 
         let sieve = crate::editor::Sieve { uncapped: true, ..sieve };
         let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1881,8 +1881,7 @@ impl Editor {
             .enumerate()
             .map(|(i, b)| crate::picker::Item::Buffer(i, b.display_name()))
             .collect();
-        self.picker = Some(crate::picker::Picker::new(&say!("picker.buffers"), items));
-        self.mode = Mode::Picker;
+        self.show_the_picker(crate::picker::Picker::new(&say!("picker.buffers"), items));
     }
 
     /// **最近開過的檔** — `:recent-files` / `:recent-files-global`
@@ -1912,8 +1911,7 @@ impl Editor {
             true => say!("picker.recent-here"),
             false => say!("picker.recent-everywhere"),
         };
-        self.picker = Some(crate::picker::Picker::new(&title, items));
-        self.mode = Mode::Picker;
+        self.show_the_picker(crate::picker::Picker::new(&title, items));
     }
 
     /// **最近開過的項目** — `:recent-projects` (2026-10-18 作者定).
@@ -1930,8 +1928,7 @@ impl Editor {
             self.status = say!("recent.nothing-yet");
             return;
         }
-        self.picker = Some(crate::picker::Picker::new(&say!("picker.recent-projects"), items));
-        self.mode = Mode::Picker;
+        self.show_the_picker(crate::picker::Picker::new(&say!("picker.recent-projects"), items));
     }
 
     /// **Where the front end should start again**, taken once (2026-10-18).
@@ -2005,6 +2002,55 @@ impl Editor {
             Key::Ctrl('u') => picker.clear_before_caret(),
             _ => {}
         }
+    }
+
+    /// **Whether the window can draw a picker**, reported once a frame.
+    ///
+    /// `None` is 「there is room」, which is also how it starts: nothing is
+    /// refused before the front end has had a chance to measure. `Some(true)`
+    /// is too short, `Some(false)` too narrow — the geometry is the drawing
+    /// side's (see `picker_box` there), the words are here.
+    ///
+    /// **A picker the window cannot draw must not be open** (2026-10-19 定):
+    /// it owns every key while it is, so an invisible one is worse than a
+    /// cramped one — the query goes nowhere the reader can see, and `Enter`
+    /// opens whatever happened to be highlighted. Reported from the same hook
+    /// the sidebar's own too-narrow gate hangs on, and for the same three
+    /// reasons (see [`Self::note_window`]): a window narrow from the start, a
+    /// key pressed in one, and the moment the terminal is dragged smaller.
+    pub fn note_picker_room(&mut self, lacking: Option<bool>) {
+        self.no_picker_room = lacking;
+        if let Some(too_short) = lacking {
+            if self.picker.is_some() {
+                self.close_picker();
+                self.status = self.no_room_said(too_short);
+            }
+        }
+    }
+
+    /// Which way the room ran out, in words.
+    fn no_room_said(&self, too_short: bool) -> String {
+        match too_short {
+            true => say!("picker.window-too-short"),
+            false => say!("picker.window-too-narrow"),
+        }
+    }
+
+    /// **Every door into a picker comes through here** — so the refusal above
+    /// cannot be fitted to one of the six and forgotten on the other five,
+    /// which is the shape this repository keeps taking apart.
+    ///
+    /// `false` when the window has no room and nothing was opened; the caller
+    /// stops there rather than starting a walk whose answers have nowhere to
+    /// go.
+    pub(super) fn show_the_picker(&mut self, picker: crate::picker::Picker) -> bool {
+        if let Some(too_short) = self.no_picker_room {
+            self.status = self.no_room_said(too_short);
+            return false;
+        }
+        self.picker = Some(picker);
+        self.mode = Mode::Picker;
+        true
     }
 
     /// Shut the picker and go back to Normal.

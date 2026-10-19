@@ -61,7 +61,7 @@ pub enum WikiCommand {
     Global,
     /// `:wiki-panel [on|off]` — keep the entry in the sidebar rather than
     /// letting it float. `None` flips it.
-    Panel(Option<bool>),
+    Panel(Switch),
     /// `:wiki-mark line|color|off` — how a wiki name is marked in the prose.
     /// `None` says which it is now.
     Mark(Option<crate::wiki::Mark>),
@@ -238,7 +238,7 @@ pub enum Command {
     FileInfo,
     /// `:keymap-yumete-flavor [on|off]` —— Yumete 鍵位風味，鋪在當前鍵位之上的
     /// 一小組改動（2026-10-18）。不帶參數就報它開着没有、裏頭有哪幾項。
-    KeymapYumeteFlavor(Option<bool>),
+    KeymapYumeteFlavor(Switch),
     /// `:vertical` / `:horizontal` — 把這一頁轉過去（Feature #61）。
     ///
     /// **一件事一種說法**（2026-10-12 定）：從前是 `:layout` 的兩個參數，加上一
@@ -249,12 +249,12 @@ pub enum Command {
     SetVerticalKeys(Option<yumete_cjk::VerticalKeys>),
     /// `:yume-chaifen [on|off]` — the 拆分 annotation beside candidates
     /// (Feature #66). `None` is the bare word, which toggles.
-    SetChaifen(Option<bool>),
+    SetChaifen(Switch),
     /// `:scheme <tag>` — switch the input scheme (Feature #86).
     SetScheme(String),
     /// `:view-hanging [on|off]` — 句讀 in the margin rather than a square each
     /// (Feature #70). `None` is the bare word, which toggles.
-    SetHanging(Option<bool>),
+    SetHanging(Switch),
     /// `:view-wrap` / `:view-wrap off` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
@@ -298,22 +298,22 @@ pub enum Command {
     /// `:markdown …` — write a piece of Markdown at the cursor.
     Markdown(MarkdownBit),
     /// `:view-typewriter [on|off]` — the cursor's row stays in the middle.
-    SetTypewriter(Option<bool>),
+    SetTypewriter(Switch),
     /// `:view-focus [on|off]` — everything but the 段 being written stands back.
-    SetFocus(Option<bool>),
+    SetFocus(Switch),
     /// `:view-meter [on|off]` — 平仄 and 韻腳 in the margin.
-    SetMeter(Option<bool>),
+    SetMeter(Switch),
     /// `:view-punct [on|off]` — the mark that is wrong, named on the page beside it.
-    SetNote(Option<bool>),
+    SetNote(Switch),
     /// `:view-code [on|off|toggle]` — fenced code in its own grammar's colours
     /// (#420). **Three answers, not two**: `None` is the bare word, which
     /// reports rather than setting anything (2026-09-20); `Some(None)` is
     /// `toggle`; `Some(Some(b))` is `on`/`off`.
-    SetCode(Option<Option<bool>>),
+    SetCode(Switch),
     /// `:view-long-line`：一行長過多少列就不上色。`None` ＝裸的，報告現在多少。
     SetLongLine(Option<Option<usize>>),
     /// `:table-numbers on|off` — the row of column numbers above the header.
-    SetTableNumbers(Option<bool>),
+    SetTableNumbers(Switch),
     /// `:search` — open the search panel (#419).
     ///
     /// Warning: **It takes no pattern, only a place.** What to look for is typed in
@@ -336,7 +336,7 @@ pub enum Command {
     SidebarSide(crate::sidebar::Side, SidebarAsk),
     /// `:table-header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
-    SetTableHeader(Option<bool>),
+    SetTableHeader(Switch),
     /// `:table-schema` — the schema file in the other work area, written next
     /// to the data first if none claims it yet (Feature #218).
     OpenTableSchema,
@@ -345,7 +345,7 @@ pub enum Command {
     /// counts the heading; the rule row is not a row.
     NewTable { rows: usize, columns: usize },
     /// `:table-detail [on|off]` — the panel; `None` toggles.
-    ShowDetail(Option<bool>),
+    ShowDetail(Switch),
     /// `:table-detail 40` — how wide it is.
     /// `:table-sort 1 a 2 d` — put the rows in order by these columns, in this
     /// order. Empty sorts by the column the cursor is in.
@@ -383,9 +383,9 @@ pub enum Command {
     },
     /// `:view-numbers-fill` — whether the line-number band has a ground of its
     /// own. `None` toggles.
-    SetNumberFill(Option<bool>),
+    SetNumberFill(Switch),
     /// `:view-diff` — 行號旁邊那一格說不說 git 的改動（#55）。`None` 是輪替。
-    SetDiffGutter(Option<bool>),
+    SetDiffGutter(Switch),
     /// `:shot` — a picture of the page, drawn by the editor itself (#189).
     Screenshot { shot: Shot, force: bool },
     /// `:theme` — which theme, and whether it is dark, light or the
@@ -418,7 +418,7 @@ pub enum Command {
     /// `:indent-width [n]` — how many columns Tab and `>` move; bare reports.
     SetIndentWidth(Option<usize>),
     /// `:view-bands 2` — how many bands the 縱書 page is divided into (段組).
-    SetBands(usize),
+    SetBands(Option<usize>),
 
     /// `:table-find row|column <pattern>` — the two directions a search can run.
     Search { pattern: String, by: Axis },
@@ -430,7 +430,7 @@ pub enum Command {
     /// [`yumete_cjk::Margin`].
     SetMargin(Option<yumete_cjk::Margin>),
     /// One 句 to a 縱 — a view of the page, not a change to the file.
-    SetSentences(bool),
+    SetSentences(Switch),
     /// `:render off|on|full` — how much of the result the page shows
     /// (Features #96 / #104).
     SetRender(crate::editor::Render),
@@ -443,7 +443,7 @@ pub enum Command {
     ReportHud,
     /// `:view-preview` / `:view-preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
-    SetPreview(bool),
+    SetPreview(Switch),
     /// `:w!` — write over a file that changed on disk since it was read.
     WriteForce(Option<String>),
     /// `:reload` / `:reload!` — read the file again. The `!` throws away
@@ -451,12 +451,12 @@ pub enum Command {
     Reload { force: bool },
     /// `:reload-auto on|off` — re-read a **clean** buffer by itself when the
     /// file changes on disk. `None` asks which it is (Feature #214).
-    ReloadAuto(Option<bool>),
+    ReloadAuto(Switch),
     /// **把配置檔重讀一遍，推進來** —— 改完 `config.toml` 不必重啓（2026-09-23）。
     ReloadConfig,
     /// `:readonly on|off` — lock this buffer against editing. `None` asks
     /// (Feature #213).
-    SetReadonly(Option<bool>),
+    SetReadonly(Switch),
     /// `:yume-builtin` — use the 碼表 in the binary, whatever is installed.
     BuiltinScheme,
     /// `:yume-table <path>` — type with a code table of your own.
@@ -489,7 +489,7 @@ pub enum Command {
     /// Off: the backtick and the `>` are drawn already, so the run's extent is
     /// on the page and a ground behind it says it a second time. `None`
     /// toggles.
-    ThemeFill(Option<bool>),
+    ThemeFill(Switch),
     /// **`:rules 80 100 120`：在那幾欄上鋪一道底紋**（#424，2026-09-30）。
     ///
     /// 空的 `Vec` ＝ `off`，一道都不鋪。不帶參數的 `:rules` 送的是 `[80]`。
@@ -507,7 +507,7 @@ pub enum Command {
     /// `:yume-autocompletion [on|off]` — 輸入預測: whether a code that is not
     /// finished is answered with the candidates that would finish it. `None`
     /// toggles, as `:yume-chaifen` does.
-    YumeAutocompletion(Option<bool>),
+    YumeAutocompletion(Switch),
     /// `:yume on` / `:yume abc` / `:yume off` — which of the three states the
     /// input method is in (#290).
     ///
@@ -625,7 +625,7 @@ pub enum Command {
     /// exists to replace.
     RenderRuby {
         dialect: Dialect,
-        on: bool,
+        on: Switch,
     },
     /// `:format-ruby-<dialect>` — rewrite every reading in the buffer into one
     /// dialect, whatever it was written in.
@@ -1163,6 +1163,57 @@ impl Need {
     }
 }
 
+/// **What a switch was asked for** — one answer for all twenty-three of them.
+///
+/// 「裸的報告，帶參數的纔設」(2026-10-09 定). A bare `:view-focus` is a
+/// *question*; `on` and `off` are answers; `toggle` is 「I am not saying which,
+/// turn it round」.
+///
+/// Warning: **this used to be `Option<bool>`, and that is one state short** — so the
+/// twenty-three of them each invented the missing one. An audit on 2026-10-19
+/// measured three different answers to the same bare command in the same
+/// table: `:view-diff` turned the bands **on** (its entry defaulted to
+/// `Some("on")`), `:theme-fill` **flipped**, `:view-numbers-fill` **reported**.
+/// `toggle` meanwhile was a word only six of them accepted, so for the other
+/// seventeen 「report」 and 「flip」 could not both be asked for. Three states
+/// and one word list is what makes the rule sayable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Switch {
+    /// The bare command: say what it is now, change nothing.
+    Ask,
+    /// `toggle`: whatever it is, the other one.
+    Flip,
+    /// `on` or `off`.
+    To(bool),
+}
+
+impl Switch {
+    /// What the setting becomes, given what it is now.
+    pub fn over(self, now: bool) -> bool {
+        match self {
+            Switch::Ask => now,
+            Switch::Flip => !now,
+            Switch::To(want) => want,
+        }
+    }
+
+    /// Whether this was a question. A question moves nothing.
+    pub fn is_a_question(self) -> bool {
+        self == Switch::Ask
+    }
+
+    /// The word it was asked with — for the requests the core hands the front
+    /// end as text (`predict:on`), where the empty string is the question.
+    pub fn word(self) -> &'static str {
+        match self {
+            Switch::Ask => "",
+            Switch::Flip => "toggle",
+            Switch::To(true) => "on",
+            Switch::To(false) => "off",
+        }
+    }
+}
+
 /// Read a line against what its command says it takes (#368).
 ///
 /// **One walk for every command**, so that what a parameter may be is declared
@@ -1172,14 +1223,13 @@ impl Need {
 /// menu printed `check (ch)` beside words `:table ch` did not accept, and had
 /// done for a year.
 ///
-/// `None` when the command has not been moved over yet.
-/// `on｜off｜toggle` as the editor's own `Option<bool>`: **the other way** is
-/// 「I am not saying which, turn it round」, which is `None`.
-fn switched(p: &Parsed) -> Result<Option<bool>, CommandError> {
-    Ok(match p.need(0)? {
-        "toggle" => None,
-        word => Some(word == "on"),
-    })
+/// Read `on｜off｜toggle`, or the bare command, as one of [`Switch`]'s three.
+fn switched(p: &Parsed) -> Switch {
+    match p.arg(0) {
+        None => Switch::Ask,
+        Some("toggle") => Switch::Flip,
+        Some(word) => Switch::To(word == "on"),
+    }
 }
 
 fn read_params(
@@ -2306,7 +2356,7 @@ const VERTICAL_KEY_WAYS: &[Word] = &[
 /// What `:word-show` may be given — **four words, not two**.
 ///
 /// The parser has always taken `tint` and `ink` here (and 底色/字色, which
-/// `WordMark::parse` reads), while the table declared `ON_OFF`: so the two
+/// `WordMark::parse` reads), while the table declared only 「on｜off」: so the two
 /// drawings ran, and the menu that exists to say what may follow `show` never
 /// mentioned them. Same shape as §5.2.2 fault 7 — a word the editor accepts
 /// and no reader can find is a word only its author has.
@@ -2476,6 +2526,17 @@ fn named_panel(
 
 /// The two words every switch takes — read back by [`switch`].
 /// The four margins, tightest first (`:view-margin`).
+/// `on｜off` for the one command that is **not** a switch.
+///
+/// `:view-bands` sets how many bands the page is in — one to four — and `on`
+/// is simply the spelling of two. 「toggle」 has nothing to turn round there,
+/// so it is not offered; every genuine switch takes [`SWITCH`] instead, whose
+/// third word is the whole point of it.
+const ON_OFF: &[Word] = &[
+    Word { name: "on", help: "cmd.on-off.on", needs: &[] },
+    Word { name: "off", help: "hint.close", needs: &[] },
+];
+
 const MARGINS: &[Word] = &[
     Word { name: "never", help: "cmd.margins.never", needs: &[] },
     Word { name: "dense", help: "cmd.margins.dense", needs: &[] },
@@ -2483,18 +2544,6 @@ const MARGINS: &[Word] = &[
     Word { name: "always", help: "cmd.margins.always", needs: &[] },
 ];
 
-const ON_OFF: &[Word] = &[
-    Word {
-        name: "on",
-        help: "cmd.on-off.on",
-        needs: &[],
-    },
-    Word {
-        name: "off",
-        help: "hint.close",
-        needs: &[],
-    },
-];
 
 /// `off` 和没別的：`:view-long-line` 的參數不是開關，是一個數目，而 `off` 是那個
 /// 數目的「没有上限」那一格（vim 的 `synmaxcol=0`）。
@@ -2699,7 +2748,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.reload.auto",
         needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: None }],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
             // The bang answers 「throw this buffer's changes away」, which is
             // not a question `auto` asks — so `:reload-auto! on` is a typo,
@@ -2709,7 +2758,7 @@ pub const COMMANDS: &[Entry] = &[
                     command: "reload-auto",
                     value: "!".to_string(),
                 }),
-                false => Ok(Command::ReloadAuto(p.arg(0).map(|w| w == "on"))),
+                false => Ok(Command::ReloadAuto(switched(p))),
             }
         }),
     },
@@ -2720,10 +2769,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.readonly",
         needs: &[],
         params: &[Param::Words {
-            of: ON_OFF,
+            of: SWITCH,
             default: None,
         }],
-        build: Some(|p| Ok(Command::SetReadonly(p.arg(0).map(|w| w == "on")))),
+        build: Some(|p| Ok(Command::SetReadonly(switched(p)))),
     },
     Entry {
         name: "goto",
@@ -3033,13 +3082,9 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.keymap-yumete-flavor",
         needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: None }],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
-            Ok(Command::KeymapYumeteFlavor(match p.arg(0) {
-                None => None,
-                Some("on") => Some(true),
-                _ => Some(false),
-            }))
+            Ok(Command::KeymapYumeteFlavor(switched(p)))
         }),
     },
     Entry {
@@ -3047,13 +3092,9 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.wikis.panel",
         needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: None }],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
-            Ok(Command::Wiki(WikiCommand::Panel(match p.arg(0) {
-                None => None,
-                Some("on") => Some(true),
-                _ => Some(false),
-            })))
+            Ok(Command::Wiki(WikiCommand::Panel(switched(p))))
         }),
     },
     Entry {
@@ -3381,8 +3422,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.theme-fill",
         needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: None }],
-        build: Some(|p| Ok(Command::ThemeFill(p.arg(0).map(|w| w == "on")))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::ThemeFill(switched(p)))),
     },
     Entry {
         name: "shot",
@@ -3482,8 +3523,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.yume.chaifen",
         needs: &[Need::Scheme],
-        params: &[Param::Words { of: ON_OFF, default: None }],
-        build: Some(|p| Ok(Command::SetChaifen(p.arg(0).map(|w| w == "on")))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetChaifen(switched(p)))),
     },
     Entry {
         name: "yume-commit",
@@ -3569,8 +3610,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.yume.autocompletion",
         needs: &[Need::Scheme],
-        params: &[Param::Words { of: ON_OFF, default: None }],
-        build: Some(|p| Ok(Command::YumeAutocompletion(p.arg(0).map(|w| w == "on")))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::YumeAutocompletion(switched(p)))),
     },
     Entry {
         name: "yume-installed",
@@ -3705,14 +3746,17 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[Need::Vertical],
         params: &[Param::WordsOr {
             of: ON_OFF,
-            default: Some("on"),
+            default: None,
             or: "<幾條，1–4>",
         }],
-        build: Some(|p| match p.need(0)? {
-            "on" => Ok(Command::SetBands(2)),
-            "off" => Ok(Command::SetBands(1)),
-            _ => match p.number(0)? {
-                n @ 1..=4 => Ok(Command::SetBands(n)),
+        build: Some(|p| match p.arg(0) {
+            // Bare asks, like every other switch; `on` is two bands, which is
+            // what 「band」 means at all.
+            None => Ok(Command::SetBands(None)),
+            Some("on") => Ok(Command::SetBands(Some(2))),
+            Some("off") => Ok(Command::SetBands(Some(1))),
+            Some(_) => match p.number(0)? {
+                n @ 1..=4 => Ok(Command::SetBands(Some(n))),
                 n => Err(CommandError::InvalidArgument {
                     command: "view-bands",
                     value: n.to_string(),
@@ -3726,10 +3770,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.view.sentence",
         needs: &[Need::Vertical],
         params: &[Param::Words {
-            of: ON_OFF,
-            default: Some("on"),
+            of: SWITCH,
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetSentences(p.need(0)? == "on"))),
+        build: Some(|p| Ok(Command::SetSentences(switched(p)))),
     },
     Entry {
         name: "view-hanging",
@@ -3737,10 +3781,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.view.hanging",
         needs: &[Need::Vertical, Need::Margin],
         params: &[Param::Words {
-            of: ON_OFF,
+            of: SWITCH,
             default: None,
         }],
-        build: Some(|p| Ok(Command::SetHanging(p.arg(0).map(|w| w == "on")))),
+        build: Some(|p| Ok(Command::SetHanging(switched(p)))),
     },
     Entry {
         // `:view-numbers-fill` on its own said nothing about *what* of the numbers
@@ -3750,10 +3794,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.numbers.fill",
         needs: &[],
         params: &[Param::Words {
-            of: ON_OFF,
+            of: SWITCH,
             default: None,
         }],
-        build: Some(|p| Ok(Command::SetNumberFill(p.arg(0).map(|w| w == "on")))),
+        build: Some(|p| Ok(Command::SetNumberFill(switched(p)))),
     },
     Entry {
         // 跟 `:view-numbers-fill` 排在一起：兩個說的都是行號那一帶（#55）。
@@ -3765,9 +3809,9 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words {
             of: SWITCH,
-            default: Some("on"),
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetDiffGutter(switched(p)?))),
+        build: Some(|p| Ok(Command::SetDiffGutter(switched(p)))),
     },
     Entry {
         name: "view-typewriter",
@@ -3776,9 +3820,9 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words {
             of: SWITCH,
-            default: Some("on"),
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetTypewriter(switched(p)?))),
+        build: Some(|p| Ok(Command::SetTypewriter(switched(p)))),
     },
     Entry {
         name: "view-focus",
@@ -3787,9 +3831,9 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words {
             of: SWITCH,
-            default: Some("on"),
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetFocus(switched(p)?))),
+        build: Some(|p| Ok(Command::SetFocus(switched(p)))),
     },
     Entry {
         name: "view-meter",
@@ -3798,9 +3842,9 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[Need::Margin],
         params: &[Param::Words {
             of: SWITCH,
-            default: Some("on"),
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetMeter(switched(p)?))),
+        build: Some(|p| Ok(Command::SetMeter(switched(p)))),
     },
     Entry {
         // Was `:note`, which was never about footnotes (§5.2.3 ④).
@@ -3810,9 +3854,9 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Words {
             of: SWITCH,
-            default: Some("on"),
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetNote(switched(p)?))),
+        build: Some(|p| Ok(Command::SetNote(switched(p)))),
     },
     Entry {
         // The bare word **reports** — the shape `:view-hud` and `:render`
@@ -3828,11 +3872,7 @@ pub const COMMANDS: &[Entry] = &[
             default: None,
         }],
         build: Some(|p| {
-            Ok(Command::SetCode(match p.arg(0) {
-                None => None,
-                Some("toggle") => Some(None),
-                Some(word) => Some(Some(word == "on")),
-            }))
+            Ok(Command::SetCode(switched(p)))
         }),
     },
     Entry {
@@ -3885,10 +3925,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.view.preview",
         needs: &[],
         params: &[Param::Words {
-            of: ON_OFF,
-            default: Some("on"),
+            of: SWITCH,
+            default: None,
         }],
-        build: Some(|p| Ok(Command::SetPreview(p.need(0)? == "on"))),
+        build: Some(|p| Ok(Command::SetPreview(switched(p)))),
     },
     Entry {
         name: "render",
@@ -4330,12 +4370,12 @@ pub const COMMANDS: &[Entry] = &[
         // Warning: **`<寬>` 那個參數没了**（2026-09-26）：寬度歸側欄，面板說不上話
         // （原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
         // 要寬要窄按 `w`，三檔。
-        params: &[Param::Words { of: ON_OFF, default: None }],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
             Ok(match p.arg(0) {
-                Some("off") => Command::ShowDetail(Some(false)),
-                Some("on") => Command::ShowDetail(Some(true)),
-                _ => Command::ShowDetail(None),
+                Some("off") => Command::ShowDetail(Switch::To(false)),
+                Some("on") => Command::ShowDetail(Switch::To(true)),
+                _ => Command::ShowDetail(switched(p)),
             })
         }),
     },
@@ -4346,19 +4386,19 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[Need::Table],
         // **裸的報告，帶參數的纔設**（2026-10-09 作者定，三個表格開關一起）。從前
         // `default: Some("on")` 讓裸形永遠報「欄號：開」——問不出它現在是哪一種。
-        params: &[Param::Words { of: ON_OFF, default: None }],
-        build: Some(|p| Ok(Command::SetTableNumbers(p.arg(0).map(|w| w == "on")))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetTableNumbers(switched(p)))),
     },
     Entry {
         name: "table-header",
         aliases: &[],
         help: "cmd.table.header",
         needs: &[Need::Table],
-        params: &[Param::Words { of: ON_OFF, default: None }],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
             // 「這一行是欄名還是資料」 — on its own it flips, because that is
             // the question a 碼表 asks once and never again (#217).
-            Ok(Command::SetTableHeader(p.arg(0).map(|w| w == "on")))
+            Ok(Command::SetTableHeader(switched(p)))
         }),
     },
     Entry {
@@ -4736,12 +4776,9 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.ruby.html",
         needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: Some("on") }],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
-            Ok(Command::RenderRuby {
-                dialect: Dialect::Html,
-                on: p.need(0)? == "on",
-            })
+            Ok(Command::RenderRuby { dialect: Dialect::Html, on: switched(p) })
         }),
     },
     Entry {
@@ -4749,12 +4786,9 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.ruby.typst",
         needs: &[],
-        params: &[Param::Words { of: ON_OFF, default: Some("on") }],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
-            Ok(Command::RenderRuby {
-                dialect: Dialect::Typst,
-                on: p.need(0)? == "on",
-            })
+            Ok(Command::RenderRuby { dialect: Dialect::Typst, on: switched(p) })
         }),
     },
     Entry {
@@ -6051,7 +6085,7 @@ mod tests {
     /// The declaration and the arm that answers it sit two thousand lines
     /// apart, so nothing but a walk of the table can tell they disagree.
     /// `:view-hanging off` turned hanging punctuation **on**: `COMMANDS` declared
-    /// `Args::Words(ON_OFF)`, the hint printed it, the menu offered it, and
+    /// the two words and nothing else, the hint printed them, the menu offered
     /// `parse` was `"hanging" => Ok(Command::ToggleHanging)` with `rest`
     /// never read. `every_listed_command_parses` cannot see it — `:hanging
     /// off` *parses* — so the question has to be whether the two answers
@@ -6154,7 +6188,7 @@ mod tests {
 
     #[test]
     fn the_input_method_lives_under_one_word() {
-        assert_eq!(parse(":yume-chaifen"), Ok(Command::SetChaifen(None)));
+        assert_eq!(parse(":yume-chaifen"), Ok(Command::SetChaifen(Switch::Ask)));
         assert_eq!(
             parse(":yume-scheme lingming"),
             Ok(Command::SetScheme("lingming".into()))
@@ -6675,8 +6709,9 @@ mod tests {
             Command::Theme { name: Some("solarized".into()), mood: None }
         );
         // And the ground behind 品色 is its own switch, off by default.
-        assert_eq!(parse(":theme-fill on"), Ok(Command::ThemeFill(Some(true))));
-        assert_eq!(parse(":theme-fill"), Ok(Command::ThemeFill(None)));
+        assert_eq!(parse(":theme-fill on"), Ok(Command::ThemeFill(Switch::To(true))));
+        assert_eq!(parse(":theme-fill"), Ok(Command::ThemeFill(Switch::Ask)));
+        assert_eq!(parse(":theme-fill toggle"), Ok(Command::ThemeFill(Switch::Flip)));
     }
 
     /// What a menu row says, and what it leaves out (2026-09-10).
@@ -6991,7 +7026,7 @@ mod tests {
         assert_eq!(parse(":yume-scheme ling"), Ok(Command::SetScheme("lingming".into())));
         // `chaifen` and `commit` both start with `c`, so `yume-c` alone names
         // neither — the menu shows both, which is the answer.
-        assert_eq!(parse(":yume-ch"), Ok(Command::SetChaifen(None)));
+        assert_eq!(parse(":yume-ch"), Ok(Command::SetChaifen(Switch::Ask)));
         assert!(matches!(parse(":yume-c"), Err(CommandError::Unknown(_))));
         // No name at all means the one the config asked for.
         assert_eq!(parse(":yume-s"), Ok(Command::SetScheme(String::new())));
@@ -7052,7 +7087,10 @@ mod tests {
         // A parent command is not a mechanism of its own — its subcommands are
         // simply the words it takes, and they go as deep as they like.
         assert_eq!(words("ruby-render "), ["off", "basic", "full"]);
-        assert_eq!(words("ruby-html "), ["on", "off"]);
+        assert_eq!(words("ruby-html "), ["on", "off", "toggle"]);
+        // `:view-bands` is a count, not a switch, so it is the one that does not
+        // offer 「toggle」 (see [`ON_OFF`]).
+        assert_eq!(words("view-bands "), ["on", "off"]);
 
         // Where the word being completed starts, so a completion replaces it
         // and not the whole line.
