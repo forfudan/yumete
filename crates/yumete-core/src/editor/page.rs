@@ -1333,7 +1333,7 @@ impl Editor {
         Some((path, line, crate::problem::utf16_column(&text, chars)))
     }
 
-    /// **有人按過 `:config-reload`** —— 前端去重讀配置檔並推一遍。
+    /// **有人按過 `:reload-config`** —— 前端去重讀配置檔並推一遍。
     /// **設置面板存完之後也要重讀一遍**（2026-10-09 作者報的）。
     ///
     /// 從前 `:w` 只把檔寫出去，而 `settings::apply` 一共只有兩個呼叫方：啓動，和

@@ -339,7 +339,7 @@ fn frame_to(
         editor.set_settings_open(true);
         yumete_config::panel::Panel::open(
             Some(yumete_config::config_dir().join("config.toml")),
-            // 本項目那一頁跟着**工作路徑**走，同啓動那一趟與 `:config-reload`
+            // 本項目那一頁跟着**工作路徑**走，同啓動那一趟與 `:reload-config`
             // （2026-10-01）。從前它問進程的 cwd，於是面板改的是另一個項目的
             // `config.toml`。
             Some(yumete_config::panel::local_sheet_path(&editor.root())),
@@ -1631,7 +1631,7 @@ pub fn run(
                         }
                     }
                 }
-                // **`:config-reload`：重讀設定檔，推一遍**（2026-09-23 定：
+                // **`:reload-config`：重讀設定檔，推一遍**（2026-09-23 定：
                 // 「下次啓動生效或者一個應用（重載）設置命令來生效」）。
                 //
                 // Warning: **同一支 `apply`，啓動叫的那一支。** 換一份 `Config` 只讓
@@ -5888,7 +5888,6 @@ fn draw_list(
         (lay(deep, 0).into_iter().take(1).collect(), deep)
     };
     let across = widths.len().max(1);
-    let visible = (deep * across).min(items.len());
     // The entries, the footer, and the ring above and below them.
     let height = (deep + 3) as u16;
     if height > area.height || bottom < height {
@@ -5896,16 +5895,33 @@ fn draw_list(
     }
     // Scrolled just enough: the selection stays on the list, and a list that
     // fits never scrolls at all.
-    let first = focus
-        .saturating_sub(visible.saturating_sub(1))
-        .min(items.len().saturating_sub(visible));
+    //
     // A scrolled list is measured off the rows actually on screen, not off the
     // ones above them: the column is as wide as what is *in* it.
-    if first > 0 {
+    //
+    // Warning: **the window and the columns settle each other, so one pass is not
+    // enough.** Re-measuring from a scrolled row can put a long name at the head
+    // of a column and cost the list a whole column — which shrinks the window
+    // the first row was worked out from, and the focus falls off the end of it.
+    // 2026-10-19: at 100 columns (the commonest width, and `--shot`'s default)
+    // `:` with the focus on the last entry drew entries 15..59 of 71 with
+    // **nothing highlighted at all**, while the footer said `71/71` and the
+    // command line named the entry that was not on the page. Slide the window
+    // down until it holds the focus; each pass moves it strictly further, so
+    // this settles.
+    let mut first = 0;
+    let mut visible = (deep * across).min(items.len());
+    while focus >= first + visible {
+        let want = (focus + 1)
+            .saturating_sub(visible)
+            .min(items.len().saturating_sub(visible));
+        if want <= first {
+            break;
+        }
+        first = want;
         widths = lay(deep, first);
+        visible = (deep * widths.len().max(1)).min(items.len() - first);
     }
-    let across = widths.len().max(1);
-    let visible = (deep * across).min(items.len() - first);
 
     let inner = widths
         .iter()
