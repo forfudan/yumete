@@ -10443,12 +10443,21 @@ fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
 /// A 漢字 the cut lands in the middle of becomes air: half a 字 is not a
 /// character the terminal can draw, and drawing the whole one would put a
 /// column of writing where the reader is owed none.
-/// Give every private-use character the second cell this editor counts for it.
+/// Give every character the second cell this editor counts for it.
 ///
-/// [`yumete_cjk::is_private_use`] makes a 字根 two cells wide and everything
-/// that measures in this editor agrees — but the manuscript body is handed to
-/// ratatui as spans, and ratatui lays spans out with plain Annex #11, where the
-/// private-use area is one cell. So it put the next character into the cell
+/// [`yumete_cjk::needs_a_second_cell`] names the characters this is for, and
+/// says why each one needs it. Everything that measures in this editor counts
+/// them two — but the manuscript body is handed to ratatui as spans, and
+/// ratatui lays spans out with plain Annex #11, where they are one cell.
+///
+/// Warning: **It covered the private-use area only until 2026-10-19**, and the rest
+/// of the Ambiguous block has the identical mismatch whenever
+/// `ambiguous_width = "wide"` is in force. Measured then: `a—b—c—d`, walk `l`
+/// twice, and the status line said 列 4 · `b` while the caret's block was
+/// painted on the `—` after it — one cell of drift per `—` earlier on the row,
+/// two by the time the cursor reached `c`. The caret's own arithmetic was
+/// right; the row under it was a cell short. The two halves are one predicate
+/// now, so a third block of this kind cannot be fixed on one side only. So it put the next character into the cell
 /// this side had already spent: `A` `字根` `B` came out `A` at 3, the 字根 at 4
 /// and `B` at **5**, where a 漢字 in the same place leaves 5 blank and puts `B`
 /// at 6. One column short per 字根, and the caret, the ground and the click map
@@ -10472,25 +10481,26 @@ fn prompt_preedit(editor: &Editor, ime: &ImeSession) -> String {
 ///
 /// Warning: **After [`scrolled`], not before.** That one cuts the row in this editor's
 /// own cells, so it has to see the text the way the rest of the layout does.
-fn with_room_for_private_use(lines: Vec<Line<'static>>) -> Vec<Line<'static>> {
-    lines.into_iter().map(room_for_private_use).collect()
+fn with_room_for_wide_glyphs(lines: Vec<Line<'static>>) -> Vec<Line<'static>> {
+    lines.into_iter().map(room_for_wide_glyphs).collect()
 }
 
-fn room_for_private_use(line: Line<'static>) -> Line<'static> {
-    if !line.spans.iter().any(|s| s.content.chars().any(yumete_cjk::is_private_use)) {
+fn room_for_wide_glyphs(line: Line<'static>) -> Line<'static> {
+    let wants = |s: &Span<'_>| s.content.chars().any(yumete_cjk::needs_a_second_cell);
+    if !line.spans.iter().any(wants) {
         return line;
     }
     let style = line.style;
     let spans: Vec<Span<'static>> = line
         .spans
         .into_iter()
-        .map(|span| match span.content.chars().any(yumete_cjk::is_private_use) {
+        .map(|span| match wants(&span) {
             false => span,
             true => {
                 let mut text = String::with_capacity(span.content.len() + 4);
                 for c in span.content.chars() {
                     text.push(c);
-                    if yumete_cjk::is_private_use(c) {
+                    if yumete_cjk::needs_a_second_cell(c) {
                         text.push(' ');
                     }
                 }
@@ -11789,7 +11799,7 @@ fn draw_horizontal(
     // on: past the last line of a short file the page is still the page, and
     // 墨香's light page on a dark terminal made that half of the window black.
     frame.render_widget(
-        Paragraph::new(with_room_for_private_use(lines)).style(ink.page()),
+        Paragraph::new(with_room_for_wide_glyphs(lines)).style(ink.page()),
         text_area,
     );
 
@@ -11876,7 +11886,7 @@ fn draw_horizontal(
             scrolled(names.unwrap_or_else(blank), gutter, left),
         ];
         frame.render_widget(
-            Paragraph::new(with_room_for_private_use(rows)).style(head_bar),
+            Paragraph::new(with_room_for_wide_glyphs(rows)).style(head_bar),
             bar,
         );
     }
@@ -12003,7 +12013,7 @@ fn draw_status(
         // terminal that drops the attribute.
         let guess = bar.fg(ink.at(yumete_config::rung::RULE));
         frame.render_widget(
-            Paragraph::new(room_for_private_use(Line::from(vec![
+            Paragraph::new(room_for_wide_glyphs(Line::from(vec![
                 Span::styled(line, bar),
                 Span::styled(drawn, guess),
                 Span::styled(format!("{}{tag}", " ".repeat(gap)), bar),
@@ -12238,7 +12248,7 @@ fn draw_status(
     let cut = mode.len().min(status.len());
     let (word, rest) = status.split_at(cut);
     frame.render_widget(
-        Paragraph::new(room_for_private_use(Line::from(vec![
+        Paragraph::new(room_for_wide_glyphs(Line::from(vec![
             // 左邊那一格是留白，和底下那一行對齊。
             Span::styled(" ".to_string(), bar),
             Span::styled(
@@ -13463,7 +13473,7 @@ fn draw_candidate_row(
             cell.set_symbol(" ").set_style(ground);
         }
     }
-    let line = room_for_private_use(Line::from(spans));
+    let line = room_for_wide_glyphs(Line::from(spans));
     frame.render_widget(Paragraph::new(line).style(ground), row);
 }
 
@@ -13681,7 +13691,7 @@ fn draw_panel_rows(
     });
     // The rows go inside the ring rather than through a `Paragraph`'s own
     // block: the ring is `chrome`'s now, and one thing should draw it.
-    frame.render_widget(Paragraph::new(with_room_for_private_use(lines)).style(ground), inner);
+    frame.render_widget(Paragraph::new(with_room_for_wide_glyphs(lines)).style(ground), inner);
 }
 
 #[cfg(test)]

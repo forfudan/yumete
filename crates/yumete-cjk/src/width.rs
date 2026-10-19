@@ -80,6 +80,30 @@ pub fn char_width(c: char) -> usize {
     }
 }
 
+/// **Whether a renderer laying this out by plain Annex #11 will reserve one
+/// cell where this editor counted two** (2026-10-19).
+///
+/// [`char_width`] is the editor's answer and every measurement here agrees with
+/// it — the wrap, the caret's column, the click map. `ratatui` lays its spans
+/// out with plain Annex #11 instead, so for a character it reads as Ambiguous
+/// it reserves a single cell and puts the next character in the one this side
+/// had already spent. The glyph the *terminal* then draws is two cells wide and
+/// paints over its neighbour.
+///
+/// Two blocks answer yes. The private-use area always does (see
+/// [`is_private_use`] — that mismatch was found 2026-10-16 and the front end
+/// has padded for it since). The rest of the Ambiguous block does whenever
+/// [`ambiguous_is_wide`] is in force, and that half went unpadded until an
+/// audit measured it: with `ambiguous_width = "wide"`, walking `l` along
+/// `a—b—c—d` put the caret's block one cell right of the character the status
+/// line named, drifting a further cell per `—` on the row.
+///
+/// Warning: **the answer moves with the setting**, because the layout's does. Asking
+/// it per character rather than per block is what keeps the two in step.
+pub fn needs_a_second_cell(c: char) -> bool {
+    char_width(c) == 2 && UnicodeWidthChar::width(c) != Some(2)
+}
+
 /// Whether `c` is in a Private Use Area.
 ///
 /// **These are two cells here, whatever Annex #11 says** (2026-10-16). The
