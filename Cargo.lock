@@ -1082,6 +1082,7 @@ version = "0.1.0"
 name = "yumete"
 version = "0.10.0"
 dependencies = [
+ "libc",
  "yumete-config",
  "yumete-core",
  "yumete-ime",

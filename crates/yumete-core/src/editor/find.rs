@@ -723,6 +723,7 @@ impl Editor {
                     let walked = walk_and_search(&hunt, &sieve, &mut stop, &mut take);
                     self.search.files.extend(files);
                     self.search.cut = walked.cut;
+                    self.search.own_output = walked.own_output.clone();
                 }
                 false if self.in_the_background => {
                     self.search_in_the_background(root.clone(), sieve, look, unsaved, here, going)
@@ -739,6 +740,7 @@ impl Editor {
                     let walked = walk_and_search(&hunt, &sieve, &mut stop, &mut take);
                     self.search.files.extend(files);
                     self.search.cut = walked.cut;
+                    self.search.own_output = walked.own_output.clone();
                 }
             }
             self.search.root = Some(root);
@@ -2763,7 +2765,10 @@ impl Editor {
                 // 收的那一頭没了（編輯器關了，或者這一趟被頂掉了）就收攤。
                 say.send((generation, found)).is_ok()
             });
-            let _ = say.send((generation, Found::Done { cut: walked.cut }));
+            let _ = say.send((
+                generation,
+                Found::Done { cut: walked.cut, own_output: walked.own_output.clone() },
+            ));
         });
         self.searching = Some(crate::editor::Searching {
             generation,
@@ -2841,8 +2846,9 @@ impl Editor {
                     first_hit = true;
                 }
                 Found::File(path) => self.search.files.push((Some(path), None)),
-                Found::Done { cut } => {
+                Found::Done { cut, own_output } => {
                     self.search.cut = cut;
+                    self.search.own_output = own_output;
                     done = true;
                 }
             }
@@ -3112,7 +3118,10 @@ fn walk_and_search(
         walked
     });
     *stop = quit.load(std::sync::atomic::Ordering::Relaxed);
-    crate::editor::Walked { cut: walked.cut || *stop }
+    crate::editor::Walked {
+        cut: walked.cut || *stop,
+        own_output: walked.own_output.clone(),
+    }
 }
 
 /// 背景那一趟交回來的東西（§5.93）。
@@ -3123,7 +3132,7 @@ pub(crate) enum Found {
     /// 一個**有**命中的檔，照走到的次序。
     File(std::path::PathBuf),
     /// 走完了（或者被叫停了）。
-    Done { cut: bool },
+    Done { cut: bool, own_output: Option<String> },
 }
 
 /// **一行，問一遍，命中當場交出去** —— 流式搜索的那一格。
