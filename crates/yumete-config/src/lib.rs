@@ -1960,6 +1960,57 @@ impl Default for ExportConfig {
 /// Names first, because a writer says 32開 and not 130 × 184; then a literal
 /// `寬x高`, because the list of names a printer uses is longer than any list
 /// kept here and a writer holding a sample copy can measure it.
+/// **`[editor] language_key` as a shape**, before a front end turns it into a
+/// key event (#339).
+///
+/// `off`, `F1`–`F12`, `C-<char>`, `A-<char>`. The grammar lives here because
+/// this is the layer that can *complain* about a misspelling, and a second copy
+/// in the front end would be a second answer.
+///
+/// Warning: **a misspelt name used to be indistinguishable from `off`** (2026-10-19
+/// 審出來的): `language_key = "!!!nonsense"` took the 中英 key away and said
+/// nothing, while the settings panel showed the typo back as though it had been
+/// understood. The doc on the front end's own reader has promised since #339
+/// that 「the start-up line says which key there is」; this is that line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LanguageKey {
+    /// No stand-in key at all.
+    Off,
+    /// `F1`–`F12`.
+    Function(u8),
+    /// `C-<char>`.
+    Ctrl(char),
+    /// `A-<char>`.
+    Alt(char),
+}
+
+impl LanguageKey {
+    /// Read the name, or `None` when it is not one of the four shapes.
+    pub fn parse(name: &str) -> Option<LanguageKey> {
+        let name = name.trim();
+        if name.is_empty() || name.eq_ignore_ascii_case("off") {
+            return Some(LanguageKey::Off);
+        }
+        if let Some(n) = name
+            .strip_prefix(['F', 'f'])
+            .and_then(|d| d.parse::<u8>().ok())
+        {
+            return (1..=12).contains(&n).then_some(LanguageKey::Function(n));
+        }
+        let (mods, rest) = name.split_once('-')?;
+        let mut chars = rest.chars();
+        let c = chars.next()?;
+        if chars.next().is_some() {
+            return None;
+        }
+        match mods {
+            "C" | "c" => Some(LanguageKey::Ctrl(c)),
+            "A" | "a" => Some(LanguageKey::Alt(c)),
+            _ => None,
+        }
+    }
+}
+
 fn parse_page(value: &str) -> Option<(u32, u32)> {
     let name = value.trim().to_ascii_lowercase();
     let named = match name.as_str() {
@@ -3395,7 +3446,13 @@ impl RawConfig {
             config.editor.table_rules = rules;
         }
         if let Some(key) = self.editor.language_key {
-            config.editor.language_key = key;
+            match LanguageKey::parse(&key) {
+                Some(_) => config.editor.language_key = key,
+                None => problems.push(format!(
+                    "[editor] language_key：不認得「{key}」——只能是 off、F1 到 F12、\
+                     C-<字母> 或 A-<字母>"
+                )),
+            }
         }
         if let Some(on) = self.editor.line_number_fill {
             config.editor.line_number_fill = on;
@@ -3708,7 +3765,28 @@ impl RawConfig {
         if let Some(markers) = self.panel.markers {
             // An empty list would leave every candidate unnumbered; keep the
             // default rather than silently taking the numbers away.
-            if !markers.is_empty() {
+            //
+            // **半角的序號對不齊**（2026-10-19 審出來的）：手冊一直寫着「每一個
+            // 都要全角」，而這裏只問過空不空——`markers = "ABCDEFGHI"` 靜靜收下，
+            // 候選欄的格子從此一欄一欄地錯開。
+            //
+            // Warning: **問的是 ASCII，不是量出來的寬度。** `①②③` 是 East Asian
+            // Ambiguous：CJK 字體裏兩格，別處一格，而 [`yumete_cjk::char_width`]
+            // 答的是**此刻那個全局**怎麼設的——拿它當閘，同一個配置檔在兩臺終端
+            // 上一個收一個拒。能數得清的只有「這個字在哪裏都是窄的」。
+            let narrow: String = markers.chars().filter(char::is_ascii).collect();
+            if markers.is_empty() {
+            } else if !narrow.is_empty() {
+                // 一個都不全角的時候不必把同一串字說兩遍。
+                let which = match narrow == markers {
+                    true => format!("「{markers}」"),
+                    false => format!("「{markers}」裏的「{narrow}」"),
+                };
+                problems.push(format!(
+                    "[panel] markers：{which}不是全角的——序號要全角，\
+                     不然候選欄的格子對不齊"
+                ));
+            } else {
                 config.panel.markers = markers;
             }
         }
@@ -3736,6 +3814,16 @@ impl RawConfig {
         }
         if let Some(inline) = self.panel.inline_preedit.as_deref().and_then(InlinePreedit::parse) {
             config.panel.inline_preedit = inline;
+        }
+        // **認不出來的紙張從前靜靜地變成 A5**（2026-10-19 審出來的）：`a44`、
+        // `0x0`、`bogus` 都是，而同一個檔裏別的壞值每一條都說得出口。
+        if let Some(page) = self.export.page.as_deref() {
+            if parse_page(page).is_none() {
+                problems.push(format!(
+                    "[export] page：不認得「{page}」——只能是 a4 a5 a6 b5 b6 letter \
+                     16開 32開 大32開，或者「137x195」這樣的毫米數"
+                ));
+            }
         }
         if let Some(page) = self.export.page.as_deref().and_then(parse_page) {
             config.export.page = page;

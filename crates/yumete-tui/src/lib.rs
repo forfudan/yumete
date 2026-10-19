@@ -2321,27 +2321,20 @@ impl std::ops::IndexMut<usize> for Seats {
 /// `C-<char>`, `A-<char>`, `F1`…`F12`, `off`. Anything else is `None` — a
 /// misspelt key is no key, and the start-up line says which key there is.
 fn language_key(config: &Config) -> Option<(KeyCode, KeyModifiers)> {
-    let name = config.editor.language_key.trim();
-    if name.is_empty() || name.eq_ignore_ascii_case("off") {
-        return None;
+    // The grammar is the config layer's — one answer, and that is the layer
+    // that can complain about a misspelling (see `LanguageKey`).
+    match yumete_config::LanguageKey::parse(&config.editor.language_key)? {
+        yumete_config::LanguageKey::Off => None,
+        yumete_config::LanguageKey::Function(n) => Some((KeyCode::F(n), KeyModifiers::NONE)),
+        yumete_config::LanguageKey::Ctrl(c) => {
+            let mods = KeyModifiers::CONTROL;
+            Some((KeyCode::Char(control_alias(c, mods)), mods))
+        }
+        yumete_config::LanguageKey::Alt(c) => {
+            let mods = KeyModifiers::ALT;
+            Some((KeyCode::Char(control_alias(c, mods)), mods))
+        }
     }
-    if let Some(n) = name
-        .strip_prefix(['F', 'f'])
-        .and_then(|d| d.parse::<u8>().ok())
-    {
-        return (1..=12).contains(&n).then_some((KeyCode::F(n), KeyModifiers::NONE));
-    }
-    let (mods, rest) = match name.split_once('-')? {
-        ("C" | "c", rest) => (KeyModifiers::CONTROL, rest),
-        ("A" | "a", rest) => (KeyModifiers::ALT, rest),
-        _ => return None,
-    };
-    let mut chars = rest.chars();
-    let c = chars.next()?;
-    chars
-        .next()
-        .is_none()
-        .then(|| (KeyCode::Char(control_alias(c, mods)), mods))
 }
 
 /// The one name a control chord has, whichever protocol delivered it.
