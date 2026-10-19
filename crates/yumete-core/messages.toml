@@ -6925,9 +6925,9 @@ en = "saved; C-o comes back"
 [[message]]
 # :keymap-actions 那張清單的開頭一段
 key = "keys.actions-head"
-zht = "把名字寫在配置的 `[keys.normal]` 右邊：`x = 「delete_selection」`。右邊也可以是 `:命令`，或者一串鍵。"
-zhs = "把名字写在配置的 `[keys.normal]` 右边：`x = 「delete_selection」`。右边也可以是 `:命令`，或者一串键。"
-en = "Write a name on the right of `[keys.normal]`: `x = 「delete_selection」`. The right may also be a `:command`, or keys."
+zht = "把名字寫在配置的 `[keys.normal]` 右邊：`x = 「delete_selection」`。右邊三種：動作名、`:命令`、`@一串鍵`。"
+zhs = "把名字写在配置的 `[keys.normal]` 右边：`x = 「delete_selection」`。右边三种：动作名、`:命令`、`@一串键`。"
+en = "Write a name on the right of `[keys.normal]`: `x = 「delete_selection」`. Three kinds on the right: an action's name, a `:command`, or keys with an `@` in front."
 
 [[message]]
 # :keymap-actions 那個緩衝區的名字
