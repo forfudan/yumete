@@ -242,7 +242,12 @@ mod every_setting_is_pushed_here {
             "{root}/crates/yumete-tui/src/settings.rs"
         ))
         .expect("this file");
-        for (what, needle) in [("顯示注音", ":ruby-render"), ("注音寫法", "ruby_dialects")] {
+        // **問的是「推」那一句，不是那個名字**（2026-10-19）。從前拿名字在整個
+        // `main.rs` 上搜，而那個檔裏還有 `--help` 那一大段字——`--help` 寫上
+        // `:ruby-render off|basic|full` 這一行（它本來教的是一個已經退役的拼法）
+        // 當場把這一條弄紅了，而没有任何東西跑回啓動那一段。釘的是命令串，命令
+        // 串只出現在真去推它的地方。
+        for (what, needle) in [("顯示注音", "\":ruby-render "), ("注音寫法", "ruby_dialects")] {
             assert!(here.contains(needle), "{what} 要在這個檔裏推：{needle}");
             assert!(
                 !main.contains(needle),
