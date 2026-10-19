@@ -15,6 +15,11 @@ names: `yumete`, and `ye` for the one you actually type.
 brew install forfudan/tap/yumete
 ```
 
+```powershell
+scoop bucket add forfudan https://github.com/forfudan/scoop-bucket
+scoop install yumete
+```
+
 **[docs/manual.md](docs/manual.md)** is the user manual — what the keys and
 commands do, how vertical layout works, and how to configure it.
 
@@ -26,9 +31,11 @@ commands do, how vertical layout works, and how to configure it.
 ## Status
 
 A working editor, used daily by its author, and not finished. **v0.10.0** is the
-current release: `brew install forfudan/tap/yumete`, or a tarball from the
-[releases page](https://github.com/forfudan/yumete/releases), or build it from
-source (below). What each release changed is in
+current release: `brew install forfudan/tap/yumete` on macOS and Linux,
+`scoop install yumete` on Windows once the
+[bucket](https://github.com/forfudan/scoop-bucket) is added, or an archive from
+the [releases page](https://github.com/forfudan/yumete/releases), or build it
+from source (below). What each release changed is in
 [CHANGELOG.md](CHANGELOG.md).
 
 ## What it does
