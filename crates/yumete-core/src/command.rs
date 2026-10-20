@@ -326,14 +326,20 @@ pub enum Command {
     /// `:replace [folder]` and its `-cd`/`-wd`/`-gd` — the same panel with the
     /// replace row already showing (#419).
     OpenReplace(crate::search_panel::Where),
-    /// `:panel-left|right [panel]` — which side a panel lives on
-    /// (#293). No name means the one holding the keys.
-    ShowSidebarAt(crate::sidebar::Side, Option<crate::sidebar::Panel>),
-    /// `:sidebar-left|right [off|panel]` — that side of the screen itself
-    /// (2026-09-18): bare it opens or puts away, `off` puts away, a panel name
-    /// opens it showing that one. The keys had a toggle from the first day
-    /// (`空格 e`, `空格 o`) and the command line had no way to say it at all.
-    SidebarSide(crate::sidebar::Side, SidebarAsk),
+    /// `:sidebar [off|panel]` — the sidebar, whichever side the panel asked
+    /// for lives on.
+    ///
+    /// **One command, and no way to move a panel** (2026-10-20 作者定). It was
+    /// four: `:sidebar-left`, `:sidebar-right`, `:panel-left`, `:panel-right`,
+    /// and a `[sidebar]` table in the config to make a move stick. 原話：
+    /// 「the location of each type of panel is fixed by yumete and users
+    /// cannot change it to left and right themselves. This makes our model
+    /// concise and stable, and also makes it less buggy.」 It does: a panel
+    /// that could cross took whatever was in the far slot with it, handed the
+    /// displaced one back, and left `side_view` and `views_on` to agree about
+    /// the result — which is the machinery behind 「`空格 4` opens an empty
+    /// docs panel」.
+    Sidebar(SidebarAsk),
     /// `:table-header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
     SetTableHeader(Switch),
@@ -2522,18 +2528,19 @@ const SWITCH: &[Word] = &[
 /// What a `:sidebar-left`/`:sidebar-right` was asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SidebarAsk {
-    /// No name: open that side if it is away, put it away if it is there.
-    Toggle,
-    /// `off`.
+    /// No name: say which panels are open, and move nothing — the rule every
+    /// switch in this table keeps (2026-10-19).
+    Ask,
+    /// `off`: close both of them.
     Off,
-    /// A panel's name: open that side showing it.
+    /// A panel's name: open it, wherever yumete keeps that one.
     Show(crate::sidebar::Panel),
 }
 
-/// `off`, or one of the panels — [`SIDEBAR_SIDES`]'s words read back.
+/// `off`, or one of the panels — [`SIDEBAR_PANELS`]'s words read back.
 fn sidebar_ask(command: &'static str, word: Option<&str>) -> Result<SidebarAsk, CommandError> {
     match word {
-        None => Ok(SidebarAsk::Toggle),
+        None => Ok(SidebarAsk::Ask),
         Some("off") => Ok(SidebarAsk::Off),
         Some(word) => Ok(SidebarAsk::Show(
             named_panel(command, Some(word))?.expect("a word was given"),
@@ -2587,15 +2594,20 @@ const OFF_ONLY: &[Word] = &[Word {
     needs: &[],
 }];
 
-/// The panels a slot can hold, for `:panel-left`/`:panel-right` — Feature #293.
+/// What `:sidebar` takes: `off`, or a panel to open — Feature #293.
+///
+/// Warning: **`search` 開得出來，從前卻不在這張表上**（2026-09-23 審出來的）。
+/// `named_panel` 走的是 `Panel::parse`——於是 `:sidebar-left search` 真的執行
+/// 得了，命令選單卻從不列這個名字，而那條說明寫着「寫名字就開在那一格」。
+/// 以 `Panel::ALL` 為準。
+///
+/// Warning: **從前這是兩張幾乎一樣的表**（`SIDEBAR_SIDES` 多一個 `off`，
+/// `SIDEBAR_PANELS` 少一個），各給兩條命令用。四條併成一條之後只剩這一張。
 const SIDEBAR_PANELS: &[Word] = &[
-    Word { name: "files", help: "label.panel.files", needs: &[] },
+    Word { name: "off", help: "label.sidebar-off", needs: &[] },
+    Word { name: "explorer", help: "label.panel.files", needs: &[] },
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
-    // Warning: **`search` 開得出來，從前卻不在這張表上**（2026-09-23 審出來的）。
-    // `named_panel` 走的是 `Panel::parse`——於是 `:sidebar-left search` 真的執行
-    // 得了，命令選單卻從不列這個名字，而那條說明寫着「寫名字就開在那一格」。
-    // 以 `Panel::ALL` 為準。
     Word { name: "search", help: "label.panel.search", needs: &[] },
     Word { name: "info", help: "label.panel.info", needs: &[] },
 ];
@@ -2614,19 +2626,6 @@ const INFO_KINDS: &[Word] = &[
     Word { name: "change", help: "label.panel.change", needs: &[] },
 ];
 
-/// What `:sidebar-left` and `:sidebar-right` take: `off`, or a panel to open
-/// there. The panels are [`SIDEBAR_PANELS`] again rather than a reference to
-/// it — a `&[Word]` cannot be concatenated in a `const`, and the two lists
-/// answer different questions anyway (one 「which panel」, one 「what to do
-/// with this side」).
-const SIDEBAR_SIDES: &[Word] = &[
-    Word { name: "off", help: "label.sidebar-off", needs: &[] },
-    Word { name: "files", help: "label.panel.files", needs: &[] },
-    Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
-    Word { name: "outline", help: "label.panel.outline", needs: &[] },
-    Word { name: "search", help: "label.panel.search", needs: &[] },
-    Word { name: "info", help: "label.panel.info", needs: &[] },
-];
 
 /// Every command, for the completion list.
 ///
@@ -4324,56 +4323,12 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Project))),
     },
     Entry {
-        name: "sidebar-left",
+        name: "sidebar",
         aliases: &[],
-        help: "cmd.sidebar.left-side",
-        needs: &[],
-        params: &[Param::Words { of: SIDEBAR_SIDES, default: None }],
-        build: Some(|p| {
-            Ok(Command::SidebarSide(
-                crate::sidebar::Side::Left,
-                sidebar_ask(p.name, p.arg(0))?,
-            ))
-        }),
-    },
-    Entry {
-        name: "sidebar-right",
-        aliases: &[],
-        help: "cmd.sidebar.right-side",
-        needs: &[],
-        params: &[Param::Words { of: SIDEBAR_SIDES, default: None }],
-        build: Some(|p| {
-            Ok(Command::SidebarSide(
-                crate::sidebar::Side::Right,
-                sidebar_ask(p.name, p.arg(0))?,
-            ))
-        }),
-    },
-    Entry {
-        name: "panel-left",
-        aliases: &[],
-        help: "cmd.panel.left",
+        help: "cmd.sidebar.sidebar",
         needs: &[],
         params: &[Param::Words { of: SIDEBAR_PANELS, default: None }],
-        build: Some(|p| {
-            Ok(Command::ShowSidebarAt(
-                crate::sidebar::Side::Left,
-                named_panel(p.name, p.arg(0))?,
-            ))
-        }),
-    },
-    Entry {
-        name: "panel-right",
-        aliases: &[],
-        help: "cmd.panel.right",
-        needs: &[],
-        params: &[Param::Words { of: SIDEBAR_PANELS, default: None }],
-        build: Some(|p| {
-            Ok(Command::ShowSidebarAt(
-                crate::sidebar::Side::Right,
-                named_panel(p.name, p.arg(0))?,
-            ))
-        }),
+        build: Some(|p| Ok(Command::Sidebar(sidebar_ask(p.name, p.arg(0))?))),
     },
     Entry {
         name: "table-detail",
@@ -4889,7 +4844,14 @@ const RENAMED: &[(&str, &str)] = &[
     ("markup", "render"),
     ("note", "view-punct"),
     ("nowrap", "view-wrap"),
+    // **The four that said which side** (2026-10-20). Where a panel lives is
+    // yumete's to decide now, so `:panel-left` has nothing to point at but
+    // the command that opens the thing.
+    ("panel-left", "sidebar"),
+    ("panel-right", "sidebar"),
     ("row", "table-jump"),
+    ("sidebar-left", "sidebar"),
+    ("sidebar-right", "sidebar"),
     ("sav", "write-as"),
     ("saveas", "write-as"),
     ("source", "render"),

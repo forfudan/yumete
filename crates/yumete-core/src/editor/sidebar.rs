@@ -10,54 +10,32 @@ use super::*;
 impl Editor {
     // ---- The side panels (Feature #94, #293) -------------------------------
 
-    /// **Which slot a panel lives in — the one place that decides it** (#293).
+    /// **Which slot a panel lives in — and yumete decides, not the reader**
+    /// (#293, settled 2026-10-20).
     ///
-    /// One answer per panel, because a reader may want the outline across from
-    /// the tree, or the 字典 stacked under it. Warning: **`Tab` then walks only the
-    /// views that share a slot** ([`Editor::cycle_view`]): the motion belongs
-    /// to the column, not to the list of views.
+    /// 原話：「the location of each type of panel is fixed by yumete and users
+    /// cannot change it to left and right themselves. This makes our model
+    /// concise and stable, and also makes it less buggy.」 So this is a fact
+    /// about the panel, not a field: 文件、緩衝、大綱、搜索 on the left, 信息
+    /// on the right — it is 「what is this」, and it follows the eye rather
+    /// than pushing the manuscript to the right.
+    ///
+    /// Warning: **what went with the setting.** `set_side` carried a showing panel
+    /// across, handed the displaced one back, moved the keys if they were in
+    /// it, and left `side_view`/`views_on` to agree about the result; a
+    /// `[sidebar]` table in the config said it again at startup. The empty
+    /// docs panel that `空格 4` used to open was that machinery disagreeing
+    /// with itself.
+    ///
+    /// Warning: **`Tab` walks only the views that share a slot**
+    /// ([`Editor::cycle_view`]): the motion belongs to the column, not to the
+    /// list of views.
     pub fn side_of(&self, panel: crate::sidebar::Panel) -> crate::sidebar::Side {
-        self.sides[panel as usize]
-    }
-
-    /// Put that panel on that side.
-    ///
-    /// Whatever is already open moves with it, because a panel that stayed
-    /// where the old setting put it would make the setting a lie until the
-    /// next restart. A slot that was busy hands what it held back to the slot
-    /// this one just left, so nothing is silently closed.
-    pub fn set_side(&mut self, panel: crate::sidebar::Panel, side: crate::sidebar::Side) {
-        use crate::sidebar::View;
-        let was = self.side_of(panel);
-        self.sides[panel as usize] = side;
-        if was == side {
-            return;
+        use crate::sidebar::{Panel, Side};
+        match panel {
+            Panel::Files | Panel::Buffers | Panel::Outline | Panel::Search => Side::Left,
+            Panel::Info => Side::Right,
         }
-        // A panel that is showing goes across; what is *in* the 信息 slot has
-        // nothing to carry, since it is worked out afresh every frame (#426).
-        match View::ALL.into_iter().find(|&v| crate::sidebar::Panel::from(v) == panel) {
-            Some(view) if self.showing(view) == Some(was) => {
-                let moving = self.panels[was as usize].take();
-                let focused = self.panel_focus == Some(was);
-                let displaced = self.panels[side as usize].take();
-                self.panels[side as usize] = moving;
-                self.panels[was as usize] = displaced;
-                if focused {
-                    self.panel_focus = Some(side);
-                }
-            }
-            Some(_) => {}
-            // Warning: **只有這一格自己正拿着鍵的時候，鍵纔跟過去。** 從前的條件是
-            // 「焦點在 `was` 那一側」——`Layer` 在的時候那等於「在下層」，没了
-            // 之後它也可能是**那一側的常駐面板**。於是
-            // `:panel-dictionary left` 會把鍵從右邊的百科裏拽走
-            // （2026-09-23 審出來的）。
-            None if self.panel_focus == Some(was) && Self::view_of(panel).is_some() => {
-                self.panel_focus = Some(side)
-            }
-            None => {}
-        }
-        self.refresh_sidebar();
     }
 
     /// Which slot a view opens in.
@@ -710,6 +688,25 @@ impl Editor {
                 self.focus_slot(side);
             }
             _ => {}
+        }
+    }
+
+    /// **Which panels are open** — what bare `:sidebar` answers.
+    ///
+    /// Named in the order they are on the screen, left then right, by the same
+    /// words their own headers carry. Nothing open is an answer too, and it is
+    /// the one a reader who typed `:sidebar` expecting a toggle most needs.
+    pub(super) fn sidebar_report(&self) -> String {
+        let open: Vec<String> = crate::sidebar::Side::BOTH
+            .into_iter()
+            .filter_map(|side| self.panel(side))
+            .map(|panel| {
+                crate::messages::say(crate::sidebar::Panel::from(panel.view()).tag(), &[])
+            })
+            .collect();
+        match open.is_empty() {
+            true => say!("sidebar.nothing-open"),
+            false => say!("sidebar.open", open.join(&say!("label.comma"))),
         }
     }
 

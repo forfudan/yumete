@@ -345,7 +345,7 @@ pub const ALL: &[Action] = &[
     keys("copy_to_clipboard", "action.copy-to-clipboard", " y"),
     keys("paste_from_clipboard", "action.paste-from-clipboard", " p"),
     command("ruby", "action.ruby", "ruby"),
-    command("sidebar", "action.sidebar", "sidebar-left"),
+    command("sidebar", "action.sidebar", "sidebar"),
     command("wiki_panel", "action.wiki-panel", "wiki panel"),
     command("save_file", "action.save-file", "write"),
     command("save_and_quit", "action.save-and-quit", "wq"),

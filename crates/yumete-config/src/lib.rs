@@ -1828,8 +1828,6 @@ pub struct Config {
     pub panel: PanelConfig,
     pub ime: ImeConfig,
     pub syntax: SyntaxConfig,
-    /// Which side each panel lives on — Feature #293.
-    pub sidebar: SidebarConfig,
     pub keys: KeyConfig,
     pub export: ExportConfig,
     /// What each language can be told to run, by verb: `preview`, `format`, and
@@ -1924,18 +1922,6 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
     ])
 }
 
-/// **Which side each panel lives on** — Feature #293.
-///
-/// One entry per panel rather than one for the whole sidebar: a reader may
-/// want the outline across from the tree, or the 字典 stacked under it. The
-/// words are kept as written and read back by the editor, the way `syntax` is
-/// — they belong to the half that uses them, and one nobody knows keeps the
-/// default there rather than being silently rewritten here.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SidebarConfig {
-    /// Panel name (`files` `buffers` `outline` `search` `info`) → `"left"`/`"right"`.
-    pub side: HashMap<String, String>,
-}
 
 /// What `:export` cannot work out for itself.
 ///
@@ -2910,8 +2896,6 @@ struct RawConfig {
     #[serde(default)]
     syntax: HashMap<String, String>,
     #[serde(default)]
-    sidebar: HashMap<String, String>,
-    #[serde(default)]
     keys: RawKeys,
     #[serde(default)]
     export: RawExport,
@@ -3272,11 +3256,6 @@ impl RawConfig {
         }
         for (name, servers) in &other.lsp {
             self.lsp.insert(name.clone(), servers.clone());
-        }
-        // Same rule for the panels: a project may move one without restating
-        // the other four.
-        for (name, side) in &other.sidebar {
-            self.sidebar.insert(name.clone(), side.clone());
         }
         if other.panel.markers.is_some() {
             self.panel.markers = other.panel.markers;
@@ -3683,7 +3662,6 @@ impl RawConfig {
             config.ime.system = SystemImePolicy::from_config(&system);
         }
         config.syntax.by_name = self.syntax;
-        config.sidebar.side = self.sidebar;
         if let Some(name) = self.theme.name {
             if !name.trim().is_empty() {
                 // The name picks the whole set of anchors, and the keys below
