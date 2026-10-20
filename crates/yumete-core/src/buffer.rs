@@ -1202,17 +1202,22 @@ impl Buffer {
         let old_seen = self.seen.take();
         let old_read_as = self.read_as.take();
         let target: PathBuf = path.into();
+        // **Room first, then the overwrite question.** A folder is not a file
+        // that `:w!` will write over, and saying it was sent the writer to a
+        // bang that could never work. The two never both apply: a target that
+        // exists has a parent that exists, so `room_for` passes it straight
+        // through unless the target *is* the folder.
+        if let Err(why) = Buffer::room_for(&target, force) {
+            self.seen = old_seen;
+            self.read_as = old_read_as;
+            return Err(why);
+        }
         // Writing over a file that is already there is a decision, not a
         // typo's consequence: `:w other.md` used to replace it without a word.
         if !force && target.exists() {
             self.seen = old_seen;
             self.read_as = old_read_as;
             return Err(io::Error::other(say!("buffer.file-already-exists")));
-        }
-        if let Err(why) = Buffer::room_for(&target, force) {
-            self.seen = old_seen;
-            self.read_as = old_read_as;
-            return Err(why);
         }
         self.path = Some(target);
         // A new name, so no copy of ours is out there under it yet — and no
@@ -1249,10 +1254,10 @@ impl Buffer {
         if self.readonly {
             return Err(io::Error::other(say!("readonly.refused")));
         }
+        Buffer::room_for(path, force)?;
         if !force && path.exists() {
             return Err(io::Error::other(say!("buffer.file-already-exists")));
         }
-        Buffer::room_for(path, force)?;
         self.write_atomically(path, finish)
     }
 
@@ -1269,7 +1274,17 @@ impl Buffer {
     ///
     /// Warning: **救命稿那條路不走這一支。** 它的父目錄就是文檔自己的目錄，本來
     /// 就在；而一份草稿不該有權力替人建目錄。
+    ///
+    /// Warning: **A folder is not a target, with or without the bang.** `:w 某目錄`
+    /// used to answer 「那個文件已經存在——`:w!` 才蓋掉它」 (a folder called a
+    /// file, and a bang that could never work), and `:w! 某目錄` dropped the
+    /// raw `Is a directory (os error 21)` into a Chinese status bar. Helix
+    /// 25.07.1 says that OS error for both (measured); the refusal here is the
+    /// same refusal, in this editor's own words.
     fn room_for(path: &Path, force: bool) -> io::Result<()> {
+        if path.is_dir() {
+            return Err(io::Error::other(say!("buffer.target-is-a-folder")));
+        }
         let Some(parent) = path.parent().filter(|one| !one.as_os_str().is_empty()) else {
             return Ok(());
         };
@@ -2137,6 +2152,40 @@ fn tmp() -> std::path::PathBuf {
         // `:w!` 建出來並存下去。
         b.save_as(path.clone(), true, true).expect("`:w!` 建得出來");
         assert!(path.is_file(), "存到了 {}", path.display());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// **文件夾不是存檔的去處，帶不帶 `!` 都一樣**（2026-10-20）。
+    ///
+    /// 從前 `:w 某目錄` 答的是 [`say!`]`("buffer.file-already-exists")`——把目錄叫成
+    /// 文件，還指了一條 `:w!` 的路，而那條路落到 `File::create` 上，回的是一句
+    /// 英文的 `Is a directory (os error 21)`。helix 25.07.1 兩種都說後面那一句
+    /// （2026-10-20 用 pty 量的）。
+    #[test]
+    fn a_folder_is_never_somewhere_to_save() {
+        let dir = tmp().join(format!("yumete-saveondir-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("已有的")).expect("fixture dirs");
+        fs::write(dir.join("在.md"), "那年冬天。
+").expect("seed");
+
+        let target = dir.join("已有的");
+        let mut b = Buffer::open(dir.join("在.md")).expect("open");
+        for force in [false, true] {
+            for said in [
+                b.save_as(target.clone(), force, true).expect_err("存不進文件夾"),
+                b.write_copy(&target, force, true).expect_err("抄不進文件夾"),
+            ]
+            .map(|why| why.to_string())
+            {
+                assert!(said.contains("文件夾"), "說得出那是個文件夾：{said}");
+                assert!(!said.contains("os error"), "不漏系統那句英文：{said}");
+                assert!(!said.contains(":w!"), "没有一條 `:w!` 的出路可指：{said}");
+            }
+            assert!(target.is_dir(), "文件夾原樣還在");
+            assert_eq!(b.path(), Some(dir.join("在.md").as_path()), "名字没被改掉");
+        }
 
         let _ = fs::remove_dir_all(&dir);
     }
