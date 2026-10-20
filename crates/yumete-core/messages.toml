@@ -832,6 +832,13 @@ zhs = "存了 {0} 个文件；{1} 个没存：{2}"
 en = "saved {0} file(s); {1} not saved: {2}"
 
 [[message]]
+# :w 到一個已經存在的文件夾上（帶不帶 ! 都一樣）
+key = "buffer.target-is-a-folder"
+zht = "你輸入的是已有文件夾名，本文件無法保存"
+zhs = "你输入的是已有文件夹名，本文件无法保存"
+en = "that name is a folder that is already there — the file cannot be saved onto it"
+
+[[message]]
 # :update 與 :x 在檔案没改過時説的那句
 key = "buffer.unchanged-not-written"
 zht = "没有改動，未寫盤"
@@ -2186,6 +2193,13 @@ zht = "简体中文"
 zhs = "简体中文"
 en = "简体中文"
 find = "简体 簡體 zhs simplified"
+
+[[message]]
+# `:999…9`：全是数字，但大过一个行号装得下的
+key = "cmd.line-number-too-big"
+zht = "行號太大了：{0}"
+zhs = "行号太大了：{0}"
+en = "line number too big: {0}"
 
 [[message]]
 # `:view-margin` 可选的一档：always

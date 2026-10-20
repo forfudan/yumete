@@ -22,6 +22,22 @@ use yumete_ime::{CommitStrategy, ImeSession, Scheme};
 /// A release build (`YUMETE_RELEASE=1`) is the bare `0.1.0`.
 const VERSION: &str = env!("YUMETE_VERSION");
 
+/// Warning: **`--files` 只認得走檔那幾個。** 別的是給式子用的，而檔名那一邊用的是
+/// 挑選器的模糊匹配，根本沒有式子。從前它們**悄悄不生效**，而 `--help` 說「下面
+/// 每一個都還管用」——說了假話比少一個功能壞。
+///
+/// 讀兩處：`--files` 還欠着詞的時候（那一句話要說對原因），與參數讀完之後。
+const FOR_GREP_ONLY: [&str; 8] = [
+    "--ignore-case",
+    "--case-sensitive",
+    "--word",
+    "--regex",
+    "--fixed",
+    "--fuzzy",
+    "--chinese",
+    "--heading",
+];
+
 /// **這台機器以前用過 yumete 沒有。**
 ///
 /// Warning: **要在任何人碰數據目錄之前問**，所以它在 `main` 的第一行。那個目錄一啓動
@@ -167,6 +183,15 @@ fn main() -> ExitCode {
             // `--hidden` 當成了要找的詞，再把 `alpha` 當成目錄——然後說
             // 「alpha 不是一個目錄」。少打一個詞的人看不懂那句話。
             if arg.starts_with('-') && arg != "-" {
+                // Warning: **先說真正的毛病。** `ye --files --heading` 的問題不是少打
+                // 了一個詞——`--heading` 給 `--files` 用本來就不成立，補上一個詞
+                // 之後它還會再撞一次（底下 `FOR_GREP_ONLY` 那一關）。少打一個詞
+                // 是 `ye --grep --hidden alpha` 那一種，那裏這句話是對的。
+                if which == "--files" && FOR_GREP_ONLY.contains(&arg.as_str()) {
+                    eprintln!("yumete: {arg} shapes a pattern, and --files matches names by feel");
+                    eprintln!("it belongs to --grep");
+                    return ExitCode::from(2);
+                }
                 eprintln!("yumete: {which} wants a word, not another option ({arg:?})");
                 eprintln!("try 'yumete --help'");
                 return ExitCode::from(2);
@@ -513,19 +538,6 @@ fn main() -> ExitCode {
         }
     }
     if listing.is_some() {
-        // Warning: **`--files` 只認得走檔那幾個。** 別的是給式子用的，而檔名那一邊用
-        // 的是挑選器的模糊匹配，根本沒有式子。從前它們**悄悄不生效**，而
-        // `--help` 說「下面每一個都還管用」——說了假話比少一個功能壞。
-        const FOR_GREP_ONLY: [&str; 8] = [
-            "--ignore-case",
-            "--case-sensitive",
-            "--word",
-            "--regex",
-            "--fixed",
-            "--fuzzy",
-            "--chinese",
-            "--heading",
-        ];
         if let Some(stray) = modifiers.iter().find(|m| FOR_GREP_ONLY.contains(m)) {
             eprintln!("yumete: {stray} shapes a pattern, and --files matches names by feel");
             eprintln!("it belongs to --grep");

@@ -678,6 +678,13 @@ pub enum CommandError {
         command: &'static str,
         word: String,
     },
+    /// All digits, but too many of them to be a line number.
+    ///
+    /// `:42` is a line, so `:9999999999999999999999` is a writer overshooting
+    /// — not a command, which is what both this and Helix 25.07.1 used to call
+    /// it (measured: `no such command: '18446744073709551616'`). The refusal
+    /// is the same refusal; only the reason it gives is true now.
+    LineTooBig(String),
     /// Something followed a word that takes nothing.
     ///
     /// Not the same complaint as [`CommandError::InvalidArgument`], which says
@@ -698,6 +705,9 @@ impl fmt::Display for CommandError {
                 Some(now) => write!(f, "{}", crate::say!("cmd.no-such-command-but", word, now)),
                 None => write!(f, "{}", crate::say!("cmd.no-such-command", word)),
             },
+            CommandError::LineTooBig(digits) => {
+                write!(f, "{}", crate::say!("cmd.line-number-too-big", digits))
+            }
             CommandError::MissingArgument(what) => {
                 write!(f, "{}", crate::say!("cmd.needs-an-argument", what))
             }
@@ -744,6 +754,12 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     // the name split so no command can ever be named a number.
     if let Ok(n) = trimmed.parse::<usize>() {
         return Ok(Command::GotoLine(n));
+    }
+    // Still a line number when it does not fit: a word of nothing but digits
+    // names no command here and never will, so 「no such command」 sent the
+    // reader looking for a spelling mistake in a number.
+    if trimmed.chars().all(|c| c.is_ascii_digit()) {
+        return Err(CommandError::LineTooBig(trimmed.to_string()));
     }
 
     // `:!make` is vi's, and it takes the whole rest of the line — including
@@ -7774,6 +7790,21 @@ mod tests {
             })
         );
     }
+
+    /// All digits is a line number, however many of them there are.
+    #[test]
+    fn a_number_too_big_for_a_line_is_still_a_number() {
+        // `usize::MAX` itself parses, and the editor clamps it to the last line.
+        assert_eq!(parse(":18446744073709551615"), Ok(Command::GotoLine(usize::MAX)));
+        // One more digit, and the word used to name no command at all.
+        let too_big = parse(":18446744073709551616");
+        assert_eq!(
+            too_big,
+            Err(CommandError::LineTooBig("18446744073709551616".into()))
+        );
+        let said = too_big.unwrap_err().to_string();
+        assert!(!said.contains("命令") && !said.contains("command"), "{said}");
+    }
 }
 
 #[cfg(test)]
@@ -7807,5 +7838,4 @@ mod which_commands_are_overloaded {
             };
             println!("  {mark}  :{name}  （{n} 個詞）");
         }
-    }
-}
+    }}
