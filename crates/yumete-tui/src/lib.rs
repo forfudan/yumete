@@ -399,6 +399,16 @@ pub fn want_page_size(n: usize) {
     PAGE_WISH.store(n, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// **上一幀留給候選面板的高度**，so that `:yume-menu-size` can answer about the
+/// page it just asked for rather than the one already on screen.
+///
+/// The clamp lives in [`fit_the_page`], which runs before the *next* frame —
+/// and the status line is written now. Keeping the height here lets the
+/// command run the same clamp a frame early. 0 means no frame has been fitted
+/// yet (every test that calls [`menu_size`] directly), and then there is no
+/// window to clamp against.
+static PANEL_ROOM: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 
 
 /// **把頁夾到上一幀畫得下的那麼大**（#516）。
@@ -445,6 +455,7 @@ pub fn fit_the_page(
     let area = Rect::new(0, 0, width, height);
     let areas = page_areas(editor, config, area, 0);
     let room = areas.status.y.saturating_sub(area.y).max(1);
+    PANEL_ROOM.store(usize::from(room), std::sync::atomic::Ordering::Relaxed);
     let fits = page_for_window(wish, room);
     // **行在哪裏斷，也要在按鍵之前答**（2026-10-13）。從前只有真畫那一步答
     // （[`frame_to`]），而離屏這一支的 `--keys` 跑在任何一幀**之前**——於是動作
@@ -3545,6 +3556,15 @@ fn menu_size(ime: &mut ImeSession, n: &str) -> String {
     if let Some(n) = n.parse::<usize>().ok().filter(|n| (1..=9).contains(n)) {
         // 記下要的那個數，窗口矮的時候照舊夾小——而窗口長高了還長得回去（#516）。
         want_page_size(n);
+        // **答的是剛設的那一頁，不是上一頁。** [`fit_the_page`] 要到下一幀纔
+        // 夾，而這一行現在就要寫出去：從前 `:yume-menu-size 3` 回「候選面板一頁
+        // 6 條」——上一個數——再問一次纔說 3。夾法與那一支同一支，所以窗口矮的
+        // 時候答的仍是畫得下的那個數。
+        let room = PANEL_ROOM.load(std::sync::atomic::Ordering::Relaxed);
+        ime.set_page_size(match u16::try_from(room) {
+            Ok(0) | Err(_) => n,
+            Ok(room) => page_for_window(n, room),
+        });
     }
     say!("ime.menu-size-is", ime.page_size())
 }
