@@ -14414,6 +14414,41 @@ fn the_grid_refusal_names_a_way_through() {
     assert!(ed.current_buffer().text().contains("拆分 | 註"), "{}", ed.status());
 }
 
+/// **The panel's refusal names a way the panel can take** (2026-10-20).
+///
+/// It used to hand back the `:s` sentence, 「加 t 旗標(`:%s/…/…/gt`)」, and
+/// there is nowhere in a panel to type a flag. `:replace!` was declared
+/// forceable and read by nothing, so the bang parsed and changed nothing.
+#[test]
+fn the_panels_grid_refusal_names_the_bang() {
+    let table = "| 鍵 | 拆分 |\n| --- | --- |\n| 木 | 木 |\n";
+    let find_and_replace = |ed: &mut Editor| {
+        ed.search.query = "拆分".to_string();
+        ed.search.replace = "拆分 | 註".to_string();
+        ed.owed_search = true;
+        ed.settle_search();
+        ed.replace_all_found();
+    };
+
+    let mut ed = typed(table);
+    ed.execute(":replace").ok();
+    find_and_replace(&mut ed);
+    assert!(ed.status().contains(":replace!"), "{}", ed.status());
+    assert!(!ed.status().contains("t 旗標"), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text(), table, "refused, so unchanged");
+
+    // …and with the bang it goes through.
+    let mut ed = typed(table);
+    ed.execute(":replace!").ok();
+    find_and_replace(&mut ed);
+    assert!(
+        ed.current_buffer().text().contains("拆分 | 註"),
+        "{}\n{}",
+        ed.current_buffer().text(),
+        ed.status()
+    );
+}
+
 /// A paste the cell refuses says so — in Insert as well as in Normal.
 ///
 /// The text is a bare `|`, not the tab-separated block this test used to

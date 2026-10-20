@@ -2087,12 +2087,14 @@ fn pathdiff(full: &std::path::Path, from: &std::path::Path) -> std::path::PathBu
 /// no picture, and in 2026-09-11's review it wasted a whole afternoon of six
 /// reviewers' terminal-size findings before anyone noticed (#389).
 ///
-/// A comma is taken as well as an `x`, because it is what everyone tries first.
+/// A comma is taken as well as an `x`, because it is what everyone tries first
+/// — and the whole list is [`yumete_core::command::BETWEEN_TWO_NUMBERS`],
+/// shared with `:table`, so the two cannot drift apart again.
 fn parse_size(text: &str) -> Result<(u16, u16), String> {
     let text = text.trim();
-    let Some((w, h)) = text.split_once(['x', 'X', '*', ',']) else {
+    let Some((w, h)) = text.split_once(yumete_core::command::BETWEEN_TWO_NUMBERS) else {
         return Err(format!(
-            "--shot wants a size like 100x30, not {text:?} (`x`, `X`, `*` or `,` between them)"
+            "--shot wants a size like 100x30, not {text:?} (`x`, `X`, `×`, `*` or `,` between them)"
         ));
     };
     // Warning: **Both ends are refused, and both used to get through.** Zero is not

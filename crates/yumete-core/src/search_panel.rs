@@ -468,6 +468,13 @@ pub struct Search {
     /// A row rather than a mode: the panel is the same panel, and turning it
     /// on is 「I am going to change these」, not 「forget what I found」.
     pub replacing: bool,
+    /// Whether this panel may change how many cells a row has — what the `!`
+    /// of `:replace!` buys, and nothing else sets.
+    ///
+    /// The same permission `:s` spells `t`. It lives on the panel rather than
+    /// on the one call because the panel is reopened by the command and then
+    /// used many times: the writer said 「I mean it」 once, about this hunt.
+    pub reshape: bool,
     /// Where to look.
     pub scope: Where,
     /// **那一格裏寫着的字** —— [`Field::Scope`] 的正文。

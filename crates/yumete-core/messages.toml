@@ -1941,9 +1941,9 @@ en = "Japanese 新字体"
 [[message]]
 # : 命令選單裏 opencc 那一項(convert 組)
 key = "cmd.convert.opencc"
-zht = "opencc 本身：没裝就裝，裝了就升級"
-zhs = "opencc 本身：没装就装，装了就升级"
-en = "opencc itself: install it, or bring it up to date"
+zht = "opencc 裝了没有、裝在哪、哪個版本"
+zhs = "opencc 装了没有、装在哪、哪个版本"
+en = "whether opencc is installed, where, and which version"
 
 [[message]]
 # : 命令選單裏 s 那一項(convert 組)，是稿子現在的樣子，也是要變成的樣子
@@ -3682,6 +3682,13 @@ key = "convert.opencc-needed"
 zht = "没裝 opencc。裝它：{0}(macOS 上 :convert-opencc-install 就是這句)"
 zhs = "没装 opencc。装它：{0}(macOS 上 :convert-opencc-install 就是这句)"
 en = "opencc is not installed. Install it with: {0}"
+
+[[message]]
+# :convert-opencc 報的那一則：裝了，這個版本，在這裏
+key = "convert.opencc-version"
+zht = "opencc {0}：{1}"
+zhs = "opencc {0}：{1}"
+en = "opencc {0}: {1}"
 
 [[message]]
 # :convert 説明頁開出來之後的狀態行
@@ -11571,6 +11578,13 @@ key = "table.q-is-for-the-window"
 zht = "␣t q 只在全窗表格裏交回窗口——退出表格按 ␣t o"
 zhs = "␣t q 只在全窗表格里交回窗口——退出表格按 ␣t o"
 en = "␣t q gives back the window, and only the window — ␣t o leaves the table"
+
+[[message]]
+# :replace 面板改了欄數——它打不出 :s 的 t 旗標，所以名的是自己的 !
+key = "table.replace-would-change-width"
+zht = "第 {0} 行會從 {1} 格變成 {2} 格。真要改欄數，用 `:replace!`"
+zhs = "第 {0} 行会从 {1} 格变成 {2} 格。真要改栏数，用 `:replace!`"
+en = "row {0} would go from {1} cells to {2} — use `:replace!` to mean it"
 
 [[message]]
 # 加了一行之後

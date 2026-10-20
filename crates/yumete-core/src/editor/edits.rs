@@ -42,6 +42,21 @@ impl Editor {
     /// cells it had. A substitution that only changes what is *inside* cells
     /// passes, which is the useful kind — `:%s/⿰木/⿰禾/g` over a 拆分表.
     pub(super) fn substitution_breaks_the_grid(&self, rebuilt: &str) -> Option<String> {
+        self.grid_refusal(rebuilt, false)
+    }
+
+    /// The same check, worded for the `:replace` panel.
+    ///
+    /// Only the wording differs, and it has to: the `:s` refusal tells the
+    /// writer to 「add the t flag」, and there is nowhere in the panel to type
+    /// one. What the panel takes is the bang of `:replace!`.
+    pub(super) fn replace_breaks_the_grid(&self, rebuilt: &str) -> Option<String> {
+        self.grid_refusal(rebuilt, true)
+    }
+
+    /// Whether a rewritten document would change any row's shape, said in the
+    /// name of whichever command asked.
+    fn grid_refusal(&self, rebuilt: &str, panel: bool) -> Option<String> {
         // **A table is a table whether or not `:table` was typed.** This check
         // used to open with `self.table.as_ref()?`, so `:replace` — which
         // reaches every file `:grep` found, including files never opened — went
@@ -104,12 +119,10 @@ impl Editor {
         // **A refusal that names no way through is a wall.** It used to say
         // 「先 :table-render off」, which stopped being an escape the moment the check
         // stopped asking whether table mode was on.
-        Some(say!(
-            "table.substitution-would-change-width",
-            line + 1,
-            from + 1,
-            to + 1
-        ))
+        Some(match panel {
+            true => say!("table.replace-would-change-width", line + 1, from + 1, to + 1),
+            false => say!("table.substitution-would-change-width", line + 1, from + 1, to + 1),
+        })
     }
 
     /// Write `text` over `start..end`, unless a grid says either half must not
