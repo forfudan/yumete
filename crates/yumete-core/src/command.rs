@@ -1232,6 +1232,37 @@ fn switched(p: &Parsed) -> Switch {
     }
 }
 
+/// A subcommand of this command, written with a space instead of a hyphen.
+///
+/// Warning: **the leftover guard in [`read_params`] cannot see this one.** It reads
+/// what no parameter took, and a parameter that takes the rest takes
+/// everything — so `:wiki panel on` looked up an entry named 「panel on」,
+/// `:write all` saved the page to a file called `all`, `:search project`
+/// searched a path of that name, and each of them looked like it had worked.
+/// Nine commands have both a subcommand and a first parameter wide enough to
+/// swallow its name (measured 2026-10-20: `:indent`, `:pipe`, `:replace`,
+/// `:search`, `:table`, `:theme`, `:view-wrap`, `:wiki`, `:write`).
+///
+/// **The parameter's own words win**, so a theme or a level that happens to be
+/// spelled like a subcommand is still read as itself. Only the first word is
+/// asked about: a subcommand is the word right after the command, and anything
+/// further along is the leftover guard's.
+fn means_the_hyphenated_one(entry: &'static Entry, rest: &str) -> Option<CommandError> {
+    let word = rest.split_whitespace().next()?;
+    let hyphenated = format!("{}-{word}", entry.name);
+    if !COMMANDS.iter().any(|e| e.name == hyphenated) {
+        return None;
+    }
+    let declared = entry.params.first().and_then(Param::words);
+    if declared.is_some_and(|list| pick(word, list).is_some()) {
+        return None;
+    }
+    Some(CommandError::MeansTheHyphenatedOne {
+        command: entry.name,
+        word: word.to_string(),
+    })
+}
+
 fn read_params(
     entry: &'static Entry,
     rest: &str,
@@ -1239,6 +1270,9 @@ fn read_params(
 ) -> Option<Result<Command, CommandError>> {
     let build = entry.build?;
     let mut left = rest.trim();
+    if let Some(wrong) = means_the_hyphenated_one(entry, left) {
+        return Some(Err(wrong));
+    }
     let mut args: Vec<&str> = Vec::with_capacity(entry.params.len());
     for param in entry.params {
         // **The last kind of parameter eats the line.** A path may hold
@@ -2601,21 +2635,6 @@ const SIDEBAR_SIDES: &[Word] = &[
 /// the list here rather than deriving it means adding a command is two edits —
 /// the price of the table being the one place that says what each one is *for*,
 /// which is what the user is reading when they cannot remember the name.
-/// What `:write` takes besides a path — the two that had to join it without
-/// `:w 第三章.md` ceasing to be a path (#225).
-pub const WRITE: &[Word] = &[
-    Word {
-        name: "all",
-        help: "cmd.write.all",
-        needs: &[],
-    },
-    Word {
-        name: "as",
-        help: "cmd.write.as",
-        needs: &[],
-    },
-];
-
 pub const COMMANDS: &[Entry] = &[
     // Warning: **名字就叫 `cd`，不叫 `change-current-directory`**（2026-10-01）。
     // helix 的全名是後者，而這一頭的 `:` 選單按第一個連字符摺家族——
@@ -2671,20 +2690,14 @@ pub const COMMANDS: &[Entry] = &[
             // from the one command that most needs them (#225). With `all`
             // and `as` commands of their own, the ambiguity is gone and so is
             // the shape that carried it.
-            // Warning: `:write all` is not a path. `WRITE` lists the two words
-            // that became commands of their own, and a bare one of them here
-            // used to be obeyed as a file name: a copy of the manuscript
-            // appeared in the working directory under the name `all`, the
-            // status line said 「抄了一份到 all」, and every other modified
-            // buffer stayed unsaved. Naming a file `./all` still works.
-            if let Some(word) = p.arg(0) {
-                if WRITE.iter().any(|w| w.name == word) {
-                    return Err(CommandError::MeansTheHyphenatedOne {
-                        command: "write",
-                        word: word.to_string(),
-                    });
-                }
-            }
+            // Warning: `:write all` is not a path — and the guard that says so is
+            // [`means_the_hyphenated_one`], which every command now passes
+            // through. It was written here first, by hand, for `all` and `as`
+            // alone: a copy of the manuscript appeared in the working
+            // directory under the name `all`, the status line said 「抄了一份
+            // 到 all」, and every other modified buffer stayed unsaved. Eight
+            // other commands had the same hole. Naming a file `./all` still
+            // works.
             Ok(match p.force {
                 true => Command::WriteForce(p.arg(0).map(|s| s.to_string())),
                 false => Command::Write(p.arg(0).map(|s| s.to_string())),
@@ -5629,6 +5642,15 @@ pub fn names_something(line: &str) -> Result<(), String> {
     let Some(entry) = entry_named(head) else {
         return Err(head.to_string());
     };
+    // **A subcommand written with a space is not a spelling either.** The same
+    // rule the command line keeps, so that a document cannot teach `:wiki
+    // panel` and be told it names something.
+    let after = line.trim_start().strip_prefix(head).unwrap_or("");
+    if let Some(CommandError::MeansTheHyphenatedOne { word, .. }) =
+        means_the_hyphenated_one(entry, after)
+    {
+        return Err(format!("{} {word}", entry.name));
+    }
     for (at, word) in words.enumerate() {
         // **A command that declares nothing takes nothing.** The parser says
         // so already (`CommandError::TakesNoArgument`), and this walk has to
@@ -6649,6 +6671,14 @@ mod tests {
     /// `all` was a legal one: a copy of the manuscript appeared in the working
     /// directory called `all`, the status line said 「抄了一份到 all」, and
     /// every other modified buffer stayed unsaved.
+    ///
+    /// Warning: **the guard under a parameter that eats the line is the later half**
+    /// (2026-10-20). The leftover rule above sees only what no parameter took,
+    /// and a `Path` or a `Free` takes everything — so `:wiki panel on` looked
+    /// up an entry named 「panel on」 and said 「這本書還没有百科」, and
+    /// `:search project` searched a path of that name. Nine commands had the
+    /// hole; `:write`'s was the one that had been patched by hand, and that
+    /// patch is now this rule.
     #[test]
     fn a_subcommand_written_with_a_space_says_the_spelling() {
         for (line, name, word) in [
@@ -6656,6 +6686,16 @@ mod tests {
             (":buffer next", "buffer", "next"),
             (":write all", "write", "all"),
             (":write as", "write", "as"),
+            // The nine whose first parameter would otherwise have swallowed it.
+            (":wiki panel on", "wiki", "panel"),
+            (":wiki edit", "wiki", "edit"),
+            (":search project", "search", "project"),
+            (":replace buffers", "replace", "buffers"),
+            (":table check", "table", "check"),
+            (":theme mode", "theme", "mode"),
+            (":indent tab", "indent", "tab"),
+            (":pipe to wc -l", "pipe", "to"),
+            (":view-wrap vertical", "view-wrap", "vertical"),
         ] {
             match parse(line) {
                 Err(CommandError::MeansTheHyphenatedOne { command, word: got }) => {
@@ -6674,6 +6714,16 @@ mod tests {
         assert!(parse(":buffer-next").is_ok());
         // A file really called `all` is still writable, spelled as a path.
         assert!(matches!(parse(":write ./all"), Ok(Command::Write(Some(p))) if p == "./all"));
+        // **And what the parameter itself takes is still its own.** Only a
+        // word that names a command of this family is read as the hyphenated
+        // one, and a word the parameter declares wins even then.
+        assert!(parse(":wiki 百科").is_ok(), "an entry whose name is not a subcommand");
+        assert!(parse(":search src/main.rs").is_ok());
+        assert!(parse(":theme 墨香").is_ok());
+        assert!(parse(":indent basic").is_ok(), "a level `:indent` declares");
+        assert!(parse(":view-wrap 24").is_ok());
+        assert!(parse(":view-wrap off").is_ok());
+        assert!(parse(":table 3x4").is_ok());
     }
 
     #[test]

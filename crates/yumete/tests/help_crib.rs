@@ -10,12 +10,13 @@
 //! are `:table-render`'s) and `:ruby [off|basic|full|<dialect>]` (`:ruby-render`'s).
 //! In each case the manual was right and the crib was the stale one.
 //!
-//! Warning: **It catches two of those four, and the reach was measured, not assumed**
-//! (each stale line was put back and the test run). Caught: `:layout` and
-//! `:ruby [off|basic|full]` — a name the table does not have, and words a
-//! command does not take. Not caught: `:table [off|basic|full|check]`, because
-//! `:table`'s parameter is `Param::Free` and therefore *does* accept the word
-//! `off` by declaration; and `:replace <new>`, whose head and placeholder are
+//! Warning: **It catches three of those four, and the reach was measured, not assumed**
+//! (each stale line was put back and the test run). Caught: `:layout`, `:ruby
+//! [off|basic|full]`, and — since the hyphen guard became general on
+//! 2026-10-20 — the `check` in `:table [off|basic|full|check]`, which names
+//! `:table-check`. Not caught: that line's `off|basic|full`, because
+//! `:table`'s parameter is `Param::Free` and therefore *does* accept those
+//! words by declaration; and `:replace <new>`, whose head and placeholder are
 //! both fine and whose fault was the sentence after them. A crib's prose
 //! cannot be checked this way — only its spellings.
 //!
