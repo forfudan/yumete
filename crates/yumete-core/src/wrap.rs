@@ -485,7 +485,7 @@ fn latin_word_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || matches!(c, '_' | '\'' | '-' | '’')
 }
 
-/// Whether `c` may not begin a row (行頭禁則): the marks that belong to the
+/// Whether `c` may not begin a row (行首禁則): the marks that belong to the
 /// text before them.
 ///
 /// **clreq §6.1.1, 基本處理** — the level it calls 最推薦:
@@ -515,7 +515,7 @@ pub(crate) fn forbidden_at_row_start(c: char) -> bool {
     )
 }
 
-/// Whether `c` may not end a row (行末禁則): a bracket that introduces what
+/// Whether `c` may not end a row (行尾禁則): a bracket that introduces what
 /// follows it.
 ///
 /// > 開始引號、開始括號、開始書名號乙式等符號，不能出現在一行的結尾。
@@ -773,7 +773,7 @@ fn adjusted_break(
     // …and 禁則 again over what the word rule chose, because it may have put a
     // bracket back at the row's end: a URL in `[名字](網址)` retreats to the
     // start of `https`, which is exactly one character after the `(` that
-    // 行末禁則 had just pulled down.
+    // 行尾禁則 had just pulled down.
     (kinsoku(cut) - g).max(1)
 }
 
