@@ -44,6 +44,16 @@ pub enum Item {
     /// is saved, and an index would go stale between opening this list and
     /// choosing from it. The name is the feature's own key (`Wiki::by_name`).
     Wiki(String, String),
+    /// **A directory, in the explorer** — `␣e` (2026-10-20 作者定).
+    ///
+    /// Not a file with a slash on the end: choosing one does not open
+    /// anything, it re-roots this same picker one level down, and that is the
+    /// whole difference between browsing and picking. `..` is one of these
+    /// too — the row that goes back up.
+    ///
+    /// The label carries the trailing `/`, because that is what a reader needs
+    /// to see before pressing Enter; `path` is the name without it.
+    Dir(String),
     /// **A project to carry on in** — `:recent-projects` (2026-10-18 作者定).
     ///
     /// Not a file: choosing one means leaving this directory for that one.
@@ -56,7 +66,7 @@ impl Item {
     /// The text shown in the list, and matched against.
     pub fn label(&self) -> &str {
         match self {
-            Item::File(path) | Item::Project(path) => path,
+            Item::File(path) | Item::Project(path) | Item::Dir(path) => path,
             Item::Buffer(_, name) | Item::Row(_, name) | Item::Paste(_, name) => name,
             Item::Wiki(name, _) => name,
         }
@@ -246,7 +256,12 @@ impl Picker {
         // Warning: **代價是同一棵子樹會被層拆開**：`設定/a.md` 和
         // `設定/深/b.md` 不再挨着。同一層裏次序没動（還是路徑序），所以一個目錄
         // 底下的檔照舊連在一起——拆開的只有「目錄裏還有目錄」那一種。
-        let deep = |one: &Item| one.label().matches(['/', '\\']).count();
+        // Warning: **a trailing slash is not a level** (2026-10-20). The explorer
+        // writes a directory as `chapters/`, and without the trim every
+        // directory counted as one level deeper than every file beside it —
+        // so the first screen of `␣e` was all files and the directories were
+        // pushed below them, `../` included.
+        let deep = |one: &Item| one.label().trim_end_matches(['/', '\\']).matches(['/', '\\']).count();
         scored.sort_by(|a, b| {
             b.0.cmp(&a.0)
                 .then(a.1.cmp(&b.1))

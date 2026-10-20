@@ -3437,6 +3437,8 @@ impl Editor {
     pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
         ('f', "hint.space.open-file"),  // project dir
         ('F', "hint.space.open-file-here"),  // working dir
+        ('e', "hint.space.explorer"),  // project dir
+        ('E', "hint.space.explorer-here"),  // this file's dir
         ('b', "hint.space.switch-buffer"),
         ('y', "hint.space.copy-to-clipboard"),
         ('p', "hint.space.paste-from-clipboard"),
@@ -4042,6 +4044,12 @@ impl Editor {
             Key::Char('C') => self.toggle_comment(crate::comment::Prefer::Block),
             Key::Char('f') => self.open_file_picker(),
             Key::Char('F') => self.open_file_picker_here(),
+            // **挑選器式的瀏覽，不是邊欄那棵樹**（2026-10-20 作者定，原話：「In
+            // helix, _e and _E do not open the sidebar but a picker-like
+            // explorer. That is what I also want to have.」）。邊欄那一扇只走
+            // `:sidebar explorer`，不佔鍵。
+            Key::Char('e') => self.open_explorer(),
+            Key::Char('E') => self.open_explorer_here(),
             Key::Char('b') => self.open_buffer_picker(),
             // **高級搜索** (#419). It used to prefill `:grep `, and `:grep` is
             // gone: what to look for is typed in the panel's own box, which

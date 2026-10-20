@@ -10093,7 +10093,17 @@ fn draw_picker(
     // dragged a patch of the *old* one behind every line the day the panel's
     // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
     // whatever is under it.
-    let ground = Style::default();
+    //
+    // Warning: **the ring has to paint it, though** (2026-10-20). This panel passed
+    // the ring a ground of its own with no colour in it, and `chrome::draw`
+    // opens with ratatui's `Clear`, which *resets* every cell it covers — so
+    // the picker was a hole the size of itself, showing the terminal's own
+    // background rather than the theme's. Invisible on a terminal dressed to
+    // match, a light rectangle over a dark page on one that is not. The other
+    // panels have passed `panel_ground` since #387; this one never did, and
+    // `every_cell_of_the_frame_is_painted` could not see it because no picker
+    // had ever been open while it ran.
+    let ground = Style::default().bg(crate::chrome::panel_ground(ink));
     crate::chrome::draw(frame, left, &crate::chrome::Ring {
         foot: None,
         rounded: config.panel.rounded,
@@ -10227,7 +10237,13 @@ fn draw_picker(
                 }
                 out
             };
-            let name_at = clusters
+            // Warning: **a trailing separator is not a folder boundary** (2026-10-20,
+            // for the explorer). Split on the *last* `/` and `chapters/` had
+            // an empty name and a 「folder」 half holding everything — drawn
+            // two cells in, with the slash eaten, so every directory in `␣e`
+            // read as a file that had wandered right.
+            let last = clusters.len().saturating_sub(1);
+            let name_at = clusters[..last]
                 .iter()
                 .rposition(|&(_, g)| g == "/" || g == "\\")
                 .map_or(0, |i| i + 1);
@@ -10370,14 +10386,9 @@ fn draw_preview(
     area: Rect,
 ) {
     // The same ground as the list beside it: two panes of one panel must not
-    // be two colours (2026-09-18).
-    // Warning: **The body sets no ground of its own** (2026-09-18: 「命令行文字
-    // 嚴格意義上來說底色是透明的，下面是什麽顏色就是什麽底色」). The ring has
-    // already painted the panel; text that carried its own copy of that colour
-    // dragged a patch of the *old* one behind every line the day the panel's
-    // ground moved. `Cell::set_style` patches, so a style with no `bg` keeps
-    // whatever is under it.
-    let ground = Style::default();
+    // be two colours (2026-09-18) — which is also why this one carries the
+    // colour rather than nothing at all, see the list's own note.
+    let ground = Style::default().bg(crate::chrome::panel_ground(ink));
     // **The ring is drawn even when there is nothing to put in it** — a query
     // that matches no file left the writing showing through the shape the
     // preview had been occupying a keystroke ago, which reads as a panel that
@@ -20968,6 +20979,15 @@ fn squeezed(text: &str) -> String {
         // The black-hole-in-light-mode bug, three times over: a rectangle
         // handed out and not painted shows the terminal's own ground. This is
         // the assertion that keeps it gone.
+        //
+        // Warning: **`空格 e` opens the explorer, and that is the point of it being
+        // here** (2026-10-20). Those two keys were a no-op when this was
+        // written — nothing was bound to `e` — so the 「sidebar」 half of this
+        // sweep only ever drew the sidebar, and no picker was ever open while
+        // it ran. The day `空格 e` started opening one, this test found the
+        // picker's own ring had been passing a ground with no colour in it
+        // since #387. Leave the keys: a sweep over every rectangle wants a
+        // picker among them.
         let mut editor = editor_with("那年冬天很冷。\n第二行\n第三行");
         let config = Config::default();
         let ink = ink(&config);
