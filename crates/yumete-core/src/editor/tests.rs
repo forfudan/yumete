@@ -688,6 +688,64 @@ fn a_record_over_several_lines_is_one_row_wherever_it_sits() {
     }
 }
 
+/// **`Tab` walks the record's cells, not the written line's** (2026-10-21
+/// 作者報的: 「clicking Tab in this Cell (row 61, column 5) will go to Cell
+/// (row 61, column 3), then column 4, column 5 (line 2) then column 1」).
+///
+/// `row_cells` was taught to measure in the record (2026-10-20) while
+/// `cell_span`, `cell_box`, `cell_position` and `go_to_cell` went on adding
+/// those spans to **the caret's own line**. On a record's first line the two
+/// agree and nothing shows; one line further down they are out by the length
+/// of everything above, so the record's second written line was walked as
+/// though it were a row of its own — which is why `Tab` went backwards.
+#[test]
+fn tab_walks_the_cells_of_the_record_not_of_the_line() {
+    let dir = tmp().join(format!("yumete-tabwalk-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut text = String::from("c1,c2,c3,c4,c5,c6\n");
+    for i in 1..=10 {
+        match i {
+            7 => text.push_str("r7a,r7b,r7c,r7d,\"line one\nline two\",r7f\n"),
+            _ => text.push_str(&format!("r{i}a,r{i}b,r{i}c,r{i}d,r{i}e,r{i}f\n")),
+        }
+    }
+    let csv = dir.join("tabwalk.csv");
+    std::fs::write(&csv, &text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // **The caret on the continuation line is still in the record's fifth
+    // field** — it is the second half of the cell the writer broke.
+    let second = ed.current_buffer().rope().line_to_char(8);
+    ed.move_head(second);
+    assert_eq!(ed.cell_position(), Some((7, 4)), "{}", ed.status());
+
+    // Walk the record cell by cell. It used to go 5 → 4 → 5 → 1 here.
+    press(&mut ed, "gg");
+    for _ in 0..6 {
+        press(&mut ed, "j");
+    }
+    assert_eq!(ed.table_row_number(), 7, "{}", ed.status());
+    for want in 1..6 {
+        ed.on_key(Key::Tab);
+        assert_eq!(
+            ed.cell_position().map(|(_, c)| c),
+            Some(want),
+            "Tab 第 {want} 次：{}",
+            ed.status()
+        );
+        assert_eq!(ed.table_row_number(), 7, "still in record 7");
+    }
+    // Off the end of the record and into the next one, not back into itself.
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.table_row_number(), 8, "{}", ed.status());
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **The 記錄 panel waits to be asked, and goes when you leave the row**
 /// (2026-10-20 作者定).
 ///

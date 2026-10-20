@@ -544,7 +544,14 @@ pub fn draw(
             yumete_core::markdown::Block::Table { nth, .. } => nth,
             // Not a `|` table at all — a delimited file has no header rule and
             // no scanner to ask, so the base row is row 0 of its body.
-            _ => line - base.min(line) + 2,
+            //
+            // Warning: **the record's number, not the line's** (2026-10-21 作者報的:
+            // 「the background color of this row and the next two rows are
+            // indifferent」). A record that runs over three lines moves every
+            // row after it three lines down and only one row down, so counting
+            // lines put the stripes out of step from there to the end of the
+            // file — and two rows in a row came out the same colour.
+            _ => editor.table_row_index(line) + 2,
         };
         match crate::table_row_depth(nth) {
             // Over whatever this row sits on — in this window that is the page,
