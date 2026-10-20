@@ -1904,7 +1904,7 @@ mod tests {
 
     #[test]
     fn a_zong_does_not_open_with_a_full_stop() {
-        // 行頭禁則, down the column. The horizontal page has always done this;
+        // 行首禁則, down the column. The horizontal page has always done this;
         // the vertical page — the reason to choose this editor — did not, and
         // a 縱 opening with 。 is the one typographic error a Chinese reader
         // cannot fail to see.
@@ -1940,7 +1940,7 @@ mod tests {
 
     #[test]
     fn a_zong_does_not_close_with_an_opening_bracket() {
-        // 行末禁則: 「 introduces what follows it, so it goes down with it.
+        // 行尾禁則: 「 introduces what follows it, so it goes down with it.
         let rope = Rope::from_str("一二三四五六七八九「十」十一\n");
         let grid = Grid {
             zong_len: 10,
