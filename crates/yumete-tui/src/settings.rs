@@ -26,22 +26,13 @@ use yumete_core::editor::Editor;
 /// **打錯的值要出聲，而這幾格的解析器在核心裏**（2026-10-10 報的）。
 ///
 /// `yumete-config` 自己那一支（`into_config_saying`）已經盯住它看得見的每一格，
-/// 可 `syntax`／`table_rules`／`indent_hint`／`[sidebar]` 的判準寫在 `yumete-core`
+/// 可 `syntax`／`table_rules`／`indent_hint` 的判準寫在 `yumete-core`
 /// 裏，而那兩個 crate 是兄弟、互不依賴——於是這幾格打錯只是 `parse` 回 `None`、
 /// 悄悄退回出廠值，和「這個設定不管用」在屏幕上長得一模一樣。這一支站在兩邊都看
 /// 得見的地方補上那一半。
 ///
-/// Warning: **允許值是數出來的，不是抄的**（`Panel::ALL`）。抄一份下來，下次加一
-/// 扇面板這句話就開始撒謊。
 pub fn complaints(config: &Config) -> Vec<String> {
     let mut said = Vec::new();
-    let panels = || {
-        yumete_core::sidebar::Panel::ALL
-            .iter()
-            .map(|p| p.key())
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
     let word = config.editor.syntax.trim();
     if !word.is_empty() && yumete_core::syntax::Syntax::parse(word).is_none() {
         said.push(format!(
@@ -66,18 +57,6 @@ pub fn complaints(config: &Config) -> Vec<String> {
         said.push(format!(
             "[editor] indent_hint = \"{word}\" 只能是 none、color、symbol"
         ));
-    }
-    for (name, side) in &config.sidebar.side {
-        if yumete_core::sidebar::Panel::parse(name).is_none() {
-            said.push(format!(
-                "[sidebar] \"{name}\" 不是面板的名字——只能是 {}",
-                panels()
-            ));
-        } else if yumete_core::sidebar::Side::parse(side).is_none() {
-            said.push(format!(
-                "[sidebar] {name} = \"{side}\" 只能是 left 或 right"
-            ));
-        }
     }
     said
 }
@@ -175,16 +154,6 @@ pub fn apply(
     editor.set_smart_case(config.editor.smart_case);
     editor.set_fuzzy_search(config.editor.fuzzy_search);
     editor.set_wheel_step(config.editor.wheel_step);
-    // A name or a word nobody knows is skipped rather than guessed at — a typo
-    // here moves the whole page.
-    for (name, side) in &config.sidebar.side {
-        if let (Some(panel), Some(side)) = (
-            yumete_core::sidebar::Panel::parse(name),
-            yumete_core::sidebar::Side::parse(side),
-        ) {
-            editor.set_side(panel, side);
-        }
-    }
     editor.set_margin(config.editor.margin);
     editor.set_word_level(config.editor.word_level);
     editor.set_segmentation_visible(config.editor.show_segmentation);

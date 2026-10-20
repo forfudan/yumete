@@ -36,16 +36,6 @@ impl Side {
     /// question about "any panel" walks.
     pub const BOTH: [Side; 2] = [Side::Left, Side::Right];
 
-    /// Parse a config value. An unknown word is `None`, and the caller keeps
-    /// the default rather than guessing: a typo here moves the whole page.
-    pub fn parse(value: &str) -> Option<Side> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "left" | "左" => Some(Side::Left),
-            "right" | "右" => Some(Side::Right),
-            _ => None,
-        }
-    }
-
     /// The other slot.
     pub fn other(self) -> Side {
         match self {
@@ -158,7 +148,10 @@ impl Panel {
     /// Its name in the config file and on the command line.
     pub fn key(self) -> &'static str {
         match self {
-            Panel::Files => "files",
+            // **`explorer`, not `files`** (2026-10-20 作者定): it is what
+            // vscode calls the thing and what the English label says, and the
+            // old word was the only place still saying the other one.
+            Panel::Files => "explorer",
             Panel::Buffers => "buffers",
             Panel::Outline => "outline",
             Panel::Search => "search",

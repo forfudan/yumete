@@ -10496,15 +10496,16 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     type_keys(&mut ed, " s");
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "and now it closes");
 
-    // **The file tree has no key of its own** since 2026-09-18 — `空格 e` was
-    // cut, `空格 f` being what 「open a file」 means — so the command names it,
-    // and `off` is the door out the command line never had.
-    ed.execute(":sidebar-left files").unwrap();
+    // **The file tree in the sidebar has no key of its own** (2026-10-20 作者
+    // 定): `空格 e` browses on the picker, and the sidebar is named by the
+    // command. `off` closes it, and bare asks.
+    ed.execute(":sidebar explorer").unwrap();
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Explorer);
-    ed.execute(":sidebar-left off").unwrap();
+    ed.execute(":sidebar off").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
-    ed.execute(":sidebar-left").unwrap();
-    assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "bare is a toggle");
+    ed.execute(":sidebar").unwrap();
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "a question opens nothing");
+    assert_eq!(ed.status(), say!("sidebar.nothing-open"));
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -12738,9 +12739,16 @@ fn a_hit_found_by_its_sound_can_be_replaced() {
     assert_eq!(ed.current_buffer().text(), "這是服務器。\n再說一遍：服務器。\n");
 }
 
-/// **Which side each panel lives on is a setting, one per panel** — #293.
+/// **Which side each panel lives on is yumete's to say** — #293, settled
+/// 2026-10-20.
+///
+/// It was a setting, one per panel, with `:panel-left`/`:panel-right` to move
+/// one on the spot and a `[sidebar]` table to make it stick. 原話：「the
+/// location of each type of panel is fixed by yumete and users cannot change
+/// it to left and right themselves. This makes our model concise and stable,
+/// and also makes it less buggy.」
 #[test]
-fn the_panels_go_where_the_settings_put_them() {
+fn the_panels_go_where_yumete_puts_them() {
     use crate::sidebar::{Panel, Side, View};
     let dir = tmp().join(format!("yumete-sides-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -12748,72 +12756,63 @@ fn the_panels_go_where_the_settings_put_them() {
     std::fs::write(dir.join("a.md"), "那年冬天\n").unwrap();
 
     let mut ed = Editor::new();
-    ed.set_side(Panel::Files, Side::Right);
-    ed.open_sidebar_at(&dir);
-    assert!(ed.panel(Side::Right).is_some(), "the tree opened on the right");
-    assert!(ed.panel(Side::Left).is_none());
+    // The whole of the layout, in one place and answerable without an editor
+    // in any particular state.
+    for panel in [Panel::Files, Panel::Buffers, Panel::Outline, Panel::Search] {
+        assert_eq!(ed.side_of(panel), Side::Left, "{panel:?}");
+    }
+    assert_eq!(ed.side_of(Panel::Info), Side::Right, "「這是什麽」跟着眼睛走");
 
-    // **A panel already open moves with the setting**, or the setting is a lie
-    // until the next restart.
-    ed.set_side(Panel::Files, Side::Left);
-    assert!(ed.panel(Side::Left).is_some(), "and it came along");
+    ed.open_sidebar_at(&dir);
+    assert!(ed.panel(Side::Left).is_some(), "the tree opens on the left");
     assert!(ed.panel(Side::Right).is_none());
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "keys too");
 
-    // **`Tab` walks the views that share this slot, and only those.** With the
-    // outline moved across, the left column holds two and walks between them.
-    ed.set_side(Panel::Outline, Side::Right);
-    ed.set_side(Panel::Search, Side::Right);
-    ed.on_key(Key::Tab);
-    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Buffers);
-    ed.on_key(Key::Tab);
-    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "two, not four");
+    // **`Tab` walks the views that share this slot, and only those** — four
+    // on the left, and the 信息 slot is not among them.
+    for want in [View::Buffers, View::Outline, View::Search, View::Explorer] {
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.panel(Side::Left).unwrap().view(), want);
+    }
 
-    // …and a column with one view in it says so rather than looking broken.
-    ed.set_side(Panel::Buffers, Side::Right);
-    ed.on_key(Key::Tab);
-    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer);
-    assert_eq!(ed.status(), say!("sidebar.only-view-on-this-side"));
-
-    // **兩扇配在同一邊，那一邊一次只擺得下一扇**（#426，2026-09-30 改的）。
-    //
-    // Warning: **從前這裏是「字典疊在文件樹底下，樹還在」。** 那是兩層那個模型
-    // ——上層常駐、下層臨時——而它 2026-09-30 拆了：一個槽一扇面板，`空格 D`
-    // 把「信息」擺進去，文件樹就讓開。這一條現在釘的是那件事，不是它的反面。
+    // **一個槽一扇面板**（#426，2026-09-30 改的）：信息那一扇開在右邊，樹留在
+    // 左邊，兩邊各坐各的。
     let mut ed = typed("那年冬天");
-    ed.set_side(Panel::Info, Side::Left);
     ed.open_sidebar_at(&dir);
+    // 開樹的那一支把鍵交給它，`C-w w` 轉回正文——`空格 N` 要在正文裏按。
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "先是文件樹");
     ed.on_key(Key::Char(' '));
     // Warning: 大寫：進邊欄的是 `空格 N`（2026-09-22）。
     ed.on_key(Key::Char('N'));
-    assert_eq!(ed.info_in_this_sidebar(Side::Left), Some(crate::sidebar::Info::Dictionary));
-    assert_eq!(ed.info_in_this_sidebar(Side::Right), None, "右邊一格都没開");
-    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Info, "那一扇換成了信息");
+    assert_eq!(ed.info_in_this_sidebar(Side::Right), Some(crate::sidebar::Info::Dictionary));
+    assert_eq!(ed.panel(Side::Left).unwrap().view(), View::Explorer, "樹没讓位");
+
+    // …and a column with one view in it says so rather than looking broken.
+    // Warning: 大寫纔是「進那一欄」，小寫是「開關那一欄」（`hint.region.into-bar`）。
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('I'));
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.status(), say!("sidebar.only-view-on-this-side"));
 
     // **開了，而鍵留在原處**（2026-10-13 定）：`空格 N` 從前把鍵交給邊欄。
-    // 一個槽一個座位，所以 `C-w w` 照舊轉得過去。
+    let mut ed = typed("那年冬天");
+    ed.open_sidebar_at(&dir);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('N'));
     assert_eq!(ed.panel_focus(), None, "the keys stay in the writing");
-    ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('w'));
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "round to the panel");
-    ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('w'));
-    assert_eq!(ed.panel_focus(), None, "the writing");
 
     // 再按一次 `空格 N` 就收起來——連那一格一起還回去，不留一扇空的。
     ed.on_key(Key::Char(' '));
     ed.on_key(Key::Char('N'));
-    assert_eq!(ed.info_in_this_sidebar(Side::Left), None, "字典没了");
-    assert!(ed.panel(Side::Left).is_none(), "Warning: 那一格也還回去了，不留空框");
+    assert_eq!(ed.info_in_this_sidebar(Side::Right), None, "字典没了");
+    assert!(ed.panel(Side::Right).is_none(), "Warning: 那一格也還回去了，不留空框");
 
-    // A word nobody knows keeps the default rather than picking a side.
-    assert_eq!(Side::parse("right"), Some(Side::Right));
-    assert_eq!(Side::parse("  LEFT "), Some(Side::Left));
-    assert_eq!(Side::parse("上"), None);
     assert_eq!(Panel::parse("outline"), Some(Panel::Outline));
+    assert_eq!(Panel::parse("explorer"), Some(Panel::Files), "vscode 的詞");
+    assert_eq!(Panel::parse("files"), None, "舊拼法不留別名");
     assert_eq!(Panel::parse("nope"), None);
 
     std::fs::remove_dir_all(&dir).ok();
@@ -15280,28 +15279,31 @@ fn the_intro_does_not_come_back_once_the_buffer_has_been_edited() {
 ///
 /// 「I search `:panel` but cannot see anything related to `:yume-panel`」。
 /// `:` 那一行比的是前綴，而命令名是連字符分段的路徑；猜的那一層是打分的，而
-/// `panel` 在這張表裏信息量太低（`panel-left`、`panel-right` 和它們的說明裏都
-/// 有），`yume-panel` 從來過不了那道門檻。
+/// `panel` 在這張表裏信息量太低，`yume-panel` 從來過不了那道門檻。
+///
+/// Warning: **靶換成了 `table`**（2026-10-20）。原來那一組是 `panel-left`／
+/// `panel-right`，而那兩條隨「面板擺哪邊由 yumete 定」一起退役了——`panel`
+/// 於是一條前綴都配不上，測不出「前綴的排在段匹配前面」。規矩没變，例子換了。
 #[test]
 fn a_word_anywhere_in_a_command_name_finds_it() {
     let mut ed = Editor::new();
-    press(&mut ed, ":panel");
+    press(&mut ed, ":table");
     let (rows, _) = ed.command_menu();
     let names: Vec<&str> = rows.iter().map(|c| c.name).collect();
     // 前綴那幾條照舊在，而且在前面。
-    assert_eq!(names.first(), Some(&"panel-left"), "{names:?}");
-    assert!(names.contains(&"panel-right"), "{names:?}");
-    // …而名字裏帶 `panel` 的那幾條也撈到了。
-    assert!(names.contains(&"yume-panel"), "{names:?}");
-    assert!(names.contains(&"wiki-panel"), "{names:?}");
+    assert_eq!(names.first(), Some(&"table"), "{names:?}");
+    assert!(names.contains(&"table-render"), "{names:?}");
+    // …而名字裏帶 `table` 的那幾條也撈到了。
+    assert!(names.contains(&"yume-table"), "{names:?}");
+    assert!(names.contains(&"convert-table"), "{names:?}");
     // 前綴的排在段匹配的前面：畫出來前者亮、後者淡。
-    let prefix_last = names.iter().rposition(|n| n.starts_with("panel")).expect("{names:?}");
-    let segment_first = names.iter().position(|n| *n == "yume-panel").expect("{names:?}");
-    assert!(prefix_last < segment_first || names[..segment_first].contains(&"panel-left"),
+    let prefix_last = names.iter().rposition(|n| n.starts_with("table")).expect("{names:?}");
+    let segment_first = names.iter().position(|n| *n == "yume-table").expect("{names:?}");
+    assert!(prefix_last < segment_first || names[..segment_first].contains(&"table"),
         "the prefix rows come first: {names:?}");
 
-    // **第一段不重複列**：`panel-left` 是前綴配中的，不該再從段匹配進來一次。
-    let twice = names.iter().filter(|n| **n == "panel-left").count();
+    // **第一段不重複列**：`table-render` 是前綴配中的，不該再從段匹配進來一次。
+    let twice = names.iter().filter(|n| **n == "table-render").count();
     assert_eq!(twice, 1, "{names:?}");
 
     // 打了參數就不是在打名字了，段匹配不插話。
@@ -23767,7 +23769,7 @@ fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
     assert!(ed.info_in_the_sidebar().is_none());
 
     // 開出那一格再問：不浮了，畫進去。
-    ed.execute(":sidebar-right info").unwrap();
+    ed.execute(":sidebar info").unwrap();
     press(&mut ed, " k");
     ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), None, "那一格開着就不浮");
@@ -23833,21 +23835,18 @@ fn the_five_kinds_share_one_slot_so_tab_only_sees_one() {
     let mut rings = Vec::new();
     for name in ["a.rs", "b.md"] {
         ed.open_file(dir.join(name)).unwrap();
-        ed.execute(":panel-right info").unwrap();
-        ed.execute(":panel-right outline").unwrap();
-        rings.push(ed.views_on(Side::Right));
+        rings.push(ed.views_on(Side::Left));
     }
     assert_eq!(rings[0], rings[1], "代碼與散文轉得到的是同一組：{rings:?}");
-    assert!(rings[0].contains(&View::Info), "而信息在環上：{rings:?}");
-    assert_eq!(
-        rings[0].iter().filter(|&&v| v == View::Info).count(),
-        1,
-        "只佔一格：{rings:?}"
-    );
+    // **信息只佔一格。** 它在右邊自己坐着（2026-10-20 起那是定死的），而
+    // `View::ALL` 裏只有一個 `Info`——百科、文檔、診斷不是三扇面板。
+    assert_eq!(View::ALL.iter().filter(|&&v| v == View::Info).count(), 1);
+    assert_eq!(ed.side_of(crate::sidebar::Panel::Info), Side::Right);
+    assert!(!rings[0].contains(&View::Info), "所以它不在左邊那個環上：{rings:?}");
 
     // Warning: **換了稿子那一格不必跟着換**——它擺什麽是問出來的，所以屏幕上
     // 永遠不會留下一扇這份稿子裏根本不存在的面板。
-    ed.execute(":sidebar-right info").unwrap();
+    ed.execute(":sidebar info").unwrap();
     assert_eq!(ed.showing(View::Info), Some(Side::Right));
     ed.open_file(dir.join("a.rs")).unwrap();
     assert_eq!(ed.showing(View::Info), Some(Side::Right), "那一格還在");
@@ -23970,7 +23969,7 @@ fn asking_and_showing_are_two_separate_things() {
     // 開一格出來：同一個開關，答案改走邊欄。
     // Warning: `:sidebar-*` 把鍵交給了那一格，`l` 就不再挪正文的光標了——要先
     // 把鍵拿回來，不然下面那一問看不出光標動過。
-    ed.execute(":sidebar-right info").unwrap();
+    ed.execute(":sidebar info").unwrap();
     for _ in 0..4 {
         if ed.panel_focus().is_none() {
             break;
@@ -24227,8 +24226,8 @@ fn the_direction_keys_walk_between_regions_and_never_open_one() {
 fn the_region_group_toggles_a_bar_without_going_into_it() {
     use crate::sidebar::Side;
     let mut ed = typed("那年冬天。\n");
-    ed.execute(":sidebar-left files").unwrap();
-    ed.execute(":sidebar-right info").unwrap();
+    ed.execute(":sidebar explorer").unwrap();
+    ed.execute(":sidebar info").unwrap();
     assert!(ed.panel(Side::Left).is_some() && ed.panel(Side::Right).is_some());
     while ed.panel_focus().is_some() {
         ed.on_key(Key::Ctrl('w'));
@@ -25142,7 +25141,7 @@ fn closing_a_buffer_redraws_the_buffer_list() {
     let mut ed = Editor::new();
     ed.open_file(dir.join("one.md")).unwrap();
     ed.open_file(dir.join("two.md")).unwrap();
-    ed.execute(":sidebar-left buffers").unwrap();
+    ed.execute(":sidebar buffers").unwrap();
     let names = |ed: &Editor| -> Vec<String> {
         ed.panel(Side::Left)
             .expect("那一扇開着")
@@ -25169,7 +25168,7 @@ fn closing_a_buffer_redraws_the_buffer_list() {
 fn the_outline_keeps_the_heading_it_was_standing_on() {
     use crate::sidebar::Side;
     let mut ed = typed("# 一\n\n# 二\n\n# 三\n");
-    ed.execute(":sidebar-left outline").unwrap();
+    ed.execute(":sidebar outline").unwrap();
     let standing = |ed: &Editor| -> String {
         let panel = ed.panel(Side::Left).expect("那一扇開着");
         panel.rows()[panel.selected()].name.clone()

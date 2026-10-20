@@ -1139,56 +1139,29 @@ impl Editor {
                 self.open_search_in(scope, true);
                 Ok(CommandOutcome::Continue)
             }
-            Command::SidebarSide(side, ask) => {
+            Command::Sidebar(ask) => {
                 use crate::command::SidebarAsk;
                 match ask {
-                    SidebarAsk::Off => self.close_panel(side),
-                    // Bare: away if it is there, and if it is not, back to
-                    // whatever that side last held — the file tree when it has
-                    // held nothing yet.
-                    SidebarAsk::Toggle => match self.panel(side).is_some() {
-                        true => self.close_panel(side),
-                        false => {
-                            let view = self.side_view(side);
-                            self.open_side_showing(side, view);
+                    // **Bare is a question** (2026-10-19's rule for every
+                    // switch): it says which panels are up and moves nothing.
+                    SidebarAsk::Ask => self.status = self.sidebar_report(),
+                    // `off` closes the sidebar — both halves of it. With no
+                    // `left`/`right` to name, 「off」 can only mean all of it.
+                    SidebarAsk::Off => {
+                        for side in crate::sidebar::Side::BOTH {
+                            self.close_panel(side);
                         }
-                    },
-                    // Naming a panel says which side it is to be on as well as
-                    // that it is to show — 字典 and 詳情 have only the first
-                    // half, being worked out afresh under whichever slot owns
-                    // them.
+                    }
+                    // A name opens that panel **where yumete keeps it**. The
+                    // 字典 and 詳情 are worked out afresh under whichever slot
+                    // owns them, so they have no view to open.
                     SidebarAsk::Show(panel) => {
-                        self.set_side(panel, side);
+                        let side = self.side_of(panel);
                         if let Some(view) = Editor::view_of(panel) {
                             self.open_side_showing(side, view);
                         }
                     }
                 }
-                Ok(CommandOutcome::Continue)
-            }
-            Command::ShowSidebarAt(side, which) => {
-                // No name means 「this one」 — the panel holding the keys. With
-                // the keys in the text there is no 「this one」, and guessing
-                // would move a panel the reader is not looking at.
-                let which = match which {
-                    Some(panel) => Some(panel),
-                    None => self
-                        .panel_focus()
-                        .and_then(|at| self.panel(at).map(|p| crate::sidebar::Panel::from(p.view()))),
-                };
-                let Some(panel) = which else {
-                    self.status = say!("sidebar.which-panel");
-                    return Ok(CommandOutcome::Continue);
-                };
-                self.set_side(panel, side);
-                self.status = say!(
-                    "sidebar.moved",
-                    crate::messages::say(panel.tag(), &[]),
-                    match side {
-                        crate::sidebar::Side::Left => say!("label.left"),
-                        crate::sidebar::Side::Right => say!("label.right"),
-                    }
-                );
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableNumbers(want) => {

@@ -3291,7 +3291,6 @@ pub struct Editor {
     /// One per panel rather than one per group: a reader may want the outline
     /// across from the tree, or the 字典 stacked under it. Two on one side
     /// share that slot — `Tab` walks them, the way the three used to.
-    sides: [crate::sidebar::Side; crate::sidebar::Panel::ALL.len()],
     /// The search panel's form and what it found (#419).
     search: crate::search_panel::Search,
     /// **為「看一眼」開出來的那一份緩衝**，記的是它的號（2026-09-27）。
@@ -4011,15 +4010,6 @@ impl Editor {
             owed_jump: false,
             page_span: (0, 0),
             status_fades: None,
-            sides: [
-                // 文件、緩衝、大綱、搜索在左；信息在右（它是「這是什麽」那一
-                // 格，跟着眼睛走，不該把正文往右推）。
-                crate::sidebar::Side::Left,
-                crate::sidebar::Side::Left,
-                crate::sidebar::Side::Left,
-                crate::sidebar::Side::Left,
-                crate::sidebar::Side::Right,
-            ],
             dictionary_anchor: None,
             wiki_pinned: None,
             panel_scroll: 0,
