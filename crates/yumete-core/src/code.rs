@@ -242,7 +242,7 @@ impl Language {
     ///
     /// Warning: **而 helix 的查詢檔抄不得**：MPL-2.0，這個倉是 Apache-2.0（同
     /// `objects()` 那一條）。所以這裏走第三條路：**自己追加一條**。最後一條贏，追加
-    /// 的就贏，而另外十四種語言一個像素都不動。
+    /// 的就贏，而另外十五種語言一個像素都不動。
     fn extra_highlights(self) -> &'static str {
         match self {
             // `fmt.Println(1)` 的 `Println` 是一個 `field_identifier`，而 Go 的查詢
@@ -453,7 +453,7 @@ impl Language {
     ///
     /// Warning: **不抄 helix 的 `textobjects.scm`**——那些檔是 MPL-2.0，這個倉是
     /// Apache-2.0（見 [`Language::tags`]）。自己寫還有一層好處：helix 那份要照顧
-    /// 幾十種語言和它自己的鍵，我們只要這四種語言、兩種對象。
+    /// 幾十種語言和它自己的鍵，我們只要這八種語言、兩種對象。
     ///
     /// ⚠ **代價是上游改語法我們自己盯**：下面這些節點名是寫死的，`tree-sitter-*`
     /// 升一版把某個節點改了名，查詢就**靜悄悄地不匹配**——不報錯、不編譯失敗，
