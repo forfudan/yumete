@@ -1484,6 +1484,22 @@ impl Editor {
                 };
                 Some((path, shown))
             }
+            // 預覽一個目錄：它裝着什麽——同 helix，也同上面那一格項目。
+            crate::picker::Item::Dir(name) => {
+                let here = self.picker.as_ref().and_then(|p| p.root.clone())?;
+                let full = match name.trim_end_matches('/') {
+                    ".." => here.parent().map(Path::to_path_buf)?,
+                    one => here.join(one),
+                };
+                let (dirs, files) = crate::editor::list_one_level(&full, &crate::editor::Sieve::default());
+                let shown: Vec<String> = dirs
+                    .into_iter()
+                    .map(|d| d + "/")
+                    .chain(files)
+                    .take(rows)
+                    .collect();
+                Some((name, shown))
+            }
             crate::picker::Item::File(path) => {
                 let full = match self.picker.as_ref().and_then(|p| p.root.as_ref()) {
                     Some(root) => root.join(&path),
@@ -1582,6 +1598,17 @@ impl Editor {
             Some(crate::picker::Item::Project(path)) => {
                 self.reopen_request = Some(PathBuf::from(path));
             }
+            // **A directory is a step, not a choice.** The picker was closed
+            // two lines up because every other item closes it; this one opens
+            // it again one level along, which is what browsing is.
+            Some(crate::picker::Item::Dir(name)) => {
+                let here = root.unwrap_or_else(|| self.working_dir());
+                let there = match name.trim_end_matches('/') {
+                    ".." => here.parent().map(Path::to_path_buf).unwrap_or(here),
+                    name => here.join(name),
+                };
+                self.browse(&there);
+            }
             Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
             // The picker belongs to whichever key opened it, so choosing from
             // it lands the way that key lands.
@@ -1654,6 +1681,77 @@ impl Editor {
     /// the match decides.
     pub(super) fn open_file_picker(&mut self) {
         self.open_file_picker_in(self.root(), crate::editor::Sieve::default());
+    }
+
+    /// **`空格 e` — the explorer**: one directory at a time (2026-10-20 作者定,
+    /// after helix's `file_explorer`).
+    ///
+    /// Not the file tree in the sidebar and not `空格 f` either. `空格 f` is
+    /// for a name you can already half spell; this is for a book you are
+    /// looking *through* — the directory you are in, `..` to go up, Enter on a
+    /// directory to go down. Measured against the real helix before it was
+    /// written: it is its picker widget, not a tree, with `../` as the first
+    /// row and the preview pane showing whatever the highlight stands on.
+    ///
+    /// Warning: **the title is the path, and that is the whole of the title.**
+    /// There is nothing to translate and nothing to keep in step: a reader
+    /// browsing needs to know which directory this is, which no fixed word
+    /// can say.
+    pub(super) fn open_explorer(&mut self) {
+        let root = self.root();
+        self.browse(&root);
+    }
+
+    /// `空格 E` — the same, at the directory this file is in (helix's
+    /// `file_explorer_in_current_buffer_directory`).
+    ///
+    /// A buffer with no file of its own has no directory, so that falls back
+    /// to the working directory — the same answer `空格 F` gives.
+    pub(super) fn open_explorer_here(&mut self) {
+        let here = self
+            .current_buffer()
+            .path()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| self.working_dir());
+        self.browse(&here);
+    }
+
+    /// List one directory on the picker — the explorer, and every step of it.
+    ///
+    /// Re-entered on every Enter over a directory, which is what makes
+    /// browsing one picker rather than a stack of them.
+    pub(super) fn browse(&mut self, dir: &Path) {
+        // Nothing is walking: a directory is read in one breath, so the
+        // explorer has no streaming half and must not leave the file picker's
+        // thread running underneath it.
+        self.stop_filling_the_picker();
+        let sieve = crate::editor::Sieve::default();
+        let (dirs, files) = crate::editor::list_one_level(dir, &sieve);
+        let mut items = Vec::with_capacity(dirs.len() + files.len() + 1);
+        // **`..` is a row, not a key.** It is the row a reader's eye lands on
+        // first and the one helix puts there; a key would have to be taught.
+        if dir.parent().is_some() {
+            items.push(crate::picker::Item::Dir(String::from("../")));
+        }
+        items.extend(dirs.into_iter().map(|name| crate::picker::Item::Dir(name + "/")));
+        items.extend(files.into_iter().map(crate::picker::Item::File));
+        let mut picker = crate::picker::Picker::new(&self.browsing_title(dir), items);
+        picker.root = Some(dir.to_path_buf());
+        picker.sieve = Some(sieve);
+        self.show_the_picker(picker);
+    }
+
+    /// Which directory the explorer is standing in, written the shortest way
+    /// that is still unambiguous: relative to the project while it is inside
+    /// it, and in full once browsing has climbed out of it.
+    fn browsing_title(&self, dir: &Path) -> String {
+        let root = self.root();
+        match dir.strip_prefix(&root) {
+            Ok(under) if under.as_os_str().is_empty() => format!("{}/", root.display()),
+            Ok(under) => format!("{}/", under.display()),
+            Err(_) => format!("{}/", dir.display()),
+        }
     }
 
     /// `空格 F` —— 同上，但搜的是[工作路徑][`Editor::working_dir`]（2026-10-01，

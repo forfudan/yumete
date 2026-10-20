@@ -5947,6 +5947,20 @@ zhs = "显示汉字信息(边栏)"
 en = "show info of character (sidebar)"
 
 [[message]]
+# space e：瀏覽文件，一次一個目錄（挑選器式，不是邊欄那棵樹）
+key = "hint.space.explorer"
+zht = "瀏覽文件(項目路徑)"
+zhs = "浏览文件(项目路径)"
+en = "browse files (project dir)"
+
+[[message]]
+# space E：同上，從這個檔所在的目錄開始
+key = "hint.space.explorer-here"
+zht = "瀏覽文件(本文件路徑)"
+zhs = "浏览文件(本文件路径)"
+en = "browse files (this file's dir)"
+
+[[message]]
 # space f：open a file
 # 開啟文件
 key = "hint.space.open-file"
@@ -7060,7 +7074,7 @@ en = "Docs"
 key = "label.panel.files"
 zht = "文件"
 zhs = "文件"
-en = "Files"
+en = "Explorer"
 
 [[message]]
 # 標籤：信息——五種內容共用那一格，空着的時候寫這個(#426，2026-09-30 定)

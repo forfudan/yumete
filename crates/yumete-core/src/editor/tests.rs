@@ -21400,6 +21400,78 @@ fn the_picker_walks_its_list_and_shows_what_it_is_standing_on() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`空格 e` — browsing, one directory at a time** (2026-10-20 作者定).
+///
+/// Measured against the real helix before this was written: its `space e` is
+/// the picker widget over one directory, with `../` as the first row, not a
+/// tree. The thing that makes it browsing rather than picking is that Enter
+/// on a directory re-roots the same picker instead of choosing anything.
+#[test]
+fn the_explorer_lists_one_directory_and_walks_into_it() {
+    let dir = tmp().join(format!("yumete-explorer-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::create_dir_all(dir.join("target")).unwrap();
+    std::fs::write(dir.join("卷一").join("一.md"), "第一章。\n").unwrap();
+    std::fs::write(dir.join("序.md"), "序。\n").unwrap();
+    std::fs::write(dir.join("target").join("built.md"), "built\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("序.md")).unwrap();
+
+    type_keys(&mut ed, " e");
+    let rows = |ed: &Editor| -> Vec<String> {
+        ed.picker().unwrap().matches().iter().map(|i| i.label().to_string()).collect()
+    };
+    // Directories first, `..` at the head, and the build tree left out — the
+    // same rules `空格 f` walks by, because it is the same walker one level
+    // deep.
+    assert_eq!(rows(&ed), vec!["../", "卷一/", "序.md"], "listed once, in that order");
+
+    // **Enter on a directory does not choose anything**: the picker stays up,
+    // one level down, with the query cleared.
+    ed.on_key(Key::Char('卷'));
+    ed.on_key(Key::Enter);
+    assert!(ed.picker().is_some(), "still browsing");
+    assert_eq!(rows(&ed), vec!["../", "一.md"]);
+    assert_eq!(ed.picker().unwrap().query(), "", "a step is not a search");
+
+    // Its preview is what is in it, so a directory can be read before it is
+    // entered.
+    let (name, shown) = ed.picker_preview(4).expect("something highlighted");
+    assert_eq!(name, "../");
+    assert!(shown.contains(&String::from("卷一/")), "{shown:?}");
+
+    // `..` climbs, and a file opens and closes the picker, as `空格 f` does.
+    ed.on_key(Key::Enter);
+    assert_eq!(rows(&ed), vec!["../", "卷一/", "序.md"], "back up");
+    ed.on_key(Key::Char('序'));
+    ed.on_key(Key::Enter);
+    assert!(ed.picker().is_none(), "a file is a choice, and a choice closes it");
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("序.md")));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `空格 E` starts where this file is, not where the project is — helix's
+/// `file_explorer_in_current_buffer_directory`.
+#[test]
+fn the_other_explorer_starts_in_this_files_own_directory() {
+    let dir = tmp().join(format!("yumete-explorer-here-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::write(dir.join("卷一").join("一.md"), "第一章。\n").unwrap();
+    std::fs::write(dir.join("序.md"), "序。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一").join("一.md")).unwrap();
+
+    type_keys(&mut ed, " E");
+    let rows: Vec<String> =
+        ed.picker().unwrap().matches().iter().map(|i| i.label().to_string()).collect();
+    assert_eq!(rows, vec!["../", "一.md"], "the chapter's own folder");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **從前是命令的那幾個鍵，現在是查詢詞裏的字母**（2026-10-08 定）。
 ///
 /// `j`/`k` 走單子、`q` 關窗、`i` 進框、`g`/`G` 到兩頭、`d`/`D`/`c`/`C`/`a`/`A`/`I`

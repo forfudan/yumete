@@ -1847,6 +1847,55 @@ pub(crate) fn walk_with(root: &Path, sieve: &Sieve, f: &mut impl FnMut(&Path)) -
     walk_inner(root, sieve, false, None, f)
 }
 
+/// **One directory, not a tree** — what the explorer (`␣e`) lists.
+///
+/// The directories first and then the files, each in path order, each name on
+/// its own without the root in front of it.
+///
+/// Warning: **the same rules as `␣f`, by construction.** It is the same
+/// `WalkBuilder` with `max_depth(1)`, so hidden files, `.gitignore`, the
+/// `target`/`node_modules` floor and the glob switches all answer the same
+/// here as they do for the picker and for `ye --files`. Listing a directory
+/// by hand with `read_dir` would have been four lines shorter and would have
+/// shown a `target/` that `␣f` refuses to walk into.
+pub(crate) fn list_one_level(root: &Path, sieve: &Sieve) -> (Vec<String>, Vec<String>) {
+    let mut dirs = Vec::new();
+    let mut files = Vec::new();
+    let Some(overrides) = sieve.overrides(root) else { return (dirs, files) };
+    let walker = ignore::WalkBuilder::new(root)
+        .overrides(overrides)
+        .hidden(!sieve.hidden)
+        .ignore(!sieve.ignored)
+        .git_ignore(!sieve.ignored)
+        .git_global(!sieve.ignored)
+        .git_exclude(!sieve.ignored)
+        .follow_links(false)
+        .sort_by_file_path(|a, b| a.cmp(b))
+        .require_git(false)
+        .max_depth(Some(1))
+        .filter_entry({
+            let floor = !sieve.ignored;
+            move |entry| {
+                !floor
+                    || !entry.file_type().is_some_and(|t| t.is_dir())
+                    || !matches!(&*entry.file_name().to_string_lossy(), "target" | "node_modules")
+            }
+        })
+        .build();
+    for entry in walker.flatten() {
+        // Depth 0 is the directory being listed.
+        if entry.depth() == 0 {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        match entry.file_type().is_some_and(|t| t.is_dir()) {
+            true => dirs.push(name),
+            false => files.push(name),
+        }
+    }
+    (dirs, files)
+}
+
 /// [`walk_with`], **but it can be told to stop** — the picker's walk runs beside
 /// the key thread now and has to end when the panel does (2026-10-09).
 ///
