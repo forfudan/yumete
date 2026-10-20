@@ -248,6 +248,11 @@ const DISOWNED: &[&str] = &[
     // `build`'s and this test does not run `build`. The manual's sentence
     // about how the name reads is unaffected.
     ":view note",
+    // The same kind of sentence, about the other half of the hyphen rule:
+    // 「`:write all` can only guess between a sub-command and a file named
+    // `all`」. It guessed the file until #225, and the manual explains why it
+    // no longer guesses at all.
+    ":write all",
 ];
 
 #[test]
