@@ -723,34 +723,47 @@ fn adjusted_break(
     let after = |i: usize| (i..widths.len()).find_map(seen).unwrap_or(' ');
     let char_at = |i: usize| chars.get(cuts[i]).copied().unwrap_or(' ');
 
+    // Whether a break at `cut` offends one of the three rules. 分離禁止 first:
+    // `——` and `……` are one mark, and a row may not end with half of one.
+    let forbidden_at = |cut: usize| {
+        let split_a_pair = half_of_a_pair(before(cut)) && before(cut) == after(cut);
+        split_a_pair || forbidden_at_row_start(after(cut)) || forbidden_at_row_end(before(cut))
+    };
     // 禁則處理 first: pull the offending character down with its neighbour.
-    let kinsoku = |mut cut: usize| {
+    //
+    // Warning: **A retreat that does not help is not taken** (2026-10-20). The loop
+    // retreated while the rule was offended, and handed back wherever it had
+    // got to — so a run of marks that offend it *everywhere* paid the full
+    // retreat for nothing: 連接號 is 行首禁則, and a line of `—` offends it at
+    // every boundary, so a 22-cell row came out 18 cells long and no 行首禁則
+    // was satisfied by the four empty cells. Measured on `—`×40 at width 25:
+    // 18/22, where 字 filled 22/22 and letters 22/22. 追い出し is a way to
+    // honour the rule, not a tax; where it cannot honour it, the break stands
+    // where the measure put it, as it does in a typesetter.
+    let kinsoku = |first: usize| {
+        let mut cut = first;
         for _ in 0..MAX_KINSOKU_RETREAT {
+            if !forbidden_at(cut) {
+                return cut;
+            }
             if cut <= g + 1 {
                 break;
             }
-            // 分離禁止 first: `——` and `……` are one mark, and a row may not
-            // end with half of one.
-            let split_a_pair = half_of_a_pair(before(cut)) && before(cut) == after(cut);
-            if split_a_pair
-                || forbidden_at_row_start(after(cut))
-                || forbidden_at_row_end(before(cut))
-            {
-                // **One retreat is one character the reader can see.** Stepping
-                // by grapheme spent both tries walking back over a hidden run —
-                // `字**」**。` — and moved the boundary past nothing, so the 。
-                // still opened the next row. The markup travels down with the
-                // character it belongs to.
-                let mut back = cut - 1;
-                while back > g + 1 && widths.get(back).copied().unwrap_or(1) == 0 {
-                    back -= 1;
-                }
-                cut = back;
-            } else {
-                break;
+            // **One retreat is one character the reader can see.** Stepping
+            // by grapheme spent both tries walking back over a hidden run —
+            // `字**」**。` — and moved the boundary past nothing, so the 。
+            // still opened the next row. The markup travels down with the
+            // character it belongs to.
+            let mut back = cut - 1;
+            while back > g + 1 && widths.get(back).copied().unwrap_or(1) == 0 {
+                back -= 1;
             }
+            cut = back;
         }
-        cut
+        match forbidden_at(cut) {
+            true => first,
+            false => cut,
+        }
     };
     let mut cut = kinsoku(end);
 
@@ -2336,5 +2349,31 @@ mod tests {
         let rows = |m: Measure| rows_of_line(&rope, 0, m);
         assert_eq!(rows(Measure::plain(8).with_drawn(&one)), vec![(0, 3), (3, 5)]);
         assert_eq!(rows(Measure::plain(8).with_drawn(&two)), vec![(0, 2), (2, 5)]);
+    }
+
+    /// **禁則 does not get to shorten a row it cannot fix.**
+    ///
+    /// 連接號 `—` is 行首禁則, so every boundary inside a run of them offends
+    /// the rule and retreating moves the offence rather than removing it. The
+    /// retreat was taken anyway: a 22-cell row of `—` came out 18 cells long,
+    /// four empty cells bought nothing, and 漢字 and letters beside it filled
+    /// the row exactly.
+    #[test]
+    fn a_retreat_that_cannot_help_is_not_taken() {
+        for mark in ['—', '…'] {
+            let run: String = std::iter::repeat_n(mark, 40).collect();
+            let first = &wrapped(&run, 22)[0];
+            assert_eq!(first.chars().count(), 22, "{mark} filled the row: {first:?}");
+        }
+        // The neighbours it was being measured against, unchanged.
+        assert_eq!(wrapped(&"字".repeat(40), 22)[0].chars().count(), 11);
+        assert_eq!(wrapped(&"a".repeat(40), 22)[0].chars().count(), 22);
+        // And the retreat still happens where it does help: one 。 after a
+        // full row goes down with the character before it.
+        // 。 falls at the head of the second row at this width, and goes down
+        // with the character before it.
+        let rows = wrapped("一二三四五六七八九十。十一", 20);
+        assert!(!rows[1].starts_with('。'), "{rows:?}");
+        assert_eq!(rows[0].chars().count(), 9, "{rows:?}");
     }
 }

@@ -1438,11 +1438,18 @@ pub fn draw(
             // terminal as itself it draws nothing, and a 縱 with a NUL in it
             // looked like a 縱 with a gap. One cell either way, which is the
             // cell the slot was measured for.
-            let symbol: String = row
-                .text
-                .chars()
-                .map(|c| yumete_cjk::control_picture(c).unwrap_or(c))
-                .collect();
+            // …and so does a combining mark with no base (2026-10-20): the
+            // same cell, the same reason, and the same dotted circle the
+            // horizontal page draws, so the two never show a slot differently.
+            let symbol: String = {
+                let mut chars: Vec<char> = row
+                    .text
+                    .chars()
+                    .map(|c| yumete_cjk::control_picture(c).unwrap_or(c))
+                    .collect();
+                yumete_cjk::show_orphan_marks(&mut chars);
+                chars.into_iter().collect()
+            };
             // **A table's walls turn with it** (2026-09-19). A row is one
             // 縱 (the core refuses to wrap one), so the grid is the page's own
             // grid turned a quarter turn — and the walls have to turn too or

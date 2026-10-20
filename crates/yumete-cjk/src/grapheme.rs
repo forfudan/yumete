@@ -66,6 +66,30 @@ pub fn prev_grapheme_boundary(s: &str, byte: usize) -> usize {
 ///
 /// `char_width` stays right for what it says: **one** character's own width —
 /// a box-drawing glyph the terminal was asked about, a lone constant.
+/// Give a face to every cluster in `chars` that opens with a combining mark
+/// that has nothing to combine with (see [`crate::orphan_mark_picture`]).
+///
+/// In place, one `char` for one `char`: the row's indices are what the caret,
+/// the selection and the hidden runs are all counted in, so a picture may
+/// replace a character but may never be inserted beside it.
+pub fn show_orphan_marks(chars: &mut [char]) {
+    // Almost every row has none, and the segmentation below is only worth
+    // paying for on a row that might.
+    if !chars.iter().any(|&c| crate::is_combining_mark(c)) {
+        return;
+    }
+    let cells = cells_per_char(chars);
+    for (i, c) in chars.iter_mut().enumerate() {
+        // `cells[i] > 0` is 「this char opens its cluster」; a mark that
+        // follows a base has a base and is drawn with it.
+        if cells[i] > 0 {
+            if let Some(picture) = crate::orphan_mark_picture(*c) {
+                *c = picture;
+            }
+        }
+    }
+}
+
 pub fn cells_per_char(chars: &[char]) -> Vec<usize> {
     // One allocation for the run, because grapheme segmentation reads `&str`.
     // Measured against the alternative of re-deriving cluster boundaries from
