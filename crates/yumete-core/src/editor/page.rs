@@ -1354,6 +1354,11 @@ impl Editor {
         std::mem::take(&mut self.config_reload)
     }
 
+    /// **有人按過 `:check-config`** —— 前端去查那兩個檔，開一頁報告。
+    pub fn take_config_check(&mut self) -> bool {
+        std::mem::take(&mut self.config_check)
+    }
+
     /// **有人按過 `:settings`** —— 前端去開那扇面板。
     pub fn take_settings_request(&mut self) -> bool {
         std::mem::take(&mut self.settings_request)

@@ -18,6 +18,7 @@
 
 use yumete_config::Config;
 use yumete_core::editor::Editor;
+use yumete_core::{say, TextStore as _};
 
 /// **每一項設定，推一遍。** 冪等——見本檔開頭。
 ///
@@ -31,6 +32,178 @@ use yumete_core::editor::Editor;
 /// 悄悄退回出廠值，和「這個設定不管用」在屏幕上長得一模一樣。這一支站在兩邊都看
 /// 得見的地方補上那一半。
 ///
+/// **The config file, checked while you are looking at it** (2026-10-20 作者定).
+///
+/// 原話：「為 config.toml 寫個 yumete config 專用 lsp，檢測有問題的項目？」Asked
+/// on 2026-10-10 and written down then as not built (§5.155 ②); this is it.
+///
+/// Warning: **no server, and that is the point.** Everything it needs is already
+/// here — the checks ([`yumete_config::faults::faults_in`] and the four below
+/// that need `yumete-core`'s own parsers), the place to put the answer
+/// ([`Editor::set_problems`]), and the gutter and 診斷 panel that draw whatever
+/// is in it. A language server would have added a process, a socket and a
+/// second copy of the rules.
+///
+/// It follows the **current** buffer, like the language servers do: a config
+/// file open in the other pane and not being looked at is not where the
+/// reader's attention is, and the check is cheap enough to run the moment it
+/// comes back.
+#[derive(Default)]
+pub struct ConfigWatch {
+    /// The file and the revision already answered for, so the walk happens on
+    /// an edit rather than on every frame.
+    seen: Option<(std::path::PathBuf, u64)>,
+}
+
+impl ConfigWatch {
+    /// Whether this path is one of the files the loader actually reads.
+    ///
+    /// Matched by shape rather than by canonical path: a buffer may hold a
+    /// relative path, and `~/.config/yumete/config.toml` through a symlinked
+    /// home is the same file by two names. The three shapes are
+    /// [`yumete_config::config_dir`]'s `config.toml`, a project's
+    /// `.yumete/config.toml`, and a project's `.yumete.toml`.
+    fn is_a_config(path: &std::path::Path) -> bool {
+        let named = |what: &str| path.file_name().is_some_and(|n| n == what);
+        if named(".yumete.toml") {
+            return true;
+        }
+        if !named("config.toml") {
+            return false;
+        }
+        let parent = path.parent();
+        parent.is_some_and(|p| p.file_name().is_some_and(|n| n == ".yumete"))
+            || parent == Some(yumete_config::config_dir().as_path())
+    }
+
+    /// Check the current buffer if it is a config file and has changed.
+    pub fn follow(&mut self, editor: &mut Editor) {
+        let Some(path) = editor.current_buffer().path().map(std::path::Path::to_path_buf) else {
+            return;
+        };
+        if !Self::is_a_config(&path) {
+            return;
+        }
+        let now = (path.clone(), editor.current_buffer().revision());
+        if self.seen.as_ref() == Some(&now) {
+            return;
+        }
+        self.seen = Some(now);
+        let text = editor.current_buffer().text();
+        editor.set_problems(path, String::from(Self::WHOSE), Self::faults(&text));
+    }
+
+    /// The name this checker signs its complaints with — it stands where a
+    /// server's name stands, and `Problems` keeps one list per name.
+    const WHOSE: &'static str = "yumete-config";
+
+    /// Everything wrong with this text, as the editor draws complaints.
+    fn faults(text: &str) -> Vec<yumete_core::problem::Problem> {
+        use yumete_core::problem::{Problem, Severity};
+        let say = |line: usize, severity: Severity, message: String| Problem {
+            line,
+            // **The line, not a column.** Every one of these is about a key,
+            // and a key is the line it is written on; pointing at a column
+            // would be pointing at the quote marks.
+            utf16_column: 0,
+            severity,
+            message,
+            source: Some(String::from(Self::WHOSE)),
+        };
+        let mut out: Vec<Problem> = yumete_config::faults::faults_in(text)
+            .into_iter()
+            .map(|f| {
+                let loud = match f.fatal {
+                    // **這一條讓整份不生效**，所以它要說出那個後果，不能只說
+                    // 哪個字不認得——同啓動那一行（§5.155）。
+                    true => Severity::Error,
+                    false => Severity::Warn,
+                };
+                let said = match f.fatal {
+                    true => format!("{}——{}", f.said, say!("config.whole-file-dropped")),
+                    false => f.said,
+                };
+                say(f.line, loud, said)
+            })
+            .collect();
+        // **The four whose rules live in `yumete-core`.** `yumete-config` is
+        // its sibling and cannot see them; this crate sees both, which is why
+        // `complaints` is here and not there.
+        if out.iter().all(|p| p.severity != Severity::Error) {
+            for said in complaints(&Config::from_toml(text)) {
+                let line = yumete_config::faults::line_for(text, &said);
+                out.push(say(line, Severity::Warn, said));
+            }
+        }
+        out.sort_by_key(|p| p.line);
+        out
+    }
+}
+
+/// **`:check-config` — both config files, without opening either** (2026-10-20).
+///
+/// The editor's own checks already run at start-up and, since
+/// [`ConfigWatch`], on the file while it is open. This is the third question
+/// a reader asks — 「is anything wrong *right now*」 — and it is the one that
+/// does not require knowing where the files are.
+///
+/// The listing is `path:line: 說的話`, which is the shape `gf` and `Enter`
+/// already walk, so every complaint is one keystroke from the line it is
+/// about. Absolute paths: the two files are in two different places and
+/// neither is under the project.
+pub fn answer_config_check(editor: &mut Editor) {
+    if !editor.take_config_check() {
+        return;
+    }
+    let mut lines = Vec::new();
+    let mut looked = 0;
+    for path in config_files(editor) {
+        let Ok(text) = std::fs::read_to_string(&path) else { continue };
+        looked += 1;
+        let mut said: Vec<(usize, String)> = yumete_config::faults::faults_in(&text)
+            .into_iter()
+            .map(|f| (f.line, f.said))
+            .collect();
+        // The four whose rules are `yumete-core`'s, located the same way.
+        if !text.trim().is_empty() {
+            for one in complaints(&Config::from_toml(&text)) {
+                said.push((yumete_config::faults::line_for(&text, &one), one));
+            }
+        }
+        // **Down the file, not in the order the checks happen to run.** A
+        // listing is walked with `Enter`, and one that jumps 6 → 3 → 2 makes
+        // a reader lose their place in their own config.
+        said.sort_by_key(|(line, _)| *line);
+        // **The path in full.** `~` would read better and `gf` would then have
+        // to expand it; the listing's whole value is that every line is one
+        // keystroke from the place it is about.
+        lines.extend(said.into_iter().map(|(line, one)| {
+            format!("{}:{}: {one}", path.display(), line + 1)
+        }));
+    }
+    if lines.is_empty() {
+        editor.set_status(say!("config.check-clean", looked));
+        return;
+    }
+    let n = lines.len();
+    editor.open_report(&say!("config.check-name"), &format!("{}
+", lines.join("
+")));
+    editor.set_status(say!("config.check-found", n));
+}
+
+/// The config files that exist, global first — the order the loader reads
+/// them in, so a reader sees them the way they are applied.
+fn config_files(editor: &Editor) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let global = yumete_config::config_dir().join("config.toml");
+    if global.is_file() {
+        out.push(global);
+    }
+    out.extend(yumete_config::local_config_path(&editor.root()));
+    out
+}
+
 pub fn complaints(config: &Config) -> Vec<String> {
     let mut said = Vec::new();
     let word = config.editor.syntax.trim();
@@ -230,5 +403,95 @@ mod every_setting_is_pushed_here {
         for needle in ["set_ambiguous_wide", "messages::set_language", "set_commit_strategy"] {
             assert!(here.contains(needle), "{needle} 要在這個檔裏也推一遍");
         }
+    }
+}
+
+#[cfg(test)]
+mod config_watch_tests {
+    use super::ConfigWatch;
+    use yumete_core::editor::Editor;
+    use yumete_core::problem::Severity;
+    use yumete_core::TextStore as _;
+
+    /// **Which files the checker owns.** Too wide and it would complain about
+    /// somebody else's `config.toml`; too narrow and the one file a reader
+    /// actually edits goes unchecked.
+    #[test]
+    fn it_knows_a_yumete_config_from_any_other_toml() {
+        // **The global one is asked for, not spelt out**: where it lives
+        // depends on `XDG_CONFIG_HOME` and on the platform, and a literal
+        // here would pass on one machine and fail on the next.
+        let global = yumete_config::config_dir().join("config.toml");
+        assert!(ConfigWatch::is_a_config(&global), "{}", global.display());
+        let yes = ["/book/.yumete/config.toml", ".yumete/config.toml", "/book/.yumete.toml"];
+        let no = [
+            "/book/Cargo.toml",
+            "/book/config.toml",
+            "/book/.config/config.toml",
+            "/book/.yumete/keys.toml",
+            "/book/notes.md",
+        ];
+        for one in yes {
+            assert!(ConfigWatch::is_a_config(std::path::Path::new(one)), "{one}");
+        }
+        for one in no {
+            assert!(!ConfigWatch::is_a_config(std::path::Path::new(one)), "{one}");
+        }
+    }
+
+    /// **`:check-config` — both files, without opening either** (2026-10-20).
+    #[test]
+    fn check_config_lists_every_fault_with_its_line() {
+        let dir = std::env::temp_dir().join(format!("yumete-check-cfg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+        std::fs::write(
+            dir.join(".yumete").join("config.toml"),
+            "[editor]\nindent = 50\nsyntax = \"klingon\"\n",
+        )
+        .unwrap();
+        let mut ed = Editor::new();
+        ed.set_root(&dir);
+
+        ed.execute(":check-config").unwrap();
+        super::answer_config_check(&mut ed);
+        let page = ed.current_buffer().text();
+        // One line per fault, each `path:line: what`, **down the file**.
+        let lines: Vec<&str> = page.lines().collect();
+        assert_eq!(lines.len(), 2, "{page}");
+        assert!(lines[0].contains(":2: ") && lines[0].contains("indent"), "{}", lines[0]);
+        // The one whose rule is `yumete-core`'s, located the same way.
+        assert!(lines[1].contains(":3: ") && lines[1].contains("syntax"), "{}", lines[1]);
+        assert!(ed.status().contains('2'), "{}", ed.status());
+
+        // **A clean config says so and opens nothing.**
+        std::fs::write(dir.join(".yumete").join("config.toml"), "[editor]\nindent = 4\n").unwrap();
+        let before = ed.current_buffer().id();
+        ed.execute(":check-config").unwrap();
+        super::answer_config_check(&mut ed);
+        assert_eq!(ed.current_buffer().id(), before, "no second page: {}", ed.status());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The error says what it costs; a warning is one key and says so.
+    #[test]
+    fn the_one_that_drops_the_file_says_that_it_does() {
+        let fatal = ConfigWatch::faults("[editor]\nlayout = \"vertical\"\n\n[nope]\na = 1\n");
+        assert_eq!(fatal.len(), 1);
+        assert_eq!(fatal[0].severity, Severity::Error);
+        assert_eq!(fatal[0].line, 3);
+        assert!(fatal[0].message.contains("出廠設置"), "{}", fatal[0].message);
+        assert_eq!(fatal[0].source.as_deref(), Some("yumete-config"));
+
+        // **一句都不說的那一種**：文件好好的。
+        assert!(ConfigWatch::faults("[editor]\nlayout = \"vertical\"\n").is_empty());
+
+        // 這一格的規矩在 `yumete-core` 裏，`yumete-config` 看不見它——所以它走
+        // 的是這個檔自己那一支 `complaints`，而行號照樣找得到。
+        let core = ConfigWatch::faults("[editor]\nsyntax = \"klingon\"\n");
+        assert_eq!(core.len(), 1, "{core:?}");
+        assert_eq!(core[0].severity, Severity::Warn);
+        assert_eq!(core[0].line, 1);
     }
 }

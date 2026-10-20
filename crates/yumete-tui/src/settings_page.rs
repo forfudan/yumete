@@ -275,6 +275,33 @@ impl Seat {
         if key == Some(Key::Char(':')) && page.typing.is_none() {
             return false;
         }
+        // **`e` 開的是這一頁寫進去的那個檔**（2026-10-20 作者定，§5.155 ①）。
+        //
+        // 它和這一扇面板是一對：面板管得了的是那張表上列着的那些，而
+        // `[keys.normal]`、`[lsp.*]`、`[syntax]` 那幾張表**面板上永遠不會有**
+        // （上面那段註釋說了為什麽），要改只能進那個檔。從前連「那個檔在哪」都
+        // 要去問 `:version`。
+        //
+        // Warning: **`Tab` 撥哪一份，`e` 就開哪一份。** 頂上那一行寫着現在是全局還
+        // 是本項目，所以「這個檔」在螢幕上是看得見的，不必猜。
+        if key == Some(Key::Char('e')) && page.typing.is_none() {
+            let path = page.sheet().path.clone();
+            let dirty = page.dirty();
+            if let Some(path) = path {
+                // 攢着没存的改動就先攔一下，同 `:q`——那一頁的值和檔裏的字此刻
+                // 不是同一回事，而開出來的是檔裏那一份。
+                if dirty && !self.warned {
+                    self.warned = true;
+                    editor.set_status(say!("set.leaving-unsaved"));
+                    return true;
+                }
+                self.leave(editor, false);
+                if let Err(why) = editor.open_file(&path) {
+                    editor.set_status(say!("buffer.cannot-open", shorten(&path), why));
+                }
+            }
+            return true;
+        }
         // Warning: **認不出的鍵也算收下了**：面板開着的時候一個 F13 不該掉進正文。
         let Some(key) = key else { return true };
         let dirty = page.dirty();
@@ -952,6 +979,55 @@ mod tests {
         for key in [Key::Char('j'), Key::Char('l'), Key::Char(' '), Key::Tab, Key::Char('q')] {
             assert!(press(&mut p, key), "{key:?} 不該關掉它");
         }
+    }
+
+    /// **`e` 開的是這一頁寫進去的那個檔**（2026-10-20 作者定）。
+    ///
+    /// 面板上没有 `[keys.normal]`、`[lsp.*]`、`[syntax]` 那幾張表，也永遠不會
+    /// 有；要改它們只能進那個檔，而從前連它在哪都要去問 `:version`。
+    #[test]
+    fn e_opens_the_file_this_page_writes_into() {
+        let dir = std::env::temp_dir().join(format!("yumete-set-e-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let global = dir.join("config.toml");
+        std::fs::write(&global, "[editor]\nlayout = \"vertical\"\n").unwrap();
+        let local = dir.join("local.toml");
+        std::fs::write(&local, "[editor]\nbands = 2\n").unwrap();
+
+        let mut ed = Editor::new();
+        let mut seat = Seat {
+            panel: Some(Panel::open(Some(global.clone()), Some(local.clone()))),
+            ..Default::default()
+        };
+        assert!(seat.took(&mut ed, Some(Key::Char('e'))), "面板收下了這一鍵");
+        assert!(seat.panel.is_none(), "開了檔就讓位——面板蓋在正文上");
+        // **比名字，不比整條路**：開檔那一支會把路徑正規化（macOS 的
+        // `/var` 是 `/private/var` 的連結），兩邊寫出來不是同一個字串。
+        let opened = |ed: &Editor| ed.current_buffer().path().unwrap().to_path_buf();
+        assert!(opened(&ed).ends_with("config.toml"), "{:?}", opened(&ed));
+
+        // **`Tab` 撥哪一份，`e` 就開哪一份。**
+        let mut page = Panel::open(Some(global.clone()), Some(local.clone()));
+        page.flip_into();
+        let mut seat = Seat { panel: Some(page), ..Default::default() };
+        assert!(seat.took(&mut ed, Some(Key::Char('e'))));
+        assert!(opened(&ed).ends_with("local.toml"), "{:?}", opened(&ed));
+
+        // **攢着没存的就先攔一下**，同 `:q`：開出來的是檔裏那一份，而這一頁的
+        // 值此刻和它不是同一回事。
+        let mut page = Panel::open(Some(global.clone()), Some(local));
+        page.across(true);
+        page.row = page.rows().iter().position(|s| s.key == "bands").unwrap();
+        page.press();
+        assert!(page.dirty(), "撥過一下了");
+        let mut seat = Seat { panel: Some(page), ..Default::default() };
+        assert!(seat.took(&mut ed, Some(Key::Char('e'))));
+        assert!(seat.panel.is_some(), "第一下只說一句");
+        assert!(seat.took(&mut ed, Some(Key::Char('e'))));
+        assert!(seat.panel.is_none(), "第二下纔開");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **正在打字的時候 `:` 也是一個字**（2026-10-09 查出來的，會丟字）。

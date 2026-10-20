@@ -1231,6 +1231,14 @@ en = "everything the language servers have complained about, as a listing gf can
 find = "診斷 诊断 錯誤 错误 警告 編譯 编译 語言服務器 语言服务器 lsp diagnostics error warning"
 
 [[message]]
+# : 命令選單裏 config 那一項的説明(check 組)
+key = "cmd.check.config"
+zht = "查配置檔：哪一行讓整份失效，哪一行寫了没人讀"
+zhs = "查配置档：哪一行让整份失效，哪一行写了没人读"
+en = "check the config: the line that voids the whole file, and the keys nobody reads"
+find = "配置 设置 設定 設置 config settings toml 檢查 检查 毛病"
+
+[[message]]
 # : 命令選單裏 merge 那一項的説明(check 組)
 key = "cmd.check.merge"
 zht = "列出這份文件裏的合併衝突"
@@ -3480,6 +3488,27 @@ en = "a heading in this file"
 # ── convert ───────────────────────────────────────────────────────────
 
 [[message]]
+# :check-config 查完了，兩個檔都没毛病({0} 是查了幾個檔)
+key = "config.check-clean"
+zht = "配置檔没毛病（查了 {0} 個）"
+zhs = "配置档没毛病（查了 {0} 个）"
+en = "the config is clean ({0} file(s) checked)"
+
+[[message]]
+# :check-config 查出來幾條
+key = "config.check-found"
+zht = "配置檔有 {0} 處"
+zhs = "配置档有 {0} 处"
+en = "{0} thing(s) wrong in the config"
+
+[[message]]
+# :check-config 查出來的那一頁的名字
+key = "config.check-name"
+zht = "配置檔的毛病"
+zhs = "配置档的毛病"
+en = "config problems"
+
+[[message]]
 # :reload-config 讀到的設定檔有毛病
 key = "config.reload-said"
 zht = "設定重讀了，但有話説：{0}"
@@ -3492,6 +3521,13 @@ key = "config.reloaded"
 zht = "設定重讀了"
 zhs = "设置重读了"
 en = "settings reloaded"
+
+[[message]]
+# 配置檔裏這一條讓整份都不生效(畫在那一行上的那條診斷)
+key = "config.whole-file-dropped"
+zht = "這一條讓整份配置都没生效，用的是出廠設置"
+zhs = "这一条让整份配置都没生效，用的是出厂设置"
+en = "this one line stops the whole file applying; the factory settings are in use"
 
 [[message]]
 # ]c/[c 跳到了第 {0} 行的衝突
@@ -10066,9 +10102,9 @@ en = "system"
 [[message]]
 # 設置面板：底下那一行鍵
 key = "set.keys"
-zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  Tab 切換全局/本地設置  :w 存  :q 退"
-zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  Tab 切换全局/本地设置  :w 存  :q 退"
-en = "hl panes  jk move  space toggle  i edit  d drop  Tab which file  :w save  :q leave"
+zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  e 開這個檔  Tab 切換全局/本地設置  :w 存  :q 退"
+zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  e 开这个档  Tab 切换全局/本地设置  :w 存  :q 退"
+en = "hl panes  jk move  space toggle  i edit  d drop  e open it  Tab which file  :w save  :q leave"
 
 [[message]]
 # 設置：Yumete 鍵位風味
