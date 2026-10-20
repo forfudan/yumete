@@ -617,6 +617,338 @@ fn the_editor_says_when_a_recovery_copy_is_owed() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **A record written over several lines is one row, wherever it sits**
+/// (2026-10-20 作者報的).
+///
+/// A field holding a line break is one record (RFC 4180 §2.6) and the grid
+/// drew it as two rows with the wrong number of columns in each. What this
+/// pins is the half my own fixture could not see: I tested a record on the
+/// **first** line, where `viewport.top` is 0 and the scroll is never taken,
+/// and the author found it at record 7 — scrolled to, every row from the
+/// continuation line down was read from the middle of a record, so
+/// `line two of seven"` became **column 1** in the detail panel and the first
+/// column's width was measured against it.
+///
+/// One root cause in three places: a line may be a continuation line, and
+/// anything that names a grid row by a line has to normalise to the record's
+/// first line ([`Editor::table_row_start`]).
+#[test]
+fn a_record_over_several_lines_is_one_row_wherever_it_sits() {
+    let dir = tmp().join(format!("yumete-record-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // Six plain records, then one holding a line break in its fifth field,
+    // then three more — the author's shape, not a record on line 1.
+    let mut text = String::from("c1,c2,c3,c4,c5,c6\n");
+    for i in 1..=10 {
+        match i {
+            7 => text.push_str("r7a,r7b,r7c,r7d,\"line one\nline two\",r7f\n"),
+            _ => text.push_str(&format!("r{i}a,r{i}b,r{i}c,r{i}d,r{i}e,r{i}f\n")),
+        }
+    }
+    let csv = dir.join("seven.csv");
+    std::fs::write(&csv, &text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // Record 7 starts on file line 7 and spans two of them; the continuation
+    // line names that same row rather than one of its own.
+    assert_eq!(ed.record_height(7), 2);
+    assert_eq!(ed.table_row_start(8), 7, "line 8 is record 7's, not its own");
+    assert_eq!(ed.table_row_index(7), 6, "the seventh record, zero-based");
+    assert_eq!(ed.table_row_index(8), 6, "and so is its continuation line");
+
+    // **Read from either of its lines, the record cuts into six fields** —
+    // and the fifth is the one the writer broke, not the first.
+    for line in [7, 8] {
+        let source = ed.row_source(line);
+        let cells = ed.row_cells(line);
+        assert_eq!(cells.len(), 6, "line {line}: {source:?}");
+        let shown: Vec<String> = cells.iter().map(|&s| ed.cell_shown(&source, s)).collect();
+        assert_eq!(shown[0], "r7a", "line {line}: column 1 is the record's first field");
+        assert_eq!(shown[4], "line one\nline two", "line {line}");
+        assert_eq!(shown[5], "r7f", "line {line}");
+    }
+    // The quotes are the file's syntax and the grid does not draw them.
+    assert!(!ed.row_source(7).is_empty());
+    assert!(ed.cell_shown(&ed.row_source(7), ed.row_cells(7)[4]).starts_with("line one"));
+
+    // **`j` and `k` move one record a press**, in both directions. The record
+    // used to eat one: the page already showed the whole of it, so the press
+    // that stepped into its second line looked like a press that did nothing.
+    press(&mut ed, "gg");
+    for want in 1..=10 {
+        assert_eq!(ed.table_row_number(), want, "after {} × j", want - 1);
+        press(&mut ed, "j");
+    }
+    for want in (1..=10).rev() {
+        assert_eq!(ed.table_row_number(), want, "on the way back up");
+        press(&mut ed, "k");
+    }
+}
+
+/// **The 記錄 panel waits to be asked, and goes when you leave the row**
+/// (2026-10-20 作者定).
+///
+/// 原話：「make sure that the panel of record is not on automatically by
+/// default……space-i is a shortcut to turn on this panel / sidebar for this
+/// row (just like space-k for definition). When the cursor go out of the row,
+/// it disappear.」 And on the two spellings: 「make sure that every kind of
+/// info shown in the right sidebar has the same logic so that users won't get
+/// confused」 — so `␣i` and `␣I` differ in *where* they put it and in nothing
+/// else.
+///
+/// `:instant-info record` is still the way to have it always, untouched.
+#[test]
+fn the_record_panel_is_asked_for_and_lasts_one_row() {
+    let dir = tmp().join(format!("yumete-panel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("rows.csv");
+    // A multi-line record among plain ones: walking inside *it* is still the
+    // same row, which is the half a one-line record cannot show.
+    let text = "y,a,n\n1751,,116\n1765,\"one\ntwo\",130\n1769,,134\n";
+    std::fs::write(&csv, text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    let shown = |ed: &Editor| ed.info_now() == Some(crate::sidebar::Info::Record);
+    assert!(!shown(&ed), "nothing opens by itself");
+
+    for key in [" i", " I"] {
+        press(&mut ed, "gg");
+        press(&mut ed, key);
+        assert!(shown(&ed), "{key} asks for it");
+        // Along the row it is still that row's question.
+        ed.on_key(Key::Tab);
+        assert!(shown(&ed), "{key}: still the same row after Tab");
+        // Off the row it is gone.
+        press(&mut ed, "j");
+        assert!(!shown(&ed), "{key}: left the row");
+        // Pressing it twice puts it away.
+        press(&mut ed, key);
+        assert!(shown(&ed), "{key} again");
+        press(&mut ed, key);
+        assert!(!shown(&ed), "{key} twice puts it away");
+    }
+
+    // A record written over two lines is **one** row: walking from its first
+    // line to its second does not leave it.
+    press(&mut ed, "gg");
+    press(&mut ed, "j");
+    assert_eq!(ed.table_row_number(), 2, "the two-line record");
+    press(&mut ed, " i");
+    assert!(shown(&ed));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Tab);
+    assert!(shown(&ed), "its second written line is still its row");
+    press(&mut ed, "j");
+    assert!(!shown(&ed), "and the record after it is not");
+
+    // `:instant-info record` is the way to have it always — asked or not.
+    ed.execute(":instant-info record").unwrap();
+    press(&mut ed, "gg");
+    assert!(shown(&ed), "instant means instant: {}", ed.status());
+    press(&mut ed, "j");
+    assert!(shown(&ed), "and it does not expire with the row");
+}
+
+/// **A file whose rows each hold an unpaired quote still walks straight**
+/// (2026-10-20 作者報的, and this is the reproduction).
+///
+/// His two symptoms were a row far down the file drawing record 7's text, and
+/// `k` walking 7 → 1 → 6 → 5. Neither showed on any fixture of mine until I
+/// found the shape: a field whose content is a lone `"` opens a field that
+/// never closes on its line, so **every** such line reports 「runs on」.
+///
+/// The first version of `record_first` walked *backwards* while the line above
+/// ran on, which on a file like this collapses: measured by putting that walk
+/// back, `k` went 4 → 2 → 1 → 1 → 1 and `j` to the bottom reached row 4 of 17.
+/// Boundaries are scanned forward from the header now, so there is nothing to
+/// collapse — those rows join into records, which is what RFC 4180 says they
+/// are, and the walk is one row a press either way.
+#[test]
+fn rows_holding_an_unpaired_quote_still_walk_one_row_a_press() {
+    let dir = tmp().join(format!("yumete-stray-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut text = String::from("c1,c2,c3\n");
+    for i in 1..=20 {
+        match (3..=8).contains(&i) {
+            true => text.push_str(&format!("r{i}a,\",r{i}c\n")),
+            false => text.push_str(&format!("r{i}a,r{i}b,r{i}c\n")),
+        }
+    }
+    let csv = dir.join("stray.csv");
+    std::fs::write(&csv, &text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // Down to the bottom and back up, one row a press, never jumping.
+    press(&mut ed, "gg");
+    let mut seen = vec![ed.table_row_number()];
+    for _ in 0..30 {
+        press(&mut ed, "j");
+        seen.push(ed.table_row_number());
+    }
+    let bottom = *seen.last().expect("walked");
+    assert!(bottom > 4, "`j` reached row {bottom}, which the backward walk capped at 4");
+    for pair in seen.windows(2) {
+        assert!(
+            pair[1] == pair[0] || pair[1] == pair[0] + 1,
+            "`j` went {} → {}: {seen:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+    let mut back = vec![ed.table_row_number()];
+    for _ in 0..30 {
+        press(&mut ed, "k");
+        back.push(ed.table_row_number());
+    }
+    assert_eq!(*back.last().expect("walked"), 1, "`k` came home: {back:?}");
+    for pair in back.windows(2) {
+        assert!(
+            pair[1] == pair[0] || pair[1] + 1 == pair[0],
+            "`k` went {} → {}: {back:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+}
+
+/// **Every way of saying 「go to row 40」 lands on row 40** (2026-10-20
+/// 作者報的: 「when I go to line 40, the Line 7 still render in the first
+/// cell」).
+///
+/// Inside the full-window grid the window is bounded and the rule the gutter
+/// already keeps is that every number in sight means a row of *this table*.
+/// A record holding a line break puts the file's lines one ahead of the
+/// table's rows, and the three ways in disagreed with the gutter and with each
+/// other: `:40` landed on row 38, `40G` and `␣t40g` on row 39.
+#[test]
+fn every_way_of_going_to_a_grid_row_lands_on_that_row() {
+    let dir = tmp().join(format!("yumete-goto-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut text = String::from("c1,c2,c3\n");
+    for i in 1..=40 {
+        match i {
+            7 => text.push_str("r7a,\"line one\nline two\",r7c\n"),
+            _ => text.push_str(&format!("r{i}a,r{i}b,r{i}c\n")),
+        }
+    }
+    let csv = dir.join("goto.csv");
+    std::fs::write(&csv, &text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // …and the same file with no line break in it anywhere, as the control.
+    // Warning: **the control is the half that matters.** My first fix put the row →
+    // line translation inside `move_to_line`, which a dozen callers hand a
+    // 1-based *file line* — so `gg` landed a row low in **every** table, this
+    // one included, and only a case with nothing special in it says so.
+    let mut plain = String::from("c1,c2,c3\n");
+    for i in 1..=40 {
+        plain.push_str(&format!("r{i}a,r{i}b,r{i}c\n"));
+    }
+    let flat = dir.join("plain.csv");
+    std::fs::write(&flat, &plain).unwrap();
+    let mut control = Editor::new();
+    control.open_file(&flat).unwrap();
+    assert!(control.enter_table(), "{}", control.status());
+
+    // Every row, by every route, in both files: the row has to be the one
+    // named — the number *and* the content under it.
+    for (what, ed) in [("with a break", &mut ed), ("plain", &mut control)] {
+        for want in [1usize, 2, 6, 7, 8, 20, 39, 40] {
+            for how in ["colon", "G", "gg", "tg"] {
+                match how {
+                    // `:N` is the **file's** line N, in a grid as anywhere
+                    // else — older than the grid, and pinned by two tests
+                    // that have used it that way for months. Checked here so
+                    // the difference between the two numbers is on the record
+                    // rather than something to rediscover.
+                    "colon" => {
+                        let _ = ed.execute(&format!(":{want}")).unwrap();
+                        assert_eq!(
+                            ed.cursor_line() + 1,
+                            want.min(ed.current_buffer().line_count()),
+                            "{what}: `:{want}` is the file's line"
+                        );
+                        continue;
+                    }
+                    "G" => press(ed, &format!("{want}G")),
+                    // `gg` takes no count: it is row 1 and nothing else, and
+                    // it is how the broken `move_to_line` showed itself.
+                    "gg" => {
+                        press(ed, "gg");
+                        assert_eq!(ed.table_row_number(), 1, "{what}: gg is row 1");
+                        continue;
+                    }
+                    _ => press(ed, &format!(" t{want}g")),
+                }
+                assert_eq!(ed.table_row_number(), want, "{what}: {how} to row {want}");
+                let source = ed.row_source(ed.table_row_start(ed.cursor_line()));
+                let first = ed.cell_shown(&source, ed.row_cells(ed.cursor_line())[0]);
+                assert_eq!(
+                    first,
+                    format!("r{want}a"),
+                    "{what}: {how} to row {want}: {source:?}"
+                );
+            }
+        }
+    }
+}
+
+/// **The record is read-only until the editing half is built** (2026-10-20
+/// 作者定: 讀 ＋ 畫 ＋ 走 先做).
+///
+/// The caret inside a cell is counted in the **value**, and the span it edits
+/// still carries the quotes — so typing landed in front of the opening `"`.
+/// Measured before the guard: `alpha,"first line` became `alpha,ZZ"first line`
+/// and the record stopped parsing at all.
+#[test]
+fn a_record_over_several_lines_refuses_to_be_typed_into() {
+    let dir = tmp().join(format!("yumete-recordro-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("ro.csv");
+    let text = "name,note,n\nalpha,\"first line\nsecond line\",1\nbravo,plain,2\n";
+    std::fs::write(&csv, text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "gg");
+    assert!(ed.record_spans_lines(), "row 1 is the two-line record");
+    press(&mut ed, "i");
+    assert_eq!(ed.status(), say!("table.record-is-read-only"));
+    assert_ne!(ed.mode(), crate::input::Mode::Insert, "the door did not open");
+    // Still in Normal, so what follows is not typing: the bytes are untouched
+    // and the writer has not been left in a mode that cannot write.
+    assert_eq!(ed.current_buffer().text(), text, "not a byte of it moved");
+
+    // The plain record below it types as it always did.
+    press(&mut ed, "j");
+    assert!(
+        !ed.record_spans_lines(),
+        "row 2 is one line: cursor_line={}",
+        ed.cursor_line()
+    );
+    press(&mut ed, "iZZ");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("ZZbravo"),
+        "{:?}",
+        ed.current_buffer().text()
+    );
+}
+
 /// **A file that ends in a newline has no row after its last one** (#384).
 ///
 /// `ropey` reports a trailing empty line for every file that ends in a newline

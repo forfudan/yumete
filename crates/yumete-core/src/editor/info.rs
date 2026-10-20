@@ -40,9 +40,11 @@ impl Editor {
         if let Some(one) = self.info_live {
             return one;
         }
-        if self.detail_is_a_panel() {
-            return Info::Record;
-        }
+        // Warning: **A table does not make 記錄 the live one** (2026-10-20 作者定).
+        // It used to, which is why the panel was there before anybody asked;
+        // `:instant-info record` is the way to have it always, and that comes
+        // in through `self.info_live` above like every other kind's.
+
         match self.writes_code() {
             true => Info::Problems,
             false => Info::Wiki,
@@ -83,7 +85,21 @@ impl Editor {
         // **改動那一條問的是一塊，不是一個字**（2026-10-11 定：「能走，走出那幾行
         // 就收」）。帶子蓋着好幾行，光標在那幾行裏走它照舊算數——別的四種都是
         // 「光標底下這個東西」，一個字就是一個問題，所以只有這一種要放寬。
+        // **記錄 is asked of a row, not of a character** (2026-10-20 作者定:
+        // 「When the cursor go out of the row, it disappear」). Walking along
+        // the row you asked about is still that row's question — the same
+        // widening 改動 has, for the same reason.
+        if one == Info::Record && self.still_the_same_row(at) {
+            return Some(one);
+        }
         (one == Info::Change && self.still_the_same_change(at)).then_some(one)
+    }
+
+    /// Whether `at` and the cursor are in the same row of the grid.
+    fn still_the_same_row(&self, at: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let line = |pos: usize| rope.char_to_line(pos.min(rope.len_chars()));
+        self.table_row_start(line(at)) == self.table_row_start(line(self.sel.head()))
     }
 
     /// 鍵此刻是不是就在那一格裏。

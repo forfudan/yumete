@@ -14837,6 +14837,60 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// **一個光標不給自己以外的格子上底色，不管那一格是不是空的**（2026-10-21
+    /// 作者報的：「the selection is wrong when the cursor is on a empty cell」，
+    /// 再報「a cursor can still highlight two cells if it is empty」）。
+    ///
+    /// 空格子是一個位置，寬度是零，而這個編輯器的光標**蓋住它站的那個字**，所以
+    /// 「站着不動」在空格子上是一片一字符寬的選區，而那一個字符是**牆**。三處各
+    /// 自上過當：牆那一邊的格子也算被選到、「整格被選到」又讓它亮滿換行那一行的
+    /// 每一行、而 `b > to` 把光標讀成「選區越過了這一格」於是亮滿整格的寬。
+    ///
+    /// 站着的那一格由**光標塊**畫（`blocked`），選中的底一格都不該有。真的選區
+    /// 一點不變，空格子照樣在帶子裏——上一條測的就是那個。
+    #[test]
+    fn a_caret_on_an_empty_cell_lights_no_cell_at_all() {
+        let config = Config::default();
+        let ink = ink(&config);
+        // **ASCII only** — 同上一條：寬字的第二格 `TestBackend` 不發。
+        // **逗號，不是豎線**：豎線表格的空格子裏有個空格，寬度是一；逗號表格的
+        // 空格子寬度是零，而零寬正是這一條要測的那件事。
+        let mut editor = editor_with("who,note,tag\nann,,\nbob,,\n");
+        let mut seats = Seats::default();
+        let (w, h) = (40u16, 8u16);
+        // 光標那一行上，上了選中底色的格子；外加光標塊在不在它該在的地方。
+        let look = |editor: &Editor, seats: &mut Seats| -> (Vec<bool>, bool) {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| draw(frame, editor, &config, no_ime(), seats, None))
+                .unwrap();
+            let at = caret_of(&mut terminal, &config);
+            let buffer = terminal.backend().buffer().clone();
+            let lit = (0..w)
+                .map(|x| buffer[(x, at.y)].style().bg == Some(ink.selection()))
+                .collect();
+            (lit, blocked(&buffer, at.x, at.y, ink))
+        };
+
+        // 全窗，走進那個空格子。`l` 走一個字，`Tab` 走一格。
+        for key in [' ', 't', 't', 'j'] {
+            editor.on_key(Key::Char(key));
+        }
+        editor.on_key(Key::Tab);
+        assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "{}", editor.status());
+        let (lit, cursor) = look(&editor, &mut seats);
+        let band = |lit: &[bool]| lit.iter().map(|&on| if on { '#' } else { '.' }).collect::<String>();
+        assert!(cursor, "站着的那一格看得見");
+        assert_eq!(lit.iter().filter(|&&on| on).count(), 0, "一格都没上底：{}", band(&lit));
+
+        // 隔壁那一格也是空的——從前牆兩邊一起亮，就是在這裏看出來的。
+        editor.on_key(Key::Tab);
+        assert_eq!(editor.cell_position().map(|(_, c)| c), Some(2), "{}", editor.status());
+        let (lit, cursor) = look(&editor, &mut seats);
+        assert!(cursor, "站着的那一格看得見");
+        assert_eq!(lit.iter().filter(|&&on| on).count(), 0, "一格都没上底：{}", band(&lit));
+    }
+
     /// #726, reported 2026-10-09: 「The cursor location in the table is
     /// incorrect (insert mode)」.
     ///
@@ -15246,11 +15300,18 @@ fn squeezed(text: &str) -> String {
         );
     }
 
-    /// **A row on a page of prose never opens the panel unasked** — `to`,
-    /// `tb` and `tf` alike (2026-09-11: 「tb 模式（basic）默认不用打开
-    /// information panel」; 2026-09-15: 「tf 和 tb 在信息面板显示上保持一致」).
-    /// Only `tt`, where the grid has the window, opens it: there the panel is
-    /// the way to read a folded cell whole and there is no prose to disturb.
+    /// **A row never opens the panel unasked** — at any level, `tt` included
+    /// (2026-09-11: 「tb 模式（basic）默认不用打开 information panel」;
+    /// 2026-09-15: 「tf 和 tb 在信息面板显示上保持一致」; and 2026-10-20, which
+    /// took the last one away: 「make sure that the panel of record is not on
+    /// automatically by default……This is also very annoying to see the
+    /// floating panel by default」).
+    ///
+    /// `tt` used to be the exception, on the reasoning that the panel is how
+    /// a folded cell is read whole and there is no prose to disturb. The
+    /// author's answer is that a panel nobody asked for is in the way wherever
+    /// it is: `␣i` asks for it, `:instant-info record` is how to have it
+    /// always, and the exception is gone.
     ///
     /// Warning: `tf` used to open it, and the reason it must not is the **cost on a
     /// prose page**: the panel takes a fifth of the width, so the paragraphs
@@ -15277,7 +15338,7 @@ fn squeezed(text: &str) -> String {
         assert!(!at("to").detail_visible(), "源碼 leaves it shut");
         assert!(!at("tb").detail_visible(), "基本 leaves it shut");
         assert!(!at("tf").detail_visible(), "全 too — it is still a page of prose");
-        assert!(at("tt").detail_visible(), "the pane is the one that opens it");
+        assert!(!at("tt").detail_visible(), "and the window, since 2026-10-20");
 
         // Asked for, it opens at 基本 too…
         let mut editor = at("tb");
@@ -15298,12 +15359,14 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('i'));
         assert!(editor.detail_visible(), "{}", editor.status());
-        // …and shutting the pane's own is equally the reader's to do.
+        // …and in the window it is the reader's to **open**, since the window
+        // stopped opening it for them (2026-10-20). This used to shut the
+        // pane's own, which was the only thing there was to do to it.
         let mut editor = at("tt");
         editor.on_key(Key::Char(' '));
         editor.on_key(Key::Char('t'));
         editor.on_key(Key::Char('i'));
-        assert!(!editor.detail_visible(), "{}", editor.status());
+        assert!(editor.detail_visible(), "{}", editor.status());
     }
 
     /// #379: 基本 numbers the columns too.    /// #379: 基本 numbers the columns too.
@@ -15680,8 +15743,12 @@ fn squeezed(text: &str) -> String {
         let grid = |page: &str| page.lines().take(8).collect::<Vec<_>>().join("\n");
         assert_eq!(grid(&stood_in), grid(&folded), "and the grid is exactly as it was");
 
-        // …and it is still readable, three ways. The panel down the right had
-        // it whole all along, which is the one that costs the grid nothing.
+        // …and it is still readable, three ways. The panel down the right has
+        // it whole — asked for with `␣i` since 2026-10-20, where the window
+        // used to open it unasked.
+        for key in [' ', 'i'] {
+            editor.on_key(Key::Char(key));
+        }
         let frame = render(&editor, &config, 120, 10);
         let whole_page: String = (0..10).map(|y| row_text(&frame, y)).collect::<Vec<_>>().join("");
         assert!(
@@ -15769,6 +15836,13 @@ fn squeezed(text: &str) -> String {
             "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |"
         ));
         for key in ['j', 'j', ' ', 't', 't'] {
+            editor.on_key(Key::Char(key));
+        }
+        // **Asked for.** The window used to open the panel by itself; since
+        // 2026-10-20 nobody's panel opens unasked, so the reader presses `␣i`
+        // — which is the key this whole complaint is about reading a cell
+        // with.
+        for key in [' ', 'i'] {
             editor.on_key(Key::Char(key));
         }
         let config = Config::default();
@@ -18954,6 +19028,197 @@ fn squeezed(text: &str) -> String {
         let gutter =
             gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute, false);
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
+    }
+
+    /// **Every `j` and every `k`, checked against the frame it drew**
+    /// (2026-10-20 作者定: 「make sure that you really test per j k and per
+    /// snapshot」).
+    ///
+    /// The two tests above look at a handful of steps, and that is how two
+    /// more defects got past them: at row 40 the grid still drew record 7's
+    /// text in the first cell, and `k` walked 7 → 1 → 6 → 5 → …. Neither is
+    /// visible in a frame or two — they need the whole walk.
+    ///
+    /// So this one presses every key of the walk and reads the page back after
+    /// each press, holding three invariants: the gutter's numbers are
+    /// consecutive from the top of the page down, every drawn record is the
+    /// record its number says, and one press moves exactly one row.
+    #[test]
+    fn every_step_of_a_grid_walk_draws_the_row_it_says() {
+        let dir = std::env::temp_dir().join(format!("yumete-walk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // Forty records, one of them written over two lines — the author's
+        // shape: he found this at row 40 with the break back at row 7.
+        let mut text = String::from("c1,c2,c3\n");
+        for i in 1..=40 {
+            match i {
+                7 => text.push_str("r7a,\"line one\nline two\",r7c\n"),
+                _ => text.push_str(&format!("r{i}a,r{i}b,r{i}c\n")),
+            }
+        }
+        let csv = dir.join("walk.csv");
+        std::fs::write(&csv, &text).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        assert!(editor.enter_table(), "{}", editor.status());
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let mut terminal = Terminal::new(TestBackend::new(60, 10)).unwrap();
+        let mut seats = Seats::default();
+        let ime = no_ime();
+
+        // What the page says: (row number, the first field drawn in it).
+        let read = |terminal: &mut Terminal<TestBackend>,
+                    editor: &Editor,
+                    seats: &mut Seats| -> Vec<(usize, String)> {
+            terminal
+                .draw(|frame| draw(frame, editor, &config, ime, seats, None))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            (0..buffer.area.height)
+                .filter_map(|y| {
+                    let row = row_text(&buffer, y);
+                    // A data row has walls in it. The column-number band above
+                    // the header has none, and reading it as a row made the
+                    // first failure this test reported one of its own.
+                    if !row.contains('┆') {
+                        return None;
+                    }
+                    let (number, rest) = row.trim_start().split_once("  ")?;
+                    let n: usize = number.parse().ok()?;
+                    let first = rest.split('┆').next()?.trim().to_string();
+                    Some((n, first))
+                })
+                .collect()
+        };
+        // Record *n*'s first field, which is what row *n* must draw.
+        let expect = |n: usize| format!("r{n}a");
+
+        let walk = |terminal: &mut Terminal<TestBackend>,
+                    editor: &mut Editor,
+                    seats: &mut Seats,
+                    key: char,
+                    steps: usize,
+                    way: &str| {
+            let mut was = editor.table_row_number();
+            for step in 0..steps {
+                editor.on_key(Key::Char(key));
+                let now = editor.table_row_number();
+                // **One press, one row** — the `k` the author saw went
+                // 7 → 1 → 6.
+                let moved = now.abs_diff(was);
+                assert!(
+                    moved <= 1,
+                    "{way} step {step}: row {was} → {now}, which is {moved} rows for one press"
+                );
+                let page = read(terminal, editor, seats);
+                for &(n, ref first) in &page {
+                    assert_eq!(
+                        *first,
+                        expect(n),
+                        "{way} step {step}: row {n} drew {first:?}\\n{page:?}"
+                    );
+                }
+                // The numbers down the page are consecutive.
+                for pair in page.windows(2) {
+                    assert_eq!(
+                        pair[1].0,
+                        pair[0].0 + 1,
+                        "{way} step {step}: {} then {}\\n{page:?}",
+                        pair[0].0,
+                        pair[1].0
+                    );
+                }
+                was = now;
+            }
+        };
+
+        for c in "gg".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        assert_eq!(editor.table_row_number(), 1);
+        walk(&mut terminal, &mut editor, &mut seats, 'j', 45, "down");
+        assert_eq!(editor.table_row_number(), 40, "`j` reached the last record");
+        walk(&mut terminal, &mut editor, &mut seats, 'k', 45, "up");
+        assert_eq!(editor.table_row_number(), 1, "`k` came back to the first");
+    }
+
+    /// **The page starts at a record, never inside one** (2026-10-20 作者報的).
+    ///
+    /// The bug he found and the one my own fixture could not: I had tested a
+    /// multi-line record on the **first** line, where `viewport.top` is 0 and
+    /// the scroll is never taken at all. He put one at record 7 and pressed
+    /// `j` until it reached the top of the window — `viewport.top` landed on
+    /// its continuation line, every row from there was read from the middle of
+    /// a record, and `line two of seven"` was drawn as **column 1**.
+    ///
+    /// This test is in this crate because the viewport is: the core-side tests
+    /// for the same fix pass with the viewport's normalisation taken out,
+    /// which is precisely how it got through the first time.
+    #[test]
+    fn the_grid_never_starts_a_page_inside_a_record() {
+        let dir = std::env::temp_dir().join(format!("yumete-grid-scroll-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut text = String::from("c1,c2,c3,c4,c5,c6\n");
+        for i in 1..=10 {
+            match i {
+                7 => text.push_str("r7a,r7b,r7c,r7d,\"line one\nline two\",r7f\n"),
+                _ => text.push_str(&format!("r{i}a,r{i}b,r{i}c,r{i}d,r{i}e,r{i}f\n")),
+            }
+        }
+        let csv = dir.join("seven.csv");
+        std::fs::write(&csv, &text).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        assert!(editor.enter_table(), "{}", editor.status());
+        let config = Config::default();
+
+        // **One `Seats` across every frame, as the event loop has.** The
+        // viewport is what carries the scroll, and a fresh one per frame starts
+        // at the top — which is why a test built on `render` could not reach
+        // this state and passed with the fix taken out.
+        crate::theme::settle(&config, None);
+        let mut terminal = Terminal::new(TestBackend::new(72, 8)).unwrap();
+        let mut seats = Seats::default();
+        let ime = no_ime();
+        let frame_now = |terminal: &mut Terminal<TestBackend>,
+                         editor: &Editor,
+                         seats: &mut Seats| {
+            terminal
+                .draw(|frame| draw(frame, editor, &config, ime, seats, None))
+                .unwrap();
+            terminal.backend().buffer().clone()
+        };
+
+        // Walk down past the multi-line record in a window too short to hold
+        // the whole table, so the page has to scroll over it.
+        for nth in 0..12 {
+            let buffer = frame_now(&mut terminal, &editor, &mut seats);
+            let rows: Vec<String> = (0..buffer.area.height).map(|y| row_text(&buffer, y)).collect();
+            // Record 7 appears on the page once. Read from the middle of
+            // itself it was drawn a second time, as a row of its own.
+            //
+            // `r7a┆` is the grid's own spelling — the detail panel down the
+            // right prints the same field with spaces around it, and counting
+            // that caught my assertion rather than the code.
+            let sevens = rows.iter().filter(|r| r.contains("r7a┆")).count();
+            assert!(sevens <= 1, "step {nth}: record 7 drawn twice:\n{}", rows.join("\n"));
+            for row in &rows {
+                // A row read from the middle of a record puts the cell's second
+                // written line where the record's first field belongs — so it
+                // shows up with no `r_a` beside it and no `line one` above it.
+                let continues = row.contains("line two") && !row.contains("line one");
+                let in_place = row.trim_start().starts_with('┆') || row.trim_start().starts_with('r');
+                assert!(
+                    !continues || in_place,
+                    "step {nth}: a page began inside a record:\n{}",
+                    rows.join("\n")
+                );
+            }
+            editor.on_key(Key::Char('j'));
+        }
     }
 
     /// **A combining mark with no base fills the cell it was charged for.**

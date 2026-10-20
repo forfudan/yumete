@@ -108,6 +108,14 @@ pub fn needs_a_second_cell(c: char) -> bool {
 /// stands in for the base it lost.
 pub const DOTTED_CIRCLE: char = '\u{25cc}';
 
+/// The picture of a line feed, for the one place a line break is **not** what
+/// ends the row: inside a table cell (2026-10-20 作者定).
+///
+/// From the same Control Pictures block [`control_picture`] draws from, so it
+/// is one cell by the same reckoning — and not `↵`, which is East Asian
+/// Ambiguous and would be one cell or two depending on a setting.
+pub const LINE_FEED_PICTURE: char = '\u{240a}';
+
 /// Whether `c` is a mark that **extends** the cluster before it rather than
 /// opening one of its own — and that a renderer therefore draws in no cell.
 ///

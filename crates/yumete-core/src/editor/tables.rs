@@ -209,6 +209,10 @@ impl Editor {
         };
         let columns = schema.columns.len();
         let delimiter = schema.delimiter;
+        // **Scanned forwards, once, on the way in** — and only kept when the
+        // file actually has a record that runs over a line, which no table
+        // anybody has written so far does.
+        let record_starts = self.scan_record_starts(usize::from(schema.header), delimiter);
         self.table = Some(TableView {
             schema,
             from,
@@ -221,6 +225,7 @@ impl Editor {
             // and stays on when the cursor walks out of a row (#275).
             bounds: Bounds::WholeFile,
             reach: Reach::File,
+            record_starts,
         });
         // A grid is read across: rows run left to right and columns stack down
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
@@ -355,6 +360,7 @@ impl Editor {
                 // moment the reader walks off the block, the file is prose
                 // again.
                 reach: Reach::Cursor,
+                record_starts: None,
             });
             self.snap_to_cell();
             self.status = say!(
@@ -656,6 +662,7 @@ impl Editor {
                 pane: true,
                 bounds: Bounds::WholeFile,
                 reach: Reach::File,
+                record_starts: None,
             });
             // The same door as `:table`, and the same rule: a grid is read
             // across. This is the door the manual calls the ordinary one —
@@ -736,6 +743,7 @@ impl Editor {
                     pane: false,
                     bounds: Bounds::Md,
                     reach: Reach::File,
+                record_starts: None,
                 });
             }
         }
@@ -813,6 +821,7 @@ impl Editor {
             pane: false,
             bounds: Bounds::WholeFile,
             reach: Reach::File,
+            record_starts: None,
         });
     }
 
@@ -1162,9 +1171,26 @@ impl Editor {
         }
     }
 
+    /// **Which row of the grid `line` is**, counted in records (2026-10-20
+    /// 作者定: 「行号应该是表格行，不管单元格内部分行」).
+    ///
+    /// Zero-based from [`Self::table_row_base`], so a caller adds one to print
+    /// it. With no multi-line record in the file — every table so far — the
+    /// *n*th record is the *n*th line and this is a subtraction; the walk is
+    /// paid only by a file that has one, and those are small.
+    pub fn table_row_index(&self, line: usize) -> usize {
+        let base = self.table_row_base();
+        let Some(starts) = self.table.as_ref().and_then(|v| v.record_starts.as_ref()) else {
+            return line.saturating_sub(base);
+        };
+        starts
+            .partition_point(|&start| start <= line)
+            .saturating_sub(1)
+    }
+
     /// Which row the cursor is on, **numbered the way the page numbers it**.
     pub fn table_row_number(&self) -> usize {
-        self.cursor_line().saturating_sub(self.table_row_base()) + 1
+        self.table_row_index(self.cursor_line()) + 1
     }
 
     /// What to write above the columns, when the grid freezes a header.
@@ -1199,7 +1225,7 @@ impl Editor {
         let Some(region) = self.prose_region_at(line) else {
             return named();
         };
-        let source = self.line_text(region.first).unwrap_or_default();
+        let source = self.row_source(region.first);
         let cells: Vec<String> = self
             .row_cells(region.first)
             .into_iter()
@@ -1797,6 +1823,7 @@ impl Editor {
             // 語法，比如 txt、yaml 用空格制表符隔開」 — is the *guessed* block,
             // and that is `enter_block_table`'s.
             reach: Reach::File,
+            record_starts: None,
         });
         // A header with no rule under it is a table nobody can render yet —
         // and the person is standing in it, so they meant to write one. Adding
@@ -2972,10 +2999,17 @@ impl Editor {
             return Some(want);
         }
         let last = motion::last_line(self.current_buffer().rope());
+        // **A record's continuation lines are not rows to stop on**
+        // (2026-10-20 作者報的). A field holding a line break is one row, so a
+        // `j` that stepped into the middle of it looked like a `j` that did
+        // nothing: the page was already showing the whole record, and the
+        // writer pressed it twice to get past a single row.
+        let start = self.record_first(line);
         if down {
-            (line < last).then_some(line + 1)
+            let want = start + self.record_height(start).max(1);
+            (want <= last).then_some(want)
         } else {
-            line.checked_sub(1)
+            self.record_first(start.checked_sub(1)?).into()
         }
     }
 
@@ -3016,6 +3050,175 @@ impl Editor {
         region.holds(want).then_some(want)
     }
 
+    /// **Where every record starts, scanned down from `first`.**
+    ///
+    /// `None` when every record is one line, which is the ordinary file and
+    /// the whole point: the table below then costs nothing to keep and nothing
+    /// to consult.
+    ///
+    /// Warning: **Forwards, never backwards** (2026-10-20 作者報的). See
+    /// [`crate::editor::TableView::record_starts`] for what the backward walk
+    /// did to a file with unpaired quotes in it.
+    fn scan_record_starts(&self, first: usize, delimiter: char) -> Option<std::rc::Rc<Vec<usize>>> {
+        let rope = self.current_buffer().rope();
+        let lines = rope.len_lines();
+        let mut starts = Vec::new();
+        let mut at = first;
+        let mut any = false;
+        while at < lines {
+            starts.push(at);
+            let height = crate::table::record_lines(
+                (at..lines).map(|n| rope.line(n).to_string()),
+                delimiter,
+            );
+            any |= height > 1;
+            at += height.max(1);
+        }
+        any.then(|| std::rc::Rc::new(starts))
+    }
+
+    /// **The first line of the record `line` is part of** (2026-10-20 作者定).
+    ///
+    /// A grid row is named by this, and that is the whole of what makes a
+    /// multi-line record cheap: a row is still a line number, so every offset
+    /// a caller builds out of one — `line_to_char(line) + span.0` — still lands
+    /// where it did. What changes is only *which* line names the row.
+    ///
+    /// Warning: **It walks back over the record, never over the file.** A continuation
+    /// line is preceded by a line that runs on, so the walk stops at the first
+    /// line that does not — two steps for a two-line record. Asking the file
+    /// instead would be a scan from the table's top per row per frame, which on
+    /// a 123,380-line 拆分表 is the table squared.
+    pub(super) fn record_first(&self, line: usize) -> usize {
+        let Some(starts) = self.table.as_ref().and_then(|v| v.record_starts.as_ref()) else {
+            return line;
+        };
+        // The last boundary at or before `line`. Nothing before the first
+        // boundary is a record at all — the header, say — so it names itself.
+        match starts.partition_point(|&start| start <= line).checked_sub(1) {
+            Some(nth) => starts[nth],
+            None => line,
+        }
+    }
+
+    /// **How many lines the record that starts at `line` spans** — one, almost
+    /// always.
+    ///
+    /// Public because the grid widget steps its rows by it: a record's
+    /// continuation lines are not rows of their own, in the drawing, in the
+    /// click map or in the scroll that keeps a row whole.
+    pub fn record_height(&self, line: usize) -> usize {
+        let Some(starts) = self.table.as_ref().and_then(|v| v.record_starts.as_ref()) else {
+            return 1;
+        };
+        let nth = starts.partition_point(|&start| start <= line);
+        match (nth.checked_sub(1).map(|i| starts[i]), starts.get(nth)) {
+            // Between two boundaries: the distance between them.
+            (Some(start), Some(&next)) if start == line => next - start,
+            // The last record runs to the end of the file.
+            (Some(start), None) if start == line => {
+                self.current_buffer().rope().len_lines().saturating_sub(start).max(1)
+            }
+            _ => 1,
+        }
+    }
+
+    /// The text of the record that starts at `line` — its lines, joined.
+    ///
+    /// Line breaks **inside** it are kept: they are what the writer typed, and
+    /// the cell they sit in is 「一個獨立的小文章」 (2026-10-20 作者定).
+    pub(super) fn record_text(&self, line: usize) -> Option<String> {
+        let rope = self.current_buffer().rope();
+        if line >= rope.len_lines() {
+            return None;
+        }
+        let height = self.record_height(line);
+        if height == 1 {
+            return Some(rope.line(line).to_string());
+        }
+        Some(
+            (line..(line + height).min(rope.len_lines()))
+                .map(|n| rope.line(n).to_string())
+                .collect(),
+        )
+    }
+
+    /// **Whether the cursor is in a record written over more than one line.**
+    ///
+    /// Only inside a grid: in the source view the lines are the file's own and
+    /// there is nothing special about them.
+    pub(super) fn record_spans_lines(&self) -> bool {
+        self.record_height(self.record_first(self.cursor_line())) > 1
+    }
+
+    /// **Which line row `nth` of the grid begins on**, 1-based as a reader
+    /// counts rows — or `None` when the number is not a grid row number.
+    ///
+    /// Only inside the full-window grid, where the window is bounded and every
+    /// number in sight already means a row of this table. Elsewhere a number
+    /// is the file's line, because elsewhere the file is what is on the page.
+    pub(crate) fn grid_row_line(&self, nth: usize) -> Option<usize> {
+        let view = self.table.as_ref()?;
+        if !view.takes_the_pane() {
+            return None;
+        }
+        let base = self.table_row_base();
+        let want = nth.saturating_sub(1);
+        match &view.record_starts {
+            // Every record is one line: the row's line is a subtraction, which
+            // is what this has always been.
+            None => Some(base + want),
+            Some(starts) => Some(*starts.get(want).or(starts.last())?),
+        }
+    }
+
+    /// **The line that names the grid row `line` belongs to.**
+    ///
+    /// Public half of [`Self::record_first`]: the widget has to be able to ask
+    /// it of `viewport.top` and of the cursor's row, because the scroll and the
+    /// motions both still count lines.
+    pub fn table_row_start(&self, line: usize) -> usize {
+        self.record_first(line)
+    }
+
+    /// **The text a row's cell spans are measured in** (2026-10-20 作者定).
+    ///
+    /// The record, which is the line in every file that has no quoted line
+    /// break in it. Pair it with [`Self::row_cells`]: those spans are offsets
+    /// into *this* string, and slicing the single line instead cuts a
+    /// multi-line record's later cells off the end.
+    pub fn row_source(&self, line: usize) -> String {
+        self.record_text(self.record_first(line)).unwrap_or_default()
+    }
+
+    /// **What a reader sees in one cell** — the value, not the bytes.
+    ///
+    /// Two differences from [`crate::table::cell_text`], both decided
+    /// 2026-10-20:
+    ///
+    /// - **The quotes come off.** In the grid a cell is 「一個獨立的小文章」,
+    ///   and the pair of `"` around it is the file's syntax rather than
+    ///   anything the writer typed. The editor owns them: it takes them off
+    ///   here and puts them back on the way out
+    ///   ([`crate::table::quote_for`]), so a value holding a delimiter, a
+    ///   quote or a line break stays legal CSV without anybody minding it.
+    /// - **A line break inside it is shown**, as `␊` — Unicode's own picture
+    ///   for one, in the block `control_picture` already draws from. That
+    ///   function excludes `\n` on purpose, because on the prose page a line
+    ///   break *is* what ends the row; inside a cell it is not, which is this
+    ///   case and no other. The caller then splits on the newline and gets one
+    ///   drawn line per line the writer wrote.
+    ///
+    /// A `|` table keeps its text as it stands: it has no quoting, and a cell
+    /// of one cannot hold a line break at all.
+    pub fn cell_shown(&self, source: &str, span: (usize, usize)) -> String {
+        let text = crate::table::cell_text(source, span);
+        match self.table.as_ref().map(|view| view.separator) {
+            Some(Separator::Delimiter(_)) => crate::table::unquote(&text),
+            _ => text,
+        }
+    }
+
     /// Where every cell of a line begins and ends, in characters from its start.
     pub fn row_cells(&self, line: usize) -> Vec<(usize, usize)> {
         let Some(view) = &self.table else {
@@ -3028,7 +3231,18 @@ impl Editor {
         // A `|` cell's padding is layout, not content: it is not in the span,
         // so landing on a cell lands on its first real character rather than on
         // the space before it.
-        view.cells(&rope.line(line).to_string())
+        //
+        // **The record, not the line** (2026-10-20): a field holding a line
+        // break is one record over several lines, and `scan` reads it whole as
+        // soon as it is given the whole of it.
+        //
+        // Warning: **and a continuation line names its record**, not itself. Handed
+        // one raw, this read from the middle of a record: `line two of seven\",r7f`
+        // parsed as a row whose **first** column was the cell's second line, and
+        // that is what the detail panel then showed and what the column widths
+        // were measured against (2026-10-20 作者報的: 「the multiple line of that
+        // cell goes to the first cell」).
+        view.cells(&self.row_source(line))
     }
 
     /// Where every cell's **box** begins and ends — its padding included.
@@ -3051,7 +3265,7 @@ impl Editor {
         // A delimited row has no padding to include: its cells are already
         // contiguous, delimiter to delimiter, which is why `boxes` and `cells`
         // are the same answer there.
-        view.boxes(&rope.line(line).to_string())
+        view.boxes(&self.row_source(line))
     }
 
     /// The buffer range one cell's box covers, padding included.
@@ -3128,7 +3342,15 @@ impl Editor {
         };
         match span {
             Some((first, last)) => {
-                let want = first.saturating_add(n.saturating_sub(1)).min(last);
+                // **A record over several lines puts the row and the line one
+                // apart** (2026-10-20 作者報的), so adding `n` to the first line
+                // stopped naming row `n`: `40G` landed on row 39 and `8G` on
+                // row 7, while `:40` and `␣t40g` went where they said. One
+                // answer for all three — `grid_row_line`.
+                let want = match self.grid_row_line(n) {
+                    Some(line) => line.min(last),
+                    None => first.saturating_add(n.saturating_sub(1)).min(last),
+                };
                 self.goto_line(want + 1);
                 self.snap_to_cell();
             }
@@ -4201,12 +4423,19 @@ impl Editor {
                 // its twentieth.
                 let lines = self.current_buffer().line_count();
                 let base = self.table_row_base();
-                let line = match self.table_row_span() {
-                    Some((first, last)) if base > 0 => {
-                        (first + row.saturating_sub(1)).clamp(first, last)
-                    }
-                    Some((first, last)) => row.clamp(first + 1, last + 1).saturating_sub(1),
-                    None => row.clamp(1, lines).saturating_sub(1),
+                // **A record over several lines puts the row and the line one
+                // apart** (2026-10-20 作者報的), and `grid_row_line` is the one
+                // answer the gutter, `:40` and this key now share: `␣t40g`
+                // used to add 40 to the first line and land on row 39.
+                let line = match self.grid_row_line(row) {
+                    Some(line) => line,
+                    None => match self.table_row_span() {
+                        Some((first, last)) if base > 0 => {
+                            (first + row.saturating_sub(1)).clamp(first, last)
+                        }
+                        Some((first, last)) => row.clamp(first + 1, last + 1).saturating_sub(1),
+                        None => row.clamp(1, lines).saturating_sub(1),
+                    },
                 };
                 self.remember_jump();
                 self.goto_line(line + 1);
@@ -4215,7 +4444,10 @@ impl Editor {
                 // rows inside it, the file's lines outside.
                 self.status = say!(
                     "table.row-and-column",
-                    line + 1 - base.min(line),
+                    match base > 0 {
+                        true => self.table_row_index(line) + 1,
+                        false => line + 1,
+                    },
                     cell + 1
                 );
                 return;

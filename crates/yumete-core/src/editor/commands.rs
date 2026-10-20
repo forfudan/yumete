@@ -569,6 +569,15 @@ impl Editor {
             }
             Command::Recover => self.recover(),
             Command::GotoLine(n) => {
+                // Warning: **`:40` is the file's line 40, in a grid as anywhere else**,
+                // and that is older than the grid. 2026-10-20 I read the rule
+                // at `table_row_base` — 「inside the window the gutter, the
+                // status line and `␣t20g` all mean one number」 — as covering
+                // this too and made it a row; two tests that had pinned the
+                // old meaning for months said otherwise
+                // (`a_quoted_field_is_read_as_the_one_field_it_is` uses `:3`
+                // for the third **line**). Whether it should become a row is
+                // the author's to decide, not a comment's.
                 self.goto_line(n);
                 Ok(CommandOutcome::Continue)
             }

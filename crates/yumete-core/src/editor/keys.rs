@@ -539,6 +539,8 @@ impl Editor {
             // keeps a table three screens down from wrapping while the cursor
             // is up here in the prose, padded and folded at once.
             reach: Reach::File,
+            // A `|` cell has no quoting and cannot hold a line break.
+            record_starts: None,
         });
     }
 

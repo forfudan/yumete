@@ -116,8 +116,10 @@ fn widths(
             if !view.schema.shows(i) {
                 continue;
             }
-            let text = editor.current_buffer().rope().line(line).to_string();
-            let cell = yumete_core::table::cell_text(&text, span);
+            let text = editor.row_source(line);
+            // **Measured as drawn**: the quotes are off and a line break shows
+            // as `␊`, so the column is as wide as what is on the page.
+            let cell = editor.cell_shown(&text, span);
             // **The cell being typed in is not folded** — the prose page's own
             // rule (`folds_open_at`), and now kept the same way here: measure
             // that one cell against the window instead of the cap.
@@ -140,10 +142,42 @@ fn widths(
                 true => room.max(MIN_COLUMN),
                 false => ceiling,
             };
-            *want = (*want).max(yumete_cjk::str_width(&cell).min(ceiling));
+            // A cell the writer broke into lines is as wide as its widest
+            // line, not as wide as all of them run together.
+            let wide = cell
+                .split('\n')
+                .map(yumete_cjk::str_width)
+                .max()
+                .unwrap_or(0);
+            *want = (*want).max(wide.min(ceiling));
         }
     }
     widths
+}
+
+/// **A cell's drawn lines** (2026-10-20 作者定).
+///
+/// One per line the writer wrote. The break that ended each of them is drawn
+/// as `␊` and then honoured — a soft wrap is a consequence of a narrow window
+/// and a hard newline is the author's own, so `t a` governs the first and has
+/// no say over the second. Each written line is then soft-wrapped on its own
+/// when `t a` is on.
+fn cell_lines(shown: &str, width: usize, wrap: bool) -> Vec<String> {
+    let hard: Vec<&str> = shown.split('\n').collect();
+    let last = hard.len() - 1;
+    hard.into_iter()
+        .enumerate()
+        .flat_map(|(i, piece)| {
+            let piece = match i == last {
+                true => piece.to_string(),
+                false => format!("{piece}{}", yumete_cjk::LINE_FEED_PICTURE),
+            };
+            match wrap && width > 0 {
+                true => wrapped(piece.trim_end(), width),
+                false => vec![piece],
+            }
+        })
+        .collect()
 }
 
 /// Scroll the columns just enough to keep the cursor's cell whole on screen.
@@ -225,25 +259,24 @@ pub fn char_at(
     // lands further and further off with every wrapped row above it.
     let wrap = editor.cell_wrap();
     let lines_of = |line: usize| -> Vec<Vec<String>> {
-        let source = rope.line(line).to_string();
+        let source = editor.row_source(line);
         editor
             .row_cells(line)
             .iter()
             .enumerate()
             .map(|(i, span)| {
                 let w = widths.get(i).copied().unwrap_or(MIN_COLUMN);
-                let text = yumete_core::table::cell_text(&source, *span);
-                match wrap && w > 0 {
-                    true => wrapped(text.trim_end(), w),
-                    false => vec![text],
-                }
+                cell_lines(&editor.cell_shown(&source, *span), w, wrap)
             })
             .collect()
     };
     let tall_of = |parts: &[Vec<String>]| -> usize {
-        if !wrap {
-            return 1;
-        }
+        // **A hard break counts whether `t a` is on or not** (2026-10-20): the
+        // soft wrap is a consequence of a narrow window and `t a` governs it,
+        // while a line break the writer typed is the writer's. With `t a` off
+        // a cell written over two lines still takes two rows — dropping the
+        // second was the one answer worse than either of the others, since the
+        // text was then nowhere on the page.
         let mut x = area.x + gutter;
         let mut tall = 1;
         for (i, part) in parts.iter().enumerate().skip(viewport.left) {
@@ -271,7 +304,7 @@ pub fn char_at(
             break;
         }
         top += tall;
-        line += 1;
+        line += editor.record_height(line).max(1);
         parts = lines_of(line);
     }
     let start = rope.line_to_char(line);
@@ -364,7 +397,10 @@ pub fn draw(
     // A pane that is only being read is scrolled around the row it was opened
     // at, and marks it — it has no cursor and no cell of its own.
     let (cursor_row, cursor_cell) = match peek {
-        None => editor.cell_position().unwrap_or((0, 0)),
+        None => {
+            let (row, cell) = editor.cell_position().unwrap_or((0, 0));
+            (editor.table_row_start(row), cell)
+        }
         Some(pane) => {
             let rope = editor.current_buffer().rope();
             let line = rope.char_to_line(pane.cursor().min(rope.len_chars()));
@@ -406,6 +442,13 @@ pub fn draw(
         .top
         .min(bottom_row)
         .max(first_data.min(bottom_row));
+    // **The page starts at a record, never inside one** (2026-10-20 作者報的).
+    // The scroll above counts lines, so stepping down past a record that holds
+    // a line break landed `top` on its continuation line — and every row from
+    // there was read from the middle of a record: the cell's second line became
+    // column 1, the detail panel showed it as the row, and the first column's
+    // width was measured against it.
+    viewport.top = editor.table_row_start(viewport.top);
 
     // **The gutter numbers this table's rows**, not the file's lines: the
     // window is bounded (`Editor::hold_the_pane`), so inside it every number
@@ -619,22 +662,19 @@ pub fn draw(
     // One row's cells, each as the lines it is drawn on — one line each
     // unless 折行 is on.
     let lines_of = |line: usize| -> (Vec<(usize, usize)>, Vec<Vec<String>>) {
-        let source = editor.current_buffer().rope().line(line).to_string();
+        let source = editor.row_source(line);
         let cells = editor.row_cells(line);
         let parts = cells
             .iter()
             .enumerate()
             .map(|(i, span)| {
                 let w = widths.get(i).copied().unwrap_or(MIN_COLUMN);
-                let text = yumete_core::table::cell_text(&source, *span);
-                match wrap && w > 0 {
-                    // **Trailing spaces do not buy a line.** A cell of a table
-                    // squared up in the file carries its column's whole width
-                    // as padding, so `短` plus thirty spaces is thirty-three
-                    // cells wide and wrapped to a second line holding nothing.
-                    true => wrapped(text.trim_end(), w),
-                    false => vec![text],
-                }
+                // **Trailing spaces do not buy a line.** A cell of a table
+                // squared up in the file carries its column's whole width as
+                // padding, so `短` plus thirty spaces is thirty-three cells
+                // wide and wrapped to a second line holding nothing. Handled
+                // inside `cell_lines`, per line the writer wrote.
+                cell_lines(&editor.cell_shown(&source, *span), w, wrap)
             })
             .collect();
         (cells, parts)
@@ -642,9 +682,9 @@ pub fn draw(
     // How tall a row is drawn — counting only the columns that are on screen,
     // since a cell scrolled off the right edge must not buy rows nobody sees.
     let height_of = |parts: &[Vec<String>]| -> usize {
-        if !wrap {
-            return 1;
-        }
+        // The same rule as `tall_of` in the click map: a hard break counts
+        // whether `t a` is on or not, so the two surfaces agree about how many
+        // rows a record takes.
         let mut x = area.x + gutter;
         let mut tall = 1;
         for (i, part) in parts.iter().enumerate().skip(viewport.left) {
@@ -678,7 +718,7 @@ pub fn draw(
                 if used >= rows {
                     break false;
                 }
-                line += 1;
+                line += editor.record_height(line).max(1);
             };
             if fits {
                 break;
@@ -695,6 +735,11 @@ pub fn draw(
         let ragged = editor.row_is_ragged(line);
         let (cells, parts) = lines_of(line);
         let tall = height_of(&parts).min((floor - y) as usize).max(1);
+        // **A record's continuation lines are not rows of their own**
+        // (2026-10-20 作者定): a field holding a line break is one record over
+        // several lines, so the step is the record's height and the gutter
+        // numbers it once — the same rule a 折行 row already follows above.
+        let step = editor.record_height(line).max(1);
         for k in 0..tall {
             let y = y + k as u16;
             // The row number, frozen at the left: with the columns scrolled
@@ -704,9 +749,12 @@ pub fn draw(
             // would say they were not.
             if gutter > 0 {
                 let n = match k {
+                    // **Counted in records, not in lines** (2026-10-20): a
+                    // field holding a line break is one row, so the row after
+                    // it is the next number and not the next line.
                     0 => crate::gutter_text(
-                        line - base.min(line),
-                        cursor_row.saturating_sub(base),
+                        editor.table_row_index(line),
+                        editor.table_row_index(cursor_row),
                         gutter as usize,
                         config.editor.line_numbers,
                         false,
@@ -840,8 +888,31 @@ pub fn draw(
                 // last cell of the row and left the rest of the record
                 // looking untouched, and a selection standing on a wall was
                 // drawn nowhere at all (§5.12.69).
+                // **A caret is a point, not a selection** (2026-10-20 作者報的:
+                // 「the selection is wrong when the cursor is on an empty
+                // cell」). An empty cell is a single offset, so a zero-width
+                // selection standing on it satisfies 「covers this cell
+                // whole」 — and so does the cell on the **other side of the
+                // wall**, which shares that offset. Both lit, and 「whole」
+                // then lights every line of the row: beside a 折行 cell that
+                // is twelve rows of grey, two columns wide, over a cell the
+                // reader had merely walked into.
+                let bare = {
+                    let (a, b) = editor.selection();
+                    // Warning: **not `a == b`.** The caret here *covers* the character
+                    // it is on, so standing still is a selection one character
+                    // wide — and on an empty cell that one character is the
+                    // wall, which is exactly how both sides of it lit up.
+                    b <= a + 1
+                };
                 let lit = editor.cell_span(line, i).filter(|_| peek.is_none()).and_then(
                     |(from, to)| {
+                        // Standing somewhere is one cell's business, and which
+                        // one is `cell_position`'s answer, not an arithmetic
+                        // coincidence at a wall.
+                        if bare && (line, i) != (cursor_row, cursor_cell) {
+                            return None;
+                        }
                         let (a, b) = editor.selection();
                         // Clip the selection to this cell. An empty cell is a
                         // single offset, so it lights when the selection
@@ -868,8 +939,12 @@ pub fn draw(
                     // while the seams between them stayed lit, and the band
                     // came out as holes with bridges. A record is one thing on
                     // every line it occupies.
-                    let whole_cell = a <= from && to <= b;
-                    if whole_cell || (la <= k && k <= lb) {
+                    // …and a caret lights the cell's box on **its own line**,
+                    // not on all of them: 「covers it whole」 is about a
+                    // selection, which a point is not.
+                    let whole_cell = a <= from && to <= b && !bare;
+                    let only_line = usize::from(bare) * la;
+                    if (whole_cell || (la <= k && k <= lb)) && (!bare || k == only_line) {
                         let c0 = match (la == k, whole_cell) {
                             (true, false) => (ca as u16).saturating_sub(slid),
                             _ => 0,
@@ -887,8 +962,23 @@ pub fn draw(
                         // that stops at a cell's last character satisfies —
                         // so `w` on the tail of a cell lit the padding behind
                         // it as though the selection ran on into the wall.
-                        let runs_on = past;
+                        // Warning: **a caret runs past nothing** (2026-10-21). An
+                        // empty cell is a single offset, and the caret covers
+                        // the character it stands on, so `b` is always one
+                        // beyond it — which read as 「the selection carries on
+                        // into the next cell」 and lit the whole box.
+                        let runs_on = past && !bare;
                         let c1 = match (lb == k, runs_on, whole_cell) {
+                            // **An empty cell under a caret is lit one column
+                            // wide** — the width of the caret, not the width of
+                            // the cell. It has no character to stand on, so
+                            // something must be drawn; painting its whole box
+                            // says 「this cell is selected」 about a cell the
+                            // reader has merely walked into, and beside a
+                            // second empty cell the two bands read as one
+                            // (2026-10-21 作者報的: 「a cursor can still
+                            // highlight two cells if it is empty」).
+                            (true, false, false) if bare && from == to => c0 + 1,
                             (true, false, false) => (cb as u16).saturating_sub(slid),
                             _ => w,
                         };
@@ -931,7 +1021,14 @@ pub fn draw(
                     .zip(editor.cell_span(line, i + 1))
                     .is_some_and(|((_, to), (next, _))| {
                         let (a, b) = editor.selection();
-                        peek.is_none() && a <= to && next <= b
+                        // Warning: **a caret crosses nothing** (2026-10-20 作者報的).
+                        // Two empty cells share the offset their wall sits on,
+                        // so a caret standing on one of them read as a
+                        // selection reaching across the seam — and the seam
+                        // then took the lit ground down **every** line of a
+                        // 折行 row, which is the grey ribbon that was left
+                        // after the cells themselves stopped lighting.
+                        peek.is_none() && !bare && a <= to && next <= b
                     });
                 let ground = match crossed {
                     true => ground.patch(on),
@@ -991,7 +1088,7 @@ pub fn draw(
             }
         }
         y += tall as u16;
-        line += 1;
+        line += step;
     }
     caret
 }
