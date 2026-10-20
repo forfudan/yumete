@@ -1137,11 +1137,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::OpenSearch(scope) => {
-                self.open_search_in(scope, false);
+                self.open_search_in(scope, false, false);
                 Ok(CommandOutcome::Continue)
             }
-            Command::OpenReplace(scope) => {
-                self.open_search_in(scope, true);
+            Command::OpenReplace { scope, reshape } => {
+                self.open_search_in(scope, true, reshape);
                 Ok(CommandOutcome::Continue)
             }
             Command::Sidebar(ask) => {

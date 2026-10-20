@@ -361,6 +361,26 @@ pub fn opencc() -> Option<PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
+/// Which opencc this is, if it will say.
+///
+/// Spawned, unlike [`opencc`] — but only by `:convert-opencc`, which is the
+/// one command whose whole job is to answer this. `opencc --version` prints
+/// two lines and the version is on the second (`Version: 1.4.2`), so the
+/// number is read off that label rather than off a position: a release that
+/// adds a banner line would otherwise be reported as its own banner.
+pub fn version(program: &std::path::Path) -> Option<String> {
+    let out = std::process::Command::new(program).arg("--version").output().ok()?;
+    let text = String::from_utf8_lossy(match out.stdout.is_empty() {
+        true => &out.stderr,
+        false => &out.stdout,
+    })
+    .into_owned();
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix("Version:"))
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
 /// Every destination a side can reach, and whether `force` works for it.
 ///
 /// Asked of [`plan`] rather than read off [`ROUTES`], so the menu and the

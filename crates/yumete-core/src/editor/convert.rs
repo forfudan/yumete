@@ -11,6 +11,18 @@ impl Editor {
         use crate::convert::{self, Snag};
         match ask {
             ConvertAsk::Explain => self.explain_convert(),
+            // The one place that *runs* opencc to find out about opencc. Asking
+            // its version costs a process, which is why `:convert` itself still
+            // only looks at `PATH` (see [`convert::opencc`]).
+            ConvertAsk::Status => {
+                self.status = match convert::opencc() {
+                    None => say!("convert.opencc-needed", convert::install_line()),
+                    Some(path) => match convert::version(&path) {
+                        Some(version) => say!("convert.opencc-version", version, path.display()),
+                        None => say!("convert.opencc-at", path.display()),
+                    },
+                };
+            }
             ConvertAsk::Opencc { update } => {
                 let line = match update {
                     true => convert::install_line().replace("install", "upgrade"),

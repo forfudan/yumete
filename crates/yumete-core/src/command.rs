@@ -331,7 +331,16 @@ pub enum Command {
     OpenSearch(crate::search_panel::Where),
     /// `:replace [folder]` and its `-cd`/`-wd`/`-gd` — the same panel with the
     /// replace row already showing (#419).
-    OpenReplace(crate::search_panel::Where),
+    OpenReplace {
+        scope: crate::search_panel::Where,
+        /// `:replace!` — the panel may change how many cells a row has.
+        ///
+        /// Without it a replacement that reshapes a grid is refused, the same
+        /// way `:s` refuses one without its `t` flag. The bang was declared
+        /// [`FORCEABLE`] and read by nothing until 2026-10-20, so the refusal
+        /// named an escape (`:%s/…/…/gt`) that cannot be typed into a panel.
+        reshape: bool,
+    },
     /// `:sidebar [off|panel]` — the sidebar, whichever side the panel asked
     /// for lives on.
     ///
@@ -777,8 +786,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
 
 /// What was asked of `:convert`.
 ///
-/// Three shapes rather than one because they are three different questions:
-/// what can this do, do it, and 「the program it needs is not here」.
+/// Four shapes rather than one because they are four different questions:
+/// what can this do, do it, which opencc is here, and get me one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConvertAsk {
     /// `:convert` on its own — every pair it can do, and whether opencc is
@@ -799,6 +808,14 @@ pub enum ConvertAsk {
         /// not bring it back.
         force: bool,
     },
+    /// `:convert-opencc` — whether opencc is installed, where, which version.
+    ///
+    /// Its own question, not a second spelling of [`Self::Explain`]. The
+    /// listing answers 「which ways can this text be turned」, and half of its
+    /// routes (繁體 to 繁體) never spawn opencc at all; this answers 「is the
+    /// program here」, and it is the only thing in the crate that runs opencc
+    /// to find out rather than looking at `PATH`.
+    Status,
     /// `:convert-opencc-install` / `:convert-opencc-update`.
     Opencc {
         update: bool,
@@ -998,7 +1015,11 @@ pub struct Parsed<'a> {
     pub force: bool,
     /// One entry per declared parameter, written out in full — a word list's
     /// own spelling, or the text as it was typed.
-    args: Vec<&'a str>,
+    ///
+    /// Owned rather than borrowed because a path is **unquoted** on the way in
+    /// ([`unquote`]), and `"a b.txt"` without its quotes is not a slice of the
+    /// line that was typed.
+    args: Vec<String>,
     /// Whatever was left when the declared parameters ran out. Empty for
     /// every regular command; the irregular few read it themselves.
     pub rest: &'a str,
@@ -1006,12 +1027,12 @@ pub struct Parsed<'a> {
 
 impl<'a> Parsed<'a> {
     /// What stood in parameter `i`, or `None` if it was left off.
-    pub fn arg(&self, i: usize) -> Option<&'a str> {
-        self.args.get(i).copied().filter(|a| !a.is_empty())
+    pub fn arg(&self, i: usize) -> Option<&str> {
+        self.args.get(i).map(String::as_str).filter(|a| !a.is_empty())
     }
 
     /// What stood in parameter `i`, refusing to guess if it was left off.
-    pub fn need(&self, i: usize) -> Result<&'a str, CommandError> {
+    pub fn need(&self, i: usize) -> Result<&str, CommandError> {
         self.arg(i).ok_or(CommandError::MissingArgument(self.name))
     }
 
@@ -1285,12 +1306,26 @@ fn read_params(
     if let Some(wrong) = means_the_hyphenated_one(entry, left) {
         return Some(Err(wrong));
     }
-    let mut args: Vec<&str> = Vec::with_capacity(entry.params.len());
+    let mut args: Vec<String> = Vec::with_capacity(entry.params.len());
     for param in entry.params {
         // **The last kind of parameter eats the line.** A path may hold
         // spaces, and so may the text of a `:grep`; a word never does.
         if param.takes_the_rest() {
-            args.push(left);
+            // A path is unquoted, the text of a `:pipe` is not — that one goes
+            // to a shell, which does its own quoting, and stripping the quotes
+            // here would hand it a different command.
+            args.push(match matches!(param, Param::Path) {
+                true => match unquote(left) {
+                    Some(path) => path,
+                    None => {
+                        return Some(Err(CommandError::InvalidArgument {
+                            command: entry.name,
+                            value: left.to_string(),
+                        }))
+                    }
+                },
+                false => left.to_string(),
+            });
             left = "";
             continue;
         }
@@ -1301,7 +1336,7 @@ fn read_params(
         if head.is_empty() {
             // Left off: the default if it has one, and otherwise nothing —
             // `build` decides whether it could do without it.
-            args.push(param.default().unwrap_or(""));
+            args.push(param.default().unwrap_or("").to_string());
             continue;
         }
         match (param.words(), matches!(param, Param::WordsOr { .. })) {
@@ -1309,8 +1344,8 @@ fn read_params(
             // prints the shortest unambiguous spelling of every word; that
             // parenthesis is a promise, and this is where it is kept.
             (Some(list), open) => match pick(head, list) {
-                Some(word) => args.push(word.name),
-                None if open => args.push(head),
+                Some(word) => args.push(word.name.to_string()),
+                None if open => args.push(head.to_string()),
                 None => {
                     return Some(Err(CommandError::InvalidArgument {
                         command: entry.name,
@@ -1318,7 +1353,7 @@ fn read_params(
                     }))
                 }
             },
-            (None, _) => args.push(head),
+            (None, _) => args.push(head.to_string()),
         }
         left = tail;
     }
@@ -1354,6 +1389,65 @@ fn read_params(
     }))
 }
 
+
+/// What may stand between the two numbers of a size — `3x4`, `3X4`, `3×4`,
+/// `3*4`, `3,4`.
+///
+/// One list, because two parsers for the same shape with two different lists
+/// is the bug: `--shot=80,6` was taken and `:table 3,4` was refused with
+/// 「不認得「3,4」」, and the comma had been added to `--shot` for the reason
+/// that applies to both — it is what everyone tries first (§5.63).
+///
+/// Whitespace is not in it, because the two differ there for a real reason:
+/// `:table 3 4` is two words on a command line, while `--shot` reads one
+/// argument and lets ` 40 x 10 ` be trimmed at the ends.
+pub const BETWEEN_TWO_NUMBERS: &[char] = &['x', 'X', '×', '*', ','];
+
+/// What a path argument says once its quotes are off, or `None` if a quote
+/// was opened and never closed.
+///
+/// **Measured against helix 25.07.1 rather than against the idea of a shell**
+/// (2026-10-20, in a pty, reading which file appeared on disk):
+///
+/// | typed | helix writes |
+/// | --- | --- |
+/// | `:w "a.txt"` | `a.txt` |
+/// | `:w "a b.txt"` | `a b.txt` |
+/// | `:w 'a.txt'` | `a.txt` |
+/// | `:w a\ b.txt` | `a b.txt` |
+/// | `:w 'a\ b.txt'` | `a\ b.txt` — no escapes inside quotes |
+/// | `:w a"b.txt` | `a"b.txt` — a quote that does not *open* is a character |
+/// | `:w pre"fix".txt` | `pre"fix".txt` |
+/// | `:w "a.txt` | nothing; `'write': unterminated token a.txt` |
+///
+/// So a quote quotes only at the front, and inside one nothing is special.
+/// That is why this is not a shell's rules: `'a\ b.txt'` keeps its backslash.
+///
+/// Warning: **one measured case is deliberately not matched**. `:w "a\"b.txt"`
+/// writes nothing in helix, because its tokenizer ends the token at the
+/// escaped quote and `:w` then has two arguments; a path here takes the whole
+/// of the line, has never counted its arguments, and would write `a\"b.txt`.
+///
+/// A backslash outside quotes escapes the next character, **except on
+/// Windows**, where it is a path separator and helix leaves it alone.
+fn unquote(raw: &str) -> Option<String> {
+    let mut chars = raw.chars();
+    if let Some(quote @ ('"' | '\'')) = raw.chars().next() {
+        let body = &raw[quote.len_utf8()..];
+        return body.strip_suffix(quote).map(str::to_string);
+    }
+    if cfg!(windows) {
+        return Some(raw.to_string());
+    }
+    let mut out = String::with_capacity(raw.len());
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => out.push(chars.next().unwrap_or('\\')),
+            c => out.push(c),
+        }
+    }
+    Some(out)
+}
 
 /// The command a typed word names, by prefix when it is not a whole name.
 ///
@@ -1456,7 +1550,13 @@ const FORCEABLE: &[&str] = &[
     "reload!",
     "quit!",
     "export!",
+    // All four spellings of the panel, because the bang is the panel's
+    // permission and not one command's: `:replace-project!` means over all
+    // those files what `:replace!` means in this one.
     "replace!",
+    "replace-buffers!",
+    "replace-working!",
+    "replace-project!",
     "shot!",
     // **前提一併補上，也是這一下**（2026-10-07 定）。從前它是行末一個 `force`
     // 字，而那個詞吃掉了別人的參數（`:open force` 開的是挑選器）。判詞：
@@ -2950,7 +3050,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.convert.opencc",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::Convert(ConvertAsk::Explain))),
+        build: Some(|_| Ok(Command::Convert(ConvertAsk::Status))),
     },
     Entry {
         name: "convert-opencc-install",
@@ -4091,7 +4191,9 @@ pub const COMMANDS: &[Entry] = &[
             // underneath is punctuation, and nobody means it when they say
             // three.
             let spec = p.arg(0).unwrap_or("");
-            let mut numbers = spec.split(['x', 'X', '×', ' ', '\t']).filter(|w| !w.is_empty());
+            let mut numbers = spec
+                .split(|c: char| BETWEEN_TWO_NUMBERS.contains(&c) || c.is_whitespace())
+                .filter(|w| !w.is_empty());
             let first = numbers.next();
             // Warning: **分隔符自己不是一個數**（2026-10-09 審出來的）。`:table x`、
             // `:table ×`、`:table xXx` 切完一個數都不剩，於是兩個 `unwrap_or("3")`
@@ -4223,10 +4325,13 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Path],
         build: Some(|p| {
-            Ok(Command::OpenReplace(match p.arg(0) {
-                None => crate::search_panel::Where::Buffer,
-                Some(path) => crate::search_panel::Where::Named(path.into()),
-            }))
+            Ok(Command::OpenReplace {
+                scope: match p.arg(0) {
+                    None => crate::search_panel::Where::Buffer,
+                    Some(path) => crate::search_panel::Where::Named(path.into()),
+                },
+                reshape: p.force,
+            })
         }),
     },
     Entry {
@@ -4235,7 +4340,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.replace-buffers",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Buffers))),
+        build: Some(|p| Ok(Command::OpenReplace {
+            scope: crate::search_panel::Where::Buffers,
+            reshape: p.force,
+        })),
     },
     Entry {
         name: "replace-working",
@@ -4243,7 +4351,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.replace-working",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Working))),
+        build: Some(|p| Ok(Command::OpenReplace {
+            scope: crate::search_panel::Where::Working,
+            reshape: p.force,
+        })),
     },
     Entry {
         name: "replace-project",
@@ -4251,7 +4362,10 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.replace-project",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::OpenReplace(crate::search_panel::Where::Project))),
+        build: Some(|p| Ok(Command::OpenReplace {
+            scope: crate::search_panel::Where::Project,
+            reshape: p.force,
+        })),
     },
     Entry {
         name: "pipe-before",
@@ -7552,6 +7666,113 @@ mod tests {
         assert_eq!(parts("s"), None);
         assert_eq!(parts("s abc"), None);
         assert_eq!(parts("write"), None);
+    }
+
+    /// **A quoted path arrives without its quotes** (2026-10-20).
+    ///
+    /// `:w "a.txt"` used to write a file whose name had the quotes in it, and
+    /// `:w "a b.txt"` one with quotes *and* a space. The answers below are
+    /// helix 25.07.1's, measured in a pty by reading which file landed on
+    /// disk; the whole table is on [`unquote`].
+    #[test]
+    fn a_quoted_path_arrives_without_its_quotes() {
+        let named = |line: &str| match parse(line) {
+            Ok(Command::Write(path)) => path,
+            other => panic!("{line}: {other:?}"),
+        };
+        assert_eq!(named(r#":w "a.txt""#).as_deref(), Some("a.txt"));
+        assert_eq!(named(r#":w "a b.txt""#).as_deref(), Some("a b.txt"));
+        assert_eq!(named(":w 'a.txt'").as_deref(), Some("a.txt"));
+        assert_eq!(named(r":w a\ b.txt").as_deref(), Some("a b.txt"));
+        // Inside quotes nothing is special, which is helix's answer too.
+        assert_eq!(named(r":w 'a\ b.txt'").as_deref(), Some(r"a\ b.txt"));
+        // A quote that does not open the argument is a character in a name.
+        assert_eq!(named(r#":w a"b.txt"#).as_deref(), Some(r#"a"b.txt"#));
+        assert_eq!(named(r#":w pre"fix".txt"#).as_deref(), Some(r#"pre"fix".txt"#));
+        // And the bare path is untouched, which is nearly every path there is.
+        assert_eq!(named(":w 第三章.md").as_deref(), Some("第三章.md"));
+    }
+
+    /// **An unterminated quote is refused, not written** (2026-10-20).
+    ///
+    /// helix writes nothing and says `'write': unterminated token a.txt`.
+    /// Writing `"a.txt` instead would make a file nobody can name again
+    /// without quoting it.
+    #[test]
+    fn an_unterminated_quote_is_refused() {
+        assert!(matches!(
+            parse(r#":w "a.txt"#),
+            Err(CommandError::InvalidArgument { command: "write", .. })
+        ));
+        assert!(matches!(
+            parse(":o 'a.txt"),
+            Err(CommandError::InvalidArgument { command: "open", .. })
+        ));
+    }
+
+    /// **The text of a `:pipe` keeps its quotes**, because a shell reads it.
+    #[test]
+    fn a_shell_line_is_not_unquoted() {
+        assert_eq!(
+            parse(r#":pipe sed 's/a/b/'"#),
+            Ok(Command::Pipe(r#"sed 's/a/b/'"#.to_string()))
+        );
+    }
+
+    /// **One separator list for both parsers** (2026-10-20).
+    ///
+    /// `--shot=80,6` was taken and `:table 3,4` said 「不認得「3,4」」. The
+    /// comma had been added to `--shot` for a reason that applies to both:
+    /// it is what everyone tries first.
+    #[test]
+    fn a_size_is_two_numbers_however_they_are_separated() {
+        for spec in ["3x4", "3X4", "3×4", "3*4", "3,4", "3 4"] {
+            assert_eq!(
+                parse(&format!(":table {spec}")),
+                Ok(Command::NewTable { rows: 3, columns: 4 }),
+                "{spec}"
+            );
+        }
+    }
+
+    /// **`:convert-opencc` is not a second spelling of bare `:convert`.**
+    ///
+    /// Both built `ConvertAsk::Explain`, so the command whose help said
+    /// 「opencc 本身」 printed the list of 簡繁 routes. Half those routes never
+    /// run opencc at all.
+    #[test]
+    fn convert_opencc_asks_about_opencc() {
+        assert_eq!(parse(":convert"), Ok(Command::Convert(ConvertAsk::Explain)));
+        assert_eq!(
+            parse(":convert-opencc"),
+            Ok(Command::Convert(ConvertAsk::Status))
+        );
+    }
+
+    /// **The bang of `:replace!` is read** (2026-10-20).
+    ///
+    /// It was in [`FORCEABLE`] and nothing looked at it, so the panel refused
+    /// a replacement that reshaped a grid and told the writer to 「add the t
+    /// flag」 — which cannot be typed into a panel. All four spellings take
+    /// it, because the permission belongs to the panel.
+    #[test]
+    fn the_bang_of_replace_is_the_panels_permission() {
+        use crate::search_panel::Where;
+        let reshape = |line: &str| match parse(line) {
+            Ok(Command::OpenReplace { reshape, .. }) => reshape,
+            other => panic!("{line}: {other:?}"),
+        };
+        for name in ["replace", "replace-buffers", "replace-working", "replace-project"] {
+            assert!(!reshape(&format!(":{name}")), ":{name}");
+            assert!(reshape(&format!(":{name}!")), ":{name}!");
+        }
+        assert_eq!(
+            parse(":replace! 稿"),
+            Ok(Command::OpenReplace {
+                scope: Where::Named("稿".into()),
+                reshape: true,
+            })
+        );
     }
 }
 

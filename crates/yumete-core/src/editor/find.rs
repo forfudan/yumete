@@ -112,7 +112,7 @@ impl Editor {
     /// intentions in one key, which is how VSCode's box behaves.
     /// `:search-working`/`-wd`/`-gd`/`:search <path>` — open it looking somewhere
     /// else (#419).
-    pub(super) fn open_search_in(&mut self, scope: Where, replacing: bool) {
+    pub(super) fn open_search_in(&mut self, scope: Where, replacing: bool, reshape: bool) {
         // Warning: **A folder that is not there is said out loud.** Falling back to
         // 「this file only」 would answer a question nobody asked, and answer
         // it plausibly — a short list that looks like the truth.
@@ -128,6 +128,10 @@ impl Editor {
         // reader saying 「just looking」, and leaving the row up would leave
         // `r` and `R` live on a panel nobody meant to change anything with.
         self.search.replacing = replacing;
+        // Warning: **written every time, so it cannot be inherited.** A `:replace!`
+        // and then a plain `:replace` is the writer taking the permission back,
+        // and a panel that remembered it would reshape a grid nobody meant.
+        self.search.reshape = reshape;
         // Warning: **模糊 comes off when the panel starts changing things**
         // (2026-09-20). A loose match covers characters nobody typed, so
         // 「replace them all」 would hand the manuscript a range the writer
@@ -165,7 +169,7 @@ impl Editor {
     /// `stand_on_and_look`），不另開一條路。同一天上午修過一個反例：離屏拍照那
     /// 一支手抄了一份輸入法派發，照出來的是另一個程序。
     pub fn open_search_with(&mut self, query: &str, scope: crate::search_panel::Where) {
-        self.open_search_in(scope, false);
+        self.open_search_in(scope, false, false);
         self.search.query = query.to_string();
         self.search.stale = false;
         // **欠着，讓主循環在背景裏還**（2026-10-07 報的）。
@@ -2138,9 +2142,11 @@ impl Editor {
         // Warning: The grid guard, for the same reason `:s` has it: a substitution
         // that changes how many cells a row has turns a 拆分表 into rubbish,
         // and it cannot be seen happening in a file nobody is looking at.
-        if let Some(why) = self.substitution_breaks_the_grid(&rebuilt) {
-            self.status = why;
-            return false;
+        if !self.search.reshape {
+            if let Some(why) = self.replace_breaks_the_grid(&rebuilt) {
+                self.status = why;
+                return false;
+            }
         }
         // One snapshot per file, so `u` in that file takes the whole of this
         // back — not one match at a time.
