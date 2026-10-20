@@ -24,8 +24,22 @@ impl Editor {
     /// it. A note in prose is not a row and is not affected: there is nothing
     /// on the page that says what a footnote holds.
     pub(super) fn detail_opens_here(&self) -> bool {
-        !(self.detail_shows_a_row()
-            && !self.table.as_ref().is_some_and(|view| view.pane))
+        // **A row never opens by itself** (2026-10-20 作者定: 「make sure that
+        // the panel of record is not on automatically by default……This is
+        // also very annoying to see the floating panel by default」).
+        //
+        // It used to read 「a row, and **not** in the window」 — and inside the
+        // full-window grid that is false, so the answer was yes and the panel
+        // was there before anybody asked. `␣i` asks for it now, and
+        // `:instant-info record` is how to have it always.
+        //
+        // Warning: **Only the row.** `detail()` also answers for a footnote the
+        // cursor is pressing, and that one floats on its own as it always has
+        // — a footnote is 「what is under the cursor」, which is a question the
+        // reader asked by standing there.
+        // (`a_footnote_inside_a_table_cell_still_answers` caught me writing
+        // `false` here and taking the note down with the row.)
+        !self.detail_shows_a_row()
     }
 
     /// **`空格 t i`/`空格 t I`（與 `空格 i`/`空格 I`）：把這一行攤開**。
@@ -51,6 +65,11 @@ impl Editor {
             self.status = say!("ui.detail-panel-off");
             return;
         }
+        // **Asked for this row, and gone when the cursor leaves it** (2026-10-20
+        // 作者定: 「space-i is a shortcut to turn on this panel / sidebar for
+        // this row (just like space-k for definition). When the cursor go out
+        // of the row, it disappear.」). `put_this_info_here` records the ask;
+        // `info_asked_now` is where it expires.
         self.show_detail = Some(true);
         self.put_this_info_here(crate::sidebar::Info::Record, afloat);
         self.status = say!("ui.detail-panel-on");
@@ -602,7 +621,7 @@ impl Editor {
         if line + 1 == rope.len_lines() && rope.line(line).len_chars() == 0 {
             return None;
         }
-        let text = self.current_buffer().rope().line(line).to_string();
+        let text = self.row_source(line);
         // **The view splits the row, not the delimiter** (#283). A `|` row
         // begins and ends with the separator, so splitting it on the character
         // gives an empty cell at each end — and the panel then answered every
@@ -622,7 +641,11 @@ impl Editor {
         // Warning: **一律寫行號，不寫主鍵的值**（2026-09-30 定，原話「我建议
         // 都用行号数字，不要用主键的值（主键的值可能很长）」）。從前有主鍵就拿
         // 主鍵的值當標題，而一格主鍵裏可以是一整句話，浮窗的標題欄放不下。
-        let title = format!("{}", line.saturating_sub(self.table_row_base()) + 1);
+        // **Numbered in records** (2026-10-20): a line inside a record that
+        // holds a line break is still that record, and this read the line's
+        // own distance from the top — so the panel titled itself 「記錄 8」
+        // over the fields of record 7.
+        let title = format!("{}", self.table_row_index(line) + 1);
         // The field the cursor is in is shown even when it is empty: that it
         // *is* empty is the answer to "what is in this cell".
         // **Numbered the same way the rows are**, or the panel can never find

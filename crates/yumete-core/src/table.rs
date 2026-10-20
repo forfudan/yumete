@@ -676,6 +676,44 @@ pub fn field_runs_on(line: &str, delimiter: char) -> bool {
     scan(line, delimiter).1
 }
 
+/// **How many lines the record starting here spans** (2026-10-20 作者定).
+///
+/// `lines` is this record's first line and the ones after it, each **with** its
+/// line break — `rope.lines_at(first)`, in other words. The answer is 1 for
+/// almost every record, and more only where a quoted field holds a line break.
+///
+/// Warning: **A record that never closes its quote is one line, not all of them.**
+/// A stray `"` in a 123,380-line file would otherwise swallow the rest of the
+/// table into one record, and every row below it would vanish from the grid.
+/// `:table-check` is the place that complains about an unclosed quote; this one
+/// gives up and lets the line stand alone, so the damage stops at the line that
+/// has it.
+pub fn record_lines<I, S>(lines: I, delimiter: char) -> usize
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut held = String::new();
+    for (taken, line) in lines.into_iter().take(RECORD_LINES_MOST).enumerate() {
+        held.push_str(line.as_ref());
+        if !scan(&held, delimiter).1 {
+            return taken + 1;
+        }
+    }
+    // Never closed: the line stands alone, so the damage stops at the line
+    // that has the stray quote.
+    1
+}
+
+/// How far [`record_lines`] looks for the quote that closes a record.
+///
+/// A bound for **cost**, not for correctness: without one, a single stray `"`
+/// in a 123,380-line 拆分表 makes every row query scan to the end of the file,
+/// which is the whole table per row. A field holding more than this many lines
+/// is not a field somebody wrote, it is a quote nobody closed — and that is
+/// what `:table-check` is for.
+pub const RECORD_LINES_MOST: usize = 1000;
+
 /// A field's value, with the quotes a delimited file wraps it in taken off.
 ///
 /// The span [`cells`] hands back **includes** the quotes, because they are in

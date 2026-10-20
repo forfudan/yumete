@@ -1021,6 +1021,24 @@ pub struct TableView {
     pub bounds: Bounds,
     /// How far the mode reaches — this table, or every table in the file.
     pub reach: Reach,
+    /// **Where every record of this file starts**, when any of them runs over
+    /// more than one line (2026-10-20 作者報的).
+    ///
+    /// `None` for every table anybody has written so far, and that is the
+    /// cheap path: with no quoted line break in the file the *n*th record is
+    /// the *n*th line, so nothing has to be counted or looked up.
+    ///
+    /// Warning: **Boundaries can only be found forwards.** The first version asked
+    /// 「does the line before this one run on?」 and walked back — and
+    /// `field_runs_on` scans one line, so a file with several lines each
+    /// carrying an unpaired `"` has every one of them looking unclosed. From
+    /// row 40 the walk went back to row 7, which drew row 7's text in row 40
+    /// and made `k` jump 7 → 1. Scanned from the top there is no such
+    /// ambiguity: a record ends where its quotes balance, and the next one
+    /// starts on the next line.
+    ///
+    /// Behind an `Rc` because the renderer asks for it once per drawn row.
+    pub record_starts: Option<std::rc::Rc<Vec<usize>>>,
 }
 
 /// What splits one cell of a row from the next (#261).

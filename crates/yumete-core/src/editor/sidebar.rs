@@ -2363,6 +2363,12 @@ impl Editor {
     pub(super) fn move_to_line(&mut self, n: usize) {
         let rope = self.current_buffer().rope();
         let last = motion::last_line(rope);
+        // Warning: **`n` is a 1-based line of the file, and every caller means that.**
+        // 2026-10-20 I made this translate a grid *row* instead, which is what
+        // `:40` means — and broke the dozen callers that do not: `hold_the_pane`
+        // hands it `line + 1`, and `gg` then landed a row low in every table,
+        // multi-line records or none. The translation belongs on the command
+        // whose number is a row (`Command::GotoLine`), not here.
         let line = n.saturating_sub(1).min(last);
         let at = rope.line_to_char(line);
         let pos = motion::line_first_non_blank(rope, at);

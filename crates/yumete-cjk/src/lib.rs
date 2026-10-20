@@ -61,7 +61,7 @@ pub use vertical::{
 pub use width::{
     ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width, is_combining_mark,
     is_private_use, needs_a_second_cell, orphan_mark_picture, set_ambiguous_wide, stored_width,
-    str_width, tab_width_at, DOTTED_CIRCLE,
+    str_width, tab_width_at, DOTTED_CIRCLE, LINE_FEED_PICTURE,
 };
 pub use word::{
     is_han, is_segmentable, ranges_around_cjk, word_ranges, word_ranges_big, word_ranges_coarse,
