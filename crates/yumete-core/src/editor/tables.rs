@@ -3191,6 +3191,20 @@ impl Editor {
         self.record_text(self.record_first(line)).unwrap_or_default()
     }
 
+    /// Where the text [`Self::row_cells`] measures in begins in the buffer.
+    ///
+    /// Warning: **the record's first line, not the line handed in.** `row_cells`
+    /// normalises through [`Self::record_first`], so every span it gives back
+    /// is an offset into the **whole record**; adding one to a continuation
+    /// line's own start lands in a different cell, and the further down the
+    /// record the caret is the further out the answer goes. 2026-10-21 作者報
+    /// 的：`Tab` out of a two-line cell went 列 5 → 列 4 → 列 5 → 列 1,
+    /// because the record's second written line was being walked as though it
+    /// were a row of its own.
+    fn record_base(&self, line: usize) -> usize {
+        self.current_buffer().rope().line_to_char(self.record_first(line))
+    }
+
     /// **What a reader sees in one cell** — the value, not the bytes.
     ///
     /// Two differences from [`crate::table::cell_text`], both decided
@@ -3272,7 +3286,7 @@ impl Editor {
     pub fn cell_box(&self, line: usize, cell: usize) -> Option<(usize, usize)> {
         let boxes = self.row_cell_boxes(line);
         let &(a, b) = boxes.get(cell)?;
-        let start = self.current_buffer().rope().line_to_char(line);
+        let start = self.record_base(line);
         Some((start + a, start + b))
     }
 
@@ -3280,7 +3294,7 @@ impl Editor {
     pub fn cell_position(&self) -> Option<(usize, usize)> {
         self.table.as_ref()?;
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
+        let line = self.record_first(rope.char_to_line(self.caret().min(rope.len_chars())));
         let within = self.caret() - rope.line_to_char(line);
         let cells = self.row_cells(line);
         // Delimited cells are contiguous, so one of them always holds the
@@ -3298,7 +3312,7 @@ impl Editor {
     pub fn cell_span(&self, line: usize, cell: usize) -> Option<(usize, usize)> {
         let cells = self.row_cells(line);
         let &(a, b) = cells.get(cell)?;
-        let start = self.current_buffer().rope().line_to_char(line);
+        let start = self.record_base(line);
         Some((start + a, start + b))
     }
 
@@ -3769,7 +3783,7 @@ impl Editor {
         while !self.column_shows(at) && at > 0 {
             at -= 1;
         }
-        let start = self.current_buffer().rope().line_to_char(line);
+        let start = self.record_base(line);
         self.move_head(start + cells[at].0);
     }
 

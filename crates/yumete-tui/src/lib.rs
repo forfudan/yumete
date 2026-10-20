@@ -14837,6 +14837,61 @@ fn squeezed(text: &str) -> String {
         );
     }
 
+    /// **隔行底色數的是記錄，不是寫出來的行**（2026-10-21 作者報的：「the
+    /// background color of this row and the next two rows are indifferent」）。
+    ///
+    /// 一條跨三行的記錄把它後面每一行往下推三行而只往下推一行記錄，於是從那裏
+    /// 到檔尾條紋整個錯開，連着兩行同色。`banded` 從前數的是 `line - base + 2`。
+    #[test]
+    fn the_stripes_count_records_not_lines() {
+        let config = Config::default();
+        let _ = ink(&config); // 先定下明暗，再讀底色（§5.12.58）。
+        let dir = std::env::temp_dir().join(format!("yumete-stripes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // 第 3 條跨兩行，第 4 條跨三行——兩種高度，一種偶一種奇。
+        let mut text = String::from("c1,c2,c3\n");
+        for i in 1..=8 {
+            match i {
+                3 => text.push_str("r3a,\"one\ntwo\",r3c\n"),
+                4 => text.push_str("r4a,\"one\ntwo\nthree\",r4c\n"),
+                _ => text.push_str(&format!("r{i}a,r{i}b,r{i}c\n")),
+            }
+        }
+        let csv = dir.join("stripes.csv");
+        std::fs::write(&csv, &text).unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        assert!(editor.enter_table(), "{}", editor.status());
+        let mut seats = Seats::default();
+        let (w, h) = (40u16, 20u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        // 每一條記錄畫在哪一行上——按它第一行的畫面行找，用行號欄認。
+        let rows: Vec<(usize, u16)> = (0..h)
+            .filter_map(|y| {
+                let text: String = (0..w).map(|x| buffer[(x, y)].symbol()).collect();
+                let n: String = text.chars().take_while(|c| *c == ' ' || c.is_ascii_digit()).collect();
+                n.trim().parse::<usize>().ok().map(|n| (n, y))
+            })
+            .collect();
+        assert!(rows.len() >= 8, "八條記錄都在畫面上：{rows:?}");
+        // 相鄰兩條記錄的底色必須不同，一條之內必須相同。
+        let ground = |y: u16| buffer[(w - 2, y)].style().bg;
+        for pair in rows.windows(2) {
+            let (n, y) = pair[0];
+            let (m, next) = pair[1];
+            assert_ne!(ground(y), ground(next), "記錄 {n} 和 {m} 同色");
+            for inner in (y + 1)..next {
+                assert_eq!(ground(inner), ground(y), "記錄 {n} 自己的第 {inner} 行變了色");
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// **一個光標不給自己以外的格子上底色，不管那一格是不是空的**（2026-10-21
     /// 作者報的：「the selection is wrong when the cursor is on a empty cell」，
     /// 再報「a cursor can still highlight two cells if it is empty」）。
