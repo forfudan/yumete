@@ -4143,16 +4143,25 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        // Warning: **1–16, which is what `[editor] indent_width` declares** (2026-10-20).
+        // This said 1–8 and the manual said 1–8, while the settings panel
+        // declared 1–16 and a config file was clamped to it — so
+        // `indent_width = 12` was legal written down and refused typed in. The
+        // panel's declaration is the one fact (`settings_ui::counted`, which
+        // is what `as_declared` reads), and no reference caps it anywhere near
+        // 8: vim takes `tabstop` to 9999 and `shiftwidth` past 10000
+        // (measured), helix's `indent.unit` is a string of whitespace with no
+        // number in it, and EditorConfig's `indent_size` states no maximum.
         name: "indent-width",
         aliases: &[],
         help: "cmd.indent.width",
         needs: &[],
-        params: &[Param::Free("<幾格，1–8>")],
+        params: &[Param::Free("<幾格，1–16>")],
         build: Some(|p| {
             Ok(Command::SetIndentWidth(match p.arg(0) {
                 None => None,
                 Some(_) => match p.number(0)? {
-                    n @ 1..=8 => Some(n),
+                    n @ 1..=16 => Some(n),
                     n => {
                         return Err(CommandError::InvalidArgument {
                             command: "indent-width",
@@ -4634,15 +4643,35 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        // Warning: **The range is declared once** (2026-10-20). `[editor] wheel_step`
+        // in the settings panel says 1–10 and a config file is clamped to it
+        // (`settings_ui::counted`, which exists so that 「鉗的規矩和面板畫的
+        // 規矩必須是同一個事實」) — and this command checked nothing at all:
+        // `:wheel 999999` answered 「滾輪：一格 999999 行」 while the same
+        // number written in `config.toml` came back as 10. The core cannot see
+        // `yumete-config`, so the two are held together by a drift test over
+        // there (`tests/settings_ui.rs`) rather than by one constant.
         name: "wheel",
         aliases: &[],
         help: "cmd.commands.wheel",
         needs: &[],
-        params: &[Param::Free("<幾行>")],
+        params: &[Param::Free("<幾行，1–10>")],
         build: Some(|p| {
             Ok(Command::SetWheelStep(match p.arg(0) {
                 None => None,
-                Some(_) => Some(p.number(0)?),
+                // `0` is a spelling of `1` and not a refusal: zero is 「the
+                // terminal's own notch」, which is one unit — a config file
+                // clamps it the same way, and `set_wheel_step` is where the
+                // `.max(1)` lives.
+                Some(_) => match p.number(0)? {
+                    n @ 0..=10 => Some(n),
+                    n => {
+                        return Err(CommandError::InvalidArgument {
+                            command: "wheel",
+                            value: n.to_string(),
+                        })
+                    }
+                },
             }))
         }),
     },

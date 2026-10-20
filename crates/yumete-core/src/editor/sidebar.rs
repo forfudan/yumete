@@ -1525,13 +1525,6 @@ impl Editor {
             crate::picker::Item::Buffer(i, name) => {
                 Some((name, head(&self.buffers.get(i)?.text())))
             }
-            crate::picker::Item::Row(line, name) => {
-                let rope = self.current_buffer().rope();
-                let lines = (line..(line + rows).min(rope.len_lines()))
-                    .map(|n| rope.line(n).to_string().trim_end().to_string())
-                    .collect();
-                Some((name, lines))
-            }
             // A clipboard entry is already the whole of what it is.
             // **寄存器那一扇也有預覽**（2026-10-11 報的）。從前這裏一律回 `None`，
             // 而畫的那一支「有没有東西都把框畫出來」——於是右邊那半扇**永遠**是
@@ -1607,12 +1600,6 @@ impl Editor {
                 self.browse(&there);
             }
             Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
-            // The picker belongs to whichever key opened it, so choosing from
-            // it lands the way that key lands.
-            Some(crate::picker::Item::Row(line, _)) => {
-                let preview = self.definition_preview;
-                self.land_on_row(line, preview)
-            }
             Some(crate::picker::Item::Paste(Some(which), _)) => self.paste_from_menu(which),
             // The system clipboard is the front end's to read.
             Some(crate::picker::Item::Paste(None, _)) => self.clipboard_paste(true),
