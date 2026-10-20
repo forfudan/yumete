@@ -1010,7 +1010,22 @@ fn main() -> ExitCode {
             // 寫着 `[中 靈明]`。互動那一支每一輪都撥一次。
             editor.set_ime_available(ime.available());
         }
+        // **設定檔的毛病，離屏也要看得見**（2026-10-20）。它不開進程、不碰磁碟、
+        // 不等人，算一遍就答得出——所以它歸這一支，同 `settings_request` 那一族；
+        // 真的語言服務器留給循環，那一種要等一個程序回話。
+        //
+        // Warning: **按鍵之前一次，之後一次**，而互動那一支只要後面那一次。
+        // 之前：`空格 d`「這一行說了什麼」是一個**鍵**，擺在後面離屏永遠答「這
+        // 一行没有診斷」，而同一幀的槽邊已經畫着那個標記。之後：按鍵自己開得出
+        // 一個配置檔來（`:settings` 再按 `e`），那一份還没人看過。第二趟碰上同
+        // 一個緩衝區自己收攤——`ConfigWatch` 記着版本號。
+        let mut watch = yumete_tui::settings::ConfigWatch::default();
+        watch.follow(&mut editor);
         settings_page = press(&mut editor, pressed, &config, &mut ime, shot);
+        watch.follow(&mut editor);
+        // …and `:check-config` is answered **after** the keys, because it is a
+        // key that asks. Reading two small files is not 「needs the loop」.
+        yumete_tui::settings::answer_config_check(&mut editor);
     }
     // Asked for on the command line, and run the same way `:tutor` runs it.
     if tutor {

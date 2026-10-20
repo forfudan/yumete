@@ -713,6 +713,9 @@ pub fn run(
     // that has one is really opened, and everything it says arrives through
     // `collect` below without anything here ever waiting on it.
     let mut servers = crate::server::Servers::default();
+    // **配置檔開着的時候，現查現說**（2026-10-20 作者定）。和上面那一行一樣是
+    // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
+    let mut config_watch = crate::settings::ConfigWatch::default();
 
     let result = loop {
         // **Extend is a mode as far as the cursor is concerned** (2026-09-12).
@@ -1182,6 +1185,10 @@ pub fn run(
         // non-blocking; what is not here yet lands on the next turn round.
         servers.follow(editor, config);
         servers.forget_closed_files(editor);
+        // **yumete 自己的設定檔，也要有人挑毛病。** 同一個鉤子，不開服務器：
+        // 查的規矩本來就在手上，畫的地方（槽邊的標記、診斷面板）也是現成的。
+        config_watch.follow(editor);
+        crate::settings::answer_config_check(editor);
         // **`:info`：這份檔案是什麼**（2026-10-08）。核心把那張表排好，這一頭只填
         // 「哪幾個服務器在看着它」那一行——同 `:yume-where`，答案是一頁，而那一
         // 行只有前端知道。擺在 `follow` 後面：剛打開的那一份要先起得了服務器，

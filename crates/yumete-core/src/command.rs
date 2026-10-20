@@ -165,6 +165,12 @@ pub enum Command {
     Progress,
     /// `:count-target <字>` — how many 字 a day; `None` is `:count-target off`.
     Target(Option<usize>),
+    /// `:check-config` — both config files, every line with something wrong.
+    ///
+    /// The checks live in `yumete-config` and the front end is the only half
+    /// that can see both crates, so this is a request rather than a job: the
+    /// core says it was asked, the front end answers with a page.
+    CheckConfig,
     /// `:check-usage` — which of two spellings the manuscript settled on, and
     /// where it slipped (Feature #233).
     CheckUsage,
@@ -2841,6 +2847,18 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::CheckUsage)),
+    },
+    Entry {
+        // **The config file's own check** (2026-10-20 作者定). In the `check-`
+        // family because that is what it is — one more 「look this over and
+        // tell me what is wrong」 — and not under `config-`, which would fold
+        // a family of one beside `:reload-config`.
+        name: "check-config",
+        aliases: &[],
+        help: "cmd.check.config",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::CheckConfig)),
     },
     Entry {
         name: "check-names",
@@ -6787,7 +6805,7 @@ mod tests {
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
         assert_eq!(row("", "view-"), ":view- +16");
-        assert_eq!(row("", "check-"), ":check- +5");
+        assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
         // …while a name that merely begins the same way is no relation:

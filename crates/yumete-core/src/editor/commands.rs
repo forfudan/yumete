@@ -538,6 +538,11 @@ impl Editor {
                 self.check_charset();
                 Ok(CommandOutcome::Continue)
             }
+            // **前端去查**：規矩在 `yumete-config` 裏，而核心看不見那個兄弟。
+            Command::CheckConfig => {
+                self.config_check = true;
+                Ok(CommandOutcome::Continue)
+            }
             Command::CheckUsage => {
                 self.check_usage();
                 Ok(CommandOutcome::Continue)

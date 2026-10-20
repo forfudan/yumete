@@ -15,6 +15,7 @@
 // Warning: **兩支模組聲明擺在這裏，別擺在 `rung` 那一段之前。** `rung` 頂上那一大段
 // `///` 是**它的**文檔（紙與墨的階梯），中間插一行 `pub mod` 就把那段註釋搶過去，
 // 而編譯照過、測試照綠——文檔掛在誰身上是看不見的。
+pub mod faults;
 pub mod panel;
 pub mod settings_ui;
 pub mod write_back;
@@ -2152,248 +2153,261 @@ impl Config {
             }
         }
 
-        // A setting that is gone is said out loud, not dropped: a reader whose
-        // `segmentation_threshold = 50` stopped doing anything would have no
-        // way to find out that the question is now spelled `word_level`.
-        if raw.editor.segmentation_threshold.is_some() {
-            problems.push(
-                "segmentation_threshold 已經没有了——改成 word_level = \"strict\"/\"balanced\"/\"full\""
-                    .to_string(),
-            );
-        }
-
-        // …and a setting that changed **shape** is said out loud too.
-        // `tatechuyoko` was a switch until 2026-09-21 and is a count now, and
-        // the old value is not taken: 「on」 no longer says how many half-width
-        // characters share the slot, and guessing two for it would quietly make
-        // that decision for a reader who asked for a longer group.
-        if let Some(RawTatechuyoko::Switch(on)) = raw.editor.tatechuyoko {
-            problems.push(format!(
-                "tatechuyoko = {on} 現在要寫成一個數——一格裝幾個半角字，{TATECHUYOKO_CLASSIC} 是老辦法，最多 {TATECHUYOKO_MAX}，0 是關"
-            ));
-        }
-
-        // The three 上屏方式 are yume's, and the list is short enough to check
-        // here — a misspelt one is otherwise a setting that silently does
-        // nothing, which is the failure this whole function exists to end.
-        // A misspelt 上屏方式 is otherwise a setting that silently does nothing,
-        // which is the failure this whole function exists to end. The value is
-        // dropped either way — `into_config` reads it through the same list —
-        // and this is where it is said out loud.
-        if let Some(mode) = raw.ime.commit.as_deref() {
-            if !commit_is_a_word(mode) {
-                problems.push(format!(
-                    "[ime] commit = \"{mode}\" 不是上屏方式——default、delayed、unique（auto）、fluency"
-                ));
-            }
-        }
-
-        // …and for the same reason: a misspelt `system` reads as `auto`, which
-        // is the opposite of what somebody writing `keep` wanted.
-        // A misspelt margin reads as the factory one, which is a setting that
-        // silently does nothing — so it is named here.
-        if let Some(word) = raw.editor.margin.as_deref() {
-            if Margin::parse(word).is_none() {
-                problems.push(format!(
-                    "[editor] margin = \"{word}\" 只能是 never、dense、loose、always"
-                ));
-            }
-        }
-
-        // **打錯的設定要出聲：還有二十六格漏了**（2026-10-09 作者定，審出來的）。
-        //
-        // 2026-10-07 那一輪立的規矩在底下，而它只掃到了一部分。漏的是兩族：
-        //
-        // - **二十六個顏色格**（`[theme]` 的二十四個品色 ＋ `[panel] ink`／`paper`）。
-        //   寫錯一個色，`parse_hex` 回 `None`，`into_config` 那一支就留着主題自己的
-        //   顏色——而「留着主題的顏色」和「這一行没生效」在屏幕上一模一樣。
-        // - **七個有閉合詞表的格**：`theme.ground`／`status_bar`、`editor.layout`／
-        //   `tabs`／`word_level`／`word_mark`。
-        //
-        // ⚠ `editor.language_key` 還没補：那個字串是前端的鍵盤解析器認的
-        //   （`C-^` 這種寫法），這一層看不見它認不認。
-        for (name, value) in [
-            ("[theme] ink", &raw.theme.ink),
-            ("[theme] paper", &raw.theme.paper),
-            ("[theme] ink_light", &raw.theme.ink_light),
-            ("[theme] paper_light", &raw.theme.paper_light),
-            ("[theme] mark", &raw.theme.mark),
-            ("[theme] mark_light", &raw.theme.mark_light),
-            ("[theme] gold", &raw.theme.gold),
-            ("[theme] gold_light", &raw.theme.gold_light),
-            ("[theme] purple", &raw.theme.purple),
-            ("[theme] purple_light", &raw.theme.purple_light),
-            ("[theme] green", &raw.theme.green),
-            ("[theme] green_light", &raw.theme.green_light),
-            ("[theme] azure", &raw.theme.azure),
-            ("[theme] azure_light", &raw.theme.azure_light),
-            ("[theme] amber", &raw.theme.amber),
-            ("[theme] amber_light", &raw.theme.amber_light),
-            ("[theme] orange", &raw.theme.orange),
-            ("[theme] orange_light", &raw.theme.orange_light),
-            ("[theme] pink", &raw.theme.pink),
-            ("[theme] pink_light", &raw.theme.pink_light),
-            ("[theme] cyan", &raw.theme.cyan),
-            ("[theme] cyan_light", &raw.theme.cyan_light),
-            ("[theme] lime", &raw.theme.lime),
-            ("[theme] lime_light", &raw.theme.lime_light),
-            ("[panel] ink", &raw.panel.ink),
-            ("[panel] paper", &raw.panel.paper),
-        ] {
-            if let Some(word) = value.as_deref() {
-                if parse_hex(word).is_none() {
-                    problems.push(format!("{name} = \"{word}\" 只能是一個 #RRGGBB"));
-                }
-            }
-        }
-        if let Some(word) = raw.theme.ground.as_deref() {
-            if !matches!(
-                word.trim().to_ascii_lowercase().as_str(),
-                "paint" | "theme" | "自己" | "terminal" | "終端" | "终端"
-            ) {
-                problems.push(format!("[theme] ground = \"{word}\" 只能是 paint 或 terminal"));
-            }
-        }
-        if let Some(word) = raw.theme.status_bar.as_deref() {
-            if !matches!(
-                word.trim().to_ascii_lowercase().as_str(),
-                "raised" | "quiet" | "淡" | "sunken" | "deep" | "沉"
-            ) {
-                problems
-                    .push(format!("[theme] status_bar = \"{word}\" 只能是 raised 或 sunken"));
-            }
-        }
-        if let Some(word) = raw.editor.layout.as_deref() {
-            if yumete_cjk::Layout::parse(word).is_none() {
-                problems
-                    .push(format!("[editor] layout = \"{word}\" 只能是 vertical 或 horizontal"));
-            }
-        }
-        if let Some(word) = raw.editor.tabs.as_deref() {
-            if Tabs::parse(word).is_none() {
-                problems
-                    .push(format!("[editor] tabs = \"{word}\" 只能是 auto、always、never"));
-            }
-        }
-        if let Some(word) = raw.editor.word_level.as_deref() {
-            if yumete_cjk::WordLevel::parse(word).is_none() {
-                problems.push(format!(
-                    "[editor] word_level = \"{word}\" 只能是 off、strict、balanced、full"
-                ));
-            }
-        }
-        if let Some(word) = raw.editor.word_mark.as_deref() {
-            if yumete_cjk::WordMark::parse(word).is_none() {
-                problems.push(format!(
-                    "[editor] word_mark = \"{word}\" 只能是 tint、ink、color、line"
-                ));
-            }
-        }
-        if let Some(word) = raw.editor.vertical_keys.as_deref() {
-            if yumete_cjk::VerticalKeys::parse(word).is_none() {
-                problems.push(format!(
-                    "[editor] vertical_keys = \"{word}\" 只能是 logical、visual"
-                ));
-            }
-        }
-
-        // **打錯的設定要出聲，不許默默退回出廠值**（2026-10-07 一輪審查報來的）。
-        //
-        // 這一族底下每一條的形狀都一樣：`parse` 回 `None` 就落回缺省，而落回缺省
-        // 和「這個設定不管用」在屏幕上長得一模一樣。這個檔自己的文檔寫着它存在的
-        // 理由就是終結這件事，而這幾格漏了。
-        if let Some(word) = raw.theme.name.as_deref() {
-            if !word.trim().is_empty() && ThemeConfig::named(word).is_none() {
-                problems.push(format!(
-                    "[theme] name = \"{word}\" 不是主題的名字——:theme 按一下 Tab 看有哪些"
-                ));
-            }
-        }
-        if let Some(word) = raw.theme.mode.as_deref() {
-            if Mode::parse(word).is_none() {
-                problems.push(format!("[theme] mode = \"{word}\" 只能是 auto、system、dark、light"));
-            }
-        }
-        if let Some(word) = raw.editor.line_numbers.as_deref() {
-            // ⚠️ `parse_line_numbers` 不回 `Option`——**任何**一個詞都成了
-            // `absolute`，所以這一格的判準要寫在這裏。
-            let known = ["absolute", "abs", "relative", "rel", "none", "off", "false"];
-            let word = word.trim();
-            if !known.contains(&word.to_ascii_lowercase().as_str()) {
-                problems.push(format!(
-                    "[editor] line_numbers = \"{word}\" 只能是 absolute、relative、none"
-                ));
-            }
-        }
-        if let Some(word) = raw.editor.ambiguous_width.as_deref() {
-            if !["auto", "wide", "narrow"].contains(&word.trim().to_ascii_lowercase().as_str()) {
-                problems.push(format!(
-                    "[editor] ambiguous_width = \"{word}\" 只能是 auto、wide、narrow"
-                ));
-            }
-        }
-        if let Some(word) = raw.editor.language.as_deref() {
-            // ⚠️ **這一張單子抄自 `yumete_core::messages::Language::parse`**，因為
-            // 這個 crate 不依賴那一個。那邊加一種寫法，這裏要跟。
-            let known = [
-                "zh", "zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体",
-                "zhs", "zh-hans", "zh-cn", "简体", "簡體", "en", "english",
-            ];
-            let said = word.trim().to_ascii_lowercase();
-            if !said.is_empty() && !known.contains(&said.as_str()) {
-                problems.push(format!("[editor] language = \"{word}\" 只能是 zh、zhs、en"));
-            }
-        }
-        if let Some(word) = raw.panel.display.as_deref() {
-            if PanelDisplay::parse(word).is_none() {
-                problems.push(format!("[panel] display = \"{word}\" 不是候選面板的畫法"));
-            }
-        }
-        if let Some(word) = raw.panel.inline_preedit.as_deref() {
-            if InlinePreedit::parse(word).is_none() {
-                problems.push(format!("[panel] inline_preedit = \"{word}\" 不是編碼的擺法"));
-            }
-        }
-
-        if let Some(word) = raw.keys.preset.as_deref() {
-            if KeyPreset::parse(word).is_none() {
-                problems.push(format!("[keys] preset = \"{word}\" 只能是 helix 或 vim"));
-            }
-        }
-
-        if let Some(word) = raw.editor.tab_inserts.as_deref() {
-            if !matches!(word, "spaces" | "tab") {
-                problems.push(format!("[editor] tab_inserts = \"{word}\" 只能是 spaces 或 tab"));
-            }
-        }
-
-        if let Some(word) = raw.ime.system.as_deref() {
-            if !SystemImePolicy::is_written(word) {
-                problems.push(format!("[ime] system = \"{word}\" 只能是 auto 或 keep"));
-            }
-        }
-
-        // A command a language declares that will not do what it says is a
-        // problem *about the config*, named here rather than discovered when
-        // the key is pressed.
-        for (language, verbs) in &raw.language {
-            for (verb, runner) in verbs {
-                let checked = Runner {
-                    run: runner.run.clone(),
-                    kind: RunKind::parse(runner.kind.as_deref().unwrap_or("")).unwrap_or_default(),
-                };
-                if RunKind::parse(runner.kind.as_deref().unwrap_or("")).is_none() {
-                    problems.push(format!(
-                        "[language.{language}] {verb}: kind 只能是 once、server 或 filter"
-                    ));
-                } else if let Some(fault) = checked.fault() {
-                    problems.push(format!("[language.{language}] {verb}: {fault}"));
-                }
-            }
-        }
+        Self::complain_about(&raw, &mut problems);
         let config = raw.into_config_saying(&mut problems);
         (config, problems)
     }
+
+    /// **What is wrong with the values, once the file has parsed.**
+    ///
+    /// Warning: **這一段從前長在 `load_reporting_in` 的肚子裏**（2026-10-20 挪出來）。於是它只在「開機讀磁盤上那兩個檔」那條路上跑得到：`from_toml_saying`
+    /// 看不見它，而編輯器裏對着 `config.toml` 現查的那一支也看不見——查出來
+    /// 的東西比開機那一行少一半，而兩邊說的本該是同一句話。
+    ///
+    /// 和 [`RawConfig::into_config_saying`] 的分工：那一支一邊造 `Config` 一邊
+    /// 說話（鉗住的數目、裝不上的綁定），這一支只看 `raw`，不造東西。
+    fn complain_about(raw: &RawConfig, problems: &mut Vec<String>) {
+    // A setting that is gone is said out loud, not dropped: a reader whose
+    // `segmentation_threshold = 50` stopped doing anything would have no
+    // way to find out that the question is now spelled `word_level`.
+    if raw.editor.segmentation_threshold.is_some() {
+        problems.push(
+            "segmentation_threshold 已經没有了——改成 word_level = \"strict\"/\"balanced\"/\"full\""
+                .to_string(),
+        );
+    }
+
+    // …and a setting that changed **shape** is said out loud too.
+    // `tatechuyoko` was a switch until 2026-09-21 and is a count now, and
+    // the old value is not taken: 「on」 no longer says how many half-width
+    // characters share the slot, and guessing two for it would quietly make
+    // that decision for a reader who asked for a longer group.
+    if let Some(RawTatechuyoko::Switch(on)) = raw.editor.tatechuyoko {
+        problems.push(format!(
+            "tatechuyoko = {on} 現在要寫成一個數——一格裝幾個半角字，{TATECHUYOKO_CLASSIC} 是老辦法，最多 {TATECHUYOKO_MAX}，0 是關"
+        ));
+    }
+
+    // The three 上屏方式 are yume's, and the list is short enough to check
+    // here — a misspelt one is otherwise a setting that silently does
+    // nothing, which is the failure this whole function exists to end.
+    // A misspelt 上屏方式 is otherwise a setting that silently does nothing,
+    // which is the failure this whole function exists to end. The value is
+    // dropped either way — `into_config` reads it through the same list —
+    // and this is where it is said out loud.
+    if let Some(mode) = raw.ime.commit.as_deref() {
+        if !commit_is_a_word(mode) {
+            problems.push(format!(
+                "[ime] commit = \"{mode}\" 不是上屏方式——default、delayed、unique（auto）、fluency"
+            ));
+        }
+    }
+
+    // …and for the same reason: a misspelt `system` reads as `auto`, which
+    // is the opposite of what somebody writing `keep` wanted.
+    // A misspelt margin reads as the factory one, which is a setting that
+    // silently does nothing — so it is named here.
+    if let Some(word) = raw.editor.margin.as_deref() {
+        if Margin::parse(word).is_none() {
+            problems.push(format!(
+                "[editor] margin = \"{word}\" 只能是 never、dense、loose、always"
+            ));
+        }
+    }
+
+    // **打錯的設定要出聲：還有二十六格漏了**（2026-10-09 作者定，審出來的）。
+    //
+    // 2026-10-07 那一輪立的規矩在底下，而它只掃到了一部分。漏的是兩族：
+    //
+    // - **二十六個顏色格**（`[theme]` 的二十四個品色 ＋ `[panel] ink`／`paper`）。
+    //   寫錯一個色，`parse_hex` 回 `None`，`into_config` 那一支就留着主題自己的
+    //   顏色——而「留着主題的顏色」和「這一行没生效」在屏幕上一模一樣。
+    // - **七個有閉合詞表的格**：`theme.ground`／`status_bar`、`editor.layout`／
+    //   `tabs`／`word_level`／`word_mark`。
+    //
+    // ⚠ `editor.language_key` 還没補：那個字串是前端的鍵盤解析器認的
+    //   （`C-^` 這種寫法），這一層看不見它認不認。
+    for (name, value) in [
+        ("[theme] ink", &raw.theme.ink),
+        ("[theme] paper", &raw.theme.paper),
+        ("[theme] ink_light", &raw.theme.ink_light),
+        ("[theme] paper_light", &raw.theme.paper_light),
+        ("[theme] mark", &raw.theme.mark),
+        ("[theme] mark_light", &raw.theme.mark_light),
+        ("[theme] gold", &raw.theme.gold),
+        ("[theme] gold_light", &raw.theme.gold_light),
+        ("[theme] purple", &raw.theme.purple),
+        ("[theme] purple_light", &raw.theme.purple_light),
+        ("[theme] green", &raw.theme.green),
+        ("[theme] green_light", &raw.theme.green_light),
+        ("[theme] azure", &raw.theme.azure),
+        ("[theme] azure_light", &raw.theme.azure_light),
+        ("[theme] amber", &raw.theme.amber),
+        ("[theme] amber_light", &raw.theme.amber_light),
+        ("[theme] orange", &raw.theme.orange),
+        ("[theme] orange_light", &raw.theme.orange_light),
+        ("[theme] pink", &raw.theme.pink),
+        ("[theme] pink_light", &raw.theme.pink_light),
+        ("[theme] cyan", &raw.theme.cyan),
+        ("[theme] cyan_light", &raw.theme.cyan_light),
+        ("[theme] lime", &raw.theme.lime),
+        ("[theme] lime_light", &raw.theme.lime_light),
+        ("[panel] ink", &raw.panel.ink),
+        ("[panel] paper", &raw.panel.paper),
+    ] {
+        if let Some(word) = value.as_deref() {
+            if parse_hex(word).is_none() {
+                problems.push(format!("{name} = \"{word}\" 只能是一個 #RRGGBB"));
+            }
+        }
+    }
+    if let Some(word) = raw.theme.ground.as_deref() {
+        if !matches!(
+            word.trim().to_ascii_lowercase().as_str(),
+            "paint" | "theme" | "自己" | "terminal" | "終端" | "终端"
+        ) {
+            problems.push(format!("[theme] ground = \"{word}\" 只能是 paint 或 terminal"));
+        }
+    }
+    if let Some(word) = raw.theme.status_bar.as_deref() {
+        if !matches!(
+            word.trim().to_ascii_lowercase().as_str(),
+            "raised" | "quiet" | "淡" | "sunken" | "deep" | "沉"
+        ) {
+            problems
+                .push(format!("[theme] status_bar = \"{word}\" 只能是 raised 或 sunken"));
+        }
+    }
+    if let Some(word) = raw.editor.layout.as_deref() {
+        if yumete_cjk::Layout::parse(word).is_none() {
+            problems
+                .push(format!("[editor] layout = \"{word}\" 只能是 vertical 或 horizontal"));
+        }
+    }
+    if let Some(word) = raw.editor.tabs.as_deref() {
+        if Tabs::parse(word).is_none() {
+            problems
+                .push(format!("[editor] tabs = \"{word}\" 只能是 auto、always、never"));
+        }
+    }
+    if let Some(word) = raw.editor.word_level.as_deref() {
+        if yumete_cjk::WordLevel::parse(word).is_none() {
+            problems.push(format!(
+                "[editor] word_level = \"{word}\" 只能是 off、strict、balanced、full"
+            ));
+        }
+    }
+    if let Some(word) = raw.editor.word_mark.as_deref() {
+        if yumete_cjk::WordMark::parse(word).is_none() {
+            problems.push(format!(
+                "[editor] word_mark = \"{word}\" 只能是 tint、ink、color、line"
+            ));
+        }
+    }
+    if let Some(word) = raw.editor.vertical_keys.as_deref() {
+        if yumete_cjk::VerticalKeys::parse(word).is_none() {
+            problems.push(format!(
+                "[editor] vertical_keys = \"{word}\" 只能是 logical、visual"
+            ));
+        }
+    }
+
+    // **打錯的設定要出聲，不許默默退回出廠值**（2026-10-07 一輪審查報來的）。
+    //
+    // 這一族底下每一條的形狀都一樣：`parse` 回 `None` 就落回缺省，而落回缺省
+    // 和「這個設定不管用」在屏幕上長得一模一樣。這個檔自己的文檔寫着它存在的
+    // 理由就是終結這件事，而這幾格漏了。
+    if let Some(word) = raw.theme.name.as_deref() {
+        if !word.trim().is_empty() && ThemeConfig::named(word).is_none() {
+            problems.push(format!(
+                "[theme] name = \"{word}\" 不是主題的名字——:theme 按一下 Tab 看有哪些"
+            ));
+        }
+    }
+    if let Some(word) = raw.theme.mode.as_deref() {
+        if Mode::parse(word).is_none() {
+            problems.push(format!("[theme] mode = \"{word}\" 只能是 auto、system、dark、light"));
+        }
+    }
+    if let Some(word) = raw.editor.line_numbers.as_deref() {
+        // ⚠️ `parse_line_numbers` 不回 `Option`——**任何**一個詞都成了
+        // `absolute`，所以這一格的判準要寫在這裏。
+        let known = ["absolute", "abs", "relative", "rel", "none", "off", "false"];
+        let word = word.trim();
+        if !known.contains(&word.to_ascii_lowercase().as_str()) {
+            problems.push(format!(
+                "[editor] line_numbers = \"{word}\" 只能是 absolute、relative、none"
+            ));
+        }
+    }
+    if let Some(word) = raw.editor.ambiguous_width.as_deref() {
+        if !["auto", "wide", "narrow"].contains(&word.trim().to_ascii_lowercase().as_str()) {
+            problems.push(format!(
+                "[editor] ambiguous_width = \"{word}\" 只能是 auto、wide、narrow"
+            ));
+        }
+    }
+    if let Some(word) = raw.editor.language.as_deref() {
+        // ⚠️ **這一張單子抄自 `yumete_core::messages::Language::parse`**，因為
+        // 這個 crate 不依賴那一個。那邊加一種寫法，這裏要跟。
+        let known = [
+            "zh", "zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体",
+            "zhs", "zh-hans", "zh-cn", "简体", "簡體", "en", "english",
+        ];
+        let said = word.trim().to_ascii_lowercase();
+        if !said.is_empty() && !known.contains(&said.as_str()) {
+            problems.push(format!("[editor] language = \"{word}\" 只能是 zh、zhs、en"));
+        }
+    }
+    if let Some(word) = raw.panel.display.as_deref() {
+        if PanelDisplay::parse(word).is_none() {
+            problems.push(format!("[panel] display = \"{word}\" 不是候選面板的畫法"));
+        }
+    }
+    if let Some(word) = raw.panel.inline_preedit.as_deref() {
+        if InlinePreedit::parse(word).is_none() {
+            problems.push(format!("[panel] inline_preedit = \"{word}\" 不是編碼的擺法"));
+        }
+    }
+
+    if let Some(word) = raw.keys.preset.as_deref() {
+        if KeyPreset::parse(word).is_none() {
+            problems.push(format!("[keys] preset = \"{word}\" 只能是 helix 或 vim"));
+        }
+    }
+
+    if let Some(word) = raw.editor.tab_inserts.as_deref() {
+        if !matches!(word, "spaces" | "tab") {
+            problems.push(format!("[editor] tab_inserts = \"{word}\" 只能是 spaces 或 tab"));
+        }
+    }
+
+    if let Some(word) = raw.ime.system.as_deref() {
+        if !SystemImePolicy::is_written(word) {
+            problems.push(format!("[ime] system = \"{word}\" 只能是 auto 或 keep"));
+        }
+    }
+
+    // A command a language declares that will not do what it says is a
+    // problem *about the config*, named here rather than discovered when
+    // the key is pressed.
+    for (language, verbs) in &raw.language {
+        for (verb, runner) in verbs {
+            let checked = Runner {
+                run: runner.run.clone(),
+                kind: RunKind::parse(runner.kind.as_deref().unwrap_or("")).unwrap_or_default(),
+            };
+            if RunKind::parse(runner.kind.as_deref().unwrap_or("")).is_none() {
+                problems.push(format!(
+                    "[language.{language}] {verb}: kind 只能是 once、server 或 filter"
+                ));
+            } else if let Some(fault) = checked.fault() {
+                problems.push(format!("[language.{language}] {verb}: {fault}"));
+            }
+        }
+    }
+    }
+
 
     /// One line naming a config file and what is wrong with it.
     /// Read a config file: its text, `None` when there is no such file, and a

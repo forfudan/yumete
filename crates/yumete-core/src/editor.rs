@@ -2527,6 +2527,8 @@ pub struct Editor {
     /// 核心不知道配置檔在哪，也不該知道：那是 XDG 的事，歸前端。核心只記「有人
     /// 要求了」，同十一支 `take_*_request` 一個形狀。
     config_reload: bool,
+    /// **`:check-config` 按過了** —— 同上，前端下一趟取走並開一頁報告。
+    config_check: bool,
     /// **`:settings` 按過了** —— 前端下一趟取走並開那扇面板。
     ///
     /// Warning: **那扇面板的狀態不在核心裏**（它讀 `yumete_config::settings_ui` 那張表，
@@ -3809,6 +3811,7 @@ impl Editor {
             asked_where_from: None,
             say_it_again: false,
             config_reload: false,
+            config_check: false,
             settings_request: false,
             settings_open: false,
             settings_save: false,
