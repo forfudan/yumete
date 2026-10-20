@@ -44,7 +44,7 @@ pub mod width;
 pub mod word;
 
 pub use grapheme::{
-    cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme,
+    cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, show_orphan_marks,
     prev_grapheme_boundary,
 };
 pub use keymap::{read_which_wrap, KeyPreset, WHICH_WRAP};
@@ -59,8 +59,9 @@ pub use vertical::{
     DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, Margin, TATECHUYOKO_CLASSIC, TATECHUYOKO_MAX,
 };
 pub use width::{
-    ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width, is_private_use,
-    needs_a_second_cell, set_ambiguous_wide, stored_width, str_width, tab_width_at,
+    ambiguous_is_wide, char_width, control_picture, drawn_width, grapheme_width, is_combining_mark,
+    is_private_use, needs_a_second_cell, orphan_mark_picture, set_ambiguous_wide, stored_width,
+    str_width, tab_width_at, DOTTED_CIRCLE,
 };
 pub use word::{
     is_han, is_segmentable, ranges_around_cjk, word_ranges, word_ranges_big, word_ranges_coarse,

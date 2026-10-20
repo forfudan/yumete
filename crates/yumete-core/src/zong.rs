@@ -1129,24 +1129,34 @@ fn zong_breaks(
                 cut = opens;
             }
         }
+        // 分離禁止 (clreq §6.1.2.1): `——` and `……` take two squares and are
+        // one mark. Vertically the halves are stroke glyphs, so a split leaves
+        // a rule that stops at the foot of one 縱 and starts again at the head
+        // of the next.
+        let forbidden_at = |cut: usize| {
+            let split_a_pair =
+                crate::wrap::half_of_a_pair(char_of(cut)) && char_of(cut) == char_of(cut - 1);
+            split_a_pair
+                || crate::wrap::forbidden_at_row_start(char_of(cut))
+                || crate::wrap::forbidden_at_row_end(char_of(cut - 1))
+        };
+        // Warning: **A retreat that does not help is not taken** (2026-10-20), the
+        // same rule the horizontal page keeps (`wrap::row_end`) — a run of 連接號
+        // offends 行首禁則 at every boundary, so retreating shortened the 縱 and
+        // satisfied nothing. The two pages have to agree about where a
+        // paragraph breaks, so they give up at the same point.
+        let unadjusted = cut;
         for _ in 0..crate::wrap::MAX_KINSOKU_RETREAT {
+            if !forbidden_at(cut) {
+                break;
+            }
             if cut <= at + 1 {
                 break;
             }
-            // 分離禁止 (clreq §6.1.2.1): `——` and `……` take two squares and
-            // are one mark. Vertically the halves are stroke glyphs, so a
-            // split leaves a rule that stops at the foot of one 縱 and starts
-            // again at the head of the next.
-            let split_a_pair = crate::wrap::half_of_a_pair(char_of(cut))
-                && char_of(cut) == char_of(cut - 1);
-            if split_a_pair
-                || crate::wrap::forbidden_at_row_start(char_of(cut))
-                || crate::wrap::forbidden_at_row_end(char_of(cut - 1))
-            {
-                cut -= 1;
-            } else {
-                break;
-            }
+            cut -= 1;
+        }
+        if forbidden_at(cut) {
+            cut = unadjusted;
         }
         breaks.push(cut);
         at = cut;
@@ -1936,6 +1946,28 @@ mod tests {
             .map(|s| s.text.as_str())
             .collect();
         assert_eq!(first.chars().count(), 9, "{first:?}");
+    }
+
+    /// **A retreat that cannot help is not taken**, down the column too.
+    ///
+    /// 連接號 `—` is 行首禁則, so a run of them offends the rule at every
+    /// boundary and retreating only moves the offence. The 縱 came out short
+    /// for nothing — and the horizontal page had the same bug, which is why
+    /// they give up at the same point: the cursor's 縱 and the drawn 縱 have
+    /// to agree about where a paragraph breaks.
+    #[test]
+    fn a_run_of_connectors_fills_the_zong() {
+        let grid = Grid {
+            zong_len: 10,
+            hanging: false,
+            ..Grid::default()
+        };
+        for mark in ['—', '…'] {
+            let rope = Rope::from_str(&format!("{}\n", std::iter::repeat_n(mark, 25).collect::<String>()));
+            let zongs = layout(&rope, grid);
+            assert_eq!(zongs[0].slots, 10, "{mark} 填滿第一縱");
+            assert_eq!(zongs[1].slots, 10, "{mark} 填滿第二縱");
+        }
     }
 
     #[test]

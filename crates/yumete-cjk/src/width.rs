@@ -104,6 +104,48 @@ pub fn needs_a_second_cell(c: char) -> bool {
     char_width(c) == 2 && UnicodeWidthChar::width(c) != Some(2)
 }
 
+/// Unicode's own way of showing a combining mark on its own: a dotted circle
+/// stands in for the base it lost.
+pub const DOTTED_CIRCLE: char = '\u{25cc}';
+
+/// Whether `c` is a mark that **extends** the cluster before it rather than
+/// opening one of its own — and that a renderer therefore draws in no cell.
+///
+/// Asked of the segmenter rather than of a category table, so it costs this
+/// crate no dependency it does not already have: put an `a` in front of `c`
+/// and see whether the two come back as one cluster. ZWSP (U+200B) comes back
+/// as **two**, and so is not one of these: a zero-width space is a typesetting
+/// decision somebody made on purpose, not a mark that lost its base.
+///
+/// The width test comes first and almost always answers: a character the
+/// renderer gives a cell to is not one of these, whatever the segmenter would
+/// say, and the string the segmenter needs is never built for it.
+pub fn is_combining_mark(c: char) -> bool {
+    UnicodeWidthChar::width(c) == Some(0) && crate::grapheme_count(&format!("a{c}")) == 1
+}
+
+/// The picture to draw a combining mark that has nothing to combine with
+/// (2026-10-20).
+///
+/// [`grapheme_width`] charges such a cluster one cell — `.max(1)`, there since
+/// a kana 濁點 split off its base drew nothing at all and `が` came out as
+/// `か`, one codepoint of the manuscript simply gone from the page. The
+/// renderer disagrees: `ratatui` lays out by plain Annex #11, gives the mark
+/// zero, and leaves the charged cell blank — so the row came out a cell short,
+/// everything after it sat a cell left, and the caret's block landed on the
+/// character beside the one the status line named.
+///
+/// Same question as [`control_picture`], same answer: what is invisible gets
+/// treated as absent, so the codepoint stays in the buffer and gets a face.
+/// The accent itself is not drawn — one cell is one `char` all the way through
+/// the row, and the status line names the codepoint (`U+0301`).
+///
+/// Only a mark that **opens** its cluster is orphaned; the caller knows which
+/// those are, which is why this takes a `char` and not a cluster.
+pub fn orphan_mark_picture(c: char) -> Option<char> {
+    is_combining_mark(c).then_some(DOTTED_CIRCLE)
+}
+
 /// Whether `c` is in a Private Use Area.
 ///
 /// **These are two cells here, whatever Annex #11 says** (2026-10-16). The
@@ -299,6 +341,40 @@ mod tests {
     fn control_characters_are_zero_width() {
         assert_eq!(char_width('\n'), 0);
         assert_eq!(char_width('\r'), 0);
+    }
+
+    /// **A mark with no base is charged a cell and drawn in none of it.**
+    ///
+    /// 2026-10-20: the editor says 「列 1 · U+0301」 and the renderer puts the
+    /// next character in that very cell, so the row comes out short and the
+    /// caret lands beside the character the status line names.
+    #[test]
+    fn a_mark_with_no_base_gets_a_dotted_circle() {
+        for c in ['\u{0301}', '\u{3099}'] {
+            assert!(is_combining_mark(c), "{c:?}");
+            assert_eq!(orphan_mark_picture(c), Some(DOTTED_CIRCLE), "{c:?}");
+            // The cell the editor charges it, and the nothing the renderer draws.
+            assert_eq!(grapheme_width(&c.to_string()), 1);
+            assert_eq!(drawn_width(&c.to_string()), 0);
+        }
+        // A zero-width space is a typesetting decision, not a lost mark: `a`
+        // and it come back as two clusters.
+        for c in ['\u{200b}', 'a', '中', '\u{3000}'] {
+            assert!(!is_combining_mark(c), "{c:?}");
+            assert_eq!(orphan_mark_picture(c), None, "{c:?}");
+        }
+    }
+
+    /// The pass over a row: only a mark that **opens** its cluster is orphaned.
+    #[test]
+    fn a_mark_that_has_a_base_keeps_it() {
+        let mut row: Vec<char> = "e\u{0301}f".chars().collect();
+        crate::show_orphan_marks(&mut row);
+        assert_eq!(row.iter().collect::<String>(), "e\u{0301}f");
+
+        let mut row: Vec<char> = "\u{0301}abc".chars().collect();
+        crate::show_orphan_marks(&mut row);
+        assert_eq!(row.iter().collect::<String>(), "\u{25cc}abc", "one char for one char");
     }
 
     #[test]

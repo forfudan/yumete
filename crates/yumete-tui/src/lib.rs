@@ -430,7 +430,12 @@ fn settle_the_wrap(editor: &mut Editor, config: &Config, page: Rect) {
             editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
         }
         false => {
-            let gutter = gutter_width(lines, config.editor.line_numbers, editor.writes_code());
+            let gutter = gutter_in(
+                page.width as usize,
+                lines,
+                config.editor.line_numbers,
+                editor.writes_code(),
+            );
             editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
         }
     }
@@ -866,7 +871,12 @@ pub fn run(
                 // The width paragraphs soft-wrap at depends on the gutter as
                 // well; `j` and `k` walk those rows, so it too is settled
                 // before the keys that use it.
-                let gutter = gutter_width(lines, config.editor.line_numbers, editor.writes_code());
+                let gutter = gutter_in(
+                    page.width as usize,
+                    lines,
+                    config.editor.line_numbers,
+                    editor.writes_code(),
+                );
                 editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
                 editor.set_page(page.height as usize, page.width.max(1) as usize);
             }
@@ -4539,6 +4549,29 @@ const PROBLEM_GUTTER: usize = 2;
 
 /// The width of the line-number gutter for a given mode (digits + the air),
 /// plus the diagnostics column when this buffer is code.
+/// The gutter, or nothing when the frame cannot afford it **and** two cells of
+/// writing.
+///
+/// Warning: **A 漢字 needs two cells, and one cell draws nothing at all.** At a frame
+/// width of 4 the gutter took 3 and left 1, and ratatui cannot put a two-cell
+/// glyph in one cell — so 春夏秋冬 came out as four blank rows with the
+/// manuscript untouched underneath. Latin went on being readable, which is how
+/// it stayed hidden.
+///
+/// Helix 25.07.1, measured in a pty at every width from 4 to 12: it drops its
+/// gutter below 8 columns and gives the writing the whole frame (at 4 it draws
+/// 春夏), and from 8 it draws the gutter — where **its** text column is 1 cell
+/// and 春夏秋冬天氣好 draws blank, which is this same bug one window wider.
+/// So the rule here is the one it is reaching for rather than the width it
+/// reaches for it at: the writing never gets fewer than two cells.
+fn gutter_in(width: usize, total_lines: usize, mode: LineNumbers, code: bool) -> usize {
+    let want = gutter_width(total_lines, mode, code);
+    match width >= want + 2 {
+        true => want,
+        false => 0,
+    }
+}
+
 fn gutter_width(total_lines: usize, mode: LineNumbers, code: bool) -> usize {
     match mode {
         LineNumbers::None => 0,
@@ -7735,8 +7768,12 @@ fn text_at(
     match editor.layout() {
         WritingLayout::Horizontal => {
             let buffer = editor.current_buffer();
-            let gutter =
-                gutter_width(buffer.line_count(), config.editor.line_numbers, editor.writes_code());
+            let gutter = gutter_in(
+                area.width as usize,
+                buffer.line_count(),
+                config.editor.line_numbers,
+                editor.writes_code(),
+            );
             let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
             let hide = |line: usize| editor.hidden_on_line(line);
             // The same measure the page was drawn with — the indent changes
@@ -10769,11 +10806,18 @@ fn draw_horizontal(
     let total_lines = buffer.line_count();
     let height = text_area.height as usize;
     let mode = config.editor.line_numbers;
-    let problem_gutter = match editor.writes_code() && mode != LineNumbers::None {
+    let gutter = gutter_in(
+        text_area.width as usize,
+        total_lines,
+        mode,
+        editor.writes_code(),
+    );
+    // Dropped with the gutter it lives in: there is no lane for a diagnostic
+    // mark when there is no lane.
+    let problem_gutter = match gutter > 0 && editor.writes_code() && mode != LineNumbers::None {
         true => PROBLEM_GUTTER,
         false => 0,
     };
-    let gutter = gutter_width(total_lines, mode, editor.writes_code());
     let rope = buffer.rope();
     // The half that is only being read is drawn a rung back, all of it — that
     // is how you can see which half the keys are in without looking for the
@@ -11184,7 +11228,7 @@ fn draw_horizontal(
         // — which is #395, and a different question (is it a line?).
         // **哪幾格本來是 tab**，下面要給它們和它們拉出來的那一段同一個底色。
         let mut tabs: Vec<usize> = Vec::new();
-        let chars: Vec<char> = text
+        let mut chars: Vec<char> = text
             .chars()
             .enumerate()
             .map(|(i, c)| match c {
@@ -11195,6 +11239,10 @@ fn draw_horizontal(
                 _ => yumete_cjk::control_picture(c).unwrap_or(c),
             })
             .collect();
+        // …and **a combining mark with nothing to combine with gets a dotted
+        // circle** (2026-10-20), for the same reason and in the same cell the
+        // editor had already charged it.
+        yumete_cjk::show_orphan_marks(&mut chars);
         // The block grounds the whole row; the inline runs are patched onto it.
         // **The page is painted.** Until this line, the manuscript itself was
         // drawn with no colour at all — the terminal's own ink on the
@@ -11332,7 +11380,6 @@ fn draw_horizontal(
         // What the *measure* was told, which is one answer per anchor: the
         // widths have to be the ones the wrap and the click map counted.
         let flat: Vec<(usize, String)> = yumete_core::drawn::flat(&runs);
-        let mut chars = chars;
         for &(at, glyph) in &grid {
             if let Some(ch) = at.checked_sub(start_in_line).and_then(|i| chars.get_mut(i)) {
                 *ch = glyph;
@@ -12641,10 +12688,12 @@ fn reading_line(
     let start_in_line = row.start - line_start;
     // Control characters get their pictures here too (#398) — a reading is
     // text on the page like any other, and a NUL in one would draw nothing.
-    let text: Vec<char> = yumete_core::zong::line_chars(rope, row.line)
+    let mut text: Vec<char> = yumete_core::zong::line_chars(rope, row.line)
         .into_iter()
         .map(|c| yumete_cjk::control_picture(c).unwrap_or(c))
         .collect();
+    yumete_cjk::show_orphan_marks(&mut text);
+    let text = text;
     let column = drawn_columns(drawn, lead);
     let mut out = String::new();
     let mut col = 0usize;
@@ -14513,7 +14562,8 @@ fn squeezed(text: &str) -> String {
         w: u16,
         h: u16,
     ) -> ratatui::buffer::Buffer {
-        let gutter = gutter_width(
+        let gutter = gutter_in(
+            w as usize,
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
             editor.writes_code(),
@@ -18904,6 +18954,48 @@ fn squeezed(text: &str) -> String {
         let gutter =
             gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute, false);
         assert_eq!(at(&buffer, 20 + gutter as u16, 4), "│");
+    }
+
+    /// **A combining mark with no base fills the cell it was charged for.**
+    ///
+    /// 2026-10-20: the editor counts such a cluster one cell (`grapheme_width`
+    /// `.max(1)`, there since a stranded 濁點 drew nothing and `が` came out
+    /// `か`), and `ratatui` draws it in none — so the row came out a cell short
+    /// and `abc` sat where a row with no mark in it would have put it.
+    #[test]
+    fn a_mark_with_no_base_takes_the_cell_the_editor_charged_it() {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        let mut editor = editor_with("\u{0301}abc\ne\u{0301}f\n");
+
+        let buffer = render_wrapped(&mut editor, &config, 20, 6);
+        assert_eq!(row_text(&buffer, 0).trim_end(), "\u{25cc}abc");
+        // A mark that has a base is drawn with it and gets no circle.
+        assert_eq!(row_text(&buffer, 1).trim_end(), "e\u{0301}f");
+    }
+
+    /// **A one-cell text column draws no 漢字 at all** (2026-10-20).
+    ///
+    /// At a frame width of 4 the gutter took 3 cells and left 1; a two-cell
+    /// glyph does not go into one cell, so 春夏秋冬 came out as blank rows
+    /// while Latin beside it stayed readable. Helix 25.07.1 drops its gutter
+    /// below 8 columns and draws 春夏 at 4 (measured in a pty); the gutter
+    /// goes here too, whenever keeping it would leave the writing fewer than
+    /// two cells.
+    #[test]
+    fn a_frame_too_narrow_for_the_gutter_gives_the_writing_the_whole_width() {
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::Absolute;
+        let mut editor = editor_with("春夏秋冬\nabcd\n");
+
+        let buffer = render_wrapped(&mut editor, &config, 4, 6);
+        assert_eq!(row_text(&buffer, 0), "春夏", "the gutter went, the 漢字 stayed");
+        assert_eq!(row_text(&buffer, 1), "秋冬");
+
+        // One more cell and the gutter fits beside two cells of writing.
+        let buffer = render_wrapped(&mut editor, &config, 5, 6);
+        assert_eq!(row_text(&buffer, 0), "1  春");
+        assert_eq!(row_text(&buffer, 1), "   夏");
     }
 
     /// 2026-09-05: `:view-wrap 50` then `:view-wrap off` left a rule down
