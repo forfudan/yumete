@@ -727,7 +727,8 @@ pub fn run(
         // helix's `[editor.cursor-shape]` has three slots — normal, insert and
         // **select** — and its default theme paints the select cursor its own
         // colour (`ui.cursor.primary.select`). yumete's ladder cannot spare a
-        // rung for it: HEAD 815 and SELECTION 700 are already only 5% apart, so
+        // rung for it: HEAD 第 73 and SELECTION 第 63 are already only 1.26:1
+        // apart, so
         // a third ground between them would be a difference nobody can see. The
         // shape is free, and the terminal draws it.
         // Warning: **The terminal's cursor is not painted by the palette** (#493).
