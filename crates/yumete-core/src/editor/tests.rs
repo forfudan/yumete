@@ -975,41 +975,137 @@ fn every_way_of_going_to_a_grid_row_lands_on_that_row() {
     }
 }
 
-/// **The record is read-only until the editing half is built** (2026-10-20
-/// 作者定: 讀 ＋ 畫 ＋ 走 先做).
+/// **<kbd>Enter</kbd> inside a cell makes a line break, and the editor puts
+/// the quotes there** (2026-10-21 作者定: 「格子裏打什麽都行，引號歸編輯器
+/// 管」).
 ///
-/// The caret inside a cell is counted in the **value**, and the span it edits
-/// still carries the quotes — so typing landed in front of the opening `"`.
-/// Measured before the guard: `alpha,"first line` became `alpha,ZZ"first line`
-/// and the record stopped parsing at all.
+/// And takes them away again: a pair that is no longer earning its place goes
+/// with the line break that asked for it, which is
+/// [`crate::table::quote_for`]'s own rule — quoted only when it has to be.
 #[test]
-fn a_record_over_several_lines_refuses_to_be_typed_into() {
-    let dir = tmp().join(format!("yumete-recordro-{}", std::process::id()));
+fn a_line_break_typed_into_a_cell_quotes_the_field() {
+    let dir = tmp().join(format!("yumete-cellbreak-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let csv = dir.join("ro.csv");
+    let csv = dir.join("break.csv");
+    std::fs::write(&csv, "name,note\n一,第一條\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "ggl");
+    assert_eq!(ed.record_height(1), 1, "one line to begin with");
+
+    press(&mut ed, "i");
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note\n一,\"\n第一條\"\n",
+        "the field is quoted around the break"
+    );
+    assert_eq!(ed.record_height(1), 2, "two lines of the file");
+    assert_eq!(ed.row_cells(1).len(), 2, "one row of the grid");
+
+    // Take the break away and the quotes go with it. The caret after `i` is
+    // on the break itself — it is the value's first character — so this is
+    // the forward delete.
+    press(&mut ed, "i");
+    ed.on_key(Key::Delete);
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "name,note\n一,第一條\n", "{}", ed.status());
+    assert_eq!(ed.record_height(1), 1);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A `|` table still refuses a line break**: a row of one *is* a line, and
+/// there is no quoting to lean on.
+#[test]
+fn a_pipe_table_takes_no_line_break_in_a_cell() {
+    let mut ed = typed("| 名 | 數 |\n| --- | --- |\n| 甲 | 12 |\n");
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    let before = ed.current_buffer().text();
+    press(&mut ed, "i");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.status(), say!("table.enter-makes-no-newline"));
+    assert_eq!(ed.current_buffer().text(), before);
+}
+
+/// **A value with the file's own delimiter in it goes in quoted** —
+/// 「Smith, John」 is one field, and it used to be turned away at the door.
+#[test]
+fn a_value_holding_the_delimiter_is_quoted_on_the_way_in() {
+    let dir = tmp().join(format!("yumete-cellquote-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("quote.csv");
+    std::fs::write(&csv, "who,n\nAmy,1\nBob,2\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    // Typed in, because a register filled from *outside* the grid is read the
+    // way a spreadsheet reads it — one line of CSV, cut into cells.
+    press(&mut ed, "gg");
+    press(&mut ed, "c");
+    for c in "Smith, John".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "who,n\n\"Smith, John\",1\nBob,2\n",
+        "{}",
+        ed.status()
+    );
+    assert_eq!(ed.row_cells(1).len(), 2, "still two fields");
+    // …and what comes back out is the value, not the field.
+    press(&mut ed, "y");
+    press(&mut ed, "j");
+    press(&mut ed, "R");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "who,n\n\"Smith, John\",1\n\"Smith, John\",2\n",
+        "{}",
+        ed.status()
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A record over several lines types like any other** (2026-10-21 作者定,
+/// the last of the three cuts).
+///
+/// It was read-only for a day, and the gate was honest: the caret inside a
+/// cell is counted in the **value** while the span it edited still carried the
+/// quotes, so typing landed in front of the opening `"` —
+/// `alpha,"first line` became `alpha,ZZ"first line` and the record stopped
+/// parsing. Both ends are the value now ([`Editor::value_span`]).
+#[test]
+fn a_record_over_several_lines_types_like_any_other() {
+    let dir = tmp().join(format!("yumete-recordrw-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("rw.csv");
     let text = "name,note,n\nalpha,\"first line\nsecond line\",1\nbravo,plain,2\n";
     std::fs::write(&csv, text).unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
 
-    press(&mut ed, "gg");
-    assert!(ed.record_spans_lines(), "row 1 is the two-line record");
-    press(&mut ed, "i");
-    assert_eq!(ed.status(), say!("table.record-is-read-only"));
-    assert_ne!(ed.mode(), crate::input::Mode::Insert, "the door did not open");
-    // Still in Normal, so what follows is not typing: the bytes are untouched
-    // and the writer has not been left in a mode that cannot write.
-    assert_eq!(ed.current_buffer().text(), text, "not a byte of it moved");
+    // Into the quoted cell: the caret lands on the value's first character,
+    // not on the `"` in front of it.
+    press(&mut ed, "ggl");
+    press(&mut ed, "iZZ");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("\"ZZfirst line\n"),
+        "{:?}",
+        ed.current_buffer().text()
+    );
+    assert_eq!(ed.row_cells(1).len(), 3, "the record still has three fields");
 
     // The plain record below it types as it always did.
-    press(&mut ed, "j");
-    assert!(
-        !ed.record_spans_lines(),
-        "row 2 is one line: cursor_line={}",
-        ed.cursor_line()
-    );
+    press(&mut ed, "j0");
     press(&mut ed, "iZZ");
     ed.on_key(Key::Esc);
     assert!(
@@ -1017,6 +1113,7 @@ fn a_record_over_several_lines_refuses_to_be_typed_into() {
         "{:?}",
         ed.current_buffer().text()
     );
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// **A file that ends in a newline has no row after its last one** (#384).
@@ -5430,6 +5527,14 @@ fn hjkl_walk_cells_when_the_file_is_a_grid() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A cell holds the delimiter and a line break now — and the row keeps its
+/// shape** (2026-10-21 作者定: 「格子裏打什麽都行，引號歸編輯器管」).
+///
+/// The guard this test was written for refused those two characters outright,
+/// because an unquoted field cannot hold either. What refuses them now is only
+/// the *unquoted* state: the keystroke that needs quoting puts the quotes
+/// there first ([`Editor::quote_the_cell`]), and what may never change — the
+/// number of cells the row comes apart into — is what is asserted here.
 #[test]
 fn a_cell_cannot_be_typed_out_of() {
     let (dir, csv) = a_table("guard");
@@ -5437,28 +5542,36 @@ fn a_cell_cannot_be_typed_out_of() {
     ed.open_file(&csv).unwrap();
     ed.goto_line(2);
     let before = ed.current_buffer().text();
+    let wide = ed.row_cells(1).len();
 
-    // The delimiter is the one character that cannot go in a cell: with no
-    // quoting it is not a comma, it is one more column.
+    // The delimiter goes in, and the field is quoted around it.
     press(&mut ed, "i");
     ed.on_key(Key::Char(','));
-    assert_eq!(ed.current_buffer().text(), before, "refused");
-    assert!(ed.status().contains("分隔"), "{}", ed.status());
+    assert_eq!(ed.row_cells(1).len(), wide, "still one row: {}", ed.current_buffer().text());
+    assert!(ed.current_buffer().text().contains("\",一\""), "{}", ed.current_buffer().text());
 
-    // Nor a line break, which would cut the row in half.
+    // So does a line break: the record is two lines of the file and one row of
+    // the grid.
     ed.on_key(Key::Enter);
-    assert_eq!(ed.current_buffer().text(), before);
+    assert_eq!(ed.row_cells(1).len(), wide, "{}", ed.current_buffer().text());
+    assert_eq!(ed.record_height(1), 2, "two lines, one record");
 
-    // Backspace at the cell's start would join it to the one before.
+    // Backspace at the cell's start would join it to the one before — and
+    // `Home` inside a cell is that start (the value's, not the field's).
+    ed.on_key(Key::Home);
     ed.on_key(Key::Backspace);
-    assert_eq!(ed.current_buffer().text(), before, "the delimiter survives");
     assert!(ed.status().contains("格首"), "{}", ed.status());
+    assert_eq!(ed.row_cells(1).len(), wide, "the delimiter survives");
 
-    // Ordinary typing works exactly as it always did.
-    ed.on_key(Key::Char('三'));
-    assert!(ed.current_buffer().text().contains("三一,"), "{}", ed.current_buffer().text());
-    ed.on_key(Key::Backspace);
+    // …and one `u` takes the whole typing session back.
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('u'));
     assert_eq!(ed.current_buffer().text(), before, "and undoes itself");
+
+    // A tab is still turned away: nothing quotes it into a use.
+    press(&mut ed, "i");
+    ed.on_key(Key::Char('\t'));
+    assert_eq!(ed.current_buffer().text(), before, "a tab has no business here");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -10193,8 +10306,12 @@ fn an_edit_that_did_nothing_leaves_nothing_to_undo() {
     press(&mut ed, "l");
     press(&mut ed, "i");
     ed.on_key(Key::Char('土'));
-    ed.on_key(Key::Char(','));
-    ed.on_key(Key::Char(','));
+    // **A tab, not the delimiter** (2026-10-21): a cell holds the delimiter
+    // now — the editor quotes the field when one goes in — so the refusal this
+    // test needs is the one character a cell of a delimited file still has no
+    // use for.
+    ed.on_key(Key::Char('\t'));
+    ed.on_key(Key::Char('\t'));
     ed.on_key(Key::Esc);
     assert_eq!(ed.cell_text(1, 1), "土⿰木目");
     ed.on_key(Key::Char('u'));
@@ -10548,59 +10665,75 @@ fn a_bang_sends_the_selection_through_a_command() {
     assert!(ed.current_buffer().display_name().contains("wc -l"));
 }
 
+/// **Nine routes, and not one of them changes a row's shape** (2026-10-21).
+///
+/// A review found seven ways past the first version of this guard, each of
+/// which shifted every column of a row and then wrote the file out without a
+/// word. Every one of them is here.
+///
+/// Warning: **the rule changed and the invariant did not.** A cell may hold the
+/// delimiter now — the editor quotes the field when one goes in — so what is
+/// asserted is the thing the guard was built for: the number of cells each row
+/// comes apart into. A route that refuses and a route that quotes both pass;
+/// a route that shifts a column does not.
 #[test]
-fn no_route_at_all_gets_a_delimiter_into_a_cell() {
-    // A review found seven ways past the first version of this guard, each
-    // of which shifted every column of a row and then wrote the file out
-    // without a word. Every one of them is here.
+fn no_route_at_all_changes_a_rows_shape() {
     let (dir, csv) = a_table("guardall");
-    let commas = |ed: &Editor| ed.current_buffer().text().matches(',').count();
+    let shape = |ed: &Editor| (0..3).map(|n| ed.row_cells(n).len()).collect::<Vec<_>>();
 
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     let clean = ed.current_buffer().text();
-    let n = commas(&ed);
+    let was = shape(&ed);
+    assert_eq!(was.len(), 3, "three rows to watch");
     ed.goto_line(2);
     press(&mut ed, "l");
 
     // 1. Typed.
     press(&mut ed, "i");
     ed.on_key(Key::Char(','));
-    assert_eq!(commas(&ed), n, "typed");
-    // 2. A tab and a line break are not text a cell may hold either.
+    assert_eq!(shape(&ed), was, "typed");
+    // 2. A line break goes in too — the record is two lines and one row. A tab
+    //    is still turned away: nothing quotes it into a use.
+    ed.on_key(Key::Enter);
+    assert_eq!(shape(&ed), was, "a line break");
     ed.on_key(Key::Char('\t'));
-    ed.on_key(Key::Char('\n'));
-    assert_eq!(ed.current_buffer().text(), clean, "tab and newline");
+    assert_eq!(shape(&ed), was, "a tab");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('u'));
+    assert_eq!(ed.current_buffer().text(), clean, "and one `u` takes it all back");
+    press(&mut ed, "l");
     // 3. Bracketed paste — ⌘V, which the manual says still works.
+    press(&mut ed, "i");
     ed.paste_text("⿰木,目");
-    assert_eq!(commas(&ed), n, "pasted");
+    assert_eq!(shape(&ed), was, "pasted");
     ed.paste_text("⿰木\n目");
-    assert_eq!(commas(&ed), n, "pasted over two lines");
-    assert_eq!(ed.current_buffer().text(), clean);
+    assert_eq!(shape(&ed), was, "pasted over two lines");
     // 4. An IME commit.
     ed.insert_committed("木,目");
-    assert_eq!(commas(&ed), n, "committed by the IME");
+    assert_eq!(shape(&ed), was, "committed by the IME");
     ed.on_key(Key::Esc);
 
     // 5. The system clipboard (`Space p`).
     ed.provide_clipboard("木,目", crate::editor::Pasting::AsIs { after: true });
-    assert_eq!(commas(&ed), n, "from the system clipboard");
+    assert_eq!(shape(&ed), was, "from the system clipboard");
     // 6. `r` — two keystrokes in Normal mode, and the easiest of the lot.
     press(&mut ed, "r");
     ed.on_key(Key::Char(','));
-    assert_eq!(commas(&ed), n, "overwritten with r");
+    assert_eq!(shape(&ed), was, "overwritten with r");
     // 7. `R`, from a register holding a whole row.
     press(&mut ed, "0");
     press(&mut ed, "xy");
     press(&mut ed, "l");
     press(&mut ed, "R");
-    assert_eq!(commas(&ed), n, "replaced from a register");
-    // 8. `:s`, which rewrites whole lines at once.
+    assert_eq!(shape(&ed), was, "replaced from a register");
+    // 8. `:s`, which rewrites whole lines at once — still refused outright,
+    //    because it is not a cell edit and nothing quotes what it writes.
     assert!(ed.execute("s/⿰/a,b/").is_ok());
-    assert_eq!(commas(&ed), n, "substituted");
+    assert_eq!(shape(&ed), was, "substituted");
     assert!(ed.status().contains("格"), "and it says why: {}", ed.status());
     assert!(ed.execute("s/⿰/a\\nb/").is_ok());
-    assert_eq!(commas(&ed), n, "substituted with a line break");
+    assert_eq!(shape(&ed), was, "substituted with a line break");
 
     // 9. Deleting the delimiter itself. An empty cell sits exactly on one,
     // so `d` there used to join its two neighbours — and on this table most
@@ -10632,7 +10765,7 @@ fn no_route_at_all_gets_a_delimiter_into_a_cell() {
     // And a substitution that only changes what is *inside* cells is the
     // useful kind, so it still runs.
     assert!(ed.execute("s/⿰木目/⿰禾布/").is_ok());
-    assert_eq!(commas(&ed), 4);
+    assert_eq!(ed.current_buffer().text().matches(',').count(), 4);
     assert!(ed.current_buffer().text().contains("⿰禾布"));
 
     std::fs::remove_dir_all(&dir).ok();

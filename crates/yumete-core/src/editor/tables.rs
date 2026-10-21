@@ -3151,6 +3151,28 @@ impl Editor {
         any.then(|| std::rc::Rc::new(starts))
     }
 
+    /// **Re-read where the records start.**
+    ///
+    /// Scanned once on the way in, because no 拆分表 anybody has written holds
+    /// a field that runs on. A cell typed into can grow one now (2026-10-21),
+    /// and from that keystroke every row number in the grid depends on this
+    /// answer — so it is asked again wherever a cell edit could have added a
+    /// line break or taken one away, and **nowhere near a frame**: the scan
+    /// reads every line of the file.
+    pub(super) fn rescan_records(&mut self) {
+        let Some(view) = self.table.as_ref() else {
+            return;
+        };
+        let Separator::Delimiter(delimiter) = view.separator else {
+            return;
+        };
+        let first = usize::from(view.schema.header);
+        let starts = self.scan_record_starts(first, delimiter);
+        if let Some(view) = self.table.as_mut() {
+            view.record_starts = starts;
+        }
+    }
+
     /// **The first line of the record `line` is part of** (2026-10-20 作者定).
     ///
     /// A grid row is named by this, and that is the whole of what makes a
@@ -3217,13 +3239,6 @@ impl Editor {
         )
     }
 
-    /// **Whether the cursor is in a record written over more than one line.**
-    ///
-    /// Only inside a grid: in the source view the lines are the file's own and
-    /// there is nothing special about them.
-    pub(super) fn record_spans_lines(&self) -> bool {
-        self.record_height(self.record_first(self.cursor_line())) > 1
-    }
 
     /// **Which line row `nth` of the grid begins on**, 1-based as a reader
     /// counts rows — or `None` when the number is not a grid row number.
@@ -3392,6 +3407,48 @@ impl Editor {
             .or_else(|| cells.iter().rposition(|&(_, b)| within > b))
     }
 
+    /// **The value's own span inside a cell** — the pair of `"` around a
+    /// quoted field taken off.
+    ///
+    /// Those two characters are the file's syntax, not anything the writer
+    /// typed (`cell_shown` has said so since 2026-10-20), so everything that
+    /// is about *content* asks this and not [`Self::cell_span`]: where the
+    /// caret may stand, what walls a motion, what `g h`/`g l` answer, what
+    /// Insert is clamped to.
+    ///
+    /// Warning: **this is why a record over several lines used to be read-only.**
+    /// The caret was counted in the value while the span it edited still
+    /// carried the quotes, so typing landed in front of the opening one:
+    /// `alpha,"first line` became `alpha,ZZ"first line` and the record stopped
+    /// parsing (2026-10-20). A `|` table has no quoting at all, so there the
+    /// two spans are the same answer.
+    pub(super) fn value_span(&self, from: usize, to: usize) -> (usize, usize) {
+        if !matches!(
+            self.table.as_ref().map(|view| view.separator),
+            Some(Separator::Delimiter(_))
+        ) {
+            return (from, to);
+        }
+        let rope = self.current_buffer().rope();
+        let (from, to) = (from.min(rope.len_chars()), to.min(rope.len_chars()));
+        match to >= from + 2 && rope.char(from) == '"' && rope.char(to - 1) == '"' {
+            true => (from + 1, to - 1),
+            false => (from, to),
+        }
+    }
+
+    /// Whether the cursor's cell is a quoted field — and so can hold a
+    /// delimiter, a quote or a line break without anything else being done.
+    pub(super) fn the_cell_is_quoted(&self) -> bool {
+        let Some((line, cell)) = self.cell_position() else {
+            return false;
+        };
+        let Some((from, to)) = self.cell_span(line, cell) else {
+            return false;
+        };
+        self.value_span(from, to) != (from, to)
+    }
+
     /// The buffer range one cell covers.
     pub fn cell_span(&self, line: usize, cell: usize) -> Option<(usize, usize)> {
         let cells = self.row_cells(line);
@@ -3422,7 +3479,8 @@ impl Editor {
     /// only `t o` has none, and there `self.table` is `None`.
     pub(super) fn cell_here(&self) -> Option<(usize, usize)> {
         let (line, cell) = self.cell_position()?;
-        self.cell_span(line, cell)
+        let (from, to) = self.cell_span(line, cell)?;
+        Some(self.value_span(from, to))
     }
 
     /// **全窗裏行號是表格自己的行號**（2026-10-17 作者定），左邊畫的那一個。
@@ -3486,6 +3544,144 @@ impl Editor {
         // what it said. What still guards the row is what guards every other
         // one — a delimiter typed into a cell is turned away where it is typed.
         self.cell_span(line, cell)
+    }
+
+    /// **Write a value into one cell, and let the file's syntax be the
+    /// editor's problem** (2026-10-21 作者定: 「格子裏打什麼都行，引號歸編輯器
+    /// 管」).
+    ///
+    /// What goes in is the value a reader sees; what lands in the file is that
+    /// value written so a parser cut by this delimiter gets it back whole —
+    /// quoted when it has to be and **not when it does not**
+    /// ([`crate::table::quote_for`]), which is already the rule everywhere
+    /// else a field is written out. So this is also where a quote stops being
+    /// needed: clear the line break out of a cell and the `"` pair goes with
+    /// it.
+    ///
+    /// The guard is stood down for the one write it cannot read: the text
+    /// *is* a delimiter or a quote, and it is legal precisely because it has
+    /// just been quoted.
+    fn write_the_cell(&mut self, line: usize, cell: usize, value: &str) -> bool {
+        let Some((from, to)) = self.cell_span_to_edit(line, cell) else {
+            return false;
+        };
+        let text = match self.table.as_ref().map(|view| view.separator) {
+            Some(Separator::Delimiter(d)) => crate::table::quote_for(value, d),
+            // A `|` table has no quoting; its one escape is `\|`, and a cell of
+            // it cannot hold a line break at all — so the guard still answers
+            // there, and this is a plain write.
+            _ => value.to_string(),
+        };
+        let done = match matches!(
+            self.table.as_ref().map(|view| view.separator),
+            Some(Separator::Delimiter(_))
+        ) {
+            true => self.without_cell_guard(|e| e.overwrite(from, to, &text)),
+            false => self.overwrite(from, to, &text),
+        };
+        // A value may have brought a line break with it, or taken the last one
+        // away with its quotes.
+        self.rescan_records();
+        done
+    }
+
+    /// **Whether this character is one the quotes exist for** — the file's
+    /// delimiter, or a quote.
+    ///
+    /// A line break is the third, and it is asked for by name
+    /// ([`Self::cell_takes_a_line_break`]) because the key that makes one is
+    /// not a `Char`.
+    pub(super) fn cell_needs_quoting_for(&self, c: char) -> bool {
+        match self.table.as_ref().map(|view| view.separator) {
+            Some(Separator::Delimiter(d)) => c == d || c == '"',
+            _ => false,
+        }
+    }
+
+    /// **Whether a cell of this file can hold a line break at all.**
+    ///
+    /// Only a delimited one: RFC 4180 quotes a field that holds one, and the
+    /// grid has read records over several lines since 2026-10-20. A `|` table
+    /// row *is* a line — it has no quoting to lean on, and a break in the
+    /// middle of one is two broken rows.
+    pub(super) fn cell_takes_a_line_break(&self) -> bool {
+        matches!(
+            self.table.as_ref().map(|view| view.separator),
+            Some(Separator::Delimiter(_))
+        )
+    }
+
+    /// **Put the quotes around the cursor's cell, so the next character typed
+    /// can be anything** (2026-10-21).
+    ///
+    /// Lazily, on the three keystrokes that need it — the delimiter, a quote
+    /// and <kbd>Enter</kbd> — rather than on the way into every cell: a field
+    /// nobody types one of those into is a field this never touches, and the
+    /// file does not grow a pair of quotes for a visit. `false` when the cell
+    /// cannot be found, or the table is not a delimited one.
+    pub(super) fn quote_the_cell(&mut self) -> bool {
+        let Some(Separator::Delimiter(_)) = self.table.as_ref().map(|view| view.separator) else {
+            return false;
+        };
+        if self.the_cell_is_quoted() {
+            return true;
+        }
+        let Some((line, cell)) = self.cell_position() else {
+            return false;
+        };
+        let Some((from, to)) = self.cell_span(line, cell) else {
+            return false;
+        };
+        let at = self.caret();
+        self.without_cell_guard(|e| {
+            let done = e.current_buffer_mut().insert(to, "\"");
+            if !e.applied(done) {
+                return false;
+            }
+            let done = e.current_buffer_mut().insert(from, "\"");
+            e.applied(done)
+        }) && {
+            // The caret was in the value and stays there: one character went
+            // in ahead of it.
+            self.set_cursor(at + 1);
+            true
+        }
+    }
+
+    /// **Write the cursor's cell back as its own value** — which drops a pair
+    /// of quotes that is no longer earning its place, and adds one that has
+    /// become necessary.
+    ///
+    /// Called on the way out of Insert, so a cell typed into leaves the file
+    /// the way [`crate::table::quote_for`] would have written it. The caret
+    /// keeps its place *in the value*, which is the only place it has while
+    /// the quotes are the editor's to move.
+    pub(super) fn tidy_the_cell(&mut self) {
+        if !self.table_here() {
+            return;
+        }
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        let Some((from, to)) = self.cell_span(line, cell) else {
+            return;
+        };
+        let (first, last) = self.value_span(from, to);
+        let value = self.current_buffer().rope().slice(first..last).to_string();
+        let within = self.caret().saturating_sub(first).min(value.chars().count());
+        let delimiter = match self.table.as_ref().map(|view| view.separator) {
+            Some(Separator::Delimiter(d)) => d,
+            _ => return,
+        };
+        if self.current_buffer().rope().slice(from..to) == crate::table::quote_for(&value, delimiter)
+        {
+            return;
+        }
+        if self.write_the_cell(line, cell, &value) {
+            if let Some((from, to)) = self.cell_span(line, cell) {
+                self.set_cursor(self.value_span(from, to).0 + within);
+            }
+        }
     }
 
     /// The text of one cell.
@@ -3619,11 +3815,12 @@ impl Editor {
         self.snapshot();
         for (r, value) in values.iter().enumerate() {
             let Some(&line) = lines.get(r) else { break };
-            let Some((from, to)) = self.cell_span_to_edit(line, cell) else {
+            // A line this column does not reach — the blank line between two
+            // blocks — is skipped, not an error.
+            if self.cell_span(line, cell).is_none() {
                 continue;
-            };
-            let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(from..to, value));
-            if !self.applied(done) {
+            }
+            if !self.write_the_cell(line, cell, value) {
                 return;
             }
         }
@@ -3715,11 +3912,10 @@ impl Editor {
                 }
             }
             for (c, text) in values.iter().enumerate() {
-                let Some((from, to)) = self.cell_span_to_edit(at, cell + c) else {
+                if self.cell_span(at, cell + c).is_none() {
                     continue;
-                };
-                let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(from..to, text));
-                if !self.applied(done) {
+                }
+                if !self.write_the_cell(at, cell + c, text) {
                     return;
                 }
             }
@@ -5039,9 +5235,15 @@ impl Editor {
         let Some((line, cell)) = self.cell_position() else {
             return;
         };
-        let Some((start, end)) = self.cell_span_to_edit(line, cell) else {
+        let Some((whole, past)) = self.cell_span_to_edit(line, cell) else {
             return;
         };
+        // **The caret goes into the value, not onto the opening quote**
+        // (2026-10-21). `i` used to land on the `"` itself, so the first
+        // character typed went in front of it and the record stopped parsing
+        // — which is the whole reason a record over several lines was
+        // read-only.
+        let (start, end) = self.value_span(whole, past);
         self.snapshot();
         match how {
             CellEdit::Start => self.set_cursor(start),
@@ -5057,9 +5259,12 @@ impl Editor {
                         let text = self.current_buffer().rope().slice(start..end).to_string();
                         self.store(text);
                     }
-                    self.edit_remove(start..end);
+                    // The quotes go with it: what is being replaced is the
+                    // field, and an empty value needs none.
+                    self.without_cell_guard(|e| e.edit_remove(whole..past));
+                    self.rescan_records();
                 }
-                self.set_cursor(start);
+                self.set_cursor(whole);
             }
         }
         self.enter_insert();
@@ -5124,9 +5329,22 @@ impl Editor {
         let Some((line, cell)) = self.cell_position() else {
             return;
         };
-        let text = self.cell_text(line, cell);
+        // **The value, not the field.** A quoted cell's `"` are the file's
+        // syntax; taking them into the register would mean `R` quoting them
+        // again on the way back, and `"a,b"` would come out as a value with
+        // two quotes in it (2026-10-21).
+        let value = {
+            let (source, cells) = (self.row_source(line), self.row_cells(line));
+            cells.get(cell).map(|&span| self.cell_shown(&source, span)).unwrap_or_default()
+        };
+        let text = value.clone();
         let n = text.chars().count();
-        self.store(text);
+        self.store(text.clone());
+        // **One cell is a run of one** (2026-10-21). Without this, a value
+        // holding the file's own delimiter — 「Smith, John」 — came back out of
+        // the register as *two* cells, because that is what the text says and
+        // text is all there is to go on. The key that took it knows better.
+        self.register_grid = Some((text, Held::Cells(vec![value])));
         self.status = say!("table.yanked-cell", n);
     }
 
@@ -5368,16 +5586,15 @@ impl Editor {
         if run.len() > 1 {
             return self.put_the_run(line, cell, &run);
         }
-        if let Some(why) = self.cell_refuses_text(&body) {
-            self.status = why;
-            return;
-        }
-        let Some((start, end)) = self.cell_span_to_edit(line, cell) else {
-            return;
-        };
         self.snapshot();
-        if self.overwrite(start, end, &body) {
-            self.set_cursor(start);
+        // **Whatever is in the register, the cell can hold it** (2026-10-21
+        // 作者定). A value with the file's own delimiter in it — 「Smith,
+        // John」 — used to be turned away here; now it is quoted on the way
+        // in, which is what the quotes are for.
+        if self.write_the_cell(line, cell, &body) {
+            if let Some((start, end)) = self.cell_span(line, cell) {
+                self.set_cursor(self.value_span(start, end).0);
+            }
             // What was written in may be wider than the column was.
             //
             // **Only a cell squares the table up** (2026-10-21). A *record*
@@ -5498,25 +5715,21 @@ impl Editor {
             return;
         }
         for (nth, text) in run.iter().enumerate().rev() {
-            if let Some(why) = self.cell_refuses_text(text) {
-                self.status = why;
-                return;
-            }
-            let Some((from, to)) = self.cell_span_to_edit(line, cell + nth) else {
-                return;
-            };
             if nth == run.len() - 1 {
                 self.snapshot();
             }
-            if !self.overwrite(from, to, text) {
+            if !self.write_the_cell(line, cell + nth, text) {
                 return;
             }
         }
-        if let Some((from, _)) = self.cell_span(line, cell) {
-            self.set_cursor(from);
+        if let Some((from, to)) = self.cell_span(line, cell) {
+            self.set_cursor(self.value_span(from, to).0);
         }
         self.format_md_table();
-        self.status = say!("table.cells-replaced", run.len());
+        self.status = match run.len() {
+            1 => say!("table.cell-replaced"),
+            n => say!("table.cells-replaced", n),
+        };
     }
 
     /// The bounds of the cell the cursor is in, for clamping Insert to it.
@@ -5525,7 +5738,8 @@ impl Editor {
             return None;
         }
         let (line, cell) = self.cell_position()?;
-        self.cell_span(line, cell)
+        let (from, to) = self.cell_span(line, cell)?;
+        Some(self.value_span(from, to))
     }
     /// Find every row whose 拆分 uses what is under the cursor.
     ///
@@ -5876,10 +6090,12 @@ impl Editor {
 
     /// Whether the cursor sits at the first character of its cell.
     pub(super) fn at_cell_start(&self) -> bool {
-        match self.cell_position() {
-            Some((line, cell)) => self.cell_span(line, cell).map(|(a, _)| a) == Some(self.caret()),
-            None => false,
-        }
+        // **The value's start, not the field's.** Inside a quoted field the
+        // character before the caret is the opening `"`, and backspacing over
+        // it is not 「joining two cells」 — it is taking the quote the editor
+        // put there. The head of a *continuation* line is not a cell start
+        // either, so Backspace there joins the cell's own two lines.
+        self.cell_here().map(|(a, _)| a) == Some(self.caret())
     }
 
     /// **What divides this file into cells, whatever mode it is in.**
@@ -5968,6 +6184,16 @@ impl Editor {
         // does not care whether `:table` is on.
         let view = self.table.as_ref()?;
         if !self.table_here() {
+            return None;
+        }
+        // **A quoted field can hold anything** (2026-10-21 作者定). The pair of
+        // `"` is the editor's to put there and to take away
+        // ([`Self::write_the_cell`]), and once it is there the delimiter, a
+        // quote and a line break are all ordinary characters of the value —
+        // which is what RFC 4180 says and what 「一格是一篇獨立的小文章」 asks
+        // for. An *unquoted* field still refuses them, and the keystroke that
+        // needs one quotes the field first.
+        if self.the_cell_is_quoted() {
             return None;
         }
         if c == view.schema.delimiter {

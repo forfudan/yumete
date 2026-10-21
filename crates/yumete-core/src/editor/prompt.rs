@@ -156,6 +156,23 @@ impl Editor {
         if self.table_here() {
             match key {
                 Key::Char(c) => {
+                    // **The three characters the quotes are for** (2026-10-21
+                    // 作者定: 「格子裏打什麽都行，引號歸編輯器管」). A quoted
+                    // field holds the delimiter and a quote as ordinary
+                    // characters, so the keystroke that needs one puts the
+                    // quotes there — and a `"` typed into the value is two in
+                    // the file, which is RFC 4180's own escape.
+                    if c == '"' && self.cell_needs_quoting_for(c) && self.quote_the_cell() {
+                        // One quote in the value is two in the file — RFC
+                        // 4180's own escape, and the one place this editor
+                        // writes a character the reader did not type.
+                        self.insert_recording.push(c);
+                        self.insert_str("\"\"");
+                        return;
+                    }
+                    if self.cell_needs_quoting_for(c) {
+                        self.quote_the_cell();
+                    }
                     let mut buf = [0u8; 4];
                     let one = c.encode_utf8(&mut buf);
                     if let Some(why) = self.cell_refuses_text_at(Some(self.sel.head()), one) {
@@ -170,6 +187,19 @@ impl Editor {
                 Key::Tab | Key::BackTab => {
                     self.format_md_table();
                     self.step_cell(key == Key::Tab, true);
+                    return;
+                }
+                // **<kbd>Enter</kbd> inside a cell makes a line break**
+                // (2026-10-21 作者定) — in a delimited file, where a quoted
+                // field may hold one. A `|` table cannot: a row of it is one
+                // line by construction, and there is no quoting to lean on.
+                Key::Enter if self.cell_takes_a_line_break() && self.quote_the_cell() => {
+                    self.insert_recording.push('\n');
+                    self.insert_str("\n");
+                    // **This row is two rows of the file now.** Every row
+                    // number the grid draws comes from the record map, and it
+                    // was scanned on the way in.
+                    self.rescan_records();
                     return;
                 }
                 Key::Enter => {
@@ -212,6 +242,13 @@ impl Editor {
                 // 那一則簽名是打字當口的東西，出了插入態就不是答案了。
                 self.signature = None;
                 self.signature_query = None;
+                // **The quotes are the editor's, on the way out too**
+                // (2026-10-21): a cell typed into leaves the file written the
+                // way `quote_for` would have written it, so a pair that is no
+                // longer earning its place goes away with the line break or
+                // the comma that asked for it.
+                self.tidy_the_cell();
+                self.rescan_records();
                 // A cell that grew while it was being typed in made its column
                 // too narrow for it. Laying the table out again on the way out
                 // is what keeps "aligned" a property of the file rather than a
