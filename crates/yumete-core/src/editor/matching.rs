@@ -1220,7 +1220,12 @@ impl Editor {
         // `window_at` scroll the cell inside itself and draw `dog` as `<g`.
         let pos = self.past_what_a_table_keeps_off(pos, forward, Stepping::Caret);
         let pos = self.on_this_line_under_vim(pos, flag);
-        self.move_head(self.a_place_for_the_caret(pos, forward));
+        // …and last of all the cell's own walls, when the keys are inside one
+        // (2026-10-21). It goes after `a_place_for_the_caret` and not before:
+        // that one looks for somewhere the page really draws, and the place
+        // it would find outside this cell is in the next one.
+        let pos = self.a_place_for_the_caret(pos, forward);
+        self.move_head(self.in_the_cell(pos));
     }
 
     /// **vim 鍵位下 `h`/`l` 不出這一行**（`:h l`；2026-10-02 定照參考實現）。
@@ -1757,6 +1762,90 @@ impl Editor {
     /// 而數目超出的時候「做 n 遍」走到最後一個，vim 是整個動作失敗。別的動作做 n
     /// 遍確實就是對的（`3w`），所以只有這一支認得 `nth`。
     pub(super) fn read_motion_nth(
+        &self,
+        what: motion::Motion,
+        how: motion::Reading,
+        nth: usize,
+    ) -> motion::Span {
+        let span = self.read_motion_unwalled(what, how, nth);
+        self.walled(what, span)
+    }
+
+    /// **The wall round a cell** — the whole of what [`Layer::Inside`] means
+    /// (2026-10-21).
+    ///
+    /// At the middle layer the cell *is* the document: `l` stops at its last
+    /// character, `gg` is its first, `$` its end, `f` looks no further than
+    /// it, and `d w` cannot reach the delimiter. One clamp, on the way out of
+    /// the one funnel every motion comes through, rather than a rule per key
+    /// — the three keymap presets spell these differently and neither this
+    /// nor `table/layer.rs` may know which preset is loaded. What is walled is
+    /// a **motion**, and a motion is a value here (B1).
+    ///
+    /// Warning: **`j`/`k` are not walled**, and the screen motions are not
+    /// either. A step down a column already answers 「which cell」 — it keeps
+    /// the one it is in ([`Self::step_grid_row`]) — so it was never the
+    /// question the layers exist to settle, and walling it would make `j`
+    /// dead inside a one-line cell, which is nearly every cell. Paging is not
+    /// here at all: it is not a [`motion::Motion`].
+    fn walled(&self, what: motion::Motion, span: motion::Span) -> motion::Span {
+        if matches!(what, motion::Motion::Line { .. } | motion::Motion::Screen { .. }) {
+            return span;
+        }
+        let Some((from, to)) = self.cell_walls() else {
+            return span;
+        };
+        match span {
+            // **Both ends.** A span is what an operator takes, so clamping
+            // only the head would let `d` keep an anchor outside the cell and
+            // eat the delimiter from the other side.
+            motion::Span::Over { anchor, head } => motion::Span::Over {
+                anchor: anchor.clamp(from, to),
+                head: head.clamp(from, to),
+            },
+            // 「nothing there」 stays 「nothing there」: a verb has to be able
+            // to tell it from a span of one.
+            motion::Span::Missed => span,
+        }
+    }
+
+    /// **The two places the caret may stand in this cell**, when the keys are
+    /// walled inside one — `None` when they are not, which is everywhere
+    /// except [`Layer::Inside`].
+    ///
+    /// Warning: **the far wall is the last grapheme, not the span's end.** A cell's
+    /// span runs up to the delimiter, and standing there is standing on the
+    /// wall — 全窗 has no column for it, and `x` there would eat the
+    /// separator. The exception is Insert, where the caret is a bar between
+    /// graphemes and the place after the last character is exactly where the
+    /// next one goes; that is the editor's rule everywhere else too.
+    fn cell_walls(&self) -> Option<(usize, usize)> {
+        if !self.table_layer().walled() || !self.layers_here() {
+            return None;
+        }
+        let (line, cell) = self.cell_position()?;
+        let (from, to) = self.cell_span(line, cell)?;
+        let last = match self.mode == Mode::Insert || to <= from {
+            true => to,
+            false => motion::prev_grapheme(self.current_buffer().rope(), to),
+        };
+        Some((from, last.max(from)))
+    }
+
+    /// One position, walled into the cell — the same clamp [`Self::walled`]
+    /// puts on a span, for the keys that never make one.
+    ///
+    /// `h` and `l` are those keys: they step over what a grid keeps off the
+    /// page and over the seams between cells (#408), so they do their own
+    /// arithmetic rather than asking for a [`motion::Motion`].
+    fn in_the_cell(&self, pos: usize) -> usize {
+        match self.cell_walls() {
+            Some((from, to)) => pos.clamp(from, to),
+            None => pos,
+        }
+    }
+
+    fn read_motion_unwalled(
         &self,
         what: motion::Motion,
         how: motion::Reading,

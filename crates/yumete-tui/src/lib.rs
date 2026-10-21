@@ -15465,8 +15465,8 @@ fn squeezed(text: &str) -> String {
         let basic = strip("tb");
         assert!(basic.contains('1') && basic.contains('2'), "基本: {basic:?}");
         assert!(!basic.contains("ch"), "and it is not the table's first row: {basic:?}");
-        let full = strip("tf");
-        assert_eq!(basic, full, "基本 numbers them exactly as 全 does");
+        // **`t f` 併進 `t b` 了**（2026-10-21），所以「基本數得和全一樣」這句
+        // 没有第二邊可比。剩下的那一句纔是這一條的名字：源碼不數。
         let source = strip("to");
         assert!(source.contains("ch"), "源碼 starts at the file: {source:?}");
     }
@@ -15480,7 +15480,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_delimited_table_squares_its_columns_up_like_a_pipe_one() {
         let mut editor = editor_with("ch\t錐\nlongcode\t蜘\nbk\t裘\n");
-        for c in " tf".chars() {
+        for c in " tb".chars() {
             editor.on_key(Key::Char(c));
         }
         let buffer = render_with(&editor, &Config::default(), no_ime(), 40, 6);
@@ -15735,7 +15735,7 @@ fn squeezed(text: &str) -> String {
         // `t i`, because a table on a page of prose does not open the panel
         // by itself any more (#495) — what is under test here is its *shape*
         // once it is open.
-        for key in ['4', 'j', ' ', 't', 'f', ' ', 't', 'i'] {
+        for key in ['4', 'j', ' ', 't', 'b', ' ', 't', 'i'] {
             editor.on_key(Key::Char(key));
         }
         let config = Config::default();
@@ -19580,8 +19580,10 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('h'));
         assert_eq!(caret(&editor, &config), one, "and back");
 
-        // The same in Insert, where it decides where the next 字 lands.
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); }
+        // The same in Insert, where it decides where the next 字 lands. `Esc`
+        // comes back up to the cells, where `i` is the cell's own door
+        // (2026-10-21: `空格 t T` is gone, the layers are `Enter`/`Esc`).
+        editor.on_key(Key::Esc);
         editor.on_key(Key::Char('i'));
         assert_eq!(caret(&editor, &config), at_start, "`i` is the cell's start");
         editor.on_key(Key::Right);
@@ -19868,9 +19870,8 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        // A grid opens at its top layer, so `l` is already a cell (2026-10-21).
-        // …and into the second cell, which is `mu`.
-        editor.on_key(Key::Char('l'));
+        // 跨格是 `Tab` 的事（2026-10-21）：`t b` 是文檔，那裏 `l` 走的是字。
+        editor.on_key(Key::Tab);
         let (line, at) = editor.cell_position().expect("in a cell");
         assert_eq!(at, 1, "the second cell");
         let buf = render(&editor, &config, 30, 8);
@@ -20061,8 +20062,8 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        // A grid opens at its top layer, so this `l` is a whole cell.
-        editor.on_key(Key::Char('l'));
+        // 跨格是 `Tab` 的事（2026-10-21）：`t b` 是文檔，那裏 `l` 走的是字。
+        editor.on_key(Key::Tab);
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "on `mu`");
         // Then down into the cell, where `l` walks characters and the
         // selection covers two of them. It has to: the block cursor is painted
@@ -20117,8 +20118,8 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        // A grid opens at its top layer, so `l` is already a cell (2026-10-21).
-        editor.on_key(Key::Char('l'));
+        // 跨格是 `Tab` 的事（2026-10-21）：`t b` 是文檔，那裏 `l` 走的是字。
+        editor.on_key(Key::Tab);
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let buf = render(&editor, &config, 30, 8);
         let want = ink.gold();
@@ -20166,10 +20167,10 @@ fn squeezed(text: &str) -> String {
                 .unwrap_or_else(|| panic!("{ch} is on the page"))
         };
 
-        // Into the highlighted cell — `l` walks across the row, because the
-        // motions are turned with the text. The highlighter's ground is the
-        // answer to 「this is marked」 and the cell may not rub it out.
-        editor.on_key(Key::Char('l'));
+        // Into the highlighted cell. 跨格是 `Tab` 的事（2026-10-21）。The
+        // highlighter's ground is the answer to 「this is marked」 and the
+        // cell may not rub it out.
+        editor.on_key(Key::Tab);
         assert_eq!(editor.cell_position(), Some((2, 1)), "in the marked cell");
         let buffer = render_vertical(&mut editor, &config, 24, 14);
         let (x, y) = find(&buffer, "m");
@@ -20181,10 +20182,12 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Enter);
         assert_eq!(editor.cursor_line(), 1, "on the rule: {}", editor.status());
         let buffer = render_vertical(&mut editor, &config, 24, 14);
-        // Warning: **`┄`, not `-`** — 竪排下規則行那一縱畫的是 `├┄┄┄┼┄┄┄┤`，一個字符
-        // 換一個字形（`tf` 那一套）。找 `-` 在這一幀上一個都找不着，而這半條測試
-        // 從 2026-09-10 起就沒跑過，所以沒人撞見。
-        let (x, y) = find(&buffer, "┄");
+        // **`─`，不是 `┄`**（2026-10-21）：`├┄┄┄┼┄┄┄┤` 是 `tf` 那一套，而
+        // `tf` 併進了 `tb`。竪排這一頭的規則行由竪排自己畫成 `──┼─`，那是
+        // 版面的事，不是哪一檔表格模式的事——所以它活下來了。
+        // ⚠ **一格裏兩個字形**：竪排把兩個半角畫進同一個 縱 的槽裏，所以這一
+        // 格的符號是 `──` 而不是 `─`。
+        let (x, y) = find(&buffer, "\u{2500}\u{2500}");
         assert_ne!(buffer[(x, y)].bg, want, "the rule row is not a cell");
 
         // And out of the table, onto a paragraph that merely holds a `|`.

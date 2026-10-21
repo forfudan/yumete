@@ -935,7 +935,6 @@ impl Editor {
                 let word = |level: TableLevel| match level {
                     TableLevel::Off => say!("level.off"),
                     TableLevel::Basic => say!("level.basic"),
-                    TableLevel::Full => say!("level.full"),
                 };
                 // **The three it writes**, not four. `:indent` reports itself
                 // — it is not `:render`'s to set, so saying its level here
@@ -947,7 +946,7 @@ impl Editor {
                 let level = |how: Render| match how {
                     Render::Off => TableLevel::Off,
                     Render::Basic => TableLevel::Basic,
-                    Render::Full => TableLevel::Full,
+                    Render::Full => TableLevel::Basic,
                 };
                 self.status = say!(
                     "render.is",
@@ -1233,7 +1232,6 @@ impl Editor {
                     false => match self.table_level {
                         TableLevel::Off => say!("table.already-off"),
                         TableLevel::Basic => say!("table.already-operated"),
-                        TableLevel::Full => say!("table.already-drawn"),
                     },
                 };
                 Ok(CommandOutcome::Continue)

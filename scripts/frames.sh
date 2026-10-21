@@ -42,7 +42,7 @@ scenes() {
 竪排-選區|60x24|:vertical\nvjj
 竪排-表格|60x24|:vertical\n:open TABLE\n
 表格-文中|80x20|:open TABLE\n
-表格-滿版|80x20|:open TABLE\ntt
+表格-滿版|80x20|:open TABLE\n tt
 搜索面板|100x24|:s\n那\n
 搜索面板-替換|100x24|:replace\n那\n
 挑選器|90x24| f

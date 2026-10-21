@@ -2414,7 +2414,7 @@ KEYS (Normal mode, Helix-style):
               :word-list-reload   reread .yumete/words.txt — this book's own names
               :word-habit      口頭禪: what this one says far more than prose does
               :table <行>x<欄>   an empty table, the first row its headings
-              :table-render off|basic|full   how much of a grid is drawn
+              :table-render off|basic|window how much of a grid is drawn
               :table-check     look the whole over: repeated row names, parts
                           no row has, rows whose column count is wrong
               :table-jump <char>  the row a table names by that character
