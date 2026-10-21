@@ -6458,6 +6458,161 @@ fn every_key_the_table_group_lists_does_something() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **`x` takes a record, `%` takes the table** (2026-10-21 作者定: 「`x` 选整条
+/// 记录 is a must have feature. Also nice if users want to copy the whole
+/// table.」).
+///
+/// The point of saying 「record」 rather than 「line」 is the fixture's second
+/// row: a field holding a line break is two lines of the file and one row of
+/// the grid, and `x` is the key that takes a row.
+#[test]
+fn x_takes_a_record_and_percent_takes_this_table() {
+    let dir = tmp().join(format!("yumete-take-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("t.csv");
+    let text = "a,b\n1,one\n2,\"two\nlines\"\n3,three\n";
+    std::fs::write(&csv, text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    let taken = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+
+    // The one-line record, whole — and the cursor was in the middle of it.
+    ed.goto_line(2);
+    press(&mut ed, "l");
+    press(&mut ed, "x");
+    assert_eq!(taken(&ed), "1,one\n", "{}", ed.status());
+
+    // Pressed again it takes one more **record**, and the next one is two
+    // lines of the file.
+    press(&mut ed, "x");
+    assert_eq!(taken(&ed), "1,one\n2,\"two\nlines\"\n", "{}", ed.status());
+
+    // Standing in the two-line record, one `x` takes both of its lines.
+    ed.goto_line(3);
+    press(&mut ed, "x");
+    assert_eq!(taken(&ed), "2,\"two\nlines\"\n", "一條記錄兩行：{}", ed.status());
+
+    // **`%` is this table, header and all** — and a file that is nothing but
+    // a table is all of it.
+    press(&mut ed, "%");
+    assert_eq!(taken(&ed), text, "{}", ed.status());
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`v` grows by whole cells along the row** (2026-10-21 作者定: 「something
+/// good if users want to pick some cells of a line and paste/replace into
+/// another row」).
+///
+/// The motions land the caret on a cell's first character, so a selection
+/// that simply stopped there would be 「these two cells and the first 字 of
+/// the third」. What the reader asked for is cells.
+#[test]
+fn v_grows_by_whole_cells_along_the_row() {
+    let dir = tmp().join(format!("yumete-vcells-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("v.csv");
+    std::fs::write(&csv, "a,b,c\n一,二,三\n四,五,六\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    let taken = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+
+    ed.goto_line(2);
+    press(&mut ed, "v");
+    assert_eq!(taken(&ed), "一", "一格起步");
+    press(&mut ed, "l");
+    assert_eq!(taken(&ed), "一,二", "兩格，連中間那個分隔符");
+    press(&mut ed, "l");
+    assert_eq!(taken(&ed), "一,二,三", "三格");
+    // …and back, a cell at a time.
+    press(&mut ed, "h");
+    assert_eq!(taken(&ed), "一,二", "縮回兩格");
+
+    // **A point is not a selection**: with nothing being extended the caret
+    // just stands in its cell, which the two 金 edges mark.
+    //
+    // `Esc` is what stops extending — at the top layer it does not cross a
+    // layer, it does what it does everywhere (`esc_at_the_top_stays_at_the_top`).
+    ed.on_key(Key::Esc);
+    ed.goto_line(3);
+    press(&mut ed, "l");
+    assert_eq!(taken(&ed), "五", "一個字素，不是一格");
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A run of cells copies and pastes over another row's cells** (2026-10-21
+/// 作者定: 「users want to pick some cells of a line and paste/replace into
+/// another row」).
+///
+/// One for one, left to right, and the row keeps every delimiter it had —
+/// what is being replaced is contents.
+#[test]
+fn a_run_of_cells_goes_over_another_rows_cells() {
+    let dir = tmp().join(format!("yumete-run-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("run.csv");
+    std::fs::write(&csv, "a,b,c,d\n一,二,三,四\n壹,貳,參,肆\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+
+    // Two cells of row 1 — narrower than the row, so it is a run.
+    ed.goto_line(2);
+    press(&mut ed, "vl");
+    press(&mut ed, "y");
+    assert!(ed.status().contains('2'), "取了兩格：{}", ed.status());
+
+    // Down to row 2 and over its first two cells.
+    ed.on_key(Key::Esc);
+    ed.goto_line(3);
+    press(&mut ed, "p");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "a,b,c,d\n一,二,三,四\n一,二,參,肆\n",
+        "{}",
+        ed.status()
+    );
+
+    // …and it can start anywhere on the row, not only at its head.
+    ed.goto_line(3);
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Tab);
+    press(&mut ed, "p");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "a,b,c,d\n一,二,三,四\n一,二,一,二\n",
+        "{}",
+        ed.status()
+    );
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`%` takes the table, not the chapter it sits in.**
+#[test]
+fn percent_in_a_document_takes_the_table_and_stops() {
+    let mut ed = typed("前文\n\n| a | b |\n| --- | --- |\n| 一 | 二 |\n\n後文\n");
+    ed.execute(":syntax markdown").unwrap();
+    ed.goto_line(5);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    press(&mut ed, "%");
+    let (from, to) = ed.selection();
+    let took = ed.current_buffer().rope().slice(from..to).to_string();
+    assert!(took.starts_with("| a | b |"), "從表頭起：{took:?}");
+    assert!(took.trim_end().ends_with("|"), "到末一行止：{took:?}");
+    assert!(!took.contains("前文") && !took.contains("後文"), "不碰散文：{took:?}");
+}
+
 /// **A grid opens on cells, and one key goes inside one** (2026-10-21).
 ///
 /// The reverse of what #356 settled, and deliberately: that decision —
@@ -10188,11 +10343,18 @@ fn a_cell_can_be_copied_and_a_row_can_be_duplicated() {
     assert_eq!(ed.cursor_line(), 3, "the cursor is on the new row");
     assert!(!ed.row_is_ragged(3), "which is a whole row, not a fragment");
 
-    // Half a row has no honest place to go.
+    // **Half a row goes over the cells from here on** (2026-10-21 作者定:
+    // 「users want to pick some cells of a line and paste/replace into
+    // another row」). It used to be refused — 「half a row, two cells」 had
+    // no honest place to go — and now it has one: one cell for one cell,
+    // left to right, every delimiter kept.
+    ed.goto_line(4);
     ed.set_register_for_test("二,土");
     press(&mut ed, "p");
-    assert_eq!(ed.current_buffer().text().lines().count(), 4, "refused");
-    assert!(ed.status().contains("分隔"), "{}", ed.status());
+    assert_eq!(ed.current_buffer().text().lines().count(), 4, "no row was added");
+    assert_eq!(ed.cell_text(3, 0), "二", "{}", ed.status());
+    assert_eq!(ed.cell_text(3, 1), "土");
+    assert!(ed.status().contains('2'), "說了幾格：{}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
 }

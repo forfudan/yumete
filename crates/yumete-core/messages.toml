@@ -11104,6 +11104,13 @@ zhs = "去某一格要两个数：`␣t20,20g` 第 20 行第 20 栏。`-` 是范
 en = "a cell takes two numbers: `␣t20,20g` is row 20, column 20. `-` is a range, as in `␣t2-10/`"
 
 [[message]]
+# 表格：貼進來的那一段蓋掉了從這一格起的幾格(2026-10-21)
+key = "table.cells-replaced"
+zht = "換掉了 {0} 格"
+zhs = "换掉了 {0} 格"
+en = "replaced {0} cells"
+
+[[message]]
 # :check 查完表格，没有問題
 key = "table.check-clean"
 zht = "{0}：{1} 行，没查出問題"
@@ -11788,6 +11795,13 @@ key = "table.yanked-cell"
 zht = "取了一格({0} 個字)"
 zhs = "取了一格({0} 个字)"
 en = "yanked a cell ({0} character(s))"
+
+[[message]]
+# 表格：一段格子進了寄存器(2026-10-21，v 橫着長出來的那一段)
+key = "table.yanked-cells"
+zht = "取了 {0} 格"
+zhs = "取了 {0} 格"
+en = "yanked {0} cells"
 
 [[message]]
 # 取了一整欄

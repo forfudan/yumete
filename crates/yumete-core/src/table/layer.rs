@@ -51,6 +51,13 @@ pub enum Claim {
     /// A motion over cells. The editor moves the selection; the layer does
     /// not care how.
     Cell(Step),
+    /// **Take a whole thing as the selection.** A key that selects means
+    /// something different where the unit is the cell: `x` takes a record
+    /// rather than a line of the file, and `%` takes this table rather than
+    /// the document it is sitting in (2026-10-21 作者定: 「`x` 选整条记录 is
+    /// a must have feature. Also nice if users want to copy the whole
+    /// table.」).
+    Take(Whole),
     /// Cross into another layer.
     Cross(Layer),
     /// **Not this layer's business.** The ordinary editor takes the key, and
@@ -81,6 +88,18 @@ pub enum Step {
     Next,
     /// The previous cell, the way `Next` came.
     Prev,
+}
+
+/// What a selection key takes, where the unit is the cell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Whole {
+    /// **One record**, and one more each time the key is pressed again — the
+    /// same thing `x` means in prose, counted in records instead of lines. A
+    /// field holding a line break makes one record several lines, and the
+    /// reader asked for the record.
+    Record,
+    /// **This table**, header and all — not the document it sits in.
+    Table,
 }
 
 /// How the active cell is bracketed — [`Layer`]'s one instruction to the
@@ -274,6 +293,8 @@ impl Layer {
             Key::Char('k') | Key::Up => Claim::Cell(Step::Up),
             Key::Char('0') | Key::Home => Claim::Cell(Step::RecordStart),
             Key::Char('$') | Key::End => Claim::Cell(Step::RecordEnd),
+            Key::Char('x') => Claim::Take(Whole::Record),
+            Key::Char('%') => Claim::Take(Whole::Table),
             _ => Claim::Fall,
         }
     }
@@ -406,6 +427,24 @@ mod tests {
                 assert_eq!(from.claim(mode, Key::Tab), Claim::Cell(Step::Next));
                 assert_eq!(from.claim(mode, Key::BackTab), Claim::Cell(Step::Prev));
             }
+        }
+    }
+
+    /// **The two keys that select take a cell-sized thing**, and only at the
+    /// top layer: inside a cell `x` is a line of the file and `%` is the
+    /// document, which is what they are in prose.
+    #[test]
+    fn a_selection_key_takes_a_cell_sized_thing() {
+        assert_eq!(
+            Layer::Whole.claim(Mode::Normal, Key::Char('x')),
+            Claim::Take(Whole::Record)
+        );
+        assert_eq!(
+            Layer::Whole.claim(Mode::Normal, Key::Char('%')),
+            Claim::Take(Whole::Table)
+        );
+        for key in [Key::Char('x'), Key::Char('%')] {
+            assert_eq!(Layer::Inside.claim(Mode::Normal, key), Claim::Fall, "{key:?}");
         }
     }
 

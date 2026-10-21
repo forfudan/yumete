@@ -3928,6 +3928,10 @@ impl Editor {
                 self.step_cells(step, count);
                 return true;
             }
+            Claim::Take(whole) => {
+                self.repeat(count, |e| e.take_whole(whole));
+                return true;
+            }
             // Not the grid's business: the ordinary editor takes the key and a
             // table changes nothing about what it means. Paging, search, `:`
             // and every operator arrive here at the middle layer.
@@ -4054,6 +4058,93 @@ impl Editor {
         true
     }
 
+    /// Take a whole record, or the whole table — the two selection keys a
+    /// grid spells differently ([`Claim::Take`]).
+    fn take_whole(&mut self, whole: layer::Whole) {
+        match whole {
+            // **`x` is `x`, counted in records.** The prose key already knows
+            // how to take one more each time it is pressed; all a grid adds
+            // is that the thing being counted may be several lines
+            // (RFC 4180), so the ends are pulled out to the record's.
+            layer::Whole::Record => {
+                self.select_line();
+                self.round_out_to_records();
+            }
+            layer::Whole::Table => self.select_the_table(),
+        }
+    }
+
+    /// Pull both ends of the selection out to whole records.
+    ///
+    /// Only a record that runs over several lines needs this; `select_line`
+    /// has the one-line case, and the key that repeats to take one more.
+    fn round_out_to_records(&mut self) {
+        let (a, b) = self.selection();
+        let (from, to) = {
+            let rope = self.current_buffer().rope();
+            let last = motion::last_line(rope);
+            let head = motion::prev_grapheme(rope, b.min(rope.len_chars())).max(a);
+            let first = self.record_first(rope.char_to_line(a.min(rope.len_chars())));
+            let tail = self.record_first(rope.char_to_line(head));
+            let past = tail + self.record_height(tail).max(1);
+            let from = rope.line_to_char(first);
+            // **The head stands on the line break**, which is the shape
+            // `select_line` leaves and the shape it reads back to answer
+            // 「already a whole line, take one more」. Leave a different one
+            // and the second `x` quietly stops extending.
+            // ⚠ **末端是一個落得下的位置，不是「末端之後」。** `len_chars()` 在
+            // 緩衝區外面，把頭擺到那裏會被夾回來、選區當場塌成一個點——`2xd`
+            // 於是清掉一格而不是剪掉兩行。
+            let to = motion::prev_grapheme(
+                rope,
+                match past > last {
+                    true => rope.len_chars(),
+                    false => rope.line_to_char(past),
+                },
+            );
+            (from, to.max(from))
+        };
+        self.set_the_span(from, to);
+    }
+
+    /// **This table, header and all** — `%` where the unit is the cell.
+    ///
+    /// Not the document: a `|` table is three lines of a chapter, and 「select
+    /// everything」 there means those three lines — the one answer that is
+    /// useful and the one a reader cannot get any other way. A file that is
+    /// nothing but a table gives what `%` in prose would give, and that is a
+    /// coincidence rather than a reason.
+    fn select_the_table(&mut self) {
+        let (from, to) = {
+            let rope = self.current_buffer().rope();
+            let last = motion::last_line(rope);
+            let (first, end) = match self.prose_region() {
+                Some(region) => (region.first, region.last),
+                None => (0, last),
+            };
+            let from = rope.line_to_char(first);
+            let to = match end >= last {
+                true => motion::prev_grapheme(rope, rope.len_chars()),
+                false => motion::prev_grapheme(rope, rope.line_to_char(end + 1)),
+            };
+            (from, to.max(from))
+        };
+        self.set_the_span(from, to);
+    }
+
+    /// Put the selection exactly here, **without the cell clamp**.
+    ///
+    /// Warning: **not [`Editor::select_span`]**, which pulls both ends into the
+    /// cell the caret is in — that is 全窗's rule for the keys that walk by
+    /// word, and it is right for them. A key that takes a record or a table
+    /// is asking for something bigger than a cell on purpose, so going
+    /// through that door would hand it back one cell every time.
+    fn set_the_span(&mut self, from: usize, to: usize) {
+        self.sel.set_anchor(from);
+        self.sel.set_head(to);
+        self.refresh_goal_column();
+    }
+
     /// Execute one step over cells — the whole of what [`Claim::Cell`] asks
     /// for.
     ///
@@ -4061,6 +4152,54 @@ impl Editor {
     /// the three keymap presets spell these differently and neither the model
     /// nor this function may know which preset is loaded.
     fn step_cells(&mut self, step: layer::Step, count: usize) {
+        self.step_cells_unsnapped(step, count);
+        self.round_out_to_cells();
+    }
+
+    /// **A selection at this layer is a whole number of cells** (2026-10-21
+    /// 作者定: 「`v` 在一行里横着长 is something good if users want to pick
+    /// some cells of a line and paste/replace into another row.」).
+    ///
+    /// The motions land the caret on a cell's **first** character, which is
+    /// where a caret belongs; a selection that ended there would be 「these
+    /// two cells and the first 字 of the third」, and what the reader asked
+    /// for is cells. Nothing to do when nothing is being extended: a point is
+    /// not a selection, and the cell it stands in is marked by its edges.
+    fn round_out_to_cells(&mut self) {
+        if !self.extend || !self.table_layer().selects_the_cell() || !self.layers_here() {
+            return;
+        }
+        let (a, b) = (self.sel.anchor(), self.sel.head());
+        // **The cell an offset is in** — the same arithmetic `cell_position`
+        // does for the caret, asked about either end of the selection.
+        let holding = |at: usize| -> Option<(usize, usize)> {
+            let rope = self.current_buffer().rope();
+            let line = self.record_first(rope.char_to_line(at.min(rope.len_chars())));
+            let base = rope.line_to_char(line);
+            let within = at.saturating_sub(base);
+            let cells = self.row_cells(line);
+            let nth = cells
+                .iter()
+                .position(|&(from, to)| within >= from && within <= to)
+                .or_else(|| cells.iter().rposition(|&(_, to)| within > to))?;
+            self.cell_span(line, nth)
+        };
+        let (Some((first, _)), Some((_, past))) = (holding(a.min(b)), holding(a.max(b))) else {
+            return;
+        };
+        let last = {
+            let rope = self.current_buffer().rope();
+            motion::prev_grapheme(rope, past).max(first)
+        };
+        let (from, to) = match a <= b {
+            true => (first, last),
+            false => (last, first),
+        };
+        self.sel.set_anchor(from);
+        self.sel.set_head(to);
+    }
+
+    fn step_cells_unsnapped(&mut self, step: layer::Step, count: usize) {
         use layer::Step;
         match step {
             Step::Left => self.repeat(count, |e| e.move_cell(false)),
@@ -4906,6 +5045,17 @@ impl Editor {
     }
 
     fn yank_cell(&mut self) {
+        // **A run of cells, when a run is standing** (2026-10-21). The
+        // selection is a whole number of cells at this layer
+        // ([`Self::round_out_to_cells`]), so the text between its ends is
+        // those cells with the file's own delimiters between them — which is
+        // exactly what `p` needs to put them back down on another row.
+        if let Some((from, to, cells)) = self.cells_selected() {
+            let text = self.current_buffer().rope().slice(from..to).to_string();
+            self.store(text);
+            self.status = say!("table.yanked-cells", cells);
+            return;
+        }
         let Some((line, cell)) = self.cell_position() else {
             return;
         };
@@ -4913,6 +5063,31 @@ impl Editor {
         let n = text.chars().count();
         self.store(text);
         self.status = say!("table.yanked-cell", n);
+    }
+
+    /// **The run of cells the selection covers**, and how many — `None` when
+    /// the selection is a point, or when it is not a run of cells at all.
+    ///
+    /// Warning: **one cell is not a run.** A caret covers the grapheme it stands
+    /// on, so 「the selection」 is never empty; a run is two cells or more,
+    /// and anything narrower is the cursor's own cell, which `y` and `d`
+    /// already have their own answer for.
+    fn cells_selected(&self) -> Option<(usize, usize, usize)> {
+        if !self.layers_here() || !self.table_layer().selects_the_cell() {
+            return None;
+        }
+        let (from, to) = self.selection();
+        let (line, first) = self.cell_position()?;
+        let cells = self.row_cells(line);
+        let base = self.record_base(line);
+        let within = |at: usize| at.saturating_sub(base);
+        let a = cells.iter().position(|&(s, e)| within(from) >= s && within(from) <= e)?;
+        let b = cells
+            .iter()
+            .rposition(|&(s, e)| within(to.saturating_sub(1)) >= s && within(to.saturating_sub(1)) <= e)?;
+        let _ = first;
+        let (a, b) = (a.min(b), a.max(b));
+        (b > a).then(|| (from, to, b - a + 1))
     }
 
     /// Take a copy of the whole row.
@@ -4995,6 +5170,38 @@ impl Editor {
                     body.chars().filter(|&c| c == d).count() + 1 == columns && columns > 1
                 }
             };
+        // **A run of cells goes over the cells from here on** (2026-10-21
+        // 作者定: 「users want to pick some cells of a line and paste/replace
+        // into another row」). One for one, left to right, and the row keeps
+        // every delimiter it had: what is being replaced is contents.
+        //
+        // Warning: **narrower than the row, or it is a row.** A run as wide as the
+        // row it came from reads the same in the file as a whole row does,
+        // and there is no third thing in the text to tell them apart — so the
+        // wide case stays what it has always been, a new row, and `Y` is
+        // still how you ask for one on purpose.
+        if !is_row && !body.contains(['\n', '\r']) {
+            let run: Vec<String> = match separator {
+                Separator::Pipe => crate::mdtable::split(body),
+                // `cells` gives the spans; the run wants the text in them,
+                // quotes taken off the way a cell is read everywhere else.
+                //
+                // ⚠ **那是字符下標，不是字節下標** —— 拿去切 `&str` 會從一個
+                // 漢字中間劈開。
+                Separator::Delimiter(d) => crate::table::cells(body, d)
+                    .into_iter()
+                    .map(|(from, to)| {
+                        let text: String =
+                            body.chars().skip(from).take(to.saturating_sub(from)).collect();
+                        crate::table::unquote(&text)
+                    })
+                    .collect(),
+            };
+            let width = self.row_cells(line).len();
+            if run.len() > 1 && cell + run.len() <= width {
+                return self.put_the_run(line, cell, &run);
+            }
+        }
         if is_row {
             let body = body.to_string();
             // A Markdown table goes through its own parts, so a row pasted
@@ -5062,6 +5269,36 @@ impl Editor {
             self.format_md_table();
             self.status = say!("table.cell-replaced");
         }
+    }
+
+    /// Write a run of cells over the cells from `cell` on, one for one.
+    ///
+    /// **Right to left**, because each write moves everything after it: a
+    /// span measured before the first write is already stale by the second.
+    fn put_the_run(&mut self, line: usize, cell: usize, run: &[String]) {
+        if self.refuse_readonly() {
+            return;
+        }
+        for (nth, text) in run.iter().enumerate().rev() {
+            if let Some(why) = self.cell_refuses_text(text) {
+                self.status = why;
+                return;
+            }
+            let Some((from, to)) = self.cell_span_to_edit(line, cell + nth) else {
+                return;
+            };
+            if nth == run.len() - 1 {
+                self.snapshot();
+            }
+            if !self.overwrite(from, to, text) {
+                return;
+            }
+        }
+        if let Some((from, _)) = self.cell_span(line, cell) {
+            self.set_cursor(from);
+        }
+        self.format_md_table();
+        self.status = say!("table.cells-replaced", run.len());
     }
 
     /// The bounds of the cell the cursor is in, for clamping Insert to it.
