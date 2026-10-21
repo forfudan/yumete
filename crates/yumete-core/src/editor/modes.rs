@@ -540,6 +540,19 @@ impl Editor {
     ///
     /// 和 `char_at_cursor` 同一條收尾規矩：行末没有字就答前面那一個。
     pub fn grapheme_at_cursor(&self) -> Option<String> {
+        // **An empty cell holds no character to name** (2026-10-22 報的). In
+        // the grid the caret's position in an empty cell is the delimiter's,
+        // and the readout said 「this cell holds `,`」. The line's own rule
+        // below — 「no character at the end of the line, so answer the one
+        // before it」 — is the prose page's, where the character before is on
+        // the same line; here it is in the cell next door.
+        if self.grid_has_the_pane() {
+            if let Some((from, to)) = self.cell_here() {
+                if self.caret() >= to && to <= from {
+                    return None;
+                }
+            }
+        }
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(self.caret().min(rope.len_chars()));
         let start = rope.line_to_char(line);

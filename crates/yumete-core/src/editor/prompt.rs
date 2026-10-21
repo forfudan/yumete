@@ -148,8 +148,19 @@ impl Editor {
                 Key::End | Key::Ctrl('e') => return self.set_cursor(end),
                 // The same step `j` and `k` take from Normal, keeping to the
                 // column — one rule for「which cell is above this one」, not
-                // two.
-                Key::Up | Key::Down => return self.move_cell_row(key == Key::Down),
+                // two. **Which is why it has to ask the layer**: inside a cell
+                // that step walks the cell's own rows first and leaves it only
+                // at the last one, and typing does not change what a direction
+                // means (2026-10-22 報的: the arrow in Insert went straight to
+                // the next record and the second line of the field could not
+                // be reached). Typing from the top layer has no row inside a
+                // cell to walk, so there it is the cell below.
+                Key::Up | Key::Down => {
+                    return match self.table_layer().walled() {
+                        true => self.move_vertical(key == Key::Up),
+                        false => self.move_cell_row(key == Key::Down),
+                    };
+                }
                 _ => {}
             }
         }
@@ -249,6 +260,14 @@ impl Editor {
                 // the comma that asked for it.
                 self.tidy_the_cell();
                 self.rescan_records();
+                // **And the caret back onto a character of the cell**
+                // (2026-10-22 報的). `step_back_out_of_insert` pulls it one
+                // grapheme the way vi does, which off the end of a cell lands
+                // on the cell's last character — but `a` at the end of a cell
+                // leaves it *on the delimiter*, and the status line read that
+                // out as 「this cell holds `,`」. The grid's walls are the
+                // cell's, so coming to rest is clamped by them.
+                self.put_the_caret_in_the_cell();
                 // A cell that grew while it was being typed in made its column
                 // too narrow for it. Laying the table out again on the way out
                 // is what keeps "aligned" a property of the file rather than a
