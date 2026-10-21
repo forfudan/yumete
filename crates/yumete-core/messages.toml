@@ -6240,6 +6240,13 @@ zhs = "格内"
 en = "in a cell"
 
 [[message]]
+# 表格提示：Enter 下到格內(2026-10-21 作者定，原話「進單元格/出單元格」)
+key = "hint.table.into-the-cell"
+zht = "進單元格"
+zhs = "进单元格"
+en = "into the cell"
+
+[[message]]
 # Table record
 key = "hint.table.into-the-sidebar"
 zht = "在邊欄顯示行記錄"
@@ -6308,6 +6315,13 @@ key = "hint.table.operate-it"
 zht = "基本視圖(表格按列對齊)"
 zhs = "基本视图(表格按列对齐)"
 en = "basic view: the columns lined up"
+
+[[message]]
+# 表格提示：Esc 回到整格
+key = "hint.table.out-of-the-cell"
+zht = "出單元格"
+zhs = "出单元格"
+en = "out of the cell"
 
 [[message]]
 # 表格提示：上一格

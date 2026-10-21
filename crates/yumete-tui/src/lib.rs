@@ -15690,7 +15690,7 @@ fn squeezed(text: &str) -> String {
             // The grid alone: the pane's panel prints the whole cell down the
             // right, and the mark is never drawn in it.
             let rows: Vec<String> = (0..10)
-                .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+                .map(|y| grid_half(&frame, y))
                 .collect();
             let y = rows
                 .iter()
@@ -15774,7 +15774,7 @@ fn squeezed(text: &str) -> String {
         let page = |editor: &Editor| -> String {
             let frame = render(editor, &config, 120, 10);
             (0..10)
-                .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+                .map(|y| grid_half(&frame, y))
                 .collect::<Vec<_>>()
                 .join("\n")
         };
@@ -15870,7 +15870,7 @@ fn squeezed(text: &str) -> String {
         let page = |editor: &Editor| -> Vec<String> {
             let frame = render(editor, &config, 120, 12);
             (0..12)
-                .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+                .map(|y| grid_half(&frame, y))
                 .collect()
         };
 
@@ -15965,7 +15965,7 @@ fn squeezed(text: &str) -> String {
         // reading the two together would let the panel answer for the ruler.
         let frame = render(&editor, &config, 96, 10);
         let grid: Vec<String> = (0..10)
-            .map(|y| row_text(&frame, y).split('│').next().unwrap_or("").to_string())
+            .map(|y| grid_half(&frame, y))
             .collect();
         let heading = grid
             .iter()
@@ -16094,6 +16094,28 @@ fn squeezed(text: &str) -> String {
 
     fn command_line(buffer: &ratatui::buffer::Buffer) -> String {
         row_text(buffer, buffer.area.height - 1)
+    }
+
+    /// A row of a drawn grid with **the detail pane cut off** — what the grid
+    /// itself says on that line.
+    ///
+    /// Warning: **cut at the pane's own column, not at the first `│`** (2026-10-21).
+    /// These tests used to `split('│')` and keep what came before, because the
+    /// pane down the right repeats the row's text. Since the active cell's two
+    /// edges are drawn in that same glyph, the cursor's row was being cut in
+    /// half at its own left edge and read as an empty row.
+    ///
+    /// The pane's separator is the one that stands in the **same column on
+    /// every line**; a cell's edge is on one line only.
+    fn grid_half(frame: &ratatui::buffer::Buffer, y: u16) -> String {
+        let column = (0..frame.area.width).find(|&x| {
+            (0..frame.area.height).all(|row| frame[(x, row)].symbol() == "\u{2502}")
+        });
+        let row = row_text(frame, y);
+        match column {
+            Some(at) => row.chars().take(at as usize).collect(),
+            None => row,
+        }
     }
 
     fn row_text(buffer: &ratatui::buffer::Buffer, y: u16) -> String {
@@ -19178,7 +19200,11 @@ fn squeezed(text: &str) -> String {
                     // dashed」), and the left one of the first column stands in
                     // the gutter — so a reader that knows only `┆` loses
                     // exactly the row the caret is on, every time.
-                    let seam = |c: char| c == '┆' || ('\u{2580}'..='\u{259f}').contains(&c);
+                    // Box drawing **and** the block elements: the grid's own
+                    // rule is `┆`, the active cell's is `│` (2026-10-21), and
+                    // the hair that marks a cell from inside is an eighth
+                    // block. All three stand in a seam.
+                    let seam = |c: char| ('\u{2500}'..='\u{259f}').contains(&c);
                     // A data row has seams in it. The column-number band above
                     // the header has none, and reading it as a row made the
                     // first failure this test reported one of its own.
@@ -19307,7 +19333,8 @@ fn squeezed(text: &str) -> String {
             // read — otherwise every check below quietly skips that one row.
             let rows: Vec<String> = (0..buffer.area.height)
                 .map(|y| {
-                    row_text(&buffer, y).replace(['\u{2590}', '\u{258c}', '\u{2595}', '\u{258f}'], "┆")
+                    row_text(&buffer, y)
+                        .replace(['\u{2502}', '\u{2590}', '\u{258c}', '\u{2595}', '\u{258f}'], "┆")
                 })
                 .collect();
             // Record 7 appears on the page once. Read from the middle of
@@ -19660,8 +19687,8 @@ fn squeezed(text: &str) -> String {
         // border but you still make it dashed」). Recolouring a `┆` was the
         // #407 rule, and it is kept for the thin edge only — see
         // `the_edges_round_the_cell_say_which_layer_the_keys_are_in`.
-        assert_eq!(at(&buffer, left, 2), "\u{2590}", "the seam before it, in 金");
-        assert_eq!(at(&buffer, right, 2), "\u{258c}", "and the one after");
+        assert_eq!(at(&buffer, left, 2), "\u{2502}", "the seam before it, in 金");
+        assert_eq!(at(&buffer, right, 2), "\u{2502}", "and the one after");
         assert_eq!(at(&buffer, left + 1, 2), "\u{2ff0}", "it is the 拆分 cell");
         // The brackets stand at the *column's* edges, not the text's — a cell
         // you are inside, not three highlighted characters. Counted, not
@@ -19787,8 +19814,8 @@ fn squeezed(text: &str) -> String {
         );
         assert_eq!(
             edges(&editor, &config),
-            vec!["\u{2590}".to_string(), "\u{258c}".to_string()],
-            "half a cell each side, hugging the cell from the far side of the gap"
+            vec!["\u{2502}".to_string(), "\u{2502}".to_string()],
+            "one rule each side, the weight the rest of the grid is drawn in"
         );
 
         // …and one `Enter` down they thin, which is the whole of what the mark
@@ -19833,10 +19860,12 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.table_layer(), yumete_core::table::layer::Layer::Whole);
         assert_eq!(
             edges(&editor, &config),
-            vec!["\u{2590}".to_string(), "\u{258c}".to_string()],
+            vec!["\u{2502}".to_string(), "\u{2502}".to_string()],
             "and at the top layer it is drawn over the rule, not tinted"
         );
-        assert_ne!(rule, "\u{2590}", "the rule really was a different glyph");
+        // ⚠ 這一檔（`:table-rules line`）畫的本來就是 `│`，所以「蓋過去」和
+        // 「只換顏色」在這一檔上看不出分別——分別在上頭那一半：縫是空的時候，
+        // 頂層長出一道 `│` 而格內只長出八分之一。
 
         std::fs::remove_dir_all(&dir).ok();
     }

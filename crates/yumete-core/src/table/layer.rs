@@ -87,35 +87,43 @@ pub enum Step {
 /// terminal besides [`Layer::caret`].
 ///
 /// The mark sits in the seam the grid already keeps between columns, so it
-/// costs the cell no width and the selection no colour (#407). **Only the two
-/// vertical edges exist**: a row has nothing to spend on a horizontal rule but
-/// its own characters, and Unicode has a left-hand block at every eighth
-/// (`▏▎▍▌▋▊▉`) while the right hand has exactly two — the half `▐` and the
-/// eighth `▕`. So a symmetric edge is either thin or thick, with nothing in
-/// between, and that is why those are the two values here.
+/// costs the cell no width (#407). **Only the two vertical edges exist**: a
+/// row has nothing to spend on a horizontal rule but its own characters.
+///
+/// **Both of them are one stroke wide** (2026-10-21 作者定:「Would you also
+/// use thin border instead of a thick border? Not dashed, but the same width
+/// as dashed line.」). It was a half-block for a day, which was the only way
+/// to be louder than a recoloured rule *without a ground*; now that the cell
+/// carries a 金 ground the loudness is the ground's job, and the edge can go
+/// back to the weight the rest of the grid is drawn in. A box rule also sits
+/// in the middle of its cell, so the two sides are the same glyph — the
+/// half-blocks had to be mirrored (`▐` and `▌`) because Unicode gives the
+/// left hand every eighth and the right hand only two.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Edge {
-    /// One eighth each side — the caret is inside this cell.
-    Thin,
-    /// Half a cell each side — the whole cell is the unit.
-    Thick,
+    /// An eighth of a cell, hugging the cell from the far side of the gap —
+    /// and where the grid draws its own rule, that rule merely turns 金.
+    /// The caret is inside this cell.
+    Hair,
+    /// A rule of its own, drawn over whatever the seam held: the whole cell
+    /// is the unit.
+    Line,
 }
 
 impl Edge {
-    /// The glyph for the seam **before** the cell, where the ink hugs the
-    /// cell from the right-hand side of the gap.
+    /// The glyph for the seam **before** the cell.
     pub fn before(self) -> &'static str {
         match self {
-            Edge::Thin => "\u{2595}",  // ▕ right one eighth block
-            Edge::Thick => "\u{2590}", // ▐ right half block
+            Edge::Hair => "\u{2595}", // ▕ right one eighth block
+            Edge::Line => "\u{2502}", // │ box drawings light vertical
         }
     }
 
-    /// The glyph for the seam **after** the cell, hugging it from the left.
+    /// The glyph for the seam **after** the cell.
     pub fn after(self) -> &'static str {
         match self {
-            Edge::Thin => "\u{258f}",  // ▏ left one eighth block
-            Edge::Thick => "\u{258c}", // ▌ left half block
+            Edge::Hair => "\u{258f}", // ▏ left one eighth block
+            Edge::Line => "\u{2502}", // │ box drawings light vertical
         }
     }
 }
@@ -143,30 +151,39 @@ impl Layer {
         }
     }
 
-    /// Whether a caret is drawn at all.
+    /// **Whether the whole cell is the unit at this moment** — the one
+    /// question everything the reader sees is an answer to.
     ///
-    /// `false` in one case only: **the top layer at rest**, where the whole
-    /// cell is the unit and there is no character to stand on. The terminal's
-    /// own cursor is left unset for that frame, which is how this editor
-    /// already hides it over a settings page and in a panel field.
-    ///
-    /// The mode is asked because **typing always has a caret**, at either
-    /// layer. `i` at the top layer leaves this field alone — that is the whole
-    /// of 「`Esc` goes back to the layer you came from」 ([`Layer::step`]) —
-    /// so the layer cannot be the only thing asked, or the characters being
-    /// typed would appear with nothing to say where the next one goes.
-    pub fn caret(self, mode: Mode) -> bool {
-        match self {
-            Layer::Whole => mode != Mode::Normal,
-            Layer::Inside => true,
-        }
+    /// The layer alone cannot say it, because **typing is inside a cell
+    /// whichever layer you came from**. `i` at the top layer leaves the field
+    /// at [`Layer::Whole`] on purpose — that is the whole of 「`Esc` goes back
+    /// to the layer you came from」 ([`Layer::step`]) — so the mark has to ask
+    /// the mode too, or `i` from the top layer would leave the page looking
+    /// like a cell was selected while characters were going into it
+    /// (2026-10-21 作者報的:「Using `i` from CEL -> INS remains the golden
+    /// thick borders. So it looks differently from using `i` from NOR -> INS.
+    /// This is a bug.」).
+    pub fn the_cell_is_the_unit(self, mode: Mode) -> bool {
+        self == Layer::Whole && mode == Mode::Normal
     }
 
-    /// How the active cell is bracketed.
-    pub fn edge(self) -> Edge {
-        match self {
-            Layer::Whole => Edge::Thick,
-            Layer::Inside => Edge::Thin,
+    /// Whether a caret is drawn at all.
+    ///
+    /// `false` in one case only: while the whole cell is the unit, where
+    /// there is no character to stand on. The terminal's own cursor is left
+    /// unset for that frame, which is how this editor already hides it over a
+    /// settings page and in a panel field.
+    pub fn caret(self, mode: Mode) -> bool {
+        !self.the_cell_is_the_unit(mode)
+    }
+
+    /// How the active cell is bracketed — the same question again, and it
+    /// must give the same answer: half a cell while the cell is the unit, an
+    /// eighth the moment it is not.
+    pub fn edge(self, mode: Mode) -> Edge {
+        match self.the_cell_is_the_unit(mode) {
+            true => Edge::Line,
+            false => Edge::Hair,
         }
     }
 
@@ -328,7 +345,7 @@ mod tests {
         assert!(Layer::default().selects_the_cell());
         assert!(!Layer::default().walled());
         assert!(!Layer::default().caret(Mode::Normal));
-        assert_eq!(Layer::default().edge(), Edge::Thick);
+        assert_eq!(Layer::default().edge(Mode::Normal), Edge::Line);
     }
 
     /// **Insert never moves the layer** — the mechanism behind 「`Esc` goes
@@ -461,31 +478,43 @@ mod tests {
         assert_eq!(Mode::Insert.label(), Some("INS"));
     }
 
-    /// **Only one layer in one mode hides the caret.** Typing has one
-    /// wherever it happens, which is why [`Layer::caret`] is asked the mode
-    /// and not only the layer.
+    /// **One moment, one answer, and the two marks never disagree.** Typing
+    /// has a caret wherever it happens and a thin edge wherever it happens;
+    /// a page that drew a selected cell round a caret would be saying two
+    /// things at once (2026-10-21 作者報的).
     #[test]
-    fn the_caret_is_hidden_only_at_the_top_layer_at_rest() {
-        let hidden: Vec<(Layer, Mode)> = BOTH
-            .into_iter()
-            .flat_map(|l| [Mode::Normal, Mode::Insert, Mode::Command].map(move |m| (l, m)))
-            .filter(|&(l, m)| !l.caret(m))
-            .collect();
-        assert_eq!(hidden, vec![(Layer::Whole, Mode::Normal)], "who hides the caret");
+    fn the_caret_and_the_edge_answer_the_same_question() {
+        let every = || {
+            BOTH.into_iter()
+                .flat_map(|l| [Mode::Normal, Mode::Insert, Mode::Command].map(move |m| (l, m)))
+        };
+        for (layer, mode) in every() {
+            assert_eq!(
+                layer.caret(mode),
+                layer.edge(mode) == Edge::Hair,
+                "{layer:?} in {mode:?} draws a caret and a thick edge at once"
+            );
+        }
+        let whole: Vec<(Layer, Mode)> =
+            every().filter(|&(l, m)| l.the_cell_is_the_unit(m)).collect();
+        assert_eq!(whole, vec![(Layer::Whole, Mode::Normal)], "when is a cell the unit");
     }
 
-    /// **Thin and thick, and the two sides are not the same glyph**: the seam
-    /// before the cell is filled from its right-hand side, the seam after it
-    /// from its left.
+    /// **A hair hugs the cell; a rule stands in the middle of its own cell.**
+    ///
+    /// The eighth-blocks have to be mirrored because they are ink pushed to
+    /// one side of a cell, and the side that faces the text is a different
+    /// side on the left and on the right. A box rule is already centred, so
+    /// one glyph does both.
     #[test]
-    fn the_edge_hugs_the_cell_from_both_sides() {
-        assert_eq!(Layer::Inside.edge(), Edge::Thin);
-        assert_eq!(Edge::Thin.before(), "\u{2595}");
-        assert_eq!(Edge::Thin.after(), "\u{258f}");
-        assert_eq!(Edge::Thick.before(), "\u{2590}");
-        assert_eq!(Edge::Thick.after(), "\u{258c}");
-        for edge in [Edge::Thin, Edge::Thick] {
-            assert_ne!(edge.before(), edge.after());
+    fn the_edge_is_one_column_wide_on_either_side() {
+        assert_eq!(Layer::Inside.edge(Mode::Normal), Edge::Hair);
+        assert_eq!(Edge::Hair.before(), "\u{2595}");
+        assert_eq!(Edge::Hair.after(), "\u{258f}");
+        assert_ne!(Edge::Hair.before(), Edge::Hair.after(), "a hair hugs the cell");
+        assert_eq!(Edge::Line.before(), "\u{2502}");
+        assert_eq!(Edge::Line.after(), "\u{2502}", "a rule is centred already");
+        for edge in [Edge::Hair, Edge::Line] {
             // One cell each, or the grid's columns would shift.
             assert_eq!(yumete_cjk::str_width(edge.before()), 1);
             assert_eq!(yumete_cjk::str_width(edge.after()), 1);
