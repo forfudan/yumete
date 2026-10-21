@@ -790,6 +790,31 @@ pub fn draw(
                     }
                 }
                 put_text(buf, area.x, y, area.x + gutter, &n, style);
+                // **The margin before the first cell belongs to the row, not
+                // to the numbers** (2026-10-21 作者報的). The gutter ends in a
+                // blank column that the numbers never reach, and painting it
+                // the numbers' colour left a sliver of chrome down the left
+                // edge of every band — the row looked as though it began one
+                // column late. It is the same argument #473 made about the
+                // seams between columns: the gap is *inside* the table.
+                //
+                // **And it carries the grid's own rule** (2026-10-21 作者報的),
+                // so the numbers are fenced off from the first column the way
+                // every other column is fenced off from its neighbour. It is
+                // the same `stroke` the seams use, which is what makes
+                // `:table-rules off` take this line away too — one answer to
+                // 「does this grid draw rules」, not two.
+                if gutter > 0 {
+                    if let Some(cell) = buf.cell_mut((area.x + gutter - 1, y)) {
+                        let ground = banded(line, page);
+                        match stroke {
+                            Some((glyph, rule)) => {
+                                cell.set_symbol(glyph).set_style(ground.fg(rule))
+                            }
+                            None => cell.set_symbol(" ").set_style(ground),
+                        };
+                    }
+                }
             }
 
             let mut x = area.x + gutter;
@@ -1079,22 +1104,51 @@ pub fn draw(
                     // eighth, the right hand has only the half and the eighth
                     // — so there is nothing in between to choose.
                     //
-                    // Warning: **the thick edge is drawn over whatever the seam
-                    // held** (2026-10-21 作者報的: 「It should be thick golden
-                    // left and right border but you still make it dashed」).
-                    // #407 only ever *recoloured* a seam that already had a
-                    // rule in it, and that was right while the mark was an
-                    // eighth — the grid went on reading exactly as before. A
-                    // half-block is a different promise: it says 「the whole
-                    // cell is the unit, and there is no caret because there is
-                    // nothing inside it to stand on」, and a `┆` in 金 does not
-                    // make that promise however it is coloured.
+                    let edge = view.layer.edge(editor.mode());
+                    // **A 金 ground, and the two rules stand on it** (2026-10-21
+                    // 作者定: 「I think it might be good to use golden
+                    // background for the CEL highlighted cell to highlight
+                    // it.」 then 「Can you make this background also covering
+                    // the border?」). The mark is one block, edges included —
+                    // a tint that stopped short of its own rules read as
+                    // three things side by side instead of one cell.
                     //
-                    // A thin edge keeps the old rule, and for the old reason:
+                    // Only while the whole cell is the unit: the moment you
+                    // are typing in it the edges thin and this goes with
+                    // them, because then the cell is not what is selected.
+                    //
+                    // **The faint wash, not the wash.** `==標記==` already
+                    // sits on `wash()` (1.9:1 off the page); a cell on the
+                    // same ground would be the same colour saying a different
+                    // thing. 1.35:1 is a ground a reader feels rather than
+                    // reads, and it is the one the callouts' faint half uses.
+                    //
+                    // **Laid down before the rules are**, so that `wall`'s
+                    // `fg` patch keeps it: a rule drawn first and tinted
+                    // after would have its own glyph painted over.
+                    if edge == Edge::Line {
+                        let from = x.saturating_sub(1);
+                        let upto = (x + w + 1).min(right);
+                        for cx in from..upto {
+                            if let Some(cell) = buf.cell_mut((cx, y)) {
+                                cell.set_style(cell.style().bg(ink.faint_wash()));
+                            }
+                        }
+                    }
+                    // Warning: **the active cell's rule is drawn over whatever the
+                    // seam held**. #407 only ever *recoloured* a seam that
+                    // already had a rule in it, and that was right while the
+                    // mark was an eighth — the grid went on reading exactly as
+                    // before. A solid rule is a different promise: it says
+                    // 「the whole cell is the unit, and there is no caret
+                    // because there is nothing inside it to stand on」, and a
+                    // `┆` in 金 does not make that promise however it is
+                    // coloured.
+                    //
+                    // A hair keeps the old rule, and for the old reason:
                     // inside a cell this is an ordinary page drawn as a grid,
                     // so the grid should look like the one it was.
-                    let edge = view.layer.edge();
-                    let own_glyph = edge == Edge::Thick || stroke.is_none();
+                    let own_glyph = edge == Edge::Line || stroke.is_none();
                     let mut wall = |bx: u16, glyph: &str| {
                         if let Some(cell) = buf.cell_mut((bx, y)) {
                             if own_glyph {

@@ -293,14 +293,39 @@ impl Editor {
                 // T 按格移动被折叠到 _t 中了，所以这个提示也就不需要了」）。它
                 // 從前寫在這裏是因為 `T` 是頂層的鍵；`空格 t T` 收了它之後，這
                 // 一行再寫一遍就是把三格裏最貴的一格花在單子上已經有的東西上。
-                Hint::Keys(say!("label.table"), vec![
+                // **分層那一鍵寫在這一行上**（2026-10-21 作者報的:「In cell
+                // mode, no information in command line about using enter to
+                // go intra-cell layer.」）。一個鍵改掉 `hjkl` 的意思而没有一
+                // 處說出它，是這個編輯器對自己定的規矩的反面——而它正好是這
+                // 一行存在的理由。
+                //
+                // 只在全窗寫：文檔裏的表没有層可換（`layers_here`）。
+                let crossing = match (self.layers_here(), self.table_layer()) {
+                    (false, _) => Vec::new(),
+                    (true, crate::table::layer::Layer::Whole) => {
+                        vec![("Enter".into(), say!("hint.table.into-the-cell"))]
+                    }
+                    (true, crate::table::layer::Layer::Inside) => {
+                        vec![("Esc".into(), say!("hint.table.out-of-the-cell"))]
+                    }
+                };
+                // **標題說的是「鍵在哪」**，同 `CEL`／`CEL.NOR` 那一欄：在格子
+                // 裏的時候這一行的鍵是格子裏的，寫「表格」就少說了一半。
+                let where_at = match self.table_layer() == crate::table::layer::Layer::Inside
+                    && self.layers_here()
+                {
+                    true => say!("hint.table.in-a-cell"),
+                    false => say!("label.table"),
+                };
+                Hint::Keys(where_at, [crossing, vec![
                     // 2026-09-21 表格組搬到了 `空格 t`；這一行 2026-09-23 纔跟上。
                     ("\u{2423}t".into(), say!("hint.table.menu")),
                     ("Tab".into(), say!("hint.table.next-cell")),
                     // **這一行的記錄去邊欄**（2026-09-30 提的）。浮窗那一個是
                     // 小寫的 `空格 i`，與別的四種信息同一條規矩——大寫進邊欄。
                     ("\u{2423}I".into(), say!("hint.table.into-the-sidebar")),
-                ])
+                ]]
+                .concat())
             }
             _ => self.the_way_back_to_the_list(),
         }
