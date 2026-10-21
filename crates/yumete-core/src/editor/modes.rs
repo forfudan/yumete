@@ -51,15 +51,18 @@ impl Editor {
         if self.mode == Mode::Picker {
             return Some("PIC.INS".to_string());
         }
-        if self.extend && self.mode == Mode::Normal {
-            return Some("SEL".to_string());
-        }
         // **覆寫模式報 `REP`**（vim 的 `R`，2026-10-06）。vim 寫 `-- REPLACE --`；
         // 這一欄的詞一律三個大寫字母（`NOR` `INS` `SEL`），所以取頭三個。
-        if self.overwriting && self.mode == Mode::Insert {
-            return Some("REP".to_string());
-        }
-        let word = self.mode.label().map(str::to_string);
+        //
+        // Warning: **這三支不許提前 return**（2026-10-21 改）。它們從前各自
+        // `return` 一個詞，而網格那一層的前綴是在底下加的——於是在表格裏按 `v`
+        // 報的是 `SEL` 而不是 `CEL.SEL`，鍵在哪一層那一問當場斷掉。先算出詞，
+        // 最後一步統一加前綴，這樣再添一個詞也不會漏。
+        let word = match (self.extend && self.mode == Mode::Normal, self.overwriting) {
+            (true, _) => Some("SEL".to_string()),
+            (false, true) if self.mode == Mode::Insert => Some("REP".to_string()),
+            _ => self.mode.label().map(str::to_string),
+        };
         // **A grid prefixes whatever word came out above** (2026-10-21), so
         // `REP` and `SEL` come along without this line knowing they exist, and
         // the layer answers 「where are my keys」 the way `PAN.` and `PIC.`
