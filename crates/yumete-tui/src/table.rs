@@ -23,6 +23,7 @@ use yumete_config::Config;
 use yumete_core::editor::Editor;
 use yumete_core::say;
 use yumete_core::sidebar::Side;
+use yumete_core::table::layer::Edge;
 use yumete_core::table::Rules;
 
 use crate::{gutter_width, put_text};
@@ -1078,15 +1079,25 @@ pub fn draw(
                     // eighth, the right hand has only the half and the eighth
                     // — so there is nothing in between to choose.
                     //
-                    // **A rule that is already there is only recoloured.** A
-                    // drawn seam (`:table-rules line`) turns 金 and the grid
-                    // reads exactly as before; only a *blank* seam is given a
-                    // mark of its own, hugging the cell from the far side of
-                    // the gap.
+                    // Warning: **the thick edge is drawn over whatever the seam
+                    // held** (2026-10-21 作者報的: 「It should be thick golden
+                    // left and right border but you still make it dashed」).
+                    // #407 only ever *recoloured* a seam that already had a
+                    // rule in it, and that was right while the mark was an
+                    // eighth — the grid went on reading exactly as before. A
+                    // half-block is a different promise: it says 「the whole
+                    // cell is the unit, and there is no caret because there is
+                    // nothing inside it to stand on」, and a `┆` in 金 does not
+                    // make that promise however it is coloured.
+                    //
+                    // A thin edge keeps the old rule, and for the old reason:
+                    // inside a cell this is an ordinary page drawn as a grid,
+                    // so the grid should look like the one it was.
                     let edge = view.layer.edge();
+                    let own_glyph = edge == Edge::Thick || stroke.is_none();
                     let mut wall = |bx: u16, glyph: &str| {
                         if let Some(cell) = buf.cell_mut((bx, y)) {
-                            if stroke.is_none() {
+                            if own_glyph {
                                 cell.set_symbol(glyph);
                             }
                             cell.set_style(cell.style().fg(ink.gold()));
