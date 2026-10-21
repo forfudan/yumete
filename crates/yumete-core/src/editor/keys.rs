@@ -3084,10 +3084,29 @@ impl Editor {
         // and then a letter. The consumer is unchanged: a goto **collapses**
         // (`move_head`), which is exactly the reading `jump_to` wraps.
         let go = |e: &mut Self, what: motion::Motion| {
+            // **At the top layer 「this line」 is 「this row's cells」**
+            // (2026-10-21 作者報的: 「in CEL mode, `gh` and `gl` does not work
+            // in helix mode」). `0`/`$`/`Home`/`End` are claimed by the layer
+            // model itself (`Claim::Cell(Step::RecordStart)`), but `g h`/`g l`
+            // /`g s` are a `g` sequence and never reach `table_motion` — so
+            // the helix hand could not reach a motion the vim hand could, and
+            // what it got instead was the cell's own two ends, which is where
+            // the cursor already was. One answer, both spellings.
+            let step = match what {
+                motion::Motion::LineStart | motion::Motion::LineFirstNonBlank => {
+                    Some(crate::table::layer::Step::RecordStart)
+                }
+                motion::Motion::LineEnd => Some(crate::table::layer::Step::RecordEnd),
+                _ => None,
+            };
+            if let Some(step) = step.filter(|_| e.cell_is_the_unit()) {
+                return e.step_cells(step, 1);
+            }
             // **全窗裏「這一行」是「這一格」**（2026-10-17 作者定）。`g h`/`g l`
             // /`g s` — and so vim's `0`/`$`/`^`, which expand to them — used to
             // run to the row's own ends and park on a wall. 全窗 is a view of
-            // the content; the ends it has are the cell's.
+            // the content; the ends it has are the cell's — and **inside** one
+            // that is still the whole of the answer.
             let edge = match what {
                 motion::Motion::LineStart | motion::Motion::LineFirstNonBlank => {
                     e.cell_edge(false)

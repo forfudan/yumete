@@ -74,6 +74,16 @@ impl Editor {
         self.layers_here() && !self.table_layer().caret(self.mode)
     }
 
+    /// **Whether a key pressed now is about a cell rather than a character.**
+    ///
+    /// [`Self::caret_is_the_cell`] asks the same question of the *screen*;
+    /// this asks it of the keyboard, and the two have to agree — a layer where
+    /// the cell stands in for the caret is a layer where 「this line」 means
+    /// 「this row's cells」.
+    pub(super) fn cell_is_the_unit(&self) -> bool {
+        self.layers_here() && self.table_layer().the_cell_is_the_unit(self.mode)
+    }
+
     /// Cross into a layer.
     ///
     /// Nothing is printed: the mode word on the status line *is* the layer
@@ -4170,7 +4180,7 @@ impl Editor {
     /// Named by what the reader wanted rather than by the key pressed, because
     /// the three keymap presets spell these differently and neither the model
     /// nor this function may know which preset is loaded.
-    fn step_cells(&mut self, step: layer::Step, count: usize) {
+    pub(super) fn step_cells(&mut self, step: layer::Step, count: usize) {
         self.step_cells_unsnapped(step, count);
         self.round_out_to_cells();
     }
