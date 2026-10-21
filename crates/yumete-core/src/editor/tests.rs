@@ -6684,6 +6684,48 @@ fn r_writes_a_record_over_another_record() {
     assert_eq!(text.lines().nth(2), text.lines().nth(3), "{text}");
 }
 
+/// **Both keymaps' spelling of 「this line's two ends」 walks cells at the top
+/// layer** (2026-10-21 作者報的: 「in CEL mode, `gh` and `gl` does not work in
+/// helix mode」).
+///
+/// `0`/`$`/`Home`/`End` are claimed by the layer model; `g h`/`g l`/`g s` are a
+/// `g` sequence and never reach it, so the helix hand could not reach a motion
+/// the vim hand could — and what it got instead was the cell's own two ends,
+/// which at the top layer is where the cursor already was.
+#[test]
+fn the_rows_two_ends_answer_to_either_spelling() {
+    let mut ed = typed("| 名 | 說明 | 數 |\n| --- | --- | --- |\n| 甲 | 第一條 | 12 |\n");
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    let at = |ed: &Editor| ed.cell_position().map(|(_, at)| at);
+    for keys in ["$", "gl"] {
+        press(&mut ed, "0");
+        press(&mut ed, keys);
+        assert_eq!(at(&ed), Some(2), "{keys}");
+    }
+    for keys in ["0", "gh", "gs"] {
+        press(&mut ed, "$");
+        press(&mut ed, keys);
+        assert_eq!(at(&ed), Some(0), "{keys}");
+    }
+    ed.on_key(Key::End);
+    assert_eq!(at(&ed), Some(2));
+    ed.on_key(Key::Home);
+    assert_eq!(at(&ed), Some(0));
+
+    // **Inside a cell they are that cell's own two ends** — which is what
+    // makes vim's `0 v $` mean 「this cell」 without anybody teaching it to.
+    press(&mut ed, "l");
+    ed.on_key(Key::Enter);
+    let (first, past) = ed.cell_span(2, 1).unwrap();
+    press(&mut ed, "gl");
+    assert_eq!(ed.caret(), past - 1, "格尾是這一格的末字");
+    press(&mut ed, "gh");
+    assert_eq!(ed.caret(), first, "格首是這一格的頭一個字");
+    assert_eq!(at(&ed), Some(1), "没離開這一格");
+}
+
 /// **`%` takes the table, not the chapter it sits in.**
 #[test]
 fn percent_in_a_document_takes_the_table_and_stops() {
