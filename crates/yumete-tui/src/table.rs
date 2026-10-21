@@ -488,8 +488,9 @@ pub fn draw(
     // *selection's* rung, a selection inside that cell had no colour left to
     // be drawn in: press `w` in a grid and the word you just took looked
     // exactly like the cell around it. There is no room on the ladder for a
-    // third ground either (`HEAD` 815 and `SELECTION` 700 are 5% apart at the
-    // paper end, and the ladder's own note says 1.11–1.20 is invisible).
+    // third ground either (`HEAD` 第 73 and `SELECTION` 第 63 measure 1.26:1
+    // apart at the paper end in 莫蘭迪's light mood, and two flat grounds need
+    // 1.24 between them to be told apart).
     //
     // The cell is still a box; the box just moved off the ground and into the
     // seam beside it — two 金 rules, drawn further down where `here` is known.
@@ -521,7 +522,8 @@ pub fn draw(
     // 行上是 1.98:1，落在這一條帶子上只剩 1.37:1，而這個檔自己的註釋寫着
     // 1.11–1.20 就是看不見。正在編輯的那一行恰恰是看不清選中的那一行。
     //
-    // 梯子上擠不出第三層（`HEAD` 815 與 `SELECTION` 700 在紙那一頭只差 5%），
+    // 梯子上擠不出第三層（`HEAD` 第 73 檔 與 `SELECTION` 第 63 檔 在紙那一頭只差
+    // 1.26:1，而兩塊平底色要分得開需要 1.24），
     // 所以照 2026-09-12 給**格**的那一刀再切一次：底色歸選中一個人，「在哪一
     // 行」挪到邊上去說——行號點成金的，和欄的標題同一種說法。試算表都是這麼
     // 分的（Excel／Numbers／Sheets：選中吃底色，當前格靠兩頭的表頭點亮）。
@@ -1052,8 +1054,8 @@ pub fn draw(
                 // **The caret's cell, bracketed** (#407). The box used to be
                 // the cell's whole ground, painted in the *selection's* rung —
                 // which left a selection inside it no colour to be drawn in.
-                // The ladder has no room for a third ground (HEAD 815 and
-                // SELECTION 700 are 5% apart at the paper end), so the box
+                // The ladder has no room for a third ground (HEAD 第 73 and
+                // SELECTION 第 63 are 1.26:1 apart at the paper end), so the box
                 // moved off the ground and into the seam the page already
                 // keeps between columns: two thin rules in 金, the one colour
                 // on the grid that is not a quantity of ink. A spreadsheet's

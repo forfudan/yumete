@@ -1281,3 +1281,62 @@ mod span_tests {
     }
 }
 
+
+#[cfg(test)]
+mod ground_tests {
+    use super::contrast;
+    use ratatui::style::Color;
+    use yumete_config::{rung, Ladder, ThemeConfig};
+
+    /// Two flat grounds need this much between them to be told apart —
+    /// `settings_page.rs` measures the same number from the other side.
+    const APART: f64 = 1.24;
+
+    fn at(ladder: Ladder, rung: u16) -> Color {
+        let (r, g, b) = ladder.step(rung);
+        Color::Rgb(r, g, b)
+    }
+
+    /// **The three grounds that meet inside a table stay a rung apart** — the
+    /// claim [`yumete_config::rung::HEAD`] and [`yumete_config::rung::SELECTION`]
+    /// are placed by, in every theme and both moods.
+    ///
+    /// A selection inside a table's cursor row is three grounds nested one in
+    /// another — 選區 第 63, 光標行 第 73, 欄底 第 84 — and near the paper end
+    /// the rungs compress, so the pair that decides the numbers is whichever
+    /// theme has the least contrast to spend. This is also the test that says
+    /// there is no room for a *fourth*: it fails on any rung put between them.
+    #[test]
+    fn the_grounds_that_meet_are_a_rung_apart() {
+        let names = [
+            "ink",
+            "bw",
+            "cyanotype",
+            "amber",
+            "mogao",
+            "morandi",
+            "firefly",
+            "meridian",
+            "kiln",
+            "complement",
+        ];
+        for name in names {
+            let theme = ThemeConfig::named(name).expect("a theme by that name");
+            for (mood, ladder) in [("dark", theme.dark), ("light", theme.light)] {
+                let selection = at(ladder, rung::SELECTION);
+                let head = at(ladder, rung::HEAD);
+                let band = at(ladder, rung::BAND);
+                for (a, b, pair) in [
+                    (selection, head, "選區／光標行"),
+                    (head, band, "光標行／欄底"),
+                ] {
+                    let ratio = contrast(a, b);
+                    assert!(
+                        ratio >= APART,
+                        "{name} {mood} {pair}: {ratio:.2}:1, under {APART}"
+                    );
+                }
+            }
+        }
+    }
+}
