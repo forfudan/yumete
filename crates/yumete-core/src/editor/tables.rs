@@ -3359,17 +3359,27 @@ impl Editor {
         self.table.as_ref()?;
         let rope = self.current_buffer().rope();
         let line = self.record_first(rope.char_to_line(self.caret().min(rope.len_chars())));
-        let within = self.caret() - rope.line_to_char(line);
+        Some((line, self.cell_holding(line, self.caret()).unwrap_or(0)))
+    }
+
+    /// **Which cell of `line` holds the position `at`.**
+    ///
+    /// Delimited cells are contiguous, so one of them always holds it. A
+    /// Markdown row has padding between its cells and around its pipes, and a
+    /// position standing in that padding belongs to the cell it is past.
+    ///
+    /// One arithmetic, three questions: where the cursor is
+    /// ([`Self::cell_position`]), which cells a selection covers
+    /// ([`Self::run_selected`]), and where a selection's far end has to be
+    /// pulled to ([`Self::round_out_to_cells`]). It was written out three
+    /// times, and two of the copies disagreed with this one (2026-10-21).
+    pub(super) fn cell_holding(&self, line: usize, at: usize) -> Option<usize> {
+        let within = at.saturating_sub(self.record_base(line));
         let cells = self.row_cells(line);
-        // Delimited cells are contiguous, so one of them always holds the
-        // cursor. A Markdown row has padding between its cells and around its
-        // pipes, and the cursor sitting in it belongs to the cell it is past.
-        let at = cells
+        cells
             .iter()
             .position(|&(a, b)| within >= a && within <= b)
             .or_else(|| cells.iter().rposition(|&(_, b)| within > b))
-            .unwrap_or(0);
-        Some((line, at))
     }
 
     /// The buffer range one cell covers.
@@ -3988,8 +3998,17 @@ impl Editor {
             // the Markdown writer, which squared the whole table up — and `d`
             // then `P` is the one sequence whose entire job is 「put that back
             // the way it was」.
-            Key::Char('p') | Key::Char('P') if self.register_is_a_record() => return false,
+            Key::Char('p') | Key::Char('P') if self.register_holds_records() => return false,
             Key::Char('p') | Key::Char('P') => self.put_cell(key == Key::Char('p')),
+            // **`R` 蓋上去，`p` 放進去**（2026-10-21 作者定，見
+            // [`Self::put_cell`]）。整條記錄那一種讓正文那一支蓋——`x R` 蓋掉的
+            // 正是選區那幾條，而整行換整行這個編輯器本來就認
+            // （`put_takes_whole_rows`）。没選區的時候蓋掉的是光標這一條，所以
+            // `R` 在這裏永遠有一個說得清的靶。
+            //
+            // 格子窗用不上 vim 鍵位的覆寫模式：`c` 已經是「打字換掉這一格」。
+            Key::Char('R') if self.register_holds_records() => self.replace_records(),
+            Key::Char('R') => self.replace_in_grid(),
             Key::Char('i') => self.edit_cell(CellEdit::Start),
             Key::Char('a') | Key::Char('A') => self.edit_cell(CellEdit::End),
             Key::Char('I') => self.edit_cell(CellEdit::Start),
@@ -4170,27 +4189,28 @@ impl Editor {
             return;
         }
         let (a, b) = (self.sel.anchor(), self.sel.head());
-        // **The cell an offset is in** — the same arithmetic `cell_position`
-        // does for the caret, asked about either end of the selection.
-        let holding = |at: usize| -> Option<(usize, usize)> {
+        // **The cell an offset is in** — [`Self::cell_holding`]'s question,
+        // asked about either end of the selection.
+        let span = |at: usize| -> Option<(usize, usize)> {
             let rope = self.current_buffer().rope();
             let line = self.record_first(rope.char_to_line(at.min(rope.len_chars())));
-            let base = rope.line_to_char(line);
-            let within = at.saturating_sub(base);
-            let cells = self.row_cells(line);
-            let nth = cells
-                .iter()
-                .position(|&(from, to)| within >= from && within <= to)
-                .or_else(|| cells.iter().rposition(|&(_, to)| within > to))?;
-            self.cell_span(line, nth)
+            self.cell_span(line, self.cell_holding(line, at)?)
         };
-        let (Some((first, _)), Some((_, past))) = (holding(a.min(b)), holding(a.max(b))) else {
+        let (Some((first, _)), Some((head, past))) = (span(a.min(b)), span(a.max(b))) else {
             return;
         };
-        let last = {
-            let rope = self.current_buffer().rope();
-            motion::prev_grapheme(rope, past).max(first)
-        };
+        // **The far end stands on the cell's last character — and an empty
+        // cell's last character is its first** (2026-10-21 作者報的: 「`v l l`
+        // … it stucks at empty cells」). A cell with nothing in it is one
+        // position wide, so stepping back from its end lands on the padding,
+        // which belongs to no cell; the next `l` then read the cell *before*
+        // it and walked back, and the selection could not get past a blank
+        // column.
+        let last = match past > head {
+            true => motion::prev_grapheme(self.current_buffer().rope(), past),
+            false => head,
+        }
+        .max(first);
         let (from, to) = match a <= b {
             true => (first, last),
             false => (last, first),
@@ -5045,15 +5065,50 @@ impl Editor {
     }
 
     fn yank_cell(&mut self) {
+        // **Whole records first** (2026-10-21 作者報的: 「y … For multiple rows
+        // selection, this is not working」). `x` takes a record and `%` takes
+        // the table, so `x y` means 「copy this row」 and `% y` 「copy this
+        // table」; what they leave in the register is line-wise, which is what
+        // `p` puts back as rows.
+        if let Some((from, to, records)) = self.records_selected() {
+            let text = self.current_buffer().rope().slice(from..to).to_string();
+            let ending = self.current_buffer().ending().to_string();
+            // **Line-wise means it ends with a line break** — the one mark
+            // both halves of this editor read to tell a record from a cell's
+            // worth of text. The last record of a file need not have one.
+            let text = match text.ends_with('\n') {
+                true => text,
+                false => text + &ending,
+            };
+            self.store(text.clone());
+            self.register_grid = Some((text, Held::Records(records)));
+            self.status = say!("table.yanked-records", records);
+            return;
+        }
         // **A run of cells, when a run is standing** (2026-10-21). The
         // selection is a whole number of cells at this layer
         // ([`Self::round_out_to_cells`]), so the text between its ends is
         // those cells with the file's own delimiters between them — which is
-        // exactly what `p` needs to put them back down on another row.
-        if let Some((from, to, cells)) = self.cells_selected() {
+        // what belongs on the system clipboard. What `R` needs is the cells
+        // themselves, and they are remembered beside it: a run of N cells and
+        // an N-column row are the same text, so the key that took it has to
+        // say which it was ([`Held`]).
+        if let Some((line, a, b)) = self.run_selected() {
+            let (Some((from, _)), Some((_, to))) =
+                (self.cell_span(line, a), self.cell_span(line, b))
+            else {
+                return;
+            };
             let text = self.current_buffer().rope().slice(from..to).to_string();
-            self.store(text);
-            self.status = say!("table.yanked-cells", cells);
+            let run: Vec<String> = {
+                let (source, cells) = (self.row_source(line), self.row_cells(line));
+                (a..=b)
+                    .filter_map(|nth| cells.get(nth).map(|&span| self.cell_shown(&source, span)))
+                    .collect()
+            };
+            self.store(text.clone());
+            self.register_grid = Some((text, Held::Cells(run)));
+            self.status = say!("table.yanked-cells", b - a + 1);
             return;
         }
         let Some((line, cell)) = self.cell_position() else {
@@ -5065,29 +5120,65 @@ impl Editor {
         self.status = say!("table.yanked-cell", n);
     }
 
-    /// **The run of cells the selection covers**, and how many — `None` when
-    /// the selection is a point, or when it is not a run of cells at all.
+    /// **The run of cells the selection covers** — the record it is in, and
+    /// the first and last cell — or `None` when it is not a run.
     ///
     /// Warning: **one cell is not a run.** A caret covers the grapheme it stands
     /// on, so 「the selection」 is never empty; a run is two cells or more,
     /// and anything narrower is the cursor's own cell, which `y` and `d`
     /// already have their own answer for.
-    fn cells_selected(&self) -> Option<(usize, usize, usize)> {
+    ///
+    /// Warning: **and a run is cells of one record.** A selection over several
+    /// records is a different thing with a different answer
+    /// ([`Self::records_selected`]). Asked here, it used to measure the far
+    /// end against the *near* record's cells: the subtraction saturated to
+    /// zero, so `x y` reported 「取了一格」 and took one (2026-10-21 作者報的).
+    fn run_selected(&self) -> Option<(usize, usize, usize)> {
         if !self.layers_here() || !self.table_layer().selects_the_cell() {
             return None;
         }
         let (from, to) = self.selection();
-        let (line, first) = self.cell_position()?;
-        let cells = self.row_cells(line);
-        let base = self.record_base(line);
-        let within = |at: usize| at.saturating_sub(base);
-        let a = cells.iter().position(|&(s, e)| within(from) >= s && within(from) <= e)?;
-        let b = cells
-            .iter()
-            .rposition(|&(s, e)| within(to.saturating_sub(1)) >= s && within(to.saturating_sub(1)) <= e)?;
-        let _ = first;
-        let (a, b) = (a.min(b), a.max(b));
-        (b > a).then(|| (from, to, b - a + 1))
+        let rope = self.current_buffer().rope();
+        let last = to.saturating_sub(1).max(from).min(rope.len_chars());
+        let line = self.record_first(rope.char_to_line(from.min(rope.len_chars())));
+        if self.record_first(rope.char_to_line(last)) != line {
+            return None;
+        }
+        let (a, b) = (self.cell_holding(line, from)?, self.cell_holding(line, last)?);
+        (b > a).then_some((line, a, b))
+    }
+
+    /// **The whole records the selection covers**, and how many — `None` when
+    /// it does not cover whole ones.
+    ///
+    /// What `x` and `%` leave standing. A record may run over several lines,
+    /// so this counts records rather than lines; and it answers for one record
+    /// too, because `x y` means 「copy this row」 whether or not the row
+    /// happens to be one line.
+    fn records_selected(&self) -> Option<(usize, usize, usize)> {
+        if !self.layers_here() || !self.table_layer().selects_the_cell() {
+            return None;
+        }
+        let (from, to) = self.selection();
+        let rope = self.current_buffer().rope();
+        let bottom = motion::last_line(rope);
+        let first = self.record_first(rope.char_to_line(from.min(rope.len_chars())));
+        if from != rope.line_to_char(first) {
+            return None;
+        }
+        let (mut at, mut records) = (first, 0usize);
+        while at <= bottom {
+            at += self.record_height(at).max(1);
+            records += 1;
+            let end = match at > bottom {
+                true => rope.len_chars(),
+                false => rope.line_to_char(at),
+            };
+            if to <= end {
+                return (to == end).then_some((from, end, records));
+            }
+        }
+        None
     }
 
     /// Take a copy of the whole row.
@@ -5120,18 +5211,22 @@ impl Editor {
         text.ends_with('\n') && sniff_grid(text.trim_end_matches(['\n', '\r'])).is_none()
     }
 
-    /// Put the register into the cell — or, if it is a whole row, below this one.
+    /// Put the register in — which in a grid can only mean **a new row**.
     ///
-    /// Two things are worth pasting in a grid and they are told apart by what
-    /// is in the register, not by a second key: a cell's worth of text replaces
-    /// the cell, and a row's worth becomes a new row. Anything else — half a
-    /// row, two cells — is refused, because there is no honest place to put it.
+    /// 2026-10-21 作者定, and it is the whole of the model: 「`p` means: append
+    /// to the end of selection (cursor). So this will broke the layout of the
+    /// table. Otherwise it is actually a 'replace' action.」 A row's cell count
+    /// belongs to the table, so a cell or a run of cells has nowhere to be
+    /// *inserted* — the only thing a grid can take in without changing shape
+    /// is a whole record. Writing over what is already there is `R`
+    /// ([`Self::replace_in_grid`]), which is the key both reference
+    /// implementations use for it: helix calls it `replace_with_yanked`, and
+    /// measured on 25.07 (`scripts/oracle/hx_keys.py`) its `p` with a
+    /// selection standing pastes *after* the selection rather than over it.
     ///
-    /// `after` is vi's own distinction between `p` and `P`, and it applies to
-    /// the **row** — a cell is replaced, and there is no before or after about
-    /// that. Both keys put a row below until 2026-10-21, which `x d` then `P`
-    /// made plain: it is the one key sequence whose whole job is 「put that
-    /// back where it was」.
+    /// `after` is vi's own distinction between `p` and `P`. Both keys put a
+    /// row below until 2026-10-21, which `x d` then `P` made plain: it is the
+    /// one key sequence whose whole job is 「put that back where it was」.
     fn put_cell(&mut self, after: bool) {
         if self.refuse_readonly() {
             return;
@@ -5141,20 +5236,9 @@ impl Editor {
             self.status = say!("edit.nothing-yanked-yet");
             return;
         }
-        let Some((line, cell)) = self.cell_position() else {
-            return;
-        };
         let Some(view) = &self.table else { return };
         let (separator, columns) = (view.separator, view.schema.columns.len());
         let body = text.trim_end_matches(['\n', '\r']);
-        // A block of cells — what a spreadsheet puts on the clipboard. It goes
-        // in **at the cursor's cell**, filling right and down from there, which
-        // is what every grid does with a pasted block and what a writer means
-        // by it.
-        if let Some(grid) = sniff_grid(body) {
-            self.paste_grid(grid);
-            return;
-        }
         // A row: the right number of cells, and no line break left inside it.
         // A Markdown row says what it is by its own pipes, so it is recognised
         // by the same test that finds a table in the first place.
@@ -5170,39 +5254,11 @@ impl Editor {
                     body.chars().filter(|&c| c == d).count() + 1 == columns && columns > 1
                 }
             };
-        // **A run of cells goes over the cells from here on** (2026-10-21
-        // 作者定: 「users want to pick some cells of a line and paste/replace
-        // into another row」). One for one, left to right, and the row keeps
-        // every delimiter it had: what is being replaced is contents.
-        //
-        // Warning: **narrower than the row, or it is a row.** A run as wide as the
-        // row it came from reads the same in the file as a whole row does,
-        // and there is no third thing in the text to tell them apart — so the
-        // wide case stays what it has always been, a new row, and `Y` is
-        // still how you ask for one on purpose.
-        if !is_row && !body.contains(['\n', '\r']) {
-            let run: Vec<String> = match separator {
-                Separator::Pipe => crate::mdtable::split(body),
-                // `cells` gives the spans; the run wants the text in them,
-                // quotes taken off the way a cell is read everywhere else.
-                //
-                // ⚠ **那是字符下標，不是字節下標** —— 拿去切 `&str` 會從一個
-                // 漢字中間劈開。
-                Separator::Delimiter(d) => crate::table::cells(body, d)
-                    .into_iter()
-                    .map(|(from, to)| {
-                        let text: String =
-                            body.chars().skip(from).take(to.saturating_sub(from)).collect();
-                        crate::table::unquote(&text)
-                    })
-                    .collect(),
-            };
-            let width = self.row_cells(line).len();
-            if run.len() > 1 && cell + run.len() <= width {
-                return self.put_the_run(line, cell, &run);
-            }
+        if !is_row {
+            self.status = say!("table.p-only-puts-records");
+            return;
         }
-        if is_row {
+        {
             let body = body.to_string();
             // A Markdown table goes through its own parts, so a row pasted
             // while standing on the header lands *under the rule* rather than
@@ -5248,9 +5304,61 @@ impl Editor {
             }
             self.set_cursor(at + leading);
             self.status = say!("table.pasted-as-new-row");
+        }
+    }
+
+    /// **Write the register over what is here** — `R` where the unit is the
+    /// cell (2026-10-21 作者定; see [`Self::put_cell`] for why it is a key of
+    /// its own).
+    ///
+    /// Four things can be written over a grid, and only the first needs a key
+    /// to tell it from the others: a run of N cells and an N-column row are
+    /// the same text, so the run is believed because the key that took it said
+    /// so ([`Held`]). The rest answer for themselves — a spreadsheet's block
+    /// fills right and down, and anything else is one cell's worth.
+    fn replace_in_grid(&mut self) {
+        if self.refuse_readonly() {
             return;
         }
-        if let Some(why) = self.cell_refuses_text(body) {
+        let run = match self.grid_in_register() {
+            Some(Held::Cells(cells)) => Some(cells.clone()),
+            _ => None,
+        };
+        let text = self.recall();
+        if text.is_empty() {
+            self.status = say!("edit.nothing-yanked-yet");
+            return;
+        }
+        let Some((line, cell)) = self.cell_position() else {
+            return;
+        };
+        if let Some(run) = run {
+            // **Where the run lands is where the selection starts**, so
+            // `v l l R` writes over the cells you can see are selected; with
+            // no selection standing the cursor's cell is the first one, which
+            // is what a spreadsheet does with a pasted block.
+            let first = self.run_selected().map_or(cell, |(_, a, _)| a);
+            return self.put_the_run(line, first, &run);
+        }
+        let body = text.trim_end_matches(['\n', '\r']).to_string();
+        // A block of cells — what a spreadsheet puts on the clipboard. It goes
+        // in **at the cursor's cell**, filling right and down from there, which
+        // is what every grid does with a pasted block and what a writer means
+        // by it.
+        if let Some(grid) = sniff_grid(&body) {
+            return self.paste_grid(grid);
+        }
+        // **Text that comes apart into cells is a run of them** — a register
+        // filled from outside this grid (the system clipboard, `:let`, a
+        // prose yank) has no [`Held`] beside it, and 「one cell for one cell」
+        // is still the only thing that can be done with it. A row's worth of
+        // text lands the same way: written over the cells from here on, which
+        // starting at the first one *is* replacing the row.
+        let run = self.text_as_a_run(&body);
+        if run.len() > 1 {
+            return self.put_the_run(line, cell, &run);
+        }
+        if let Some(why) = self.cell_refuses_text(&body) {
             self.status = why;
             return;
         }
@@ -5258,9 +5366,9 @@ impl Editor {
             return;
         };
         self.snapshot();
-        if self.overwrite(start, end, body) {
+        if self.overwrite(start, end, &body) {
             self.set_cursor(start);
-            // What was pasted in may be wider than the column was.
+            // What was written in may be wider than the column was.
             //
             // **Only a cell squares the table up** (2026-10-21). A *record*
             // came out of this table and goes back the way it was — and `d`
@@ -5271,12 +5379,112 @@ impl Editor {
         }
     }
 
+    /// **Write the register's records over the records here** — `R` with a
+    /// record-wise register (2026-10-21 作者定).
+    ///
+    /// With nothing selected the target is the cursor's own record, so this
+    /// key always has a target a reader can see: 「蓋掉這一條」.
+    ///
+    /// Warning: **a record-wise register is only one whose text ends with a line
+    /// break**, and 「春天\n」 ends with one too. So the text is put to the same
+    /// question `p` asks of a row it is about to put in — whole rows, as wide
+    /// as this table — and anything else is handed on to the cell half, where a
+    /// one-liner is a run or a cell's worth and says so.
+    fn replace_records(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        if self.records_selected().is_none() {
+            self.take_whole(layer::Whole::Record);
+        }
+        let (from, to) = self.selection();
+        let text = self.peek_register();
+        if !self.put_takes_whole_rows(Some(from), &text) {
+            return self.replace_in_grid();
+        }
+        let records = text.lines().count();
+        let text = self.recall();
+        self.snapshot();
+        // **The guard is off because its question has been answered** — whole
+        // rows going out, whole rows coming in. Left on, it reads the text's
+        // own delimiters as delimiters being typed into a cell and tells the
+        // reader to escape a `|` they never typed.
+        if self.without_cell_guard(|e| e.overwrite(from, to, &text)) {
+            self.set_cursor(from);
+            self.status = say!("table.records-replaced", records);
+        }
+    }
+
+    /// **One line of text, cut into cells the way this file cuts them** — one
+    /// cell when it holds no delimiter at all.
+    fn text_as_a_run(&self, body: &str) -> Vec<String> {
+        let Some(view) = self.table.as_ref() else {
+            return Vec::new();
+        };
+        if body.contains(['\n', '\r']) {
+            return Vec::new();
+        }
+        match view.separator {
+            // Warning: **an unwalled fragment is not a row**, and `split` reads
+            // rows: its cells are what stands *between* two pipes, so a
+            // two-cell run came back as **one** cell whose text held a `|` —
+            // which the cell then refused, and that is the message 作者 saw
+            // (2026-10-21). Give the fragment the walls it is missing.
+            Separator::Pipe => match crate::mdtable::is_row(body) {
+                true => crate::mdtable::split(body),
+                false => crate::mdtable::split(&format!("|{body}|")),
+            },
+            // `cells` gives the spans; the run wants the text in them, quotes
+            // taken off the way a cell is read everywhere else.
+            //
+            // ⚠ **那是字符下標，不是字節下標** —— 拿去切 `&str` 會從一個漢字
+            // 中間劈開。
+            Separator::Delimiter(d) => crate::table::cells(body, d)
+                .into_iter()
+                .map(|(from, to)| {
+                    let text: String =
+                        body.chars().skip(from).take(to.saturating_sub(from)).collect();
+                    crate::table::unquote(&text)
+                })
+                .collect(),
+        }
+    }
+
+    /// What the grid itself last put in the register — and `None` once the
+    /// register holds anything else (see [`Held`]).
+    fn grid_in_register(&self) -> Option<&Held> {
+        let (text, held) = self.register_grid.as_ref()?;
+        (*text == self.peek_register()).then_some(held)
+    }
+
+    /// **Whether the register holds whole records**, and so lines rather than
+    /// cells.
+    ///
+    /// The grid's own answer when the grid filled it; otherwise the trailing
+    /// line break, which is how this editor has told a line-wise register from
+    /// a character-wise one since long before grids.
+    fn register_holds_records(&self) -> bool {
+        match self.grid_in_register() {
+            Some(Held::Records(_)) => true,
+            Some(Held::Cells(_)) => false,
+            None => self.register_is_a_record(),
+        }
+    }
+
     /// Write a run of cells over the cells from `cell` on, one for one.
     ///
     /// **Right to left**, because each write moves everything after it: a
     /// span measured before the first write is already stale by the second.
     fn put_the_run(&mut self, line: usize, cell: usize, run: &[String]) {
         if self.refuse_readonly() {
+            return;
+        }
+        // **Doesn't fit, nothing moves** (2026-10-21 作者定). Writing as many
+        // as there is room for would leave a row that reads like another row,
+        // and the two cells that went nowhere would be gone.
+        let room = self.row_cells(line).len().saturating_sub(cell);
+        if run.len() > room {
+            self.status = say!("table.cells-do-not-fit", run.len(), room);
             return;
         }
         for (nth, text) in run.iter().enumerate().rev() {

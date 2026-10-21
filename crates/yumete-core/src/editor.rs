@@ -1127,6 +1127,21 @@ pub enum TableLevel {
     Basic,
 }
 
+/// **What the grid itself last put in the register.**
+///
+/// A run of N cells and an N-column row read the same in the file, and so do
+/// N records and a block of cells copied out of a spreadsheet: there is
+/// nothing in the text to tell either pair apart. The key that *filled* the
+/// register knows, so it says so here, and [`Editor::store`] clears it — a
+/// register filled by anything else cannot then be mistaken for a run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Held {
+    /// Cells of one record, left to right.
+    Cells(Vec<String>),
+    /// Whole records, as many as this.
+    Records(usize),
+}
+
 /// The numbers a `t` or `g` sequence has been given, and how they were joined.
 ///
 /// **`-` is a range, `,` is a list or a pair** (§5.7). One key had been doing
@@ -2322,6 +2337,9 @@ pub struct Editor {
     /// first — copy a paragraph to `a`, go and fetch something else, and it is
     /// still there.
     register: String,
+    /// What the grid put in the register, and the text it put there — see
+    /// [`Held`]. Believed only while the register still holds that very text.
+    register_grid: Option<(String, Held)>,
     /// Warning: **一格一串值，不是一個字串**（2026-10-09）：N 段選區各存自己那一截，同
     /// [`Self::register_parts`]。讀的時候段數對不上就交接起來的那一整份。
     registers: HashMap<char, Vec<String>>,
@@ -3765,6 +3783,7 @@ impl Editor {
             extend: false,
             vim_lines: false,
             register: String::new(),
+            register_grid: None,
             registers: HashMap::new(),
             register_parts: Vec::new(),
             parts_round: 0,
