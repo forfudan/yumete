@@ -105,17 +105,21 @@ fn a_tab_a_table_has_taken_over_is_a_separator_and_not_a_stop() {
 
     // 基本 and 全 both read it as a table, and in both the separator is the
     // table's punctuation — one cell, like a pipe.
-    for level in [" tb", " tf"] {
+    for level in [" tb"] {
         for c in level.chars() {
             ed.on_key(Key::Char(c));
         }
         assert_eq!(tabs(&ed), 0, "{level} takes the separator over: {}", ed.status());
     }
 
-    // And 全 draws its rule on that very character, which is only possible
-    // because the character still has a cell of its own.
-    let walls: Vec<usize> = ed.grid_on_line(0).into_iter().map(|(at, _)| at).collect();
-    assert_eq!(walls, vec![2], "the rule stands on the tab: {}", ed.status());
+    // And the table knows that very character as its wall, which is only
+    // possible because the character still has a cell of its own.
+    //
+    // **Asked of the table, not of the page** (2026-10-21): no level drawn
+    // into a document paints over the punctuation you typed any more — `t f`
+    // did, and it is folded into `t b` — so where the walls *are* is the
+    // question, and `grid_on_line` answered where they were *drawn*.
+    assert_eq!(ed.wall_columns(0), vec![2], "the wall stands on the tab: {}", ed.status());
 }
 
 /// The same rule with the same code path, in the punctuation everyone else
@@ -126,9 +130,8 @@ fn a_pipe_and_a_comma_are_walls_by_the_very_same_door() {
     let mut ed = typed("a,bb,c\nlonger,b,cc\n");
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
-    for c in " tf".chars() {
+    for c in " tb".chars() {
         ed.on_key(Key::Char(c));
     }
-    let walls: Vec<usize> = ed.grid_on_line(0).into_iter().map(|(at, _)| at).collect();
-    assert_eq!(walls, vec![1, 4], "both commas: {}", ed.status());
+    assert_eq!(ed.wall_columns(0), vec![1, 4], "both commas: {}", ed.status());
 }

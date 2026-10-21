@@ -75,7 +75,7 @@ fn four_punctuations_one_table() {
     ];
     for (name, text) in said {
         let mut ed = typed(text);
-        press(&mut ed, " tf");
+        press(&mut ed, " tb");
         let at = last_wall_column(&ed, 3);
         assert_eq!(at[0], at[1], "{name}: {at:?}");
         assert_eq!(at[1], at[2], "{name}: {at:?}");
@@ -97,12 +97,14 @@ fn the_levels_mean_the_same_thing_whatever_the_punctuation() {
             (0..3).map(|l| ed.drawn_on_line(l)).collect::<Vec<_>>()
         );
 
-        for level in [" tb", " tf"] {
-            press(&mut ed, level);
-            let at = last_wall_column(&ed, 3);
-            assert_eq!(at[0], at[1], "{level} squares it up: {at:?}");
-            assert_eq!(at[1], at[2], "{level} squares it up: {at:?}");
-        }
+        // **One level squares the columns up**, since `t f` was folded into
+        // `t b` (2026-10-21). 全窗 lines them up too, but it draws its own
+        // grid out of the schema rather than padding the page — which is a
+        // different question, asked by `nothing_drawn_into_a_page_replaces_what_you_typed`.
+        press(&mut ed, " tb");
+        let at = last_wall_column(&ed, 3);
+        assert_eq!(at[0], at[1], "`t b` squares it up: {at:?}");
+        assert_eq!(at[1], at[2], "`t b` squares it up: {at:?}");
     }
 }
 
@@ -112,7 +114,7 @@ fn the_levels_mean_the_same_thing_whatever_the_punctuation() {
 #[test]
 fn only_the_pipe_is_written_with_a_space_off_it() {
     let mut ed = typed("ab,cd\nef,gh\n");
-    press(&mut ed, " tf");
+    press(&mut ed, " tb");
     assert!(
         ed.drawn_on_line(0).is_empty(),
         "every cell is already the column's width: {:?}",
@@ -120,7 +122,7 @@ fn only_the_pipe_is_written_with_a_space_off_it() {
     );
 
     let mut ed = typed("|ab|cd|\n|ef|gh|\n");
-    press(&mut ed, " tf");
+    press(&mut ed, " tb");
     assert!(
         !ed.drawn_on_line(0).is_empty(),
         "and a pipe table still gets its spaces"
@@ -181,12 +183,17 @@ fn a_table_is_measured_over_what_is_on_the_page() {
 /// levels that draw a grid walk alike**, and 源碼模式 has no grid to walk.
 #[test]
 fn the_levels_leave_hjkl_to_the_layer() {
-    // Warning: **全窗 is the one level that skips the separator** (2026-10-17 作者定):
+    // Warning: **全窗 is a different model, not a third level** (2026-10-17 作者定:
     // 「to, tb, tf are about the texts (content + separators though
-    // rendered), and tt is only about the content」. Inside a cell `l` there
-    // still walks characters — one press, one character — it just never
-    // stands on the tab, so the walk is the same list with that offset left
-    // out.
+    // rendered), and tt is only about the content」). Since 2026-10-21 that
+    // sentence has teeth. `t f` is folded into `t b`, and what is left is a
+    // document that lines its columns up — 「`tb` is for convenient. It
+    // preserves some basic navigation feature of a normal document but allow
+    // to have some table features like visual alignment, tab navigation.」 So
+    // `l` there is a letter, separator and all, as it is in 源碼模式.
+    //
+    // 全窗 is where a cell is a container: `l` walks the two characters of
+    // `ch` and stops at the wall, and `Enter` is what goes inside one.
     let walk = |ed: &mut Editor| {
         let mut seen = vec![ed.cursor()];
         for _ in 0..3 {
@@ -195,22 +202,25 @@ fn the_levels_leave_hjkl_to_the_layer() {
         }
         seen
     };
-    for (level, top, inside) in [
-        // 源碼模式 draws no grid, so there is no layer and `l` is a letter.
-        (" to", vec![0, 1, 2, 3], vec![0, 1, 2, 3]),
-        (" tb", vec![0, 3, 3, 3], vec![0, 1, 2, 3]),
-        (" tf", vec![0, 3, 3, 3], vec![0, 1, 2, 3]),
-        (" tt", vec![0, 3, 3, 3], vec![0, 1, 3, 3]),
-    ] {
+    for level in [" to", " tb"] {
         let mut ed = typed("ch\t錐\nbkd\t蜘\n");
         press(&mut ed, level);
-        assert_eq!(walk(&mut ed), top, "{level} at the top layer walks cells");
-
+        assert_eq!(walk(&mut ed), vec![0, 1, 2, 3], "{level} walks characters");
+        // …and there is no second answer to go looking for: `Enter` is the
+        // page's own key there, not a way down into a cell.
         let mut ed = typed("ch\t錐\nbkd\t蜘\n");
         press(&mut ed, level);
         ed.on_key(Key::Enter);
-        assert_eq!(walk(&mut ed), inside, "{level} inside a cell walks characters");
+        assert_eq!(walk(&mut ed), vec![0, 1, 2, 3], "{level} has one answer");
     }
+
+    let mut ed = typed("ch\t錐\nbkd\t蜘\n");
+    press(&mut ed, " tt");
+    assert_eq!(walk(&mut ed), vec![0, 3, 3, 3], "全窗 opens on its cells");
+    let mut ed = typed("ch\t錐\nbkd\t蜘\n");
+    press(&mut ed, " tt");
+    ed.on_key(Key::Enter);
+    assert_eq!(walk(&mut ed), vec![0, 1, 1, 1], "and one `Enter` down, on its characters");
 }
 
 /// A step the reader cannot see is not a step (#379).
@@ -228,11 +238,11 @@ fn the_caret_steps_over_what_a_table_keeps_off_the_page() {
     let mut ed = typed(&text);
     ed.execute(":syntax markdown").unwrap();
     ed.execute("4").unwrap();
-    press(&mut ed, " tf");
-    // Down into the cell, where `l` is a character (2026-10-21) — and here,
-    // not after the `4` below: a `:N` jump leaves the grid without the keys
-    // for one keystroke, so an `Enter` sent straight after it never crosses.
-    ed.on_key(Key::Enter);
+    press(&mut ed, " tb");
+    // **摺疊要開口要**（2026-10-21）：這一條問的是「頁面上看不見的那一段，`l`
+    // 跨不跨得過去」，而頁面藏東西只在摺起來的時候。`t f` 出廠就摺，它併進
+    // `t b` 的時候没有把那個默認帶過來——文檔該顯示你打的字。
+    press(&mut ed, " tw");
     let hidden = ed.cell_hidden_on_line(3);
     assert!(!hidden.is_empty(), "the file's padding is off the page: {hidden:?}");
     let (from, upto) = hidden[0];

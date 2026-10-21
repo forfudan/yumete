@@ -24,11 +24,40 @@ impl Editor {
     /// editor and the terminal both ask, and the only way either reaches the
     /// model.
     ///
-    /// [`Layer::Whole`] outside a grid too, so a caller that forgot to ask
-    /// [`Self::table_here`] first gets the answer a grid opens with rather
-    /// than a second shape of nothing.
+    /// **[`Layer::Inside`] wherever the layers are not in force**
+    /// ([`Self::layers_here`]) — `t b` walks by character and has no second
+    /// answer, which is the whole of what makes it a document (2026-10-21
+    /// 作者定: 「`tb` should have no _tT toggle at all. It just go by char,
+    /// period. Two layer: normal mode - insert mode.」).
+    ///
+    /// [`Layer::Whole`] outside a grid altogether, so a caller that forgot to
+    /// ask [`Self::table_here`] first gets the answer a grid opens with
+    /// rather than a second shape of nothing.
     pub fn table_layer(&self) -> Layer {
-        self.table.as_ref().map(|v| v.layer).unwrap_or_default()
+        let Some(view) = self.table.as_ref() else {
+            return Layer::default();
+        };
+        match self.layers_here() {
+            true => view.layer,
+            false => Layer::Inside,
+        }
+    }
+
+    /// **Whether the grid's layers are in force here** (2026-10-21 作者定:
+    /// 「we are only working on the tt mode and it should not affect tb/tf
+    /// mode (tb/tf mode are only for document-type files)」).
+    ///
+    /// They belong to the surface that is **nothing but a grid**: 全窗, and a
+    /// file that is a table from its first line to its last. A table drawn
+    /// into a page of prose (`t b` / `t f`) is part of a document somebody is
+    /// writing, and there `hjkl` stay the letters the rest of the page gives
+    /// them — only `Tab` is the grid's, as it always was.
+    ///
+    /// This is the one door. Everything the layers do asks it: which keys the
+    /// grid claims, whether the cell walls a motion, whether the status line
+    /// says `CEL`, and whether the caret is drawn at all.
+    pub fn layers_here(&self) -> bool {
+        self.grid_has_the_pane()
     }
 
     /// **Whether the cell itself is standing in for the caret**, and so no
@@ -42,7 +71,7 @@ impl Editor {
     /// prose therefore keeps its caret, at either layer, until the edges can
     /// be drawn there too.
     pub fn caret_is_the_cell(&self) -> bool {
-        self.grid_has_the_pane() && !self.table_layer().caret(self.mode)
+        self.layers_here() && !self.table_layer().caret(self.mode)
     }
 
     /// Cross into a layer.
@@ -73,7 +102,7 @@ impl Editor {
         // where the page is turned: `turn_for_table` asks `grid_is_drawn`
         // while it is building the view, and `:table` draws it whole.
         let was = self.table_level;
-        self.table_level = TableLevel::Full;
+        self.table_level = TableLevel::Basic;
         if !self.enter_table_as(false) {
             self.table_level = was;
             return false;
@@ -94,13 +123,11 @@ impl Editor {
     /// Whether the columns are **drawn** as columns — `t f` or `t t` (#283).
     ///
     /// The question 縱書 asks: a grid is read across, and that is the one
-    /// thing a vertical page cannot do, so either of these turns the page
-    /// horizontal. `t b` draws no walls and leaves the page alone.
+    /// thing a vertical page cannot do, so the pane turns the page
+    /// horizontal. `t b` draws no walls and leaves the page alone — which
+    /// since 2026-10-21 is the only other answer there is.
     pub fn grid_is_drawn(&self) -> bool {
-        match self.table.as_ref() {
-            Some(view) => view.pane || self.table_level == TableLevel::Full,
-            None => false,
-        }
+        self.table.as_ref().is_some_and(|view| view.pane)
     }
 
     /// Whether the separator is `|` — three file characters, one drawn wall.
@@ -540,11 +567,9 @@ impl Editor {
             self.zong_motion = false;
         }
         let stayed = was == want && !gave_the_window_back;
-        self.status = match (want, stayed) {
-            (TableLevel::Full, false) => say!("table.drawn"),
-            (TableLevel::Full, true) => say!("table.already-drawn"),
-            (_, false) => say!("table.operated"),
-            (_, true) => say!("table.already-operated"),
+        self.status = match stayed {
+            false => say!("table.operated"),
+            true => say!("table.already-operated"),
         };
     }
 
@@ -633,6 +658,10 @@ impl Editor {
             return;
         }
         view.pane = want;
+        // **Taking the window is opening a grid**, so it opens at the grid's
+        // top layer — the same answer `t t` gives a `.csv` that was a table
+        // before anyone pressed anything.
+        view.layer = Layer::default();
         if self.grid_is_drawn() {
             self.turn_for_table();
         } else if let Some(back) = self.turned_for_table.take() {
@@ -643,10 +672,7 @@ impl Editor {
             true => say!("table.given-the-window"),
             // What it went back to is worth saying, because it is the whole
             // difference between `t q` and `t o`.
-            false => match self.table_level {
-                TableLevel::Full => say!("table.drawn"),
-                _ => say!("table.operated"),
-            },
+            false => say!("table.operated"),
         };
     }
 
@@ -1522,12 +1548,12 @@ impl Editor {
     /// Empty in the other two modes, and empty when the table has a pane of its
     /// own — there the grid is drawn by `crate::table` out of the schema rather
     /// than out of the writer's own punctuation.
-    fn grid_walls(&self, line: usize) -> Option<(usize, usize, Vec<usize>)> {
-        if self.table_level != TableLevel::Full {
-            return None;
-        }
-        let (first, last) = self.table_lines_at(line)?;
-        Some((first, last, self.wall_columns(line)))
+    fn grid_walls(&self, _line: usize) -> Option<(usize, usize, Vec<usize>)> {
+        // **Nothing draws walls into a page of prose any more** (2026-10-21).
+        // That was `t f`'s one difference from `t b`, and `t f` is folded into
+        // `t b`: an inline table shows the `|` you typed, and a table you want
+        // drawn as a grid is `t t`'s, which draws its own.
+        None
     }
 
     /// Where the table's own separator stands on `line`, as character indices.
@@ -3867,12 +3893,37 @@ impl Editor {
     /// 改成 _tT了，因为 T 现在 till 佔用的」）。換層那一下掛在表格那一組上
     /// （[`Self::toggle_table_layer`]），而 `Enter` / `Esc` 是正路。
     pub(super) fn table_motion(&mut self, key: Key, count: usize) -> bool {
+        // **The rule row is not a line anybody types into** — a guard, not a
+        // cell operator (2026-10-21). It used to be inside `edit_cell`, which
+        // only the top layer reaches; `t b` walks by character now and its
+        // letters are the page's, so from there `i` would have typed straight
+        // into `| --- | --- |` and the file would have stopped being a table.
+        // Markdown knows that row by its shape, and it is the one line a `|`
+        // table cannot survive losing.
+        //
+        // Its alignment is changed with `空格 t < = >`, which is why this
+        // names only the keys that open Insert on the spot.
+        if matches!(
+            key,
+            Key::Char('i' | 'I' | 'a' | 'A' | 'c' | 'C' | 's' | 'S' | 'R')
+        ) && self.md_rule_here()
+        {
+            self.status = say!("table.rule-row-is-drawn");
+            return true;
+        }
         let layer = self.table_layer();
         match layer.claim(self.mode, key) {
-            Claim::Cross(to) => {
+            // **Only a dedicated grid has layers to cross between**
+            // ([`Self::layers_here`]). Drawn into a page of prose there is
+            // one way to walk a table and `Enter` is the page's own key —
+            // under the vim preset it means 「the next line, where its
+            // writing begins」, and a document is exactly where somebody
+            // wants that.
+            Claim::Cross(to) if self.layers_here() => {
                 self.set_table_layer(to);
                 return true;
             }
+            Claim::Cross(_) => {}
             Claim::Cell(step) => {
                 self.step_cells(step, count);
                 return true;
@@ -4358,27 +4409,6 @@ impl Editor {
     /// Directions mean what they mean in a grid: `j`/`k` are the row, `h`/`l`
     /// are the column, and which one an edit is about never has to be said
     /// twice. The rest is vi's own spelling — `o`/`O` open, `d` deletes.
-    /// **按格走還是按字走**（`空格 t T`）。
-    ///
-    /// 表格開在頂層（整格是單位），`Enter` 下一層、`Esc` 上一層——那是正路。
-    /// 這一下是同一件事的第二道門：一鍵來回，不必記方向。
-    ///
-    /// Warning: **它與 `Enter`／`Esc` 讀同一個欄位**，所以兩道門不會各記一份、
-    /// 也不會對不上。它報一句狀態，而 `Enter`／`Esc` 不報：鍵盤在哪一層由模式
-    /// 那一欄一直寫着（`CEL`／`CEL.NOR`），而這一下是從單子上按出來的，按單子
-    /// 的人要的正是一句回話。
-    pub(super) fn toggle_table_layer(&mut self) {
-        let to = match self.table_layer() {
-            Layer::Whole => Layer::Inside,
-            Layer::Inside => Layer::Whole,
-        };
-        self.set_table_layer(to);
-        self.status = match to {
-            Layer::Whole => say!("table.moving-by-cell"),
-            Layer::Inside => say!("table.moving-by-character"),
-        };
-    }
-
     pub(super) fn table_structure(&mut self, key: Key) {
         use crate::mdtable::Align;
         // **The three that work whether or not there is a table here.** `t` is
@@ -4411,22 +4441,16 @@ impl Editor {
                 self.pending = crate::editor::Pending::TableConvert;
                 return;
             }
-            // `t b` / `t f` — 基本 and 完整, the same two words the command
-            // takes: [`Self::ask_for_table_level`] is the whole of both.
-            Key::Char('b') | Key::Char('f') => {
-                let want = match key {
-                    Key::Char('f') => TableLevel::Full,
-                    _ => TableLevel::Basic,
-                };
-                self.ask_for_table_level(want);
+            // `t b` — 基本, the same word the command takes:
+            // [`Self::ask_for_table_level`] is the whole of it.
+            //
+            // **`t f` is gone** (2026-10-21): it drew the `|` you typed as the
+            // wall it means and nothing else `t b` had not caught up with, and
+            // that is what `t t` is for.
+            Key::Char('b') => {
+                self.ask_for_table_level(TableLevel::Basic);
                 return;
             }
-            // **`空格 t T` — 換移動的粒度**（2026-09-30 定：「T 按格移动被折
-            // 叠到 _t 中了」）。#356 把它放在頂層的 `T` 上，於是格子模式裏往回
-            // till 按不到——一個頂層字母鍵在一種文件裏換意思，代價比那個理由
-            // 大。大寫，因為它與 `t t`/`t w`/`t a` 一樣是「這一扇窗怎麼走」，
-            // 而 `t t` 已經佔了小寫。
-            Key::Char('T') => return self.toggle_table_layer(),
             // `t w` — 寬. Whether a cell wider than the cap keeps its tail on
             // the page or folds it away behind a `>`. A preference about how
             // the page is *drawn*, so it sits beside `t b` / `t f` and asks

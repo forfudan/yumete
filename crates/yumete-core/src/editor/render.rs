@@ -39,7 +39,7 @@ impl Editor {
         self.table_level = match how {
             Render::Off => TableLevel::Off,
             Render::Basic => TableLevel::Basic,
-            Render::Full => TableLevel::Full,
+            Render::Full => TableLevel::Basic,
         };
         if self.table_level == TableLevel::Off {
             self.leave_table_quietly();
@@ -868,7 +868,7 @@ impl Editor {
     /// the level may not do unasked.
     pub(super) fn cell_width_now(&self) -> CellWidth {
         let pane = self.table.as_ref().is_some_and(|view| view.takes_the_pane());
-        self.cell_folds.unwrap_or(match pane || self.table_level == TableLevel::Full {
+        self.cell_folds.unwrap_or(match pane {
             true => CellWidth::Fold,
             false => CellWidth::Whole,
         })

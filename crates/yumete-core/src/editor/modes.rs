@@ -65,7 +65,10 @@ impl Editor {
         // the layer answers 「where are my keys」 the way `PAN.` and `PIC.`
         // already do. [`Layer::label`] owns the spelling, including the one
         // case that is a bare word: the top layer at rest says `CEL`.
-        match self.table_here() {
+        // …and only where the layers are in force: a table drawn into a page
+        // of prose is a document, and a document's mode word is the
+        // document's (2026-10-21).
+        match self.layers_here() {
             true => word.map(|w| self.table_layer().label(&w)),
             false => word,
         }

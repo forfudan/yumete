@@ -3105,7 +3105,16 @@ impl Editor {
             // window holds you」, which drags the caret back without placing
             // it: `g e` landed on the last row's trailing `|`. Asking for the
             // row by number lands in a cell.
-            let rows = e.grid_has_the_pane().then(|| e.table_row_span()).flatten();
+            //
+            // Warning: **the top layer only** (2026-10-21). Inside a cell the
+            // cell is the document, so its two ends are what `g g` and `g e`
+            // mean there — which is also what makes vim's `ggVG` 「the whole
+            // cell」 without anything being taught to spell it. The clamp in
+            // `Editor::walled` does that half; this has to stand aside for it,
+            // or the row jump answers first and leaves the cell.
+            let rows = (!e.table_layer().walled())
+                .then(|| e.grid_has_the_pane().then(|| e.table_row_span()).flatten())
+                .flatten();
             if let Some((first, last)) = rows {
                 match what {
                     motion::Motion::FileStart => return e.goto_grid_row(1),
@@ -3677,16 +3686,16 @@ impl Editor {
     /// These six work anywhere, so they head every list, and on a page with no
     /// table under the cursor they are the whole list.
     const TABLE_KEYS: &'static [(&'static str, &'static str)] = &[
-        // **五個一系列，照它們的次序排**（2026-09-30 定：「t 放到 f 后面，
-        // q放到 t后面。这五个是一个系列」）。`o b f t` 是同一個問題的四個答案
-        // ——這張表畫成什麼樣——由淺入深，`q` 是從最深那一檔退回來。
+        // **一個系列，照它們的次序排**（2026-09-30 定：「t 放到 f 后面，q 放到
+        // t 后面。这五个是一个系列」）。`o b t` 是同一個問題的三個答案——這張表
+        // 畫成什麼樣——由淺入深，`q` 是從最深那一檔退回來。
+        //
+        // **`f` 2026-10-21 併進 `b`**，於是這一系列從五個變四個：它只多畫一道
+        // 牆，而要看網格的人要的是 `t t`。
         ("o", "hint.table.back-to-prose"),
         ("b", "hint.table.operate-it"),
-        ("f", "hint.table.draw-it"),
         ("t", "hint.table.whole-window"),
         ("q", "hint.table.leave-the-window"),
-        // 2026-09-30：從頂層的 `T` 搬進來。
-        ("T", "hint.table.grain"),
         // 摺格子 asks nothing about where the cursor is standing either — it is
         // a preference about how the page is *drawn* — and it had never once
         // been offered by any of the four lists, in the group whose whole

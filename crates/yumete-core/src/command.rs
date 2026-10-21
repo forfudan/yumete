@@ -2307,8 +2307,7 @@ const HINTS: &[Word] = &[
 const TABLE_LEVELS: &[Word] = &[
     Word { name: "off", help: "hint.table.back-to-prose", needs: &[] },
     Word { name: "basic", help: "hint.table.operate-it", needs: &[] },
-    Word { name: "full", help: "hint.table.draw-it", needs: &[] },
-    // **全窗 is the fourth answer to the same question** (2026-10-07: 「_tt 可以
+    // **全窗 is the third answer to the same question** (2026-10-07: 「_tt 可以
     // 對應命令 `table-render window`，因爲他和另外三個 render 模式是不會
     // overlap」). `空格 t q` stays a key with no command of its own — 「本質上只
     // 對全窗模式生效。我建議暫時不用命令」.
@@ -4265,7 +4264,11 @@ pub const COMMANDS: &[Entry] = &[
                 Some("off") => Command::SetTableLevel(crate::editor::TableLevel::Off),
                 Some("basic") => Command::SetTableLevel(crate::editor::TableLevel::Basic),
                 Some("window") => Command::TableWindow,
-                _ => Command::SetTableLevel(crate::editor::TableLevel::Full),
+                // **`full` 2026-10-21 併進 `basic`**：它只多把你打的 `|` 畫成
+                // 一道牆，而要一張畫好的網格是 `window` 的事。`full` 連同它那
+                // 一行從 `TABLE_LEVELS` 裏刪了，所以它現在和拼錯一樣被擋在門
+                // 外——不留別名，也不悄悄當成 `basic`。
+                _ => Command::SetTableLevel(crate::editor::TableLevel::Basic),
             })
         }),
     },

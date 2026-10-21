@@ -1726,12 +1726,12 @@ en = "an empty table: `:table 3 4` is three rows by four columns, the first row 
 find = "表格 網格 网格 格子 新建 插入 空表 建表 grid new insert"
 
 [[message]]
-# : 命令選單裏 table-render 那一項的説明(commands 組)。四個參數就是 空格 t o|b|f|t
+# : 命令選單裏 table-render 那一項的説明(commands 組)。三個參數就是 空格 t o|b|t
 key = "cmd.commands.table-render"
-zht = "表格渲染模式：源碼視圖、基本視圖、完整視圖、全窗視圖。無參數時，報告當前模式名"
-zhs = "表格渲染模式：源码视图、基本视图、完整视图、全窗视图。无参数时，报告当前模式名"
-en = "how much of a table is drawn: the source, basic, full, or window view; bare says which it is now"
-find = "表格 視圖 视图 源碼 源码 基本 完整 全窗 render 級别 级别"
+zht = "表格渲染模式：源碼視圖、基本視圖、全窗視圖。無參數時，報告當前模式名"
+zhs = "表格渲染模式：源码视图、基本视图、全窗视图。无参数时，报告当前模式名"
+en = "how much of a table is drawn: the source, basic, or window view; bare says which it is now"
+find = "表格 視圖 视图 源碼 源码 基本 全窗 render 級别 级别"
 
 [[message]]
 # : 命令選單裏 theme 那一項的説明(commands 組)
@@ -6212,13 +6212,6 @@ zhs = "该行记录"
 en = "this row's record"
 
 [[message]]
-# t 選單：t f 這一行
-key = "hint.table.draw-it"
-zht = "完整視圖(表格顯示列號)"
-zhs = "完整视图(表格显示列号)"
-en = "full view: the table shows column numbers"
-
-[[message]]
 # 表格提示：第一行當欄名/當資料
 key = "hint.table.first-row-is-data"
 zht = "表格第一行是否為標題"
@@ -6238,13 +6231,6 @@ key = "hint.table.go-to-cell"
 zht = "去某一格(␣t 20,20g)"
 zhs = "去某一格(␣t 20,20g)"
 en = "go to a cell (␣t20,20g)"
-
-[[message]]
-# 空格 t 單子：換移動的粒度(2026-09-30 定，原話「按格/按字移動」)
-key = "hint.table.grain"
-zht = "按格/按字移動"
-zhs = "按格/按字移动"
-en = "move by cell or by character"
 
 [[message]]
 # 表格提示：格內
@@ -7539,13 +7525,6 @@ key = "level.basic"
 zht = "基本"
 zhs = "基本"
 en = "basic"
-
-[[message]]
-# 級别名：完整
-key = "level.full"
-zht = "完整"
-zhs = "完整"
-en = "full"
 
 [[message]]
 # 級别名：關
@@ -10999,18 +10978,11 @@ zhs = "这一段本来就是 | 表格"
 en = "this is already a | table"
 
 [[message]]
-# t f 對齊，本來就是齊的
+# 對齊，本來就是齊的
 key = "table.already-aligned"
 zht = "已經是對齊的"
 zhs = "已经是对齐的"
 en = "already lined up"
-
-[[message]]
-# t a，但這張表已經畫在正文裏了
-key = "table.already-drawn"
-zht = "已經是完整表格了——t t 全窗，t b 基本，t o 源碼"
-zhs = "已经是完整表格了——t t 全窗，t b 基本，t o 源码"
-en = "already at the full level — t t takes the window, t b is basic, t o is the source"
 
 [[message]]
 # :sort 但本來就是這個順序
@@ -11029,9 +11001,9 @@ en = "not reading anything as a grid"
 [[message]]
 # t n，但這張表已經在表格操作模式
 key = "table.already-operated"
-zht = "已經是基本表格了——t f 完整，t t 全窗，t o 源碼"
-zhs = "已经是基本表格了——t f 完整，t t 全窗，t o 源码"
-en = "already at the basic level — t f draws the walls, t t takes the window, t o is the source"
+zht = "已經是基本表格了——t t 全窗，t o 源碼"
+zhs = "已经是基本表格了——t t 全窗，t o 源码"
+en = "already at the basic level — t t takes the window, t o is the source"
 
 [[message]]
 # t t，但這張表已經佔着整個窗口
@@ -11230,13 +11202,6 @@ zhs = "格与格之间的分隔符删不掉"
 en = "the divider between cells cannot be deleted"
 
 [[message]]
-# t a：在正文裏把表格畫成格子
-key = "table.drawn"
-zht = "完整表格——t t 全窗，t b 基本，t o 源碼"
-zhs = "完整表格——t t 全窗，t b 基本，t o 源码"
-en = "the full level — t t takes the window, t b is basic, t o is the source"
-
-[[message]]
 # 在格子裏按 Enter
 key = "table.enter-makes-no-newline"
 zht = "一格之內：Enter 不換行——Tab 走下一格"
@@ -11377,7 +11342,7 @@ zhs = "第 {0} 行的表格"
 en = "the table on line {0}"
 
 [[message]]
-# t f 對齊完成
+# 對齊完成
 key = "table.lined-up"
 zht = "對齊好了"
 zhs = "对齐好了"
@@ -11389,20 +11354,6 @@ key = "table.looks-delimited"
 zht = "本文件格式似乎是 {0} 分欄，故而以表格模式打開，按 t o 回到源碼模式"
 zhs = "本文件格式似乎是 {0} 分栏，故而以表格模式打开，按 t o 回到源码模式"
 en = "this file looks {0}-delimited, so it opens as a table; t o for the source"
-
-[[message]]
-# 表格裏切回按格移動
-key = "table.moving-by-cell"
-zht = "按格移動(T 回到按字)"
-zhs = "按格移动(T 回到按字)"
-en = "moving by cell — T goes back to characters"
-
-[[message]]
-# 表格裏切成按字移動
-key = "table.moving-by-character"
-zht = "按字移動(T 回到按格)"
-zhs = "按字移动(T 回到按格)"
-en = "moving by character — T goes back to cells"
 
 [[message]]
 # :table 在段落中間按下——新建一張表會把那一段寫壞，所以不猜，攔住
@@ -11554,9 +11505,9 @@ en = "one column only — a table needs two, or write the |---| line first"
 [[message]]
 # t b：一個字都没藏，按鍵歸表格(基本表格)
 key = "table.operated"
-zht = "基本表格——一個字都没藏，t f 畫牆，t o 源碼"
-zhs = "基本表格——一个字都没藏，t f 画墙，t o 源码"
-en = "the basic level — nothing hidden, t f draws the walls, t o is the source"
+zht = "基本表格——一個字都没藏，t t 全窗，t o 源碼"
+zhs = "基本表格——一个字都没藏，t t 全窗，t o 源码"
+en = "the basic level — nothing hidden, t t takes the window, t o is the source"
 
 [[message]]
 # 貼進的格子比表格的欄數寬

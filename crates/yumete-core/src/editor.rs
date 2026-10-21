@@ -1101,27 +1101,30 @@ pub enum TableLevel {
     /// replaced** — every character the writer typed is still on the page, so
     /// a 縱書 chapter with no table in it is drawn exactly as `Off` draws it.
     ///
-    /// **The level says how much of the grid is drawn, not where the keys
-    /// are.** That is [`Layer`], which is a field of the view and not of the
-    /// level, so `t b` and `t f` draw the same table two ways and `hjkl` mean
-    /// the same thing in both.
+    /// **`hjkl` are letters here, and there is no second answer** (2026-10-21
+    /// 作者定). This level is a *document* that happens to line its columns
+    /// up: 「`tb` is for convenient. It preserves some basic navigation
+    /// feature of a normal document but allow to have some table features
+    /// like visual alignment, tab navigation.」 So the top-level letter keys
+    /// are the page's, the grid's own work is on the `空格 t` menu, and the
+    /// two table keys that are worth a keystroke of their own — alignment,
+    /// and `Tab` from cell to cell — are the two that cost the page nothing.
     ///
-    /// This paragraph has now said both answers — 「they walk cells」 until
-    /// 2026-09-11, 「they are letters」 until 2026-10-21 — because what it was
-    /// reporting was a toggle with no mark on the screen, and an argument got
-    /// built on top of each reading in turn. The layer has a mark: `CEL` on
-    /// the status line, two 金 edges round the cell.
+    /// This paragraph has said three different things in six weeks, and the
+    /// reason each time was the same: what it was reporting was a toggle with
+    /// no mark on the screen. There is no toggle now. A grid you walk by cell
+    /// is [`TableLevel`]'s neighbour `t t`, which is a different model and
+    /// says so on the status line.
+    ///
+    /// **`t f` was folded in here** (2026-10-21): it drew the `|` you typed as
+    /// the wall `┆` it means, and nothing else that `t b` had not already
+    /// caught up with — the column ruler came over on 2026-09-11 (#379) and
+    /// folding long cells was always the `空格 t w` toggle. That last
+    /// difference is what `t t` is *for*, and a half-grid drawn into prose is
+    /// the awkward middle: not faithful to what you typed, and not a table
+    /// interface either.
     #[default]
     Basic,
-    /// `t f` — everything `Basic` draws, and then the parts are optimised:
-    /// the `|` the writer typed is drawn as the wall `┆` it means, and the
-    /// column ruler goes above the table.
-    ///
-    /// **The columns are the table's**, not the screen's: the widest cell in
-    /// each column decides, once, for the whole table. That is what makes the
-    /// padding stable while you scroll — and it is the one thing the pane does
-    /// differently.
-    Full,
 }
 
 /// The numbers a `t` or `g` sequence has been given, and how they were joined.

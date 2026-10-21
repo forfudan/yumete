@@ -170,6 +170,25 @@ impl Layer {
         }
     }
 
+    /// **Whether the cell is the whole document at this layer.**
+    ///
+    /// `true` in the middle, where the cell's edges are the walls: `l` stops
+    /// at its last character, `gg` is its first, `$` its end, and `d w`
+    /// cannot reach the delimiter. That is what 「inside one cell」 means, and
+    /// it is the half of the middle layer this model could not state until
+    /// the motions were bounded (2026-10-21).
+    ///
+    /// `false` at the top, where motions are over cells and there is nothing
+    /// inside one to be walled.
+    ///
+    /// Warning: **this is not a list of keys**, and it must not become one. The
+    /// three keymap presets spell `l` and `gg` differently; what is walled is
+    /// a *motion*, which the editor holds as a value, and which of those are
+    /// walled is the editor's to say — see `Editor::walled`.
+    pub fn walled(self) -> bool {
+        self == Layer::Inside
+    }
+
     /// Whether the selection is a whole cell at this layer.
     ///
     /// The top layer's selection *is* the cell, which is what makes `y`, `d`,
@@ -283,11 +302,31 @@ mod tests {
 
     const BOTH: [Layer; 2] = [Layer::Whole, Layer::Inside];
 
+    /// **Each layer has exactly one unit, and they are not the same one.**
+    ///
+    /// The two questions the editor asks of a layer before it moves anything:
+    /// 「is the whole cell the thing I am acting on?」 and 「is the cell the
+    /// whole document?」. One is true at the top, the other in the middle, and
+    /// neither is ever true at both — that is the model in one line.
+    #[test]
+    fn one_layer_takes_the_cell_and_the_other_is_taken_by_it() {
+        for layer in BOTH {
+            assert_ne!(
+                layer.selects_the_cell(),
+                layer.walled(),
+                "{layer:?} answers both unit questions the same way"
+            );
+        }
+        assert!(Layer::Whole.selects_the_cell());
+        assert!(Layer::Inside.walled());
+    }
+
     /// **A grid opens at the top layer** (2026-10-21 定).
     #[test]
     fn a_table_opens_with_the_whole_cell() {
         assert_eq!(Layer::default(), Layer::Whole);
         assert!(Layer::default().selects_the_cell());
+        assert!(!Layer::default().walled());
         assert!(!Layer::default().caret(Mode::Normal));
         assert_eq!(Layer::default().edge(), Edge::Thick);
     }

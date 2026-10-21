@@ -1173,9 +1173,12 @@ fn insert_takes_back_a_word_and_a_line() {
 
 #[test]
 fn taking_back_a_word_stays_inside_its_cell() {
-    let mut ed = typed("| 甲 | 春天到了很好 |\n| --- | --- |\n| 丙 | 丁 |\n");
-    ed.goto_line(1);
+    // **長的那一格放在數據行上**（2026-10-21）：`A` 和 `C-u` 是格子的鍵，所以
+    // 這一條走全窗，而全窗把標題凍在頂上、光標帶進第一條記錄。
+    let mut ed = typed("| 甲 | 乙 |\n| --- | --- |\n| 丙 | 春天到了很好 |\n");
+    ed.goto_line(3);
     assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
     press(&mut ed, "l");
     ed.on_key(Key::Char('A'));
     ed.on_key(Key::Ctrl('u'));
@@ -1586,10 +1589,20 @@ fn every_motion_stands_on_the_table_wall_once() {
         assert!(ed.cursor_line() == 2, "走過頭了");
     }
     assert_eq!(text(&ed), "e", "停在 `people` 的末一個字母上");
+    // ⚠ **走到牆上，別數按鍵**（2026-10-21）：`t f` 折疊時把檔案自帶的補白從
+    // 頁面上撤掉，於是末字再一下正好是牆；`t b` 把補白留在頁面上（它只加字，
+    // 從不拿走），所以中間隔着幾格空白。隔幾格是排版算出來的，不是這一條要問
+    // 的事——要問的是「牆上站得住，而且只站一下」。
+    for i in 0.. {
+        assert!(i < 20, "`l` 走不到那道牆上：{:?}", text(&ed));
+        ed.on_key(Key::Char('l'));
+        if text(&ed) == "|" {
+            break;
+        }
+        assert_eq!(text(&ed), " ", "牆之前只該是補白：{:?}", text(&ed));
+    }
     ed.on_key(Key::Char('l'));
-    assert_eq!(text(&ed), "|", "一下站上那道牆");
-    ed.on_key(Key::Char('l'));
-    assert_eq!(text(&ed), "l", "再一下進下一格，牆兩邊的空格一個也不停");
+    assert_eq!(text(&ed), " ", "牆只站一下，過去就是下一格的補白");
 }
 
 /// **空格子保得住它那一個落點**（2026-10-17）。
@@ -1608,8 +1621,14 @@ fn an_empty_cell_keeps_the_one_place_it_has() {
     ed.execute("goto 3").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, " tt");
-    while column(&ed) == Some(0) {
-        ed.on_key(Key::Char('l'));
+    // ⚠ 數着按，而且走的是 `Tab`：跨格是它的事（2026-10-21），`l` 在格子裏
+    // 走不出去，而在頂層它走的本來就是格——兩邊都不該拿它當「走到第 N 格」。
+    for i in 0.. {
+        if column(&ed) == Some(1) {
+            break;
+        }
+        assert!(i < 8, "`Tab` 走不到那個空格子上");
+        ed.on_key(Key::Tab);
     }
     assert_eq!(column(&ed), Some(1), "空格子進得去：{}", ed.status());
     // 進得去，也寫得進。
@@ -1741,8 +1760,14 @@ fn the_older_holes_the_review_found_are_shut() {
     ed.execute("goto 3").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, " tt");
-    while ed.cell_position().map(|(_, c)| c) != Some(2) {
-        ed.on_key(Key::Char('l'));
+    // ⚠ 數着按，而且走的是 `Tab`：跨格是它的事（2026-10-21），`l` 在格子裏
+    // 走不出去，而在頂層它走的本來就是格——兩邊都不該拿它當「走到第 N 格」。
+    for i in 0.. {
+        if ed.cell_position().map(|(_, c)| c) == Some(2) {
+            break;
+        }
+        assert!(i < 8, "`Tab` 走不到第三格");
+        ed.on_key(Key::Tab);
     }
     ed.on_key(Key::Char('j'));
     let (from, to) = ed.selection();
@@ -1791,9 +1816,13 @@ fn a_quoted_comma_is_not_a_wall() {
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
 
-    // 完整那一層從前在 `"one, two"` 中間畫了一道牆，全窗與基本都畫對。
-    press(&mut ed, " tq");
-    assert_eq!(ed.grid_on_line(1).len(), 2, "三格兩道牆：{:?}", ed.grid_on_line(1));
+    // **三格，中間那個逗號是欄位裏的字**。從前問的是畫出來的牆有幾道，而
+    // 2026-10-21 之後没有哪一層往頁面上畫牆了（見
+    // `nothing_drawn_into_a_page_replaces_what_you_typed`）——問格子本身，
+    // 那纔是這一條一直要問的。
+    assert_eq!(ed.row_cells(1).len(), 3, "三格：{:?}", ed.row_cells(1));
+    // ⚠ 引號是檔案的語法，`cell_text` 交的是檔案裏那一段原文。
+    assert_eq!(ed.cell_text(1, 1), "\"one, two\"", "引號裏的逗號不是牆");
 
     // 剪一行再貼回來——從前貼不回去，那一行就丟了。
     press(&mut ed, " tt");
@@ -1932,6 +1961,8 @@ fn mi_c_takes_the_cell_and_still_takes_a_comment_in_code() {
     let mut ed = typed(table);
     ed.execute("goto 3").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     press(&mut ed, " tt");
     for _ in 0..12 {
         ed.on_key(Key::Char('l'));
@@ -1956,7 +1987,13 @@ fn mi_c_takes_the_cell_and_still_takes_a_comment_in_code() {
     let mut ed = typed(table);
     ed.execute("goto 4").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
-    for _ in 0..3 {
+    // ⚠ 數着按走不到：`t b` 把補白留在頁面上，隔幾格是排版算出來的
+    // （2026-10-21）。
+    for i in 0.. {
+        if ed.cell_position().map(|(_, c)| c) == Some(1) {
+            break;
+        }
+        assert!(i < 20, "`l` 走不到那個空格子上");
         ed.on_key(Key::Char('l'));
     }
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "在空格子裏");
@@ -1986,13 +2023,13 @@ fn the_pane_reads_a_line_as_a_cell_and_a_number_as_a_row() {
     ed.execute("goto 5").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, " tt");
-    // 按字走是中層：表格開在頂層，那裏 `hjkl` 走格子（2026-10-21）。
-    ed.on_key(Key::Enter);
     let text = |ed: &Editor| {
         let (from, to) = ed.selection();
         ed.current_buffer().rope().slice(from..to).to_string()
     };
-    // 走到第二格中間。
+    // 到第二格，再下到中層：`l` 出不了格子了（2026-10-21），過去是 `Tab`。
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Enter);
     for _ in 0..14 {
         ed.on_key(Key::Char('l'));
     }
@@ -2111,6 +2148,8 @@ fn the_pane_has_no_wall_to_stand_on() {
     // 的是格子，而這一條問的是一格的末字再按一下落在哪。
     let to_the_last_letter = |ed: &mut Editor| {
         ed.on_key(Key::Enter);
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Enter);
         let last = ed.current_buffer().text().find("people").expect("fixture") + 5;
         for i in 0.. {
             if ed.selection().0 >= last {
@@ -2126,8 +2165,15 @@ fn the_pane_has_no_wall_to_stand_on() {
     ed.execute("goto 3").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     to_the_last_letter(&mut ed);
-    ed.on_key(Key::Char('l'));
-    assert_eq!(text(&ed), "|", "`t f`：牆是字，占一欄");
+    // **`t b`：牆是字，站得上去**——它和補白一樣都在頁面上，`t b` 只加字從不
+    // 拿走（2026-10-21，`t f` 併進來之後這一半就是它了）。
+    for i in 0.. {
+        assert!(i < 20, "`l` 走不到那道牆上：{:?}", text(&ed));
+        ed.on_key(Key::Char('l'));
+        if text(&ed) == "|" {
+            break;
+        }
+    }
 
     let mut ed = typed(table);
     ed.execute("goto 3").unwrap();
@@ -2135,8 +2181,15 @@ fn the_pane_has_no_wall_to_stand_on() {
     press(&mut ed, " tt");
     assert!(ed.grid_has_the_pane(), "{}", ed.status());
     to_the_last_letter(&mut ed);
+    // **全窗 裏那一下哪兒也不去**（2026-10-21）。牆在 `t f` 是一個字、占一欄，
+    // 在全窗根本不畫——而這一條從前問的是「不畫的那一格，`l` 跨不跨得過去」。
+    // 分層之後問法自己沒了：一格之內就是全部，`l` 停在末字上，過去是 `Tab` 或
+    // 者上一層。兩種模式於是各自成立，而不是同一條規矩的兩種寫法。
     ed.on_key(Key::Char('l'));
-    assert_eq!(text(&ed), "l", "`t t`：牆不是東西，一步進下一格");
+    assert_eq!(text(&ed), "e", "`t t`：一格之內就是全部，末字就是末字");
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0), "沒有出格");
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "過去是 `Tab`");
 }
 
 /// **整行拿得走，也貼得回來**（2026-10-17 作者定）。
@@ -2153,6 +2206,8 @@ fn whole_rows_are_the_one_cut_a_grid_lets_through() {
     let mut ed = typed(table);
     ed.execute("goto 3").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
 
     // 一行：`x` 選整行，`d` 拿走，`p` 貼回來。
     press(&mut ed, "xd");
@@ -2182,11 +2237,15 @@ fn whole_rows_are_the_one_cut_a_grid_lets_through() {
     assert_eq!(ed.current_buffer().text(), table, "分隔行：{}", ed.status());
     assert_eq!(ed.status(), say!("table.rule-row-is-drawn"), "說得出改對齊的鍵");
     ed.execute("goto 3").unwrap();
-    // `| one | two |`：光標從行首那道牆起步，四下 `l` 正落在格與格之間那一道
-    // （中間兩個空格一欄也不占，所以過不去的只有牆本身）。按字走是中層，所以
-    // 先 `Enter` 下去一層（2026-10-21）。
-    ed.on_key(Key::Enter);
-    press(&mut ed, "llll");
+    // `| one | two |`：走到格與格之間那一道牆上。⚠ 數着按走不到——`t b` 把補
+    // 白留在頁面上，隔幾格是排版算出來的（2026-10-21）。
+    for i in 0.. {
+        assert!(i < 20, "`l` 走不到中間那道牆上");
+        if i > 0 && ed.current_buffer().rope().char(ed.selection().0) == '|' {
+            break;
+        }
+        ed.on_key(Key::Char('l'));
+    }
     assert_eq!(
         ed.current_buffer().rope().char(ed.selection().0),
         '|',
@@ -5315,6 +5374,8 @@ fn a_cell_pasted_into_a_pipe_table_keeps_its_backslashes() {
     let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 水 |\n");
     ed.execute(":3").unwrap();
     ed.enter_table();
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     press(&mut ed, "l");
     ed.store("註\nC:\\ 與 |\n".to_string());
     press(&mut ed, " tp");
@@ -6397,59 +6458,6 @@ fn every_key_the_table_group_lists_does_something() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **The key the list offers for the layer is the key that changes it** (#399).
-///
-/// `Tab` held this until #356 gave it what every spreadsheet means by the key
-/// and moved the switch to `T` — and the command row went on offering `Tab`.
-/// Pressing it stepped one cell and left the switch, the row and the status
-/// line exactly as they were, which reads as a switch that does not switch.
-///
-/// 2026-09-30 它從頂層的 `T` 搬進了 `空格 t`，所以問的是那一張單子；提示行那
-/// 一頭改成反過來問——它**不**該再寫這一條。
-#[test]
-fn the_table_group_offers_the_key_that_really_changes_the_layer() {
-    let dir = tmp().join(format!("yumete-grain-hint-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
-    std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n",
-    )
-    .unwrap();
-    let csv = dir.join("d.csv");
-    std::fs::write(&csv, "char,ids_y\n相,⿰木目\n木,木\n").unwrap();
-
-    let mut ed = Editor::new();
-    ed.open_file(&csv).unwrap();
-    ed.goto_line(2);
-
-    // Both ways round: the key has to work from either layer.
-    for _ in 0..2 {
-        let before = ed.table_layer();
-        // A hint is a status line first, and the file has just been opened.
-        ed.status.clear();
-        // 提示行上一個字都不寫粒度——它在單子裏。
-        let Hint::Keys(title, row) = ed.hint() else { panic!("standing in a grid") };
-        assert_eq!(title, say!("label.table"), "the title carries no grain");
-        assert!(!row.iter().any(|(k, _)| *k == "T"), "{row:?}");
-        // 空格 t 開那一組，`T` 在單子上，按下去真的換。
-        press(&mut ed, " t");
-        let Hint::Keys(_, keys) = ed.hint() else { panic!("the table group is open") };
-        let (_, what) = keys.iter().find(|(k, _)| *k == "T").expect("T is on the list");
-        assert_eq!(*what, say!("hint.table.grain"));
-        press(&mut ed, "T");
-        assert_ne!(
-            ed.table_layer(),
-            before,
-            "`空格 t T` is offered for 「{}」 and it did not change the grain",
-            say!("hint.table.grain")
-        );
-    }
-
-    std::fs::remove_dir_all(&dir).ok();
-}
-
 /// **A grid opens on cells, and one key goes inside one** (2026-10-21).
 ///
 /// The reverse of what #356 settled, and deliberately: that decision —
@@ -6505,13 +6513,21 @@ fn a_grid_opens_on_cells_and_one_key_goes_inside_one() {
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('目'));
 
-    // Back to the head of the cell, still one character at a time.
-    // Warning: **one `l`, not two** (2026-10-17). The comma used to be a stop of its
-    // own; in 全窗 the separator is not an object at all, for a delimited
-    // file as for a `|` one — see `kept_off_on_line`.
+    // **And `l` does not leave the cell at all** (2026-10-21). 「相」 is the
+    // whole of the first cell, so pressing it there moves nothing — the cell
+    // is the document at this layer, and crossing is `Tab`'s job or a layer
+    // up.
+    //
+    // It used to step across the comma into the next cell, on the grounds
+    // that 全窗 draws no separator to stand on (2026-10-17). True, and the
+    // wall answers it better: there is nothing to stand on because there is
+    // nowhere to go.
     ed.goto_line(2);
     press(&mut ed, "l");
-    assert_eq!(ed.char_at_cursor(), Some('⿰'));
+    assert_eq!(ed.char_at_cursor(), Some('相'), "`l` stops at the cell's wall");
+    assert_eq!(ed.cell_position(), Some((1, 0)), "and stays in the cell");
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.char_at_cursor(), Some('⿰'), "`Tab` is how you cross");
 
     // `Esc` back up, and the cursor snaps to cells again.
     ed.on_key(Key::Esc);
@@ -7256,7 +7272,9 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
 #[test]
 fn the_markdown_grid_keys_say_so_on_a_locked_file() {
     let mut ed = typed("| 甲 | 乙 |\n| --- | --- |\n| 一 | 二 |\n");
-    press(&mut ed, " tf");
+    press(&mut ed, " tt");
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    ed.on_key(Key::Enter);
     ed.goto_line(3);
     assert!(ed.execute("readonly on").is_ok());
     let before = ed.current_buffer().text();
@@ -7584,7 +7602,9 @@ fn clearing_a_cell_keeps_the_register_under_the_same_rule_as_prose() {
     let cleared_with = |key: &str| -> Editor {
         let mut ed = typed(table);
         ed.goto_line(3);
-        press(&mut ed, " tb");
+        // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏 `y`／`d` 是
+        // 頁面的鍵，不是「這一格」。
+        press(&mut ed, " tt");
         press(&mut ed, "l");
         press(&mut ed, "y"); // 三十 進寄存器
         press(&mut ed, "h");
@@ -7601,7 +7621,7 @@ fn clearing_a_cell_keeps_the_register_under_the_same_rule_as_prose() {
     // `D`；2026-10-08 接上了 `A-d`，`D` 就刪了——不留別名。
     let mut ed = typed(table);
     ed.goto_line(3);
-    press(&mut ed, " tb");
+    press(&mut ed, " tt");
     press(&mut ed, "l");
     press(&mut ed, "y");
     press(&mut ed, "h");
@@ -7632,7 +7652,11 @@ fn with_two_md_tables() -> Editor {
 fn t_w_folds_a_cell_too_wide_to_scan_and_gives_it_back() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, " tf");
+    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
+    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
+    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
+    press(&mut ed, " tb");
+    press(&mut ed, " tw");
     // Row 9's 備註 is 25 characters — 50 cells — so its tail comes off.
     let folded = ed.hidden_on_line(8);
     assert!(!folded.is_empty(), "the wide cell is folded: {folded:?}");
@@ -7685,7 +7709,11 @@ fn a_table_squared_up_in_the_file_is_still_folded_to_the_cap() {
     let file: Vec<usize> = square.iter().map(|l| yumete_cjk::str_width(l)).collect();
     let mut ed = typed(&format!("{}\n", square.join("\n")));
     ed.goto_line(3);
-    press(&mut ed, " tf");
+    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
+    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
+    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
+    press(&mut ed, " tb");
+    press(&mut ed, " tw");
 
     assert!(
         !ed.hidden_on_line(0).is_empty(),
@@ -7750,14 +7778,19 @@ fn 源碼_has_no_squared_up_column_to_fold_and_says_so() {
 fn the_answer_t_w_gave_travels_between_the_levels() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, " tf");
-    assert!(!ed.hidden_on_line(8).is_empty(), "全 folds to begin with");
-    press(&mut ed, " tw");
-    assert!(ed.hidden_on_line(8).is_empty(), "and `t w` opens it: {}", ed.status());
+    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
+    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
+    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
     press(&mut ed, " tb");
-    assert!(ed.hidden_on_line(8).is_empty(), "基本 does not fold it back");
-    press(&mut ed, " tf");
-    assert!(ed.hidden_on_line(8).is_empty(), "nor does walking back up to 全");
+    press(&mut ed, " tw");
+    assert!(!ed.hidden_on_line(8).is_empty(), "`t w` folds it");
+    press(&mut ed, " tw");
+    assert!(ed.hidden_on_line(8).is_empty(), "and `t w` again opens it: {}", ed.status());
+    press(&mut ed, " tt");
+    press(&mut ed, " tq");
+    assert!(ed.hidden_on_line(8).is_empty(), "the window did not fold it back");
+    press(&mut ed, " tb");
+    assert!(ed.hidden_on_line(8).is_empty(), "nor did coming back to 基本");
 }
 
 /// #283, off `development.md` itself (2026-09-07): 「tw 功能无
@@ -7900,7 +7933,11 @@ fn t_w_and_t_a_are_two_toggles_over_one_axis() {
 fn t_a_says_where_it_works_and_still_remembers() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, " tf");
+    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
+    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
+    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
+    press(&mut ed, " tb");
+    press(&mut ed, " tw");
     press(&mut ed, " ta");
     assert!(ed.status().contains("tt"), "it points at the window: {}", ed.status());
     assert!(ed.cell_wrap(), "and the switch is set: {}", ed.status());
@@ -7923,12 +7960,22 @@ fn t_a_says_where_it_works_and_still_remembers() {
 fn a_folded_cell_opens_to_be_typed_in_and_not_to_be_walked_over() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, " tf");
+    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
+    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
+    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
+    press(&mut ed, " tb");
+    press(&mut ed, " tw");
     assert!(!ed.hidden_on_line(8).is_empty());
-    // Into the 備註 cell — the last one on the row.
-    while ed.cell_position().map(|(_, c)| c) != Some(1) {
-        ed.on_key(Key::Char('l'));
+    // Into the 備註 cell — the last one on the row. `Tab` crosses; `Enter`
+    // then goes inside it, which is what the rest of this is about.
+    for i in 0.. {
+        if ed.cell_position().map(|(_, c)| c) == Some(1) {
+            break;
+        }
+        assert!(i < 8, "`Tab` 走不到 備註 那一格");
+        ed.on_key(Key::Tab);
     }
+    ed.on_key(Key::Enter);
     assert!(
         !ed.hidden_on_line(8).is_empty(),
         "standing in it leaves it folded — the panel is where it is read"
@@ -7952,10 +7999,15 @@ fn a_folded_cell_opens_to_be_typed_in_and_not_to_be_walked_over() {
 fn a_cell_being_typed_in_juts_out_rather_than_widening_its_column() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, " tf");
-    while ed.cell_position().map(|(_, c)| c) != Some(1) {
-        ed.on_key(Key::Char('l'));
+    press(&mut ed, " tt");
+    for i in 0.. {
+        if ed.cell_position().map(|(_, c)| c) == Some(1) {
+            break;
+        }
+        assert!(i < 8, "`Tab` 走不到第二格");
+        ed.on_key(Key::Tab);
     }
+    ed.on_key(Key::Enter);
     // The header row of that table is drawn at the folded width…
     let shut = drawn_width(&ed, 6);
     ed.on_key(Key::Char('i'));
@@ -7974,7 +8026,9 @@ fn a_cell_being_typed_in_juts_out_rather_than_widening_its_column() {
 fn t_i_reads_a_markdown_row_by_the_columns_of_its_own_table() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
-    press(&mut ed, " tf");
+    press(&mut ed, " tt");
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    ed.on_key(Key::Enter);
     // **Asked for** (#495). It opened by itself until 2026-09-15; on a page of
     // prose the fifth of the width it takes rewraps the paragraphs around the
     // table, so now only `tt` opens it unasked. This test is about `t i`
@@ -8022,7 +8076,9 @@ fn with_a_narrow_and_a_wide_table() -> Editor {
 fn the_second_table_is_measured_by_its_own_width() {
     let mut ed = with_a_narrow_and_a_wide_table();
     ed.goto_line(11);
-    press(&mut ed, " tf");
+    press(&mut ed, " tt");
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    ed.on_key(Key::Enter);
 
     // The panel: five fields, not the first table's two.
     let panel = ed.detail().expect("a row of the wide table answers");
@@ -8055,7 +8111,9 @@ fn the_second_table_is_measured_by_its_own_width() {
 fn a_block_table_reads_by_its_own_numbered_columns() {
     let mut ed = typed("一段話。\n\n木\tmu\t一\n林\tlin\t二\n森\tsen\t三\n");
     ed.goto_line(4);
-    press(&mut ed, " tf");
+    press(&mut ed, " tt");
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    ed.on_key(Key::Enter);
     let panel = ed.detail().expect("a row of a block table answers");
     assert_eq!(panel.rows.len(), 3, "{:?}", panel.rows);
     assert_eq!(panel.rows[1].1.as_deref(), Some("lin"), "{:?}", panel.rows);
@@ -8079,6 +8137,8 @@ fn a_pipe_table_is_a_grid_wherever_it_is() {
     let mut ed = with_md_table();
     let before = ed.current_buffer().text();
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     // **Looking does not rewrite.** Entering used to lay the whole region
     // out, which marks a file modified for having been read — 45 lines of
     // this project's own `development.md`, and `:table-render off` does not undo it.
@@ -8156,11 +8216,16 @@ fn paging_a_column_stops_at_the_table_edge_even_though_a_step_does_not() {
     ed.set_page(80, 40);
     ed.goto_line(2);
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
+    // 進全窗那一下把光標帶進**第一條記錄**（標題凍在窗口頂上，不是走得上去的
+    // 一行），所以上下兩頭就是數據行的兩頭（2026-10-21）。
+    assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3), "{}", ed.status());
     // 翻頁是六個 Ctrl 鍵，不是 `J`/`K`（2026-10-17，見 `table_motion`）。
     ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "{}", ed.status());
     ed.on_key(Key::Ctrl('u'));
-    assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "{}", ed.status());
+    assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3), "{}", ed.status());
 }
 
 #[test]
@@ -8254,7 +8319,9 @@ fn t_moves_a_row_and_a_column_with_the_cursor_on_it() {
 fn alignment_is_a_keystroke_and_shows_in_the_source() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    press(&mut ed, "l t>");
+    // 第二欄：跨格是 `Tab` 的事，`t b` 裏 `l` 走的是字（2026-10-21）。
+    ed.on_key(Key::Tab);
+    press(&mut ed, " t>");
     assert!(
         ed.current_buffer().text().contains("| ---: |"),
         "{}",
@@ -8295,6 +8362,8 @@ fn tab_at_the_end_of_the_last_row_opens_another() {
     let mut ed = typed("| a | b |\n| --- | --- |\n| x | y |\n");
     ed.goto_line(3);
     assert!(ed.enter_table());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     press(&mut ed, "l");
     press(&mut ed, "i");
     ed.on_key(Key::Tab);
@@ -8468,6 +8537,8 @@ fn a_cell_may_hold_an_escaped_pipe() {
     // The manual says so: 「`|` 打不進格子…要用寫 `\|`」. It was not true.
     let mut ed = with_md_table();
     assert!(ed.enter_table());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     press(&mut ed, "c");
     press(&mut ed, r"a\|b");
     ed.on_key(Key::Esc);
@@ -8495,8 +8566,10 @@ fn a_cell_may_hold_an_escaped_pipe() {
 fn a_row_pasted_on_the_header_lands_under_the_rule() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    ed.goto_line(2);
-    ed.enter_table();
+    // 整行整格的鍵歸表格界面（2026-10-21）：`t b` 是文檔，那裏 `Y`／`p` 是
+    // 頁面的。進全窗那一下自己把光標帶進第一條記錄，這一條問的正是「貼進去
+    // 之後規則行還在不在它那一行上」。
+    press(&mut ed, " tt");
     press(&mut ed, "Y");
     press(&mut ed, "p");
     let text = ed.current_buffer().text();
@@ -9022,6 +9095,8 @@ fn a_block_from_a_spreadsheet_goes_in_as_cells() {
     let mut ed = typed("| 字 | 音 |\n| --- | --- |\n| a | b |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     ed.goto_line(3);
     ed.set_register_for_test("木\tmu\n目\tmu\n禾\the\n");
     press(&mut ed, "p");
@@ -9063,6 +9138,8 @@ fn ordinary_text_is_still_pasted_as_text() {
     let mut ed = typed("| a | b |\n| --- | --- |\n| x | y |\n");
     ed.goto_line(3);
     assert!(ed.enter_table());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     ed.set_register_for_test("春天");
     press(&mut ed, "p");
     assert_eq!(ed.cell_text(2, 0), "春天", "{}", ed.status());
@@ -9078,6 +9155,8 @@ fn a_whole_column_can_be_taken_and_put_back() {
     let mut ed = typed("| 字 | 音 |\n| --- | --- |\n| 木 | mu |\n| 目 | mo |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     ed.goto_line(4);
     press(&mut ed, "l");
     press(&mut ed, " ty");
@@ -9211,10 +9290,15 @@ fn paging_through_a_pipe_table_stops_at_its_last_row() {
     ed.set_page(8, 8);
     ed.goto_line(5);
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     press(&mut ed, "ll");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "column c");
 
-    let region = ed.md_region().expect("in the table");
+    // **A page counts the grid's own rows** — and in the window the heading
+    // is frozen at the top rather than being a row you can page onto
+    // (2026-10-21), so the two ends are the data rows' two ends.
+    let (first_row, last_row) = ed.table_row_span().expect("in the table");
     // Pages down, and keeps going: six rows is shorter than a page, so
     // this runs off the end — and stops on the last row, in its column,
     // rather than carrying on into the prose under the table.
@@ -9222,33 +9306,34 @@ fn paging_through_a_pipe_table_stops_at_its_last_row() {
         ed.on_key(Key::Ctrl('d'));
         assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "still column c");
     }
-    assert_eq!(ed.cursor_line(), region.last, "and stopped at the last row");
+    assert_eq!(ed.cursor_line(), last_row, "and stopped at the last row");
 
-    // …and up again, which stops at the header rather than in the blank
-    // line above it. `C-f` and `C-b` are the same motion by another name.
+    // …and up again, which stops at the first row rather than in the blank
+    // line above the table. `C-f` and `C-b` are the same motion by another
+    // name.
     for _ in 0..3 {
         ed.on_key(Key::Ctrl('u'));
         assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "coming back");
     }
-    assert_eq!(ed.cursor_line(), region.first, "the header is the top");
+    assert_eq!(ed.cursor_line(), first_row, "the first row is the top");
     for _ in 0..3 {
         ed.on_key(Key::Ctrl('f'));
     }
-    assert_eq!(ed.cursor_line(), region.last, "C-f pages the same way");
+    assert_eq!(ed.cursor_line(), last_row, "C-f pages the same way");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2));
     for _ in 0..3 {
         ed.on_key(Key::Ctrl('b'));
     }
-    assert_eq!(ed.cursor_line(), region.first, "and C-b back");
+    assert_eq!(ed.cursor_line(), first_row, "and C-b back");
 
     // `C-f`/`C-b` are the whole page rather than half of it, and page the
     // same way — down and up the rows, not across the columns. (`L`/`H` did
     // this until 2026-10-17; outside a grid they are the sentence motions.)
     ed.on_key(Key::Ctrl('f'));
-    assert_eq!(ed.cursor_line(), region.last, "a whole page down");
+    assert_eq!(ed.cursor_line(), last_row, "a whole page down");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2), "in its column");
     ed.on_key(Key::Ctrl('b'));
-    assert_eq!(ed.cursor_line(), region.first, "and a whole page back");
+    assert_eq!(ed.cursor_line(), first_row, "and a whole page back");
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(2));
 }
 
@@ -9292,23 +9377,20 @@ fn a_pipe_table_is_drawn_as_a_grid_only_when_that_is_the_key_pressed() {
     assert!(ed.table().unwrap().in_prose(), "{}", ed.status());
     assert!(!ed.table().unwrap().takes_the_pane(), "three lines, not the pane");
 
-    // `t a` — 現在的 tt 模式: 「照舊把整頁轉橫」, because a grid is read
-    // across. It is still three lines of a chapter, so it does not take
-    // the window.
-    press(&mut ed, " tf");
-    assert!(ed.grid_is_drawn(), "{}", ed.status());
-    assert!(ed.table().unwrap().in_prose(), "still inside the document");
-    assert_eq!(ed.layout(), Layout::Horizontal, "{}", ed.status());
-    assert!(!ed.table().unwrap().takes_the_pane(), "still three lines of a chapter");
-
-    // `t t` — the whole window, and `t q` gives it back to whichever
-    // surface it took it from (2026-09-05): 「退到 markdown 文件中，且回到
-    // 此前的表格模式」.
+    // `t t` — 「照舊把整頁轉橫」, because a grid is read across. **Drawn and
+    // having the window are the same thing now** (2026-10-21): `t f` used to
+    // sit between them, drawing a grid into a page that kept its prose, and
+    // it is folded into `t b`.
     press(&mut ed, " tt");
-    assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
-    press(&mut ed, " tq");
     assert!(ed.grid_is_drawn(), "{}", ed.status());
-    assert!(ed.table().unwrap().in_prose(), "back on t a, not in prose");
+    assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
+    assert_eq!(ed.layout(), Layout::Horizontal, "{}", ed.status());
+
+    // …and `t q` gives the window back to whichever surface it took it from
+    // (2026-09-05): 「退到 markdown 文件中，且回到此前的表格模式」.
+    press(&mut ed, " tq");
+    assert!(!ed.grid_is_drawn(), "back on t b: {}", ed.status());
+    assert!(ed.table().unwrap().in_prose(), "and still inside the document");
 
     // And any of them switches straight into any other — `t n` is a
     // surface, not the way out — which is what gives the page back.
@@ -9428,10 +9510,18 @@ fn the_window_comes_back_when_the_cursor_walks_out_of_the_grid() {
     assert!(ed.grid_has_the_pane(), "{}", ed.status());
 }
 
+/// **No level drawn into a page replaces a character you typed** (2026-10-21).
+///
+/// 「完全画成表格」 used to be a third level, `t f`, and the one thing it did
+/// that `t b` did not was draw the `|` as the wall `┆` it means. It is folded
+/// into `t b` now: a table inside a document shows the punctuation its writer
+/// put there, and a grid drawn out of a schema is `t t`'s, which draws its own
+/// rules rather than re-glyphing the file's.
+///
+/// So this test, which was 「only the drawn mode draws the grid」, is now the
+/// stronger sentence: **nothing drawn into a page draws the grid at all.**
 #[test]
-fn only_the_drawn_mode_draws_the_grid() {
-    // 「完全画成表格」 — and only there. 表格操作 keeps 「markdown/csv 的语法
-    // 标记」 on the page, which is the whole difference between the two.
+fn nothing_drawn_into_a_page_replaces_what_you_typed() {
     let mut ed = with_md_table();
     press(&mut ed, " tb");
     assert!(ed.grid_on_line(1).is_empty(), "the pipes stay pipes");
@@ -9447,15 +9537,20 @@ fn only_the_drawn_mode_draws_the_grid() {
         ed.status()
     );
 
-    press(&mut ed, " tf");
-    let head: Vec<char> = ed.grid_on_line(1).into_iter().map(|(_, g)| g).collect();
-    assert_eq!(head, vec!['┆', '┆', '┆'], "| 字 | 讀音 |");
-    // The rule row is not a row — it is the line under the head, and every
-    // character of it is drawn, the file's spaces included.
-    let rule: String = ed.grid_on_line(2).into_iter().map(|(_, g)| g).collect();
-    assert_eq!(rule, "├┄┄┄┄┄┼┄┄┄┄┄┤", "{}", ed.status());
-    assert!(ed.grid_rule_row(2));
-    assert!(!ed.grid_rule_row(1));
+    // **And the window does not re-glyph the file either** — it draws a grid
+    // of its own out of the schema, which is a different thing from painting
+    // over the writer's punctuation. `grid_on_line` answers for the page, so
+    // in the window it answers for nothing.
+    press(&mut ed, " tt");
+    for line in 0..6 {
+        assert!(
+            ed.grid_on_line(line).is_empty(),
+            "line {line} is drawn by the pane, not painted over: {}",
+            ed.status()
+        );
+        assert!(!ed.grid_rule_row(line), "line {line}");
+    }
+    press(&mut ed, " tq");
 
     // 「畫，貼在表格上緣」: one ruler, over the first line and no other.
     assert_eq!(ed.table_ruler_on_line(1).len(), 2, "two columns, two numbers");
@@ -9477,10 +9572,16 @@ fn every_table_in_a_markdown_file_is_drawn_at_once() {
     assert!(ed.enter_table(), "{}", ed.status());
     assert_eq!(ed.table_ruler_on_line(0).len(), 2, "{}", ed.status());
     assert_eq!(ed.table_ruler_on_line(6).len(), 3, "the second table");
-    assert!(!ed.grid_on_line(8).is_empty(), "its last row");
-    // The paragraph between them is still a paragraph.
-    assert!(ed.grid_on_line(4).is_empty(), "中間");
-    assert!(ed.table_ruler_on_line(4).is_empty());
+    // The paragraph between them is still a paragraph: no ruler over it.
+    //
+    // **What is `grid_on_line` doing here no longer** (2026-10-21): it
+    // answered 「which characters of this line the page draws over」, and
+    // since `t f` was folded into `t b` the page draws over none of them —
+    // see `nothing_drawn_into_a_page_replaces_what_you_typed`. What is left
+    // to say 「this line belongs to a table」 is the ruler, which is what
+    // this test is about anyway.
+    assert!(ed.table_ruler_on_line(4).is_empty(), "中間");
+    assert!(ed.table_ruler_on_line(8).is_empty(), "a data row carries no ruler");
 }
 
 #[test]
@@ -10323,9 +10424,12 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
     assert!(ed.status().contains("轉回竪排"), "{}", ed.status());
 
     // Asking for a level again turns it again, and off again gives it back.
-    ed.execute("table-render full").unwrap();
+    //
+    // **全窗 is what turns the page now** (2026-10-21): `t f` used to, and it
+    // is folded into `t b`, which draws nothing and leaves the page alone.
+    // What it says is the window's own sentence, not 「已轉橫排」.
+    ed.execute("table-render window").unwrap();
     assert_eq!(ed.layout(), Layout::Horizontal);
-    assert!(ed.status().contains("已轉橫排"), "{}", ed.status());
     ed.execute("table-render off").unwrap();
     assert_eq!(ed.layout(), Layout::Vertical);
 
@@ -17789,6 +17893,8 @@ fn putting_a_column_into_a_block_stops_at_the_blank_line() {
     let mut ed = typed("木,AA\n目,BB\n田,CC\n\n他寫下,然後停筆\n");
     ed.execute(":1").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     press(&mut ed, " ty");
     press(&mut ed, "l");
     press(&mut ed, " tp");
@@ -18071,6 +18177,10 @@ fn a_reused_row_says_what_a_cold_walk_would_have_said() {
         " ".repeat(30),
     ));
     ed.execute(":render full").unwrap();
+    // **摺疊要開口要**（2026-10-21）：出廠折的只有表格界面。`t f` 那一檔併進
+    // `t b` 的時候没有把「默認折」帶過來——文檔該顯示你打的字。
+    press(&mut ed, " tb");
+    press(&mut ed, " tw");
     assert!(ed.cell_folds(), "the cap is what makes a row's list worth reusing");
 
     // Into the *first* row's first cell, which the last row never reads —
@@ -19248,6 +19358,8 @@ fn an_arrow_key_off_the_end_of_a_table_does_not_open_a_row() {
     let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 水 |\n");
     ed.execute(":3").unwrap();
     ed.enter_table();
+    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    press(&mut ed, " tt");
     press(&mut ed, "l");
     assert_eq!(ed.cell_position(), Some((2, 1)), "the last cell");
     let before = ed.current_buffer().text();
@@ -25907,7 +26019,9 @@ fn yank_on_delete_reaches_the_grid_too() {
         let mut ed = typed(table);
         ed.set_keymap_flavor(!on);
         ed.goto_line(3);
-        press(&mut ed, " tb");
+        // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏 `y`／`d` 是
+        // 頁面的鍵，不是「這一格」。
+        press(&mut ed, " tt");
         press(&mut ed, "l");
         press(&mut ed, "y"); // 三十 進寄存器
         press(&mut ed, "h");
