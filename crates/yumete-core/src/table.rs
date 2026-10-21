@@ -34,6 +34,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub mod layer;
+
 /// How a table's columns are told apart (Feature #157).
 ///
 /// Three answers, because the right one depends on the table and not on the
