@@ -1152,13 +1152,12 @@ impl Editor {
 
     /// `j`/`k` inside a grid, by cell rather than by screen column.
     ///
-    /// Answers whether it took the step: only in a table, only while `hjkl`
-    /// are walking characters (by cell is [`Self::move_cell_row`]'s job), and
-    /// only when there is a row that way to go to — at the edges the ordinary
-    /// path takes over, so walking out of a table into the prose still works.
+    /// Answers whether it took the step: only in a table, only inside a cell
+    /// (at the top layer the row is [`Self::move_cell_row`]'s job), and only
+    /// when there is a row that way to go to — at the edges the ordinary path
+    /// takes over, so walking out of a table into the prose still works.
     fn step_grid_row(&mut self, up: bool) -> bool {
-        let grain = self.table.as_ref().map(|view| view.grain);
-        if !self.table_here() || grain != Some(Grain::Char) {
+        if !self.table_here() || self.table_layer() != Layer::Inside {
             return false;
         }
         let Some((line, cell)) = self.cell_position() else {

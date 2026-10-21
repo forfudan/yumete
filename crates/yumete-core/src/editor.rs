@@ -25,6 +25,7 @@ use crate::input::{Key, Mode};
 use crate::lookfor;
 use crate::motion;
 use crate::ruby::{Dialect, Dialects};
+use crate::table::layer::{self, Claim, Layer};
 use crate::text_store::TextStore;
 use crate::zong::{self, Grid, Layout, DEFAULT_ZONG_LENGTH};
 
@@ -1003,8 +1004,10 @@ pub struct TableView {
     /// Which cell `j` and `k` aim for, so walking down a column stays in it
     /// even across a row whose cells are shorter.
     goal: usize,
-    /// What one step of `hjkl` moves by.
-    pub grain: Grain,
+    /// **Which layer of the grid the keys are in** — the whole cell, or the
+    /// characters inside one. [`Layer`] is the model; this field is the only
+    /// place it is stored, and closing the grid takes it with it.
+    pub layer: Layer,
     /// What splits one cell from the next.
     pub separator: Separator,
     /// Whether the grid widget has the whole window — `t t` (#283).
@@ -1098,13 +1101,16 @@ pub enum TableLevel {
     /// replaced** — every character the writer typed is still on the page, so
     /// a 縱書 chapter with no table in it is drawn exactly as `Off` draws it.
     ///
-    /// **`hjkl` are still letters**, at this level and at every other. This
-    /// said they walked cells until 2026-09-11, which was true before #356 and
-    /// has been wrong since: the grain defaults to [`Grain::Char`] everywhere
-    /// it is set, and `T` is what asks for cells. A stale comment is worse
-    /// than none — this one was read as law and an argument built on top of it
-    /// (「自动进 tb 会悄悄改掉 hjkl 的含义」), and it had to be knocked
-    /// down with the obvious answer: 「tb tf to 模式都是按字走的」.
+    /// **The level says how much of the grid is drawn, not where the keys
+    /// are.** That is [`Layer`], which is a field of the view and not of the
+    /// level, so `t b` and `t f` draw the same table two ways and `hjkl` mean
+    /// the same thing in both.
+    ///
+    /// This paragraph has now said both answers — 「they walk cells」 until
+    /// 2026-09-11, 「they are letters」 until 2026-10-21 — because what it was
+    /// reporting was a toggle with no mark on the screen, and an argument got
+    /// built on top of each reading in turn. The layer has a mark: `CEL` on
+    /// the status line, two 金 edges round the cell.
     #[default]
     Basic,
     /// `t f` — everything `Basic` draws, and then the parts are optimised:
@@ -1330,26 +1336,6 @@ impl TableView {
             Separator::Delimiter(d) => crate::table::cells(line, d),
         }
     }
-}
-
-/// What a motion moves by, in a grid.
-///
-/// A grid has two units and they are both wanted. Walking a table is walking
-/// cells — that is what makes it a grid rather than a long line. But a 拆分 is
-/// a *sequence*: `⿰木目` is three components, and reaching the middle one to
-/// see what it is, or to jump to its own row, means the unit has to be the
-/// character. `Tab` says which.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Grain {
-    /// `hjkl` walk cells and rows — what `T` asks for.
-    Cell,
-    /// `hjkl` walk characters and lines, as they do in any other file.
-    ///
-    /// **The default**, at every level and in the pane, wherever a view is
-    /// built. It used to be [`Cell`](Grain::Cell) — 「it is what a grid is
-    /// for」 — and #356 turned it round on the grounds that 「the cell is not
-    /// what a writer mostly wants — the characters in it are」.
-    Char,
 }
 
 /// The depth of a Chinese chapter heading, if this line is one.

@@ -703,14 +703,15 @@ impl Editor {
         // Everything that was about the *other* document goes — one list, in
         // one place. Whether this file is a grid is asked again there, so a
         // chapter opened next to a table cannot inherit the table's columns.
-        // How you were reading it, though, is a fact about you: coming back to
-        // a table you were walking by character should not silently put you
-        // back on cells.
-        let grain = self.table.as_ref().map(|v| v.grain);
+        //
+        // Warning: **the layer goes with it** (2026-10-21). The grain this
+        // replaced was carried across on the grounds that 「how you were
+        // reading it is a fact about you」, and that was right about a
+        // preference. A layer is not a preference, it is where you are
+        // standing: every grid opens at the top of its own, and arriving in a
+        // new table already inside a cell is the same stale state the layers
+        // were drawn to remove.
         self.forget_the_document();
-        if let (Some(grain), Some(view)) = (grain, self.table.as_mut()) {
-            view.grain = grain;
-        }
         // The `[n/total]` indicator is already on the status line; repeating it
         // here would print it twice on every switch.
         self.status = self.current_buffer().display_name().to_string();
