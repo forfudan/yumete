@@ -11580,13 +11580,6 @@ zhs = "␣t q 只在全窗表格里交回窗口——退出表格按 ␣t o"
 en = "␣t q gives back the window, and only the window — ␣t o leaves the table"
 
 [[message]]
-# 跨行的記錄在格子裏只讀（2026-10-20，編輯那一半還没做）
-key = "table.record-is-read-only"
-zht = "這一條記錄存在換行，需在 ␣t o 源碼模式更改"
-zhs = "这一条记录存在换行，需在 ␣t o 源码模式更改"
-en = "this record has a line break in it — change it in the source view, ␣t o"
-
-[[message]]
 # R 用寄存器裏的幾條記錄蓋掉這裏的幾條
 key = "table.records-replaced"
 zht = "換掉了 {0} 條記錄"

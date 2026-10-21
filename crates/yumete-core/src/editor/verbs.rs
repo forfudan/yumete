@@ -17,20 +17,12 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        // **A record written over several lines is read-only, for now**
-        // (2026-10-20 作者定: 讀 ＋ 畫 ＋ 走 先做，編輯下一輪). The grid draws it
-        // right and walks it right, and the quotes it hides are the file's
-        // syntax — so the caret inside the cell is counted in the value while
-        // the span it edits still carries them, and typing lands in front of
-        // the opening `"`. Measured: `alpha,"first line` became
-        // `alpha,ZZ"first line` and the record stopped parsing.
-        //
-        // Refused at the door, for `refuse_readonly`'s reason: once, rather
-        // than a status line saying it at every keystroke.
-        if self.record_spans_lines() {
-            self.status = say!("table.record-is-read-only");
-            return;
-        }
+        // **A record over several lines was read-only until 2026-10-21**, and
+        // the gate stood here. What it was guarding is gone: the caret and the
+        // span it edits are both the *value* now
+        // ([`Editor::value_span`]), so typing no longer lands in front of the
+        // opening `"` — which is what used to turn `alpha,"first line` into
+        // `alpha,ZZ"first line` and stop the record parsing.
         // 延伸模式 is left at the door. It is a *mode* kept outside `Mode`, so
         // every operation has had to remember to clear it and some did not —
         // `v i X Esc` came back to Normal still extending, and the next `j`

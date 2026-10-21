@@ -79,6 +79,12 @@ impl Editor {
                 self.sel.set_head(cursor);
                 self.sel.set_anchor(cursor);
                 self.clamp_cursor();
+                // **A step back can move a record's boundary** (2026-10-21):
+                // undoing the line break typed into a cell leaves the grid's
+                // record map claiming a record two lines long, and then the
+                // row is read as the next row's text joined to its own —
+                // measured as five cells where the table has three.
+                self.rescan_records();
             }
             None => self.status = say!("edit.undo-at-oldest"),
         }
@@ -139,6 +145,9 @@ impl Editor {
                 self.sel.set_head(cursor);
                 self.sel.set_anchor(cursor);
                 self.clamp_cursor();
+                // The same reason as `undo`'s: a step either way can put a
+                // record's boundary back or take it away.
+                self.rescan_records();
             }
             None => self.status = say!("edit.redo-at-newest"),
         }
