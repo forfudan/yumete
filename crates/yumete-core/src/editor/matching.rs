@@ -1150,25 +1150,82 @@ impl Editor {
         self.sel.set_goal(None);
     }
 
-    /// `j`/`k` inside a grid, by cell rather than by screen column.
+    /// `j`/`k` inside a grid: the cell's own rows first, then the cell below.
     ///
-    /// Answers whether it took the step: only in a table, only inside a cell
-    /// (at the top layer the row is [`Self::move_cell_row`]'s job), and only
-    /// when there is a row that way to go to — at the edges the ordinary path
-    /// takes over, so walking out of a table into the prose still works.
-    fn step_grid_row(&mut self, up: bool) -> bool {
+    /// Answers whether it took the step, which inside a cell is **always**:
+    /// a layer exists only in the dedicated grid, so there is no prose for
+    /// the ordinary path to walk the caret out into, and the three answers
+    /// are 「a row further down this cell」, 「the same column of the next
+    /// record」 and 「stay where you are」.
+    ///
+    /// At the top layer the row is [`Self::move_cell_row`]'s job.
+    fn step_grid_row(&mut self, up: bool, textual: bool) -> bool {
         if !self.table_here() || self.table_layer() != Layer::Inside {
             return false;
         }
         let Some((line, cell)) = self.cell_position() else {
             return false;
         };
-        let Some((from, _)) = self.cell_span(line, cell) else {
+        let Some((from, to)) = self.cell_here() else {
             return false;
         };
-        let into = self.caret().saturating_sub(from);
+        // **Inside the cell first** (2026-10-22 作者定: 「we agree that hjkl
+        // will be kept within cell in the nor and ins mode and I can still
+        // use jk to go across cells vertically, but I cannot use hjkl to go
+        // to the next logical or the visual line within the cell」).
+        //
+        // A cell has rows of its own since the third cut, and this step read
+        // straight past them: in a two-line field one `j` went to the record
+        // below and the second line was unreachable. So `j`/`k` walk the
+        // cell's rows and **fall out of it only at its last one** — which
+        // leaves 「down a column」 exactly as it was for the one-line cells
+        // that are nearly all of them.
+        //
+        // `textual` is the editor's own split, not a new rule: `j` walks the
+        // rows on the screen and `gj` the rows of the file ([`Self::move_row`]).
+        //
+        // Warning: **the dedicated grid only** (2026-10-21 作者定: 「we are only
+        // working on the tt mode and it should not affect tb/tf mode」). Without
+        // the pane there is no layer — [`Editor::table_layer`] answers
+        // `Inside` for every level, because that is where the walls are — and
+        // a table drawn into a document is part of it: `j` off its last row
+        // walks into the paragraph underneath, which is what the reader asked
+        // for in 2026-09-05 and what `t b` still means.
+        let grid = self.layers_here();
+        let rows = match grid {
+            true => self.cell_rows(from, to, !textual),
+            false => vec![(from, to)],
+        };
+        let into = match self.row_of_the_cell(&rows, self.caret()) {
+            Some((nth, column)) => {
+                let next = match up {
+                    true => nth.checked_sub(1),
+                    false => (nth + 1 < rows.len()).then_some(nth + 1),
+                };
+                if let Some(next) = next {
+                    let (a, b) = rows[next];
+                    let last = match self.mode == Mode::Insert || b <= a {
+                        true => b,
+                        false => crate::motion::prev_grapheme(self.current_buffer().rope(), b),
+                    };
+                    self.move_head((a + column).min(last.max(a)));
+                    return true;
+                }
+                column
+            }
+            // The caret is not on any row of this cell — nothing to carry
+            // over, so step down the column from its near end.
+            None => self.caret().saturating_sub(from),
+        };
         let Some(want) = self.next_row(line, !up) else {
-            return false;
+            // **The grid's last record keeps the caret** (2026-10-22 報的).
+            // This used to give up here and let the prose path take the key,
+            // which walked out of the bottom of the table and dropped the
+            // caret in column 1 of the row it had just left — `j j` inside a
+            // cell drifted a column left. In the dedicated grid there is no
+            // prose to walk into; drawn into a document there is, and that
+            // way out stays open.
+            return grid;
         };
         // **A row with fewer cells keeps the caret in its last one**
         // (2026-10-17, found in review). This used to give up when the row
@@ -1177,8 +1234,18 @@ impl Editor {
         // 全窗 says it never stands, and the grid drew it inside the cell, so
         // nothing warned before the next keystroke.
         let width = self.row_cells(want).len();
-        let Some((a, b)) = self.cell_span(want, cell.min(width.saturating_sub(1))) else {
+        let span = self.cell_span(want, cell.min(width.saturating_sub(1)));
+        let Some((a, b)) = span.map(|(a, b)| self.value_span(a, b)) else {
             return false;
+        };
+        // **And onto the row of that cell the reader is arriving at** — its
+        // first coming down, its last going up. Landing always on the first
+        // row would make `k` out of a cell and `j` back into it a different
+        // place from where it started (2026-10-22).
+        let rows = self.cell_rows(a, b, !textual);
+        let (a, b) = match up {
+            true => *rows.last().unwrap_or(&(a, b)),
+            false => *rows.first().unwrap_or(&(a, b)),
         };
         // **Onto a character of that cell, not past its last one**
         // (2026-10-17). `b` is the content's end, so a column walked down into
@@ -1565,7 +1632,7 @@ impl Editor {
         // drifted between columns as it went down. Asked as 「the same cell,
         // the same way into it」 the question needs no widths at all, and it is
         // what a grid means by 「down」 anyway.
-        if self.step_grid_row(up) {
+        if self.step_grid_row(up, textual) {
             return;
         }
         let (pos, goal) = {
@@ -1783,11 +1850,12 @@ impl Editor {
     /// a **motion**, and a motion is a value here (B1).
     ///
     /// Warning: **`j`/`k` are not walled**, and the screen motions are not
-    /// either. A step down a column already answers 「which cell」 — it keeps
-    /// the one it is in ([`Self::step_grid_row`]) — so it was never the
-    /// question the layers exist to settle, and walling it would make `j`
-    /// dead inside a one-line cell, which is nearly every cell. Paging is not
-    /// here at all: it is not a [`motion::Motion`].
+    /// either. A step down a column already answers 「which cell」 — it walks
+    /// this cell's own rows and only then the next record's
+    /// ([`Self::step_grid_row`]) — so it was never the question the layers
+    /// exist to settle, and walling it would make `j` dead inside a one-line
+    /// cell, which is nearly every cell. Paging is not here at all: it is not
+    /// a [`motion::Motion`].
     fn walled(&self, what: motion::Motion, span: motion::Span) -> motion::Span {
         if matches!(what, motion::Motion::Line { .. } | motion::Motion::Screen { .. }) {
             return span;
@@ -1819,12 +1887,21 @@ impl Editor {
     /// separator. The exception is Insert, where the caret is a bar between
     /// graphemes and the place after the last character is exactly where the
     /// next one goes; that is the editor's rule everywhere else too.
+    ///
+    /// Warning: **the walls are the value's, not the source's** (2026-10-22 報的).
+    /// This asked [`Editor::cell_span`], whose span carries the quotes a
+    /// delimited field is wrapped in, so the near wall of a quoted cell was
+    /// the opening `"` — `Enter` parked the caret on it and one `i X` wrote
+    /// `X` *outside* the value. `write_the_cell` then quoted what it read
+    /// back, and `"頭一行"` came out as `"X""頭一行"""`: the cell's own quotes
+    /// turned into escaped ones and the field was silently a different field.
+    /// Everything about content asks [`Editor::cell_here`] — this is the one
+    /// place that had been missed by the third cut.
     fn cell_walls(&self) -> Option<(usize, usize)> {
         if !self.table_layer().walled() || !self.layers_here() {
             return None;
         }
-        let (line, cell) = self.cell_position()?;
-        let (from, to) = self.cell_span(line, cell)?;
+        let (from, to) = self.cell_here()?;
         let last = match self.mode == Mode::Insert || to <= from {
             true => to,
             false => motion::prev_grapheme(self.current_buffer().rope(), to),
@@ -1842,6 +1919,38 @@ impl Editor {
         match self.cell_walls() {
             Some((from, to)) => pos.clamp(from, to),
             None => pos,
+        }
+    }
+
+    /// **Put the caret where this layer says it may stand** — called when the
+    /// keys arrive inside a cell, by either of the two doors.
+    ///
+    /// `Enter` crossing down is one: the top layer has no caret, so whatever
+    /// position the selection was carrying is a *source* position, and in a
+    /// quoted cell that is the opening `"`. Leaving Insert is the other: `a`
+    /// ends with the caret one past the last character, which is the
+    /// delimiter, and the status line read it out as the cell's own
+    /// character (2026-10-22 報的).
+    ///
+    /// Asked of the **cell** and not of the layer, because both layers want
+    /// the same thing: the top one parks a position it does not draw, and the
+    /// next key to open Insert reads it. Only the dedicated grid is clamped —
+    /// `t b` is a document whose columns happen to line up, and there the
+    /// caret crosses a delimiter like any other character.
+    pub(super) fn put_the_caret_in_the_cell(&mut self) {
+        if !self.grid_has_the_pane() {
+            return;
+        }
+        let Some((from, to)) = self.cell_here() else {
+            return;
+        };
+        let last = match to <= from {
+            true => to,
+            false => motion::prev_grapheme(self.current_buffer().rope(), to),
+        };
+        let pos = self.caret().clamp(from, last.max(from));
+        if pos != self.caret() {
+            self.move_head(pos);
         }
     }
 

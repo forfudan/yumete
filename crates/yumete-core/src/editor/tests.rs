@@ -1116,6 +1116,169 @@ fn a_record_over_several_lines_types_like_any_other() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`Enter` into a quoted cell lands in the value** — the one door the third
+/// cut missed (2026-10-22 報的).
+///
+/// The walls came from `cell_span`, which carries the quotes, so the near wall
+/// of a quoted field was the opening `"`. `Enter` parked the caret there and
+/// one `i X` wrote `X` *outside* the value; `write_the_cell` then quoted what
+/// it read back and `"first line"` was written as `"X""first line"""` — the
+/// field's own quotes turned into escaped ones. Typing from the top layer was
+/// safe all along (`insert_bounds` asks the value), which is why this hid.
+#[test]
+fn enter_into_a_quoted_cell_lands_on_the_value() {
+    let dir = tmp().join(format!("yumete-entercell-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("q.csv");
+    std::fs::write(&csv, "name,note,n\nalpha,\"first line\nsecond line\",1\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Enter);
+    assert_eq!(
+        ed.grapheme_at_cursor().as_deref(),
+        Some("f"),
+        "the caret is on the value's first character, not the quote"
+    );
+    press(&mut ed, "iX");
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("\"Xfirst line\nsecond line\",1"),
+        "{:?}",
+        ed.current_buffer().text()
+    );
+    assert_eq!(ed.row_cells(1).len(), 3, "and the row still has three cells");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`j` walks the cell's own rows before it leaves the cell** (2026-10-22
+/// 作者定: 「we agree that hjkl will be kept within cell in the nor and ins
+/// mode and I can still use jk to go across cells vertically, but I cannot
+/// use hjkl to go to the next logical or the visual line within the cell」).
+///
+/// A cell has had rows of its own since a line break could be typed into one,
+/// and this step read straight past them: in a two-line field one `j` went to
+/// the record below and the second line could not be reached at all. The last
+/// record used to give the key back to the prose path, which walked out of the
+/// bottom of the grid and dropped the caret in the first column — `j j` drifted
+/// a column left.
+#[test]
+fn j_walks_the_rows_inside_a_cell_before_the_cell_below() {
+    let dir = tmp().join(format!("yumete-cellrows-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("rows.csv");
+    std::fs::write(&csv, "name,note,n\nalpha,\"one\ntwo\",1\nbravo,three,2\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Enter);
+    let at = |ed: &Editor| ed.grapheme_at_cursor().unwrap_or_default();
+    assert_eq!(at(&ed), "o", "on 「one」");
+    press(&mut ed, "j");
+    assert_eq!(at(&ed), "t", "the cell's second row, not the record below");
+    press(&mut ed, "k");
+    assert_eq!(at(&ed), "o", "and back up inside the cell");
+
+    // Out of the cell only at its last row, and into the same column.
+    press(&mut ed, "jj");
+    assert_eq!(at(&ed), "t", "「three」 — the same column of the next record");
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "column kept");
+
+    // **The last record keeps the caret.** Falling through to the prose path
+    // here is what moved the caret out of the column.
+    let was = ed.caret();
+    press(&mut ed, "jjj");
+    assert_eq!(ed.caret(), was, "nothing below the last record to step to");
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "and no drift");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`j` walks what is drawn, `gj` what is written** — the editor's own split
+/// ([`Editor::move_textual_line`]), answered for one cell.
+///
+/// Under 折行 a cell too wide for the cap is drawn on more than one row, and
+/// those rows are not in the file: `j` steps through them and `gj` steps over
+/// the lot to the next record, exactly as they do over a wrapped paragraph.
+#[test]
+fn a_wrapped_cell_has_rows_for_j_that_gj_steps_over() {
+    let dir = tmp().join(format!("yumete-wraprow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("wide.csv");
+    // One logical line, two drawn rows: 40 letters against a cap of 32.
+    let wide = "x".repeat(40);
+    std::fs::write(&csv, format!("name,note\nalpha,{wide}\nbravo,short\n")).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    ed.set_cell_width(crate::editor::CellWidth::Wrap);
+
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Enter);
+    let column = |ed: &Editor| ed.caret() - ed.cell_here().unwrap().0;
+    assert_eq!(column(&ed), 0);
+    press(&mut ed, "j");
+    assert_eq!(
+        column(&ed),
+        crate::mdtable::MAX_COLUMN,
+        "`j` steps onto the cell's second drawn row"
+    );
+    assert_eq!(ed.cell_position().map(|(l, _)| l), Some(1), "still that record");
+
+    // `gj` from the top of the same cell has no line of the file to go to
+    // inside it, so it is the next record.
+    press(&mut ed, "k");
+    press(&mut ed, "gj");
+    assert_eq!(
+        ed.cell_position().map(|(l, _)| l),
+        Some(2),
+        "`gj` steps over the drawn rows: {}",
+        ed.status()
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Leaving Insert comes to rest on a character of the cell** (2026-10-22
+/// 報的), and an empty cell has none to name.
+///
+/// `a` ends with the caret one past the cell's last character, which in a
+/// delimited file is the delimiter — and the status line read it out as this
+/// cell's own character: 「`,` U+002C」. The same position is what an empty
+/// cell's caret always sits on, and there the readout has to say nothing
+/// rather than name the separator.
+#[test]
+fn the_caret_comes_to_rest_inside_the_cell_it_typed_in() {
+    let dir = tmp().join(format!("yumete-restcell-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("rest.csv");
+    std::fs::write(&csv, "name,note\nalpha,beta\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "gg");
+    press(&mut ed, "a");
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.grapheme_at_cursor().as_deref(),
+        Some("a"),
+        "the cell's last character, not the delimiter after it"
+    );
+
+    // An empty cell: nothing to name, so nothing is named.
+    press(&mut ed, "ld");
+    assert_eq!(ed.cell_text(1, 1), "", "the cell was cleared: {}", ed.status());
+    assert_eq!(ed.grapheme_at_cursor(), None, "an empty cell holds no character");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A file that ends in a newline has no row after its last one** (#384).
 ///
 /// `ropey` reports a trailing empty line for every file that ends in a newline

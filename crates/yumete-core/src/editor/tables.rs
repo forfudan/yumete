@@ -3684,6 +3684,75 @@ impl Editor {
         }
     }
 
+    /// **The rows the grid draws one cell on** — as spans of the buffer, in
+    /// the order they are drawn, never empty.
+    ///
+    /// A cell has had rows of its own since a line break could be typed into
+    /// one (2026-10-21, 第三刀), and the grid draws them two ways: a value's
+    /// own line breaks each start a row, and under 折行 (`␣t a`) anything past
+    /// [`crate::mdtable::MAX_COLUMN`] columns is drawn underneath as well.
+    /// `visual` asks for the rows **on the screen** (both splits) and
+    /// `!visual` for the rows **of the file** (line breaks only) — the same
+    /// question `j` and `gj` ask of a page of prose, answered here for one
+    /// cell.
+    ///
+    /// Takes the value span so that every caller is already past the quotes:
+    /// a row of a cell is a row of its *content*.
+    pub(super) fn cell_rows(&self, from: usize, to: usize, visual: bool) -> Vec<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        let wraps = visual && self.cell_width_now() == CellWidth::Wrap;
+        let mut rows = Vec::new();
+        let mut start = from;
+        for at in from..to {
+            if rope.char(at) == '\n' {
+                rows.push((start, at));
+                start = at + 1;
+            }
+        }
+        rows.push((start, to));
+        if !wraps {
+            return rows;
+        }
+        // **折行 cuts a row when the ink runs past the cap**, counted the way
+        // the grid counts it: by display width, so one wide character is two.
+        rows.into_iter()
+            .flat_map(|(a, b)| {
+                let mut cut = Vec::new();
+                let (mut start, mut width) = (a, 0);
+                for at in a..b {
+                    let w = yumete_cjk::char_width(rope.char(at));
+                    if width + w > crate::mdtable::MAX_COLUMN && at > start {
+                        cut.push((start, at));
+                        (start, width) = (at, 0);
+                    }
+                    width += w;
+                }
+                cut.push((start, b));
+                cut
+            })
+            .collect()
+    }
+
+    /// Which of [`Self::cell_rows`] holds this position, and how far into it.
+    ///
+    /// Warning: **a row's far end belongs to the row after it.** Rows split by
+    /// 折行 share a position — one ends where the next begins, with no line
+    /// break between them — and reading it as the earlier row made `j` on the
+    /// cell's second drawn row count as its first, so it stepped to the
+    /// second again and the caret stopped there (2026-10-22, 量出來的). The
+    /// cell's own far end has no row after it, and belongs to the last.
+    pub(super) fn row_of_the_cell(
+        &self,
+        rows: &[(usize, usize)],
+        at: usize,
+    ) -> Option<(usize, usize)> {
+        let nth = match rows.iter().position(|&(a, b)| at >= a && at < b) {
+            Some(nth) => nth,
+            None => rows.iter().rposition(|&(a, b)| at >= a && at <= b)?,
+        };
+        Some((nth, at - rows[nth].0))
+    }
+
     /// The text of one cell.
     pub fn cell_text(&self, line: usize, cell: usize) -> String {
         match self.cell_span(line, cell) {
@@ -4137,6 +4206,11 @@ impl Editor {
             // wants that.
             Claim::Cross(to) if self.layers_here() => {
                 self.set_table_layer(to);
+                // **A caret has to be somewhere it may stand.** The layer it
+                // came from draws none, so the position it was carrying is a
+                // source position — the opening `"` of a quoted field — and
+                // one `i` there writes outside the value (2026-10-22 報的).
+                self.put_the_caret_in_the_cell();
                 return true;
             }
             Claim::Cross(_) => {}
@@ -4379,6 +4453,15 @@ impl Editor {
     pub(super) fn step_cells(&mut self, step: layer::Step, count: usize) {
         self.step_cells_unsnapped(step, count);
         self.round_out_to_cells();
+        // **The parked position is in the value too** (2026-10-22 報的). The
+        // top layer draws no caret, but everything that asks 「where am I」
+        // reads that position: the status line's character readout said a
+        // quoted cell held `"` and an empty one held the delimiter. Not while
+        // extending — there the head is one end of a cell range, and
+        // [`Self::round_out_to_cells`] has just put it where that range ends.
+        if !self.extend {
+            self.put_the_caret_in_the_cell();
+        }
     }
 
     /// **A selection at this layer is a whole number of cells** (2026-10-21
