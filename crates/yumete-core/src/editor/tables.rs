@@ -20,6 +20,43 @@ impl Editor {
         self.table.as_ref()
     }
 
+    /// **Which layer of the grid the keys are in** — the one question the
+    /// editor and the terminal both ask, and the only way either reaches the
+    /// model.
+    ///
+    /// [`Layer::Whole`] outside a grid too, so a caller that forgot to ask
+    /// [`Self::table_here`] first gets the answer a grid opens with rather
+    /// than a second shape of nothing.
+    pub fn table_layer(&self) -> Layer {
+        self.table.as_ref().map(|v| v.layer).unwrap_or_default()
+    }
+
+    /// **Whether the cell itself is standing in for the caret**, and so no
+    /// character cursor is to be drawn this frame.
+    ///
+    /// [`Layer::caret`] answers the model's half; this adds the one thing the
+    /// model cannot know — whether the grid widget is the thing on the screen.
+    /// It has to be, because the two 金 edges that mark the cell are the
+    /// widget's own (#407): take the caret away anywhere else and the reader
+    /// is left with no mark at all. A `|` table drawn as part of a page of
+    /// prose therefore keeps its caret, at either layer, until the edges can
+    /// be drawn there too.
+    pub fn caret_is_the_cell(&self) -> bool {
+        self.grid_has_the_pane() && !self.table_layer().caret(self.mode)
+    }
+
+    /// Cross into a layer.
+    ///
+    /// Nothing is printed: the mode word on the status line *is* the layer
+    /// ([`Layer::label`]), so crossing already shows up in the one place a
+    /// reader looks to ask 「where are my keys」, and a message would be the
+    /// same fact said twice.
+    fn set_table_layer(&mut self, to: Layer) {
+        if let Some(view) = self.table.as_mut() {
+            view.layer = to;
+        }
+    }
+
     /// Read this file as a grid, by the schema found next to it.
     ///
     /// Reports what it did, because a mode that changes what every key means
@@ -217,7 +254,7 @@ impl Editor {
             schema,
             from,
             goal: 0,
-            grain: Grain::Char,
+            layer: Layer::default(),
             separator: Separator::Delimiter(delimiter),
             pane,
             // A file a schema claims, or one whose own header row is the
@@ -347,7 +384,7 @@ impl Editor {
                 schema: crate::table::Schema::numbered(columns, delimiter),
                 from: PathBuf::new(),
                 goal: 0,
-                grain: Grain::Char,
+                layer: Layer::default(),
                 separator: Separator::Delimiter(delimiter),
                 // Drawn as part of the document it sits in. The grid widget
                 // clears the frame, and clearing the chapter in order to look
@@ -657,7 +694,7 @@ impl Editor {
                 schema,
                 from,
                 goal: 0,
-                grain: Grain::Char,
+                layer: Layer::default(),
                 separator: Separator::Delimiter(delimiter),
                 pane: true,
                 bounds: Bounds::WholeFile,
@@ -738,7 +775,7 @@ impl Editor {
                     schema: crate::mdtable::schema(&header),
                     from: PathBuf::new(),
                     goal: 0,
-                    grain: Grain::Char,
+                    layer: Layer::default(),
                     separator: Separator::Pipe,
                     pane: false,
                     bounds: Bounds::Md,
@@ -816,7 +853,7 @@ impl Editor {
             schema: crate::table::Schema::from_header(&head, delimiter),
             from: PathBuf::new(),
             goal: 0,
-            grain: Grain::Char,
+            layer: Layer::default(),
             separator: Separator::Delimiter(delimiter),
             pane: false,
             bounds: Bounds::WholeFile,
@@ -1812,7 +1849,7 @@ impl Editor {
             schema,
             from: PathBuf::new(),
             goal: 0,
-            grain: Grain::Char,
+            layer: Layer::default(),
             separator: Separator::Pipe,
             pane,
             bounds: Bounds::Md,
@@ -2445,14 +2482,15 @@ impl Editor {
     }
 
     /// Put a new row in below the cursor's (or above it).
-    pub(super) fn md_new_row(&mut self, below: bool) {
+    pub(super) fn md_new_row(&mut self, below: bool) -> bool {
         let Some((region, mut parts)) = self.md_parts_to_edit() else {
-            return;
+            return false;
         };
         let (row, cell) = self.md_at(&region);
         let at = parts.insert_row(if below { row + 1 } else { row });
         self.md_write(&region, &parts, at, cell);
         self.status = say!("table.row-added");
+        true
     }
 
     /// Take the cursor's row out, **into the register**.
@@ -2960,7 +2998,7 @@ impl Editor {
                 // in is not finished. A delimited file's rows are the file's,
                 // so there it simply stops.
                 (None, true) if may_add_row && self.md_region().is_some() => {
-                    self.md_new_row(true);
+                    let _ = self.md_new_row(true);
                     if let Some((l, _)) = self.cell_position() {
                         self.go_to_cell(l, 0);
                     }
@@ -3730,12 +3768,17 @@ impl Editor {
             }
             return;
         }
+        // **A record's continuation lines are not rows to stop on** (§5.236,
+        // 2026-10-20 作者報的). `line ± 1` is a *line*, and a field holding a
+        // line break makes one row several of them — so this `j` stepped into
+        // the middle of a record and read as a press that did nothing.
+        //
+        // [`Self::next_row`] is the one authority on 「the row that way」, and
+        // the character path has asked it since that day; this one went on
+        // asking the buffer. It only showed up once a grid started opening on
+        // cells (2026-10-21), which is where this branch runs by default.
         let last = self.grid_last_line();
-        let want = if down {
-            (line + 1).min(last)
-        } else {
-            line.saturating_sub(1)
-        };
+        let want = self.next_row(line, down).unwrap_or(line).min(last);
         let goal = self.table.as_ref().map(|v| v.goal).unwrap_or(0);
         self.go_to_cell(want, goal);
     }
@@ -3807,44 +3850,42 @@ impl Editor {
 
     /// Run one key while the file is being read as a grid.
     ///
-    /// Only the key whose meaning actually changes, which since 2026-09-30 is
-    /// **`Tab`**: the grain defaults to [`Grain::Char`], so `hjkl`, the
-    /// operators and the selection go on meaning what they mean in any other
-    /// file, and it takes `空格 t T` to hand them to the cells. Everything
-    /// else — paging, `gg`, search — is about lines and text, and a grid does
-    /// not change what those mean either.
+    /// **An adapter, not a second opinion.** Which keys a grid claims and what
+    /// they mean is [`Layer::claim`]'s to answer — one short file, read in one
+    /// sitting ([`crate::table::layer`]) — and everything in the first half of
+    /// this function is the execution of what it said. That split is the point:
+    /// 「does a table change what this key means?」 used to be answerable only
+    /// by reading this function to the end, and every table bug reported so far
+    /// has been that question answered twice.
     ///
-    /// Warning: **`T` is till again, in a grid too**（2026-09-30 定，原話
-    /// 「这个可能要改成 _tT了，因为 T 现在 till 佔用的」）。#356 給了 `T` 換
-    /// 粒度，理由是「在格子裏往回 till 没人用」；一個頂層字母鍵在一種文件裏
-    /// 換意思，代價比那個理由大。粒度現在在 [`Self::toggle_table_grain`]，掛
-    /// 在表格那一組上。
+    /// The cell **operators** in the second half are not claims. They are the
+    /// keys that work on whatever the unit is, and the unit is the whole cell
+    /// exactly when [`Layer::selects_the_cell`] says so — asked once, here,
+    /// rather than by each of them.
+    ///
+    /// Warning: **`T` is till in a grid too**（2026-09-30 定，原話「这个可能要
+    /// 改成 _tT了，因为 T 现在 till 佔用的」）。換層那一下掛在表格那一組上
+    /// （[`Self::toggle_table_layer`]），而 `Enter` / `Esc` 是正路。
     pub(super) fn table_motion(&mut self, key: Key, count: usize) -> bool {
-        // **`Tab` walks the grid, in either grain** — right along the row and
-        // on to the first cell of the next when it runs out, `S-Tab` back the
-        // way it came. What every spreadsheet means by the key, and what it
-        // already meant inside a cell in Insert mode; now it means the same
-        // from Normal, which is where the writer usually is.
-        if key == Key::Tab || key == Key::BackTab {
-            let forward = key == Key::Tab;
-            self.repeat(count, |e| {
-                e.step_cell(forward, true);
-            });
-            return true;
+        let layer = self.table_layer();
+        match layer.claim(self.mode, key) {
+            Claim::Cross(to) => {
+                self.set_table_layer(to);
+                return true;
+            }
+            Claim::Cell(step) => {
+                self.step_cells(step, count);
+                return true;
+            }
+            // Not the grid's business: the ordinary editor takes the key and a
+            // table changes nothing about what it means. Paging, search, `:`
+            // and every operator arrive here at the middle layer.
+            Claim::Fall => {}
         }
-        // Reading by character, this is an ordinary file that happens to be
-        // drawn as a grid: `hjkl`, the operators and the selection all mean
-        // what they mean everywhere else. Only Enter still knows about cells.
-        if self.table.as_ref().map(|v| v.grain) == Some(Grain::Char) {
+        if !layer.selects_the_cell() {
             return false;
         }
         match key {
-            Key::Char('h') | Key::Left => self.repeat(count, |e| e.move_cell(false)),
-            Key::Char('l') | Key::Right => self.repeat(count, |e| e.move_cell(true)),
-            Key::Char('j') | Key::Down => self.repeat(count, |e| e.move_cell_row(true)),
-            Key::Char('k') | Key::Up => self.repeat(count, |e| e.move_cell_row(false)),
-            Key::Char('0') | Key::Home => self.move_cell_end(false),
-            Key::Char('$') | Key::End => self.move_cell_end(true),
             // **Several rows, down the same column.** These mean "a page" for
             // everything else and reach `move_page`, which aims at a
             // *character* column — and a character column is in a different
@@ -3878,11 +3919,22 @@ impl Editor {
             Key::Char('y') => self.yank_cell(),
             // The whole row, spelled the way vi spells "the whole line".
             Key::Char('Y') => self.yank_row(),
-            Key::Char('p') | Key::Char('P') => {
-                self.put_cell();
-                // What was pasted in may be wider than the column was.
-                self.format_md_table();
-            }
+            // **A line-wise register is a record, and a record is a line** —
+            // which the editor's ordinary paste already puts where it belongs
+            // (2026-10-21). The kind is carried by a trailing newline
+            // (`edits.rs`), so it is answered by the key that *filled* the
+            // register rather than guessed at here by counting delimiters.
+            //
+            // Warning: **counting was wrong twice**, and both only showed up once a
+            // grid started opening on cells, which is where `p` means this at
+            // all. ① On a `.csv` with no schema beside it there is no column
+            // count to count against, so `x d` then `P` lost the row to
+            // 「逗號寫不進格子」. ② In a `|` table the row went back through
+            // the Markdown writer, which squared the whole table up — and `d`
+            // then `P` is the one sequence whose entire job is 「put that back
+            // the way it was」.
+            Key::Char('p') | Key::Char('P') if self.register_is_a_record() => return false,
+            Key::Char('p') | Key::Char('P') => self.put_cell(key == Key::Char('p')),
             Key::Char('i') => self.edit_cell(CellEdit::Start),
             Key::Char('a') | Key::Char('A') => self.edit_cell(CellEdit::End),
             Key::Char('I') => self.edit_cell(CellEdit::Start),
@@ -3929,8 +3981,16 @@ impl Editor {
             // 花了東西没拿到。
             // `o` in a grid means a new row, and on the header row the new row
             // has to go under the rule rather than between it and its names.
-            Key::Char('o') if self.md_region().is_some() => self.md_new_row(true),
-            Key::Char('O') if self.md_region().is_some() => self.md_new_row(false),
+            // **`o` opens a row and puts you in it, ready to type** — vi's own
+            // `o`, which is 「open a line and start writing」 and not 「open a
+            // line」 (2026-10-21). A new row's cells are all empty, so there is
+            // nothing to do there in Normal, and this key used to land in one
+            // and stop; the key that followed it was always `i`.
+            Key::Char('o') | Key::Char('O') if self.md_region().is_some() => {
+                if self.md_new_row(key == Key::Char('o')) {
+                    self.edit_cell(CellEdit::Start);
+                }
+            }
             // A grid's header names the columns. A row opened above it would
             // make the names into data — and then the key index treats the
             // literal string `char` as a key.
@@ -3941,6 +4001,33 @@ impl Editor {
             _ => return false,
         }
         true
+    }
+
+    /// Execute one step over cells — the whole of what [`Claim::Cell`] asks
+    /// for.
+    ///
+    /// Named by what the reader wanted rather than by the key pressed, because
+    /// the three keymap presets spell these differently and neither the model
+    /// nor this function may know which preset is loaded.
+    fn step_cells(&mut self, step: layer::Step, count: usize) {
+        use layer::Step;
+        match step {
+            Step::Left => self.repeat(count, |e| e.move_cell(false)),
+            Step::Right => self.repeat(count, |e| e.move_cell(true)),
+            Step::Down => self.repeat(count, |e| e.move_cell_row(true)),
+            Step::Up => self.repeat(count, |e| e.move_cell_row(false)),
+            Step::RecordStart => self.move_cell_end(false),
+            Step::RecordEnd => self.move_cell_end(true),
+            // `Tab` carries on into the next record at the end of this one,
+            // and past the last cell of a Markdown table it opens a row —
+            // what every spreadsheet means by the key.
+            Step::Next => self.repeat(count, |e| {
+                e.step_cell(true, true);
+            }),
+            Step::Prev => self.repeat(count, |e| {
+                e.step_cell(false, true);
+            }),
+        }
     }
 
     /// Whether the cursor is on a header row that names the columns.
@@ -4273,20 +4360,22 @@ impl Editor {
     /// twice. The rest is vi's own spelling — `o`/`O` open, `d` deletes.
     /// **按格走還是按字走**（`空格 t T`）。
     ///
-    /// 出廠是按字：`hjkl`、算子、選區在格子裏與在別的檔裏一個意思，要把它們交
-    /// 給格子纔按這一下。從前這一下是頂層的 `T`（#356），2026-09-30 搬進表格
-    /// 那一組——見 [`Self::table_motion`] 上頭那一段。
-    pub(super) fn toggle_table_grain(&mut self) {
-        let grain = match self.table.as_ref().map(|v| v.grain) {
-            Some(Grain::Char) => Grain::Cell,
-            _ => Grain::Char,
+    /// 表格開在頂層（整格是單位），`Enter` 下一層、`Esc` 上一層——那是正路。
+    /// 這一下是同一件事的第二道門：一鍵來回，不必記方向。
+    ///
+    /// Warning: **它與 `Enter`／`Esc` 讀同一個欄位**，所以兩道門不會各記一份、
+    /// 也不會對不上。它報一句狀態，而 `Enter`／`Esc` 不報：鍵盤在哪一層由模式
+    /// 那一欄一直寫着（`CEL`／`CEL.NOR`），而這一下是從單子上按出來的，按單子
+    /// 的人要的正是一句回話。
+    pub(super) fn toggle_table_layer(&mut self) {
+        let to = match self.table_layer() {
+            Layer::Whole => Layer::Inside,
+            Layer::Inside => Layer::Whole,
         };
-        if let Some(view) = self.table.as_mut() {
-            view.grain = grain;
-        }
-        self.status = match grain {
-            Grain::Cell => say!("table.moving-by-cell"),
-            Grain::Char => say!("table.moving-by-character"),
+        self.set_table_layer(to);
+        self.status = match to {
+            Layer::Whole => say!("table.moving-by-cell"),
+            Layer::Inside => say!("table.moving-by-character"),
         };
     }
 
@@ -4337,7 +4426,7 @@ impl Editor {
             // till 按不到——一個頂層字母鍵在一種文件裏換意思，代價比那個理由
             // 大。大寫，因為它與 `t t`/`t w`/`t a` 一樣是「這一扇窗怎麼走」，
             // 而 `t t` 已經佔了小寫。
-            Key::Char('T') => return self.toggle_table_grain(),
+            Key::Char('T') => return self.toggle_table_layer(),
             // `t w` — 寬. Whether a cell wider than the cap keeps its tail on
             // the page or folds it away behind a `>`. A preference about how
             // the page is *drawn*, so it sits beside `t b` / `t f` and asks
@@ -4580,8 +4669,12 @@ impl Editor {
             return;
         }
         match key {
-            Key::Char('r') => self.md_new_row(true),
-            Key::Char('R') => self.md_new_row(false),
+            Key::Char('r') => {
+                let _ = self.md_new_row(true);
+            }
+            Key::Char('R') => {
+                let _ = self.md_new_row(false);
+            }
             Key::Char('c') => self.md_new_column(true),
             Key::Char('C') => self.md_new_column(false),
             Key::Char('d') => self.md_drop_row(),
@@ -4811,13 +4904,36 @@ impl Editor {
         self.status = say!("table.yanked-row");
     }
 
+    /// **Whether the register holds a whole record**, and so a line rather
+    /// than a cell's worth of text.
+    ///
+    /// A trailing newline is how this editor has told a line-wise register
+    /// from a character-wise one since long before grids, and a record is a
+    /// line. One question, one answer, both halves of the editor — and asked
+    /// without consuming a pending `"`.
+    ///
+    /// Warning: **a block of cells is line-wise too** — what a spreadsheet puts
+    /// on the clipboard ends in a newline like anything else. It is asked
+    /// second, and it wins: a block goes in **at the cursor's cell**, filling
+    /// right and down, which is not what putting a line back means.
+    fn register_is_a_record(&self) -> bool {
+        let text = self.peek_register();
+        text.ends_with('\n') && sniff_grid(text.trim_end_matches(['\n', '\r'])).is_none()
+    }
+
     /// Put the register into the cell — or, if it is a whole row, below this one.
     ///
     /// Two things are worth pasting in a grid and they are told apart by what
     /// is in the register, not by a second key: a cell's worth of text replaces
     /// the cell, and a row's worth becomes a new row. Anything else — half a
     /// row, two cells — is refused, because there is no honest place to put it.
-    fn put_cell(&mut self) {
+    ///
+    /// `after` is vi's own distinction between `p` and `P`, and it applies to
+    /// the **row** — a cell is replaced, and there is no before or after about
+    /// that. Both keys put a row below until 2026-10-21, which `x d` then `P`
+    /// made plain: it is the one key sequence whose whole job is 「put that
+    /// back where it was」.
+    fn put_cell(&mut self, after: bool) {
         if self.refuse_readonly() {
             return;
         }
@@ -4843,6 +4959,11 @@ impl Editor {
         // A row: the right number of cells, and no line break left inside it.
         // A Markdown row says what it is by its own pipes, so it is recognised
         // by the same test that finds a table in the first place.
+        //
+        // **A line-wise register never reaches here** — `table_motion` sends
+        // it to the ordinary paste, which knows where a line goes. What is
+        // left to recognise is a row that was taken *character-wise*, which is
+        // what `Y` stores.
         let is_row = !body.contains(['\n', '\r'])
             && match separator {
                 Separator::Pipe => crate::mdtable::is_row(body),
@@ -4859,7 +4980,10 @@ impl Editor {
             // the reflow then made permanent by re-composing it ruleless.
             if let Some((region, mut parts)) = self.md_parts() {
                 let (row, cell) = self.md_at(&region);
-                let at = parts.insert_row(row + 1);
+                // Standing on the header, `P` lands under the rule too:
+                // `insert_row` clamps to 1, because row 0 *is* the column
+                // names and nothing may go above them.
+                let at = parts.insert_row(row + usize::from(after));
                 parts.rows[at] = crate::mdtable::split(&body);
                 self.md_write(&region, &parts, at, cell);
                 self.status = say!("table.pasted-as-new-row");
@@ -4867,13 +4991,31 @@ impl Editor {
             }
             self.snapshot();
             let rope = self.current_buffer().rope();
-            let at = motion::line_end(rope, self.sel.head());
-            let done =
-                self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &format!("\n{body}")));
+            let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+            // **A row goes in at the start of a line and brings its own
+            // newline.** Adding `\n` + the row at the *end* of this line
+            // instead puts it after the file's last line break, and on the
+            // empty last line every file ending in a newline has, that opened
+            // a blank row above the pasted one.
+            let before = line + usize::from(after);
+            let (at, text) = match before < rope.len_lines() {
+                true => (rope.line_to_char(before), format!("{body}\n")),
+                // Past the last line: append, and give the line above its own
+                // break first when it has none.
+                false => {
+                    let at = rope.len_chars();
+                    match at > 0 && rope.char(at - 1) != '\n' {
+                        true => (at, format!("\n{body}")),
+                        false => (at, format!("{body}\n")),
+                    }
+                }
+            };
+            let leading = usize::from(text.starts_with('\n'));
+            let done = self.without_cell_guard(|e| e.current_buffer_mut().insert(at, &text));
             if !self.applied(done) {
                 return;
             }
-            self.set_cursor(at + 1);
+            self.set_cursor(at + leading);
             self.status = say!("table.pasted-as-new-row");
             return;
         }
@@ -4887,6 +5029,13 @@ impl Editor {
         self.snapshot();
         if self.overwrite(start, end, body) {
             self.set_cursor(start);
+            // What was pasted in may be wider than the column was.
+            //
+            // **Only a cell squares the table up** (2026-10-21). A *record*
+            // came out of this table and goes back the way it was — and `d`
+            // then `P` is the one sequence whose whole job is 「put that
+            // back」, so it must not come back padded.
+            self.format_md_table();
             self.status = say!("table.cell-replaced");
         }
     }
@@ -4916,17 +5065,17 @@ impl Editor {
         self.search_columns_within(&regex::escape(&needle), columns);
     }
 
-    /// The question a table key is asking: the selection, or what the cursor is
-    /// on by whichever unit `Tab` last chose.
+    /// The question a table key is asking: the selection, or what the cursor
+    /// is on by the unit of the layer it is in.
     fn what_is_here(&self) -> String {
         let (from, to) = self.selection();
         if to > from + 1 {
             let rope = self.current_buffer().rope();
             return rope.slice(from..to.min(rope.len_chars())).to_string();
         }
-        match self.table.as_ref().map(|v| v.grain) {
-            Some(Grain::Char) => self.char_at_cursor().map(String::from).unwrap_or_default(),
-            _ => self
+        match self.table_layer() {
+            Layer::Inside => self.char_at_cursor().map(String::from).unwrap_or_default(),
+            Layer::Whole => self
                 .cell_position()
                 .map(|(line, cell)| self.cell_text(line, cell))
                 .unwrap_or_default(),

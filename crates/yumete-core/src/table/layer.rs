@@ -145,13 +145,19 @@ impl Layer {
 
     /// Whether a caret is drawn at all.
     ///
-    /// `false` at the top layer, where the whole cell is selected and there is
-    /// no character to stand on. The terminal's own cursor is left unset for
-    /// that frame, which is how this editor already hides it over a settings
-    /// page and in a panel field.
-    pub fn caret(self) -> bool {
+    /// `false` in one case only: **the top layer at rest**, where the whole
+    /// cell is the unit and there is no character to stand on. The terminal's
+    /// own cursor is left unset for that frame, which is how this editor
+    /// already hides it over a settings page and in a panel field.
+    ///
+    /// The mode is asked because **typing always has a caret**, at either
+    /// layer. `i` at the top layer leaves this field alone — that is the whole
+    /// of 「`Esc` goes back to the layer you came from」 ([`Layer::step`]) —
+    /// so the layer cannot be the only thing asked, or the characters being
+    /// typed would appear with nothing to say where the next one goes.
+    pub fn caret(self, mode: Mode) -> bool {
         match self {
-            Layer::Whole => false,
+            Layer::Whole => mode != Mode::Normal,
             Layer::Inside => true,
         }
     }
@@ -282,7 +288,7 @@ mod tests {
     fn a_table_opens_with_the_whole_cell() {
         assert_eq!(Layer::default(), Layer::Whole);
         assert!(Layer::default().selects_the_cell());
-        assert!(!Layer::default().caret());
+        assert!(!Layer::default().caret(Mode::Normal));
         assert_eq!(Layer::default().edge(), Edge::Thick);
     }
 
@@ -414,6 +420,19 @@ mod tests {
     fn the_resting_word_this_file_matches_on_is_the_editors_own() {
         assert_eq!(Mode::Normal.label(), Some("NOR"));
         assert_eq!(Mode::Insert.label(), Some("INS"));
+    }
+
+    /// **Only one layer in one mode hides the caret.** Typing has one
+    /// wherever it happens, which is why [`Layer::caret`] is asked the mode
+    /// and not only the layer.
+    #[test]
+    fn the_caret_is_hidden_only_at_the_top_layer_at_rest() {
+        let hidden: Vec<(Layer, Mode)> = BOTH
+            .into_iter()
+            .flat_map(|l| [Mode::Normal, Mode::Insert, Mode::Command].map(move |m| (l, m)))
+            .filter(|&(l, m)| !l.caret(m))
+            .collect();
+        assert_eq!(hidden, vec![(Layer::Whole, Mode::Normal)], "who hides the caret");
     }
 
     /// **Thin and thick, and the two sides are not the same glyph**: the seam

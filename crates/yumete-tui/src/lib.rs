@@ -5183,6 +5183,18 @@ fn draw(
         // 「设置」左侧有个光标呢？」）。這一支什麼都不做，於是這一幀沒人設光標，
         // ratatui 就把它藏起來（`Terminal::draw` 裏 `None => hide_cursor()`）。
         // 打字的時候由下面那一段設回來。
+    } else if editor.caret_is_the_cell() {
+        // **The whole cell is the unit, so the cell is the mark** (2026-10-21).
+        // At a grid's top layer there is no character to stand on: `hjkl` walk
+        // cells, `y` takes a cell, and what the reader needs to see is which
+        // cell — which the grid widget draws as two 金 edges in the seams
+        // beside it (#407), costing the cell no width and the selection no
+        // colour.
+        //
+        // Nothing to do, so this frame nobody sets the cursor and ratatui
+        // hides it — the same way the settings page and a panel field above
+        // already hide it. Typing puts it back: [`Layer::caret`] is asked the
+        // mode, and `i` at this layer leaves the layer alone.
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
         the_caret_reads_back(editor, config, area, viewport, (cursor_x, cursor_y));
         // **A block is painted into the page; a bar is the terminal's.**
@@ -14813,9 +14825,12 @@ fn squeezed(text: &str) -> String {
             (text, lit)
         };
 
-        for key in [' ', 't', 't', 'j', 'x'] {
+        for key in [' ', 't', 't', 'j'] {
             editor.on_key(Key::Char(key));
         }
+        // 下到中層：這一條按光標那一行取色，而頂層没有光標（2026-10-21）。
+        editor.on_key(Key::Enter);
+        editor.on_key(Key::Char('x'));
         let (text, lit) = row_of(&editor, &mut seats);
         // **沒有被捲。** 那一格原樣畫着，`<` 不在這一行上。
         assert!(text.contains("reads"), "那一格原樣畫着：{text}");
@@ -14928,11 +14943,14 @@ fn squeezed(text: &str) -> String {
             (lit, blocked(&buffer, at.x, at.y, ink))
         };
 
-        // 全窗，走進那個空格子。`l` 走一個字，`Tab` 走一格。
+        // 全窗，走進那個空格子。`Tab` 走一格，`l` 走一個字。
         for key in [' ', 't', 't', 'j'] {
             editor.on_key(Key::Char(key));
         }
         editor.on_key(Key::Tab);
+        // **這一條問的是光標塊**，而頂層没有光標——整格是單位，記號是縫裏那兩
+        // 道金邊（2026-10-21）。所以先下到中層。
+        editor.on_key(Key::Enter);
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "{}", editor.status());
         let (lit, cursor) = look(&editor, &mut seats);
         let band = |lit: &[bool]| lit.iter().map(|&on| if on { '#' } else { '.' }).collect::<String>();
@@ -15748,7 +15766,6 @@ fn squeezed(text: &str) -> String {
         for key in ['j', 'j', ' ', 't', 't'] {
             editor.on_key(Key::Char(key));
         }
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
         assert!(editor.grid_has_the_pane(), "{}", editor.status());
         let config = Config::default();
         // **The grid, not the window**: the panel down the right is showing
@@ -19505,15 +19522,16 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         editor.execute("2").unwrap();
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
+        // One cell along at the top layer, then down into it: there is no
+        // caret up there to measure (2026-10-21).
         editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Enter);
 
         let caret = |e: &Editor, c: &Config| render_caret(e, c, 60, 10).1.unwrap().x;
         let at_start = caret(&editor, &config);
 
-        // Reading by character, the caret has to move with the cursor — pinned
-        // to the cell's first 字 it would say the cursor had not moved at all.
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); }
+        // Inside the cell, the caret has to move with the cursor — pinned to
+        // the cell's first 字 it would say the cursor had not moved at all.
         editor.on_key(Key::Char('l'));
         let one = caret(&editor, &config);
         assert_eq!(one, at_start + 2, "one 漢字 further along the cell");
@@ -19575,7 +19593,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = Editor::new();
         editor.open_file(&csv).unwrap();
         editor.execute("2").unwrap();
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
+        // A grid opens at its top layer, so `l` is already a cell (2026-10-21).
         editor.on_key(Key::Char('l'));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
@@ -19625,6 +19643,122 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// **At the top layer a standing caret lights nothing** (2026-10-21 作者定:
+    /// 「Can we first do not use background colour but only the border? If it
+    /// is not very good, let's then consider adding background?」).
+    ///
+    /// The whole cell is the unit up there and its mark is the two 金 edges.
+    /// A caret in this editor *covers* the character it stands on, so standing
+    /// still is a selection one grapheme wide — and the grid painted it, which
+    /// put a ground in the middle of a cell that says the wrong thing twice:
+    /// it is a ground at all, and it is not the cell's width.
+    #[test]
+    fn the_top_layer_marks_its_cell_with_edges_and_no_ground() {
+        let (dir, csv) = a_table_file("noground");
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        editor.execute("2").unwrap();
+        editor.on_key(Key::Char('l'));
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        let ink = ink(&config);
+
+        let grounds = |editor: &Editor, config: &Config| -> Vec<(u16, String)> {
+            let buffer = render(editor, config, 60, 10);
+            (0..60u16)
+                .filter(|&x| buffer[(x, 2)].style().bg == Some(ink.selection()))
+                .map(|x| (x, at(&buffer, x, 2)))
+                .collect()
+        };
+
+        assert_eq!(
+            grounds(&editor, &config),
+            Vec::new(),
+            "the cell is marked by its edges alone"
+        );
+        // …and the other half of the same decision: no caret is drawn up
+        // there either, because there is no character to stand on.
+        //
+        // Warning: **the painted block, not `render_caret`** — that helper falls
+        // back to the terminal's own cursor, which a `TestBackend` reports at
+        // `(0, 0)` whether or not anybody set it, so it can never answer
+        // 「nobody set one this frame」.
+        let block = |editor: &Editor, config: &Config| {
+            painted_caret(&render(editor, config, 60, 10), config)
+        };
+        assert_eq!(
+            block(&editor, &config),
+            None,
+            "no caret where the whole cell is the unit"
+        );
+
+        // Inside the cell it is an ordinary page again, caret and all.
+        editor.on_key(Key::Enter);
+        assert!(
+            block(&editor, &config).is_some(),
+            "and inside one, the caret is back"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **How thick the two 金 edges are is the layer's answer** (2026-10-21).
+    ///
+    /// Half a cell each side while the whole cell is the unit, an eighth while
+    /// the caret is inside it — and those are the only two, because Unicode
+    /// gives the left-hand block every eighth (`▏▎▍▌▋▊▉`) and the right hand
+    /// exactly two, the half `▐` and the eighth `▕`. Read off a grid whose
+    /// seams are **blank** (`:table-rules off`): a seam that already draws a
+    /// rule is only recoloured, so it says nothing about thickness.
+    #[test]
+    fn the_edges_round_the_cell_say_which_layer_the_keys_are_in() {
+        let (dir, csv) = a_table_file("edges");
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        editor.execute("table-rules off").unwrap();
+        editor.execute("2").unwrap();
+        // The second cell, so that there is a seam on **both** sides of it:
+        // the first column starts at the page's edge and has nothing before
+        // it to hug.
+        editor.on_key(Key::Char('l'));
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+
+        let edges = |editor: &Editor, config: &Config| -> Vec<String> {
+            let buffer = render(editor, config, 60, 10);
+            let gold = ink(config).gold();
+            (0..60u16)
+                .filter(|&x| buffer[(x, 2)].style().fg == Some(gold))
+                .map(|x| at(&buffer, x, 2))
+                .collect()
+        };
+
+        // A grid opens at its top layer, where the cell is the unit.
+        assert_eq!(
+            editor.table_layer(),
+            yumete_core::table::layer::Layer::Whole,
+            "{}",
+            editor.status()
+        );
+        assert_eq!(
+            edges(&editor, &config),
+            vec!["\u{2590}".to_string(), "\u{258c}".to_string()],
+            "half a cell each side, hugging the cell from the far side of the gap"
+        );
+
+        // …and one `Enter` down they thin, which is the whole of what the mark
+        // has to say: the unit is no longer the cell.
+        editor.on_key(Key::Enter);
+        assert_eq!(editor.table_layer(), yumete_core::table::layer::Layer::Inside);
+        assert_eq!(
+            edges(&editor, &config),
+            vec!["\u{2595}".to_string(), "\u{258f}".to_string()],
+            "one eighth each side"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     // ---- The cell you are standing on (#229) ------------------------------
 
     /// A `|` table is drawn as part of its page, so until #229 the only sign
@@ -19644,8 +19778,8 @@ fn squeezed(text: &str) -> String {
             .insert(0, "前文\n| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
                 .expect("the fixture buffer is writable");
         // Onto the `木` row. By line number, not by counting `j`: which rows a
-        // `j` steps over depends on the grain (#356), and this test is about
-        // how a cell is drawn.
+        // `j` steps over depends on the layer, and this test is about how a
+        // cell is drawn.
         editor.execute("4").unwrap();
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
@@ -19654,7 +19788,7 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
+        // A grid opens at its top layer, so `l` is already a cell (2026-10-21).
         // …and into the second cell, which is `mu`.
         editor.on_key(Key::Char('l'));
         let (line, at) = editor.cell_position().expect("in a cell");
@@ -19838,7 +19972,7 @@ fn squeezed(text: &str) -> String {
             .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
                 .expect("the fixture buffer is writable");
         // Onto the `木` row by line number: which rows a `j` steps over depends
-        // on the grain (#356), and this test is about how a cell is drawn.
+        // on the layer, and this test is about how a cell is drawn.
         editor.execute("3").unwrap();
         // 表格操作 (#275): the pipes stay on the page, which is what the
         // assertions below read. `t t` re-glyphs them into a grid instead.
@@ -19847,14 +19981,14 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
+        // A grid opens at its top layer, so this `l` is a whole cell.
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1), "on `mu`");
-        // `T` is `Grain::Char`, so `l` walks inside the cell and the selection
-        // covers two characters. It has to: the block cursor is painted over
-        // its own slot last of all, so the column that answers this question is
-        // the one **beside** the cursor.
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); }
+        // Then down into the cell, where `l` walks characters and the
+        // selection covers two of them. It has to: the block cursor is painted
+        // over its own slot last of all, so the column that answers this
+        // question is the one **beside** the cursor.
+        editor.on_key(Key::Enter);
         editor.on_key(Key::Char('v'));
         editor.on_key(Key::Char('l'));
         let buf = render(&editor, &config, 30, 8);
@@ -19903,7 +20037,7 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
+        // A grid opens at its top layer, so `l` is already a cell (2026-10-21).
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let buf = render(&editor, &config, 30, 8);
@@ -19937,13 +20071,11 @@ fn squeezed(text: &str) -> String {
         editor.set_layout(WritingLayout::Vertical);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('g'));
-        // `Left` walks to the next 縱, which on these short rows is the next
-        // line of the file — 方向鍵不歸 `vertical_keys` 管，所以這一條不隨出廠
-        // 值翻（2026-10-13）。
-        editor.on_key(Key::Left);
-        editor.on_key(Key::Left);
         assert!(editor.enter_table(), "{}", editor.status());
-        for k in [' ', 't', 'T'] { editor.on_key(Key::Char(k)); } // #356: 這一條測的是格
+        // Onto the row holding the highlight, **by line number** (2026-10-21):
+        // which rows an arrow key steps over is the layer's to say, and a grid
+        // opens at the top layer where `Left` is one cell, not one 縱.
+        editor.execute("3").unwrap();
         let config = vertical_config();
         let ink = ink(&config);
         let want = ink.at(yumete_config::rung::HEAD);

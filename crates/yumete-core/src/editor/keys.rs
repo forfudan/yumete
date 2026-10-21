@@ -530,7 +530,7 @@ impl Editor {
             schema: crate::mdtable::schema(&header),
             from: PathBuf::new(),
             goal: 0,
-            grain: Grain::Char,
+            layer: Layer::default(),
             separator: Separator::Pipe,
             pane: false,
             bounds: Bounds::Md,

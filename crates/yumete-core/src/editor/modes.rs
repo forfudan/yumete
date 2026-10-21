@@ -28,10 +28,11 @@ impl Editor {
     ///
     /// Three questions in one word, in this order:
     ///
-    /// 1. **Where do the keys go?** `PAN.` when a side panel has them. That is
-    ///    asked first because it is the one with teeth: `d` in the results
-    ///    list clears the search word, `d` in the page deletes a line of the
-    ///    novel, and both read `NORMAL` until 2026-09-27.
+    /// 1. **Where do the keys go?** `PAN.` when a side panel has them, `CEL`
+    ///    when a grid does. That is asked first because it is the one with
+    ///    teeth: `d` in the results list clears the search word, `d` in the
+    ///    page deletes a line of the novel, and both read `NORMAL` until
+    ///    2026-09-27.
     /// 2. **Is the selection being extended?** `SEL`, the way Helix writes it.
     /// 3. **Otherwise the mode's own word** — three letters.
     pub fn mode_label(&self) -> Option<String> {
@@ -58,7 +59,16 @@ impl Editor {
         if self.overwriting && self.mode == Mode::Insert {
             return Some("REP".to_string());
         }
-        self.mode.label().map(str::to_string)
+        let word = self.mode.label().map(str::to_string);
+        // **A grid prefixes whatever word came out above** (2026-10-21), so
+        // `REP` and `SEL` come along without this line knowing they exist, and
+        // the layer answers 「where are my keys」 the way `PAN.` and `PIC.`
+        // already do. [`Layer::label`] owns the spelling, including the one
+        // case that is a bare word: the top layer at rest says `CEL`.
+        match self.table_here() {
+            true => word.map(|w| self.table_layer().label(&w)),
+            false => word,
+        }
     }
 
     /// Whether select (extend) mode is active.

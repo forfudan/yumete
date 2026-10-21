@@ -914,8 +914,18 @@ pub fn draw(
                     // wall, which is exactly how both sides of it lit up.
                     b <= a + 1
                 };
-                let lit = editor.cell_span(line, i).filter(|_| peek.is_none()).and_then(
-                    |(from, to)| {
+                let lit = editor
+                    .cell_span(line, i)
+                    .filter(|_| peek.is_none())
+                    // **At the top layer a standing caret lights nothing**
+                    // (2026-10-21 作者定: 「Can we first do not use background
+                    // colour but only the border?」). The whole cell is the
+                    // unit there and its mark is the two 金 edges; the band a
+                    // caret leaves is one character wide and sits in the
+                    // middle of the cell, which says the wrong thing twice —
+                    // it is a ground, and it is not the cell's width.
+                    .filter(|_| !(bare && editor.caret_is_the_cell()))
+                    .and_then(|(from, to)| {
                         // Standing somewhere is one cell's business, and which
                         // one is `cell_position`'s answer, not an arithmetic
                         // coincidence at a wall.
@@ -1061,11 +1071,19 @@ pub fn draw(
                 // on the grid that is not a quantity of ink. A spreadsheet's
                 // active cell — and it costs the selection nothing.
                 if here {
+                    // **How thick is the layer's to say** (2026-10-21): half a
+                    // cell each side while the whole cell is the unit, an
+                    // eighth while the caret is inside it. The two are what
+                    // the terminal has — the left-hand block comes at every
+                    // eighth, the right hand has only the half and the eighth
+                    // — so there is nothing in between to choose.
+                    //
                     // **A rule that is already there is only recoloured.** A
                     // drawn seam (`:table-rules line`) turns 金 and the grid
                     // reads exactly as before; only a *blank* seam is given a
                     // mark of its own, hugging the cell from the far side of
-                    // the gap — a right eighth-block before, a left one after.
+                    // the gap.
+                    let edge = view.layer.edge();
                     let mut wall = |bx: u16, glyph: &str| {
                         if let Some(cell) = buf.cell_mut((bx, y)) {
                             if stroke.is_none() {
@@ -1075,10 +1093,10 @@ pub fn draw(
                         }
                     };
                     if x > 0 {
-                        wall(x - 1, "\u{2595}");
+                        wall(x - 1, edge.before());
                     }
                     if x + w < right {
-                        wall(x + w, "\u{258f}");
+                        wall(x + w, edge.after());
                     }
                 }
                 // A hidden column takes no gap either — a column of

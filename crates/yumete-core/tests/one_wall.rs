@@ -165,36 +165,51 @@ fn a_table_is_measured_over_what_is_on_the_page() {
     }
 }
 
-/// **`hjkl` are letters at every level**, and `T` is what hands them to the
-/// cells (#356).
+/// **The level does not decide what `hjkl` mean — the layer does**
+/// (2026-10-21).
 ///
-/// Written down as a test because the doc comment that said otherwise stood
-/// for months after #356 made it false, and on 2026-09-11 it was read as law:
-/// an argument against recognising a delimited file on open was built on「自动
-/// 进 tb 会悄悄改掉 hjkl 的含义」, which was wrong: 「tb tf to
-/// 模式都是按字走的不是按格走的」. A comment cannot fail; this can.
+/// Written down as a test because the doc comment that answered this has now
+/// been wrong twice, and each time it was read as law. 2026-09-11 it still
+/// said 「they walk cells」, and an argument against recognising a delimited
+/// file on open was built on it (「自动进 tb 会悄悄改掉 hjkl 的含义」) —
+/// answered then with 「tb tf to 模式都是按字走的不是按格走的」. Which is what
+/// it said next, until the layers made *that* the wrong half: a grid now opens
+/// at its top layer, where one press is one cell, and `Enter` goes down to the
+/// characters. A comment cannot fail; this can.
+///
+/// What survives both turns is the sentence the test is named for: **the three
+/// levels that draw a grid walk alike**, and 源碼模式 has no grid to walk.
 #[test]
-fn the_levels_leave_hjkl_alone() {
+fn the_levels_leave_hjkl_to_the_layer() {
     // Warning: **全窗 is the one level that skips the separator** (2026-10-17 作者定):
     // 「to, tb, tf are about the texts (content + separators though
-    // rendered), and tt is only about the content」. `l` there still walks
-    // characters — one press, one character — it just never stands on the
-    // tab, so the walk is the same list with that offset left out. Which is
-    // the thing this test is really for: the letters do not become cells.
-    for (level, want) in [
-        (" to", vec![0, 1, 2, 3]),
-        (" tb", vec![0, 1, 2, 3]),
-        (" tf", vec![0, 1, 2, 3]),
-        (" tt", vec![0, 1, 3, 3]),
+    // rendered), and tt is only about the content」. Inside a cell `l` there
+    // still walks characters — one press, one character — it just never
+    // stands on the tab, so the walk is the same list with that offset left
+    // out.
+    let walk = |ed: &mut Editor| {
+        let mut seen = vec![ed.cursor()];
+        for _ in 0..3 {
+            ed.on_key(Key::Char('l'));
+            seen.push(ed.cursor());
+        }
+        seen
+    };
+    for (level, top, inside) in [
+        // 源碼模式 draws no grid, so there is no layer and `l` is a letter.
+        (" to", vec![0, 1, 2, 3], vec![0, 1, 2, 3]),
+        (" tb", vec![0, 3, 3, 3], vec![0, 1, 2, 3]),
+        (" tf", vec![0, 3, 3, 3], vec![0, 1, 2, 3]),
+        (" tt", vec![0, 3, 3, 3], vec![0, 1, 3, 3]),
     ] {
         let mut ed = typed("ch\t錐\nbkd\t蜘\n");
         press(&mut ed, level);
-        let mut walk = vec![ed.cursor()];
-        for _ in 0..3 {
-            ed.on_key(Key::Char('l'));
-            walk.push(ed.cursor());
-        }
-        assert_eq!(walk, want, "{level} walks characters");
+        assert_eq!(walk(&mut ed), top, "{level} at the top layer walks cells");
+
+        let mut ed = typed("ch\t錐\nbkd\t蜘\n");
+        press(&mut ed, level);
+        ed.on_key(Key::Enter);
+        assert_eq!(walk(&mut ed), inside, "{level} inside a cell walks characters");
     }
 }
 
@@ -214,6 +229,10 @@ fn the_caret_steps_over_what_a_table_keeps_off_the_page() {
     ed.execute(":syntax markdown").unwrap();
     ed.execute("4").unwrap();
     press(&mut ed, " tf");
+    // Down into the cell, where `l` is a character (2026-10-21) — and here,
+    // not after the `4` below: a `:N` jump leaves the grid without the keys
+    // for one keystroke, so an `Enter` sent straight after it never crosses.
+    ed.on_key(Key::Enter);
     let hidden = ed.cell_hidden_on_line(3);
     assert!(!hidden.is_empty(), "the file's padding is off the page: {hidden:?}");
     let (from, upto) = hidden[0];

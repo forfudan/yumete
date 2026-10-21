@@ -451,7 +451,7 @@ impl Editor {
             return false;
         }
         self.snapshot();
-        self.md_new_row(below);
+        let _ = self.md_new_row(below);
         self.seat_in_a_cell();
         self.enter_insert();
         true
@@ -1209,9 +1209,25 @@ impl Editor {
         self.status = say!("edit.pasted", name);
     }
 
-    /// The contents of the register a command should read from.
+    /// The contents of the register a command should read from, **taking the
+    /// pending `"` with it**.
     pub(super) fn recall(&mut self) -> String {
-        match self.take_register() {
+        let name = self.take_register();
+        self.register_text(name)
+    }
+
+    /// The same contents, **leaving the pending `"` where it is** — so one key
+    /// may ask what *kind* of thing is in there and then still read it.
+    ///
+    /// Warning: **`recall` consumes the name**, so asking twice for one
+    /// keystroke reads `"aP` out of register `a` the first time and out of the
+    /// unnamed one the second.
+    pub(super) fn peek_register(&self) -> String {
+        self.register_text(self.pending_register)
+    }
+
+    fn register_text(&self, name: Option<char>) -> String {
+        match name {
             // **`#` 是選區的序號**（#405 Phase 3，helix 也是這個名字）。它不是一個存東
             // 西的格子，是一個問題的答案：「這是第幾段」。`"#p` 於是在第一段貼「1」、
             // 第二段貼「2」——編號列表那個用例就是這麼解開的。
