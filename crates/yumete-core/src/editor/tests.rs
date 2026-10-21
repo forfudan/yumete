@@ -6549,12 +6549,14 @@ fn v_grows_by_whole_cells_along_the_row() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A run of cells copies and pastes over another row's cells** (2026-10-21
-/// 作者定: 「users want to pick some cells of a line and paste/replace into
-/// another row」).
+/// **A run of cells copies and is written over another row's cells**
+/// (2026-10-21 作者定: 「users want to pick some cells of a line and
+/// paste/replace into another row」).
 ///
 /// One for one, left to right, and the row keeps every delimiter it had —
-/// what is being replaced is contents.
+/// what is being replaced is contents. The key is `R`, not `p`: a row's cell
+/// count belongs to the table, so there is nothing a run can be *inserted*
+/// into, and 「寫到已經有東西的地方」 is `R` in both reference keymaps.
 #[test]
 fn a_run_of_cells_goes_over_another_rows_cells() {
     let dir = tmp().join(format!("yumete-run-{}", std::process::id()));
@@ -6571,10 +6573,15 @@ fn a_run_of_cells_goes_over_another_rows_cells() {
     press(&mut ed, "y");
     assert!(ed.status().contains('2'), "取了兩格：{}", ed.status());
 
-    // Down to row 2 and over its first two cells.
+    // **`p` is not the key.** It puts a record in, and a run is not one.
     ed.on_key(Key::Esc);
     ed.goto_line(3);
     press(&mut ed, "p");
+    assert_eq!(ed.status(), say!("table.p-only-puts-records"));
+    assert_eq!(ed.current_buffer().text(), "a,b,c,d\n一,二,三,四\n壹,貳,參,肆\n");
+
+    // Down to row 2 and over its first two cells.
+    press(&mut ed, "R");
     assert_eq!(
         ed.current_buffer().text(),
         "a,b,c,d\n一,二,三,四\n一,二,參,肆\n",
@@ -6586,7 +6593,7 @@ fn a_run_of_cells_goes_over_another_rows_cells() {
     ed.goto_line(3);
     ed.on_key(Key::Tab);
     ed.on_key(Key::Tab);
-    press(&mut ed, "p");
+    press(&mut ed, "R");
     assert_eq!(
         ed.current_buffer().text(),
         "a,b,c,d\n一,二,三,四\n一,二,一,二\n",
@@ -6594,7 +6601,87 @@ fn a_run_of_cells_goes_over_another_rows_cells() {
         ed.status()
     );
 
+    // **Doesn't fit, nothing moves** (2026-10-21 作者定). Two cells in the
+    // register, and the cursor on the last column.
+    ed.goto_line(3);
+    for _ in 0..3 {
+        ed.on_key(Key::Tab);
+    }
+    press(&mut ed, "R");
+    assert_eq!(ed.status(), say!("table.cells-do-not-fit", 2, 1));
+    assert_eq!(ed.current_buffer().text(), "a,b,c,d\n一,二,三,四\n一,二,一,二\n");
+
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **An empty column does not stop a selection growing** (2026-10-21 作者報的:
+/// 「`v l l` … Not good, it stucks at empty cells.」).
+///
+/// A cell with nothing in it is one position wide, so stepping back from its
+/// end landed on the padding, which belongs to no cell — and the next `l` then
+/// read the cell *before* it and walked back.
+#[test]
+fn an_empty_cell_does_not_stop_the_selection_growing() {
+    let mut ed = typed("| 名 | 說明 | 數 |\n| --- | --- | --- |\n| 甲 |  | 12 |\n");
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    press(&mut ed, "vl");
+    assert_eq!(ed.cell_position().map(|(_, at)| at), Some(1), "在空格子上");
+    press(&mut ed, "l");
+    assert_eq!(ed.cell_position().map(|(_, at)| at), Some(2), "走過去了");
+    press(&mut ed, "y");
+    assert_eq!(ed.status(), say!("table.yanked-cells", 3));
+}
+
+/// **`y` over whole records takes records** (2026-10-21 作者報的: 「y … For
+/// multiple rows selection, this is not working」).
+///
+/// It measured the far end of the selection against the *near* record's cells,
+/// the subtraction saturated to zero, and so `x y` reported 「取了一格」 and
+/// took one. What `x` and `%` leave standing is records, and a record is a
+/// line — which is the one thing `p` can put into a grid.
+#[test]
+fn y_over_whole_records_takes_records() {
+    let mut ed = typed("| 名 | 數 |\n| --- | --- |\n| 甲 | 12 |\n| 乙 | 34 |\n");
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    press(&mut ed, "xy");
+    assert_eq!(ed.status(), say!("table.yanked-records", 1));
+    press(&mut ed, "p");
+    let text = ed.current_buffer().text();
+    assert_eq!(text.lines().count(), 5, "一條記錄進來了：{text}");
+    assert_eq!(text.lines().nth(3), text.lines().nth(2), "{text}");
+    press(&mut ed, "2x");
+    press(&mut ed, "y");
+    assert_eq!(ed.status(), say!("table.yanked-records", 2));
+    press(&mut ed, "%");
+    press(&mut ed, "y");
+    assert_eq!(ed.status(), say!("table.yanked-records", 5), "整張表也是記錄");
+}
+
+/// **`R` writes the register's records over the records here** — the other
+/// half of 「`p` puts in, `R` writes over」 (2026-10-21 作者定).
+///
+/// Warning: **the guard has to be told this is whole rows going in.** Asked without
+/// a position it reads the row's own `|` as delimiters being typed into a cell,
+/// and answers 「格子裏要寫，寫成 \|」 about a pipe nobody typed.
+#[test]
+fn r_writes_a_record_over_another_record() {
+    let mut ed = typed("| 名 | 數 |\n| --- | --- |\n| 甲 | 12 |\n| 乙 | 34 |\n");
+    ed.goto_line(4);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    press(&mut ed, "xy");
+    assert_eq!(ed.status(), say!("table.yanked-records", 1));
+    // Nothing selected, so the target is the cursor's own record.
+    ed.goto_line(3);
+    press(&mut ed, "R");
+    assert_eq!(ed.status(), say!("table.records-replaced", 1));
+    let text = ed.current_buffer().text();
+    assert_eq!(text.lines().count(), 4, "没多出一行：{text}");
+    assert_eq!(text.lines().nth(2), text.lines().nth(3), "{text}");
 }
 
 /// **`%` takes the table, not the chapter it sits in.**
@@ -8867,12 +8954,15 @@ fn d_on_a_grid_means_the_cell() {
     // prose's rule, and the grid follows it key for key since 2026-10-08. It
     // used to be the other way round here (`d` quiet, `D` cutting), which made
     // one capital letter mean opposite things in prose and in a table.
-    press(&mut ed, "p");
+    //
+    // **`R` 把它蓋回去，不是 `p`**（2026-10-21 作者定）：一格插不進一行裏去，
+    // 所以「寫到已經有東西的地方」是 `R`。
+    press(&mut ed, "R");
     assert_eq!(ed.cell_text(1, 0), cell, "what `d` cut can be put back");
     ed.on_key(Key::Alt('d'));
     assert_eq!(ed.cell_text(1, 0), "", "A-d 也清得掉");
-    // 而寄存器没動：剛纔那一格還在上面，貼得回來。
-    press(&mut ed, "p");
+    // 而寄存器没動：剛纔那一格還在上面，蓋得回來。
+    press(&mut ed, "R");
     assert_eq!(ed.cell_text(1, 0), cell, "A-d 不吃寄存器");
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -9254,7 +9344,9 @@ fn a_block_from_a_spreadsheet_goes_in_as_cells() {
     press(&mut ed, " tt");
     ed.goto_line(3);
     ed.set_register_for_test("木\tmu\n目\tmu\n禾\the\n");
-    press(&mut ed, "p");
+    // **`R` writes over, `p` puts in** (2026-10-21 作者定): a block fills the
+    // cells it lands on, so it is the first key and not the second.
+    press(&mut ed, "R");
     assert_eq!(
         ed.current_buffer().text(),
         "| 字 | 音 |\n| -- | -- |\n| 木 | mu |\n| 目 | mu |\n| 禾 | he |\n",
@@ -9266,7 +9358,7 @@ fn a_block_from_a_spreadsheet_goes_in_as_cells() {
     // A pipe in a pasted cell goes in as the escape, not as a boundary.
     ed.goto_line(3);
     ed.set_register_for_test("a|b\tc\n");
-    press(&mut ed, "p");
+    press(&mut ed, "R");
     assert_eq!(ed.row_cells(2).len(), 2, "{}", ed.current_buffer().text());
     assert!(ed.current_buffer().text().contains(r"a\|b"));
 }
@@ -9281,7 +9373,7 @@ fn a_block_too_wide_for_a_schema_is_refused() {
     let wide: String = (0..width + 1).map(|i| format!("{i}\t")).collect();
     ed.set_register_for_test(&wide);
     let before = ed.current_buffer().text();
-    press(&mut ed, "p");
+    press(&mut ed, "R");
     assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
     assert!(ed.status().contains("貼不下"), "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
@@ -9295,12 +9387,18 @@ fn ordinary_text_is_still_pasted_as_text() {
     assert!(ed.enter_table());
     // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
     press(&mut ed, " tt");
+    // **`R` writes over, `p` puts in** (2026-10-21 作者定): a cell's worth of
+    // text has nowhere to be inserted, so writing it over this cell is `R`.
     ed.set_register_for_test("春天");
-    press(&mut ed, "p");
+    press(&mut ed, "R");
     assert_eq!(ed.cell_text(2, 0), "春天", "{}", ed.status());
+    assert_eq!(ed.status(), say!("table.cell-replaced"));
+    // …and `p` says so rather than guessing.
+    press(&mut ed, "p");
+    assert_eq!(ed.status(), say!("table.p-only-puts-records"));
     // …and a paragraph with commas in it is a paragraph, not a grid.
     ed.set_register_for_test("他說，這樣，那樣");
-    press(&mut ed, "p");
+    press(&mut ed, "R");
     assert!(ed.cell_text(2, 0).contains('，'), "{}", ed.current_buffer().text());
 }
 
@@ -10321,12 +10419,14 @@ fn a_cell_can_be_copied_and_a_row_can_be_duplicated() {
     press(&mut ed, "l");
     assert_eq!(ed.cell_text(1, 1), "⿰木目");
 
-    // One key takes the cell, one key puts it in another.
+    // One key takes the cell, one key writes it over another. **`R`, not
+    // `p`** (2026-10-21 作者定): a row's cell count belongs to the table, so
+    // nothing cell-sized can be *inserted* into one.
     press(&mut ed, "y");
     assert!(ed.status().contains("一格"), "{}", ed.status());
     press(&mut ed, "j");
     assert_eq!(ed.cell_text(2, 1), "土");
-    press(&mut ed, "p");
+    press(&mut ed, "R");
     assert_eq!(ed.cell_text(2, 1), "⿰木目", "the cell was replaced");
     assert_eq!(ed.cell_text(2, 0), "二", "and its neighbours are untouched");
     assert_eq!(ed.cell_text(2, 2), "土");
@@ -10350,7 +10450,7 @@ fn a_cell_can_be_copied_and_a_row_can_be_duplicated() {
     // left to right, every delimiter kept.
     ed.goto_line(4);
     ed.set_register_for_test("二,土");
-    press(&mut ed, "p");
+    press(&mut ed, "R");
     assert_eq!(ed.current_buffer().text().lines().count(), 4, "no row was added");
     assert_eq!(ed.cell_text(3, 0), "二", "{}", ed.status());
     assert_eq!(ed.cell_text(3, 1), "土");

@@ -1106,6 +1106,9 @@ impl Editor {
 
     /// Put `text` in the register named by a pending `"`, or the unnamed one.
     pub(super) fn store(&mut self, text: String) {
+        // **Whatever the grid remembered about this register is now stale**
+        // (2026-10-21). The one key that may set it sets it after this call.
+        self.register_grid = None;
         // 整行取出來的要帶着行尾——見 [`Editor::yank_whole_lines`]。
         let text = match self.yank_whole_lines && !text.is_empty() && !text.ends_with('\n') {
             true => text + self.current_buffer().ending(),
