@@ -15813,7 +15813,26 @@ fn squeezed(text: &str) -> String {
         );
         // The grid itself, not the two rows at the foot: the hint and the
         // position readout name the cell the caret is in, and it moved.
-        let grid = |page: &str| page.lines().take(8).collect::<Vec<_>>().join("\n");
+        //
+        // **The seams come off both pages first.** The cell mark lives in them
+        // and moves with the caret — that is what it is for — so comparing
+        // them byte for byte would assert the opposite of #407. What is being
+        // asserted is that the **columns** did not move: a folded column that
+        // re-laid itself out on every `l` is the thing this test is for.
+        let grid = |page: &str| {
+            page.lines()
+                .take(8)
+                .map(|l| {
+                    l.chars()
+                        .map(|c| match ('\u{2500}'..='\u{259f}').contains(&c) {
+                            true => ' ',
+                            false => c,
+                        })
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
         assert_eq!(grid(&stood_in), grid(&folded), "and the grid is exactly as it was");
 
         // …and it is still readable, three ways. The panel down the right has
@@ -19152,15 +19171,29 @@ fn squeezed(text: &str) -> String {
             (0..buffer.area.height)
                 .filter_map(|y| {
                     let row = row_text(&buffer, y);
-                    // A data row has walls in it. The column-number band above
+                    // **A seam is `┆` or the cell mark standing in its place.**
+                    // The two 金 edges replace whatever glyph the seam held
+                    // (#407, thickened 2026-10-21 作者報的: 「It should be thick
+                    // golden left and right border but you still make it
+                    // dashed」), and the left one of the first column stands in
+                    // the gutter — so a reader that knows only `┆` loses
+                    // exactly the row the caret is on, every time.
+                    let seam = |c: char| c == '┆' || ('\u{2580}'..='\u{259f}').contains(&c);
+                    // A data row has seams in it. The column-number band above
                     // the header has none, and reading it as a row made the
                     // first failure this test reported one of its own.
-                    if !row.contains('┆') {
+                    if !row.contains(seam) {
                         return None;
                     }
-                    let (number, rest) = row.trim_start().split_once("  ")?;
-                    let n: usize = number.parse().ok()?;
-                    let first = rest.split('┆').next()?.trim().to_string();
+                    let row = row.trim_start();
+                    let digits: String = row.chars().take_while(|c| c.is_ascii_digit()).collect();
+                    let n: usize = digits.parse().ok()?;
+                    let first = row[digits.len()..]
+                        .trim_start_matches(|c: char| c == ' ' || seam(c))
+                        .split(seam)
+                        .next()?
+                        .trim()
+                        .to_string();
                     Some((n, first))
                 })
                 .collect()
@@ -19269,7 +19302,14 @@ fn squeezed(text: &str) -> String {
         // the whole table, so the page has to scroll over it.
         for nth in 0..12 {
             let buffer = frame_now(&mut terminal, &editor, &mut seats);
-            let rows: Vec<String> = (0..buffer.area.height).map(|y| row_text(&buffer, y)).collect();
+            // The caret's row has the two 金 edges where its seams were
+            // (#407), so the grid's own spelling is put back before it is
+            // read — otherwise every check below quietly skips that one row.
+            let rows: Vec<String> = (0..buffer.area.height)
+                .map(|y| {
+                    row_text(&buffer, y).replace(['\u{2590}', '\u{258c}', '\u{2595}', '\u{258f}'], "┆")
+                })
+                .collect();
             // Record 7 appears on the page once. Read from the middle of
             // itself it was drawn a second time, as a row of its own.
             //
@@ -19612,11 +19652,14 @@ fn squeezed(text: &str) -> String {
             .collect();
         assert_eq!(bracket.len(), 2, "one on each side: {bracket:?}");
         let (left, right) = (bracket[0], bracket[1]);
-        // This grid draws its seams (`:table-rules line`), and a rule already
-        // there is only recoloured — the glyph does not change, so the grid
-        // reads exactly as it did. A blank seam gets a mark of its own instead.
-        assert_eq!(at(&buffer, left, 2), "\u{2506}", "the seam before it, in 金");
-        assert_eq!(at(&buffer, right, 2), "\u{2506}", "and the one after");
+        // This grid draws its seams (`:table-rules line`), and at the top
+        // layer the thick edge is drawn **over** the rule that was there
+        // (2026-10-21 作者報的: 「It should be thick golden left and right
+        // border but you still make it dashed」). Recolouring a `┆` was the
+        // #407 rule, and it is kept for the thin edge only — see
+        // `the_edges_round_the_cell_say_which_layer_the_keys_are_in`.
+        assert_eq!(at(&buffer, left, 2), "\u{2590}", "the seam before it, in 金");
+        assert_eq!(at(&buffer, right, 2), "\u{258c}", "and the one after");
         assert_eq!(at(&buffer, left + 1, 2), "\u{2ff0}", "it is the 拆分 cell");
         // The brackets stand at the *column's* edges, not the text's — a cell
         // you are inside, not three highlighted characters. Counted, not
@@ -19755,6 +19798,43 @@ fn squeezed(text: &str) -> String {
             vec!["\u{2595}".to_string(), "\u{258f}".to_string()],
             "one eighth each side"
         );
+
+        // **And with the rules back on, the thick edge is still thick**
+        // (2026-10-21 作者報的: 「It should be thick golden left and right
+        // border but you still make it dashed」). A seam that already draws a
+        // `┆` is only *recoloured* for the thin edge — that was #407's rule
+        // and the grid goes on reading as the grid it was. The thick one is a
+        // different promise and has to be drawn.
+        editor.execute("table-rules line").unwrap();
+        // Read against a seam the cell does not touch, so this says what the
+        // rule *is* rather than which glyph `:table-rules line` happens to
+        // draw: inside a cell the two gold seams are that same glyph.
+        let plain = |editor: &Editor, config: &Config| -> String {
+            let buffer = render(editor, config, 60, 10);
+            let gold = ink(config).gold();
+            (0..60u16)
+                .map(|x| (x, at(&buffer, x, 2)))
+                .find(|(x, g)| {
+                    buffer[(*x, 2)].style().fg != Some(gold)
+                        && g.chars().next().is_some_and(|c| ('\u{2500}'..='\u{257f}').contains(&c))
+                })
+                .map(|(_, g)| g)
+                .expect("an untouched seam on the row")
+        };
+        let rule = plain(&editor, &config);
+        assert_eq!(
+            edges(&editor, &config),
+            vec![rule.clone(), rule.clone()],
+            "inside a cell, the drawn rule is only recoloured"
+        );
+        editor.on_key(Key::Esc);
+        assert_eq!(editor.table_layer(), yumete_core::table::layer::Layer::Whole);
+        assert_eq!(
+            edges(&editor, &config),
+            vec!["\u{2590}".to_string(), "\u{258c}".to_string()],
+            "and at the top layer it is drawn over the rule, not tinted"
+        );
+        assert_ne!(rule, "\u{2590}", "the rule really was a different glyph");
 
         std::fs::remove_dir_all(&dir).ok();
     }
