@@ -1484,6 +1484,72 @@ fn a_record_over_several_lines_goes_back_where_it_came_from() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **The structural keys move a whole record** (2026-10-22).
+///
+/// Each of them asked 「which line am I on」, which is the same question for
+/// all but a handful of records and the wrong one for those: `t d` cut the
+/// record's first line off and left `three four",1` standing as a row that
+/// parses as nothing, `t j` moved that line past the next record, and `t r`
+/// opened the new row *between* the record's two lines, where the quoting then
+/// wrapped the wreck in quotes of its own. Sorting had been stopped outright
+/// since 2026-10-09 for the same reason; it now sorts records.
+#[test]
+fn the_structural_keys_move_a_whole_record() {
+    let dir = tmp().join(format!("yumete-recordrow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let text = "name,note,n\nalpha,\"one two\nthree four\",1\nbravo,plain,2\n";
+    let open = |name: &str| {
+        let csv = dir.join(name);
+        std::fs::write(&csv, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "gg");
+        ed
+    };
+
+    // `t d` — the record, both its lines, and `u` puts it back.
+    let mut ed = open("drop.csv");
+    press(&mut ed, " td");
+    assert_eq!(ed.current_buffer().text(), "name,note,n\nbravo,plain,2\n", "{}", ed.status());
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), text);
+
+    // `t j` — two records change places, and the one that moved is still one.
+    let mut ed = open("shift.csv");
+    press(&mut ed, " tj");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note,n\nbravo,plain,2\nalpha,\"one two\nthree four\",1\n",
+        "{}",
+        ed.status()
+    );
+    assert_eq!(ed.row_cells(ed.cursor_line()).len(), 3, "the cursor followed it");
+
+    // `t r` — the new row goes under the record, not inside it.
+    let mut ed = open("open.csv");
+    press(&mut ed, " tr");
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note,n\nalpha,\"one two\nthree four\",1\n,,\nbravo,plain,2\n",
+        "{}",
+        ed.status()
+    );
+
+    // And the sort carries the record whole.
+    let mut ed = open("sort.csv");
+    press(&mut ed, " t1S");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note,n\nbravo,plain,2\nalpha,\"one two\nthree four\",1\n",
+        "{}",
+        ed.status()
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A file that ends in a newline has no row after its last one** (#384).
 ///
 /// `ropey` reports a trailing empty line for every file that ends in a newline

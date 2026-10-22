@@ -410,7 +410,17 @@ impl Editor {
         if self.open_a_row(true) {
             return;
         }
-        let end = motion::line_end(self.current_buffer().rope(), self.sel.head());
+        // **Below the record, not below the line** (2026-10-22). A field
+        // holding a line break makes a record of two lines, and opening the
+        // new row at the end of the *cursor's* line wedged it between them —
+        // the quoting then wrapped the wreck in quotes of its own.
+        let end = match self.record_lines_here() {
+            Some((_, through)) => {
+                let rope = self.current_buffer().rope();
+                motion::line_end(rope, rope.line_to_char(through))
+            }
+            None => motion::line_end(self.current_buffer().rope(), self.sel.head()),
+        };
         let row = self.blank_row();
         // 縮進跟着下來，同 vim 的 `o`（2026-10-08）。
         let indent = self.indent_of_line(self.cursor_line(), None);
@@ -465,7 +475,11 @@ impl Editor {
         if self.open_a_row(false) {
             return;
         }
-        let start = motion::line_start(self.current_buffer().rope(), self.sel.head());
+        // **Above the record** — see the note in [`Self::open_line_below`].
+        let start = match self.record_lines_here() {
+            Some((first, _)) => self.current_buffer().rope().line_to_char(first),
+            None => motion::line_start(self.current_buffer().rope(), self.sel.head()),
+        };
         let row = self.blank_row();
         // 同 `o`：縮進照這一行的來（2026-10-08）。
         let indent = self.indent_of_line(self.cursor_line(), None);
