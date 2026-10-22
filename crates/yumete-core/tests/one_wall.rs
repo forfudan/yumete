@@ -192,8 +192,10 @@ fn the_levels_leave_hjkl_to_the_layer() {
     // to have some table features like visual alignment, tab navigation.」 So
     // `l` there is a letter, separator and all, as it is in 源碼模式.
     //
-    // 全窗 is where a cell is a container: `l` walks the two characters of
-    // `ch` and stops at the wall, and `Enter` is what goes inside one.
+    // 全窗 is where a cell is a container: `Enter` goes inside one and `l`
+    // walks the two characters of `ch`. At the cell's edge it steps into the
+    // one next door — 2026-10-22 作者定,「往上對齊:h/l 也跨」, which is what
+    // the arrows in Insert have always done.
     let walk = |ed: &mut Editor| {
         let mut seen = vec![ed.cursor()];
         for _ in 0..3 {
@@ -220,7 +222,11 @@ fn the_levels_leave_hjkl_to_the_layer() {
     let mut ed = typed("ch\t錐\nbkd\t蜘\n");
     press(&mut ed, " tt");
     ed.on_key(Key::Enter);
-    assert_eq!(walk(&mut ed), vec![0, 1, 1, 1], "and one `Enter` down, on its characters");
+    assert_eq!(
+        walk(&mut ed),
+        vec![0, 1, 3, 5],
+        "and one `Enter` down, on its characters and across its edges"
+    );
 }
 
 /// A step the reader cannot see is not a step (#379).

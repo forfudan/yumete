@@ -127,22 +127,24 @@ impl Editor {
                 // break and the line under it could not be typed in. The
                 // cell's own two ends are what `start` and `end` are for.
                 Key::Left => {
-                    if self.sel.head() > start {
-                        self.move_horizontal(motion::prev_grapheme);
-                    } else if self.step_cell(false, false) {
-                        // Entered from the right, so the caret is at the far
-                        // end of what it walked into.
-                        if let Some((_, end)) = self.insert_bounds() {
-                            self.set_cursor(end);
+                    match self.sel.head() > start {
+                        true => self.move_horizontal(motion::prev_grapheme),
+                        // **The same step Normal's `h` takes at the edge**
+                        // (2026-10-22 作者定,「往上對齊」): one function, so
+                        // the two modes cannot drift apart again — it is also
+                        // the one that knows not to walk onto the header.
+                        false => {
+                            self.step_into_the_next_cell(false);
                         }
                     }
                     return;
                 }
                 Key::Right => {
-                    if self.sel.head() < end {
-                        self.move_horizontal(motion::next_grapheme);
-                    } else {
-                        self.step_cell(true, false);
+                    match self.sel.head() < end {
+                        true => self.move_horizontal(motion::next_grapheme),
+                        false => {
+                            self.step_into_the_next_cell(true);
+                        }
                     }
                     return;
                 }

@@ -1326,9 +1326,14 @@ fn hl_cross_a_break_the_writer_typed_and_stop_at_the_cells_walls() {
         "and over it, onto the line under it in the same cell"
     );
     assert_eq!(ed.cell_position(), Some((1, 1)), "still that one cell");
-    // The walls are still the walls: the far one is the cell's last character.
-    press(&mut ed, "lllllll");
+    // To the cell's last character — and the step after that is the next cell
+    // (2026-10-22 作者定,「往上對齊:h/l 也跨」).
+    press(&mut ed, "lllll");
     assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("d"));
+    press(&mut ed, "l");
+    assert_eq!(ed.cell_position(), Some((1, 2)), "into the cell next door");
+    press(&mut ed, "h");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("d"), "and back onto its last");
     // And back up over it, which is the step that has to agree with the one down.
     press(&mut ed, "hhhhhh");
     assert_eq!(ed.cursor(), brk, "the same column on the way back");
@@ -1556,33 +1561,57 @@ fn the_structural_keys_move_a_whole_record() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **到邊了說一句** — 設計 §04 的一條,10-22 量出來沒做:「中層裏 `l` 撞到格子的
-/// 右牆,狀態欄寫一行『這一格到頭了,`Tab` 去下一格』,別默默停住 —— 讀的人就是這
-/// 樣學會這個邊界的。」
+/// **`h`/`l` cross at the cell's two ends, and the table's own two ends say
+/// so** (2026-10-22 作者定:「往上對齊:h/l 也跨」).
+///
+/// The arrows in Insert have crossed since #376 and `j`/`k` cross at the
+/// cell's first and last row, so a direction that stopped only here was half
+/// a rule. 設計 §04's 「到邊了說一句」 is what is left where there is nowhere
+/// to step: the first cell of the table and the last.
 #[test]
-fn a_motion_that_hits_the_cells_wall_says_so() {
+fn hl_cross_at_the_cells_ends_and_the_tables_ends_say_so() {
     let dir = tmp().join(format!("yumete-cellwall-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("wall.csv");
-    std::fs::write(&csv, "name,note\nalpha,one\n").unwrap();
+    std::fs::write(&csv, "name,note\nalpha,one\nbravo,two\n").unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
 
     press(&mut ed, "ggl");
     ed.on_key(Key::Enter);
-    // Along the cell: a step that *ends* on the last character has moved, so
-    // it says nothing. Only the press that the wall stopped does.
     press(&mut ed, "ll");
-    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"));
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"), "the cell's last character");
     assert_eq!(ed.status(), "", "a step that moved says nothing: {}", ed.status());
+    // Off the end of the row: the first cell of the record below, first
+    // character — the same landing the arrow keys in Insert make.
     press(&mut ed, "l");
-    assert_eq!(ed.status(), say!("table.cell-ends-here"));
-    press(&mut ed, "hhh");
-    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("o"));
+    assert_eq!(ed.cell_position(), Some((2, 0)), "{}", ed.status());
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("b"));
+    // And back, onto the last character of the cell it came from.
     press(&mut ed, "h");
-    assert_eq!(ed.status(), say!("table.cell-starts-here"));
+    assert_eq!(ed.cell_position(), Some((1, 1)));
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"));
+    // 詞 keeps the cell as its world (設計 §01), so there is a way to stay in.
+    press(&mut ed, "www");
+    assert_eq!(ed.cell_position(), Some((1, 1)), "`w` does not leave: {}", ed.status());
+
+    // The table's own two ends have nowhere to step, and say so.
+    press(&mut ed, "gg");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "gh");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "h");
+    assert_eq!(ed.status(), say!("table.cell-starts-here"), "{}", ed.status());
+    // Back up to the cells first: inside one, `ge` is the cell's own far end.
+    // (`ge` is the last row under these keys; a bare `G` is helix's no-op.)
+    ed.on_key(Key::Esc);
+    press(&mut ed, "ge");
+    press(&mut ed, "gl");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "lll");
+    assert_eq!(ed.status(), say!("table.cell-ends-here"), "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -2644,12 +2673,10 @@ fn the_pane_reads_a_line_as_a_cell_and_a_number_as_a_row() {
         let (from, to) = ed.selection();
         ed.current_buffer().rope().slice(from..to).to_string()
     };
-    // 到第二格，再下到中層：`l` 出不了格子了（2026-10-21），過去是 `Tab`。
+    // 到第二格，再下到中層。**走到格尾的是 `gl`，不是 `l`**：`l` 在兩頭跨得
+    // 出去（2026-10-22 作者定），所以它不再是「走到這一格的末字」那一步。
     ed.on_key(Key::Tab);
     ed.on_key(Key::Enter);
-    for _ in 0..14 {
-        ed.on_key(Key::Char('l'));
-    }
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "在第二格裏");
     // `g h` / `g l` / `g s` 是這一格的兩頭，不是這一行的。
     press(&mut ed, "gl");
@@ -2798,15 +2825,16 @@ fn the_pane_has_no_wall_to_stand_on() {
     press(&mut ed, " tt");
     assert!(ed.grid_has_the_pane(), "{}", ed.status());
     to_the_last_letter(&mut ed);
-    // **全窗 裏那一下哪兒也不去**（2026-10-21）。牆在 `t f` 是一個字、占一欄，
-    // 在全窗根本不畫——而這一條從前問的是「不畫的那一格，`l` 跨不跨得過去」。
-    // 分層之後問法自己沒了：一格之內就是全部，`l` 停在末字上，過去是 `Tab` 或
-    // 者上一層。兩種模式於是各自成立，而不是同一條規矩的兩種寫法。
+    // **全窗 裏沒有牆可站，也沒有牆可停**（2026-10-21 定前一半，2026-10-22 定
+    // 後一半）。牆在 `t b` 是一個字、占一欄，在全窗根本不畫；而一格的末字再按
+    // 一下，走的是隔壁那一格——與插入態的 `→` 逐字相同，作者的話是「往上對齊:
+    // h/l 也跨」。`Tab` 照舊，只是不再是唯一的路。
     ed.on_key(Key::Char('l'));
-    assert_eq!(text(&ed), "e", "`t t`：一格之內就是全部，末字就是末字");
-    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0), "沒有出格");
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "末字再一下是隔壁那一格");
+    ed.on_key(Key::Char('h'));
+    assert_eq!(text(&ed), "e", "回來落在末字上");
     ed.on_key(Key::Tab);
-    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "過去是 `Tab`");
+    assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "`Tab` 照舊");
 }
 
 /// **整行拿得走，也貼得回來**（2026-10-17 作者定）。
@@ -7430,21 +7458,22 @@ fn a_grid_opens_on_cells_and_one_key_goes_inside_one() {
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('目'));
 
-    // **And `l` does not leave the cell at all** (2026-10-21). 「相」 is the
-    // whole of the first cell, so pressing it there moves nothing — the cell
-    // is the document at this layer, and crossing is `Tab`'s job or a layer
-    // up.
+    // **And at the cell's edge `l` steps into the one next door** (2026-10-22
+    // 作者定:「往上對齊:h/l 也跨」). 「相」 is the whole of the first cell, so
+    // the first press is already at its edge.
     //
-    // It used to step across the comma into the next cell, on the grounds
-    // that 全窗 draws no separator to stand on (2026-10-17). True, and the
-    // wall answers it better: there is nothing to stand on because there is
-    // nowhere to go.
+    // 2026-10-21 had it stop there — the cell as the document, crossing by
+    // `Tab` — and the arrows in Insert crossed all along (#376). A direction
+    // means the same thing in either mode, which is the rule 「typing does not
+    // change what a direction means」 that `j`/`k` and the arrows already keep.
     ed.goto_line(2);
     press(&mut ed, "l");
-    assert_eq!(ed.char_at_cursor(), Some('相'), "`l` stops at the cell's wall");
-    assert_eq!(ed.cell_position(), Some((1, 0)), "and stays in the cell");
+    assert_eq!(ed.char_at_cursor(), Some('⿰'), "`l` crosses at the cell's edge");
+    assert_eq!(ed.cell_position(), Some((1, 1)), "into the next cell");
+    press(&mut ed, "h");
+    assert_eq!(ed.char_at_cursor(), Some('相'), "and back onto its last character");
     ed.on_key(Key::Tab);
-    assert_eq!(ed.char_at_cursor(), Some('⿰'), "`Tab` is how you cross");
+    assert_eq!(ed.char_at_cursor(), Some('⿰'), "`Tab` crosses too");
 
     // `Esc` back up, and the cursor snaps to cells again.
     ed.on_key(Key::Esc);

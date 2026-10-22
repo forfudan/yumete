@@ -1317,6 +1317,12 @@ impl Editor {
             .cell_walls()
             .is_some_and(|(from, to)| !(from..=to).contains(&asked));
         if at == here && walled_in {
+            // **而兩頭是跨得出去的**（2026-10-22 作者定）：一步到了這一格的邊
+            // 上就踏進隔壁那一格，與插入態的 ←／→ 逐字相同。走不了纔說那一句，
+            // 那時是整張表的頭或尾。
+            if self.step_into_the_next_cell(forward) {
+                return;
+            }
             self.status = match forward {
                 true => say!("table.cell-ends-here"),
                 false => say!("table.cell-starts-here"),
