@@ -6751,8 +6751,20 @@ impl Editor {
             // lines on its own is the wrong number of cells — so the table
             // turned away the record it had itself just given up, and `x d`
             // then `P` answered 「',' 是格與格的分隔」 about a whole record.
+            //
+            // **At most this wide, not exactly** (2026-10-22 作者定:「剪什麼就
+            // 放回什麼」). A file may hold a record short of the schema's
+            // columns — the writer put it there — and the cut side never
+            // asked: `x d` takes a ragged record away like any other. Asking
+            // here made the pair one-way, and `P` answered 「',' 是格與格的分
+            // 隔」 about the record this very table had just given up. Found
+            // by `scripts/table_keys.py` 掃形狀 over the 欄數不齊 shape.
+            //
+            // Wider than the table is still refused: that is not a record
+            // this grid gave up, and taking it in would push every column
+            // right of the last one off the schema.
             Separator::Delimiter(d) => records_in(text, d)
-                .is_some_and(|rows| rows.iter().all(|row| crate::table::cells(row, d).len() == wide)),
+                .is_some_and(|rows| rows.iter().all(|row| crate::table::cells(row, d).len() <= wide)),
         }
     }
 

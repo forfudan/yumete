@@ -1206,6 +1206,48 @@ fn insert_and_escape_leave_an_escaped_quote_exactly_as_it_was() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A record short of the schema's columns goes back where it was cut from**
+/// (2026-10-22 作者定: 「剪什麼就放回什麼」).
+///
+/// `x d` takes a ragged record away like any other — the cut side never asks
+/// how many cells it had. The put side did (`put_takes_whole_rows` wanted
+/// *exactly* the table's width), so the pair was one-way: `P` fell through to
+/// the ordinary cell guard and answered 「',' 是格與格的分隔」 about the record
+/// this very table had just given up, and the row was gone.
+///
+/// Wider than the table is still refused — that is not a record this grid
+/// gave up. Found by `scripts/table_keys.py` over the 欄數不齊 shape.
+#[test]
+fn a_record_short_of_its_columns_is_put_back_where_it_was_cut() {
+    let dir = tmp().join(format!("yumete-ragged-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("g.csv");
+    let before = "n,v,t\nA,one,X\nB,short\nC,three,Z\n";
+    std::fs::write(&csv, before).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "ggjxd");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "n,v,t\nA,one,X\nC,three,Z\n",
+        "the ragged record is cut like any other"
+    );
+    press(&mut ed, "P");
+    assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+
+    // …and a record **wider** than the table is still turned away: it is not
+    // one this grid gave up, and every column past the last has nowhere to go.
+    ed.set_register_for_test("D,four,W,extra\n");
+    let now = ed.current_buffer().text();
+    press(&mut ed, "P");
+    assert_eq!(ed.current_buffer().text(), now, "nothing moved: {}", ed.status());
+    assert!(!ed.status().is_empty(), "and it said why");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`j` walks the cell's own rows before it leaves the cell** (2026-10-22
 /// 作者定: 「we agree that hjkl will be kept within cell in the nor and ins
 /// mode and I can still use jk to go across cells vertically, but I cannot
