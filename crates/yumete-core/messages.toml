@@ -11705,6 +11705,13 @@ zhs = "schema：{0}"
 en = "schema: {0}"
 
 [[message]]
+# 排序：有一個引號從頭到尾不成對，這幾行不是這張表的記錄
+key = "table.sort-quote-never-closes"
+zht = "{0} 有一個引號沒有收尾，排不了序——`:table-check` 指得出是哪一行"
+zhs = "{0} 有一个引号没有收尾，排不了序——`:table-check` 指得出是哪一行"
+en = "{0} has a quote that never closes, so there is no sorting it — `:table-check` points at the line"
+
+[[message]]
 # 光按 ts/tS，没説照哪一欄
 key = "table.sort-wants-a-column"
 zht = "排序要指明欄：`␣t1s` 第一欄、`␣t0s` 你站的這一欄、`␣t1,5,9s` 好幾欄"

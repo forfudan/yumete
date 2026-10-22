@@ -2868,7 +2868,7 @@ impl Editor {
             .any(|row| crate::table::field_runs_on(&row.join("\n"), delimiter))
         {
             let name = self.current_buffer().display_name();
-            self.status = say!("table.field-runs-on", name);
+            self.status = say!("table.sort-quote-never-closes", name);
             return;
         }
         // **Keyed once, not once per comparison** — a record's key is read off
