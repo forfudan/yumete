@@ -19619,6 +19619,50 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// **A line break the writer typed inside a cell is a place to walk to**
+    /// (2026-10-22 reported: 「l cannot go beyond the LF symbol (hard wrap) in
+    /// the cell in NOR mode」).
+    ///
+    /// Read off the page and not off the editor, because two answers have to
+    /// agree for the key to be worth pressing: the caret's file position, and
+    /// the glyph the page draws it on. A quoted field is the only kind that
+    /// can hold a break at all, and the quotes are off the page.
+    #[test]
+    fn the_caret_walks_a_cells_own_lines_and_is_drawn_on_the_character_it_is_on() {
+        let (dir, csv) = a_table_file("break");
+        std::fs::write(&csv, "char,ids_y,note\n一,\"頭一行\n第二行\",x\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        editor.execute("2").unwrap();
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Enter);
+
+        let on = |e: &Editor, c: &Config| {
+            let (buffer, at) = render_caret(e, c, 60, 10);
+            let at = at.expect("a caret in the cell");
+            (buffer[(at.x, at.y)].symbol().to_string(), at)
+        };
+        let (glyph, first) = on(&editor, &config);
+        assert_eq!(glyph, "頭", "the caret is drawn on the cell's first character");
+        for want in ["一", "行"] {
+            editor.on_key(Key::Char('l'));
+            assert_eq!(on(&editor, &config).0, want);
+        }
+        // Off the end of the written line, onto the one the grid draws under
+        // it — the same cell, so the same column.
+        editor.on_key(Key::Char('l'));
+        let (glyph, at) = on(&editor, &config);
+        assert_eq!(glyph, "第", "`l` crosses the break the writer typed");
+        assert_eq!((at.x, at.y), (first.x, first.y + 1));
+        // And back up over it.
+        editor.on_key(Key::Char('h'));
+        assert_eq!(on(&editor, &config).0, "行");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn a_grid_lines_its_columns_up_and_freezes_the_header() {
         let (dir, csv) = a_table_file("draw");

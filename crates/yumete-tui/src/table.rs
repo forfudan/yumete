@@ -144,10 +144,19 @@ fn widths(
                 false => ceiling,
             };
             // A cell the writer broke into lines is as wide as its widest
-            // line, not as wide as all of them run together.
-            let wide = cell
-                .split('\n')
-                .map(yumete_cjk::str_width)
+            // line, not as wide as all of them run together — **and every line
+            // but the last carries the `␊` that says so** (2026-10-22). Without
+            // that column the cell was charged for 「頭一行」 and drawn as
+            // 「頭一行␊」, so the page cut the writer's own last character and
+            // marked it `>` as if there were more of it off to the right.
+            let tail = yumete_cjk::char_width(yumete_cjk::LINE_FEED_PICTURE).max(1);
+            let lines: Vec<&str> = cell.split('\n').collect();
+            let wide = lines
+                .iter()
+                .enumerate()
+                .map(|(k, line)| {
+                    yumete_cjk::str_width(line) + tail * usize::from(k + 1 < lines.len())
+                })
                 .max()
                 .unwrap_or(0);
             *want = (*want).max(wide.min(ceiling));
@@ -327,6 +336,13 @@ pub fn char_at(
             // because that is what was drawn, and from the line of the cell
             // the pointer is on rather than from its first.
             let want = mouse.column.saturating_sub(x) as usize;
+            // **Counted inside the value** (2026-10-22). `held` holds the
+            // lines `cell_shown` drew, and a quoted field's two `"` are off
+            // the page — so a click counted from the source start answered one
+            // character to the left of the one it was pointed at, and
+            // `the_caret_reads_back` says so for every two-line cell.
+            let (a, b) = editor.value_span(start + span.0, start + span.1);
+            let span = &(a - start, b - start);
             let held = parts.get(i).cloned().unwrap_or_default();
             // **…plus what the cell scrolled off its own front** ([`slid_by`]).
             let want = want + slid_by(editor, line, i, on, &held, w as usize);
@@ -1416,7 +1432,15 @@ pub fn draw_detail(
 /// padding after the last cell's `1` instead of on the `1`. In Insert it is
 /// the place appending happens and must be drawn.
 fn caret_step_in(editor: &Editor, line: usize, cell: usize, parts: &[String]) -> (usize, usize) {
-    let (from, to) = editor.cell_span(line, cell).unwrap_or((usize::MAX, usize::MAX));
+    // **The value's span, because `parts` are the value's lines** (2026-10-22).
+    // `cell_shown` takes a quoted field's two `"` off the page, so counting the
+    // caret from the source start put it one character further along than it
+    // stands — and a field with a line break in it is always a quoted one, so
+    // every cell with two lines in it drew its caret in the wrong place.
+    let (from, to) = editor
+        .cell_span(line, cell)
+        .map(|(a, b)| editor.value_span(a, b))
+        .unwrap_or((usize::MAX, usize::MAX));
     let at = editor.cursor();
     let appending = editor.mode() == yumete_core::input::Mode::Insert;
     let content = match appending || to == from {

@@ -1279,6 +1279,140 @@ fn the_caret_comes_to_rest_inside_the_cell_it_typed_in() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`h` and `l` cross a line break of the cell's own** (2026-10-22 reported:
+/// 「l cannot go beyond the LF symbol (hard wrap) in the cell in NOR mode」).
+///
+/// A record over several lines is several *file* lines, and every clamp that
+/// keeps `h`/`l` on one line was keeping them on one of the cell's own written
+/// lines — while the grid draws those lines one under the other inside the one
+/// cell. So the caret reached the character before the break and stopped, and
+/// the writing under it could only be reached with `j`.
+#[test]
+fn hl_cross_a_break_the_writer_typed_and_stop_at_the_cells_walls() {
+    let dir = tmp().join(format!("yumete-cellbreak-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("break.csv");
+    std::fs::write(&csv, "name,note,n\nalpha,\"first line\nsecond\",1\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Enter);
+    // `cell_text` is the source, quotes and all; the caret is in the value.
+    assert_eq!(ed.cell_text(1, 1), "\"first line\nsecond\"");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("f"));
+    // Nine steps along the written line, and the tenth over the break the grid
+    // draws as `␊`.
+    press(&mut ed, "lllllllll");
+    assert_eq!(
+        ed.grapheme_at_cursor().as_deref(),
+        Some("e"),
+        "the last character of the line the writer typed"
+    );
+    press(&mut ed, "l");
+    assert_eq!(
+        ed.grapheme_at_cursor().as_deref(),
+        Some("s"),
+        "and over the break, onto the line under it in the same cell"
+    );
+    assert_eq!(ed.cell_position(), Some((1, 1)), "still that one cell");
+    // The walls are still the walls: the far one is the cell's last character.
+    press(&mut ed, "lllllll");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("d"));
+    // And back up over it, which is the step that has to agree with the one down.
+    press(&mut ed, "hhhhhh");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The arrows in Insert reach both of a cell's written lines** (2026-10-22).
+///
+/// The cell's own two ends are what bound them ([`Editor::insert_bounds`]), and
+/// they stepped by [`crate::motion::right`], which stops at the end of a *file*
+/// line — so the place before the break, where appending to that written line
+/// happens, could not be reached at all. Insert never moves the layer, so the
+/// door the typing came through must not change the answer.
+#[test]
+fn the_arrows_in_insert_walk_a_cells_own_lines_from_either_door() {
+    let dir = tmp().join(format!("yumete-cellbreakins-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let text = "name,note,n\nalpha,\"first line\nsecond\",1\n";
+    let open = |name: &str| {
+        let csv = dir.join(name);
+        std::fs::write(&csv, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed
+    };
+
+    // Through `Enter`, inside the cell.
+    let mut ed = open("ins-inside.csv");
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Char('i'));
+    for _ in 0..10 {
+        ed.on_key(Key::Right);
+    }
+    ed.on_key(Key::Char('X'));
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("first lineX\nsecond"),
+        "the end of the written line is a place to type: {:?}",
+        ed.current_buffer().text()
+    );
+
+    // And from the top layer, where `i` opens Insert without crossing down.
+    let mut ed = open("ins-whole.csv");
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Char('i'));
+    for _ in 0..11 {
+        ed.on_key(Key::Right);
+    }
+    ed.on_key(Key::Char('X'));
+    ed.on_key(Key::Esc);
+    assert!(
+        ed.current_buffer().text().contains("first line\nXsecond"),
+        "one more arrow is the line below: {:?}",
+        ed.current_buffer().text()
+    );
+    assert_eq!(ed.row_cells(1).len(), 3, "the record still has three fields");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A schema beside the data is told where the records start** (2026-10-22).
+///
+/// `table_on_open` is the door the manual calls the ordinary one — 「放一份
+/// schema 在資料旁邊，它就自動是表格」 — and it built its view here rather
+/// than through `enter_table`, so it was the one that never scanned. A field
+/// with a line break in it then drew as two ragged rows with the quotes on the
+/// page, in the very file the schema was written for.
+#[test]
+fn a_schema_beside_the_data_joins_a_record_that_runs_on() {
+    let dir = tmp().join(format!("yumete-schemarecord-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::write(
+        dir.join(".yumete").join("tables").join("t.toml"),
+        "[table]\nfile = ['rows.csv']\n\
+         [[table.column]]\nname = 'name'\n\
+         [[table.column]]\nname = 'note'\n\
+         [[table.column]]\nname = 'n'\n",
+    )
+    .unwrap();
+    let csv = dir.join("rows.csv");
+    std::fs::write(&csv, "name,note,n\nalpha,\"first line\nsecond\",1\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+
+    assert_eq!(ed.row_cells(1).len(), 3, "one record, three fields: {}", ed.status());
+    assert_eq!(ed.cell_text(1, 1), "\"first line\nsecond\"");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A file that ends in a newline has no row after its last one** (#384).
 ///
 /// `ropey` reports a trailing empty line for every file that ends in a newline

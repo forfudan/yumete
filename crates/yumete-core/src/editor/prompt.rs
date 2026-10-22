@@ -119,9 +119,16 @@ impl Editor {
                 // reach the middle of a 拆分 sequence; at its edge they step
                 // into the cell next door — off the end of a row, into the
                 // first cell of the next.
+                //
+                // **By grapheme and not by [`motion::right`]** (2026-10-22
+                // 報的). That one stops at the end of a *file* line, which was
+                // the same thing as the end of the cell until a cell could
+                // hold a line break of its own: the arrow then stopped at the
+                // break and the line under it could not be typed in. The
+                // cell's own two ends are what `start` and `end` are for.
                 Key::Left => {
                     if self.sel.head() > start {
-                        self.move_horizontal(motion::left);
+                        self.move_horizontal(motion::prev_grapheme);
                     } else if self.step_cell(false, false) {
                         // Entered from the right, so the caret is at the far
                         // end of what it walked into.
@@ -133,7 +140,7 @@ impl Editor {
                 }
                 Key::Right => {
                     if self.sel.head() < end {
-                        self.move_horizontal(motion::right);
+                        self.move_horizontal(motion::next_grapheme);
                     } else {
                         self.step_cell(true, false);
                     }
