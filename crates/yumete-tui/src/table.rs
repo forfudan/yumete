@@ -23,7 +23,6 @@ use yumete_config::Config;
 use yumete_core::editor::Editor;
 use yumete_core::say;
 use yumete_core::sidebar::Side;
-use yumete_core::table::layer::Edge;
 use yumete_core::table::Rules;
 
 use crate::{gutter_width, put_text};
@@ -501,7 +500,28 @@ pub fn draw(
         Some(_) => crate::theme::Palette::of(config).faded(),
     };
     let gutter_style = ink.ground(yumete_config::rung::CHROME);
+    // 金 — the one warm colour on the grid, and it marks **which column and
+    // which row you are in**: the column's number, the column's name, the
+    // row's number.
     let head_style = gutter_style.fg(ink.gold()).add_modifier(Modifier::BOLD);
+    // A column's name while it is not the one you are in. It used to be 金 as
+    // well, with the current one picked out by REVERSED (2026-10-22 作者報的:
+    // 「the highlight on the column name is more obvious than the highlight on
+    // the cell itself. So it give me a feeling that I am in the column name
+    // cell instead of a content cell」).
+    //
+    // Two things were wrong with that. Reverse video is the loudest mark a
+    // terminal has, and it was spent on **furniture** while the cell the
+    // caret is in is marked by two rules in a seam; and the row of numbers
+    // one line above already says the same thing another way — it changes
+    // colour. Now both rows say it the one way: quiet, and 金 for the one you
+    // are in. 金 on seventeen names at once is not worth looking at; on one
+    // it is.
+    //
+    // Not `White`: the ladder's own ink, so the light mood gets black here.
+    // Still a rung brighter than the ruler above it, which keeps the three
+    // apart — ruler, name, 金.
+    let name_style = gutter_style.fg(ink.text()).add_modifier(Modifier::BOLD);
     // A ground, and only a ground: the ink under it is left alone, so a torn
     // cell is still torn while you stand on it to mend it. It used to be
     // `fg(White)`, which is brighter than the ink and flattened every colour
@@ -671,10 +691,9 @@ pub fn draw(
             if x >= right {
                 break;
             }
-            let style = if i == cursor_cell {
-                head_style.add_modifier(Modifier::REVERSED)
-            } else {
-                head_style
+            let style = match i == cursor_cell {
+                true => head_style,
+                false => name_style,
             };
             let named = view.schema.columns.get(i).map(|c| c.heading());
             let text = headings.get(i).map(String::as_str).or(named).unwrap_or("");
@@ -1130,14 +1149,6 @@ pub fn draw(
                 // on the grid that is not a quantity of ink. A spreadsheet's
                 // active cell — and it costs the selection nothing.
                 if here {
-                    // **How thick is the layer's to say** (2026-10-21): half a
-                    // cell each side while the whole cell is the unit, an
-                    // eighth while the caret is inside it. The two are what
-                    // the terminal has — the left-hand block comes at every
-                    // eighth, the right hand has only the half and the eighth
-                    // — so there is nothing in between to choose.
-                    //
-                    let edge = view.layer.edge(editor.mode());
                     // **A 金 ground, and the two rules stand on it** (2026-10-21
                     // 作者定: 「I think it might be good to use golden
                     // background for the CEL highlighted cell to highlight
@@ -1147,8 +1158,12 @@ pub fn draw(
                     // three things side by side instead of one cell.
                     //
                     // Only while the whole cell is the unit: the moment you
-                    // are typing in it the edges thin and this goes with
-                    // them, because then the cell is not what is selected.
+                    // are typing in it this goes, because then the cell is
+                    // not what is selected. **It is the whole of the
+                    // difference now** — the edges are the same two marks in
+                    // either layer (2026-10-22), so the ground is what says
+                    // 「the cell is the unit, and there is no caret because
+                    // there is nothing inside it to stand on」.
                     //
                     // **The faint wash, not the wash.** `==標記==` already
                     // sits on `wash()` (1.9:1 off the page); a cell on the
@@ -1159,7 +1174,7 @@ pub fn draw(
                     // **Laid down before the rules are**, so that `wall`'s
                     // `fg` patch keeps it: a rule drawn first and tinted
                     // after would have its own glyph painted over.
-                    if edge == Edge::Line {
+                    if view.layer.the_cell_is_the_unit(editor.mode()) {
                         let from = x.saturating_sub(1);
                         let upto = (x + w + 1).min(right);
                         for cx in from..upto {
@@ -1168,33 +1183,28 @@ pub fn draw(
                             }
                         }
                     }
-                    // Warning: **the active cell's rule is drawn over whatever the
-                    // seam held**. #407 only ever *recoloured* a seam that
-                    // already had a rule in it, and that was right while the
-                    // mark was an eighth — the grid went on reading exactly as
-                    // before. A solid rule is a different promise: it says
-                    // 「the whole cell is the unit, and there is no caret
-                    // because there is nothing inside it to stand on」, and a
-                    // `┆` in 金 does not make that promise however it is
-                    // coloured.
-                    //
-                    // A hair keeps the old rule, and for the old reason:
-                    // inside a cell this is an ordinary page drawn as a grid,
-                    // so the grid should look like the one it was.
-                    let own_glyph = edge == Edge::Line || stroke.is_none();
+                    // **The seam keeps its own glyph and turns 金** — the #407
+                    // rule, and now the only rule (2026-10-22 作者定:
+                    // 「the CEL mode, the highlighted border can use the same
+                    // style as NOR mode (dashed and golden). It does not need
+                    // to be normal line.」). Inside a cell this is an ordinary
+                    // page drawn as a grid, and at the top layer it is the
+                    // same grid — so the grid should look like the one it was
+                    // either way. The two blocks below stand in only where
+                    // the grid draws no rule of its own.
                     let mut wall = |bx: u16, glyph: &str| {
                         if let Some(cell) = buf.cell_mut((bx, y)) {
-                            if own_glyph {
+                            if stroke.is_none() {
                                 cell.set_symbol(glyph);
                             }
                             cell.set_style(cell.style().fg(ink.gold()));
                         }
                     };
                     if x > 0 {
-                        wall(x - 1, edge.before());
+                        wall(x - 1, yumete_core::table::layer::EDGE_BEFORE);
                     }
                     if x + w < right {
-                        wall(x + w, edge.after());
+                        wall(x + w, yumete_core::table::layer::EDGE_AFTER);
                     }
                 }
                 // A hidden column takes no gap either — a column of

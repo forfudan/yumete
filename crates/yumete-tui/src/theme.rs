@@ -791,8 +791,8 @@ impl Palette {
     /// 金 — 這不是正文.
     ///
     /// The page's ladder is a run of greys, on purpose, so the one warm colour
-    /// on the screen is worth looking at: a heading, a table's header row, the
-    /// name beside a value. It is the only thing here that is not a quantity
+    /// on the screen is worth looking at: a heading, the column and the row a
+    /// grid's caret is in, the name beside a value. It is the only thing here that is not a quantity
     /// of ink and not 朱.
     pub fn gold(self) -> Color {
         self.accent(self.gold)

@@ -109,43 +109,29 @@ pub enum Whole {
 /// costs the cell no width (#407). **Only the two vertical edges exist**: a
 /// row has nothing to spend on a horizontal rule but its own characters.
 ///
-/// **Both of them are one stroke wide** (2026-10-21 作者定:「Would you also
-/// use thin border instead of a thick border? Not dashed, but the same width
-/// as dashed line.」). It was a half-block for a day, which was the only way
-/// to be louder than a recoloured rule *without a ground*; now that the cell
-/// carries a 金 ground the loudness is the ground's job, and the edge can go
-/// back to the weight the rest of the grid is drawn in. A box rule also sits
-/// in the middle of its cell, so the two sides are the same glyph — the
-/// half-blocks had to be mirrored (`▐` and `▌`) because Unicode gives the
-/// left hand every eighth and the right hand only two.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Edge {
-    /// An eighth of a cell, hugging the cell from the far side of the gap —
-    /// and where the grid draws its own rule, that rule merely turns 金.
-    /// The caret is inside this cell.
-    Hair,
-    /// A rule of its own, drawn over whatever the seam held: the whole cell
-    /// is the unit.
-    Line,
-}
-
-impl Edge {
-    /// The glyph for the seam **before** the cell.
-    pub fn before(self) -> &'static str {
-        match self {
-            Edge::Hair => "\u{2595}", // ▕ right one eighth block
-            Edge::Line => "\u{2502}", // │ box drawings light vertical
-        }
-    }
-
-    /// The glyph for the seam **after** the cell.
-    pub fn after(self) -> &'static str {
-        match self {
-            Edge::Hair => "\u{258f}", // ▏ left one eighth block
-            Edge::Line => "\u{2502}", // │ box drawings light vertical
-        }
-    }
-}
+/// **One mark, in all three layers** (2026-10-22 作者定: 「the CEL mode, the
+/// highlighted border can use the same style as NOR mode (dashed and
+/// golden). It does not need to be normal line. This makes the border style
+/// consistent in all three layers.」). Where the grid draws its own rule the
+/// seam keeps that rule and merely turns 金; these two glyphs are what stands
+/// there when it draws none (`:table-rules off`, `colour`).
+///
+/// It went half-block → one stroke → the grid's own rule in two days, and
+/// each step had the same reason: the mark started out as the only thing
+/// saying 「the whole cell is the unit」 and had to be loud enough to say it
+/// alone. The 金 ground says it now, so the edge is free to be drawn in the
+/// weight the rest of the grid is — and a cell's border changing shape as the
+/// caret goes in and out of it was one answer too many to 「does this grid
+/// draw rules」.
+///
+/// The two are mirrored because they are ink pushed to one side of a cell,
+/// and the side that faces the text is a different side on the left and on
+/// the right.
+///
+/// The seam **before** the cell: ▕ right one eighth block.
+pub const EDGE_BEFORE: &str = "\u{2595}";
+/// The seam **after** it: ▏ left one eighth block.
+pub const EDGE_AFTER: &str = "\u{258f}";
 
 impl Layer {
     /// **The status line's word.**
@@ -194,16 +180,6 @@ impl Layer {
     /// settings page and in a panel field.
     pub fn caret(self, mode: Mode) -> bool {
         !self.the_cell_is_the_unit(mode)
-    }
-
-    /// How the active cell is bracketed — the same question again, and it
-    /// must give the same answer: half a cell while the cell is the unit, an
-    /// eighth the moment it is not.
-    pub fn edge(self, mode: Mode) -> Edge {
-        match self.the_cell_is_the_unit(mode) {
-            true => Edge::Line,
-            false => Edge::Hair,
-        }
     }
 
     /// **Whether the cell is the whole document at this layer.**
@@ -366,7 +342,7 @@ mod tests {
         assert!(Layer::default().selects_the_cell());
         assert!(!Layer::default().walled());
         assert!(!Layer::default().caret(Mode::Normal));
-        assert_eq!(Layer::default().edge(Mode::Normal), Edge::Line);
+        assert!(Layer::default().the_cell_is_the_unit(Mode::Normal));
     }
 
     /// **Insert never moves the layer** — the mechanism behind 「`Esc` goes
@@ -518,11 +494,17 @@ mod tests {
     }
 
     /// **One moment, one answer, and the two marks never disagree.** Typing
-    /// has a caret wherever it happens and a thin edge wherever it happens;
-    /// a page that drew a selected cell round a caret would be saying two
-    /// things at once (2026-10-21 作者報的).
+    /// has a caret wherever it happens and no 金 ground wherever it happens;
+    /// a page that washed a cell round a caret would be saying two things at
+    /// once (2026-10-21 作者報的).
+    ///
+    /// The second mark used to be the edge, and is not any more
+    /// (2026-10-22): the two seams are 金 in either layer, so the ground is
+    /// the whole of the difference. A ground is the terminal's to draw, so
+    /// that it follows this answer is asserted over there, in
+    /// `yumete_tui::tests::the_top_layer_washes_its_cell_and_draws_no_caret`.
     #[test]
-    fn the_caret_and_the_edge_answer_the_same_question() {
+    fn the_caret_is_drawn_wherever_the_cell_is_not_the_unit() {
         let every = || {
             BOTH.into_iter()
                 .flat_map(|l| [Mode::Normal, Mode::Insert, Mode::Command].map(move |m| (l, m)))
@@ -530,8 +512,8 @@ mod tests {
         for (layer, mode) in every() {
             assert_eq!(
                 layer.caret(mode),
-                layer.edge(mode) == Edge::Hair,
-                "{layer:?} in {mode:?} draws a caret and a thick edge at once"
+                !layer.the_cell_is_the_unit(mode),
+                "{layer:?} in {mode:?} washes the cell and draws a caret in it at once"
             );
         }
         let whole: Vec<(Layer, Mode)> =
@@ -539,24 +521,16 @@ mod tests {
         assert_eq!(whole, vec![(Layer::Whole, Mode::Normal)], "when is a cell the unit");
     }
 
-    /// **A hair hugs the cell; a rule stands in the middle of its own cell.**
+    /// **The two marks hug the cell, one column each.**
     ///
-    /// The eighth-blocks have to be mirrored because they are ink pushed to
-    /// one side of a cell, and the side that faces the text is a different
-    /// side on the left and on the right. A box rule is already centred, so
-    /// one glyph does both.
+    /// They are mirrored because they are ink pushed to one side of a cell,
+    /// and the side that faces the text is a different side on the left and
+    /// on the right. One cell each, or the grid's columns would shift.
     #[test]
     fn the_edge_is_one_column_wide_on_either_side() {
-        assert_eq!(Layer::Inside.edge(Mode::Normal), Edge::Hair);
-        assert_eq!(Edge::Hair.before(), "\u{2595}");
-        assert_eq!(Edge::Hair.after(), "\u{258f}");
-        assert_ne!(Edge::Hair.before(), Edge::Hair.after(), "a hair hugs the cell");
-        assert_eq!(Edge::Line.before(), "\u{2502}");
-        assert_eq!(Edge::Line.after(), "\u{2502}", "a rule is centred already");
-        for edge in [Edge::Hair, Edge::Line] {
-            // One cell each, or the grid's columns would shift.
-            assert_eq!(yumete_cjk::str_width(edge.before()), 1);
-            assert_eq!(yumete_cjk::str_width(edge.after()), 1);
+        assert_ne!(EDGE_BEFORE, EDGE_AFTER, "each hugs the cell from its own side");
+        for glyph in [EDGE_BEFORE, EDGE_AFTER] {
+            assert_eq!(yumete_cjk::str_width(glyph), 1);
         }
     }
 }

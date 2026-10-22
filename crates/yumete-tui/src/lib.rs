@@ -19841,14 +19841,11 @@ fn squeezed(text: &str) -> String {
             .collect();
         assert_eq!(bracket.len(), 2, "one on each side: {bracket:?}");
         let (left, right) = (bracket[0], bracket[1]);
-        // This grid draws its seams (`:table-rules line`), and at the top
-        // layer the thick edge is drawn **over** the rule that was there
-        // (2026-10-21 作者報的: 「It should be thick golden left and right
-        // border but you still make it dashed」). Recolouring a `┆` was the
-        // #407 rule, and it is kept for the thin edge only — see
-        // `the_edges_round_the_cell_say_which_layer_the_keys_are_in`.
-        assert_eq!(at(&buffer, left, 2), "\u{2502}", "the seam before it, in 金");
-        assert_eq!(at(&buffer, right, 2), "\u{2502}", "and the one after");
+        // This grid draws its seams, so the mark is that same `┆` turned 金
+        // — in either layer (2026-10-22), see
+        // `the_edges_round_the_cell_are_the_same_mark_in_either_layer`.
+        assert_eq!(at(&buffer, left, 2), "\u{2506}", "the seam before it, in 金");
+        assert_eq!(at(&buffer, right, 2), "\u{2506}", "and the one after");
         assert_eq!(at(&buffer, left + 1, 2), "\u{2ff0}", "it is the 拆分 cell");
         // The brackets stand at the *column's* edges, not the text's — a cell
         // you are inside, not three highlighted characters. Counted, not
@@ -19875,17 +19872,28 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **At the top layer a standing caret lights nothing** (2026-10-21 作者定:
-    /// 「Can we first do not use background colour but only the border? If it
-    /// is not very good, let's then consider adding background?」).
+    /// **At the top layer the cell wears a faint 金 ground and no caret**
+    /// (2026-10-21 作者定: 「I think it might be good to use golden background
+    /// for the CEL highlighted cell to highlight it.」 and 「Can you make this
+    /// background also covering the border?」).
     ///
-    /// The whole cell is the unit up there and its mark is the two 金 edges.
     /// A caret in this editor *covers* the character it stands on, so standing
-    /// still is a selection one grapheme wide — and the grid painted it, which
-    /// put a ground in the middle of a cell that says the wrong thing twice:
-    /// it is a ground at all, and it is not the cell's width.
+    /// still is a selection one grapheme wide — and up there the unit is the
+    /// cell, not a character in it. So the caret goes and the whole cell is
+    /// washed instead, its two seams included: a tint that stopped short of
+    /// its own edges reads as three things side by side rather than one cell.
+    ///
+    /// **This is the whole of what separates the two layers now**
+    /// (2026-10-22): the edges are the same two 金 marks in either one, so if
+    /// the ground stopped answering, nothing on the page would say which
+    /// layer the keys are in. The other half of the pair is asserted in
+    /// `yumete_core`'s `the_caret_is_drawn_wherever_the_cell_is_not_the_unit`.
+    ///
+    /// Not `selection()`, which stays free for a selection *inside* the cell
+    /// (#407, 2026-09-12): a cell on the selection's own ground would leave
+    /// the word you just took no colour to be drawn in.
     #[test]
-    fn the_top_layer_marks_its_cell_with_edges_and_no_ground() {
+    fn the_top_layer_washes_its_cell_and_draws_no_caret() {
         let (dir, csv) = a_table_file("noground");
         let mut editor = Editor::new();
         editor.open_file(&csv).unwrap();
@@ -19895,22 +19903,39 @@ fn squeezed(text: &str) -> String {
         config.editor.line_numbers = LineNumbers::None;
         let ink = ink(&config);
 
-        let grounds = |editor: &Editor, config: &Config| -> Vec<(u16, String)> {
+        // Warning: **the second cell of a wide glyph reads back as `Reset`**
+        // whatever was painted over it, so a row of 漢字 has a hole every
+        // other column and only the first cell of each can be asserted on.
+        let grounds = |editor: &Editor, config: &Config, bg| -> Vec<u16> {
             let buffer = render(editor, config, 60, 10);
-            (0..60u16)
-                .filter(|&x| buffer[(x, 2)].style().bg == Some(ink.selection()))
-                .map(|x| (x, at(&buffer, x, 2)))
-                .collect()
+            (0..60u16).filter(|&x| buffer[(x, 2)].style().bg == Some(bg)).collect()
+        };
+        let edges = |editor: &Editor, config: &Config| -> Vec<u16> {
+            let buffer = render(editor, config, 60, 10);
+            (0..60u16).filter(|&x| buffer[(x, 2)].style().fg == Some(ink.gold())).collect()
         };
 
+        let washed = grounds(&editor, &config, ink.faint_wash());
+        let bracket = edges(&editor, &config);
+        assert_eq!(bracket.len(), 2, "one 金 edge each side: {bracket:?}");
+        let whole: Vec<u16> = {
+            let buffer = render(&editor, &config, 60, 10);
+            (bracket[0]..=bracket[1])
+                .filter(|&x| {
+                    !matches!(
+                        buffer[(x, 2)].style().bg,
+                        None | Some(ratatui::style::Color::Reset)
+                    )
+                })
+                .collect()
+        };
+        assert_eq!(washed, whole, "one block, edges included, and nothing outside it");
+        assert!(washed.len() > 2, "not just the two edges: {washed:?}");
         assert_eq!(
-            grounds(&editor, &config),
-            Vec::new(),
-            "the cell is marked by its edges alone"
+            grounds(&editor, &config, ink.selection()),
+            Vec::<u16>::new(),
+            "the selection's own ground is left free"
         );
-        // …and the other half of the same decision: no caret is drawn up
-        // there either, because there is no character to stand on.
-        //
         // Warning: **the painted block, not `render_caret`** — that helper falls
         // back to the terminal's own cursor, which a `TestBackend` reports at
         // `(0, 0)` whether or not anybody set it, so it can never answer
@@ -19924,26 +19949,38 @@ fn squeezed(text: &str) -> String {
             "no caret where the whole cell is the unit"
         );
 
-        // Inside the cell it is an ordinary page again, caret and all.
+        // Inside the cell it is an ordinary page again: caret, and no wash.
         editor.on_key(Key::Enter);
-        assert!(
-            block(&editor, &config).is_some(),
-            "and inside one, the caret is back"
+        assert!(block(&editor, &config).is_some(), "and inside one, the caret is back");
+        assert_eq!(
+            grounds(&editor, &config, ink.faint_wash()),
+            Vec::<u16>::new(),
+            "the cell is not what is selected once you are typing in it"
         );
+        assert_eq!(edges(&editor, &config).len(), 2, "and the edges have not moved");
 
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    /// **How thick the two 金 edges are is the layer's answer** (2026-10-21).
+    /// **The two 金 edges are the same mark in either layer** (2026-10-22
+    /// 作者定: 「the CEL mode, the highlighted border can use the same style
+    /// as NOR mode (dashed and golden). It does not need to be normal line.
+    /// This makes the border style consistent in all three layers.」).
     ///
-    /// Half a cell each side while the whole cell is the unit, an eighth while
-    /// the caret is inside it — and those are the only two, because Unicode
-    /// gives the left-hand block every eighth (`▏▎▍▌▋▊▉`) and the right hand
-    /// exactly two, the half `▐` and the eighth `▕`. Read off a grid whose
-    /// seams are **blank** (`:table-rules off`): a seam that already draws a
-    /// rule is only recoloured, so it says nothing about thickness.
+    /// They went half-block → one stroke → the grid's own rule in two days,
+    /// and the reason each time was the same one: the mark was once the only
+    /// thing saying 「the whole cell is the unit」, so it had to say it alone.
+    /// The 金 ground says it now
+    /// (`the_top_layer_washes_its_cell_and_draws_no_caret`), and a border
+    /// that changed shape as the caret went in and out of a cell was a second
+    /// answer to 「does this grid draw rules」.
+    ///
+    /// Read both ways round, because the two halves are different code: on a
+    /// grid whose seams are **blank** (`:table-rules off`) the mark is the
+    /// eighth-block the editor keeps for it, and on one that draws its own
+    /// rule the seam keeps that rule and is only recoloured.
     #[test]
-    fn the_edges_round_the_cell_say_which_layer_the_keys_are_in() {
+    fn the_edges_round_the_cell_are_the_same_mark_in_either_layer() {
         let (dir, csv) = a_table_file("edges");
         let mut editor = Editor::new();
         editor.open_file(&csv).unwrap();
@@ -19964,6 +20001,7 @@ fn squeezed(text: &str) -> String {
                 .map(|x| at(&buffer, x, 2))
                 .collect()
         };
+        let hair = || vec!["\u{2595}".to_string(), "\u{258f}".to_string()];
 
         // A grid opens at its top layer, where the cell is the unit.
         assert_eq!(
@@ -19972,32 +20010,19 @@ fn squeezed(text: &str) -> String {
             "{}",
             editor.status()
         );
-        assert_eq!(
-            edges(&editor, &config),
-            vec!["\u{2502}".to_string(), "\u{2502}".to_string()],
-            "one rule each side, the weight the rest of the grid is drawn in"
-        );
+        assert_eq!(edges(&editor, &config), hair(), "one eighth each side");
 
-        // …and one `Enter` down they thin, which is the whole of what the mark
-        // has to say: the unit is no longer the cell.
+        // …and one `Enter` down nothing about them changes. What changes is
+        // the ground, and that is the other test's to say.
         editor.on_key(Key::Enter);
         assert_eq!(editor.table_layer(), yumete_core::table::layer::Layer::Inside);
-        assert_eq!(
-            edges(&editor, &config),
-            vec!["\u{2595}".to_string(), "\u{258f}".to_string()],
-            "one eighth each side"
-        );
+        assert_eq!(edges(&editor, &config), hair(), "the same eighth, inside the cell");
 
-        // **And with the rules back on, the thick edge is still thick**
-        // (2026-10-21 作者報的: 「It should be thick golden left and right
-        // border but you still make it dashed」). A seam that already draws a
-        // `┆` is only *recoloured* for the thin edge — that was #407's rule
-        // and the grid goes on reading as the grid it was. The thick one is a
-        // different promise and has to be drawn.
+        // **With the grid drawing its own rule, both layers only recolour
+        // it.** Read against a seam the cell does not touch, so this says
+        // what the rule *is* rather than which glyph `:table-rules line`
+        // happens to draw.
         editor.execute("table-rules line").unwrap();
-        // Read against a seam the cell does not touch, so this says what the
-        // rule *is* rather than which glyph `:table-rules line` happens to
-        // draw: inside a cell the two gold seams are that same glyph.
         let plain = |editor: &Editor, config: &Config| -> String {
             let buffer = render(editor, config, 60, 10);
             let gold = ink(config).gold();
@@ -20020,13 +20045,9 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.table_layer(), yumete_core::table::layer::Layer::Whole);
         assert_eq!(
             edges(&editor, &config),
-            vec!["\u{2502}".to_string(), "\u{2502}".to_string()],
-            "and at the top layer it is drawn over the rule, not tinted"
+            vec![rule.clone(), rule.clone()],
+            "and at the top layer it is only recoloured too"
         );
-        // ⚠ 這一檔（`:table-rules line`）畫的本來就是 `│`，所以「蓋過去」和
-        // 「只換顏色」在這一檔上看不出分別——分別在上頭那一半：縫是空的時候，
-        // 頂層長出一道 `│` 而格內只長出八分之一。
-
         std::fs::remove_dir_all(&dir).ok();
     }
 
