@@ -1248,6 +1248,101 @@ fn a_record_short_of_its_columns_is_put_back_where_it_was_cut() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A quoted cell's own `"` cannot be cut out from under it** (2026-10-23).
+///
+/// vim's `X` cuts the character before the cursor, and on the first character
+/// of `"甲,乙"` that character is the opening quote — which is not part of the
+/// value but the editor's own mark that the value is quoted. The record read
+/// `二,甲,乙",B`: four columns in a table of three, with a quote left standing.
+/// Emptying the whole cell takes the pair together and stays allowed.
+/// Found by `scripts/table_keys.py --preset vim`.
+#[test]
+fn a_quoted_cells_own_quote_is_not_cut_out_from_under_it() {
+    let dir = tmp().join(format!("yumete-quote-wall-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("g.csv");
+    let before = "n,v,t\nA,\"one,two\",X\n";
+    std::fs::write(&csv, before).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    ed.execute(":keymap vim").unwrap();
+
+    press(&mut ed, "ggl");
+    press(&mut ed, "X");
+    assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+    assert_eq!(ed.status(), say!("table.divider-cannot-be-deleted"));
+
+    // Inside the cell it is the same quote and the same answer…
+    ed.on_key(Key::Enter);
+    press(&mut ed, "X");
+    assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
+    // …while a character of the value goes as it always did.
+    press(&mut ed, "lX");
+    assert_eq!(ed.current_buffer().text(), "n,v,t\nA,\"ne,two\",X\n", "{}", ed.status());
+
+    // And emptying the cell takes both quotes with it.
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "ggld");
+    assert_eq!(ed.current_buffer().text(), "n,v,t\nA,,X\n", "{}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **At the cell layer a vim operator waits for its motion, and every motion
+/// is 「this cell」** (2026-10-23 作者定).
+///
+/// `c` and `d` were one stroke here while vim spells them as operators, so the
+/// motion key that followed had no one to take it: `s` is `@c{n}l`, `c` started
+/// insert on the spot and the `l` was typed into the cell. `cw` left a `w`,
+/// `cc` a `c`, and `dd` ran two `d`s — on a record short of its columns the
+/// second one emptied the cell the cursor had fallen back to.
+/// Found by `scripts/table_keys.py --preset vim`.
+#[test]
+fn a_vim_operator_at_the_cell_layer_waits_and_means_the_cell() {
+    let dir = tmp().join(format!("yumete-cell-operator-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("g.csv");
+    let before = "n,v,t\nA,one,X\nB,short\n";
+    std::fs::write(&csv, before).unwrap();
+    let open = || {
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        ed.execute(":keymap vim").unwrap();
+        ed
+    };
+
+    for keys in ["ggls山", "gglcw山", "gglcc山"] {
+        let mut ed = open();
+        press(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(
+            ed.current_buffer().text(),
+            "n,v,t\nA,山,X\nB,short\n",
+            "{keys}: {}",
+            ed.status()
+        );
+    }
+
+    // A bare `d` waits, as it does in vim; `dd` and `dw` are the cell.
+    let mut ed = open();
+    press(&mut ed, "ggld");
+    assert_eq!(ed.current_buffer().text(), before, "a bare `d` waits");
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "n,v,t\nA,,X\nB,short\n", "{}", ed.status());
+
+    // The record short of its columns keeps its first cell: the second `d`
+    // used to take it, because the first one had moved the cursor there.
+    let mut ed = open();
+    press(&mut ed, "ggjjldd");
+    assert_eq!(ed.current_buffer().text(), "n,v,t\nA,one,X\nB,\n", "{}", ed.status());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`j` walks the cell's own rows before it leaves the cell** (2026-10-22
 /// 作者定: 「we agree that hjkl will be kept within cell in the nor and ins
 /// mode and I can still use jk to go across cells vertically, but I cannot

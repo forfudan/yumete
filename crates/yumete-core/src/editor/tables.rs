@@ -4426,6 +4426,30 @@ impl Editor {
             // in. Without this the guard that makes the grid safe is also what
             // makes copying a cell impossible: `v l y` reaches across the
             // delimiter, and pasting what it took is then refused.
+            // **vim's operators wait for a motion here too** (2026-10-23
+            // 作者定). At this layer `c` and `d` were one stroke — `c` retypes
+            // the cell, `d` empties it — while in vim's own grammar they are
+            // operators that wait. So the motion key that followed had no one
+            // to take it: `s` is spelled `@c{n}l`, `c` started insert on the
+            // spot and the `l` was typed into the cell (`二,l山,B`); `cw` left
+            // a `w` and `cc` a `c`; `dd` ran two `d`s, and on a record short
+            // of its columns the second one took the cell the cursor had
+            // fallen back to — `七,短` became `,`. Found by
+            // `scripts/table_keys.py --preset vim`.
+            //
+            // Every motion resolves to 「this cell」 ([`Self::cell_operator`],
+            // reached through [`Editor::do_vim_span`]), so `dd` `dw` `d$` and
+            // `cc` `cw` `cl` all mean the one unit this layer has. The cost is
+            // vim's own: a bare `d` no longer empties the cell, `dd` does.
+            // `A-d` / `A-c` stay one stroke, and the helix preset is untouched.
+            Key::Char(op @ ('d' | 'c' | 'y'))
+                if self.key_preset == yumete_cjk::KeyPreset::Vim
+                    && !self.extend
+                    && self.sel.anchor() == self.sel.head() =>
+            {
+                self.pending = crate::editor::Pending::VimOperator { op, first: None };
+                self.count = (count > 1).then_some(count);
+            }
             Key::Char('y') => self.yank_cell(),
             // The whole row, spelled the way vi spells "the whole line".
             Key::Char('Y') => self.yank_row(),
@@ -4889,6 +4913,20 @@ impl Editor {
             view.from = file.clone();
         }
         Some(file)
+    }
+
+    /// **What `d`, `c` and `y` mean when the cell is the unit** — one
+    /// implementation, so the key pressed bare and the same key reached
+    /// through a vim motion cannot drift apart.
+    pub(super) fn cell_operator(&mut self, op: char) {
+        match op {
+            'y' => self.yank_cell(),
+            'c' => self.edit_cell(match self.yank_on_delete() {
+                true => CellEdit::Replace,
+                false => CellEdit::ReplaceKeeping,
+            }),
+            _ => self.clear_cell(self.yank_on_delete()),
+        }
     }
 
     /// Empty the cell the cursor is in, keeping its boundaries.
@@ -6791,6 +6829,30 @@ impl Editor {
         let range = range.start.min(rope.len_chars())..range.end.min(rope.len_chars());
         if range.is_empty() {
             return None;
+        }
+        // **A quoted cell's own `"` is not the writer's to cut** (2026-10-23
+        // 作者定). [`Self::cell_refuses`] below lets every character through
+        // once the cell is quoted — right for the value, wrong for the pair
+        // that makes it one, because those two quotes are the editor's to put
+        // there and to take away. vim's `X` on the first character of
+        // `"甲,乙"` cut the opening quote and the record read `二,甲,乙",B`:
+        // four columns in a table of three, with a quote left standing. The
+        // unquoted cell never had the hole — the character before it is the
+        // delimiter, which is refused by name. Found by
+        // `scripts/table_keys.py --preset vim`.
+        //
+        // **One of the pair, not both**, is the test: a cut that takes the
+        // whole cell takes them together and leaves the file sound, which is
+        // what emptying a cell does ([`Self::clear_cell`]).
+        if let Some((from, to)) = self
+            .the_cell_is_quoted()
+            .then(|| self.cell_position())
+            .flatten()
+            .and_then(|(line, cell)| self.cell_span(line, cell))
+        {
+            if range.contains(&from) != range.contains(&(to - 1)) {
+                return Some(say!("table.divider-cannot-be-deleted"));
+            }
         }
         // The escape again: `\|` inside a cell is not a boundary, so taking it
         // out is not taking a boundary out.
