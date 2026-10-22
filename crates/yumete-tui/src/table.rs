@@ -958,6 +958,16 @@ pub fn draw(
                 };
                 let lit = editor
                     .cell_span(line, i)
+                    // **The value's span, because `parts` are the value's
+                    // lines** (2026-10-22 報的:「In NOR mode, cursor
+                    // additionally covers the char after the current char」).
+                    // `cell_shown` takes a quoted field's two `"` off the
+                    // page, so counting the band from the source start painted
+                    // it one character along — the caret's own block sat on
+                    // the right character and the band lit the one after it,
+                    // which reads as a cursor two characters wide. Third place
+                    // in this family, after the caret and the hit test.
+                    .map(|(a, b)| editor.value_span(a, b))
                     .filter(|_| peek.is_none())
                     // **At the top layer a standing caret lights nothing**
                     // (2026-10-21 作者定: 「Can we first do not use background

@@ -19670,6 +19670,45 @@ fn squeezed(text: &str) -> String {
         std::fs::remove_dir_all(&dir).ok();
     }
 
+    /// **The cursor inside a cell covers the character it is on, and no more**
+    /// (2026-10-22 報的:「In NOR mode, cursor additionally covers the char
+    /// after the current char in lines with LF」).
+    ///
+    /// The page draws a quoted field without its `"`, and the band counted
+    /// from the source start — so the caret's own block sat on the right
+    /// character while the band lit the one after it, and the two together
+    /// read as a cursor two characters wide. Read off the page, because that
+    /// is the only place the two answers can be seen to disagree.
+    #[test]
+    fn the_band_inside_a_cell_covers_what_the_selection_covers() {
+        let (dir, csv) = a_table_file("band");
+        std::fs::write(&csv, "char,ids_y,note\n一,\"頭一行\n第二段\",x\n").unwrap();
+        let mut editor = Editor::new();
+        editor.open_file(&csv).unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = LineNumbers::None;
+        editor.execute("2").unwrap();
+        editor.on_key(Key::Char('l'));
+        editor.on_key(Key::Enter);
+
+        // Which glyphs of the cell's row are painted over the row's own band.
+        let lit = |editor: &Editor, config: &Config| -> Vec<String> {
+            let (buffer, at) = render_caret(editor, config, 60, 10);
+            let y = at.expect("a caret in the cell").y;
+            let ground = buffer[(0, y)].bg;
+            (0..40u16)
+                .filter(|&x| buffer[(x, y)].bg != ground)
+                .map(|x| buffer[(x, y)].symbol().to_string())
+                .filter(|s| s.trim() != "")
+                .collect()
+        };
+        assert_eq!(lit(&editor, &config), ["頭"], "a caret covers one character");
+        editor.on_key(Key::Char('v'));
+        editor.on_key(Key::Char('l'));
+        assert_eq!(lit(&editor, &config), ["頭", "一"], "and a selection covers two");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn a_grid_lines_its_columns_up_and_freezes_the_header() {
         let (dir, csv) = a_table_file("draw");
