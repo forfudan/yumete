@@ -1154,6 +1154,58 @@ fn enter_into_a_quoted_cell_lands_on_the_value() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A cell nobody changed comes out of Insert byte for byte**
+/// (2026-10-22, the first thing `scripts/table_keys.py` swept up).
+///
+/// `tidy_the_cell` rewrites a cell on the way out of Insert so the quotes are
+/// the editor's to add and drop. It read the span *between* the quotes as the
+/// value — but that span is still the file's own text, where one `"` of the
+/// value is written `""`. Handing it to `quote_for` escaped it a second time,
+/// so `i` `Esc` with nothing typed turned `"he said ""ok"""` into
+/// `"he said """"ok"""""`, and every later visit doubled it again. The cell
+/// drew the same either way; only reading the file back showed it.
+///
+/// **Only a value holding a `"` could see this**, which is why it took a
+/// sweep over the cell shapes rather than a key to find: everywhere else the
+/// span between the quotes *is* the value.
+#[test]
+fn insert_and_escape_leave_an_escaped_quote_exactly_as_it_was() {
+    let dir = tmp().join(format!("yumete-requote-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("q.csv");
+    let before = "name,note\nA,\"he said \"\"ok\"\"\"\n";
+    std::fs::write(&csv, before).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "ggl");
+    // `cell_text` hands back the file's own text, quotes and all — which is
+    // exactly the thing that must not move.
+    let source = "\"he said \"\"ok\"\"\"";
+    assert_eq!(ed.cell_text(1, 1), source, "before anything");
+    for round in 1..=3 {
+        press(&mut ed, "i");
+        ed.on_key(Key::Esc);
+        assert_eq!(
+            ed.current_buffer().text(),
+            before,
+            "round {round}: nothing was typed, so nothing may change"
+        );
+    }
+    // …and a cell that *is* typed into still comes out escaped once.
+    press(&mut ed, "iX");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.cell_text(1, 1), "\"Xhe said \"\"ok\"\"\"", "escaped once, not twice");
+    assert!(
+        ed.current_buffer().text().contains("A,\"Xhe said \"\"ok\"\"\"\n"),
+        "{:?}",
+        ed.current_buffer().text()
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`j` walks the cell's own rows before it leaves the cell** (2026-10-22
 /// 作者定: 「we agree that hjkl will be kept within cell in the nor and ins
 /// mode and I can still use jk to go across cells vertically, but I cannot

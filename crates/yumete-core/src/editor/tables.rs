@@ -3816,15 +3816,30 @@ impl Editor {
         let Some((from, to)) = self.cell_span(line, cell) else {
             return;
         };
-        let (first, last) = self.value_span(from, to);
-        let value = self.current_buffer().rope().slice(first..last).to_string();
+        let (first, _last) = self.value_span(from, to);
+        let source = self.current_buffer().rope().slice(from..to).to_string();
+        // **Un-escape before re-escaping, or the `""` pairs double every time**
+        // (2026-10-22, `scripts/table_keys.py` 第一趟掃出來的). The span inside
+        // the quotes is still the *file's* text: a value holding one `"` is
+        // written `""` there. Reading that span as the value and handing it to
+        // `quote_for` escaped it a second time, so `i` `Esc` — with nothing
+        // typed — turned `"he said ""ok"""` into `"he said """"ok"""""`, and
+        // each visit doubled it again. Nothing said so: the cell drew the same
+        // either way until the file was read back.
+        //
+        // Every other kind of cell was safe, which is why it took a sweep
+        // over the shapes to see: with no `"` in the value the span between
+        // the quotes **is** the value.
+        let value = crate::table::unquote(&source);
         let within = self.caret().saturating_sub(first).min(value.chars().count());
         let delimiter = match self.table.as_ref().map(|view| view.separator) {
             Some(Separator::Delimiter(d)) => d,
             _ => return,
         };
-        if self.current_buffer().rope().slice(from..to) == crate::table::quote_for(&value, delimiter)
-        {
+        // Already written the way this editor would write it — so leave it
+        // alone. **This is the whole guard**: a cell nobody changed must come
+        // out of Insert byte for byte as it went in.
+        if source == crate::table::quote_for(&value, delimiter) {
             return;
         }
         if self.write_the_cell(line, cell, &value) {
