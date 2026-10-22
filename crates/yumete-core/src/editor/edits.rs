@@ -940,6 +940,15 @@ impl Editor {
         if start == self.sel.head() {
             return;
         }
+        // **Ask before moving the selection** (2026-10-23). A grid may turn
+        // this cut away — the character before the cursor can be the quote
+        // that makes the cell a quoted one — and the refusal used to arrive
+        // after the selection had already been laid over the thing that was
+        // not cut, leaving the caret outside its own cell.
+        if let Some(why) = self.cell_refuses_cut(start..self.sel.head()) {
+            self.status = why;
+            return;
+        }
         self.sel.set_anchor(start);
         self.sel.set_head(last);
         self.cut_selection_to_register();

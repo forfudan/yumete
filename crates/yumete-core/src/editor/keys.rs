@@ -1182,6 +1182,17 @@ impl Editor {
             self.pending = Pending::Surround;
             return;
         }
+        // **Where the cell is the unit, the motion is already spoken for**
+        // (2026-10-23 作者定). The grid claims `d`, `c` and `y` at the whole
+        // cell layer and hands them the wait ([`Editor::table_motion`]); the
+        // span the motion worked out is a span of characters, and this layer
+        // has no characters — it has one cell. `dd` `dw` `d$`, `cc` `cw` `cl`
+        // and `yy` therefore all mean that cell.
+        if matches!(op, 'd' | 'c' | 'y') && self.cell_is_the_unit() {
+            self.count = None;
+            self.alias_count = None;
+            return self.cell_operator(op);
+        }
         // Warning: **動作落在換行符上，vim 就是「什麽都没動」**（2026-10-09 審出來的）。
         //
         // `D` 在這一端拼成 `d$`，而 `$` 走 `line_last`——空行上那一格正是換行符，段寬
