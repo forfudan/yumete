@@ -1347,6 +1347,12 @@ fn hl_cross_a_break_the_writer_typed_and_stop_at_the_cells_walls() {
     );
     press(&mut ed, "h");
     assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"), "and back");
+    // **And the cell is the document, so `G` is its far end** (設計 §03). This
+    // one moved the head itself instead of going through `run_motion`, so the
+    // clamp never saw it and `G` walked out of the cell onto the record below.
+    press(&mut ed, "G");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("d"), "the cell's last character");
+    assert_eq!(ed.cell_position(), Some((1, 1)), "still in the cell");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -1547,6 +1553,86 @@ fn the_structural_keys_move_a_whole_record() {
         "{}",
         ed.status()
     );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **到邊了說一句** — 設計 §04 的一條,10-22 量出來沒做:「中層裏 `l` 撞到格子的
+/// 右牆,狀態欄寫一行『這一格到頭了,`Tab` 去下一格』,別默默停住 —— 讀的人就是這
+/// 樣學會這個邊界的。」
+#[test]
+fn a_motion_that_hits_the_cells_wall_says_so() {
+    let dir = tmp().join(format!("yumete-cellwall-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("wall.csv");
+    std::fs::write(&csv, "name,note\nalpha,one\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Enter);
+    // Along the cell: a step that *ends* on the last character has moved, so
+    // it says nothing. Only the press that the wall stopped does.
+    press(&mut ed, "ll");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"));
+    assert_eq!(ed.status(), "", "a step that moved says nothing: {}", ed.status());
+    press(&mut ed, "l");
+    assert_eq!(ed.status(), say!("table.cell-ends-here"));
+    press(&mut ed, "hhh");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("o"));
+    press(&mut ed, "h");
+    assert_eq!(ed.status(), say!("table.cell-starts-here"));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`o` inside a cell opens a line of the cell** — 設計 §03 的中層那一格. At
+/// the top layer the same letter opens a row, which is one key with one
+/// meaning per layer rather than two.
+#[test]
+fn o_inside_a_cell_opens_a_line_of_the_cell() {
+    let dir = tmp().join(format!("yumete-cellopen-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let text = "name,note,n\nalpha,one,1\n";
+    let open = |name: &str| {
+        let csv = dir.join(name);
+        std::fs::write(&csv, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "ggl");
+        ed
+    };
+
+    let mut ed = open("below.csv");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "oX");
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note,n\nalpha,\"one\nX\",1\n",
+        "{}",
+        ed.status()
+    );
+    assert_eq!(ed.row_cells(1).len(), 3, "one record of three still");
+
+    let mut ed = open("above.csv");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "OX");
+    ed.on_key(Key::Esc);
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note,n\nalpha,\"X\none\",1\n",
+        "{}",
+        ed.status()
+    );
+
+    // The top layer keeps its own meaning: a row, with every delimiter in it.
+    let mut ed = open("row.csv");
+    press(&mut ed, "o");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "name,note,n\nalpha,one,1\n,,\n", "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
 

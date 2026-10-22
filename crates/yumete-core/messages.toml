@@ -11076,6 +11076,13 @@ zhs = "清空了一格({0} 个字)"
 en = "cleared a cell ({0} character(s))"
 
 [[message]]
+# 格內 `l`／`→` 撞到這一格的遠端那面牆（設計 §04「到邊了說一句」）
+key = "table.cell-ends-here"
+zht = "這一格到頭了，`Tab` 去下一格"
+zhs = "这一格到头了，`Tab` 去下一格"
+en = "this cell ends here — `Tab` for the next one"
+
+[[message]]
 # :table-csv：某一格裏就有那個分隔符，不能拆
 key = "table.cell-holds-the-delimiter"
 zht = "第 {0} 行第 {1} 欄裏就有「{2}」——換個分隔符，或者先改那一格"
@@ -11095,6 +11102,13 @@ key = "table.cell-replaced"
 zht = "換掉了一格"
 zhs = "换掉了一格"
 en = "replaced the cell"
+
+[[message]]
+# 格內 `h`／`←` 撞到這一格的近端那面牆
+key = "table.cell-starts-here"
+zht = "這一格從這裏起，`S-Tab` 去上一格"
+zhs = "这一格从这里起，`S-Tab` 去上一格"
+en = "this cell starts here — `S-Tab` for the one before"
 
 [[message]]
 # tg 給的不是「行,欄」兩個數

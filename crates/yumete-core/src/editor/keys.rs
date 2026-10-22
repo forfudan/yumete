@@ -2912,8 +2912,25 @@ impl Editor {
                     }
                     false if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                         self.remember_jump();
-                        let rope = self.current_buffer().rope();
-                        self.move_head(motion::buffer_end(rope, self.sel.head()));
+                        // **Inside a cell the cell is the document**, so its
+                        // far end is what this means there (設計 §03 的「格尾」,
+                        // 2026-10-22). Two ways it was wrong: the buffer's end
+                        // is outside the cell, and this arm moves the head
+                        // itself rather than going through `run_motion`, so the
+                        // clamp in `Editor::walled` — which is what gives
+                        // helix's `ge` the same answer — never saw it and `G`
+                        // walked onto the record below. And where the buffer's
+                        // last *line* happens to be a line of this very cell,
+                        // clamping was not enough either: the answer was the
+                        // start of the cell's last written line, not its end.
+                        let at = match self.cell_far_wall() {
+                            Some(at) => at,
+                            None => {
+                                let rope = self.current_buffer().rope();
+                                motion::buffer_end(rope, self.sel.head())
+                            }
+                        };
+                        self.move_head(at);
                     }
                     // helix 鍵位：不帶數的 `G` 不動——`ge` 纔是末行。
                     false => {}
