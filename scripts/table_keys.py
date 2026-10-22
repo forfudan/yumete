@@ -128,7 +128,7 @@ def shoot(path, keys):
     """跑一趟,回（狀態欄,提示／消息那一行）。"""
     out = subprocess.run(
         [YUMETE, f"--shot={SHOT}", f"--keys={keys}", path],
-        capture_output=True, text=True, cwd=os.path.dirname(path),
+        capture_output=True, text=True, cwd=os.path.dirname(path), env=sealed(path),
     ).stdout.splitlines()
     rows = int(SHOT.split("x")[1])
     line = lambda n: out[n].rstrip() if 0 <= n < len(out) else ""
@@ -138,6 +138,23 @@ def shoot(path, keys):
 def tidy(said):
     """提示行上印出來的那一句——去掉右下角的落款,空白擠成一格。"""
     return " ".join(said.replace("宇夢編輯器", "").split())
+
+
+def sealed(path):
+    """**使用者的配置要擋在門外**,`HOME` 指到一個空目錄。
+
+    `--shot` 走的是真二進制、讀的是真配置,於是這張表會變成「**這臺機器上**的
+    yumete 怎麼答」。踩過一次就夠了:作者的 `config.toml` 寫着 `flavor = true`
+    （`d`/`c` 刪而不進寄存器,出廠是進的）,於是 `x d p` 在表上看起來像「刪掉就
+    找不回來了」——而那是他自己設的,不是缺陷。同一條記在
+    `yuhao-ime/CLAUDE.md` 的「別再踩」裏:自測不許讀使用者的實際設置。
+    """
+    env = dict(os.environ)
+    home = os.path.join(os.path.dirname(path), "home")
+    os.makedirs(home, exist_ok=True)
+    env["HOME"] = home
+    env["XDG_CONFIG_HOME"] = os.path.join(home, ".config")
+    return env
 
 
 def one(work, prefix, keys):
