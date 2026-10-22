@@ -1278,6 +1278,17 @@ impl Editor {
         let here = self.sel.head();
         let pos = motion(self.current_buffer().rope(), here);
         let forward = pos >= here;
+        // **The line break the writer typed inside a cell is not a wall**
+        // (2026-10-22 reported: 「l cannot go beyond the LF symbol (hard wrap)
+        // in the cell in NOR mode」). A record over several lines is several
+        // *file* lines, so every clamp that keeps `h`/`l` on one line keeps
+        // them on one of the cell's own written lines too — while the grid
+        // draws those lines one under the other inside the one cell, which is
+        // where the reader is looking. Taken before the three steps below, so
+        // none of them ever sees the break; the walls are still the bound.
+        if let Some(pos) = self.across_the_cells_own_break(here, pos, forward) {
+            return self.move_head(pos);
+        }
         // **Three steps, and the order is the whole of it** (2026-10-17).
         // Step clear of what the table keeps off; *then* let the line clamp
         // say whether running off the end crosses to the next row or stops;
@@ -1920,6 +1931,49 @@ impl Editor {
             Some((from, to)) => pos.clamp(from, to),
             None => pos,
         }
+    }
+
+    /// **Across a line break of the cell's own** — `None` when the step does
+    /// not meet one, which is every step outside a grid cell.
+    ///
+    /// Normal steps over it: the caret rests on characters, and a break is
+    /// drawn as `␊` only to show that the cell goes on below. Insert stands on
+    /// it, because the place before a break is where appending to that written
+    /// line happens — the same split [`Self::cell_walls`] makes at the far
+    /// wall. Either way the walls bound it: a step that would leave the cell
+    /// is not this rule's business and goes back to the clamps.
+    fn across_the_cells_own_break(&self, here: usize, pos: usize, forward: bool) -> Option<usize> {
+        // **Insert asks the cell, not the layer.** Typing never moves the
+        // layer, so `i` from the top one leaves [`Self::cell_walls`] empty
+        // while the arrows are still scoped to the one cell
+        // ([`Self::insert_bounds`]) — and a break in it is the same break.
+        let (from, to) = match self.mode == Mode::Insert {
+            true => match self.grid_has_the_pane() {
+                true => self.insert_bounds()?,
+                false => return None,
+            },
+            false => self.cell_walls()?,
+        };
+        if !(from..=to).contains(&pos) {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        // The two shapes a step inside this cell can have: onto the break, and
+        // off it onto the line below. Both are a step the clamps would answer
+        // by the *file* line, and neither leaves the cell.
+        let onto_the_break = rope.get_char(pos) == Some('\n');
+        if !onto_the_break && rope.char_to_line(pos) == rope.char_to_line(here.min(rope.len_chars()))
+        {
+            return None;
+        }
+        if !onto_the_break || self.mode == Mode::Insert {
+            return Some(pos);
+        }
+        let at = match forward {
+            true => motion::next_grapheme(rope, pos),
+            false => motion::prev_grapheme(rope, pos),
+        };
+        (from..=to).contains(&at).then_some(at)
     }
 
     /// **Put the caret where this layer says it may stand** — called when the

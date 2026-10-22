@@ -787,6 +787,14 @@ impl Editor {
         if self.table.is_none() && problems.is_empty() && self.names_itself_a_grid(&path) {
             self.enter_table();
         }
+        // **And where its records start** (2026-10-22 reported). The schema
+        // door above builds its view right here instead of going through
+        // `enter_table`, and this is the one thing it never asked for: a field
+        // with a line break in it then drew as two ragged rows with the quotes
+        // on the page, in the very file the manual calls the ordinary way to
+        // have a table — 「放一份 schema 在資料旁邊，它就自動是表格」. Before
+        // the block below, which asks which lines the rows are.
+        self.rescan_records();
         // **The caret starts on a row, never on the header the grid freezes**
         // (2026-10-17, found in review). `enter_table_as` has checked this
         // since #356 — 「進得去、用不了的表格」 — but a schema beside the data
@@ -3414,7 +3422,9 @@ impl Editor {
     /// typed (`cell_shown` has said so since 2026-10-20), so everything that
     /// is about *content* asks this and not [`Self::cell_span`]: where the
     /// caret may stand, what walls a motion, what `g h`/`g l` answer, what
-    /// Insert is clamped to.
+    /// Insert is clamped to — and, since 2026-10-22, where the page draws the
+    /// caret and what a click in a cell lands on, which are the same question
+    /// asked by the one surface that draws the value rather than the source.
     ///
     /// Warning: **this is why a record over several lines used to be read-only.**
     /// The caret was counted in the value while the span it edited still
@@ -3422,7 +3432,7 @@ impl Editor {
     /// `alpha,"first line` became `alpha,ZZ"first line` and the record stopped
     /// parsing (2026-10-20). A `|` table has no quoting at all, so there the
     /// two spans are the same answer.
-    pub(super) fn value_span(&self, from: usize, to: usize) -> (usize, usize) {
+    pub fn value_span(&self, from: usize, to: usize) -> (usize, usize) {
         if !matches!(
             self.table.as_ref().map(|view| view.separator),
             Some(Separator::Delimiter(_))
