@@ -3221,6 +3221,19 @@ impl Editor {
     /// did to a file with unpaired quotes in it.
     fn scan_record_starts(&self, first: usize, delimiter: char) -> Option<std::rc::Rc<Vec<usize>>> {
         let rope = self.current_buffer().rope();
+        // **No quote, no record that runs on** (2026-10-23). The walk below
+        // reads every line of the file and builds a boundary for each one,
+        // only to throw the lot away when none of them joined — and a `"` is
+        // the one thing that can join them. The real 拆分表 holds **not one
+        // quote** in 123,380 lines, so that was the whole of the 50 ms an
+        // <kbd>Esc</kbd> out of a cell cost there: the fill loop is
+        // `i` 打字 `Esc` `Tab`, which paid it once per cell. Asking first
+        // runs over the chunks, where the search is a memchr, and a file that
+        // does hold a quote is no worse off than before.
+        // Found by `scripts/table_big.py` on the real table.
+        if !rope.chunks().any(|chunk| chunk.contains('"')) {
+            return None;
+        }
         let lines = rope.len_lines();
         let mut starts = Vec::new();
         let mut at = first;
