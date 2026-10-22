@@ -15,6 +15,7 @@
 
     python3 scripts/table_keys.py              # 全窗表格那一面
     python3 scripts/table_keys.py --surface tb # 文中表格 · to 源碼
+    python3 scripts/table_keys.py --preset vim # 換一套鍵位,同一張固定裝置
     python3 scripts/table_keys.py --key 'l,x'  # 只看這幾個鍵
     python3 scripts/table_keys.py --moved      # 只印「檔案變了」的那些行
 
@@ -92,6 +93,17 @@ KEYS_TOP = [
     ("␣t 1s", " t1s"),
     ("Enter", "\\n"),
 ]
+
+# **只有 vim 那套鍵位纔拼得出來的那幾個**（`:keymap vim` 的自述:`x X` 剪字、
+# `s` 改一個字、`V` 選行、`dd yy cc dw cw`、`^ $ 0`）。helix 那一面按不出來,所以
+# 這一段只在 `--preset vim` 時接上去——另三張表的行數不變,逐行對得起來。
+KEYS_VIM = [
+    ("X", "X"), ("s山\\e", "s山\\e"), ("V", "V"), ("^", "^"),
+    ("dd", "dd"), ("yy", "yy"), ("cc山\\e", "cc山\\e"),
+    ("dw", "dw"), ("cw山\\e", "cw山\\e"),
+    ("dd P", "ddP"),
+]
+
 KEYS_IN = [
     ("h", "h"), ("l", "l"), ("j", "j"), ("k", "k"),
     ("0", "0"), ("$", "$"), ("w", "w"), ("b", "b"),
@@ -199,6 +211,7 @@ def squash(before, after):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--surface", default="tt", choices=sorted(SURFACES))
+    ap.add_argument("--preset", default="helix", choices=("helix", "vim"))
     ap.add_argument("--key", default="", help="只跑這幾個鍵(逗號分開,按印出來的名字)")
     ap.add_argument("--moved", action="store_true", help="只印檔案變了的那些行")
     args = ap.parse_args()
@@ -206,7 +219,10 @@ def main():
     if not os.access(YUMETE, os.X_OK):
         sys.exit("!! 先 ./scripts/build.sh")
 
-    into = SURFACES[args.surface]
+    # **鍵位是走命令換的**,所以它只是前綴的第一段。`:keymap` 自己那一句報告
+    # 下一鍵就被頂掉了,而底線那一格與它同一個前綴,所以減得乾淨。
+    lay = "" if args.preset == "helix" else f":keymap {args.preset}\\n"
+    into = lay + SURFACES[args.surface]
     want = {k.strip() for k in args.key.split(",") if k.strip()}
     work = tempfile.mkdtemp(prefix="table-keys-")
     rows, rest = [], {}
@@ -215,6 +231,7 @@ def main():
             [(n, k, "") for n, k in KEYS_TOP]
             + [(n, k, "\\n") for n, k in KEYS_IN]
             + [(n, k, "\\n") for n, k in KEYS_INS]
+            + [(n, k, "") for n, k in (KEYS_VIM if args.preset == "vim" else [])]
         ):
             if want and name not in want:
                 continue
@@ -238,7 +255,7 @@ def main():
     # 同一個鍵的七種形狀排在一起:橫着看是「這一鍵在哪一種格子上不一樣」。
     heads = ("形狀", "鍵", "層", "光標落在", "檔案", "說的話")
     wide = [max(width(r[i]) for r in rows + [heads]) for i in range(6)]
-    print(f"{YUMETE}  ·  {args.surface}  ·  {len(rows)} 格\n")
+    print(f"{YUMETE}  ·  {args.surface}  ·  {args.preset}  ·  {len(rows)} 格\n")
     print("  ".join(pad(h, w) for h, w in zip(heads, wide)))
     print("  ".join("─" * w for w in wide))
     last = None
