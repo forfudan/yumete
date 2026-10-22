@@ -596,7 +596,7 @@ impl Editor {
                     Some(Bounds::WholeFile) => Some(Bounds::WholeFile),
                     _ => None,
                 };
-                (say!("hint.table.title"), Self::said(Self::table_keys(inside)))
+                (say!("hint.table.title"), Self::said(Self::table_keys(inside, self.the_pane_is_on())))
             }
         };
         Some(Hint::Keys(keys.0, keys.1))

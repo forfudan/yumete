@@ -5087,15 +5087,20 @@ impl Editor {
                 self.ask_for_table_level(TableLevel::Basic);
                 return;
             }
-            // `t w` — 寬. Whether a cell wider than the cap keeps its tail on
-            // the page or folds it away behind a `>`. A preference about how
-            // the page is *drawn*, so it sits beside `t b` / `t f` and asks
-            // nothing about where the cursor is standing.
-            Key::Char('w') => return self.toggle_cell_folds(),
-            // `t a` — 折行, the other answer to the same question. It is a
-            // toggle of its own rather than a third stop on `t w`'s cycle, so
-            // that `t w` means one thing in every mode.
-            Key::Char('a') => return self.toggle_cell_wrap(),
+            // `t w` — 寬: how a cell wider than the cap is drawn, round a ring
+            // of three (軟折行 → 摺起 → 全文).
+            //
+            // **Only where the table has the window** (2026-10-22 定：「in the
+            // document (`tb` mode), we do not allow `tw` to change the layout
+            // …we promised users that in `tb` mode, no letters or symbols from
+            // the source code is hidden」). So it is not a key here at all
+            // outside the pane: it falls through to the group's own 「`tw` is
+            // not a key combination here」 rather than to a sentence refusing
+            // what the menu never offered. `t a` was the second key over this
+            // axis and went with the ring.
+            Key::Char('w') if self.the_pane_is_on() => {
+                return self.cycle_cell_width();
+            }
             // `t t` — 全窗, which is `:table-render window`.
             Key::Char('t') => {
                 self.ask_for_the_table_window();
@@ -5256,7 +5261,7 @@ impl Editor {
                 // 一遍」——那是從前的做法，`sort_table` 現在按塊的行寫回。
                 Key::Char('s') | Key::Char('S') => self.sort_the_named_columns(key),
                 Key::Esc => {}
-                _ => self.status = Self::table_keys_say(Some(Bounds::Block)),
+                _ => self.status = Self::table_keys_say(Some(Bounds::Block), self.the_pane_is_on()),
             }
             return;
         }
@@ -5324,7 +5329,7 @@ impl Editor {
                 // status line.
                 Key::Char('e') => self.open_schema(),
                 Key::Esc => {}
-                _ => self.status = Self::table_keys_say(Some(Bounds::WholeFile)),
+                _ => self.status = Self::table_keys_say(Some(Bounds::WholeFile), self.the_pane_is_on()),
             }
             return;
         }
@@ -5374,7 +5379,7 @@ impl Editor {
             Key::Esc => {}
             _ => {
                 let inside = self.md_region().is_some().then_some(Bounds::Md);
-                self.status = Self::table_keys_say(inside);
+                self.status = Self::table_keys_say(inside, self.the_pane_is_on());
             }
         }
     }

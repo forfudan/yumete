@@ -229,14 +229,20 @@ fn the_levels_leave_hjkl_to_the_layer() {
     );
 }
 
-/// A step the reader cannot see is not a step (#379).
+/// **The page keeps nothing of a table off it, so there is nothing to step
+/// over** (2026-10-22 定：「in the document (`tb` mode) …we promised users that
+/// in `tb` mode, no letters or symbols from the source code is hidden」).
 ///
-/// Under `t f` the file's own padding comes off the page, so `l` through a
-/// cell's trailing spaces moved the caret and moved nothing on the screen —
-/// 2026-09-11：「如果我一直按 l，光标是定住不动的，然后突然跳到右
-/// 边一格……既然没有显示，就应该允许用户直接跳过去。」
+/// This is where #379 stood. 2026-09-11：「如果我一直按 l，光标是定住不动的，
+/// 然后突然跳到右边一格……既然没有显示，就应该允许用户直接跳过去。」 The run it
+/// was about was the file's own padding, which came off the page **because the
+/// cell's tail did** — fold the writing to the cap and the spaces behind it
+/// went with it. Nothing folds on the page now, so the padding is drawn where
+/// the file wrote it and every press of `l` moves something a reader can see.
+/// The skipping itself is still there for what is still off the page: a 竪排
+/// row's slack, and the markup ([`Editor::cell_hidden_on_line`]).
 #[test]
-fn the_caret_steps_over_what_a_table_keeps_off_the_page() {
+fn the_page_keeps_nothing_of_a_table_off_it() {
     let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃";
     let text = format!(
         "| 名 | 傳 |\n| --- | --- |\n| 洛陽 | {long} |\n| 甲 | 乙                                    |\n"
@@ -245,50 +251,25 @@ fn the_caret_steps_over_what_a_table_keeps_off_the_page() {
     ed.execute(":syntax markdown").unwrap();
     ed.execute("4").unwrap();
     press(&mut ed, " tb");
-    // **摺疊要開口要**（2026-10-21）：這一條問的是「頁面上看不見的那一段，`l`
-    // 跨不跨得過去」，而頁面藏東西只在摺起來的時候。`t f` 出廠就摺，它併進
-    // `t b` 的時候没有把那個默認帶過來——文檔該顯示你打的字。
+    assert!(
+        ed.cell_hidden_on_line(3).is_empty(),
+        "基本 不藏：{:?}",
+        ed.cell_hidden_on_line(3)
+    );
+    // And `t w` is not a key here at all — it cannot put anything off the page.
     press(&mut ed, " tw");
-    let hidden = ed.cell_hidden_on_line(3);
-    assert!(!hidden.is_empty(), "the file's padding is off the page: {hidden:?}");
-    let (from, upto) = hidden[0];
+    assert!(ed.cell_hidden_on_line(3).is_empty(), "nor after asking for it");
 
-    // Walk to the last character before the hidden run…
+    // So `l` through the padding moves the caret and the column together, which
+    // is all #379 ever asked for.
     ed.execute("4").unwrap();
-    let start = ed.cursor();
-    // **Pressed until it arrives, not counted** (#408). `l` now steps over the
-    // seams between cells too — three characters of the file drawn as one
-    // rule — so the number of presses is no longer the number of characters.
-    // The character before the padding is a visible one, so it is still landed
-    // on exactly.
-    for _ in 0..from {
-        if ed.cursor() - start >= from - 1 {
-            break;
-        }
+    let mut column = ed.cursor_visual_column();
+    for _ in 0..8 {
         ed.on_key(Key::Char('l'));
+        let now = ed.cursor_visual_column();
+        assert!(now > column, "the page moved with it: {column} -> {now}");
+        column = now;
     }
-    assert_eq!(ed.cursor() - start, from - 1, "at the last visible character");
-    let before = ed.cursor_visual_column();
-
-    // …and one more press clears the whole run rather than walking it blind.
-    // The run's far end is the row's closing ` |`, itself drawn as one rule
-    // (#408), so the press carries through that too and stops at the last
-    // character of the line — one press either way, nothing walked blind.
-    ed.on_key(Key::Char('l'));
-    assert!(
-        ed.cursor() - start >= upto,
-        "one press, the whole run: {hidden:?}, landed {}",
-        ed.cursor() - start
-    );
-    assert!(
-        ed.cursor_visual_column() > before,
-        "and the page moved with it: {before} -> {}",
-        ed.cursor_visual_column()
-    );
-
-    // Back the same way.
-    ed.on_key(Key::Char('h'));
-    assert_eq!(ed.cursor() - start, from - 1, "and back over it in one");
 }
 
 /// Markup is the other half of what is hidden and it is **not** skipped: it

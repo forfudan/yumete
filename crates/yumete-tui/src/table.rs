@@ -306,11 +306,18 @@ pub fn char_at(
     let mut line = viewport.top;
     let mut top = area.y + head;
     let mut parts = lines_of(line);
-    let mut on = 0usize;
-    while line < bottom {
+    let on;
+    loop {
         let tall = tall_of(&parts) as u16;
-        if mouse.row < top + tall {
-            on = mouse.row.saturating_sub(top) as usize;
+        // **The bottom row is inside the loop too** (2026-10-22). `while line
+        // < bottom` left it out, so a click anywhere in the last row of a
+        // table answered 「the first of its drawn lines」 — invisible for as
+        // long as a row was one line tall, and wrong for every wrapped cell of
+        // a one-row table from the moment 軟折行 became what the pane opens
+        // with. `the_caret_reads_back` named it: the caret painted on the 17th
+        // character of a cell, and the same cell read back as its 1st.
+        if mouse.row < top + tall || line >= bottom {
+            on = mouse.row.saturating_sub(top).min(tall.saturating_sub(1)) as usize;
             break;
         }
         top += tall;

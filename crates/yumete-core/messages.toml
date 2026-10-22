@@ -6221,9 +6221,9 @@ en = "whether the table's first row is a heading row"
 [[message]]
 # t 選單：t w 這一行
 key = "hint.table.fold-wide-cells"
-zht = "長單元格摺疊/展開"
-zhs = "长单元格折叠/展开"
-en = "long cells: fold / unfold"
+zht = "長單元格:換行/摺疊/全文"
+zhs = "长单元格:换行/折叠/全文"
+en = "long cells: wrap / fold / whole"
 
 [[message]]
 # 表格提示：去某一格
@@ -6371,13 +6371,6 @@ key = "hint.table.whole-window"
 zht = "全窗視圖(表格獨佔窗口)"
 zhs = "全窗视图(表格独占窗口)"
 en = "full-window view: the table takes the window"
-
-[[message]]
-# t 選單：t a 這一行
-key = "hint.table.wrap-wide-cells"
-zht = "長單元格自動換行"
-zhs = "长单元格自动换行"
-en = "long cells wrap onto the next line"
 
 [[message]]
 # 表格提示：取這欄/貼一欄
@@ -11300,13 +11293,6 @@ zhs = "命令送回来的第 {0} 行是 {1} 栏，这张表是 {2} 栏——没�
 en = "line {0} came back with {1} columns and this table has {2} — nothing replaced"
 
 [[message]]
-# t w 在源碼模式下按到：那裏的表格照原樣畫，没有排齊的欄可摺
-key = "table.folds-need-a-drawn-table"
-zht = "没有排齊的表格可摺——先 tb 或 tf"
-zhs = "没有排齐的表格可折——先 tb 或 tf"
-en = "nothing squared up to fold — press tb or tf first"
-
-[[message]]
 # t w 把過寬的格子收起尾巴
 key = "table.folds-off"
 zht = "格子：全文(超過 {0} 格的欄跑出畫面)"
@@ -11803,18 +11789,11 @@ zhs = "全窗表格只走这张表——␣t q 交回窗口，␣t ] 去下一�
 en = "the whole-window table holds this table — ␣t q gives the window back, ␣t ] goes to the next"
 
 [[message]]
-# t a 在正文頁面上按到——那裏的行是共用的折行層算的
-key = "table.wrap-needs-the-window"
-zht = "格內折行只在全窗表格裏——先 tt(設置已記下)"
-zhs = "格内折行只在全窗表格里——先 tt(设置已记下)"
-en = "cells wrap in the whole-window table — press tt first (the switch is set)"
-
-[[message]]
-# t a 在全窗表格裏把過寬的格子折到下面幾行
+# t w 的第一檔：把過寬的格子折到下面幾行
 key = "table.wrap-on"
-zht = "格子：折行(超過 {0} 格的接着往下一行寫)"
-zhs = "格子：折行(超过 {0} 格的接着往下一行写)"
-en = "cells: wrapped (past {0} the rest is drawn underneath)"
+zht = "單元格軟折行"
+zhs = "单元格软折行"
+en = "cells: soft-wrapped"
 
 [[message]]
 # 寫下了一張空表，光標停在第一格
