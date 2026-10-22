@@ -16,6 +16,7 @@
     python3 scripts/table_keys.py              # 全窗表格那一面
     python3 scripts/table_keys.py --surface tb # 文中表格 · to 源碼
     python3 scripts/table_keys.py --preset vim # 換一套鍵位,同一張固定裝置
+    python3 scripts/table_keys.py --undo       # 改動過的那些格,再按 u 回不回得去
     python3 scripts/table_keys.py --key 'l,x'  # 只看這幾個鍵
     python3 scripts/table_keys.py --moved      # 只印「檔案變了」的那些行
 
@@ -68,6 +69,9 @@ SHAPES = [
 
 # 三個面。全窗是 `.csv` 開檔就在的那一面,另外兩個要自己按過去。
 SURFACES = {"tt": "", "tb": " tb", "to": " to"}
+
+# 重做各按各的:helix 是 `U`,vim 鍵位是 `C-r`（`U` 在那邊不重做）。
+REDO = {"helix": "U", "vim": "\\{C-r}"}
 
 # （印出來叫什麼,餵進去是什麼,前面要不要先進格內）。
 #
@@ -208,12 +212,66 @@ def squash(before, after):
     return " · ".join(bits).replace("\t", "⇥") or f"{len(a)}行 → {len(b)}行"
 
 
+def every_key(preset):
+    """（印出來叫什麼,餵進去是什麼,前面要不要先進格內）—— 三層接起來。"""
+    return (
+        [(n, k, "") for n, k in KEYS_TOP]
+        + [(n, k, "\\n") for n, k in KEYS_IN]
+        + [(n, k, "\\n") for n, k in KEYS_INS]
+        + [(n, k, "") for n, k in (KEYS_VIM if preset == "vim" else [])]
+    )
+
+
+def sweep_undo(args, into, want, work):
+    """**改壞得了,就要撤得回來。**
+
+    只看**真的動過檔案**的那些格——没動過的格子按 `u` 没有東西可撤,印出來是噪音。
+    每一格三趟:按完、再 `u`、再重做。要看的是兩句話:`u` 之後**一個字節都不差**地
+    回到原樣,重做之後回到按完那個樣子。
+    """
+    redo = REDO[args.preset]
+    rows = []
+    try:
+        for name, keys, layer_in in every_key(args.preset):
+            if want and name not in want:
+                continue
+            for n, (mark, shape) in enumerate(SHAPES):
+                prefix = into + "j" * n + "l" + layer_in
+                _, _, after, _ = one(work, prefix, keys)
+                if after == FIXTURE:
+                    continue
+                _, at, back, said = one(work, prefix, keys + "\\eu")
+                _, _, again, _ = one(work, prefix, keys + "\\eu" + redo)
+                rows.append((
+                    f"{mark} {shape}",
+                    name,
+                    squash(FIXTURE, after),
+                    "原樣" if back == FIXTURE else squash(FIXTURE, back),
+                    "回到按完" if again == after else squash(FIXTURE, again),
+                    at,
+                ))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    heads = ("形狀", "鍵", "按完", "u 之後", f"u {redo} 之後", "u 之後光標落在")
+    wide = [max(width(r[i]) for r in rows + [heads]) for i in range(6)]
+    print(f"{YUMETE}  ·  {args.surface}  ·  {args.preset}  ·  撤銷  ·  {len(rows)} 格\n")
+    print("  ".join(pad(h, w) for h, w in zip(heads, wide)))
+    print("  ".join("─" * w for w in wide))
+    last = None
+    for r in rows:
+        if last is not None and r[1] != last:
+            print()
+        print("  ".join(pad(c, w) for c, w in zip(r, wide)))
+        last = r[1]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--surface", default="tt", choices=sorted(SURFACES))
     ap.add_argument("--preset", default="helix", choices=("helix", "vim"))
     ap.add_argument("--key", default="", help="只跑這幾個鍵(逗號分開,按印出來的名字)")
     ap.add_argument("--moved", action="store_true", help="只印檔案變了的那些行")
+    ap.add_argument("--undo", action="store_true", help="改動過的那些格,再按 u 回不回得去")
     args = ap.parse_args()
 
     if not os.access(YUMETE, os.X_OK):
@@ -225,14 +283,11 @@ def main():
     into = lay + SURFACES[args.surface]
     want = {k.strip() for k in args.key.split(",") if k.strip()}
     work = tempfile.mkdtemp(prefix="table-keys-")
+    if args.undo:
+        return sweep_undo(args, into, want, work)
     rows, rest = [], {}
     try:
-        for name, keys, layer_in in (
-            [(n, k, "") for n, k in KEYS_TOP]
-            + [(n, k, "\\n") for n, k in KEYS_IN]
-            + [(n, k, "\\n") for n, k in KEYS_INS]
-            + [(n, k, "") for n, k in (KEYS_VIM if args.preset == "vim" else [])]
-        ):
+        for name, keys, layer_in in every_key(args.preset):
             if want and name not in want:
                 continue
             for n, (mark, shape) in enumerate(SHAPES):
