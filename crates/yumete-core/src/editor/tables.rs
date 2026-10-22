@@ -2803,21 +2803,16 @@ impl Editor {
                 .join("\n"),
             None => self.current_buffer().text(),
         };
-        // Warning: **一條記錄跨兩行的時候不許排**（2026-10-09 審出來的）。
+        // Warning: **排的是記錄，不是行**（2026-10-09 攔住，2026-10-22 做出來）。
         //
-        // 這一支底下按 `text.lines()` 一行一條記錄地重排，而一個引號裏夾了換行的欄位
-        // 是**一條記錄兩行**。開檔那道門攔得住它，可那道門只讀前二十行
-        // （`looks_delimited`／`first_lines(20)`），於是第二十一行之後的那一個照樣進得
-        // 來——排完 `zz,"line1` 落到檔尾、`line2"` 升成第二行，記錄碎了、引號也不成
-        // 對，整個檔從此讀不進去。字一個没少，可那比少幾個字更糟。
+        // 一個引號裏夾了換行的欄位是**一條記錄兩行**，而這一支從前按 `text.lines()`
+        // 一行一條地重排：排完 `zz,"line1` 落到檔尾、`line2"` 升成第二行，記錄碎了、
+        // 引號也不成對，整個檔從此讀不進去。字一個没少，可那比少幾個字更糟。所以
+        // 2026-10-09 審出來的時候先攔住了它，報的是開檔那道門那一句——而那一句說的是
+        // 「讀不了這一種」，自 2026-10-20 起已經不是真話了。
         //
-        // 所以這裏自己問一遍整份，報的還是開檔那道門報的那一句。`:table-check` 早就
-        // 指得出那一行，只是排序没問過它。
-        if text.lines().any(|l| crate::table::field_runs_on(l, delimiter)) {
-            let name = self.current_buffer().display_name();
-            self.status = say!("table.field-runs-on", name);
-            return;
-        }
+        // 現在先按記錄分組再排（`records_in` 同一條規矩），只有**引號從頭到尾不成對**
+        // 的時候纔拒絕：那樣的檔不是這張表的幾條記錄，`:table-check` 指得出是哪一行。
         let ends_with_newline = block.is_none() && text.ends_with('\n');
         // **Whatever this file ends its lines with, it goes on ending them with
         // it.** `str::lines` strips `\r\n` and a naive rejoin writes `\n`, so
@@ -2836,9 +2831,6 @@ impl Editor {
             self.status = say!("table.too-few-rows-to-sort");
             return;
         }
-        // The trailing empty line a file ending in a newline leaves is not a
-        // row and must not be sorted into the middle.
-        let body = &mut lines[header..];
         // Warning: **按欄位的字排，不按它在檔裏的拼法**（2026-10-02 一輪掃查報來的）。
         // `cell_text` 交的是原樣的那一段，引號在內——於是 `"Smith, John"` 按 `"`
         // （0x22）排，落在 `Amy` 前面。排序排的是人看得見的那幾個字。
@@ -2856,9 +2848,42 @@ impl Editor {
                 Err(_) => (true, 0.0, value),
             }
         };
-        body.sort_by(|a, b| {
-            for &(column, descending) in &keys {
-                let (ka, kb) = (rank(cell(a, column)), rank(cell(b, column)));
+        // **The rows grouped into records**, each one the lines it is written
+        // on. One line for all but a handful of them.
+        let mut rows: Vec<Vec<&str>> = Vec::new();
+        let mut at = header;
+        while at < lines.len() {
+            let tall = crate::table::record_lines(
+                lines[at..].iter().map(|line| format!("{line}\n")),
+                delimiter,
+            )
+            .max(1);
+            let upto = (at + tall).min(lines.len());
+            rows.push(lines[at..upto].to_vec());
+            at = upto;
+        }
+        // A record whose quote never closes is not a record of this table.
+        if rows
+            .iter()
+            .any(|row| crate::table::field_runs_on(&row.join("\n"), delimiter))
+        {
+            let name = self.current_buffer().display_name();
+            self.status = say!("table.field-runs-on", name);
+            return;
+        }
+        // **Keyed once, not once per comparison** — a record's key is read off
+        // the lines joined back together, which is the only spelling of it
+        // `cells` can split.
+        let mut keyed: Vec<(Vec<SortKey>, Vec<&str>)> = rows
+            .into_iter()
+            .map(|row| {
+                let whole = row.join("\n");
+                (keys.iter().map(|&(c, _)| rank(cell(&whole, c))).collect(), row)
+            })
+            .collect();
+        keyed.sort_by(|a, b| {
+            for (nth, &(_, descending)) in keys.iter().enumerate() {
+                let (ka, kb) = (&a.0[nth], &b.0[nth]);
                 let order = ka
                     .0
                     .cmp(&kb.0)
@@ -2874,6 +2899,10 @@ impl Editor {
             }
             std::cmp::Ordering::Equal
         });
+        lines.truncate(header);
+        for (_, row) in &keyed {
+            lines.extend(row.iter().copied());
+        }
         let mut rebuilt = lines.join(eol);
         if ends_with_newline {
             rebuilt.push_str(eol);
@@ -3298,6 +3327,24 @@ impl Editor {
     /// 的：`Tab` out of a two-line cell went 列 5 → 列 4 → 列 5 → 列 1,
     /// because the record's second written line was being walked as though it
     /// were a row of its own.
+    /// **The first and last file line of the record the cursor is on** —
+    /// `None` unless it really runs over more than one (2026-10-22).
+    ///
+    /// Every structural key answered 「which line am I on」, which is the same
+    /// question for all but a handful of records and the wrong one for those:
+    /// `t d` cut off the record's first line and left the rest of it standing
+    /// as an unparseable row, `t j` moved that line past the next record, and
+    /// `t r` opened the new row **inside** the record, between its two lines.
+    /// `None` for an ordinary row keeps each of them on exactly the path it
+    /// was on before.
+    pub(super) fn record_lines_here(&self) -> Option<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
+        let first = self.record_first(line);
+        let height = self.record_height(first);
+        (height > 1).then(|| (first, first + height - 1))
+    }
+
     fn record_base(&self, line: usize) -> usize {
         self.current_buffer().rope().line_to_char(self.record_first(line))
     }
@@ -4783,15 +4830,24 @@ impl Editor {
             self.status = say!("table.header-cannot-be-deleted");
             return;
         }
-        let (start, end, text) = {
+        // **The record's lines, which for a field with a line break in it are
+        // more than one** (2026-10-22). It used to take the cursor's line and
+        // nothing else, so `t d` on such a record left `three four",1` behind
+        // — a row that parses as nothing and that the grid then drew as a
+        // ragged one.
+        let (first, through) = self.record_lines_here().unwrap_or_else(|| {
             let rope = self.current_buffer().rope();
             let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+            (line, line)
+        });
+        let (start, end, text) = {
+            let rope = self.current_buffer().rope();
             let last = motion::last_line(rope);
-            let start = rope.line_to_char(line);
-            let end = if line >= last {
+            let start = rope.line_to_char(first);
+            let end = if through >= last {
                 rope.len_chars()
             } else {
-                rope.line_to_char(line + 1)
+                rope.line_to_char(through + 1)
             };
             (start, end, rope.slice(start..end.max(start)).to_string())
         };
@@ -4804,12 +4860,18 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
+        self.rescan_records();
         self.set_cursor(start.min(self.current_buffer().rope().len_chars()));
         self.snap_to_cell();
         self.status = say!("table.row-deleted");
     }
 
     /// Move the row the cursor is on down (or up), in a delimited file.
+    ///
+    /// **Two records change places, not two lines** (2026-10-22). A field
+    /// holding a line break makes a record of two lines, and swapping the
+    /// cursor's line with the one under it tore such a record in half — the
+    /// half left behind parsed as nothing.
     fn shift_row(&mut self, down: bool) {
         if self.refuse_readonly() {
             return;
@@ -4821,25 +4883,39 @@ impl Editor {
                 motion::last_line(rope),
             )
         };
-        let other = if down { line + 1 } else { line.wrapping_sub(1) };
+        let line = self.record_first(line);
+        let tall = self.record_height(line).max(1);
+        let other = match down {
+            true => line + tall,
+            false => match line {
+                0 => usize::MAX,
+                _ => self.record_first(line - 1),
+            },
+        };
         let header = usize::from(self.table.as_ref().is_some_and(|v| v.schema.header));
         if other > last || other < header || line < header {
             self.status = say!("table.no-further");
             return;
         }
         let (a, b) = (line.min(other), line.max(other));
-        let text_a = self.line_text(a).unwrap_or_default();
-        let text_b = self.line_text(b).unwrap_or_default();
-        let (start, end) = {
+        let deep = self.record_height(b).max(1);
+        let (start, split_at, end) = {
             let rope = self.current_buffer().rope();
-            let end = if b >= last {
+            let end = if b + deep > last {
                 rope.len_chars()
             } else {
-                rope.line_to_char(b + 1)
+                rope.line_to_char(b + deep)
             };
-            (rope.line_to_char(a), end)
+            (rope.line_to_char(a), rope.line_to_char(b), end)
         };
-        // Whatever the two lines ended with, they go on ending with it: the
+        let (text_a, text_b) = {
+            let rope = self.current_buffer().rope();
+            (
+                rope.slice(start..split_at).to_string(),
+                rope.slice(split_at..end.max(split_at)).to_string(),
+            )
+        };
+        // Whatever the two blocks ended with, they go on ending with it: the
         // last line of a file may have no break at all.
         let split = |l: &str| -> (String, String) {
             let body = l.trim_end_matches(['\n', '\r']);
@@ -4853,7 +4929,16 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        let landed = self.current_buffer().rope().line_to_char(other.min(last));
+        self.rescan_records();
+        // Where the record that moved now starts: the other one took its
+        // place, so it begins that many lines further along — or, going up, at
+        // the line the one above it began on.
+        let landed = match down {
+            true => a + deep,
+            false => a,
+        };
+        let rope = self.current_buffer().rope();
+        let landed = rope.line_to_char(landed.min(motion::last_line(rope)));
         self.set_cursor(landed);
         self.snap_to_cell();
         self.status = match down {
@@ -6777,6 +6862,10 @@ impl Editor {
         }
     }
 }
+
+/// What one column of a sort compares: a number as a number, anything else by
+/// code point (`is_text`, the number, the text).
+type SortKey = (bool, f64, String);
 
 /// **The records in this text**, each as one string — a field holding a line
 /// break makes a record of several lines, which is why this is not
