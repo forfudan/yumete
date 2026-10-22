@@ -3088,6 +3088,55 @@ impl Editor {
         true
     }
 
+    /// **A single step at the cell's edge goes into the one next door**
+    /// (2026-10-22 作者定,「往上對齊:h/l 也跨」).
+    ///
+    /// The arrow keys in Insert have crossed since #376 —「an arrow key moves
+    /// and changes nothing, so barring it was a rule about editing applied to
+    /// walking」— and `j`/`k` cross at the cell's first and last row. A
+    /// direction means the same thing whichever mode it is pressed in, so the
+    /// character step crosses too.
+    ///
+    /// **The character step only.** 詞 (`w`/`b`/`e`) and the cell's two ends
+    /// (`gh`/`gl`, `Home`/`End`) keep the cell as their whole world, which is
+    /// 設計 §01 and the way to stay inside one.
+    ///
+    /// `false` when there is no cell that way — the table's own first or last
+    /// — which is where 「到邊了說一句」 belongs now.
+    pub(super) fn step_into_the_next_cell(&mut self, forward: bool) -> bool {
+        if !self.grid_has_the_pane() {
+            return false;
+        }
+        let (was, home) = (self.cell_position(), self.caret());
+        self.step_cell(forward, false);
+        // **And not onto the header**, which `step_cell` walks back onto from
+        // the first data row: the grid draws it frozen at the top and refuses
+        // every edit on it, so a caret there is one the page cannot show —
+        // 「the window holds you」 then dragged it back and said so, about a
+        // key that had merely reached the table's first cell (2026-10-22).
+        if self.cell_position() == was || self.on_header_row() {
+            self.set_cursor(home);
+            return false;
+        }
+        match forward {
+            // Landing from the left is landing on the first character, which
+            // is the clamp's own answer.
+            true => self.put_the_caret_in_the_cell(),
+            // …and from the right, on the last — the same place the arrow
+            // keys in Insert land when they walk in backwards.
+            false => {
+                if let Some((from, to)) = self.cell_here() {
+                    let last = match self.mode == crate::input::Mode::Insert || to <= from {
+                        true => to,
+                        false => crate::motion::prev_grapheme(self.current_buffer().rope(), to),
+                    };
+                    self.set_cursor(last.max(from));
+                }
+            }
+        }
+        true
+    }
+
     /// The next line of the grid that holds data.
     pub(super) fn next_row(&self, line: usize, down: bool) -> Option<usize> {
         self.next_row_for(line, down, true)
