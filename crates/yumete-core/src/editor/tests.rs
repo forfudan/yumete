@@ -7083,23 +7083,28 @@ fn every_key_the_table_group_lists_does_something() {
         ed
     };
 
-    let cases: [(Option<Bounds>, &dyn Fn() -> Editor); 4] = [
-        (None, &prose),
-        (Some(Bounds::Md), &md),
-        (Some(Bounds::Block), &block),
-        (Some(Bounds::WholeFile), &file),
+    // **第四檔就是全窗表格**（2026-10-22 補）：`.csv` 開起來窗口本來就是它的，
+    // 所以 `␣t w` 從那天起只在這一張單子上，而這一條測試一直走得到它。
+    // 一檔：在哪一種表格裏、窗口是不是這張表的、怎麽造出來。
+    type Case<'a> = (Option<Bounds>, bool, &'a dyn Fn() -> Editor);
+    let cases: [Case; 4] = [
+        (None, false, &prose),
+        (Some(Bounds::Md), false, &md),
+        (Some(Bounds::Block), false, &block),
+        (Some(Bounds::WholeFile), true, &file),
     ];
 
-    for (inside, make) in cases {
+    for (inside, in_pane, make) in cases {
         // 兩句「什麽都没發生」：没人認的鍵落到兜底（再念一遍那張單子），以及
         // 光標根本不在表格裏那一句——後者擋在那一支 `match` 的中間。
-        let dead = [Editor::table_keys_say(inside), say!("hint.table.not-in-a-table")];
+        let dead =
+            [Editor::table_keys_say(inside, in_pane), say!("hint.table.not-in-a-table")];
         // 先驗這一條測試自己驗得出東西：一個**不在**單子上的鍵要落到其中一句。
         let mut ed = make();
         press(&mut ed, " tZ");
         assert!(dead.contains(&ed.status().to_string()), "{inside:?}：没人認的鍵——{}", ed.status());
 
-        for (keys, what) in Editor::table_keys(inside) {
+        for (keys, what) in Editor::table_keys(inside, in_pane) {
             for token in keys.split_whitespace() {
                 let mut ed = make();
                 press(&mut ed, " t");
@@ -8590,180 +8595,6 @@ fn with_two_md_tables() -> Editor {
     ))
 }
 
-/// #283. 「markdown中的表格在 tf 模式下都没办法通过 tw 来缩小单元格宽度」——
-/// there was no `t w`, and no cap in prose at all: a 80-cell cell pushed
-/// every column after it off the side, which is what this project's own
-/// `development.md` looked like.
-#[test]
-fn t_w_folds_a_cell_too_wide_to_scan_and_gives_it_back() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
-    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
-    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
-    press(&mut ed, " tb");
-    press(&mut ed, " tw");
-    // Row 9's 備註 is 25 characters — 50 cells — so its tail comes off.
-    let folded = ed.hidden_on_line(8);
-    assert!(!folded.is_empty(), "the wide cell is folded: {folded:?}");
-    let marks = ed.drawn_runs_on_line(8);
-    assert!(
-        marks
-            .iter()
-            .any(|r| r.text == crate::mdtable::FOLD_MARK && r.ink == crate::drawn::Ink::Fold),
-        "and says so on the page, in an ink of its own: {marks:?}"
-    );
-    // What is left is the cap, mark included — never one cell more.
-    let text = ed.line_text(8).unwrap();
-    let chars: Vec<char> = text.trim_end().chars().collect();
-    let shown: String = (0..chars.len())
-        .filter(|at| !folded.iter().any(|&(a, b)| (a..b).contains(at)))
-        .map(|at| chars[at])
-        .collect();
-    let cell = shown.split('|').nth(2).unwrap_or_default().trim().to_string();
-    assert!(
-        yumete_cjk::str_width(&cell) + yumete_cjk::str_width(crate::mdtable::FOLD_MARK)
-            <= crate::mdtable::MAX_COLUMN,
-        "「{cell}」 and the mark fit in {}",
-        crate::mdtable::MAX_COLUMN
-    );
-
-    // `t w` gives the whole cell back — the reader who came to *read* it.
-    press(&mut ed, " tw");
-    assert!(ed.hidden_on_line(8).is_empty(), "nothing off the page now");
-    press(&mut ed, " tw");
-    assert!(!ed.hidden_on_line(8).is_empty(), "and folded again");
-}
-
-/// Off this project's own `development.md`: 「the long cells are trimmed
-/// with a `>` symbol. However, the width of the cell are still padded
-/// with white spaces at the tail.」
-///
-/// A table squared up **in the file** carries the column's whole width
-/// inside every cell, as spaces; the padding is measured pipe to pipe, so
-/// each of those cells went on voting 50 cells wide however short its
-/// writing was. The mark stood where the writing stopped and a field of
-/// nothing ran from there to the pipe — the cap saved no room at all.
-#[test]
-fn a_table_squared_up_in_the_file_is_still_folded_to_the_cap() {
-    let long = "一二三四五六七八九十一二三四五六七八九十一二三四五";
-    let rows: Vec<String> = format!("| 姓名 | 備註 |\n| --- | --- |\n| 甲 | {long} |")
-        .lines()
-        .map(str::to_string)
-        .collect();
-    let square = crate::mdtable::format(&rows);
-    let file: Vec<usize> = square.iter().map(|l| yumete_cjk::str_width(l)).collect();
-    let mut ed = typed(&format!("{}\n", square.join("\n")));
-    ed.goto_line(3);
-    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
-    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
-    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
-    press(&mut ed, " tb");
-    press(&mut ed, " tw");
-
-    assert!(
-        !ed.hidden_on_line(0).is_empty(),
-        "the short row gives its padding up too, or the column stays wide"
-    );
-    let page: Vec<usize> = (0..3).map(|l| drawn_width(&ed, l)).collect();
-    assert!(
-        page.iter().zip(&file).all(|(drawn, wrote)| drawn < wrote),
-        "every row is drawn narrower than the file wrote it: {page:?} of {file:?}"
-    );
-    // And they still square up: the mark stands in the cell it saved, so
-    // no row is more than the one cell it costs from any other.
-    let (low, high) = (page.iter().min().unwrap(), page.iter().max().unwrap());
-    assert!(high - low <= 1, "square within the mark's own cell: {page:?}");
-    assert!(
-        *high <= crate::mdtable::MAX_COLUMN + yumete_cjk::str_width("| 姓名 |") + 3,
-        "and the wide column is drawn at the cap, not at the file's width: {page:?}"
-    );
-}
-
-/// 「`basic` 不藏、不摺、不替換」 is a law about what a *level* does with
-/// nobody asking. `t w` is the reader asking (2026-09-07: 「虽然
-/// tb 在默认状态下不折叠，但能不能在按下 tw 之后折叠？」), and 基本 squares
-/// its columns up exactly as 全 does — so there is something to fold
-/// against, and folding it is the reader's call and not the level's.
-#[test]
-fn 基本_folds_nothing_unasked_and_folds_when_asked() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    press(&mut ed, " tb");
-    assert!(ed.hidden_on_line(8).is_empty(), "基本 hides nothing unasked");
-    press(&mut ed, " tw");
-    assert_eq!(ed.table_level(), TableLevel::Basic, "and stays 基本");
-    assert!(
-        !ed.hidden_on_line(8).is_empty(),
-        "asked, it folds without raising the level: {}",
-        ed.status()
-    );
-    press(&mut ed, " tw");
-    assert!(ed.hidden_on_line(8).is_empty(), "and gives it back: {}", ed.status());
-}
-
-/// 源碼 draws the file as it is written, so no column has been squared up
-/// and there is nothing to measure a fold against. The refusal names the
-/// two keys that square one up rather than raising a level behind the
-/// reader's back.
-#[test]
-fn 源碼_has_no_squared_up_column_to_fold_and_says_so() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    press(&mut ed, " to");
-    press(&mut ed, " tw");
-    assert_eq!(ed.table_level(), TableLevel::Off, "and stays 源碼");
-    assert!(ed.hidden_on_line(8).is_empty(), "nothing folded");
-    assert!(ed.status().contains("tb"), "it points at the keys: {}", ed.status());
-}
-
-/// The level supplies the default and the reader's own answer outlives it:
-/// a `t w` pressed at 基本 is still the answer at 全, and the other way
-/// round. Otherwise walking between levels would keep undoing the reader.
-#[test]
-fn the_answer_t_w_gave_travels_between_the_levels() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
-    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
-    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
-    press(&mut ed, " tb");
-    press(&mut ed, " tw");
-    assert!(!ed.hidden_on_line(8).is_empty(), "`t w` folds it");
-    press(&mut ed, " tw");
-    assert!(ed.hidden_on_line(8).is_empty(), "and `t w` again opens it: {}", ed.status());
-    press(&mut ed, " tt");
-    press(&mut ed, " tq");
-    assert!(ed.hidden_on_line(8).is_empty(), "the window did not fold it back");
-    press(&mut ed, " tb");
-    assert!(ed.hidden_on_line(8).is_empty(), "nor did coming back to 基本");
-}
-
-/// #283, off `development.md` itself (2026-09-07): 「tw 功能无
-/// 法在 tt 模式下使用，导致所有的长单元格都是保持折叠状态且没有折叠符号…
-/// 因此我永远没有办法读取完整内容」.
-///
-/// The refusal asked for 全 and the pane is not a level, so it fired on
-/// every press inside the window these tables are read in — and the
-/// grid's own 32-cell cap had no other key against it.
-#[test]
-fn t_w_is_answered_in_the_pane_which_is_not_below_全() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    press(&mut ed, " tt");
-    assert!(ed.table().unwrap().takes_the_pane(), "{}", ed.status());
-    assert!(ed.cell_folds(), "the grid folds to its cap to begin with");
-    press(&mut ed, " tw");
-    assert!(!ed.cell_folds(), "and `t w` is heard: {}", ed.status());
-    assert!(
-        !ed.status().contains("tb"),
-        "no refusal in a window that squares its own columns up: {}",
-        ed.status()
-    );
-    press(&mut ed, " tw");
-    assert!(ed.cell_folds(), "and back again: {}", ed.status());
-}
-
 /// **全窗表格 is bounded**: `gg`, `G` and `:120` do not walk out of it
 /// (2026-09-07: 「衹能通過 tq/tf/tb 離開回到其他模式，或者 t[ t]
 /// 去下一個表格」), and the gutter numbers this table's own rows, so
@@ -8835,106 +8666,6 @@ fn the_window_holds_the_table_it_was_opened_on() {
     press(&mut ed, " tq");
     press(&mut ed, "gg");
     assert_eq!(ed.cursor_line(), 0, "{}", ed.status());
-}
-
-/// `t w` and `t a` are two toggles over **one** axis: 摺起, 攤平, 折行,
-/// and never two of them at once (2026-09-07: 「ta on 和 tw on 两
-/// 者不会叠在一起」).
-///
-/// A three-way cycle on `t w` was the other way to spell it, and it would
-/// have made one key a toggle in prose and a cycle in the window.
-#[test]
-fn t_w_and_t_a_are_two_toggles_over_one_axis() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    press(&mut ed, " tt");
-    assert!(ed.cell_folds() && !ed.cell_wrap(), "the grid opens folded");
-    // 折行 takes over from 摺起. **The cap still bites** — 折行 *is* 摺起
-    // plus 「and draw the rest underneath」, which is why the prose page,
-    // where the second half cannot be drawn, still folds.
-    press(&mut ed, " ta");
-    assert!(ed.cell_wrap(), "{}", ed.status());
-    assert!(ed.cell_folds(), "the cap is what 折行 wraps at: {}", ed.status());
-    // …and `t w` takes it back off — to 攤平, not to 摺起
-    // (2026-09-08). Both keys name a way of *not* showing a cell whole, so
-    // the way back from either of them is the whole cell; answering 折行
-    // with 摺起 handed the reader the one state they had not named.
-    press(&mut ed, " tw");
-    assert!(!ed.cell_folds() && !ed.cell_wrap(), "攤平: {}", ed.status());
-    // Each is still a toggle of its own: from 攤平 it folds, and again
-    // from 摺起 it opens back out.
-    press(&mut ed, " tw");
-    assert!(ed.cell_folds() && !ed.cell_wrap(), "摺起: {}", ed.status());
-    press(&mut ed, " tw");
-    assert!(!ed.cell_folds() && !ed.cell_wrap(), "攤平: {}", ed.status());
-    press(&mut ed, " ta");
-    assert!(ed.cell_wrap(), "{}", ed.status());
-    press(&mut ed, " ta");
-    assert!(!ed.cell_wrap() && !ed.cell_folds(), "攤平 again: {}", ed.status());
-}
-
-/// 折行 is the grid's answer and says so where it cannot be drawn — but it
-/// **sets the switch**, so `t t` finds the answer already given.
-#[test]
-fn t_a_says_where_it_works_and_still_remembers() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
-    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
-    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
-    press(&mut ed, " tb");
-    press(&mut ed, " tw");
-    press(&mut ed, " ta");
-    assert!(ed.status().contains("tt"), "it points at the window: {}", ed.status());
-    assert!(ed.cell_wrap(), "and the switch is set: {}", ed.status());
-    // In prose the cap still bites — 折行 is 摺起 plus a second half that
-    // only the grid can draw.
-    assert!(!ed.hidden_on_line(8).is_empty(), "the tail is still folded away");
-}
-
-/// **Reading does not open a cell; typing in one does** (#283, remade
-/// 2026-09-07).
-///
-/// Walking in used to open it, and that one line put the caret into the
-/// table's layout: the page's geometry then changed on every keystroke,
-/// and a `j` down a two-character column rebuilt 286 rows. Reading is
-/// what `t i`'s panel is for — it holds the whole cell, wrapped — so the
-/// page keeps its columns still, and the tail comes back exactly when
-/// somebody needs to type in it, because a caret may never sit inside
-/// characters the page does not draw.
-#[test]
-fn a_folded_cell_opens_to_be_typed_in_and_not_to_be_walked_over() {
-    let mut ed = with_two_md_tables();
-    ed.goto_line(9);
-    // **摺疊在文檔裏要開口要**（2026-10-21）：出廠折的只有表格界面，`t f` 那
-    // 一檔——它在頁面上折——併進 `t b` 的時候没有把「默認折」帶過來，因為文
-    // 檔本來就該顯示你打的字。`hidden_on_line` 問的正是頁面藏了什麼。
-    press(&mut ed, " tb");
-    press(&mut ed, " tw");
-    assert!(!ed.hidden_on_line(8).is_empty());
-    // Into the 備註 cell — the last one on the row. `Tab` crosses; `Enter`
-    // then goes inside it, which is what the rest of this is about.
-    for i in 0.. {
-        if ed.cell_position().map(|(_, c)| c) == Some(1) {
-            break;
-        }
-        assert!(i < 8, "`Tab` 走不到 備註 那一格");
-        ed.on_key(Key::Tab);
-    }
-    ed.on_key(Key::Enter);
-    assert!(
-        !ed.hidden_on_line(8).is_empty(),
-        "standing in it leaves it folded — the panel is where it is read"
-    );
-    // `i` is the other half: what is being typed in is on the page.
-    ed.on_key(Key::Char('i'));
-    assert!(
-        ed.hidden_on_line(8).is_empty(),
-        "the cell being typed in is whole: {}",
-        ed.status()
-    );
-    ed.on_key(Key::Esc);
-    assert!(!ed.hidden_on_line(8).is_empty(), "and folds again on Esc");
 }
 
 /// The other half of the same law: **an open cell does not move the
@@ -19163,11 +18894,10 @@ fn a_reused_row_says_what_a_cold_walk_would_have_said() {
         " ".repeat(30),
     ));
     ed.execute(":render full").unwrap();
-    // **摺疊要開口要**（2026-10-21）：出廠折的只有表格界面。`t f` 那一檔併進
-    // `t b` 的時候没有把「默認折」帶過來——文檔該顯示你打的字。
+    // **没有摺疊可借**（2026-10-22）：從前這裏按 `␣t w`，拿「摺到 32 格」當
+    // 「一行的單子值得留着」的理由。頁面從那天起一個字都不藏，所以理由換成
+    // 排齊本身——一格長出來，同一欄的每一行都得跟着動。
     press(&mut ed, " tb");
-    press(&mut ed, " tw");
-    assert!(ed.cell_folds(), "the cap is what makes a row's list worth reusing");
 
     // Into the *first* row's first cell, which the last row never reads —
     // except through the width of the column they share.
@@ -19310,36 +19040,70 @@ fn stepping_sideways_crosses_the_line_break() {
     assert_eq!(ed.sel.head(), 0, "the top of the file is where it stops");
 }
 
-/// `t w` and `t a` are two switches over one axis, and **either of them,
-/// pressed while the other is on, opens the table out**
-/// (2026-09-08). Answering `t w` from 折行 with 摺起 handed the reader the
-/// one state they had not named — a second way of hiding, when what they
-/// asked for was to stop hiding.
+/// **`t w` is one ring of three stops** — 軟折行 → 摺起 → 全文 — and the grid
+/// opens on the first of them (2026-10-22 定：「I would keep only `tw` which
+/// cycles "raw length", "folded" and "soft wrap"… Do default "wrap", then
+/// "folded", then "full"」).
+///
+/// It replaces the 2026-09-08 pair: `t w` and `t a` were two switches over one
+/// axis, each opening the table out of whatever the other had done, and the
+/// question they were answering is a cycle.
 #[test]
-fn either_cell_switch_opens_the_table_out_from_the_other() {
-    let mut ed = typed("| a | b |\n| - | - |\n| c | d |\n");
-    ed.set_cell_width(CellWidth::Whole);
+fn the_width_key_is_one_ring_of_three_stops() {
+    let mut ed = typed("| 名 | 數 |\n| --- | --- |\n| 甲 | 12 |\n");
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tt");
+    assert!(ed.grid_has_the_pane(), "{}", ed.status());
 
-    ed.toggle_cell_folds();
-    assert_eq!(ed.cell_width_now(), CellWidth::Fold, "t w 摺起");
-    ed.toggle_cell_wrap();
-    assert_eq!(ed.cell_width_now(), CellWidth::Wrap, "t a walks in from 摺起");
-    ed.toggle_cell_folds();
-    assert_eq!(
-        ed.cell_width_now(),
-        CellWidth::Whole,
-        "and t w out of 折行 is 全部攤開, not 摺起"
-    );
+    assert_eq!(ed.cell_width_now(), CellWidth::Wrap, "全窗表格 opens 軟折行");
+    press(&mut ed, " tw");
+    assert_eq!(ed.cell_width_now(), CellWidth::Fold, "then 摺起");
+    assert_eq!(ed.status(), say!("table.folds-on", crate::mdtable::MAX_COLUMN.to_string(), crate::mdtable::FOLD_MARK));
+    press(&mut ed, " tw");
+    assert_eq!(ed.cell_width_now(), CellWidth::Whole, "then 全文");
+    press(&mut ed, " tw");
+    assert_eq!(ed.cell_width_now(), CellWidth::Wrap, "and round again");
+    assert_eq!(ed.status(), say!("table.wrap-on"));
 
-    // The other way round is the pair it always was: each key, pressed
-    // twice, is where it started.
-    ed.toggle_cell_wrap();
-    assert_eq!(ed.cell_width_now(), CellWidth::Wrap);
-    ed.toggle_cell_wrap();
+    // **`t a` went with the ring.** A letter nothing answers falls to the
+    // group's own 「`ta` is not a key combination here」, not to 折行.
+    press(&mut ed, " ta");
+    assert_eq!(ed.cell_width_now(), CellWidth::Wrap, "t a is not a width key any more");
+}
+
+/// **源碼 and 基本 draw every cell whole, and `t w` is not theirs**
+/// (2026-10-22 定：「in the document (`tb` mode), we do not allow `tw` to
+/// change the layout. It always show the full length of the cell. This is
+/// because we promised users that in `tb` mode, no letters or symbols from the
+/// source code is hidden」).
+///
+/// Which reverses 2026-09-07's 「虽然 tb 在默认状态下不折叠，但能不能在按下 tw
+/// 之后折叠？」: the switch is the pane's alone now, it does not travel back to
+/// the page, and the list does not offer the key where the editor would refuse
+/// it.
+#[test]
+fn the_page_draws_every_cell_whole_and_the_width_key_is_not_on_its_list() {
+    use crate::editor::Bounds;
+
+    let mut ed = typed("| 名 | 數 |\n| --- | --- |\n| 甲 | 12 |\n");
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // Set from inside the pane and carried out of it: the page still draws
+    // every cell whole.
+    ed.set_cell_width(CellWidth::Fold);
     assert_eq!(ed.cell_width_now(), CellWidth::Whole);
-    ed.toggle_cell_folds();
-    ed.toggle_cell_folds();
-    assert_eq!(ed.cell_width_now(), CellWidth::Whole);
+    assert!(!ed.cell_folds(), "基本 不藏");
+
+    press(&mut ed, " tw");
+    assert_eq!(ed.cell_width_now(), CellWidth::Whole, "t w draws nothing here");
+
+    let listed = |pane: bool| {
+        Editor::table_keys(Some(Bounds::Md), pane).iter().any(|&(k, _)| k == "w")
+    };
+    assert!(!listed(false), "and the page's list does not offer it");
+    assert!(listed(true), "the pane's does");
 }
 
 /// The block scan reads each line's opening **where the rope keeps it** when

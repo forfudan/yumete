@@ -773,74 +773,39 @@ impl Editor {
         self.layout() == Layout::Horizontal && self.table_padding_on()
     }
 
-    /// `t w` — fold the over-wide cells away, or give them back (#283).
+    /// `t w` — **one ring of three stops**: 軟折行 → 摺起 → 全文, and round
+    /// again (2026-10-22 定：「I would keep only `tw` which cycles "raw
+    /// length", "folded" and "soft wrap"… Do default "wrap", then "folded",
+    /// then "full"」). `t a` was a second key over this one axis and is gone
+    /// with the ring: one key, one question, three answers.
     ///
-    /// **It asks for a table that has been squared up, not for 全.** The law
-    /// 「`basic` 不藏、不摺、不替換」 says what a *level* does on its own, and
-    /// `t w` is the reader's own key — asking for it at 基本 is not the editor
-    /// hiding anything behind anybody's back (2026-09-07: 「虽然 tb 在
-    /// 默认状态下不折叠，但能不能在按下 tw 之后折叠？」). What folding really
-    /// needs is a column to fold *against*, and 基本 squares one up exactly as
-    /// 全 does. Only 源碼 has none, and there the answer is still a refusal
-    /// rather than a level quietly raised: a width key that also drew walls
-    /// and a ruler would be a second way to change the level, and the reader
-    /// could not tell which of the two they had asked for. The switch is
-    /// still *set* — walk up a level and the answer is the one asked for.
+    /// **It is the 全窗表格's key and nobody else's** (2026-10-22 定：「in the
+    /// document (`tb` mode), we do not allow `tw` to change the layout. It
+    /// always show the full length of the cell. This is because we promised
+    /// users that in `tb` mode, no letters or symbols from the source code is
+    /// hidden」). That reverses 2026-09-07's 「虽然 tb 在默认状态下不折叠，但
+    /// 能不能在按下 tw 之后折叠？」, and the promise is why: 基本 may add to
+    /// the page and never take from it, and a reader's shortcut does not get
+    /// to spend that promise. Hiding a cell's tail belongs to the place that
+    /// is a table interface rather than a document.
     ///
-    /// **The pane is not below 全 — it is beside it.** `t t` draws its own
-    /// grid at its own cap, so the switch means there exactly what it means
-    /// in prose, and refusing it there left over-wide cells
-    /// that could not be opened by any key at all (2026-09-07:
-    /// 「tw 功能无法在 tt 模式下使用……长单元格被折叠的信息永远无法读取」).
-    pub(super) fn toggle_cell_folds(&mut self) {
-        // **Two toggles over one axis, and they cannot both be on**
-        // (2026-09-07). A three-way cycle on `t w` was the other way to spell
-        // this, and it would have made the same key mean a toggle in prose
-        // and a cycle in the window; a reader learns 「`t w` 摺不摺」 once and
-        // it has to hold everywhere. So `t w` answers 摺/不摺, and either
-        // key pulls the table out of whatever the other one had done.
-        //
-        // From 折行, `t w` **opens the table out** rather than folding it
-        // (2026-09-08). Both keys name a way of not showing a cell
-        // whole, so the way back from either of them is the whole cell: from
-        // 折行 the reader who presses the other key is asking to stop wrapping,
-        // and answering with 摺起 hands them the one state they did not name.
+    /// Two things follow, and both are elsewhere: the key is **not offered**
+    /// outside the pane (`Editor::table_keys` — a group that lists a key it
+    /// would refuse is the one thing these menus may not do), and
+    /// [`Self::cell_width_now`] answers 全文 in prose whatever the switch
+    /// holds.
+    pub(super) fn cycle_cell_width(&mut self) {
         let want = match self.cell_width_now() {
-            CellWidth::Fold | CellWidth::Wrap => CellWidth::Whole,
-            CellWidth::Whole => CellWidth::Fold,
+            CellWidth::Wrap => CellWidth::Fold,
+            CellWidth::Fold => CellWidth::Whole,
+            CellWidth::Whole => CellWidth::Wrap,
         };
         self.set_cell_width(want);
         let cap = crate::mdtable::MAX_COLUMN.to_string();
-        self.status = match (want, self.folds_can_bite()) {
-            (_, false) => say!("table.folds-need-a-drawn-table"),
-            (CellWidth::Fold, _) => say!("table.folds-on", cap, crate::mdtable::FOLD_MARK),
-            _ => say!("table.folds-off", cap),
-        };
-    }
-
-    /// `t a` — 格內折行: the tail is drawn **under** the cell, in its own
-    /// column, rather than taken off the page (2026-09-07: 「把所有超
-    /// 长的单元格都在单元格下方的空行中 soft wrap」).
-    ///
-    /// **The grid's answer, and only the grid's.** The prose page's rows come
-    /// from [`crate::wrap`], which every motion, the mouse, 縱書 and the split
-    /// panes read, and it has no hanging indent: a row wrapped there would
-    /// carry on at the left margin with the rest of its cells trailing after
-    /// the wrapped text, which is not what anybody means by 折行. So in prose
-    /// the key says where it works — and still **sets the switch**, so the
-    /// answer is waiting when the reader presses `t t`.
-    pub(super) fn toggle_cell_wrap(&mut self) {
-        let want = match self.cell_width_now() {
-            CellWidth::Wrap => CellWidth::Whole,
-            CellWidth::Fold | CellWidth::Whole => CellWidth::Wrap,
-        };
-        self.set_cell_width(want);
-        let pane = self.table.as_ref().is_some_and(|view| view.takes_the_pane());
-        let cap = crate::mdtable::MAX_COLUMN.to_string();
-        self.status = match (want, pane) {
-            (CellWidth::Wrap, false) => say!("table.wrap-needs-the-window"),
-            (CellWidth::Wrap, true) => say!("table.wrap-on", cap),
-            (_, _) => say!("table.folds-off", cap),
+        self.status = match want {
+            CellWidth::Wrap => say!("table.wrap-on"),
+            CellWidth::Fold => say!("table.folds-on", cap, crate::mdtable::FOLD_MARK),
+            CellWidth::Whole => say!("table.folds-off", cap),
         };
     }
 
@@ -851,27 +816,30 @@ impl Editor {
         self.pad_cache.borrow_mut().take();
     }
 
-    /// Whether `t w` has anywhere to bite from where the reader is standing —
-    /// a page that squares its tables up, or the grid the pane draws for
-    /// itself. 源碼 is the one place with nothing to fold against.
-    fn folds_can_bite(&self) -> bool {
-        self.table_level != TableLevel::Off
-            || self.table.as_ref().is_some_and(|view| view.takes_the_pane())
+    /// The answer that holds where the reader is standing (#283).
+    ///
+    /// **Prose has no switch to read.** 源碼 and 基本 draw every cell whole,
+    /// whatever `t w` was last pressed on, because neither of them may take a
+    /// character off the page (2026-10-22 定：「in `tb` mode, no letters or
+    /// symbols from the source code is hidden」). The reader's answer is the
+    /// 全窗表格's, and the grid's own answer is **軟折行** — it has the window
+    /// to itself, so the tail of a long cell has somewhere to go, and a cell
+    /// cut off behind a `>` is the one thing a table interface should not open
+    /// with.
+    pub(super) fn cell_width_now(&self) -> CellWidth {
+        match self.the_pane_is_on() {
+            true => self.cell_folds.unwrap_or(CellWidth::Wrap),
+            false => CellWidth::Whole,
+        }
     }
 
-    /// The answer that holds where the reader is standing — theirs if they
-    /// have given one, and otherwise the place's own (#283).
+    /// Whether a table has the window — the only place `t w` means anything.
     ///
-    /// The two places have different defaults and both are right: the `t t`
-    /// grid draws its own columns and caps them however it was opened, while
-    /// the prose page folds only at 全, because below 全 hiding is something
-    /// the level may not do unasked.
-    pub(super) fn cell_width_now(&self) -> CellWidth {
-        let pane = self.table.as_ref().is_some_and(|view| view.takes_the_pane());
-        self.cell_folds.unwrap_or(match pane {
-            true => CellWidth::Fold,
-            false => CellWidth::Whole,
-        })
+    /// Not [`Self::grid_has_the_pane`], which also asks whether the caret is
+    /// standing on a row of it: how a cell is *drawn* is a preference about
+    /// the view, and a reader who has scrolled off the rows still owns it.
+    pub(super) fn the_pane_is_on(&self) -> bool {
+        self.table.as_ref().is_some_and(|view| view.takes_the_pane())
     }
 
     /// Whether the cap bites where the reader is standing.
@@ -893,9 +861,10 @@ impl Editor {
         self.folds_now()
     }
 
-    /// Whether an over-wide cell is drawn **wrapped under itself** — `t a`.
+    /// Whether an over-wide cell is drawn **wrapped under itself** — the
+    /// grid's own answer, and the first stop on `t w`'s ring.
     ///
-    /// The grid asks; nothing else can answer it. See [`Self::toggle_cell_wrap`].
+    /// The grid asks; nothing else can answer it. See [`Self::cycle_cell_width`].
     pub fn cell_wrap(&self) -> bool {
         self.cell_width_now() == CellWidth::Wrap
     }
@@ -913,6 +882,14 @@ impl Editor {
     ///   line — [`Self::cell_folds`] is the switch it reads.
     ///
     /// [`Editor::cell_folds`] is the writer's switch over the top — `t w`.
+    ///
+    /// **Today this is never true**, and that is 2026-10-22's decision rather
+    /// than a bug: prose answers 全文 whatever the switch holds
+    /// ([`Self::cell_width_now`]), so the layer underneath this one — the
+    /// tails, the slack they free, the `>` — has nothing that can turn it on.
+    /// It is still here because the question it answers is a real one (a level
+    /// that may hide, asked for by name), and taking it out reaches into
+    /// [`crate::mdtable`] and the measure: its own cut, not this one's.
     fn cells_fold_here(&self) -> bool {
         self.folds_now()
             && self.table_padding_on()

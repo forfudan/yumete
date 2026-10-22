@@ -14994,7 +14994,13 @@ fn squeezed(text: &str) -> String {
             (row, terminal.backend().buffer()[(at.x, at.y)].symbol().to_string())
         };
         // 全窗, into the second column, and type far past its width.
-        for key in [' ', 't', 't', 'l', 'i'] {
+        //
+        // **摺起, asked for** (2026-10-22). Scrolling a cell inside itself is
+        // what the cap does when the tail has nowhere else to go; 軟折行 — what
+        // the pane opens with now — gives it somewhere, draws it underneath and
+        // never scrolls. So this is the ring's second stop, which is the state
+        // #726 was reported in.
+        for key in [' ', 't', 't', ' ', 't', 'w', 'l', 'i'] {
             editor.on_key(Key::Char(key));
         }
         for key in "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸".chars() {
@@ -15023,6 +15029,47 @@ fn squeezed(text: &str) -> String {
         assert!(
             row.contains(yumete_core::mdtable::HEAD_MARK),
             "a scrolled cell says its head is behind it:\n{row}"
+        );
+    }
+
+    /// The same cell under **軟折行**, which is what the pane opens with
+    /// (2026-10-22): the tail is drawn underneath instead of scrolled away, so
+    /// nothing typed ever leaves the page and no head is left behind.
+    ///
+    /// It is also where [`table::char_at`]'s own bottom row turned up. The hit
+    /// test walked the rows `while line < bottom`, which left the last one out,
+    /// so a click anywhere in it answered 「the first of its drawn lines」 —
+    /// and `the_caret_reads_back` says so the moment a cell of that row has two
+    /// of them.
+    #[test]
+    fn a_wrapped_cell_keeps_everything_typed_on_the_page() {
+        let config = Config::default();
+        let _ = ink(&config);
+        let mut editor = editor_with("| 名 | 說明 |\n| --- | --- |\n| 甲 | 第一條 |\n");
+        let mut seats = Seats::default();
+        let (w, h) = (36u16, 8u16);
+        for key in [' ', 't', 't', 'l', 'i'] {
+            editor.on_key(Key::Char(key));
+        }
+        assert!(editor.cell_wrap(), "the pane opens on 軟折行: {}", editor.status());
+        let typed = "一二三四五六七八九十甲乙丙丁戊己庚辛壬癸";
+        for key in typed.chars() {
+            editor.on_key(Key::Char(key));
+        }
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None))
+            .unwrap();
+        let page: String = (0..h)
+            .map(|y| (0..w).map(|x| terminal.backend().buffer()[(x, y)].symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        for c in typed.chars() {
+            assert!(page.contains(c), "{c} is on the page:\n{page}");
+        }
+        assert!(
+            !page.contains(yumete_core::mdtable::HEAD_MARK),
+            "and nothing has scrolled off the front:\n{page}"
         );
     }
 
@@ -15572,11 +15619,17 @@ fn squeezed(text: &str) -> String {
                 editor.on_key(Key::Char(key));
             }
             assert!(editor.grid_has_the_pane(), "t t did not hand the grid the pane");
+            // **折行 is what the pane opens on** since 2026-10-22, so this is
+            // the other case that now needs a key: one `␣t w` takes the ring
+            // from 軟折行 to 摺起, which is what the pane used to open with.
             if wrap {
-                for key in [' ', 't', 'a'] {
+                assert!(editor.cell_wrap(), "the pane no longer opens on 折行");
+            } else {
+                for key in [' ', 't', 'w'] {
                     editor.on_key(Key::Char(key));
                 }
-                assert!(editor.cell_wrap(), "t a did not turn 折行 on");
+                assert!(!editor.cell_wrap(), "␣t w did not take 折行 off");
+                assert!(editor.cell_folds(), "and it is 摺起 that it landed on");
             }
             let _ = render_with(&editor, &config, ime, w, h);
             let steps = 100;
@@ -15677,10 +15730,12 @@ fn squeezed(text: &str) -> String {
         let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃宇宙洪荒日月盈昃";
         let source = format!("| 地名 | 小傳 |\n| --- | --- |\n| 洛陽 | {long} |");
         let config = Config::default();
-        // Both surfaces the mark is drawn on: the prose page, which folds
-        // against the columns it squares up once `t w` asks it to, and the
-        // pane, which draws its own grid and caps it unasked.
-        for keys in [vec!['j', 'j', ' ', 't', 'b', ' ', 't', 'w'], vec!['j', 'j', ' ', 't', 't']] {
+        // **The pane is the only surface the mark is drawn on** (2026-10-22).
+        // The prose page was the other one until 「in `tb` mode, no letters or
+        // symbols from the source code is hidden」 settled the question, and
+        // the pane itself opens on 軟折行 now — so the cap has to be asked for
+        // with one `␣t w`, which is the ring's second stop.
+        for keys in [vec!['j', 'j', ' ', 't', 't', ' ', 't', 'w']] {
             let mut editor = editor_with(&source);
             for key in keys.iter().copied() {
                 editor.on_key(Key::Char(key));
@@ -15767,6 +15822,14 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char(key));
         }
         assert!(editor.grid_has_the_pane(), "{}", editor.status());
+        // **One turn of the ring to the cap** (2026-10-22): the pane opens on
+        // 軟折行, and 摺起 is the stop after it.
+        let ring = |editor: &mut Editor| {
+            for key in [' ', 't', 'w'] {
+                editor.on_key(Key::Char(key));
+            }
+        };
+        ring(&mut editor);
         let config = Config::default();
         // **The grid, not the window**: the panel down the right is showing
         // the same cell whole, which is its job, and reading the two together
@@ -15787,11 +15850,8 @@ fn squeezed(text: &str) -> String {
             "and a mark stands where it stopped:\n{folded}"
         );
 
-        // `t w` — the whole cell, the way it does in prose.
-        editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('t'));
-        editor.on_key(Key::Char('w'));
-        editor.on_key(Key::Char('w'));
+        // One more turn — 全文, every character of it on the grid.
+        ring(&mut editor);
         let whole = page(&editor);
         assert!(whole.contains(long), "every character of it:\n{whole}");
         assert!(!whole.contains('>'), "and nothing left to unfold:\n{whole}");
@@ -15800,10 +15860,9 @@ fn squeezed(text: &str) -> String {
         // **A column that rewrote itself on every `l`** is what this costs
         // otherwise — the key means「next cell」and the whole table shifted
         // sideways to answer it.
-        editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('t'));
-        editor.on_key(Key::Char('w'));
-        editor.on_key(Key::Char('w'));
+        // Round to 軟折行 and on to 摺起 again, then walk into the cut cell.
+        ring(&mut editor);
+        ring(&mut editor);
         editor.on_key(Key::Char('l'));
         assert_eq!(editor.cell_position().map(|(_, c)| c), Some(1));
         let stood_in = page(&editor);
@@ -15853,12 +15912,17 @@ fn squeezed(text: &str) -> String {
         assert!(typing.contains(long), "the cell being typed in is whole:\n{typing}");
     }
 
-    /// `t a` — 格內折行 (2026-09-07: 「把所有超长的单元格都在单元格下方
-    /// 的空行中 soft wrap」). The grid can do this and the prose page cannot:
-    /// it owns its own layout, so a row is as tall as its tallest cell and the
-    /// rows under it move down.
+    /// 格內軟折行 (2026-09-07: 「把所有超长的单元格都在单元格下方的空行中 soft
+    /// wrap」). The grid can do this and the prose page cannot: it owns its own
+    /// layout, so a row is as tall as its tallest cell and the rows under it
+    /// move down.
+    ///
+    /// **It is what the pane opens with** since 2026-10-22 (「Do default
+    /// "wrap", then "folded", then "full"」), and `␣t w` turns the ring on from
+    /// there — so this test walks the other way round from how it was written:
+    /// wrapped first, cut second. `t a` was the key it used to need.
     #[test]
-    fn t_a_wraps_a_long_cell_under_itself_and_moves_the_rows_below_down() {
+    fn the_grid_opens_wrapped_and_one_turn_of_the_ring_cuts_the_rows_back() {
         let long = "甲乙丙丁戊己庚辛壬癸子丑寅卯辰巳午未申酉戌亥天地玄黃";
         let mut editor = editor_with(&format!(
             "| 地名 | 備註 |\n| --- | --- |\n| 洛陽 | {long} |\n| 長安 | 短 |"
@@ -15874,24 +15938,13 @@ fn squeezed(text: &str) -> String {
                 .collect()
         };
 
-        // Folded: one row each, and the tail is off the grid behind a `>`.
-        let folded = page(&editor);
         let row_of = |page: &[String], needle: &str| {
             page.iter()
                 .position(|line| line.contains(needle))
                 .unwrap_or_else(|| panic!("{needle} is on the page: {page:?}"))
         };
-        assert_eq!(
-            row_of(&folded, "長安"),
-            row_of(&folded, "洛陽") + 1,
-            "one row each:\n{}",
-            folded.join("\n")
-        );
 
-        // `t a`: the tail is drawn underneath, in its own column.
-        editor.on_key(Key::Char(' '));
-        editor.on_key(Key::Char('t'));
-        editor.on_key(Key::Char('a'));
+        // As it opens: the tail is drawn underneath, in its own column.
         let wrapped = page(&editor);
         assert!(
             !wrapped.iter().any(|line| line.contains('>')),
@@ -15914,6 +15967,23 @@ fn squeezed(text: &str) -> String {
         assert!(
             carried.trim_start().starts_with(|c: char| !c.is_ascii_digit()),
             "no second row number on the wrapped line: {carried:?}"
+        );
+
+        // One `␣t w`: 摺起 — one row each again, and the tail behind a `>`.
+        for key in [' ', 't', 'w'] {
+            editor.on_key(Key::Char(key));
+        }
+        let folded = page(&editor);
+        assert_eq!(
+            row_of(&folded, "長安"),
+            row_of(&folded, "洛陽") + 1,
+            "one row each:\n{}",
+            folded.join("\n")
+        );
+        assert!(
+            folded.iter().any(|line| line.contains('>')),
+            "and the tail is off the grid behind a mark:\n{}",
+            folded.join("\n")
         );
     }
 

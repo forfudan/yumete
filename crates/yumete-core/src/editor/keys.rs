@@ -3732,18 +3732,22 @@ impl Editor {
         ("b", "hint.table.operate-it"),
         ("t", "hint.table.whole-window"),
         ("q", "hint.table.leave-the-window"),
-        // 摺格子 asks nothing about where the cursor is standing either — it is
-        // a preference about how the page is *drawn* — and it had never once
-        // been offered by any of the four lists, in the group whose whole
-        // purpose is to say what `t` can be finished with.
-        ("w", "hint.table.fold-wide-cells"),
-        // 折行 stands beside 摺起 because it answers the same question — and
-        // a key offered nowhere is a key nobody finds.
-        ("a", "hint.table.wrap-wide-cells"),
         ("] [", "hint.table.next-or-previous"),
         // 2026-10-02 定：命令是 `:convert-table`，鍵位摺在這一組底下。
         ("x", "hint.table.convert"),
     ];
+
+    /// What `t` adds **once a table has the window**, and only there.
+    ///
+    /// 格子多寬 is a preference about how the view draws, not about where the
+    /// cursor is standing — so it used to head every list. It belongs to the
+    /// pane alone since 2026-10-22: 源碼 and 基本 draw every cell whole and
+    /// may not do otherwise (「we promised users that in `tb` mode, no letters
+    /// or symbols from the source code is hidden」), and **a list that offers
+    /// a key the editor would refuse is the one thing these lists may not
+    /// be** — that is what `TABLE_KEYS_FILE` was written for.
+    const TABLE_KEYS_PANE: &'static [(&'static str, &'static str)] =
+        &[("w", "hint.table.fold-wide-cells")];
 
     /// `空格 t x` 底下那三個格式。名字直接寫——它們就是命令上打的那三個詞。
     /// `空格 t x` 底下那三種格式。**小寫是轉換，大寫是把剪貼板貼成那一種**
@@ -3841,14 +3845,22 @@ impl Editor {
         say!("hint.yume.after-z", keys.join(" "))
     }
 
-    pub(super) fn table_keys_say(inside: Option<Bounds>) -> String {
-        let keys: Vec<&str> = Self::table_keys(inside).into_iter().map(|(k, _)| k).collect();
+    pub(super) fn table_keys_say(inside: Option<Bounds>, pane: bool) -> String {
+        let keys: Vec<&str> =
+            Self::table_keys(inside, pane).into_iter().map(|(k, _)| k).collect();
         say!("hint.table.after-t", keys.join(" "))
     }
 
-    /// The keys `t` offers, given what the cursor is standing in.
-    pub(super) fn table_keys(inside: Option<Bounds>) -> Vec<(&'static str, &'static str)> {
+    /// The keys `t` offers, given what the cursor is standing in and whether
+    /// a table has the window.
+    pub(super) fn table_keys(
+        inside: Option<Bounds>,
+        pane: bool,
+    ) -> Vec<(&'static str, &'static str)> {
         let mut keys = Self::TABLE_KEYS.to_vec();
+        if pane {
+            keys.extend(Self::TABLE_KEYS_PANE.iter().copied());
+        }
         keys.extend(
             match inside {
                 Some(Bounds::Block) => Self::TABLE_KEYS_BLOCK,
