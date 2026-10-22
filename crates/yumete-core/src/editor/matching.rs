@@ -1969,6 +1969,16 @@ impl Editor {
         if !onto_the_break || self.mode == Mode::Insert {
             return Some(pos);
         }
+        // **helix stands on a line break, vim never does** — the editor's own
+        // split, and inside a cell the break is drawn as `␊`, so under those
+        // keys it is a column of the page like any other. Measured against hx
+        // 25.07 (`scripts/oracle/hx_keys.py`): on `ab\ncd`, `ll` parks on the
+        // break and it takes a third `l` to reach `c`. vim's caret has nowhere
+        // to be there ([`Self::keep_off_the_newline`]), so there one press
+        // takes the whole step.
+        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+            return Some(pos);
+        }
         let at = match forward {
             true => motion::next_grapheme(rope, pos),
             false => motion::prev_grapheme(rope, pos),

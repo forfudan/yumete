@@ -5560,21 +5560,29 @@ impl Editor {
         let Some(view) = &self.table else { return };
         let (separator, columns) = (view.separator, view.schema.columns.len());
         let body = text.trim_end_matches(['\n', '\r']);
-        // A row: the right number of cells, and no line break left inside it.
-        // A Markdown row says what it is by its own pipes, so it is recognised
-        // by the same test that finds a table in the first place.
+        // A row: the right number of cells. A Markdown row says what it is by
+        // its own pipes, so it is recognised by the same test that finds a
+        // table in the first place.
         //
         // **A line-wise register never reaches here** — `table_motion` sends
         // it to the ordinary paste, which knows where a line goes. What is
         // left to recognise is a row that was taken *character-wise*, which is
         // what `Y` stores.
-        let is_row = !body.contains(['\n', '\r'])
-            && match separator {
-                Separator::Pipe => crate::mdtable::is_row(body),
-                Separator::Delimiter(d) => {
-                    body.chars().filter(|&c| c == d).count() + 1 == columns && columns > 1
-                }
-            };
+        //
+        // **Counted the way the table reads a row** (2026-10-22). Counting the
+        // delimiter characters counted the ones inside a quoted field too, and
+        // 「no line break anywhere in it」 turned away the one record that is
+        // allowed to have one — so `x d` then `P`, the sequence whose whole job
+        // is 「put that back」, put nothing back for a record whose field holds
+        // a break, and said 「p 只可插入記錄」 about a record.
+        let is_row = match separator {
+            Separator::Pipe => !body.contains(['\n', '\r']) && crate::mdtable::is_row(body),
+            Separator::Delimiter(d) => {
+                columns > 1
+                    && crate::table::cells(body, d).len() == columns
+                    && !crate::table::field_runs_on(body, d)
+            }
+        };
         if !is_row {
             self.status = say!("table.p-only-puts-records");
             return;
@@ -5624,6 +5632,9 @@ impl Editor {
                 return;
             }
             self.set_cursor(at + leading);
+            // **A record that came in over several lines is several lines of
+            // the file** (2026-10-22), so which lines are rows has changed.
+            self.rescan_records();
             self.status = say!("table.pasted-as-new-row");
         }
     }
@@ -6527,17 +6538,24 @@ impl Editor {
             return false;
         };
         let wide = self.table_column_count_at(first);
-        text.lines().all(|row| match view.separator {
-            Separator::Pipe => {
+        match view.separator {
+            Separator::Pipe => text.lines().all(|row| {
                 crate::mdtable::is_row(row) && crate::mdtable::split(row).len() == wide
-            }
+            }),
             // Warning: **Counted the way the file is read** (2026-10-17, found in
             // review). It used to count raw delimiters, while everything else
             // splits with `table::cells`, which honours quotes — so a row
             // holding `"one, two"` was judged one cell too wide and its own
             // table refused to take it back.
-            Separator::Delimiter(d) => crate::table::cells(row, d).len() == wide,
-        })
+            //
+            // **And grouped into records first** (2026-10-22). A field holding
+            // a line break makes a record of two lines, and each of those
+            // lines on its own is the wrong number of cells — so the table
+            // turned away the record it had itself just given up, and `x d`
+            // then `P` answered 「',' 是格與格的分隔」 about a whole record.
+            Separator::Delimiter(d) => records_in(text, d)
+                .is_some_and(|rows| rows.iter().all(|row| crate::table::cells(row, d).len() == wide)),
+        }
     }
 
     /// The reason this range may not be cut out, if there is one.
@@ -6758,4 +6776,31 @@ impl Editor {
             _ => false,
         }
     }
+}
+
+/// **The records in this text**, each as one string — a field holding a line
+/// break makes a record of several lines, which is why this is not
+/// `str::lines` (2026-10-22).
+///
+/// `None` when a record never closes its quote: that text is not rows of this
+/// table, whatever else it is.
+fn records_in(text: &str, delimiter: char) -> Option<Vec<String>> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < lines.len() {
+        let height = crate::table::record_lines(
+            lines[at..].iter().map(|line| format!("{line}\n")),
+            delimiter,
+        )
+        .max(1);
+        let upto = (at + height).min(lines.len());
+        let row = lines[at..upto].join("\n");
+        if crate::table::field_runs_on(&row, delimiter) {
+            return None;
+        }
+        out.push(row);
+        at = upto;
+    }
+    Some(out)
 }
