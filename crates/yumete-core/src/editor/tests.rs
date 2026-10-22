@@ -1293,7 +1293,8 @@ fn hl_cross_a_break_the_writer_typed_and_stop_at_the_cells_walls() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let csv = dir.join("break.csv");
-    std::fs::write(&csv, "name,note,n\nalpha,\"first line\nsecond\",1\n").unwrap();
+    let text = "name,note,n\nalpha,\"first line\nsecond\",1\n";
+    std::fs::write(&csv, text).unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
@@ -1311,11 +1312,18 @@ fn hl_cross_a_break_the_writer_typed_and_stop_at_the_cells_walls() {
         Some("e"),
         "the last character of the line the writer typed"
     );
+    // **These keys are helix's**, and helix stands on a line break: on `ab\ncd`
+    // real `hx` parks on it after `ll` and reaches `c` only on the third press
+    // (`scripts/oracle/hx_keys.py`). In a cell that break is drawn as `␊`, so
+    // it is a column of the page and a place to be.
+    let brk = text.find("\nsecond").expect("the break the writer typed");
+    press(&mut ed, "l");
+    assert_eq!(ed.cursor(), brk, "onto the `␊`");
     press(&mut ed, "l");
     assert_eq!(
         ed.grapheme_at_cursor().as_deref(),
         Some("s"),
-        "and over the break, onto the line under it in the same cell"
+        "and over it, onto the line under it in the same cell"
     );
     assert_eq!(ed.cell_position(), Some((1, 1)), "still that one cell");
     // The walls are still the walls: the far one is the cell's last character.
@@ -1323,7 +1331,22 @@ fn hl_cross_a_break_the_writer_typed_and_stop_at_the_cells_walls() {
     assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("d"));
     // And back up over it, which is the step that has to agree with the one down.
     press(&mut ed, "hhhhhh");
+    assert_eq!(ed.cursor(), brk, "the same column on the way back");
+    press(&mut ed, "h");
     assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"));
+
+    // **vim's caret has nowhere to be on a break**, so there the step is taken
+    // whole — one press from the end of the written line to the writing below.
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "l");
+    assert_eq!(
+        ed.grapheme_at_cursor().as_deref(),
+        Some("s"),
+        "vim crosses in one press: {}",
+        ed.cursor()
+    );
+    press(&mut ed, "h");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("e"), "and back");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -1410,6 +1433,54 @@ fn a_schema_beside_the_data_joins_a_record_that_runs_on() {
 
     assert_eq!(ed.row_cells(1).len(), 3, "one record, three fields: {}", ed.status());
     assert_eq!(ed.cell_text(1, 1), "\"first line\nsecond\"");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A record over several lines goes back where it came from** (2026-10-22).
+///
+/// `x d` then `P` is the one key sequence whose whole job is 「put that back」,
+/// and for a record whose field holds a line break it put nothing back: the
+/// guard that lets whole rows through asked `str::lines`, and each line of such
+/// a record is the wrong number of cells on its own, so the table turned away
+/// the record it had itself just given up — answering 「',' 是格與格的分隔」
+/// about a record. `p` said 「只可插入記錄」 for the same reason.
+#[test]
+fn a_record_over_several_lines_goes_back_where_it_came_from() {
+    let dir = tmp().join(format!("yumete-recordput-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("put.csv");
+    let text = "name,note,n\nalpha,\"one two\nthree four\",1\nbravo,plain,2\n";
+    std::fs::write(&csv, text).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    // Taken out…
+    press(&mut ed, "ggxd");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note,n\nbravo,plain,2\n",
+        "{}",
+        ed.status()
+    );
+    // …and put back, byte for byte.
+    press(&mut ed, "P");
+    assert_eq!(ed.current_buffer().text(), text, "{}", ed.status());
+    assert_eq!(ed.row_cells(1).len(), 3, "and it is one record again");
+    assert_eq!(ed.cell_text(1, 1), "\"one two\nthree four\"");
+
+    // And `p` puts a copy of it below, which is the other half of the same key.
+    press(&mut ed, "ggxyp");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "name,note,n\nalpha,\"one two\nthree four\",1\nalpha,\"one two\nthree four\",1\nbravo,plain,2\n",
+        "{}",
+        ed.status()
+    );
+    // The rows were re-scanned, so the copy is row 2 and not two broken rows.
+    assert_eq!(ed.cell_position().map(|(_, cell)| cell), Some(2));
+    assert_eq!(ed.row_cells(3).len(), 3, "the copy is one record of three");
     std::fs::remove_dir_all(&dir).ok();
 }
 

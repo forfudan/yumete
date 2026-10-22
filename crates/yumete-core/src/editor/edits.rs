@@ -1374,6 +1374,10 @@ impl Editor {
         if !self.edit_insert(at, &text) {
             return;
         }
+        // **A record pasted into a grid may be several lines of it**
+        // (2026-10-22): a field with a line break in it is one record over two
+        // lines, so which lines are rows has changed.
+        self.rescan_records();
         // The pasted text becomes the selection, ending on its last grapheme.
         let rope = self.current_buffer().rope();
         let head = motion::prev_grapheme(rope, at + len).max(at);

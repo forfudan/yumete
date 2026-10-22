@@ -19650,13 +19650,20 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char('l'));
             assert_eq!(on(&editor, &config).0, want);
         }
-        // Off the end of the written line, onto the one the grid draws under
-        // it — the same cell, so the same column.
+        // Onto the break itself, which these keys (helix's) stand on and the
+        // page draws as `␊` — so the glyph under the caret is that mark.
+        editor.on_key(Key::Char('l'));
+        let (glyph, at) = on(&editor, &config);
+        assert_eq!(glyph, yumete_cjk::LINE_FEED_PICTURE.to_string());
+        assert_eq!(at.y, first.y, "still the cell's first drawn row");
+        // And over it, onto the row the grid draws under it — the same cell,
+        // so the same column.
         editor.on_key(Key::Char('l'));
         let (glyph, at) = on(&editor, &config);
         assert_eq!(glyph, "第", "`l` crosses the break the writer typed");
         assert_eq!((at.x, at.y), (first.x, first.y + 1));
         // And back up over it.
+        editor.on_key(Key::Char('h'));
         editor.on_key(Key::Char('h'));
         assert_eq!(on(&editor, &config).0, "行");
 
