@@ -407,6 +407,10 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
+        // **格內的 `o` 開的是這一格的一行**（設計 §03，2026-10-22）。
+        if self.open_a_line_in_the_cell(true) {
+            return;
+        }
         if self.open_a_row(true) {
             return;
         }
@@ -470,6 +474,9 @@ impl Editor {
     /// Open a new line above the cursor and enter Insert mode (`O`).
     pub(super) fn open_line_above(&mut self) {
         if self.refuse_readonly() {
+            return;
+        }
+        if self.open_a_line_in_the_cell(false) {
             return;
         }
         if self.open_a_row(false) {

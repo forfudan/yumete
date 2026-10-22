@@ -3661,6 +3661,50 @@ impl Editor {
     /// grid has read records over several lines since 2026-10-20. A `|` table
     /// row *is* a line — it has no quoting to lean on, and a break in the
     /// middle of one is two broken rows.
+    /// **Inside a cell, `o`/`O` open a line of the cell** — 設計 §03 的中層那
+    /// 一格:「`o` 在格內開新行」(2026-10-22 做的).
+    ///
+    /// At the top layer the same letter opens a *row*: one key, one meaning
+    /// per layer, which is the whole of what the layer model buys. A `|`
+    /// table's row is one line by construction, so there this says what
+    /// <kbd>Enter</kbd> says in a cell.
+    pub(super) fn open_a_line_in_the_cell(&mut self, below: bool) -> bool {
+        if !self.grid_has_the_pane() || self.table_layer() != Layer::Inside {
+            return false;
+        }
+        if !self.cell_takes_a_line_break() {
+            self.status = say!("table.enter-makes-no-newline");
+            return true;
+        }
+        let Some((from, to)) = self.cell_here() else {
+            return false;
+        };
+        // The written line the caret is on, bounded by the cell: its end for
+        // `o`, its start for `O`.
+        let at = {
+            let rope = self.current_buffer().rope();
+            let line = rope.char_to_line(self.caret().min(rope.len_chars()));
+            match below {
+                true => crate::motion::line_end(rope, self.caret()).min(to),
+                false => rope.line_to_char(line).max(from),
+            }
+        };
+        self.snapshot();
+        self.set_cursor(at);
+        if !self.quote_the_cell() {
+            return true;
+        }
+        self.enter_insert();
+        self.insert_str("\n");
+        if !below {
+            // `O` types on the new line, which is the one *before* the break.
+            self.set_cursor(self.caret().saturating_sub(1));
+        }
+        // This row is a row more of the file now.
+        self.rescan_records();
+        true
+    }
+
     pub(super) fn cell_takes_a_line_break(&self) -> bool {
         matches!(
             self.table.as_ref().map(|view| view.separator),

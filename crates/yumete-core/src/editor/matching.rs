@@ -1278,6 +1278,9 @@ impl Editor {
         let here = self.sel.head();
         let pos = motion(self.current_buffer().rope(), here);
         let forward = pos >= here;
+        // What the key asked for, before any of the clamps below — the only
+        // thing that tells 「the wall stopped me」 from 「I had one step left」.
+        let asked = pos;
         // **The line break the writer typed inside a cell is not a wall**
         // (2026-10-22 reported: 「l cannot go beyond the LF symbol (hard wrap)
         // in the cell in NOR mode」). A record over several lines is several
@@ -1303,7 +1306,22 @@ impl Editor {
         // that one looks for somewhere the page really draws, and the place
         // it would find outside this cell is in the next one.
         let pos = self.a_place_for_the_caret(pos, forward);
-        self.move_head(self.in_the_cell(pos));
+        let at = self.in_the_cell(pos);
+        self.move_head(at);
+        // **到邊了說一句**（設計 §04，2026-10-22 做的）：「中層裏 `l` 撞到格子
+        // 的右牆，狀態欄寫一行『這一格到頭了，`Tab` 去下一格』，別默默停住——
+        // 讀的人就是這樣學會這個邊界的。」Only when the wall is what stopped
+        // it: a step that merely *ends* on the last character has moved, and
+        // saying so there would be a line printed on every other press.
+        let walled_in = self
+            .cell_walls()
+            .is_some_and(|(from, to)| !(from..=to).contains(&asked));
+        if at == here && walled_in {
+            self.status = match forward {
+                true => say!("table.cell-ends-here"),
+                false => say!("table.cell-starts-here"),
+            };
+        }
     }
 
     /// **vim 鍵位下 `h`/`l` 不出這一行**（`:h l`；2026-10-02 定照參考實現）。
@@ -1926,7 +1944,13 @@ impl Editor {
     /// `h` and `l` are those keys: they step over what a grid keeps off the
     /// page and over the seams between cells (#408), so they do their own
     /// arithmetic rather than asking for a [`motion::Motion`].
-    fn in_the_cell(&self, pos: usize) -> usize {
+    /// **The far wall of the cell the keys are inside** — `None` when they are
+    /// not inside one.
+    pub(super) fn cell_far_wall(&self) -> Option<usize> {
+        self.cell_walls().map(|(_, to)| to)
+    }
+
+    pub(super) fn in_the_cell(&self, pos: usize) -> usize {
         match self.cell_walls() {
             Some((from, to)) => pos.clamp(from, to),
             None => pos,
