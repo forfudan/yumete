@@ -1347,9 +1347,13 @@ pub fn draw_detail(
     let drawn: Vec<Vec<String>> = detail
         .rows
         .iter()
-        .map(|(_, text)| match text {
-            Some(text) => wrapped(text, width),
-            None => vec!["⟨缺⟩".to_string()],
+        .map(|(_, text)| match (text, width) {
+            (Some(_), 0) => Vec::new(),
+            // Broken where the writer broke it, with the same `␊` the grid
+            // draws, and each written line wrapped on its own — one function
+            // for both, so the panel and the cell cannot show a value two ways.
+            (Some(text), _) => cell_lines(text, width, true),
+            (None, _) => vec!["⟨缺⟩".to_string()],
         })
         .collect();
     // Far enough up that the *last* row of the field the cursor is in is still

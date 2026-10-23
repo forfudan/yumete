@@ -6904,7 +6904,15 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
             let rows: Vec<(String, String)> = detail
                 .rows
                 .iter()
-                .map(|(name, value)| (name.clone(), value.clone().unwrap_or_default()))
+                // **A line break is drawn as the grid draws it** (2026-10-23).
+                // `Body::Keys` gives a value one line, and the break vanished
+                // there — 「兩行的值」 beside a grid that showed 「兩行␊的值」.
+                // The sidebar has the room to break it for real; this shows
+                // where the break is.
+                .map(|(name, value)| {
+                    let value = value.clone().unwrap_or_default();
+                    (name.clone(), value.replace('\n', &yumete_cjk::LINE_FEED_PICTURE.to_string()))
+                })
                 .collect();
             return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,

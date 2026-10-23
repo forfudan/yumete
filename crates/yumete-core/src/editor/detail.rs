@@ -632,7 +632,7 @@ impl Editor {
             schema
                 .index_of(name)
                 .and_then(|i| spans.get(i))
-                .map(|&s| crate::table::cell_text(&text, s))
+                .map(|&s| self.cell_shown(&text, s))
                 .unwrap_or_default()
         };
         // Warning: **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
@@ -666,7 +666,13 @@ impl Editor {
                 // `None` when the row has no such field — a short row, which
                 // the grid already marks as ragged. An empty field is
                 // `Some("")`, and they are different answers to 「這一格有什麼」.
-                let text = spans.get(i).map(|&s| crate::table::cell_text(&text, s));
+                // **The value, not the bytes** (2026-10-23): the grid drew
+                // 「兩行␊的值」 and this panel, reading the source, wrote
+                // `"兩行的值"` — the quotes the editor owns, and the line break
+                // lost on the way to the screen. [`Self::cell_shown`] is what
+                // the grid reads; the front end then breaks it where the
+                // writer did.
+                let text = spans.get(i).map(|&s| self.cell_shown(&text, s));
                 // **Numbered**, because the keys count columns: `t3/` looks in
                 // the third, `t20,20g` goes to a cell by number, and the panel
                 // is where a reader finds out which number a field is without
