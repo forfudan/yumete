@@ -60,6 +60,15 @@ pub enum Claim {
     Take(Whole),
     /// Cross into another layer.
     Cross(Layer),
+    /// **The table's command group, as though `␣t` had been pressed.**
+    ///
+    /// `t` at the top layer and nowhere else (2026-10-20 作者定: 「now we have a
+    /// TAB mode and we can use the short cut `t` as an alias of `_t`, as
+    /// "till" is not useful in the TAB mode … `_t` can be kept」). There is no
+    /// character to stop before when the whole cell is the unit, so the key is
+    /// free there; inside a cell `t` is vi's till again, and so it is
+    /// everywhere outside the grid.
+    Menu,
     /// **Not this layer's business.** The ordinary editor takes the key, and
     /// the grid changes nothing about what it means. Paging, search, `:` and
     /// every operator arrive here.
@@ -271,6 +280,7 @@ impl Layer {
             Key::Char('$') | Key::End => Claim::Cell(Step::RecordEnd),
             Key::Char('x') => Claim::Take(Whole::Record),
             Key::Char('%') => Claim::Take(Whole::Table),
+            Key::Char('t') => Claim::Menu,
             _ => Claim::Fall,
         }
     }
@@ -468,6 +478,27 @@ mod tests {
                 Key::Char('$'),
             ],
             "the top layer's key map changed"
+        );
+    }
+
+    /// **`t` is the table's group at the top, and nowhere else** (2026-10-20).
+    ///
+    /// Stated over every key, so a second key that opens the menu would show
+    /// up here as well as a `t` that stopped opening it; and over both layers
+    /// and every mode, so the alias cannot leak into a cell, where `t` is
+    /// vi's till and a reader stops before a character with it.
+    #[test]
+    fn t_opens_the_table_group_at_the_top_layer_only() {
+        let menu: Vec<(Layer, Mode, Key)> = BOTH
+            .into_iter()
+            .flat_map(|l| [Mode::Normal, Mode::Insert, Mode::Command].map(move |m| (l, m)))
+            .flat_map(|(l, m)| every_key().into_iter().map(move |k| (l, m, k)))
+            .filter(|&(l, m, k)| matches!(l.claim(m, k), Claim::Menu))
+            .collect();
+        assert_eq!(
+            menu,
+            vec![(Layer::Whole, Mode::Normal, Key::Char('t'))],
+            "who opens the table group"
         );
     }
 
