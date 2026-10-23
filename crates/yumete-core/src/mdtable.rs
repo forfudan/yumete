@@ -510,6 +510,10 @@ impl Parts {
     /// Take row `at` out. The header is not a row anyone may delete.
     pub fn remove_row(&mut self, at: usize) -> Result<usize, &'static str> {
         if at == 0 {
+            // **Not the catalogue's `table.header-cannot-be-deleted`**, which
+            // tells the reader to press `␣t H` — a key the `|` half does not
+            // have (`set_table_header` refuses outright there: a `|` table
+            // says which row is its header in the file, on the `---` line).
             return Err("標題行不能刪：它是欄名");
         }
         if at >= self.rows.len() {
@@ -965,7 +969,8 @@ pub fn measured_window(
 
 pub const MAX_COLUMN: usize = 32;
 
-/// The mark that stands where a cell's tail was folded away.
+/// The mark that stands where a cell's tail was cut off — the grid's, since
+/// prose draws every cell whole ([`crate::editor::Editor::cell_width_now`]).
 ///
 /// **ASCII on purpose.** Every ellipsis Unicode offers — `…`, `⋯`, `‥` — is
 /// East Asian *Ambiguous*, and a table is the one place on the page where the
@@ -1000,145 +1005,15 @@ pub const FOLD_MARK: &str = ">";
 /// those sixteen characters, with eleven more scrolled off to the left.
 pub const HEAD_MARK: &str = "<";
 
-/// The tail of each cell of `line` that is drawn wider than `cap`.
-///
-/// Spans of the **file's own characters**, to be hidden — the same currency
-/// [`padding`] measures in, so a folded column squares up at the cap without
-/// anybody having to tell it. `hidden` is what is already off the page there
-/// (所見即所得's markup, a reading's tags): a cell is folded by what it
-/// *shows*, not by what it holds, or `**很長的一句**` would fold four
-/// characters early.
-///
-/// `open` is the span of the line the selection covers, if any: a cell it
-/// touches is left whole. Walk into a cell and it opens; walk out and it
-/// closes — the same law the markup keeps, and what makes a folded table
-/// still an editable one.
-///
-/// **Per cell, not per column.** The two come to the same width — a column is
-/// as wide as its widest cell, and no cell may pass `cap` — and per cell asks
-/// nothing of the rows above it, so no row has to be drawn twice.
-pub fn folds(
-    line: &str,
-    hidden: &[(usize, usize)],
-    cap: usize,
-    open: Option<(usize, usize)>,
-) -> Vec<(usize, usize)> {
-    // The mark is the last cell of the column, so the writing gets one less.
-    let keep = cap.saturating_sub(yumete_cjk::str_width(FOLD_MARK));
-    let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
-    let mut out = Vec::new();
-    for (from, to) in cells(line) {
-        let to = to.min(chars.len());
-        let from = from.min(to);
-        // **The cell the caret is in is never folded.** It is the same law the
-        // markup keeps — what the cursor is inside stays on the page — and it
-        // is what makes a folded table still editable: walk into a cell and it
-        // opens; walk out and it closes again. `to` is inclusive here because
-        // the caret sits *after* the last character when you are appending.
-        if open.is_some_and(|(a, b)| a <= to && b >= from) {
-            continue;
-        }
-        let text: String = chars[from..to].iter().collect();
-        let mut width = 0usize;
-        let mut at = from;
-        for g in yumete_cjk::graphemes(&text) {
-            let n = g.chars().count();
-            if !hidden.iter().any(|&(a, b)| (a..b).contains(&at)) {
-                let w = yumete_cjk::grapheme_width(g);
-                // Cut **before** the grapheme that would pass the cap, so what
-                // is kept is never wider than it — and a cut is only ever made
-                // at a character that shows, which is what makes the mark
-                // honest: there is something behind it.
-                if width + w > keep {
-                    out.push((at, to));
-                    break;
-                }
-                width += w;
-            }
-            at += n;
-        }
-    }
-    out
-}
-
-/// The padding **the file already holds** in `line`, beyond what the cap
-/// leaves room for — spans to take off the page, like a folded tail.
-///
-/// **Without this the cap buys nothing on a table that is square in the
-/// file.** [`padding`] measures the **box**, pipe to pipe, because that is
-/// what lines two rows up; [`folds`] cuts inside the **content**. So in a
-/// table [`compose`] has squared up — which is every table in this project's
-/// own docs — each cell carries its spaces out to the file's column width,
-/// and a cell whose writing was just cut to 32 is padded straight back out to
-/// 43. The reader sees the mark stand where the writing stopped, and then a
-/// field of nothing all the way to the pipe: the fold saved no room at all.
-///
-/// **Only down to the cap, and never below it.** #212's law is that a drawn
-/// can only *add*, and it holds everywhere the cap does not bite: a cell that
-/// fits is left exactly as the file wrote it, so a table under the cap is
-/// drawn today's width to the character. What comes off, in this order, is
-/// whatever a cell holds that is not writing — its padding down to one space
-/// against each pipe, and then, on a rule row, its dashes down to one, since
-/// `----------` is not writing but drawing and [`padding`] redraws it to the
-/// column's width anyway. The colons are the alignment and are never touched.
-///
-/// **The run the selection stands in is left whole**, and only that run — not
-/// the whole cell [`folds`] opens. The law is the same one (the caret is
-/// never inside text that is not on the page), but a cell is the wrong unit
-/// for it here: a cell's padding is as wide as the column, so opening the
-/// cell to walk into its *writing* would swell the column under the reader's
-/// hands at every step of `l`. Standing in the spaces is the only reason to
-/// see them.
-pub fn slack(
-    line: &str,
-    hidden: &[(usize, usize)],
-    cap: usize,
-    open: Option<(usize, usize)>,
-) -> Vec<(usize, usize)> {
-    let chars: Vec<char> = line.trim_end_matches(['\n', '\r']).chars().collect();
-    let ruled = rule_of(line).is_some();
-    // The cap is what a cell may *show*; the two spaces against the pipes are
-    // the table's own, and every other cell has them too.
-    let room = cap + 2;
-    let mut out = Vec::new();
-    for ((start, end), (from, to)) in boxes(line).into_iter().zip(cells(line)) {
-        let end = end.min(chars.len());
-        let mut over = visible_width(&chars, (start, end), hidden, Measure::Cells).saturating_sub(room);
-        // Spans of padding this cell could give up, nearest the pipe first,
-        // each keeping the one space (or the one dash) that has to stay.
-        let mut spare = vec![(to + 1, end), (start + 1, from)];
-        if ruled {
-            let lead = usize::from(chars.get(from) == Some(&':'));
-            let trail = usize::from(to > from && chars.get(to - 1) == Some(&':'));
-            spare.push((from + lead + 1, to.saturating_sub(trail)));
-        }
-        for (a, b) in spare {
-            if over == 0 {
-                break;
-            }
-            if a >= b || open.is_some_and(|(x, y)| x <= b && y >= a) {
-                continue;
-            }
-            // Padding and dashes are one column each, so the count of
-            // characters taken is the count of columns saved.
-            let take = over.min(b - a);
-            out.push((b - take, b));
-            over -= take;
-        }
-    }
-    out.sort_unstable();
-    out
-}
 
 /// The drawn padding that squares a table up, row by row.
 ///
 /// **Measured and drawn are two lists** (#283, 2026-09-07). `rows` carries
-/// what each row hides when the table is *measured* — every cell folded — and
-/// `shown` what it hides as the page really draws it, which differs on at most
-/// one row and only while it is being typed in. The column's width therefore
-/// never moves when a cell opens: the open cell simply runs past its own wall,
-/// and every other row keeps the alignment it had. Pass `shown` empty to say
-/// 「the same as measured」.
+/// what each row hides when the table is *measured* and `shown` what it hides
+/// as the page really draws it, so a column's width never moves because of
+/// where the caret is. Pass `shown` empty to say 「the same as measured」,
+/// which is what prose does now that it folds nothing (2026-10-23) — the two
+/// parted company only over a cell whose folded tail came back for writing.
 pub fn padding(
     rows: &[(String, Vec<(usize, usize)>)],
     wall: Wall,
@@ -1739,162 +1614,36 @@ mod tests {
             .collect()
     }
 
-    /// The whole fold pipeline the editor runs, in one place: work out each
-    /// row's folds, hide them, tell `padding` how wide the marks are, and draw
-    /// what comes out. A test of the parts alone would not have caught the one
-    /// thing that actually goes wrong — a column squared up as though the mark
-    /// were not there.
-    fn folded(text: &str, cap: usize, open: Option<(usize, usize)>) -> Vec<String> {
-        folded_told(text, cap, open, false)
-    }
-
-    /// The same pipeline, with `tell` saying whether the page owns up to what
-    /// it really hides — which is what the editor does the moment a cell is
-    /// opened for writing, and what `padding`'s fourth argument is for.
-    fn folded_told(
-        text: &str,
-        cap: usize,
-        open: Option<(usize, usize)>,
-        tell: bool,
-    ) -> Vec<String> {
-        let rows: Vec<String> = lines(text);
-        let rule = rows.get(1).and_then(|l| rule_of(l)).map(|_| 1);
-        let width = yumete_cjk::str_width(FOLD_MARK);
-        // One pass of the pipeline. `caret` is what it knows of the caret: the
-        // **measure** knows nothing, so its columns are the widths a closed
-        // table has, and that is what keeps the walls still when a cell opens.
-        let pass = |caret: Option<(usize, usize)>| {
-            let cuts: Vec<Vec<(usize, usize)>> = rows
-                .iter()
-                .enumerate()
-                .map(|(i, l)| match Some(i) == rule {
-                    true => Vec::new(),
-                    false => folds(l, &[], cap, caret.filter(|_| i == 2)),
-                })
-                .collect();
-            // The tail is not the only thing that comes off a row: the padding
-            // the file already holds goes with it, or the column the mark just
-            // saved is drawn straight back out to the file's width.
-            let with: Vec<(String, Vec<(usize, usize)>)> = rows
-                .iter()
-                .zip(&cuts)
-                .enumerate()
-                .map(|(i, (l, f))| {
-                    let mut off = f.clone();
-                    off.extend(slack(l, &[], cap, caret.filter(|_| i == 2)));
-                    off.sort_unstable();
-                    (l.clone(), off)
-                })
-                .collect();
-            let marks: Vec<Vec<(usize, usize)>> = cuts
-                .iter()
-                .map(|f| f.iter().map(|&(at, _)| (at, width)).collect())
-                .collect();
-            (cuts, with, marks)
-        };
-        let (cuts, with, marks) = pass(open);
-        // Told: the columns come from the measure, which never saw the caret,
-        // and only `shown` says which of those marks the page really draws.
-        let (measure, told) = match tell {
-            false => (None, Vec::new()),
-            true => (
-                Some(pass(None)),
-                with.iter().map(|(_, off)| off.clone()).collect(),
-            ),
-        };
-        let (rows_in, marks_in) = match &measure {
-            None => (&with, &marks),
-            Some((_, w, m)) => (w, m),
-        };
-        padding(rows_in, Wall::Pipe, rule, &aligns_of(rows_in, rule), marks_in, &told, Measure::Cells)
-            .iter()
-            .enumerate()
-            .map(|(i, runs)| {
-                let mut all: Vec<(usize, String)> = runs.clone();
-                all.extend(cuts[i].iter().map(|&(at, _)| (at, FOLD_MARK.to_string())));
-                all.sort_by_key(|&(at, _)| at);
-                drawn(&rows[i], with[i].1.as_slice(), &all)
-            })
-            .collect()
-    }
-
-    /// #283. Once the page owns up to what it really hides, the open cell juts
-    /// out past its own wall and **nothing else moves**. The row the caret is
-    /// not on is still folded, still one mark wide, and still exactly where it
-    /// stood a keystroke ago — otherwise pressing `i` anywhere in a table
-    /// nudges every folded wall in it one cell to the right, which is a whole
-    /// table redrawing itself for a caret that never touched it.
+    /// **A mark drawn inside a cell is one cell of its column** (2026-09-23).
+    /// `padding`'s `marks` is how it hears about something it does not draw
+    /// itself — today the `⁽¹⁾` a footnote reference is drawn as, whose four
+    /// source characters are hidden and count as nothing. A column squared up
+    /// as though the mark were not there comes out that many cells narrow on
+    /// every row that carries one, and the rule row gives the error away.
     #[test]
-    fn opening_one_cell_leaves_every_other_row_where_it_stood() {
-        let whole = "| a | b |\n| - | - |\n| 一二三四五 | d |\n| 一二三四五 | e |\n";
-        let shut = folded(whole, 6, None);
-        let open = folded_told(whole, 6, Some((3, 3)), true);
-        assert_eq!(open[2], "| 一二三四五 | d |", "walked into, so whole");
-        assert_eq!(open[3], shut[3], "and the row below did not budge");
-        assert_eq!(open[0], shut[0], "nor the head");
-        assert_eq!(open[1], shut[1], "nor the rule");
-    }
-
-    /// The bug reported off `development.md`: 「the long cells are
-    /// trimmed with a `>` symbol. However, the width of the cell are still
-    /// padded with white spaces at the tail.」 A table squared up in the file
-    /// carries its padding *inside* every cell, and the padding is measured
-    /// pipe to pipe — so the mark stood where the writing stopped and the
-    /// column went on being drawn to the file's width, a field of nothing.
-    #[test]
-    fn a_table_squared_up_in_the_file_folds_to_the_cap_and_not_back_out() {
-        let whole = "| a          | b |\n| ---------- | - |\n| 一二三四五 | d |\n";
-        let out = folded(whole, 6, None);
-        // Two spaces, not one: the cap is 6 and a 漢字 is two cells wide, so
-        // `一二>` stops one cell short of it and the drawn padding squares
-        // that up. One cell of ragged edge is what any cap costs; a field of
-        // fourteen was the bug.
-        assert_eq!(out[2], "| 一二>  | d |", "the mark, then the pipe");
-        let widths: Vec<usize> = out.iter().map(|l| yumete_cjk::str_width(l)).collect();
-        assert!(widths.iter().all(|w| *w == widths[0]), "square: {out:?}");
-        assert!(
-            widths[0] < yumete_cjk::str_width(&lines(whole)[0]),
-            "and narrower than the file it came from: {out:?}"
+    fn a_drawn_mark_is_one_cell_of_its_column() {
+        let rows: Vec<(String, Vec<(usize, usize)>)> = lines("| a | b |\n| - | - |\n| c | d |\n")
+            .into_iter()
+            .map(|l| (l, Vec::new()))
+            .collect();
+        let aligns = aligns_of(&rows, Some(1));
+        let bare = padding(&rows, Wall::Pipe, Some(1), &aligns, &[], &[], Measure::Cells);
+        // Three cells are drawn inside the first column of the last row.
+        let marks = vec![Vec::new(), Vec::new(), vec![(3, 3)]];
+        let told = padding(&rows, Wall::Pipe, Some(1), &aligns, &marks, &[], Measure::Cells);
+        assert_ne!(bare, told, "the column heard about the mark");
+        let width = |runs: &[Vec<(usize, String)>]| {
+            runs.iter()
+                .map(|row| row.iter().map(|(_, text)| text.chars().count()).sum::<usize>())
+                .collect::<Vec<usize>>()
+        };
+        assert_eq!(
+            width(&told)[0],
+            width(&bare)[0] + 3,
+            "the header grew by the mark: {:?} against {:?}",
+            told,
+            bare
         );
-    }
-
-    /// **Only down to the cap.** #212's law — a drawn can only add — holds
-    /// wherever the cap does not bite, so a formatted table that fits is
-    /// drawn exactly as the file wrote it, alignment and all.
-    #[test]
-    fn a_table_that_fits_keeps_every_space_the_file_gave_it() {
-        let whole = "| a    | b    |\n| :--- | ---: |\n| 一二 | 三   |\n";
-        assert_eq!(folded(whole, 32, None), lines(whole), "left as written");
-    }
-
-    /// The rule row is drawing, not writing: [`padding`] redraws it to the
-    /// column's width, so its dashes are the page's to spend — down to one,
-    /// and never over the colons that declare the alignment.
-    #[test]
-    fn the_rule_row_gives_its_dashes_up_before_a_column_stays_wide() {
-        let whole = "| a | b |\n| :--------: | - |\n| c | d |\n";
-        let out = folded(whole, 4, None);
-        assert!(out[1].starts_with("| :"), "the colons stand: {out:?}");
-        assert!(out[1].contains(":|") || out[1].contains(": |"), "{out:?}");
-        let widths: Vec<usize> = out.iter().map(|l| yumete_cjk::str_width(l)).collect();
-        assert!(widths.iter().all(|w| *w == widths[0]), "square: {out:?}");
-        assert!(
-            widths[0] < yumete_cjk::str_width(&lines(whole)[1]),
-            "and the row of dashes no longer decides the width: {out:?}"
-        );
-    }
-
-    /// A fold is measured in what the cell **shows**: 所見即所得 has already
-    /// taken `**` off, and counting the stars would fold four characters early.
-    #[test]
-    fn a_fold_counts_the_writing_and_not_the_markup() {
-        let line = "| **一二三四五** | d |";
-        let bare = folds(line, &[], 6, None);
-        let seen = folds(line, &[(2, 4), (9, 11)], 6, None);
-        assert_ne!(bare, seen, "the markup moved the cut");
-        // Two characters and the mark fit in six cells; the stars are not
-        // there to be counted.
-        assert_eq!(seen.first().map(|&(at, _)| at), Some(6), "cut after 一二");
     }
 
     #[test]

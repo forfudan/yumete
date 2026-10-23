@@ -11,8 +11,8 @@ use super::*;
 /// far edge of a selection (2026-10-17).
 ///
 /// A dead zone is a run of file characters that owns no column on the page:
-/// folded tails, the file's surplus alignment spaces, and the one space
-/// either side of a `|` wall, which is drawn as part of the single `┆`.
+/// a turned table's surplus alignment spaces, and the one space either side of
+/// a `|` wall, which is drawn as part of the single `┆`.
 ///
 /// The two need opposite treatment and both are right:
 ///
@@ -1410,10 +1410,9 @@ impl Editor {
     ///
     /// **A step the reader cannot see is not a step**, and its converse:
     /// a character that owns a drawn column is a character every motion may
-    /// stand on. Under `t f` the file's own padding comes off the page
-    /// (`cell_slack_against`), so `l` through a cell's trailing spaces moved
-    /// the caret and moved nothing on the screen: it sat still for four
-    /// presses and then jumped a column.
+    /// stand on. Where the file's own padding comes off the page, `l` through
+    /// a cell's trailing spaces moved the caret and moved nothing on the
+    /// screen: it sat still for four presses and then jumped a column.
     /// 2026-09-11：「既然没有显示，就应该允许用户直接跳过去。」
     ///
     /// Only what a table keeps — see [`Editor::cell_hidden_on_line`]. Markup

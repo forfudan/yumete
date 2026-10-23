@@ -11351,14 +11351,10 @@ fn draw_horizontal(
         // as something that has already been written. A note (#248) is further
         // back still and in the marker's ink: it is not a word of the
         // manuscript at all, it is the editor pointing at one.
-        // The fold mark is neither: it is 金 and it is bold, the page's own
-        // way of saying 這不是正文. Grey said it too quietly — the page is a
-        // run of greys on purpose, so a grey `>` at the end of a cell is a
-        // `>` the writer typed. Ink and weight rather than a ground, because
-        // a ground on this page is the *reader's* mark (the selection, the
-        // 朱 wash, the cursor's band) and the fold mark is the editor's.
+        // Ink and weight rather than a ground, because a ground on this page
+        // is the *reader's* mark — the selection, the 朱 wash, the cursor's
+        // band — and what is drawn here is the editor's.
         let run_style = |kind: yumete_core::drawn::Ink| match kind {
-            yumete_core::drawn::Ink::Fold => ground.fg(ink.gold()).add_modifier(Modifier::BOLD),
             yumete_core::drawn::Ink::Note => ground.fg(ink.marker()),
             // 與源碼形態的 `[^1]` 同一個墨色（`Kind::Footnote`），所以開不開
             // `:render` 看着是同一件東西，只是換了個寫法。

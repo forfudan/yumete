@@ -332,27 +332,6 @@ impl Editor {
     /// hidden, so the cursor is never inside text that is not on the screen —
     /// which is what makes every motion and every edit act on what can be seen.
     pub fn hidden_on_line(&self, line: usize) -> Spans {
-        let mut off = self.markup_off_line(line);
-        // **A folded cell tail is off the page by the same door** (#283), and
-        // it has to be: the width the padding squares up, the columns the wrap
-        // counts and the cell the mouse lands in all read this one list. Give
-        // the fold its own channel and the three would disagree — the page
-        // would draw a short cell and the caret would walk a long one.
-        //
-        // The markup is handed on rather than asked for again: this is called
-        // once per line of every frame, and a fold is measured against exactly
-        // the list that was just built.
-        let folded = self.cell_folds_against(line, &off);
-        off.extend(folded);
-        off.sort_unstable();
-        off
-    }
-
-    /// [`Self::hidden_on_line`] without the folds — the markup alone.
-    ///
-    /// Separate because a fold is *measured* against this: how wide a cell is
-    /// drawn is how wide it is with its markup already off.
-    fn markup_off_line(&self, line: usize) -> Spans {
         // **太長的一行也不藏記號**（`:view-long-line`，2026-10-08）。
         //
         // 和 [`Self::markup_runs`] 同一條門槛，因為是同一筆賬：這一支走
@@ -575,7 +554,6 @@ impl Editor {
                 .map(|(at, text)| Run::new(at, text, Ink::Padding)),
         );
         runs.extend(self.tab_stops_on_line(line));
-        runs.extend(self.fold_marks_on_line(line));
         runs.extend(self.notes_on_line(line));
         runs.extend(self.footnote_marks_on_line(line));
         crate::drawn::compose(runs)
@@ -583,7 +561,7 @@ impl Editor {
 
     /// **`[^1]` 畫成 `⁽¹⁾`**（2026-09-22）。
     ///
-    /// 源碼在 [`Self::markup_off_line`] 那頭藏起來，這裏在原地畫一個印刷體的
+    /// 源碼在 [`Self::hidden_on_line`] 那頭藏起來，這裏在原地畫一個印刷體的
     /// 註號——和表格摺疊畫那個 `>` 是同一條路（藏掉一段、原地立一個記號）。
     ///
     /// Warning: **只有純數字的註號換得了。** 上標數字 Unicode 齊全，上標字母不齊
@@ -603,7 +581,7 @@ impl Editor {
 
     /// 這一行上每個畫得出來的註號：起、訖、以及畫成什麽。
     ///
-    /// 一處算，兩處用——[`Self::markup_off_line`] 拿它決定藏哪一段，
+    /// 一處算，兩處用——[`Self::hidden_on_line`] 拿它決定藏哪一段，
     /// [`Self::footnote_marks_on_line`] 拿它決定原地畫什麽。兩邊要是各算各的，
     /// 就會出現「藏了没畫」或者「畫了没藏」。
     fn footnote_spans(&self, line: usize) -> Vec<(usize, usize, String)> {
@@ -854,9 +832,8 @@ impl Editor {
     /// Whether over-wide cells are folded (#283) — the switch, with no
     /// question about *where* the table is drawn.
     ///
-    /// The prose page asks [`Self::cells_fold_here`], which adds the terms
-    /// that only prose has; the grid — which caps and scrolls by its own
-    /// rules — asks this.
+    /// The grid asks this; prose has no answer of its own to give
+    /// ([`Self::cell_width_now`]).
     pub fn cell_folds(&self) -> bool {
         self.folds_now()
     }
@@ -869,219 +846,26 @@ impl Editor {
         self.cell_width_now() == CellWidth::Wrap
     }
 
-    /// Whether an over-wide cell has its tail folded away on this page (#283).
-    ///
-    /// Two terms, and each one is the law rather than a preference:
-    ///
-    /// * **Wherever the table is squared up.** A fold is measured in display
-    ///   width against a squared-up column, so `table_padding_on` is the whole
-    ///   of the question — 基本 squares up and 源碼 does not. 「`basic` 不藏、
-    ///   不摺、不替換」 governs what the *level* does unasked; `t w` is asked.
-    /// * **In prose only.** The pane draws its own grid, and folds it by
-    ///   drawing its columns narrow rather than by hiding characters of a
-    ///   line — [`Self::cell_folds`] is the switch it reads.
-    ///
-    /// [`Editor::cell_folds`] is the writer's switch over the top — `t w`.
-    ///
-    /// **Today this is never true**, and that is 2026-10-22's decision rather
-    /// than a bug: prose answers 全文 whatever the switch holds
-    /// ([`Self::cell_width_now`]), so the layer underneath this one — the
-    /// tails, the slack they free, the `>` — has nothing that can turn it on.
-    /// It is still here because the question it answers is a real one (a level
-    /// that may hide, asked for by name), and taking it out reaches into
-    /// [`crate::mdtable`] and the measure: its own cut, not this one's.
-    fn cells_fold_here(&self) -> bool {
-        self.folds_now()
-            && self.table_padding_on()
-            && !self.table.as_ref().is_some_and(|view| view.pane)
-    }
-
-    /// The cell tails folded away on `line`, as char ranges within it (#283).
-    ///
-    /// Empty on the rule row: `---|:---:|---` is not writing, it is the shape
-    /// of the table, and folding it would hide the alignment the row exists to
-    /// declare.
-    fn cell_folds_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        if !self.cells_fold_here() {
-            return Vec::new();
-        }
-        let markup = self.markup_off_line(line);
-        self.cell_tails_against(line, &markup, self.folds_open_at(line))
-    }
-
-    /// Everything a row keeps off the page for the table's sake: the tails,
-    /// and **the padding the file itself holds** with them.
-    ///
-    /// The two are one list here because one list is what the width, the wrap
-    /// and the mouse all read — and they are two functions because only the
-    /// tail leaves a mark. A `>` over the spaces between a cell and its pipe
-    /// would say something was folded away there, and nothing was.
     /// What a table keeps off `line` and **will not give back for the caret**
-    /// (#379): the folded tails and the file's own padding.
+    /// (#379).
     ///
     /// The other half of [`Self::hidden_on_line`] — the markup — comes back
     /// the moment the caret is in it, which is what 所見即所得 means, so the
-    /// caret is welcome to walk into it. This half does not: `t w` opens a
-    /// fold and nothing at all opens the slack. 2026-09-11：
+    /// caret is welcome to walk into it. This half does not. 2026-09-11：
     /// 「tf tt 模式下这种 padding 的空格既然没有显示，就应该允许用户直接跳过
     /// 去，而不是把光标定在那里但后台还是在过空格。」Which is #212's own law
     /// read from the other end: if the caret may never stand in a column the
     /// page does not have, then a motion may not leave it there either.
+    ///
+    /// Warning: **What a turned table keeps off the page is kept off motion too**
+    /// (2026-09-19, caught in review). Without it the caret walked the
+    /// cushions and the file's own alignment spaces in a 竪排 table: six
+    /// presses of `j`, six file positions, and the caret sat on the same slot
+    /// the whole time.
     pub fn cell_hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
-        let markup = self.markup_off_line(line);
-        self.cell_folds_against(line, &markup)
-    }
-
-    fn cell_folds_against(&self, line: usize, markup: &[(usize, usize)]) -> Vec<(usize, usize)> {
-        let open = self.folds_open_at(line);
-        let mut out = self.cell_tails_against(line, markup, open);
-        out.extend(self.cell_slack_against(line, markup, open));
-        // Warning: **What a turned table keeps off the page is kept off motion too**
-        // (2026-09-19, caught in review). This is the third list — the measure
-        // has one, the page has one, and this one is what #379 built so that
-        // 「a step the reader cannot see is not a step」. Without it the caret
-        // walked the cushions and the file's own alignment spaces in a 竪排
-        // table: six presses of `j`, six file positions, and the caret sat on
-        // the same slot the whole time.
-        out.extend(self.table_slack_off_the_page(line));
+        let mut out = self.table_slack_off_the_page(line);
         out.sort_unstable();
         out
-    }
-
-    /// What the **measure** takes off `line`, and the tails that get a mark
-    /// — the two lists a row owes its table's padding, off one parse.
-    ///
-    /// **As the table is measured rather than as it is drawn.** The page's
-    /// list and this one differ on one row at most, and only while somebody
-    /// is typing in it: the cell being edited has its tail back on the page,
-    /// and a column that grew to hold it would swell and shrink under the
-    /// reader's hands — every other row shifting sideways because one cell is
-    /// open. So the column is measured as though every cell were folded, the
-    /// open cell juts out past its own wall, and the table's geometry stops
-    /// depending on the caret altogether. That is what makes the layout worth
-    /// remembering across a keystroke.
-    ///
-    /// **Two answers, one walk** (#316). The marks name tails the measure has
-    /// already found, and both are read off the same markup. Asked for one at
-    /// a time — as three separate questions, which is how this began — each
-    /// rebuilt the row's markup and its cells from scratch, and a 5,000-row
-    /// table spent 50 ms of every keystroke deriving twice over what the line
-    /// before had just worked out.
-    fn measured_on_line(&self, line: usize) -> (Spans, Spans) {
-        let markup = self.markup_off_line(line);
-        let tails = self.cell_tails_against(line, &markup, None);
-        let slack = self.cell_slack_against(line, &markup, None);
-        let mut off = markup;
-        off.extend(tails.iter().copied());
-        off.extend(slack);
-        off.sort_unstable();
-        (off, tails)
-    }
-
-    /// The padding the file holds in this row, when folding is on.
-    ///
-    /// **Without this the cap buys nothing on a squared-up table.** The width
-    /// a column is drawn to is the widest *box* in it, pipe to pipe, and a
-    /// table that has been formatted in the file — `:table-rules`, and every
-    /// table in this project's own docs — pads every cell out to the column's
-    /// natural width. Fold the writing to 32 and the spaces behind it still
-    /// vote 43: the mark lands where the writing stopped and a field of empty
-    /// cells follows it to the pipe. The file's padding is the page's to
-    /// spend, so under `t f` it comes off — **down to the cap and no
-    /// further**, which is what keeps #212's law (a drawn can only add) true
-    /// everywhere the cap does not bite: a table that fits is drawn exactly
-    /// as the file wrote it.
-    fn cell_slack_against(
-        &self,
-        line: usize,
-        markup: &[(usize, usize)],
-        open: Option<(usize, usize)>,
-    ) -> Spans {
-        if !self.cells_fold_here() {
-            return Vec::new();
-        }
-        if !self.opens_a_row(line) || self.block_of(line).is_literal() {
-            return Vec::new();
-        }
-        let Some(text) = self.line_text(line) else {
-            return Vec::new();
-        };
-        crate::mdtable::slack(
-            &text,
-            markup,
-            crate::mdtable::MAX_COLUMN,
-            open,
-        )
-    }
-
-    /// **Where the caret opens a folded cell — and it is not by standing in
-    /// it** (#283, remade 2026-09-07).
-    ///
-    /// It used to be `selected_columns`: walk into a cell and its tail came
-    /// back. That is one line of code and it cost the table its whole layout
-    /// on **every** keystroke, because a caret in the key is a caret in the
-    /// key whether or not the cell it moved to was ever folded — a `j` down
-    /// the `#` column of this project's own `development.md` rebuilt 286 rows
-    /// and took 15 ms, in a column two characters wide (2026-09-07:
-    /// 「不是说撑开的时候卡，而是不撑开的单元格也卡」).
-    ///
-    /// So reading and editing are told apart. **Reading** does not need the
-    /// tail on the page — `t i`'s panel holds the whole cell, wrapped, which
-    /// is what that panel is for — and in exchange the page's layout stops
-    /// depending on where the caret is at all: it is worked out once per
-    /// edit, and a cursor moving over a folded table costs nothing.
-    /// **Editing** does need it, and there is no argument: the caret may
-    /// never sit inside characters the page does not draw, or every motion,
-    /// the mouse and the caret's own column disagree with what is on screen.
-    /// So the cell opens on `i`/`a`/`c` and closes again on `Esc`.
-    fn folds_open_at(&self, line: usize) -> Option<(usize, usize)> {
-        match self.mode {
-            Mode::Insert => self.selected_columns(line),
-            _ => None,
-        }
-    }
-
-    /// The cell tails folded away on `line`, with the markup already worked
-    /// out — the spans that get a mark.
-    fn cell_tails_against(
-        &self,
-        line: usize,
-        markup: &[(usize, usize)],
-        open: Option<(usize, usize)>,
-    ) -> Spans {
-        if !self.cells_fold_here() {
-            return Vec::new();
-        }
-        if !self.opens_a_row(line) || self.block_of(line).is_literal() {
-            return Vec::new();
-        }
-        let Some(text) = self.line_text(line) else {
-            return Vec::new();
-        };
-        if crate::mdtable::rule_of(&text).is_some() {
-            return Vec::new();
-        }
-        crate::mdtable::folds(
-            &text,
-            markup,
-            crate::mdtable::MAX_COLUMN,
-            open,
-        )
-    }
-
-    /// The fold marks drawn on `line` — one per cell whose tail came off.
-    ///
-    /// [`crate::drawn::Ink::Fold`], which is its own ink and not the note's:
-    /// a note is *about* what is written and takes the markup's grey, and a
-    /// grey `>` beside grey writing is a `>` the reader takes for the
-    /// writer's own. It is anchored at the first character of the folded
-    /// tail, so it stands exactly where the writing stopped.
-    fn fold_marks_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
-        use crate::drawn::{Ink, Run};
-        self.cell_folds_on_line(line)
-            .into_iter()
-            .map(|(at, _)| Run::new(at, crate::mdtable::FOLD_MARK.to_string(), Ink::Fold))
-            .collect()
     }
 
     /// Which punctuation the table on `line` is told apart by, if there is a
@@ -1212,15 +996,10 @@ impl Editor {
             revision: buffer.revision(),
             first,
             last,
-            // **Folding asks where the caret is too**, whatever `:render`
-            // says: the cell it stands in is left whole, so the answer moves
-            // when it moves.
-            caret: (self.wysiwyg() || (self.cells_fold_here() && self.mode == Mode::Insert))
-                .then(|| self.selection()),
+            caret: self.wysiwyg().then(|| self.selection()),
             render: self.render,
             ruby: self.ruby(),
             syntax: buffer.syntax(),
-            folds: self.cells_fold_here(),
             wall,
             measure,
         };
@@ -1253,7 +1032,6 @@ impl Editor {
         let last_time = last_time
             .filter(|(had, _)| had.same_shape(&key))
             .map(|(_, work)| work);
-        let width = yumete_cjk::str_width(crate::mdtable::FOLD_MARK);
         let height = region.last + 1 - region.first;
         let mut rows: Vec<(String, Vec<(usize, usize)>)> = Vec::with_capacity(height);
         let mut marks: Vec<Vec<(usize, usize)>> = Vec::with_capacity(height);
@@ -1275,34 +1053,23 @@ impl Editor {
                 same.then(|| (was.rows[k].1.clone(), was.marks[k].clone()))
             });
             let (measured, mark) = kept.unwrap_or_else(|| {
-                let (measured, tails) = self.measured_on_line(i);
-                // **The fold mark is one cell of its column.** It is drawn,
-                // not written, so `visible_width` cannot see it — and a
-                // column padded as though it were not there comes out one
-                // cell narrow on every row that folds, which is every row the
-                // cap bites.
-                let mut mark: Vec<(usize, usize)> =
-                    tails.iter().map(|&(at, _)| (at, width)).collect();
-                // **⁽¹⁾ 同理，而且更明顯：三格。** 源碼那四個字 `[^1]` 藏了，
-                // 算寬的時候當零；可畫上去的註號佔三格，於是帶註的那一行整整
-                // 頂出去三格，格線歪掉（2026-09-23 審出來的）。
-                mark.extend(
-                    self.footnote_marks_on_line(i)
-                        .into_iter()
-                        .map(|run| (run.column, yumete_cjk::str_width(&run.text))),
-                );
+                let measured = self.hidden_on_line(i);
+                // **⁽¹⁾ 畫上去的註號佔三格。** 源碼那四個字 `[^1]` 藏了，算寬
+                // 的時候當零；可畫上去的註號佔三格，於是帶註的那一行整整頂出
+                // 去三格，格線歪掉（2026-09-23 審出來的）。
+                let mut mark: Vec<(usize, usize)> = self
+                    .footnote_marks_on_line(i)
+                    .into_iter()
+                    .map(|run| (run.column, yumete_cjk::str_width(&run.text)))
+                    .collect();
                 mark.sort_unstable();
                 (measured, mark)
             });
-            // What the page really hides, which is the same list on every row
-            // but the one being typed in — see [`Self::measured_on_line`].
-            // `folds_open_at` is that row or nothing, so this is one row's
-            // extra work and not the table's.
+            // What the page really hides, which is now the same list on every
+            // row — the measure's and the page's answers parted company only
+            // over a folded tail.
             if typing {
-                shown.push(match self.folds_open_at(i).is_some() {
-                    false => measured.clone(),
-                    true => self.hidden_on_line(i),
-                });
+                shown.push(measured.clone());
             }
             marks.push(mark);
             cols.push(here);
@@ -1361,8 +1128,8 @@ impl Editor {
         // **太長的一行連注音也不排**（`:view-long-line`，2026-10-09）。
         //
         // Warning: **這道閘只能擺在這裏。** 注音這一件事有兩頭——標籤由
-        // [`Self::markup_off_line`] 藏起來，讀音由橫排那一行疊在上面畫——而兩頭問的
-        // 都是這一支。從前閘擺在 `markup_off_line` 裏，於是長行上標籤露着、讀音照樣
+        // [`Self::hidden_on_line`] 藏起來，讀音由橫排那一行疊在上面畫——而兩頭問的
+        // 都是這一支。從前閘擺在 `hidden_on_line` 裏，於是長行上標籤露着、讀音照樣
         // 畫在它上面：`長段<ruby>甲<rt>jiǎ</rt></ruby>開頭` 的源碼上頭浮着一個錯開
         // 六格的 `jiǎ`。[`Self::footnote_spans`] 那一段說過這條規矩（「兩邊要是各算
         // 各的，就會出現『藏了没畫』或者『畫了没藏』」），注音漏在外頭了。

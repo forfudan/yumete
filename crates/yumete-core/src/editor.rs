@@ -922,7 +922,8 @@ struct PadKey {
     /// so what comes off a row — and therefore how wide its cells draw —
     /// moves with the caret. Under `:render basic` it does not: nothing in
     /// [`Editor::hidden_on_line`] asks where the caret is unless
-    /// [`Editor::wysiwyg`] is true.
+    /// [`Editor::wysiwyg`] is true, which is the whole of the question now
+    /// that prose folds nothing.
     ///
     /// Carrying it unconditionally threw the whole table's padding away on
     /// every `j`, and a padding is a walk down every row of the table: one
@@ -932,11 +933,6 @@ struct PadKey {
     caret: Option<(usize, usize)>,
     render: Render,
     ruby: Dialects,
-    /// **Whether cells are folded** (#283). `t f` and `t w` move neither the
-    /// revision nor `:render`, and a folded cell is a *narrower* cell — so
-    /// without this the level a table was first drawn at was the level it kept
-    /// until somebody typed in it, and `t w` did nothing at all.
-    folds: bool,
     /// What comes off the page depends on how the file is being read, and
     /// `:syntax` changes that without touching a byte of it — so a table drawn
     /// with the backticks hidden stayed drawn that way after `:syntax text`
@@ -967,7 +963,6 @@ impl PadKey {
             && self.render == other.render
             && self.ruby == other.ruby
             && self.syntax == other.syntax
-            && self.folds == other.folds
             && self.measure == other.measure
     }
 }
