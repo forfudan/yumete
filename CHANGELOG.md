@@ -27,9 +27,9 @@ helix, and a search that no longer reads the file it is writing.
 
   **The keys say what they say about the cell.** `c` replaces this cell (the
   most pressed key in a grid), `d` empties it and leaves the delimiter, `y`
-  takes it, `x` takes this whole **record** — every line of it, where a quoted
-  field runs over several — and `%` takes the whole table, heading and all,
-  rather than the chapter it sits in. `A-d` and `A-c` do the same without
+  yanks it, `x` selects this whole **record** — every line of it, where a
+  quoted field runs over several — and `%` selects the whole table, heading and
+  all, rather than the chapter it sits in. `A-d` and `A-c` do the same without
   touching the register, key for key with the text. `v` then `h`/`l` grows the
   selection by whole cells. `i`/`a` go in before the first character and after
   the last.
@@ -131,8 +131,8 @@ helix, and a search that no longer reads the file it is writing.
   `:yume-where` showed an 08-28 table (`YFL3`, `YTB1d`) in the first layer.
   Naming your own directory is now one road only, `[ime] data_dirs` — a line of
   configuration can do it, copying a file into a directory cannot, and that is
-  the point. The directory itself stays: word lists, places and sessions are
-  still read and written there.
+  the point. The directory itself stays: word lists, the line each file was
+  last left on, and sessions are still read and written there.
 
 - **One rule for twenty-three switches.** Bare reports, `on`/`off` sets,
   `toggle` flips — the same three answers from every one of them.
