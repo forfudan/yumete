@@ -30,7 +30,7 @@ commands do, how vertical layout works, and how to configure it.
 
 ## Status
 
-A working editor, used daily by its author, and not finished. **v0.10.0** is the
+A working editor, used daily by its author, and not finished. **v0.11.0** is the
 current release: `brew install forfudan/tap/yumete` on macOS and Linux,
 `scoop install yumete` on Windows once the
 [bucket](https://github.com/forfudan/scoop-bucket) is added, or an archive from

@@ -303,8 +303,11 @@ b {{ color: #FFF6DD; font-weight: 600 }}
 code {{ font: .9em {MONO}; color: {GOLD};
   background: {CHROME_RUNG}; padding: 1px {px(6)}px; border-radius: 3px }}
 a {{ color: #8FC9E8; text-decoration: none }}
+/* **折行，不切**（2026-10-23）：`scoop bucket add … scoop-bucket` 一行 66 字，框裏
+   放得下 57 個，`pre` 的默認是把多出來的切掉。圖上的命令没人複製，折一行比少半個網址好。 */
 pre.sh {{ background: {CHROME_RUNG}; color: {TEXT}; padding: {px(16)}px {px(20)}px;
   border-radius: 5px; margin: 0 0 {px(18)}px;
+  white-space: pre-wrap; overflow-wrap: anywhere;
   font: {px(16)}px/1.6 {MONO} }}
 hr {{ border: 0; border-top: 1px solid {CHROME_RUNG}; margin: {px(26)}px 0 }}
 .foot {{ margin-top: {px(34)}px; padding-top: {px(20)}px; border-top: 1px solid {CHROME_RUNG};
