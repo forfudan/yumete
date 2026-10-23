@@ -1248,6 +1248,38 @@ fn a_record_short_of_its_columns_is_put_back_where_it_was_cut() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A word motion lands on a grapheme, never inside one** (2026-10-23).
+///
+/// A segmenter counts a combining mark as a thing of its own, so `w` and `e`
+/// stopped *between* a letter and its mark and the next `i` wrote a character
+/// between the two: `m̀x` became `mZ̀x`. `l` and `x` never did, because they
+/// step by grapheme. Every line below is what **real helix 25.07** answers,
+/// measured with `scripts/oracle/hx_keys.py`; the last two are the ordinary
+/// text that must not move.
+///
+/// Found by putting the shapes of real data into `scripts/table_keys.py` —
+/// the 拆分表's `pinyin` column holds twenty of these (`ê̄`, `m̩`, `ŋ̍`, `d͡z`).
+#[test]
+fn a_word_motion_lands_on_a_grapheme_never_inside_one() {
+    for (text, keys, want) in [
+        ("m\u{300}x yz\n", "w", "m\u{300}Zx yz\n"),
+        ("m\u{300}x yz\n", "e", "m\u{300}Zx yz\n"),
+        ("m\u{300}x yz\n", "ww", "m\u{300}x Zyz\n"),
+        ("d\u{361}z yz\n", "w", "d\u{361}Zz yz\n"),
+        ("d\u{361}z yz\n", "e", "d\u{361}Zz yz\n"),
+        ("\u{5185}\u{fe00}x yz\n", "e", "\u{5185}\u{fe00}Zx yz\n"),
+        ("ab m\u{300}x\n", "ee", "abZ m\u{300}x\n"),
+        ("alpha beta\n", "e", "Zalpha beta\n"),
+        ("alpha beta\n", "ee", "alphaZ beta\n"),
+    ] {
+        let mut ed = typed(text);
+        press(&mut ed, keys);
+        press(&mut ed, "iZ");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), want, "{keys} on {text:?}");
+    }
+}
+
 /// **A quoted cell's own `"` cannot be cut out from under it** (2026-10-23).
 ///
 /// vim's `X` cuts the character before the cursor, and on the first character
