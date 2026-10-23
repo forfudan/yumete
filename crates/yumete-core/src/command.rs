@@ -7731,7 +7731,15 @@ mod tests {
         assert_eq!(named(r#":w "a.txt""#).as_deref(), Some("a.txt"));
         assert_eq!(named(r#":w "a b.txt""#).as_deref(), Some("a b.txt"));
         assert_eq!(named(":w 'a.txt'").as_deref(), Some("a.txt"));
-        assert_eq!(named(r":w a\ b.txt").as_deref(), Some("a b.txt"));
+        // **A backslash escapes only where it is not a path separator.**
+        // `unquote` has said so since it was written, and the assertion did
+        // not: it wanted the unix answer on both platforms, so CI was red on
+        // Windows alone from the day this test landed (2026-10-23).
+        let escaped = match cfg!(windows) {
+            true => r"a\ b.txt",
+            false => "a b.txt",
+        };
+        assert_eq!(named(r":w a\ b.txt").as_deref(), Some(escaped));
         // Inside quotes nothing is special, which is helix's answer too.
         assert_eq!(named(r":w 'a\ b.txt'").as_deref(), Some(r"a\ b.txt"));
         // A quote that does not open the argument is a character in a name.
