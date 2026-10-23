@@ -17,6 +17,7 @@
     python3 scripts/table_keys.py --surface tb # 文中表格 · to 源碼
     python3 scripts/table_keys.py --preset vim # 換一套鍵位,同一張固定裝置
     python3 scripts/table_keys.py --undo       # 改動過的那些格,再按 u 回不回得去
+    python3 scripts/table_keys.py --rowless    # 刪到零行那張表(只剩表頭)
     python3 scripts/table_keys.py --key 'l,x'  # 只看這幾個鍵
     python3 scripts/table_keys.py --moved      # 只印「檔案變了」的那些行
 
@@ -66,6 +67,13 @@ FIXTURE = (
     "\u5341\u4e00,\U00033479,K\n"  # ⑪ BMP 以外:四字節,寬的
     "\u5341\u4e8c,\uf400,L\n"    # ⑫ PUA 部件:寬度在不同字體下不一樣
 )
+
+# **只有表頭,一行數據都没有**（`--rowless`）。這不是第十三種形狀,是第十三種
+# **處境**:表格刪到零行,光標無處可站。十二種形狀都站在某一格上,所以這一張表
+# 掃不到它——而它底下藏着五條（2026-10-23）:表頭被當數據畫了第二遍、`i` 寫出
+# 一欄的記錄、`␣t r` 在前面多留一個空行、`P`/`R` 答「逗號寫不進格子」、狀態欄
+# 說「行 2」。
+FIXTURE_ROWLESS = "名,值,尾\n"
 
 # （記號,名字）—— 第 n 條記錄就是第 n 種形狀。
 SHAPES = [
@@ -193,17 +201,18 @@ def sealed(path):
     return env
 
 
-def one(work, prefix, keys):
+def one(work, prefix, keys, fixture=None):
     """一格:（層,光標落在哪,檔案變成什麼,狀態欄說了什麼）。"""
     path = os.path.join(work, "t.csv")
+    fixture = FIXTURE if fixture is None else fixture
 
     with open(path, "w", encoding="utf-8") as f:
-        f.write(FIXTURE)
+        f.write(fixture)
     status, said = shoot(path, prefix + keys)
 
     # 第二趟:存下來看檔案。**`\e` 是必須的**——插入態裏 `:w` 會被打進格子。
     with open(path, "w", encoding="utf-8") as f:
-        f.write(FIXTURE)
+        f.write(fixture)
     shoot(path, prefix + keys + "\\e:w\\n")
     with open(path, encoding="utf-8") as f:
         after = f.read()
@@ -285,6 +294,41 @@ def sweep_undo(args, into, want, work):
         last = r[1]
 
 
+def sweep_rowless(args, into, want, work):
+    """**刪到零行的那張表** —— 每個鍵按一次,看它說什麼、改了什麼。
+
+    固定裝置只有一行（表頭）,所以没有形狀那一軸:前綴不走 `j`,也不走 `l`——
+    零行表上没有格子可以走過去。
+    """
+    rows, rest = [], None
+    path = os.path.join(work, "t.csv")
+    try:
+        for name, keys, layer_in in every_key(args.preset):
+            if want and name not in want:
+                continue
+            prefix = into + layer_in
+            if rest is None:
+                rest = tidy(one(work, prefix, "", FIXTURE_ROWLESS)[3])
+            layer, at, after, said = one(work, prefix, keys, FIXTURE_ROWLESS)
+            said = tidy(said)
+            rows.append((
+                name,
+                layer,
+                at,
+                squash(FIXTURE_ROWLESS, after),
+                "—" if said == rest else said,
+            ))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+    heads = ("鍵", "層", "光標落在", "檔案", "說的話")
+    wide = [max(width(r[i]) for r in rows + [heads]) for i in range(5)]
+    print(f"{YUMETE}  ·  {args.surface}  ·  {args.preset}  ·  零行  ·  {len(rows)} 格\n")
+    print("  ".join(pad(h, w) for h, w in zip(heads, wide)))
+    print("  ".join("─" * w for w in wide))
+    for r in rows:
+        print("  ".join(pad(c, w) for c, w in zip(r, wide)))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--surface", default="tt", choices=sorted(SURFACES))
@@ -292,6 +336,7 @@ def main():
     ap.add_argument("--key", default="", help="只跑這幾個鍵(逗號分開,按印出來的名字)")
     ap.add_argument("--moved", action="store_true", help="只印檔案變了的那些行")
     ap.add_argument("--undo", action="store_true", help="改動過的那些格,再按 u 回不回得去")
+    ap.add_argument("--rowless", action="store_true", help="刪到零行的那張表(只剩表頭)")
     args = ap.parse_args()
 
     if not os.access(YUMETE, os.X_OK):
@@ -303,6 +348,8 @@ def main():
     into = lay + SURFACES[args.surface]
     want = {k.strip() for k in args.key.split(",") if k.strip()}
     work = tempfile.mkdtemp(prefix="table-keys-")
+    if args.rowless:
+        return sweep_rowless(args, into, want, work)
     if args.undo:
         return sweep_undo(args, into, want, work)
     rows, rest = [], {}
