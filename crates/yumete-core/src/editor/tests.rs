@@ -29671,3 +29671,28 @@ fn find_crosses_lines_under_helix_and_says_where_it_looked() {
     assert_eq!(ed.cursor_line(), 0, "vim's f stays on its line");
     assert_eq!(ed.status(), say!("find.no-such-character-on-this-line", 'd'));
 }
+
+/// **`␣y` at the cell layer copies what `y` takes**, not the one character the
+/// caret sits on (2026-10-23 作者報的).
+#[test]
+fn space_y_at_the_cell_layer_copies_the_cell() {
+    let dir = tmp().join(format!("yumete-space-y-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("y.csv");
+    std::fs::write(&csv, "名,值\n一,平常之日\n二,\"兩行\n的值\"\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "l y");
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some("平常之日"));
+    assert_eq!(ed.status(), say!("edit.copied-to-clipboard", 4));
+    // A two-line value goes out as the value: its line break, no quotes.
+    press(&mut ed, "j y");
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some("兩行\n的值"));
+    // Inside the cell it is the character selection again.
+    press(&mut ed, "k");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "vl y");
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some("平常"));
+}

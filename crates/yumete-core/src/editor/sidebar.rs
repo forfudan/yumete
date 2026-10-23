@@ -2229,6 +2229,21 @@ impl Editor {
     /// terminal editor is often run from. The terminal may refuse — many do by
     /// default — so this says what it asked for rather than claiming success.
     pub(super) fn copy_to_clipboard(&mut self) {
+        // **At the cell layer the cell is the unit, not the character the caret
+        // sits on** (2026-10-23 作者報的: 「when I use `space y` on a cell (CEL
+        // layer), it only yank the first char instead of the whole cell. Note
+        // that `y` works correctly」). There is no character selection there —
+        // the selection is one character wide while the whole cell is lit — so
+        // this copies what `y` takes: the value of this cell, the run of cells
+        // standing, or the records selected.
+        if self.cell_is_the_unit() {
+            if let Some(text) = self.yank_cell() {
+                let n = text.chars().count();
+                self.clipboard_request = Some(text);
+                self.status = say!("edit.copied-to-clipboard", n);
+            }
+            return;
+        }
         let (start, end) = self.selection();
         let text = self.current_buffer().rope().slice(start..end).to_string();
         if text.is_empty() {
