@@ -1532,10 +1532,6 @@ pub fn draw(
                 // this branch's business; the ground below it is not.
                 let under = crate::block_style(markup.block(zong.line), ink).unwrap_or(ink.page());
                 let style = match kind {
-                    // 金 and bold, the same as across the page: 這不是正文.
-                    yumete_core::drawn::Ink::Fold => {
-                        under.fg(ink.gold()).add_modifier(Modifier::BOLD)
-                    }
                     yumete_core::drawn::Ink::Note => under.fg(ink.marker()),
                     _ => under.fg(ink.quiet()),
                 };
