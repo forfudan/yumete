@@ -96,6 +96,24 @@ impl Editor {
         }
     }
 
+    /// **The second click of a double click goes into the cell, with the caret
+    /// on the character clicked** (design §04: 「鼠標:單擊選格,雙擊進中層(光標
+    /// 落在你點的那個字上)」; built 2026-10-23 — the page carried it as
+    /// unmeasured, and there was no double click to measure).
+    ///
+    /// The first click has already selected the cell ([`Self::point_at`]).
+    /// Anywhere the grid's layers are not in force, or already inside a cell,
+    /// this is one more click.
+    pub fn point_into(&mut self, pos: usize) {
+        self.point_at(pos);
+        if self.layers_here() && self.table_layer() == Layer::Whole && self.mode == Mode::Normal {
+            self.set_table_layer(Layer::Inside);
+            // Kept where the click put it, unless that is a quote or a wall,
+            // which is not a place a caret may stand.
+            self.put_the_caret_in_the_cell();
+        }
+    }
+
     /// Read this file as a grid, by the schema found next to it.
     ///
     /// Reports what it did, because a mode that changes what every key means

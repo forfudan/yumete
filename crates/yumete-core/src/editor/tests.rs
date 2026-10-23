@@ -29596,3 +29596,31 @@ fn the_record_panel_shows_a_two_line_value_as_the_grid_does() {
         .and_then(|(_, v)| v.clone());
     assert_eq!(value.as_deref(), Some("兩行\n的值"));
 }
+
+/// **A double click goes into the cell, with the caret where it was clicked**
+/// (design §04, built 2026-10-23).
+#[test]
+fn a_second_click_goes_into_the_cell_on_the_character_clicked() {
+    let dir = tmp().join(format!("yumete-double-click-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("d.csv");
+    std::fs::write(&csv, "名,值\n一,平常之日\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    let rope = ed.current_buffer().rope().clone();
+    let at = rope.line_to_char(1) + "一,平常".chars().count(); // on 之
+
+    ed.point_at(at);
+    assert!(ed.cell_is_the_unit(), "one click selects the cell");
+    ed.point_into(at);
+    assert!(!ed.cell_is_the_unit(), "the second goes into it");
+    assert_eq!(ed.current_buffer().rope().char(ed.caret()), '之', "on the character clicked");
+
+    // Inside already, a second click is one more click.
+    let back = rope.line_to_char(1) + "一,".chars().count(); // on 平
+    ed.point_into(back);
+    assert!(!ed.cell_is_the_unit(), "still inside");
+    assert_eq!(ed.current_buffer().rope().char(ed.caret()), '平');
+}

@@ -644,6 +644,9 @@ pub fn run(
 
     let mut viewport = Seats::default();
     let mut shift = ShiftTap::default();
+    // The last left press on the page, to pair a second one with
+    // ([`is_double_click`]).
+    let mut last_press: Option<(std::time::Instant, u16, u16)> = None;
     // Whether the extra enhancement level — the one with
     // `REPORT_ALL_KEYS_AS_ESCAPE_CODES` in it — is on the terminal's stack.
     // Pushed and popped as the input method takes and gives back the keyboard,
@@ -1839,7 +1842,15 @@ pub fn run(
                     } else if let Some(at) =
                         text_at(editor, config, terminal.size().ok(), &viewport, mouse)
                     {
-                        editor.point_at(at);
+                        let now = std::time::Instant::now();
+                        let double = is_double_click(last_press, now, mouse.column, mouse.row);
+                        // A third press starts a new pair rather than making
+                        // a second double out of the second and third.
+                        last_press = (!double).then_some((now, mouse.column, mouse.row));
+                        match double {
+                            true => editor.point_into(at),
+                            false => editor.point_at(at),
+                        }
                         // **Ctrl-click follows a link** (Feature #285) — the
                         // gesture every other editor already means by it, and
                         // the one modifier that survives a terminal. A bare
@@ -8744,6 +8755,25 @@ pub(crate) fn sidebar_shell(
     let head_at = from + 1 + yumete_cjk::str_width(name) as u16;
     let floor_ink = line;
     Shell { from, to, head, head_at, area: room, floor, floor_ink }
+}
+
+/// **How close two presses must be to be one double click.** Terminals
+/// report presses and never clicks, so the pairing is the editor's: the same
+/// cell of the screen, within 400 ms — inside every desktop's default, and
+/// longer than a hand takes to press twice on purpose.
+const DOUBLE_CLICK: std::time::Duration = std::time::Duration::from_millis(400);
+
+/// Whether a press at (`column`, `row`) at `now` completes a double click
+/// begun by `last`.
+fn is_double_click(
+    last: Option<(std::time::Instant, u16, u16)>,
+    now: std::time::Instant,
+    column: u16,
+    row: u16,
+) -> bool {
+    last.is_some_and(|(at, c, r)| {
+        c == column && r == row && now.saturating_duration_since(at) <= DOUBLE_CLICK
+    })
 }
 
 /// 框的四個角。`top` 說上下，`inner` 說是不是朝着正文的那一邊。
@@ -16435,6 +16465,20 @@ fn squeezed(text: &str) -> String {
     }
 
     /// A click lands on the 字 under the pointer, not on one a screenful back.
+    /// **A double click is two presses on one cell, close together** — and
+    /// nothing else: another cell, or too long a wait, is a new first press.
+    #[test]
+    fn two_presses_on_one_cell_close_together_are_a_double_click() {
+        let t0 = std::time::Instant::now();
+        let soon = t0 + std::time::Duration::from_millis(150);
+        let late = t0 + DOUBLE_CLICK + std::time::Duration::from_millis(1);
+        assert!(is_double_click(Some((t0, 10, 4)), soon, 10, 4));
+        assert!(!is_double_click(Some((t0, 10, 4)), soon, 11, 4), "another column");
+        assert!(!is_double_click(Some((t0, 10, 4)), soon, 10, 5), "another row");
+        assert!(!is_double_click(Some((t0, 10, 4)), late, 10, 4), "too slow");
+        assert!(!is_double_click(None, soon, 10, 4), "no first press");
+    }
+
     #[test]
     fn a_click_counts_from_what_is_on_the_page() {
         let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
