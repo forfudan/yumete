@@ -43,6 +43,11 @@ in `docs/development.md` §5.2.
   table, whose cells are one line, refuses such a column whole and says which value
   holds the break.
 
+- **`空格 y` at the cell layer copies the cell.** It copied the one character the caret
+  sat on, while `y` took the whole cell: at that layer the cell is the unit and the
+  character selection is one wide. It now copies what `y` takes — the cell's value, the
+  run of cells standing, or the records selected — to the system clipboard.
+
 - **The record panel shows a cell's value, not its bytes.** A two-line field read
   `"兩行的值"` there while the grid drew 「兩行␊的值」: the quotes the editor owns, and the
   line break gone. The sidebar now breaks it where the writer did; the floating panel,

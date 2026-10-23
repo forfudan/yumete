@@ -4588,7 +4588,9 @@ impl Editor {
                 self.pending = crate::editor::Pending::VimOperator { op, first: None };
                 self.count = (count > 1).then_some(count);
             }
-            Key::Char('y') => self.yank_cell(),
+            Key::Char('y') => {
+                self.yank_cell();
+            }
             // The whole row, spelled the way vi spells "the whole line".
             Key::Char('Y') => self.yank_row(),
             // **A line-wise register is a record, and a record is a line** —
@@ -5084,7 +5086,9 @@ impl Editor {
     /// through a vim motion cannot drift apart.
     pub(super) fn cell_operator(&mut self, op: char) {
         match op {
-            'y' => self.yank_cell(),
+            'y' => {
+                self.yank_cell();
+            }
             'c' => self.edit_cell(match self.yank_on_delete() {
                 true => CellEdit::Replace,
                 false => CellEdit::ReplaceKeeping,
@@ -5774,7 +5778,9 @@ impl Editor {
         self.register = text.to_string();
     }
 
-    fn yank_cell(&mut self) {
+    /// Hands back what it put in the register, so `␣y` at the cell layer can
+    /// send the same thing to the system clipboard ([`Self::copy_to_clipboard`]).
+    pub(super) fn yank_cell(&mut self) -> Option<String> {
         // **Whole records first** (2026-10-21 作者報的: 「y … For multiple rows
         // selection, this is not working」). `x` takes a record and `%` takes
         // the table, so `x y` means 「copy this row」 and `% y` 「copy this
@@ -5793,7 +5799,7 @@ impl Editor {
             self.store(text.clone());
             self.register_grid = Some((text, Held::Records(records)));
             self.status = say!("table.yanked-records", records);
-            return;
+            return self.register_grid.as_ref().map(|(text, _)| text.clone());
         }
         // **A run of cells, when a run is standing** (2026-10-21). The
         // selection is a whole number of cells at this layer
@@ -5807,7 +5813,7 @@ impl Editor {
             let (Some((from, _)), Some((_, to))) =
                 (self.cell_span(line, a), self.cell_span(line, b))
             else {
-                return;
+                return None;
             };
             let text = self.current_buffer().rope().slice(from..to).to_string();
             let run: Vec<String> = {
@@ -5819,11 +5825,9 @@ impl Editor {
             self.store(text.clone());
             self.register_grid = Some((text, Held::Cells(run)));
             self.status = say!("table.yanked-cells", b - a + 1);
-            return;
+            return self.register_grid.as_ref().map(|(text, _)| text.clone());
         }
-        let Some((line, cell)) = self.cell_position() else {
-            return;
-        };
+        let (line, cell) = self.cell_position()?;
         // **The value, not the field.** A quoted cell's `"` are the file's
         // syntax; taking them into the register would mean `R` quoting them
         // again on the way back, and `"a,b"` would come out as a value with
@@ -5839,8 +5843,9 @@ impl Editor {
         // holding the file's own delimiter — 「Smith, John」 — came back out of
         // the register as *two* cells, because that is what the text says and
         // text is all there is to go on. The key that took it knows better.
-        self.register_grid = Some((text, Held::Cells(vec![value])));
+        self.register_grid = Some((text.clone(), Held::Cells(vec![value])));
         self.status = say!("table.yanked-cell", n);
+        Some(text)
     }
 
     /// **The run of cells the selection covers** — the record it is in, and
