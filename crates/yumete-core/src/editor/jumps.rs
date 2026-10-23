@@ -272,10 +272,28 @@ impl Editor {
             _ => false,
         };
         if span == crate::motion::Span::Missed || outside {
-            // 全窗裏「這一行」是「這一格」，所以話也要說那一個（2026-10-17 作者定）。
-            self.status = match self.cell_the_caret_is_in().is_some() {
-                true => say!("find.no-such-character-in-this-cell", target),
-                false => say!("find.no-such-character-on-this-line", target),
+            // **The sentence names the stretch that was searched.** 全窗裏
+            // 「這一行」是「這一格」（2026-10-17 作者定）; under helix the search
+            // runs on over line breaks (2026-10-23), so outside a cell it is
+            // everything ahead or behind; under vim it is still the line — and
+            // inside a cell that a line break splits, vim's bound is that line,
+            // not the cell, so 「這一格裏没有」 would be untrue there.
+            let across = self.key_preset != yumete_cjk::KeyPreset::Vim;
+            let cell = self.cell_the_caret_is_in();
+            let rope = self.current_buffer().rope();
+            let one_line = |(a, b): (usize, usize)| rope.char_to_line(a) == rope.char_to_line(b);
+            self.status = match (cell, across) {
+                (Some(_), true) => say!("find.no-such-character-in-this-cell", target),
+                (Some(span), false) if one_line(span) => {
+                    say!("find.no-such-character-in-this-cell", target)
+                }
+                (Some(_), false) | (None, false) => {
+                    say!("find.no-such-character-on-this-line", target)
+                }
+                (None, true) => match kind.forward() {
+                    true => say!("find.no-such-character-ahead", target),
+                    false => say!("find.no-such-character-behind", target),
+                },
             };
             return;
         }

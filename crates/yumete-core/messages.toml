@@ -4235,6 +4235,20 @@ zhs = "{0}：{1}"
 en = "{0}: {1}"
 
 [[message]]
+# helix 的 f/t 跨行往後找，到文件尾都没有
+key = "find.no-such-character-ahead"
+zht = "往後找不到「{0}」"
+zhs = "往后找不到「{0}」"
+en = "no '{0}' anywhere ahead"
+
+[[message]]
+# helix 的 F/T 跨行往前找，到文件頭都没有
+key = "find.no-such-character-behind"
+zht = "往前找不到「{0}」"
+zhs = "往前找不到「{0}」"
+en = "no '{0}' anywhere behind"
+
+[[message]]
 # f/F 在全窗表格的本格裏找不到那個字（全窗裏「這一行」是「這一格」）
 key = "find.no-such-character-in-this-cell"
 zht = "這一格裏没有「{0}」"
