@@ -7,6 +7,209 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## 0.11.0 · 2026-10-23
+
+Seventy-three commits, five days after 0.10.0. Most of them are one feature: a
+table is a **grid**, and a cell is the thing a key means. The rest is vim's
+sentences and paragraphs measured against vim, a file explorer measured against
+helix, and a search that no longer reads the file it is writing.
+
+### Added
+
+- **A table is a grid, and the cell is the unit.** Open a `.csv`, a `.tsv`, a
+  code table or a markdown table and `hjkl` walk **cells** rather than
+  characters: `h` and `l` cross to the next cell at the cell's own two ends,
+  `j` and `k` keep the column, `0` and `$` are this row's first and last cell
+  (`gh` `gl` `gs` under the helix keymap), and `Tab`/`S-Tab` step on regardless
+  of which layer you are standing at. The status line names the column you are
+  in — 「列 3 [碼]」 — so a 123,380-row 拆分表 is readable without counting
+  commas.
+
+  **The keys say what they say about the cell.** `c` replaces this cell (the
+  most pressed key in a grid), `d` empties it and leaves the delimiter, `y`
+  takes it, `x` takes this whole **record** — every line of it, where a quoted
+  field runs over several — and `%` takes the whole table, heading and all,
+  rather than the chapter it sits in. `A-d` and `A-c` do the same without
+  touching the register, key for key with the text. `v` then `h`/`l` grows the
+  selection by whole cells. `i`/`a` go in before the first character and after
+  the last.
+
+  **`p` puts in and `R` writes over**, and that division is the grid's own: a
+  row's cell count belongs to the table, so the only thing it can take *in*
+  without changing shape is a whole record — `p` below, `P` above. A cell, a run
+  of cells, a block copied out of a spreadsheet: all of those can only be
+  written **over** what is there, and that key is `R`. A run of N cells and an
+  N-column row are the same text, so one key covers both.
+
+  **Two layers, and `Enter`/`Esc` between them.** The top layer is where the
+  grid opens and the whole cell is the unit; `Enter` goes down into the cell,
+  where this is an ordinary editor over one field — `j`/`k` walk the cell's own
+  rows before they leave it, `o` and `O` open a line *of the cell* rather than a
+  row of the table — and `Esc` comes back up. `Esc` never leaves the grid.
+
+- **`空格 t` is the table's command group.** `空格 t r`/`R`/`d` add a row below
+  or above and delete this one; `空格 t j`/`k` move this row; `空格 t y`/`p`
+  yank and paste a whole column; `空格 t i` is the record panel; `空格 t H` says
+  whether the first row is a heading; `空格 t e` opens this table's schema in
+  the other half, writing one out if there is none; `空格 t /` and `空格 t ?`
+  search **column by column** — 「who used it」 — with `空格 t1/` for column 1
+  only and `空格 t2-10?` for columns 2 to 10, and `n`/`N` walk what they found.
+  `:table-jump 木` goes to the row this table calls 木. `空格 t ]`/`[` walk to
+  another table, and a different column count is no obstacle.
+
+  The group is on `空格 t` and not on `t`, because `t`/`T` is vi's till and
+  stays that.
+
+- **Three surfaces, one model.** `空格 t o` is the source, where `|` is just a
+  character and the text's own keys apply; `空格 t b` is table keys over the
+  file as it is written, commas and tabs still visible, the rows no longer
+  wrapping so you can count which column you are in; `空格 t t` hands the whole
+  window to one table and draws the delimiters as rules, and `空格 t q` hands
+  the window back. In the whole-window grid the heading row is drawn rather than
+  stood on, the line numbers are this table's own rows, and the cursor cannot
+  walk out of the file. `空格 t w` cycles how a cell too wide for its column is
+  drawn: wrapped under itself, cut at the cap with a `>`, or whole.
+
+  **A table can have no rows at all**, and a heading is not one of them: delete
+  the last row and the grid draws the column names and nothing else, the status
+  line writes 「行 —」, and every key that means 「this cell」 says there is
+  none. `空格 t r`, `o`, `O` and `p` open a row with this table's own columns in
+  it.
+
+- **A stretch inside a document can be a table too.** A code table pasted into a
+  chapter, a `dict.yaml`'s body under its front matter, LaTeX's `tabular`: put
+  the cursor in those lines, `:table-render basic`, and it is a grid —
+  `:table-render off` comes out and not one byte has moved. It only **reads**:
+  walking cells, `空格 t g`, the two searches and the column yank all work,
+  while every key that would rewrite a whole row is refused. A code table is
+  somebody else's data and what surrounds it is somebody else's prose; to really
+  tidy it up, `:convert-table` it into a table first, so that the file itself
+  says on every line what it is.
+
+- **`空格 e` and `空格 E` browse one directory at a time**, the way helix does
+  it: the picker component with a directory in it, `../` on the first line,
+  typing filters, `Enter` goes into a directory by reopening the picker rather
+  than closing it. `空格 e` starts at the project root and `空格 E` beside the
+  file you are in. The floor is the one `空格 f` already walks, so hidden files,
+  `.gitignore` and `target` are treated identically.
+
+- **`空格 空格` turns the page and `空格 退格` turns it back.** A reader's thumb
+  is already on the space bar, and here the space bar leads the menu — so
+  turning a page is pressing it twice. A whole page, the same step as `C-f` and
+  `C-b`; `J` and `K` are still the half-page pair.
+
+- **`:keymap-yumete-flavor` — a short list of changes laid over helix or vim**,
+  not a third keymap. 「We only modify limited cases. This keeps the majority of
+  helix/vim keymap and is easy to maintain.」 The set holds one item today: `d`
+  and `c` do not fill the register, and `A-d`/`A-c` are the pair that cut.
+  Three layers rather than four — `[keys.normal]` over the flavour over the
+  preset — and the command says when `[keys.normal]` has covered it.
+
+### Changed
+
+- Warning: **Breaking: `:yank-on-delete` and `[editor] yank_on_delete` are gone.**
+  That behaviour is the flavour's single item now: `:keymap-yumete-flavor on|off`,
+  or `[keys] flavor`.
+
+- Warning: **Breaking: the sidebar is one command.**
+  `:sidebar [off|explorer|buffers|outline|search|info]`, bare to report, `off`
+  closes both sides, a name opens that panel on the side it belongs to. 「The
+  location of each type of panel is fixed by yumete and users cannot change it
+  to left and right themselves. This makes our model concise and stable, and
+  also makes it less buggy.」 The four old commands have signposts, `files` is
+  now `explorer`, and the `[sidebar]` config table is gone — **a config file
+  that still has one does not load at all**, since every table refuses unknown
+  fields, so take the table out before upgrading. Rather more was deleted than
+  added, and the empty document panel `空格 4` used to open came out with it.
+
+- Warning: **Breaking: 碼表 are no longer looked for in
+  `~/.local/share/yumete`.** That directory sat first in the search order and
+  the error message told people to put tables in it, so anyone who ever copied
+  one there had it silently covering 宇浩's own — which updates with the
+  install, and lost anyway. One Linux reader was stuck exactly there: `yuman
+  yume update` fetched a new package, 拼音 still did not work, and
+  `:yume-where` showed an 08-28 table (`YFL3`, `YTB1d`) in the first layer.
+  Naming your own directory is now one road only, `[ime] data_dirs` — a line of
+  configuration can do it, copying a file into a directory cannot, and that is
+  the point. The directory itself stays: word lists, places and sessions are
+  still read and written there.
+
+- **One rule for twenty-three switches.** Bare reports, `on`/`off` sets,
+  `toggle` flips — the same three answers from every one of them.
+
+- **vim's sentences cross lines, its paragraphs break on blank lines, and a
+  motion that cannot move fails.** Measured against vim rather than reasoned
+  about: `)` goes to the next sentence instead of selecting this one, and an
+  exclusive motion follows vim's own rule about the last line. The sweep that
+  compares the two keeps a list of the differences that are **meant** to be
+  there, and it starts empty, because the first five entries on it turned out to
+  be this editor's bugs.
+
+- **A hyphenated name is recognised before the arguments are read.** `:wiki
+  panel on` looked up an entry called 「panel on」, `:search project` searched
+  for a path called `project`, and `:table check`, `:theme mode`, `:indent tab`,
+  `:pipe to`, `:replace buffers` and `:view-wrap vertical` all did something
+  that looked like success. Nine commands have both a subcommand and a first
+  argument wide enough to swallow its name; the gate now asks the first word
+  only, and a word an argument declares for itself still wins, so `:indent
+  basic`, `:view-wrap off`, `:theme 墨香` and `:write ./all` are unchanged.
+
+- **The 「did nothing」 notice and `--help` teach spellings the editor really
+  has.** `--help` was offering four the parser refuses, and `:view-preview on`
+  answered 「so `:preview` did nothing here」 about a command retired two
+  releases ago. A string is the one kind of documentation nothing walks, so
+  `--help`'s output and that notice are now walked by tests against the command
+  table. `:cy` used to be `:clipboard-yank`, and prefix fallback sent it to the
+  `cyanotype` theme — a vi hand reaching to copy landed in the theme switcher.
+  Eleven retired names gained signposts, and prefix fallback no longer reaches
+  into the values.
+
+### Fixed
+
+- **The 拆分表 opens five times faster.** Every line of the file was read to
+  build a record boundary, and the lot thrown away when none of them joined. A
+  `"` is the only thing that can join two lines into one record, and the real
+  123,380-line table holds not one — so asking the chunks for a quote first (a
+  memchr over 8 MB) settles it. Opening falls from 250 ms to 49 ms, and an `Esc`
+  out of a cell from 50 ms to 1 ms, which filling a row used to pay once per
+  cell. A file that does hold a quote walks exactly as it did.
+
+- **Eleven things the grid got wrong, found by sweeping it rather than by
+  reasoning about it.** Every key pressed on every shape of cell — empty, one
+  character, quoted, holding the delimiter, holding a line break, the first cell,
+  the last, the only one — across three surfaces and both keymaps, with `u`
+  after every square that moved the file, and then again on shapes taken from
+  the real table instead of invented. Among them: a quoted cell doubled its
+  quotes, cutting a ragged record and putting it back lost it, a quote that never
+  closed went through the sort, and a table deleted down to zero rows drew its
+  heading a second time as row 1 — after which `i` typed a one-column record
+  under a three-column schema and `d`/`y` named a cell that was not there.
+
+- **A search no longer reads the file it is writing.** `ye --grep word . >
+  out.txt` found `out.txt`, read back what it had just written, and wrote it
+  again: one such command reached **315 GB** and left 1.6 GB on a 926 GB disk,
+  silently from beginning to end. The walk now asks `fstat(1)` for the identity
+  behind this process's stdout and skips that file — identity rather than name,
+  so a symlink and a second path to it are both caught — and says on stderr
+  which file it did not look at.
+
+- **The cursor is drawn on the cell the editor counted.** Under `ambiguous_width
+  = "wide"`, two presses of `l` on `a—b—c—d` put the status line on 「列 4」
+  while the highlight sat a cell to the left, one cell further out per `—`. The
+  editor counts `—` as two cells and ratatui leaves it one, so a two-cell glyph
+  painted over its neighbour. The private-use half of this was fixed in October;
+  both halves are now one predicate, 「this end counts two cells where Unicode
+  Annex #11 leaves one」.
+
+- **`:yume-menu-size 3` says 3.** It used to answer with the previous number and
+  only tell the truth when asked twice: the clamp runs a frame later, and the
+  status line is written in this one.
+
+- **`--shot` survives a closed pipe, and the command list keeps the entry you
+  are on.**
+
+- **The search panel rescans whichever file you edited, by name.**
+
 ## 0.10.0 · 2026-10-18
 
 Seven commits, the day after 0.9.0. The input method's keys gathered under one
