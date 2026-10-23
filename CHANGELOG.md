@@ -19,6 +19,24 @@ in `docs/development.md` §5.2.
   already saying 「按 t o 回到源碼模式」; under 0.11.0, `t o` searched the cell for an
   「o」.
 
+- **A double click goes into a cell**, with the caret on the character clicked; a single
+  click still selects the cell. Terminals report presses, not clicks, so two presses on
+  the same place within 400 ms are paired into one.
+
+### Fixed
+
+- **`空格 t y` and `空格 t p` take a column one record at a time.** A record whose field
+  holds a line break is written on two lines, and the column was walked a line at a
+  time: on a 41-row table it went out as 42 values, the two-line one as two halves with
+  their quotes, and `空格 t p` wrote every cell below it two rows down — with the row and
+  column counts unchanged, so the table still read as a good one. A value with a line
+  break now travels quoted, as one line of a one-column TSV, and comes back whole.
+
+- **The record panel shows a cell's value, not its bytes.** A two-line field read
+  `"兩行的值"` there while the grid drew 「兩行␊的值」: the quotes the editor owns, and the
+  line break gone. The sidebar now breaks it where the writer did; the floating panel,
+  one line to a field, shows the break as `␊`.
+
 ## 0.11.0 · 2026-10-23
 
 Seventy-three commits, five days after 0.10.0. Most of them are one feature: a
