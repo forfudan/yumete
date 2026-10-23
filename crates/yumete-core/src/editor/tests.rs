@@ -29547,3 +29547,52 @@ fn t_is_the_table_group_at_the_top_layer_and_till_inside_a_cell() {
     assert_eq!(rope.char(ed.caret()), '平', "till 常 stops on 平: {}", ed.status());
     assert!(!ed.cell_is_the_unit(), "and the caret is still inside the cell");
 }
+
+/// **A column goes out and comes back one record to a value** (2026-10-23).
+///
+/// Walked a line at a time, a record whose field holds a line break was taken
+/// once per line it is written on, with its quotes: `␣t y` reported 42 cells of
+/// a 41-row table, and `␣t p` wrote every cell under the two-line one two rows
+/// down. The row and column counts never changed, so nothing said so.
+#[test]
+fn a_column_with_a_two_line_value_goes_out_and_comes_back_whole() {
+    let dir = tmp().join(format!("yumete-column-records-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("c.csv");
+    std::fs::write(&csv, "名,值,尾\n一,甲,A\n二,\"兩行\n的值\",B\n三,丙,C\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+
+    press(&mut ed, "l ty");
+    assert_eq!(ed.status(), say!("table.yanked-column", "值", 4), "header and three records");
+    press(&mut ed, "l tp");
+    assert_eq!(ed.status(), say!("table.pasted-column", 4));
+    assert_eq!(
+        ed.current_buffer().text(),
+        "名,值,值\n一,甲,甲\n二,\"兩行\n的值\",\"兩行\n的值\"\n三,丙,丙\n",
+        "every value beside itself, the two-line one quoted once and whole"
+    );
+}
+
+/// **The record panel shows the value, not the bytes** (2026-10-23): no
+/// quotes, and the line break the writer typed.
+#[test]
+fn the_record_panel_shows_a_two_line_value_as_the_grid_does() {
+    let dir = tmp().join(format!("yumete-panel-value-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("p.csv");
+    std::fs::write(&csv, "名,值\n二,\"兩行\n的值\"\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    let detail = ed.detail().expect("a row answers");
+    let value = detail
+        .rows
+        .iter()
+        .find(|(name, _)| name.ends_with("值"))
+        .and_then(|(_, v)| v.clone());
+    assert_eq!(value.as_deref(), Some("兩行\n的值"));
+}

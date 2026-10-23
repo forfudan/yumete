@@ -3982,6 +3982,11 @@ impl Editor {
     /// One cell to a line — which is what a column *is*, and what `t p` reads
     /// back. It is also a shape every other tool understands, so a column
     /// yanked here pastes into a spreadsheet as a column.
+    ///
+    /// **A value that holds a line break is quoted** (2026-10-23), the way a
+    /// one-column TSV writes it ([`crate::table::quote_for`] with a tab). One
+    /// value to a line cannot otherwise say where a two-line value ends: it
+    /// went out as two values and came back two rows apart.
     fn yank_column(&mut self) {
         let Some((_, cell)) = self.cell_position() else {
             return;
@@ -3992,7 +3997,8 @@ impl Editor {
             return;
         }
         let n = values.len();
-        self.store(format!("{}\n", values.join("\n")));
+        let lines: Vec<String> = values.iter().map(|v| crate::table::quote_for(v, '\t')).collect();
+        self.store(format!("{}\n", lines.join("\n")));
         // **The table the cursor is in names it** (#283) — see
         // [`Self::schema_here`]. It used to be the view's schema, which in a
         // Markdown document is the *first* table's: `t y` in the second table
@@ -4021,9 +4027,32 @@ impl Editor {
                 .map(|row| crate::mdtable::unescape(row.get(cell).map_or("", String::as_str)))
                 .collect();
         }
+        self.record_lines()
+            .into_iter()
+            .map(|line| {
+                let source = self.row_source(line);
+                self.row_cells(line)
+                    .get(cell)
+                    .map(|&span| self.cell_shown(&source, span))
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    /// **The line each record of the grid starts on** — one per row of the
+    /// table, top to bottom.
+    ///
+    /// [`Self::cell_lines`] is every line that has cells, and a record whose
+    /// field holds a line break is written on several of them — each of which
+    /// answers with the whole record's cells. A column walked line by line
+    /// took that record once per line (2026-10-23: `␣t y` reported 42 cells of
+    /// a 41-row table, the two-line value went out as two quoted halves, and
+    /// `␣t p` wrote every cell under it two rows down — silently, since the
+    /// row and column counts never changed).
+    fn record_lines(&self) -> Vec<usize> {
         self.cell_lines()
             .into_iter()
-            .map(|line| self.cell_text(line, cell))
+            .filter(|&line| self.record_first(line) == line)
             .collect()
     }
 
@@ -4056,11 +4085,14 @@ impl Editor {
             return;
         }
         let text = self.recall();
-        let values: Vec<String> = text
-            .trim_end_matches('\n')
-            .lines()
-            .map(str::to_string)
-            .collect();
+        let body = text.trim_end_matches('\n');
+        // What `␣t y` wrote: one value to a line, a value with a line break in
+        // it quoted. Text that never closes a quote was not written by it, and
+        // is read the way it always was, a line to a value.
+        let values: Vec<String> = match records_in(body, '\t') {
+            Some(records) => records.iter().map(|r| crate::table::unquote(r)).collect(),
+            None => body.lines().map(str::to_string).collect(),
+        };
         if values.is_empty() {
             self.status = say!("edit.nothing-yanked-yet");
             return;
@@ -4086,7 +4118,7 @@ impl Editor {
             return;
         };
         let d = self.table.as_ref().map(|v| v.schema.delimiter).unwrap_or(',');
-        let lines = self.cell_lines();
+        let lines = self.record_lines();
         // **A value holding the delimiter is refused, not filtered.** It used
         // to be stripped out character by character, which is the same silent
         // damage `:table-csv` refuses in the other direction: 「長, 久」 went
@@ -4098,8 +4130,13 @@ impl Editor {
             return;
         }
         self.snapshot();
-        for (r, value) in values.iter().enumerate() {
-            let Some(&line) = lines.get(r) else { break };
+        // **From the bottom up** (2026-10-23). A value that brings a line
+        // break with it moves every line under it down by one, so the record
+        // lines worked out above stay true only for the rows not yet written —
+        // which, written last-first, is all of them.
+        let pairs: Vec<(usize, &String)> = lines.iter().copied().zip(values.iter()).collect();
+        let mut written = 0;
+        for (line, value) in pairs.into_iter().rev() {
             // A line this column does not reach — the blank line between two
             // blocks — is skipped, not an error.
             if self.cell_span(line, cell).is_none() {
@@ -4108,9 +4145,10 @@ impl Editor {
             if !self.write_the_cell(line, cell, value) {
                 return;
             }
+            written += 1;
         }
         self.snap_to_cell();
-        self.status = say!("table.pasted-column", n);
+        self.status = say!("table.pasted-column", written);
     }
 
     /// Put a block of cells in, starting at the cursor's.
