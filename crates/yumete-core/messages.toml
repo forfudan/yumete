@@ -11223,6 +11223,13 @@ zhs = "第 {0} 栏宽 {1} 格，没有窗口装得下——对齐它只会写出
 en = "column {0} is {1} squares wide — no window holds it, and lining it up would write nothing but spaces. The table is untouched"
 
 [[message]]
+# 整欄貼進 | 表格，有一個值帶換行（從分隔符檔案抄來的兩行格子）；整欄拒收
+key = "table.column-value-has-a-line-break"
+zht = "本表格不允許單元格内換行，第 {0} 個值存在換行"
+zhs = "本表格不允许单元格内换行，第 {0} 个值存在换行"
+en = "this table's cells cannot hold a line break, and value {0} has one"
+
+[[message]]
 # 進 | 表格模式，光標不在表格裏
 key = "table.cursor-not-in-a-table"
 zht = "光標不在表格裏"

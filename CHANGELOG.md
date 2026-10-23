@@ -30,7 +30,9 @@ in `docs/development.md` §5.2.
   time: on a 41-row table it went out as 42 values, the two-line one as two halves with
   their quotes, and `空格 t p` wrote every cell below it two rows down — with the row and
   column counts unchanged, so the table still read as a good one. A value with a line
-  break now travels quoted, as one line of a one-column TSV, and comes back whole.
+  break now travels quoted, as one line of a one-column TSV, and comes back whole. A `|`
+  table, whose cells are one line, refuses such a column whole and says which value
+  holds the break.
 
 - **The record panel shows a cell's value, not its bytes.** A two-line field read
   `"兩行的值"` there while the grid drew 「兩行␊的值」: the quotes the editor owns, and the

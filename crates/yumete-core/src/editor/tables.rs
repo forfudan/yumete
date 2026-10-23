@@ -4117,6 +4117,15 @@ impl Editor {
         }
         let n = values.len();
         if let Some((region, mut parts)) = self.md_parts() {
+            // **A `|` cell is one line** (2026-10-23). A column yanked out of a
+            // delimited file can carry a two-line value, and written into a
+            // `|` row it broke the row in two — the table stopped being one.
+            // Refused whole and before anything moves, so the refusal costs
+            // nothing to undo.
+            if let Some(nth) = values.iter().position(|v| v.contains('\n')) {
+                self.status = say!("table.column-value-has-a-line-break", nth + 1);
+                return;
+            }
             let (_, cell) = self.md_at(&region);
             for (r, value) in values.iter().enumerate() {
                 while r >= parts.rows.len() {
