@@ -11062,11 +11062,11 @@ zhs = "照 {0}"
 en = "by {0}"
 
 [[message]]
-# 清空一格
+# 清空一格。不報字數：數的是源文，帶引號的格子報得比看得見的多
 key = "table.cell-cleared"
-zht = "清空了一格({0} 個字)"
-zhs = "清空了一格({0} 个字)"
-en = "cleared a cell ({0} character(s))"
+zht = "清空了一格"
+zhs = "清空了一格"
+en = "cleared a cell"
 
 [[message]]
 # 格內 `l`／`→` 撞到這一格的遠端那面牆（設計 §04「到邊了說一句」）
@@ -11316,9 +11316,9 @@ en = "the whole window — ␣t q gives it back, ␣t o leaves"
 [[message]]
 # 想删掉標題行
 key = "table.header-cannot-be-deleted"
-zht = "標題行不能删：欄名寫在那裏"
-zhs = "标题行不能删：栏名写在那里"
-en = "the header names the columns — it cannot be deleted"
+zht = "標題行不可編輯，請先用 ␣t H 將其轉爲數據行"
+zhs = "标题行不可编辑，请先用 ␣t H 将其转为数据行"
+en = "the header row cannot be edited; ␣t H turns it into a data row first"
 
 [[message]]
 # 欄名取自首行

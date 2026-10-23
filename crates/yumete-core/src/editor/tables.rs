@@ -5047,14 +5047,16 @@ impl Editor {
         }
         self.snapshot();
         let text = self.current_buffer().rope().slice(start..end).to_string();
-        let n = text.chars().count();
         if yanks {
             self.store(text);
         }
         if self.edit_remove(start..end) {
             self.set_cursor(start);
             self.format_md_table();
-            self.status = say!("table.cell-cleared", n);
+            // **No count** (2026-10-23): it counted the source, so a cell whose
+            // value held a comma or a quote reported more characters than the
+            // reader could see. 「清空了一个单元格就可以了吧」.
+            self.status = say!("table.cell-cleared");
         }
     }
 
