@@ -389,11 +389,56 @@ pub fn line_words(rope: &Rope, line: usize, grain: Grain, seg: &dyn Segmenter) -
 
 /// 一段文本按某個粒度切出來的詞範圍（相對這段文本）。
 fn segment_text(text: &str, grain: Grain, seg: &dyn Segmenter) -> Vec<(usize, usize)> {
-    match grain {
+    let words = match grain {
         Grain::Big => yumete_cjk::word_ranges_big(text),
         Grain::Coarse => yumete_cjk::word_ranges_coarse(text),
         Grain::Word => seg.segment(text),
+    };
+    whole_graphemes(text, words)
+}
+
+/// **A word is made of whole graphemes** (2026-10-23).
+///
+/// A segmenter counts a combining mark as a thing of its own, so a word ended
+/// *between* a letter and its mark — and a caret there is not a place. On
+/// `m̀` (U+006D U+0300) `w` and `e` landed inside the cluster and the next
+/// `i` wrote the character **between the letter and its accent**: `m̀x` became
+/// `mZ̀x`. Real helix 25.07 keeps the mark with its letter, measured with
+/// `scripts/oracle/hx_keys.py`; `l` and `x` here already agreed, because they
+/// step by grapheme. The real 拆分表 holds twenty of these in its `pinyin`
+/// column (`ê̄`, `m̩`, `ŋ̍`, `d͡z`), which is how it was found — by putting the
+/// shapes of real data into `scripts/table_keys.py`.
+///
+/// Warning: **The ordinary text pays one count for this.** Where every cluster is
+/// one character — every line of Chinese, and every line of English without a
+/// combining mark — the two counts agree and the words are handed straight
+/// back.
+fn whole_graphemes(text: &str, words: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+    let mut starts = Vec::new();
+    let mut at = 0;
+    for cluster in graphemes(text) {
+        starts.push(at);
+        at += cluster.chars().count();
     }
+    if starts.len() == at {
+        return words;
+    }
+    starts.push(at);
+    let back = |p: usize| starts[starts.partition_point(|&b| b <= p).saturating_sub(1)];
+    let ahead = |p: usize| starts[starts.partition_point(|&b| b < p).min(starts.len() - 1)];
+    let mut out: Vec<(usize, usize)> = Vec::with_capacity(words.len());
+    for (a, b) in words {
+        let (a, b) = (back(a), ahead(b));
+        // Warning: **Only a real overlap merges.** Two words that now *touch* are
+        // still two: real helix splits `m̀x` after the mark (`m̀` then `x`),
+        // and a `>=` here swallowed the pair into one word, which `w` then
+        // walked straight past.
+        match out.last_mut() {
+            Some(last) if last.1 > a => last.1 = last.1.max(b),
+            _ => out.push((a, b)),
+        }
+    }
+    out
 }
 
 // ---- 長行上的詞動作：只切光標附近那一段（2026-10-08） ----------------------
@@ -1100,8 +1145,14 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
         // 字。現在那條邊界由被丟掉的那一扇記下來，見 [`Window::leading`]。
         let found = near_words(rope, line, pos, grain, seg, true, |w| {
             let words = w.ended();
+            // Warning: **「已經在詞尾了」要按字位問,不是按碼位**（2026-10-23）。光標罩
+            // 着的是一整個字位,而 `m̀`（U+006D U+0300）那種詞**整個就是那一格**——
+            // 問 `end - 1 > pos` 的時候 1 是組合記號,於是 `e` 把頭放進了字位中間,
+            // 而真 helix 25.07 收下一個詞（`scripts/oracle/hx_keys.py` 量的）。
+            // 每個字位都是一個字符的時候,`right(pos)` 就是 `pos + 1`,兩個寫法同一
+            // 個答案。
             let (k, &(_, end)) =
-                words.iter().enumerate().find(|(_, &(_, end))| end.saturating_sub(1) > pos)?;
+                words.iter().enumerate().find(|(_, &(_, end))| end > right(rope, pos))?;
             // **A word owns the whitespace in front of it** — that is the half
             // of the boundary `e` takes, and `w` takes the other (#304). So the
             // selection starts at the end of the word before, not at the start
@@ -1110,7 +1161,8 @@ pub fn next_word_end(rope: &Rope, pos: usize, grain: Grain, seg: &dyn Segmenter)
             let leading = w.leading(k);
             // …but never *behind* the caret: when the caret is already inside
             // this word, `e` takes the rest of it and nothing before.
-            Some((pos.max(leading), end.saturating_sub(1)))
+            // 頭落在那個詞**最後一個字位**的頭上,不是最後一個碼位上。
+            Some((pos.max(leading), left(rope, end)))
         });
         if let Some(found) = found {
             return found;
