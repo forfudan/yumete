@@ -29624,3 +29624,28 @@ fn a_second_click_goes_into_the_cell_on_the_character_clicked() {
     assert!(!ed.cell_is_the_unit(), "still inside");
     assert_eq!(ed.current_buffer().rope().char(ed.caret()), '平');
 }
+
+/// **A two-line value is refused by a `|` table, whole** (2026-10-23).
+///
+/// Written in, it broke the row in two; before the column learned records it
+/// was split into two values and every cell below moved down. Neither is a
+/// paste, so nothing is written.
+#[test]
+fn a_pipe_table_refuses_a_column_holding_a_line_break() {
+    let dir = tmp().join(format!("yumete-pipe-refuses-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("s.csv");
+    let md = dir.join("m.md");
+    std::fs::write(&csv, "名,值\n一,甲\n二,\"兩行\n的值\"\n").unwrap();
+    let table = "前言。\n\n| 名 | 值 |\n| --- | --- |\n| 子 | 丑 |\n| 寅 | 卯 |\n\n後記。\n";
+    std::fs::write(&md, table).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "l ty");
+    ed.open_file(&md).unwrap();
+    press(&mut ed, "jjl tp");
+    assert_eq!(ed.status(), say!("table.column-value-has-a-line-break", 3));
+    assert_eq!(ed.current_buffer().text(), table, "not one cell written");
+}
