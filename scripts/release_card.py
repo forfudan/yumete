@@ -39,7 +39,11 @@ CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 #
 # Warning: **`document.fonts.check()` 會撒謊**：上面四個它全回 `true`，包括根本沒裝的
 # Sarasa。要判斷一個字體在不在，**量「中」和「A」的寬度比**，別問那個 API。
-MONO = '"LXGW WenKai Mono GB", "Sarasa Mono SC", Menlo, monospace'
+#
+# **Yuniversus 接在文楷後面**（2026-10-23，0.11.0 那張拍的是拆分表）。文楷等寬缺的只
+# 有宇浩的私用區字根——量過那一幀 32 個字，缺 U+F485、U+F686 兩個，Yuniversus 兩個都
+# 有。格子是一格一個盒子排的，所以後備字體的字寬打不亂對齊；文楷有的字照舊是文楷。
+MONO = '"LXGW WenKai Mono GB", "Yuniversus", "Sarasa Mono SC", Menlo, monospace'
 SANS = '"LXGW WenKai GB", "PingFang SC", "Hiragino Sans GB", sans-serif'
 
 # 墨香那幾個色，和編輯器裏量出來的一樣（`development.md` 的梯子那一節）。
@@ -84,7 +88,12 @@ def inline(text):
 
 
 def render(md):
-    """那幾樣語法 → HTML。段落、`---`、代碼塊、列表（含一層縮進）、標題。"""
+    """那幾樣語法 → HTML。段落、`---`、代碼塊、列表（含一層縮進）、標題。
+
+    **列表項的第二段**（2026-10-23）：緊跟在列表項下面、縮進兩格、又不是列表記號的
+    那一行，接進同一項，另起一段。0.11.0 的中文稿有五條是兩段的，不認的話第二段掉
+    出列表，頂格成了一個没有記號的段落。
+    """
     out, lines, i = [], md.split("\n"), 0
     stack = 0  # 開着幾層 <ul>
 
@@ -118,6 +127,8 @@ def render(md):
                 stack += 1
             close(deep + 1)
             out.append("<li>" + inline(line.lstrip().lstrip("-*").strip()) + "</li>")
+        elif line.startswith("  ") and line.strip() and out and out[-1].endswith("</li>"):
+            out[-1] = out[-1][: -len("</li>")] + "<p>" + inline(line.strip()) + "</p></li>"
         elif not line.strip():
             close()
         else:
@@ -287,6 +298,7 @@ h1, h2, h3, h4 {{ color: {GOLD}; margin: {px(30)}px 0 {px(12)}px; font-size: {px
 ul {{ margin: 0 0 {px(14)}px; padding-left: {px(26)}px }}
 ul ul {{ margin: {px(6)}px 0 {px(2)}px }}
 li {{ margin: 0 0 {px(10)}px }}
+li p {{ margin: {px(8)}px 0 0 }}
 b {{ color: #FFF6DD; font-weight: 600 }}
 code {{ font: .9em {MONO}; color: {GOLD};
   background: {CHROME_RUNG}; padding: 1px {px(6)}px; border-radius: 3px }}
