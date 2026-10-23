@@ -29503,6 +29503,47 @@ fn replacing_a_whole_file_asks_in_the_middle_of_the_page() {
     assert_eq!(ed.search().total, 0, "{}", ed.status());
 }
 
+/// **`t` is `␣t` at the top layer of a grid, and till inside a cell**
+/// (2026-10-20 作者定; built 2026-10-23, after 0.11.0 shipped without it).
+///
+/// The opening message of a delimited file has said 「按 t o 回到源碼模式」 all
+/// along, and until this landed `t o` searched the cell for an 「o」.
+#[test]
+fn t_is_the_table_group_at_the_top_layer_and_till_inside_a_cell() {
+    let dir = tmp().join(format!("yumete-t-alias-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("t.csv");
+    std::fs::write(&csv, "名,值,尾\n一,平常,A\n").unwrap();
+    let open = || {
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        assert!(ed.cell_is_the_unit(), "the grid opens at the top layer");
+        ed
+    };
 
+    // The same two keys, with and without the space, do the same thing.
+    for keys in ["tH", " tH"] {
+        let mut ed = open();
+        press(&mut ed, keys);
+        assert_eq!(ed.status(), say!("table.header-is-data", 3), "{keys:?}");
+    }
+    for keys in ["to", " to"] {
+        let mut ed = open();
+        press(&mut ed, keys);
+        assert_eq!(ed.status(), say!("table.off"), "{keys:?}");
+        assert!(!ed.grid_has_the_pane(), "{keys:?} handed the window back");
+    }
 
-
+    // Inside a cell `t` stops before a character, the way it does in text.
+    let mut ed = open();
+    press(&mut ed, "j");
+    press(&mut ed, "l");
+    ed.on_key(Key::Enter);
+    assert!(!ed.cell_is_the_unit(), "Enter went into the cell");
+    press(&mut ed, "t常");
+    let rope = ed.current_buffer().rope();
+    assert_eq!(rope.char(ed.caret()), '平', "till 常 stops on 平: {}", ed.status());
+    assert!(!ed.cell_is_the_unit(), "and the caret is still inside the cell");
+}

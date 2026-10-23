@@ -7,6 +7,18 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **`t` at the cell layer is `空格 t`.** A till stops before a character, and at the
+  cell layer there is none to stop before — the whole cell is the unit — so there the
+  key opens the table's group: `t o` back to the source, `t H` the heading, `t r` a
+  row. Inside a cell, and everywhere outside the whole-window grid, `t` is till as it
+  was. 0.11.0 shipped without it, while the message a delimited file opens with was
+  already saying 「按 t o 回到源碼模式」; under 0.11.0, `t o` searched the cell for an
+  「o」.
+
 ## 0.11.0 · 2026-10-23
 
 Seventy-three commits, five days after 0.10.0. Most of them are one feature: a

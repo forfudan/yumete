@@ -4456,6 +4456,10 @@ impl Editor {
                 self.repeat(count, |e| e.take_whole(whole));
                 return true;
             }
+            Claim::Menu => {
+                self.pending = crate::editor::Pending::Table;
+                return true;
+            }
             // Not the grid's business: the ordinary editor takes the key and a
             // table changes nothing about what it means. Paging, search, `:`
             // and every operator arrive here at the middle layer.
