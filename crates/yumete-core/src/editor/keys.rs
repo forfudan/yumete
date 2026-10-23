@@ -404,6 +404,25 @@ impl Editor {
         if self.current_buffer().id() != buffer {
             return;
         }
+        // **A table with no rows still has to hold the caret somewhere**
+        // (2026-10-23). `ropey` reports a trailing empty line for every file
+        // that ends in a newline (#384), and that is where `␣t d` on the last
+        // row left the caret: `o` and `␣t r` then opened their row *under* it
+        // and wrote the blank line into the file (`名,值,尾␊␊,,␊`). The header
+        // line is the only line such a table has, and every key that means
+        // 「this cell」 is already turned away there, so it is somewhere the
+        // caret can safely wait for `␣t r`.
+        //
+        // Silently: 「删了一行」 is the sentence the reader is owed for the key
+        // they pressed, and 「窗子拉得住你」 would eat it.
+        if self.table_is_rowless() {
+            let rope = self.current_buffer().rope();
+            if rope.char_to_line(self.caret().min(rope.len_chars())) != 0 {
+                let at = rope.line_to_char(0);
+                self.set_cursor(at);
+            }
+            return;
+        }
         // **Only what this key moved.** A cursor that was already off the rows
         // — parked on a header row, which only an internal call can do — is
         // not something to drag anywhere: holding it there would move the

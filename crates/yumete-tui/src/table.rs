@@ -414,7 +414,13 @@ pub fn draw(
             rope.char_to_line(pane.cursor().min(rope.len_chars()))
         }
     };
-    let Some((top_row, bottom_row)) = editor.table_row_span_at(anchor) else {
+    // **A table can have no rows at all** — a header and nothing under it,
+    // which is what a `.csv` looks like one `␣t d` past its last row. The head
+    // is still the table and still worth drawing; what is below it is empty,
+    // so nothing here may scroll and the row loop must not run (2026-10-23).
+    let span = editor.table_row_span_at(anchor);
+    let rowless = span.is_none() && editor.table_is_rowless();
+    let Some((top_row, bottom_row)) = span.or(rowless.then_some((1, 0))) else {
         return (area.x, area.y);
     };
     // A pane that is only being read is scrolled around the row it was opened
@@ -461,10 +467,12 @@ pub fn draw(
     if let Some(inset) = editor.page_inset(distance, rows.saturating_sub(1), scrolloff) {
         viewport.top = cursor_row.saturating_sub(inset);
     }
-    viewport.top = viewport
-        .top
-        .min(bottom_row)
-        .max(first_data.min(bottom_row));
+    viewport.top = match rowless {
+        // Nothing to scroll, and `first_data.min(bottom_row)` on an empty
+        // table is line 0 — the header, which the clamp then drew as row 1.
+        true => top_row,
+        false => viewport.top.min(bottom_row).max(first_data.min(bottom_row)),
+    };
     // **The page starts at a record, never inside one** (2026-10-20 作者報的).
     // The scroll above counts lines, so stepping down past a record that holds
     // a line break landed `top` on its continuation line — and every row from
@@ -783,7 +791,11 @@ pub fn draw(
     let floor = area.y + area.height;
     let mut y = area.y + head;
     let mut line = viewport.top;
-    while y < floor && line <= bottom_row {
+    // `!rowless` said here rather than left to the arithmetic: an empty table's
+    // pair is `(1, 0)` and every step between here and there — the clamp, the
+    // 折行 scroll, `table_row_start` — could put `top` back on line 0, which is
+    // the header and the one line this loop must never draw.
+    while !rowless && y < floor && line <= bottom_row {
         let ragged = editor.row_is_ragged(line);
         let (cells, parts) = lines_of(line);
         let tall = height_of(&parts).min((floor - y) as usize).max(1);

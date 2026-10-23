@@ -309,7 +309,12 @@ impl Editor {
         // the top and refuses every edit on — while the caret was drawn on the
         // first row of data, so the cell you were told you were in and the
         // cell the caret sat in were two different cells.
-        if self.on_header_row() {
+        //
+        // **And not when there is no row to land on** (2026-10-23): a header
+        // with nothing under it has one line, the one the grid freezes, and
+        // `ropey`'s trailing empty line is not a place to wait (#384) — `o`
+        // opened its row *under* that line and left a blank one in the file.
+        if self.on_header_row() && self.table_row_span().is_some() {
             let rope = self.current_buffer().rope();
             if rope.len_lines() > 1 {
                 let at = rope.line_to_char(1);
@@ -1176,8 +1181,31 @@ impl Editor {
     /// brings the grid back: the same bargain [`Self::table_here`] makes for
     /// the keys — 「a mode scoped to the thing it is about never has to be
     /// turned off」. `t q` still gives the window back for good.
+    ///
+    /// **A whole file that is one table is the exception**: the cursor cannot
+    /// walk out of it ([`Self::hold_the_pane`]), so the grid keeps the pane
+    /// even when there is no row left to draw. Giving the window back to the
+    /// page there would make `␣t d` on the last row look like leaving table
+    /// mode — and the header is still on the screen, which is the one thing
+    /// such a file still has (2026-10-23).
     pub fn grid_has_the_pane(&self) -> bool {
-        self.table.as_ref().is_some_and(|v| v.takes_the_pane()) && self.table_row_span().is_some()
+        let Some(view) = self.table.as_ref() else {
+            return false;
+        };
+        view.takes_the_pane()
+            && (view.bounds == Bounds::WholeFile || self.table_row_span().is_some())
+    }
+
+    /// **Whether the grid is showing a table with no rows in it** — a header
+    /// and nothing under it, which is what a `.csv` looks like one `␣t d` past
+    /// its last row (2026-10-23 作者定: 「零行是正當狀態，沒有格子可編」).
+    ///
+    /// There is no cell here, so the keys that mean 「this cell」 say so and
+    /// change nothing; `␣t r`, `o`, `O` and `p` open a row and are the way
+    /// out, and `␣t H` turns the header into an ordinary row for anyone who
+    /// wants to edit the column names.
+    pub fn table_is_rowless(&self) -> bool {
+        self.grid_has_the_pane() && self.table_row_span().is_none()
     }
 
     /// The buffer lines this table's **data rows** occupy: the first and the
@@ -1218,7 +1246,17 @@ impl Editor {
         let view = self.table.as_ref()?;
         let last_line = self.grid_last_line();
         match view.bounds {
-            Bounds::WholeFile => Some((usize::from(view.schema.header), last_line)),
+            // **And a whole file that is one table can have no rows either**
+            // (2026-10-23). The region branch below has had this guard since
+            // the beginning; this one handed back an inverted pair, the grid's
+            // scroll clamp turned it into `0`, and a `.csv` one `␣t d` past
+            // its last row **drew its header a second time as row 1** — `i`
+            // then typed a one-column record under a three-column schema, and
+            // `d`/`y` named a cell that was not there.
+            Bounds::WholeFile => {
+                let first = usize::from(view.schema.header);
+                (first <= last_line).then_some((first, last_line))
+            }
             _ => {
                 let region = self.prose_region_at(line)?;
                 let first = region.first
@@ -4374,6 +4412,24 @@ impl Editor {
             self.status = say!("table.rule-row-is-drawn");
             return true;
         }
+        // **And a table with no rows has no cell to be about** (2026-10-23
+        // 作者定). The same shape of guard as the rule row above, and for the
+        // same reason: a key that means 「this cell」 has to be turned away
+        // before anything downstream invents one. `i` used to write a
+        // one-column record into a three-column schema, and `d`/`y` reported
+        // on a cell that was not there (「這一格是空的」/「取了一格(0 個字)」).
+        //
+        // Not every key: `␣t r`, `o`, `O`, `p`, `P` and `R` all open a row
+        // with the schema's own columns in it, and they are the way out.
+        if self.table_is_rowless()
+            && matches!(
+                key,
+                Key::Char('i' | 'I' | 'a' | 'A' | 'c' | 'C' | 's' | 'S' | 'x' | 'X' | 'd' | 'y')
+            )
+        {
+            self.status = say!("table.no-rows");
+            return true;
+        }
         let layer = self.table_layer();
         match layer.claim(self.mode, key) {
             // **Only a dedicated grid has layers to cross between**
@@ -4480,6 +4536,18 @@ impl Editor {
             // the Markdown writer, which squared the whole table up — and `d`
             // then `P` is the one sequence whose entire job is 「put that back
             // the way it was」.
+            // **A table with no rows has one place a record can go, and no
+            // record to replace** (2026-10-23). `P` aimed at the line before
+            // the caret — the header — and `R` had nothing under it to cover,
+            // so both fell to the cell path and were answered 「',' 是格與格
+            // 的分隔」 and 「放不下 3 格」 about a record this very table had
+            // just given up. `o` and `O` already agree that there is only one
+            // place, and 「剪什麼就放回什麼」 is the rule the pair is for.
+            Key::Char('p') | Key::Char('P') | Key::Char('R')
+                if self.table_is_rowless() && self.register_holds_records() =>
+            {
+                self.paste(true);
+            }
             Key::Char('p') | Key::Char('P') if self.register_holds_records() => return false,
             Key::Char('p') | Key::Char('P') => self.put_cell(key == Key::Char('p')),
             // **`R` 蓋上去，`p` 放進去**（2026-10-21 作者定，見
@@ -4810,10 +4878,24 @@ impl Editor {
         // The header is drawn frozen at the top and refuses every edit, so a
         // cursor left standing on it is a cursor in a cell nothing can be done
         // to — the same landing `enter_table` makes.
-        if want && self.cursor_line() == 0 {
+        //
+        // **Both directions, one question** (2026-10-23): turning the header
+        // off makes row one editable, and the caret was waiting on the header
+        // line above it — so `c` had no row to change and typed a second line
+        // into the file instead. 「Is the caret on a row of this table」 is the
+        // whole of it, and when the table has none the caret waits on the
+        // header line, which `hold_the_pane` is the keeper of.
+        let line = self.cursor_line();
+        let to = match self.table_row_span() {
+            Some((first, last)) if !(first..=last).contains(&line) => {
+                Some(line.clamp(first, last))
+            }
+            _ => None,
+        };
+        if let Some(to) = to {
             let rope = self.current_buffer().rope();
-            if rope.len_lines() > 1 {
-                let at = rope.line_to_char(1);
+            if to < rope.len_lines() {
+                let at = rope.line_to_char(to);
                 self.set_cursor(at);
             }
         }
@@ -6783,8 +6865,17 @@ impl Editor {
             .table_row_span_at(line)
             .or_else(|| self.table_row_span_at(line.saturating_sub(1)))
             .filter(|&(first, last)| (first..=last + 1).contains(&line));
-        let Some((first, _)) = span else {
-            return false;
+        // **A table with no rows still takes rows** (2026-10-23). `␣t d` on
+        // the last row and then `p` is the one pair whose whole job is 「put
+        // that back the way it was」, and a table emptied of rows still has a
+        // schema that says how many columns a row of it has. Without this the
+        // record went to the cell path and was answered 「',' 是格與格的分
+        // 隔」 about a record this very table had just given up — the third
+        // time that message has stood in for a missing row span.
+        let first = match span {
+            Some((first, _)) => first,
+            None if self.table_is_rowless() && line == usize::from(view.schema.header) => line,
+            None => return false,
         };
         let wide = self.table_column_count_at(first);
         match view.separator {

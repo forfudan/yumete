@@ -1375,6 +1375,117 @@ fn a_vim_operator_at_the_cell_layer_waits_and_means_the_cell() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A table can be emptied of rows, and then it has no cell** (2026-10-23
+/// 作者定: 「零行是正當狀態，沒有格子可編」).
+///
+/// The whole-file branch of [`Editor::table_row_span_at`] handed back an
+/// inverted pair for a header with nothing under it, and the grid's scroll
+/// clamp turned that into line 0: the header was **drawn a second time as row
+/// 1**, `i` wrote a one-column record under a three-column schema, and `d`/`y`
+/// reported on a cell that was not there. The caret was left standing on
+/// `ropey`'s trailing empty line besides (#384), so `␣t r` and `o` opened
+/// their row *under* it and wrote a blank line into the file, and `␣t H` — the
+/// one way to edit the column names — left the caret off the row it had just
+/// made editable.
+///
+/// Found sweeping the one place `scripts/table_keys.py` cannot put a cursor.
+#[test]
+fn a_table_emptied_of_rows_has_no_cell_and_keeps_its_header() {
+    let dir = tmp().join(format!("yumete-rowless-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("g.csv");
+    std::fs::write(&csv, "名,值,尾\n一,平常,A\n").unwrap();
+    // Every case starts from a table one `␣t d` past its last row.
+    let empty = || {
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, " td");
+        assert_eq!(ed.current_buffer().text(), "名,值,尾\n", "{}", ed.status());
+        ed
+    };
+
+    let ed = empty();
+    assert_eq!(ed.table_row_span(), None, "a header is not a row");
+    assert!(ed.table_is_rowless(), "{}", ed.status());
+    assert!(ed.grid_has_the_pane(), "the window still shows this table");
+    // On the header line, not on the trailing one the file's newline makes.
+    assert_eq!(ed.cursor_line(), 0, "{}", ed.status());
+
+    // The keys that mean 「this cell」 say so, and the whole sequence a reader
+    // would type changes nothing — the 山 after a refused `i` is an unbound
+    // key, which clears the sentence, so the two are asked separately.
+    for key in ["i", "a", "c", "x", "d", "y"] {
+        let mut ed = empty();
+        press(&mut ed, key);
+        assert_eq!(ed.status(), say!("table.no-rows"), "{key}");
+    }
+    for keys in ["i山", "a山", "c山", "x", "d", "y"] {
+        let mut ed = empty();
+        press(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "名,值,尾\n", "{keys}");
+    }
+    // And from inside the cell layer, which is where `i` used to write its
+    // one-column record: `Enter` crosses into a cell that is not there.
+    let mut ed = empty();
+    ed.on_key(Key::Enter);
+    press(&mut ed, "i山");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "名,值,尾\n", "{}", ed.status());
+
+    // The keys that open a row still do, with the schema's own columns in it
+    // — and with no blank line in front of it.
+    for keys in [" tr山", " tR山", "o山", "O山"] {
+        let mut ed = empty();
+        press(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "名,值,尾\n山,,\n", "{keys}: {}", ed.status());
+    }
+
+    // 「剪什麼就放回什麼」 holds here too: `␣t d` yanked that record.
+    for keys in ["p", "P", "R"] {
+        let mut ed = empty();
+        press(&mut ed, keys);
+        assert_eq!(
+            ed.current_buffer().text(),
+            "名,值,尾\n一,平常,A\n",
+            "{keys}: {}",
+            ed.status()
+        );
+    }
+
+    // `␣t H` is the way to edit the column names: row one becomes data, and
+    // the caret has to land on it for `c` to have a cell to change.
+    let mut ed = empty();
+    press(&mut ed, " tH");
+    assert_eq!(ed.cursor_line(), 0, "{}", ed.status());
+    press(&mut ed, "c新");
+    ed.on_key(Key::Esc);
+    press(&mut ed, " tH");
+    assert_eq!(ed.current_buffer().text(), "新,值,尾\n", "{}", ed.status());
+    assert!(ed.table_is_rowless(), "still a header and nothing under it");
+
+    // **And a file that was a header to begin with**, which is what `:w` on a
+    // table nobody has typed a row into leaves on disk. Entering used to land
+    // the caret on `ropey`'s trailing empty line, one below the header, so
+    // every row-opener wrote its blank line into the file first.
+    let bare = dir.join("h.csv");
+    std::fs::write(&bare, "名,值,尾\n").unwrap();
+    for keys in ["o山", "O山", " tr山", " tR山"] {
+        let mut ed = Editor::new();
+        ed.open_file(&bare).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        assert!(ed.table_is_rowless(), "{keys}: {}", ed.status());
+        assert_eq!(ed.cursor_line(), 0, "{keys}: on the header, not below it");
+        press(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().text(), "名,值,尾\n山,,\n", "{keys}: {}", ed.status());
+    }
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`j` walks the cell's own rows before it leaves the cell** (2026-10-22
 /// 作者定: 「we agree that hjkl will be kept within cell in the nor and ins
 /// mode and I can still use jk to go across cells vertically, but I cannot
