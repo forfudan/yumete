@@ -2117,7 +2117,8 @@ impl Editor {
             motion::Motion::WordEnd(grain) => motion::word_end(rope, self.sel.head(), grain, seg),
             motion::Motion::WordBack(grain) => motion::word_back(rope, self.sel.head(), grain, seg),
             motion::Motion::Find { forward, target, till } => {
-                motion::find_char(rope, self.sel.head(), forward, target, till, nth)
+                let across = self.key_preset != yumete_cjk::KeyPreset::Vim;
+                motion::find_char(rope, self.sel.head(), forward, target, till, nth, across)
             }
             // **The gotos collapse**, so they say so in the span: both ends at
             // the target. A goto is not a selection — 「take me there」, not

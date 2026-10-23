@@ -29649,3 +29649,25 @@ fn a_pipe_table_refuses_a_column_holding_a_line_break() {
     assert_eq!(ed.status(), say!("table.column-value-has-a-line-break", 3));
     assert_eq!(ed.current_buffer().text(), table, "not one cell written");
 }
+
+/// **helix's `f` runs on over line breaks, vim's does not, and the sentence
+/// for 「not there」 names the stretch that was searched** (2026-10-23).
+#[test]
+fn find_crosses_lines_under_helix_and_says_where_it_looked() {
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "fd");
+    assert_eq!(ed.current_buffer().rope().char(ed.caret()), 'd', "{}", ed.status());
+    assert_eq!(ed.cursor_line(), 1, "on the line below");
+
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "fq");
+    assert_eq!(ed.status(), say!("find.no-such-character-ahead", 'q'));
+    press(&mut ed, "jFq");
+    assert_eq!(ed.status(), say!("find.no-such-character-behind", 'q'));
+
+    let mut ed = typed("ab\ncd\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "fd");
+    assert_eq!(ed.cursor_line(), 0, "vim's f stays on its line");
+    assert_eq!(ed.status(), say!("find.no-such-character-on-this-line", 'd'));
+}

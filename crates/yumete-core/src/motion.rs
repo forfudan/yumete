@@ -804,11 +804,10 @@ pub enum Motion {
     WordEndHere(Grain),
     /// `b` / `B` — backwards to the start of the run behind.
     WordBack(Grain),
-    /// `f` / `F` / `t` / `T` — to a character, **on this line only**.
+    /// `f` / `F` / `t` / `T` — to a character: on this line under vim, across
+    /// lines under helix ([`find_char`]'s `across`).
     ///
-    /// `till` is vim's `t`: the same search, stopping one short of what it
-    /// found. helix has no such key (`t` opens the table group), so this field
-    /// is only ever set by the vim grammar.
+    /// `till` is `t`: the same search, stopping one short of what it found.
     Find { forward: bool, target: char, till: bool },
     /// `gg` — the first character of the buffer.
     FileStart,
@@ -978,12 +977,18 @@ impl Span {
     }
 }
 
-/// **`f` / `F`, as a span** (B1) — the character on this line, and nothing
-/// off it.
+/// **`f` / `F`, as a span** (B1) — the nth `target` ahead of `pos` or behind
+/// it.
 ///
-/// Warning: **A line, not the buffer**: `f` that ran on would be a search, and this
-/// editor has one (`/`). Not found is [`Span::Missed`] — the editor says so on
-/// the status line, which is its business and not this function's.
+/// **`across` is the keymap's answer, not a preference** (2026-10-23, measured
+/// against helix 25.07.1 in a pty): helix's `f`, `t`, `F` and `T` run on over
+/// line breaks — `f d` on `ab⏎cd` lands on the `d` below, `2f d` counts past
+/// lines, `t d` stops on the line break when `d` opens the next line — and
+/// vim's stop at the end of the line. This used to be line-bound for both, on
+/// the reasoning that a search that ran on would be `/`.
+///
+/// Not found is [`Span::Missed`] — the editor says so on the status line,
+/// which is its business and not this function's.
 pub fn find_char(
     rope: &Rope,
     pos: usize,
@@ -991,7 +996,45 @@ pub fn find_char(
     target: char,
     till: bool,
     nth: usize,
+    across: bool,
 ) -> Span {
+    if across {
+        let len = rope.len_chars();
+        let pos = pos.min(len);
+        let nth = nth.max(1);
+        let found = match forward {
+            true => rope
+                .chars_at((pos + 1).min(len))
+                .enumerate()
+                .filter(|&(_, c)| c == target)
+                .nth(nth - 1)
+                .map(|(i, _)| pos + 1 + i),
+            false => {
+                let mut it = rope.chars_at(pos);
+                let mut at = pos;
+                let mut seen = 0;
+                let mut found = None;
+                while let Some(c) = it.prev() {
+                    at -= 1;
+                    if c == target {
+                        seen += 1;
+                        if seen == nth {
+                            found = Some(at);
+                            break;
+                        }
+                    }
+                }
+                found
+            }
+        };
+        let Some(head) = found else { return Span::Missed };
+        let head = match (till, forward) {
+            (false, _) => head,
+            (true, true) => prev_grapheme(rope, head),
+            (true, false) => next_grapheme(rope, head),
+        };
+        return Span::Over { anchor: pos, head };
+    }
     let line = line_of(rope, pos);
     let line_start = rope.line_to_char(line);
     let mut text = rope.line(line).to_string();
@@ -2067,23 +2110,45 @@ mod tests {
         assert_eq!(word_forward(&r, r.len_chars(), Grain::Word, &two), Span::Missed);
     }
 
-    /// `f` stays on its line, and 「not there」 is `Missed` — the editor turns
-    /// that into a sentence, this only reports it.
+    /// **vim's `f` stays on its line**, and 「not there」 is `Missed` — the
+    /// editor turns that into a sentence, this only reports it.
     #[test]
-    fn find_stays_on_its_line() {
+    fn vims_find_stays_on_its_line() {
         let r = rope("alpha, beta\ngamma, delta");
         // Forward to the comma on this line.
-        assert_eq!(find_char(&r, 0, true, ',', false, 1), Span::Over { anchor: 0, head: 5 });
+        assert_eq!(find_char(&r, 0, true, ',', false, 1, false), Span::Over { anchor: 0, head: 5 });
         // The comma on the *next* line is not this line's business.
-        assert_eq!(find_char(&r, 7, true, ',', false, 1), Span::Missed);
+        assert_eq!(find_char(&r, 7, true, ',', false, 1, false), Span::Missed);
         // Backwards, and never onto the character the caret is already on.
-        assert_eq!(find_char(&r, 8, false, ',', false, 1), Span::Over { anchor: 8, head: 5 });
-        assert_eq!(find_char(&r, 5, false, ',', false, 1), Span::Missed);
+        assert_eq!(find_char(&r, 8, false, ',', false, 1, false), Span::Over { anchor: 8, head: 5 });
+        assert_eq!(find_char(&r, 5, false, ',', false, 1, false), Span::Missed);
         // `t` is `f` one short — a **grapheme** short, not an index short.
-        assert_eq!(find_char(&r, 0, true, ',', true, 1), Span::Over { anchor: 0, head: 4 });
+        assert_eq!(find_char(&r, 0, true, ',', true, 1, false), Span::Over { anchor: 0, head: 4 });
         let r = rope("他說，她笑");
-        assert_eq!(find_char(&r, 0, true, '，', false, 1), Span::Over { anchor: 0, head: 2 });
-        assert_eq!(find_char(&r, 0, true, '，', true, 1), Span::Over { anchor: 0, head: 1 });
+        assert_eq!(find_char(&r, 0, true, '，', false, 1, false), Span::Over { anchor: 0, head: 2 });
+        assert_eq!(find_char(&r, 0, true, '，', true, 1, false), Span::Over { anchor: 0, head: 1 });
+    }
+
+    /// **helix's `f` runs on over line breaks** — the answers below are real
+    /// helix 25.07.1's, read off the file in a pty (2026-10-23).
+    #[test]
+    fn helixs_find_crosses_lines() {
+        let r = rope("ab\ncd\nxd\n");
+        // `f d` from `a`: the `d` on the next line.
+        assert_eq!(find_char(&r, 0, true, 'd', false, 1, true), Span::Over { anchor: 0, head: 4 });
+        // `2f d`: counted past the line, the one two lines down.
+        assert_eq!(find_char(&r, 0, true, 'd', false, 2, true), Span::Over { anchor: 0, head: 7 });
+        // `t d`: one short, which is the `c`.
+        assert_eq!(find_char(&r, 0, true, 'd', true, 1, true), Span::Over { anchor: 0, head: 3 });
+        // Nowhere ahead: nothing moves.
+        assert_eq!(find_char(&r, 0, true, 'q', false, 1, true), Span::Missed);
+        // From the `d` on line 2, `F a` goes back a line and `T a` stops after it.
+        assert_eq!(find_char(&r, 4, false, 'a', false, 1, true), Span::Over { anchor: 4, head: 0 });
+        assert_eq!(find_char(&r, 4, false, 'a', true, 1, true), Span::Over { anchor: 4, head: 1 });
+        // `t d` where `d` opens the next line stops **on the line break** —
+        // helix's caret may stand there, and that is where it puts it.
+        let r = rope("ab\ndx\n");
+        assert_eq!(find_char(&r, 0, true, 'd', true, 1, true), Span::Over { anchor: 0, head: 2 });
     }
 
     /// vim's `w` is the **bare primitive**, and that is the whole difference:

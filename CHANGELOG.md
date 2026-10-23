@@ -23,6 +23,15 @@ in `docs/development.md` §5.2.
   click still selects the cell. Terminals report presses, not clicks, so two presses on
   the same place within 400 ms are paired into one.
 
+### Changed
+
+- **Under the helix keymap, `f` `t` `F` `T` run on over line breaks**, the way helix's
+  own do — measured against helix in a terminal: `f d` on `ab⏎cd` lands on the `d`
+  below, `2f d` counts past lines, `t d` stops on the line break when `d` opens the
+  next line. They used to stop at the end of the line under both keymaps. The vim
+  keymap keeps vim's line-bound `f`. Not found ahead says 「往後找不到」, behind
+  「往前找不到」; inside a cell the cell is still the bound.
+
 ### Fixed
 
 - **`空格 t y` and `空格 t p` take a column one record at a time.** A record whose field
