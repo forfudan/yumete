@@ -13268,7 +13268,16 @@ fn position_in(editor: &Editor, full: bool) -> String {
         // `t1/` and `t2-10?` keys are addressed by, so it has to be on the
         // page somewhere.
         let column = editor.cell_position().map(|(_, cell)| cell + 1).unwrap_or(1);
-        return say!("ui.position-in-table", editor.table_row_number(), column, where_);
+        // **A table with no rows has no row number** (2026-10-23 作者定:
+        // 「行 —, 列 1 [名]」). It used to print 「行 2」 on a `.csv` one `␣t d`
+        // past its last row — a row the grid was drawing nothing on. The
+        // column half stays: it is what `t1/` and `t2-10?` address a column
+        // by, and `␣t H` and `o` are both about the column you are in.
+        let row = match editor.table_is_rowless() {
+            true => "—".to_string(),
+            false => editor.table_row_number().to_string(),
+        };
+        return say!("ui.position-in-table", row, column, where_);
     }
     if editor.layout() == WritingLayout::Vertical {
         let at = editor.zong_position();
@@ -13334,6 +13343,13 @@ fn position_in(editor: &Editor, full: bool) -> String {
 fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
     let nothing = || [String::new(), String::new(), String::new()];
     if !config.editor.char_info || editor.prompt().is_some() {
+        return nothing();
+    }
+    // **A table with no rows has no character under the caret** (2026-10-23):
+    // the caret waits on the header line, and the grid draws that line frozen
+    // at the top and never as a row — so 「名 U+540D」 there named a cell the
+    // reader could not see, beside a row number that already says 「—」.
+    if editor.table_is_rowless() {
         return nothing();
     }
     // **一個字簇，不是一個碼位**（2026-10-12）。屏幕上的一個「字」可以是好幾個：

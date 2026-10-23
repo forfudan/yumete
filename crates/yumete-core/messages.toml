@@ -11440,6 +11440,13 @@ zhs = "前面没有表格了"
 en = "no table before this one"
 
 [[message]]
+# 表格刪到只剩表頭，而按的鍵説的是「這一格」
+key = "table.no-rows"
+zht = "只剩表頭，沒有數據行"
+zhs = "只剩表头，没有数据行"
+en = "only the header is left; this table has no data rows"
+
+[[message]]
 # t < = > 用在没有分隔行的表上
 key = "table.no-rule-row-to-align"
 zht = "没有分隔行，無從對齊"
