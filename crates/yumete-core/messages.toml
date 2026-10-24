@@ -4563,13 +4563,6 @@ zhs = "数字在前是次数"
 en = "a number in front is a count"
 
 [[message]]
-# 常用幫助：剪切/剪切後改(大寫的那一對纔動寄存器)
-key = "help.common.cut-change"
-zht = "同樣是删/改，但先把它放進寄存器(剪切)"
-zhs = "同样是删/改，但先把它放进寄存器(剪切)"
-en = "the same two, but the text goes to the register first (cut)"
-
-[[message]]
 # 常用幫助：删掉選區/換掉選區
 key = "help.common.delete-change"
 zht = "删掉選區/換掉選區(換完就在打字了)"

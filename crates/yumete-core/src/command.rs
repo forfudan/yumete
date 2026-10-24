@@ -4867,7 +4867,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["outline"],
         help: "cmd.commands.toc",
         needs: &[],
-        params: &[Param::Free("<幾級>")],
+        params: &[Param::Free("<第幾條>")],
         build: Some(|p| {
             // 同 `:goto`：`number` 的錯已經是對的那一句，別蓋掉它。
             Ok(Command::Outline(match p.arg(0) {
