@@ -7,7 +7,14 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## Unreleased
+## 0.12.0 · 2026-10-24
+
+Nine commits, one day after 0.11.0, nearly all of them from using the grid on real
+files. One of them matters: `空格 t y` and `空格 t p` split a two-line value and
+wrote the cells below it two rows down, without a word. The rest is `t` at the cell
+layer doing what the opening message said it would, a double click that goes into a
+cell, a grid that scrolls by screen lines, and helix's `f` running on over line
+breaks.
 
 ### Added
 
