@@ -1943,6 +1943,20 @@ fn write_bytes_with_model(
             ));
         }
     }
+    // **A file with a second hard link is written in place** (#312, 2026-10-24).
+    // The rename below gives the path a new file, so the other name went on
+    // holding the old text, and the attributes on the file (Finder tags,
+    // ownership) stayed behind with it. Measured: nvim, vim and helix all keep
+    // the link and the attributes for such a file, and all three still rename
+    // an ordinary one, which is what this does too.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if fs::metadata(&path).is_ok_and(|m| m.nlink() > 1) {
+            let aside = dir.join(format!(".yumete-old-{}-{}", std::process::id(), nanos));
+            return write_in_place(&path, &aside, write);
+        }
+    }
     let tmp = dir.join(format!(".yumete-tmp-{}-{}", std::process::id(), nanos));
     // Every way out of the write leaves the directory as it found it. Only the
     // rename used to clean up after itself, so a disk-full `:w` on a 9.6 MB
@@ -1998,6 +2012,47 @@ fn write_bytes_with_model(
         let _ = dir.sync_all();
     }
     Ok(())
+}
+
+/// Overwrite `path` itself rather than replace it, keeping its old bytes in
+/// `aside` until the new ones are on disk — vim's `backupcopy=yes`.
+///
+/// Warning: **Not atomic, which is why the copy exists.** A failure halfway leaves a
+/// cut-short file under the writer's own name; the old bytes are then copied
+/// back. Only when that fails as well is the copy left where it is, and the
+/// message names it, since it is the one whole version left.
+fn write_in_place(
+    path: &Path,
+    aside: &Path,
+    write: impl FnOnce(&mut fs::File) -> io::Result<()>,
+) -> io::Result<()> {
+    fs::copy(path, aside)?;
+    let overwrite = |fill: &mut dyn FnMut(&mut fs::File) -> io::Result<()>| -> io::Result<()> {
+        let mut file = fs::OpenOptions::new().write(true).truncate(true).open(path)?;
+        fill(&mut file)?;
+        file.flush()?;
+        file.sync_all()
+    };
+    let mut write = Some(write);
+    let written = overwrite(&mut |file| match write.take() {
+        Some(write) => write(file),
+        None => Ok(()),
+    });
+    let Err(err) = written else {
+        let _ = fs::remove_file(aside);
+        return Ok(());
+    };
+    let restored = overwrite(&mut |file| io::copy(&mut fs::File::open(aside)?, file).map(|_| ()));
+    match restored {
+        Ok(()) => {
+            let _ = fs::remove_file(aside);
+            Err(err)
+        }
+        Err(_) => Err(io::Error::new(
+            err.kind(),
+            say!("buffer.in-place-lost", aside.display().to_string()),
+        )),
+    }
 }
 
 /// 給一份撞了名字的草稿找一個空名字，**而且還要找得回來**。
@@ -2311,6 +2366,42 @@ fn tmp() -> std::path::PathBuf {
         let _ = fs::remove_file(&loose);
         write_bytes_with_model(&loose, None, |f| f.write_all(b"draft")).expect("swap");
         assert!(fs::metadata(&loose).is_ok());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// #312: a file with a second hard link is written in place, so the other
+    /// name sees the save; a write that fails puts the old bytes back.
+    #[cfg(unix)]
+    #[test]
+    fn a_hard_linked_file_is_written_in_place() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tmp().join(format!("yumete-hardlink-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("fixture dir");
+        let chapter = dir.join("chapter.md");
+        let other = dir.join("linked.md");
+        fs::write(&chapter, "old\n").expect("write");
+        fs::hard_link(&chapter, &other).expect("link");
+        let inode = fs::metadata(&chapter).expect("stat").ino();
+
+        write_bytes_atomically(&chapter, |f| f.write_all(b"new\n")).expect("save");
+        assert_eq!(fs::read_to_string(&other).expect("read"), "new\n");
+        assert_eq!(fs::metadata(&chapter).expect("stat").ino(), inode);
+        assert_eq!(fs::metadata(&chapter).expect("stat").nlink(), 2);
+
+        // Half a write, then a failure: the old bytes come back.
+        let failed = write_bytes_atomically(&chapter, |f| {
+            f.write_all(b"ha")?;
+            Err(io::Error::other("disk full"))
+        });
+        assert!(failed.is_err());
+        assert_eq!(fs::read_to_string(&other).expect("read"), "new\n");
+        let mut left: Vec<_> = fs::read_dir(&dir)
+            .expect("list")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["chapter.md", "linked.md"], "a copy was left behind");
         let _ = fs::remove_dir_all(&dir);
     }
 

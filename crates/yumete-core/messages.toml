@@ -769,6 +769,13 @@ zhs = "这个文件是只读的——先 chmod，或者换个文件名存"
 en = "this file is read-only — chmod it, or save under another name"
 
 [[message]]
+# 帶硬連結的檔就地寫，寫壞了而原文又放不回去；{0} 是留着原文的那一份
+key = "buffer.in-place-lost"
+zht = "没寫進去，原來的内容也没能放回去——原來的那一份在 {0}"
+zhs = "没写进去，原来的内容也没能放回去——原来的那一份在 {0}"
+en = "Not written, and the old contents could not be put back — they are in {0}"
+
+[[message]]
 # 存檔時那個檔是一個指不到東西的符號連結
 key = "buffer.link-points-nowhere"
 zht = "{0} 是一個鏈接，而它指的那一份不在了——`:write-as 别的路徑` 存到别處"
