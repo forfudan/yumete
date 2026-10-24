@@ -28392,6 +28392,36 @@ fn a_book_with_frost(tag: &str) -> (std::path::PathBuf, Editor) {
     (dir, ed)
 }
 
+/// **換不了的只讀檔要說出來**（2026-10-25）。問的那一句數進了它的那一處，答的那
+/// 一句少了一處而不說為什麽，讀起來就是全換完了。
+#[cfg(unix)]
+#[test]
+fn a_replacement_names_the_read_only_files_it_skipped() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tmp().join(format!("yumete-replace-ro-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for name in ["甲", "乙", "丙"] {
+        std::fs::write(dir.join(format!("{name}.md")), format!("霜{name}\n")).unwrap();
+    }
+    let locked = dir.join("甲.md");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o444)).unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("丙.md")).unwrap();
+    ed.execute(":replace-working").unwrap();
+    ed.on_key(Key::Char('霜'));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Char('雪'));
+    ed.on_key(Key::Enter);
+    ed.settle_search();
+    ed.search_for_test().field = crate::search_panel::Field::Results;
+    replace_the_frost(&mut ed);
+    assert_eq!(ed.status(), say!("search.replaced-skipping", 2, 1));
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// 同上：按 `R`、答應那一扇窗。
 fn replace_the_frost(ed: &mut Editor) {
     ed.on_key(Key::Char('R'));
