@@ -1593,12 +1593,13 @@ fn downloads_dir() -> PathBuf {
     PathBuf::from(".")
 }
 
-/// **Which folder counts as 「this book」** — the root every listing is
+/// **Which folder counts as the project** — the root every listing is
 /// rooted at.
 ///
-/// Up from the file for a `.yumete` first — that is where a book already keeps
-/// its config, its `words.txt` and its `tables/` — then for a `.git`, and it
-/// settles for the folder the file itself is in. Only a session with no named
+/// Up for a `.yumete` first — that is where a project already keeps its
+/// config, its `words.txt` and its `tables/` — then for the nearest `.git`,
+/// `.jj` or `.svn` (2026-10-25: helix's version-control markers, with
+/// `.yumete` still first), and it settles for the folder itself. Only a session with no named
 /// file left in it falls back to `here`.
 ///
 /// Warning: **Every path is resolved against `here` first.** A file opened as
@@ -1624,13 +1625,13 @@ pub fn book_root_of(here: &Path) -> PathBuf {
 }
 
 pub(crate) fn book_root(here: &Path) -> PathBuf {
-    let marked = |mark: &str, flat: &str| {
+    let marked = |marks: &[&str]| {
         here.ancestors()
-            .find(|d| d.join(mark).exists() || d.join(flat).exists())
+            .find(|d| marks.iter().any(|m| d.join(m).exists()))
             .map(Path::to_path_buf)
     };
-    marked(".yumete", ".yumete.toml")
-        .or_else(|| marked(".git", ".git"))
+    marked(&[".yumete", ".yumete.toml"])
+        .or_else(|| marked(&[".git", ".jj", ".svn"]))
         .unwrap_or_else(|| here.to_path_buf())
 }
 

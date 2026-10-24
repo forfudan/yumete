@@ -14054,6 +14054,26 @@ fn the_project_is_the_first_marked_folder_above_the_working_directory() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **`.jj` and `.svn` mark a project too, and `.yumete` still comes first**
+/// (2026-10-25).
+#[test]
+fn a_jj_or_svn_checkout_is_a_project_and_yumete_still_wins() {
+    let top = tmp().join(format!("yumete-vcsroot-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&top);
+    for vcs in [".jj", ".svn"] {
+        let repo = top.join(vcs.trim_start_matches('.'));
+        std::fs::create_dir_all(repo.join(vcs)).unwrap();
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        assert_eq!(crate::editor::book_root(&repo.join("src")), repo, "{vcs}");
+    }
+    // A `.yumete` above a nearer `.git`: the `.yumete` is the project.
+    let outer = top.join("outer");
+    std::fs::create_dir_all(outer.join(".yumete")).unwrap();
+    std::fs::create_dir_all(outer.join("drafts").join(".git")).unwrap();
+    assert_eq!(crate::editor::book_root(&outer.join("drafts")), outer);
+    std::fs::remove_dir_all(&top).ok();
+}
+
 /// The walk is the book's, and it reads `.gitignore` — #308, #362, #419 二.
 ///
 /// Warning: This is the coverage `:grep`'s tests used to carry. It came back with
