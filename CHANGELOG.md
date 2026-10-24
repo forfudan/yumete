@@ -10,7 +10,7 @@ in `docs/development.md` §5.2.
 ## 0.12.0 · 2026-10-24
 
 Nine commits, one day after 0.11.0, nearly all of them from using the grid on real
-files. One of them matters: `空格 t y` and `空格 t p` split a two-line value and
+files. One of them matters: `Space t y` and `Space t p` split a two-line value and
 wrote the cells below it two rows down, without a word. The rest is `t` at the cell
 layer doing what the opening message said it would, a double click that goes into a
 cell, a grid that scrolls by screen lines, and helix's `f` running on over line
@@ -18,13 +18,13 @@ breaks.
 
 ### Added
 
-- **`t` at the cell layer is `空格 t`.** A till stops before a character, and at the
+- **`t` at the cell layer is `Space t`.** A till stops before a character, and at the
   cell layer there is none to stop before — the whole cell is the unit — so there the
   key opens the table's group: `t o` back to the source, `t H` the heading, `t r` a
   row. Inside a cell, and everywhere outside the whole-window grid, `t` is till as it
   was. 0.11.0 shipped without it, while the message a delimited file opens with was
-  already saying 「按 t o 回到源碼模式」; under 0.11.0, `t o` searched the cell for an
-  「o」.
+  already telling you to press `t o` to go back to the source; under 0.11.0, `t o`
+  searched the cell for an `o`.
 
 - **A double click goes into a cell**, with the caret on the character clicked; a single
   click still selects the cell. Terminals report presses, not clicks, so two presses on
@@ -42,8 +42,8 @@ breaks.
   own do — measured against helix in a terminal: `f d` on `ab⏎cd` lands on the `d`
   below, `2f d` counts past lines, `t d` stops on the line break when `d` opens the
   next line. They used to stop at the end of the line under both keymaps. The vim
-  keymap keeps vim's line-bound `f`. Not found ahead says 「往後找不到」, behind
-  「往前找不到」; inside a cell the cell is still the bound.
+  keymap keeps vim's line-bound `f`. A miss says whether it searched ahead or
+  behind; inside a cell the cell is still the bound.
 
 ### Fixed
 
@@ -53,23 +53,23 @@ breaks.
   Now only the rows that are drawn count, and a row with the wrong number of fields does
   not count at all, unless the caret is typing in it.
 
-- **`空格 t y` and `空格 t p` take a column one record at a time.** A record whose field
+- **`Space t y` and `Space t p` take a column one record at a time.** A record whose field
   holds a line break is written on two lines, and the column was walked a line at a
   time: on a 41-row table it went out as 42 values, the two-line one as two halves with
-  their quotes, and `空格 t p` wrote every cell below it two rows down — with the row and
+  their quotes, and `Space t p` wrote every cell below it two rows down — with the row and
   column counts unchanged, so the table still read as a good one. A value with a line
   break now travels quoted, as one line of a one-column TSV, and comes back whole. A `|`
   table, whose cells are one line, refuses such a column whole and says which value
   holds the break.
 
-- **`空格 y` at the cell layer copies the cell.** It copied the one character the caret
+- **`Space y` at the cell layer copies the cell.** It copied the one character the caret
   sat on, while `y` took the whole cell: at that layer the cell is the unit and the
   character selection is one wide. It now copies what `y` takes — the cell's value, the
   run of cells standing, or the records selected — to the system clipboard.
 
 - **The record panel shows a cell's value, not its bytes.** A two-line field read
-  `"兩行的值"` there while the grid drew 「兩行␊的值」: the quotes the editor owns, and the
-  line break gone. The sidebar now breaks it where the writer did; the floating panel,
+  `"first line second line"` there, with its quotes and without its line break, while
+  the grid drew it on two lines. The sidebar now breaks it where the writer did; the floating panel,
   one line to a field, shows the break as `␊`.
 
 ## 0.11.0 · 2026-10-23
