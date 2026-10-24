@@ -126,7 +126,6 @@ impl Editor {
             ("i a", say!("help.common.insert-before-after")),
             ("o O", say!("help.common.open-line")),
             ("d c", say!("help.common.delete-change")),
-            ("D C", say!("help.common.cut-change")),
             ("x", say!("help.common.select-line")),
             ("v ;", say!("help.common.extend-collapse")),
             ("L H", say!("help.common.sentence-motions")),
