@@ -26206,5 +26206,62 @@ fn squeezed(text: &str) -> String {
         assert!(!shot.contains("0/0+"), "不是空名單加一個加號：{shot}");
         std::fs::remove_dir_all(&dir).ok();
     }
-}
 
+    /// **A page that is left alone stays where it is** (2026-10-24 作者報的,
+    /// with a screen recording: after `60G` the first row on the page went
+    /// 49, 48, 49, 48… once a redraw, for as long as no key was pressed).
+    ///
+    /// A jump asks for the middle on every frame until the next key, and with
+    /// every row two lines tall the middle can be a line out of reach. The
+    /// grid answered 「at least that far down」 from one top and 「at most」 from
+    /// the other, so each frame undid the last. Every height from 14 to 33
+    /// lines is tried, since only some of them leave the middle out of reach.
+    #[test]
+    fn a_grid_left_alone_after_a_jump_does_not_rock() {
+        let dir = std::env::temp_dir().join(format!("yumete-rock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut text = String::from("name,note\n");
+        for i in 1..=80 {
+            text.push_str(&format!("\"r{i} top\nr{i} bottom\",n{i}\n"));
+        }
+        let csv = dir.join("rock.csv");
+        std::fs::write(&csv, &text).unwrap();
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        // The number in the gutter of the first row drawn under the head.
+        let first_row = |buffer: &ratatui::buffer::Buffer| -> Option<usize> {
+            (0..buffer.area.height).find_map(|y| {
+                let row = row_text(buffer, y);
+                if !row.contains(|c: char| ('\u{2500}'..='\u{259f}').contains(&c)) {
+                    return None;
+                }
+                let digits: String =
+                    row.trim_start().chars().take_while(|c| c.is_ascii_digit()).collect();
+                digits.parse().ok()
+            })
+        };
+        for height in 14..=33u16 {
+            let mut editor = Editor::new();
+            editor.open_file(&csv).unwrap();
+            assert!(editor.enter_table(), "{}", editor.status());
+            let mut terminal = Terminal::new(TestBackend::new(60, height)).unwrap();
+            let mut seats = Seats::default();
+            for key in "40G".chars() {
+                editor.on_key(Key::Char(key));
+            }
+            let mut tops = Vec::new();
+            for _ in 0..6 {
+                terminal
+                    .draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None))
+                    .unwrap();
+                tops.push(first_row(terminal.backend().buffer()));
+            }
+            assert!(
+                tops.windows(2).all(|pair| pair[0] == pair[1]),
+                "{height} lines: the page moved with no key pressed: {tops:?}"
+            );
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+}
