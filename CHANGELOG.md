@@ -25,6 +25,12 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The whole-window grid scrolls by screen lines, not by records.** A record whose cells
+  wrap or hold line breaks counts for the lines it takes, so `scrolloff` is kept above and
+  below it, and the cell the caret is on is kept on screen whole. Before, `j` into a
+  record eleven lines tall threw it to the middle of the screen. The page still starts
+  where a record starts, so a tall record scrolls off in one piece.
+
 - **Under the helix keymap, `f` `t` `F` `T` run on over line breaks**, the way helix's
   own do — measured against helix in a terminal: `f d` on `ab⏎cd` lands on the `d`
   below, `2f d` counts past lines, `t d` stops on the line break when `d` opens the
@@ -33,6 +39,12 @@ in `docs/development.md` §5.2.
   「往前找不到」; inside a cell the cell is still the bound.
 
 ### Fixed
+
+- **A column is as wide as the rows on screen need.** The widths were measured over a
+  fixed number of rows from the top, and those could include rows below the last one
+  drawn: a long value further down widened its column while nothing on screen needed it.
+  Now only the rows that are drawn count, and a row with the wrong number of fields does
+  not count at all, unless the caret is typing in it.
 
 - **`空格 t y` and `空格 t p` take a column one record at a time.** A record whose field
   holds a line break is written on two lines, and the column was walked a line at a

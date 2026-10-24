@@ -57,7 +57,8 @@ const MAX_COLUMN: usize = 32;
 /// The gap between two columns.
 const GAP: usize = 1;
 
-/// Measure the visible rows and say how wide each column should be drawn.
+/// Measure the rows this frame draws and say how wide each column should be
+/// drawn, settling `left` — where the columns start — on the way.
 ///
 /// Warning: **The visible rows, on purpose — not a bug to fix**
 /// (2026-09-17). Measuring the whole table lets one very long cell a thousand
@@ -67,21 +68,68 @@ const GAP: usize = 1;
 /// logged it as 「列寬跟着可見範圍變，滾動時整表橫跳」; it was answered, and
 /// the answer is this.
 ///
+/// **Visible means drawn** (2026-10-23). This used to measure the next `rows`
+/// lines of the file, which is the page only while every row is one line tall.
+/// Under 折行 a page of 26 lines held six records and twenty more voted that
+/// nobody could see: one ragged line thirteen rows below the last drawn one
+/// widened column 1 to the cap, pushed a column of long notes off the right
+/// edge, and the rows on screen collapsed from eleven lines to one — all on one
+/// `j`. So the records are taken from the top one at a time, each
+/// measured, until the page is full **at the widths measured so far**. A wider
+/// column only makes a row shorter, so the page can only take more; the loop
+/// ends when it is full or the table is.
+///
+/// **A ragged row does not vote** (2026-10-23). It is drawn — in 朱, cut at
+/// its column's edge — because hiding it would hide the damage; but a line that
+/// is not a record of this table says nothing about how wide its columns are.
+/// The one exception is the cell being typed in, which is measured whole
+/// wherever it is, so that mending a ragged row is not done blind.
+///
 /// `last` is the table's last row, not the file's: since 2026-09-05 the widget
 /// is given `|` tables that are three lines of a chapter, and measuring the
 /// chapter under them would make every column as wide as the prose.
-fn widths(
+#[allow(clippy::too_many_arguments)]
+fn layout(
     editor: &Editor,
     anchor: usize,
-    first: usize,
+    top: usize,
     rows: usize,
     last: usize,
     room: usize,
     caret: (usize, usize),
+    left: &mut usize,
 ) -> Vec<usize> {
-    let Some(view) = editor.table() else {
+    let Some((mut widths, ceiling)) = heading_widths(editor, anchor, room) else {
         return Vec::new();
     };
+    // The height of each record taken so far, recounted whole only when a
+    // record moved the widths or the columns: most change nothing, and the
+    // page is then the old one plus this row.
+    let mut drawn: Vec<(usize, usize)> = Vec::new();
+    let mut line = top;
+    while line <= last {
+        let before = (widths.clone(), *left);
+        vote(editor, line, &mut widths, ceiling, room, caret);
+        scroll_columns(&widths, room, caret.1, left);
+        if (widths.clone(), *left) != before {
+            for (l, tall) in drawn.iter_mut() {
+                *tall = row_height(editor, *l, &widths, *left, room);
+            }
+        }
+        drawn.push((line, row_height(editor, line, &widths, *left, room)));
+        let used: usize = drawn.iter().map(|&(_, tall)| tall).sum();
+        if used >= rows {
+            break;
+        }
+        line += editor.record_height(line).max(1);
+    }
+    widths
+}
+
+/// The width each column starts from before a row is measured: its heading,
+/// or nothing for a hidden one — and the cap a cell is measured against.
+fn heading_widths(editor: &Editor, anchor: usize, room: usize) -> Option<(Vec<usize>, usize)> {
+    let view = editor.table()?;
     // How wide a column may be drawn. Folding on, that is the cap; folding
     // off, it is the window — a column wider than the window buys nothing,
     // since the grid scrolls by whole columns and the rest could never be
@@ -96,7 +144,7 @@ fn widths(
     let headings = editor.table_headings_at(anchor);
     // **This** table's columns, not the schema's: `t ]` into the next table of
     // a document lands in one with a different number of them.
-    let mut widths: Vec<usize> = (0..editor.table_column_count_at(anchor))
+    let widths = (0..editor.table_column_count_at(anchor))
         .map(|i| match view.schema.columns.get(i).is_some_and(|c| c.hidden) {
             true => 0,
             false => {
@@ -106,62 +154,206 @@ fn widths(
             }
         })
         .collect();
-    for line in first..(first + rows).min(last + 1) {
-        for (i, span) in editor.row_cells(line).into_iter().enumerate() {
-            let Some(want) = widths.get_mut(i) else {
-                // A ragged row has cells the schema does not know about. They
-                // are drawn, because hiding them would hide the damage.
-                continue;
-            };
-            if !view.schema.shows(i) {
-                continue;
-            }
-            let text = editor.row_source(line);
-            // **Measured as drawn**: the quotes are off and a line break shows
-            // as `␊`, so the column is as wide as what is on the page.
-            let cell = editor.cell_shown(&text, span);
-            // **The cell being typed in is not folded** — the prose page's own
-            // rule (`folds_open_at`), and now kept the same way here: measure
-            // that one cell against the window instead of the cap.
-            //
-            // It used to open for the caret in Normal too, and that was the
-            // page's rule read one word too widely. 2026-09-11:
-            // 「我觉得这个有一个问题就是列宽容易跳。所以我建议这个和 tf 保持
-            // 一致（光标不自动展开，insert 模式展开这个格子），这样我们的逻辑
-            // 更简洁、一致，而且不用每个单元格都重算这一列的列宽。」Right on
-            // all three counts: every `l` across a row of long cells was a new
-            // width for that column, so the grid shifted sideways under a key
-            // that only meant 「next cell」 — and reading a cell whole is what
-            // the panel down the right is for, which needs no width at all.
-            //
-            // **And not under 折行** even then, where nothing is cut in the
-            // first place: widening the column would swell it to the window to
-            // show what the rows underneath already show.
-            let typing = editor.mode() == yumete_core::input::Mode::Insert;
-            let ceiling = match typing && (line, i) == caret && !editor.cell_wrap() {
-                true => room.max(MIN_COLUMN),
-                false => ceiling,
-            };
-            // A cell the writer broke into lines is as wide as its widest
-            // line, not as wide as all of them run together — **and every line
-            // but the last carries the `␊` that says so** (2026-10-22). Without
-            // that column the cell was charged for 「頭一行」 and drawn as
-            // 「頭一行␊」, so the page cut the writer's own last character and
-            // marked it `>` as if there were more of it off to the right.
-            let tail = yumete_cjk::char_width(yumete_cjk::LINE_FEED_PICTURE).max(1);
-            let lines: Vec<&str> = cell.split('\n').collect();
-            let wide = lines
-                .iter()
-                .enumerate()
-                .map(|(k, line)| {
-                    yumete_cjk::str_width(line) + tail * usize::from(k + 1 < lines.len())
-                })
-                .max()
-                .unwrap_or(0);
-            *want = (*want).max(wide.min(ceiling));
+    Some((widths, ceiling))
+}
+
+/// Widen `widths` to what one row needs.
+fn vote(
+    editor: &Editor,
+    line: usize,
+    widths: &mut [usize],
+    ceiling: usize,
+    room: usize,
+    caret: (usize, usize),
+) {
+    let Some(view) = editor.table() else {
+        return;
+    };
+    let typing = editor.mode() == yumete_core::input::Mode::Insert;
+    let ragged = editor.row_is_ragged(line);
+    for (i, span) in editor.row_cells(line).into_iter().enumerate() {
+        let Some(want) = widths.get_mut(i) else {
+            // A ragged row has cells the schema does not know about. They
+            // are drawn, because hiding them would hide the damage.
+            continue;
+        };
+        if !view.schema.shows(i) {
+            continue;
         }
+        if ragged && !(typing && (line, i) == caret) {
+            continue;
+        }
+        let text = editor.row_source(line);
+        // **Measured as drawn**: the quotes are off and a line break shows
+        // as `␊`, so the column is as wide as what is on the page.
+        let cell = editor.cell_shown(&text, span);
+        // **The cell being typed in is not folded** — the prose page's own
+        // rule (`folds_open_at`), and now kept the same way here: measure
+        // that one cell against the window instead of the cap.
+        //
+        // It used to open for the caret in Normal too, and that was the
+        // page's rule read one word too widely. 2026-09-11:
+        // 「我觉得这个有一个问题就是列宽容易跳。所以我建议这个和 tf 保持
+        // 一致（光标不自动展开，insert 模式展开这个格子），这样我们的逻辑
+        // 更简洁、一致，而且不用每个单元格都重算这一列的列宽。」Right on
+        // all three counts: every `l` across a row of long cells was a new
+        // width for that column, so the grid shifted sideways under a key
+        // that only meant 「next cell」 — and reading a cell whole is what
+        // the panel down the right is for, which needs no width at all.
+        //
+        // **And not under 折行** even then, where nothing is cut in the
+        // first place: widening the column would swell it to the window to
+        // show what the rows underneath already show.
+        let ceiling = match typing && (line, i) == caret && !editor.cell_wrap() {
+            true => room.max(MIN_COLUMN),
+            false => ceiling,
+        };
+        // A cell the writer broke into lines is as wide as its widest
+        // line, not as wide as all of them run together — **and every line
+        // but the last carries the `␊` that says so** (2026-10-22). Without
+        // that column the cell was charged for 「頭一行」 and drawn as
+        // 「頭一行␊」, so the page cut the writer's own last character and
+        // marked it `>` as if there were more of it off to the right.
+        let tail = yumete_cjk::char_width(yumete_cjk::LINE_FEED_PICTURE).max(1);
+        let lines: Vec<&str> = cell.split('\n').collect();
+        let wide = lines
+            .iter()
+            .enumerate()
+            .map(|(k, line)| {
+                yumete_cjk::str_width(line) + tail * usize::from(k + 1 < lines.len())
+            })
+            .max()
+            .unwrap_or(0);
+        *want = (*want).max(wide.min(ceiling));
     }
-    widths
+}
+
+/// How many lines of the window one row is drawn on — its tallest cell,
+/// counting only the columns that are on screen, since a cell scrolled off the
+/// right edge must not buy rows nobody sees.
+///
+/// The same rule as `tall_of` in the click map: a hard break counts whether
+/// `t a` is on or not, so the two surfaces agree about how many rows a record
+/// takes.
+fn row_height(editor: &Editor, line: usize, widths: &[usize], left: usize, room: usize) -> usize {
+    let source = editor.row_source(line);
+    let wrap = editor.cell_wrap();
+    let mut x = 0;
+    let mut tall = 1;
+    for (i, span) in editor.row_cells(line).iter().enumerate().skip(left) {
+        if x >= room {
+            break;
+        }
+        let w = widths.get(i).copied().unwrap_or(MIN_COLUMN);
+        tall = tall.max(cell_lines(&editor.cell_shown(&source, *span), w, wrap).len());
+        x += w + if w == 0 { 0 } else { GAP };
+    }
+    tall
+}
+
+/// How many lines of the window lie between the top of the page and the
+/// cursor's record — or `Some(0)` when the cursor is a step above the page,
+/// and `None` when it is far enough away that getting there is a jump.
+#[allow(clippy::too_many_arguments)]
+fn screen_distance(
+    editor: &Editor,
+    top: usize,
+    cursor_row: usize,
+    widths: &[usize],
+    left: usize,
+    room: usize,
+    rows: usize,
+) -> Option<usize> {
+    let (from, to) = match cursor_row < top {
+        true => (cursor_row, top),
+        false => (top, cursor_row),
+    };
+    let mut used = 0usize;
+    let mut line = from;
+    while line < to {
+        used += row_height(editor, line, widths, left, room);
+        // Further than a page above, or two below, is not a step.
+        if used > rows * if cursor_row < top { 1 } else { 2 } {
+            return None;
+        }
+        line += editor.record_height(line).max(1);
+    }
+    Some(if cursor_row < top { 0 } else { used })
+}
+
+/// The record a page starts at when the cursor's record is to sit `inset`
+/// lines down it — at least that many when `up`, at most that many otherwise.
+#[allow(clippy::too_many_arguments)]
+fn top_for(
+    editor: &Editor,
+    cursor_row: usize,
+    inset: usize,
+    first: usize,
+    widths: &[usize],
+    left: usize,
+    room: usize,
+    up: bool,
+) -> usize {
+    let mut top = cursor_row;
+    let mut above = 0usize;
+    while top > first {
+        if up && above >= inset {
+            break;
+        }
+        let previous = editor.table_row_start(top - 1);
+        let tall = row_height(editor, previous, widths, left, room);
+        if !up && above + tall > inset {
+            break;
+        }
+        above += tall;
+        top = previous;
+    }
+    top
+}
+
+/// Whether a page starting at `top` shows the cursor's cell whole, with
+/// `scrolloff` lines of the table under it — or as many as the table has left.
+#[allow(clippy::too_many_arguments)]
+fn cell_fits(
+    editor: &Editor,
+    top: usize,
+    cursor_row: usize,
+    cursor_cell: usize,
+    widths: &[usize],
+    left: usize,
+    room: usize,
+    rows: usize,
+    last: usize,
+    scrolloff: usize,
+) -> bool {
+    let mut used = 0usize;
+    let mut line = top;
+    while line < cursor_row {
+        used += row_height(editor, line, widths, left, room);
+        if used >= rows {
+            return false;
+        }
+        line += editor.record_height(line).max(1);
+    }
+    let source = editor.row_source(cursor_row);
+    let cell = editor
+        .row_cells(cursor_row)
+        .get(cursor_cell)
+        .map(|span| {
+            let w = widths.get(cursor_cell).copied().unwrap_or(MIN_COLUMN);
+            cell_lines(&editor.cell_shown(&source, *span), w, editor.cell_wrap()).len()
+        })
+        .unwrap_or(1)
+        .max(1);
+    // What is under the cell: the rest of its own record first, then the
+    // records after it, counted only as far as `scrolloff` asks.
+    let mut under = row_height(editor, cursor_row, widths, left, room).saturating_sub(cell);
+    let mut next = cursor_row + editor.record_height(cursor_row).max(1);
+    while under < scrolloff && next <= last {
+        under += row_height(editor, next, widths, left, room);
+        next += editor.record_height(next).max(1);
+    }
+    used + cell + under.min(scrolloff) <= rows
 }
 
 /// **A cell's drawn lines** (2026-10-20 作者定).
@@ -251,14 +443,19 @@ pub fn char_at(
     // that cell is drawn whole whatever the cap says, so a hit test that did
     // not know it lands one column out for every column to its right.
     let room = area.width.saturating_sub(gutter) as usize;
-    let widths = widths(
+    // …and the same rows: `layout` measures what `draw` drew, from the top
+    // `draw` settled, so the columns start where they were drawn.
+    let (row, cell) = editor.cell_position().unwrap_or((0, 0));
+    let mut left = viewport.left;
+    let widths = layout(
         editor,
         editor.cursor_line(),
         viewport.top,
         rows,
         bottom,
         room,
-        editor.cell_position().unwrap_or((0, 0)),
+        (editor.table_row_start(row), cell),
+        &mut left,
     );
     let right = area.x + area.width;
     let rope = editor.current_buffer().rope();
@@ -288,7 +485,7 @@ pub fn char_at(
         // text was then nowhere on the page.
         let mut x = area.x + gutter;
         let mut tall = 1;
-        for (i, part) in parts.iter().enumerate().skip(viewport.left) {
+        for (i, part) in parts.iter().enumerate().skip(left) {
             if x >= right {
                 break;
             }
@@ -331,7 +528,7 @@ pub fn char_at(
     // Walk the columns the way they were drawn, and stop at the one the
     // pointer is in.
     let mut x = area.x + gutter;
-    for (i, span) in cells.iter().enumerate().skip(viewport.left) {
+    for (i, span) in cells.iter().enumerate().skip(left) {
         let w = widths.get(i).copied().unwrap_or(MIN_COLUMN) as u16;
         if x >= right {
             break;
@@ -457,16 +654,6 @@ pub fn draw(
     // Vertical scroll: the ordinary rule, keeping the cursor's row on screen.
     let scrolloff = config.editor.scrolloff.min(rows / 2);
     let first_data = top_row;
-    // **Where the cursor sits on a page is the editor's answer**, not this
-    // surface's: a row off the page is a jump and lands in the middle, a step
-    // off an edge scrolls by as little as it takes, and typewriter mode keeps
-    // the row in the middle whatever it was. This used to be a third copy of
-    // that rule, and it was the copy that never heard of `:view-typewriter`.
-    let distance = (cursor_row >= viewport.top && cursor_row < viewport.top + rows)
-        .then(|| cursor_row - viewport.top);
-    if let Some(inset) = editor.page_inset(distance, rows.saturating_sub(1), scrolloff) {
-        viewport.top = cursor_row.saturating_sub(inset);
-    }
     viewport.top = match rowless {
         // Nothing to scroll, and `first_data.min(bottom_row)` on an empty
         // table is line 0 — the header, which the clamp then drew as row 1.
@@ -474,11 +661,11 @@ pub fn draw(
         false => viewport.top.min(bottom_row).max(first_data.min(bottom_row)),
     };
     // **The page starts at a record, never inside one** (2026-10-20 作者報的).
-    // The scroll above counts lines, so stepping down past a record that holds
-    // a line break landed `top` on its continuation line — and every row from
-    // there was read from the middle of a record: the cell's second line became
-    // column 1, the detail panel showed it as the row, and the first column's
-    // width was measured against it.
+    // The scroll counts records, so stepping down past a record that holds a
+    // line break must not land `top` on its continuation line — every row
+    // from there was read from the middle of a record: the cell's second line
+    // became column 1, the detail panel showed it as the row, and the first
+    // column's width was measured against it.
     viewport.top = editor.table_row_start(viewport.top);
 
     // **The gutter numbers this table's rows**, not the file's lines: the
@@ -488,7 +675,7 @@ pub fn draw(
     let gutter =
         gutter_width(bottom_row.saturating_sub(base) + 1, config.editor.line_numbers, false) as u16;
     let room = area.width.saturating_sub(gutter) as usize;
-    let widths = widths(
+    let mut widths = layout(
         editor,
         anchor,
         viewport.top,
@@ -496,11 +683,146 @@ pub fn draw(
         bottom_row,
         room,
         (cursor_row, cursor_cell),
+        &mut viewport.left,
     );
+    // **Where the cursor sits on a page is the editor's answer**, not this
+    // surface's: a row off the page is a jump and lands in the middle, a step
+    // off an edge scrolls by as little as it takes, and typewriter mode keeps
+    // the row in the middle whatever it was. This used to be a third copy of
+    // that rule, and it was the copy that never heard of `:view-typewriter`.
+    //
+    // **Asked in lines of the window, not of the file** (2026-10-23). Under
+    // 折行 a record can be eleven lines tall, and a `scrolloff` of five file
+    // lines then meant five records — fifty lines of context the page did not
+    // have — so a `k` that stayed well inside the page pushed it down nine
+    // lines. The distance, the inset and `scrolloff` are all counted on the
+    // page now, and the page still starts at a record.
+    let distance = screen_distance(
+        editor,
+        viewport.top,
+        cursor_row,
+        &widths,
+        viewport.left,
+        room,
+        rows,
+    );
+    let inset = editor.page_inset(distance, rows.saturating_sub(1), scrolloff);
+    if !rowless {
+        let from = viewport.top;
+        if let Some(inset) = inset {
+            // A cursor inside the top margin wants at least `scrolloff` lines
+            // above it; anything else — a step down, a jump, `zz`, the
+            // typewriter — at most `inset`.
+            //
+            // Warning: **Not 「at least whenever the cursor is above `inset`」**
+            // (2026-10-24 作者報的: after `60G` the page swapped between two
+            // tops every redraw, for as long as nobody pressed a key). A jump
+            // asks for the middle on every frame until the next key, and with
+            // rows two lines tall the middle can be one line out of reach:
+            // 「at least」 from one top and 「at most」 from the other then
+            // answered each other for ever. Only the margin case may depend on
+            // where the page was; every other answer is the cursor's alone.
+            let up = distance.is_some_and(|d| d < scrolloff);
+            let mut seen = Vec::new();
+            let mut top =
+                top_for(editor, cursor_row, inset, first_data, &widths, viewport.left, room, up);
+            // **Settled here, not over the next frames.** The widths are the
+            // drawn rows', so a new top can lay the page out differently and
+            // want another top. Asked again until it holds; a pair that keeps
+            // answering each other is broken by the lower one, the same way
+            // whichever of the two this frame happened to start from.
+            while !seen.contains(&top) && seen.len() < 4 {
+                seen.push(top);
+                widths = layout(
+                    editor,
+                    anchor,
+                    top,
+                    rows,
+                    bottom_row,
+                    room,
+                    (cursor_row, cursor_cell),
+                    &mut viewport.left,
+                );
+                top = top_for(editor, cursor_row, inset, first_data, &widths, viewport.left, room, up);
+            }
+            if seen.last() != Some(&top) {
+                top = seen.iter().copied().min().unwrap_or(top);
+            }
+            viewport.top = top;
+        }
+        // A step off the top edge with `scrolloff` at nothing: the editor
+        // says 「leave it」 and the cursor would be above the page.
+        if cursor_row < viewport.top {
+            viewport.top = cursor_row;
+        }
+        // Laid out again from where the page now starts, whichever way it got
+        // there — `seen` may have settled on a top it measured first.
+        if viewport.top != from || inset.is_some() {
+            widths = layout(
+                editor,
+                anchor,
+                viewport.top,
+                rows,
+                bottom_row,
+                room,
+                (cursor_row, cursor_cell),
+                &mut viewport.left,
+            );
+        }
+    }
+    // **The cursor's cell is kept whole on the page**, and `scrolloff` lines
+    // of what follows it (2026-10-23). The page starts at a record, and under
+    // 折行 one record can be eleven lines of the window, so the page starts
+    // low enough that the cell the cursor is in still fits.
+    //
+    // It used to be the cursor's whole **record**. One `j` onto a record whose
+    // note ran to eleven lines then scrolled the page eight rows at once, and
+    // the row landed in the middle of the window with the cursor's one-line
+    // cell at its top — the page moved for a column nobody was in. A cell is
+    // what this grid is walked by, so a cell is what is kept: the rest of a
+    // tall record runs off the bottom edge and comes up as the walk goes on.
+    //
+    // Measured again from each new top: the widths are the drawn rows', so a
+    // page that starts lower can be laid out differently.
+    if !rowless {
+        for _ in 0..4 {
+            let from = viewport.top;
+            while viewport.top < cursor_row {
+                let fits = cell_fits(
+                    editor,
+                    viewport.top,
+                    cursor_row,
+                    cursor_cell,
+                    &widths,
+                    viewport.left,
+                    room,
+                    rows,
+                    bottom_row,
+                    scrolloff,
+                );
+                if fits {
+                    break;
+                }
+                viewport.top += editor.record_height(viewport.top).max(1);
+            }
+            if viewport.top == from {
+                break;
+            }
+            widths = layout(
+                editor,
+                anchor,
+                viewport.top,
+                rows,
+                bottom_row,
+                room,
+                (cursor_row, cursor_cell),
+                &mut viewport.left,
+            );
+        }
+    }
     // How many columns this table has — what a row is measured against when
     // asking whether it is ragged, and where the drawn extras start.
     let columns = editor.table_column_count_at(anchor);
-    scroll_columns(&widths, room, cursor_cell, &mut viewport.left);
 
     let ink = match peek {
         None => crate::theme::Palette::of(config),
@@ -757,36 +1079,6 @@ pub fn draw(
         }
         tall
     };
-    // **The cursor's row is kept whole on the page.** The ordinary scroll rule
-    // counts rows of the file; with 折行 on, one row of the file can be five
-    // rows of the window, so the page starts low enough that the row the
-    // cursor is in — all of it — still fits.
-    if wrap {
-        while viewport.top < cursor_row {
-            let mut used = 0usize;
-            let mut line = viewport.top;
-            let fits = loop {
-                if line > bottom_row {
-                    break true;
-                }
-                let (_, parts) = lines_of(line);
-                let tall = height_of(&parts);
-                if line == cursor_row {
-                    break used + tall <= rows;
-                }
-                used += tall;
-                if used >= rows {
-                    break false;
-                }
-                line += editor.record_height(line).max(1);
-            };
-            if fits {
-                break;
-            }
-            viewport.top += 1;
-        }
-    }
-
     let mut caret = (area.x + gutter, area.y + head);
     let floor = area.y + area.height;
     let mut y = area.y + head;
