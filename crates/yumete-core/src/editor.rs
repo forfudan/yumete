@@ -1722,14 +1722,38 @@ impl Sieve {
             return Some(ignore::overrides::Override::empty());
         }
         let mut build = ignore::overrides::OverrideBuilder::new(root);
-        for one in self.include.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        for one in globs(&self.include) {
             build.add(one).ok()?;
         }
-        for one in self.exclude.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        for one in globs(&self.exclude) {
             build.add(&format!("!{one}")).ok()?;
         }
         build.build().ok()
     }
+}
+
+/// **The globs in one include/exclude field**: split on the commas that are not
+/// inside `{…}`, as VS Code's `splitGlobAware` does (2026-10-25).
+///
+/// A plain `split(',')` cut `*.{md,txt}` into `*.{md` and `txt}`, neither of
+/// which parses, and the whole search was reported as written wrong.
+pub(crate) fn globs(field: &str) -> impl Iterator<Item = &str> {
+    let mut depth = 0usize;
+    let mut start = 0;
+    let mut cut = Vec::new();
+    for (at, c) in field.char_indices() {
+        match c {
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                cut.push(&field[start..at]);
+                start = at + 1;
+            }
+            _ => {}
+        }
+    }
+    cut.push(&field[start..]);
+    cut.into_iter().map(str::trim).filter(|s| !s.is_empty())
 }
 
 /// **走過多少個條目就不往下走了** —— 二進制檔不算進 [`WALK_CEILING`]，可它們自己
