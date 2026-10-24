@@ -8418,6 +8418,12 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
 /// Warning: **檔位是意圖，寬度是結果。** 兩側都開而窗口又小時，中和寬會被保底咬成一樣；
 /// 那時 `w` 照走檔位，窗口一拉大它就真的寬了。
 fn sidebar_columns(editor: &Editor, total: u16) -> [u16; 2] {
+    // **擺不下就一欄都不給**（2026-10-25），和 `note_window` 那道閘同一個數：那邊
+    // 把鍵還給正文、說「窗口過窄」，這邊從前照樣畫一條四五欄寬的框，每一行只剩
+    // 一個號和一個省略號——鍵已經不在它那裏了，它還佔着正文的地方。
+    if !editor.room_for_a_panel() {
+        return [0, 0];
+    }
     let total = total as usize;
     let mut want = [0usize; 2];
     for side in Side::BOTH {
