@@ -14054,6 +14054,13 @@ fn the_project_is_the_first_marked_folder_above_the_working_directory() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A comma inside `{…}` belongs to the glob** (2026-10-25, VS Code's rule).
+#[test]
+fn a_brace_list_in_the_include_field_is_one_glob() {
+    let got: Vec<&str> = crate::editor::globs("*.{md,txt}, notes/**,,").collect();
+    assert_eq!(got, ["*.{md,txt}", "notes/**"]);
+}
+
 /// **`.jj` and `.svn` mark a project too, and `.yumete` still comes first**
 /// (2026-10-25).
 #[test]
