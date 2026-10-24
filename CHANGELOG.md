@@ -7,6 +7,16 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Fixed
+
+- **`:w` keeps a hard link.** A file with a second name was saved by writing a new
+  file and renaming it over the old one, so the other name went on holding the old
+  text, and the file's own attributes — Finder tags among them — were left behind.
+  Such a file is now written in place, as vim and helix write it, with the old
+  contents kept aside until the new ones are on disk.
+
 ## 0.12.0 · 2026-10-24
 
 Nine commits, one day after 0.11.0, nearly all of them from using the grid on real
