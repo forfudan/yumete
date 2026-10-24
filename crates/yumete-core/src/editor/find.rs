@@ -1741,6 +1741,11 @@ impl Editor {
         let Some(look) = self.looker() else { return };
         let with = self.replacement();
         match self.buffer_of(&hit) {
+            // A read-only file is said to be one, not taken for a line that
+            // changed since it was read (2026-10-25).
+            Some(index) if self.buffers[index].is_readonly() => {
+                self.status = say!("readonly.refused");
+            }
             Some(index) => {
                 let done =
                     self.with_buffer(index, |ed| ed.swap_one(&look, &with, hit.line, hit.nth));
@@ -1749,7 +1754,7 @@ impl Editor {
                     self.remember_what_was_replaced(index, hit.file.as_deref(), 1);
                 }
                 match done {
-                    true => self.after_replacing(1),
+                    true => self.after_replacing(1, 0),
                     // The line has fewer matches than it had when it was read:
                     // somebody has edited it since. Saying so beats changing
                     // whatever is in that position now.
@@ -1779,6 +1784,10 @@ impl Editor {
         let Some(index) = index else {
             return 0;
         };
+        if self.buffers[index].is_readonly() {
+            self.replace_skipped += 1;
+            return 0;
+        }
         let done = self.with_buffer(index, |ed| ed.swap_all(&look, &with));
         if done > 0 {
             self.remember_what_was_replaced(index, rel, done);
@@ -1824,8 +1833,10 @@ impl Editor {
         match self.replace_this_file.take() {
             Some((path, id)) => {
                 self.replaced_in.clear();
+                self.replace_skipped = 0;
                 let done = self.replace_file(Some(&path), id);
-                self.after_replacing(done);
+                let skipped = std::mem::take(&mut self.replace_skipped);
+                self.after_replacing(done, skipped);
             }
             None => self.replace_all_found(),
         }
@@ -1941,7 +1952,8 @@ impl Editor {
             }
         }
         let done = std::mem::take(&mut self.replace_tally);
-        self.after_replacing(done);
+        let skipped = std::mem::take(&mut self.replace_skipped);
+        self.after_replacing(done, skipped);
     }
 
     /// 中央那一扇「安全核驗」，或者 `None`（只動一個檔，狀態欄一行就夠）。
@@ -2041,6 +2053,7 @@ impl Editor {
         // 們有没存的改動），只是不站在那裏。
         self.replace_home = self.current_buffer().id();
         self.replace_tally = 0;
+        self.replace_skipped = 0;
         self.replace_queue = self.search.files.clone();
         // **一批一批地做，中間把屏幕還回去**（2026-10-03 定：「不給取消，只給
         // 進度」）。從前這裏是一個跑到底的 `for`，而三千個檔那一趟十幾秒裏屏幕
@@ -2433,11 +2446,16 @@ impl Editor {
             .min(self.search.rows().len().saturating_sub(1));
     }
 
-    fn after_replacing(&mut self, done: usize) {
+    fn after_replacing(&mut self, done: usize, skipped: usize) {
         self.look_again_and_stand_still();
         // Warning: **一處都没換就不說話**（2026-09-29）：`R` 只在名單上有東西的時候
         // 纔畫得出來，所以 `done == 0` 是走不到的；真走到了也不必解釋。
-        if done > 0 {
+        //
+        // **Read-only files are named** (2026-10-25): the question counted their
+        // hits, and an answer two short with no reason read as success.
+        if skipped > 0 {
+            self.status = say!("search.replaced-skipping", done, skipped);
+        } else if done > 0 {
             self.status = say!("search.replaced", done);
         }
     }

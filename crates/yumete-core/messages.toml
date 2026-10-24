@@ -9112,6 +9112,13 @@ zhs = "共替换 {0} 处(使用 :wa 保存全部)"
 en = "Replaced {0} matches (:wa saves them all)"
 
 [[message]]
+# 搜索：換掉了幾處，有幾個只讀的檔没換
+key = "search.replaced-skipping"
+zht = "共替換 {0} 處，跳過 {1} 個只讀文件(使用 :wa 保存全部)"
+zhs = "共替换 {0} 处，跳过 {1} 个只读文件(使用 :wa 保存全部)"
+en = "Replaced {0} matches, skipped {1} read-only file(s) (:wa saves them all)"
+
+[[message]]
 # 搜索面板那個開關：勾上就長出替換行
 key = "search.replacing"
 zht = "替換"

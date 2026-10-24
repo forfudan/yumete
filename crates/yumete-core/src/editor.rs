@@ -3386,6 +3386,10 @@ pub struct Editor {
     replace_queue: Vec<(Option<std::path::PathBuf>, Option<u64>)>,
     /// 這一批到此刻換掉了幾處，跨幀累着。
     replace_tally: usize,
+    /// How many files this batch could not touch because they are read-only
+    /// (2026-10-25). Their hits were counted in the question, so the answer
+    /// says where the difference went.
+    replace_skipped: usize,
     /// 這一批開始的時候人在哪一份緩衝上——換完要回去。
     replace_home: u64,
     /// **屏幕上的落腳點和它們的標籤**（`gw`，#406）——亮着的時候整個鍵盤都是標籤。
@@ -4026,6 +4030,7 @@ impl Editor {
             replace_paused: false,
             replace_queue: Vec::new(),
             replace_tally: 0,
+            replace_skipped: 0,
             replace_home: 0,
             labels: Vec::new(),
             jump_typed: String::new(),
