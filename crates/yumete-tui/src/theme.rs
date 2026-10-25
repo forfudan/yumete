@@ -56,6 +56,11 @@ pub fn name(config: &Config) -> String {
     in_force(config).name
 }
 
+/// Whether the theme in force has no light half (2026-10-25).
+pub fn dark_only(config: &Config) -> bool {
+    in_force(config).dark_only
+}
+
 /// Wear this theme from now on.
 /// **眼下選着的那一個，原樣取一份**（2026-10-07，預覽用）。
 ///
@@ -403,6 +408,9 @@ pub struct Palette {
     lime: (u8, u8, u8),
     /// Whether a coloured run also gets a ground (`:theme-fill`).
     fill: bool,
+    /// Colours copied from a borrowed theme, which win over the ones worked
+    /// out here (2026-10-25, see [`yumete_config::Pinned`]).
+    pinned: Option<yumete_config::Pinned>,
     paint: bool,
     /// Whether this is the work area that is only being *read* (Feature #176).
     ///
@@ -598,6 +606,8 @@ impl Palette {
 
     /// One theme, in one mood.
     pub fn of_theme(theme: &ThemeConfig, dark: bool) -> Palette {
+        // A theme with no light half is drawn dark in either mood.
+        let dark = dark || theme.dark_only;
         Palette {
             ladder: theme.ladder(dark),
             mark: theme.mark(dark),
@@ -611,6 +621,7 @@ impl Palette {
             cyan: theme.cyan(dark),
             lime: theme.lime(dark),
             fill: theme.fill,
+            pinned: theme.pinned,
             paint: theme.ground == Ground::Paint,
             faded: false,
         }
@@ -796,6 +807,17 @@ impl Palette {
     /// of ink and not 朱.
     pub fn gold(self) -> Color {
         self.accent(self.gold)
+    }
+
+    /// A colour the theme copied from elsewhere, in this pane's weight — `None`
+    /// for a theme of this editor's own.
+    pub fn pinned(self, pick: impl Fn(&yumete_config::Pinned) -> (u8, u8, u8)) -> Option<Color> {
+        self.pinned.map(|p| self.accent(pick(&p)))
+    }
+
+    /// Whether the theme copies its code and Markdown colours from elsewhere.
+    pub fn borrowed(self) -> bool {
+        self.pinned.is_some()
     }
 
     /// 朱 — 這裏不對.
@@ -1312,13 +1334,13 @@ mod ground_tests {
             "ink",
             "bw",
             "cyanotype",
-            "amber",
             "mogao",
             "morandi",
             "firefly",
             "meridian",
             "kiln",
             "complement",
+            "one-dark",
         ];
         for name in names {
             let theme = ThemeConfig::named(name).expect("a theme by that name");

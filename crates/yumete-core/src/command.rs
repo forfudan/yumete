@@ -2384,12 +2384,6 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
-        // 琥珀
-        name: "amber",
-        help: "cmd.themes.amber",
-        needs: &[],
-    },
-    Word {
         // 莫高
         name: "mogao",
         help: "cmd.themes.mogao",
@@ -2423,6 +2417,12 @@ const THEMES: &[Word] = &[
         // 靛橘
         name: "complement",
         help: "cmd.themes.complement",
+        needs: &[],
+    },
+    Word {
+        // One Dark, after One Dark Pro (2026-10-25).
+        name: "one-dark",
+        help: "cmd.themes.one-dark",
         needs: &[],
     },
 ];
@@ -6690,13 +6690,13 @@ mod tests {
                 "ink",
                 "bw",
                 "cyanotype",
-                "amber",
                 "mogao",
                 "morandi",
                 "firefly",
                 "meridian",
                 "kiln",
-                "complement"
+                "complement",
+                "one-dark"
             ],
             "the menu lists what can be typed — ASCII, with the pinyin as an alias"
         );

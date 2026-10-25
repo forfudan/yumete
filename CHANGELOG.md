@@ -9,7 +9,24 @@ in `docs/development.md` §5.2.
 
 ## Unreleased
 
+### Added
+
+- **`:theme one-dark`.** Code and Markdown in One Dark Pro's colours, value for
+  value: keywords purple, functions blue, built-in functions cyan, types yellow,
+  strings green, numbers orange, fields red; headings red, bold orange, italic
+  purple, inline code green, a link's text blue and its address purple, each mark
+  coloured by what it marks. The page's ink and paper are One Dark's own text and
+  ground, and everything else is worked out from them as in every other theme.
+  Dark only: in a light mood it stays dark, and `:theme-mode light` says so.
+  Variables are in the text colour, as helix and Zed draw them; where a grammar
+  does not tell two things apart (Python's `self`, for one), neither can the theme.
+  The MIT notices of One Dark Pro and Atom's One Dark are in `licenses/`, and the
+  release archive carries them.
+
 ### Changed
+
+- **⚠️ The `amber` theme is gone**, to keep the set at ten. A config that names it
+  falls back to the default theme.
 
 - **A `.jj` or `.svn` checkout is a project.** The project root is the nearest folder
   with a `.yumete`, or else the nearest with a `.git`, `.jj` or `.svn`, as helix's

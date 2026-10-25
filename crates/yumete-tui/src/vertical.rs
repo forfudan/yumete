@@ -1557,7 +1557,8 @@ pub fn draw(
             // 從前這裏還記一格「這一格上有沒有 `==標記==`」，給格子的底色讓
             // 路；格子沒有底色了（見上面那一段），讓路的那一方也就沒有了。
             for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
-                style = style.patch(crate::markup_style(run.kind, ink));
+                let ch = symbol.chars().next();
+                style = style.patch(crate::markup_style_in(run, runs, ch, ink));
             }
 
             // Warning: **Not `&& !has_selection`** (#450, and again here for #457).

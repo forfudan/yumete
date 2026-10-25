@@ -2779,13 +2779,6 @@ zhs = "{0} 后面不跟东西——「{1}」多了"
 en = "{0} takes nothing after it — '{1}' is extra"
 
 [[message]]
-# : 命令選單裏 amber 那一項的説明(themes 組)
-key = "cmd.themes.amber"
-zht = "琥珀：整頁只有一種顏色"
-zhs = "琥珀：整页只有一种颜色"
-en = "amber: one colour for the whole page"
-
-[[message]]
 # : 命令選單裏 bw 那一項的説明(themes 組)
 key = "cmd.themes.bw"
 zht = "黑白：只有黑、白和灰——輕重説話，顏色不説"
@@ -2844,9 +2837,16 @@ en = "mogao: the brown-black the murals oxidised into; the gold is malachite, th
 [[message]]
 # : 命令選單裏 morandi 那一項的説明(themes 組)
 key = "cmd.themes.morandi"
-zht = "莫蘭迪：十套裏最低的正文對比、最灰的地"
-zhs = "莫兰迪：十套里最低的正文对比、最灰的地"
-en = "morandi: the lowest text contrast and the greyest ground of the ten"
+zht = "莫蘭迪：正文對比度低"
+zhs = "莫兰迪：正文对比度低"
+en = "morandi: low text contrast"
+
+[[message]]
+# : 命令選單裏 one-dark 那一項的説明(themes 組)
+key = "cmd.themes.one-dark"
+zht = "One Dark：VS Code 裏最常見的那一套配色，只有深色"
+zhs = "One Dark：VS Code 里最常见的那一套配色，只有深色"
+en = "one-dark: the scheme most VS Code users know; dark only"
 
 [[message]]
 # `:vertical-keys` 選單上那兩個詞——邏輯那一個
@@ -11873,6 +11873,13 @@ en = "yanked a row"
 
 
 # ── theme ─────────────────────────────────────────────────────────────
+
+[[message]]
+# :theme-mode light，而眼下的主題只有深色
+key = "theme.dark-only"
+zht = "{0} 只有深色，照舊用深色"
+zhs = "{0} 只有深色，照旧用深色"
+en = "{0} has no light mode; staying dark"
 
 [[message]]
 # :theme-fill off ——品色那幾樣不上底色
