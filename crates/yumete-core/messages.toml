@@ -2800,13 +2800,6 @@ zhs = "蓝晒：普鲁士蓝的地、白线的字——十套里唯一底色真�
 en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
 
 [[message]]
-# : 命令選單裏 firefly 那一項的説明(themes 組)
-key = "cmd.themes.firefly"
-zht = "夜螢：近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點"
-zhs = "夜萤：近乎全黑的地，字是冷灰，唯一的暖处是那点黄金——萤火不是霓虹，一页上只该有几点"
-en = "firefly: a near-black ground, cool grey text, and warmth only in the gold — a few sparks to a page"
-
-[[message]]
 # : 命令選單裏 ink 那一項的説明(themes 組)
 key = "cmd.themes.ink"
 zht = "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來"
@@ -2827,6 +2820,12 @@ zht = "莫高：墨是壁畫氧化之後真正變成的褐黑；金不是金色�
 zhs = "莫高：墨是壁画氧化之后真正变成的褐黑；金不是金色，是石绿——洞窟自己的矿物"
 en = "mogao: the brown-black the murals oxidised into; the gold is malachite, the caves' own mineral"
 
+[[message]]
+# : 命令選單裏 monokai 那一項的説明(themes 組)
+key = "cmd.themes.monokai"
+zht = "Monokai：Sublime Text 的經典配色，只有深色"
+zhs = "Monokai：Sublime Text 的经典配色，只有深色"
+en = "monokai: the classic Sublime Text scheme; dark only"
 [[message]]
 # : 命令選單裏 morandi 那一項的説明(themes 組)
 key = "cmd.themes.morandi"

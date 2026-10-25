@@ -1135,6 +1135,7 @@ pub struct Pinned {
     pub function: (u8, u8, u8),
     pub builtin_function: (u8, u8, u8),
     pub types: (u8, u8, u8),
+    pub types_italic: bool,
     pub this: (u8, u8, u8),
     pub string: (u8, u8, u8),
     pub escape: (u8, u8, u8),
@@ -1159,6 +1160,8 @@ pub struct Pinned {
     pub code: (u8, u8, u8),
     pub code_mark: (u8, u8, u8),
     pub list_mark: (u8, u8, u8),
+    /// A list item's own words — Monokai colours `markup.list` whole.
+    pub list_text: (u8, u8, u8),
     pub link_text: (u8, u8, u8),
     pub link_italic: bool,
     /// `[` and `]` (and an image's `!`).
@@ -1183,6 +1186,7 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     function: (0x61, 0xAF, 0xEF),         // entity.name.function
     builtin_function: (0x56, 0xB6, 0xC2), // support.function
     types: (0xE5, 0xC0, 0x7B),            // entity.name.type, entity.name.class
+    types_italic: false,
     this: (0xE5, 0xC0, 0x7B),             // variable.language
     string: (0x98, 0xC3, 0x79),           // string
     escape: (0x56, 0xB6, 0xC2),           // constant.character.escape
@@ -1206,6 +1210,7 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     code: (0x98, 0xC3, 0x79),             // markup.inline.raw
     code_mark: (0xE5, 0xC0, 0x7B),        // punctuation.definition.raw
     list_mark: (0xE5, 0xC0, 0x7B),        // punctuation.definition.list
+    list_text: (0xAB, 0xB2, 0xBF),        // no rule for markup.list
     link_text: (0x61, 0xAF, 0xEF),        // string.other.link.title
     link_italic: false,
     link_bracket: (0xE0, 0x6C, 0x75),     // punctuation.definition.string
@@ -1215,6 +1220,60 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     quote_mark: (0x5C, 0x63, 0x70),
     deleted: (0xE0, 0x6C, 0x75),          // markup.deleted
     deleted_mark: (0xE0, 0x6C, 0x75),
+};
+
+/// **Monokai, as VS Code ships it**, read off
+/// `extensions/theme-monokai/themes/monokai-color-theme.json` (2026-10-26).
+///
+/// VS Code's is "based on the original Monokai" (Wimer Hazenberg's TextMate
+/// theme, 2006) by way of Colorsublime; both are MIT. Each value is the
+/// `tokenColors` rule for the scope beside it. Markdown's `markup.*` rules
+/// cover a whole construct, marks included, and `markup.list` the whole item.
+/// The theme sets no error colour, so VS Code's own `#F14C4C` is the 朱.
+///
+/// Where its grammar and ours part, the commoner case is taken: `def` and
+/// `fn` are `storage.type` (cyan, italic) to VS Code and `@keyword` to us, so
+/// they are keyword pink; a field is `variable.other.property` (the text
+/// colour), though a JSON key is cyan there.
+pub const MONOKAI: Pinned = Pinned {
+    keyword: (0xF9, 0x26, 0x72),          // keyword, storage
+    function: (0xA6, 0xE2, 0x2E),         // entity.name.function
+    builtin_function: (0x66, 0xD9, 0xEF), // support.function
+    types: (0x66, 0xD9, 0xEF),            // support.type (italic)
+    types_italic: true,
+    this: (0xFD, 0x97, 0x1F),             // variable.language
+    string: (0xE6, 0xDB, 0x74),           // string
+    escape: (0xAE, 0x81, 0xFF),           // constant.character
+    constant: (0xAE, 0x81, 0xFF),         // constant.language
+    number: (0xAE, 0x81, 0xFF),           // constant.numeric
+    property: (0xF8, 0xF8, 0xF2),         // variable.other.property
+    parameter: (0xFD, 0x97, 0x1F),        // variable.parameter (italic)
+    parameter_italic: true,
+    tag: (0xF9, 0x26, 0x72),              // entity.name.tag
+    attribute: (0xA6, 0xE2, 0x2E),        // entity.other.attribute-name
+    comment: (0x88, 0x84, 0x6F),          // comment (upright)
+    comment_italic: false,
+    plain: (0xF8, 0xF8, 0xF2),            // editor.foreground
+    operator: (0xF9, 0x26, 0x72),         // keyword.operator
+    punctuation: (0xF8, 0xF8, 0xF2),      // no rule
+    heading: (0xA6, 0xE2, 0x2E),          // markup.heading, `#` and all
+    bold: (0x66, 0xD9, 0xEF),             // markup.bold, marks and all
+    bold_mark: (0x66, 0xD9, 0xEF),
+    italic: (0x66, 0xD9, 0xEF),           // markup.italic, marks and all
+    italic_mark: (0x66, 0xD9, 0xEF),
+    code: (0xFD, 0x97, 0x1F),             // markup.inline.raw, backticks and all
+    code_mark: (0xFD, 0x97, 0x1F),
+    list_mark: (0xE6, 0xDB, 0x74),        // markup.list
+    list_text: (0xE6, 0xDB, 0x74),
+    link_text: (0xE6, 0xDB, 0x74),        // string.other.link
+    link_italic: false,
+    link_bracket: (0xF8, 0xF8, 0xF2),     // no rule
+    link_paren: (0xF8, 0xF8, 0xF2),       // no rule
+    link_address: (0xF8, 0xF8, 0xF2),     // markup.underline.link: no rule
+    quote: (0xF9, 0x26, 0x72),            // markup.quote, `>` and all
+    quote_mark: (0xF9, 0x26, 0x72),
+    deleted: (0xF8, 0xF8, 0xF2),          // markup.strikethrough: no colour
+    deleted_mark: (0xF8, 0xF8, 0xF2),
 };
 
 /// **Zed's One Dark**, read off `assets/themes/one/one.json` (2026-10-25).
@@ -1228,6 +1287,7 @@ pub const ZED_ONE_DARK: Pinned = Pinned {
     function: (0x73, 0xAD, 0xE9),         // function
     builtin_function: (0x73, 0xAD, 0xE9), // function (no builtin key)
     types: (0x6E, 0xB4, 0xBF),            // type
+    types_italic: false,
     this: (0xBF, 0x95, 0x6A),             // variable.special
     string: (0xA1, 0xC1, 0x81),           // string
     escape: (0x87, 0x8E, 0x98),           // string.escape
@@ -1251,6 +1311,7 @@ pub const ZED_ONE_DARK: Pinned = Pinned {
     code: (0xA1, 0xC1, 0x81),             // text.literal
     code_mark: (0xA1, 0xC1, 0x81),
     list_mark: (0xD0, 0x72, 0x77),        // punctuation.list_marker
+    list_text: (0xAC, 0xB2, 0xBE),        // a paragraph: no colour
     link_text: (0x73, 0xAD, 0xE9),        // link_text (italic)
     link_italic: true,
     link_bracket: (0x73, 0xAD, 0xE9),     // link_text: the brackets are the link's
@@ -1346,15 +1407,15 @@ impl ThemeConfig {
     /// the design looks like with every colour taken away, which is also what a
     /// monochrome terminal and a colour-blind reader are left with.
     ///
-    /// Six more carry 宇浩's own candidate palettes onto a page of prose:
-    /// 藍曬、莫高、莫蘭迪、夜螢、明度階、靛橘. Each is two anchors per mood
-    /// plus 金 and 朱, and every other shade on the page is a rung worked out
-    /// from them — so a theme is eight colours and no more.
+    /// Five more carry 宇浩's own candidate palettes onto a page of prose:
+    /// 藍曬、莫高、莫蘭迪、明度階、靛橘. Each is two anchors per mood plus 金
+    /// and 朱, and every other shade on the page is a rung worked out from
+    /// them — so a theme is eight colours and no more.
     ///
-    /// The last two are **borrowed** (2026-10-25): `one-dark` and
-    /// `zed-one-dark` take their ink and paper from One Dark and copy its code
-    /// and Markdown colours exactly ([`Pinned`]), dark only. 琥珀 and 陶窯 went
-    /// to keep the set at ten.
+    /// Three are **borrowed** (2026-10-25/26): `one-dark`, `zed-one-dark` and
+    /// `monokai` take their ink and paper from the theme they copy, and its
+    /// code and Markdown colours exactly ([`Pinned`]), dark only. 琥珀, 陶窯
+    /// and 夜螢 went to keep the set at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is, and the pinyin is an alias for the hand that
@@ -1536,29 +1597,35 @@ impl ThemeConfig {
                 lime_light: (0x59, 0x6C, 0x42),
                 ..ThemeConfig::default()
             }),
-            // 夜螢 — 近乎全黑的地，字是冷灰，唯一的暖處是那點黃金——螢火不是霓虹，一頁上只該有幾點。
-            "firefly" | "yeying" | "夜螢" | "夜萤" => Some(ThemeConfig {
-                name: "firefly".to_string(),
+            // Monokai — VS Code's, after Wimer Hazenberg's (2026-10-26). Built as
+            // `one-dark` is: its text and ground for the ink and paper, `MONOKAI`
+            // for the code and the Markdown, its own hues for the accents, and
+            // VS Code's default error red for 朱, since the theme sets none.
+            //
+            // Source: VS Code, `extensions/theme-monokai` (MIT, © Microsoft),
+            // from Colorsublime's themes (MIT). Notices in `licenses/`.
+            "monokai" => Some(ThemeConfig {
+                name: "monokai".to_string(),
                 dark: Ladder {
-                    ink: (0xC9, 0xCF, 0xC4),
-                    paper: (0x08, 0x09, 0x0B),
+                    ink: (0xF8, 0xF8, 0xF2),
+                    paper: (0x27, 0x28, 0x22),
                 },
                 light: Ladder {
-                    ink: (0x14, 0x15, 0x0F),
-                    paper: (0xFB, 0xFB, 0xF7),
+                    ink: (0xF8, 0xF8, 0xF2),
+                    paper: (0x27, 0x28, 0x22),
                 },
-                gold_dark: (0xD9, 0xC2, 0x4A),
-                gold_light: (0x7A, 0x6D, 0x0A),
-                mark_dark: (0xE0, 0x69, 0x59),
-                mark_light: (0xB3, 0x3B, 0x2E),
-                orange_dark: (0xE5, 0x8D, 0x54),
-                orange_light: (0xAC, 0x59, 0x1B),
-                pink_dark: (0xE0, 0x8E, 0xB6),
-                pink_light: (0xB3, 0x4A, 0x81),
-                cyan_dark: (0x5A, 0xBA, 0xBF),
-                cyan_light: (0x24, 0x7A, 0x83),
-                lime_dark: (0x9E, 0xBB, 0x6B),
-                lime_light: (0x5B, 0x79, 0x2D),
+                dark_only: true,
+                pinned: Some(MONOKAI),
+                gold_dark: (0xE6, 0xDB, 0x74),
+                mark_dark: (0xF1, 0x4C, 0x4C),
+                purple_dark: (0xAE, 0x81, 0xFF),
+                green_dark: (0xA6, 0xE2, 0x2E),
+                azure_dark: (0x66, 0xD9, 0xEF),
+                amber_dark: (0xFD, 0x97, 0x1F),
+                orange_dark: (0xFD, 0x97, 0x1F),
+                pink_dark: (0xF9, 0x26, 0x72),
+                cyan_dark: (0x66, 0xD9, 0xEF),
+                lime_dark: (0xA6, 0xE2, 0x2E),
                 ..ThemeConfig::default()
             }),
             // 明度階 — 朱不是紅的，是藍的：紅綠色盲也分得開。金與朱在色相和明度上各自分開了兩次。
@@ -4810,6 +4877,17 @@ mod a_typo_is_said_out_loud {
         assert!(one.dark_only);
         assert_eq!(one.pinned, Some(ONE_DARK_PRO));
         assert_eq!(one.dark.paper, (0x28, 0x2C, 0x34));
+    }
+
+    /// 2026-10-26: firefly went to make room for Monokai, the theme nearest
+    /// the default (ΔE 14.6 dark, 13.4 light).
+    #[test]
+    fn monokai_replaces_firefly() {
+        assert!(ThemeConfig::named("firefly").is_none());
+        let theme = ThemeConfig::named("monokai").expect("monokai");
+        assert!(theme.dark_only);
+        assert_eq!(theme.pinned, Some(MONOKAI));
+        assert_eq!(theme.dark.paper, (0x27, 0x28, 0x22));
     }
 
     /// 2026-10-25: kiln went to make room for Zed's One Dark.

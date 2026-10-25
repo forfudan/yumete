@@ -8170,7 +8170,7 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
                     Token::Escape => pin(|p| p.escape),
                     Token::Property => pin(|p| p.property),
                     Token::Attribute => pin(|p| p.attribute),
-                    Token::Type => pin(|p| p.types),
+                    Token::Type => leaning(pin(|p| p.types), italic(|p| p.types_italic)),
                     Token::String => pin(|p| p.string),
                     Token::Tag => pin(|p| p.tag),
                     Token::Constant => pin(|p| p.constant),
@@ -8319,6 +8319,11 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
     match block {
         // A note running over several lines has its ink from its runs, and no
         // ground: a one-line note has none either (#288).
+        // A borrowed theme's list item takes its `markup.list` colour, which
+        // Monokai gives the whole item (2026-10-26).
+        Block::Item { .. } if ink.borrowed() => {
+            ink.pinned(|p| p.list_text).map(|c| Style::default().fg(c))
+        }
         Block::Prose | Block::Heading(_) | Block::Item { .. } | Block::Comment { .. } => None,
         // An aside is a block on the page because it is a block on paper.
         // **A table is a block too** (#270). It was the one thing in this list
@@ -26498,6 +26503,26 @@ fn squeezed(text: &str) -> String {
         assert!(at(7).add_modifier.contains(Modifier::ITALIC), "the link's text leans");
         assert_eq!(at(9).fg, Some(rgb(0x6E_B4_BF)), "`(` belongs to the address");
         assert_eq!(at(10).fg, Some(rgb(0x6E_B4_BF)));
+    }
+
+    /// **Monokai is VS Code's** (2026-10-26): pink keywords and operators,
+    /// cyan italic types, purple numbers, and a list item yellow as a whole.
+    #[test]
+    fn monokai_paints_what_vs_code_paints() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::{Block, Kind};
+        let theme = yumete_config::ThemeConfig::named("monokai").expect("monokai");
+        let ink = crate::theme::Palette::of_theme(&theme, true);
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        let token = |t| markup_style(Kind::Token(t), ink);
+        assert_eq!(token(Token::Keyword).fg, Some(rgb(0xF9_26_72)));
+        assert_eq!(token(Token::Operator).fg, Some(rgb(0xF9_26_72)));
+        assert_eq!(token(Token::Number).fg, Some(rgb(0xAE_81_FF)));
+        assert_eq!(token(Token::Type).fg, Some(rgb(0x66_D9_EF)));
+        assert!(token(Token::Type).add_modifier.contains(Modifier::ITALIC));
+        assert!(!token(Token::Comment).add_modifier.contains(Modifier::ITALIC));
+        let item = block_style(Block::Item { task: None }, ink).and_then(|s| s.fg);
+        assert_eq!(item, Some(rgb(0xE6_DB_74)));
     }
 
     #[test]

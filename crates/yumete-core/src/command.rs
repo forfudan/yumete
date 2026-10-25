@@ -2385,6 +2385,12 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
+        // Monokai, as VS Code ships it (2026-10-26).
+        name: "monokai",
+        help: "cmd.themes.monokai",
+        needs: &[],
+    },
+    Word {
         // 黑白
         name: "bw",
         help: "cmd.themes.bw",
@@ -2406,12 +2412,6 @@ const THEMES: &[Word] = &[
         // 莫蘭迪
         name: "morandi",
         help: "cmd.themes.morandi",
-        needs: &[],
-    },
-    Word {
-        // 夜螢
-        name: "firefly",
-        help: "cmd.themes.firefly",
         needs: &[],
     },
     Word {
@@ -6690,11 +6690,11 @@ mod tests {
                 "ink",
                 "one-dark",
                 "zed-one-dark",
+                "monokai",
                 "bw",
                 "cyanotype",
                 "mogao",
                 "morandi",
-                "firefly",
                 "meridian",
                 "complement"
             ],
