@@ -9,7 +9,29 @@ in `docs/development.md` §5.2.
 
 ## Unreleased
 
+### Changed
+
+- **A `.jj` or `.svn` checkout is a project.** The project root is the nearest folder
+  with a `.yumete`, or else the nearest with a `.git`, `.jj` or `.svn`, as helix's
+  markers go; a jj repository without git and an svn checkout used to be rooted
+  wherever you started.
+
 ### Fixed
+
+- **`*.{md,txt}` works in the search panel's include and exclude fields.** A comma
+  inside braces belongs to the glob, as in VS Code's; the field used to split there
+  and report the whole search as written wrong.
+
+- **A replacement across files says which read-only files it skipped**: 「共替換 2
+  處，跳過 1 個只讀文件」 instead of a count one short with no reason. `r` on a hit in a
+  read-only file says the file is read-only, not that the line has moved.
+
+- **A window too narrow for a sidebar draws none.** Under 36 columns the keys already
+  went back to the text; a panel four to six columns wide was still drawn, a number
+  and an ellipsis to a row.
+
+- **`:help` no longer lists `D C`**, which are not bound under the helix keymap, and
+  `:toc`'s argument reads `<第幾條>`: it goes to that heading, not that level.
 
 - **`:w` keeps a hard link.** A file with a second name was saved by writing a new
   file and renaming it over the old one, so the other name went on holding the old
