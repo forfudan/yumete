@@ -158,8 +158,9 @@ pub struct EditorConfig {
     /// `C-_`/`C-7`, are each one key here.
     pub language_key: String,
     /// Whether the word-segmentation overlay is shown at start-up (Feature #24).
-    /// On by default so the CJK word grouping is visible; toggle with
-    /// `:word-show off` or set `show_segmentation = false`.
+    /// On by default so the CJK word grouping is visible. **Not a key of its
+    /// own any more** (2026-10-25): the file says `word_mark = "off"`, and
+    /// `:word-mark off` turns it off for the session.
     pub show_segmentation: bool,
     /// How readily characters join into words: `strict`, `balanced`, `full`
     /// (Feature #24), the same three `:word-level` names.
@@ -168,9 +169,9 @@ pub struct EditorConfig {
     /// only the bundled list had — it said nothing to a reader and nothing at
     /// all to the language model, which most machines actually segment with.
     pub word_level: yumete_cjk::WordLevel,
-    /// How the overlay marks a word: `tint` (a hair of colour under every
-    /// other word, the default) or `ink` (the characters themselves in a
-    /// second colour, the paper untouched) — the same two `:word-show` names.
+    /// How the overlay marks a word — `color`, `ink`, `tint` or `line`, the
+    /// same names `:word-mark` takes. In the file `off` is one of them, and
+    /// sets [`Self::show_segmentation`] instead.
     pub word_mark: yumete_cjk::WordMark,
     /// Horizontal (default) or vertical layout (Feature #61).
     pub layout: Layout,
@@ -897,7 +898,7 @@ pub mod rung {
     //! 地方可以表達——狀態欄只能往墨的方向抬，而那是**反主題色**的方向。現在
     //! 紙在第 90 檔，後面十檔留給比紙更主題色的東西。
     /// **第 15 檔** — the writing, one small step back, for the *other* word in
-    /// an alternated pair (`:word-show ink`, #278).
+    /// an alternated pair (`:word-mark ink`, #278).
     ///
     /// Warning: **Not [`ASIDE`].** That rung is 「read this, it is not the prose」 —
     /// a reading, a 拆分, a candidate's number — and at 第 25 it is far enough
@@ -2328,6 +2329,10 @@ impl Config {
                 .to_string(),
         );
     }
+    // 2026-10-25: on/off went into `word_mark`, as its `off`.
+    if raw.editor.show_segmentation.is_some() {
+        problems.push("show_segmentation 已經没有了——改成 word_mark = \"off\"".to_string());
+    }
 
     // …and a setting that changed **shape** is said out loud too.
     // `tatechuyoko` was a switch until 2026-09-21 and is a count now, and
@@ -2450,9 +2455,9 @@ impl Config {
         }
     }
     if let Some(word) = raw.editor.word_mark.as_deref() {
-        if yumete_cjk::WordMark::parse(word).is_none() {
+        if word != "off" && yumete_cjk::WordMark::parse(word).is_none() {
             problems.push(format!(
-                "[editor] word_mark = \"{word}\" 只能是 tint、ink、color、line"
+                "[editor] word_mark = \"{word}\" 只能是 off、color、ink、tint、line"
             ));
         }
     }
@@ -3601,9 +3606,6 @@ impl RawConfig {
         if let Some(symbol) = self.editor.indent_symbol {
             config.editor.indent_symbol = symbol;
         }
-        if let Some(on) = self.editor.show_segmentation {
-            config.editor.show_segmentation = on;
-        }
         if let Some(level) = self
             .editor
             .word_level
@@ -3612,13 +3614,16 @@ impl RawConfig {
         {
             config.editor.word_level = level;
         }
-        if let Some(mark) = self
-            .editor
-            .word_mark
-            .as_deref()
-            .and_then(yumete_cjk::WordMark::parse)
-        {
-            config.editor.word_mark = mark;
+        // `off` is one of the ways (2026-10-25); naming a way turns it on.
+        match self.editor.word_mark.as_deref() {
+            Some("off") => config.editor.show_segmentation = false,
+            Some(word) => {
+                if let Some(mark) = yumete_cjk::WordMark::parse(word) {
+                    config.editor.word_mark = mark;
+                    config.editor.show_segmentation = true;
+                }
+            }
+            None => {}
         }
         if let Some(way) = self
             .editor
@@ -4375,12 +4380,21 @@ mod tests {
         let c = Config::from_toml(
             r##"
             [editor]
-            show_segmentation = true
+            word_mark = "line"
             word_level = "strict"
             "##,
         );
         assert!(c.editor.show_segmentation);
+        assert_eq!(c.editor.word_mark, yumete_cjk::WordMark::Line);
         assert_eq!(c.editor.word_level, yumete_cjk::WordLevel::Strict);
+        // `off` is one of the ways (2026-10-25), and the old switch is gone,
+        // said out loud rather than dropped.
+        let c = Config::from_toml("[editor]\nword_mark = \"off\"\n");
+        assert!(!c.editor.show_segmentation);
+        let raw: RawConfig = toml::from_str("[editor]\nshow_segmentation = false\n").unwrap();
+        let mut problems = Vec::new();
+        Config::complain_about(&raw, &mut problems);
+        assert!(problems.iter().any(|p| p.contains("word_mark = \"off\"")), "{problems:?}");
         // A word nobody defined keeps the default rather than refusing the file.
         let c = Config::from_toml("[editor]\nword_level = \"whatever\"\n");
         assert_eq!(c.editor.word_level, yumete_cjk::WordLevel::Balanced);

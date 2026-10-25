@@ -82,11 +82,12 @@ pub enum WikiCommand {
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
     Report,
-    /// `:word-show on|off` — the colour that says where the boundaries fell.
-    /// `None` flips it.
-    Show(Option<bool>),
-    /// `:word-show tint|ink` — which of the two ways it is drawn: under the
-    /// writing, or in the writing (Feature #278). Turns the overlay on.
+    /// `:word-mark` bare — how the boundaries are marked, or that they are not.
+    MarkReport,
+    /// `:word-mark off` — no mark at all.
+    Unmark,
+    /// `:word-mark color|ink|tint|line` — which way the boundaries are drawn,
+    /// which also turns the mark on (Feature #278).
     Mark(yumete_cjk::WordMark),
     /// `:word-list` — the same report, from the list's side.
     List,
@@ -2514,13 +2515,6 @@ const VERTICAL_KEY_WAYS: &[Word] = &[
     },
 ];
 
-/// What `:word-show` may be given — **four words, not two**.
-///
-/// The parser has always taken `tint` and `ink` here (and 底色/字色, which
-/// `WordMark::parse` reads), while the table declared only 「on｜off」: so the two
-/// drawings ran, and the menu that exists to say what may follow `show` never
-/// mentioned them. Same shape as §5.2.2 fault 7 — a word the editor accepts
-/// and no reader can find is a word only its author has.
 /// How much of a reading is drawn — the same three levels `:render` has.
 const RUBY_LEVELS: &[Word] = &[
     Word { name: "off", help: "cmd.ruby.off", needs: &[] },
@@ -2534,35 +2528,35 @@ const DIALECTS: &[Word] = &[
     Word { name: "typst", help: "cmd.ruby.format.typst", needs: &[] },
 ];
 
-const WORD_SHOW: &[Word] = &[
-    Word {
-        name: "on",
-        help: "cmd.on-off.on",
-        needs: &[],
-    },
+/// What `:word-mark` may be given: `off` and the four ways (2026-10-25).
+///
+/// Every word the parser takes is listed (底色/字色 too, through
+/// `WordMark::parse`): a word the editor accepts and no reader can find is a
+/// word only its author has — §5.2.2 fault 7.
+const WORD_MARKS: &[Word] = &[
     Word {
         name: "off",
         help: "hint.close",
         needs: &[],
     },
     Word {
-        name: "tint",
-        help: "cmd.word-show.tint",
+        name: "color",
+        help: "cmd.word-mark.color",
         needs: &[],
     },
     Word {
         name: "ink",
-        help: "cmd.word-show.ink",
+        help: "cmd.word-mark.ink",
         needs: &[],
     },
     Word {
-        name: "color",
-        help: "cmd.word-show.color",
+        name: "tint",
+        help: "cmd.word-mark.tint",
         needs: &[],
     },
     Word {
         name: "line",
-        help: "cmd.word-show.line",
+        help: "cmd.word-mark.line",
         needs: &[],
     },
 ];
@@ -3153,28 +3147,29 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::Word(WordCommand::Report))),
     },
     Entry {
-        name: "word-show",
+        name: "word-mark",
         aliases: &[],
-        help: "cmd.word-topics.show",
+        help: "cmd.word-topics.mark",
         needs: &[],
         params: &[Param::WordsOr {
-            of: WORD_SHOW,
+            of: WORD_MARKS,
             default: None,
             or: "字色｜墨色",
         }],
         build: Some(|p| {
-            // `:word-show 字色` is the same question as `:word-show on` — how
-            // this is drawn — so it lives under the same command rather than
-            // making the writer learn a second one.
+            // **One choice, `off` among the ways** (2026-10-25). It was
+            // `:word-show on|off` beside the ways — two settings in one argument:
+            // `on` meant「whichever way it was last」 and naming a way turned it
+            // on as well. Now every value says what the page will show, as
+            // `:wiki-mark` and `:render` do.
             Ok(Command::Word(match p.arg(0) {
-                None => WordCommand::Show(None),
-                Some("on") => WordCommand::Show(Some(true)),
-                Some("off") => WordCommand::Show(Some(false)),
+                None => WordCommand::MarkReport,
+                Some("off") => WordCommand::Unmark,
                 Some(how) => match yumete_cjk::WordMark::parse(how) {
                     Some(mark) => WordCommand::Mark(mark),
                     None => {
                         return Err(CommandError::InvalidArgument {
-                            command: "word-show",
+                            command: "word-mark",
                             value: how.to_string(),
                         })
                     }
@@ -5037,6 +5032,8 @@ const RENAMED: &[(&str, &str)] = &[
     ("source", "render"),
     ("view-dense", "view-margin"),
     ("wall", "write-all"),
+    // One choice now, `off` among the ways (2026-10-25).
+    ("word-show", "word-mark"),
     ("wysiwyg", "render"),
 ];
 
@@ -6335,10 +6332,13 @@ mod tests {
     fn parses_segment_toggle() {
         // 分詞邊界 is one subject and one command now.
         assert_eq!(parse(":word"), Ok(Command::Word(WordCommand::Report)));
+        assert_eq!(parse(":word-mark"), Ok(Command::Word(WordCommand::MarkReport)));
+        assert_eq!(parse(":word-mark off"), Ok(Command::Word(WordCommand::Unmark)));
         assert_eq!(
-            parse(":word-show on"),
-            Ok(Command::Word(WordCommand::Show(Some(true))))
+            parse(":word-mark line"),
+            Ok(Command::Word(WordCommand::Mark(yumete_cjk::WordMark::Line)))
         );
+        assert!(parse(":word-mark on").is_err(), "`on` is gone: name the way");
         assert_eq!(parse(":word-list"), Ok(Command::Word(WordCommand::List)));
         assert_eq!(
             parse(":word-list-reload"),
@@ -6824,7 +6824,7 @@ mod tests {
     #[test]
     fn a_subcommand_written_with_a_space_says_the_spelling() {
         for (line, name, word) in [
-            (":word show off", "word", "show"),
+            (":word mark off", "word", "mark"),
             (":buffer next", "buffer", "next"),
             (":write all", "write", "all"),
             (":write as", "write", "as"),
@@ -6852,7 +6852,7 @@ mod tests {
             Err(CommandError::TakesNoArgument { value, .. }) if value == "zzz"
         ));
         // …and the hyphenated spellings themselves go through.
-        assert!(parse(":word-show off").is_ok());
+        assert!(parse(":word-mark off").is_ok());
         assert!(parse(":buffer-next").is_ok());
         // A file really called `all` is still writable, spelled as a path.
         assert!(matches!(parse(":write ./all"), Ok(Command::Write(Some(p))) if p == "./all"));

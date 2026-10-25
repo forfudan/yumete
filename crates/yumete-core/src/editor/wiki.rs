@@ -300,7 +300,7 @@ impl WikiView<'_> {
 impl Editor {
     /// `:wiki panel` — put the 百科 page up (or take it down), and leave the
     /// keys where they are.
-    /// `:wiki-panel [on|off]` — `None` 切換，和 `:word-show` 同一套。
+    /// `:wiki-panel [on|off]` — `None` 切換，和 `:word-mark` 同一套。
     fn show_wiki_panel(&mut self, want: crate::command::Switch) {
         let open = self.showing(crate::sidebar::View::Info);
         let want = want.over(open.is_some());

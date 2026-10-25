@@ -1855,9 +1855,9 @@ find = "百科 詞條 词条 在哪 找不到 wiki where"
 [[message]]
 # : 命令選單裏 word 那一項的説明(commands 組)
 key = "cmd.commands.word"
-zht = "分詞：哪一份詞表、著色、粒度"
-zhs = "分词：哪一份词表、著色、粒度"
-en = "words: which list, the tint, the level"
+zht = "分詞：哪一份詞表、標記、粒度"
+zhs = "分词：哪一份词表、标记、粒度"
+en = "words: which list, the mark, the level"
 find = "分詞 分词 詞表 词表 粒度 segmentation dictionary"
 
 [[message]]
@@ -3118,36 +3118,36 @@ en = "reread both word lists, this book's and the global one"
 find = "詞表 词表 重讀 重读 刷新 reload"
 
 [[message]]
-# : 命令選單裏 color 那一項的説明(word-show 組)
-key = "cmd.word-show.color"
+# : 命令選單裏 color 那一項的説明(word-mark 組)
+key = "cmd.word-mark.color"
 zht = "換墨的顏色：一半暖一半冷，明度不動(出廠)"
 zhs = "换墨的颜色：一半暖一半冷，明度不动(出厂)"
 en = "a second hue at the same lightness (the default)"
-find = "色相 顏色 颜色 藍黃 蓝黄 color hue"
+find = "標記 标记 mark 色相 顏色 颜色 藍黃 蓝黄 color hue"
 
 [[message]]
-# : 命令選單裏 ink 那一項的説明(word-show 組)
-key = "cmd.word-show.ink"
+# : 命令選單裏 ink 那一項的説明(word-mark 組)
+key = "cmd.word-mark.ink"
 zht = "換墨色：紙不動，隔一個詞的字本身退後一格"
 zhs = "换墨色：纸不动，隔一个词的字本身退后一格"
 en = "mark by ink: the paper stays, every other word steps back"
-find = "分詞 分词 著色 着色 字色 文字 ink"
+find = "標記 标记 mark 分詞 分词 著色 着色 字色 文字 ink"
 
 [[message]]
-# : 命令選單裏 line 那一項的説明(word-show 組)
-key = "cmd.word-show.line"
+# : 命令選單裏 line 那一項的説明(word-mark 組)
+key = "cmd.word-mark.line"
 zht = "詞下畫一條淡線，字與紙都不動"
 zhs = "词下画一条淡线，字与纸都不动"
 en = "a faint rule under the word, ink and paper untouched"
-find = "線 线 下劃線 下划线 分界 line rule underline sep"
+find = "標記 标记 mark 線 线 下劃線 下划线 分界 line rule underline sep"
 
 [[message]]
-# : 命令選單裏 tint 那一項的説明(word-show 組)
-key = "cmd.word-show.tint"
+# : 命令選單裏 tint 那一項的説明(word-mark 組)
+key = "cmd.word-mark.tint"
 zht = "鋪底色：隔一個詞在紙上一層極淡的色"
 zhs = "铺底色：隔一个词在纸上一层极淡的色"
 en = "mark by tint: a very faint ground under every other word"
-find = "分詞 分词 著色 着色 底色 背景 tint"
+find = "標記 标记 mark 分詞 分词 著色 着色 底色 背景 tint"
 
 [[message]]
 # : 命令選單裏 discover 那一項的説明(word-topics 組)
@@ -3198,12 +3198,12 @@ en = "which word list is in force"
 find = "詞表 词表 list"
 
 [[message]]
-# : 命令選單裏 show 那一項的説明(word-topics 組)
-key = "cmd.word-topics.show"
-zht = "分詞著色"
-zhs = "分词著色"
-en = "the word tint"
-find = "分詞 分词 著色 着色 show"
+# : 命令選單裏 mark 那一項的説明(word-topics 組)
+key = "cmd.word-topics.mark"
+zht = "分詞標記"
+zhs = "分词标记"
+en = "word mark"
+find = "分詞 分词 標記 标记 著色 着色 mark"
 
 [[message]]
 # : 命令選單裏 0 那一項的説明(wrap 組)
@@ -9798,20 +9798,6 @@ zhs = "把注音排在字的旁边。默认关：文件里是什么，画面上�
 en = "show ruby"
 
 [[message]]
-# 設置：词语着色
-key = "set.editor.show-segmentation"
-zht = "詞語着色"
-zhs = "词语着色"
-en = "show segmentation"
-
-[[message]]
-# 設置：词语着色——一句話
-key = "set.editor.show-segmentation.hint"
-zht = "按詞給正文上色，一眼看得出編輯器把哪幾個字當成一個詞"
-zhs = "按词给正文上色，一眼看得出编辑器把哪几个字当成一个词"
-en = "show segmentation"
-
-[[message]]
 # 設置：智能大小写
 key = "set.editor.smart-case"
 zht = "智能大小寫"
@@ -9966,17 +9952,17 @@ zhs = "多容易把几个字并成一个词。严：只认没争议的；松：�
 en = "word level"
 
 [[message]]
-# 設置：词怎么画
+# 設置：分词标记
 key = "set.editor.word-mark"
-zht = "詞怎麽畫"
-zhs = "词怎么画"
+zht = "分詞標記"
+zhs = "分词标记"
 en = "word mark"
 
 [[message]]
-# 設置：词怎么画——一句話
+# 設置：分词标记——一句話
 key = "set.editor.word-mark.hint"
-zht = "詞語着色用哪一種畫法"
-zhs = "词语着色用哪一种画法"
+zht = "分詞標記用哪一種畫法"
+zhs = "分词标记用哪一种画法"
 en = "word mark"
 
 [[message]]
@@ -10666,6 +10652,13 @@ key = "set.pick.word-mark.line"
 zht = "下劃線"
 zhs = "下划线"
 en = "word mark.line"
+
+[[message]]
+# 設置面板：分詞標記不畫
+key = "set.pick.word-mark.off"
+zht = "不畫"
+zhs = "不画"
+en = "word mark.off"
 
 [[message]]
 # setting: how to show word segmentation - tint
@@ -12550,39 +12543,39 @@ zhs = "词表已重读：{0}"
 en = "word lists reread: {0}"
 
 [[message]]
-# 分詞著色換成「色相」：明度一樣，換顏色
+# 分詞標記換成「色相」：明度一樣，換顏色
 key = "word.mark-color"
-zht = "分詞著色：色相差異"
-zhs = "分词著色：色相差异"
-en = "word tint: hue difference"
+zht = "分詞標記：色相差異"
+zhs = "分词标记：色相差异"
+en = "word mark: hue difference"
 
 [[message]]
-# 分詞著色改用字色：不動紙，隔一個詞換一種墨色
+# 分詞標記改用字色：不動紙，隔一個詞換一種墨色
 key = "word.mark-ink"
-zht = "分詞著色：字色差異"
-zhs = "分词著色：字色差异"
-en = "word tint: ink difference"
+zht = "分詞標記：字色差異"
+zhs = "分词标记：字色差异"
+en = "word mark: ink difference"
 
 [[message]]
-# 分詞著色換成「線」：字本身不動，詞底下畫一道淡線
+# 分詞標記換成「線」：字本身不動，詞底下畫一道淡線
 key = "word.mark-line"
-zht = "分詞著色：底部横線"
-zhs = "分词著色：底部横线"
-en = "word tint: a rule under the word"
+zht = "分詞標記：底部横線"
+zhs = "分词标记：底部横线"
+en = "word mark: a rule under the word"
 
 [[message]]
 # 竪排選了「線」：畫不了，因爲 Insert 的光標就是那條下橫線
 key = "word.mark-line-not-vertical"
-zht = "竪排無法使用底部横線。分詞著色關閉"
-zhs = "竖排无法使用底部横线。分词著色关闭"
-en = "no word rule in vertical layout. word tint off"
+zht = "竪排無法使用底部横線。分詞標記關閉"
+zhs = "竖排无法使用底部横线。分词标记关闭"
+en = "no word rule in vertical layout. word mark off"
 
 [[message]]
-# 分詞著色改用底色：隔一個詞在紙上鋪一層淡色
+# 分詞標記改用底色：隔一個詞在紙上鋪一層淡色
 key = "word.mark-tint"
-zht = "分詞著色：底色差異"
-zhs = "分词著色：底色差异"
-en = "word tint: background color difference"
+zht = "分詞標記：底色差異"
+zhs = "分词标记：底色差异"
+en = "word mark: background color difference"
 
 [[message]]
 # 没有資料目錄，没有全域詞表
@@ -12622,26 +12615,16 @@ en = "宇浩 language model, {0} entries"
 [[message]]
 # 分詞現在的狀態
 key = "word.status"
-zht = "分詞：{0} · {1} · 著色{2}"
-zhs = "分词：{0} · {1} · 著色{2}"
-en = "words: {0} · {1} · tint {2}"
+zht = "分詞：{0} · {1} · 標記{2}"
+zhs = "分词：{0} · {1} · 标记{2}"
+en = "words: {0} · {1} · mark {2}"
 
 [[message]]
-# 分詞著色關掉
+# 分詞標記關掉
 key = "word.tint-off"
-zht = "分詞著色：關"
-zhs = "分词著色：关"
-en = "word tint: off"
-
-[[message]]
-# 分詞著色打開
-key = "word.tint-on"
-zht = "分詞著色：開"
-zhs = "分词著色：开"
-en = "word tint: on"
-
-
-# ── words ─────────────────────────────────────────────────────────────
+zht = "分詞標記：關"
+zhs = "分词标记：关"
+en = "word mark: off"
 
 [[message]]
 # :word-habit 一個詞都没有多説
