@@ -22,8 +22,8 @@ in `docs/development.md` §5.2.
   inside braces belongs to the glob, as in VS Code's; the field used to split there
   and report the whole search as written wrong.
 
-- **A replacement across files says which read-only files it skipped**: 「共替換 2
-  處，跳過 1 個只讀文件」 instead of a count one short with no reason. `r` on a hit in a
+- **A replacement across files says how many read-only files it skipped**, instead
+  of a count one short with no reason. `r` on a hit in a
   read-only file says the file is read-only, not that the line has moved.
 
 - **A window too narrow for a sidebar draws none.** Under 36 columns the keys already
@@ -31,7 +31,8 @@ in `docs/development.md` §5.2.
   and an ellipsis to a row.
 
 - **`:help` no longer lists `D C`**, which are not bound under the helix keymap, and
-  `:toc`'s argument reads `<第幾條>`: it goes to that heading, not that level.
+  the label on `:toc`'s argument says it is the heading's place in the list, not a
+  heading level.
 
 - **`:w` keeps a hard link.** A file with a second name was saved by writing a new
   file and renaming it over the old one, so the other name went on holding the old
