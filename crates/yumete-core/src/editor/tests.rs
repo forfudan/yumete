@@ -17491,18 +17491,19 @@ fn aligning_a_table_measures_what_the_terminal_draws() {
 #[test]
 fn the_word_command_is_one_subject_from_three_sides() {
     let mut ed = Editor::new();
-    // 著色: named on and off, and **reported** when neither is said
-    // （2026-10-09 作者定：裸的報告，帶參數的纔設，同 `:view-numbers-fill`）。
+    // 標記: one choice, `off` among the ways, and **reported** when none is
+    // said（2026-10-09 定：裸的報告，帶參數的纔設；2026-10-25 併成一選）。
     assert!(!ed.segmentation_visible());
-    ed.execute(":word-show on").unwrap();
+    ed.execute(":word-mark line").unwrap();
     assert!(ed.segmentation_visible());
-    ed.execute(":word-show").unwrap();
+    ed.execute(":word-mark").unwrap();
     assert!(ed.segmentation_visible(), "裸的不許撥動它");
-    assert!(ed.status().contains("開") || ed.status().contains("on"), "{}", ed.status());
-    ed.execute(":word-show off").unwrap();
+    assert_eq!(ed.status(), say!("word.mark-line"));
+    ed.execute(":word-mark off").unwrap();
     assert!(!ed.segmentation_visible());
-    ed.execute(":word-show").unwrap();
+    ed.execute(":word-mark").unwrap();
     assert!(!ed.segmentation_visible(), "裸的不許撥動它");
+    assert_eq!(ed.status(), say!("word.tint-off"));
 
     // 粒度: it says which, and it takes which.
     ed.execute(":word-level").unwrap();

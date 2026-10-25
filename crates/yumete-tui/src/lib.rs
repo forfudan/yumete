@@ -12033,7 +12033,7 @@ fn draw_horizontal(
             // 這一段是按**字符**切的，而分詞的着色也是按字符給的下標；一個詞的邊
             // 界落在基字和它的組合符號之間，那個符號就自己成了一段，而一段只有一
             // 個零寬符號**畫不出任何一格**——屏幕上 `が`（か＋U+3099）成了 `か`，
-            // **換了一個字**，而稿子裏那兩個碼位都在。`:word-show off` 就好了，
+            // **換了一個字**，而稿子裏那兩個碼位都在。`:word-mark off` 就好了，
             // 所以是着色切的。
             //
             // 往後吞掉後面那些零寬的，一段就總是整字整字的。
@@ -19230,7 +19230,7 @@ fn squeezed(text: &str) -> String {
             editor.on_key(Key::Char(c));
         }
         editor.on_key(Key::Esc);
-        assert!(editor.execute("word-show 字色").is_ok());
+        assert!(editor.execute("word-mark 字色").is_ok());
         assert_eq!(editor.word_mark(), yumete_cjk::WordMark::Ink);
 
         let config = Config::default();
@@ -22752,7 +22752,7 @@ fn squeezed(text: &str) -> String {
         for text in ["A\u{304b}\u{3099}B\n", "\u{306f}\u{309a}\n", "e\u{301}x\n"] {
             let mut editor = editor_with(text);
             editor.set_segmenter(Box::new(SplitsClusters));
-            editor.execute("word-show on").unwrap();
+            editor.execute("word-mark color").unwrap();
             let shot = frame_to_text(
                 &mut editor,
                 &config,

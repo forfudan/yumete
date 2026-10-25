@@ -10,6 +10,17 @@ use super::*;
 const BIGGEST_TO_DETECT: usize = 16 * 1024 * 1024;
 
 impl Editor {
+    /// What `:word-mark` says the page shows: `off`, or which way.
+    fn word_mark_said(&self) -> String {
+        match (self.show_segmentation, self.word_mark) {
+            (false, _) => say!("word.tint-off"),
+            (true, yumete_cjk::WordMark::Tint) => say!("word.mark-tint"),
+            (true, yumete_cjk::WordMark::Ink) => say!("word.mark-ink"),
+            (true, yumete_cjk::WordMark::Color) => say!("word.mark-color"),
+            (true, yumete_cjk::WordMark::Line) => say!("word.mark-line"),
+        }
+    }
+
     // ---- Word segmentation (Feature #24) ----------------------------------
 
     /// Forget every answer that was worked out with the segmenter in force.
@@ -99,27 +110,16 @@ impl Editor {
                     self.status = say!("word.mark-line-not-vertical");
                     return Ok(CommandOutcome::Continue);
                 }
-                // Naming a way of drawing it turns it on: nobody asks for 字色
-                // meaning「keep it hidden, but hide it differently」.
                 self.word_mark = mark;
                 self.show_segmentation = true;
-                self.status = match mark {
-                    yumete_cjk::WordMark::Tint => say!("word.mark-tint"),
-                    yumete_cjk::WordMark::Ink => say!("word.mark-ink"),
-                    yumete_cjk::WordMark::Color => say!("word.mark-color"),
-                    yumete_cjk::WordMark::Line => say!("word.mark-line"),
-                };
+                self.status = self.word_mark_said();
             }
-            WordCommand::Show(on) => {
-                // **裸的報告，帶參數的纔設**（2026-10-09 作者定）。同
-                // `:view-numbers-fill`：從前裸的輪替，於是問不出它現在是開還是關。
-                let on = on.unwrap_or(self.show_segmentation);
-                self.show_segmentation = on;
-                self.status = match on {
-                    true => say!("word.tint-on"),
-                    false => say!("word.tint-off"),
-                };
+            WordCommand::Unmark => {
+                self.show_segmentation = false;
+                self.status = self.word_mark_said();
             }
+            // **裸的報告，帶參數的纔設**（2026-10-09 定）：問得出它現在是哪一種。
+            WordCommand::MarkReport => self.status = self.word_mark_said(),
             WordCommand::Reload => {
                 // The book's own list, here; the dictionary underneath it is
                 // the front end's to build, so it is asked for one.
@@ -709,7 +709,7 @@ impl Editor {
     }
 
     /// Say how the overlay marks a word. The config's opening answer; after
-    /// that it is `:word-show tint|ink`.
+    /// that it is `:word-mark tint|ink`.
     pub fn set_word_mark(&mut self, mark: yumete_cjk::WordMark) {
         self.word_mark = mark;
     }

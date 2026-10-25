@@ -164,7 +164,7 @@ pub enum WordMark {
 }
 
 impl WordMark {
-    /// Parse a `:word-show` argument or a `word_mark` config value.
+    /// Parse a `:word-mark` argument or a `word_mark` config value.
     pub fn parse(value: &str) -> Option<WordMark> {
         match value.trim().to_ascii_lowercase().as_str() {
             "tint" | "bg" | "background" | "底色" | "背景" => Some(WordMark::Tint),

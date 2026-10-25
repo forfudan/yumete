@@ -31,6 +31,14 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **⚠️ `:word-show` is `:word-mark`, and it takes one of `off`, `color`, `ink`, `tint`,
+  `line`.** `on` is gone: it meant "whichever way it was drawn last", while naming a
+  way turned the mark on as well, so one argument was setting two things. Every
+  value now says what the page will show, as `:wiki-mark` and `:render` do, and a
+  bare `:word-mark` reports which. In the config, `show_segmentation` is folded into
+  `word_mark = "off"`; a file that still has it is told so. The settings panel's two
+  rows are one. `:word-show` points at the new name.
+
 - **⚠️ The `amber` and `kiln` themes are gone**, to keep the set at ten. A config
   that names either falls back to the default theme.
 

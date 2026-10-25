@@ -1616,7 +1616,7 @@ pub fn draw(
                     // Warning: **線 draws nothing here** (#503). The rule would land
                     // on the cell's bottom edge, which in 縱書 is where the
                     // Insert caret is — a terminal has one horizontal rule per
-                    // cell and the cursor has taken it. `:word-show line` on a
+                    // cell and the cursor has taken it. `:word-mark line` on a
                     // 縱書 page says so and turns the tint off instead; this is
                     // the other door into the same state (the mark was chosen
                     // on a 橫排 page and the layout changed under it).

@@ -203,6 +203,7 @@ const EDITOR_WORD_LEVEL_WAYS: &[Choice] = &[
 ];
 
 const EDITOR_WORD_MARK_WAYS: &[Choice] = &[
+    Choice { word: "off", label: "set.pick.word-mark.off" },
     Choice { word: "color", label: "set.pick.word-mark.color" },
     Choice { word: "ink", label: "set.pick.word-mark.ink" },
     Choice { word: "tint", label: "set.pick.word-mark.tint" },
@@ -494,15 +495,6 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Tick,
         label: "set.editor.diff-gutter",
         hint: "set.editor.diff-gutter.hint",
-        factory: "true",
-    },
-    Setting {
-        table: "editor",
-        key: "show_segmentation",
-        group: Group::Marks,
-        kind: Kind::Tick,
-        label: "set.editor.show-segmentation",
-        hint: "set.editor.show-segmentation.hint",
         factory: "true",
     },
     Setting {
@@ -938,6 +930,8 @@ pub const LATER: &[&str] = &[
 pub const NOT_IN_THE_PANEL: &[&str] = &[
     "editor.screenshot",
     "editor.segmentation_threshold",
+    // Folded into `word_mark` as its `off` (2026-10-25); kept to say so.
+    "editor.show_segmentation",
     // **一張表，面板畫不出來**：勾和數字說不完「哪個鍵配哪個動作」。
     // 2026-10-18 定：不進面板的只有它，風味那一格進（它只是一個勾）。
     "keys.normal",
