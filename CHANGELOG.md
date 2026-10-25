@@ -34,6 +34,11 @@ in `docs/development.md` §5.2.
 - **⚠️ The `amber` and `kiln` themes are gone**, to keep the set at ten. A config
   that names either falls back to the default theme.
 
+- **The line number of every line a selection touches is in the writing's colour**,
+  the rest in the usual grey, as in Zed, VS Code and helix. A line whose break `x`
+  took is lit; the line after it is not. The current search hit's number is still
+  red.
+
 - **A `.jj` or `.svn` checkout is a project.** The project root is the nearest folder
   with a `.yumete`, or else the nearest with a `.git`, `.jj` or `.svn`, as helix's
   markers go; a jj repository without git and an svn checkout used to be rooted

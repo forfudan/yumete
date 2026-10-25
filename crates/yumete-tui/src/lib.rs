@@ -11185,6 +11185,18 @@ fn draw_horizontal(
         None => editor.secondary_selections(),
         Some(_) => Vec::new(),
     };
+    // **The lines a selection touches** carry their number in the writing's
+    // ink rather than the furniture's (2026-10-25, as Zed, VS Code and helix
+    // light theirs). A run ending just past a line break does not light the
+    // line after it: `x` takes the break, not the next line.
+    let lit_lines: Vec<(usize, usize)> = std::iter::once((sel_start, sel_end))
+        .chain(secondary.iter().copied())
+        .map(|(from, to)| {
+            let last = to.saturating_sub(1).max(from).min(rope.len_chars());
+            (rope.char_to_line(from.min(rope.len_chars())), rope.char_to_line(last))
+        })
+        .collect();
+    let lit = |line: usize| lit_lines.iter().any(|&(a, b)| a <= line && line <= b);
     // **The cell you are standing on** (#229). Insert has always been confined
     // to it, and until now the only sign of that was the column name in the
     // status line — so a table you were editing looked exactly like a table you
@@ -11352,9 +11364,10 @@ fn draw_horizontal(
             // is kept** — an arrow in its place would take away the one thing
             // the gutter is for, which is saying *which* line; a coloured
             // number says both at once and costs no column.
-            let band = match hit_line == Some(row.line) && row.starts_line() {
-                true => band.fg(ink.mark()).add_modifier(Modifier::BOLD),
-                false => band.fg(ink.furniture()),
+            let band = match (hit_line == Some(row.line), lit(row.line)) {
+                (true, _) if row.starts_line() => band.fg(ink.mark()).add_modifier(Modifier::BOLD),
+                (_, true) => band.fg(ink.text()),
+                _ => band.fg(ink.furniture()),
             };
             // **helix 的五欄，照它的次序**（`helix-view/src/editor.rs:100`）：
             // 診斷、空、號碼、空、改動條。頭尾兩欄各一格，中間兩格空氣就是
@@ -26494,6 +26507,31 @@ fn squeezed(text: &str) -> String {
         assert_eq!(list_mark("3) a"), Some(0..2));
         assert_eq!(list_mark("-a"), None);
         assert_eq!(list_mark("1999 was"), None);
+    }
+
+
+    /// **The lines a selection touches carry a lit number** (2026-10-25): the
+    /// writing's ink, where every other number is furniture. `x` takes a line
+    /// and its break, and the line after it stays unlit.
+    #[test]
+    fn a_selected_line_has_its_number_in_the_writings_ink() {
+        let mut editor = editor_with("one\ntwo\nthree\nfour\n");
+        editor.on_key(Key::Char('j'));
+        editor.on_key(Key::Char('x'));
+        editor.on_key(Key::Char('x'));
+        let config = Config::default();
+        let buffer = render(&editor, &config, 30, 8);
+        let number = |row: u16| {
+            (0..6)
+                .map(|x| buffer[(x, row)].clone())
+                .find(|cell| cell.symbol().trim().chars().all(|c| c.is_ascii_digit()) && !cell.symbol().trim().is_empty())
+                .and_then(|cell| cell.style().fg)
+        };
+        let ink = ink(&config);
+        assert_eq!(number(0), Some(ink.furniture()), "line 1 is not selected");
+        assert_eq!(number(1), Some(ink.text()), "line 2 is");
+        assert_eq!(number(2), Some(ink.text()), "and line 3");
+        assert_eq!(number(3), Some(ink.furniture()), "line 4 is past the break `x` took");
     }
 
 }
