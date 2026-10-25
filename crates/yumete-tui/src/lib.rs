@@ -2741,7 +2741,14 @@ pub fn set_theme(
     // settle 出來的是深色，於是**同一幀裏話和畫對不上**。`settle` 對「有人明說過
     // 明暗」是空操作（`CHOSEN_MOOD`），所以上面那一段剛選過的不會被它蓋掉。
     crate::theme::settle(config, crate::theme::terminal_answer());
-    let mood = match crate::theme::dark() {
+    // **A theme with no light half is drawn dark whatever the mood says**
+    // (2026-10-25), so that is what is reported — and a light mood asked for
+    // out loud is answered, not quietly ignored.
+    let dark_only = crate::theme::dark_only(config);
+    if dark_only && matches!(mood, Some(Mood::Light)) {
+        return say!("theme.dark-only", crate::theme::name(config));
+    }
+    let mood = match crate::theme::dark() || dark_only {
         true => say!("cmd.moods.dark"),
         false => say!("cmd.moods.light"),
     };
@@ -7274,11 +7281,11 @@ pub(crate) fn put_marked_text(
 ) -> u16 {
     let chars: Vec<char> = text.chars().collect();
     let mut styles = vec![base; chars.len()];
-    for span in yumete_core::markdown::spans(text) {
-        let over = markup_style(span.kind, ink);
+    let spans = yumete_core::markdown::spans(text);
+    for span in &spans {
         let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
-        for one in styles.iter_mut().take(hi).skip(lo) {
-            *one = one.patch(over);
+        for (i, one) in styles.iter_mut().enumerate().take(hi).skip(lo) {
+            *one = one.patch(markup_style_in(span, &spans, chars.get(i).copied(), ink));
         }
     }
     // 相鄰同樣式的併成一段再畫，省掉逐格一次 `put_text`。
@@ -7932,6 +7939,57 @@ fn tab_at(
         .map(|(_, _, i)| i)
 }
 
+/// [`markup_style`], with the rest of the line to hand: under a borrowed theme
+/// a mark takes the colour of **what it marks** (2026-10-25).
+///
+/// One Dark Pro colours `**` as bold, a backtick yellow, a link's brackets red
+/// and its address purple; this editor's own themes set every mark back in one
+/// grey, which is what [`markup_style`] answers alone. `ch` is the character
+/// being drawn: a link's closing mark is `](address)` in one run, and only its
+/// brackets are brackets.
+pub(crate) fn markup_style_in(
+    span: &yumete_core::markdown::Span,
+    all: &[yumete_core::markdown::Span],
+    ch: Option<char>,
+    ink: crate::theme::Palette,
+) -> Style {
+    use yumete_core::markdown::Kind;
+    if span.kind != Kind::Marker || !ink.borrowed() {
+        return markup_style(span.kind, ink);
+    }
+    let owner = all
+        .iter()
+        .find(|s| s.construct == span.construct && s.kind != Kind::Marker);
+    let pin = |pick: fn(&yumete_config::Pinned) -> (u8, u8, u8)| {
+        Style::default().fg(ink.pinned(pick).unwrap_or_else(|| ink.marker()))
+    };
+    match owner.map(|o| o.kind) {
+        Some(Kind::Strong) => pin(|p| p.bold).add_modifier(Modifier::BOLD),
+        Some(Kind::Emphasis) => pin(|p| p.italic).add_modifier(Modifier::ITALIC),
+        Some(Kind::Code) => pin(|p| p.code_mark),
+        Some(Kind::Strike) => pin(|p| p.deleted),
+        Some(Kind::Link | Kind::WikiLink) => match ch {
+            Some('[' | ']' | '(' | ')' | '!') => pin(|p| p.link_mark),
+            _ => pin(|p| p.link_address),
+        },
+        _ => markup_style(span.kind, ink),
+    }
+}
+
+/// **Where a list item's marker is** in its line — `-`, `*`, `+`, `3.` or `3)` —
+/// as a char range, for a borrowed theme to colour it (2026-10-25).
+pub(crate) fn list_mark(line: &str) -> Option<std::ops::Range<usize>> {
+    let indent = line.chars().take_while(|c| *c == ' ' || *c == '\t').count();
+    let rest: Vec<char> = line.chars().skip(indent).collect();
+    let digits = rest.iter().take_while(|c| c.is_ascii_digit()).count();
+    let len = match (rest.first(), digits) {
+        (Some('-' | '*' | '+'), 0) => 1,
+        (_, 1..=9) if matches!(rest.get(digits), Some('.' | ')')) => digits + 1,
+        _ => return None,
+    };
+    matches!(rest.get(len), Some(' ' | '\t') | None).then_some(indent..indent + len)
+}
+
 /// How a Markdown run is set.
 ///
 /// The markup itself is *shown* and set back; what it marks is set forward.
@@ -7939,6 +7997,26 @@ fn tab_at(
 /// is in it, and says which part of that is scaffolding.
 pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme::Palette) -> Style {
     use yumete_core::markdown::Kind;
+    // **A borrowed theme's Markdown is its own** (2026-10-25): One Dark Pro's
+    // `markup.*` colours, value for value. The weight stays this editor's — a
+    // terminal cannot make a heading bigger, so it is still bold.
+    if ink.borrowed() {
+        let pin = |pick: fn(&yumete_config::Pinned) -> (u8, u8, u8)| {
+            Style::default().fg(ink.pinned(pick).unwrap_or_else(|| ink.text()))
+        };
+        match kind {
+            Kind::Heading => return pin(|p| p.heading).add_modifier(Modifier::BOLD),
+            Kind::HeadingMark => return pin(|p| p.heading),
+            Kind::Strong => return pin(|p| p.bold).add_modifier(Modifier::BOLD),
+            Kind::Emphasis => return pin(|p| p.italic).add_modifier(Modifier::ITALIC),
+            Kind::Code => return pin(|p| p.code),
+            Kind::Link | Kind::WikiLink => {
+                return pin(|p| p.link_text).add_modifier(Modifier::UNDERLINED);
+            }
+            Kind::Strike => return pin(|p| p.deleted).add_modifier(Modifier::CROSSED_OUT),
+            _ => {}
+        }
+    }
     // **Weight for prose, 品色 for what is not prose** (#449).
     //
     // This said 「weight, not hue」 outright, and it was half right. Bold,
@@ -8062,11 +8140,34 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         Kind::Token(token) => {
             use yumete_core::code::Token;
             let fg = |c| Style::default().fg(c);
+            // **A borrowed theme's code is its own, value for value**
+            // (2026-10-25): a reader who knows One Dark finds every keyword
+            // where it was. Operators and punctuation are the text colour there.
+            if ink.borrowed() {
+                let pin = |pick: fn(&yumete_config::Pinned) -> (u8, u8, u8)| {
+                    fg(ink.pinned(pick).unwrap_or_else(|| ink.text()))
+                };
+                return match token {
+                    Token::Plain | Token::Operator | Token::Punctuation => pin(|p| p.plain),
+                    Token::Keyword => pin(|p| p.keyword),
+                    Token::Builtin => pin(|p| p.this),
+                    Token::Function => pin(|p| p.function),
+                    Token::BuiltinFunction => pin(|p| p.builtin_function),
+                    Token::Escape => pin(|p| p.escape),
+                    Token::Property => pin(|p| p.property),
+                    Token::Attribute => pin(|p| p.attribute),
+                    Token::Type => pin(|p| p.types),
+                    Token::String => pin(|p| p.string),
+                    Token::Tag => pin(|p| p.tag),
+                    Token::Constant => pin(|p| p.constant),
+                    Token::Comment => pin(|p| p.comment).add_modifier(Modifier::ITALIC),
+                };
+            }
             match token {
                 Token::Plain | Token::Operator => fg(ink.text()),
                 Token::Keyword => fg(ink.purple()),
                 Token::Builtin => fg(ink.pink()),
-                Token::Function => fg(ink.azure()),
+                Token::Function | Token::BuiltinFunction => fg(ink.azure()),
                 Token::Escape => fg(ink.cyan()),
                 Token::Property | Token::Attribute => fg(ink.gold()),
                 Token::Type => fg(ink.amber()),
@@ -8220,6 +8321,14 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         // on every line of a quote and a fence has its own ``` — **except
         // inside a `:::`**, where the callout's own wash has to carry on
         // underneath or the block is cut in half (#468).
+        // A borrowed theme's quote is its `markup.quote`, and its fence is the
+        // text colour — One Dark Pro has no rule for a fence's body (2026-10-25).
+        Block::Quote { inside } if ink.borrowed() => {
+            Some(inked(ink.pinned(|p| p.quote).unwrap_or_else(|| ink.green()), inside, ink))
+        }
+        Block::Code { inside } if ink.borrowed() => {
+            Some(inked(ink.pinned(|p| p.plain).unwrap_or_else(|| ink.text()), inside, ink))
+        }
         Block::Quote { inside } => Some(inked(ink.green(), inside, ink)),
         Block::Code { inside } => Some(inked(ink.purple(), inside, ink)),
         // A callout keeps its ground whatever `:theme-fill` says: 「這是一塊」
@@ -11505,8 +11614,23 @@ fn draw_horizontal(
                 if run.kind == yumete_core::markdown::Kind::Highlight {
                     highlighted.push((a.min(b), b));
                 }
-                for style in styles.iter_mut().take(b).skip(a.min(b)) {
-                    *style = style.patch(markup_style(run.kind, ink));
+                for (i, style) in styles.iter_mut().enumerate().take(b).skip(a.min(b)) {
+                    let ch = chars.get(i).copied();
+                    *style = style.patch(markup_style_in(run, runs, ch, ink));
+                }
+            }
+            // A list item's `-` or `3.` in a borrowed theme's colour; this
+            // editor's own themes leave it the writing's (2026-10-25).
+            let item = matches!(
+                blocks.get(row.line),
+                Some(yumete_core::markdown::Block::Item { .. })
+            );
+            if item && start_in_line == 0 && ink.borrowed() {
+                let line: String = chars.iter().collect();
+                if let (Some(at), Some(color)) = (list_mark(&line), ink.pinned(|p| p.list_mark)) {
+                    for style in styles.iter_mut().take(at.end).skip(at.start) {
+                        *style = style.fg(color);
+                    }
                 }
             }
         }
@@ -26270,4 +26394,47 @@ fn squeezed(text: &str) -> String {
         }
         std::fs::remove_dir_all(&dir).ok();
     }
+    /// **One Dark's code and Markdown are One Dark Pro's, value for value**
+    /// (2026-10-25), and a mark takes the colour of what it marks.
+    #[test]
+    fn one_dark_paints_code_and_markdown_as_one_dark_pro_does() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::{spans, Kind};
+        let theme = yumete_config::ThemeConfig::named("one-dark").expect("one-dark");
+        let ink = crate::theme::Palette::of_theme(&theme, true);
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        let token = |t| markup_style(Kind::Token(t), ink).fg;
+        assert_eq!(token(Token::Keyword), Some(rgb(0xC6_78_DD)));
+        assert_eq!(token(Token::BuiltinFunction), Some(rgb(0x56_B6_C2)));
+        assert_eq!(token(Token::Function), Some(rgb(0x61_AF_EF)));
+        assert_eq!(token(Token::Plain), Some(rgb(0xAB_B2_BF)));
+        assert_eq!(token(Token::Property), Some(rgb(0xE0_6C_75)));
+
+        let line = "**b** [t](u)";
+        let all = spans(line);
+        let at = |i: usize| {
+            let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
+            markup_style_in(span, &all, line.chars().nth(i), ink).fg
+        };
+        assert_eq!(at(0), Some(rgb(0xD1_9A_66)), "`**` is bold's colour");
+        assert_eq!(at(2), Some(rgb(0xD1_9A_66)));
+        assert_eq!(at(6), Some(rgb(0xE0_6C_75)), "`[` is red");
+        assert_eq!(at(7), Some(rgb(0x61_AF_EF)), "the link's text is blue");
+        assert_eq!(at(10), Some(rgb(0xC6_78_DD)), "the address is purple");
+        assert_eq!(at(11), Some(rgb(0xE0_6C_75)), "`)` is red");
+        // This editor's own theme sets every mark back in one grey.
+        let own = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::default(), true);
+        let mark = all.iter().find(|s| s.kind == Kind::Marker).unwrap();
+        assert_eq!(markup_style_in(mark, &all, Some('*'), own), markup_style(Kind::Marker, own));
+    }
+
+    #[test]
+    fn a_list_mark_is_found_where_markdown_puts_one() {
+        assert_eq!(list_mark("- a"), Some(0..1));
+        assert_eq!(list_mark("  12. a"), Some(2..5));
+        assert_eq!(list_mark("3) a"), Some(0..2));
+        assert_eq!(list_mark("-a"), None);
+        assert_eq!(list_mark("1999 was"), None);
+    }
+
 }

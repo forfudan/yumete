@@ -34,6 +34,9 @@ pub enum Token {
     Builtin,
     /// A function or method, defined or called.
     Function,
+    /// A function the language gives you — `print`, `len` (2026-10-25: One
+    /// Dark colours it apart from the rest, so the token has to say it).
+    BuiltinFunction,
     /// A type, a class, a constructor.
     Type,
     /// A field, an object's key, a CSS property.
@@ -773,6 +776,7 @@ fn token_of(capture: &str) -> Paint {
         ("keyword" | "import" | "media" | "charset" | "keyframes" | "namespace" | "supports", _) => {
             Token::Keyword
         }
+        ("function", "builtin") => Token::BuiltinFunction,
         ("function", _) => Token::Function,
         ("type" | "constructor" | "label", _) => Token::Type,
         ("tag", _) => Token::Tag,

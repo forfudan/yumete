@@ -160,13 +160,13 @@ const THEME_NAMES: &[Choice] = &[
     Choice { word: "ink", label: "cmd.themes.ink" },
     Choice { word: "bw", label: "cmd.themes.bw" },
     Choice { word: "cyanotype", label: "cmd.themes.cyanotype" },
-    Choice { word: "amber", label: "cmd.themes.amber" },
     Choice { word: "mogao", label: "cmd.themes.mogao" },
     Choice { word: "morandi", label: "cmd.themes.morandi" },
     Choice { word: "firefly", label: "cmd.themes.firefly" },
     Choice { word: "meridian", label: "cmd.themes.meridian" },
     Choice { word: "kiln", label: "cmd.themes.kiln" },
     Choice { word: "complement", label: "cmd.themes.complement" },
+    Choice { word: "one-dark", label: "cmd.themes.one-dark" },
 ];
 
 /// 出廠的碼表，**與 `command.rs` 的 `SCHEMES` 同名同序**（同上）。

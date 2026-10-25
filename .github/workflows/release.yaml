@@ -346,6 +346,10 @@ jobs:
           # the same way: Apache-2.0 §4(a) says a copy travels with the thing
           # you hand over, so it stays however early the version is.
           cp LICENSE "${STAGE}/"
+          # …and the notices of what it borrows, for the same reason: the MIT
+          # licence of a theme whose colours are copied into the binary says
+          # the notice goes with every copy (2026-10-25, `one-dark`).
+          cp -R licenses "${STAGE}/"
           # The manual travels with it: this editor's keys are not vi's, and a
           # reader who installed it from a tap has nowhere else to look. It
           # keeps its repository path, so `README.md`'s own link to

@@ -1113,7 +1113,82 @@ pub struct ThemeConfig {
     /// ground behind it is a second answer to a question nobody asked. On for
     /// whoever wants the code to sit in a box.
     pub fill: bool,
+    /// **A theme with no light half** (2026-10-25, One Dark). In a light mood
+    /// it is drawn dark all the same, and `:theme-mode light` says so.
+    pub dark_only: bool,
+    /// Colours a theme takes **from somewhere else, exactly** — the code and
+    /// the Markdown of a well-known theme — instead of working them out from
+    /// its own accents. `None` for every theme that is this editor's own.
+    pub pinned: Option<Pinned>,
 }
+
+/// **The colours a borrowed theme copies value for value** (2026-10-25).
+///
+/// The page's other colours are worked out from ink, paper and the accents;
+/// these are not, because the point of a borrowed theme is that a reader who
+/// knows it finds every keyword and every heading where it was.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pinned {
+    // Code, one per [`yumete_core::code::Token`] kind.
+    pub keyword: (u8, u8, u8),
+    pub function: (u8, u8, u8),
+    pub builtin_function: (u8, u8, u8),
+    pub types: (u8, u8, u8),
+    pub this: (u8, u8, u8),
+    pub string: (u8, u8, u8),
+    pub escape: (u8, u8, u8),
+    pub constant: (u8, u8, u8),
+    pub property: (u8, u8, u8),
+    pub tag: (u8, u8, u8),
+    pub attribute: (u8, u8, u8),
+    pub comment: (u8, u8, u8),
+    pub plain: (u8, u8, u8),
+    // Markdown.
+    pub heading: (u8, u8, u8),
+    pub bold: (u8, u8, u8),
+    pub italic: (u8, u8, u8),
+    pub code: (u8, u8, u8),
+    pub code_mark: (u8, u8, u8),
+    pub list_mark: (u8, u8, u8),
+    pub link_text: (u8, u8, u8),
+    pub link_mark: (u8, u8, u8),
+    pub link_address: (u8, u8, u8),
+    pub quote: (u8, u8, u8),
+    pub deleted: (u8, u8, u8),
+}
+
+/// **One Dark Pro**, read off `themes/OneDark-Pro.json` (2026-10-25).
+///
+/// Each value is the `tokenColors` rule for the scope beside it. Variables
+/// are the text colour: with tree-sitter nearly every name is `@variable`,
+/// and One Dark Pro's red for `variable` would turn the page red (2026-10-25,
+/// helix and Zed draw them in the text colour too).
+pub const ONE_DARK_PRO: Pinned = Pinned {
+    keyword: (0xC6, 0x78, 0xDD),          // keyword, storage
+    function: (0x61, 0xAF, 0xEF),         // entity.name.function
+    builtin_function: (0x56, 0xB6, 0xC2), // support.function
+    types: (0xE5, 0xC0, 0x7B),            // entity.name.type, entity.name.class
+    this: (0xE5, 0xC0, 0x7B),             // variable.language
+    string: (0x98, 0xC3, 0x79),           // string
+    escape: (0x56, 0xB6, 0xC2),           // constant.character.escape
+    constant: (0xD1, 0x9A, 0x66),         // constant, constant.numeric
+    property: (0xE0, 0x6C, 0x75),         // variable.other.property
+    tag: (0xE0, 0x6C, 0x75),              // entity.name.tag
+    attribute: (0xD1, 0x9A, 0x66),        // entity.other.attribute-name
+    comment: (0x7F, 0x84, 0x8E),          // comment (italic)
+    plain: (0xAB, 0xB2, 0xBF),            // editor.foreground; operators, punctuation
+    heading: (0xE0, 0x6C, 0x75),          // markup.heading, its `#`
+    bold: (0xD1, 0x9A, 0x66),             // markup.bold, its `**`
+    italic: (0xC6, 0x78, 0xDD),           // markup.italic, its `*`
+    code: (0x98, 0xC3, 0x79),             // markup.inline.raw
+    code_mark: (0xE5, 0xC0, 0x7B),        // punctuation.definition.raw
+    list_mark: (0xE5, 0xC0, 0x7B),        // punctuation.definition.list
+    link_text: (0x61, 0xAF, 0xEF),        // string.other.link.title
+    link_mark: (0xE0, 0x6C, 0x75),        // punctuation.definition.string / metadata
+    link_address: (0xC6, 0x78, 0xDD),     // markup.underline.link
+    quote: (0x5C, 0x63, 0x70),            // markup.quote
+    deleted: (0xE0, 0x6C, 0x75),          // markup.deleted
+};
 
 impl ThemeConfig {
     /// The ladder in force.
@@ -1295,42 +1370,41 @@ impl ThemeConfig {
                 lime_light: (0x55, 0x73, 0x27),
                 ..ThemeConfig::default()
             }),
-            // 琥珀 — 整頁只有一種顏色。正文本身就是磷光，金是同一個琥珀燒得更亮，不是第二個色相。
-            "amber" | "hupo" | "琥珀" => Some(ThemeConfig {
-                name: "amber".to_string(),
+            // One Dark — Atom's palette as One Dark Pro paints it (2026-10-25).
+            // The page's ink and paper are One Dark's own text and ground, and
+            // the rest of the ladder is this editor's; the code and the Markdown
+            // take One Dark Pro's colours exactly (`ONE_DARK_PRO`). Dark only:
+            // One Dark has no light half, and an invented one would not be it.
+            //
+            // Source: One Dark Pro, `themes/OneDark-Pro.json` (MIT, © Binaryify),
+            // after Atom's `one-dark-syntax` (MIT, © GitHub). The two notices are
+            // in `licenses/`.
+            "one-dark" | "onedark" | "one_dark" => Some(ThemeConfig {
+                name: "one-dark".to_string(),
                 dark: Ladder {
-                    ink: (0xFF, 0xB1, 0x00),
-                    paper: (0x0D, 0x0F, 0x09),
+                    ink: (0xAB, 0xB2, 0xBF),
+                    paper: (0x28, 0x2C, 0x34),
                 },
                 light: Ladder {
-                    ink: (0x14, 0x18, 0x0F),
-                    paper: (0xCB, 0xCE, 0xC0),
+                    ink: (0xAB, 0xB2, 0xBF),
+                    paper: (0x28, 0x2C, 0x34),
                 },
-                gold_dark: (0xFF, 0xE9, 0xB0),
-                gold_light: (0x6B, 0x46, 0x10),
-                mark_dark: (0xFF, 0x3C, 0x2C),
-                mark_light: (0xA6, 0x30, 0x24),
-                // Warning: **這四格從前是繼承來的**（2026-10-07 一輪審查量出來的）。
-                // 十套主題裏，除了墨香與黑白，每一套都自己定了第二梯隊那四個
-                // （橙粉青綠），卻都繼承了第一梯隊這四個——重新調了配角、讓主角
-                // 留在原主題，没有人會故意這麼做。在這一套的紙上量出來是 紫 4.07、
-                // 綠 3.38、藍 4.44、黃 3.52，四個全在 WCAG 的 4.5:1 以下，而它自己
-                // 定的那四個穩穩在 4.8。
-                //
-                // 補法就是照它自己那四個的做法：**色相不動，只把亮度壓到 4.8**。
-                // 深色那一檔量過，不必動。
-                purple_light: (0x63, 0x3A, 0xAF),
-                green_light: (0x13, 0x5F, 0x3E),
-                azure_light: (0x1D, 0x57, 0x82),
-                amber_light: (0x6F, 0x4C, 0x0E),
-                orange_dark: (0xE8, 0x8F, 0x56),
-                orange_light: (0x86, 0x3F, 0x03),
-                pink_dark: (0xE3, 0x91, 0xB9),
-                pink_light: (0x91, 0x2A, 0x64),
-                cyan_dark: (0x5B, 0xBA, 0xC0),
-                cyan_light: (0x00, 0x5C, 0x65),
-                lime_dark: (0x99, 0xB6, 0x66),
-                lime_light: (0x3F, 0x5B, 0x06),
+                dark_only: true,
+                pinned: Some(ONE_DARK_PRO),
+                // The accents everything else on the page uses — a heading in a
+                // panel, a callout, the grid's own column — from the same seven
+                // hues. 朱 is One Dark Pro's `editorError`, not its red, so an
+                // error is never the colour of a heading.
+                gold_dark: (0xE5, 0xC0, 0x7B),
+                mark_dark: (0xC2, 0x40, 0x38),
+                purple_dark: (0xC6, 0x78, 0xDD),
+                green_dark: (0x98, 0xC3, 0x79),
+                azure_dark: (0x61, 0xAF, 0xEF),
+                amber_dark: (0xD1, 0x9A, 0x66),
+                orange_dark: (0xD1, 0x9A, 0x66),
+                pink_dark: (0xE0, 0x6C, 0x75),
+                cyan_dark: (0x56, 0xB6, 0xC2),
+                lime_dark: (0x98, 0xC3, 0x79),
                 ..ThemeConfig::default()
             }),
             // 莫高 — 墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物。
@@ -1584,6 +1658,8 @@ impl Default for ThemeConfig {
             lime_dark: (0xAA, 0xC7, 0x77),
             lime_light: (0x51, 0x6F, 0x21),
             fill: false,
+            dark_only: false,
+            pinned: None,
         }
     }
 }
@@ -4633,4 +4709,17 @@ mod a_typo_is_said_out_loud {
             assert!(said(text).is_empty(), "{text:?} 是對的，不該報：{:?}", said(text));
         }
     }
+
+    /// 2026-10-25: amber went to make room for One Dark, which is dark only
+    /// and copies One Dark Pro's colours.
+    #[test]
+    fn one_dark_replaces_amber() {
+        assert!(ThemeConfig::named("amber").is_none());
+        let one = ThemeConfig::named("onedark").expect("one-dark answers to onedark");
+        assert_eq!(one.name, "one-dark");
+        assert!(one.dark_only);
+        assert_eq!(one.pinned, Some(ONE_DARK_PRO));
+        assert_eq!(one.dark.paper, (0x28, 0x2C, 0x34));
+    }
+
 }
