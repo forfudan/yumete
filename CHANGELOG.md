@@ -23,10 +23,16 @@ in `docs/development.md` §5.2.
   The MIT notices of One Dark Pro and Atom's One Dark are in `licenses/`, and the
   release archive carries them.
 
+- **`:theme zed-one-dark`** (or `zed`): Zed's default theme, built the same way
+  from Zed's own values. It differs from `one-dark` where Zed does: softer hues,
+  cyan types and operators, red parameters, upright comments, a number apart from a
+  named constant, and Markdown coloured whole, its marks included; a link's text is
+  blue and italic, its address cyan. Dark only, like `one-dark`.
+
 ### Changed
 
-- **⚠️ The `amber` theme is gone**, to keep the set at ten. A config that names it
-  falls back to the default theme.
+- **⚠️ The `amber` and `kiln` themes are gone**, to keep the set at ten. A config
+  that names either falls back to the default theme.
 
 - **A `.jj` or `.svn` checkout is a project.** The project root is the nearest folder
   with a `.yumete`, or else the nearest with a `.git`, `.jj` or `.svn`, as helix's

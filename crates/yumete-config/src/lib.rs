@@ -1138,23 +1138,37 @@ pub struct Pinned {
     pub string: (u8, u8, u8),
     pub escape: (u8, u8, u8),
     pub constant: (u8, u8, u8),
+    pub number: (u8, u8, u8),
     pub property: (u8, u8, u8),
+    pub parameter: (u8, u8, u8),
+    pub parameter_italic: bool,
     pub tag: (u8, u8, u8),
     pub attribute: (u8, u8, u8),
     pub comment: (u8, u8, u8),
+    pub comment_italic: bool,
     pub plain: (u8, u8, u8),
-    // Markdown.
+    pub operator: (u8, u8, u8),
+    pub punctuation: (u8, u8, u8),
+    // Markdown: each construct, and the marks that open and close it.
     pub heading: (u8, u8, u8),
     pub bold: (u8, u8, u8),
+    pub bold_mark: (u8, u8, u8),
     pub italic: (u8, u8, u8),
+    pub italic_mark: (u8, u8, u8),
     pub code: (u8, u8, u8),
     pub code_mark: (u8, u8, u8),
     pub list_mark: (u8, u8, u8),
     pub link_text: (u8, u8, u8),
-    pub link_mark: (u8, u8, u8),
+    pub link_italic: bool,
+    /// `[` and `]` (and an image's `!`).
+    pub link_bracket: (u8, u8, u8),
+    /// `(` and `)` around the address.
+    pub link_paren: (u8, u8, u8),
     pub link_address: (u8, u8, u8),
     pub quote: (u8, u8, u8),
+    pub quote_mark: (u8, u8, u8),
     pub deleted: (u8, u8, u8),
+    pub deleted_mark: (u8, u8, u8),
 }
 
 /// **One Dark Pro**, read off `themes/OneDark-Pro.json` (2026-10-25).
@@ -1171,23 +1185,80 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     this: (0xE5, 0xC0, 0x7B),             // variable.language
     string: (0x98, 0xC3, 0x79),           // string
     escape: (0x56, 0xB6, 0xC2),           // constant.character.escape
-    constant: (0xD1, 0x9A, 0x66),         // constant, constant.numeric
+    constant: (0xD1, 0x9A, 0x66),         // constant
+    number: (0xD1, 0x9A, 0x66),           // constant.numeric
     property: (0xE0, 0x6C, 0x75),         // variable.other.property
+    parameter: (0xAB, 0xB2, 0xBF),        // variable.parameter: italic, no colour
+    parameter_italic: true,
     tag: (0xE0, 0x6C, 0x75),              // entity.name.tag
     attribute: (0xD1, 0x9A, 0x66),        // entity.other.attribute-name
     comment: (0x7F, 0x84, 0x8E),          // comment (italic)
-    plain: (0xAB, 0xB2, 0xBF),            // editor.foreground; operators, punctuation
+    comment_italic: true,
+    plain: (0xAB, 0xB2, 0xBF),            // editor.foreground
+    operator: (0xAB, 0xB2, 0xBF),         // keyword.operator
+    punctuation: (0xAB, 0xB2, 0xBF),      // editor.foreground
     heading: (0xE0, 0x6C, 0x75),          // markup.heading, its `#`
-    bold: (0xD1, 0x9A, 0x66),             // markup.bold, its `**`
-    italic: (0xC6, 0x78, 0xDD),           // markup.italic, its `*`
+    bold: (0xD1, 0x9A, 0x66),             // markup.bold
+    bold_mark: (0xD1, 0x9A, 0x66),        // punctuation.definition.bold
+    italic: (0xC6, 0x78, 0xDD),           // markup.italic
+    italic_mark: (0xC6, 0x78, 0xDD),      // punctuation.definition.italic
     code: (0x98, 0xC3, 0x79),             // markup.inline.raw
     code_mark: (0xE5, 0xC0, 0x7B),        // punctuation.definition.raw
     list_mark: (0xE5, 0xC0, 0x7B),        // punctuation.definition.list
     link_text: (0x61, 0xAF, 0xEF),        // string.other.link.title
-    link_mark: (0xE0, 0x6C, 0x75),        // punctuation.definition.string / metadata
+    link_italic: false,
+    link_bracket: (0xE0, 0x6C, 0x75),     // punctuation.definition.string
+    link_paren: (0xE0, 0x6C, 0x75),       // punctuation.definition.metadata
     link_address: (0xC6, 0x78, 0xDD),     // markup.underline.link
-    quote: (0x5C, 0x63, 0x70),            // markup.quote
+    quote: (0x5C, 0x63, 0x70),            // markup.quote, `>` and all
+    quote_mark: (0x5C, 0x63, 0x70),
     deleted: (0xE0, 0x6C, 0x75),          // markup.deleted
+    deleted_mark: (0xE0, 0x6C, 0x75),
+};
+
+/// **Zed's One Dark**, read off `assets/themes/one/one.json` (2026-10-25).
+///
+/// Zed colours by its own capture names, so each value is the `syntax` key the
+/// capture resolves to; a Markdown construct is coloured whole, its marks
+/// included (Zed's `markdown-inline/highlights.scm`). Zed gives no colour to a
+/// quotation's text or to a strikethrough, so those are the text colour.
+pub const ZED_ONE_DARK: Pinned = Pinned {
+    keyword: (0xB4, 0x77, 0xCF),          // keyword
+    function: (0x73, 0xAD, 0xE9),         // function
+    builtin_function: (0x73, 0xAD, 0xE9), // function (no builtin key)
+    types: (0x6E, 0xB4, 0xBF),            // type
+    this: (0xBF, 0x95, 0x6A),             // variable.special
+    string: (0xA1, 0xC1, 0x81),           // string
+    escape: (0x87, 0x8E, 0x98),           // string.escape
+    constant: (0xDF, 0xC1, 0x84),         // constant
+    number: (0xBF, 0x95, 0x6A),           // number, boolean
+    property: (0xD0, 0x72, 0x77),         // property
+    parameter: (0xD0, 0x72, 0x77),        // variable.parameter
+    parameter_italic: false,
+    tag: (0x74, 0xAD, 0xE8),              // tag
+    attribute: (0x74, 0xAD, 0xE8),        // attribute
+    comment: (0x5D, 0x63, 0x6F),          // comment (upright)
+    comment_italic: false,
+    plain: (0xAC, 0xB2, 0xBE),            // variable, editor.foreground
+    operator: (0x6E, 0xB4, 0xBF),         // operator
+    punctuation: (0xB2, 0xB9, 0xC6),      // punctuation.bracket, .delimiter
+    heading: (0xD0, 0x72, 0x77),          // title, `#` and all
+    bold: (0xBF, 0x95, 0x6A),             // emphasis.strong
+    bold_mark: (0xBF, 0x95, 0x6A),
+    italic: (0x74, 0xAD, 0xE8),           // emphasis
+    italic_mark: (0x74, 0xAD, 0xE8),
+    code: (0xA1, 0xC1, 0x81),             // text.literal
+    code_mark: (0xA1, 0xC1, 0x81),
+    list_mark: (0xD0, 0x72, 0x77),        // punctuation.list_marker
+    link_text: (0x73, 0xAD, 0xE9),        // link_text (italic)
+    link_italic: true,
+    link_bracket: (0x73, 0xAD, 0xE9),     // link_text: the brackets are the link's
+    link_paren: (0x6E, 0xB4, 0xBF),       // link_uri
+    link_address: (0x6E, 0xB4, 0xBF),     // link_uri
+    quote: (0xAC, 0xB2, 0xBE),            // a paragraph: no colour
+    quote_mark: (0xD0, 0x72, 0x77),       // punctuation.markup
+    deleted: (0xAC, 0xB2, 0xBE),          // strikethrough: no colour
+    deleted_mark: (0xAC, 0xB2, 0xBE),
 };
 
 impl ThemeConfig {
@@ -1274,10 +1345,15 @@ impl ThemeConfig {
     /// the design looks like with every colour taken away, which is also what a
     /// monochrome terminal and a colour-blind reader are left with.
     ///
-    /// The other eight carry 宇浩's own candidate palettes onto a page of
-    /// prose: 藍曬、琥珀、莫高、莫蘭迪、夜螢、明度階、陶窯、靛橘. Each is two
-    /// anchors per mood plus 金 and 朱, and every other shade on the page is a
-    /// rung worked out from them — so a theme is eight colours and no more.
+    /// Six more carry 宇浩's own candidate palettes onto a page of prose:
+    /// 藍曬、莫高、莫蘭迪、夜螢、明度階、靛橘. Each is two anchors per mood
+    /// plus 金 and 朱, and every other shade on the page is a rung worked out
+    /// from them — so a theme is eight colours and no more.
+    ///
+    /// The last two are **borrowed** (2026-10-25): `one-dark` and
+    /// `zed-one-dark` take their ink and paper from One Dark and copy its code
+    /// and Markdown colours exactly ([`Pinned`]), dark only. 琥珀 and 陶窯 went
+    /// to keep the set at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is, and the pinyin is an alias for the hand that
@@ -1509,36 +1585,36 @@ impl ThemeConfig {
                 lime_light: (0x5B, 0x7A, 0x2E),
                 ..ThemeConfig::default()
             }),
-            // 陶窯 — 灰釉炻器：地是窯灰，金是草木灰的青綠。橘色只留給錯誤——那是窯裏的火。
-            "kiln" | "taoyao" | "陶窯" | "陶窑" => Some(ThemeConfig {
-                name: "kiln".to_string(),
+            // Zed's One Dark — the theme Zed opens in (2026-10-25). Built as
+            // `one-dark` is, from Zed's own values: its text and ground for the
+            // ink and paper, `ZED_ONE_DARK` for the code and the Markdown, and
+            // its status colours for the accents. 朱 is Zed's `error`, which is
+            // the colour of its headings too — Zed's choice, kept.
+            //
+            // Source: Zed, `assets/themes/one/one.json`; the theme is MIT,
+            // © GitHub (it is Atom's One, retuned). Notice in `licenses/`.
+            "zed-one-dark" | "zed" | "zed_one_dark" => Some(ThemeConfig {
+                name: "zed-one-dark".to_string(),
                 dark: Ladder {
-                    ink: (0xE8, 0xE1, 0xD3),
-                    paper: (0x2A, 0x25, 0x21),
+                    ink: (0xAC, 0xB2, 0xBE),
+                    paper: (0x28, 0x2C, 0x33),
                 },
                 light: Ladder {
-                    ink: (0x24, 0x1F, 0x1A),
-                    paper: (0xE3, 0xDD, 0xD0),
+                    ink: (0xAC, 0xB2, 0xBE),
+                    paper: (0x28, 0x2C, 0x33),
                 },
-                gold_dark: (0x8F, 0xA6, 0x6B),
-                gold_light: (0x4A, 0x5A, 0x2C),
-                mark_dark: (0xE2, 0x79, 0x3D),
-                mark_light: (0xA8, 0x50, 0x1E),
-                // Warning: **橙 is red in this theme.** Its 朱 is the kiln's orange and
-                // keeps it — 「橘色只留給錯誤」 — so the number in a fence takes the
-                // red that 朱 left free, not a second orange.
-                // 同 琥珀 那一處（2026-10-07）：這一套的紙上，繼承來的綠是 4.00、
-                // 黃是 4.16，兩個在 4.5:1 以下。色相不動，只壓亮度。
-                green_light: (0x15, 0x6B, 0x45),
-                amber_light: (0x7E, 0x56, 0x10),
-                orange_dark: (0xFE, 0x71, 0x5F),
-                orange_light: (0xAC, 0x32, 0x26),
-                pink_dark: (0xFB, 0xA6, 0xCE),
-                pink_light: (0x9E, 0x37, 0x6F),
-                cyan_dark: (0x74, 0xD3, 0xD7),
-                cyan_light: (0x04, 0x69, 0x71),
-                lime_dark: (0xB6, 0xD4, 0x83),
-                lime_light: (0x49, 0x67, 0x17),
+                dark_only: true,
+                pinned: Some(ZED_ONE_DARK),
+                gold_dark: (0xDE, 0xC1, 0x84),
+                mark_dark: (0xD0, 0x72, 0x77),
+                purple_dark: (0xB4, 0x77, 0xCF),
+                green_dark: (0xA1, 0xC1, 0x81),
+                azure_dark: (0x74, 0xAD, 0xE8),
+                amber_dark: (0xDE, 0xC1, 0x84),
+                orange_dark: (0xBF, 0x95, 0x6A),
+                pink_dark: (0xD0, 0x72, 0x77),
+                cyan_dark: (0x6E, 0xB4, 0xBF),
+                lime_dark: (0xA1, 0xC1, 0x81),
                 ..ThemeConfig::default()
             }),
             // 靛橘 — 顏色只活在底色裏，正文永遠是中性灰。唯一破例的是朱，它用紫，故意違反自己這條規矩。
@@ -4720,6 +4796,16 @@ mod a_typo_is_said_out_loud {
         assert!(one.dark_only);
         assert_eq!(one.pinned, Some(ONE_DARK_PRO));
         assert_eq!(one.dark.paper, (0x28, 0x2C, 0x34));
+    }
+
+    /// 2026-10-25: kiln went to make room for Zed's One Dark.
+    #[test]
+    fn zed_one_dark_replaces_kiln() {
+        assert!(ThemeConfig::named("kiln").is_none());
+        let zed = ThemeConfig::named("zed").expect("zed-one-dark answers to zed");
+        assert_eq!(zed.name, "zed-one-dark");
+        assert!(zed.dark_only);
+        assert_eq!(zed.pinned, Some(ZED_ONE_DARK));
     }
 
 }
