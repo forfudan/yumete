@@ -29,6 +29,15 @@ in `docs/development.md` §5.2.
   named constant, and Markdown coloured whole, its marks included; a link's text is
   blue and italic, its address cyan. Dark only, like `one-dark`.
 
+- **`:theme monokai`**: Monokai as VS Code ships it, built the same way. Keywords
+  and operators pink, functions green, built-in functions and types cyan (types in
+  italics), strings yellow, numbers and constants purple, `self` and parameters
+  orange; in Markdown, headings green, bold and italic cyan, inline code orange,
+  quotations pink, and a list item yellow as a whole, as VS Code colours
+  `markup.list`. Errors take VS Code's own red, since the theme sets none. Dark only.
+  Its MIT notices (VS Code, and the Colorsublime themes it comes from) are in
+  `licenses/`.
+
 ### Changed
 
 - **⚠️ `:word-show` is `:word-mark`, and it takes one of `off`, `color`, `ink`, `tint`,
@@ -39,8 +48,8 @@ in `docs/development.md` §5.2.
   `word_mark = "off"`; a file that still has it is told so. The settings panel's two
   rows are one. `:word-show` points at the new name.
 
-- **⚠️ The `amber` and `kiln` themes are gone**, to keep the set at ten. A config
-  that names either falls back to the default theme.
+- **⚠️ The `amber`, `kiln` and `firefly` themes are gone**, to keep the set at ten. A
+  config that names one falls back to the default theme.
 
 - **The line number of every line a selection touches is in the writing's colour**,
   the rest in the usual grey, as in Zed, VS Code and helix. A line whose break `x`
