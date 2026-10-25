@@ -164,9 +164,9 @@ const THEME_NAMES: &[Choice] = &[
     Choice { word: "morandi", label: "cmd.themes.morandi" },
     Choice { word: "firefly", label: "cmd.themes.firefly" },
     Choice { word: "meridian", label: "cmd.themes.meridian" },
-    Choice { word: "kiln", label: "cmd.themes.kiln" },
     Choice { word: "complement", label: "cmd.themes.complement" },
     Choice { word: "one-dark", label: "cmd.themes.one-dark" },
+    Choice { word: "zed-one-dark", label: "cmd.themes.zed-one-dark" },
 ];
 
 /// 出廠的碼表，**與 `command.rs` 的 `SCHEMES` 同名同序**（同上）。

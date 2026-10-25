@@ -2814,13 +2814,6 @@ zhs = "墨香：黑墨、白金墨、金墨、红墨，其余的色阶都算出�
 en = "moxiang: black, white-gold, gold and red ink; every other shade computed"
 
 [[message]]
-# : 命令選單裏 kiln 那一項的説明(themes 組)
-key = "cmd.themes.kiln"
-zht = "陶窯：灰釉炻器：地是窯灰，金是草木灰的青綠"
-zhs = "陶窑：灰釉炻器：地是窑灰，金是草木灰的青绿"
-en = "kiln: ash-glazed stoneware — kiln-ash ground, wood-ash green for the gold"
-
-[[message]]
 # : 命令選單裏 meridian 那一項的説明(themes 組)
 key = "cmd.themes.meridian"
 zht = "明度階：朱不是紅的，是藍的：紅綠色盲也分得開"
@@ -2848,6 +2841,12 @@ zht = "One Dark：VS Code 裏最常見的那一套配色，只有深色"
 zhs = "One Dark：VS Code 里最常见的那一套配色，只有深色"
 en = "one-dark: the scheme most VS Code users know; dark only"
 
+[[message]]
+# : 命令選單裏 zed-one-dark 那一項的説明(themes 組)
+key = "cmd.themes.zed-one-dark"
+zht = "Zed：Zed 編輯器的默認配色，只有深色"
+zhs = "Zed：Zed 编辑器的默认配色，只有深色"
+en = "zed-one-dark: Zed's default theme; dark only"
 [[message]]
 # `:vertical-keys` 選單上那兩個詞——邏輯那一個
 key = "cmd.vertical-keys.logical"
@@ -12865,6 +12864,4 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
-
-
 

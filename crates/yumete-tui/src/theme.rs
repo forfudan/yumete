@@ -815,6 +815,11 @@ impl Palette {
         self.pinned.map(|p| self.accent(pick(&p)))
     }
 
+    /// A yes-or-no the borrowed theme states — whether its comments lean, say.
+    pub fn pinned_says(self, pick: impl Fn(&yumete_config::Pinned) -> bool) -> bool {
+        self.pinned.is_some_and(|p| pick(&p))
+    }
+
     /// Whether the theme copies its code and Markdown colours from elsewhere.
     pub fn borrowed(self) -> bool {
         self.pinned.is_some()
@@ -1338,9 +1343,9 @@ mod ground_tests {
             "morandi",
             "firefly",
             "meridian",
-            "kiln",
             "complement",
             "one-dark",
+            "zed-one-dark",
         ];
         for name in names {
             let theme = ThemeConfig::named(name).expect("a theme by that name");

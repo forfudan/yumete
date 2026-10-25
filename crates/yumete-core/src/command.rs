@@ -2408,12 +2408,6 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
-        // 陶窯
-        name: "kiln",
-        help: "cmd.themes.kiln",
-        needs: &[],
-    },
-    Word {
         // 靛橘
         name: "complement",
         help: "cmd.themes.complement",
@@ -2423,6 +2417,12 @@ const THEMES: &[Word] = &[
         // One Dark, after One Dark Pro (2026-10-25).
         name: "one-dark",
         help: "cmd.themes.one-dark",
+        needs: &[],
+    },
+    Word {
+        // Zed's One Dark (2026-10-25).
+        name: "zed-one-dark",
+        help: "cmd.themes.zed-one-dark",
         needs: &[],
     },
 ];
@@ -6694,9 +6694,9 @@ mod tests {
                 "morandi",
                 "firefly",
                 "meridian",
-                "kiln",
                 "complement",
-                "one-dark"
+                "one-dark",
+                "zed-one-dark"
             ],
             "the menu lists what can be typed — ASCII, with the pinyin as an alias"
         );

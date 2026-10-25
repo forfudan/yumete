@@ -49,8 +49,13 @@ pub enum Token {
     String,
     /// An escape, and the `{…}` that interpolates into a string.
     Escape,
-    /// A number, `true`, `None`, a named constant.
+    /// A named constant, `None`.
     Constant,
+    /// A number or a boolean (2026-10-25: Zed colours them apart from a named
+    /// constant; this editor's own themes still do not).
+    Number,
+    /// A function's parameter (2026-10-25, same reason).
+    Parameter,
     /// A comment.
     Comment,
     /// `+`, `=`, `=>`.
@@ -782,8 +787,10 @@ fn token_of(capture: &str) -> Paint {
         ("tag", _) => Token::Tag,
         ("attribute", _) => Token::Attribute,
         ("property", _) => Token::Property,
-        ("number" | "boolean" | "constant", _) => Token::Constant,
+        ("number" | "boolean", _) => Token::Number,
+        ("constant", _) => Token::Constant,
         ("variable", "builtin") => Token::Builtin,
+        ("variable", "parameter") => Token::Parameter,
         ("variable" | "embedded", _) => Token::Plain,
         ("operator", _) => Token::Operator,
         // Python's f-string braces, JavaScript's `${`: where a string stops
@@ -1376,7 +1383,7 @@ mod tests {
         // In chars, not bytes: 你 is three bytes and one column of the line.
         assert_eq!(at(&got, 2, 13), Some(Token::String), "{:?}", got[2]);
         let one = got[2].last().unwrap();
-        assert_eq!((one.start, one.kind), (26, Kind::Token(Token::Constant)), "{:?}", got[2]);
+        assert_eq!((one.start, one.kind), (26, Kind::Token(Token::Number)), "{:?}", got[2]);
     }
 
     /// **我們自己寫的那兩份查詢真的會匹配**（2026-10-08）。
@@ -1427,7 +1434,7 @@ mod tests {
         let got = highlight(Language::Json, &lines("{\"名\": \"值\", \"n\": 3}"));
         assert_eq!(at(&got, 0, 1), Some(Token::Property), "{:?}", got[0]);
         assert_eq!(at(&got, 0, 6), Some(Token::String), "{:?}", got[0]);
-        assert_eq!(at(&got, 0, 16), Some(Token::Constant), "{:?}", got[0]);
+        assert_eq!(at(&got, 0, 16), Some(Token::Number), "{:?}", got[0]);
     }
 
     #[test]

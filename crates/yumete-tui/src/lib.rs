@@ -7964,12 +7964,13 @@ pub(crate) fn markup_style_in(
         Style::default().fg(ink.pinned(pick).unwrap_or_else(|| ink.marker()))
     };
     match owner.map(|o| o.kind) {
-        Some(Kind::Strong) => pin(|p| p.bold).add_modifier(Modifier::BOLD),
-        Some(Kind::Emphasis) => pin(|p| p.italic).add_modifier(Modifier::ITALIC),
+        Some(Kind::Strong) => pin(|p| p.bold_mark).add_modifier(Modifier::BOLD),
+        Some(Kind::Emphasis) => pin(|p| p.italic_mark).add_modifier(Modifier::ITALIC),
         Some(Kind::Code) => pin(|p| p.code_mark),
-        Some(Kind::Strike) => pin(|p| p.deleted),
+        Some(Kind::Strike) => pin(|p| p.deleted_mark),
         Some(Kind::Link | Kind::WikiLink) => match ch {
-            Some('[' | ']' | '(' | ')' | '!') => pin(|p| p.link_mark),
+            Some('[' | ']' | '!') => pin(|p| p.link_bracket),
+            Some('(' | ')') => pin(|p| p.link_paren),
             _ => pin(|p| p.link_address),
         },
         _ => markup_style(span.kind, ink),
@@ -8011,7 +8012,11 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
             Kind::Emphasis => return pin(|p| p.italic).add_modifier(Modifier::ITALIC),
             Kind::Code => return pin(|p| p.code),
             Kind::Link | Kind::WikiLink => {
-                return pin(|p| p.link_text).add_modifier(Modifier::UNDERLINED);
+                let style = pin(|p| p.link_text).add_modifier(Modifier::UNDERLINED);
+                return match ink.pinned_says(|p| p.link_italic) {
+                    true => style.add_modifier(Modifier::ITALIC),
+                    false => style,
+                };
             }
             Kind::Strike => return pin(|p| p.deleted).add_modifier(Modifier::CROSSED_OUT),
             _ => {}
@@ -8147,8 +8152,17 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
                 let pin = |pick: fn(&yumete_config::Pinned) -> (u8, u8, u8)| {
                     fg(ink.pinned(pick).unwrap_or_else(|| ink.text()))
                 };
+                let leaning = |style: Style, italic: bool| match italic {
+                    true => style.add_modifier(Modifier::ITALIC),
+                    false => style,
+                };
+                let italic = |pick: fn(&yumete_config::Pinned) -> bool| ink.pinned_says(pick);
                 return match token {
-                    Token::Plain | Token::Operator | Token::Punctuation => pin(|p| p.plain),
+                    Token::Plain => pin(|p| p.plain),
+                    Token::Operator => pin(|p| p.operator),
+                    Token::Punctuation => pin(|p| p.punctuation),
+                    Token::Number => pin(|p| p.number),
+                    Token::Parameter => leaning(pin(|p| p.parameter), italic(|p| p.parameter_italic)),
                     Token::Keyword => pin(|p| p.keyword),
                     Token::Builtin => pin(|p| p.this),
                     Token::Function => pin(|p| p.function),
@@ -8160,11 +8174,11 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
                     Token::String => pin(|p| p.string),
                     Token::Tag => pin(|p| p.tag),
                     Token::Constant => pin(|p| p.constant),
-                    Token::Comment => pin(|p| p.comment).add_modifier(Modifier::ITALIC),
+                    Token::Comment => leaning(pin(|p| p.comment), italic(|p| p.comment_italic)),
                 };
             }
             match token {
-                Token::Plain | Token::Operator => fg(ink.text()),
+                Token::Plain | Token::Operator | Token::Parameter => fg(ink.text()),
                 Token::Keyword => fg(ink.purple()),
                 Token::Builtin => fg(ink.pink()),
                 Token::Function | Token::BuiltinFunction => fg(ink.azure()),
@@ -8173,7 +8187,7 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
                 Token::Type => fg(ink.amber()),
                 Token::String => fg(ink.green()),
                 Token::Tag => fg(ink.lime()),
-                Token::Constant => fg(ink.orange()),
+                Token::Constant | Token::Number => fg(ink.orange()),
                 Token::Comment => fg(ink.furniture()).add_modifier(Modifier::ITALIC),
                 Token::Punctuation => fg(ink.marker()),
             }
@@ -11630,6 +11644,21 @@ fn draw_horizontal(
                 if let (Some(at), Some(color)) = (list_mark(&line), ink.pinned(|p| p.list_mark)) {
                     for style in styles.iter_mut().take(at.end).skip(at.start) {
                         *style = style.fg(color);
+                    }
+                }
+            }
+            // …and a quotation's `>`, which Zed colours apart from its words.
+            let quoted = matches!(
+                blocks.get(row.line),
+                Some(yumete_core::markdown::Block::Quote { .. })
+            );
+            if quoted && start_in_line == 0 && ink.borrowed() {
+                if let Some(color) = ink.pinned(|p| p.quote_mark) {
+                    let lead = chars.iter().take_while(|c| matches!(c, ' ' | '\t' | '>')).count();
+                    for (c, style) in chars.iter().zip(styles.iter_mut()).take(lead) {
+                        if *c == '>' {
+                            *style = style.fg(color);
+                        }
                     }
                 }
             }
@@ -26426,6 +26455,36 @@ fn squeezed(text: &str) -> String {
         let own = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::default(), true);
         let mark = all.iter().find(|s| s.kind == Kind::Marker).unwrap();
         assert_eq!(markup_style_in(mark, &all, Some('*'), own), markup_style(Kind::Marker, own));
+    }
+
+    /// **Zed's One Dark is Zed's**, where it differs from One Dark Pro: cyan
+    /// operators, upright comments, a number apart from a constant, a link's
+    /// parentheses in the address's colour (2026-10-25).
+    #[test]
+    fn zed_one_dark_paints_what_zed_paints() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::{spans, Kind};
+        let theme = yumete_config::ThemeConfig::named("zed").expect("zed-one-dark");
+        let ink = crate::theme::Palette::of_theme(&theme, true);
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        let token = |t| markup_style(Kind::Token(t), ink);
+        assert_eq!(token(Token::Operator).fg, Some(rgb(0x6E_B4_BF)));
+        assert_eq!(token(Token::Number).fg, Some(rgb(0xBF_95_6A)));
+        assert_eq!(token(Token::Constant).fg, Some(rgb(0xDF_C1_84)));
+        assert_eq!(token(Token::Parameter).fg, Some(rgb(0xD0_72_77)));
+        assert!(!token(Token::Comment).add_modifier.contains(Modifier::ITALIC));
+
+        let line = "**b** [t](u)";
+        let all = spans(line);
+        let at = |i: usize| {
+            let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
+            markup_style_in(span, &all, line.chars().nth(i), ink)
+        };
+        assert_eq!(at(0).fg, Some(rgb(0xBF_95_6A)), "`**` is the bold's own colour");
+        assert_eq!(at(6).fg, Some(rgb(0x73_AD_E9)), "`[` belongs to the link's text");
+        assert!(at(7).add_modifier.contains(Modifier::ITALIC), "the link's text leans");
+        assert_eq!(at(9).fg, Some(rgb(0x6E_B4_BF)), "`(` belongs to the address");
+        assert_eq!(at(10).fg, Some(rgb(0x6E_B4_BF)));
     }
 
     #[test]
