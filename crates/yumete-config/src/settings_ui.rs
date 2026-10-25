@@ -158,6 +158,8 @@ impl Setting {
 /// 所以兩邊的字永遠一樣。
 const THEME_NAMES: &[Choice] = &[
     Choice { word: "ink", label: "cmd.themes.ink" },
+    Choice { word: "one-dark", label: "cmd.themes.one-dark" },
+    Choice { word: "zed-one-dark", label: "cmd.themes.zed-one-dark" },
     Choice { word: "bw", label: "cmd.themes.bw" },
     Choice { word: "cyanotype", label: "cmd.themes.cyanotype" },
     Choice { word: "mogao", label: "cmd.themes.mogao" },
@@ -165,8 +167,6 @@ const THEME_NAMES: &[Choice] = &[
     Choice { word: "firefly", label: "cmd.themes.firefly" },
     Choice { word: "meridian", label: "cmd.themes.meridian" },
     Choice { word: "complement", label: "cmd.themes.complement" },
-    Choice { word: "one-dark", label: "cmd.themes.one-dark" },
-    Choice { word: "zed-one-dark", label: "cmd.themes.zed-one-dark" },
 ];
 
 /// 出廠的碼表，**與 `command.rs` 的 `SCHEMES` 同名同序**（同上）。
