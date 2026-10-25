@@ -2373,6 +2373,18 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
+        // One Dark, after One Dark Pro (2026-10-25), under 墨香 since 2026-10-26: the two most used.
+        name: "one-dark",
+        help: "cmd.themes.one-dark",
+        needs: &[],
+    },
+    Word {
+        // Zed's One Dark (2026-10-25).
+        name: "zed-one-dark",
+        help: "cmd.themes.zed-one-dark",
+        needs: &[],
+    },
+    Word {
         // 黑白
         name: "bw",
         help: "cmd.themes.bw",
@@ -2412,18 +2424,6 @@ const THEMES: &[Word] = &[
         // 靛橘
         name: "complement",
         help: "cmd.themes.complement",
-        needs: &[],
-    },
-    Word {
-        // One Dark, after One Dark Pro (2026-10-25).
-        name: "one-dark",
-        help: "cmd.themes.one-dark",
-        needs: &[],
-    },
-    Word {
-        // Zed's One Dark (2026-10-25).
-        name: "zed-one-dark",
-        help: "cmd.themes.zed-one-dark",
         needs: &[],
     },
 ];
@@ -6688,15 +6688,15 @@ mod tests {
             themes,
             [
                 "ink",
+                "one-dark",
+                "zed-one-dark",
                 "bw",
                 "cyanotype",
                 "mogao",
                 "morandi",
                 "firefly",
                 "meridian",
-                "complement",
-                "one-dark",
-                "zed-one-dark"
+                "complement"
             ],
             "the menu lists what can be typed — ASCII, with the pinyin as an alias"
         );

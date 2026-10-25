@@ -1337,6 +1337,8 @@ mod ground_tests {
     fn the_grounds_that_meet_are_a_rung_apart() {
         let names = [
             "ink",
+            "one-dark",
+            "zed-one-dark",
             "bw",
             "cyanotype",
             "mogao",
@@ -1344,8 +1346,6 @@ mod ground_tests {
             "firefly",
             "meridian",
             "complement",
-            "one-dark",
-            "zed-one-dark",
         ];
         for name in names {
             let theme = ThemeConfig::named(name).expect("a theme by that name");
