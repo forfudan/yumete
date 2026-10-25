@@ -18,6 +18,11 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **A footnote is drawn as one, all the way down.** A note hard-wrapped over several
+  lines had only its first line set back in grey, and the rest drawn as writing. The
+  indented lines that follow `[^1]:` belong to the note, after a blank line too, and
+  so does a plain line straight after its text, as GFM and pandoc read them.
+
 - **`*.{md,txt}` works in the search panel's include and exclude fields.** A comma
   inside braces belongs to the glob, as in VS Code's; the field used to split there
   and report the whole search as written wrong.
