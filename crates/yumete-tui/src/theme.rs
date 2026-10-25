@@ -1339,11 +1339,11 @@ mod ground_tests {
             "ink",
             "one-dark",
             "zed-one-dark",
+            "monokai",
             "bw",
             "cyanotype",
             "mogao",
             "morandi",
-            "firefly",
             "meridian",
             "complement",
         ];
