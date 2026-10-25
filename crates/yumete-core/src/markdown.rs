@@ -262,6 +262,27 @@ pub struct BlockScanner {
     /// How many `|` rows have run without a break — what [`Block::Table`]
     /// carries, so the rows can be banded alternately.
     table_row: usize,
+    /// Where a footnote's text stands: what decides whether the next line
+    /// is still the note. See [`Note`].
+    note: Note,
+}
+
+/// **A footnote runs on past its first line** (2026-10-25).
+///
+/// `[^1]: text` is followed by the lines that continue it, the way GFM and
+/// pandoc read one: an indented line is the note's, after a blank line too
+/// (a note of two paragraphs), and a plain line straight after the note's text
+/// is its lazy continuation. Only the `[^1]:` line used to be set back as
+/// furniture, so a note hard-wrapped into six lines had its first line grey and
+/// the other five drawn as writing.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum Note {
+    #[default]
+    None,
+    /// The line above was the note's text.
+    Open,
+    /// Blank lines since the note's text: only an indented line goes on.
+    Gap,
 }
 
 impl BlockScanner {
@@ -288,6 +309,8 @@ impl BlockScanner {
         // inverted. Clearing here and restoring there cannot be forgotten by
         // whoever adds the twelfth path.
         let table_row = std::mem::take(&mut self.table_row);
+        // Same shape: every path ends the note unless it says otherwise.
+        let note = std::mem::take(&mut self.note);
         let text = prefix.trim_end_matches(['\n', '\r']);
         let trimmed = text.trim_start();
         let whole = len <= PREFIX;
@@ -379,6 +402,12 @@ impl BlockScanner {
         if let Some(kind) = inside {
             return Block::Container(kind);
         }
+        // An indented line goes on with an open note whatever it starts with —
+        // `    - one` in a note is the note's list, not a new one.
+        if note != Note::None && !trimmed.is_empty() && text.starts_with([' ', '\t']) {
+            self.note = Note::Open;
+            return Block::FootnoteDef;
+        }
 
         let hashes = trimmed.chars().take_while(|&c| c == '#').count();
         if hashes > 0 && hashes <= 6 && matches!(trimmed.chars().nth(hashes), Some(' ') | None) {
@@ -391,6 +420,7 @@ impl BlockScanner {
             return Block::Rule;
         }
         if trimmed.starts_with("[^") && trimmed.contains("]:") {
+            self.note = Note::Open;
             return Block::FootnoteDef;
         }
         if let Some(rest) = item_body(trimmed) {
@@ -399,6 +429,15 @@ impl BlockScanner {
                 .and_then(|r| r.get(..1).zip(r.get(1..2)))
                 .and_then(|(mark, close)| (close == "]").then_some(mark != " "));
             return Block::Item { task };
+        }
+        match (note, trimmed.is_empty()) {
+            (Note::None, _) => {}
+            (_, true) => self.note = Note::Gap,
+            (Note::Open, false) => {
+                self.note = Note::Open;
+                return Block::FootnoteDef;
+            }
+            (Note::Gap, false) => {}
         }
         Block::Prose
     }
@@ -2330,6 +2369,20 @@ mod tests {
                 Block::Conflict(_) => '!',
             })
             .collect()
+    }
+
+    /// 2026-10-25: a note hard-wrapped with an indent was grey on its first line
+    /// only.
+    #[test]
+    fn a_footnote_runs_on_over_its_indented_and_lazy_lines() {
+        // Indented lines, a second paragraph after a blank, then writing again.
+        assert_eq!(walk("[^a]: one\n    two\n    three\n\n    four\n\n那年"), "FFF.F..");
+        // A plain line straight after is the note's; after a blank it is not.
+        assert_eq!(walk("[^a]: one\ntwo\n\nthree"), "FF..");
+        // A heading, a list item or the next note ends it.
+        assert_eq!(walk("[^a]: one\n## 二\n[^b]: x\n- y"), "F2F-");
+        // An indented list inside the note stays the note's.
+        assert_eq!(walk("[^a]: one\n    - y"), "FF");
     }
 
     #[test]
