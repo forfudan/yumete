@@ -1288,8 +1288,19 @@ impl Palette {
     /// See `rung::DEEP`: the ladder runs 墨 → 紙 → 更沉, which is 反主題色 →
     /// 主題色, so this is darker on a dark theme and lighter on a light one
     /// without anything here having to ask which.
+    ///
+    /// **Unless the ladder has run out** (2026-10-26 review): a pure white
+    /// paper — github's light one — has nothing lighter to give, 第 100 檔
+    /// clamps back onto the page, and the status bar disappears into it. Then
+    /// it turns round and goes as far toward the ink instead (第 80 檔), the
+    /// way a light editor's status bar is a step greyer than its page.
     pub fn sunken(self) -> Color {
-        self.at(yumete_config::rung::DEEP)
+        use yumete_config::rung::{DEEP, PAPER};
+        let deep = self.at(DEEP);
+        match contrast(deep, self.at(PAPER)) < 1.05 {
+            true => self.at(PAPER - (DEEP - PAPER)),
+            false => deep,
+        }
     }
 
     /// Whether the page is painted.
@@ -1364,6 +1375,28 @@ mod ground_tests {
                 }
             }
         }
+    }
+
+    /// **The status bar is never the page** (2026-10-26 review). github's
+    /// light paper is pure white, so 第 100 檔 clamped back onto it (1.000:1)
+    /// and the bar had no ground of its own; it turns round toward the ink.
+    #[test]
+    fn the_status_bar_has_a_ground_of_its_own_in_every_theme() {
+        use super::Palette;
+        for name in [
+            "ink", "one-dark", "github", "monokai", "dracula", "tokyo-night", "catppuccin", "gruvbox", "bw",
+            "morandi",
+        ] {
+            let theme = ThemeConfig::named(name).expect("a theme by that name");
+            for dark in [true, false] {
+                let p = Palette::of_theme(&theme, dark);
+                let apart = super::contrast(p.sunken(), p.paper());
+                assert!(apart >= 1.05, "{name} dark={dark}: the status bar is {apart:.3}:1 off the page");
+            }
+        }
+        // Only where the ladder ran out: bw's light bar, 1.08 off, keeps its rung.
+        let bw = Palette::of_theme(&ThemeConfig::named("bw").expect("bw"), false);
+        assert_eq!(bw.sunken(), bw.at(rung::DEEP));
     }
 
     #[test]

@@ -2266,7 +2266,9 @@ impl ThemeConfig {
                 lime_light: (0x79, 0x74, 0x0E),
                 ..ThemeConfig::default()
             }),
-            // 莫蘭迪 — 十套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
+            // 莫蘭迪 — the greyest grounds of the ten and muted accents, 朱 brought down to a
+            // dusty brick red. Not the lowest text contrast any more (9.2:1 dark, 12.2:1
+            // light, 2026-10-26): one-dark and Catppuccin Latte sit lower.
             "morandi" | "molandi" | "莫蘭迪" | "莫兰迪" => Some(ThemeConfig {
                 name: "morandi".to_string(),
                 dark: Ladder {

@@ -2827,9 +2827,9 @@ en = "monokai: the classic Sublime Text scheme; dark only"
 [[message]]
 # : 命令選單裏 morandi 那一項的説明(themes 組)
 key = "cmd.themes.morandi"
-zht = "莫蘭迪：正文對比度低"
-zhs = "莫兰迪：正文对比度低"
-en = "morandi: low text contrast"
+zht = "莫蘭迪：灰調的柔和配色，深淺都有"
+zhs = "莫兰迪：灰调的柔和配色，深浅都有"
+en = "morandi: muted, greyed colours; light and dark"
 
 [[message]]
 # : 命令選單裏 one-dark 那一項的説明(themes 組)
