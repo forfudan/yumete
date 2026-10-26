@@ -59,6 +59,16 @@ in `docs/development.md` §5.2.
   `>` and a link's brackets are the punctuation cyan, link text teal, quotations
   italic. Errors take its editor error red. Its MIT notice is in `licenses/`.
 
+- **`:theme catppuccin`**: Catppuccin Mocha and Latte, built as `github` is, so
+  `:theme-mode` turns it light or dark. Keywords mauve, functions blue and
+  built-in functions peach, both italic, types yellow and italic, strings green,
+  numbers and constants peach, parameters maroon and italic, `self` red and
+  italic, operators teal, punctuation and comments grey, comments italic. In
+  Markdown each heading level has its own colour, red at `#` through peach,
+  yellow, green and sapphire to lavender at `######`; bold and italic red, inline
+  code green, list markers teal, a link's text lavender and its address blue,
+  quotations pink. Its MIT notice is in `licenses/`.
+
 ### Changed
 
 - **Light moods space their greys by contrast.** The shades between a theme's
@@ -76,7 +86,7 @@ in `docs/development.md` §5.2.
   `word_mark = "off"`; a file that still has it is told so. The settings panel's two
   rows are one. `:word-show` points at the new name.
 
-- **⚠️ The `amber`, `kiln`, `firefly`, `mogao` and `cyanotype` themes are gone**, to
+- **⚠️ The `amber`, `kiln`, `firefly`, `mogao`, `cyanotype` and `complement` themes are gone**, to
   keep the set at ten. A config that names one falls back to the default theme.
 
 - **The line number of every line a selection touches is in the writing's colour**,

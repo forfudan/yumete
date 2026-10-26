@@ -2402,6 +2402,11 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
+        name: "catppuccin",
+        help: "cmd.themes.catppuccin",
+        needs: &[],
+    },
+    Word {
         // 黑白
         name: "bw",
         help: "cmd.themes.bw",
@@ -2417,12 +2422,6 @@ const THEMES: &[Word] = &[
         // 明度階
         name: "meridian",
         help: "cmd.themes.meridian",
-        needs: &[],
-    },
-    Word {
-        // 靛橘
-        name: "complement",
-        help: "cmd.themes.complement",
         needs: &[],
     },
 ];
@@ -6692,10 +6691,10 @@ mod tests {
                 "monokai",
                 "dracula",
                 "tokyo-night",
+                "catppuccin",
                 "bw",
                 "morandi",
-                "meridian",
-                "complement"
+                "meridian"
             ],
             "the menu lists what can be typed — ASCII, with the pinyin as an alias"
         );

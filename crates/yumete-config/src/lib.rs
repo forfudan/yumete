@@ -1205,7 +1205,9 @@ pub struct Pinned {
     // Code, one per [`yumete_core::code::Token`] kind.
     pub keyword: (u8, u8, u8),
     pub function: (u8, u8, u8),
+    pub function_italic: bool,
     pub builtin_function: (u8, u8, u8),
+    pub builtin_function_italic: bool,
     pub types: (u8, u8, u8),
     pub types_italic: bool,
     pub this: (u8, u8, u8),
@@ -1261,7 +1263,9 @@ pub struct Pinned {
 pub const ONE_DARK_PRO: Pinned = Pinned {
     keyword: (0xC6, 0x78, 0xDD),          // keyword, storage
     function: (0x61, 0xAF, 0xEF),         // entity.name.function
+    function_italic: false,
     builtin_function: (0x56, 0xB6, 0xC2), // support.function
+    builtin_function_italic: false,
     types: (0xE5, 0xC0, 0x7B),            // entity.name.type, entity.name.class
     types_italic: false,
     this: (0xE5, 0xC0, 0x7B),             // variable.language
@@ -1313,7 +1317,9 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
 pub const GITHUB_DARK: Pinned = Pinned {
     keyword: (0xFF, 0x7B, 0x72),          // keyword, storage
     function: (0xD2, 0xA8, 0xFF),         // entity.name.function
+    function_italic: false,
     builtin_function: (0x79, 0xC0, 0xFF), // support
+    builtin_function_italic: false,
     types: (0xFF, 0xA6, 0x57),            // entity.name
     types_italic: false,
     this: (0x79, 0xC0, 0xFF),             // variable.language
@@ -1359,7 +1365,9 @@ pub const GITHUB_DARK: Pinned = Pinned {
 pub const GITHUB_LIGHT: Pinned = Pinned {
     keyword: (0xCF, 0x22, 0x2E),          // keyword, storage
     function: (0x82, 0x50, 0xDF),         // entity.name.function
+    function_italic: false,
     builtin_function: (0x05, 0x50, 0xAE), // support
+    builtin_function_italic: false,
     types: (0x95, 0x38, 0x00),            // entity.name
     types_italic: false,
     this: (0x05, 0x50, 0xAE),             // variable.language
@@ -1412,7 +1420,9 @@ pub const GITHUB_LIGHT: Pinned = Pinned {
 pub const DRACULA: Pinned = Pinned {
     keyword: (0xFF, 0x79, 0xC6),          // keyword, storage
     function: (0x50, 0xFA, 0x7B),         // entity.name.function
+    function_italic: false,
     builtin_function: (0x8B, 0xE9, 0xFD), // support (cyan) + support.function (upright)
+    builtin_function_italic: false,
     types: (0x8B, 0xE9, 0xFD),            // entity.name.type (italic)
     types_italic: true,
     this: (0xBD, 0x93, 0xF9),             // variable.language (italic)
@@ -1469,7 +1479,9 @@ pub const DRACULA: Pinned = Pinned {
 pub const TOKYO_NIGHT: Pinned = Pinned {
     keyword: (0xBB, 0x9A, 0xF7),          // keyword, storage.type
     function: (0x7A, 0xA2, 0xF7),         // entity.name.function
+    function_italic: false,
     builtin_function: (0x0D, 0xB9, 0xD7), // support.function
+    builtin_function_italic: false,
     types: (0x0D, 0xB9, 0xD7),            // support.type, support.class
     types_italic: false,
     this: (0xF7, 0x76, 0x8E),             // variable.language
@@ -1522,7 +1534,9 @@ pub const TOKYO_NIGHT: Pinned = Pinned {
 pub const TOKYO_NIGHT_LIGHT: Pinned = Pinned {
     keyword: (0x65, 0x35, 0x9D),          // keyword, storage.type
     function: (0x29, 0x59, 0xAA),         // entity.name.function
+    function_italic: false,
     builtin_function: (0x00, 0x6C, 0x86), // support.function
+    builtin_function_italic: false,
     types: (0x00, 0x6C, 0x86),            // support.type, support.class
     types_italic: false,
     this: (0x8C, 0x43, 0x51),             // variable.language
@@ -1570,6 +1584,124 @@ pub const TOKYO_NIGHT_LIGHT: Pinned = Pinned {
     deleted_mark: (0x00, 0x6C, 0x86),     // punctuation
 };
 
+/// **Catppuccin Mocha**, read off the published extension's
+/// `themes/mocha.json` (Catppuccin.catppuccin-vsc 3.19.0, 2026-10-26; MIT,
+/// © Catppuccin). Each value is what the `tokenColors` rules for the scope
+/// beside it add up to.
+///
+/// Functions, built-in functions, types, `self` and parameters are italic, as
+/// the extension draws them. A type is `entity.name.type`'s yellow, which is
+/// what a type's uses are in Rust and TypeScript; Python's built-in `int` is
+/// `support.type`'s mauve there, and the grammar here does not tell them apart.
+/// Each heading level has its own colour, red at `#` through to lavender.
+pub const CATPPUCCIN_MOCHA: Pinned = Pinned {
+    keyword: (0xCB, 0xA6, 0xF7),          // keyword, storage.type
+    function: (0x89, 0xB4, 0xFA),         // entity.name.function (italic)
+    function_italic: true,
+    builtin_function: (0xFA, 0xB3, 0x87), // support.function (italic)
+    builtin_function_italic: true,
+    types: (0xF9, 0xE2, 0xAF),            // entity.name.type (italic)
+    types_italic: true,
+    this: (0xF3, 0x8B, 0xA8),             // variable.language (italic)
+    this_italic: true,
+    string: (0xA6, 0xE3, 0xA1),           // string
+    escape: (0xF5, 0xC2, 0xE7),           // constant.character.escape
+    constant: (0xFA, 0xB3, 0x87),         // constant.language, constant.other
+    number: (0xFA, 0xB3, 0x87),           // constant.numeric
+    property: (0xCD, 0xD6, 0xF4),         // variable.other.property
+    parameter: (0xEB, 0xA0, 0xAC),        // variable.parameter (italic)
+    parameter_italic: true,
+    tag: (0x89, 0xB4, 0xFA),              // entity.name.tag
+    attribute: (0xF9, 0xE2, 0xAF),        // entity.other.attribute-name
+    attribute_italic: false,
+    comment: (0x93, 0x99, 0xB2),          // comment (italic)
+    comment_italic: true,
+    plain: (0xCD, 0xD6, 0xF4),            // variable.other.readwrite
+    operator: (0x94, 0xE2, 0xD5),         // keyword.operator
+    punctuation: (0x93, 0x99, 0xB2),      // punctuation
+    headings: [
+        (0xF3, 0x8B, 0xA8), // heading.1.markdown, `#` and all
+        (0xFA, 0xB3, 0x87), // heading.2.markdown
+        (0xF9, 0xE2, 0xAF), // heading.3.markdown
+        (0xA6, 0xE3, 0xA1), // heading.4.markdown
+        (0x74, 0xC7, 0xEC), // heading.5.markdown
+        (0xB4, 0xBE, 0xFE), // heading.6.markdown
+    ],
+    bold: (0xF3, 0x8B, 0xA8),             // markup.bold
+    bold_mark: (0x93, 0x99, 0xB2),        // punctuation
+    italic: (0xF3, 0x8B, 0xA8),           // markup.italic
+    italic_mark: (0x93, 0x99, 0xB2),      // punctuation
+    code: (0xA6, 0xE3, 0xA1),             // markup.inline.raw, backticks and all
+    code_mark: (0xA6, 0xE3, 0xA1),
+    list_mark: (0x94, 0xE2, 0xD5),        // punctuation.definition.list.begin
+    list_text: (0xCD, 0xD6, 0xF4),        // no rule
+    link_text: (0xB4, 0xBE, 0xFE),        // string.other.link.title
+    link_italic: false,
+    link_bracket: (0xB4, 0xBE, 0xFE),     // punctuation.definition.link.title
+    link_paren: (0x93, 0x99, 0xB2),       // punctuation
+    link_address: (0x89, 0xB4, 0xFA),     // markup.underline.link
+    quote: (0xF5, 0xC2, 0xE7),            // markup.quote, no italic
+    quote_italic: false,
+    quote_mark: (0xF5, 0xC2, 0xE7),       // punctuation.definition.quote.begin
+    deleted: (0xA6, 0xAD, 0xC8),          // markup.strikethrough
+    deleted_mark: (0x93, 0x99, 0xB2),     // punctuation
+};
+
+/// **Catppuccin Latte**, from `themes/latte.json` — see [`CATPPUCCIN_MOCHA`].
+/// The same rules, in Latte's colours.
+pub const CATPPUCCIN_LATTE: Pinned = Pinned {
+    keyword: (0x88, 0x39, 0xEF),          // keyword, storage.type
+    function: (0x1E, 0x66, 0xF5),         // entity.name.function (italic)
+    function_italic: true,
+    builtin_function: (0xFE, 0x64, 0x0B), // support.function (italic)
+    builtin_function_italic: true,
+    types: (0xDF, 0x8E, 0x1D),            // entity.name.type (italic)
+    types_italic: true,
+    this: (0xD2, 0x0F, 0x39),             // variable.language (italic)
+    this_italic: true,
+    string: (0x40, 0xA0, 0x2B),           // string
+    escape: (0xEA, 0x76, 0xCB),           // constant.character.escape
+    constant: (0xFE, 0x64, 0x0B),         // constant.language, constant.other
+    number: (0xFE, 0x64, 0x0B),           // constant.numeric
+    property: (0x4C, 0x4F, 0x69),         // variable.other.property
+    parameter: (0xE6, 0x45, 0x53),        // variable.parameter (italic)
+    parameter_italic: true,
+    tag: (0x1E, 0x66, 0xF5),              // entity.name.tag
+    attribute: (0xDF, 0x8E, 0x1D),        // entity.other.attribute-name
+    attribute_italic: false,
+    comment: (0x7C, 0x7F, 0x93),          // comment (italic)
+    comment_italic: true,
+    plain: (0x4C, 0x4F, 0x69),            // variable.other.readwrite
+    operator: (0x17, 0x92, 0x99),         // keyword.operator
+    punctuation: (0x7C, 0x7F, 0x93),      // punctuation
+    headings: [
+        (0xD2, 0x0F, 0x39), // heading.1.markdown, `#` and all
+        (0xFE, 0x64, 0x0B), // heading.2.markdown
+        (0xDF, 0x8E, 0x1D), // heading.3.markdown
+        (0x40, 0xA0, 0x2B), // heading.4.markdown
+        (0x20, 0x9F, 0xB5), // heading.5.markdown
+        (0x72, 0x87, 0xFD), // heading.6.markdown
+    ],
+    bold: (0xD2, 0x0F, 0x39),             // markup.bold
+    bold_mark: (0x7C, 0x7F, 0x93),        // punctuation
+    italic: (0xD2, 0x0F, 0x39),           // markup.italic
+    italic_mark: (0x7C, 0x7F, 0x93),      // punctuation
+    code: (0x40, 0xA0, 0x2B),             // markup.inline.raw, backticks and all
+    code_mark: (0x40, 0xA0, 0x2B),
+    list_mark: (0x17, 0x92, 0x99),        // punctuation.definition.list.begin
+    list_text: (0x4C, 0x4F, 0x69),        // no rule
+    link_text: (0x72, 0x87, 0xFD),        // string.other.link.title
+    link_italic: false,
+    link_bracket: (0x72, 0x87, 0xFD),     // punctuation.definition.link.title
+    link_paren: (0x7C, 0x7F, 0x93),       // punctuation
+    link_address: (0x1E, 0x66, 0xF5),     // markup.underline.link
+    quote: (0xEA, 0x76, 0xCB),            // markup.quote, no italic
+    quote_italic: false,
+    quote_mark: (0xEA, 0x76, 0xCB),       // punctuation.definition.quote.begin
+    deleted: (0x6C, 0x6F, 0x85),          // markup.strikethrough
+    deleted_mark: (0x7C, 0x7F, 0x93),     // punctuation
+};
+
 /// **Monokai, as VS Code ships it**, read off
 /// `extensions/theme-monokai/themes/monokai-color-theme.json` (2026-10-26).
 ///
@@ -1586,7 +1718,9 @@ pub const TOKYO_NIGHT_LIGHT: Pinned = Pinned {
 pub const MONOKAI: Pinned = Pinned {
     keyword: (0xF9, 0x26, 0x72),          // keyword, storage
     function: (0xA6, 0xE2, 0x2E),         // entity.name.function
+    function_italic: false,
     builtin_function: (0x66, 0xD9, 0xEF), // support.function
+    builtin_function_italic: false,
     types: (0x66, 0xD9, 0xEF),            // support.type (italic)
     types_italic: true,
     this: (0xFD, 0x97, 0x1F),             // variable.language
@@ -1711,16 +1845,17 @@ impl ThemeConfig {
     /// the design looks like with every colour taken away, which is also what a
     /// monochrome terminal and a colour-blind reader are left with.
     ///
-    /// Three more carry 宇浩's own candidate palettes onto a page of prose:
-    /// 莫蘭迪、明度階、靛橘. Each is two anchors per mood plus 金 and 朱,
+    /// Two more carry 宇浩's own candidate palettes onto a page of prose:
+    /// 莫蘭迪、明度階. Each is two anchors per mood plus 金 and 朱,
     /// and every other shade on the page is a rung worked out from them — so
     /// a theme is eight colours and no more.
     ///
-    /// Five are **borrowed** (2026-10-25/26): `one-dark`, `github`, `monokai`,
-    /// `dracula` and `tokyo-night` take their ink and paper from the theme they
-    /// copy, and its code and Markdown colours exactly ([`Pinned`]); `github`
-    /// and `tokyo-night` have both moods, the other three are dark only. 琥珀,
-    /// 陶窯, 夜螢, 莫高 and 藍曬 went to keep the set at ten.
+    /// Six are **borrowed** (2026-10-25/26): `one-dark`, `github`, `monokai`,
+    /// `dracula`, `tokyo-night` and `catppuccin` take their ink and paper from
+    /// the theme they copy, and its code and Markdown colours exactly
+    /// ([`Pinned`]); `github`, `tokyo-night` and `catppuccin` have both moods,
+    /// the other three are dark only. 琥珀, 陶窯, 夜螢, 莫高, 藍曬 and 靛橘 went
+    /// to keep the set at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is, and the pinyin is an alias for the hand that
@@ -1903,6 +2038,51 @@ impl ThemeConfig {
                 lime_light: (0x33, 0x63, 0x5C),
                 ..ThemeConfig::default()
             }),
+            // Catppuccin — Mocha and Latte (2026-10-26), in place of 靛橘, built
+            // as `github` is: each flavour's text and base for the ink and
+            // paper, `CATPPUCCIN_MOCHA` and `CATPPUCCIN_LATTE` for the code and
+            // the Markdown, its named colours for the accents (yellow for 金,
+            // red for 朱, which is also its `errorForeground`).
+            //
+            // Latte's text is 7.1:1 on its base; it passes the floor between
+            // grounds only because light ladders are spaced by contrast.
+            //
+            // Source: Catppuccin.catppuccin-vsc 3.19.0 (MIT, © Catppuccin).
+            // Notice in `licenses/`.
+            "catppuccin" => Some(ThemeConfig {
+                name: "catppuccin".to_string(),
+                dark: Ladder {
+                    ink: (0xCD, 0xD6, 0xF4),
+                    paper: (0x1E, 0x1E, 0x2E),
+                },
+                light: Ladder {
+                    ink: (0x4C, 0x4F, 0x69),
+                    paper: (0xEF, 0xF1, 0xF5),
+                },
+                pinned: Some(CATPPUCCIN_MOCHA),
+                pinned_light: Some(CATPPUCCIN_LATTE),
+                gold_dark: (0xF9, 0xE2, 0xAF),
+                gold_light: (0xDF, 0x8E, 0x1D),
+                mark_dark: (0xF3, 0x8B, 0xA8),
+                mark_light: (0xD2, 0x0F, 0x39),
+                purple_dark: (0xCB, 0xA6, 0xF7),
+                purple_light: (0x88, 0x39, 0xEF),
+                green_dark: (0xA6, 0xE3, 0xA1),
+                green_light: (0x40, 0xA0, 0x2B),
+                azure_dark: (0x89, 0xB4, 0xFA),
+                azure_light: (0x1E, 0x66, 0xF5),
+                amber_dark: (0xFA, 0xB3, 0x87),
+                amber_light: (0xFE, 0x64, 0x0B),
+                orange_dark: (0xFA, 0xB3, 0x87),
+                orange_light: (0xFE, 0x64, 0x0B),
+                pink_dark: (0xF5, 0xC2, 0xE7),
+                pink_light: (0xEA, 0x76, 0xCB),
+                cyan_dark: (0x89, 0xDC, 0xEB),
+                cyan_light: (0x04, 0xA5, 0xE5),
+                lime_dark: (0x94, 0xE2, 0xD5),
+                lime_light: (0x17, 0x92, 0x99),
+                ..ThemeConfig::default()
+            }),
             // 莫蘭迪 — 十套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
             "morandi" | "molandi" | "莫蘭迪" | "莫兰迪" => Some(ThemeConfig {
                 name: "morandi".to_string(),
@@ -2026,33 +2206,6 @@ impl ThemeConfig {
                 cyan_light: (0x0A, 0x30, 0x69),
                 lime_dark: (0x7E, 0xE7, 0x87),
                 lime_light: (0x11, 0x63, 0x29),
-                ..ThemeConfig::default()
-            }),
-            // 靛橘 — 顏色只活在底色裏，正文永遠是中性灰。唯一破例的是朱，它用紫，故意違反自己這條規矩。
-            "complement" | "dianju" | "靛橘" => Some(ThemeConfig {
-                name: "complement".to_string(),
-                dark: Ladder {
-                    ink: (0xE9, 0xE9, 0xEC),
-                    paper: (0x14, 0x16, 0x2B),
-                },
-                light: Ladder {
-                    ink: (0x19, 0x1A, 0x1E),
-                    paper: (0xF2, 0xF3, 0xFA),
-                },
-                gold_dark: (0xE8, 0x86, 0x2A),
-                gold_light: (0xA8, 0x54, 0x00),
-                mark_dark: (0xB9, 0x8C, 0xFF),
-                mark_light: (0x5B, 0x3F, 0xA0),
-                // Warning: **橙 is red in this theme**: its 金 is the orange, and a number
-                // the colour of a heading says nothing.
-                orange_dark: (0xF6, 0x5D, 0x4C),
-                orange_light: (0xC1, 0x3D, 0x30),
-                pink_dark: (0xEB, 0x99, 0xC0),
-                pink_light: (0xAE, 0x45, 0x7E),
-                cyan_dark: (0x65, 0xC4, 0xC9),
-                cyan_light: (0x1E, 0x76, 0x7F),
-                lime_dark: (0xA8, 0xC5, 0x75),
-                lime_light: (0x56, 0x74, 0x28),
                 ..ThemeConfig::default()
             }),
             _ => None,
@@ -5256,6 +5409,17 @@ mod a_typo_is_said_out_loud {
     }
 
     /// 2026-10-26: Tokyo Night took 藍曬's place, dark only.
+    #[test]
+    fn catppuccin_replaces_complement() {
+        assert!(ThemeConfig::named("complement").is_none());
+        let theme = ThemeConfig::named("catppuccin").expect("catppuccin");
+        assert!(!theme.dark_only);
+        assert_eq!(theme.pinned, Some(CATPPUCCIN_MOCHA));
+        assert_eq!(theme.pinned_light, Some(CATPPUCCIN_LATTE));
+        assert_eq!(theme.dark.paper, (0x1E, 0x1E, 0x2E));
+        assert_eq!(theme.light.paper, (0xEF, 0xF1, 0xF5));
+    }
+
     #[test]
     fn tokyo_night_replaces_cyanotype() {
         assert!(ThemeConfig::named("cyanotype").is_none());

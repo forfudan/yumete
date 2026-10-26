@@ -163,10 +163,10 @@ const THEME_NAMES: &[Choice] = &[
     Choice { word: "monokai", label: "cmd.themes.monokai" },
     Choice { word: "dracula", label: "cmd.themes.dracula" },
     Choice { word: "tokyo-night", label: "cmd.themes.tokyo-night" },
+    Choice { word: "catppuccin", label: "cmd.themes.catppuccin" },
     Choice { word: "bw", label: "cmd.themes.bw" },
     Choice { word: "morandi", label: "cmd.themes.morandi" },
     Choice { word: "meridian", label: "cmd.themes.meridian" },
-    Choice { word: "complement", label: "cmd.themes.complement" },
 ];
 
 /// 出廠的碼表，**與 `command.rs` 的 `SCHEMES` 同名同序**（同上）。

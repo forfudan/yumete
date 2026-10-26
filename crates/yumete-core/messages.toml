@@ -2786,11 +2786,11 @@ zhs = "黑白：只有黑、白和灰——轻重説话，颜色不説"
 en = "heibai: black, white and grey only — weight says it, colour says nothing"
 
 [[message]]
-# : 命令選單裏 complement 那一項的説明(themes 組)
-key = "cmd.themes.complement"
-zht = "靛橘：顏色只活在底色裏，正文永遠是中性灰"
-zhs = "靛橘：颜色只活在底色里，正文永远是中性灰"
-en = "complement: colour lives in the grounds only; the writing stays neutral grey"
+# : 命令選單裏 catppuccin 那一項的説明(themes 組)
+key = "cmd.themes.catppuccin"
+zht = "Catppuccin：粉彩色，深色 Mocha，淺色 Latte"
+zhs = "Catppuccin：粉彩色，深色 Mocha，浅色 Latte"
+en = "catppuccin: pastels; Mocha dark, Latte light"
 
 [[message]]
 # : 命令選單裏 dracula 那一項的説明(themes 組)
