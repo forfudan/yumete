@@ -2407,6 +2407,11 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
+        name: "gruvbox",
+        help: "cmd.themes.gruvbox",
+        needs: &[],
+    },
+    Word {
         // 黑白
         name: "bw",
         help: "cmd.themes.bw",
@@ -2416,12 +2421,6 @@ const THEMES: &[Word] = &[
         // 莫蘭迪
         name: "morandi",
         help: "cmd.themes.morandi",
-        needs: &[],
-    },
-    Word {
-        // 明度階
-        name: "meridian",
-        help: "cmd.themes.meridian",
         needs: &[],
     },
 ];
@@ -6692,9 +6691,9 @@ mod tests {
                 "dracula",
                 "tokyo-night",
                 "catppuccin",
+                "gruvbox",
                 "bw",
-                "morandi",
-                "meridian"
+                "morandi"
             ],
             "the menu lists what can be typed — ASCII, with the pinyin as an alias"
         );

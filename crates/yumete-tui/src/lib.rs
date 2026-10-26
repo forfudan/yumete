@@ -7963,10 +7963,13 @@ pub(crate) fn markup_style_in(
             .map_or(1, |mark| mark.end - mark.start)
             .clamp(1, 6);
         let colour = ink.pinned(|p| p.headings[level - 1]).unwrap_or_else(|| ink.text());
-        let style = Style::default().fg(colour);
         return match span.kind {
-            Kind::Heading => style.add_modifier(Modifier::BOLD),
-            _ => style,
+            Kind::Heading => Style::default().fg(colour).add_modifier(Modifier::BOLD),
+            // Gruvbox's `#`s are punctuation grey whatever the level.
+            _ => {
+                let mark = ink.pinned(|p| p.heading_mark.unwrap_or(p.headings[level - 1]));
+                Style::default().fg(mark.unwrap_or(colour))
+            }
         };
     }
     if span.kind != Kind::Marker || !ink.borrowed() {
@@ -8022,7 +8025,7 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         };
         match kind {
             Kind::Heading => return pin(|p| p.headings[0]).add_modifier(Modifier::BOLD),
-            Kind::HeadingMark => return pin(|p| p.headings[0]),
+            Kind::HeadingMark => return pin(|p| p.heading_mark.unwrap_or(p.headings[0])),
             Kind::Strong => return pin(|p| p.bold).add_modifier(Modifier::BOLD),
             Kind::Emphasis => return pin(|p| p.italic).add_modifier(Modifier::ITALIC),
             Kind::Code => return pin(|p| p.code),
@@ -26616,6 +26619,33 @@ fn squeezed(text: &str) -> String {
         let one_dark = yumete_config::ThemeConfig::named("one-dark").expect("one-dark");
         let one_dark = crate::theme::Palette::of_theme(&one_dark, true);
         assert!(!token(one_dark, Token::Function).add_modifier.contains(Modifier::ITALIC));
+    }
+
+    /// **Gruvbox's `#`s are punctuation grey at every level** (2026-10-26),
+    /// while the title takes the level's colour.
+    #[test]
+    fn gruvbox_greys_its_heading_marks() {
+        use yumete_core::markdown::{spans, Kind};
+        let theme = yumete_config::ThemeConfig::named("gruvbox").expect("gruvbox");
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        let dark = crate::theme::Palette::of_theme(&theme, true);
+        let light = crate::theme::Palette::of_theme(&theme, false);
+        let at = |ink, line: &str, i: usize| {
+            let all = spans(line);
+            let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
+            markup_style_in(span, &all, line.chars().nth(i), ink)
+        };
+        assert_eq!(at(dark, "# a", 0).fg, Some(rgb(0xA8_99_84)));
+        assert_eq!(at(dark, "# a", 2).fg, Some(rgb(0xFB_49_34)));
+        assert_eq!(at(dark, "### a", 0).fg, Some(rgb(0xA8_99_84)));
+        assert_eq!(at(dark, "### a", 4).fg, Some(rgb(0xFA_BD_2F)));
+        assert_eq!(at(light, "## a", 0).fg, Some(rgb(0x7C6F64)));
+        assert_eq!(at(light, "## a", 3).fg, Some(rgb(0xAF_3A_03)));
+        assert_eq!(markup_style(Kind::HeadingMark, dark).fg, Some(rgb(0xA8_99_84)));
+        // Tokyo Night still colours its `#`s with the level.
+        let tokyo = yumete_config::ThemeConfig::named("tokyo-night").expect("tokyo-night");
+        let tokyo = crate::theme::Palette::of_theme(&tokyo, true);
+        assert_eq!(at(tokyo, "## a", 0).fg, Some(rgb(0x61_BD_F2)));
     }
 
     #[test]

@@ -1231,6 +1231,9 @@ pub struct Pinned {
     /// A heading and its `#`s, one per level — Tokyo Night fades `#` to
     /// `######` from cyan to grey (2026-10-26); the others give all six one.
     pub headings: [(u8, u8, u8); 6],
+    /// The `#`s, when they are not the heading's own colour — Gruvbox draws
+    /// them punctuation grey at every level (2026-10-26).
+    pub heading_mark: Option<(u8, u8, u8)>,
     pub bold: (u8, u8, u8),
     pub bold_mark: (u8, u8, u8),
     pub italic: (u8, u8, u8),
@@ -1286,6 +1289,7 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     operator: (0xAB, 0xB2, 0xBF),         // keyword.operator
     punctuation: (0xAB, 0xB2, 0xBF),      // editor.foreground
     headings: [(0xE0, 0x6C, 0x75); 6],    // markup.heading, its `#`
+    heading_mark: None,
     bold: (0xD1, 0x9A, 0x66),             // markup.bold
     bold_mark: (0xD1, 0x9A, 0x66),        // punctuation.definition.bold
     italic: (0xC6, 0x78, 0xDD),           // markup.italic
@@ -1340,6 +1344,7 @@ pub const GITHUB_DARK: Pinned = Pinned {
     operator: (0xFF, 0x7B, 0x72),         // keyword
     punctuation: (0xE6, 0xED, 0xF3),      // no rule
     headings: [(0x79, 0xC0, 0xFF); 6],    // markup.heading, `#` and all
+    heading_mark: None,
     bold: (0xE6, 0xED, 0xF3),             // markup.bold: weight only
     bold_mark: (0xE6, 0xED, 0xF3),
     italic: (0xE6, 0xED, 0xF3),           // markup.italic: slant only
@@ -1388,6 +1393,7 @@ pub const GITHUB_LIGHT: Pinned = Pinned {
     operator: (0xCF, 0x22, 0x2E),         // keyword
     punctuation: (0x1F, 0x23, 0x28),      // no rule
     headings: [(0x05, 0x50, 0xAE); 6],    // markup.heading, `#` and all
+    heading_mark: None,
     bold: (0x1F, 0x23, 0x28),             // markup.bold: weight only
     bold_mark: (0x1F, 0x23, 0x28),
     italic: (0x1F, 0x23, 0x28),           // markup.italic: slant only
@@ -1443,6 +1449,7 @@ pub const DRACULA: Pinned = Pinned {
     operator: (0xFF, 0x79, 0xC6),         // keyword
     punctuation: (0xF8, 0xF8, 0xF2),      // no rule
     headings: [(0xBD, 0x93, 0xF9); 6],    // markup.heading, `#` and all
+    heading_mark: None,
     bold: (0xFF, 0xB8, 0x6C),             // markup.bold, marks and all
     bold_mark: (0xFF, 0xB8, 0x6C),
     italic: (0xF1, 0xFA, 0x8C),           // markup.italic, marks and all
@@ -1509,6 +1516,7 @@ pub const TOKYO_NIGHT: Pinned = Pinned {
         (0x9A, 0xA5, 0xCE), // heading.5.markdown
         (0x74, 0x7C, 0xA1), // heading.6.markdown
     ],
+    heading_mark: None,
     bold: (0xC0, 0xCA, 0xF5),             // markup.bold, marks and all
     bold_mark: (0xC0, 0xCA, 0xF5),
     italic: (0xC0, 0xCA, 0xF5),           // markup.italic, marks and all
@@ -1564,6 +1572,7 @@ pub const TOKYO_NIGHT_LIGHT: Pinned = Pinned {
         (0x40, 0x43, 0x4F), // heading.5.markdown
         (0x74, 0x7C, 0xA1), // heading.6.markdown
     ],
+    heading_mark: None,
     bold: (0x34, 0x3B, 0x58),             // markup.bold, marks and all
     bold_mark: (0x34, 0x3B, 0x58),
     italic: (0x34, 0x3B, 0x58),           // markup.italic, marks and all
@@ -1627,6 +1636,7 @@ pub const CATPPUCCIN_MOCHA: Pinned = Pinned {
         (0x74, 0xC7, 0xEC), // heading.5.markdown
         (0xB4, 0xBE, 0xFE), // heading.6.markdown
     ],
+    heading_mark: None,
     bold: (0xF3, 0x8B, 0xA8),             // markup.bold
     bold_mark: (0x93, 0x99, 0xB2),        // punctuation
     italic: (0xF3, 0x8B, 0xA8),           // markup.italic
@@ -1682,6 +1692,7 @@ pub const CATPPUCCIN_LATTE: Pinned = Pinned {
         (0x20, 0x9F, 0xB5), // heading.5.markdown
         (0x72, 0x87, 0xFD), // heading.6.markdown
     ],
+    heading_mark: None,
     bold: (0xD2, 0x0F, 0x39),             // markup.bold
     bold_mark: (0x7C, 0x7F, 0x93),        // punctuation
     italic: (0xD2, 0x0F, 0x39),           // markup.italic
@@ -1700,6 +1711,126 @@ pub const CATPPUCCIN_LATTE: Pinned = Pinned {
     quote_mark: (0xEA, 0x76, 0xCB),       // punctuation.definition.quote.begin
     deleted: (0x6C, 0x6F, 0x85),          // markup.strikethrough
     deleted_mark: (0x7C, 0x7F, 0x93),     // punctuation
+};
+
+/// **Gruvbox Dark (Medium)**, read off the published extension's
+/// `themes/gruvbox-dark-medium.json` (jdinhlife.gruvbox 1.29.1, 2026-10-26;
+/// MIT, © 2017 JD). Each value is what the `tokenColors` rules for the scope
+/// beside it add up to.
+///
+/// One departure, asked for (2026-10-26): the extension paints every
+/// `variable` blue — names, parameters, fields, `self` — which turns most of
+/// a page of code blue; the original vim Gruvbox and helix leave them in the
+/// text colour, and so does this. A heading's `#`s are punctuation grey at
+/// every level while its title goes red, orange, yellow, green, blue, purple.
+pub const GRUVBOX_DARK: Pinned = Pinned {
+    keyword: (0xFB, 0x49, 0x34),          // keyword, storage.type
+    function: (0x8E, 0xC0, 0x7C),         // entity.name.function
+    function_italic: false,
+    builtin_function: (0xFE, 0x80, 0x19), // support.function
+    builtin_function_italic: false,
+    types: (0xFA, 0xBD, 0x2F),            // entity.name.type, support.type
+    types_italic: false,
+    this: (0xEB, 0xDB, 0xB2),             // variable: the text colour (see above)
+    this_italic: false,
+    string: (0xB8, 0xBB, 0x26),           // string
+    escape: (0xD3, 0x86, 0x9B),           // constant
+    constant: (0xD3, 0x86, 0x9B),         // constant
+    number: (0xD3, 0x86, 0x9B),           // constant
+    property: (0xEB, 0xDB, 0xB2),         // variable.other: the text colour
+    parameter: (0xEB, 0xDB, 0xB2),        // variable.parameter: the text colour
+    parameter_italic: false,
+    tag: (0x8E, 0xC0, 0x7C),              // entity.name.tag (bold)
+    attribute: (0xFA, 0xBD, 0x2F),        // entity.other.attribute-name
+    attribute_italic: false,
+    comment: (0x92, 0x83, 0x74),          // comment (italic)
+    comment_italic: true,
+    plain: (0xEB, 0xDB, 0xB2),            // variable: the text colour
+    operator: (0x8E, 0xC0, 0x7C),         // keyword.operator
+    punctuation: (0xA8, 0x99, 0x84),      // punctuation
+    headings: [
+        (0xFB, 0x49, 0x34), // heading.1.markdown
+        (0xFE, 0x80, 0x19), // heading.2.markdown
+        (0xFA, 0xBD, 0x2F), // heading.3.markdown
+        (0xB8, 0xBB, 0x26), // heading.4.markdown
+        (0x83, 0xA5, 0x98), // heading.5.markdown
+        (0xD3, 0x86, 0x9B), // heading.6.markdown
+    ],
+    heading_mark: Some((0xA8, 0x99, 0x84)), // punctuation, every level
+    bold: (0xFE, 0x80, 0x19),             // markup.bold
+    bold_mark: (0xA8, 0x99, 0x84),        // punctuation
+    italic: (0xEB, 0xDB, 0xB2),           // markup.italic: no colour
+    italic_mark: (0xA8, 0x99, 0x84),      // punctuation
+    code: (0x8E, 0xC0, 0x7C),             // markup.inline.raw
+    code_mark: (0xA8, 0x99, 0x84),        // punctuation
+    list_mark: (0xA8, 0x99, 0x84),        // punctuation
+    list_text: (0xEB, 0xDB, 0xB2),        // no rule
+    link_text: (0x92, 0x83, 0x74),        // string.other.link.title (underlined)
+    link_italic: false,
+    link_bracket: (0xA8, 0x99, 0x84),     // punctuation
+    link_paren: (0xA8, 0x99, 0x84),       // punctuation
+    link_address: (0xD3, 0x86, 0x9B),     // markup.underline.link
+    quote: (0xEB, 0xDB, 0xB2),            // markup.quote: no rule
+    quote_italic: false,
+    quote_mark: (0xA8, 0x99, 0x84),       // punctuation
+    deleted: (0xEB, 0xDB, 0xB2),          // markup.strikethrough: no rule
+    deleted_mark: (0xA8, 0x99, 0x84),     // punctuation
+};
+
+/// **Gruvbox Light (Medium)**, from `themes/gruvbox-light-medium.json` — see
+/// [`GRUVBOX_DARK`]. The same rules, in the light palette.
+pub const GRUVBOX_LIGHT: Pinned = Pinned {
+    keyword: (0x9D, 0x00, 0x06),          // keyword, storage.type
+    function: (0x42, 0x7B, 0x58),         // entity.name.function
+    function_italic: false,
+    builtin_function: (0xAF, 0x3A, 0x03), // support.function
+    builtin_function_italic: false,
+    types: (0xB5, 0x76, 0x14),            // entity.name.type, support.type
+    types_italic: false,
+    this: (0x3C, 0x38, 0x36),             // variable: the text colour (see above)
+    this_italic: false,
+    string: (0x79, 0x74, 0x0E),           // string
+    escape: (0x8F, 0x3F, 0x71),           // constant
+    constant: (0x8F, 0x3F, 0x71),         // constant
+    number: (0x8F, 0x3F, 0x71),           // constant
+    property: (0x3C, 0x38, 0x36),         // variable.other: the text colour
+    parameter: (0x3C, 0x38, 0x36),        // variable.parameter: the text colour
+    parameter_italic: false,
+    tag: (0x42, 0x7B, 0x58),              // entity.name.tag (bold)
+    attribute: (0xB5, 0x76, 0x14),        // entity.other.attribute-name
+    attribute_italic: false,
+    comment: (0x92, 0x83, 0x74),          // comment (italic)
+    comment_italic: true,
+    plain: (0x3C, 0x38, 0x36),            // variable: the text colour
+    operator: (0x42, 0x7B, 0x58),         // keyword.operator
+    punctuation: (0x7C, 0x6F, 0x64),      // punctuation
+    headings: [
+        (0x9D, 0x00, 0x06), // heading.1.markdown
+        (0xAF, 0x3A, 0x03), // heading.2.markdown
+        (0xB5, 0x76, 0x14), // heading.3.markdown
+        (0x79, 0x74, 0x0E), // heading.4.markdown
+        (0x07, 0x66, 0x78), // heading.5.markdown
+        (0x8F, 0x3F, 0x71), // heading.6.markdown
+    ],
+    heading_mark: Some((0x7C, 0x6F, 0x64)), // punctuation, every level
+    bold: (0xAF, 0x3A, 0x03),             // markup.bold
+    bold_mark: (0x7C, 0x6F, 0x64),        // punctuation
+    italic: (0x3C, 0x38, 0x36),           // markup.italic: no colour
+    italic_mark: (0x7C, 0x6F, 0x64),      // punctuation
+    code: (0x42, 0x7B, 0x58),             // markup.inline.raw
+    code_mark: (0x7C, 0x6F, 0x64),        // punctuation
+    list_mark: (0x7C, 0x6F, 0x64),        // punctuation
+    list_text: (0x3C, 0x38, 0x36),        // no rule
+    link_text: (0x92, 0x83, 0x74),        // string.other.link.title (underlined)
+    link_italic: false,
+    link_bracket: (0x7C, 0x6F, 0x64),     // punctuation
+    link_paren: (0x7C, 0x6F, 0x64),       // punctuation
+    link_address: (0x8F, 0x3F, 0x71),     // markup.underline.link
+    quote: (0x3C, 0x38, 0x36),            // markup.quote: no rule
+    quote_italic: false,
+    quote_mark: (0x7C, 0x6F, 0x64),       // punctuation
+    deleted: (0x3C, 0x38, 0x36),          // markup.strikethrough: no rule
+    deleted_mark: (0x7C, 0x6F, 0x64),     // punctuation
 };
 
 /// **Monokai, as VS Code ships it**, read off
@@ -1741,6 +1872,7 @@ pub const MONOKAI: Pinned = Pinned {
     operator: (0xF9, 0x26, 0x72),         // keyword.operator
     punctuation: (0xF8, 0xF8, 0xF2),      // no rule
     headings: [(0xA6, 0xE2, 0x2E); 6],    // markup.heading, `#` and all
+    heading_mark: None,
     bold: (0x66, 0xD9, 0xEF),             // markup.bold, marks and all
     bold_mark: (0x66, 0xD9, 0xEF),
     italic: (0x66, 0xD9, 0xEF),           // markup.italic, marks and all
@@ -1845,17 +1977,17 @@ impl ThemeConfig {
     /// the design looks like with every colour taken away, which is also what a
     /// monochrome terminal and a colour-blind reader are left with.
     ///
-    /// Two more carry 宇浩's own candidate palettes onto a page of prose:
-    /// 莫蘭迪、明度階. Each is two anchors per mood plus 金 and 朱,
+    /// One more carries one of 宇浩's own candidate palettes onto a page of
+    /// prose: 莫蘭迪. It is two anchors per mood plus 金 and 朱,
     /// and every other shade on the page is a rung worked out from them — so
     /// a theme is eight colours and no more.
     ///
-    /// Six are **borrowed** (2026-10-25/26): `one-dark`, `github`, `monokai`,
-    /// `dracula`, `tokyo-night` and `catppuccin` take their ink and paper from
-    /// the theme they copy, and its code and Markdown colours exactly
-    /// ([`Pinned`]); `github`, `tokyo-night` and `catppuccin` have both moods,
-    /// the other three are dark only. 琥珀, 陶窯, 夜螢, 莫高, 藍曬 and 靛橘 went
-    /// to keep the set at ten.
+    /// Seven are **borrowed** (2026-10-25/26): `one-dark`, `github`, `monokai`,
+    /// `dracula`, `tokyo-night`, `catppuccin` and `gruvbox` take their ink and
+    /// paper from the theme they copy, and its code and Markdown colours
+    /// exactly ([`Pinned`]); `github`, `tokyo-night`, `catppuccin` and
+    /// `gruvbox` have both moods, the other three are dark only. 琥珀, 陶窯,
+    /// 夜螢, 莫高, 藍曬, 靛橘 and 明度階 went to keep the set at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is, and the pinyin is an alias for the hand that
@@ -2083,6 +2215,48 @@ impl ThemeConfig {
                 lime_light: (0x17, 0x92, 0x99),
                 ..ThemeConfig::default()
             }),
+            // Gruvbox — Dark and Light, Medium (2026-10-26), in place of 明度階,
+            // built as `github` is: each mood's text and ground for the ink and
+            // paper, `GRUVBOX_DARK` and `GRUVBOX_LIGHT` for the code and the
+            // Markdown, its palette for the accents. 朱 is its `errorForeground`,
+            // the bright red in the dark and the deep one in the light.
+            //
+            // Source: jdinhlife.gruvbox 1.29.1 (MIT, © 2017 JD). Notice in
+            // `licenses/`.
+            "gruvbox" => Some(ThemeConfig {
+                name: "gruvbox".to_string(),
+                dark: Ladder {
+                    ink: (0xEB, 0xDB, 0xB2),
+                    paper: (0x28, 0x28, 0x28),
+                },
+                light: Ladder {
+                    ink: (0x3C, 0x38, 0x36),
+                    paper: (0xFB, 0xF1, 0xC7),
+                },
+                pinned: Some(GRUVBOX_DARK),
+                pinned_light: Some(GRUVBOX_LIGHT),
+                gold_dark: (0xFA, 0xBD, 0x2F),
+                gold_light: (0xB5, 0x76, 0x14),
+                mark_dark: (0xFB, 0x49, 0x34),
+                mark_light: (0x9D, 0x00, 0x06),
+                purple_dark: (0xD3, 0x86, 0x9B),
+                purple_light: (0x8F, 0x3F, 0x71),
+                green_dark: (0xB8, 0xBB, 0x26),
+                green_light: (0x79, 0x74, 0x0E),
+                azure_dark: (0x83, 0xA5, 0x98),
+                azure_light: (0x07, 0x66, 0x78),
+                amber_dark: (0xFE, 0x80, 0x19),
+                amber_light: (0xAF, 0x3A, 0x03),
+                orange_dark: (0xFE, 0x80, 0x19),
+                orange_light: (0xAF, 0x3A, 0x03),
+                pink_dark: (0xD3, 0x86, 0x9B),
+                pink_light: (0x8F, 0x3F, 0x71),
+                cyan_dark: (0x8E, 0xC0, 0x7C),
+                cyan_light: (0x42, 0x7B, 0x58),
+                lime_dark: (0xB8, 0xBB, 0x26),
+                lime_light: (0x79, 0x74, 0x0E),
+                ..ThemeConfig::default()
+            }),
             // 莫蘭迪 — 十套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
             "morandi" | "molandi" | "莫蘭迪" | "莫兰迪" => Some(ThemeConfig {
                 name: "morandi".to_string(),
@@ -2139,31 +2313,6 @@ impl ThemeConfig {
                 pink_dark: (0xF9, 0x26, 0x72),
                 cyan_dark: (0x66, 0xD9, 0xEF),
                 lime_dark: (0xA6, 0xE2, 0x2E),
-                ..ThemeConfig::default()
-            }),
-            // 明度階 — 朱不是紅的，是藍的：紅綠色盲也分得開。金與朱在色相和明度上各自分開了兩次。
-            "meridian" | "mingdujie" | "明度階" | "明度阶" => Some(ThemeConfig {
-                name: "meridian".to_string(),
-                dark: Ladder {
-                    ink: (0xEE, 0xF1, 0xF5),
-                    paper: (0x14, 0x17, 0x1B),
-                },
-                light: Ladder {
-                    ink: (0x14, 0x18, 0x1E),
-                    paper: (0xFC, 0xFC, 0xFD),
-                },
-                gold_dark: (0xD9, 0xB1, 0x5C),
-                gold_light: (0x8A, 0x65, 0x12),
-                mark_dark: (0x5A, 0xA6, 0xEE),
-                mark_light: (0x1D, 0x4C, 0x88),
-                orange_dark: (0xEF, 0x95, 0x5C),
-                orange_light: (0xAE, 0x5A, 0x1C),
-                pink_dark: (0xEA, 0x98, 0xBF),
-                pink_light: (0xB4, 0x4B, 0x82),
-                cyan_dark: (0x64, 0xC2, 0xC8),
-                cyan_light: (0x26, 0x7C, 0x84),
-                lime_dark: (0xA7, 0xC4, 0x74),
-                lime_light: (0x5B, 0x7A, 0x2E),
                 ..ThemeConfig::default()
             }),
             // GitHub — Dark Default and Light Default, the most installed theme in
@@ -5414,6 +5563,20 @@ mod a_typo_is_said_out_loud {
     }
 
     /// 2026-10-26: Tokyo Night took 藍曬's place, dark only.
+    #[test]
+    fn gruvbox_replaces_meridian() {
+        assert!(ThemeConfig::named("meridian").is_none());
+        let theme = ThemeConfig::named("gruvbox").expect("gruvbox");
+        assert!(!theme.dark_only);
+        assert_eq!(theme.pinned, Some(GRUVBOX_DARK));
+        assert_eq!(theme.pinned_light, Some(GRUVBOX_LIGHT));
+        assert_eq!(theme.dark.paper, (0x28, 0x28, 0x28));
+        assert_eq!(theme.light.paper, (0xFB, 0xF1, 0xC7));
+        // Names are the text colour, not the extension's blue (2026-10-26).
+        assert_eq!(GRUVBOX_DARK.plain, theme.dark.ink);
+        assert_eq!(GRUVBOX_LIGHT.parameter, theme.light.ink);
+    }
+
     #[test]
     fn catppuccin_replaces_complement() {
         assert!(ThemeConfig::named("complement").is_none());
