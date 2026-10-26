@@ -49,15 +49,15 @@ in `docs/development.md` §5.2.
   list markers cyan, and quotations italic yellow behind a cyan `>`. Errors take
   Dracula's own red. Dark only. Its MIT notice is in `licenses/`.
 
-- **`:theme tokyo-night`**: Tokyo Night, built the same way. Keywords and attributes purple,
+- **`:theme tokyo-night`**: Tokyo Night and Tokyo Night Light, built as `github`
+  is, so `:theme-mode` turns it light or dark. Keywords and attributes purple,
   functions blue, built-in functions and types cyan, strings green, numbers and
   constants orange, parameters yellow, `self` and HTML tags red, comments italic;
   names in code a step brighter than the text, as Tokyo Night draws them, and all
   punctuation a light cyan. In Markdown each heading level has its own colour,
   from cyan at `#` to grey at `######`; inline code, list markers, a quotation's
   `>` and a link's brackets are the punctuation cyan, link text teal, quotations
-  italic. Errors take its editor error red. Dark only. Its MIT notice is in
-  `licenses/`.
+  italic. Errors take its editor error red. Its MIT notice is in `licenses/`.
 
 ### Changed
 

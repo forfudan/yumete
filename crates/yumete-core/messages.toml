@@ -2841,9 +2841,9 @@ en = "one-dark: the scheme most VS Code users know; dark only"
 [[message]]
 # : 命令選單裏 tokyo-night 那一項的説明(themes 組)
 key = "cmd.themes.tokyo-night"
-zht = "Tokyo Night：柔和的藍紫調，只有深色"
-zhs = "Tokyo Night：柔和的蓝紫调，只有深色"
-en = "tokyo-night: soft blue-purple tones; dark only"
+zht = "Tokyo Night：柔和的藍紫調，深淺都有"
+zhs = "Tokyo Night：柔和的蓝紫调，深浅都有"
+en = "tokyo-night: soft blue-purple tones; light and dark"
 
 [[message]]
 # `:vertical-keys` 選單上那兩個詞——邏輯那一個
