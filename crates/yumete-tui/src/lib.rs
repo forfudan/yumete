@@ -8164,12 +8164,12 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
                     Token::Number => pin(|p| p.number),
                     Token::Parameter => leaning(pin(|p| p.parameter), italic(|p| p.parameter_italic)),
                     Token::Keyword => pin(|p| p.keyword),
-                    Token::Builtin => pin(|p| p.this),
+                    Token::Builtin => leaning(pin(|p| p.this), italic(|p| p.this_italic)),
                     Token::Function => pin(|p| p.function),
                     Token::BuiltinFunction => pin(|p| p.builtin_function),
                     Token::Escape => pin(|p| p.escape),
                     Token::Property => pin(|p| p.property),
-                    Token::Attribute => pin(|p| p.attribute),
+                    Token::Attribute => leaning(pin(|p| p.attribute), italic(|p| p.attribute_italic)),
                     Token::Type => leaning(pin(|p| p.types), italic(|p| p.types_italic)),
                     Token::String => pin(|p| p.string),
                     Token::Tag => pin(|p| p.tag),
@@ -8343,7 +8343,11 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         // A borrowed theme's quote is its `markup.quote`, and its fence is the
         // text colour — One Dark Pro has no rule for a fence's body (2026-10-25).
         Block::Quote { inside } if ink.borrowed() => {
-            Some(inked(ink.pinned(|p| p.quote).unwrap_or_else(|| ink.green()), inside, ink))
+            let style = inked(ink.pinned(|p| p.quote).unwrap_or_else(|| ink.green()), inside, ink);
+            Some(match ink.pinned_says(|p| p.quote_italic) {
+                true => style.add_modifier(Modifier::ITALIC),
+                false => style,
+            })
         }
         Block::Code { inside } if ink.borrowed() => {
             Some(inked(ink.pinned(|p| p.plain).unwrap_or_else(|| ink.text()), inside, ink))
@@ -26512,6 +26516,26 @@ fn squeezed(text: &str) -> String {
         assert!(!token(Token::Comment).add_modifier.contains(Modifier::ITALIC));
         let item = block_style(Block::Item { task: None }, ink).and_then(|s| s.fg);
         assert_eq!(item, Some(rgb(0xE6_DB_74)));
+    }
+
+    /// **Dracula is Dracula's** (2026-10-26): italic `self`, attributes and
+    /// quotations, a cyan `>` over yellow words.
+    #[test]
+    fn dracula_paints_what_dracula_paints() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::{Block, Kind};
+        let theme = yumete_config::ThemeConfig::named("dracula").expect("dracula");
+        let ink = crate::theme::Palette::of_theme(&theme, true);
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        let token = |t| markup_style(Kind::Token(t), ink);
+        assert_eq!(token(Token::Function).fg, Some(rgb(0x50_FA_7B)));
+        assert_eq!(token(Token::Builtin).fg, Some(rgb(0xBD_93_F9)));
+        assert!(token(Token::Builtin).add_modifier.contains(Modifier::ITALIC));
+        assert!(token(Token::Attribute).add_modifier.contains(Modifier::ITALIC));
+        assert!(!token(Token::BuiltinFunction).add_modifier.contains(Modifier::ITALIC));
+        let quote = block_style(Block::Quote { inside: None }, ink).unwrap();
+        assert_eq!(quote.fg, Some(rgb(0xF1_FA_8C)));
+        assert!(quote.add_modifier.contains(Modifier::ITALIC));
     }
 
     #[test]

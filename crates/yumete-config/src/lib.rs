@@ -1140,6 +1140,7 @@ pub struct Pinned {
     pub types: (u8, u8, u8),
     pub types_italic: bool,
     pub this: (u8, u8, u8),
+    pub this_italic: bool,
     pub string: (u8, u8, u8),
     pub escape: (u8, u8, u8),
     pub constant: (u8, u8, u8),
@@ -1149,6 +1150,7 @@ pub struct Pinned {
     pub parameter_italic: bool,
     pub tag: (u8, u8, u8),
     pub attribute: (u8, u8, u8),
+    pub attribute_italic: bool,
     pub comment: (u8, u8, u8),
     pub comment_italic: bool,
     pub plain: (u8, u8, u8),
@@ -1173,6 +1175,7 @@ pub struct Pinned {
     pub link_paren: (u8, u8, u8),
     pub link_address: (u8, u8, u8),
     pub quote: (u8, u8, u8),
+    pub quote_italic: bool,
     pub quote_mark: (u8, u8, u8),
     pub deleted: (u8, u8, u8),
     pub deleted_mark: (u8, u8, u8),
@@ -1191,6 +1194,7 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     types: (0xE5, 0xC0, 0x7B),            // entity.name.type, entity.name.class
     types_italic: false,
     this: (0xE5, 0xC0, 0x7B),             // variable.language
+    this_italic: false,
     string: (0x98, 0xC3, 0x79),           // string
     escape: (0x56, 0xB6, 0xC2),           // constant.character.escape
     constant: (0xD1, 0x9A, 0x66),         // constant
@@ -1200,6 +1204,7 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     parameter_italic: true,
     tag: (0xE0, 0x6C, 0x75),              // entity.name.tag
     attribute: (0xD1, 0x9A, 0x66),        // entity.other.attribute-name
+    attribute_italic: false,
     comment: (0x7F, 0x84, 0x8E),          // comment (italic)
     comment_italic: true,
     plain: (0xAB, 0xB2, 0xBF),            // editor.foreground
@@ -1220,6 +1225,7 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     link_paren: (0xE0, 0x6C, 0x75),       // punctuation.definition.metadata
     link_address: (0xC6, 0x78, 0xDD),     // markup.underline.link
     quote: (0x5C, 0x63, 0x70),            // markup.quote, `>` and all
+    quote_italic: false,
     quote_mark: (0x5C, 0x63, 0x70),
     deleted: (0xE0, 0x6C, 0x75),          // markup.deleted
     deleted_mark: (0xE0, 0x6C, 0x75),
@@ -1240,6 +1246,7 @@ pub const GITHUB_DARK: Pinned = Pinned {
     types: (0xFF, 0xA6, 0x57),            // entity.name
     types_italic: false,
     this: (0x79, 0xC0, 0xFF),             // variable.language
+    this_italic: false,
     string: (0xA5, 0xD6, 0xFF),           // string
     escape: (0x79, 0xC0, 0xFF),           // constant
     constant: (0x79, 0xC0, 0xFF),         // constant
@@ -1249,6 +1256,7 @@ pub const GITHUB_DARK: Pinned = Pinned {
     parameter_italic: false,
     tag: (0x7E, 0xE7, 0x87),              // entity.name.tag
     attribute: (0x79, 0xC0, 0xFF),        // entity
+    attribute_italic: false,
     comment: (0x8B, 0x94, 0x9E),          // comment (upright)
     comment_italic: false,
     plain: (0xE6, 0xED, 0xF3),            // editor.foreground
@@ -1269,6 +1277,7 @@ pub const GITHUB_DARK: Pinned = Pinned {
     link_paren: (0xE6, 0xED, 0xF3),       // no rule
     link_address: (0xE6, 0xED, 0xF3),     // markup.underline: underline only
     quote: (0x7E, 0xE7, 0x87),            // markup.quote, `>` and all
+    quote_italic: false,
     quote_mark: (0x7E, 0xE7, 0x87),
     deleted: (0xE6, 0xED, 0xF3),          // markup.strikethrough: no colour
     deleted_mark: (0xE6, 0xED, 0xF3),
@@ -1283,6 +1292,7 @@ pub const GITHUB_LIGHT: Pinned = Pinned {
     types: (0x95, 0x38, 0x00),            // entity.name
     types_italic: false,
     this: (0x05, 0x50, 0xAE),             // variable.language
+    this_italic: false,
     string: (0x0A, 0x30, 0x69),           // string
     escape: (0x05, 0x50, 0xAE),           // constant
     constant: (0x05, 0x50, 0xAE),         // constant
@@ -1292,6 +1302,7 @@ pub const GITHUB_LIGHT: Pinned = Pinned {
     parameter_italic: false,
     tag: (0x11, 0x63, 0x29),              // entity.name.tag
     attribute: (0x05, 0x50, 0xAE),        // entity
+    attribute_italic: false,
     comment: (0x6E, 0x77, 0x81),          // comment (upright)
     comment_italic: false,
     plain: (0x1F, 0x23, 0x28),            // editor.foreground
@@ -1312,9 +1323,63 @@ pub const GITHUB_LIGHT: Pinned = Pinned {
     link_paren: (0x1F, 0x23, 0x28),       // no rule
     link_address: (0x1F, 0x23, 0x28),     // markup.underline: underline only
     quote: (0x11, 0x63, 0x29),            // markup.quote, `>` and all
+    quote_italic: false,
     quote_mark: (0x11, 0x63, 0x29),
     deleted: (0x1F, 0x23, 0x28),          // markup.strikethrough: no colour
     deleted_mark: (0x1F, 0x23, 0x28),
+};
+
+/// **Dracula**, read off the published extension's `theme/dracula.json`
+/// (theme-dracula 2.25.1, 2026-10-26; MIT, © Dracula Theme).
+///
+/// Dracula leans on TextMate's rule merging: `support.function` only says
+/// "upright" and takes its cyan from the broader `support`, and the Markdown
+/// rules reach into particular nestings (`markup.quote.markdown …`). Each
+/// value here is what those rules add up to. A quotation's `>` is the list
+/// bullets' cyan (`beginning.punctuation.definition.quote.markdown`), its words
+/// italic yellow.
+pub const DRACULA: Pinned = Pinned {
+    keyword: (0xFF, 0x79, 0xC6),          // keyword, storage
+    function: (0x50, 0xFA, 0x7B),         // entity.name.function
+    builtin_function: (0x8B, 0xE9, 0xFD), // support (cyan) + support.function (upright)
+    types: (0x8B, 0xE9, 0xFD),            // entity.name.type (italic)
+    types_italic: true,
+    this: (0xBD, 0x93, 0xF9),             // variable.language (italic)
+    this_italic: true,
+    string: (0xF1, 0xFA, 0x8C),           // string
+    escape: (0xFF, 0x79, 0xC6),           // constant.character.escape
+    constant: (0xBD, 0x93, 0xF9),         // constant
+    number: (0xBD, 0x93, 0xF9),           // constant
+    property: (0xF8, 0xF8, 0xF2),         // variable
+    parameter: (0xFF, 0xB8, 0x6C),        // variable.parameter (italic)
+    parameter_italic: true,
+    tag: (0xFF, 0x79, 0xC6),              // entity.name.tag
+    attribute: (0x50, 0xFA, 0x7B),        // entity.other.attribute-name (italic)
+    attribute_italic: true,
+    comment: (0x62, 0x72, 0xA4),          // comment (upright)
+    comment_italic: false,
+    plain: (0xF8, 0xF8, 0xF2),            // editor.foreground
+    operator: (0xFF, 0x79, 0xC6),         // keyword
+    punctuation: (0xF8, 0xF8, 0xF2),      // no rule
+    heading: (0xBD, 0x93, 0xF9),          // markup.heading, `#` and all
+    bold: (0xFF, 0xB8, 0x6C),             // markup.bold, marks and all
+    bold_mark: (0xFF, 0xB8, 0x6C),
+    italic: (0xF1, 0xFA, 0x8C),           // markup.italic, marks and all
+    italic_mark: (0xF1, 0xFA, 0x8C),
+    code: (0x50, 0xFA, 0x7B),             // markup.inline.raw, backticks and all
+    code_mark: (0x50, 0xFA, 0x7B),
+    list_mark: (0x8B, 0xE9, 0xFD),        // beginning.punctuation.definition.list
+    list_text: (0xF8, 0xF8, 0xF2),        // no rule
+    link_text: (0xFF, 0x79, 0xC6),        // string.other.link.title
+    link_italic: false,
+    link_bracket: (0xF8, 0xF8, 0xF2),     // no rule
+    link_paren: (0xF8, 0xF8, 0xF2),       // no rule
+    link_address: (0x8B, 0xE9, 0xFD),     // markup.underline.link
+    quote: (0xF1, 0xFA, 0x8C),            // markup.quote (italic)
+    quote_italic: true,
+    quote_mark: (0x8B, 0xE9, 0xFD),       // beginning.punctuation.definition.quote
+    deleted: (0xF8, 0xF8, 0xF2),          // markup.strikethrough: no rule
+    deleted_mark: (0xF8, 0xF8, 0xF2),
 };
 
 /// **Monokai, as VS Code ships it**, read off
@@ -1337,6 +1402,7 @@ pub const MONOKAI: Pinned = Pinned {
     types: (0x66, 0xD9, 0xEF),            // support.type (italic)
     types_italic: true,
     this: (0xFD, 0x97, 0x1F),             // variable.language
+    this_italic: false,
     string: (0xE6, 0xDB, 0x74),           // string
     escape: (0xAE, 0x81, 0xFF),           // constant.character
     constant: (0xAE, 0x81, 0xFF),         // constant.language
@@ -1346,6 +1412,7 @@ pub const MONOKAI: Pinned = Pinned {
     parameter_italic: true,
     tag: (0xF9, 0x26, 0x72),              // entity.name.tag
     attribute: (0xA6, 0xE2, 0x2E),        // entity.other.attribute-name
+    attribute_italic: false,
     comment: (0x88, 0x84, 0x6F),          // comment (upright)
     comment_italic: false,
     plain: (0xF8, 0xF8, 0xF2),            // editor.foreground
@@ -1366,6 +1433,7 @@ pub const MONOKAI: Pinned = Pinned {
     link_paren: (0xF8, 0xF8, 0xF2),       // no rule
     link_address: (0xF8, 0xF8, 0xF2),     // markup.underline.link: no rule
     quote: (0xF9, 0x26, 0x72),            // markup.quote, `>` and all
+    quote_italic: false,
     quote_mark: (0xF9, 0x26, 0x72),
     deleted: (0xF8, 0xF8, 0xF2),          // markup.strikethrough: no colour
     deleted_mark: (0xF8, 0xF8, 0xF2),
@@ -1455,16 +1523,16 @@ impl ThemeConfig {
     /// the design looks like with every colour taken away, which is also what a
     /// monochrome terminal and a colour-blind reader are left with.
     ///
-    /// Five more carry 宇浩's own candidate palettes onto a page of prose:
-    /// 藍曬、莫高、莫蘭迪、明度階、靛橘. Each is two anchors per mood plus 金
-    /// and 朱, and every other shade on the page is a rung worked out from
-    /// them — so a theme is eight colours and no more.
+    /// Four more carry 宇浩's own candidate palettes onto a page of prose:
+    /// 藍曬、莫蘭迪、明度階、靛橘. Each is two anchors per mood plus 金 and 朱,
+    /// and every other shade on the page is a rung worked out from them — so
+    /// a theme is eight colours and no more.
     ///
-    /// Three are **borrowed** (2026-10-25/26): `one-dark`, `github` and
-    /// `monokai` take their ink and paper from the theme they copy, and its
-    /// code and Markdown colours exactly ([`Pinned`]); `github` has both
-    /// moods, the other two are dark only. 琥珀, 陶窯 and 夜螢 went to keep the
-    /// set at ten.
+    /// Four are **borrowed** (2026-10-25/26): `one-dark`, `github`, `monokai`
+    /// and `dracula` take their ink and paper from the theme they copy, and
+    /// its code and Markdown colours exactly ([`Pinned`]); `github` has both
+    /// moods, the other three are dark only. 琥珀, 陶窯, 夜螢 and 莫高 went to
+    /// keep the set at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is, and the pinyin is an alias for the hand that
@@ -1594,29 +1662,35 @@ impl ThemeConfig {
                 lime_dark: (0x98, 0xC3, 0x79),
                 ..ThemeConfig::default()
             }),
-            // 莫高 — 墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物。
-            "mogao" | "莫高" => Some(ThemeConfig {
-                name: "mogao".to_string(),
+            // Dracula — the purple-toned dark theme (2026-10-26), built as
+            // `one-dark` is: its text and ground for the ink and paper, `DRACULA`
+            // for the code and the Markdown, its own hues for the accents, its
+            // `errorForeground` for 朱.
+            //
+            // Source: theme-dracula 2.25.1 (MIT, © Dracula Theme). Notice in
+            // `licenses/`.
+            "dracula" => Some(ThemeConfig {
+                name: "dracula".to_string(),
                 dark: Ladder {
-                    ink: (0xE6, 0xDA, 0xB8),
-                    paper: (0x22, 0x1B, 0x14),
+                    ink: (0xF8, 0xF8, 0xF2),
+                    paper: (0x28, 0x2A, 0x36),
                 },
                 light: Ladder {
-                    ink: (0x2E, 0x21, 0x18),
-                    paper: (0xF3, 0xEC, 0xDF),
+                    ink: (0xF8, 0xF8, 0xF2),
+                    paper: (0x28, 0x2A, 0x36),
                 },
-                gold_dark: (0x56, 0x98, 0x73),
-                gold_light: (0x38, 0x6B, 0x4D),
-                mark_dark: (0xDB, 0x74, 0x66),
-                mark_light: (0x9D, 0x3F, 0x33),
-                orange_dark: (0xF4, 0x9A, 0x61),
-                orange_light: (0xA3, 0x51, 0x0D),
-                pink_dark: (0xEF, 0x9C, 0xC4),
-                pink_light: (0xA9, 0x41, 0x79),
-                cyan_dark: (0x69, 0xC8, 0xCD),
-                cyan_light: (0x17, 0x71, 0x7A),
-                lime_dark: (0xAC, 0xC8, 0x79),
-                lime_light: (0x53, 0x70, 0x23),
+                dark_only: true,
+                pinned: Some(DRACULA),
+                gold_dark: (0xF1, 0xFA, 0x8C),
+                mark_dark: (0xFF, 0x55, 0x55),
+                purple_dark: (0xBD, 0x93, 0xF9),
+                green_dark: (0x50, 0xFA, 0x7B),
+                azure_dark: (0x8B, 0xE9, 0xFD),
+                amber_dark: (0xFF, 0xB8, 0x6C),
+                orange_dark: (0xFF, 0xB8, 0x6C),
+                pink_dark: (0xFF, 0x79, 0xC6),
+                cyan_dark: (0x8B, 0xE9, 0xFD),
+                lime_dark: (0x50, 0xFA, 0x7B),
                 ..ThemeConfig::default()
             }),
             // 莫蘭迪 — 十套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
@@ -4948,6 +5022,16 @@ mod a_typo_is_said_out_loud {
         assert!(theme.dark_only);
         assert_eq!(theme.pinned, Some(MONOKAI));
         assert_eq!(theme.dark.paper, (0x27, 0x28, 0x22));
+    }
+
+    /// 2026-10-26: Dracula took mogao's place.
+    #[test]
+    fn dracula_replaces_mogao() {
+        assert!(ThemeConfig::named("mogao").is_none());
+        let theme = ThemeConfig::named("dracula").expect("dracula");
+        assert!(theme.dark_only);
+        assert_eq!(theme.pinned, Some(DRACULA));
+        assert_eq!(theme.dark.paper, (0x28, 0x2A, 0x36));
     }
 
     /// 2026-10-26: GitHub took Zed's One Dark's place, with a table per mood.
