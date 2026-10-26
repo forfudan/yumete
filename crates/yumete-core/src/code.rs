@@ -1429,6 +1429,17 @@ mod tests {
         assert_eq!(at(&got, 3, 15), Some(Token::String), "{:?}", got[3]);
     }
 
+    /// The two token kinds the borrowed themes added (2026-10-25) come out of
+    /// real grammars, not only out of tests that build them by hand: a theme
+    /// that colours a built-in or a parameter needs the grammar to say which.
+    #[test]
+    fn a_builtin_and_a_parameter_are_told_from_their_neighbours() {
+        let got = highlight(Language::Python, &lines("print(x)"));
+        assert_eq!(at(&got, 0, 0), Some(Token::BuiltinFunction), "{:?}", got[0]);
+        let got = highlight(Language::Rust, &lines("fn f(a: u8) {}"));
+        assert_eq!(at(&got, 0, 5), Some(Token::Parameter), "{:?}", got[0]);
+    }
+
     #[test]
     fn a_json_key_is_a_name_and_its_value_is_a_string() {
         let got = highlight(Language::Json, &lines("{\"名\": \"值\", \"n\": 3}"));
