@@ -159,7 +159,7 @@ impl Setting {
 const THEME_NAMES: &[Choice] = &[
     Choice { word: "ink", label: "cmd.themes.ink" },
     Choice { word: "one-dark", label: "cmd.themes.one-dark" },
-    Choice { word: "zed-one-dark", label: "cmd.themes.zed-one-dark" },
+    Choice { word: "github", label: "cmd.themes.github" },
     Choice { word: "monokai", label: "cmd.themes.monokai" },
     Choice { word: "bw", label: "cmd.themes.bw" },
     Choice { word: "cyanotype", label: "cmd.themes.cyanotype" },

@@ -2379,9 +2379,9 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
-        // Zed's One Dark (2026-10-25).
-        name: "zed-one-dark",
-        help: "cmd.themes.zed-one-dark",
+        // GitHub, light and dark (2026-10-26).
+        name: "github",
+        help: "cmd.themes.github",
         needs: &[],
     },
     Word {
@@ -6689,7 +6689,7 @@ mod tests {
             [
                 "ink",
                 "one-dark",
-                "zed-one-dark",
+                "github",
                 "monokai",
                 "bw",
                 "cyanotype",

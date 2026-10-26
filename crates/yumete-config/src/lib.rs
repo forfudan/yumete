@@ -1121,6 +1121,9 @@ pub struct ThemeConfig {
     /// the Markdown of a well-known theme — instead of working them out from
     /// its own accents. `None` for every theme that is this editor's own.
     pub pinned: Option<Pinned>,
+    /// The light mood's pinned colours, for a borrowed theme that has one
+    /// (2026-10-26, GitHub). `pinned` is the dark mood's.
+    pub pinned_light: Option<Pinned>,
 }
 
 /// **The colours a borrowed theme copies value for value** (2026-10-25).
@@ -1222,6 +1225,98 @@ pub const ONE_DARK_PRO: Pinned = Pinned {
     deleted_mark: (0xE0, 0x6C, 0x75),
 };
 
+/// **GitHub Dark Default**, read off the published extension's
+/// `themes/dark-default.json` (github-vscode-theme 6.3.5, 2026-10-26; MIT,
+/// © Primer). The JSON is built at release time, so it is taken from the
+/// package, not the repository. Each value is the `tokenColors` rule for the
+/// scope beside it.
+///
+/// Variables are the text colour, as for One Dark Pro: GitHub paints
+/// `variable` orange, and with tree-sitter nearly every name is one.
+pub const GITHUB_DARK: Pinned = Pinned {
+    keyword: (0xFF, 0x7B, 0x72),          // keyword, storage
+    function: (0xD2, 0xA8, 0xFF),         // entity.name.function
+    builtin_function: (0x79, 0xC0, 0xFF), // support
+    types: (0xFF, 0xA6, 0x57),            // entity.name
+    types_italic: false,
+    this: (0x79, 0xC0, 0xFF),             // variable.language
+    string: (0xA5, 0xD6, 0xFF),           // string
+    escape: (0x79, 0xC0, 0xFF),           // constant
+    constant: (0x79, 0xC0, 0xFF),         // constant
+    number: (0x79, 0xC0, 0xFF),           // constant
+    property: (0xE6, 0xED, 0xF3),         // variable.other
+    parameter: (0xFF, 0xA6, 0x57),        // variable (a parameter is one)
+    parameter_italic: false,
+    tag: (0x7E, 0xE7, 0x87),              // entity.name.tag
+    attribute: (0x79, 0xC0, 0xFF),        // entity
+    comment: (0x8B, 0x94, 0x9E),          // comment (upright)
+    comment_italic: false,
+    plain: (0xE6, 0xED, 0xF3),            // editor.foreground
+    operator: (0xFF, 0x7B, 0x72),         // keyword
+    punctuation: (0xE6, 0xED, 0xF3),      // no rule
+    heading: (0x79, 0xC0, 0xFF),          // markup.heading, `#` and all
+    bold: (0xE6, 0xED, 0xF3),             // markup.bold: weight only
+    bold_mark: (0xE6, 0xED, 0xF3),
+    italic: (0xE6, 0xED, 0xF3),           // markup.italic: slant only
+    italic_mark: (0xE6, 0xED, 0xF3),
+    code: (0x79, 0xC0, 0xFF),             // markup.inline.raw, backticks and all
+    code_mark: (0x79, 0xC0, 0xFF),
+    list_mark: (0xE6, 0xED, 0xF3),        // no rule
+    list_text: (0xE6, 0xED, 0xF3),
+    link_text: (0xA5, 0xD6, 0xFF),        // string.other.link
+    link_italic: false,
+    link_bracket: (0xE6, 0xED, 0xF3),     // no rule
+    link_paren: (0xE6, 0xED, 0xF3),       // no rule
+    link_address: (0xE6, 0xED, 0xF3),     // markup.underline: underline only
+    quote: (0x7E, 0xE7, 0x87),            // markup.quote, `>` and all
+    quote_mark: (0x7E, 0xE7, 0x87),
+    deleted: (0xE6, 0xED, 0xF3),          // markup.strikethrough: no colour
+    deleted_mark: (0xE6, 0xED, 0xF3),
+};
+
+/// **GitHub Light Default**, from `themes/light-default.json` — see
+/// [`GITHUB_DARK`].
+pub const GITHUB_LIGHT: Pinned = Pinned {
+    keyword: (0xCF, 0x22, 0x2E),          // keyword, storage
+    function: (0x82, 0x50, 0xDF),         // entity.name.function
+    builtin_function: (0x05, 0x50, 0xAE), // support
+    types: (0x95, 0x38, 0x00),            // entity.name
+    types_italic: false,
+    this: (0x05, 0x50, 0xAE),             // variable.language
+    string: (0x0A, 0x30, 0x69),           // string
+    escape: (0x05, 0x50, 0xAE),           // constant
+    constant: (0x05, 0x50, 0xAE),         // constant
+    number: (0x05, 0x50, 0xAE),           // constant
+    property: (0x1F, 0x23, 0x28),         // variable.other
+    parameter: (0x95, 0x38, 0x00),        // variable (a parameter is one)
+    parameter_italic: false,
+    tag: (0x11, 0x63, 0x29),              // entity.name.tag
+    attribute: (0x05, 0x50, 0xAE),        // entity
+    comment: (0x6E, 0x77, 0x81),          // comment (upright)
+    comment_italic: false,
+    plain: (0x1F, 0x23, 0x28),            // editor.foreground
+    operator: (0xCF, 0x22, 0x2E),         // keyword
+    punctuation: (0x1F, 0x23, 0x28),      // no rule
+    heading: (0x05, 0x50, 0xAE),          // markup.heading, `#` and all
+    bold: (0x1F, 0x23, 0x28),             // markup.bold: weight only
+    bold_mark: (0x1F, 0x23, 0x28),
+    italic: (0x1F, 0x23, 0x28),           // markup.italic: slant only
+    italic_mark: (0x1F, 0x23, 0x28),
+    code: (0x05, 0x50, 0xAE),             // markup.inline.raw, backticks and all
+    code_mark: (0x05, 0x50, 0xAE),
+    list_mark: (0x1F, 0x23, 0x28),        // no rule
+    list_text: (0x1F, 0x23, 0x28),
+    link_text: (0x0A, 0x30, 0x69),        // string.other.link
+    link_italic: false,
+    link_bracket: (0x1F, 0x23, 0x28),     // no rule
+    link_paren: (0x1F, 0x23, 0x28),       // no rule
+    link_address: (0x1F, 0x23, 0x28),     // markup.underline: underline only
+    quote: (0x11, 0x63, 0x29),            // markup.quote, `>` and all
+    quote_mark: (0x11, 0x63, 0x29),
+    deleted: (0x1F, 0x23, 0x28),          // markup.strikethrough: no colour
+    deleted_mark: (0x1F, 0x23, 0x28),
+};
+
 /// **Monokai, as VS Code ships it**, read off
 /// `extensions/theme-monokai/themes/monokai-color-theme.json` (2026-10-26).
 ///
@@ -1274,53 +1369,6 @@ pub const MONOKAI: Pinned = Pinned {
     quote_mark: (0xF9, 0x26, 0x72),
     deleted: (0xF8, 0xF8, 0xF2),          // markup.strikethrough: no colour
     deleted_mark: (0xF8, 0xF8, 0xF2),
-};
-
-/// **Zed's One Dark**, read off `assets/themes/one/one.json` (2026-10-25).
-///
-/// Zed colours by its own capture names, so each value is the `syntax` key the
-/// capture resolves to; a Markdown construct is coloured whole, its marks
-/// included (Zed's `markdown-inline/highlights.scm`). Zed gives no colour to a
-/// quotation's text or to a strikethrough, so those are the text colour.
-pub const ZED_ONE_DARK: Pinned = Pinned {
-    keyword: (0xB4, 0x77, 0xCF),          // keyword
-    function: (0x73, 0xAD, 0xE9),         // function
-    builtin_function: (0x73, 0xAD, 0xE9), // function (no builtin key)
-    types: (0x6E, 0xB4, 0xBF),            // type
-    types_italic: false,
-    this: (0xBF, 0x95, 0x6A),             // variable.special
-    string: (0xA1, 0xC1, 0x81),           // string
-    escape: (0x87, 0x8E, 0x98),           // string.escape
-    constant: (0xDF, 0xC1, 0x84),         // constant
-    number: (0xBF, 0x95, 0x6A),           // number, boolean
-    property: (0xD0, 0x72, 0x77),         // property
-    parameter: (0xD0, 0x72, 0x77),        // variable.parameter
-    parameter_italic: false,
-    tag: (0x74, 0xAD, 0xE8),              // tag
-    attribute: (0x74, 0xAD, 0xE8),        // attribute
-    comment: (0x5D, 0x63, 0x6F),          // comment (upright)
-    comment_italic: false,
-    plain: (0xAC, 0xB2, 0xBE),            // variable, editor.foreground
-    operator: (0x6E, 0xB4, 0xBF),         // operator
-    punctuation: (0xB2, 0xB9, 0xC6),      // punctuation.bracket, .delimiter
-    heading: (0xD0, 0x72, 0x77),          // title, `#` and all
-    bold: (0xBF, 0x95, 0x6A),             // emphasis.strong
-    bold_mark: (0xBF, 0x95, 0x6A),
-    italic: (0x74, 0xAD, 0xE8),           // emphasis
-    italic_mark: (0x74, 0xAD, 0xE8),
-    code: (0xA1, 0xC1, 0x81),             // text.literal
-    code_mark: (0xA1, 0xC1, 0x81),
-    list_mark: (0xD0, 0x72, 0x77),        // punctuation.list_marker
-    list_text: (0xAC, 0xB2, 0xBE),        // a paragraph: no colour
-    link_text: (0x73, 0xAD, 0xE9),        // link_text (italic)
-    link_italic: true,
-    link_bracket: (0x73, 0xAD, 0xE9),     // link_text: the brackets are the link's
-    link_paren: (0x6E, 0xB4, 0xBF),       // link_uri
-    link_address: (0x6E, 0xB4, 0xBF),     // link_uri
-    quote: (0xAC, 0xB2, 0xBE),            // a paragraph: no colour
-    quote_mark: (0xD0, 0x72, 0x77),       // punctuation.markup
-    deleted: (0xAC, 0xB2, 0xBE),          // strikethrough: no colour
-    deleted_mark: (0xAC, 0xB2, 0xBE),
 };
 
 impl ThemeConfig {
@@ -1412,10 +1460,11 @@ impl ThemeConfig {
     /// and 朱, and every other shade on the page is a rung worked out from
     /// them — so a theme is eight colours and no more.
     ///
-    /// Three are **borrowed** (2026-10-25/26): `one-dark`, `zed-one-dark` and
+    /// Three are **borrowed** (2026-10-25/26): `one-dark`, `github` and
     /// `monokai` take their ink and paper from the theme they copy, and its
-    /// code and Markdown colours exactly ([`Pinned`]), dark only. 琥珀, 陶窯
-    /// and 夜螢 went to keep the set at ten.
+    /// code and Markdown colours exactly ([`Pinned`]); `github` has both
+    /// moods, the other two are dark only. 琥珀, 陶窯 and 夜螢 went to keep the
+    /// set at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
     /// just opened the editor is, and the pinyin is an alias for the hand that
@@ -1653,36 +1702,46 @@ impl ThemeConfig {
                 lime_light: (0x5B, 0x7A, 0x2E),
                 ..ThemeConfig::default()
             }),
-            // Zed's One Dark — the theme Zed opens in (2026-10-25). Built as
-            // `one-dark` is, from Zed's own values: its text and ground for the
-            // ink and paper, `ZED_ONE_DARK` for the code and the Markdown, and
-            // its status colours for the accents. 朱 is Zed's `error`, which is
-            // the colour of its headings too — Zed's choice, kept.
+            // GitHub — Dark Default and Light Default, the most installed theme in
+            // VS Code (2026-10-26). The first borrowed theme with **both** moods,
+            // so it carries a pinned table for each. 朱 is GitHub's
+            // `errorForeground`; in the light mood that is its keyword red too,
+            // which is GitHub's choice and kept.
             //
-            // Source: Zed, `assets/themes/one/one.json`; the theme is MIT,
-            // © GitHub (it is Atom's One, retuned). Notice in `licenses/`.
-            "zed-one-dark" | "zed" | "zed_one_dark" => Some(ThemeConfig {
-                name: "zed-one-dark".to_string(),
+            // Source: github-vscode-theme 6.3.5 (MIT, © Primer). Notice in
+            // `licenses/`.
+            "github" | "github-theme" => Some(ThemeConfig {
+                name: "github".to_string(),
                 dark: Ladder {
-                    ink: (0xAC, 0xB2, 0xBE),
-                    paper: (0x28, 0x2C, 0x33),
+                    ink: (0xE6, 0xED, 0xF3),
+                    paper: (0x0D, 0x11, 0x17),
                 },
                 light: Ladder {
-                    ink: (0xAC, 0xB2, 0xBE),
-                    paper: (0x28, 0x2C, 0x33),
+                    ink: (0x1F, 0x23, 0x28),
+                    paper: (0xFF, 0xFF, 0xFF),
                 },
-                dark_only: true,
-                pinned: Some(ZED_ONE_DARK),
-                gold_dark: (0xDE, 0xC1, 0x84),
-                mark_dark: (0xD0, 0x72, 0x77),
-                purple_dark: (0xB4, 0x77, 0xCF),
-                green_dark: (0xA1, 0xC1, 0x81),
-                azure_dark: (0x74, 0xAD, 0xE8),
-                amber_dark: (0xDE, 0xC1, 0x84),
-                orange_dark: (0xBF, 0x95, 0x6A),
-                pink_dark: (0xD0, 0x72, 0x77),
-                cyan_dark: (0x6E, 0xB4, 0xBF),
-                lime_dark: (0xA1, 0xC1, 0x81),
+                pinned: Some(GITHUB_DARK),
+                pinned_light: Some(GITHUB_LIGHT),
+                gold_dark: (0xD2, 0x99, 0x22),
+                gold_light: (0x9A, 0x67, 0x00),
+                mark_dark: (0xF8, 0x51, 0x49),
+                mark_light: (0xCF, 0x22, 0x2E),
+                purple_dark: (0xD2, 0xA8, 0xFF),
+                purple_light: (0x82, 0x50, 0xDF),
+                green_dark: (0x7E, 0xE7, 0x87),
+                green_light: (0x11, 0x63, 0x29),
+                azure_dark: (0x79, 0xC0, 0xFF),
+                azure_light: (0x05, 0x50, 0xAE),
+                amber_dark: (0xFF, 0xA6, 0x57),
+                amber_light: (0x95, 0x38, 0x00),
+                orange_dark: (0xFF, 0xA6, 0x57),
+                orange_light: (0x95, 0x38, 0x00),
+                pink_dark: (0xFF, 0x7B, 0x72),
+                pink_light: (0xCF, 0x22, 0x2E),
+                cyan_dark: (0xA5, 0xD6, 0xFF),
+                cyan_light: (0x0A, 0x30, 0x69),
+                lime_dark: (0x7E, 0xE7, 0x87),
+                lime_light: (0x11, 0x63, 0x29),
                 ..ThemeConfig::default()
             }),
             // 靛橘 — 顏色只活在底色裏，正文永遠是中性灰。唯一破例的是朱，它用紫，故意違反自己這條規矩。
@@ -1804,6 +1863,7 @@ impl Default for ThemeConfig {
             fill: false,
             dark_only: false,
             pinned: None,
+            pinned_light: None,
         }
     }
 }
@@ -4890,14 +4950,15 @@ mod a_typo_is_said_out_loud {
         assert_eq!(theme.dark.paper, (0x27, 0x28, 0x22));
     }
 
-    /// 2026-10-25: kiln went to make room for Zed's One Dark.
+    /// 2026-10-26: GitHub took Zed's One Dark's place, with a table per mood.
     #[test]
-    fn zed_one_dark_replaces_kiln() {
-        assert!(ThemeConfig::named("kiln").is_none());
-        let zed = ThemeConfig::named("zed").expect("zed-one-dark answers to zed");
-        assert_eq!(zed.name, "zed-one-dark");
-        assert!(zed.dark_only);
-        assert_eq!(zed.pinned, Some(ZED_ONE_DARK));
+    fn github_has_a_table_for_each_mood() {
+        assert!(ThemeConfig::named("zed-one-dark").is_none());
+        let gh = ThemeConfig::named("github").expect("github");
+        assert!(!gh.dark_only);
+        assert_eq!(gh.pinned, Some(GITHUB_DARK));
+        assert_eq!(gh.pinned_light, Some(GITHUB_LIGHT));
+        assert_eq!(gh.light.paper, (0xFF, 0xFF, 0xFF));
     }
 
 }

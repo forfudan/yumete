@@ -621,7 +621,10 @@ impl Palette {
             cyan: theme.cyan(dark),
             lime: theme.lime(dark),
             fill: theme.fill,
-            pinned: theme.pinned,
+            pinned: match dark {
+                true => theme.pinned,
+                false => theme.pinned_light,
+            },
             paint: theme.ground == Ground::Paint,
             faded: false,
         }
@@ -1338,7 +1341,7 @@ mod ground_tests {
         let names = [
             "ink",
             "one-dark",
-            "zed-one-dark",
+            "github",
             "monokai",
             "bw",
             "cyanotype",
