@@ -1,6 +1,6 @@
 # Third-party notices
 
-The `one-dark`, `github`, `monokai` and `dracula` themes copy colour values from other projects,
+The `one-dark`, `github`, `monokai`, `dracula` and `tokyo-night` themes copy colour values from other projects,
 all under the MIT license. Their notices are kept here, unchanged.
 
 | File | Project | What is used |
@@ -11,3 +11,4 @@ all under the MIT license. Their notices are kept here, unchanged.
 | `colorsublime-themes.LICENSE` | [Colorsublime-Themes](https://github.com/Colorsublime/Colorsublime-Themes), which VS Code's Monokai comes from | the palette, after Wimer Hazenberg's original Monokai |
 | `github-vscode-theme.LICENSE` | [GitHub Theme](https://github.com/primer/github-vscode-theme) 6.3.5, `themes/dark-default.json` and `light-default.json` in the published extension | the code and Markdown colours of `github` (`GITHUB_DARK`, `GITHUB_LIGHT`) |
 | `dracula.LICENSE` | [Dracula for VS Code](https://github.com/dracula/visual-studio-code) 2.25.1, `theme/dracula.json` in the published extension | the code and Markdown colours of `dracula` (`DRACULA`) |
+| `tokyo-night.LICENSE` | [Tokyo Night](https://github.com/enkia/tokyo-night-vscode-theme) 1.1.2, `themes/tokyo-night-color-theme.json` in the published extension | the code and Markdown colours of `tokyo-night` (`TOKYO_NIGHT`) |
