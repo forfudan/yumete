@@ -85,6 +85,11 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The command menu lists commands only.** Shortcuts such as `:wq`, `:qa`, `:bc`
+  and `:sb` no longer take a line of their own; each shows in brackets beside its
+  command, and typing one shows that command's line. The root menu has 63
+  entries where it had 76.
+
 - **墨香's light text is `#2A2923`, at the paper's own hue.** It was a green-leaning
   `#262A27`, and every grey between it and the cream paper (line numbers, markers,
   table rules, the selection) leaned olive. The contrast is the same 12.2:1.
