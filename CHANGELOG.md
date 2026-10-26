@@ -71,6 +71,10 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **墨香's light text is `#2A2923`, at the paper's own hue.** It was a green-leaning
+  `#262A27`, and every grey between it and the cream paper (line numbers, markers,
+  table rules, the selection) leaned olive. The contrast is the same 12.2:1.
+
 - **Light moods space their greys by contrast.** The shades between a theme's
   text and paper used to be mixed in equal sRGB steps, which on a light page
   come out about a quarter closer together than on a dark one. Each step is now

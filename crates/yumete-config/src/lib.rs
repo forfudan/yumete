@@ -2249,12 +2249,17 @@ impl Default for ThemeConfig {
                 // warm.
                 paper: (0x18, 0x1A, 0x1D),
             },
-            // 墨 on paper is darker than 墨 on a screen — the light ladder's
-            // ink is the dark ladder's *ground*, which is both true of the
-            // material and what gives the light mood the range its top rungs
-            // need to stay readable.
+            // 墨 on paper is darker than 墨 on a screen, which gives the light
+            // mood the range its top rungs need to stay readable.
+            //
+            // Warning: **The ink takes the paper's hue** (2026-10-26). It was
+            // #262A27, G above R above B — OKLCH hue 153°, a green — and every
+            // grey between it and the cream paper (hue 92°) passed through
+            // olive on the way: line numbers and markers at 107°. That is the
+            // cast the dark paper lost as 「屎綠」. #2A2923 sits at the paper's
+            // hue with the same 12.2:1, so the ladder is one hue from end to end.
             light: Ladder {
-                ink: (0x26, 0x2A, 0x27),
+                ink: (0x2A, 0x29, 0x23),
                 paper: (0xF1, 0xEB, 0xD9),
             },
             // A seal's red on paper; lighter in the dark, for the same reason
