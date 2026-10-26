@@ -7,6 +7,24 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **Each step of the `m` group lists what it takes**, as helix's do. `mi` and `ma`
+  list the objects: word, sentence, paragraph, the nearest pair, Markdown marks,
+  function, type definition, parameter, comment or table cell, and the brackets and
+  quotes. `ms`, `md` and `mr` list the pairs. Each step used to show one line saying
+  "type a bracket".
+
+### Changed
+
+- **Warning: `m` after `mi`, `ma` and `md` is the nearest pair only, as in helix;
+  Markdown marks moved to `k`** (mar*k*up). `mik` and `mak` select inside and around
+  `**bold**`, a link and the rest; `mdk` takes the marks away. Under the vim keymap
+  these are `dik` and `dak`, and `dim` is the nearest pair. `mdm` on a link now
+  takes only its `[` `]`, as helix's does; `mdk` takes the whole link.
+
 ## 0.13.0 · 2026-10-26
 
 Thirty-four commits, two days after 0.12.0. Most of them are themes: seven from the

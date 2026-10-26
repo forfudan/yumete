@@ -514,11 +514,26 @@ impl Editor {
                     ],
                 ),
             ),
-            Pending::MatchPair { .. } => (say!("hint.bracket"), vec![("".into(), say!("hint.type-a-bracket-or-quote"))]),
-            Pending::Surround => (say!("hint.match.surround"), vec![("".into(), say!("hint.type-a-bracket"))]),
-            Pending::SurroundOff => (say!("hint.match.take-off"), vec![("".into(), say!("hint.type-the-one-to-take-off"))]),
-            Pending::SurroundFrom => (say!("hint.change"), vec![("".into(), say!("hint.type-the-one-being-replaced"))]),
-            Pending::SurroundTo(_) => (say!("hint.change-to"), vec![("".into(), say!("hint.type-the-one-to-change-to"))]),
+            // **Each step lists what it takes** (2026-10-27, helix's `m` group).
+            // A line saying 「type a bracket」 told the reader there was a
+            // choice and not what it was; helix lists the pairs and the
+            // objects, and so does this. The object list is the same
+            // everywhere, code rows included — a Markdown file has code in
+            // its fences.
+            Pending::MatchPair { around } => (
+                match around {
+                    true => say!("hint.match.around"),
+                    false => say!("hint.match.inside"),
+                },
+                Self::said(Self::OBJECT_KEYS.iter().copied()),
+            ),
+            Pending::Surround => (say!("hint.match.surround"), Self::pair_rows(&[])),
+            Pending::SurroundOff => (
+                say!("hint.match.take-off"),
+                Self::pair_rows(&[("m", "hint.obj.nearest-pair"), ("k", "hint.obj.markup")]),
+            ),
+            Pending::SurroundFrom => (say!("hint.change"), Self::pair_rows(&[("m", "hint.obj.nearest-pair")])),
+            Pending::SurroundTo(_) => (say!("hint.change-to"), Self::pair_rows(&[])),
             Pending::Hop { forward } => (
                 match forward {
                     true => say!("hint.hop.next"),

@@ -3948,7 +3948,7 @@ zhs = "复制了 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
-# 按 mi m/ma m(di m/da m)，可是光標不在任何一段標記裏
+# 按 mi k/ma k(di k/da k)，可是光標不在任何一段標記裏
 key = "edit.no-markup-here"
 zht = "這裏没有標記"
 zhs = "这里没有标记"
@@ -4991,13 +4991,6 @@ zhs = "顶上"
 en = "top"
 
 [[message]]
-# 提示：括號
-key = "hint.bracket"
-zht = "括號"
-zhs = "括号"
-en = "bracket"
-
-[[message]]
 # 提示欄：取消
 key = "hint.cancel"
 zht = "取消"
@@ -5519,6 +5512,13 @@ zhs = "收下"
 en = "keep it"
 
 [[message]]
+# 菜單的鍵那一欄：「( 或 )」裏的那個或
+key = "hint.key-or"
+zht = "或"
+zhs = "或"
+en = "or"
+
+[[message]]
 # ' 之後那張小表：一個標記記在哪(檔名 第幾行)
 key = "hint.mark.at"
 zht = "{0} 第 {1} 行"
@@ -5603,6 +5603,97 @@ zhs = "m"
 en = "m"
 
 [[message]]
+# mi/ma 菜單：大詞
+key = "hint.obj.big-word"
+zht = "大詞（到空格爲止）"
+zhs = "大词（到空格为止）"
+en = "WORD (up to a space)"
+
+[[message]]
+# mi/ma 菜單：括號
+key = "hint.obj.brackets"
+zht = "括號"
+zhs = "括号"
+en = "brackets"
+
+[[message]]
+# mi/ma 菜單：中文括號
+key = "hint.obj.cjk-too"
+zht = "中文括號也認"
+zhs = "中文括号也认"
+en = "Chinese brackets too"
+
+[[message]]
+# mi/ma 菜單：c，代碼裏是註釋，表格裏是這一格
+key = "hint.obj.comment-or-cell"
+zht = "註釋（代碼）/這一格（表格）"
+zhs = "注释（代码）/这一格（表格）"
+en = "comment (code), this cell (table)"
+
+[[message]]
+# mi/ma 菜單：函數
+key = "hint.obj.function"
+zht = "函數（代碼）"
+zhs = "函数（代码）"
+en = "function (code)"
+
+[[message]]
+# mi/ma/md 菜單：k，Markdown 標記
+key = "hint.obj.markup"
+zht = "Markdown 標記"
+zhs = "Markdown 标记"
+en = "Markdown marks"
+
+[[message]]
+# mi/ma/md/mr 菜單：m，最近的一對
+key = "hint.obj.nearest-pair"
+zht = "最近的一對"
+zhs = "最近的一对"
+en = "nearest pair"
+
+[[message]]
+# mi/ma 菜單：段
+key = "hint.obj.paragraph"
+zht = "段"
+zhs = "段"
+en = "paragraph"
+
+[[message]]
+# mi/ma 菜單：參數
+key = "hint.obj.parameter"
+zht = "參數（代碼）"
+zhs = "参数（代码）"
+en = "parameter (code)"
+
+[[message]]
+# m 組菜單：引號
+key = "hint.obj.quotes"
+zht = "引號"
+zhs = "引号"
+en = "quotes"
+
+[[message]]
+# mi/ma 菜單：句
+key = "hint.obj.sentence"
+zht = "句"
+zhs = "句"
+en = "sentence"
+
+[[message]]
+# mi/ma 菜單：類型定義
+key = "hint.obj.type"
+zht = "類型定義（代碼）"
+zhs = "类型定义（代码）"
+en = "type definition (code)"
+
+[[message]]
+# mi/ma 菜單：詞
+key = "hint.obj.word"
+zht = "詞"
+zhs = "词"
+en = "word"
+
+[[message]]
 # ␣o 開上次的那一組（2026-10-18）
 key = "hint.open.recent-files"
 zht = "最近開過的檔"
@@ -5643,6 +5734,41 @@ key = "hint.overwrite"
 zht = "蓋掉"
 zhs = "盖掉"
 en = "write over"
+
+[[message]]
+# ms/md/mr 菜單：尖括號
+key = "hint.pair.angle"
+zht = "尖括號"
+zhs = "尖括号"
+en = "angle brackets"
+
+[[message]]
+# ms/md/mr 菜單：中文括號
+key = "hint.pair.cjk"
+zht = "中文括號"
+zhs = "中文括号"
+en = "Chinese brackets"
+
+[[message]]
+# ms/md/mr 菜單：花括號
+key = "hint.pair.curly"
+zht = "花括號"
+zhs = "花括号"
+en = "curly braces"
+
+[[message]]
+# ms/md/mr 菜單：圓括號
+key = "hint.pair.round"
+zht = "圓括號"
+zhs = "圆括号"
+en = "parentheses"
+
+[[message]]
+# ms/md/mr 菜單：方括號
+key = "hint.pair.square"
+zht = "方括號"
+zhs = "方括号"
+en = "square brackets"
 
 [[message]]
 # 提示：挑選器——Enter 打開選中的那一條
@@ -6406,20 +6532,6 @@ zhs = "回编辑区"
 en = "back to text"
 
 [[message]]
-# 提示：打一種括號
-key = "hint.type-a-bracket"
-zht = "輸入包住的符號"
-zhs = "输入包住的符号"
-en = "type the pair to wrap it in"
-
-[[message]]
-# 提示：打一種括號或引號
-key = "hint.type-a-bracket-or-quote"
-zht = "打一種括號或引號"
-zhs = "打一种括号或引号"
-en = "type a bracket or a quote"
-
-[[message]]
 # 提示：打一個字
 key = "hint.type-a-character"
 zht = "打一個字"
@@ -6432,27 +6544,6 @@ key = "hint.type-a-character-to-overwrite"
 zht = "打一個字替換選區"
 zhs = "打一个字替换选区"
 en = "type a character to write over it"
-
-[[message]]
-# mr/cs 在等第一個字符：要被換掉的是哪一對
-key = "hint.type-the-one-being-replaced"
-zht = "輸入將被替換之符號"
-zhs = "输入将被替换之符号"
-en = "type the one to be replaced"
-
-[[message]]
-# 提示：打要換成的那一種
-key = "hint.type-the-one-to-change-to"
-zht = "輸入替換符號"
-zhs = "输入替换符号"
-en = "type the replacement"
-
-[[message]]
-# 提示：打要去掉的那一種
-key = "hint.type-the-one-to-take-off"
-zht = "輸入要移除之符號"
-zhs = "输入要移除之符号"
-en = "type the one to remove"
 
 [[message]]
 # ` 組的末行(vi 的 ` 是記號鍵，這裏是 M 和 ')

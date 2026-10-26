@@ -145,8 +145,10 @@ fn object(c: char, around: bool) -> Option<Motion> {
         'w' => crate::motion::Object::Word { big: false },
         'W' => crate::motion::Object::Word { big: true },
         'p' => crate::motion::Object::Paragraph,
-        // `dim`/`dam`：光標所在的那一段 Markdown 標記（2026-09-28）。
-        'm' => crate::motion::Object::Markup,
+        // `dim`/`dam`：最近的那一對（2026-10-27，同 `mi m`）；Markdown 標記挪到
+        // `dik`/`dak`（從 2026-09-28 起是 `dim`），mar(k)up。
+        'm' => crate::motion::Object::NearestPair,
+        'k' => crate::motion::Object::Markup,
         // `dis`/`das`：光標所在的那一句（2026-09-28）。
         's' => crate::motion::Object::Sentence,
         // **`b` 和 `B` 是 vim 給括號的兩個別名**（2026-10-12 神諭上掃出來的）：
