@@ -2800,6 +2800,12 @@ zhs = "蓝晒：普鲁士蓝的地、白线的字——十套里唯一底色真�
 en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
 
 [[message]]
+# : 命令選單裏 github 那一項的説明(themes 組)
+key = "cmd.themes.github"
+zht = "GitHub：GitHub 網站與 VS Code 裏的那一套配色，深淺都有"
+zhs = "GitHub：GitHub 网站与 VS Code 里的那一套配色，深浅都有"
+en = "github: GitHub's own scheme, as on the site and in VS Code; light and dark"
+[[message]]
 # : 命令選單裏 ink 那一項的説明(themes 組)
 key = "cmd.themes.ink"
 zht = "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來"
@@ -2840,12 +2846,6 @@ zht = "One Dark：VS Code 裏最常見的那一套配色，只有深色"
 zhs = "One Dark：VS Code 里最常见的那一套配色，只有深色"
 en = "one-dark: the scheme most VS Code users know; dark only"
 
-[[message]]
-# : 命令選單裏 zed-one-dark 那一項的説明(themes 組)
-key = "cmd.themes.zed-one-dark"
-zht = "Zed：Zed 編輯器的默認配色，只有深色"
-zhs = "Zed：Zed 编辑器的默认配色，只有深色"
-en = "zed-one-dark: Zed's default theme; dark only"
 [[message]]
 # `:vertical-keys` 選單上那兩個詞——邏輯那一個
 key = "cmd.vertical-keys.logical"

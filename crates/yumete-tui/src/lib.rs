@@ -26475,34 +26475,23 @@ fn squeezed(text: &str) -> String {
         assert_eq!(markup_style_in(mark, &all, Some('*'), own), markup_style(Kind::Marker, own));
     }
 
-    /// **Zed's One Dark is Zed's**, where it differs from One Dark Pro: cyan
-    /// operators, upright comments, a number apart from a constant, a link's
-    /// parentheses in the address's colour (2026-10-25).
+    /// **GitHub has a table for each mood** (2026-10-26): the same keyword,
+    /// GitHub's dark red on the dark page and its light red on the light one.
     #[test]
-    fn zed_one_dark_paints_what_zed_paints() {
+    fn github_paints_each_mood_with_its_own_table() {
         use yumete_core::code::Token;
-        use yumete_core::markdown::{spans, Kind};
-        let theme = yumete_config::ThemeConfig::named("zed").expect("zed-one-dark");
-        let ink = crate::theme::Palette::of_theme(&theme, true);
+        use yumete_core::markdown::Kind;
+        let theme = yumete_config::ThemeConfig::named("github").expect("github");
         let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
-        let token = |t| markup_style(Kind::Token(t), ink);
-        assert_eq!(token(Token::Operator).fg, Some(rgb(0x6E_B4_BF)));
-        assert_eq!(token(Token::Number).fg, Some(rgb(0xBF_95_6A)));
-        assert_eq!(token(Token::Constant).fg, Some(rgb(0xDF_C1_84)));
-        assert_eq!(token(Token::Parameter).fg, Some(rgb(0xD0_72_77)));
-        assert!(!token(Token::Comment).add_modifier.contains(Modifier::ITALIC));
-
-        let line = "**b** [t](u)";
-        let all = spans(line);
-        let at = |i: usize| {
-            let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
-            markup_style_in(span, &all, line.chars().nth(i), ink)
-        };
-        assert_eq!(at(0).fg, Some(rgb(0xBF_95_6A)), "`**` is the bold's own colour");
-        assert_eq!(at(6).fg, Some(rgb(0x73_AD_E9)), "`[` belongs to the link's text");
-        assert!(at(7).add_modifier.contains(Modifier::ITALIC), "the link's text leans");
-        assert_eq!(at(9).fg, Some(rgb(0x6E_B4_BF)), "`(` belongs to the address");
-        assert_eq!(at(10).fg, Some(rgb(0x6E_B4_BF)));
+        let dark = crate::theme::Palette::of_theme(&theme, true);
+        let light = crate::theme::Palette::of_theme(&theme, false);
+        let token = |ink, t| markup_style(Kind::Token(t), ink).fg;
+        assert_eq!(token(dark, Token::Keyword), Some(rgb(0xFF_7B_72)));
+        assert_eq!(token(light, Token::Keyword), Some(rgb(0xCF_22_2E)));
+        assert_eq!(token(light, Token::Function), Some(rgb(0x82_50_DF)));
+        assert_eq!(token(light, Token::Plain), Some(rgb(0x1F_23_28)), "a name stays the text");
+        assert_eq!(light.paper(), Color::Rgb(0xFF, 0xFF, 0xFF));
+        assert_eq!(markup_style(Kind::Heading, dark).fg, Some(rgb(0x79_C0_FF)));
     }
 
     /// **Monokai is VS Code's** (2026-10-26): pink keywords and operators,

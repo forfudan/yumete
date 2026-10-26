@@ -23,11 +23,14 @@ in `docs/development.md` §5.2.
   The MIT notices of One Dark Pro and Atom's One Dark are in `licenses/`, and the
   release archive carries them.
 
-- **`:theme zed-one-dark`** (or `zed`): Zed's default theme, built the same way
-  from Zed's own values. It differs from `one-dark` where Zed does: softer hues,
-  cyan types and operators, red parameters, upright comments, a number apart from a
-  named constant, and Markdown coloured whole, its marks included; a link's text is
-  blue and italic, its address cyan. Dark only, like `one-dark`.
+- **`:theme github`**: GitHub Dark Default and Light Default, the most installed
+  theme in VS Code, and the first borrowed theme with both moods: `:theme-mode`
+  turns it light or dark, each with GitHub's own code and Markdown colours.
+  Keywords and operators red, functions purple, types and parameters orange,
+  constants, numbers and built-ins blue, strings a pale blue (dark) or navy (light),
+  HTML tags green; in Markdown, headings and inline code blue, quotations green,
+  bold and italic in weight and slant only. Variables are the text colour, as in
+  `one-dark`. Errors take GitHub's own error colour. Its MIT notice is in `licenses/`.
 
 - **`:theme monokai`**: Monokai as VS Code ships it, built the same way. Keywords
   and operators pink, functions green, built-in functions and types cyan (types in
