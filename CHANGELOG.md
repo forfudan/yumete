@@ -61,6 +61,13 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Light moods space their greys by contrast.** The shades between a theme's
+  text and paper used to be mixed in equal sRGB steps, which on a light page
+  come out about a quarter closer together than on a dark one. Each step is now
+  the same contrast ratio, so a light page's selection, a table's cursor row and
+  its column stripes stand as far apart as they do on a dark page, and grey text
+  is a shade darker. Dark moods are unchanged.
+
 - **⚠️ `:word-show` is `:word-mark`, and it takes one of `off`, `color`, `ink`, `tint`,
   `line`.** `on` is gone: it meant "whichever way it was drawn last", while naming a
   way turned the mark on as well, so one argument was setting two things. Every
