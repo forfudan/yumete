@@ -1135,12 +1135,33 @@ impl Editor {
     /// and leaves with whatever could still not be saved, as `:qa!` does. A
     /// standing question stops it all the same: the bang says 「use my
     /// version」, not 「a file many times its size is what I meant」.
+    ///
+    /// **Unlike `:qa!`, it keeps the recovery copy of what it could not save**
+    /// (2026-10-26). `:qa!` is the writer saying 「not these changes」; `:wqa!`
+    /// says 「save them」, and a save that failed — a locked file, a full
+    /// disk, a folder that went away — is not a change the writer threw away.
+    /// The copy is written fresh first, so it holds the last keystroke, and
+    /// the next open offers it back. **A buffer with no file is let go**, as
+    /// was asked for (2026-10-26): there was never anywhere to save it, and
+    /// the bang is the writer saying so.
     pub(super) fn write_quit_all(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         self.write_all_forcing(force)?;
-        if self.query.is_some() || (!force && self.buffers.iter().any(|b| b.is_modified())) {
+        let unsaved = self.buffers.iter().any(|b| b.is_modified());
+        if self.query.is_some() || (unsaved && !force) {
             return Ok(CommandOutcome::Continue);
         }
-        self.quit_all(force)
+        if !unsaved {
+            return self.quit_all(false);
+        }
+        for buffer in &mut self.buffers {
+            match buffer.is_modified() && buffer.path().is_some() {
+                true => {
+                    let _ = buffer.write_swap();
+                }
+                false => buffer.clear_swap(),
+            }
+        }
+        Ok(CommandOutcome::Quit)
     }
 
     /// Open the `path:line:` named on the cursor's line (`gf`).

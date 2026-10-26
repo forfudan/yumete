@@ -1496,43 +1496,22 @@ fn resolve(word: &str) -> &str {
     // `:exp! html` did not, so the shorthand a writer had settled into stopped
     // working at exactly the moment they meant「yes, overwrite it」. The bang
     // belongs to the command, not to its spelling.
+    //
+    // **The bang is read after the spelling, never during it** (2026-10-26).
+    // The stem names what it names without the bang, and the bang is then
+    // either that command's or nothing. A walk over the forceable names alone
+    // used to narrow a spelling the bang had no business narrowing: `:e!` came
+    // out as `export!` (`e` is `open`'s), and `:write-q!` and `:write-!` as
+    // `write-quit-all!` — overwrite everything, drop what failed, leave —
+    // because `write-quit` takes no bang and the other two `write-` commands
+    // take none either.
     if let Some(stem) = word.strip_suffix('!') {
-        // **An exact spelling that takes no bang is not a prefix of one.**
-        // `e` and `o` are `open`'s own aliases and `:e!` / `:o!` are retired
-        // outright (see `parse`); because `open` is not forceable they fell
-        // through to the walk below and came out as `export!`, so `:e!
-        // 第三章.md` — typed by a hand meaning「re-read it」 — wrote an export
-        // over the chapter.
-        if COMMANDS
+        let plain = resolve(stem);
+        return COMMANDS
             .iter()
-            .any(|e| (e.name == stem || e.aliases.contains(&stem)) && forceable(e.name).is_none())
-        {
-            return word;
-        }
-        let banged: Vec<&Entry> = COMMANDS
-            .iter()
-            .filter(|e| {
-                (e.name.starts_with(stem) || e.aliases.iter().any(|a| a.starts_with(stem)))
-                    && forceable(e.name).is_some()
-            })
-            .collect();
-        if let [only] = banged.as_slice() {
-            return forceable(only.name).unwrap_or(word);
-        }
-        // **And the head wins here too** (#368): `:qu!` reaches `quit!` and
-        // `quit-all!`, and the same hierarchy settles it — a spelling that
-        // reaches a family's head reaches the head.
-        if let Some(head) = banged.iter().find(|e| {
-            banged.iter().all(|o| {
-                o.name == e.name
-                    || (o.name.len() > e.name.len() + 1
-                        && o.name.starts_with(e.name)
-                        && o.name.as_bytes()[e.name.len()] == b'-')
-            })
-        }) {
-            return forceable(head.name).unwrap_or(word);
-        }
-        return word;
+            .find(|e| e.name == plain || e.aliases.contains(&plain))
+            .and_then(|e| forceable(e.name))
+            .unwrap_or(word);
     }
     let hits: Vec<&Entry> = COMMANDS.iter().filter(|e| e.name.starts_with(word)).collect();
     if let [only] = hits.as_slice() {
@@ -1736,10 +1715,10 @@ pub struct Choice {
     pub name: &'static str,
     /// The other spellings of this same command, joined for the brackets.
     ///
-    /// **All of them, not the first.** `write-quit` answers to `:wq` and to
-    /// vi's `:x`, and `x` appears nowhere else in the menu — it is an alias of
-    /// an entry rather than a line of its own — so a bracket showing only the
-    /// first would be the only place it could have been found, showing half.
+    /// **All of them, not the first.** `exit` answers to `:x` and to `:xit`,
+    /// and no alias has a line of its own in the menu (2026-10-26) — so a
+    /// bracket showing only the first would be the only place the second
+    /// could have been found, showing half.
     pub alias: Option<String>,
     /// The shortest prefix that names this and nothing else beside it, when
     /// that is shorter than the whole word.
@@ -5004,8 +4983,8 @@ pub const COMMANDS: &[Entry] = &[
 /// form ever grows.
 ///
 /// **Only the ones that name a *line*.** A short spelling of a one-word
-/// command is what `Entry::aliases` is for — `:wq` and `:x` are `write-quit`'s
-/// aliases and shown in its brackets like every other alias. This table is for
+/// command is what `Entry::aliases` is for — `:wq` is `write-quit`'s alias
+/// and shown in its brackets like every other alias. This table is for
 /// the ones that stand for two words, which no alias can express.
 ///
 /// **`bc` and `wa` came back** (2026-09-10). The fold retired them along with
@@ -5271,8 +5250,15 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         // and `help vertical`, two different things that happen to share a
         // spelling — and folding those together would answer one question
         // with the other.
+        //
+        // **Nor what was found by a shortcut** (2026-10-26). `:x` reaches
+        // `write-quit-all` through its `xa`, and counted as a `write-` match
+        // it folded into a bare `write-` row that sorted above `:exit` — so
+        // `:x` and Tab wrote `:write-`. A row reached by its shortcut was not
+        // reached through its family, and stands as itself.
+        let by_name = |c: &Choice| c.under.is_empty() && c.name.starts_with(typed);
         let mut counted: Vec<(&str, usize)> = Vec::new();
-        for c in choices.iter().filter(|c| c.under.is_empty()) {
+        for c in choices.iter().filter(|c| by_name(c)) {
             let head = head_of(c.name);
             match counted.iter_mut().find(|(h, _)| *h == head) {
                 Some((_, n)) => *n += 1,
@@ -5312,7 +5298,7 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
         let mut standing: Vec<&str> = Vec::new();
         for c in choices.drain(..) {
             let head = head_of(c.name);
-            if !c.under.is_empty() || !folded.contains(&head) {
+            if !by_name(&c) || !folded.contains(&head) {
                 out.push(c);
                 continue;
             }
@@ -5490,6 +5476,19 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     // answer the question with the two families they came from.
     if folding && !reached_for && words.is_empty() {
         choices = fold(typed, choices);
+    }
+    // **What was typed in full comes first**, so Tab completes to it: `:x`
+    // is `exit`'s whole spelling, and `write-quit-all` (`xa`) only begins with
+    // it. Its own words, promoted beneath it above, stay where they are.
+    if words.is_empty() && !typed.is_empty() {
+        let exact = |c: &Choice| {
+            c.under.is_empty()
+                && COMMANDS.iter().any(|e| e.name == c.name && (e.name == typed || e.aliases.contains(&typed)))
+        };
+        if let Some(at) = choices.iter().position(exact) {
+            let row = choices.remove(at);
+            choices.insert(0, row);
+        }
     }
     (start, choices)
 }
@@ -6375,6 +6374,16 @@ mod tests {
         for line in [":write-quit-all!", ":wqa!", ":xa!"] {
             assert_eq!(parse(line), Ok(Command::WriteQuitAll { force: true }), "{line}");
         }
+        // A spelling of `write-quit`, or one that names no single command,
+        // does not become `:wqa!` by growing a bang (2026-10-26 review).
+        for line in [":write-q!", ":write-qui!", ":write-!", ":wq!"] {
+            assert!(matches!(parse(line), Err(CommandError::Unknown(_))), "{line}");
+        }
+        // `:x` is `exit`'s whole spelling, so it heads the menu and Tab takes
+        // it; `write-quit-all`, reached by `xa`, stands as itself.
+        let rows: Vec<String> = complete("x").iter().map(Choice::written).collect();
+        assert_eq!(rows.first().map(String::as_str), Some("exit"));
+        assert!(rows.contains(&"write-quit-all".to_string()) && !rows.contains(&"write-".to_string()), "{rows:?}");
     }
 
     #[test]
@@ -7230,22 +7239,10 @@ mod tests {
             if choice.name.ends_with('-') {
                 continue;
             }
-            // A folded family is a prefix rather than a command (#369), and a
-            // row named for a folded command's alias is that command under
-            // another of its names — neither has a spelling of its own to be
-            // held to account for.
-            if choice.name.ends_with('-') {
-                continue;
-            }
-            let Some(entry) = COMMANDS.iter().find(|e| e.name == choice.name) else {
-                assert!(
-                    COMMANDS.iter().any(|e| e.aliases.contains(&choice.name)),
-                    "`{}` is in the list and is neither a command nor one's alias",
-                    choice.name
-                );
-                assert!(parse(&format!(":{}", choice.name)).is_ok());
-                continue;
-            };
+            let entry = COMMANDS
+                .iter()
+                .find(|e| e.name == choice.name)
+                .unwrap_or_else(|| panic!("`{}` is in the list and is not a command", choice.name));
             assert_eq!(choice.short, short(entry.name), "one rule, not two");
             if let Some(short) = choice.short {
                 // It resolves, **and it resolves to this one**. Checking only

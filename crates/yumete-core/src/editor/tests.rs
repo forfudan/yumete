@@ -20264,6 +20264,71 @@ fn write_quit_all_leaves_only_when_everything_is_on_disk() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `:wqa!` leaves past a file it could not save, and keeps that file's
+/// recovery copy; a standing size question stops it, bang or not.
+#[test]
+fn forced_write_quit_all_keeps_what_it_could_not_save() {
+    let dir = tmp().join(format!("yumete-wqa-bang-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let locked = dir.join("locked.md");
+    std::fs::write(&locked, "甲\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&locked).unwrap();
+    let _ = ed.buffers[0].insert(0, "改");
+    ed.execute(":readonly on").unwrap();
+    assert_eq!(ed.execute(":wqa!").unwrap(), CommandOutcome::Quit);
+    assert_eq!(std::fs::read_to_string(&locked).unwrap(), "甲\n", "the lock held");
+    let copy = ed.buffers[0].recovery_copy().expect("a copy was written");
+    assert!(copy.exists(), "the edit it could not save is kept for the next open");
+    assert!(std::fs::read_to_string(copy).unwrap().contains("改甲"), "and it holds the edit");
+
+    // The size question: `:wqa!` stops on the file that asked, and the files
+    // after it are neither saved nor thrown away.
+    let long = dir.join("long.md");
+    let grown = dir.join("grown.md");
+    let after = dir.join("after.md");
+    std::fs::write(&long, format!("{}\n", "雪".repeat(400_000))).unwrap();
+    std::fs::write(&grown, "甲\n").unwrap();
+    std::fs::write(&after, "乙\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&long).unwrap();
+    ed.open_file(&grown).unwrap();
+    ed.open_file(&after).unwrap();
+    let _ = ed.buffers[1].insert(0, &"乙".repeat(120_000));
+    let _ = ed.buffers[2].insert(0, "丙");
+    assert_eq!(ed.execute(":wqa!").unwrap(), CommandOutcome::Continue);
+    assert!(ed.query.is_some(), "the grown file asks");
+    assert_eq!(ed.current, 1, "standing on the file that asked");
+    assert!(ed.buffers[2].is_modified(), "the file after it is still open and unsaved");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `:wqa` on the settings panel saves every buffer and the panel, then closes
+/// the panel — never the editor, and never with force.
+#[test]
+fn write_quit_all_on_the_settings_panel_closes_the_panel() {
+    let dir = tmp().join(format!("yumete-wqa-panel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.md");
+    std::fs::write(&file, "甲\n").unwrap();
+    for line in [":wqa", ":wqa!"] {
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        let _ = ed.buffers[0].insert(0, "一");
+        ed.set_settings_open(true);
+        assert_eq!(ed.execute(line).unwrap(), CommandOutcome::Continue, "{line}");
+        assert!(ed.take_settings_save(), "{line}");
+        assert_eq!(ed.take_settings_close(), Some(false), "{line}");
+        assert!(!ed.buffers[0].is_modified(), "{line} saved the buffer, as :wa does here");
+        std::fs::write(&file, "甲\n").unwrap();
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **A whole-document rewrite asks the grid the same question `:s` does**
 /// (#350).
 ///
