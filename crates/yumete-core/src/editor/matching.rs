@@ -112,8 +112,11 @@ impl Editor {
             'p' => motion::Object::Paragraph,
             // `mi s`/`ma s`：光標所在的那一句（2026-09-28）。
             's' => motion::Object::Sentence,
-            // `mi m`/`ma m`：光標所在的那一段 Markdown 標記（2026-09-28）。
-            'm' => motion::Object::Markup,
+            // **`m` is the nearest pair, `k` the Markdown marks** (2026-10-27,
+            // 「helix use `m` to mean the nearest matching pair only」). `mi m`
+            // was the marks from 2026-09-28; they moved to `k`, mar(k)up.
+            'm' => motion::Object::NearestPair,
+            'k' => motion::Object::Markup,
             // **`mi f`/`mi t`：光標所在的那個函數/類**（2026-10-06，helix 的
             // `mi f`/`mi t`）。語法樹那一邊的事，所以不走 `Object`——它是
             // 純文本的一支，而這個要問那棵樹。整份是代碼的檔才有，`ma` 和 `mi`
@@ -154,6 +157,7 @@ impl Editor {
             self.status = match what {
                 motion::Object::Word { .. } => say!("edit.no-word-here"),
                 motion::Object::Pair { open, close } => say!("edit.no-pair-around", open, close),
+                motion::Object::NearestPair => say!("edit.no-pair-to-delete"),
                 // 一段永遠在：光標停在空行上，那一段就是那幾個空行。
                 motion::Object::Paragraph => say!("edit.no-word-here"),
                 motion::Object::Markup => say!("edit.no-markup-here"),
@@ -993,39 +997,25 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    /// **一對標記，兩邊各有多長** —— `(外左, 內左, 內右, 外右)`，都是半開區間的端點。
+    /// **The Markdown marks around the caret, both sides** —
+    /// `(outer start, inner start, inner end, outer end)`, half-open ends.
     ///
-    /// 括號那一對是一邊一個字；markdown 的標記一邊是一串（`**` 兩個、`](網址)` 一片）。
-    /// `md` 要刪的就是外與內之間那兩段。
-    fn marks_around_the_cursor(&self) -> Option<(usize, usize, usize, usize)> {
-        // 括號、引號那一族：一邊一個字。
-        let pair = self.innermost_pair().map(|(open, close)| (open, open + 1, close, close + 1));
-        // markdown 那一族：`ma m` 與 `mi m` 的差就是兩邊的標記。
-        let markup = match (
-            self.markup_object_span(true),
-            self.markup_object_span(false),
-        ) {
+    /// A mark is a run on each side (`**` two, `](網址)` a stretch), and `mdk`
+    /// takes the two runs between outer and inner.
+    ///
+    /// Warning: **It used to answer `mdm` too, choosing between this and the
+    /// nearest bracket** (until 2026-10-27, when `m` became the nearest pair
+    /// only and the marks moved to `k`). That choice kept `mdm` on
+    /// `[字](網址)` from taking only `[` and `]` and leaving `字(網址)`; now
+    /// `mdm` does exactly that, as helix's does, and `mdk` takes the link.
+    fn markup_around_the_cursor(&self) -> Option<(usize, usize, usize, usize)> {
+        match (self.markup_object_span(true), self.markup_object_span(false)) {
             (
                 motion::Span::Over { anchor: out, head: out_end },
                 motion::Span::Over { anchor: inn, head: inn_end },
             ) if out < inn || out_end > inn_end => Some((out, inn, inn_end + 1, out_end + 1)),
-            // 兩段一樣寬 ＝ 這個構造没有標記可刪。
+            // The same width both ways: this construct has no marks to take.
             _ => None,
-        };
-        // **取內層的那一個**，和 `innermost_pair` 自己在 `PAIRS` 之間挑的規矩一樣：
-        // `(**粗**)` 站在粗上按 `md` 去掉的是 `**`，不是那對括號。
-        //
-        // Warning: **起點一樣的時候讓 markdown 贏**（`>=`，2026-10-04 量出來的）。
-        // `[字](網址)` 的 `[` 和那個鏈接構造都從同一格起；讓括號贏，摘掉的只是
-        // `[` 和 `]`，剩下 `字(網址)` ——一句壞掉的語法。`[[條目]]` 同理，只脫一層
-        // 殼。這兩個都該整個構造一起走。
-        match (pair, markup) {
-            (Some(p), Some(m)) => Some(match m.0 >= p.0 || pair_is_made_of_marks(p, m) {
-                true => m,
-                false => p,
-            }),
-            (Some(p), None) => Some(p),
-            (None, m) => m,
         }
     }
 
@@ -1044,12 +1034,22 @@ impl Editor {
     /// surround pair`），我們這一支直接拆最內層——**同一個鍵在兩個編輯器裏不是同一件
     /// 事**。定：「不管是 vim 还是 helix，都和他们的行为对齐就好了，不要让用户
     /// 有意外。」順帶 vim 的 `ds(` 就能一行表映過來了：`md` 正好在等那個字符。
+    /// The two characters of the innermost bracket or quote pair around the
+    /// caret — what `m` names in `mi`, `md` and `mr`.
+    fn nearest_pair_chars(&self) -> Option<(char, char)> {
+        let (open, _) = self.innermost_pair()?;
+        pair_of(self.current_buffer().rope().char(open))
+    }
+
     pub(super) fn surround_delete(&mut self, which: char) {
         if self.refuse_readonly() {
             return;
         }
+        // `m` the nearest pair and `k` the Markdown marks, as in `mi`
+        // (2026-10-27); `m` used to take whichever of the two was nearer.
         let found = match which {
-            'm' => self.marks_around_the_cursor(),
+            'm' => self.innermost_pair().map(|(open, close)| (open, open + 1, close, close + 1)),
+            'k' => self.markup_around_the_cursor(),
             // Warning: **一個鍵管一族括號**（2026-10-06 夜審報的）。取對象那條路
             // （`mi(`/`di(`）走的是 `pair_family`——按 `(` 找得到 `（）`，按 `[`
             // 連 `「」`【】一起找。這一支從前逐字符精確，於是 `md(` 在 `（甲乙）`
@@ -2220,6 +2220,12 @@ impl Editor {
                 around,
                 count,
             } => self.pair_span(open, close, around, count),
+            motion::Motion::Object { what: motion::Object::NearestPair, around, count } => {
+                match self.nearest_pair_chars() {
+                    Some((open, close)) => self.pair_span(open, close, around, count),
+                    None => motion::Span::Missed,
+                }
+            }
             motion::Motion::Object { what: motion::Object::Paragraph, around, .. } => {
                 self.paragraph_span(around)
             }
@@ -2302,23 +2308,6 @@ impl Editor {
         // `draw_horizontal`。
         self.sel.clamp(len);
     }
-}
-
-/// **那「一對括號」其實是 markdown 自己的標記嗎** —— `md` 挑內層時的例外。
-///
-/// `[[條目]]` 裏的內層 `[`…`]` 起點比整個構造晚，照「取內層」的規矩它會贏；可它
-/// 不是一對括號，是 `[[`/`]]` 的各一半。摘掉它只脫一層殼，剩下 `[條目]`——一句
-/// 壞掉的語法（2026-10-04 量出來的）。
-///
-/// 判準：兩個端點**都**落在構造的標記那兩段裏（`[外左,內左)` 與 `[內右,外右)`）。
-/// `(**粗**)` 不中——那對括號在標記外面，是真的一對。
-fn pair_is_made_of_marks(
-    pair: (usize, usize, usize, usize),
-    markup: (usize, usize, usize, usize),
-) -> bool {
-    let (open, _, close, _) = pair;
-    let (out, inn, inn_end, out_end) = markup;
-    (out..inn).contains(&open) && (inn_end..out_end).contains(&close)
 }
 
 // Warning: **測試模組擺在檔尾。** `messages.rs` 那張「每個標籤都有條目」的網把源碼切在

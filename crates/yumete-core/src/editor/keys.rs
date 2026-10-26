@@ -908,7 +908,9 @@ impl Editor {
                 motion::Motion::Object { what, around, .. }
                     if matches!(
                         what,
-                        motion::Object::Word { .. } | motion::Object::Pair { .. }
+                        motion::Object::Word { .. }
+                            | motion::Object::Pair { .. }
+                            | motion::Object::NearestPair
                     ) =>
                 {
                     crate::vim::Step {
@@ -935,6 +937,9 @@ impl Editor {
                         what: motion::Object::Pair { open, close },
                         ..
                     } => say!("edit.no-pair-around", open, close),
+                    motion::Motion::Object { what: motion::Object::NearestPair, .. } => {
+                        say!("edit.no-pair-to-delete")
+                    }
                     _ => return,
                 };
                 self.count = None;
@@ -3660,6 +3665,44 @@ impl Editor {
         ("d", "hint.match.take-off"),
         ("r", "hint.change"),
     ];
+
+    /// What `mi` / `ma` may be finished with: the objects, then the pairs.
+    pub(super) const OBJECT_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("w", "hint.obj.word"),
+        ("W", "hint.obj.big-word"),
+        ("s", "hint.obj.sentence"),
+        ("p", "hint.obj.paragraph"),
+        ("m", "hint.obj.nearest-pair"),
+        ("k", "hint.obj.markup"),
+        ("f", "hint.obj.function"),
+        ("t", "hint.obj.type"),
+        ("a", "hint.obj.parameter"),
+        ("c", "hint.obj.comment-or-cell"),
+        ("( [ { <", "hint.obj.brackets"),
+        ("\" ' `", "hint.obj.quotes"),
+        ("「 『 《", "hint.obj.cjk-too"),
+    ];
+
+    /// The pairs `ms` / `md` / `mr` take, after whatever `lead` adds above
+    /// them (`m` for the nearest pair where that means something).
+    ///
+    /// 「`(` 或 `)`」 rather than the opener alone, because either half names
+    /// the pair — the 或 is a word of the interface and is said, not written.
+    pub(super) fn pair_rows(lead: &[(&'static str, &'static str)]) -> super::KeyRows {
+        let or = say!("hint.key-or");
+        let mut rows = Self::said(lead.iter().copied());
+        for (open, close, what) in [
+            ('(', ')', "hint.pair.round"),
+            ('[', ']', "hint.pair.square"),
+            ('{', '}', "hint.pair.curly"),
+            ('<', '>', "hint.pair.angle"),
+        ] {
+            rows.push((format!("{open} {or} {close}").into(), crate::messages::say(what, &[])));
+        }
+        rows.push(("\" ' `".into(), say!("hint.obj.quotes")));
+        rows.push(("「 『 《 【".into(), say!("hint.pair.cjk")));
+        rows
+    }
 
     /// What `` ` `` may be finished with.
     ///

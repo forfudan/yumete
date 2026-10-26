@@ -930,7 +930,13 @@ pub enum Object {
     Word { big: bool },
     /// A pair of delimiters, already resolved to its two characters.
     Pair { open: char, close: char },
-    /// **`mi m`/`ma m` — 光標所在的那一段 Markdown 標記**（2026-09-28）。
+    /// **`mi m`/`ma m` — the nearest pair, whichever kind** (2026-10-27,
+    /// helix's `m`). Resolved by the editor, which can look at the text: the
+    /// innermost bracket or quote around the caret names the two characters,
+    /// and from there it is a [`Object::Pair`].
+    NearestPair,
+    /// **`mi k`/`ma k` — 光標所在的那一段 Markdown 標記**（2026-09-28；2026-10-27 從
+    /// `m` 挪到 `k`，mar(k)up）。
     ///
     /// `**粗**`、`*斜*`、`~~刪~~`、`==標==`、`` `碼` ``、`[文字](地址)`、`[[雙鏈]]`、
     /// `%%批注%%`、腳註。`i` 取裏面的文字，`a` 連標記一起。套着的時候取最裏面那一層。

@@ -4608,56 +4608,117 @@ fn vim_m_sets_a_mark_and_percent_still_jumps() {
     assert_eq!(ed.sel.head(), 4, "% 仍跳到配對的那一半");
 }
 
-/// **`md` 也去得掉 markdown 的標記**（2026-10-04 定）。
+/// **`md k` 去得掉 markdown 的標記**（2026-10-04 定；2026-10-27 從 `md m` 挪到 `md k`）。
 ///
 /// 起因是那一問：「我只想删掉 `**`，最快怎麼辦」。從前最快是四步八鍵——`mim` 複製、
 /// `mam` 選中、`R` 貼回去——因為 `md` 查的是 `PAIRS`，那張表裏只有括號和引號，
 /// 没有 `*`/`_`/`~`，而且它寫死了每邊刪**一個**字，`**` 是兩個。
 ///
-/// 在一部以 markdown 為主的編輯器裏，這件事該是三個鍵。
+/// 在一部以 markdown 為主的編輯器裏，這件事該是三個鍵。`m` 從前在括號與標記之間取
+/// 近的那一個；照 helix，`m` 現在只管最近的一對括號或引號，標記歸 `k`。
 #[test]
 fn md_takes_off_markdown_marks_too() {
-    let off = |text: &str, steps: &str| {
+    let off = |text: &str, steps: &str, keys: &str| {
         let mut ed = typed(text);
         press(&mut ed, "gg");
         press(&mut ed, steps);
-        press(&mut ed, "mdm");
+        press(&mut ed, keys);
         ed.current_buffer().text().to_string()
     };
     // 一邊一個字的、一邊兩個字的、一邊一片的，都走同一個鍵。
-    assert_eq!(off("這是 **一句話** 的例子。\n", "8l"), "這是 一句話 的例子。\n");
-    assert_eq!(off("這是 *一句話* 的例子。\n", "7l"), "這是 一句話 的例子。\n");
-    assert_eq!(off("這是 ~~一句話~~ 的例子。\n", "8l"), "這是 一句話 的例子。\n");
-    assert_eq!(off("這是 ==標出== 的例子。\n", "6l"), "這是 標出 的例子。\n");
-    assert_eq!(off("這是 `一句話` 的例子。\n", "7l"), "這是 一句話 的例子。\n");
+    assert_eq!(off("這是 **一句話** 的例子。\n", "8l", "mdk"), "這是 一句話 的例子。\n");
+    assert_eq!(off("這是 *一句話* 的例子。\n", "7l", "mdk"), "這是 一句話 的例子。\n");
+    assert_eq!(off("這是 ~~一句話~~ 的例子。\n", "8l", "mdk"), "這是 一句話 的例子。\n");
+    assert_eq!(off("這是 ==標出== 的例子。\n", "6l", "mdk"), "這是 標出 的例子。\n");
+    assert_eq!(off("這是 `一句話` 的例子。\n", "7l", "mdk"), "這是 一句話 的例子。\n");
     // 鏈接整個拆掉，不是只摘方括號——留下 `字(網址)` 是一句壞語法。
-    assert_eq!(off("這是 [字](http://a) 的例子\n", "4l"), "這是 字 的例子\n");
-    assert_eq!(off("這是 [[條目]] 的例子。\n", "5l"), "這是 條目 的例子。\n");
+    assert_eq!(off("這是 [字](http://a) 的例子\n", "4l", "mdk"), "這是 字 的例子\n");
+    assert_eq!(off("這是 [[條目]] 的例子。\n", "5l", "mdk"), "這是 條目 的例子。\n");
+    // …而 `md m` 是最近的那一對，照 helix：鏈接上它只摘方括號。
+    assert_eq!(off("這是 [字](http://a) 的例子\n", "4l", "mdm"), "這是 字(http://a) 的例子\n");
 
-    // **取內層的那一個**，和 `md` 在 `PAIRS` 之間本來的規矩一樣。
+    // `k` 只管標記，`m` 只管括號：同一個位置，各取各的。
+    assert_eq!(off("這是 (**粗**) 的例子。\n", "7l", "mdk"), "這是 (粗) 的例子。\n", "去掉 **，括號留着");
+    assert_eq!(off("這是 (**粗**) 的例子。\n", "7l", "mdm"), "這是 **粗** 的例子。\n", "去掉括號，** 留着");
+    assert_eq!(off("這是 **(a)** 的例子。\n", "6l", "mdm"), "這是 **a** 的例子。\n");
     assert_eq!(
-        off("這是 (**粗**) 的例子。\n", "7l"),
-        "這是 (粗) 的例子。\n",
-        "站在粗上：去掉 **，那對括號留着"
-    );
-    assert_eq!(
-        off("這是 **(a)** 的例子。\n", "6l"),
-        "這是 **a** 的例子。\n",
-        "站在 a 上：去掉括號，** 留着"
-    );
-    assert_eq!(
-        off("這是 **粗*斜*粗** 的例子。\n", "7l"),
+        off("這是 **粗*斜*粗** 的例子。\n", "7l", "mdk"),
         "這是 **粗斜粗** 的例子。\n",
         "套起來的強調：去掉裏面那一層"
     );
 
     // 括號那一族一個字都没變。
-    assert_eq!(off("這是（全角）的例子。\n", "5l"), "這是全角的例子。\n");
-    // 什麼標記都没有：一個字都不動。
-    let mut ed = typed("這是没有標記的一句話。\n");
-    press(&mut ed, "gg5l");
-    press(&mut ed, "mdm");
-    assert_eq!(ed.current_buffer().text(), "這是没有標記的一句話。\n");
+    assert_eq!(off("這是（全角）的例子。\n", "5l", "mdm"), "這是全角的例子。\n");
+    // 什麼都没有：一個字都不動。
+    for keys in ["mdm", "mdk"] {
+        let mut ed = typed("這是没有標記的一句話。\n");
+        press(&mut ed, "gg5l");
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "這是没有標記的一句話。\n", "{keys}");
+    }
+}
+
+/// **Each step of `m` lists what it takes** (2026-10-27), as helix's do —
+/// not a line saying 「type a bracket」.
+#[test]
+fn every_step_of_m_lists_its_choices() {
+    let keys_after = |pressed: &str| -> Vec<String> {
+        let mut ed = typed("（甲）\n");
+        press(&mut ed, pressed);
+        let Hint::Keys(_, rows) = ed.hint() else { panic!("{pressed}: no key list") };
+        rows.into_iter().map(|(k, _)| k.into_owned()).collect()
+    };
+    let mi = keys_after("mi");
+    for k in ["w", "W", "s", "p", "m", "k", "f", "t", "a", "c"] {
+        assert!(mi.iter().any(|r| r == k), "mi lists {k}: {mi:?}");
+    }
+    assert_eq!(keys_after("ma"), mi, "ma takes the same objects");
+    let ms = keys_after("ms");
+    assert!(ms.iter().any(|r| r.starts_with('(')) && !ms.iter().any(|r| r == "m"), "{ms:?}");
+    let md = keys_after("md");
+    assert!(md.iter().any(|r| r == "m") && md.iter().any(|r| r == "k"), "{md:?}");
+    let mr = keys_after("mr");
+    assert!(mr.iter().any(|r| r == "m") && !mr.iter().any(|r| r == "k"), "{mr:?}");
+    let to = keys_after("mr(");
+    assert!(to.iter().any(|r| r.starts_with('[')) && !to.iter().any(|r| r == "m"), "{to:?}");
+}
+
+/// Under the vim keymap `dik`/`dak` are the Markdown marks and `dim` the
+/// nearest pair, the same letters as `mi` (2026-10-27).
+#[test]
+fn vim_objects_follow_the_m_and_k_split() {
+    let vim = |steps: &str| {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        for c in "a **bold** b (day)".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        press(&mut ed, "0");
+        press(&mut ed, steps);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(vim("fldik"), "a **** b (day)");
+    assert_eq!(vim("fldak"), "a  b (day)");
+    assert_eq!(vim("fydim"), "a **bold** b ()");
+    assert_eq!(vim("fydam"), "a **bold** b ");
+}
+
+/// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
+#[test]
+fn mim_takes_the_nearest_pair_of_any_kind() {
+    let mut ed = typed("他說：「今天（星期三）下雨。」\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "f期;");
+    press(&mut ed, "mim");
+    let (from, to) = ed.selection();
+    let got: String = ed.current_buffer().rope().slice(from..to).chars().collect();
+    assert_eq!(got, "星期三");
+    press(&mut ed, ";mam");
+    let (from, to) = ed.selection();
+    let got: String = ed.current_buffer().rope().slice(from..to).chars().collect();
+    assert_eq!(got, "（星期三）");
 }
 
 #[test]
@@ -24512,7 +24573,8 @@ fn a_bracket_key_reaches_its_whole_family() {
     assert_eq!(ed.current_buffer().text(), "\n", "（）不在 [ 這一族裏");
 }
 
-/// **`mi m`/`ma m`：光標所在的那一段 Markdown 標記**（2026-09-28 定，一個鍵管九種）。
+/// **`mi k`/`ma k`：光標所在的那一段 Markdown 標記**（2026-09-28 定，一個鍵管九種；
+/// 2026-10-27 從 `m` 挪到 `k`，`m` 照 helix 只管最近的一對）。
 #[test]
 fn the_markup_object_takes_whatever_marks_the_cursor_is_in() {
     let took = |text: &str, steps: &str| {
@@ -24530,29 +24592,29 @@ fn the_markup_object_takes_whatever_marks_the_cursor_is_in() {
     };
 
     // **粗** ＝ 0* 1* 2粗 3* 4*；光標走到「粗」上。
-    assert_eq!(took("**粗**", "llmim"), "粗", "i 取裏面");
-    assert_eq!(took("**粗**", "llmam"), "**粗**", "a 連標記一起");
+    assert_eq!(took("**粗**", "llmik"), "粗", "i 取裏面");
+    assert_eq!(took("**粗**", "llmak"), "**粗**", "a 連標記一起");
 
     // 一個字符的標記與兩個字符的標記走同一句話。
-    assert_eq!(took("`碼`", "lmim"), "碼");
-    assert_eq!(took("~~刪~~", "llmim"), "刪");
-    assert_eq!(took("==標==", "llmim"), "標");
-    assert_eq!(took("*斜*", "lmim"), "斜");
+    assert_eq!(took("`碼`", "lmik"), "碼");
+    assert_eq!(took("~~刪~~", "llmik"), "刪");
+    assert_eq!(took("==標==", "llmik"), "標");
+    assert_eq!(took("*斜*", "lmik"), "斜");
 
     // 鏈接：`i` 取看得見的文字，`a` 連地址一起。
-    assert_eq!(took("[文字](地址)", "lmim"), "文字");
-    assert_eq!(took("[文字](地址)", "lmam"), "[文字](地址)");
-    assert_eq!(took("[[雙鏈]]", "llmim"), "雙鏈");
-    assert_eq!(took("%%批注%%", "llmim"), "批注");
+    assert_eq!(took("[文字](地址)", "lmik"), "文字");
+    assert_eq!(took("[文字](地址)", "lmak"), "[文字](地址)");
+    assert_eq!(took("[[雙鏈]]", "llmik"), "雙鏈");
+    assert_eq!(took("%%批注%%", "llmik"), "批注");
 
     // Warning: **光標停在標記本身上也算**——它和裏面那段文字是同一個構造。
-    assert_eq!(took("**粗**", "mim"), "粗", "站在第一個星號上");
+    assert_eq!(took("**粗**", "mik"), "粗", "站在第一個星號上");
 
     // Warning: **套着的時候取最裏面那一層。** 這一條原先記的是「解析器不套，所以拿到整段」，
     // 解析器學會套的當天（2026-09-28）它就紅了，改成現在這樣。
-    assert_eq!(took("**粗的`碼`**", "lllllmim"), "碼", "站在「碼」上取的是行內代碼");
-    assert_eq!(took("**粗的`碼`**", "lllllmam"), "`碼`", "a 連那一對反引號一起");
-    assert_eq!(took("[**粗**的](x)", "llmim"), "粗", "鏈接文字裏的粗體也取得到");
+    assert_eq!(took("**粗的`碼`**", "lllllmik"), "碼", "站在「碼」上取的是行內代碼");
+    assert_eq!(took("**粗的`碼`**", "lllllmak"), "`碼`", "a 連那一對反引號一起");
+    assert_eq!(took("[**粗**的](x)", "llmik"), "粗", "鏈接文字裏的粗體也取得到");
 }
 
 /// Warning: **跟着語言走**：`:syntax text` 的檔裏一個標記都没有。
@@ -24561,7 +24623,7 @@ fn the_markup_object_is_bound_to_the_syntax() {
     let mut ed = typed("**粗**");
     ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
     press(&mut ed, "gg");
-    press(&mut ed, "llmim");
+    press(&mut ed, "llmik");
     assert_eq!(ed.selection(), (2, 3), "什麼都没選中，還是光標那一格");
     assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
 }
@@ -25149,7 +25211,7 @@ fn a_jump_into_the_unseen_still_lands_in_the_middle() {
 /// 2026-10-04 報的：「我打 `mam`，最后一個 m 會變成輸入法候選框。所以我建議
 /// 這裡不解挂系統輸入法，也不允許 yume 輸入中文，這裡必須是一個 ascii 字母。」
 ///
-/// 它等的是**物件的名字**：`mim` 的 `m` 是「標記」、`mis` 的 `s` 是「句」、`mip`
+/// 它等的是**物件的名字**：`mik` 的 `k` 是「標記」（從前是 `mim`）、`mis` 的 `s` 是「句」、`mip`
 /// 的 `p` 是「段」。開着輸入法，那一鍵被當成碼吃掉，`mam` 就按不出來。
 #[test]
 fn an_object_prefix_never_opens_the_input_method() {
