@@ -1351,10 +1351,10 @@ mod ground_tests {
             "monokai",
             "dracula",
             "tokyo-night",
+            "catppuccin",
             "bw",
             "morandi",
             "meridian",
-            "complement",
         ];
         for name in names {
             let theme = ThemeConfig::named(name).expect("a theme by that name");

@@ -8180,8 +8180,11 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
                     Token::Parameter => leaning(pin(|p| p.parameter), italic(|p| p.parameter_italic)),
                     Token::Keyword => pin(|p| p.keyword),
                     Token::Builtin => leaning(pin(|p| p.this), italic(|p| p.this_italic)),
-                    Token::Function => pin(|p| p.function),
-                    Token::BuiltinFunction => pin(|p| p.builtin_function),
+                    Token::Function => leaning(pin(|p| p.function), italic(|p| p.function_italic)),
+                    Token::BuiltinFunction => leaning(
+                        pin(|p| p.builtin_function),
+                        italic(|p| p.builtin_function_italic),
+                    ),
                     Token::Escape => pin(|p| p.escape),
                     Token::Property => pin(|p| p.property),
                     Token::Attribute => leaning(pin(|p| p.attribute), italic(|p| p.attribute_italic)),
@@ -26580,6 +26583,39 @@ fn squeezed(text: &str) -> String {
         assert_eq!(token(dark, Token::Plain), Some(rgb(0xC0_CA_F5)), "a name is `variable`'s");
         assert_eq!(token(dark, Token::Keyword), Some(rgb(0xBB_9A_F7)));
         assert_eq!(dark.text(), Color::Rgb(0xA9, 0xB1, 0xD6));
+    }
+
+    /// **Catppuccin draws its functions italic, and each flavour is its own
+    /// table** (2026-10-26): Mocha in a dark mood, Latte in a light one.
+    #[test]
+    fn catppuccin_leans_its_functions_in_both_flavours() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::{spans, Kind};
+        let theme = yumete_config::ThemeConfig::named("catppuccin").expect("catppuccin");
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        let mocha = crate::theme::Palette::of_theme(&theme, true);
+        let latte = crate::theme::Palette::of_theme(&theme, false);
+        let token = |ink, t| markup_style(Kind::Token(t), ink);
+        let function = token(mocha, Token::Function);
+        assert_eq!(function.fg, Some(rgb(0x89_B4_FA)));
+        assert!(function.add_modifier.contains(Modifier::ITALIC));
+        assert!(token(mocha, Token::BuiltinFunction).add_modifier.contains(Modifier::ITALIC));
+        assert!(!token(mocha, Token::Keyword).add_modifier.contains(Modifier::ITALIC));
+        assert_eq!(token(latte, Token::Function).fg, Some(rgb(0x1E_66_F5)));
+        assert_eq!(token(latte, Token::Keyword).fg, Some(rgb(0x88_39_EF)));
+        let at = |ink, line: &str, i: usize| {
+            let all = spans(line);
+            let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
+            markup_style_in(span, &all, line.chars().nth(i), ink)
+        };
+        assert_eq!(at(mocha, "# a", 2).fg, Some(rgb(0xF3_8B_A8)));
+        assert_eq!(at(mocha, "#### a", 5).fg, Some(rgb(0xA6_E3_A1)));
+        assert_eq!(at(latte, "###### a", 7).fg, Some(rgb(0x72_87_FD)));
+        assert_eq!(latte.text(), Color::Rgb(0x4C, 0x4F, 0x69));
+        // One Dark's functions stay upright: the flag is per theme.
+        let one_dark = yumete_config::ThemeConfig::named("one-dark").expect("one-dark");
+        let one_dark = crate::theme::Palette::of_theme(&one_dark, true);
+        assert!(!token(one_dark, Token::Function).add_modifier.contains(Modifier::ITALIC));
     }
 
     #[test]
