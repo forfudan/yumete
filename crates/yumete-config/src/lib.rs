@@ -1517,6 +1517,59 @@ pub const TOKYO_NIGHT: Pinned = Pinned {
     deleted_mark: (0x89, 0xDD, 0xFF),     // punctuation
 };
 
+/// **Tokyo Night Light**, from `themes/tokyo-night-light-color-theme.json` —
+/// see [`TOKYO_NIGHT`]. The same rules, in darker inks.
+pub const TOKYO_NIGHT_LIGHT: Pinned = Pinned {
+    keyword: (0x65, 0x35, 0x9D),          // keyword, storage.type
+    function: (0x29, 0x59, 0xAA),         // entity.name.function
+    builtin_function: (0x00, 0x6C, 0x86), // support.function
+    types: (0x00, 0x6C, 0x86),            // support.type, support.class
+    types_italic: false,
+    this: (0x8C, 0x43, 0x51),             // variable.language
+    this_italic: false,
+    string: (0x38, 0x5F, 0x0D),           // string
+    escape: (0x36, 0x3C, 0x4D),           // constant.character.escape
+    constant: (0x96, 0x50, 0x27),         // constant.language, constant.other
+    number: (0x96, 0x50, 0x27),           // constant.numeric
+    property: (0x0F, 0x4B, 0x6E),         // variable.other.property
+    parameter: (0x8F, 0x5E, 0x15),        // variable.parameter
+    parameter_italic: false,
+    tag: (0x8C, 0x43, 0x51),              // entity.name.tag
+    attribute: (0x65, 0x35, 0x9D),        // entity.other.attribute-name
+    attribute_italic: false,
+    comment: (0x88, 0x8B, 0x94),          // comment (italic)
+    comment_italic: true,
+    plain: (0x34, 0x3B, 0x58),            // variable
+    operator: (0x00, 0x6C, 0x86),         // keyword.operator
+    punctuation: (0x00, 0x6C, 0x86),      // punctuation
+    headings: [
+        (0x36, 0x3C, 0x4D), // heading.1.markdown, `#` and all
+        (0x0F, 0x4B, 0x6E), // heading.2.markdown
+        (0x29, 0x59, 0xAA), // heading.3.markdown
+        (0x39, 0x5B, 0x96), // heading.4.markdown
+        (0x40, 0x43, 0x4F), // heading.5.markdown
+        (0x74, 0x7C, 0xA1), // heading.6.markdown
+    ],
+    bold: (0x34, 0x3B, 0x58),             // markup.bold, marks and all
+    bold_mark: (0x34, 0x3B, 0x58),
+    italic: (0x34, 0x3B, 0x58),           // markup.italic, marks and all
+    italic_mark: (0x34, 0x3B, 0x58),
+    code: (0x36, 0x3C, 0x4D),             // markup.inline.raw.string.markdown
+    code_mark: (0x00, 0x6C, 0x86),        // punctuation
+    list_mark: (0x00, 0x6C, 0x86),        // punctuation
+    list_text: (0x34, 0x3B, 0x59),        // no rule
+    link_text: (0x33, 0x63, 0x5C),        // string.other.link
+    link_italic: false,
+    link_bracket: (0x00, 0x6C, 0x86),     // punctuation
+    link_paren: (0x00, 0x6C, 0x86),       // punctuation
+    link_address: (0x33, 0x63, 0x5C),     // markup.underline.link
+    quote: (0x34, 0x3B, 0x59),            // markup.quote: italic, no colour
+    quote_italic: true,
+    quote_mark: (0x00, 0x6C, 0x86),       // punctuation
+    deleted: (0x34, 0x3B, 0x59),          // markup.strikethrough: no rule
+    deleted_mark: (0x00, 0x6C, 0x86),     // punctuation
+};
+
 /// **Monokai, as VS Code ships it**, read off
 /// `extensions/theme-monokai/themes/monokai-color-theme.json` (2026-10-26).
 ///
@@ -1666,7 +1719,7 @@ impl ThemeConfig {
     /// Five are **borrowed** (2026-10-25/26): `one-dark`, `github`, `monokai`,
     /// `dracula` and `tokyo-night` take their ink and paper from the theme they
     /// copy, and its code and Markdown colours exactly ([`Pinned`]); `github`
-    /// has both moods, the other four are dark only. 琥珀,
+    /// and `tokyo-night` have both moods, the other three are dark only. 琥珀,
     /// 陶窯, 夜螢, 莫高 and 藍曬 went to keep the set at ten.
     /// **A theme's name is ASCII**, because a command line is: `:theme ink`
     /// has to be typeable with the IME off, which is where a reader who has
@@ -1803,16 +1856,16 @@ impl ThemeConfig {
                 lime_dark: (0x50, 0xFA, 0x7B),
                 ..ThemeConfig::default()
             }),
-            // Tokyo Night (2026-10-26), in place of 藍曬, built as `dracula` is:
-            // its text and ground for the ink and paper, `TOKYO_NIGHT` for the
-            // code and the Markdown, its terminal colours for the accents. Its
+            // Tokyo Night — Night and Light (2026-10-26), in place of 藍曬, built
+            // as `github` is: each mood's text and ground for the ink and paper,
+            // `TOKYO_NIGHT` and `TOKYO_NIGHT_LIGHT` for the code and the
+            // Markdown, its terminal colours for the accents. Its
             // `errorForeground` is a grey (it is for the UI's error text), so 朱
             // is `editorError.foreground`.
             //
-            // Dark only. Tokyo Night Light's grey paper (#E6E7ED) under its
-            // #343B59 text leaves a selection inside a table's cursor row 1.23:1
-            // from the row, under the floor every theme keeps; of darker text,
-            // lighter paper or no light half, the third was chosen.
+            // The light half was dropped once: on the sRGB ladder its grey paper
+            // (#E6E7ED) under #343B59 text left a selection in a table's cursor
+            // row 1.23:1 from the row. Spaced by contrast it has 1.28.
             //
             // Source: enkia.tokyo-night 1.1.2 (MIT, © Enkia). Notice in
             // `licenses/`.
@@ -1823,21 +1876,31 @@ impl ThemeConfig {
                     paper: (0x1A, 0x1B, 0x26),
                 },
                 light: Ladder {
-                    ink: (0xA9, 0xB1, 0xD6),
-                    paper: (0x1A, 0x1B, 0x26),
+                    ink: (0x34, 0x3B, 0x59),
+                    paper: (0xE6, 0xE7, 0xED),
                 },
-                dark_only: true,
                 pinned: Some(TOKYO_NIGHT),
+                pinned_light: Some(TOKYO_NIGHT_LIGHT),
                 gold_dark: (0xE0, 0xAF, 0x68),
+                gold_light: (0x8F, 0x5E, 0x15),
                 mark_dark: (0xDB, 0x4B, 0x4B),
+                mark_light: (0xBD, 0x40, 0x40),
                 purple_dark: (0xBB, 0x9A, 0xF7),
+                purple_light: (0x65, 0x35, 0x9D),
                 green_dark: (0x9E, 0xCE, 0x6A),
+                green_light: (0x38, 0x5F, 0x0D),
                 azure_dark: (0x7A, 0xA2, 0xF7),
+                azure_light: (0x29, 0x59, 0xAA),
                 amber_dark: (0xFF, 0x9E, 0x64),
+                amber_light: (0x96, 0x50, 0x27),
                 orange_dark: (0xFF, 0x9E, 0x64),
+                orange_light: (0x96, 0x50, 0x27),
                 pink_dark: (0xF7, 0x76, 0x8E),
+                pink_light: (0x8C, 0x43, 0x51),
                 cyan_dark: (0x7D, 0xCF, 0xFF),
+                cyan_light: (0x00, 0x6C, 0x86),
                 lime_dark: (0x73, 0xDA, 0xCA),
+                lime_light: (0x33, 0x63, 0x5C),
                 ..ThemeConfig::default()
             }),
             // 莫蘭迪 — 十套裏最低的正文對比、最灰的地。長夜寫作最不刺眼的一套，朱也降成塵土般的磚紅。
@@ -5197,10 +5260,11 @@ mod a_typo_is_said_out_loud {
     fn tokyo_night_replaces_cyanotype() {
         assert!(ThemeConfig::named("cyanotype").is_none());
         let theme = ThemeConfig::named("tokyo-night").expect("tokyo-night");
-        assert!(theme.dark_only);
+        assert!(!theme.dark_only);
         assert_eq!(theme.pinned, Some(TOKYO_NIGHT));
-        assert_eq!(theme.pinned_light, None);
+        assert_eq!(theme.pinned_light, Some(TOKYO_NIGHT_LIGHT));
         assert_eq!(theme.dark.paper, (0x1A, 0x1B, 0x26));
+        assert_eq!(theme.light.paper, (0xE6, 0xE7, 0xED));
         // The six heading levels fade from cyan to grey.
         assert_eq!(TOKYO_NIGHT.headings[0], (0x89, 0xDD, 0xFF));
         assert_eq!(TOKYO_NIGHT.headings[5], (0x74, 0x7C, 0xA1));
