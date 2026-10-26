@@ -7,7 +7,15 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## Unreleased
+## 0.13.0 · 2026-10-26
+
+Thirty-four commits, two days after 0.12.0. Most of them are themes: seven from the
+editors people already use (`one-dark`, `github`, `monokai`, `dracula`, `tokyo-night`,
+`catppuccin`, `gruvbox`), each drawing code and Markdown in its own colours, with seven
+of the house themes retired to keep the set at ten. Light moods now space their greys
+by contrast, so a selection or a table's cursor row is as easy to see on a light page
+as on a dark one. On the command line: `:write-quit-all`, two-letter names for the
+scoped search and replace panels, and a menu that lists commands only.
 
 ### Added
 
