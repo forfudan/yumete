@@ -660,6 +660,12 @@ impl Palette {
         let Color::Rgb(r, g, b) = under else {
             return under;
         };
+        // A light ladder is spaced by contrast, so its shift is a ratio, not
+        // a difference — see `Ladder::shift`.
+        if self.ladder.light() {
+            let (r, g, b) = self.ladder.shift((r, g, b), -depth);
+            return Color::Rgb(r, g, b);
+        }
         let (ir, ig, ib) = self.ladder.ink;
         let (pr, pg, pb) = self.ladder.paper;
         // Warning: **Rounded, not truncated.** `Ladder::step` rounds half up, and a

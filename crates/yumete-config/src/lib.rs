@@ -837,11 +837,22 @@ impl Mode {
 /// editing a pair of values: the relationships between the shades stay right by
 /// construction, and nothing can drift out of agreement with anything else.
 ///
-/// Rungs run `0` (pure ink) to `1000` (pure paper). Mixed in **sRGB**, not in
-/// linear light: measured over this ladder, sRGB gives a step of 5.8–7.4 L\*
-/// across the whole ramp while linear light gives 3.2–16.8, piling nine tenths
-/// of the rungs into the light half and then falling off a cliff. The even ramp
-/// is the one you can place an interface on.
+/// Rungs run `0` (pure ink) to [`rung::PAPER`]. A dark ladder is mixed in
+/// **sRGB**, not in linear light: measured over this ladder, sRGB gives a step
+/// of 5.8–7.4 L\* across the whole ramp while linear light gives 3.2–16.8,
+/// piling nine tenths of the rungs into the light half and then falling off a
+/// cliff. The even ramp is the one you can place an interface on.
+///
+/// Warning: **A light ladder is spaced by contrast instead** (2026-10-26). The
+/// same sRGB steps that are even on a dark page come out a quarter closer on a
+/// light one, in the ratio the eye uses to tell two grounds apart: 墨香's
+/// selection was 2.16:1 off the paper in dark mood and 1.80:1 in light, and the
+/// three grounds that meet in a table (選區、光標行、欄底) fell under 1.24 on
+/// any light theme whose text was under about 9:1 — Tokyo Night Light and
+/// Catppuccin Latte both. Spacing the light rungs by equal contrast gives light
+/// mood the separation dark mood already had (2.12:1 for the same selection),
+/// so the rungs mean the same thing in both, and any light theme whose text
+/// clears 6.9:1 passes. Dark ladders are untouched, byte for byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Ladder {
     pub ink: (u8, u8, u8),
@@ -859,6 +870,9 @@ impl Ladder {
     /// one idea, not two, and no third colour to name. Channels clamp, so a
     /// theme whose paper is already white simply gets its paper back.
     pub fn step(self, t: u16) -> (u8, u8, u8) {
+        if self.light() {
+            return self.shift(self.ink, i32::from(t.min(rung::DEEP)));
+        }
         let t = t.min(rung::DEEP) as i64;
         let full = rung::PAPER as i64;
         let mix = |a: u8, b: u8| -> u8 {
@@ -871,6 +885,60 @@ impl Ladder {
             mix(self.ink.2, self.paper.2),
         )
     }
+
+    /// Whether the paper is the lighter end — a light mood, spaced by
+    /// contrast rather than by sRGB (see the type's own note).
+    pub fn light(self) -> bool {
+        luminance(self.paper) > luminance(self.ink)
+    }
+
+    /// A colour moved `depth` rungs toward the paper (negative: toward the
+    /// ink), on a light ladder.
+    ///
+    /// Each channel's light, plus the 0.05 of flare the contrast ratio counts,
+    /// is carried geometrically from ink to paper, so one rung is the same
+    /// ratio wherever it is taken. That is also what makes a shift exact: a
+    /// rung moved by `d` lands on the rung `d` away, and a colour that is not
+    /// on the ladder (a wash) moves by the same amount a rung would.
+    pub fn shift(self, (r, g, b): (u8, u8, u8), depth: i32) -> (u8, u8, u8) {
+        let along = f64::from(depth) / f64::from(rung::PAPER);
+        let channel = |c: u8, ink: u8, paper: u8| -> u8 {
+            let (from, to) = (linear(ink) + FLARE, linear(paper) + FLARE);
+            to_srgb((linear(c) + FLARE) * (to / from).powf(along) - FLARE)
+        };
+        (
+            channel(r, self.ink.0, self.paper.0),
+            channel(g, self.ink.1, self.paper.1),
+            channel(b, self.ink.2, self.paper.2),
+        )
+    }
+}
+
+/// The flare WCAG adds to both sides of a contrast ratio.
+const FLARE: f64 = 0.05;
+
+/// Relative luminance, as WCAG measures it.
+fn luminance((r, g, b): (u8, u8, u8)) -> f64 {
+    0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+}
+
+/// One sRGB channel, into light.
+fn linear(v: u8) -> f64 {
+    let v = f64::from(v) / 255.0;
+    match v <= 0.04045 {
+        true => v / 12.92,
+        false => ((v + 0.055) / 1.055).powf(2.4),
+    }
+}
+
+/// And back, clamped: a shift past either end leaves the cube.
+fn to_srgb(v: f64) -> u8 {
+    let v = v.clamp(0.0, 1.0);
+    let v = match v <= 0.003_130_8 {
+        true => v * 12.92,
+        false => 1.055 * v.powf(1.0 / 2.4) - 0.055,
+    };
+    (v * 255.0).round() as u8
 }
 
 pub mod rung {
@@ -993,8 +1061,9 @@ pub mod rung {
     /// table's cursor row is two grounds one inside the other, and the three
     /// of them — 選區, 光標行, 欄底 — have to stay a visible step apart all the
     /// way up. At 第 65 against `HEAD`'s 第 73 this measures 1.20:1 in 莫蘭迪's
-    /// light mood; 第 63 leaves 1.26:1. 莫蘭迪 has the least contrast to spend
-    /// and is the theme that decides both numbers.
+    /// light mood; 第 63 leaves 1.26:1. Those are sRGB-ladder figures: since
+    /// light ladders are spaced by contrast (2026-10-26) 莫蘭迪 light has 1.31,
+    /// and the tightest pair is one-dark's, at 1.26.
     pub const SELECTION: u16 = 6300; // 第 63 檔
     /// The page — **第 90 檔**, not the end of the ladder.
     pub const PAPER: u16 = 9000; // 第 90 檔
