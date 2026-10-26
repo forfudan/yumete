@@ -20053,7 +20053,11 @@ fn a_round_of_recovery_copies_is_bounded_and_the_backlog_drains() {
         ed.buffers[at].write_swap().expect("the yardstick is writable");
         t.elapsed()
     };
-    let bound = (one * 6).max(std::time::Duration::from_millis(250));
+    // Twenty chapters, not six (2026-10-26): the 0.13.0 release build's
+    // Windows runner took 1.03 s for one round against a 117 ms yardstick, a
+    // disk stall the yardstick did not see. A round that wrote all hundred
+    // would cost a hundred, so twenty still tells the two apart.
+    let bound = (one * 20).max(std::time::Duration::from_millis(500));
 
     ed.show_buffer_at(7);
     let started = std::time::Instant::now();
