@@ -20247,6 +20247,19 @@ fn write_quit_all_leaves_only_when_everything_is_on_disk() {
     assert_eq!(ed.execute(":xa").unwrap(), CommandOutcome::Continue);
     assert_eq!(std::fs::read_to_string(&a).unwrap(), "三一甲\n", "what could be saved was");
     assert!(ed.buffers.iter().any(|b| b.is_modified()));
+    // `:wqa!` leaves anyway, the scratch buffer thrown away as `:qa!` would.
+    assert_eq!(ed.execute(":wqa!").unwrap(), CommandOutcome::Quit);
+
+    // A file changed outside: `:wqa` will not write over it and stays;
+    // `:wqa!` writes this version over it, as `:w!` does, and leaves.
+    let mut ed = Editor::new();
+    ed.open_file(&b).unwrap();
+    let _ = ed.buffers[0].insert(0, "四");
+    std::fs::write(&b, "外面改的一行\n").unwrap();
+    assert_eq!(ed.execute(":wqa").unwrap(), CommandOutcome::Continue);
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "外面改的一行\n");
+    assert_eq!(ed.execute(":wqa!").unwrap(), CommandOutcome::Quit);
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "四二乙\n");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

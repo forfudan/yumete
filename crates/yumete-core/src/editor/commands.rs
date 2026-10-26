@@ -412,13 +412,13 @@ impl Editor {
             }
             // `:wqa` on the panel is `:wq` on the panel: save it, close it,
             // and leave the editor standing, for the reason `:qa` gives above.
-            Command::WriteQuitAll if self.settings_open => {
+            Command::WriteQuitAll { force } if self.settings_open => {
                 self.settings_save = true;
-                self.settings_close = Some(false);
+                self.settings_close = Some(force);
                 Ok(CommandOutcome::Continue)
             }
             Command::WriteQuit(path) => self.write_then_quit(path, false),
-            Command::WriteQuitAll => self.write_quit_all(),
+            Command::WriteQuitAll { force } => self.write_quit_all(force),
             // `:x` and `:xit`: the same, and the save is skipped when nothing
             // was changed. A path is an instruction, so it is always written.
             Command::Exit(path) => self.write_then_quit(path, true),

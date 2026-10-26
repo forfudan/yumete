@@ -154,7 +154,11 @@ pub enum Command {
     /// `:write-quit-all` (aliases `:wqa`, `:xa`) — save every file that
     /// changed, then leave. vim's `:wqa` / `:xa` and helix's
     /// `:write-quit-all`: a file that could not be saved keeps the editor open.
-    WriteQuitAll,
+    /// `force` (`:wqa!`) saves the way `:w!` does — over a file changed
+    /// outside — and then leaves the way `:qa!` does, whatever is left.
+    WriteQuitAll {
+        force: bool,
+    },
     /// `:exit` (aliases `:x`, `:xit`) — **save only if the file changed**, then
     /// leave. vi's `:x` and helix's `:exit`, which `:x` used to be spelled as
     /// here without the one thing that tells the two apart.
@@ -1568,6 +1572,10 @@ const FORCEABLE: &[&str] = &[
     "buffer-close!",
     "write!",
     "quit-all!",
+    // `:wqa!` (2026-10-26): overwrite what changed outside, as `:w!` does,
+    // then leave, as `:qa!` does. The oversize question still stops it — a
+    // bang never answers that one (see `write_forcing`).
+    "write-quit-all!",
     "reload!",
     "quit!",
     "export!",
@@ -3110,7 +3118,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.write.quit-all",
         needs: &[],
         params: &[],
-        build: Some(|_| Ok(Command::WriteQuitAll)),
+        build: Some(|p| Ok(Command::WriteQuitAll { force: p.force })),
     },
     // **`:x` is not `:wq`**, and it was an alias of it here. In vi and in helix
     // both, `:x` writes *only when the file changed* — a file opened, read and
@@ -6362,7 +6370,10 @@ mod tests {
     #[test]
     fn write_quit_all_answers_to_vim_and_helix_spellings() {
         for line in [":write-quit-all", ":wqa", ":xa"] {
-            assert_eq!(parse(line), Ok(Command::WriteQuitAll), "{line}");
+            assert_eq!(parse(line), Ok(Command::WriteQuitAll { force: false }), "{line}");
+        }
+        for line in [":write-quit-all!", ":wqa!", ":xa!"] {
+            assert_eq!(parse(line), Ok(Command::WriteQuitAll { force: true }), "{line}");
         }
     }
 

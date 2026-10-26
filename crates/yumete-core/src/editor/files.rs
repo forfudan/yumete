@@ -1086,6 +1086,11 @@ impl Editor {
 
     /// Save every buffer that has changed (`:write-all`).
     pub(super) fn write_all(&mut self) -> Result<CommandOutcome, EditorError> {
+        self.write_all_forcing(false)
+    }
+
+    /// The same, and `force` writes over files changed outside (`:wqa!`).
+    fn write_all_forcing(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         let mut saved = 0usize;
         let mut asked = None;
         let mut failed: Vec<String> = Vec::new();
@@ -1093,7 +1098,7 @@ impl Editor {
             if !self.buffers[i].is_modified() {
                 continue;
             }
-            match self.with_buffer(i, |e| e.write_current(None)) {
+            match self.with_buffer(i, |e| e.write_forcing(None, force)) {
                 Ok(Wrote::Asked) => {
                     asked = Some(i);
                     break;
@@ -1125,12 +1130,17 @@ impl Editor {
     /// is standing on its file, and a file that failed is still modified;
     /// either way `:wa`'s own status line says what happened, and the editor
     /// stays open for it to be read.
-    pub(super) fn write_quit_all(&mut self) -> Result<CommandOutcome, EditorError> {
-        self.write_all()?;
-        if self.query.is_some() || self.buffers.iter().any(|b| b.is_modified()) {
+    ///
+    /// `force` (`:wqa!`) writes over a file changed outside, as `:w!` does,
+    /// and leaves with whatever could still not be saved, as `:qa!` does. A
+    /// standing question stops it all the same: the bang says 「use my
+    /// version」, not 「a file many times its size is what I meant」.
+    pub(super) fn write_quit_all(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
+        self.write_all_forcing(force)?;
+        if self.query.is_some() || (!force && self.buffers.iter().any(|b| b.is_modified())) {
             return Ok(CommandOutcome::Continue);
         }
-        self.quit_all(false)
+        self.quit_all(force)
     }
 
     /// Open the `path:line:` named on the cursor's line (`gf`).
