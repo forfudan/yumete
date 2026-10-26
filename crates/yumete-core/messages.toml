@@ -2800,6 +2800,12 @@ zhs = "蓝晒：普鲁士蓝的地、白线的字——十套里唯一底色真�
 en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
 
 [[message]]
+# : 命令選單裏 dracula 那一項的説明(themes 組)
+key = "cmd.themes.dracula"
+zht = "Dracula：紫調的暗色配色，只有深色"
+zhs = "Dracula：紫调的暗色配色，只有深色"
+en = "dracula: the purple-toned dark scheme; dark only"
+[[message]]
 # : 命令選單裏 github 那一項的説明(themes 組)
 key = "cmd.themes.github"
 zht = "GitHub：GitHub 網站與 VS Code 裏的那一套配色，深淺都有"
@@ -2818,13 +2824,6 @@ key = "cmd.themes.meridian"
 zht = "明度階：朱不是紅的，是藍的：紅綠色盲也分得開"
 zhs = "明度阶：朱不是红的，是蓝的：红绿色盲也分得开"
 en = "meridian: the mark is blue, not red — separable without the red-green axis"
-
-[[message]]
-# : 命令選單裏 mogao 那一項的説明(themes 組)
-key = "cmd.themes.mogao"
-zht = "莫高：墨是壁畫氧化之後真正變成的褐黑；金不是金色，是石綠——洞窟自己的礦物"
-zhs = "莫高：墨是壁画氧化之后真正变成的褐黑；金不是金色，是石绿——洞窟自己的矿物"
-en = "mogao: the brown-black the murals oxidised into; the gold is malachite, the caves' own mineral"
 
 [[message]]
 # : 命令選單裏 monokai 那一項的説明(themes 組)

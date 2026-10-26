@@ -2391,6 +2391,12 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
+        // Dracula (2026-10-26).
+        name: "dracula",
+        help: "cmd.themes.dracula",
+        needs: &[],
+    },
+    Word {
         // 黑白
         name: "bw",
         help: "cmd.themes.bw",
@@ -2400,12 +2406,6 @@ const THEMES: &[Word] = &[
         // 藍曬
         name: "cyanotype",
         help: "cmd.themes.cyanotype",
-        needs: &[],
-    },
-    Word {
-        // 莫高
-        name: "mogao",
-        help: "cmd.themes.mogao",
         needs: &[],
     },
     Word {
@@ -6691,9 +6691,9 @@ mod tests {
                 "one-dark",
                 "github",
                 "monokai",
+                "dracula",
                 "bw",
                 "cyanotype",
-                "mogao",
                 "morandi",
                 "meridian",
                 "complement"
@@ -6704,7 +6704,7 @@ mod tests {
         assert_eq!(moods, ["system", "dark", "light"]);
         // The shortest spelling the menu offers has to work.
         let short = shortest("theme", COMMANDS.iter().map(|c| c.name));
-        assert!(parse(&format!(":{} mogao", short.unwrap_or("theme"))).is_ok());
+        assert!(parse(&format!(":{} dracula", short.unwrap_or("theme"))).is_ok());
         // And the name it lost is a signpost now, not a silence.
         assert_eq!(
             CommandError::Unknown("appearance".into()).to_string(),
@@ -7433,7 +7433,7 @@ mod tests {
             "view-wrap",
             "vertical",
             "yume-scheme lingming",
-            "theme mogao",
+            "theme dracula",
         ] {
             assert!(
                 written.iter().any(|w| w == one),
