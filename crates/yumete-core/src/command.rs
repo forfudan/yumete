@@ -4356,7 +4356,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "replace-buffers",
-        aliases: &[],
+        aliases: &["rb"],
         help: "cmd.commands.replace-buffers",
         needs: &[],
         params: &[],
@@ -4367,7 +4367,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "replace-working",
-        aliases: &[],
+        aliases: &["rw"],
         help: "cmd.commands.replace-working",
         needs: &[],
         params: &[],
@@ -4378,7 +4378,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "replace-project",
-        aliases: &[],
+        aliases: &["rp"],
         help: "cmd.commands.replace-project",
         needs: &[],
         params: &[],
@@ -4452,7 +4452,9 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search-buffers",
-        aliases: &[],
+        // Two letters, the verb's and the scope's (2026-10-26): `sb`/`sw`/`sp`,
+        // and `rb`/`rw`/`rp` for the replace panel.
+        aliases: &["sb"],
         help: "cmd.commands.search-buffers",
         needs: &[],
         params: &[],
@@ -4460,7 +4462,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search-working",
-        aliases: &[],
+        aliases: &["sw"],
         help: "cmd.commands.search-working",
         needs: &[],
         params: &[],
@@ -4468,7 +4470,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "search-project",
-        aliases: &[],
+        aliases: &["sp"],
         help: "cmd.commands.search-project",
         needs: &[],
         params: &[],
@@ -6364,6 +6366,23 @@ mod tests {
         // `:word-habit`, one subject and one command.
         assert!(parse(":segment").is_err());
         assert!(parse(":words").is_err());
+    }
+
+    /// **Two letters per scope** (2026-10-26): the verb's initial and the
+    /// scope's, for both panels; a bang still reshapes on the replace side.
+    #[test]
+    fn the_scoped_panels_have_two_letter_names() {
+        use crate::search_panel::Where;
+        for (line, want) in [(":sb", Where::Buffers), (":sw", Where::Working), (":sp", Where::Project)] {
+            assert_eq!(parse(line), Ok(Command::OpenSearch(want)), "{line}");
+        }
+        for (line, scope) in [(":rb", Where::Buffers), (":rw", Where::Working), (":rp", Where::Project)] {
+            assert_eq!(parse(line), Ok(Command::OpenReplace { scope, reshape: false }), "{line}");
+        }
+        assert_eq!(
+            parse(":rp!"),
+            Ok(Command::OpenReplace { scope: Where::Project, reshape: true })
+        );
     }
 
     #[test]

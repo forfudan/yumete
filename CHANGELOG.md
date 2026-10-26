@@ -11,6 +11,10 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Two-letter names for the scoped search and replace panels**: `:sb`, `:sw`, `:sp`
+  open search in every open buffer, the working directory and the project; `:rb`,
+  `:rw`, `:rp` open replace in the same three. `:s` is still this file.
+
 - **`:theme one-dark`.** Code and Markdown in One Dark Pro's colours, value for
   value: keywords purple, functions blue, built-in functions cyan, types yellow,
   strings green, numbers orange, fields red; headings red, bold orange, italic
