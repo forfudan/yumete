@@ -2793,13 +2793,6 @@ zhs = "靛橘：颜色只活在底色里，正文永远是中性灰"
 en = "complement: colour lives in the grounds only; the writing stays neutral grey"
 
 [[message]]
-# : 命令選單裏 cyanotype 那一項的説明(themes 組)
-key = "cmd.themes.cyanotype"
-zht = "藍曬：普魯士藍的地、白線的字——十套裏唯一底色真帶飽和色的一套"
-zhs = "蓝晒：普鲁士蓝的地、白线的字——十套里唯一底色真带饱和色的一套"
-en = "cyanotype: white lines on Prussian blue — the one theme whose ground carries colour"
-
-[[message]]
 # : 命令選單裏 dracula 那一項的説明(themes 組)
 key = "cmd.themes.dracula"
 zht = "Dracula：紫調的暗色配色，只有深色"
@@ -2844,6 +2837,13 @@ key = "cmd.themes.one-dark"
 zht = "One Dark：VS Code 裏最常見的那一套配色，只有深色"
 zhs = "One Dark：VS Code 里最常见的那一套配色，只有深色"
 en = "one-dark: the scheme most VS Code users know; dark only"
+
+[[message]]
+# : 命令選單裏 tokyo-night 那一項的説明(themes 組)
+key = "cmd.themes.tokyo-night"
+zht = "Tokyo Night：柔和的藍紫調，只有深色"
+zhs = "Tokyo Night：柔和的蓝紫调，只有深色"
+en = "tokyo-night: soft blue-purple tones; dark only"
 
 [[message]]
 # `:vertical-keys` 選單上那兩個詞——邏輯那一個

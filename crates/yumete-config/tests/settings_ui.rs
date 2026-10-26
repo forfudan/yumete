@@ -350,8 +350,8 @@ fn every_theme_the_panel_can_turn_to_is_one_the_editor_knows() {
         }
         for choice in choices {
             match yumete_config::ThemeConfig::named(choice.word) {
-                // **而且撥出去的是正名，不是別名。** `lanshai` 也開得出藍曬，可
-                // 寫進檔裏的該是 `cyanotype`——面板下次讀它纔對得上這一圈。
+                // **而且撥出去的是正名，不是別名。** `heibai` 也開得出黑白，可
+                // 寫進檔裏的該是 `bw`——面板下次讀它纔對得上這一圈。
                 Some(theme) if theme.name == choice.word => {}
                 Some(theme) => missing.push(format!(
                     "「{}」是別名，正名是「{}」",

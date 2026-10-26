@@ -2397,15 +2397,14 @@ const THEMES: &[Word] = &[
         needs: &[],
     },
     Word {
-        // 黑白
-        name: "bw",
-        help: "cmd.themes.bw",
+        name: "tokyo-night",
+        help: "cmd.themes.tokyo-night",
         needs: &[],
     },
     Word {
-        // 藍曬
-        name: "cyanotype",
-        help: "cmd.themes.cyanotype",
+        // 黑白
+        name: "bw",
+        help: "cmd.themes.bw",
         needs: &[],
     },
     Word {
@@ -6692,8 +6691,8 @@ mod tests {
                 "github",
                 "monokai",
                 "dracula",
+                "tokyo-night",
                 "bw",
-                "cyanotype",
                 "morandi",
                 "meridian",
                 "complement"

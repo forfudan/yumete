@@ -7954,6 +7954,21 @@ pub(crate) fn markup_style_in(
     ink: crate::theme::Palette,
 ) -> Style {
     use yumete_core::markdown::Kind;
+    // A heading's level is how many `#`s open it — Tokyo Night gives each
+    // level its own colour (2026-10-26). A line has one heading mark at most.
+    if matches!(span.kind, Kind::Heading | Kind::HeadingMark) && ink.borrowed() {
+        let level = all
+            .iter()
+            .find(|s| s.kind == Kind::HeadingMark)
+            .map_or(1, |mark| mark.end - mark.start)
+            .clamp(1, 6);
+        let colour = ink.pinned(|p| p.headings[level - 1]).unwrap_or_else(|| ink.text());
+        let style = Style::default().fg(colour);
+        return match span.kind {
+            Kind::Heading => style.add_modifier(Modifier::BOLD),
+            _ => style,
+        };
+    }
     if span.kind != Kind::Marker || !ink.borrowed() {
         return markup_style(span.kind, ink);
     }
@@ -8006,8 +8021,8 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
             Style::default().fg(ink.pinned(pick).unwrap_or_else(|| ink.text()))
         };
         match kind {
-            Kind::Heading => return pin(|p| p.heading).add_modifier(Modifier::BOLD),
-            Kind::HeadingMark => return pin(|p| p.heading),
+            Kind::Heading => return pin(|p| p.headings[0]).add_modifier(Modifier::BOLD),
+            Kind::HeadingMark => return pin(|p| p.headings[0]),
             Kind::Strong => return pin(|p| p.bold).add_modifier(Modifier::BOLD),
             Kind::Emphasis => return pin(|p| p.italic).add_modifier(Modifier::ITALIC),
             Kind::Code => return pin(|p| p.code),
@@ -26536,6 +26551,35 @@ fn squeezed(text: &str) -> String {
         let quote = block_style(Block::Quote { inside: None }, ink).unwrap();
         assert_eq!(quote.fg, Some(rgb(0xF1_FA_8C)));
         assert!(quote.add_modifier.contains(Modifier::ITALIC));
+    }
+
+    /// **Tokyo Night colours each heading level** (2026-10-26): `#` cyan,
+    /// `###` blue, `######` grey, the marks with their titles. Names in code
+    /// are `#C0CAF5`, a step brighter than the text, and a backtick is the
+    /// punctuation cyan.
+    #[test]
+    fn tokyo_night_fades_its_headings_by_level() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::{spans, Kind};
+        let theme = yumete_config::ThemeConfig::named("tokyo-night").expect("tokyo-night");
+        let rgb = |hex: u32| Color::Rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8);
+        let dark = crate::theme::Palette::of_theme(&theme, true);
+        let at = |ink, line: &str, i: usize| {
+            let all = spans(line);
+            let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
+            markup_style_in(span, &all, line.chars().nth(i), ink)
+        };
+        assert_eq!(at(dark, "# a", 0).fg, Some(rgb(0x89_DD_FF)));
+        assert_eq!(at(dark, "# a", 2).fg, Some(rgb(0x89_DD_FF)));
+        assert!(at(dark, "# a", 2).add_modifier.contains(Modifier::BOLD));
+        assert_eq!(at(dark, "### a", 4).fg, Some(rgb(0x7A_A2_F7)));
+        assert_eq!(at(dark, "###### a", 0).fg, Some(rgb(0x74_7C_A1)));
+        assert_eq!(at(dark, "## a", 3).fg, Some(rgb(0x61_BD_F2)));
+        assert_eq!(at(dark, "`c`", 0).fg, Some(rgb(0x89_DD_FF)), "a backtick is punctuation");
+        let token = |ink, t| markup_style(Kind::Token(t), ink).fg;
+        assert_eq!(token(dark, Token::Plain), Some(rgb(0xC0_CA_F5)), "a name is `variable`'s");
+        assert_eq!(token(dark, Token::Keyword), Some(rgb(0xBB_9A_F7)));
+        assert_eq!(dark.text(), Color::Rgb(0xA9, 0xB1, 0xD6));
     }
 
     #[test]

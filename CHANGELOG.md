@@ -49,6 +49,16 @@ in `docs/development.md` §5.2.
   list markers cyan, and quotations italic yellow behind a cyan `>`. Errors take
   Dracula's own red. Dark only. Its MIT notice is in `licenses/`.
 
+- **`:theme tokyo-night`**: Tokyo Night, built the same way. Keywords and attributes purple,
+  functions blue, built-in functions and types cyan, strings green, numbers and
+  constants orange, parameters yellow, `self` and HTML tags red, comments italic;
+  names in code a step brighter than the text, as Tokyo Night draws them, and all
+  punctuation a light cyan. In Markdown each heading level has its own colour,
+  from cyan at `#` to grey at `######`; inline code, list markers, a quotation's
+  `>` and a link's brackets are the punctuation cyan, link text teal, quotations
+  italic. Errors take its editor error red. Dark only. Its MIT notice is in
+  `licenses/`.
+
 ### Changed
 
 - **⚠️ `:word-show` is `:word-mark`, and it takes one of `off`, `color`, `ink`, `tint`,
@@ -59,8 +69,8 @@ in `docs/development.md` §5.2.
   `word_mark = "off"`; a file that still has it is told so. The settings panel's two
   rows are one. `:word-show` points at the new name.
 
-- **⚠️ The `amber`, `kiln`, `firefly` and `mogao` themes are gone**, to keep the set
-  at ten. A config that names one falls back to the default theme.
+- **⚠️ The `amber`, `kiln`, `firefly`, `mogao` and `cyanotype` themes are gone**, to
+  keep the set at ten. A config that names one falls back to the default theme.
 
 - **The line number of every line a selection touches is in the writing's colour**,
   the rest in the usual grey, as in Zed, VS Code and helix. A line whose break `x`
