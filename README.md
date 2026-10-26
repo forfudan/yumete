@@ -23,7 +23,8 @@ scoop install yumete
 **[docs/manual.md](docs/manual.md)** is the user manual — what the keys and
 commands do, how vertical layout works, and how to configure it.
 
-> Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE).
+> Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). The borrowed
+> themes' MIT notices are in [licenses/](licenses/).
 > What changed lately is in **[CHANGELOG.md](CHANGELOG.md)**.
 
 ---
@@ -132,7 +133,7 @@ character under the cursor is written.
 entries) shared by reference with the running IME rather than loaded twice. With
 no data layer installed it falls back to a bundled list of 75,000 entries cut
 from the same model; `:word` says which is answering —
-`分詞：75000 條（內置） · balanced · 著色開`. `:word-level` sets the grain —
+`分詞：75000 條（內置） · balanced · 標記開`. `:word-level` sets the grain —
 `off` (no dictionary at all: 漢字 are letters, so `我們都是apple` is one word),
 `strict`, `balanced`, `full`. `.yumete/words.txt` teaches it the names in *this*
 book, and `:word-discover` mines this file's own repeated n-grams for
@@ -300,6 +301,7 @@ instead, vertical page and all.
 yumete/
 ├── Cargo.toml                 # workspace
 ├── LICENSE                    # Apache-2.0
+├── licenses/                  # MIT notices of the borrowed themes
 ├── crates/
 │   ├── yumete-core/           # editor core: text store, buffers, motions, modes
 │   ├── yumete-cjk/            # CJK display width + grapheme clusters
@@ -309,10 +311,7 @@ yumete/
 │   └── yumete/                # binary: CLI, launches the editor or preview
 ├── scripts/build.sh           # release build → ./yumete (gitignored)
 └── docs/
-    ├── manual.md           # the user manual
-    ├── manual_tc.md        # 繁體 — frozen, behind the English, redone once yumete settles
-    ├── manual_sc.md        # 简体 — generated from manual_tc.md, equally frozen
-    └── development.md      # design & roadmap
+    └── manual.md           # the user manual
 ```
 
 ## Build & test

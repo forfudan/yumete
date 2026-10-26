@@ -852,7 +852,9 @@ impl Mode {
 /// Catppuccin Latte both. Spacing the light rungs by equal contrast gives light
 /// mood the separation dark mood already had (2.12:1 for the same selection),
 /// so the rungs mean the same thing in both, and any light theme whose text
-/// clears 6.9:1 passes. Dark ladders are untouched, byte for byte.
+/// clears about 6.93:1 (1.24 to the ninth) passes, give or take a byte of
+/// rounding — Latte, at 7.06:1, passes the gate with 0.006 to spare. Dark ladders are
+/// untouched, byte for byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Ladder {
     pub ink: (u8, u8, u8),
@@ -1052,7 +1054,10 @@ pub mod rung {
     /// At 第 75 against [`BAND`]'s 第 84 that pair measures **1.21:1** in
     /// 莫蘭迪's light mood — under the 1.24 the eye needs, and the reader can no
     /// longer see which row they are standing on. 第 73 leaves 1.26:1 at worst.
-    /// `the_grounds_that_meet_are_a_rung_apart` is the test that says so.
+    /// Those are sRGB-ladder figures; with light ladders spaced by contrast
+    /// (2026-10-26) the tightest pair is Catppuccin Latte's, at 1.25 — see
+    /// [`SELECTION`]. `the_grounds_that_meet_are_a_rung_apart` is the test
+    /// that says so.
     pub const HEAD: u16 = 7300; // 第 73 檔
     /// A selection: the loudest ground, and still only a ground — the ink on it
     /// is untouched, so a heading inside a selection is still a heading.
@@ -1063,7 +1068,11 @@ pub mod rung {
     /// way up. At 第 65 against `HEAD`'s 第 73 this measures 1.20:1 in 莫蘭迪's
     /// light mood; 第 63 leaves 1.26:1. Those are sRGB-ladder figures: since
     /// light ladders are spaced by contrast (2026-10-26) 莫蘭迪 light has 1.31,
-    /// and the tightest pair is one-dark's, at 1.26.
+    /// and the tightest pair is **Catppuccin Latte's, at 1.246** — 0.006 over
+    /// the gate, with one-dark next at 1.26. Each channel is mixed and then
+    /// rounded to a byte, so Latte's per-rung ratio wanders between 1.237 and
+    /// 1.249; moving either rung, or Latte's ink or paper by one unit, can
+    /// turn the gate red, and Latte is the theme to check first.
     pub const SELECTION: u16 = 6300; // 第 63 檔
     /// The page — **第 90 檔**, not the end of the ladder.
     pub const PAPER: u16 = 9000; // 第 90 檔
@@ -4556,13 +4565,17 @@ impl RawConfig {
                 // The name picks the whole set of anchors, and the keys below
                 // then override whichever of them the reader has an opinion
                 // about — so `name = "黑白"` plus `mark = "#…"` is a sentence.
-                let mut named = ThemeConfig::named(&name).unwrap_or_else(|| config.theme.clone());
-                named.mode = config.theme.mode;
-                named.ground = config.theme.ground;
-                if ThemeConfig::named(&name).is_some() {
+                //
+                // **A name that is no theme changes nothing, label included**
+                // (2026-10-26 review). It used to keep the default colours and
+                // take the unknown name, so a config still naming `complement`
+                // after it was retired drew 墨香 while `:theme` and the panel
+                // called it `complement`. The config check says the name is
+                // not a theme's.
+                if let Some(mut named) = ThemeConfig::named(&name) {
+                    named.mode = config.theme.mode;
+                    named.ground = config.theme.ground;
                     config.theme = named;
-                } else {
-                    config.theme.name = name;
                 }
             }
         }
@@ -5562,7 +5575,19 @@ mod a_typo_is_said_out_loud {
         assert_eq!(gh.light.paper, (0xFF, 0xFF, 0xFF));
     }
 
-    /// 2026-10-26: Tokyo Night took 藍曬's place, dark only.
+    /// A config naming a retired theme keeps the default, name and all: the
+    /// page must not draw 墨香 and call itself `complement` (2026-10-26 review).
+    #[test]
+    fn a_retired_theme_name_leaves_the_default_whole() {
+        let default = ThemeConfig::default();
+        for gone in ["complement", "meridian"] {
+            let c = Config::from_toml(&format!("[theme]\nname = \"{gone}\"\n"));
+            assert_eq!(c.theme.name, default.name, "{gone}");
+            assert_eq!(c.theme.dark, default.dark, "{gone}");
+        }
+    }
+
+    /// 2026-10-26: Gruvbox took meridian's place, in both moods.
     #[test]
     fn gruvbox_replaces_meridian() {
         assert!(ThemeConfig::named("meridian").is_none());

@@ -1342,6 +1342,30 @@ mod ground_tests {
     /// the rungs compress, so the pair that decides the numbers is whichever
     /// theme has the least contrast to spend. This is also the test that says
     /// there is no room for a *fourth*: it fails on any rung put between them.
+    /// **A wash laid over the paper lands on the rung it names, in a light
+    /// mood too** (2026-10-26 review). `Palette::over` takes its own branch
+    /// on a light ladder, and no other test draws in one: a sign flip there
+    /// would send every band and tint toward white with nothing turning red.
+    #[test]
+    fn a_wash_over_the_paper_is_the_rung_it_names_in_both_moods() {
+        use super::Palette;
+        for name in ["ink", "github", "tokyo-night", "catppuccin", "gruvbox", "bw", "morandi"] {
+            let theme = ThemeConfig::named(name).expect("a theme by that name");
+            assert_eq!(theme.light.step(rung::PAPER), theme.light.paper, "{name}: the paper rung is the paper");
+            for dark in [true, false] {
+                let p = Palette::of_theme(&theme, dark);
+                for r in [rung::WORD_TINT, rung::BAND, rung::HEAD, rung::SELECTION] {
+                    assert_eq!(
+                        p.over(p.paper(), i32::from(rung::PAPER - r)),
+                        p.at(r),
+                        "{name} dark={dark}: a wash {} deep is not rung {r}",
+                        rung::PAPER - r
+                    );
+                }
+            }
+        }
+    }
+
     #[test]
     fn the_grounds_that_meet_are_a_rung_apart() {
         let names = [

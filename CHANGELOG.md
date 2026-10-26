@@ -13,8 +13,10 @@ in `docs/development.md` §5.2.
 
 - **`:write-quit-all`** (`:wqa`, `:xa`), as in vim and helix: saves every file that
   changed, then leaves. A file that cannot be saved keeps the editor open. `:wqa!`
-  writes over files changed outside, as `:w!` does, and leaves whatever still cannot
-  be saved, as `:qa!` does.
+  writes over files changed outside, as `:w!` does, and leaves even if a file could
+  not be saved, keeping that file's recovery copy for the next open. A buffer with no
+  file is let go. The question about a save that would make a file many times bigger
+  still stops both.
 
 - **Two-letter names for the scoped search and replace panels**: `:sb`, `:sw`, `:sp`
   open search in every open buffer, the working directory and the project; `:rb`,
@@ -64,7 +66,8 @@ in `docs/development.md` §5.2.
   constants orange, parameters yellow, `self` and HTML tags red, comments italic;
   names in code a step brighter than the text, as Tokyo Night draws them, and all
   punctuation a light cyan. In Markdown each heading level has its own colour,
-  from cyan at `#` to grey at `######`; inline code, list markers, a quotation's
+  from cyan at `#` to grey at `######` in Tokyo Night (the Light half uses its own
+  darker inks); inline code, list markers, a quotation's
   `>` and a link's brackets are the punctuation cyan, link text teal, quotations
   italic. Errors take its editor error red. Its MIT notice is in `licenses/`.
 
@@ -90,10 +93,10 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
-- **The command menu lists commands only.** Shortcuts such as `:wq`, `:qa`, `:bc`
-  and `:sb` no longer take a line of their own; each shows in brackets beside its
-  command, and typing one shows that command's line. The root menu has 63
-  entries where it had 76.
+- **The command menu lists commands only.** Shortcuts such as `:wq`, `:qa` and `:bc`
+  no longer take a line of their own; each shows in brackets beside its command,
+  and typing one shows that command's line. The root menu has 63 entries where
+  0.12.0 had 70.
 
 - **墨香's light text is `#2A2923`, at the paper's own hue.** It was a green-leaning
   `#262A27`, and every grey between it and the cream paper (line numbers, markers,
@@ -106,7 +109,7 @@ in `docs/development.md` §5.2.
   its column stripes stand as far apart as they do on a dark page, and grey text
   is a shade darker. Dark moods are unchanged.
 
-- **⚠️ `:word-show` is `:word-mark`, and it takes one of `off`, `color`, `ink`, `tint`,
+- **Warning: `:word-show` is `:word-mark`, and it takes one of `off`, `color`, `ink`, `tint`,
   `line`.** `on` is gone: it meant "whichever way it was drawn last", while naming a
   way turned the mark on as well, so one argument was setting two things. Every
   value now says what the page will show, as `:wiki-mark` and `:render` do, and a
@@ -114,8 +117,9 @@ in `docs/development.md` §5.2.
   `word_mark = "off"`; a file that still has it is told so. The settings panel's two
   rows are one. `:word-show` points at the new name.
 
-- **⚠️ The `amber`, `kiln`, `firefly`, `mogao`, `cyanotype`, `complement` and `meridian` themes are gone**, to
-  keep the set at ten. A config that names one falls back to the default theme.
+- **Warning: the `amber`, `kiln`, `firefly`, `mogao`, `cyanotype`, `complement` and `meridian` themes are gone**, to
+  keep the set at ten. A config that names one keeps the default theme, and the config
+  check says the name is not a theme's.
 
 - **The line number of every line a selection touches is in the writing's colour**,
   the rest in the usual grey, as in Zed, VS Code and helix. A line whose break `x`
