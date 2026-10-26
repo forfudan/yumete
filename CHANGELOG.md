@@ -69,6 +69,16 @@ in `docs/development.md` §5.2.
   code green, list markers teal, a link's text lavender and its address blue,
   quotations pink. Its MIT notice is in `licenses/`.
 
+- **`:theme gruvbox`**: Gruvbox Dark and Light (Medium), built as `github` is, so
+  `:theme-mode` turns it light or dark: retro colours on a warm brown ground.
+  Keywords red, functions and operators aqua, built-in functions orange, types
+  yellow, strings green, numbers and constants purple, punctuation grey, comments
+  italic grey. Names, parameters and `self` stay in the text colour, as the
+  original vim Gruvbox draws them (the VS Code port paints them blue). In
+  Markdown a heading's title goes red, orange, yellow, green, blue and purple by
+  level while its `#`s stay grey; bold orange, inline code aqua, a link's text
+  grey and its address purple. Its MIT notice is in `licenses/`.
+
 ### Changed
 
 - **墨香's light text is `#2A2923`, at the paper's own hue.** It was a green-leaning
@@ -90,7 +100,7 @@ in `docs/development.md` §5.2.
   `word_mark = "off"`; a file that still has it is told so. The settings panel's two
   rows are one. `:word-show` points at the new name.
 
-- **⚠️ The `amber`, `kiln`, `firefly`, `mogao`, `cyanotype` and `complement` themes are gone**, to
+- **⚠️ The `amber`, `kiln`, `firefly`, `mogao`, `cyanotype`, `complement` and `meridian` themes are gone**, to
   keep the set at ten. A config that names one falls back to the default theme.
 
 - **The line number of every line a selection touches is in the writing's colour**,

@@ -2805,18 +2805,18 @@ zht = "GitHub：GitHub 網站與 VS Code 裏的那一套配色，深淺都有"
 zhs = "GitHub：GitHub 网站与 VS Code 里的那一套配色，深浅都有"
 en = "github: GitHub's own scheme, as on the site and in VS Code; light and dark"
 [[message]]
+# : 命令選單裏 gruvbox 那一項的説明(themes 組)
+key = "cmd.themes.gruvbox"
+zht = "Gruvbox：暖棕底的復古配色，深淺都有"
+zhs = "Gruvbox：暖棕底的复古配色，深浅都有"
+en = "gruvbox: retro colours on warm brown; light and dark"
+
+[[message]]
 # : 命令選單裏 ink 那一項的説明(themes 組)
 key = "cmd.themes.ink"
 zht = "墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來"
 zhs = "墨香：黑墨、白金墨、金墨、红墨，其余的色阶都算出来"
 en = "moxiang: black, white-gold, gold and red ink; every other shade computed"
-
-[[message]]
-# : 命令選單裏 meridian 那一項的説明(themes 組)
-key = "cmd.themes.meridian"
-zht = "明度階：朱不是紅的，是藍的：紅綠色盲也分得開"
-zhs = "明度阶：朱不是红的，是蓝的：红绿色盲也分得开"
-en = "meridian: the mark is blue, not red — separable without the red-green axis"
 
 [[message]]
 # : 命令選單裏 monokai 那一項的説明(themes 組)
