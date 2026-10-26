@@ -151,6 +151,10 @@ pub enum Command {
     },
     /// `:wq [path]` — save (optionally to a new path), then leave.
     WriteQuit(Option<String>),
+    /// `:write-quit-all` (aliases `:wqa`, `:xa`) — save every file that
+    /// changed, then leave. vim's `:wqa` / `:xa` and helix's
+    /// `:write-quit-all`: a file that could not be saved keeps the editor open.
+    WriteQuitAll,
     /// `:exit` (aliases `:x`, `:xit`) — **save only if the file changed**, then
     /// leave. vi's `:x` and helix's `:exit`, which `:x` used to be spelled as
     /// here without the one thing that tells the two apart.
@@ -3097,6 +3101,16 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Path],
         build: Some(|p| Ok(Command::WriteQuit(p.arg(0).map(|s| s.to_string())))),
+    },
+    // `:xa` beside `:wqa`, as in vim and helix: both save only what changed,
+    // the way `:x` does, so the two spellings are one command here too.
+    Entry {
+        name: "write-quit-all",
+        aliases: &["wqa", "xa"],
+        help: "cmd.write.quit-all",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::WriteQuitAll)),
     },
     // **`:x` is not `:wq`**, and it was an alias of it here. In vi and in helix
     // both, `:x` writes *only when the file changed* — a file opened, read and
@@ -6346,6 +6360,13 @@ mod tests {
     }
 
     #[test]
+    fn write_quit_all_answers_to_vim_and_helix_spellings() {
+        for line in [":write-quit-all", ":wqa", ":xa"] {
+            assert_eq!(parse(line), Ok(Command::WriteQuitAll), "{line}");
+        }
+    }
+
+    #[test]
     fn a_shortcut_shows_in_brackets_and_not_on_a_line_of_its_own() {
         // The root menu lists commands; a shortcut rides beside its command.
         for choice in complete("") {
@@ -6962,7 +6983,7 @@ mod tests {
         // A head, its declared short spelling, and how many stand behind it —
         // the count last, where it reads as a remark about the row rather than
         // part of the name.
-        assert_eq!(row("", "write"), ":write (w) +3");
+        assert_eq!(row("", "write"), ":write (w) +4");
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
@@ -6993,6 +7014,7 @@ mod tests {
         assert!(!listed.contains(&"wq") && !listed.contains(&"bc"));
         assert_eq!(row("wq", "write-quit"), ":write-quit (wq)");
         assert_eq!(row("bc", "buffer-close"), ":buffer-close (bc)");
+        assert_eq!(row("wqa", "write-quit-all"), ":write-quit-all (wqa xa)");
         // `:x` is **not** `:wq` — it is `:exit`, which writes only what changed.
         assert_eq!(row("", "exit"), ":exit (x xit)");
     }
@@ -7109,10 +7131,13 @@ mod tests {
         // (#368): `bc` is `buffer-close`'s declared alias, exactly as `wq` is
         // `write-quit`'s, and the table that used to hold the two-word lines
         // separately is gone.
+        // `wqa` starts with `wq` too, so `:write-quit-all` is offered beside it;
+        // `:wq` itself is still `write-quit`, an exact alias beating a prefix.
         assert_eq!(
             complete("wq").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["write-quit"]
+            ["write-quit", "write-quit-all"]
         );
+        assert_eq!(parse(":wq"), Ok(Command::WriteQuit(None)));
         assert_eq!(
             complete("bc").iter().map(|e| e.name).collect::<Vec<_>>(),
             ["buffer-close"]

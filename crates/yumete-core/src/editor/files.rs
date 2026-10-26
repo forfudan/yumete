@@ -1119,6 +1119,20 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    /// Save every file that changed, then leave (`:wqa`, `:xa`).
+    ///
+    /// **Leaves only when everything is on disk.** A save that stopped to ask
+    /// is standing on its file, and a file that failed is still modified;
+    /// either way `:wa`'s own status line says what happened, and the editor
+    /// stays open for it to be read.
+    pub(super) fn write_quit_all(&mut self) -> Result<CommandOutcome, EditorError> {
+        self.write_all()?;
+        if self.query.is_some() || self.buffers.iter().any(|b| b.is_modified()) {
+            return Ok(CommandOutcome::Continue);
+        }
+        self.quit_all(false)
+    }
+
     /// Open the `path:line:` named on the cursor's line (`gf`).
     ///
     /// The shape a grep result has, and the shape every compiler and every
