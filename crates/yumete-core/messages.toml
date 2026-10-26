@@ -3251,6 +3251,14 @@ en = "save under a new name and edit that one (`:w <path>` only copies)"
 find = "另存 改名 saveas rename"
 
 [[message]]
+# : 命令選單裏 quit-all 那一項的説明(write 組)；短寫 :wqa，也認 :xa
+key = "cmd.write.quit-all"
+zht = "保存所有改動過的文件並退出"
+zhs = "保存所有改动过的文件并退出"
+en = "save every file that changed, then leave"
+find = "全部保存退出 全存再退 存了再退 write quit all wqa xa"
+
+[[message]]
 # : 命令選單裏 autocompletion 那一項的説明(yume 組)
 key = "cmd.yume.autocompletion"
 zht = "輸入預測：碼没打完就先給候選"

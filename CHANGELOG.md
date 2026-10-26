@@ -11,6 +11,9 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`:write-quit-all`** (`:wqa`, `:xa`), as in vim and helix: saves every file that
+  changed, then leaves. A file that cannot be saved keeps the editor open.
+
 - **Two-letter names for the scoped search and replace panels**: `:sb`, `:sw`, `:sp`
   open search in every open buffer, the working directory and the project; `:rb`,
   `:rw`, `:rp` open replace in the same three. `:s` is still this file.

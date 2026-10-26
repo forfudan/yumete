@@ -20216,6 +20216,41 @@ fn write_all_that_stops_to_ask_stands_on_that_file_properly() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `:wqa` (and `:xa`) saves what changed and leaves; a file it could not
+/// save keeps the editor open, standing where `:wa` left it.
+#[test]
+fn write_quit_all_leaves_only_when_everything_is_on_disk() {
+    let dir = tmp().join(format!("yumete-wqa-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let a = dir.join("a.md");
+    let b = dir.join("b.md");
+    std::fs::write(&a, "甲\n").unwrap();
+    std::fs::write(&b, "乙\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    ed.open_file(&b).unwrap();
+    let _ = ed.buffers[0].insert(0, "一");
+    let _ = ed.buffers[1].insert(0, "二");
+    assert_eq!(ed.execute(":wqa").unwrap(), CommandOutcome::Quit);
+    assert_eq!(std::fs::read_to_string(&a).unwrap(), "一甲\n");
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "二乙\n");
+
+    // A scratch buffer has nowhere to go, so the editor stays.
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    let _ = ed.buffers[0].insert(0, "三");
+    ed.execute(":new").unwrap();
+    let at = ed.current;
+    let _ = ed.buffers[at].insert(0, "草");
+    assert_eq!(ed.execute(":xa").unwrap(), CommandOutcome::Continue);
+    assert_eq!(std::fs::read_to_string(&a).unwrap(), "三一甲\n", "what could be saved was");
+    assert!(ed.buffers.iter().any(|b| b.is_modified()));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **A whole-document rewrite asks the grid the same question `:s` does**
 /// (#350).
 ///
