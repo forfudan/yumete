@@ -5333,54 +5333,14 @@ fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
                 }
             }
         }
-        // **A folded family still shows the spellings worth reaching for**
-        // (2026-09-10: 「wq, bc 這種重要的別名可以單開一行」). An alias
-        // is another name for the command, not a shortcut to it, so it belongs
-        // in the list beside the names — and once its command is folded away,
-        // this row is the only place it can be seen. Named by the first of
-        // them, since that is what a reader would type.
-        let mut with_aliases: Vec<(&str, Choice)> = Vec::new();
-        for row in &out {
-            let head = head_of(row.name);
-            if row.family.is_none() || !folded.contains(&head) {
-                continue;
-            }
-            for e in COMMANDS.iter().filter(|e| head_of(e.name) == head) {
-                let Some((first, rest)) = e.aliases.split_first() else {
-                    continue;
-                };
-                // The row standing for the family is not folded away.
-                if e.name == row.name {
-                    continue;
-                }
-                with_aliases.push((head, Choice {
-                    name: first,
-                    family: None,
-                    needs: e.needs,
-                    alias: (!rest.is_empty()).then(|| rest.join(" ")),
-                    short: None,
-                    help: e.help,
-                    leading: ":",
-                    under: String::new(),
-                    note: None,
-                }));
-            }
-        }
-        // Each one under the family it belongs to, which is where a reader
-        // looking at that family will find it. **Placed by that family and not
-        // by its own name**: `wa` begins with a `w` and belongs to `write`
-        // because of what it is short for, not because of how it is spelled.
-        let mut placed: Vec<Choice> = Vec::with_capacity(out.len() + with_aliases.len());
-        for row in out.drain(..) {
-            let head = head_of(row.name);
-            placed.push(row);
-            for (of, alias) in with_aliases.iter() {
-                if *of == head {
-                    placed.push(alias.clone());
-                }
-            }
-        }
-        placed
+        // **A shortcut is not a line of its own** (2026-10-26: 「sb sw sp rb rw
+        // rp does not show in the root command menu. They will be shown as the
+        // alias of corresponding commands in the parentheses」). They used to
+        // be listed under a folded family (2026-09-10: 「wq, bc 這種重要的別名
+        // 可以單開一行」), and the six scoped-panel names pushed that past what
+        // the first page holds. A shortcut is still found: typing it matches
+        // its command, which then stands as its full row with it in brackets.
+        out
     }
 
     // The first word names a command; every word after it walks down what that
@@ -6386,6 +6346,30 @@ mod tests {
     }
 
     #[test]
+    fn a_shortcut_shows_in_brackets_and_not_on_a_line_of_its_own() {
+        // The root menu lists commands; a shortcut rides beside its command.
+        for choice in complete("") {
+            assert!(
+                choice.name.ends_with('-') || COMMANDS.iter().any(|e| e.name == choice.name),
+                "`:{}` is a line of its own in the root menu",
+                choice.name
+            );
+        }
+        // And typing one finds its command's whole line, with it in brackets,
+        // so `:sb` still says what it opens.
+        for e in COMMANDS {
+            for &alias in e.aliases {
+                let rows = complete(alias);
+                let row = rows.iter().find(|c| c.name == e.name && c.under.is_empty());
+                assert!(row.is_some(), "`:{alias}` does not show `:{}`: {:?}", e.name,
+                    rows.iter().map(Choice::shown).collect::<Vec<_>>());
+            }
+        }
+        let rows: Vec<String> = complete("sb").iter().map(Choice::shown).collect();
+        assert_eq!(rows, ["search-buffers (sb)"]);
+    }
+
+    #[test]
     fn parses_layout_commands() {
         // **一件事一種說法**（2026-10-12 定）。`:layout` 只剩互換，兩個方向各自
         // 是一條命令——而不是 `:layout` 的兩個參數**加上**兩條同名命令，那就成
@@ -7003,20 +6987,14 @@ mod tests {
         assert_eq!(row("", "toc"), ":toc (outline)");
         assert_eq!(row("", "count"), ":count (wc) +2");
         assert_eq!(row("", "format"), ":format (fmt)");
-        // A folded command with a name of its own gets a row of it, under the
-        // family it came from — otherwise the fold would have hidden the one
-        // spelling anybody types.
-        assert_eq!(row("", "wq"), ":wq");
+        // A folded command's shortcut is not a row of its own (2026-10-26):
+        // typing it opens the command's whole row, the shortcut in brackets.
+        let listed: Vec<&str> = complete("").iter().map(|c| c.name).collect();
+        assert!(!listed.contains(&"wq") && !listed.contains(&"bc"));
+        assert_eq!(row("wq", "write-quit"), ":write-quit (wq)");
+        assert_eq!(row("bc", "buffer-close"), ":buffer-close (bc)");
         // `:x` is **not** `:wq` — it is `:exit`, which writes only what changed.
         assert_eq!(row("", "exit"), ":exit (x xit)");
-        assert_eq!(row("", "bc"), ":bc");
-        let listed: Vec<&str> = complete("").iter().map(|c| c.name).collect();
-        let write = listed.iter().position(|n| *n == "write").unwrap();
-        assert_eq!(
-            &listed[write..write + 3],
-            ["write", "wa", "wq"],
-            "each one under the family it belongs to"
-        );
     }
 
     /// **Half a name still finds the command** (#373). A reader who remembers
