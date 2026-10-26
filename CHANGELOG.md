@@ -41,6 +41,14 @@ in `docs/development.md` §5.2.
   Its MIT notices (VS Code, and the Colorsublime themes it comes from) are in
   `licenses/`.
 
+- **`:theme dracula`**: Dracula, built the same way. Keywords, operators and HTML
+  tags pink, functions green, built-in functions and types cyan (types in
+  italics), strings yellow, numbers, constants and `self` purple (`self` in
+  italics), parameters orange and italic; in Markdown, headings purple, bold
+  orange, italic yellow, inline code green, link text pink and its address cyan,
+  list markers cyan, and quotations italic yellow behind a cyan `>`. Errors take
+  Dracula's own red. Dark only. Its MIT notice is in `licenses/`.
+
 ### Changed
 
 - **⚠️ `:word-show` is `:word-mark`, and it takes one of `off`, `color`, `ink`, `tint`,
@@ -51,8 +59,8 @@ in `docs/development.md` §5.2.
   `word_mark = "off"`; a file that still has it is told so. The settings panel's two
   rows are one. `:word-show` points at the new name.
 
-- **⚠️ The `amber`, `kiln` and `firefly` themes are gone**, to keep the set at ten. A
-  config that names one falls back to the default theme.
+- **⚠️ The `amber`, `kiln`, `firefly` and `mogao` themes are gone**, to keep the set
+  at ten. A config that names one falls back to the default theme.
 
 - **The line number of every line a selection touches is in the writing's colour**,
   the rest in the usual grey, as in Zed, VS Code and helix. A line whose break `x`
