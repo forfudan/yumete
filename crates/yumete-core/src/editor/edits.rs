@@ -1038,6 +1038,30 @@ impl Editor {
         // 挪之前先記下它坐在第幾行——挪完就問不出來了。
         let sat_at = self.sat_at();
         let steps = ((page as f64 * fraction).round() as usize).max(1) * count;
+        // **Every cursor moves by the half page** (2026-10-27, helix's
+        // `page_cursor_half_down`/`_up`: `scroll` with `sync_cursor` transforms
+        // each selection). `C-d` with three cursors used to move one of them.
+        // A whole page (`C-f`, `PgDn`) is helix's `page_down`, which scrolls
+        // without syncing and so moves the primary alone — measured, and kept.
+        if self.sel.is_plural() && fraction < 1.0 {
+            let before = self.sel.head();
+            self.each_selection(|e| {
+                for _ in 0..steps {
+                    let was = e.sel.head();
+                    match vertical {
+                        true => e.move_zong_from(!back, true),
+                        false => e.move_vertical(back),
+                    }
+                    if e.sel.head() == was {
+                        break;
+                    }
+                }
+            });
+            if let (true, Some(row)) = (self.sel.head() != before, sat_at) {
+                self.aim = Some(crate::editor::Aim::Row(row));
+            }
+            return;
+        }
         let mut moved = 0usize;
         for _ in 0..steps {
             let before = self.sel.head();

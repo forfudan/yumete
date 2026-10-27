@@ -96,11 +96,31 @@ impl super::Editor {
                 };
                 let anchor_goal = crate::wrap::column_of(rope, one.anchor, m);
                 let head_goal = crate::wrap::column_of(rope, one.head, m);
+                // **How many rows the selection spans: a copy goes that many
+                // down** (2026-10-27, helix's `copy_selection_on_line` steps by
+                // the selection's height). Two lines selected, `C` selects the
+                // next two, where it used to land one row down, overlapping.
+                let height = {
+                    let (top, bottom) = one.span();
+                    let mut rows = 1;
+                    let mut at = top;
+                    loop {
+                        let next = crate::wrap::next_row(rope, at, m, 0);
+                        if next == at || next > bottom {
+                            break rows;
+                        }
+                        rows += 1;
+                        at = next;
+                    }
+                };
                 let (mut anchor, mut head) = (one.anchor, one.head);
                 let mut placed = 0;
                 while placed < count {
-                    let (next_anchor, next_head) =
-                        (step(anchor, anchor_goal), step(head, head_goal));
+                    let (mut next_anchor, mut next_head) = (anchor, head);
+                    for _ in 0..height {
+                        next_anchor = step(next_anchor, anchor_goal);
+                        next_head = step(next_head, head_goal);
+                    }
                     // 兩端都走不動了就是到頭了。Warning: 判的是「有没有動」而不是「在不在檔
                     // 尾」：折行、摺疊、表格都會讓「還有没有下一行」不等於「行號還夠」。
                     if next_anchor == anchor && next_head == head {
@@ -368,11 +388,14 @@ impl super::Editor {
             let (from, to) = self.drawn(*one);
             let first = rope.char_to_line(from);
             let last = rope.char_to_line(to.saturating_sub(1).max(from));
+            // **An empty line gets a cursor too** (2026-10-27, helix's
+            // `split_on_newline`; measured: `%` `A-s` `A` reached every line
+            // but the blank ones). It sits on that line's break.
             for line in first..=last {
                 let head = rope.line_to_char(line);
                 let a = head.max(from);
                 let b = (head + crate::zong::line_chars(&rope, line).len()).min(to);
-                if b > a {
+                if b >= a {
                     out.push(self.from_drawn(a, b));
                 }
             }
@@ -456,10 +479,15 @@ impl super::Editor {
                         }
                     }
                 }
+                // **An empty piece is a piece** (2026-10-27, helix's
+                // `split_on_matches` pushes one per match): `a,b,,c` cut on
+                // `,` is four selections, the third a cursor on the second
+                // comma. Only the piece after the last match must have
+                // something in it.
                 Sift::Split => {
                     let mut cut = 0usize;
                     for (a, b) in hits {
-                        if a > cut {
+                        if a >= cut {
                             out.push(self.from_drawn(from + cut, from + a));
                         }
                         cut = b.max(cut);

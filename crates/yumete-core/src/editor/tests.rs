@@ -24599,6 +24599,47 @@ fn a_motion_moves_every_selection_not_just_the_primary() {
     assert_eq!(ed.sel.len(), 1, "三段一起到檔首，併成一段");
 }
 
+/// **helix's rules for making selections** (2026-10-27, measured against
+/// helix 25.07.1): `C` copies a selection a whole selection-height down,
+/// `A-s` puts a cursor on an empty line, `S` keeps an empty piece, and
+/// `C-d` moves every cursor.
+#[test]
+fn copying_and_splitting_selections_follow_helix() {
+    let rows = |ed: &Editor| -> Vec<usize> {
+        let rope = ed.current_buffer().rope().clone();
+        ed.sel.iter().map(|r| rope.char_to_line(r.head)).collect()
+    };
+    let mut ed = typed("ab\ncd\nef\ngh\n");
+    press(&mut ed, "ggxxC");
+    assert_eq!(ed.sel.len(), 2);
+    let rope = ed.current_buffer().rope().clone();
+    let spans: Vec<String> = ed.sel.iter().map(|r| {
+        let (a, b) = r.span();
+        rope.slice(a..crate::motion::next_grapheme(&rope, b)).to_string()
+    }).collect();
+    assert_eq!(spans, vec!["ab\ncd\n", "ef\ngh\n"]);
+
+    let mut ed = typed("ab\n\ncd\n");
+    press(&mut ed, "%");
+    ed.on_key(Key::Alt('s'));
+    press(&mut ed, "AX");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "abX\nX\ncdX\n");
+
+    let mut ed = typed("a,b,,c\n");
+    press(&mut ed, "%S,");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), 4);
+
+    let text: String = (0..60).map(|i| format!("line {i:02}\n")).collect();
+    let mut ed = typed(&text);
+    press(&mut ed, "ggC");
+    ed.on_key(Key::Ctrl('d'));
+    let at = rows(&ed);
+    assert_eq!(at.len(), 2);
+    assert!(at[0] > 1 && at[1] == at[0] + 1, "both moved, one apart: {at:?}");
+}
+
 /// **The multi-selection bugs measured against helix 25.07.1** (2026-10-27):
 /// `a` one character long at the other cursors, `>` twice on one line, `v j`
 /// overlaps left apart, `u` keeping one cursor, `i` dropping its selection,
