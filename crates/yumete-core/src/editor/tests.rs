@@ -2945,7 +2945,7 @@ fn mi_c_takes_the_cell_and_still_takes_a_comment_in_code() {
     for _ in 0..12 {
         ed.on_key(Key::Char('l'));
     }
-    press(&mut ed, "mic");
+    press(&mut ed, "mil");
     assert_eq!(text(&ed), "love me", "{}", ed.status());
     press(&mut ed, "d");
     assert!(
@@ -2958,8 +2958,14 @@ fn mi_c_takes_the_cell_and_still_takes_a_comment_in_code() {
     let mut ed = typed(table);
     ed.execute("goto 3").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
-    press(&mut ed, "mic");
+    press(&mut ed, "mil");
     assert_eq!(text(&ed), "some people", "{}", ed.status());
+    // `c` is the comment only since the cell moved to `l` (2026-10-27).
+    let mut ed = typed(table);
+    ed.execute("goto 3").unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "mic");
+    assert_ne!(text(&ed), "some people", "{}", ed.status());
 
     // 空格子也選得中它那一個位置，接着就打得了字。
     let mut ed = typed(table);
@@ -2975,7 +2981,7 @@ fn mi_c_takes_the_cell_and_still_takes_a_comment_in_code() {
         ed.on_key(Key::Char('l'));
     }
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(1), "在空格子裏");
-    press(&mut ed, "micc填上");
+    press(&mut ed, "milc填上");
     ed.on_key(Key::Esc);
     assert!(
         ed.current_buffer().text().contains("填上"),
@@ -25053,6 +25059,74 @@ fn the_sentence_object_takes_the_sentence_the_cursor_is_in() {
     // 西文那一側 `as` 真的多帶一個空格。
     assert_eq!(took("One two. Three four.", "mis"), "One two.");
     assert_eq!(took("One two. Three four.", "mas"), "One two. ");
+}
+
+/// **`mis` never selects the line break** (2026-10-27): not even after a
+/// paragraph's last sentence. vim's `dis` removes that break only when it
+/// turns linewise (`:h exclusive-linewise`), and that rule stays with the
+/// vim operator — measured against vim 9.1, `One. Two.` + blank line.
+#[test]
+fn the_sentence_object_stops_before_the_line_break() {
+    let took = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).chars().collect::<String>()
+    };
+    assert_eq!(took("今天下雨。明天晴天。\n\n下一段\n", "f明mis"), "明天晴天。");
+    assert_eq!(took("今天下雨。明天晴天。\n\n下一段\n", "f明mas"), "明天晴天。");
+    assert_eq!(took("One. Two.\n\nNext.\n", "fTmis"), "Two.");
+    assert_eq!(took("alpha beta\nxx\n\nNext.\n", "mis"), "alpha beta\nxx");
+
+    // Under the vim keymap the operator turns linewise exactly where vim does.
+    let vim = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        ed.current_buffer().text()
+    };
+    assert_eq!(vim("One. Two.\n\nNext.\n", "fTdis"), "One. \n\nNext.\n");
+    assert_eq!(vim("One.\nTwo.\n\nNext.\n", "jdis"), "One.\n\nNext.\n");
+    assert_eq!(vim("One.\nTwo.\nThree.\n\nN.\n", "jdis"), "One.\nThree.\n\nN.\n");
+    assert_eq!(vim("alpha beta\nxx\n\nNext.\n", "dis"), "\nNext.\n");
+    // No line after it: characterwise, the empty line stays.
+    assert_eq!(vim("One.\nTwo.\n", "jdis"), "One.\n\n");
+}
+
+/// **`mi u`: 短句, up to any punctuation** (2026-10-27). Brackets and quotes
+/// end it too; a mark inside a word (`3.14`, `don't`) does not.
+#[test]
+fn the_clause_object_stops_at_any_punctuation() {
+    let took = |text: &str, steps: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).chars().collect::<String>()
+    };
+    let zh = "他说：「今天（星期三）要下雨，记得带伞。」\n";
+    assert_eq!(took(zh, "f雨miu"), "要下雨");
+    assert_eq!(took(zh, "f期miu"), "星期三");
+    assert_eq!(took(zh, "f带miu"), "记得带伞");
+    assert_eq!(took(zh, "f带mau"), "记得带伞。」");
+    // On a mark: the clause it ends.
+    assert_eq!(took(zh, "f，miu"), "要下雨");
+    assert_eq!(took(zh, "miu"), "他说");
+    let en = "Well, it's 3.14 today; don't go.\n";
+    assert_eq!(took(en, "ftmiu"), "it's 3.14 today");
+    assert_eq!(took(en, "ftmau"), "it's 3.14 today; ");
+    assert_eq!(took(en, "fnmiu"), "don't go");
+    // A hard-wrapped clause crosses its line break, and `mau` takes no break.
+    assert_eq!(took("one two\nthree, four\n", "miu"), "one two\nthree");
+    assert_eq!(took("一二三\n", "mau"), "一二三");
+    // Under the vim keymap it is `iu`.
+    let mut ed = typed(zh);
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "gg");
+    press(&mut ed, "f雨diu");
+    assert_eq!(ed.current_buffer().text(), "他说：「今天（星期三），记得带伞。」\n");
 }
 
 /// **Insert 裏的 `C-r`（插寄存器）和 `C-k`（刪到行尾）**（2026-09-28，§5.17 第五條）。

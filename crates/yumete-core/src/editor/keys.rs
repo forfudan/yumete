@@ -967,6 +967,27 @@ impl Editor {
                     return self.do_vim_lines(op, a.min(b), a.max(b));
                 }
             }
+            // **A sentence that fills its lines goes linewise** (2026-10-27,
+            // measured against vim 9.1): `:h exclusive-linewise` — the object
+            // ends in column 1 of the next line and starts at or before the
+            // first non-blank, so `dis` on `Two.` between `One.` and a blank
+            // line takes the line `Two.` whole. Without a next line it stays
+            // characterwise: `dis` on a file's last line `Two.` leaves it
+            // empty. The object itself never holds the break (`mis` must
+            // not show it selected), so the rule is here, with the operator.
+            if matches!(step.motion, motion::Motion::Object { what: motion::Object::Sentence, .. })
+            {
+                if let motion::Span::Over { anchor, head } = span {
+                    let rope = self.current_buffer().rope();
+                    let after = motion::next_grapheme(rope, head);
+                    let breaks = rope.get_char(after) == Some('\n');
+                    let more = rope.char_to_line(head) < motion::last_line(rope);
+                    if breaks && more && anchor <= motion::line_first_non_blank(rope, anchor) {
+                        let (a, b) = (rope.char_to_line(anchor), rope.char_to_line(head));
+                        return self.do_vim_lines(op, a, b);
+                    }
+                }
+            }
             return self.do_vim(op, span);
         }
         // Walk the motion `n` times to find where vim would have left the
@@ -3693,6 +3714,7 @@ impl Editor {
     pub(super) const OBJECT_KEYS: &'static [(&'static str, &'static str)] = &[
         ("w", "hint.obj.word"),
         ("W", "hint.obj.big-word"),
+        ("u", "hint.obj.clause"),
         ("s", "hint.obj.sentence"),
         ("p", "hint.obj.paragraph"),
         ("m", "hint.obj.nearest-pair"),
@@ -3700,7 +3722,8 @@ impl Editor {
         ("f", "hint.obj.function"),
         ("t", "hint.obj.type"),
         ("a", "hint.obj.parameter"),
-        ("c", "hint.obj.comment-or-cell"),
+        ("c", "hint.obj.comment"),
+        ("l", "hint.obj.cell"),
         ("T", "hint.obj.test"),
         ("e", "hint.obj.entry"),
         ("x", "hint.obj.element"),
