@@ -168,6 +168,7 @@ impl Editor {
             .then(|| (self.current_buffer().id(), self.sel.head()));
         let outcome = match self.mode {
             Mode::Normal => {
+                self.back_from_the_pair_shown();
                 if multi::each_selection_key(&self.pending, key)
                     || self.copies_every_selection(key)
                 {
@@ -3046,7 +3047,7 @@ impl Editor {
             Pending::MatchPair { around } => self.select_pair(c, around, self.pair_count()),
             Pending::Surround => self.surround_add(c),
             Pending::SurroundOff => self.surround_delete(c, self.pair_count()),
-            Pending::SurroundFrom => self.pending = Pending::SurroundTo(c),
+            Pending::SurroundFrom => self.show_the_pair_to_change(c),
             Pending::SurroundTo(from) => self.surround_replace(from, c, self.pair_count()),
             // Everything else waits for a letter naming a command, and those
             // are answered where they are read.

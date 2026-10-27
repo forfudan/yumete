@@ -1152,6 +1152,56 @@ impl Editor {
         true
     }
 
+    /// **`mr` shows the pair it found before asking what to change it to**
+    /// (2026-10-27, helix's `surround_replace`): after the first key the
+    /// selection is the two characters of each pair, so the reader sees which
+    /// pair the next key will change. The selection they had is set aside and
+    /// comes back with the next key, whatever it is. No pair, or two cursors
+    /// sharing one: said now, not after the second key.
+    pub(super) fn show_the_pair_to_change(&mut self, from: char) {
+        self.surround_shown = None;
+        if !self.every_selection_has_its_own_pair(Pending::SurroundTo(from), from) {
+            return;
+        }
+        let count = self.pair_count();
+        let was = self.sel.clone();
+        let primary = was.primary();
+        let ranges: Vec<crate::selection::Range> = was.iter().copied().collect();
+        let mut points = Vec::with_capacity(ranges.len() * 2);
+        let mut which = 0;
+        for one in &ranges {
+            self.sel = crate::selection::Selections::one(*one);
+            let Some((open, close)) = self.pair_to_change(from, count) else {
+                self.sel = was;
+                self.status = match pair_of(from) {
+                    Some((open, close)) => say!("edit.no-pair-around", open, close),
+                    None => say!("edit.no-pair-to-delete"),
+                };
+                return;
+            };
+            if *one == primary {
+                which = points.len();
+            }
+            points.push(crate::selection::Range::at(open));
+            points.push(crate::selection::Range::at(close));
+        }
+        let mut shown = crate::selection::Selections::one(points[0]);
+        shown.rebuild(points, which);
+        self.sel = shown;
+        self.surround_shown = Some(was);
+        self.pending = Pending::SurroundTo(from);
+    }
+
+    /// The selection `mr` set aside, back — before its second key is read.
+    pub(super) fn back_from_the_pair_shown(&mut self) {
+        if !matches!(self.pending, Pending::SurroundTo(_)) {
+            return;
+        }
+        if let Some(was) = self.surround_shown.take() {
+            self.sel = was;
+        }
+    }
+
     pub(super) fn surround_delete(&mut self, which: char, count: usize) {
         if self.refuse_readonly() {
             return;

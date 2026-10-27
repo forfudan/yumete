@@ -4804,6 +4804,48 @@ fn only_the_vim_keymap_reaches_ahead_for_a_pair() {
     assert_eq!(ed.current_buffer().text(), "ab  ef\n", "vim: the next pair");
 }
 
+/// **`mr` shows the pair it found before the second key** (2026-10-27,
+/// helix's `surround_replace`): the selection is the two brackets, and the
+/// next key — the new pair, or `Esc` — puts the reader's selection back.
+#[test]
+fn mr_shows_the_pair_before_it_changes_it() {
+    let mut ed = typed("a (bc) d\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "fb;");
+    let before = ed.sel.clone();
+    press(&mut ed, "mr(");
+    let shown: Vec<_> = ed.sel.iter().map(|r| r.span()).collect();
+    assert_eq!(shown, [(2, 2), (5, 5)], "a cursor on each bracket");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.sel, before, "Esc gives the selection back");
+    assert_eq!(ed.current_buffer().text(), "a (bc) d\n", "and changes nothing");
+
+    press(&mut ed, "mr([");
+    assert_eq!(ed.current_buffer().text(), "a [bc] d\n");
+    assert_eq!(ed.sel, before, "the reader's selection, not the brackets");
+
+    // Two cursors, two pairs: four brackets shown.
+    let mut ed = typed("(a) (a)\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('x'));
+    ed.on_key(Key::Char('s'));
+    ed.on_key(Key::Char('a'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), 2, "a cursor on each a");
+    press(&mut ed, "mr(");
+    assert_eq!(ed.sel.len(), 4, "both pairs shown");
+    press(&mut ed, "[");
+    assert_eq!(ed.current_buffer().text(), "[a] [a]\n");
+    assert_eq!(ed.sel.len(), 2, "and the two cursors back");
+
+    // No pair: said at the first key, not after the second.
+    let mut ed = typed("a bc d\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "fb;mr(");
+    assert!(ed.pending == Pending::None, "nothing left waiting");
+    assert!(!ed.status.is_empty());
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {

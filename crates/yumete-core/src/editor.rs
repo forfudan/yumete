@@ -3017,6 +3017,9 @@ pub struct Editor {
     /// `[editor] remember` / `--private` (2026-10-27): whether `places.txt`,
     /// `projects.txt` and the session are read and written at all.
     remembers: bool,
+    /// The selection `mr` set aside while it shows the pair it found
+    /// (2026-10-27, helix's `surround_replace`); the next key puts it back.
+    surround_shown: Option<crate::selection::Selections>,
     /// The data directory, for the global word list. Set by the front end.
     data_dir: Option<PathBuf>,
     /// Where this project's session is remembered — which files were open and
@@ -3971,6 +3974,7 @@ impl Editor {
             where_config: None,
             where_data: None,
             remembers: true,
+            surround_shown: None,
             data_dir: None,
             session_file: None,
             turned_for_table: None,

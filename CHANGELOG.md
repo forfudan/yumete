@@ -22,6 +22,10 @@ in `docs/development.md` §5.2.
   read or written. `--private` does the same for one run. Recovery copies are still
   kept.
 
+- **`mr` shows the pair it found before you name the new one**, as helix's does: after
+  its first key the two brackets are selected, and the next key (or `Esc`) puts your
+  selection back.
+
 - **Counts in the `m` group**, as in helix: `2mi(`, `2md(` and `2mr([` act on the
   second pair out, and `2mim` on the second pair of any kind.
 
