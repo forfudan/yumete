@@ -1613,6 +1613,8 @@ impl Editor {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
                     self.answer_with_char(waiting, c);
+                } else if key == Key::Enter && waiting == Pending::Surround {
+                    self.surround_with_lines();
                 }
                 // Spent either way: a count typed before `f` belongs to that
                 // `f` and must not be left lying for the next command — unless
