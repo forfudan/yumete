@@ -4705,6 +4705,29 @@ fn vim_objects_follow_the_m_and_k_split() {
     assert_eq!(vim("fydam"), "a **bold** b ");
 }
 
+/// **Any character is a pair of itself** in `ms`, `md`, `mr` and, when it is
+/// not a letter or a digit, in `mi`/`ma` (2026-10-27, helix's `m` group).
+#[test]
+fn any_character_acts_as_a_pair() {
+    let run = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(run("foo bar\n", "ems*"), "*foo* bar\n");
+    assert_eq!(run("a *x* b\n", "fx;md*"), "a x b\n");
+    assert_eq!(run("a $x$ b\n", "fx;mr$("), "a (x) b\n");
+    assert_eq!(run("a (x) b\n", "fx;mr(_"), "a _x_ b\n");
+    assert_eq!(run("a $xy$ b\n", "fx;mi$d"), "a $$ b\n");
+    // Read as a quote is: `a` takes the blank after it too, as `a"` does.
+    assert_eq!(run("a $xy$ b\n", "fx;ma$d"), "a b\n");
+    // A letter is an object's name, and one that names nothing is nothing.
+    let mut ed = typed("a x b\n");
+    press(&mut ed, "ggfx;mix");
+    assert_eq!(ed.selection(), (2, 3), "the selection is where `fx;` left it");
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {

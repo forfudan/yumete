@@ -17,6 +17,11 @@ in `docs/development.md` §5.2.
   quotes. `ms`, `md` and `mr` list the pairs. Each step used to show one line saying
   "type a bracket".
 
+- **Any character is a pair in the `m` group**, as in helix: `ms*` wraps the selection
+  in `*…*`, `md$` takes off the two `$` around the cursor, `mr$(` turns `$x$` into
+  `(x)`, and `mi$` / `ma$` select between them. In `mi` and `ma` a letter or digit is
+  still the name of an object.
+
 ### Changed
 
 - **Warning: `m` after `mi`, `ma` and `md` is the nearest pair only, as in helix;

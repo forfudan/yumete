@@ -4898,13 +4898,18 @@ const FAMILIES: &[&[(char, char)]] = &[
 ];
 
 /// `c` 這個括號所在的那一族，落單的話就它自己那一對。
+///
+/// **Any other character is a pair of itself** (2026-10-27, helix's
+/// `get_pair`): `md*` takes off the two asterisks around the caret, `mr$(`
+/// turns `$x$` into `(x)`. Two of the same character on a line are read the
+/// way quotes are, counted from the start of the line.
 pub(crate) fn pair_family(c: char) -> Vec<(char, char)> {
     match FAMILIES
         .iter()
         .find(|family| family.iter().any(|&(open, close)| open == c || close == c))
     {
         Some(family) => family.to_vec(),
-        None => pair_of(c).into_iter().collect(),
+        None => vec![pair_of(c).unwrap_or((c, c))],
     }
 }
 

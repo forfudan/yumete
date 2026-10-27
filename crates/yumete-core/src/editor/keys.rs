@@ -3681,6 +3681,7 @@ impl Editor {
         ("( [ { <", "hint.obj.brackets"),
         ("\" ' `", "hint.obj.quotes"),
         ("「 『 《", "hint.obj.cjk-too"),
+        ("", "hint.pair.any"),
     ];
 
     /// The pairs `ms` / `md` / `mr` take, after whatever `lead` adds above
@@ -3701,6 +3702,7 @@ impl Editor {
         }
         rows.push(("\" ' `".into(), say!("hint.obj.quotes")));
         rows.push(("「 『 《 【".into(), say!("hint.pair.cjk")));
+        rows.push(("".into(), say!("hint.pair.any")));
         rows
     }
 
