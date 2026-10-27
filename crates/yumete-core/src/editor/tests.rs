@@ -4948,6 +4948,37 @@ fn code_objects_reach_into_a_markdown_fence() {
     assert_eq!(took("mif"), "说", "the selection stays");
 }
 
+/// **`mi T`, `mi e`, `mi x`** (2026-10-27, helix's `T` `e` `x`) through real
+/// files: a test function, a key with its value, an HTML element.
+#[test]
+fn mi_takes_a_test_an_entry_and_an_element() {
+    let dir = tmp().join(format!("yumete-tex-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let took = |name: &str, text: &str, steps: &str| {
+        let path = dir.join(name);
+        std::fs::write(&path, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&path).unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        let (from, to) = ed.selection();
+        (ed.current_buffer().rope().slice(from..to).to_string(), ed.status.clone())
+    };
+    let (got, _) = took("t.rs", "#[test]\nfn adds_two() {\n    assert!(true);\n}\n", "2jmiT");
+    assert!(got.starts_with("fn adds_two()") && got.trim_end().ends_with('}'), "{got:?}");
+    let (got, _) = took("c.json", "{\"name\": \"x\", \"version\": 13}\n", "f1;mie");
+    assert_eq!(got, "\"version\": 13");
+    let (got, _) = took("c.toml", "[editor]\nremember = false\n", "jmie");
+    assert_eq!(got, "remember = false");
+    let (got, _) = took("p.html", "<p>今天<b>下雨</b></p>\n", "f雨;mix");
+    assert_eq!(got, "<b>下雨</b>");
+    // Not in one: the status line says so.
+    let (_, said) = took("u.rs", "fn plain() {}\n", "miT");
+    assert_eq!(said, say!("code.no-test-here"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {

@@ -157,6 +157,17 @@ impl Editor {
             'c' if self.writes_code() || self.in_a_code_fence() => {
                 return self.select_object(crate::code::Object::Comment)
             }
+            // **`mi T` a test, `mi e` an entry, `mi x` an HTML element**
+            // (2026-10-27, helix's `T` `e` `x`), from our own queries.
+            'T' if self.writes_code() || self.in_a_code_fence() => {
+                return self.select_object(crate::code::Object::Test)
+            }
+            'e' if self.writes_code() || self.in_a_code_fence() => {
+                return self.select_object(crate::code::Object::Entry)
+            }
+            'x' if self.writes_code() || self.in_a_code_fence() => {
+                return self.select_object(crate::code::Object::Element)
+            }
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
                 // **Any character that is not a letter or a digit acts as a
@@ -306,6 +317,9 @@ impl Editor {
             self.status = match want {
                 crate::code::Object::Parameter => say!("code.no-parameter-here"),
                 crate::code::Object::Comment => say!("code.no-comment-here"),
+                crate::code::Object::Test => say!("code.no-test-here"),
+                crate::code::Object::Entry => say!("code.no-entry-here"),
+                crate::code::Object::Element => say!("code.no-element-here"),
             };
             return;
         };
@@ -325,6 +339,9 @@ impl Editor {
             self.status = match want {
                 crate::code::Object::Parameter => say!("code.no-parameter-here"),
                 crate::code::Object::Comment => say!("code.no-comments"),
+                crate::code::Object::Test => say!("code.no-test-here"),
+                crate::code::Object::Entry => say!("code.no-entry-here"),
+                crate::code::Object::Element => say!("code.no-element-here"),
             };
             return;
         }

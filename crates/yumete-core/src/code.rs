@@ -470,41 +470,104 @@ impl Language {
     ///
     /// 節點名是從語法自己的 `src/node-types.json` 裏讀出來的，不是記的。
     fn objects(self) -> Option<&'static str> {
+        // **`@test` / `@entry` / `@element`** (2026-10-27, helix's `T` `e` `x`):
+        // a test is told by its name or its attribute — `#[test]`, `def test_…`,
+        // `func Test…`, `it(…)`/`test(…)`/`describe(…)`, `@Test` — and an
+        // entry is one key with its value, or one field. Node and field names
+        // read from each grammar's `node-types.json`, as the rest.
         Some(match self {
             Language::Python => {
-                "(parameters (_) @parameter)\n                 (lambda_parameters (_) @parameter)\n                 (comment) @comment\n"
+                "(parameters (_) @parameter)
+                 (lambda_parameters (_) @parameter)
+                 (comment) @comment
+                 ((function_definition name: (identifier) @_name) @test
+                  (#match? @_name \"^test\"))
+                 (dictionary (pair) @entry)
+"
             }
             Language::Rust => {
-                "(parameters (_) @parameter)\n                 (closure_parameters (_) @parameter)\n                 (type_parameters (_) @parameter)\n                 (line_comment) @comment\n                 (block_comment) @comment\n"
+                "(parameters (_) @parameter)
+                 (closure_parameters (_) @parameter)
+                 (type_parameters (_) @parameter)
+                 (line_comment) @comment
+                 (block_comment) @comment
+                 ((attribute_item (attribute (identifier) @_attr)) . (function_item) @test
+                  (#eq? @_attr \"test\"))
+                 ((attribute_item (attribute (scoped_identifier name: (identifier) @_attr))) .
+                  (function_item) @test (#eq? @_attr \"test\"))
+                 (field_declaration) @entry
+                 (field_initializer) @entry
+                 (shorthand_field_initializer) @entry
+"
             }
             Language::Go => {
-                "(parameter_list (_) @parameter)\n                 (type_parameter_list (_) @parameter)\n                 (comment) @comment\n"
+                "(parameter_list (_) @parameter)
+                 (type_parameter_list (_) @parameter)
+                 (comment) @comment
+                 ((function_declaration name: (identifier) @_name) @test
+                  (#match? @_name \"^(Test|Benchmark|Example|Fuzz)\"))
+                 (keyed_element) @entry
+                 (field_declaration) @entry
+"
             }
             Language::JavaScript => {
-                "(formal_parameters (_) @parameter)\n                 (comment) @comment\n"
+                "(formal_parameters (_) @parameter)
+                 (comment) @comment
+                 ((call_expression function: (identifier) @_name) @test
+                  (#match? @_name \"^(it|test|describe)$\"))
+                 (object (pair) @entry)
+"
             }
             Language::C => {
-                "(parameter_list (_) @parameter)\n                 (comment) @comment\n"
+                "(parameter_list (_) @parameter)
+                 (comment) @comment
+"
             }
             Language::Java => {
-                "(formal_parameters (_) @parameter)\n                 (type_parameters (_) @parameter)\n                 (inferred_parameters (_) @parameter)\n                 (line_comment) @comment\n                 (block_comment) @comment\n"
+                "(formal_parameters (_) @parameter)
+                 (type_parameters (_) @parameter)
+                 (inferred_parameters (_) @parameter)
+                 (line_comment) @comment
+                 (block_comment) @comment
+                 ((method_declaration (modifiers (marker_annotation name: (identifier) @_name))) @test
+                  (#eq? @_name \"Test\"))
+"
             }
             // Warning: **R 這一門不許寫 `(_)`**：它把逗號也做成了一個**有名字**的節點
             // （`node-types.json` 裏 `parameters` 的子節點類型就只列着 `comma`），
             // 於是 `(a, b)` 用 `(_)` 數出來是三個。寫明 `(parameter)`。
             Language::R => {
-                "(parameters (parameter) @parameter)\n                 (comment) @comment\n"
+                "(parameters (parameter) @parameter)
+                 (comment) @comment
+"
             }
             // Mojo 的 `parameters` 只收 `parameter` 一種子節點（`node-types.json`
             // 查過），所以寫得明白，不必像 R 那樣躲逗號。
             Language::Mojo => {
-                "(parameters (parameter) @parameter)\n                 (comment) @comment\n"
+                "(parameters (parameter) @parameter)
+                 (comment) @comment
+"
+            }
+            Language::Html => {
+                "(element) @element
+                 (script_element) @element
+                 (style_element) @element
+                 (comment) @comment
+"
+            }
+            Language::Json => "(pair) @entry\n",
+            Language::Toml => {
+                "(pair) @entry
+                 (comment) @comment
+"
+            }
+            Language::Yaml => {
+                "(block_mapping_pair) @entry
+                 (flow_pair) @entry
+                 (comment) @comment
+"
             }
             Language::Css
-            | Language::Html
-            | Language::Json
-            | Language::Toml
-            | Language::Yaml
             // 匯編裏没有「參數」這種東西。
             | Language::Gas
             | Language::Nasm
@@ -526,6 +589,9 @@ impl Language {
                     .map(|n| match *n {
                         "parameter" => Some(Object::Parameter),
                         "comment" => Some(Object::Comment),
+                        "test" => Some(Object::Test),
+                        "entry" => Some(Object::Entry),
+                        "element" => Some(Object::Element),
                         _ => None,
                     })
                     .collect();
@@ -691,13 +757,19 @@ fn define_of(capture: &str) -> Option<Define> {
     }
 }
 
-/// **語法樹認得的那兩種小東西**（`mi a`/`mi c`，2026-10-06）。
+/// **What the syntax tree can name for `mi`** — `mi a`/`mi c` (2026-10-06), and `mi T`/`mi e`/`mi x` (2026-10-27).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Object {
     /// 一個參數（`mi a`）。
     Parameter,
     /// 一段註釋（`mi c`）。
     Comment,
+    /// A test function (`mi T`, helix's `T`).
+    Test,
+    /// One key with its value, or one field (`mi e`, helix's `e`).
+    Entry,
+    /// An HTML element (`mi x`, helix's `x`).
+    Element,
 }
 
 /// **這份正文裏每一個 `want`**，按起點排好，位置是**字節**。
@@ -1145,6 +1217,36 @@ mod tests {
     /// `tree-sitter-*` 升一版把某個節點改了名，查詢**靜悄悄地不匹配**——不報錯、
     /// 不編譯失敗，`mi a` 就是没反應。所以這裏逐種語言餵一段真代碼，數它找到
     /// 幾個。**看見這一格紅，先去看那一版的 `src/node-types.json`。**
+    /// **The test, entry and element queries still match** (2026-10-27,
+    /// helix's `T` `e` `x`): one sample per language, counting what each finds.
+    /// A node or field renamed upstream makes a query quietly match nothing,
+    /// and this is the only thing that would say so.
+    #[test]
+    fn the_test_entry_and_element_queries_match_their_grammars() {
+        let count = |language: Language, source: &str, want: Object| -> usize {
+            let tree = parse(language, source, None).expect("parses");
+            objects(language, source, &tree, want).len()
+        };
+        let cases: &[(Language, &str, Object, usize)] = &[
+            (Language::Rust, "#[test]\nfn a() {}\nfn b() {}\n#[tokio::test]\nasync fn c() {}\n", Object::Test, 2),
+            (Language::Rust, "struct S { a: u8, b: u8 }\nfn f() { S { a: 1, b }; }\n", Object::Entry, 4),
+            (Language::Python, "def test_a():\n    pass\ndef b():\n    pass\n", Object::Test, 1),
+            (Language::Python, "d = {'a': 1, 'b': 2}\n", Object::Entry, 2),
+            (Language::Go, "package p\nfunc TestA(t *T) {}\nfunc b() {}\n", Object::Test, 1),
+            (Language::Go, "package p\nvar x = S{A: 1, B: 2}\n", Object::Entry, 2),
+            (Language::JavaScript, "describe('a', () => { it('b', () => {}); });\nfoo(1);\n", Object::Test, 2),
+            (Language::JavaScript, "const o = { a: 1, b: 2 };\n", Object::Entry, 2),
+            (Language::Java, "class A { @Test void a() {} void b() {} }\n", Object::Test, 1),
+            (Language::Json, "{\"a\": 1, \"b\": {\"c\": 2}}\n", Object::Entry, 3),
+            (Language::Toml, "a = 1\n[t]\nb = 2\n", Object::Entry, 2),
+            (Language::Yaml, "a: 1\nb:\n  c: 2\n", Object::Entry, 3),
+            (Language::Html, "<p>今天<b>下雨</b></p>\n", Object::Element, 2),
+        ];
+        for &(language, source, want, expected) in cases {
+            assert_eq!(count(language, source, want), expected, "{language:?} {want:?} in {source:?}");
+        }
+    }
+
     #[test]
     fn our_textobject_queries_still_match_these_grammars() {
         let cases = [
