@@ -182,11 +182,23 @@ impl Editor {
     /// The width horizontal motion should wrap at, or `None` when the buffer is
     /// drawn as unwrapped logical lines.
     pub fn wrap_width(&self) -> Option<usize> {
-        if self.soft_wrap && self.layout() == Layout::Horizontal {
+        // **Pages side by side always wrap** (2026-10-28, decided: 「Bands wrap
+        // inside each column anyway」): a line run past a page's edge would run
+        // into the next page, and the text is meant to flow down them.
+        let paged = self.pages_on_screen > 1;
+        if (self.soft_wrap || paged) && self.layout() == Layout::Horizontal {
             self.wrap_width
         } else {
             None
         }
+    }
+
+    /// **How many pages the horizontal page is drawn in right now** — what
+    /// `:view-pages-horizontal` asked for, less what the window is too narrow
+    /// for. The front end knows, since it measures the window; it says so
+    /// before the keys, as it does the wrap width.
+    pub fn set_pages_on_screen(&mut self, n: usize) {
+        self.pages_on_screen = n.max(1);
     }
 
     /// Tell the editor how much fits on screen, for the page motions.

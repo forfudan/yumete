@@ -447,8 +447,12 @@ pub enum Command {
     SetTabInserts(Option<bool>),
     /// `:indent-width [n]` — how many columns Tab and `>` move; bare reports.
     SetIndentWidth(Option<usize>),
-    /// `:view-bands 2` — how many bands the 縱書 page is divided into (段組).
-    SetBands(Option<usize>),
+    /// `:view-pages-vertical 2` — how many pages the 縱書 page is cut into,
+    /// one above the other (段組). `None` asks.
+    SetPagesVertical(Option<usize>),
+    /// `:view-pages-horizontal 2` — how many pages the horizontal page is cut
+    /// into, side by side, the text running on from one to the next.
+    SetPagesHorizontal(Option<usize>),
 
     /// `:table-find row|column <pattern>` — the two directions a search can run.
     Search { pattern: String, by: Axis },
@@ -1578,7 +1582,6 @@ const FORCEABLE: &[&str] = &[
     "yume-chaifen!",
     "yume-commit!",
     "yume-autocompletion!",
-    "view-bands!",
     "view-sentence!",
     "view-hanging!",
     "view-meter!",
@@ -2670,17 +2673,6 @@ fn named_panel(
 
 /// The two words every switch takes — read back by [`switch`].
 /// The four margins, tightest first (`:view-margin`).
-/// `on｜off` for the one command that is **not** a switch.
-///
-/// `:view-bands` sets how many bands the page is in — one to four — and `on`
-/// is simply the spelling of two. 「toggle」 has nothing to turn round there,
-/// so it is not offered; every genuine switch takes [`SWITCH`] instead, whose
-/// third word is the whole point of it.
-const ON_OFF: &[Word] = &[
-    Word { name: "on", help: "cmd.on-off.on", needs: &[] },
-    Word { name: "off", help: "hint.close", needs: &[] },
-];
-
 const MARGINS: &[Word] = &[
     Word { name: "never", help: "cmd.margins.never", needs: &[] },
     Word { name: "dense", help: "cmd.margins.dense", needs: &[] },
@@ -3877,26 +3869,40 @@ pub const COMMANDS: &[Entry] = &[
             ))
         }),
     },
+    // **Two commands, a count each** (2026-10-28, renamed from `:view-bands`):
+    // one per layout, so two pages stacked in 縱書 do not bring two side by
+    // side in 橫排. A count, not a switch: only 1–4, no `on`/`off`, which had
+    // no meaning on a page already cut in three. Neither needs its layout to
+    // be the one in use; the number waits until it is.
     Entry {
-        name: "view-bands",
+        name: "view-pages-vertical",
         aliases: &[],
-        help: "cmd.view.bands",
-        needs: &[Need::Vertical],
-        params: &[Param::WordsOr {
-            of: ON_OFF,
-            default: None,
-            or: "<幾條，1–4>",
-        }],
+        help: "cmd.view.pages-vertical",
+        needs: &[],
+        params: &[Param::Free("<1–4>")],
         build: Some(|p| match p.arg(0) {
-            // Bare asks, like every other switch; `on` is two bands, which is
-            // what 「band」 means at all.
-            None => Ok(Command::SetBands(None)),
-            Some("on") => Ok(Command::SetBands(Some(2))),
-            Some("off") => Ok(Command::SetBands(Some(1))),
+            None => Ok(Command::SetPagesVertical(None)),
             Some(_) => match p.number(0)? {
-                n @ 1..=4 => Ok(Command::SetBands(Some(n))),
+                n @ 1..=4 => Ok(Command::SetPagesVertical(Some(n))),
                 n => Err(CommandError::InvalidArgument {
-                    command: "view-bands",
+                    command: "view-pages-vertical",
+                    value: n.to_string(),
+                }),
+            },
+        }),
+    },
+    Entry {
+        name: "view-pages-horizontal",
+        aliases: &[],
+        help: "cmd.view.pages-horizontal",
+        needs: &[],
+        params: &[Param::Free("<1–4>")],
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::SetPagesHorizontal(None)),
+            Some(_) => match p.number(0)? {
+                n @ 1..=4 => Ok(Command::SetPagesHorizontal(Some(n))),
+                n => Err(CommandError::InvalidArgument {
+                    command: "view-pages-horizontal",
                     value: n.to_string(),
                 }),
             },
@@ -7007,7 +7013,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +16");
+        assert_eq!(row("", "view-"), ":view- +17");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
@@ -7344,9 +7350,8 @@ mod tests {
         // simply the words it takes, and they go as deep as they like.
         assert_eq!(words("ruby-render "), ["off", "basic", "full"]);
         assert_eq!(words("ruby-html "), ["on", "off", "toggle"]);
-        // `:view-bands` is a count, not a switch, so it is the one that does not
-        // offer 「toggle」 (see [`ON_OFF`]).
-        assert_eq!(words("view-bands "), ["on", "off"]);
+        // `:view-pages-*` take a count and no words (2026-10-28).
+        assert!(!words("view-pages-vertical ").contains(&"on"));
 
         // Where the word being completed starts, so a completion replaces it
         // and not the whole line.
@@ -7658,7 +7663,6 @@ mod tests {
     #[test]
     fn a_word_that_moved_under_a_parent_says_where_it_went() {
         for (word, sent_to) in [
-            ("bands", "`:view-bands`"),
             ("hanging", "`:view-hanging`"),
             // Two owners since 2026-10-16: `preview` is also the word that
             // puts the first candidate in the text.

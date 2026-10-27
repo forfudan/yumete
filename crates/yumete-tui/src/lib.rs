@@ -322,7 +322,7 @@ fn frame_to(
         let metrics = vertical::Metrics::new(config, page.height, lines, look);
         editor.set_page(page.height as usize, metrics.capacity(page.width));
     } else {
-        editor.set_page(page.height as usize, page.width.max(1) as usize);
+        settle_the_pages(editor, config, page);
     }
     // …and the candidate goes into the text, the same last step the loop takes
     // before it draws. Without it `--shot` cannot photograph `bare` at all —
@@ -429,16 +429,21 @@ fn settle_the_wrap(editor: &mut Editor, config: &Config, page: Rect) {
             let look = vertical::Look::of(editor);
             editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
         }
-        false => {
-            let gutter = gutter_in(
-                page.width as usize,
-                lines,
-                config.editor.line_numbers,
-                editor.writes_code(),
-            );
-            editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
-        }
+        false => settle_the_pages(editor, config, page),
     }
+}
+
+/// **The width a horizontal row folds at, and how much a page holds**, with
+/// `:view-pages-horizontal` in it (2026-10-28): one page's width, wrapping
+/// even with wrap off, and every page's rows for `C-f`/`C-d`.
+fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
+    let lines = editor.current_buffer().line_count();
+    let strips = horizontal_pages(editor, config, page);
+    let first = strips.first().copied().unwrap_or(page);
+    let gutter = gutter_in(first.width as usize, lines, config.editor.line_numbers, editor.writes_code());
+    editor.set_pages_on_screen(strips.len());
+    editor.set_wrap_width((first.width as usize).saturating_sub(gutter));
+    editor.set_page(page.height as usize * strips.len(), first.width.max(1) as usize);
 }
 
 pub fn fit_the_page(
@@ -874,15 +879,9 @@ pub fn run(
             } else {
                 // The width paragraphs soft-wrap at depends on the gutter as
                 // well; `j` and `k` walk those rows, so it too is settled
-                // before the keys that use it.
-                let gutter = gutter_in(
-                    page.width as usize,
-                    lines,
-                    config.editor.line_numbers,
-                    editor.writes_code(),
-                );
-                editor.set_wrap_width((page.width as usize).saturating_sub(gutter));
-                editor.set_page(page.height as usize, page.width.max(1) as usize);
+                // before the keys that use it — a page's width, with
+                // `:view-pages-horizontal`.
+                settle_the_pages(editor, config, page);
             }
         }
         // …and what the input method is offering, in the text, before anybody
@@ -5026,19 +5025,65 @@ fn draw(
                 table::draw(frame, editor, config, *rect, &mut seat.table, peek)
             }
             WritingLayout::Horizontal => {
-                draw_horizontal(
-                    frame,
-                    editor,
-                    config,
-                    *rect,
-                    &mut seat.top,
-                    &mut seat.left,
-                    &mut seat.drawn_span,
-                    peek,
-                    // Only the pane the keys are in gets the bar, and only in
-                    // the layout that reserved it.
-                    (which == editor.live_pane().min(1)).then_some(head_area),
-                )
+                // **Pages side by side, the text running on** (2026-10-28,
+                // `:view-pages-horizontal`): the first page scrolls for the
+                // whole chain, each next one starts where the last one ended.
+                let strips = horizontal_pages(editor, config, *rect);
+                let chain = strips.len();
+                let mut caret = (rect.x, rect.y);
+                let mut next: Option<WrapAnchor> = None;
+                for (k, strip) in strips.iter().enumerate() {
+                    let (at, after) = match k {
+                        0 => draw_horizontal(
+                            frame,
+                            editor,
+                            config,
+                            *strip,
+                            &mut seat.top,
+                            &mut seat.left,
+                            &mut seat.drawn_span,
+                            peek,
+                            // Only the pane the keys are in gets the bar, and only in
+                            // the layout that reserved it.
+                            (which == editor.live_pane().min(1)).then_some(head_area),
+                            chain,
+                            true,
+                        ),
+                        _ => match next {
+                            Some(mut from) => {
+                                let mut left = 0;
+                                draw_horizontal(
+                                    frame,
+                                    editor,
+                                    config,
+                                    *strip,
+                                    &mut from,
+                                    &mut left,
+                                    &mut seat.drawn_span,
+                                    peek,
+                                    None,
+                                    chain,
+                                    false,
+                                )
+                            }
+                            // Past the end of the text: blank paper.
+                            None => {
+                                let ink = crate::theme::Palette::of(config);
+                                let ink = match peek {
+                                    None => ink,
+                                    Some(_) => ink.faded(),
+                                };
+                                frame.render_widget(Paragraph::new("").style(ink.page()), *strip);
+                                (None, None)
+                            }
+                        },
+                    };
+                    if let Some(at) = at {
+                        caret = at;
+                    }
+                    next = after;
+                }
+                caret
             }
             WritingLayout::Vertical => {
                 vertical::draw(frame, editor, config, *rect, &mut seat.zong, &mut seat.drawn_span, peek)
@@ -7824,6 +7869,14 @@ fn text_at(
     match editor.layout() {
         WritingLayout::Horizontal => {
             let buffer = editor.current_buffer();
+            // **Which page of `:view-pages-horizontal` the click is in**
+            // (2026-10-28): that page is the area, and its first row is
+            // where the pages before it ended.
+            let strips = horizontal_pages(editor, config, area);
+            let page = strips
+                .iter()
+                .position(|s| mouse.column >= s.x && mouse.column < s.x + s.width)?;
+            let area = strips[page];
             let gutter = gutter_in(
                 area.width as usize,
                 buffer.line_count(),
@@ -7858,12 +7911,26 @@ fn text_at(
             // The same walk the page was drawn with: a row with a reading
             // over it takes two screen rows, so counting rows from the top
             // would land a click one row low for every reading above it.
+            let mut top = viewport.top;
+            for before in &strips[..page] {
+                let rows = rows_on_screen(editor, buffer.rope(), measure, top, before.height as usize);
+                let (_, last) = rows.last()?;
+                let here = WrapAnchor { line: last.line, index_in_line: last.index_in_line };
+                top = wrap::advance(buffer.rope(), here, measure, 1);
+                if top == here {
+                    return None;
+                }
+            }
+            let left = match page {
+                0 => viewport.left,
+                _ => 0,
+            };
             let want_row = (mouse.row - area.y) as usize;
             let (_, row) = rows_on_screen(
                 editor,
                 buffer.rope(),
                 measure,
-                viewport.top,
+                top,
                 // One row further, or the row *below* a reading — the row the
                 // reading belongs to — is never in the list, and the click was
                 // dropped.
@@ -7880,7 +7947,7 @@ fn text_at(
             // the page has scrolled sideways to follow lands on the 字 under
             // the pointer and not on one a screenful back (Feature #221). A
             // click in the gutter means the first character on the page.
-            let goal = want.saturating_sub(gutter) + viewport.left;
+            let goal = want.saturating_sub(gutter) + left;
             let hidden = editor.hidden_on_line(row.line);
             let runs = editor.drawn_on_line(row.line);
             let line_start = buffer.rope().line_to_char(row.line);
@@ -11018,6 +11085,50 @@ fn tint_the_rules(
 /// 併了 `vertical::draw` 也得一起併（不然兩支一支傳結構體、一支傳字段，更亂），
 /// 而它只有七個，本來就不在警告裏。
 #[allow(clippy::too_many_arguments)]
+/// **The narrowest a page of `:view-pages-horizontal` may be**, in cells of
+/// text past its gutter (2026-10-28, decided: 「fall back to one column below
+/// 30 cells each」). Thirty cells is fifteen 漢字.
+const PAGE_LEAST: usize = 30;
+
+/// **The pages a horizontal pane is cut into**, left to right (2026-10-28).
+///
+/// As many as `:view-pages-horizontal` asks for while each still holds
+/// [`PAGE_LEAST`] cells of text; fewer when the window is too narrow, as the
+/// vertical pages fall back to fewer bands when a band cannot hold a 縱. The
+/// last page takes the cells the division leaves over.
+fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
+    let lines = editor.current_buffer().line_count();
+    let mut n = editor.pages_horizontal().max(1);
+    while n > 1 {
+        let w = (rect.width / n as u16) as usize;
+        let gutter = gutter_in(w, lines, config.editor.line_numbers, editor.writes_code());
+        if w.saturating_sub(gutter) >= PAGE_LEAST {
+            break;
+        }
+        n -= 1;
+    }
+    let w = rect.width / n as u16;
+    (0..n)
+        .map(|k| {
+            let x = rect.x + k as u16 * w;
+            let width = match k + 1 == n {
+                true => rect.x + rect.width - x,
+                false => w,
+            };
+            Rect::new(x, rect.y, width, rect.height)
+        })
+        .collect()
+}
+
+/// One page of the horizontal layout — the whole of it, or one of the pages
+/// `:view-pages-horizontal` sets side by side (2026-10-28).
+///
+/// `chain` is how many pages the text runs through, and `scrolls` whether this
+/// is the first of them: the first decides where the chain starts, treating
+/// the pages as one page `chain` times as tall, and the others start where the
+/// page before them ended. The caret comes back only from the page it is on;
+/// the second value is where the next page starts, `None` past the end.
+#[allow(clippy::too_many_arguments)]
 fn draw_horizontal(
     frame: &mut Frame,
     editor: &Editor,
@@ -11028,10 +11139,14 @@ fn draw_horizontal(
     span: &mut Option<(usize, usize)>,
     peek: Option<&yumete_core::editor::Pane>,
     head: Option<Rect>,
-) -> (u16, u16) {
+    chain: usize,
+    scrolls: bool,
+) -> (Option<(u16, u16)>, Option<WrapAnchor>) {
     let buffer = editor.current_buffer();
     let total_lines = buffer.line_count();
     let height = text_area.height as usize;
+    // The height the scrolling rules measure: every page of the chain.
+    let reach = height * chain.max(1);
     let mode = config.editor.line_numbers;
     let gutter = gutter_in(
         text_area.width as usize,
@@ -11107,10 +11222,12 @@ fn draw_horizontal(
     // half-screen jump — because a caret walking one 字 at a time along a long
     // line should not make the whole page slide out from under the reader.
     let page = (text_area.width as usize).saturating_sub(gutter).max(1);
-    if cursor_pos.column < *left {
-        *left = cursor_pos.column;
-    } else if cursor_pos.column >= *left + page {
-        *left = cursor_pos.column + 1 - page;
+    if scrolls {
+        if cursor_pos.column < *left {
+            *left = cursor_pos.column;
+        } else if cursor_pos.column >= *left + page {
+            *left = cursor_pos.column + 1 - page;
+        }
     }
     let left = *left;
 
@@ -11118,8 +11235,9 @@ fn draw_horizontal(
     // context above and below. Counted from the page's own anchor rather than
     // from a global row number, which cannot be found without walking the
     // document from the top on every keystroke.
-    let scrolloff = config.editor.scrolloff.min(height.saturating_sub(1) / 2);
+    let scrolloff = config.editor.scrolloff.min(reach.saturating_sub(1) / 2);
     let last_row = height.saturating_sub(1);
+    let last_reach = reach.saturating_sub(1);
     // **A jump lands in the middle, wherever it came from.** Whether the page
     // has to scroll at all is the wrong question to key this on: a hit two rows
     // below the bottom edge and a hit two rows above it are the same act, and
@@ -11131,8 +11249,9 @@ fn draw_horizontal(
     // (a search hit, `gg`, a mark), a step off an edge nudges by `scrolloff`,
     // and typewriter mode keeps the row being written in the middle whatever
     // it was.
-    let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_row);
-    let cursor_row = match editor.page_inset(found, last_row, scrolloff) {
+    if scrolls {
+    let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_reach);
+    let cursor_row = match editor.page_inset(found, last_reach, scrolloff) {
         None => found.unwrap_or(0),
         Some(inset) => {
             // `k` at the top edge is one row away, not a jump: it nudges.
@@ -11153,7 +11272,7 @@ fn draw_horizontal(
                 false => inset,
             };
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
-            wrap::distance(rope, *viewport, cursor_anchor, measure, height).unwrap_or(0)
+            wrap::distance(rope, *viewport, cursor_anchor, measure, reach).unwrap_or(0)
         }
     };
 
@@ -11167,11 +11286,12 @@ fn draw_horizontal(
             .iter()
             .filter(|row| row_has_reading(editor, rope, row))
             .count();
-        if cursor_row + above < height {
+        if cursor_row + above < reach {
             break;
         }
         *viewport = wrap::advance(rope, *viewport, measure, 1);
         cursor_row -= 1;
+    }
     }
 
     // What is marked: the live pane's selection, or the hit the other one was
@@ -11338,10 +11458,23 @@ fn draw_horizontal(
     // **這一趟畫了哪一段**，交給核心去算 `gw` 的落腳點（#406）。畫的這一支是唯一
     // 知道的：`page_top` 只是一個行號，而一屏放得下幾個邏輯行要問 measure。
     let on_screen = rows_on_screen(editor, rope, measure, *viewport, height);
-    *span = match (on_screen.first(), on_screen.last()) {
-        (Some((_, a)), Some((_, b))) => Some((a.start, b.end)),
+    *span = match (on_screen.first(), on_screen.last(), scrolls, *span) {
+        // A later page of a chain carries the span on to its own last row.
+        (_, Some((_, b)), false, Some((a, _))) => Some((a, b.end)),
+        (Some((_, a)), Some((_, b)), _, _) => Some((a.start, b.end)),
+        (_, _, false, kept) => kept,
         _ => None,
     };
+    // Where the next page of a chain starts: the row after this page's last.
+    // `None` once the text has run out, so a page past the end stays blank.
+    let next_page = on_screen.last().and_then(|(_, row)| {
+        let here = WrapAnchor { line: row.line, index_in_line: row.index_in_line };
+        let next = wrap::advance(rope, here, measure, 1);
+        (next != here).then_some(next)
+    });
+    let caret_here = on_screen.iter().any(|(_, row)| {
+        row.line == cursor_pos.line && row.index_in_line == cursor_pos.index_in_line
+    });
     // **The caret's screen row is read off the list the page was drawn from**
     // (2026-10-19). It used to be worked out again — `wrap::distance`, then
     // `page_inset`, then a correction loop, then a third walk counting the
@@ -12307,14 +12440,21 @@ fn draw_horizontal(
     // width would otherwise be drawn in the column after the last one.
     let x = (gutter + cursor_pos.column - left)
         .min(text_area.width.saturating_sub(1) as usize);
-    (
+    let caret = (
         text_area.x + x as u16,
         // …in **screen** rows, taken off `on_screen` where the page itself
         // took them: a reading spends a row of its own above the row it
         // reads, and counting those again here is what put the caret on the
         // wrong row.
         text_area.y + caret_row.min(last_row) as u16,
-    )
+    );
+    // The first page answers anyway, where the caret was always clamped to,
+    // so a single page behaves as it did; a later page only when it has it.
+    let caret = match (caret_here, scrolls) {
+        (true, _) | (false, true) => Some(caret),
+        (false, false) => None,
+    };
+    (caret, next_page)
 }
 
 /// Draw the status line: where am I, and nothing else.
@@ -16745,6 +16885,74 @@ fn squeezed(text: &str) -> String {
         assert!(!is_double_click(Some((t0, 10, 4)), soon, 10, 5), "another row");
         assert!(!is_double_click(Some((t0, 10, 4)), late, 10, 4), "too slow");
         assert!(!is_double_click(None, soon, 10, 4), "no first press");
+    }
+
+    /// **`:view-pages-horizontal 2`: two pages, one text running through
+    /// them** (2026-10-28). The right page starts where the left one ends,
+    /// the cursor walks on into it, a click there lands in its text, and a
+    /// window too narrow for two pages of thirty cells gets one.
+    #[test]
+    fn two_horizontal_pages_carry_one_text_left_to_right() {
+        let text: String = (1..=40).map(|n| format!("line{n:02}\n")).collect();
+        let mut editor = editor_with(&text);
+        editor.set_pages_horizontal(2);
+        let config = Config::default();
+        let _ = ink(&config);
+        let (w, h) = (90u16, 10u16);
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0);
+        let page = areas.panes[0];
+        assert_eq!(horizontal_pages(&editor, &config, page).len(), 2);
+        settle_the_pages(&mut editor, &config, page);
+        let mut seats = Seats::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut frame_of = |editor: &Editor, seats: &mut Seats| {
+            terminal.draw(|frame| draw(frame, editor, &config, no_ime(), seats, None)).unwrap();
+            let caret = caret_of(&mut terminal, &config);
+            (terminal.backend().buffer().clone(), caret)
+        };
+        let (buffer, _) = frame_of(&editor, &mut seats);
+        let right = horizontal_pages(&editor, &config, page)[1];
+        let first_right: String =
+            (right.x..right.x + right.width).map(|x| buffer[(x, right.y)].symbol().to_string()).collect();
+        let rows = page.height as usize;
+        assert!(
+            first_right.contains(&format!("line{:02}", rows + 1)),
+            "the right page goes on from the left one: {first_right:?}"
+        );
+        // The cursor walks on into the right page, one frame a key.
+        let mut furthest = 0;
+        let mut last = buffer;
+        for _ in 0..rows + 2 {
+            editor.on_key(Key::Char('j'));
+            let (buffer, caret) = frame_of(&editor, &mut seats);
+            furthest = furthest.max(caret.x);
+            last = buffer;
+        }
+        assert!(furthest >= right.x, "the caret reached the right page: x {furthest}");
+        let shown: String =
+            (right.x..right.x + right.width).map(|x| last[(x, right.y)].symbol().to_string()).collect();
+        let shown_line = shown
+            .split("line")
+            .nth(1)
+            .and_then(|tail| tail.get(..2))
+            .and_then(|n| n.parse::<usize>().ok())
+            .expect("a line on the right page's first row")
+            - 1;
+        // A click on the right page's first row is that row's line.
+        let mouse = ratatui::crossterm::event::MouseEvent {
+            kind: ratatui::crossterm::event::MouseEventKind::Down(
+                ratatui::crossterm::event::MouseButton::Left,
+            ),
+            column: right.x + right.width - 4,
+            row: right.y,
+            modifiers: ratatui::crossterm::event::KeyModifiers::NONE,
+        };
+        let at = text_at(&editor, &config, Some((w, h).into()), &seats, mouse).expect("a character");
+        let line = editor.current_buffer().rope().char_to_line(at);
+        assert_eq!(line, shown_line, "the click lands on the line drawn there: {shown:?}");
+        // Too narrow for two pages of thirty cells: one.
+        let narrow = Rect::new(0, 0, 50, 8);
+        assert_eq!(horizontal_pages(&editor, &config, narrow).len(), 1);
     }
 
     #[test]
@@ -21347,7 +21555,7 @@ fn squeezed(text: &str) -> String {
 
         // Narrow enough that twelve paragraphs cannot fit in one band.
         let one = render(&editor, &config, 14, 21);
-        editor.set_bands(2);
+        editor.set_pages_vertical(2);
         let two = render(&editor, &config, 14, 21);
         assert_ne!(buffer_text(&one), buffer_text(&two), "the page changed");
 
@@ -21370,7 +21578,7 @@ fn squeezed(text: &str) -> String {
         let text: String = (0..150).map(|_| "一二三\n").collect();
         let mut editor = editor_with(&text);
         editor.set_layout(WritingLayout::Vertical);
-        editor.set_bands(2);
+        editor.set_pages_vertical(2);
         let config = Config::default();
         let _ = ink(&config);
         let (w, h) = (40u16, 16u16);

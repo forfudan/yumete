@@ -371,11 +371,20 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
-        key: "bands",
+        key: "pages_vertical",
         group: Group::Layout,
         kind: Kind::Count { low: 1, high: 4, zero: None },
-        label: "set.editor.bands",
-        hint: "set.editor.bands.hint",
+        label: "set.editor.pages-vertical",
+        hint: "set.editor.pages-vertical.hint",
+        factory: "1",
+    },
+    Setting {
+        table: "editor",
+        key: "pages_horizontal",
+        group: Group::Layout,
+        kind: Kind::Count { low: 1, high: 4, zero: None },
+        label: "set.editor.pages-horizontal",
+        hint: "set.editor.pages-horizontal.hint",
         factory: "1",
     },
     Setting {

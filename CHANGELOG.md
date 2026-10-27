@@ -11,6 +11,12 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`:view-pages-horizontal`: pages side by side**, the text running on from the left
+  one to the right, as in a newspaper or Emacs's `follow-mode`. 1 to 4 pages, as many
+  as leave each 30 cells of text. Each page has its own line-number gutter and wraps at
+  its own width, wrap off or not; moving, scrolling, paging, `zt` `zz` `zb` and clicks
+  work through all of them. `[editor] pages_horizontal`.
+
 - **Each step of the `m` group lists what it takes**, as helix's do. `mi` and `ma`
   list the objects: word, sentence, paragraph, the nearest pair, Markdown marks,
   function, type definition, parameter, comment, table cell, and the brackets and
@@ -65,6 +71,10 @@ in `docs/development.md` §5.2.
   under the vim keymap it is `iu` / `au`.
 
 ### Changed
+
+- **Warning: `:view-bands` is now `:view-pages-vertical`, and `[editor] bands` is
+  `pages_vertical`.** It takes 1 to 4 only: `on` and `off` are gone, and a config value
+  outside 1–4 is reported. The old names are not read.
 
 - **`i` keeps the selection**, as helix's does: what you type goes before it and the
   selection is still there on `Esc`. Moving with the arrows while inserting drops it

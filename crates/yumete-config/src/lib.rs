@@ -187,8 +187,11 @@ pub struct EditorConfig {
     pub zong_length: usize,
     /// How many squares open a paragraph (首行縮進). 0 is none.
     pub indent: usize,
-    /// How many bands the vertical page is divided into (段組). 1 is none.
-    pub bands: usize,
+    /// How many pages the vertical page is cut into, one above the other
+    /// (段組). 1 to 4, and 1 is none.
+    pub pages_vertical: usize,
+    /// How many pages the horizontal page is cut into, side by side. 1 to 4.
+    pub pages_horizontal: usize,
     /// Whether `yumete` with no file opens again what was open last time.
     /// Off: a bare `yumete` is a blank page, and `yumete -c` is last time
     /// (2026-09-17, 「打 ye 應該建一個新的文檔」).
@@ -439,7 +442,8 @@ impl Default for EditorConfig {
             vertical_keys: yumete_cjk::VerticalKeys::default(),
             zong_length: 0,
             indent: 0,
-            bands: 1,
+            pages_vertical: 1,
+            pages_horizontal: 1,
             session: false,
             remember: true,
             language: "zh".to_string(),
@@ -3905,7 +3909,8 @@ struct RawEditor {
     layout: Option<String>,
     zong_length: Option<usize>,
     indent: Option<usize>,
-    bands: Option<usize>,
+    pages_vertical: Option<usize>,
+    pages_horizontal: Option<usize>,
     session: Option<bool>,
     remember: Option<bool>,
     language: Option<String>,
@@ -4045,8 +4050,11 @@ impl RawConfig {
         if other.editor.indent.is_some() {
             self.editor.indent = other.editor.indent;
         }
-        if other.editor.bands.is_some() {
-            self.editor.bands = other.editor.bands;
+        if other.editor.pages_horizontal.is_some() {
+            self.editor.pages_horizontal = other.editor.pages_horizontal;
+        }
+        if other.editor.pages_vertical.is_some() {
+            self.editor.pages_vertical = other.editor.pages_vertical;
         }
         if other.editor.session.is_some() {
             self.editor.session = other.editor.session;
@@ -4385,8 +4393,13 @@ impl RawConfig {
             // means; a number outside that is a typo, not a preference.
             config.editor.indent = held(problems, "[editor] indent", n, n.min(8), "0 到 8");
         }
-        if let Some(n) = self.editor.bands {
-            config.editor.bands = held(problems, "[editor] bands", n, n.clamp(1, 4), "1 到 4");
+        if let Some(n) = self.editor.pages_vertical {
+            config.editor.pages_vertical =
+                held(problems, "[editor] pages_vertical", n, n.clamp(1, 4), "1 到 4");
+        }
+        if let Some(n) = self.editor.pages_horizontal {
+            config.editor.pages_horizontal =
+                held(problems, "[editor] pages_horizontal", n, n.clamp(1, 4), "1 到 4");
         }
         if let Some(on) = self.editor.session {
             config.editor.session = on;
@@ -4919,6 +4932,21 @@ mod tests {
     /// own* directory instead — which is why `$HOMEBREW_PREFIX` is consulted
     /// first. Without it the Linux tarballs would install an editor that can
     /// never see the data formula.
+    /// **The page counts are 1–4, and anything else is said** (2026-10-28):
+    /// `pages_vertical` replaces `bands`, and `pages_horizontal` is new.
+    #[test]
+    fn page_counts_outside_one_to_four_are_said() {
+        let (config, problems) =
+            Config::from_toml_saying("[editor]\npages_vertical = 7\npages_horizontal = 0\n");
+        assert_eq!(config.editor.pages_vertical, 4);
+        assert_eq!(config.editor.pages_horizontal, 1);
+        assert!(problems.iter().any(|p| p.contains("pages_vertical")), "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("pages_horizontal")), "{problems:?}");
+        // The old key is an unknown one now, which the loader reports as the
+        // file failing (`describe`).
+        assert!(toml::from_str::<RawConfig>("[editor]\nbands = 2\n").is_err(), "the old key is not read");
+    }
+
     #[test]
     fn a_homebrew_install_finds_the_shared_prefix_on_both_platforms() {
         use super::{prefix_data_dirs, Path, PathBuf};

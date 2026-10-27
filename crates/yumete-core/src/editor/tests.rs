@@ -30579,3 +30579,23 @@ fn n_in_select_mode_adds_a_selection() {
     ed.on_key(Key::Esc);
     assert_eq!(ed.current_buffer().text(), "X dog X dog X\n");
 }
+
+/// **`:view-pages-vertical` / `:view-pages-horizontal` take 1–4 and nothing
+/// else** (2026-10-28, renamed from `:view-bands`): a count, not a switch, so
+/// `on`, `off`, `0` and `5` are refused, and a bare one says the number.
+#[test]
+fn the_page_counts_take_one_to_four() {
+    let mut ed = typed("x\n");
+    assert!(ed.execute("view-pages-horizontal 2").is_ok());
+    assert_eq!(ed.pages_horizontal(), 2);
+    assert!(ed.execute("view-pages-vertical 3").is_ok());
+    assert_eq!(ed.pages_vertical(), 3);
+    assert_eq!(ed.pages_horizontal(), 2, "each layout keeps its own");
+    for bad in ["on", "off", "0", "5"] {
+        assert!(ed.execute(&format!("view-pages-horizontal {bad}")).is_err(), "{bad}");
+    }
+    assert_eq!(ed.pages_horizontal(), 2);
+    assert!(ed.execute("view-pages-horizontal").is_ok());
+    assert!(!ed.status().is_empty(), "a bare one says the number");
+    assert!(ed.execute("view-bands 2").is_err(), "the old name is gone");
+}

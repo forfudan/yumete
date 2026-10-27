@@ -808,9 +808,9 @@ mod tests {
     /// 的是 `wrap::MIN_WRAP_WIDTH`）。從前面板說 4、命令說 8、檔案說 4。
     #[test]
     fn the_panel_shows_what_the_editor_takes_not_what_the_file_says() {
-        let p = panel("[editor]\nzong_length = 2\nbands = 99\n\n[panel]\nmarkers = \"\"\n", "");
+        let p = panel("[editor]\nzong_length = 2\npages_vertical = 99\n\n[panel]\nmarkers = \"\"\n", "");
         assert_eq!(p.shown(find("editor.zong_length")).value, "8", "域是「0，或者 8 到 64」");
-        assert_eq!(p.shown(find("editor.bands")).value, "4", "上限夾住");
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "4", "上限夾住");
         assert_eq!(
             p.shown(find("panel.markers")).value,
             find("panel.markers").factory,
@@ -839,20 +839,20 @@ mod tests {
         p.press();
         assert_eq!(p.shown(find("editor.layout")).value, "\"horizontal\"", "轉回來");
 
-        // 數字（bands 出廠 1，範圍 1..4）。
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        // 數字（pages_vertical 出廠 1，範圍 1..4）。
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.press();
-        assert_eq!(p.shown(find("editor.bands")).value, "2");
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "2");
     }
 
     /// 數字到頂回到底 —— 不然按到 4 之後那一格就死了。
     #[test]
     fn a_count_at_its_ceiling_comes_back_to_the_floor() {
-        let mut p = panel("[editor]\nbands = 4\n", "");
+        let mut p = panel("[editor]\npages_vertical = 4\n", "");
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.press();
-        assert_eq!(p.shown(find("editor.bands")).value, "1");
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "1");
     }
 
     /// `d` 撤掉這一層，回去跟下面那一層。
@@ -914,26 +914,26 @@ mod tests {
     fn cycling_all_the_way_back_is_not_a_change() {
         let mut p = panel("", "");
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         for _ in 0..4 {
             p.press();
         }
-        assert_eq!(p.shown(find("editor.bands")).value, "1", "1→2→3→4→1");
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "1", "1→2→3→4→1");
         assert!(!p.dirty(), "轉回來就不算改過：{:?}", p.global.edits);
     }
 
     /// 檔裏寫着 3，改成別的再改回 3 —— 同理，不算改過。
     #[test]
     fn setting_a_row_back_to_what_the_file_says_is_not_a_change() {
-        let mut p = panel("[editor]\nbands = 3\n", "");
+        let mut p = panel("[editor]\npages_vertical = 3\n", "");
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.press();
         assert!(p.dirty(), "3→4");
         p.press();
         p.press();
         p.press();
-        assert_eq!(p.shown(find("editor.bands")).value, "3", "4→1→2→3");
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "3", "4→1→2→3");
         assert!(!p.dirty(), "回到檔裏那個值：{:?}", p.global.edits);
     }
 
@@ -943,26 +943,26 @@ mod tests {
     /// `:w` 存了，而全局那個檔一個字没動——換一個目録打開就打回原形。
     #[test]
     fn matching_what_the_project_says_still_changes_the_global_file() {
-        let mut p = panel("", "[editor]\nbands = 2\n");
+        let mut p = panel("", "[editor]\npages_vertical = 2\n");
         p.into = Which::Global;
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         // 出廠 1 → 按一下是 2，和本項目那個值一樣。
         p.press();
         assert!(p.dirty(), "全局那一份真的改了：{:?}", p.global.edits);
-        assert_eq!(p.global.says("editor.bands").as_deref(), Some("2"));
+        assert_eq!(p.global.says("editor.pages_vertical").as_deref(), Some("2"));
     }
 
     /// **被上面那一層蓋着的時候，說得出來。**
     #[test]
     fn editing_a_layer_that_is_covered_says_so() {
-        let mut p = panel("", "[editor]\nbands = 2\n");
+        let mut p = panel("", "[editor]\npages_vertical = 2\n");
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.into = Which::Global;
-        assert!(p.shadowed(find("editor.bands")), "本項目蓋着全局");
+        assert!(p.shadowed(find("editor.pages_vertical")), "本項目蓋着全局");
         p.into = Which::Local;
-        assert!(!p.shadowed(find("editor.bands")), "本項目自己在最上面");
+        assert!(!p.shadowed(find("editor.pages_vertical")), "本項目自己在最上面");
     }
 
     /// **存盤是原子的**：換的是目録項，寫到一半的東西不會出現在那個路徑上。
@@ -979,13 +979,13 @@ mod tests {
 
         let mut p = Panel::open(Some(path.clone()), None);
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.press();
         p.save().expect("存得下去");
 
         let after = std::fs::read_to_string(&path).unwrap();
         assert!(after.contains("# 我寫的") && after.contains("# 理由"), "{after}");
-        assert!(after.contains("bands = 2"), "{after}");
+        assert!(after.contains("pages_vertical = 2"), "{after}");
         // 暫存檔不許留在人家的目録裏。
         let litter: Vec<_> = std::fs::read_dir(&dir)
             .unwrap()
@@ -1011,7 +1011,7 @@ mod tests {
 
         let mut p = Panel::open(Some(path.clone()), None);
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.press();
 
         // 面板開着的這段時間裏，外面動了**別的**鍵。
@@ -1019,7 +1019,7 @@ mod tests {
 
         let said = p.save().expect("存得下去");
         let after = std::fs::read_to_string(&path).unwrap();
-        assert!(after.contains("bands = 2"), "我改的那一項落地了：\n{after}");
+        assert!(after.contains("pages_vertical = 2"), "我改的那一項落地了：\n{after}");
         assert!(after.contains("soft_wrap = false"), "人家改的那一項没被頂掉：\n{after}");
         assert_eq!(said.changed_underneath.len(), 1, "而且說了一句：{said:?}");
         let _ = std::fs::remove_dir_all(&dir);
@@ -1054,11 +1054,11 @@ mod tests {
     fn a_number_out_of_range_is_pulled_back_in() {
         let mut p = panel("", "");
         p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.begin_typing();
         p.typing = Some("99".to_string());
         p.finish_typing();
-        assert_eq!(p.shown(find("editor.bands")).value, "4");
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "4");
     }
 
     /// **空的那一組進不去。**

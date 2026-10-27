@@ -2860,13 +2860,6 @@ zht = "四個鍵指哪就走哪"
 zhs = "四个键指哪就走哪"
 en = "each key goes where it points"
 
-[[message]]
-# : 命令選單裏 bands 那一項的説明(view 組)
-key = "cmd.view.bands"
-zht = "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下"
-zhs = "段组：把竖排的页面横着分成几条，右上读到左上，再右下读到左下"
-en = "bands: divide the vertical page across — top right to top left, then bottom right to bottom left"
-find = "段組 段组 分欄 分栏 bands columns"
 
 [[message]]
 # : 命令選單裏 code 那一項的説明(view 組)
@@ -2931,6 +2924,22 @@ zht = "平仄：每個字的平仄畫在旁邊，句末畫韻腳(今音，入聲
 zhs = "平仄：每个字的平仄画在旁边，句末画韵脚(今音，入声已派入三声)"
 en = "平仄: the tone class of every character in the margin, 韻腳 at the end of a 句"
 find = "平仄 韻腳 韵脚 押韻 押韵 詩 诗 詞 词 律詩 律诗 meter tone rhyme"
+
+[[message]]
+# : 命令選單裏 view-pages-horizontal 那一項的説明
+key = "cmd.view.pages-horizontal"
+zht = "分欄：橫排分成幾欄並排，文字從左欄接到右欄"
+zhs = "分栏：横排分成几栏并排，文字从左栏接到右栏"
+en = "pages, horizontal: side-by-side columns, the text running on from the left one to the right"
+find = "分欄 分栏 分頁 分页 pages columns follow"
+
+[[message]]
+# : 命令選單裏 view-pages-vertical 那一項的説明
+key = "cmd.view.pages-vertical"
+zht = "段組：把竪排的頁面橫着分成幾條，右上讀到左上，再右下讀到左下"
+zhs = "段组：把竖排的页面横着分成几条，右上读到左上，再右下读到左下"
+en = "pages, vertical: divide the vertical page across — top right to top left, then bottom right to bottom left"
+find = "段組 段组 分頁 分页 pages bands"
 
 [[message]]
 # : 命令選單裏 preview 那一項的説明(view 組)
@@ -4915,12 +4924,6 @@ zht = "{0}(:q 關掉；/ 可以搜)"
 zhs = "{0}(:q 关掉；/ 可以搜)"
 en = "{0} (:q closes it; / searches)"
 
-[[message]]
-# 竪排幫助：分幾段
-key = "help.vertical.bands"
-zht = "分幾段：一頁上下兩段，像報紙"
-zhs = "分几段：一页上下两段，像报纸"
-en = "bands: two per page, one above the other, as a newspaper sets them"
 
 [[message]]
 # 竪排幫助：一縱多少字
@@ -4956,6 +4959,13 @@ key = "help.vertical.margin"
 zht = "邊欄：每一縱旁邊都留一格"
 zhs = "边栏：每一纵旁边都留一格"
 en = "margin: a lane beside every column"
+
+[[message]]
+# 竪排幫助：分幾段
+key = "help.vertical.pages"
+zht = "分幾段：一頁上下兩段，像報紙"
+zhs = "分几段：一页上下两段，像报纸"
+en = "bands: two per page, one above the other, as a newspaper sets them"
 
 [[message]]
 # 竪排幫助：上一縱/下一縱
@@ -7420,19 +7430,7 @@ en = "your text was left alone: {0}"
 
 # ── layout ────────────────────────────────────────────────────────────
 
-[[message]]
-# 段組設成多段
-key = "layout.bands"
-zht = "段組：{0} 段"
-zhs = "段组：{0} 段"
-en = "bands: {0}"
 
-[[message]]
-# 段組設成一段
-key = "layout.bands-one"
-zht = "段組：一段(整頁一縱到底)"
-zhs = "段组：一段(整页一纵到底)"
-en = "bands: one — a 縱 runs the whole page"
 
 [[message]]
 # :vertical/-v 碰上一份程序文件——縮進是那門語言的語法，竪排讀不了
@@ -7665,6 +7663,34 @@ key = "layout.note-on"
 zht = "標點提示：開(半角標點與 ... 旁邊畫出該用的那一個)"
 zhs = "标点提示：开(半角标点与 ... 旁边画出该用的那一个)"
 en = "notes: on (the mark a half-width one should have been, beside it)"
+
+[[message]]
+# 橫排分成幾欄
+key = "layout.pages-horizontal"
+zht = "分欄：{0} 欄"
+zhs = "分栏：{0} 栏"
+en = "pages, horizontal: {0}"
+
+[[message]]
+# 橫排只有一欄
+key = "layout.pages-horizontal-one"
+zht = "分欄：一欄"
+zhs = "分栏：一栏"
+en = "pages, horizontal: one"
+
+[[message]]
+# 段組設成多段
+key = "layout.pages-vertical"
+zht = "段組：{0} 段"
+zhs = "段组：{0} 段"
+en = "pages, vertical: {0}"
+
+[[message]]
+# 段組設成一段
+key = "layout.pages-vertical-one"
+zht = "段組：一段(整頁一縱到底)"
+zhs = "段组：一段(整页一纵到底)"
+en = "pages, vertical: one — a 縱 runs the whole page"
 
 [[message]]
 # :indent-tab spaces — Tab 打空格
@@ -9611,19 +9637,7 @@ zht = "没保存的時候在文件旁邊留一份副本，崩了還能撈回來"
 zhs = "没保存的时候在文件旁边留一份副本，崩了还能捞回来"
 en = "autosave"
 
-[[message]]
-# 設置：段組
-key = "set.editor.bands"
-zht = "段組"
-zhs = "段组"
-en = "bands"
 
-[[message]]
-# 設置：段組——一句話
-key = "set.editor.bands.hint"
-zht = "竪排的頁面橫着分成幾條，每一條各自從右往左排"
-zhs = "竖排的页面横着分成几条，每一条各自从右往左排"
-en = "how many bands a set-down page is cut into across"
 
 [[message]]
 # 設置：字的码位
@@ -9876,6 +9890,34 @@ key = "set.editor.measure.hint"
 zht = "行在這裏折疊，右邊是頁邊距"
 zhs = "行在这里折叠，右边是页边距"
 en = "the line really breaks here; what is right of it is margin"
+
+[[message]]
+# 設置面板：橫排分頁那一行
+key = "set.editor.pages-horizontal"
+zht = "橫排分頁"
+zhs = "横排分页"
+en = "pages, horizontal"
+
+[[message]]
+# 設置面板：橫排分頁那一行的説明
+key = "set.editor.pages-horizontal.hint"
+zht = "橫排分成幾欄並排，文字從左欄接到右欄"
+zhs = "横排分成几栏并排，文字从左栏接到右栏"
+en = "how many columns the horizontal page is cut into, side by side"
+
+[[message]]
+# 設置面板：竪排分頁那一行
+key = "set.editor.pages-vertical"
+zht = "竪排分頁"
+zhs = "竖排分页"
+en = "pages, vertical"
+
+[[message]]
+# 設置：段組——一句話
+key = "set.editor.pages-vertical.hint"
+zht = "竪排的頁面橫着分成幾條，每一條各自從右往左排"
+zhs = "竖排的页面横着分成几条，每一条各自从右往左排"
+en = "how many bands a set-down page is cut into across"
 
 [[message]]
 # 設置：稿紙刻度
