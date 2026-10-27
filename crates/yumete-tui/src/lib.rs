@@ -5030,6 +5030,19 @@ fn draw(
                 // whole chain, each next one starts where the last one ended.
                 let strips = horizontal_pages(editor, config, *rect);
                 let chain = strips.len();
+                // The air between pages is page too.
+                {
+                    let ink = crate::theme::Palette::of(config);
+                    let ink = match peek {
+                        None => ink,
+                        Some(_) => ink.faded(),
+                    };
+                    for pair in strips.windows(2) {
+                        let from = pair[0].x + pair[0].width;
+                        let gap = Rect::new(from, rect.y, pair[1].x - from, rect.height);
+                        frame.render_widget(Paragraph::new("").style(ink.page()), gap);
+                    }
+                }
                 let mut caret = (rect.x, rect.y);
                 let mut next: Option<WrapAnchor> = None;
                 for (k, strip) in strips.iter().enumerate() {
@@ -11090,6 +11103,12 @@ fn tint_the_rules(
 /// 30 cells each」). Thirty cells is fifteen 漢字.
 const PAGE_LEAST: usize = 30;
 
+/// **Blank cells before each page after the first** (2026-10-28, decided:
+/// 「兩個空格吧，豎排好像是兩個」). The page's own gutter divides it from the
+/// page before; without air a two-digit number touched the last character of
+/// the left page (「…霜金10第10段」).
+const PAGE_GAP: u16 = 2;
+
 /// **The pages a horizontal pane is cut into**, left to right (2026-10-28).
 ///
 /// As many as `:view-pages-horizontal` asks for while each still holds
@@ -11099,18 +11118,19 @@ const PAGE_LEAST: usize = 30;
 fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
     let lines = editor.current_buffer().line_count();
     let mut n = editor.pages_horizontal().max(1);
+    let wide = |n: usize| rect.width.saturating_sub(PAGE_GAP * (n as u16 - 1)) / n as u16;
     while n > 1 {
-        let w = (rect.width / n as u16) as usize;
+        let w = wide(n) as usize;
         let gutter = gutter_in(w, lines, config.editor.line_numbers, editor.writes_code());
         if w.saturating_sub(gutter) >= PAGE_LEAST {
             break;
         }
         n -= 1;
     }
-    let w = rect.width / n as u16;
+    let w = wide(n);
     (0..n)
         .map(|k| {
-            let x = rect.x + k as u16 * w;
+            let x = rect.x + k as u16 * (w + PAGE_GAP);
             let width = match k + 1 == n {
                 true => rect.x + rect.width - x,
                 false => w,
