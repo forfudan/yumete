@@ -839,7 +839,8 @@ zhs = "存了 {0} 个文件；{1} 个没存：{2}"
 en = "saved {0} file(s); {1} not saved: {2}"
 
 [[message]]
-# :w 到一個已經存在的文件夾上（帶不帶 ! 都一樣）
+# :w 到一個已經存在的文件夾上
+# 帶不帶 ! 都一樣
 key = "buffer.target-is-a-folder"
 zht = "你輸入的是已有文件夾名，本文件無法保存"
 zhs = "你输入的是已有文件夹名，本文件无法保存"
@@ -863,14 +864,14 @@ en = "there are unsaved changes — add ! to override"
 # ── cell ──────────────────────────────────────────────────────────────
 
 [[message]]
-# :cd - 而没有上一個(2026-10-01 寫的)
+# :cd - 而没有上一個
 key = "cd.no-previous"
 zht = "没有上一個工作路徑可回"
 zhs = "没有上一个工作路径可回"
 en = "no previous working directory to go back to"
 
 [[message]]
-# :pwd 印出來的那一句，:cd 改完也説它(2026-10-01 寫的)
+# :pwd 印出來的那一句，:cd 改完也説它
 key = "cd.working-dir"
 zht = "工作路徑：{0}"
 zhs = "工作路径：{0}"
@@ -1309,7 +1310,7 @@ en = "the open files: list, switch, close"
 find = "緩衝區 缓冲区 檔案 文件 分頁 標籤 tabs files switch bn bp bc"
 
 [[message]]
-# : 命令選單裏 cd 那一項的説明(2026-10-01 寫的)
+# : 命令選單裏 cd 那一項的説明
 key = "cmd.commands.cd"
 zht = "更改工作路徑"
 zhs = "更改工作路径"
@@ -1493,7 +1494,7 @@ en = "send the selection through a terminal command and keep nothing back"
 find = "管道 外部命令 shell 送出"
 
 [[message]]
-# : 命令選單裏 pwd 那一項的説明(2026-10-01 寫的)
+# : 命令選單裏 pwd 那一項的説明
 key = "cmd.commands.pwd"
 zht = "查詢工作路徑"
 zhs = "查询工作路径"
@@ -1517,23 +1518,23 @@ en = "read-only: lock this one against editing"
 find = "只讀 只读 鎖住 锁住 保護 保护 lock"
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "cmd.commands.recent-files"
-zht = "最近開過的檔（這個項目）"
-zhs = "最近开过的档（这个项目）"
+zht = "最近開過的檔(這個項目)"
+zhs = "最近开过的档(这个项目)"
 en = "files opened under this project, newest first"
 find = "最近 最近開過 最近开过 歷史 历史 檔案 文件 recent files history"
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "cmd.commands.recent-files-global"
-zht = "最近開過的檔（全部項目）"
-zhs = "最近开过的档（全部项目）"
+zht = "最近開過的檔(全部項目)"
+zhs = "最近开过的档(全部项目)"
 en = "files opened anywhere, newest first"
 find = "最近 全部 全局 所有項目 所有项目 recent files global everywhere all"
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "cmd.commands.recent-projects"
 zht = "最近開過的項目"
 zhs = "最近开过的项目"
@@ -1605,7 +1606,7 @@ en = "search and replace in the working directory"
 find = "替換 替换 replace 工作 路徑 路径 目錄 目录 working cwd"
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "cmd.commands.resume"
 zht = "接着上次：把這個目錄上次開着的那幾個加進來"
 zhs = "接着上次：把这个目录上次开着的那几个加进来"
@@ -3452,7 +3453,7 @@ zhs = "纯文本没有注释"
 en = "plain text has no comment"
 
 [[message]]
-# 上屏方式的名字：预设（由方案自己说了算）
+# 上屏方式的名字：预设(由方案自己说了算)
 key = "commit.name.default"
 zht = "預設"
 zhs = "预设"
@@ -3536,8 +3537,8 @@ en = "a heading in this file"
 [[message]]
 # :check-config 查完了，兩個檔都没毛病({0} 是查了幾個檔)
 key = "config.check-clean"
-zht = "配置檔没毛病（查了 {0} 個）"
-zhs = "配置档没毛病（查了 {0} 个）"
+zht = "配置檔没毛病(查了 {0} 個)"
+zhs = "配置档没毛病(查了 {0} 个)"
 en = "the config is clean ({0} file(s) checked)"
 
 [[message]]
@@ -3968,7 +3969,7 @@ zhs = "复制了 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
-# mi g / ma g，可是這個文件 git 管不着（helix 的 "Diff is not available"）
+# mi g / ma g，可是這個文件 git 管不着(helix 的 "Diff is not available")
 key = "edit.no-diff-here"
 zht = "這個文件不在 git 裏，没有改動可選"
 zhs = "这个文件不在 git 里，没有改动可选"
@@ -4023,7 +4024,7 @@ zhs = "还没有取过东西"
 en = "nothing has been yanked yet"
 
 [[message]]
-# md/mr 有幾個光標，其中兩個在同一對符號裏（helix 的 CursorOverlap）：整條不做
+# md/mr 有幾個光標，其中兩個在同一對符號裏(helix 的 CursorOverlap)：整條不做
 key = "edit.one-pair-for-two-cursors"
 zht = "有兩個光標共用一對符號，没有改動"
 zhs = "有两个光标共用一对符号，没有改动"
@@ -4293,7 +4294,7 @@ zhs = "往前找不到「{0}」"
 en = "no '{0}' anywhere behind"
 
 [[message]]
-# f/F 在全窗表格的本格裏找不到那個字（全窗裏「這一行」是「這一格」）
+# f/F 在全窗表格的本格裏找不到那個字(全窗裏「這一行」是「這一格」)
 key = "find.no-such-character-in-this-cell"
 zht = "這一格裏没有「{0}」"
 zhs = "这一格里没有「{0}」"
@@ -5411,7 +5412,7 @@ zhs = "重选上一次那一段"
 en = "select what was selected last"
 
 [[message]]
-# g 選單裏的 t c b ——光標跳到屏幕的頂/中/底(2026-10-06 定的文案)
+# g 選單裏的 t c b ——光標跳到屏幕的頂/中/底
 key = "hint.goto.screen-top-middle-bottom"
 zht = "光標移至屏幕頂部/中部/底部"
 zhs = "光标移至屏幕顶部/中部/底部"
@@ -5579,7 +5580,7 @@ zhs = "叫什么名字"
 en = "name it"
 
 [[message]]
-# ' 之後那張小表：一個位置都還没記過(2026-09-29 寫的那一句)
+# ' 之後那張小表：一個位置都還没記過
 key = "hint.mark.none-yet"
 zht = "(無位置記錄)"
 zhs = "(无位置记录)"
@@ -5637,8 +5638,8 @@ en = "m"
 [[message]]
 # mi/ma 菜單：大詞
 key = "hint.obj.big-word"
-zht = "大詞（到空格爲止）"
-zhs = "大词（到空格为止）"
+zht = "大詞(到空格爲止)"
+zhs = "大词(到空格为止)"
 en = "WORD (up to a space)"
 
 [[message]]
@@ -5649,17 +5650,17 @@ zhs = "括号"
 en = "brackets"
 
 [[message]]
-# mi/ma 菜單：l，光標所在的那一格（表格）
+# mi/ma 菜單：l，光標所在的那一格(表格)
 key = "hint.obj.cell"
-zht = "單元格（表格）"
-zhs = "单元格（表格）"
+zht = "單元格(表格)"
+zhs = "单元格(表格)"
 en = "cell (table)"
 
 [[message]]
-# mi/ma 菜單：g，git 標出來的那一處改動（helix 的 Change）
+# mi/ma 菜單：g，git 標出來的那一處改動(helix 的 Change)
 key = "hint.obj.change"
-zht = "這一處改動（git）"
-zhs = "这一处改动（git）"
+zht = "這一處改動(git)"
+zhs = "这一处改动(git)"
 en = "the change here (git)"
 
 [[message]]
@@ -5670,7 +5671,7 @@ zhs = "中文括号也认"
 en = "Chinese brackets too"
 
 [[message]]
-# mi/ma 菜單：u，短句（到任何標點爲止）
+# mi/ma 菜單：u，短句(到任何標點爲止)
 key = "hint.obj.clause"
 zht = "短句"
 zhs = "短句"
@@ -5679,29 +5680,29 @@ en = "clause (up to any punctuation)"
 [[message]]
 # mi/ma 菜單：c，代碼裏的註釋
 key = "hint.obj.comment"
-zht = "註釋（代碼）"
-zhs = "注释（代码）"
+zht = "註釋(代碼)"
+zhs = "注释(代码)"
 en = "comment (code)"
 
 [[message]]
 # mi/ma 菜單：x，HTML 元素
 key = "hint.obj.element"
-zht = "HTML 元素（代碼）"
-zhs = "HTML 元素（代码）"
+zht = "HTML 元素(代碼)"
+zhs = "HTML 元素(代码)"
 en = "HTML element (code)"
 
 [[message]]
 # mi/ma 菜單：e，鍵值對
 key = "hint.obj.entry"
-zht = "鍵值對（代碼）"
-zhs = "键值对（代码）"
+zht = "鍵值對(代碼)"
+zhs = "键值对(代码)"
 en = "key and value (code)"
 
 [[message]]
 # mi/ma 菜單：函數
 key = "hint.obj.function"
-zht = "函數（代碼）"
-zhs = "函数（代码）"
+zht = "函數(代碼)"
+zhs = "函数(代码)"
 en = "function (code)"
 
 [[message]]
@@ -5728,8 +5729,8 @@ en = "paragraph"
 [[message]]
 # mi/ma 菜單：參數
 key = "hint.obj.parameter"
-zht = "參數（代碼）"
-zhs = "参数（代码）"
+zht = "參數(代碼)"
+zhs = "参数(代码)"
 en = "parameter (code)"
 
 [[message]]
@@ -5749,15 +5750,15 @@ en = "sentence"
 [[message]]
 # mi/ma 菜單：T，測試函數
 key = "hint.obj.test"
-zht = "測試函數（代碼）"
-zhs = "测试函数（代码）"
+zht = "測試函數(代碼)"
+zhs = "测试函数(代码)"
 en = "test function (code)"
 
 [[message]]
 # mi/ma 菜單：類型定義
 key = "hint.obj.type"
-zht = "類型定義（代碼）"
-zhs = "类型定义（代码）"
+zht = "類型定義(代碼)"
+zhs = "类型定义(代码)"
 en = "type definition (code)"
 
 [[message]]
@@ -5768,35 +5769,35 @@ zhs = "词"
 en = "word"
 
 [[message]]
-# ␣o 開上次的那一組（2026-10-18）
+# ␣o 開上次的那一組
 key = "hint.open.recent-files"
 zht = "最近開過的檔"
 zhs = "最近开过的档"
 en = "recent files"
 
 [[message]]
-# ␣o 開上次的那一組（2026-10-18）
+# ␣o 開上次的那一組
 key = "hint.open.recent-files-global"
-zht = "最近開過的檔（全部項目）"
-zhs = "最近开过的档（全部项目）"
+zht = "最近開過的檔(全部項目)"
+zhs = "最近开过的档(全部项目)"
 en = "recent files, everywhere"
 
 [[message]]
-# ␣o 開上次的那一組（2026-10-18）
+# ␣o 開上次的那一組
 key = "hint.open.recent-projects"
 zht = "最近開過的項目"
 zhs = "最近开过的项目"
 en = "recent projects"
 
 [[message]]
-# ␣o 開上次的那一組（2026-10-18）
+# ␣o 開上次的那一組
 key = "hint.open.resume"
 zht = "接着上次"
 zhs = "接着上次"
 en = "take up the last session"
 
 [[message]]
-# ␣o 開上次的那一組（2026-10-18）
+# ␣o 開上次的那一組
 key = "hint.open.title"
 zht = "開上次的"
 zhs = "开上次的"
@@ -5817,7 +5818,7 @@ zhs = "尖括号"
 en = "angle brackets"
 
 [[message]]
-# m 組菜單最後一行：別的符號也當成一對（helix 的 "... or any character"）
+# m 組菜單最後一行：別的符號也當成一對(helix 的 "... or any character")
 key = "hint.pair.any"
 zht = "……或任何符號"
 zhs = "……或任何符号"
@@ -5969,7 +5970,7 @@ zhs = "(该选区之序号)"
 en = "(this selection's number)"
 
 [[message]]
-# " 之後那張小表的標題(2026-09-29 定的名字)
+# " 之後那張小表的標題
 key = "hint.register.title"
 zht = "寄存器·剪貼板"
 zhs = "寄存器·剪贴板"
@@ -6208,7 +6209,7 @@ zhs = "显示汉字信息(边栏)"
 en = "show info of character (sidebar)"
 
 [[message]]
-# space e：瀏覽文件，一次一個目錄（挑選器式，不是邊欄那棵樹）
+# space e：瀏覽文件，一次一個目錄(挑選器式，不是邊欄那棵樹)
 key = "hint.space.explorer"
 zht = "瀏覽文件(項目路徑)"
 zhs = "浏览文件(项目路径)"
@@ -6238,7 +6239,7 @@ zhs = "文件挑选器(工作路径)"
 en = "open file picker (working dir)"
 
 [[message]]
-# ␣o 開上次的那一組（2026-10-18）
+# ␣o 開上次的那一組
 key = "hint.space.open-recent"
 zht = "開上次的"
 zhs = "开上次的"
@@ -6346,7 +6347,7 @@ zhs = "显示定义文档(边栏)"
 en = "show docs of definition (sidebar)"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.space.yume"
 zht = "輸入法"
 zhs = "输入法"
@@ -6465,7 +6466,7 @@ zhs = "格内"
 en = "in a cell"
 
 [[message]]
-# 表格提示：Enter 下到格內(2026-10-21 作者定，原話「進單元格/出單元格」)
+# 表格提示：Enter 下到格內
 key = "hint.table.into-the-cell"
 zht = "進單元格"
 zhs = "进单元格"
@@ -6570,7 +6571,7 @@ zhs = "按列搜索(可指定列范围)"
 en = "search down the columns (a column range can be given)"
 
 [[message]]
-# 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域(2026-09-30 寫的)
+# 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域
 key = "hint.table.search-columns-elsewhere"
 zht = "按列搜索(副窗顯示)"
 zhs = "按列搜索(副窗显示)"
@@ -6647,168 +6648,168 @@ zhs = "{0}{1} 还没説完"
 en = "{0}{1} is not finished"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.after-z"
 zht = "␣z 後面：{0}"
 zhs = "␣z 后面：{0}"
 en = "after 空格 z: {0}"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.chaifen"
 zht = "候選旁的拆分注解"
 zhs = "候选旁的拆分注解"
 en = "the 拆分 beside a candidate"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.commit"
 zht = "上屏方式"
 zhs = "上屏方式"
 en = "when a word commits"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.commit-default"
 zht = "預設——方案自己說了算"
 zhs = "预设——方案自己说了算"
 en = "default — the scheme decides"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.commit-delayed"
 zht = "頂字"
 zhs = "顶字"
 en = "delayed"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.commit-fluency"
 zht = "整句"
 zhs = "整句"
 en = "fluency"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.commit-unique"
 zht = "唯一"
 zhs = "唯一"
 en = "unique"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.menu-size"
 zht = "一頁幾條"
 zhs = "一页几条"
 en = "candidates on a page"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.next-scheme"
 zht = "下一個方案"
 zhs = "下一个方案"
 en = "the next scheme"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.panel"
 zht = "候選欄畫在哪"
 zhs = "候选栏画在哪"
 en = "where the candidates are drawn"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.panel-bottom"
 zht = "bottom——窗口最下面那一行"
 zhs = "bottom——窗口最下面那一行"
 en = "bottom — the foot of the window"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.panel-box"
 zht = "box——光標旁的框"
 zhs = "box——光标旁的框"
 en = "box — beside the caret"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.panel-inline"
 zht = "inline——光標的下一行"
 zhs = "inline——光标的下一行"
 en = "inline — the line under the caret"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.predict"
 zht = "輸入預測 開/關"
 zhs = "输入预测 开/关"
 en = "prediction on or off"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.preedit"
 zht = "正在打的那一段寫在哪"
 zhs = "正在打的那一段写在哪"
 en = "where what you are typing is written"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.preedit-composition"
 zht = "composition——正文裏寫編碼"
 zhs = "composition——正文里写编码"
 en = "composition — the code, in the text"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.preedit-off"
 zht = "off——寫在候選欄裏"
 zhs = "off——写在候选栏里"
 en = "off — in the candidate bar"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.preedit-preview"
 zht = "preview——正文裏寫首選"
 zhs = "preview——正文里写首选"
 en = "preview — the first candidate, in the text"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.scheme"
 zht = "選方案"
 zhs = "选方案"
 en = "pick a scheme"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.table"
 zht = "換碼表源"
 zhs = "换码表源"
 en = "where the 碼表 comes from"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.title"
 zht = "輸入法"
 zhs = "输入法"
 en = "the IME"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.toggle"
 zht = "中 / ABC / 關"
 zhs = "中 / ABC / 关"
 en = "中 / ABC / off"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.where"
 zht = "查看數據位置"
 zhs = "查看数据位置"
 en = "where the data is"
 
 [[message]]
-# ␣z 輸入法那一組（2026-10-17）
+# ␣z 輸入法那一組
 key = "hint.yume.which"
 zht = "查看碼表源"
 zhs = "查看码表源"
@@ -7186,8 +7187,8 @@ en = "`d` and `c` do not fill the register: {0}"
 [[message]]
 # 同上，但配置檔的 [keys.normal] 已經綁了它管的鍵——那一層在前面，說了算的是它
 key = "keys.flavor.no-yank-taken"
-zht = "`d` `c` 不進寄存器: {0}（`[keys.normal]` 綁了 {1}，此刻說了算的是它）"
-zhs = "`d` `c` 不进寄存器: {0}（`[keys.normal]` 绑了 {1}，此刻说了算的是它）"
+zht = "`d` `c` 不進寄存器: {0}(`[keys.normal]` 綁了 {1}，此刻說了算的是它)"
+zhs = "`d` `c` 不进寄存器: {0}(`[keys.normal]` 绑了 {1}，此刻说了算的是它)"
 en = "`d` and `c` do not fill the register: {0} (`[keys.normal]` binds {1}, which wins)"
 
 [[message]]
@@ -7205,7 +7206,7 @@ zhs = "开启"
 en = "on"
 
 [[message]]
-# 按出來的那一串在這一層裏没有綁任何東西(2026-10-06 定的説法，所有的層共用)
+# 按出來的那一串在這一層裏没有綁任何東西
 key = "keys.no-such-combination"
 zht = "{0} 爲無效按鍵組合，請重試"
 zhs = "{0} 为无效按键组合，请重试"
@@ -7275,7 +7276,7 @@ zhs = "字典"
 en = "Dictionary"
 
 [[message]]
-# 邊欄面板的名字：文檔(2026-09-29 定的名字)
+# 邊欄面板的名字：文檔
 key = "label.panel.docs"
 zht = "文檔"
 zhs = "文档"
@@ -7303,14 +7304,14 @@ zhs = "大纲"
 en = "Outline"
 
 [[message]]
-# 邊欄面板的名字：診斷(2026-09-29 定的名字)
+# 邊欄面板的名字：診斷
 key = "label.panel.problems"
 zht = "診斷"
 zhs = "诊断"
 en = "Diagnostics"
 
 [[message]]
-# 標籤：數據(2026-09-30 從「表格」改名，原話：「『数据』比『表格』更能反映这一行的内容」)
+# 標籤：數據
 key = "label.panel.record"
 zht = "記錄"
 zhs = "记录"
@@ -7808,7 +7809,7 @@ zhs = "查询文档中……"
 en = "asking for the docs…"
 
 [[message]]
-# 按 空格 k 的時候：稿子還没存盤，服務器答的是檔案(2026-09-29 寫的)
+# 按 空格 k 的時候：稿子還没存盤，服務器答的是檔案
 key = "lsp.buffer-unsaved"
 zht = "本緩衝區未保存，故而未綁定語言服務器"
 zhs = "本缓冲区未保存，故而未绑定语言服务器"
@@ -7822,7 +7823,7 @@ zhs = "{0} 起不来({1})——档照常开，只是没人查错"
 en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
 
 [[message]]
-# 起服務器用的是項目自己帶的那一個，不是 PATH 上的(2026-09-29 寫的)
+# 起服務器用的是項目自己帶的那一個，不是 PATH 上的
 key = "lsp.from-the-project"
 zht = "語言服務器：本項目路徑中的 {0}"
 zhs = "语言服务器：本项目路径中的 {0}"
@@ -7836,14 +7837,14 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
-# 語言服務器起來了、進程活着，卻一直不回 initialize(2026-10-11 定的 10 秒)
+# 語言服務器起來了、進程活着，卻一直不回 initialize
 key = "lsp.no-answer"
 zht = "{0} 的語言服務器已開啟但{1}秒未響應"
 zhs = "{0} 的语言服务器已开启但{1}秒未响应"
 en = "the {0} language server started but has not answered in {1} seconds"
 
 [[message]]
-# 按 空格 k 的時候：這個語言在設置裏根本没寫服務器(2026-09-29 寫的)
+# 按 空格 k 的時候：這個語言在設置裏根本没寫服務器
 key = "lsp.no-server-configured"
 zht = "未爲{0}文件指定語言服務器，請在設置中填寫"
 zhs = "未为{0}文件指定语言服务器，请在设置中填写"
@@ -7857,7 +7858,7 @@ zhs = "非程序文件，无服务器可问"
 en = "not a program file — no server to ask"
 
 [[message]]
-# 按 空格 k 的時候：設置裏寫了，可這臺機器上没有那個程序(2026-09-29 寫的)
+# 按 空格 k 的時候：設置裏寫了，可這臺機器上没有那個程序
 key = "lsp.not-installed"
 zht = "找不到 {0}，請在設置中檢查拼寫或確保其已經安裝"
 zhs = "找不到 {0}，请在设置中检查拼写或确保其已经安装"
@@ -7908,14 +7909,14 @@ zhs = "此处未找到相关文档"
 en = "no documentation here"
 
 [[message]]
-# 按 空格 k 的時候：試過了，起不來，此後不再試(2026-09-29 寫的)
+# 按 空格 k 的時候：試過了，起不來，此後不再試
 key = "lsp.start-failed"
 zht = "語言服務器開啓失敗"
 zhs = "语言服务器开启失败"
 en = "the language server could not be started"
 
 [[message]]
-# 按 空格 k 的時候：服務器正在起(2026-09-29 寫的)
+# 按 空格 k 的時候：服務器正在起
 key = "lsp.starting"
 zht = "語言服務器開啓中……"
 zhs = "语言服务器开启中……"
@@ -8205,21 +8206,21 @@ en = "registers"
 # ── preview ───────────────────────────────────────────────────────────
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "picker.recent-everywhere"
-zht = "最近開過的檔（全部項目）"
-zhs = "最近开过的档（全部项目）"
+zht = "最近開過的檔(全部項目)"
+zhs = "最近开过的档(全部项目)"
 en = "recent files, everywhere"
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "picker.recent-here"
 zht = "最近開過的檔"
 zhs = "最近开过的档"
 en = "recent files"
 
 [[message]]
-# 最近開過的檔／項目（2026-10-18）
+# 最近開過的檔／項目
 key = "picker.recent-projects"
 zht = "最近開過的項目"
 zhs = "最近开过的项目"
@@ -8240,7 +8241,7 @@ zhs = "窗口太窄，开不了挑选器"
 en = "the window is too narrow for the picker"
 
 [[message]]
-# 挑選器開不了：窗口矮過六行（2026-10-19 作者定的文案）。從前它照舊開着、照舊
+# 挑選器開不了：窗口矮過六行。從前它照舊開着、照舊
 # 吃掉每一個鍵，而一格都不畫——打完查詢按 Enter 真會開一個檔。
 key = "picker.window-too-short"
 zht = "窗口太矮，開不了挑選器"
@@ -8262,7 +8263,7 @@ zhs = "预览：{0}"
 en = "preview: {0}"
 
 [[message]]
-# 裸的 :view-preview，而没有預覽在跑（2026-10-19 作者定的文案）。帶地址的那幾則
+# 裸的 :view-preview，而没有預覽在跑。帶地址的那幾則
 # 答不了這一句——它們都要一個地址。
 key = "preview.not-running"
 zht = "預覽：沒開著"
@@ -8498,21 +8499,21 @@ zhs = "去不了 {0}：{1}"
 en = "cannot go to {0}: {1}"
 
 [[message]]
-# 最近開過的檔／項目（2026-10-18）
+# 最近開過的檔／項目
 key = "recent.no-session-there"
 zht = "那裏還没有會話"
 zhs = "那里还没有会话"
 en = "no session there yet"
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "recent.nothing-to-resume"
 zht = "這個目錄没有上次"
 zhs = "这个目录没有上次"
 en = "no last session here"
 
 [[message]]
-# 最近開過的檔／項目，接着上次（2026-10-18）
+# 最近開過的檔／項目，接着上次
 key = "recent.nothing-yet"
 zht = "還没有記錄"
 zhs = "还没有记录"
@@ -8919,7 +8920,7 @@ zhs = "全部撤回"
 en = "stop and take it all back"
 
 [[message]]
-# 跨檔替換做到一半按了 Esc，問那一句(2026-10-11 定的措辭)
+# 跨檔替換做到一半按了 Esc，問那一句
 key = "search.abort-what"
 zht = "已替換 {0} 個文件，確定終止嗎？"
 zhs = "已替换 {0} 个文件，确定终止吗？"
@@ -9031,7 +9032,7 @@ zhs = "不搜"
 en = "skip"
 
 [[message]]
-# 不搜那一行方框裏列的：不搜哪些。四態，按 7 轉一格(2026-10-03 定)
+# 不搜那一行方框裏列的：不搜哪些。四態，按 7 轉一格
 key = "search.hidden.what"
 zht = "隱藏+忽略"
 zhs = "隐藏+忽略"
@@ -9087,7 +9088,7 @@ zhs = "第 {0}/{1} 处(n N 下/上一处)"
 en = "hit {0} of {1} — n next, N previous"
 
 [[message]]
-# 搜索：找到幾處。⚠ **和 `search.hits-more` 一格一格對齊**(2026-10-08 定)：那一則
+# 搜索：找到幾處。⚠ **和 `search.hits-more` 一格一格對齊**：那一則
 # 是「{0}+結果」，所以這一則的中間是**一個空格**，搜完的那一刻只有 `+` 變成空格，
 # 數字和「結果」兩個字一格都不動。
 key = "search.hits"
@@ -9444,7 +9445,7 @@ en = "type a reading{0}"
 [[message]]
 # 候選面板每一行末尾那個數：「那個字在這一屏上有幾處」。
 # 不能只寫數字——行首的序號也是數字，兩個數並排讀者分不出哪個是哪個
-# (2026-10-04 指出)。
+# 。
 key = "seek.places"
 zht = "共{0}處"
 zhs = "共{0}处"
@@ -9496,7 +9497,7 @@ zhs = "只留主选区，去掉 {0} 处"
 en = "kept the primary, dropped {0}"
 
 [[message]]
-# 兩處選區靠到一起被併成一處——helix 是靜默的，這裏説一句(2026-09-28 定)
+# 兩處選區靠到一起被併成一處——helix 是靜默的，這裏説一句
 key = "selection.merged"
 zht = "{0} 處併到一起了，還剩 {1} 處"
 zhs = "{0} 处并到一起了，还剩 {1} 处"
@@ -9765,7 +9766,7 @@ zhs = "每段开头空几格。中文的惯例是 2"
 en = "cells at the head of a paragraph; the Chinese convention is 2"
 
 [[message]]
-# 設置面板：存檔時文末缺的那個換行符添不添（2026-10-13）
+# 設置面板：存檔時文末缺的那個換行符添不添
 key = "set.editor.insert-final-newline"
 zht = "文末添加換行符"
 zhs = "文末添加换行符"
@@ -9905,7 +9906,7 @@ zhs = "自动重新加载文档以反映外部更改"
 en = "reload the file when something outside changes it"
 
 [[message]]
-# 設置頁：記不記得去過哪裏（[editor] remember）
+# 設置頁：記不記得去過哪裏([editor] remember)
 key = "set.editor.remember"
 zht = "記住打開過的文件和位置"
 zhs = "记住打开过的文件和位置"
@@ -10366,7 +10367,7 @@ zhs = "本项目"
 en = "project"
 
 [[message]]
-# 設置面板底下那一塊：這一層沒有說話（2026-10-13）
+# 設置面板底下那一塊：這一層沒有說話
 key = "set.layer.unset"
 zht = "未設"
 zhs = "未设"
@@ -11272,7 +11273,7 @@ zhs = "清空了一格"
 en = "cleared a cell"
 
 [[message]]
-# 格內 `l`／`→` 撞到這一格的遠端那面牆（設計 §04「到邊了說一句」）
+# 格內 `l`／`→` 撞到這一格的遠端那面牆(設計 §04「到邊了說一句」)
 key = "table.cell-ends-here"
 zht = "這一格到頭了，`Tab` 去下一格"
 zhs = "这一格到头了，`Tab` 去下一格"
@@ -11321,7 +11322,7 @@ zhs = "放不下 {0} 格：从这里到行尾只剩 {1} 格"
 en = "{0} cells will not fit — {1} left from here to the end of the row"
 
 [[message]]
-# 表格：貼進來的那一段蓋掉了從這一格起的幾格(2026-10-21)
+# 表格：貼進來的那一段蓋掉了從這一格起的幾格
 key = "table.cells-replaced"
 zht = "換掉了 {0} 格"
 zhs = "换掉了 {0} 格"
@@ -11426,7 +11427,7 @@ zhs = "第 {0} 栏宽 {1} 格，没有窗口装得下——对齐它只会写出
 en = "column {0} is {1} squares wide — no window holds it, and lining it up would write nothing but spaces. The table is untouched"
 
 [[message]]
-# 整欄貼進 | 表格，有一個值帶換行（從分隔符檔案抄來的兩行格子）；整欄拒收
+# 整欄貼進 | 表格，有一個值帶換行(從分隔符檔案抄來的兩行格子)；整欄拒收
 key = "table.column-value-has-a-line-break"
 zht = "本表格不允許單元格内換行，第 {0} 個值存在換行"
 zhs = "本表格不允许单元格内换行，第 {0} 个值存在换行"
@@ -11692,7 +11693,7 @@ zhs = "不是表格——先 :table-render full"
 en = "not a table — :table-render full first"
 
 [[message]]
-# 在表格裏往格子外面打字（牆上、補空裏）
+# 在表格裏往格子外面打字(牆上、補空裏)
 key = "table.not-inside-a-cell"
 zht = "這裏不在格子裏——按 Tab 進格子"
 zhs = "这里不在格子里——按 Tab 进格子"
@@ -12027,7 +12028,7 @@ zhs = "取了一格({0} 个字)"
 en = "yanked a cell ({0} character(s))"
 
 [[message]]
-# 表格：一段格子進了寄存器(2026-10-21，v 橫着長出來的那一段)
+# 表格：一段格子進了寄存器
 key = "table.yanked-cells"
 zht = "取了 {0} 格"
 zhs = "取了 {0} 格"
@@ -12165,14 +12166,14 @@ zhs = "光标未在表格中"
 en = "the cursor is not in a table"
 
 [[message]]
-# 數據那一格關掉(2026-09-30 隨標題一起改名)
+# 數據那一格關掉
 key = "ui.detail-panel-off"
 zht = "記錄：關"
 zhs = "记录：关"
 en = "record: off"
 
 [[message]]
-# 數據那一格打開(2026-09-30 隨標題一起改名)
+# 數據那一格打開
 key = "ui.detail-panel-on"
 zht = "記錄：開"
 zhs = "记录：开"
@@ -12598,7 +12599,7 @@ zhs = "词条面板：关"
 en = "the entry panel is closed"
 
 [[message]]
-# :wiki-panel 報告（2026-10-19 作者定的文案）：從前這個命令開關都不出聲
+# :wiki-panel 報告：從前這個命令開關都不出聲
 key = "wiki.panel-on"
 zht = "詞條面板：開"
 zhs = "词条面板：开"
