@@ -2397,9 +2397,19 @@ impl Editor {
                 }
             }
             motion::Motion::WordForward(grain) => {
-                motion::word_forward(rope, self.sel.head(), grain, seg)
+                let span = motion::word_forward(rope, self.sel.head(), grain, seg);
+                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    true => span,
+                    false => motion::past_the_breaks(rope, self.sel.head(), span, grain, seg),
+                }
             }
-            motion::Motion::WordEnd(grain) => motion::word_end(rope, self.sel.head(), grain, seg),
+            motion::Motion::WordEnd(grain) => {
+                let span = motion::word_end(rope, self.sel.head(), grain, seg);
+                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    true => span,
+                    false => motion::past_the_breaks(rope, self.sel.head(), span, grain, seg),
+                }
+            }
             motion::Motion::WordBack(grain) => motion::word_back(rope, self.sel.head(), grain, seg),
             motion::Motion::Find { forward, target, till } => {
                 let across = self.key_preset != yumete_cjk::KeyPreset::Vim;

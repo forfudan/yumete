@@ -725,6 +725,61 @@ pub fn word_forward(rope: &Rope, from: usize, grain: Grain, seg: &dyn Segmenter)
     }
 }
 
+/// **Helix's `w` and `e` do not stop on a line break** (2026-10-27, measured
+/// against helix 25.07.1). [`word_forward`] lands on the break when the next
+/// word begins its own line (`xa` then `yb`: from `a`, `w` selected the break
+/// here and `yb` there); this carries such a span on over the break and any
+/// blank lines, to what the next `w` from there would take. Past the last
+/// line it goes to the end of the file, as helix's does when the file ends
+/// in a break, and nowhere when it does not.
+///
+/// Only the helix keymap asks: vim's `w` is a caret motion with rules of its
+/// own, swept against nvim.
+pub fn past_the_breaks(rope: &Rope, from: usize, span: Span, grain: Grain, seg: &dyn Segmenter) -> Span {
+    let len = rope.len_chars();
+    let is_break = |p: usize| p < len && matches!(rope.char(p), '\n' | '\r');
+    let ends_in_a_break = len > 0 && rope.char(len - 1) == '\n';
+    // The end of a file with no break after its last line: helix's `w` has
+    // nowhere to go there and leaves the selection as it is.
+    if let Span::Over { head, .. } = span {
+        if head >= len && !ends_in_a_break {
+            return Span::Missed;
+        }
+    }
+    // No step forward (`e` on a file's last word): only breaks are left, and
+    // helix still goes past them.
+    let stuck = match span {
+        Span::Over { head, .. } => head <= from,
+        Span::Missed => true,
+    };
+    let (anchor, head) = match (span, stuck) {
+        (Span::Over { anchor, head }, false) => (anchor, head),
+        _ => (from + 1, from + 1),
+    };
+    let on_breaks = match stuck {
+        true => from + 1 < len && (from + 1..len).all(is_break),
+        false => (anchor.min(head)..=anchor.max(head)).all(is_break),
+    };
+    if !on_breaks {
+        return span;
+    }
+    let mut p = anchor.max(head);
+    while is_break(p) {
+        p += 1;
+    }
+    if p < len {
+        let next = word_forward(rope, p, grain, seg);
+        return match next {
+            Span::Over { head, .. } if head >= p => Span::Over { anchor: p, head: head.max(p) },
+            _ => Span::Over { anchor: p, head: p },
+        };
+    }
+    match ends_in_a_break && from < len {
+        true => Span::Over { anchor: len, head: len },
+        false => span,
+    }
+}
+
 /// **The forward rule itself**, over whatever unit `next` counts (B1).
 ///
 /// Warning: **It was written three times** — for words, for paragraphs (`}`) and for

@@ -96,6 +96,18 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Single-cursor keys follow helix.** `I` writes after the indent (under the vim
+  keymap too, as vim's does); `t` and `T` right before their character go on to the
+  next one; `J` leaves the cursor on its text; `w` and `e` at a line's end go on to
+  the next line's first word instead of stopping on the line break; in insert mode
+  `C-u` keeps the indent and joins the line above at a line's start, and `C-k` joins
+  the next line at a line's end.
+
+- **Under `v`, `n`, `N` and `/` add the match as another selection**, as in helix, so
+  `e` `*` `v` `n` `n` `c` changes three of the same word. They used to grow one
+  selection over everything between. While `v` is on, the primary cursor keeps its
+  block under the terminal's underline, as the other cursors have theirs.
+
 - **Making selections follows helix's rules.** `C` on a selection of several lines
   copies it that many lines down instead of one; `A-s` puts a cursor on an empty line
   and `S` keeps an empty piece between two separators, so `%` `A-s` `A` reaches every

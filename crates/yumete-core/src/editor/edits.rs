@@ -742,7 +742,18 @@ impl Editor {
         // Warning: **不是 `line_last`**：那一支回的是最後一個字自己的下標，用它當上界會把行
         // 末那一個字留下。要的是這一行的**內容**有多長（不含換行）。
         let line = rope.char_to_line(at);
-        let to = rope.line_to_char(line) + crate::zong::line_chars(rope, line).len();
+        let mut to = rope.line_to_char(line) + crate::zong::line_chars(rope, line).len();
+        // **At the line's end it takes the break** (2026-10-27, helix's
+        // `kill_to_line_end`: 「if the cursor is on the newline char delete
+        // that」). Not in a cell, whose walls a join would break, and not
+        // under vim, whose `C-k` is a digraph.
+        if to <= at
+            && self.key_preset != yumete_cjk::KeyPreset::Vim
+            && self.insert_bounds().is_none()
+            && line < motion::last_line(rope)
+        {
+            to = motion::past_the_break(rope, at);
+        }
         if to <= at {
             return;
         }
@@ -775,6 +786,25 @@ impl Editor {
     pub(super) fn delete_to_line_start(&mut self) {
         let at = self.sel.head();
         let from = motion::line_start(self.current_buffer().rope(), at).max(self.insert_floor());
+        // **Helix's `kill_to_line_start`** (2026-10-27, measured): back to the
+        // first non-blank when the cursor is past it, so the indent stays; at
+        // the very start of a line, back over the break into the line above.
+        // Not in a cell (its wall is the floor), and not under vim.
+        let from = match self.key_preset != yumete_cjk::KeyPreset::Vim && self.insert_bounds().is_none() {
+            true => {
+                let rope = self.current_buffer().rope();
+                let line = rope.char_to_line(at);
+                let first = motion::line_first_non_blank(rope, at);
+                if at == from && line > 0 {
+                    motion::line_end(rope, rope.line_to_char(line - 1))
+                } else if first < at && first < motion::line_end(rope, at) && !rope.char(first).is_whitespace() {
+                    first
+                } else {
+                    from
+                }
+            }
+            false => from,
+        };
         if from >= at {
             return;
         }

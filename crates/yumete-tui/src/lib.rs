@@ -5241,7 +5241,24 @@ fn draw(
                 (cursor_x, cursor_y),
                 areas.panes[editor.live_pane().min(1)],
             ),
-            false => frame.set_cursor_position(Position::new(cursor_x, cursor_y)),
+            false => {
+                // **While `v` is on, a bare primary cursor keeps its block**
+                // (2026-10-27, reported: after `v` `jjjj` `s2` the first `2`
+                // had only the underline and the four others a block). Helix
+                // paints the primary's cell in select mode too, darker than
+                // the others, and puts the terminal's underline over it; a
+                // grown selection is painted by its own ground already.
+                if editor.is_extending() && editor.mode() == Mode::Normal && !editor.has_selection() {
+                    paint_the_caret_block(
+                        frame,
+                        editor,
+                        config,
+                        (cursor_x, cursor_y),
+                        areas.panes[editor.live_pane().min(1)],
+                    );
+                }
+                frame.set_cursor_position(Position::new(cursor_x, cursor_y))
+            }
         }
     }
 
@@ -15072,6 +15089,28 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("ab\nabcd\nabc\n");
         press(&mut editor, &[Key::Char('l'), Key::Char('l'), Key::Char('C')]);
         assert!(lit_after(&editor, "ab", 2), "normal mode, on the break");
+    }
+
+    /// **While `v` is on, the primary cursor keeps its block** (2026-10-27,
+    /// reported: after `v` `jjjj` `s2` the first `2` had only the terminal's
+    /// underline while the four others had a block; helix paints it too).
+    #[test]
+    fn the_primary_keeps_its_block_in_select_mode() {
+        let config = Config::default();
+        let ink = ink(&config);
+        let mut editor = editor_with("a2\nb2\nc2\n");
+        for key in [Key::Char('v'), Key::Char('j'), Key::Char('j'), Key::Char('l'), Key::Char('s'), Key::Char('2'), Key::Enter] {
+            editor.on_key(key);
+        }
+        assert!(editor.is_extending());
+        let mut seats = Seats::default();
+        let mut terminal = Terminal::new(TestBackend::new(30, 6)).unwrap();
+        terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        let at = caret_of(&mut terminal, &config);
+        let buffer = terminal.backend().buffer().clone();
+        let cell = &buffer[(at.x, at.y)];
+        assert_eq!(cell.symbol(), "2");
+        assert_eq!(cell.style().bg, ink.reversed(Style::default()).bg, "the primary's block");
     }
 
     /// **全窗裏一行記錄選起來是一條，不是幾段**（2026-10-17）。
