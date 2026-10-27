@@ -85,6 +85,12 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **With several selections, every key acts at every cursor**, as in helix. `~`, `J`,
+  `R`, the glyph group, `Home`, `End`, `H`, `L`, `{`, `}`, `gg`, `ge`, `]f` `]p` and their
+  kin, and in insert mode the arrows, `Home`, `End`, `C-w`, `C-u`, `C-k` and `A-d`
+  used to reach the primary selection alone. Pasting two copied pieces at one cursor
+  now pastes the first, not both joined.
+
 - **Every cursor is drawn, as helix draws them.** With several selections, the other
   cursors disappeared in insert mode, and a cursor on a line end was not drawn in any
   mode, so `C` from the end of a line or `A` on several lines showed one cursor.

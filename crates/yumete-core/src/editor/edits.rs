@@ -1268,25 +1268,28 @@ impl Editor {
             // Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
             // 說得通的，而貼一個空字符串看起來像鍵没按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
-            Some(name) => match (self.registers.get(&name), self.edit_nth) {
-                (Some(parts), Some(nth)) if parts.len() > 1 => {
-                    parts.get(nth).cloned().unwrap_or_default()
-                }
-                (Some(parts), _) => parts.concat(),
-                (None, _) => String::new(),
+            Some(name) => match self.registers.get(&name) {
+                Some(parts) if parts.len() > 1 => Self::part_for(parts, self.edit_nth),
+                Some(parts) => parts.concat(),
+                None => String::new(),
             },
             // **一段選區一份**（2026-10-09）：N 段剪下來、N 段貼回去，逐字節還原
             // ——`d` 再 `P` 是「把它放回去」的那一下，而它從前只放得回一段。
-            //
-            // 段數對不上的時候交整份（接起來的）：一個光標上 `P` 貼的是剪下來的全部，
-            // 真 helix 也是這樣。
-            None => match self.edit_nth {
-                Some(nth) if self.register_parts.len() > 1 => {
-                    self.register_parts.get(nth).cloned().unwrap_or_default()
-                }
-                _ => self.register.clone(),
+            None => match self.register_parts.len() > 1 {
+                true => Self::part_for(&self.register_parts, self.edit_nth),
+                false => self.register.clone(),
             },
         }
+    }
+
+    /// **Which of several copied pieces the `nth` selection gets** (2026-10-27,
+    /// measured against helix's `paste_impl`): its own, and the last one when
+    /// there are more selections than pieces. One cursor gets the first piece,
+    /// not all of them joined: copying two cursors' words and pasting at one
+    /// cursor used to paste both.
+    fn part_for(parts: &[String], nth: Option<usize>) -> String {
+        let nth = nth.unwrap_or(0);
+        parts.get(nth).or(parts.last()).cloned().unwrap_or_default()
     }
 
     /// **Do `op` to `span`** — the one door every verb goes through (B2,

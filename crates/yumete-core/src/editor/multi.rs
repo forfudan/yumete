@@ -797,6 +797,11 @@ fn moves_every_selection(key: crate::input::Key) -> bool {
             | Key::Char(';')
             | Key::Alt(';')
             | Key::Char('x' | 'X')
+            // Sentences, paragraphs, line ends (2026-10-27, measured: they
+            // moved the primary alone, where helix moves every selection).
+            | Key::Char('H' | 'L' | '{' | '}')
+            | Key::Home
+            | Key::End
     )
 }
 
@@ -814,11 +819,24 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
         super::Pending::MatchPair { .. } => true,
         super::Pending::Match => matches!(key, crate::input::Key::Char('m')),
         // Warning: **`g` 那一層只有幾個是移動。** `gf` 開檔、`gd` 看定義、`gw` 撒標籤，每一個
-        // 都是「整個編輯器做一次」。Warning: `gg`/`ge` 也不逐段做：它們是「到檔首/檔尾」，
-        // N 段一起去同一個地方，`normalize` 會把它們併成一段——那不是使用者要的。
-        // 逐段做的是**行內**的那三個：到行首、到行首第一個字、到行尾。
+        // 都是「整個編輯器做一次」。逐段做的是**行內**的那三個：到行首、到行首第一個
+        // 字、到行尾……
+        //
+        // **…and `gg`, `ge`, `gj`, `gk`** (2026-10-27; until then `gg`/`ge`
+        // moved the primary alone, on the reasoning that merging N selections
+        // into one 「is not what the user wants」). Helix moves every
+        // selection to the file's start or end and lets them merge into one
+        // (`goto_file_start_impl` transforms each). Merging is helix's answer,
+        // so it is ours.
         super::Pending::Goto => {
-            matches!(key, crate::input::Key::Char('h' | 's' | 'l'))
+            matches!(key, crate::input::Key::Char('h' | 's' | 'l' | 'g' | 'e' | 'j' | 'k'))
+        }
+        // `]f` `]t` `]c` `]p` `]g` and their `[`: helix transforms every
+        // selection (`goto_ts_object_impl`, `goto_next_paragraph`,
+        // `goto_next_change_impl`). `]d` is a jump to one place and `]m` to
+        // one conflict, so they stay single.
+        super::Pending::Hop { .. } => {
+            matches!(key, crate::input::Key::Char('f' | 't' | 'c' | 'p' | 'g'))
         }
         super::Pending::None => moves_every_selection(key),
         _ => false,
@@ -849,10 +867,15 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         super::Pending::SurroundOff | super::Pending::SurroundTo(_) => {
             matches!(key, crate::input::Key::Char(_))
         }
+        // The Glyph group (`` `u `` `` `s `` …): every selection converted.
+        super::Pending::Case => matches!(key, crate::input::Key::Char(_)),
         super::Pending::None => matches!(
             key,
             Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P') | Key::Char('>' | '<')
-        ) || matches!(
+        // `~`, `J`, `A-J` and `R` changed the primary alone (2026-10-27,
+        // measured against helix, which changes every selection).
+        ) || matches!(key, Key::Char('~' | 'J' | 'R') | Key::Alt('J'))
+            || matches!(
             key,
             Key::Char('i' | 'a' | 'I' | 'A' | 'o' | 'O' | 'c') | Key::Alt('c')
         // `C-a`/`C-x` 給每一段各加各的（#405 Phase 3）。
@@ -877,5 +900,16 @@ pub(super) fn types_at_every_selection(key: crate::input::Key) -> bool {
     matches!(
         key,
         Key::Char(_) | Key::Enter | Key::Backspace | Key::Delete | Key::Tab
+        // Moving and deleting by word or to the line's end, as helix's
+        // insert mode does at every cursor (2026-10-27, measured: they
+        // reached the primary alone).
+            | Key::Left
+            | Key::Right
+            | Key::Up
+            | Key::Down
+            | Key::Home
+            | Key::End
+            | Key::Ctrl('w' | 'u' | 'k' | 'h' | 'd')
+            | Key::Alt('d')
     )
 }
