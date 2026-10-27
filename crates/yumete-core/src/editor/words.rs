@@ -929,6 +929,16 @@ impl Editor {
         // replaces the selection with two characters. These five each want
         // one character, so a commit of more than one is read by its first:
         // `f` 找的是那個字, not the phrase it arrived in.
+        // **Inside a `C-v` block the character is the block's** (2026-10-27):
+        // `f` moves the block's corner, and the per-selection path below
+        // would move every line's piece instead and leave the block behind.
+        if self.block.is_some() && self.pending.takes_a_character() {
+            if let Some(c) = text.chars().next() {
+                self.on_block_key(Key::Char(c));
+            }
+            self.edit_keys.clear();
+            return;
+        }
         if self.pending.takes_a_character() {
             self.back_from_the_pair_shown();
             let waiting = self.pending;

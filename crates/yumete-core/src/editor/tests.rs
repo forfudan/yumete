@@ -30474,3 +30474,43 @@ fn space_y_at_the_cell_layer_copies_the_cell() {
     press(&mut ed, "vl y");
     assert_eq!(ed.take_clipboard_request().as_deref(), Some("平常"));
 }
+
+/// **vim's `C-v`, measured against vim 9.1** (2026-10-27): `I` skips a short
+/// line and `A` pads one, `$A` writes at line ends, the typed text is copied
+/// on `Esc`, `c` is one undo, `r` covers a wide character's two cells, a block
+/// taken is pasted as one, and `.` repeats from the cursor.
+#[test]
+fn vims_block_mode_writes_on_every_line_as_vim_does() {
+    let run = |text: &str, keys: &[Key]| -> String {
+        let mut ed = typed(text);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        press(&mut ed, "gg");
+        for &key in keys {
+            ed.on_key(key);
+        }
+        ed.current_buffer().text()
+    };
+    let k = |s: &str| -> Vec<Key> {
+        let mut out = Vec::new();
+        for c in s.chars() {
+            out.push(match c {
+                '^' => Key::Ctrl('v'),
+                '\u{1b}' => Key::Esc,
+                '\n' => Key::Enter,
+                c => Key::Char(c),
+            });
+        }
+        out
+    };
+    assert_eq!(run("abc\na\nabc\n", &k("l^jjIX\u{1b}")), "aXbc\naX\naXbc\n");
+    assert_eq!(run("abc\na\nabcde\n", &k("l^jjAX\u{1b}")), "abXc\na X\nabXcde\n");
+    assert_eq!(run("abc\na\nabcde\n", &k("^jj$AX\u{1b}")), "abcX\naX\nabcdeX\n");
+    assert_eq!(run("abc\nabc\nabc\n", &k("l^jjd")), "ac\nac\nac\n");
+    assert_eq!(run("abc\nabc\nabc\n", &k("l^jjcX\u{1b}u")), "abc\nabc\nabc\n");
+    assert_eq!(run("漢字ab\n漢字ab\n", &k("^jrX")), "XX字ab\nXX字ab\n");
+    assert_eq!(run("abc\nabc\n", &k("l^jlyP")), "abcbc\nabcbc\n");
+    assert_eq!(run("abc\nabc\nabc\n", &k("^jjIX\u{1b}j.")), "Xabc\nXXabc\nXXabc\n");
+    // A typed line break is not copied.
+    assert_eq!(run("abc\nabc\n", &k("^jIX\nY\u{1b}")), "X\nYabc\nabc\n");
+}
+

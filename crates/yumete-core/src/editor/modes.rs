@@ -58,7 +58,9 @@ impl Editor {
         // `return` 一個詞，而網格那一層的前綴是在底下加的——於是在表格裏按 `v`
         // 報的是 `SEL` 而不是 `CEL.SEL`，鍵在哪一層那一問當場斷掉。先算出詞，
         // 最後一步統一加前綴，這樣再添一個詞也不會漏。
-        let word = match (self.extend && self.mode == Mode::Normal, self.overwriting) {
+        // A block reads `SEL` too: it is a selection being grown.
+        let growing = (self.extend || self.block.is_some()) && self.mode == Mode::Normal;
+        let word = match (growing, self.overwriting) {
             (true, _) => Some("SEL".to_string()),
             (false, true) if self.mode == Mode::Insert => Some("REP".to_string()),
             _ => self.mode.label().map(str::to_string),
