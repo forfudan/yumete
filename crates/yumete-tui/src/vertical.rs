@@ -727,7 +727,7 @@ impl Look {
             zong: editor.zong_measure(),
             gap: editor.zong_gap(),
             margin: editor.margin(),
-            bands: editor.bands(),
+            bands: editor.pages_vertical(),
             diff: editor.diff_gutter(),
             metered: editor.meter_drawn(),
         }

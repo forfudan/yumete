@@ -474,10 +474,17 @@ impl Editor {
                 self.status = self.flavor_report();
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetBands(n) => {
+            Command::SetPagesVertical(n) => {
                 match n {
-                    Some(n) => self.set_bands(n),
-                    None => self.status = self.bands_report(),
+                    Some(n) => self.set_pages_vertical(n),
+                    None => self.status = self.pages_vertical_report(),
+                }
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetPagesHorizontal(n) => {
+                match n {
+                    Some(n) => self.set_pages_horizontal(n),
+                    None => self.status = self.pages_horizontal_report(),
                 }
                 Ok(CommandOutcome::Continue)
             }

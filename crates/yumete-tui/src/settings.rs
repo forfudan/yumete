@@ -290,8 +290,11 @@ pub fn apply(
     if config.editor.indent > 0 {
         editor.set_indent(config.editor.indent);
     }
-    if config.editor.bands > 1 {
-        editor.set_bands(config.editor.bands);
+    if config.editor.pages_vertical > 1 {
+        editor.set_pages_vertical(config.editor.pages_vertical);
+    }
+    if config.editor.pages_horizontal > 1 {
+        editor.set_pages_horizontal(config.editor.pages_horizontal);
     }
     if config.editor.zong_length > 0 {
         editor.set_zong_length(config.editor.zong_length);

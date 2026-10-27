@@ -833,7 +833,7 @@ mod tests {
 
         let count = yumete_config::settings_ui::SETTINGS
             .iter()
-            .find(|s| s.key == "bands")
+            .find(|s| s.key == "pages_vertical")
             .unwrap();
         assert_eq!(drawn(count, "3"), "3", "數字不戴括號");
 
@@ -878,11 +878,13 @@ mod tests {
     /// 八個組名、十二項、兩道橫綫與一道竪綫，都在。
     #[test]
     fn the_page_has_both_columns_and_the_rules_between_them() {
-        let page = shot(&Panel::open(None, None), 110, 24);
+        // 26 rows: the layout group holds both page counts since 2026-10-28,
+        // and 24 rows cut its last row off.
+        let page = shot(&Panel::open(None, None), 110, 26);
         for group in ["版面", "標記", "界面", "配色", "輸入法", "編輯", "文件", "鍵盤"] {
             assert!(page.contains(group), "少了組 {group}：\n{page}");
         }
-        for row in ["排版方向", "每縱字數", "首行縮進", "標點旁置", "稿紙刻度"] {
+        for row in ["排版方向", "每縱字數", "竪排分頁", "橫排分頁", "首行縮進", "標點旁置", "稿紙刻度"] {
             assert!(page.contains(row), "少了 {row}：\n{page}");
         }
         assert!(page.contains('┬') && page.contains('┴') && page.contains('│'), "{page}");
@@ -993,7 +995,7 @@ mod tests {
         let global = dir.join("config.toml");
         std::fs::write(&global, "[editor]\nlayout = \"vertical\"\n").unwrap();
         let local = dir.join("local.toml");
-        std::fs::write(&local, "[editor]\nbands = 2\n").unwrap();
+        std::fs::write(&local, "[editor]\npages_vertical = 2\n").unwrap();
 
         let mut ed = Editor::new();
         let mut seat = Seat {
@@ -1018,7 +1020,7 @@ mod tests {
         // 值此刻和它不是同一回事。
         let mut page = Panel::open(Some(global.clone()), Some(local));
         page.across(true);
-        page.row = page.rows().iter().position(|s| s.key == "bands").unwrap();
+        page.row = page.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         page.press();
         assert!(page.dirty(), "撥過一下了");
         let mut seat = Seat { panel: Some(page), ..Default::default() };
@@ -1041,7 +1043,7 @@ mod tests {
         let mut ed = Editor::new();
         let mut page = Panel::open(None, None);
         page.across(true);
-        page.row = page.rows().iter().position(|s| s.key == "bands").unwrap();
+        page.row = page.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         page.begin_typing();
         let mut seat = Seat { panel: Some(page), ..Default::default() };
 
@@ -1129,7 +1131,7 @@ mod tests {
     fn while_typing_q_is_a_letter() {
         let mut p = Panel::open(None, None);
         p.across(true);
-        p.row = p.rows().iter().position(|s| s.key == "bands").unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.begin_typing();
         assert!(press(&mut p, Key::Char('q')), "還開着");
         assert_eq!(p.typing.as_deref(), Some("1q"));

@@ -3096,8 +3096,12 @@ pub struct Editor {
     /// A one-shot, cleared at the end of every key: 「this move was asked
     /// for」 is about the key that is being handled, not about the editor.
     crossed_tables: bool,
-    /// How many bands the vertical page is divided into (段組).
-    bands: usize,
+    /// How many pages the vertical page is cut into, one above the other (段組).
+    pages_vertical: usize,
+    /// How many pages the horizontal page is cut into, side by side.
+    pages_horizontal: usize,
+    /// How many of those the window has room for this frame (2026-10-28).
+    pages_on_screen: usize,
     /// What the last `Enter` search found, **and which document it found it
     /// in** (Feature #191).
     ///
@@ -4016,7 +4020,9 @@ impl Editor {
             indent_folds: true,
             cell_folds: None,
             crossed_tables: false,
-            bands: 1,
+            pages_vertical: 1,
+            pages_horizontal: 1,
+            pages_on_screen: 1,
             hits: None,
             jumps: Vec::new(),
             jump_at: 0,

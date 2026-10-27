@@ -196,7 +196,7 @@ impl Editor {
             ("h l", say!("help.vertical.previous-next-column")),
             ("j k", say!("help.vertical.down-up-column")),
             (":view-wrap 24", say!("help.vertical.column-length")),
-            (":view-bands 2", say!("help.vertical.bands")),
+            (":view-pages-vertical 2", say!("help.vertical.pages")),
             (":view-hanging on", say!("help.vertical.hung-punctuation")),
             (":view-margin always", say!("help.vertical.margin")),
             (":view-sentence", say!("help.vertical.sentence")),

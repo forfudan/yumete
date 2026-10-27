@@ -394,22 +394,41 @@ impl Editor {
         self.indent
     }
 
-    /// How many bands the vertical page is divided into (段組).
-    pub fn bands(&self) -> usize {
-        self.bands.max(1)
+    /// How many pages the vertical page is cut into, one above the other (段組).
+    pub fn pages_vertical(&self) -> usize {
+        self.pages_vertical.max(1)
     }
 
-    /// Divide the vertical page into `n` bands.
-    pub fn set_bands(&mut self, n: usize) {
-        self.bands = n.clamp(1, 4);
-        self.status = self.bands_report();
+    /// Cut the vertical page into `n` pages.
+    pub fn set_pages_vertical(&mut self, n: usize) {
+        self.pages_vertical = n.clamp(1, 4);
+        self.status = self.pages_vertical_report();
     }
 
-    /// How many bands the page is in — what a bare `:view-bands` answers.
-    pub(super) fn bands_report(&self) -> String {
-        match self.bands {
-            1 => say!("layout.bands-one"),
-            n => say!("layout.bands", n),
+    /// What a bare `:view-pages-vertical` answers.
+    pub(super) fn pages_vertical_report(&self) -> String {
+        match self.pages_vertical {
+            1 => say!("layout.pages-vertical-one"),
+            n => say!("layout.pages-vertical", n),
+        }
+    }
+
+    /// How many pages the horizontal page is cut into, side by side.
+    pub fn pages_horizontal(&self) -> usize {
+        self.pages_horizontal.max(1)
+    }
+
+    /// Cut the horizontal page into `n` pages.
+    pub fn set_pages_horizontal(&mut self, n: usize) {
+        self.pages_horizontal = n.clamp(1, 4);
+        self.status = self.pages_horizontal_report();
+    }
+
+    /// What a bare `:view-pages-horizontal` answers.
+    pub(super) fn pages_horizontal_report(&self) -> String {
+        match self.pages_horizontal {
+            1 => say!("layout.pages-horizontal-one"),
+            n => say!("layout.pages-horizontal", n),
         }
     }
 
