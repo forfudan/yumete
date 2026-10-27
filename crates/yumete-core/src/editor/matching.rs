@@ -117,6 +117,8 @@ impl Editor {
             'p' => motion::Object::Paragraph,
             // `mi s`/`ma s`：光標所在的那一句（2026-09-28）。
             's' => motion::Object::Sentence,
+            // `mi u`/`ma u`: 短句, up to any punctuation (2026-10-27).
+            'u' => motion::Object::Clause,
             // **`m` is the nearest pair, `k` the Markdown marks** (2026-10-27,
             // 「helix use `m` to mean the nearest matching pair only」). `mi m`
             // was the marks from 2026-09-28; they moved to `k`, mar(k)up.
@@ -135,18 +137,14 @@ impl Editor {
             // **`mi a` 參數、`mi c` 註釋**（2026-10-06，helix 的同兩個字母）。用的
             // 是我們自己寫的那份查詢（`code::Language::objects`），不是 helix 的
             // `textobjects.scm`——授權的事見那裏。
-            // **`mi c`：光標所在的那一格**（2026-10-17 作者定）。原話：「`mi c`
-            // = 这一格」——按字之後，「把這一格整個換掉」是表格裏最常用的動
-            // 作，而它本來一個鍵都沒有。
+            // **`mi l`/`ma l`: the table cell the caret is in** (2026-10-17 on
+            // `c`; moved to `l`, cel(l), on 2026-10-27 so that `c` is the
+            // comment only, as in helix). After typing, 「replace this whole
+            // cell」 is the commonest edit in a table, and it had no key.
             //
-            // Warning: **和註釋那一條不撞。** `'c' if writes_code()` 認的是
-            // `Syntax::Code`，而 `.md`／`.csv` 都不是，所以 `mi c` 在表格裏本
-            // 來就是空的。真要在一個 `.rs` 裏把一段制表符文字讀成表（`t t`），
-            // 格子贏——那是讀者剛剛親手開的那個模式。
-            //
-            // `ma c` 和 `mi c` 是同一段：一格沒有「連着外面那層」可言，同
-            // `mi f`／`mi t`。外面那層是牆，而牆不歸這一格。
-            'c' if self.cell_here().is_some() => return self.select_the_cell(),
+            // `ma l` and `mi l` are the same span: a cell has no 「outer
+            // layer」, as `mi f`/`mi t` have none. The walls are not the cell's.
+            'l' if self.cell_here().is_some() => return self.select_the_cell(),
             // **`mi g`/`ma g`: the change around the caret** (2026-10-27,
             // helix's `g`) — the whole lines the change bar marks.
             'g' => return self.select_the_change(),
@@ -192,6 +190,8 @@ impl Editor {
                 motion::Object::Markup => say!("edit.no-markup-here"),
                 // 一句永遠在，除非這一行是空的。
                 motion::Object::Sentence => say!("edit.no-word-here"),
+                // Only punctuation between the two marks.
+                motion::Object::Clause => say!("edit.no-word-here"),
             };
             self.object_missed = true;
             return;
@@ -213,11 +213,11 @@ impl Editor {
         }
     }
 
-    /// **選中光標所在的那個函數/類**（`mi f`/`mi c`，2026-10-06）。
+    /// **選中光標所在的那個函數/類**（`mi f`/`mi t`，2026-10-06）。
     ///
     /// 取**最裏面**那一個：巢狀的函數、`impl` 裏的方法，光標站在哪一層就取哪一層
     /// ——和 `mi(` 在同族括號之間挑的規矩一樣。
-    /// **`mi c`／`ma c`：光標所在的那一格**（2026-10-17 作者定）。
+    /// **`mi l`／`ma l`: the cell the caret is in** (2026-10-17; `l` since 2026-10-27).
     ///
     /// 空格子選得中它那一個位置——`row_cells` 把空格子報在一個偏移上，選區收
     /// 在那裏，接着按 `c` 就在那一格裏打字。
@@ -780,12 +780,9 @@ impl Editor {
                 // `as` 要的是「這一句連着它後面那一段空白」，而行末那個換行屬於
                 // 下一行，不是這一句的尾巴：`…here. |Third.\nxx` 上按 `das`，nvim
                 // 刪的是 ` Third.`（連**前面**那個空格），換行留着。
-                // ……可段**末**那一個換行是這一段的一部分，照取（同 `is`）。
-                let last_of_the_paragraph = to == chars.len();
-                if !last_of_the_paragraph {
-                    while end > from && chars[end - 1] == '\n' {
-                        end -= 1;
-                    }
+                // The paragraph's last line break is not taken either; see `is`.
+                while end > from && chars[end - 1] == '\n' {
+                    end -= 1;
                 }
                 let trails =
                     end > from && chars[end - 1].is_whitespace() && chars[end - 1] != '\n';
@@ -797,21 +794,90 @@ impl Editor {
             }
             // `is`：句子本身，句末那一段空白不要。
             //
-            // Warning: **只有段**末**那個換行算進來**（2026-10-10 逐格量出來的）。
-            // 段落**裏面**的換行和句末的空格一樣削掉（`…here. |Third.` 上按 `dis`
-            // 留下 `…here. \nxx`），而段落最後那一個換行是這一段的一部分，vim 連它
-            // 一起取——「整段没有句末標點」那一種因此整段連換行一起没。
+            // Warning: **No line break, not even the paragraph's last**
+            // (2026-10-27). From 2026-10-10 the last one was taken, because
+            // vim's `dis` removes it when the sentence fills its lines — but
+            // that is vim's operator turning linewise (`:h exclusive-linewise`),
+            // not the object: `One. Two.` then a blank line, `dis` on `Two`
+            // keeps the break, and helix-keymap `mis` showed it selected. The
+            // linewise rule lives where vim keeps it, with the operator
+            // (`keys.rs`, the object path).
             false => {
-                let last_of_the_paragraph = to == chars.len();
                 while end > from && chars[end - 1].is_whitespace() {
                     end -= 1;
-                }
-                if last_of_the_paragraph {
-                    end = chars.len();
                 }
             }
         }
         let (anchor, head) = (start + from, start + end.saturating_sub(1).max(from));
+        motion::Span::Over { anchor, head: head.max(anchor) }
+    }
+
+    /// **`mi u`/`ma u` — the clause the caret is in** (2026-10-27): the run
+    /// between two punctuation marks ([`motion::ends_a_clause`]), within the
+    /// paragraph, so a hard-wrapped English clause crosses its line breaks.
+    ///
+    /// `mi u` trims the blanks off both ends. `ma u` adds the marks that end
+    /// it (`。」`, `?!`) and the spaces after them. A caret on a mark belongs to
+    /// the clause that mark ends, as a full stop belongs to its sentence; with
+    /// nothing before it (a paragraph opening on 「), to the one after.
+    fn clause_object_span(&self, around: bool) -> motion::Span {
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        let (start, stop) = self.paragraph_here();
+        let chars: Vec<char> = rope.slice(start..stop).chars().collect();
+        if chars.is_empty() {
+            return motion::Span::Missed;
+        }
+        let ends = |i: usize| motion::ends_a_clause(&chars, i);
+        let mut at = head.saturating_sub(start).min(chars.len() - 1);
+        if ends(at) {
+            // Back over the marks to the clause they end, if there is one.
+            let mut back = at;
+            while back > 0 && ends(back) {
+                back -= 1;
+            }
+            match ends(back) {
+                false => at = back,
+                true => {
+                    while at < chars.len() && ends(at) {
+                        at += 1;
+                    }
+                    if at == chars.len() {
+                        return motion::Span::Missed;
+                    }
+                }
+            }
+        }
+        let mut from = at;
+        while from > 0 && !ends(from - 1) {
+            from -= 1;
+        }
+        let mut to = at + 1;
+        while to < chars.len() && !ends(to) {
+            to += 1;
+        }
+        while from < to && chars[from].is_whitespace() {
+            from += 1;
+        }
+        let mut end = to;
+        while end > from && chars[end - 1].is_whitespace() {
+            end -= 1;
+        }
+        if from == end {
+            return motion::Span::Missed;
+        }
+        // Warning: **never a line break**, the lesson `mis` taught (see `is`).
+        let blank = |i: usize| chars[i].is_whitespace() && chars[i] != '\n';
+        if around && to < chars.len() {
+            end = to;
+            while end < chars.len() && ends(end) {
+                end += 1;
+            }
+            while end < chars.len() && blank(end) {
+                end += 1;
+            }
+        }
+        let (anchor, head) = (start + from, start + end - 1);
         motion::Span::Over { anchor, head: head.max(anchor) }
     }
 
@@ -2433,6 +2499,9 @@ impl Editor {
             }
             motion::Motion::Object { what: motion::Object::Sentence, around, .. } => {
                 self.sentence_object_span(around)
+            }
+            motion::Motion::Object { what: motion::Object::Clause, around, .. } => {
+                self.clause_object_span(around)
             }
             motion::Motion::Object {
                 what: motion::Object::Pair { open, close },

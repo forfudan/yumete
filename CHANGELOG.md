@@ -13,7 +13,7 @@ in `docs/development.md` §5.2.
 
 - **Each step of the `m` group lists what it takes**, as helix's do. `mi` and `ma`
   list the objects: word, sentence, paragraph, the nearest pair, Markdown marks,
-  function, type definition, parameter, comment or table cell, and the brackets and
+  function, type definition, parameter, comment, table cell, and the brackets and
   quotes. `ms`, `md` and `mr` list the pairs. Each step used to show one line saying
   "type a bracket".
 
@@ -53,7 +53,18 @@ in `docs/development.md` §5.2.
   `(x)`, and `mi$` / `ma$` select between them. In `mi` and `ma` a letter or digit is
   still the name of an object.
 
+- **`mi u` selects the clause the cursor is in**: up to any punctuation mark, brackets
+  and quotes included, in Chinese and in English. A mark inside a word (`3.14`,
+  `don't`) does not end it. `ma u` takes the closing marks and following spaces too;
+  under the vim keymap it is `iu` / `au`.
+
 ### Changed
+
+- **The table cell is `mi l`, not `mi c`**: `c` is the comment only, as in helix.
+
+- **`mi s` no longer selects the line break after a paragraph's last sentence.** Under
+  the vim keymap `dis` still removes a sentence's whole lines where vim does: when the
+  sentence fills its lines and another line follows.
 
 - **Under the helix keymap, `mi(` and `ma(` outside any pair take nothing**, as helix's
   do; they used to reach ahead to the next pair, which is vim's rule and stays under the

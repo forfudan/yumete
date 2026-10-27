@@ -960,6 +960,11 @@ pub enum Object {
     /// Warning: **`as` 在中文裏會退化成 `is`**，同 `aw`：它多取句末那一段空白，而中文句子之間
     /// 没有空白。
     Sentence,
+    /// **`mi u`/`ma u` — 短句, a clause** (2026-10-27): what lies between two
+    /// punctuation marks of any kind, brackets and quotes included. helix and
+    /// vim have none; `W` stops only at a space, which in Chinese is the
+    /// whole paragraph. Boundaries are [`ends_a_clause`].
+    Clause,
     /// `ip` / `ap` — a paragraph (B5, 2026-09-21).
     ///
     /// Warning: **Whole lines, not a run of characters**, which is what makes it an
@@ -1401,6 +1406,46 @@ fn ends_sentence(chars: &[char], i: usize) -> bool {
     match chars[i] {
         '。' | '！' | '？' | '．' | '…' | '!' | '?' => true,
         '.' => chars.get(i + 1).is_none_or(|c| c.is_whitespace()),
+        _ => false,
+    }
+}
+
+/// **Does the character at `i` end a clause** (`mi u`, 2026-10-27)?
+///
+/// Any punctuation mark does: 「any punctuation, word-internal kept」. The one
+/// exception is a mark inside a word — `3.14`, `1,000`, `don't`,
+/// `well-known` — where `.` `,` `'` `’` `-` sit between two letters or digits.
+pub(crate) fn ends_a_clause(chars: &[char], i: usize) -> bool {
+    let c = chars[i];
+    if !is_punctuation(c) {
+        return false;
+    }
+    let inside = |at: Option<&char>| at.is_some_and(|c| c.is_ascii_alphanumeric());
+    let joins = matches!(c, '.' | ',' | '\'' | '’' | '-');
+    !(joins && i > 0 && inside(chars.get(i - 1)) && inside(chars.get(i + 1)))
+}
+
+/// Unicode's punctuation (the `P` categories), without `_`, which joins words
+/// in names. Written out because no crate here carries the category table.
+fn is_punctuation(c: char) -> bool {
+    match c {
+        '_' => false,
+        c if c.is_ascii() => {
+            matches!(c, '!' | '"' | '#' | '%' | '&' | '\'' | '(' | ')' | '*' | ',' | '-' | '.'
+                | '/' | ':' | ';' | '?' | '@' | '[' | '\\' | ']' | '{' | '}')
+        }
+        '¡' | '§' | '«' | '¶' | '·' | '»' | '¿' | '・' => true,
+        // General Punctuation, without its spaces and invisible marks.
+        '\u{2010}'..='\u{2027}' | '\u{2030}'..='\u{205E}' => true,
+        // CJK Symbols and Punctuation: 、。〃 and the brackets 〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜〝〞〟.
+        '\u{3001}'..='\u{3003}' | '\u{3008}'..='\u{3011}' | '\u{3014}'..='\u{301F}' => true,
+        // Vertical, compatibility and small forms.
+        '\u{FE10}'..='\u{FE19}' | '\u{FE30}'..='\u{FE6B}' => true,
+        // Fullwidth: ！＂＃％＆＇（）＊，－．／ ：；？＠ ［＼］ ｛｝ ｟｠｡｢｣､･, without ＿.
+        '\u{FF01}'..='\u{FF0F}' | '\u{FF1A}'..='\u{FF20}' | '\u{FF3B}'..='\u{FF3D}' => {
+            !matches!(c, '＄' | '＋' | '＜' | '＝' | '＞')
+        }
+        '\u{FF5B}' | '\u{FF5D}' | '\u{FF5F}'..='\u{FF65}' => true,
         _ => false,
     }
 }

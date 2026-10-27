@@ -151,6 +151,8 @@ fn object(c: char, around: bool) -> Option<Motion> {
         'k' => crate::motion::Object::Markup,
         // `dis`/`das`：光標所在的那一句（2026-09-28）。
         's' => crate::motion::Object::Sentence,
+        // `diu`/`dau`: 短句 (2026-10-27, same as `mi u`). vim has no `iu`.
+        'u' => crate::motion::Object::Clause,
         // **`b` 和 `B` 是 vim 給括號的兩個別名**（2026-10-12 神諭上掃出來的）：
         // `ib` ＝ `i(`、`iB` ＝ `i{`。從前落到底下那一支，而 `b` 不是任何一對的
         // 半邊，於是 `dib` 整個不成一個動作——按下去 `d` 等着，`i` 不是動作，三

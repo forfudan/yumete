@@ -5649,6 +5649,13 @@ zhs = "括号"
 en = "brackets"
 
 [[message]]
+# mi/ma 菜單：l，光標所在的那一格（表格）
+key = "hint.obj.cell"
+zht = "單元格（表格）"
+zhs = "单元格（表格）"
+en = "cell (table)"
+
+[[message]]
 # mi/ma 菜單：g，git 標出來的那一處改動（helix 的 Change）
 key = "hint.obj.change"
 zht = "這一處改動（git）"
@@ -5663,11 +5670,18 @@ zhs = "中文括号也认"
 en = "Chinese brackets too"
 
 [[message]]
-# mi/ma 菜單：c，代碼裏是註釋，表格裏是這一格
-key = "hint.obj.comment-or-cell"
-zht = "註釋（代碼）/這一格（表格）"
-zhs = "注释（代码）/这一格（表格）"
-en = "comment (code), this cell (table)"
+# mi/ma 菜單：u，短句（到任何標點爲止）
+key = "hint.obj.clause"
+zht = "短句"
+zhs = "短句"
+en = "clause (up to any punctuation)"
+
+[[message]]
+# mi/ma 菜單：c，代碼裏的註釋
+key = "hint.obj.comment"
+zht = "註釋（代碼）"
+zhs = "注释（代码）"
+en = "comment (code)"
 
 [[message]]
 # mi/ma 菜單：x，HTML 元素
