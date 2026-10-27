@@ -160,6 +160,9 @@ impl super::Editor {
         // 每一段開跑之前擺回去，跑完之後留最後一段的那一份。
         let pending = self.pending;
         let count = self.count;
+        // `2mi(` keeps its count for every selection, not only the first
+        // (2026-10-27): the answer spends it.
+        let operator_count = self.operator_count;
         // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
@@ -186,6 +189,7 @@ impl super::Editor {
             self.sel = crate::selection::Selections::one(*one);
             self.pending = pending;
             self.count = count;
+            self.operator_count = operator_count;
             self.pending_register = named;
             self.mode = mode;
             self.extend = extend;
@@ -253,6 +257,9 @@ impl super::Editor {
         let primary = was.primary();
         let pending = self.pending;
         let count = self.count;
+        // `2mi(` keeps its count for every selection, not only the first
+        // (2026-10-27): the answer spends it.
+        let operator_count = self.operator_count;
         // Warning: **`"` 指的那個寄存器也是一次性的**（2026-09-28）：`take_register` 是
         // **take**，第一趟就把它拿走了，後面幾段於是去讀無名的那一個，`"#p` 只有一段
         // 貼得上號。同 `pending` 和 `count`，每一段開跑之前擺回去。
@@ -280,6 +287,7 @@ impl super::Editor {
             self.sel = crate::selection::Selections::one(one);
             self.pending = pending;
             self.count = count;
+            self.operator_count = operator_count;
             self.pending_register = named;
             self.mode = mode;
             self.extend = extend;

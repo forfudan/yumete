@@ -955,6 +955,9 @@ impl Editor {
                     self.answer_with_char(waiting, c);
                 }
             }
+            if self.pending == Pending::None {
+                self.operator_count = None;
+            }
             // `m` `s` is in there and the delimiter is not — never let `.`
             // replay half of a command.
             self.edit_keys.clear();

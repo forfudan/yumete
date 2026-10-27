@@ -94,7 +94,12 @@ impl Editor {
     }
 
     /// Select inside (`mi`) or around (`ma`) the pair named by `c`.
-    pub(super) fn select_pair(&mut self, c: char, around: bool) {
+    /// The count a pair command was typed with — `2mi(`, `2md(` — or 1.
+    pub(super) fn pair_count(&self) -> usize {
+        self.operator_count.unwrap_or(1).max(1)
+    }
+
+    pub(super) fn select_pair(&mut self, c: char, around: bool, count: usize) {
         // **`w` 是一個對象，不是一對括號**（2026-09-19）。helix 的 `mi w`/`ma w`
         // 是這麽寫的，而 vim 的 `ciw` `diw` `daw` 走的是同一扇門——`i`/`a` 那兩
         // 個動作播的就是 `mi%`/`ma%`（`keymap.rs` 的 `object`）。從前這裏只認
@@ -157,7 +162,7 @@ impl Editor {
                 }
             },
         };
-        let span = self.run_motion(motion::Motion::Object { what, around, count: 1 });
+        let span = self.run_motion(motion::Motion::Object { what, around, count });
         if span == motion::Span::Missed {
             self.status = match what {
                 motion::Object::Word { .. } => say!("edit.no-word-here"),
@@ -436,12 +441,19 @@ impl Editor {
         // `count` 用在**往外數幾層**上；一對都没包着的時候走另一條路，而那一條
         // 把 `count` 用在**往前數第幾個開括號**上。`a (b (c) d) e` 的行首按
         // `d2a(` 刪的是 `(c)`——往前第二個 `(`，不是外面那一層。
+        // **Under the helix keymap only a pair around the caret counts**
+        // (2026-10-27, measured: helix 25.07.1's `ma(` at the start of
+        // `ab (cd) ef` selects nothing; vim 9.1 and nvim 0.12.5 take `(cd)`).
+        // So the step ahead below is vim's alone, and so is a quote found
+        // ahead on the line by `quoted`'s vim rule.
+        let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
         let enclosing = family
             .iter()
             .filter_map(|&(open, close)| match open == close {
                 true => super::quoted(rope, here, open),
                 false => super::surrounding(rope, here, open, close),
             })
+            .filter(|&(start, end)| vim || (start <= here && here <= end))
             // 同族套着的時候取最裏面那一對（`【他說（不）】`）。
             .max_by_key(|&(start, _)| start);
         let ahead = || {
@@ -451,7 +463,11 @@ impl Editor {
                 .filter_map(|&(open, close)| super::nth_ahead(rope, here, open, close, count))
                 .min_by_key(|&(start, _)| start)
         };
-        let Some((mut start, mut end)) = enclosing.or_else(ahead) else {
+        let found = match vim {
+            true => enclosing.or_else(ahead),
+            false => enclosing,
+        };
+        let Some((mut start, mut end)) = found else {
             return motion::Span::Missed;
         };
         // 往前找到的那一對已經把數目用掉了。
@@ -1051,40 +1067,50 @@ impl Editor {
     ///
     /// `m` the nearest pair and `k` the Markdown marks, as in `mi`
     /// (2026-10-27); `m` used to take whichever of the two was nearer.
-    pub(super) fn pair_to_take_off(&self, which: char) -> Option<(usize, usize, usize, usize)> {
-        match which {
-            'm' => self.innermost_pair().map(|(open, close)| (open, open + 1, close, close + 1)),
-            'k' => self.markup_around_the_cursor(),
+    pub(super) fn pair_to_take_off(
+        &self,
+        which: char,
+        count: usize,
+    ) -> Option<(usize, usize, usize, usize)> {
+        if which == 'k' {
+            // Marks rarely nest, and a count is not theirs to read.
+            return self.markup_around_the_cursor();
+        }
+        self.pair_to_change(which, count).map(|(open, close)| (open, open + 1, close, close + 1))
+    }
+
+    /// The pair `md`/`mr` act on: the two characters' positions — the
+    /// innermost, or with a count that many pairs out (2026-10-27, helix's
+    /// `2md(`). `m` counts pairs of any kind, a bracket its own kind. Two of
+    /// the same character do not nest, so a count above one finds nothing.
+    pub(super) fn pair_to_change(&self, from: char, count: usize) -> Option<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        let here = self.sel.head();
+        let mut found = match from {
+            // **`m` ＝ 最內層那一對**，同 helix（`surround_replace` 那一支也認它）。
+            // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都没有。
+            'm' => self.innermost_pair_at(here),
             // Warning: **一個鍵管一族括號**（2026-10-06 夜審報的）。取對象那條路
             // （`mi(`/`di(`）走的是 `pair_family`——按 `(` 找得到 `（）`，按 `[`
             // 連 `「」`【】一起找。這一支從前逐字符精確，於是 `md(` 在 `（甲乙）`
             // 上答「外面没有成對的符號」，而 `mi(` 選得中。vim 的 `ds[` 在中文稿
             // 子上同病。同族套着的時候取最裏面那一對，同 `pair_span`。
-            ch => {
-                let rope = self.current_buffer().rope();
-                super::pair_family(ch)
-                    .into_iter()
-                    .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
-                    .max_by_key(|&(open, _)| open)
-                    .map(|(open, close)| (open, open + 1, close, close + 1))
-            }
-        }
-    }
-
-    /// What `mr` *from* would change at the primary selection: the two
-    /// characters' positions.
-    pub(super) fn pair_to_change(&self, from: char) -> Option<(usize, usize)> {
-        let rope = self.current_buffer().rope();
-        match from {
-            // **`m` ＝ 最內層那一對**，同 helix（`surround_replace` 那一支也認它）。
-            // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都没有。
-            'm' => self.innermost_pair(),
-            // 同 `surround_delete`：一個鍵管一族，同族套着取最裏面那一對。
             ch => super::pair_family(ch)
                 .into_iter()
-                .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
+                .filter_map(|(open, close)| surrounding(rope, here, open, close))
                 .max_by_key(|&(open, _)| open),
+        }?;
+        for _ in 1..count {
+            let (open, close) = found;
+            if rope.char(open) == rope.char(close) || open == 0 {
+                return None;
+            }
+            found = match from {
+                'm' => self.innermost_pair_at(open - 1)?,
+                _ => surrounding(rope, open - 1, rope.char(open), rope.char(close))?,
+            };
         }
+        Some(found)
     }
 
     /// **Before `md`/`mr` touch several selections, every one must have its
@@ -1097,9 +1123,10 @@ impl Editor {
         if !self.sel.is_plural() {
             return true;
         }
+        let count = self.pair_count();
         let pair_of_one = |e: &Self| match pending {
-            Pending::SurroundOff => e.pair_to_take_off(c).map(|(a, _, _, d)| (a, d)),
-            Pending::SurroundTo(from) => e.pair_to_change(from),
+            Pending::SurroundOff => e.pair_to_take_off(c, count).map(|(a, _, _, d)| (a, d)),
+            Pending::SurroundTo(from) => e.pair_to_change(from, count),
             _ => Some((0, 0)),
         };
         if !matches!(pending, Pending::SurroundOff | Pending::SurroundTo(_)) {
@@ -1125,11 +1152,11 @@ impl Editor {
         true
     }
 
-    pub(super) fn surround_delete(&mut self, which: char) {
+    pub(super) fn surround_delete(&mut self, which: char, count: usize) {
         if self.refuse_readonly() {
             return;
         }
-        let Some((out, inn, inn_end, out_end)) = self.pair_to_take_off(which) else {
+        let Some((out, inn, inn_end, out_end)) = self.pair_to_take_off(which, count) else {
             self.status = say!("edit.no-pair-to-delete");
             return;
         };
@@ -1150,12 +1177,12 @@ impl Editor {
     }
 
     /// Swap the innermost pair around the cursor for another (`mr`).
-    pub(super) fn surround_replace(&mut self, from: char, to: char) {
+    pub(super) fn surround_replace(&mut self, from: char, to: char, count: usize) {
         if self.refuse_readonly() {
             return;
         }
         let (new_open, new_close) = pair_of(to).unwrap_or((to, to));
-        let Some((start, end)) = self.pair_to_change(from) else {
+        let Some((start, end)) = self.pair_to_change(from, count) else {
             let (open, close) = pair_of(from).unwrap_or((from, from));
             self.status = say!("edit.no-pair-around", open, close);
             return;
@@ -1176,10 +1203,15 @@ impl Editor {
 
     /// The nearest pair of delimiters enclosing the cursor, whichever kind.
     fn innermost_pair(&self) -> Option<(usize, usize)> {
+        self.innermost_pair_at(self.caret())
+    }
+
+    /// The innermost bracket or quote pair around `pos`.
+    fn innermost_pair_at(&self, pos: usize) -> Option<(usize, usize)> {
         let rope = self.current_buffer().rope();
         PAIRS
             .iter()
-            .filter_map(|&(open, close)| surrounding(rope, self.caret(), open, close))
+            .filter_map(|&(open, close)| surrounding(rope, pos, open, close))
             .max_by_key(|&(start, _)| start)
     }
 
@@ -2272,10 +2304,22 @@ impl Editor {
                 around,
                 count,
             } => self.pair_span(open, close, around, count),
+            // With a count, the count-th pair out of **any** kind (2026-10-27,
+            // helix's `2mim`): `f[a(b)c]` on `b` is `[…]`, not a second `(`.
             motion::Motion::Object { what: motion::Object::NearestPair, around, count } => {
-                match self.nearest_pair_chars() {
-                    Some((open, close)) => self.pair_span(open, close, around, count),
-                    None => motion::Span::Missed,
+                match (count, self.nearest_pair_chars()) {
+                    (1, Some((open, close))) => self.pair_span(open, close, around, 1),
+                    (_, Some(_)) => match self.pair_to_change('m', count) {
+                        Some((start, end)) => {
+                            let (anchor, head) = match around {
+                                true => (start, end),
+                                false => (start + 1, end.saturating_sub(1)),
+                            };
+                            motion::Span::Over { anchor, head: head.max(anchor) }
+                        }
+                        None => motion::Span::Missed,
+                    },
+                    (_, None) => motion::Span::Missed,
                 }
             }
             motion::Motion::Object { what: motion::Object::Paragraph, around, .. } => {
