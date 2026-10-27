@@ -4846,6 +4846,32 @@ fn mr_shows_the_pair_before_it_changes_it() {
     assert!(!ed.status.is_empty());
 }
 
+/// **`ms` then `Enter` puts the selection on lines of its own** (2026-10-27,
+/// helix's `surround_add`; measured there: `x` `ms` `Enter` on `foo` gives
+/// `\nfoo\n\n`). The selection takes in both breaks.
+#[test]
+fn ms_enter_surrounds_with_line_breaks() {
+    let mut ed = typed("foo bar\n");
+    press(&mut ed, "gge");
+    press(&mut ed, "ms");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "\nfoo\n bar\n");
+    assert_eq!(ed.selection(), (0, 5), "the word and both breaks");
+
+    let mut ed = typed("foo\n");
+    press(&mut ed, "ggx");
+    press(&mut ed, "ms");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "\nfoo\n\n", "as helix gives it");
+
+    // On every selection, as the characters are.
+    let mut ed = typed("a b\na b\n");
+    press(&mut ed, "ggfb;C");
+    press(&mut ed, "ms");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().text(), "a \nb\n\na \nb\n\n");
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {

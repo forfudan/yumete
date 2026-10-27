@@ -996,25 +996,40 @@ impl Editor {
         // Any character wraps as a pair of itself (2026-10-27, helix's
         // `surround_add`): `ms*` makes `*斜*`, `ms~` half of a strikethrough.
         let (open, close) = pair_of(c).unwrap_or((c, c));
+        self.surround_with(&open.to_string(), &close.to_string());
+    }
+
+    /// **`ms` then `Enter`: the selection on lines of its own** (2026-10-27,
+    /// helix's `surround_add`) — a line break before and after it, in the
+    /// file's own ending (`\r\n` in a CRLF file).
+    pub(super) fn surround_with_lines(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let ending = self.current_buffer().ending();
+        self.surround_with(ending, ending);
+    }
+
+    fn surround_with(&mut self, open: &str, close: &str) {
         let (start, end) = self.selection();
         let end = end.max(start);
         self.snapshot();
         let done = {
             let buffer = self.current_buffer_mut();
             // The closer first, so writing it cannot shift the opener.
-            buffer
-                .insert(end, &close.to_string())
-                .and_then(|()| buffer.insert(start, &open.to_string()))
+            buffer.insert(end, close).and_then(|()| buffer.insert(start, open))
         };
         if !self.applied(done) {
             return;
         }
         self.sel.set_anchor(start);
-        // The wrapped text plus its two marks runs `start ..= end + 1`, and the
-        // head sits on the last grapheme of it — not one past. At `end + 2` the
-        // character *after* the closing mark was inside the selection, so `ms(`
-        // then `d` took one more than the highlight showed.
-        self.sel.set_head(end + 1);
+        // The wrapped text plus its two marks runs `start ..= end + 1` for a
+        // one-character mark, and the head sits on the last grapheme of it —
+        // not one past. At `end + 2` the character *after* the closing mark was
+        // inside the selection, so `ms(` then `d` took one more than the
+        // highlight showed. A longer mark (a CRLF line break) moves it on.
+        let marks = open.chars().count() + close.chars().count();
+        self.sel.set_head(end + marks - 1);
         self.clamp_cursor();
     }
 

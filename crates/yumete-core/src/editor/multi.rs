@@ -843,7 +843,10 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         // `ms`, `md` and the second key of `mr` (2026-10-27, helix's `m`
         // group): every selection is wrapped, unwrapped or changed — `md`/`mr`
         // after `every_selection_has_its_own_pair` has said they may.
-        super::Pending::Surround | super::Pending::SurroundOff | super::Pending::SurroundTo(_) => {
+        super::Pending::Surround => {
+            matches!(key, crate::input::Key::Char(_) | crate::input::Key::Enter)
+        }
+        super::Pending::SurroundOff | super::Pending::SurroundTo(_) => {
             matches!(key, crate::input::Key::Char(_))
         }
         super::Pending::None => matches!(

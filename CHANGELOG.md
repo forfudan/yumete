@@ -22,6 +22,9 @@ in `docs/development.md` §5.2.
   read or written. `--private` does the same for one run. Recovery copies are still
   kept.
 
+- **`ms` then `Enter` puts the selection on lines of its own**, as helix's does: a line
+  break before and after it.
+
 - **`mr` shows the pair it found before you name the new one**, as helix's does: after
   its first key the two brackets are selected, and the next key (or `Esc`) puts your
   selection back.
