@@ -90,6 +90,12 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Making selections follows helix's rules.** `C` on a selection of several lines
+  copies it that many lines down instead of one; `A-s` puts a cursor on an empty line
+  and `S` keeps an empty piece between two separators, so `%` `A-s` `A` reaches every
+  line; `C-d` and `C-u` move every cursor (`C-f` and `PgDn` move the primary, as in
+  helix).
+
 - **Several selections leave insert mode, indent, merge and undo as helix's do.**
   After `a` and `Esc` the other selections were one character too long; `>` with two
   cursors on one line indented it twice; overlapping selections after `v` `j` stayed
