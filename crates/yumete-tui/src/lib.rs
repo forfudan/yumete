@@ -11892,6 +11892,14 @@ fn draw_horizontal(
         // 次選區墊在主選區之前。不變式保證它們不重疊，所以這個次序眼下看不出分別；
         // 寫成這樣是因為「主選區壓在最上面」是這一族唯一不許被推翻的次序。
         let reach = row.start + row_len + usize::from(ends_line);
+        let mut break_cell = "";
+        // **A cursor on the line break is drawn there** (2026-10-27, as helix
+        // draws it): one blank cell after the row, as the primary selection's
+        // break has always been. It used to be cut off at the row's last
+        // character, so `C` from the end of a line made a cursor nobody saw.
+        // The end of the file is such a place too, on its last row.
+        let row_end_at = row.start + row_len;
+        let ends_file = row_end_at == rope.len_chars();
         for &(from, to) in &secondary {
             if to > row.start && from < reach {
                 let a = from.saturating_sub(row.start).min(row_len);
@@ -11900,11 +11908,13 @@ fn draw_horizontal(
                     *style = style.patch(sel_style);
                 }
             }
+            if (ends_line || ends_file) && from <= row_end_at && to > row_end_at {
+                break_cell = " ";
+            }
         }
 
         // The selection's ground goes over everything, because it is the answer
         // to "what would an edit take" and nothing may obscure that.
-        let mut break_cell = "";
         if has_selection && sel_end > row.start && sel_start < reach {
             let a = sel_start.saturating_sub(row.start).min(row_len);
             let b = (sel_end - row.start).min(row_len);
@@ -15007,6 +15017,57 @@ fn squeezed(text: &str) -> String {
         config.editor.line_numbers = LineNumbers::None;
         config.editor.show_segmentation = false;
         config
+    }
+
+    /// **Every cursor is drawn, in every mode, on a line end too**
+    /// (2026-10-27, as helix draws them). A second cursor used to vanish the
+    /// moment insert mode began (a caret has no width), and one standing on a
+    /// line break was cut off at the row's last character.
+    #[test]
+    fn every_cursor_is_drawn_in_insert_mode_and_on_a_line_end() {
+        let config = Config::default();
+        let ink = ink(&config);
+        let (w, h) = (40u16, 8u16);
+        // Whether the cell just after `word` on its row wears the selection's
+        // ground, and the same for the cell under `word`'s first letter.
+        let lit_after = |editor: &Editor, word: &str, offset: usize| -> bool {
+            let mut seats = Seats::default();
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|frame| draw(frame, editor, &config, no_ime(), &mut seats, None))
+                .unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            for y in 0..h {
+                let row: String = (0..w).map(|x| buffer[(x, y)].symbol()).collect();
+                if let Some(at) = row.find(&format!("  {word} ")) {
+                    let x = (at + 2 + offset) as u16;
+                    return buffer[(x, y)].style().bg == Some(ink.selection());
+                }
+            }
+            panic!("no row holds {word:?}");
+        };
+        let press = |editor: &mut Editor, keys: &[Key]| {
+            for &key in keys {
+                editor.on_key(key);
+            }
+        };
+
+        // `A` on three lines: the two secondaries sit on line breaks.
+        let mut editor = editor_with("ab\nabcd\nabc\n");
+        press(&mut editor, &[Key::Char('%'), Key::Alt('s'), Key::Char('A')]);
+        assert!(lit_after(&editor, "abcd", 4), "insert mode, on the break");
+        assert!(lit_after(&editor, "abc", 3), "insert mode, on the break");
+
+        // `i`: the cell after each caret.
+        let mut editor = editor_with("ab\nabcd\nabc\n");
+        press(&mut editor, &[Key::Char('%'), Key::Alt('s'), Key::Char('i')]);
+        assert!(lit_after(&editor, "abcd", 0), "insert mode, on a character");
+        assert!(!lit_after(&editor, "abcd", 1), "one cell, not two");
+
+        // Normal mode: `C` from a line's break puts the first cursor there.
+        let mut editor = editor_with("ab\nabcd\nabc\n");
+        press(&mut editor, &[Key::Char('l'), Key::Char('l'), Key::Char('C')]);
+        assert!(lit_after(&editor, "ab", 2), "normal mode, on the break");
     }
 
     /// **全窗裏一行記錄選起來是一條，不是幾段**（2026-10-17）。
