@@ -3708,7 +3708,10 @@ impl Editor {
         ("( [ { <", "hint.obj.brackets"),
         ("\" ' `", "hint.obj.quotes"),
         ("「 『 《", "hint.obj.cjk-too"),
-        ("", "hint.pair.any"),
+        // A space, not nothing: an empty key is drawn as a line across the
+        // whole menu, and this row belongs in the description column, as
+        // helix's `" "` row does.
+        (" ", "hint.pair.any"),
     ];
 
     /// The pairs `ms` / `md` / `mr` take, after whatever `lead` adds above
@@ -3729,7 +3732,7 @@ impl Editor {
         }
         rows.push(("\" ' `".into(), say!("hint.obj.quotes")));
         rows.push(("「 『 《 【".into(), say!("hint.pair.cjk")));
-        rows.push(("".into(), say!("hint.pair.any")));
+        rows.push((" ".into(), say!("hint.pair.any")));
         rows
     }
 
