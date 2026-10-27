@@ -258,9 +258,22 @@ impl Editor {
     ///
     /// 只在「整份是代碼」的檔上回得出東西：markdown 裏的圍欄各有各的樹，而一段
     /// 稿子裏的 `def` 不是這本書的結構。空的回空——按鍵那一頭照這個說「這裏没有」。
+    ///
+    /// **…and in the code fence the caret is in** (2026-10-27): a Markdown file
+    /// has code in its fences, and `mi f` inside a ```` ```rust ```` block means
+    /// that function. Only the fence under the caret is read.
     pub(super) fn definitions_here(&self) -> Vec<(usize, usize, crate::code::Define)> {
         let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
-            return Vec::new();
+            let Some(fence) = self.fence_under_caret() else {
+                return Vec::new();
+            };
+            let Some(tree) = crate::code::parse(fence.language, &fence.source, None) else {
+                return Vec::new();
+            };
+            return crate::code::definitions(fence.language, &fence.source, &tree)
+                .into_iter()
+                .map(|(from, to, kind)| (fence.char_at(from), fence.char_at(to), kind))
+                .collect();
         };
         if !self.code_colours {
             return Vec::new();
@@ -277,9 +290,20 @@ impl Editor {
     }
 
     /// **這一份裏每一個參數/註釋**，位置是**字符**（`mi a`/`mi c`，2026-10-06）。
+    ///
+    /// In a fence too, as [`Self::definitions_here`] is.
     pub(super) fn objects_here(&self, want: crate::code::Object) -> Vec<(usize, usize)> {
         let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
-            return Vec::new();
+            let Some(fence) = self.fence_under_caret() else {
+                return Vec::new();
+            };
+            let Some(tree) = crate::code::parse(fence.language, &fence.source, None) else {
+                return Vec::new();
+            };
+            return crate::code::objects(fence.language, &fence.source, &tree, want)
+                .into_iter()
+                .map(|(from, to)| (fence.char_at(from), fence.char_at(to)))
+                .collect();
         };
         if !self.code_colours {
             return Vec::new();
@@ -469,6 +493,50 @@ impl Editor {
         body
     }
 
+    /// **Whether the caret is in the body of a code fence that names a language
+    /// this editor can parse** — where `mi f`/`mi a`/`mi c`/`mi t` reach.
+    pub(super) fn in_a_code_fence(&self) -> bool {
+        self.fence_body_under_caret().is_some()
+    }
+
+    /// The fence whose body the caret is in, if it names a language.
+    fn fence_body_under_caret(&self) -> Option<(Fence, usize)> {
+        if !self.code_colours || self.writes_code() {
+            return None;
+        }
+        let line = self.cursor_line();
+        let fences = self.fences();
+        let at = fences.partition_point(|f| f.open < line);
+        let fence = at.checked_sub(1).map(|i| fences[i])?;
+        let end = fence.close.unwrap_or(self.current_buffer().rope().len_lines());
+        (fence.language.is_some() && line < end).then_some((fence, end))
+    }
+
+    /// That fence's body as one source, with a way back from its byte offsets
+    /// to the document's characters.
+    fn fence_under_caret(&self) -> Option<FenceSource> {
+        let (fence, end) = self.fence_body_under_caret()?;
+        let rope = self.current_buffer().rope();
+        let lines: Vec<String> = (fence.open + 1..end)
+            .map(|l| {
+                let mut text = rope.line(l).to_string();
+                while text.ends_with('\n') || text.ends_with('\r') {
+                    text.pop();
+                }
+                text
+            })
+            .collect();
+        // Warning: **Back through lines, not by counting characters** — the source
+        // joins lines with `\n`, the document may end them with `\r\n`, and a
+        // count from the top would drift a character a line.
+        let starts = (fence.open + 1..end).map(|l| rope.line_to_char(l)).collect();
+        Some(FenceSource {
+            language: fence.language?,
+            source: crate::code::joined(&lines),
+            starts,
+        })
+    }
+
     /// Every fence in the buffer, in order — read once per revision.
     fn fences(&self) -> Rc<Vec<Fence>> {
         let buffer = self.current_buffer();
@@ -520,3 +588,22 @@ impl Editor {
         cache.fences.clone()
     }
 }
+
+/// One fence's body as a parser reads it, and the way back to the page.
+struct FenceSource {
+    language: Language,
+    source: String,
+    /// Where each body line starts in the document, in characters.
+    starts: Vec<usize>,
+}
+
+impl FenceSource {
+    /// A byte offset in `source`, as a character offset in the document.
+    fn char_at(&self, byte: usize) -> usize {
+        let before = &self.source[..byte.min(self.source.len())];
+        let line = before.matches('\n').count();
+        let column = before.rsplit('\n').next().unwrap_or("").chars().count();
+        self.starts.get(line).copied().unwrap_or(0) + column
+    }
+}
+

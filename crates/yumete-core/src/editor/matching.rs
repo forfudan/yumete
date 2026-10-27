@@ -150,8 +150,13 @@ impl Editor {
             // **`mi g`/`ma g`: the change around the caret** (2026-10-27,
             // helix's `g`) — the whole lines the change bar marks.
             'g' => return self.select_the_change(),
-            'a' if self.writes_code() => return self.select_object(crate::code::Object::Parameter),
-            'c' if self.writes_code() => return self.select_object(crate::code::Object::Comment),
+            // In a code file, and in the code fence the caret is in (2026-10-27).
+            'a' if self.writes_code() || self.in_a_code_fence() => {
+                return self.select_object(crate::code::Object::Parameter)
+            }
+            'c' if self.writes_code() || self.in_a_code_fence() => {
+                return self.select_object(crate::code::Object::Comment)
+            }
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
                 // **Any character that is not a letter or a digit acts as a
