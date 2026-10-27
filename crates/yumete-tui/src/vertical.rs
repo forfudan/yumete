@@ -582,6 +582,15 @@ fn found_at_cursor(
 ///
 /// 已經排好的那幾縱用它們自己的邊欄，後面補的用出廠寬度：一塊地方放得下幾縱和
 /// 文章在哪兒結束無關，和**眼前這幾縱有多寬**有關。
+///
+/// Warning: **Every band, not the first** (2026-10-28, reported: with two
+/// bands the cursor walked the top band to its left edge and never went on
+/// into the lower one). `place` lays out one band; this answered with one
+/// band's count, so the page thought it held half its 縱 and scrolled one
+/// 縱 at a time instead of letting the cursor move to the band below. It
+/// has always counted one band; the `zb` fix of 2026-10-12, which let a step
+/// off the page's edge scroll by one 縱, is what made it show. The bands are
+/// counted the way [`layout_page`] fills them.
 fn how_many_fit(
     metrics: &Metrics,
     area: Rect,
@@ -589,14 +598,24 @@ fn how_many_fit(
     overhangs: &[u16],
     capacity: usize,
 ) -> usize {
-    if margins.len() >= capacity {
-        return place(metrics, area, margins, overhangs).len();
-    }
     let mut margins = margins.to_vec();
     let mut overhangs = overhangs.to_vec();
-    margins.resize(capacity, Margin::default());
-    overhangs.resize(capacity, 0);
-    place(metrics, area, &margins, &overhangs).len()
+    if margins.len() < capacity {
+        margins.resize(capacity, Margin::default());
+        overhangs.resize(capacity, 0);
+    }
+    let mut held = 0;
+    for _ in 0..metrics.bands.max(1) {
+        if held >= margins.len() {
+            break;
+        }
+        let n = place(metrics, area, &margins[held..], &overhangs[held..]).len();
+        if n == 0 {
+            break;
+        }
+        held += n;
+    }
+    held
 }
 
 /// Where each 縱 of a page starts, right to left, and how many of them fit.
