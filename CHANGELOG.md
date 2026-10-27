@@ -22,6 +22,10 @@ in `docs/development.md` §5.2.
   read or written. `--private` does the same for one run. Recovery copies are still
   kept.
 
+- **The `m` group acts on every selection**, as helix's does: `ms`, `md`, `mr`, `mi`,
+  `ma` and `mm` each take their own pair at every cursor, as one undo step. `md` and
+  `mr` change nothing when a cursor has no pair, or when two cursors share one.
+
 - **Any character is a pair in the `m` group**, as in helix: `ms*` wraps the selection
   in `*…*`, `md$` takes off the two `$` around the cursor, `mr$(` turns `$x$` into
   `(x)`, and `mi$` / `ma$` select between them. In `mi` and `ma` a letter or digit is

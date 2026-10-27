@@ -3997,6 +3997,12 @@ zhs = "还没有取过东西"
 en = "nothing has been yanked yet"
 
 [[message]]
+# md/mr 有幾個光標，其中兩個在同一對符號裏（helix 的 CursorOverlap）：整條不做
+key = "edit.one-pair-for-two-cursors"
+zht = "有兩個光標共用一對符號，没有改動"
+zhs = "有两个光标共用一对符号，没有改动"
+en = "two cursors share one pair; nothing was changed"
+[[message]]
 # 從貼上選單貼了一條
 key = "edit.pasted"
 zht = "貼了 {0}"

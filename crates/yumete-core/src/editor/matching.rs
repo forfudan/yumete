@@ -1046,13 +1046,13 @@ impl Editor {
         pair_of(self.current_buffer().rope().char(open))
     }
 
-    pub(super) fn surround_delete(&mut self, which: char) {
-        if self.refuse_readonly() {
-            return;
-        }
-        // `m` the nearest pair and `k` the Markdown marks, as in `mi`
-        // (2026-10-27); `m` used to take whichever of the two was nearer.
-        let found = match which {
+    /// What `md` *which* would take off at the primary selection:
+    /// `(outer start, inner start, inner end, outer end)`.
+    ///
+    /// `m` the nearest pair and `k` the Markdown marks, as in `mi`
+    /// (2026-10-27); `m` used to take whichever of the two was nearer.
+    pub(super) fn pair_to_take_off(&self, which: char) -> Option<(usize, usize, usize, usize)> {
+        match which {
             'm' => self.innermost_pair().map(|(open, close)| (open, open + 1, close, close + 1)),
             'k' => self.markup_around_the_cursor(),
             // Warning: **一個鍵管一族括號**（2026-10-06 夜審報的）。取對象那條路
@@ -1068,8 +1068,68 @@ impl Editor {
                     .max_by_key(|&(open, _)| open)
                     .map(|(open, close)| (open, open + 1, close, close + 1))
             }
+        }
+    }
+
+    /// What `mr` *from* would change at the primary selection: the two
+    /// characters' positions.
+    pub(super) fn pair_to_change(&self, from: char) -> Option<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        match from {
+            // **`m` ＝ 最內層那一對**，同 helix（`surround_replace` 那一支也認它）。
+            // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都没有。
+            'm' => self.innermost_pair(),
+            // 同 `surround_delete`：一個鍵管一族，同族套着取最裏面那一對。
+            ch => super::pair_family(ch)
+                .into_iter()
+                .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
+                .max_by_key(|&(open, _)| open),
+        }
+    }
+
+    /// **Before `md`/`mr` touch several selections, every one must have its
+    /// own pair** (2026-10-27, helix's `get_surround_pos`). Two cursors inside
+    /// the same pair would otherwise take it off twice — the second time
+    /// taking the pair outside it — so, as helix does, the command is refused
+    /// whole: when a cursor has no pair, and when two share one. Returns
+    /// whether to go ahead; with one selection it always does.
+    pub(super) fn every_selection_has_its_own_pair(&mut self, pending: Pending, c: char) -> bool {
+        if !self.sel.is_plural() {
+            return true;
+        }
+        let pair_of_one = |e: &Self| match pending {
+            Pending::SurroundOff => e.pair_to_take_off(c).map(|(a, _, _, d)| (a, d)),
+            Pending::SurroundTo(from) => e.pair_to_change(from),
+            _ => Some((0, 0)),
         };
-        let Some((out, inn, inn_end, out_end)) = found else {
+        if !matches!(pending, Pending::SurroundOff | Pending::SurroundTo(_)) {
+            return true;
+        }
+        let was = self.sel.clone();
+        let mut found = Vec::with_capacity(was.len());
+        for one in was.iter() {
+            self.sel = crate::selection::Selections::one(*one);
+            found.push(pair_of_one(self));
+        }
+        self.sel = was;
+        if found.iter().any(Option::is_none) {
+            self.status = say!("edit.no-pair-to-delete");
+            return false;
+        }
+        let mut pairs: Vec<_> = found.into_iter().flatten().collect();
+        pairs.sort_unstable();
+        if pairs.windows(2).any(|w| w[0] == w[1]) {
+            self.status = say!("edit.one-pair-for-two-cursors");
+            return false;
+        }
+        true
+    }
+
+    pub(super) fn surround_delete(&mut self, which: char) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let Some((out, inn, inn_end, out_end)) = self.pair_to_take_off(which) else {
             self.status = say!("edit.no-pair-to-delete");
             return;
         };
@@ -1095,18 +1155,7 @@ impl Editor {
             return;
         }
         let (new_open, new_close) = pair_of(to).unwrap_or((to, to));
-        let rope = self.current_buffer().rope();
-        // **`m` ＝ 最內層那一對**，同 helix（`surround_replace` 那一支也認它）。
-        // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都没有。
-        let found = match from {
-            'm' => self.innermost_pair(),
-            // 同 `surround_delete`：一個鍵管一族，同族套着取最裏面那一對。
-            ch => super::pair_family(ch)
-                .into_iter()
-                .filter_map(|(open, close)| surrounding(rope, self.sel.head(), open, close))
-                .max_by_key(|&(open, _)| open),
-        };
-        let Some((start, end)) = found else {
+        let Some((start, end)) = self.pair_to_change(from) else {
             let (open, close) = pair_of(from).unwrap_or((from, from));
             self.status = say!("edit.no-pair-around", open, close);
             return;

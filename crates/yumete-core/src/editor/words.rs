@@ -937,12 +937,22 @@ impl Editor {
                 // 收下第一個字符之後**自己要掛一個新的**（它要兩個：舊的那一對、
                 // 新的那一對）。第一版在這一句後面又抹了一次，於是 `mr「『` 做出
                 // 來的是「錢塘江『上」。
-                match super::multi::each_selection_key(&waiting, Key::Char(c)) {
-                    true => self.each_selection(move |e| {
+                if super::multi::each_selection_key(&waiting, Key::Char(c)) {
+                    self.each_selection(move |e| {
                         e.pending = Pending::None;
                         e.answer_with_char(waiting, c);
-                    }),
-                    false => self.answer_with_char(waiting, c),
+                    });
+                } else if super::multi::edits_every_selection(&waiting, Key::Char(c)) {
+                    // `ms「` and friends through the IME, on every selection,
+                    // as the same keys typed are (2026-10-27).
+                    if self.every_selection_has_its_own_pair(waiting, c) {
+                        self.edit_each(move |e| {
+                            e.pending = Pending::None;
+                            e.answer_with_char(waiting, c);
+                        });
+                    }
+                } else {
+                    self.answer_with_char(waiting, c);
                 }
             }
             // `m` `s` is in there and the delimiter is not — never let `.`
