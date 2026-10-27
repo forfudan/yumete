@@ -1690,6 +1690,18 @@ pub fn draw(
                 false => put_slot_wide(buf, x, y, &symbol, style),
             }
         }
+        // **A cursor on the line break is drawn there** (2026-10-27), one
+        // slot past the 縱's last character, as the horizontal page draws it
+        // one cell past the row's: otherwise `C` from the end of a line, or
+        // `A` on several lines, makes cursors nobody sees.
+        let ends_line = matches!(rope.get_char(zong.end), None | Some('\n'));
+        let foot = text_top + slots.len() as u16;
+        if ends_line
+            && foot < area.y + area.height
+            && secondary.iter().any(|&(from, to)| from <= zong.end && to > zong.end)
+        {
+            put_slot(buf, x, foot, " ", sel_style);
+        }
     }
 
     // **這一趟畫了哪一段**，交給核心去算 `gw` 的落腳點（#406）。同橫排那一支：

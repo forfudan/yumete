@@ -149,7 +149,20 @@ impl Editor {
                 let (start, end) = one.span();
                 let (start, end) = (start.min(len), end.min(len));
                 match insert {
-                    true => (start, end),
+                    // **The cell after the gap is drawn too** (2026-10-27, as
+                    // helix draws every cursor in every mode): a caret is a
+                    // place between two characters and has no width, so it
+                    // used to be drawn as nothing at all, and a second cursor
+                    // vanished the moment you pressed `i`. One past the end
+                    // of the file is the cell after the last character.
+                    true => {
+                        let head = one.head.min(len);
+                        let cell = match head < len {
+                            true => motion::next_grapheme(rope, head),
+                            false => len + 1,
+                        };
+                        (start, end.max(cell))
+                    }
                     false => (start, motion::next_grapheme(rope, end)),
                 }
             })

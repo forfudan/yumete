@@ -83,6 +83,12 @@ in `docs/development.md` §5.2.
   these are `dik` and `dak`, and `dim` is the nearest pair. `mdm` on a link now
   takes only its `[` `]`, as helix's does; `mdk` takes the whole link.
 
+### Fixed
+
+- **Every cursor is drawn, as helix draws them.** With several selections, the other
+  cursors disappeared in insert mode, and a cursor on a line end was not drawn in any
+  mode, so `C` from the end of a line or `A` on several lines showed one cursor.
+
 ## 0.13.0 · 2026-10-26
 
 Thirty-four commits, two days after 0.12.0. Most of them are themes: seven from the
