@@ -236,7 +236,14 @@ impl Editor {
 
     pub(super) fn find_nth_char(&mut self, kind: FindKind, target: char, nth: usize, again: bool) {
         // 重複的時候，先從「已經貼着的那一個」上讓開一格。
-        let from = match again && kind.till() {
+        //
+        // **Under helix every `t`/`T` steps off first** (2026-10-27, measured:
+        // `t,` on `a,b,c` from `a` selects `a,b` there, and stayed put here).
+        // Helix's `find_char` starts an exclusive search one past the next
+        // character, 「to enable repeated application」. vim's `t` stops
+        // where it is, and only its `;` steps off.
+        let steps_off = again || self.key_preset != yumete_cjk::KeyPreset::Vim;
+        let from = match steps_off && kind.till() {
             true => match kind.forward() {
                 true => crate::motion::next_grapheme(
                     self.current_buffer().rope(),

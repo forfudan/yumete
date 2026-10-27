@@ -2753,8 +2753,21 @@ impl Editor {
             // 當場不再是一行記錄。現在它們問 `cell_edge`。
             Key::Char('I') => {
                 self.snapshot();
+                // **After the indent**, as helix's `insert_at_line_start` and
+                // vim's `I` both put it (2026-10-27, measured: `  ab` + `IX`
+                // gave `X  ab` here). A line of blanks only: helix goes to its
+                // start, vim to its end.
                 let pos = self.cell_edge(false).unwrap_or_else(|| {
-                    motion::line_start(self.current_buffer().rope(), self.sel.head())
+                    let rope = self.current_buffer().rope();
+                    let head = self.sel.head();
+                    let (start, end) = (motion::line_start(rope, head), motion::line_end(rope, head));
+                    let first = motion::line_first_non_blank(rope, head);
+                    let written = first < end && !rope.char(first).is_whitespace();
+                    match (written, self.key_preset == yumete_cjk::KeyPreset::Vim) {
+                        (true, _) => first,
+                        (false, true) => end,
+                        (false, false) => start,
+                    }
                 });
                 self.set_cursor(pos);
                 self.enter_insert();
@@ -2947,7 +2960,24 @@ impl Editor {
             }
             Key::Char('J') => {
                 let n = self.join_count(operator_count);
-                self.repeat_writing(n, |e| e.join_lines())
+                let kept = self.sel.primary();
+                let rope = self.current_buffer().rope();
+                let (len, seam) = (rope.len_chars(), motion::line_end(rope, kept.span().0));
+                self.repeat_writing(n, |e| e.join_lines());
+                // **The selection stays on its text** (2026-10-27, helix's
+                // `join_selections` only maps it through the change; measured:
+                // `J` on `ab` left the cursor on `a` there and on the seam here).
+                // vim's `J` puts the cursor on the seam, and keeps doing so.
+                if self.key_preset != yumete_cjk::KeyPreset::Vim {
+                    let now = self.current_buffer().rope().len_chars();
+                    let moved = |p: usize| match p <= seam {
+                        true => p,
+                        false => (p + now).saturating_sub(len).max(seam).min(now.saturating_sub(1)),
+                    };
+                    self.sel.set_anchor(moved(kept.anchor));
+                    self.sel.set_head(moved(kept.head));
+                    self.clamp_cursor();
+                }
             }
             Key::Char('K') => self.open_sift(multi::Sift::Keep),
             // Swap which end of the selection the cursor is on.

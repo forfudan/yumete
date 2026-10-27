@@ -170,14 +170,36 @@ impl Editor {
                 // 就掉回 Normal，選區也没了——實測 `v w w Esc` 之後 `d` 只刪一個
                 // 空格。錨點留着，頭走到這一處**去的那一頭**：往前是最後一個字，
                 // 往回是第一個字。
-                match self.extend {
-                    true => self.sel.set_head(match forward {
+                //
+                // **…and under helix the match is a selection of its own**
+                // (2026-10-27, measured: `e` `*` `v` `n` `n` `c` gives
+                // `X dog X dog X` there; here it grew one selection from the
+                // first `cat` to the last). `search_impl` with
+                // `Movement::Extend` *pushes* the match and makes it primary;
+                // the selections already made stay. vim's visual `n` grows the
+                // one selection, and the vim keymap keeps that.
+                let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
+                match (self.extend, vim) {
+                    (true, false) => {
+                        let mut found = crate::selection::Range::new(pos, head);
+                        if !forward {
+                            found = crate::selection::Range::new(head, pos);
+                        }
+                        let merged = self.sel.push(found);
+                        self.say_the_merge(merged);
+                    }
+                    (true, true) => self.sel.set_head(match forward {
                         true => head,
                         false => pos,
                     }),
-                    false => {
+                    // The primary moves to the match and the others stay, as
+                    // helix's `Movement::Move` does — and if it lands on one of
+                    // them, the two are one.
+                    (false, _) => {
                         self.sel.set_anchor(pos);
                         self.sel.set_head(head);
+                        let merged = self.sel.normalize();
+                        self.say_the_merge(merged);
                     }
                 }
                 self.refresh_goal_column();

@@ -5574,10 +5574,12 @@ fn a_count_on_find_is_the_nth_and_a_repeat_moves_on() {
         press(&mut ed, keys);
         ed.sel.head()
     };
-    // nvim 量的（0 起算；逗號在 1、3、5、7）。
-    assert_eq!(col("t,"), 0, "t,");
-    assert_eq!(col("2t,"), 2, "2t, 是第二個逗號前一格");
-    assert_eq!(col("3t,"), 4, "3t,");
+    // 0 起算；逗號在 1、3、5、7。Under the helix keymap `t` steps off the
+    // comma right next to it, as helix's does (measured 2026-10-27: 2, 4, 6);
+    // vim's stays put, and the vim half is below.
+    assert_eq!(col("t,"), 2, "t,");
+    assert_eq!(col("2t,"), 4, "2t,");
+    assert_eq!(col("3t,"), 6, "3t,");
     assert_eq!(col("f,"), 1, "f,");
     assert_eq!(col("2f,"), 3, "2f, 是第二個逗號");
     assert_eq!(col("9f,"), 0, "只有四個逗號，整個動作不動");
@@ -5587,9 +5589,9 @@ fn a_count_on_find_is_the_nth_and_a_repeat_moves_on() {
     let mut ed = typed("a,b,c,d,e\n");
     press(&mut ed, "t,");
     ed.on_key(Key::Alt('.'));
-    assert_eq!(ed.sel.head(), 2, "helix：A-. 要前進");
+    assert_eq!(ed.sel.head(), 4, "helix：A-. 要前進");
     ed.on_key(Key::Alt('.'));
-    assert_eq!(ed.sel.head(), 4, "再一下");
+    assert_eq!(ed.sel.head(), 6, "再一下");
 
     let mut ed = typed("a,b,c,d,e\n");
     ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
@@ -22741,11 +22743,12 @@ fn the_four_chords_insert_mode_used_to_swallow() {
     );
 }
 
-/// **選區模式裏 `/`/`n`/`N` 是延伸**（2026-10-06，對齊 helix）。
+/// **選區模式裏 `/`/`n`/`N` 加一段選區**（2026-10-06 對齊 helix 時做成了延伸；
+/// 2026-10-27 量過改正）。
 ///
 /// helix 的 select 下 `n`/`N` 綁的是 `extend_search_next`/`_prev`，`/` 的搜索走
-/// `Movement::Extend` 且**模式不變**。從前這裏無條件把 `extend` 關掉，於是 `v` 之後
-/// 一搜就掉回 Normal，剛選的那一段也没了。
+/// `Movement::Extend` 且**模式不變**——而 `search_impl` 的 `Extend` 是把命中**推進**
+/// 選區裏、當主選區，原來那一段留着，不是把它一路拉長。
 #[test]
 fn searching_inside_a_selection_extends_it() {
     let mut ed = typed("alpha beta gamma\n");
@@ -22754,9 +22757,9 @@ fn searching_inside_a_selection_extends_it() {
     press(&mut ed, "/gamma");
     ed.on_key(Key::Enter);
     assert!(ed.is_extending(), "還在選區模式裏");
+    assert_eq!(ed.sel.len(), 2, "the match is a selection of its own");
     let (from, to) = ed.selection();
-    assert_eq!(from, 0, "錨點留在原處");
-    assert!(to >= 16, "頭走到 gamma 的末尾：{to}");
+    assert_eq!((from, to), (11, 16), "the primary is gamma");
     // Normal 裏還是跳走，不是延伸。
     let mut ed = typed("alpha beta gamma\n");
     press(&mut ed, "gg");
@@ -25318,13 +25321,14 @@ fn insert_can_paste_a_register_and_kill_to_the_line_end() {
     ed.on_key(Key::Esc);
     assert_eq!(ed.current_buffer().text(), "那年冬天\n");
 
-    // 已經在行尾的時候什麼都不做——不吃那個換行。
+    // At the line's end it pulls the next line up, as helix's
+    // `kill_to_line_end` does (2026-10-27; until then it did nothing there).
     let mut ed = typed("甲\n乙\n");
     press(&mut ed, "gg");
     press(&mut ed, "a");
     ed.on_key(Key::Ctrl('k'));
     ed.on_key(Key::Esc);
-    assert_eq!(ed.current_buffer().text(), "甲\n乙\n", "没有把下一行拉上來");
+    assert_eq!(ed.current_buffer().text(), "甲乙\n", "the next line pulled up");
 }
 
 /// **`A-s` 把每一段選區按行切開**（#405 Phase 2，helix 的
@@ -30514,3 +30518,64 @@ fn vims_block_mode_writes_on_every_line_as_vim_does() {
     assert_eq!(run("abc\nabc\n", &k("^jIX\nY\u{1b}")), "X\nYabc\nabc\n");
 }
 
+
+/// **Single-cursor keys aligned with helix 25.07.1** (2026-10-27, each
+/// measured): `I` after the indent, `t` skipping the target next to it, `J`
+/// leaving the cursor on its text, `C-u` keeping the indent and joining at a
+/// line's start, `C-k` joining at its end, and `w` going on past a line break.
+#[test]
+fn single_cursor_keys_follow_helix() {
+    let text = |ed: &Editor| ed.current_buffer().text();
+    let span = |ed: &Editor| -> String {
+        let rope = ed.current_buffer().rope().clone();
+        let (a, b) = ed.sel.primary().span();
+        rope.slice(a..crate::motion::next_grapheme(&rope, b).min(rope.len_chars())).to_string()
+    };
+    let mut ed = typed("  ab\n");
+    press(&mut ed, "ggIX");
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "  Xab\n");
+
+    let mut ed = typed("a,b,c\n");
+    press(&mut ed, "ggt,");
+    assert_eq!(span(&ed), "a,b");
+
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "ggJ");
+    assert_eq!(text(&ed), "ab cd\n");
+    assert_eq!(span(&ed), "a");
+
+    let mut ed = typed("  abc\n");
+    press(&mut ed, "gglA");
+    ed.on_key(Key::Ctrl('u'));
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "  \n");
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "ggji");
+    ed.on_key(Key::Ctrl('u'));
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "abcd\n");
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "ggA");
+    ed.on_key(Key::Ctrl('k'));
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "abcd\n");
+
+    let mut ed = typed("xa\n\nyb\n");
+    press(&mut ed, "ggww");
+    assert_eq!(span(&ed), "yb");
+    let mut ed = typed("xa\nyb");
+    press(&mut ed, "ggjww");
+    assert_eq!(span(&ed), "yb", "no break after it: nowhere to go");
+}
+
+/// **Under `v`, `n` adds the next match as a selection** (2026-10-27,
+/// helix's `search_impl` with `Movement::Extend` pushes it): `e` `*` `v` `n`
+/// `n` then `c` changes all three.
+#[test]
+fn n_in_select_mode_adds_a_selection() {
+    let mut ed = typed("cat dog cat dog cat\n");
+    press(&mut ed, "gge*vnncX");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "X dog X dog X\n");
+}
