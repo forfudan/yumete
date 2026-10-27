@@ -2779,6 +2779,20 @@ pub struct Editor {
     /// 而 `insert_at_line_end` 不置，於是 `a` `Esc` 回到最後一個字上、`A` `Esc` 停在
     /// 行尾那一格。vim 不看這一格：它的 `Esc` 無條件往左退一格。
     restore_caret: bool,
+    /// **The block `C-v` has up**, under the vim keymap (2026-10-27; see
+    /// `editor/block.rs`). `None` the rest of the time.
+    block: Option<block::Block>,
+    /// What a block's `I`, `A` or `c` copies to the other lines on `Esc`.
+    block_insert: Option<block::BlockInsert>,
+    /// The block and operator that insert began with, for `.`.
+    block_op: Option<(block::Size, char)>,
+    /// A block's `r`, waiting for its character.
+    block_replace: bool,
+    /// The keys `.` will play for the block change just finished.
+    block_repeat: Option<Vec<crate::input::Key>>,
+    /// **The register holds a block**: `p` puts it back one piece a line.
+    /// Any other store clears it.
+    register_block: bool,
     /// **This insert keeps the selection ahead of the caret** — the one `i`
     /// opened under the helix keymap (2026-10-27, measured against helix
     /// 25.07.1: `w` `i` `X` `Esc` leaves `foo ` selected after the `X`).
@@ -3947,6 +3961,12 @@ impl Editor {
             signature_query: None,
             signature_asked_at: None,
             restore_caret: false,
+            block: None,
+            block_insert: None,
+            block_op: None,
+            block_replace: false,
+            block_repeat: None,
+            register_block: false,
             insert_keeps_tail: false,
             keep_anchor_while_inserting: false,
             swap_asked: None,
@@ -5178,6 +5198,7 @@ fn surrounding(rope: &Rope, pos: usize, open: char, close: char) -> Option<(usiz
     find_forward(rope, start, open, close).map(|end| (start, end))
 }
 
+mod block;
 mod checks;
 mod commands;
 pub mod complete;

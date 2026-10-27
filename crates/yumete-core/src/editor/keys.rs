@@ -167,8 +167,35 @@ impl Editor {
             .is_some_and(|view| view.takes_the_pane())
             .then(|| (self.current_buffer().id(), self.sel.head()));
         let outcome = match self.mode {
+            // Warning: **not while an alias plays** — `w` under the vim keymap
+            // is keys played through here, and those are the motion itself.
+            Mode::Normal if self.block.is_some() && !self.expanding_alias => {
+                self.on_block_key(key);
+                KeyOutcome::Continue
+            }
             Mode::Normal => {
                 self.back_from_the_pair_shown();
+                let vim_quiet = self.key_preset == yumete_cjk::KeyPreset::Vim
+                    && self.pending == Pending::None
+                    && self.alias_held.is_empty();
+                // **`C-v` opens a block** (2026-10-27), vim's blockwise visual.
+                if vim_quiet && key == Key::Ctrl('v') {
+                    self.toggle_block();
+                    return KeyOutcome::Continue;
+                }
+                // **…and `p` puts a block back as one** (`:h v_b_p`'s
+                // other half: a block taken is a block pasted).
+                if vim_quiet
+                    && self.register_block
+                    && self.pending_register.is_none()
+                    && matches!(key, Key::Char('p' | 'P'))
+                {
+                    self.paste_block(key == Key::Char('p'));
+                    if watching {
+                        self.finish_watching();
+                    }
+                    return KeyOutcome::Continue;
+                }
                 if multi::each_selection_key(&self.pending, key)
                     || self.copies_every_selection(key)
                 {
@@ -252,6 +279,12 @@ impl Editor {
         };
         if watching {
             self.finish_watching();
+        }
+        // A block change is repeated as a block, from wherever `.` is pressed.
+        if let Some(keys) = self.block_repeat.take() {
+            if !self.repeating_edit {
+                self.last_edit_keys = keys;
+            }
         }
         // Warning: **留人要排在忘掉前面**（2026-10-08 報的：「我在 txt 文件中有個
         // tab-separated 部分，我进入了 _tt 後， gg 會跑到文件最頂端」）。
@@ -1448,7 +1481,7 @@ impl Editor {
         };
     }
 
-    fn on_normal_key(&mut self, key: Key) {
+    pub(super) fn on_normal_key(&mut self, key: Key) {
         self.status.clear();
         let continuing_zong = std::mem::take(&mut self.zong_motion);
 

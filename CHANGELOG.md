@@ -53,6 +53,12 @@ in `docs/development.md` §5.2.
   `(x)`, and `mi$` / `ma$` select between them. In `mi` and `ma` a letter or digit is
   still the name of an object.
 
+- **`C-v` under the vim keymap: blockwise visual mode**, as in vim. `I`, `A` and `$A`
+  write before, after or at the end of the block on every line, the text copied to the
+  other lines on `Esc` (`I` skips short lines, `A` pads them); `c`, `d`, `y`, `r`, `~`,
+  `u`, `U`, `>`, `<` and `J` act on the block; `o` and `O` change corners; `p` puts a
+  taken block back as one; `.` repeats a block change. Measured against vim 9.1.
+
 - **`mi u` selects the clause the cursor is in**: up to any punctuation mark, brackets
   and quotes included, in Chinese and in English. A mark inside a word (`3.14`,
   `don't`) does not end it. `ma u` takes the closing marks and following spaces too;

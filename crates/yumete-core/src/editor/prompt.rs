@@ -258,7 +258,10 @@ impl Editor {
                 // The session just ended is what `.` replays.
                 self.insert_recording.clear();
                 self.mode = Mode::Normal;
+                let caret = self.sel.head();
                 self.step_back_out_of_insert();
+                // A block's `I`, `A` or `c`: copy it down now.
+                self.finish_block_insert(caret);
                 // 那一則簽名是打字當口的東西，出了插入態就不是答案了。
                 self.signature = None;
                 self.signature_query = None;
