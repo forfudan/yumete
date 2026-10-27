@@ -3701,6 +3701,7 @@ impl Editor {
         ("t", "hint.obj.type"),
         ("a", "hint.obj.parameter"),
         ("c", "hint.obj.comment-or-cell"),
+        ("g", "hint.obj.change"),
         ("( [ { <", "hint.obj.brackets"),
         ("\" ' `", "hint.obj.quotes"),
         ("「 『 《", "hint.obj.cjk-too"),

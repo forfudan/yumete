@@ -147,6 +147,9 @@ impl Editor {
             // `ma c` 和 `mi c` 是同一段：一格沒有「連着外面那層」可言，同
             // `mi f`／`mi t`。外面那層是牆，而牆不歸這一格。
             'c' if self.cell_here().is_some() => return self.select_the_cell(),
+            // **`mi g`/`ma g`: the change around the caret** (2026-10-27,
+            // helix's `g`) — the whole lines the change bar marks.
+            'g' => return self.select_the_change(),
             'a' if self.writes_code() => return self.select_object(crate::code::Object::Parameter),
             'c' if self.writes_code() => return self.select_object(crate::code::Object::Comment),
             c => match pair_of(c) {
@@ -211,6 +214,51 @@ impl Editor {
         let head = motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
         self.sel.set_anchor(from);
         self.sel.set_head(head);
+        self.extend = false;
+        self.refresh_goal_column();
+    }
+
+    /// **The change the caret's line is in**, whole lines (`mi g`/`ma g`).
+    ///
+    /// helix's `textobject_change`: inside and around are the same, a line not
+    /// in any change leaves the selection where it was, and a file git does not
+    /// track says so. A cut — lines removed, nothing in their place — is a
+    /// place rather than a stretch, so the caret goes to it.
+    ///
+    /// Warning: **The changes are only worked out while the change bar is on**
+    /// (`refresh_vcs` returns at once otherwise). With it off this asks git
+    /// once and throws the answer away again, as `set_diff_gutter(false)`
+    /// does — an answer nobody is looking at only goes stale.
+    fn select_the_change(&mut self) {
+        let id = self.current_buffer().id();
+        let gutter = self.diff_gutter;
+        self.diff_gutter = true;
+        self.refresh_vcs(!gutter);
+        let tracked = self.vcs.contains_key(&id);
+        let found = self.change_here().map(|run| (run.at.start, run.at.end, run.how.is_cut()));
+        if !gutter {
+            self.diff_gutter = false;
+            self.vcs.remove(&id);
+            self.vcs_asked.remove(&id);
+        }
+        if !tracked {
+            self.status = say!("edit.no-diff-here");
+            self.object_missed = true;
+            return;
+        }
+        let Some((start, end, cut)) = found else {
+            self.status = say!("change.none-here");
+            self.object_missed = true;
+            return;
+        };
+        let rope = self.current_buffer().rope();
+        let from = rope.line_to_char(start.min(rope.len_lines()));
+        let to = rope.line_to_char(end.min(rope.len_lines()));
+        self.sel.set_anchor(from);
+        self.sel.set_head(match cut || to <= from {
+            true => from,
+            false => to - 1,
+        });
         self.extend = false;
         self.refresh_goal_column();
     }

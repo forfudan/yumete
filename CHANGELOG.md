@@ -22,6 +22,10 @@ in `docs/development.md` §5.2.
   read or written. `--private` does the same for one run. Recovery copies are still
   kept.
 
+- **`mi g` and `ma g` select the change around the cursor**, whole lines, as helix's
+  `g` does: the lines the change bar marks, against git's `HEAD`. They work with the
+  change bar off too.
+
 - **`ms` then `Enter` puts the selection on lines of its own**, as helix's does: a line
   break before and after it.
 

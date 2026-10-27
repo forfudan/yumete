@@ -4872,6 +4872,58 @@ fn ms_enter_surrounds_with_line_breaks() {
     assert_eq!(ed.current_buffer().text(), "a \nb\n\na \nb\n\n");
 }
 
+/// **`mi g` / `ma g` select the change around the caret**, whole lines
+/// (2026-10-27, helix's `g`); a line in no change, and a file git does not
+/// track, leave the selection where it was and say why.
+#[test]
+fn mig_selects_the_change_around_the_caret() {
+    let dir = tmp().join(format!("yumete-mig-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
+            .output()
+            .expect("git")
+    };
+    git(&["init", "-q", "."]);
+    let file = dir.join("a.md");
+    std::fs::write(&file, "一\n二\n三\n四\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "one"]);
+
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    // Change lines 2 and 3, then stand on line 3.
+    for line in [2, 3] {
+        ed.goto_line(line);
+        press(&mut ed, "A改");
+        ed.on_key(Key::Esc);
+    }
+    press(&mut ed, "mig");
+    let (from, to) = ed.selection();
+    let got: String = ed.current_buffer().rope().slice(from..to).chars().collect();
+    assert_eq!(got, "二改\n三改\n", "both changed lines, whole");
+
+    // Line 1 was not changed: the selection stays, and the line says so.
+    ed.goto_line(1);
+    let before = ed.selection();
+    press(&mut ed, "mig");
+    assert_eq!(ed.selection(), before);
+    assert_eq!(ed.status, say!("change.none-here"));
+
+    // A file git does not track.
+    let mut ed = typed("一\n");
+    press(&mut ed, "ggmig");
+    assert_eq!(ed.status, say!("edit.no-diff-here"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {
