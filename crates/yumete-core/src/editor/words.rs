@@ -930,6 +930,7 @@ impl Editor {
         // one character, so a commit of more than one is read by its first:
         // `f` 找的是那個字, not the phrase it arrived in.
         if self.pending.takes_a_character() {
+            self.back_from_the_pair_shown();
             let waiting = self.pending;
             self.pending = Pending::None;
             if let Some(c) = text.chars().next() {
