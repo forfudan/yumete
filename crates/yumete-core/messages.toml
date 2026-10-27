@@ -3948,6 +3948,12 @@ zhs = "复制了 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
+# mi g / ma g，可是這個文件 git 管不着（helix 的 "Diff is not available"）
+key = "edit.no-diff-here"
+zht = "這個文件不在 git 裏，没有改動可選"
+zhs = "这个文件不在 git 里，没有改动可选"
+en = "git does not track this file, so there is no change to select"
+[[message]]
 # 按 mi k/ma k(di k/da k)，可是光標不在任何一段標記裏
 key = "edit.no-markup-here"
 zht = "這裏没有標記"
@@ -5621,6 +5627,13 @@ key = "hint.obj.brackets"
 zht = "括號"
 zhs = "括号"
 en = "brackets"
+
+[[message]]
+# mi/ma 菜單：g，git 標出來的那一處改動（helix 的 Change）
+key = "hint.obj.change"
+zht = "這一處改動（git）"
+zhs = "这一处改动（git）"
+en = "the change here (git)"
 
 [[message]]
 # mi/ma 菜單：中文括號
