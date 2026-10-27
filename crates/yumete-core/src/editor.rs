@@ -2779,6 +2779,16 @@ pub struct Editor {
     /// 而 `insert_at_line_end` 不置，於是 `a` `Esc` 回到最後一個字上、`A` `Esc` 停在
     /// 行尾那一格。vim 不看這一格：它的 `Esc` 無條件往左退一格。
     restore_caret: bool,
+    /// **This insert keeps the selection ahead of the caret** — the one `i`
+    /// opened under the helix keymap (2026-10-27, measured against helix
+    /// 25.07.1: `w` `i` `X` `Esc` leaves `foo ` selected after the `X`).
+    ///
+    /// The anchor is the selection's *exclusive* far end while typing, so the
+    /// half-open span the insert-mode page draws is exactly the selection;
+    /// [`Editor::step_back_out_of_insert`] turns it back into the last
+    /// character. Typing in front shifts it ([`Editor::insert_str`]); a
+    /// deletion or a move is carried by [`Editor::carry_the_tail`].
+    insert_keeps_tail: bool,
     /// **這一趟插入要留住錨點**——`a` 開的那一種（2026-10-10，照 helix）。
     ///
     /// helix 的光標本來就是一個寬度 1 的選區，而 `a` 說的是「在**選區**後面插入」
@@ -3937,6 +3947,7 @@ impl Editor {
             signature_query: None,
             signature_asked_at: None,
             restore_caret: false,
+            insert_keeps_tail: false,
             keep_anchor_while_inserting: false,
             swap_asked: None,
             swapping_is_fine: false,

@@ -288,6 +288,9 @@ pub struct Buffer {
 struct EditSnapshot {
     rope: Rope,
     cursor: usize,
+    /// **Every selection, when the editor gave them** (2026-10-27): helix
+    /// brings back every cursor on `u`, and one `usize` holds one of them.
+    selections: Option<crate::selection::Selections>,
     modified: bool,
 }
 
@@ -1437,6 +1440,11 @@ impl Buffer {
     /// `ropey` clones are shallow (reference-counted nodes), so snapshotting the
     /// whole document per undo group is inexpensive.
     pub fn snapshot(&mut self, cursor: usize) {
+        self.snapshot_with(cursor, None);
+    }
+
+    /// [`Self::snapshot`], keeping every selection to come back to.
+    pub fn snapshot_with(&mut self, cursor: usize, selections: Option<crate::selection::Selections>) {
         // Inside a group the first announcement is the only one: everything
         // after it is the same command still running.
         if self.history.grouping {
@@ -1447,8 +1455,21 @@ impl Buffer {
         self.history.pending = Some(EditSnapshot {
             rope: self.rope.clone(),
             cursor,
+            selections,
             modified: self.modified,
         });
+    }
+
+    /// **Say where the change really begins**, before anything was typed
+    /// (2026-10-27): `A` announces its undo point and then moves to the line's
+    /// end, and helix's `u` comes back to that end, where the typing began —
+    /// so the announced point takes the selections as they stand now. Does
+    /// nothing once the point is earned, or when none is announced.
+    pub fn retarget_pending(&mut self, cursor: usize, selections: crate::selection::Selections) {
+        if let Some(point) = self.history.pending.as_mut() {
+            point.cursor = cursor;
+            point.selections = Some(selections);
+        }
     }
 
     /// Stop announcing undo points until [`Self::end_undo_group`], and say what
@@ -1518,6 +1539,15 @@ impl Buffer {
     /// Step back one undo point, returning the cursor position it was taken at,
     /// or `None` when there is nothing left to undo.
     pub fn undo(&mut self, cursor: usize) -> Option<usize> {
+        self.undo_with(cursor, None).map(|(at, _)| at)
+    }
+
+    /// [`Self::undo`], handing back every selection that point kept.
+    pub fn undo_with(
+        &mut self,
+        cursor: usize,
+        selections: Option<crate::selection::Selections>,
+    ) -> Option<(usize, Option<crate::selection::Selections>)> {
         // Read-only means the text does not move, and going *back* is still
         // moving it (Feature #213). The editor refuses first, with a reason.
         if self.readonly {
@@ -1526,7 +1556,7 @@ impl Buffer {
         // A point nobody earned is not a place to go back to.
         self.history.pending = None;
         let prev = self.history.undo.pop()?;
-        self.history.redo.push(self.here(cursor));
+        self.history.redo.push(self.here(cursor, selections));
         self.revision += 1;
         self.edit = None;
         self.rope = prev.rope;
@@ -1535,16 +1565,25 @@ impl Buffer {
             Some(same) => !same,
             None => prev.modified,
         };
-        Some(prev.cursor.min(self.rope.len_chars()))
+        Some((prev.cursor.min(self.rope.len_chars()), prev.selections))
     }
 
     /// Step forward one undo point, returning the cursor position to restore.
     pub fn redo(&mut self, cursor: usize) -> Option<usize> {
+        self.redo_with(cursor, None).map(|(at, _)| at)
+    }
+
+    /// [`Self::redo`], handing back every selection that point kept.
+    pub fn redo_with(
+        &mut self,
+        cursor: usize,
+        selections: Option<crate::selection::Selections>,
+    ) -> Option<(usize, Option<crate::selection::Selections>)> {
         if self.readonly {
             return None;
         }
         let next = self.history.redo.pop()?;
-        self.history.undo.push(self.here(cursor));
+        self.history.undo.push(self.here(cursor, selections));
         self.revision += 1;
         self.edit = None;
         self.rope = next.rope;
@@ -1552,14 +1591,15 @@ impl Buffer {
             Some(same) => !same,
             None => next.modified,
         };
-        Some(next.cursor.min(self.rope.len_chars()))
+        Some((next.cursor.min(self.rope.len_chars()), next.selections))
     }
 
     /// The buffer as it stands, as a snapshot.
-    fn here(&self, cursor: usize) -> EditSnapshot {
+    fn here(&self, cursor: usize, selections: Option<crate::selection::Selections>) -> EditSnapshot {
         EditSnapshot {
             rope: self.rope.clone(),
             cursor,
+            selections,
             modified: self.modified,
         }
     }

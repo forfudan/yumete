@@ -15058,11 +15058,15 @@ fn squeezed(text: &str) -> String {
         assert!(lit_after(&editor, "abcd", 4), "insert mode, on the break");
         assert!(lit_after(&editor, "abc", 3), "insert mode, on the break");
 
-        // `i`: the cell after each caret.
+        // `i` on cursors: the cell after each caret.
         let mut editor = editor_with("ab\nabcd\nabc\n");
-        press(&mut editor, &[Key::Char('%'), Key::Alt('s'), Key::Char('i')]);
+        press(&mut editor, &[Key::Char('j'), Key::Char('C'), Key::Char('i')]);
         assert!(lit_after(&editor, "abcd", 0), "insert mode, on a character");
         assert!(!lit_after(&editor, "abcd", 1), "one cell, not two");
+        // `i` on selections keeps them, drawn whole while typing, as helix.
+        let mut editor = editor_with("ab\nabcd\nabc\n");
+        press(&mut editor, &[Key::Char('%'), Key::Alt('s'), Key::Char('i')]);
+        assert!(lit_after(&editor, "abcd", 0) && lit_after(&editor, "abcd", 3));
 
         // Normal mode: `C` from a line's break puts the first cursor there.
         let mut editor = editor_with("ab\nabcd\nabc\n");

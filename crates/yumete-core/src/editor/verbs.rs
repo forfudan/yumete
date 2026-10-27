@@ -37,6 +37,7 @@ impl Editor {
         self.insert_opened = None;
         // 出門退不退那一格，由進門的那一個鍵說（`a` 說退）——所以進門先清。
         self.restore_caret = false;
+        self.insert_keeps_tail = false;
         // 覆寫是 `R` 自己打開的，別的入口一律是普通插入。
         self.overwriting = false;
         self.overwritten.clear();
@@ -69,7 +70,36 @@ impl Editor {
         };
         let keeping = std::mem::take(&mut self.keep_anchor_while_inserting);
         self.restore_caret = false;
+        // `i`'s selection: the far end goes back from the gap after the last
+        // character to the character itself (see `insert_keeps_tail`).
+        if std::mem::take(&mut self.insert_keeps_tail) {
+            let rope = self.current_buffer().rope().clone();
+            self.sel.map(|one| match one.anchor > one.head {
+                true => crate::selection::Range {
+                    anchor: motion::prev_grapheme(&rope, one.anchor).max(one.head),
+                    ..one
+                },
+                false => one,
+            });
+        }
         if !back {
+            return;
+        }
+        // **Every selection steps back, not the primary alone** (2026-10-27,
+        // measured against helix 25.07.1: `C` `a` `X` `Esc` left every other
+        // selection one character too long, `aXb` where helix has `aX`).
+        // Helix's `enter_normal_mode` transforms the whole selection. A grid
+        // never holds several selections (`can_be_plural`), so the cell's
+        // wall below concerns the single one only.
+        if self.sel.is_plural() {
+            let rope = self.current_buffer().rope().clone();
+            self.sel.map(|one| {
+                let stepped = motion::left(&rope, one.head);
+                match keeping && stepped >= one.anchor {
+                    true => crate::selection::Range { head: stepped, goal: None, ..one },
+                    false => crate::selection::Range::at(stepped),
+                }
+            });
             return;
         }
         let stepped = motion::left(self.current_buffer().rope(), self.sel.head());
@@ -86,7 +116,35 @@ impl Editor {
         }
     }
 
-    /// Take the pending count prefix, defaulting to one.    /// Take the pending count prefix, defaulting to one.
+    /// **An insert key, with `i`'s selection carried along** (2026-10-27).
+    ///
+    /// Typing shifts it in [`Self::insert_str`]; this answers the rest. A
+    /// deletion before it shifts it back by what went, but not behind the
+    /// caret; a move that changes no text drops it, as helix's `i` then `→`
+    /// leaves one cursor.
+    pub(super) fn insert_key_carrying_the_tail(&mut self, key: crate::input::Key) {
+        if !self.insert_keeps_tail {
+            return self.on_insert_key(key);
+        }
+        let (tail, head) = (self.sel.anchor(), self.sel.head());
+        let before = self.current_buffer().rope().len_chars();
+        self.on_insert_key(key);
+        if tail <= head || self.mode != Mode::Insert {
+            return;
+        }
+        let after = self.current_buffer().rope().len_chars();
+        let now = self.sel.head();
+        if after == before {
+            if now != head {
+                self.sel.set_anchor(now);
+            }
+            return;
+        }
+        let moved = tail as isize + after as isize - before as isize;
+        self.sel.set_anchor((moved.max(0) as usize).max(now));
+    }
+
+    /// Take the pending count prefix, defaulting to one.
     pub(super) fn take_count(&mut self) -> usize {
         self.count.take().unwrap_or(1).max(1)
     }
@@ -504,19 +562,36 @@ impl Editor {
         self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
         self.clamp_cursor();
     }
-    /// Indent (`>`) or unindent (`<`) every line the selection touches.
+    /// Indent (`>`) or unindent (`<`) every line a selection touches.
+    ///
+    /// **Every line once, however many selections touch it, and the
+    /// selections move with their text** (2026-10-27, measured against helix
+    /// 25.07.1, whose `indent` collects the lines of the whole selection and
+    /// maps each range through the change). It used to run once per
+    /// selection, so two cursors on one line indented it twice, and the
+    /// cursor stayed where the line used to start, on the new indent.
     pub(super) fn indent(&mut self, add: bool) {
-        let rope = self.current_buffer().rope();
-        let (start, end) = self.selection();
-        let first = rope.char_to_line(start);
-        let last = rope.char_to_line(end.saturating_sub(1).max(start));
+        let rope = self.current_buffer().rope().clone();
+        let mut lines: Vec<usize> = Vec::new();
+        for one in self.sel.iter() {
+            let (start, end) = self.drawn(*one);
+            let first = rope.char_to_line(start.min(rope.len_chars()));
+            let last = rope.char_to_line(end.saturating_sub(1).max(start).min(rope.len_chars()));
+            lines.extend(first..=last);
+        }
+        lines.sort_unstable();
+        lines.dedup();
+        let primary = self.sel.primary();
+        let which = self.sel.iter().position(|one| *one == primary).unwrap_or(0);
+        let mut ranges: Vec<crate::selection::Range> = self.sel.iter().copied().collect();
         let pad = " ".repeat(self.indent_width);
         self.snapshot();
         // Bottom-up, so earlier edits do not shift the lines still to come.
-        for line in (first..=last).rev() {
+        for &line in lines.iter().rev() {
             let at = self.current_buffer().rope().line_to_char(line);
-            if add {
-                self.edit_insert(at, &pad);
+            // `(at, n, grows)`: what changed at `at`, for moving the ranges.
+            let change = if add {
+                self.edit_insert(at, &pad).then_some((at, self.indent_width, true))
             } else {
                 let rope = self.current_buffer().rope();
                 let len = rope.len_chars();
@@ -524,11 +599,22 @@ impl Editor {
                 while n < self.indent_width && at + n < len && rope.char(at + n) == ' ' {
                     n += 1;
                 }
-                if n > 0 {
-                    self.edit_remove(at..at + n);
-                }
+                (n > 0 && self.edit_remove(at..at + n)).then_some((at, n, false))
+            };
+            let Some((at, n, grows)) = change else { continue };
+            let moved = |p: usize| match grows {
+                true if p >= at => p + n,
+                false if p >= at + n => p - n,
+                false if p > at => at,
+                _ => p,
+            };
+            for one in ranges.iter_mut() {
+                one.anchor = moved(one.anchor);
+                one.head = moved(one.head);
+                one.goal = None;
             }
         }
+        self.sel.rebuild(ranges, which);
         self.clamp_cursor();
     }
 
