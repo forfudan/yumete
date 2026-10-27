@@ -22,6 +22,10 @@ in `docs/development.md` §5.2.
   read or written. `--private` does the same for one run. Recovery copies are still
   kept.
 
+- **`mi f`, `mi t`, `mi a` and `mi c` work inside a Markdown code fence**: a function,
+  type, parameter or comment in the ```` ``` ```` block the cursor is in, read with that
+  block's language. They used to work only in files that are code throughout.
+
 - **`mi g` and `ma g` select the change around the cursor**, whole lines, as helix's
   `g` does: the lines the change bar marks, against git's `HEAD`. They work with the
   change bar off too.

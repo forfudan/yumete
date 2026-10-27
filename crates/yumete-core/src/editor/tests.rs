@@ -4924,6 +4924,30 @@ fn mig_selects_the_change_around_the_caret() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **`mi f` / `mi a` / `mi c` reach into the code fence the caret is in**
+/// (2026-10-27): a Markdown file has code in its fences.
+#[test]
+fn code_objects_reach_into_a_markdown_fence() {
+    let doc = "说明。\n\n```rust\n// 两数相加\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n```\n";
+    let took = |steps: &str| {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        for c in doc.chars() {
+            ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+        }
+        ed.on_key(Key::Esc);
+        press(&mut ed, "gg");
+        press(&mut ed, steps);
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    assert_eq!(took("4jfb;mia"), "b: i32", "the parameter");
+    assert!(took("4jfb;mif").starts_with("fn add("), "the function");
+    assert!(took("3jmic").contains("两数相加"), "the comment");
+    // Outside the fence there is no code to take.
+    assert_eq!(took("mif"), "说", "the selection stays");
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {
