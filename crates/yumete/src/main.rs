@@ -141,6 +141,11 @@ fn main() -> ExitCode {
     // jot one thing down and getting five chapters back is the same annoyance
     // as the reverse, in the other direction.
     let mut fresh = false;
+    // `--private`: this run neither reads nor writes where you have been —
+    // the line each file was left on, the recent lists, the session
+    // (2026-10-27, vim's `-i NONE`). `[editor] remember = false` is the
+    // standing answer.
+    let mut private = false;
     // `-c`: reopen last time's files even though `session` is off (the default).
     let mut resume = false;
     let mut tutor = false;
@@ -221,6 +226,7 @@ fn main() -> ExitCode {
             "--table" => force_table = true,
             "--readonly" => readonly = true,
             "--new" => fresh = true,
+            "--private" => private = true,
             // **`-r` 是 `--resume` 的短名**（2026-10-18 作者定：「make an alias
             // for resume for cli so that we can do ye -r easily」）。
             //
@@ -685,6 +691,7 @@ fn main() -> ExitCode {
     // Warning: **沒給路徑的那一支也要走 `book_root_of`**（2026-10-01 審出來
     // 的）。只有一支走、另一支用生的 cwd 的話，`cd 卷一 && ye` 和 `ye .` 還是
     // 兩份會話。
+    editor.set_remembering(config.editor.remember && !private);
     let session_key = config_root.clone();
     if let Some(here) = session_key {
         editor.keep_session_in(yumete_config::data_dir().join("sessions"), &here);
@@ -2206,6 +2213,10 @@ OPTIONS:
                      the line it was left on. `:resume` does it from inside.
         --new        Start on an empty buffer even when `[editor] session` is
                      on.
+        --private    Remember nothing from this run, and read nothing from
+                     before it: no line to go back to, no recent files or
+                     projects, no session. `[editor] remember = false` makes
+                     it standing. Recovery copies are still kept.
         --tutor      Open the lesson (the same as `:tutor` inside the editor).
         --lang=LANG  Which language the editor says things in for this run:
                      zh (繁體, the default), zhs (简体) or en. `[editor]

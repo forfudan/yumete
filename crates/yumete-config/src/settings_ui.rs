@@ -828,6 +828,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "remember",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "set.editor.remember",
+        hint: "set.editor.remember.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "language",
         group: Group::Interface,
         kind: Kind::Pick(EDITOR_LANGUAGE_WAYS),

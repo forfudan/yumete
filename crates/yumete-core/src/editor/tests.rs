@@ -17405,17 +17405,26 @@ fn the_session_opens_again_what_was_open() {
     std::fs::write(&one, "一\n二\n三\n四\n").unwrap();
     std::fs::write(&two, "甲\n乙\n丙\n").unwrap();
 
-    let mut ed = Editor::new();
-    ed.keep_session_in(dir.join("state"), &dir);
+    // The line each file was left on is `places.txt`'s, in the data
+    // directory; the session holds only which files (2026-10-27).
+    let fresh = |dir: &std::path::Path| {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config.toml"), dir.join("state"));
+        ed.keep_session_in(dir.join("sessions"), dir);
+        ed
+    };
+    let mut ed = fresh(&dir);
     ed.open_file(&one).unwrap();
     ed.goto_line(3);
     ed.open_file(&two).unwrap();
     ed.goto_line(2);
     ed.save_session();
+    let written: Vec<_> = std::fs::read_dir(dir.join("sessions")).unwrap().flatten().collect();
+    let session = std::fs::read_to_string(written[0].path()).unwrap();
+    assert!(!session.contains('\t'), "paths only, the lines are places.txt's: {session:?}");
 
     // A new morning.
-    let mut ed = Editor::new();
-    ed.keep_session_in(dir.join("state"), &dir);
+    let mut ed = fresh(&dir);
     assert_eq!(ed.restore_session(), 2);
     assert_eq!(ed.buffer_count(), 2);
     // Each at the line it was left on.
@@ -17427,9 +17436,44 @@ fn the_session_opens_again_what_was_open() {
     // A file that has since been deleted is simply not opened — a
     // convenience does not get to put an error on the screen every morning.
     std::fs::remove_file(&two).unwrap();
-    let mut ed = Editor::new();
-    ed.keep_session_in(dir.join("state"), &dir);
+    let mut ed = fresh(&dir);
     assert_eq!(ed.restore_session(), 1);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `[editor] remember = false` / `--private` (2026-10-27): nothing about
+/// where this editor has been is written, and nothing from before is read.
+#[test]
+fn an_editor_that_does_not_remember_leaves_nothing_behind() {
+    let dir = tmp().join(format!("yumete-private-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let one = dir.join("ch01.md");
+    std::fs::write(&one, "一\n二\n三\n").unwrap();
+    // What an earlier, remembering run left: line 3, and a session.
+    let mut ed = Editor::new();
+    ed.knows_its_paths(dir.join("config.toml"), dir.join("state"));
+    ed.keep_session_in(dir.join("sessions"), &dir);
+    ed.open_file(&one).unwrap();
+    ed.goto_line(3);
+    ed.save_session();
+    let before = std::fs::read_to_string(dir.join("state").join("places.txt")).unwrap();
+
+    let mut ed = Editor::new();
+    ed.knows_its_paths(dir.join("config.toml"), dir.join("state"));
+    ed.set_remembering(false);
+    ed.keep_session_in(dir.join("sessions"), &dir);
+    assert_eq!(ed.restore_session(), 0, "the old session is not read");
+    ed.open_file(&one).unwrap();
+    assert_eq!(ed.cursor_line(), 0, "nor the old line");
+    assert!(ed.recent_files(None).is_empty() && ed.recent_projects().is_empty());
+    ed.goto_line(2);
+    ed.save_session();
+    assert_eq!(
+        std::fs::read_to_string(dir.join("state").join("places.txt")).unwrap(),
+        before,
+        "and nothing new is written"
+    );
     std::fs::remove_dir_all(&dir).ok();
 }
 
