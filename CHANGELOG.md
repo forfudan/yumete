@@ -96,6 +96,10 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **With two or more vertical bands, the cursor goes on into the next band.** It used
+  to stop at the left edge of the top band while the page scrolled one column at a
+  time, because the page counted only one band's columns as on screen.
+
 - **Single-cursor keys follow helix.** `I` writes after the indent (under the vim
   keymap too, as vim's does); `t` and `T` right before their character go on to the
   next one; `J` leaves the cursor on its text; `w` and `e` at a line's end go on to

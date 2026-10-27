@@ -21361,6 +21361,30 @@ fn squeezed(text: &str) -> String {
         assert!(!has(&one, 8..14), "one band: nothing starts halfway down");
     }
 
+    /// **The cursor walks on into the lower band** (2026-10-28, reported: it
+    /// stayed at the top band's left edge and the page scrolled one 縱 at a
+    /// time instead). A frame is drawn after every key, as in use, so each
+    /// step is a step and not a jump.
+    #[test]
+    fn the_cursor_walks_from_the_top_band_into_the_lower_one() {
+        let text: String = (0..150).map(|_| "一二三\n").collect();
+        let mut editor = editor_with(&text);
+        editor.set_layout(WritingLayout::Vertical);
+        editor.set_bands(2);
+        let config = Config::default();
+        let _ = ink(&config);
+        let (w, h) = (40u16, 16u16);
+        let mut seats = Seats::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut lowest = 0;
+        for _ in 0..40 {
+            editor.on_key(Key::Char('h'));
+            terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+            lowest = lowest.max(caret_of(&mut terminal, &config).y);
+        }
+        assert!(lowest >= h / 2, "the caret reached the lower band: lowest row {lowest}");
+    }
+
     #[test]
     fn a_paragraph_opens_two_squares_in_on_the_page() {
         // A Chinese paragraph is marked by an indent of two 字, and the blank
