@@ -350,6 +350,17 @@ impl Editor {
             && self.current_buffer().char_count() == 0
             && self.current_buffer().revision() == 0
     }
+    /// Keep no memory of where this editor has been (`[editor] remember =
+    /// false`, `--private`): no line to go back to, no recent files or
+    /// projects, no session — read or written. vim's `viminfo=`.
+    pub fn set_remembering(&mut self, on: bool) {
+        self.remembers = on;
+        if !on {
+            self.session_file = None;
+            self.session_root = None;
+        }
+    }
+
     pub fn knows_its_paths(&mut self, config: PathBuf, data: PathBuf) {
         self.where_config = Some(config);
         self.where_data = Some(data);
@@ -364,6 +375,9 @@ impl Editor {
     /// and because an editor should not leave a file in every directory it is
     /// ever run in.
     pub fn keep_session_in(&mut self, dir: PathBuf, project: &Path) {
+        if !self.remembers {
+            return;
+        }
         let mut hasher = DefaultHasher::new();
         project.hash(&mut hasher);
         let key = format!("{:016x}", hasher.finish());
@@ -374,7 +388,7 @@ impl Editor {
 
     /// **那份「我在哪裏」在哪**（`places.txt`），没有數據目錄就是没有。
     fn places_file(&self) -> Option<PathBuf> {
-        self.where_data.as_ref().map(|d| d.join(PLACES_FILE))
+        self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(PLACES_FILE))
     }
 
     /// **這個檔上次停在第幾行**，不知道就是不知道。
@@ -468,7 +482,7 @@ impl Editor {
     /// 反推不出項目叫什麽——這一份補的就是那個名字。不存在了的目錄不列：列出
     /// 一個去不了的地方不算一條記錄。
     pub fn recent_projects(&self) -> Vec<PathBuf> {
-        let Some(dir) = self.where_data.as_ref() else {
+        let Some(dir) = self.where_data.as_ref().filter(|_| self.remembers) else {
             return Vec::new();
         };
         let Ok(text) = std::fs::read_to_string(dir.join(PROJECTS_FILE)) else {
@@ -482,8 +496,10 @@ impl Editor {
 
     /// 記下「這一趟是在哪個項目裏」，最近的排在前面。
     fn remember_this_project(&self) {
-        let (Some(dir), Some(here)) = (self.where_data.as_ref(), self.session_root.as_ref())
-        else {
+        let (Some(dir), Some(here)) = (
+            self.where_data.as_ref().filter(|_| self.remembers),
+            self.session_root.as_ref(),
+        ) else {
             return;
         };
         let here = here.display().to_string();
@@ -505,11 +521,17 @@ impl Editor {
         }
     }
 
-    /// Write down which files are open and where the cursor is in each.
+    /// Write down which files are open.
     ///
-    /// One line per file: `path\tline`. A plain list rather than a format,
-    /// because the only thing that reads it is the next hour of this editor,
-    /// and a person looking at it should be able to see what it says.
+    /// One path per line. A plain list rather than a format, because the only
+    /// thing that reads it is the next hour of this editor, and a person
+    /// looking at it should be able to see what it says.
+    ///
+    /// **Paths only, not lines** (2026-10-27). It used to be `path\tline`,
+    /// and every line number in it was also in `places.txt`, written by the
+    /// same call a moment earlier — two files saying the same thing, as a
+    /// reader noticed. The line is `places.txt`'s, which `open_file` already
+    /// goes back to.
     pub fn save_session(&mut self) {
         let here = self.sel.head();
         self.buffers[self.current].save_cursor(here);
@@ -547,10 +569,7 @@ impl Editor {
         for i in order.take(SESSION_FILES) {
             let buffer = &self.buffers[i];
             let Some(path) = buffer.path() else { continue };
-            let line = buffer
-                .rope()
-                .char_to_line(buffer.saved_cursor().min(buffer.rope().len_chars()));
-            out.push_str(&format!("{}\t{}\n", path.display(), line + 1));
+            out.push_str(&format!("{}\n", path.display()));
         }
         if out.is_empty() {
             // Nothing was open, so there is nothing to come back to — and a
@@ -580,18 +599,15 @@ impl Editor {
         let mut opened = 0usize;
         let mut first = None;
         for line in text.lines() {
-            let (path, at) = match line.split_once('\t') {
-                Some((p, n)) => (PathBuf::from(p), n.parse::<usize>().unwrap_or(1)),
-                None => (PathBuf::from(line), 1),
-            };
+            // A session written before 2026-10-27 has `path\tline`; the line
+            // is dropped, since `open_file` takes it from `places.txt`.
+            let path = PathBuf::from(line.split_once('\t').map_or(line, |(p, _)| p));
             // A file that has since been moved or deleted is simply not opened:
             // the session is a convenience, and a convenience does not get to
             // put an error on the screen every morning.
             if !path.is_file() || self.open_file(&path).is_err() {
                 continue;
             }
-            self.move_to_line(at);
-            self.buffers[self.current].save_cursor(self.sel.head());
             first.get_or_insert(self.current);
             opened += 1;
         }

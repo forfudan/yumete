@@ -17,12 +17,24 @@ in `docs/development.md` §5.2.
   quotes. `ms`, `md` and `mr` list the pairs. Each step used to show one line saying
   "type a bracket".
 
+- **`[editor] remember = false` keeps no memory of where you have been**, as vim's
+  `viminfo=` does: no line to go back to, no recent files or projects, no session,
+  read or written. `--private` does the same for one run. Recovery copies are still
+  kept.
+
 - **Any character is a pair in the `m` group**, as in helix: `ms*` wraps the selection
   in `*…*`, `md$` takes off the two `$` around the cursor, `mr$(` turns `$x$` into
   `(x)`, and `mi$` / `ma$` select between them. In `mi` and `ma` a letter or digit is
   still the name of an object.
 
 ### Changed
+
+- **The session file lists only which files were open.** The line each was left on is
+  kept once, in `places.txt`, which already took you back to it; the two files used to
+  repeat each other. Older session files still open.
+
+- **The name 「宇夢編輯器」 is no longer drawn at the right of the hint row.** It is on
+  the start screen and in `:version`, as vim says its name only on its start screen.
 
 - **Warning: `m` after `mi`, `ma` and `md` is the nearest pair only, as in helix;
   Markdown marks moved to `k`** (mar*k*up). `mik` and `mak` select inside and around

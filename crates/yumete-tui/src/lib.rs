@@ -13213,31 +13213,11 @@ fn draw_command(
             }
         }
     }
-    // **The name of the thing, in the one corner nothing else wants** (#498).
-    //
-    // Asked for as 「用一个比较淡雅的色号」, and the constraint is
-    // where rather than whether: the **left** of this row is the most useful
-    // strip on the screen — it is where a half-pressed `t` says what may follow
-    // it — so a signature there would be standing in the way exactly when the
-    // row has something to say. The right end is idle even when the row is
-    // busy, and it is the first thing to go when the row is not.
-    //
-    // FURNITURE, which is what line numbers and an unlit tab are drawn in: it
-    // reads as part of the frame rather than as something said. And **two
-    // clear cells or it does not appear** — a name run up against the last
-    // hint is worse than no name.
-    let signature = say!("ui.signature");
-    let wide = yumete_cjk::str_width(&signature) as u16;
-    if right > wide && x + 2 <= right - wide {
-        put_text(
-            buf,
-            right - wide,
-            area.y,
-            right,
-            &signature,
-            page.fg(ink.furniture()),
-        );
-    }
+    // **No name in the corner** (2026-10-27). 「宇夢編輯器」 stood at the right
+    // end of this row from #498 on, and a reader said it 「看着像广告」 — a
+    // signature on every screen, while you work. vim says its name on the
+    // empty start screen and nowhere else, and so does this now: the start
+    // screen opens with 「YUMETE － 宇夢編輯器」 and `:version` carries it.
 }
 
 /// **The cursor inside one of the search panel's boxes** — #419, 2026-09-25.
@@ -14363,34 +14343,16 @@ fn squeezed(text: &str) -> String {
         assert!(ruled < 24, "不是整行都畫——那就沒有分界了");
     }
 
-    /// 落款在提示行的右端，擠不下就沒有（#498）。
-    ///
-    /// 要的是一個 identity，而位置是有講究的：這一行的**左端**是全屏最有用的
-    /// 一條——按了半個 `t` 就靠它說下一個鍵能按什麼——所以落款只能在右端，而且
-    /// 一旦右端被佔就該讓開。
+    /// **The hint row carries no signature** (2026-10-27): the name is on the
+    /// start screen, as vim's is, not in the corner of every screen.
     #[test]
-    fn the_signature_sits_at_the_right_and_yields_when_the_row_is_full() {
-        let signature = yumete_core::messages::say("ui.signature", &[]);
+    fn the_hint_row_carries_no_signature() {
         let editor = editor_with("那年冬天。\n");
         let config = Config::default();
-
         let wide = render(&editor, &config, 80, 8);
         let row = row_text(&wide, 7);
-        assert!(row.contains(&signature), "寬的時候在：{row:?}");
-        assert!(
-            row.trim_end().ends_with(&signature),
-            "而且在最右邊：{row:?}"
-        );
-
-        // 提示行滿了就讓開：表格那一行有三組鍵，四十格裝不下它再加落款。
-        let mut editor = editor_with("| 星陳 | 卿雲 |\n| --- | --- |\n| 甲 | 乙 |\n");
-        for key in ['j', 'j', ' ', 't', 'b'] {
-            editor.on_key(Key::Char(key));
-        }
-        let narrow = render(&editor, &config, 40, 8);
-        let row = row_text(&narrow, 7);
-        assert!(row.contains('t'), "提示行確實在說話：{row:?}");
-        assert!(!row.contains(&signature), "擠不下就讓開：{row:?}");
+        assert!(!row.contains("宇夢") && !row.contains("宇梦"), "{row:?}");
+        assert_eq!(row.trim(), "", "nothing begun, nothing said: {row:?}");
     }
 
     /// 輸入框要看得出是個框（#447）。
@@ -20756,12 +20718,9 @@ fn squeezed(text: &str) -> String {
         let config = Config::default();
         // A wide glyph covers two cells and only the first carries it, so the
         // row reads back with a gap after every 字.
-        // The落款 at the right end is furniture, not something the row said
-        // (#498) — it is there whatever is or is not going on.
-        let signature = yumete_core::messages::say("ui.signature", &[]);
         let hint = move |e: &Editor| -> String {
             let b = render(e, &config, 100, 10);
-            command_line(&b).replace(&signature, "").replace(' ', "")
+            command_line(&b).replace(' ', "")
         };
 
         // Nothing begun, nothing to say: the row is blank rather than filled
@@ -20893,11 +20852,11 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('3'));
         let drawn = page(&editor);
         assert!(drawn.contains("╰3"), "beside the caret: {drawn}");
-        // **The status line's right end**, which is the row above the hint row
-        // — and since #498 the hint row's own right end carries the 落款, so
-        // 「the last line」 is no longer the same thing as 「the corner」.
+        // **The status line's right end**, which is the row above the hint row.
+        // Split on `\n` rather than `lines()`: the hint row is blank now that
+        // it carries no 落款 (2026-10-27), and `lines()` drops a blank last row.
         let status = |page: &str| -> String {
-            let rows: Vec<&str> = page.lines().collect();
+            let rows: Vec<&str> = page.split('\n').collect();
             rows[rows.len() - 2].to_string()
         };
         assert!(

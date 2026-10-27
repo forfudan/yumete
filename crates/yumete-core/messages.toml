@@ -9831,6 +9831,19 @@ zhs = "自动重新加载文档以反映外部更改"
 en = "reload the file when something outside changes it"
 
 [[message]]
+# 設置頁：記不記得去過哪裏（[editor] remember）
+key = "set.editor.remember"
+zht = "記住打開過的文件和位置"
+zhs = "记住打开过的文件和位置"
+en = "remember files and places"
+
+[[message]]
+# 設置頁 [editor] remember 那一行的說明
+key = "set.editor.remember.hint"
+zht = "關掉後不記録也不讀取：每個文件上次停在哪一行、最近的文件和項目、上次開着的文件"
+zhs = "关掉后不记录也不读取：每个文件上次停在哪一行、最近的文件和项目、上次开着的文件"
+en = "off: nothing is written or read: the line each file was left on, recent files and projects, the last session"
+[[message]]
 # 設置：想寫多長
 key = "set.editor.ruler"
 zht = "想寫多長"
@@ -12307,13 +12320,6 @@ key = "ui.sidebar-mode"
 zht = "-- 邊欄 --  {0}"
 zhs = "-- 边栏 --  {0}"
 en = "-- SIDEBAR --  {0}"
-
-[[message]]
-# 提示行右端那一小行落款：編輯器自己的名字
-key = "ui.signature"
-zht = "宇夢編輯器"
-zhs = "宇梦编辑器"
-en = "Yumete"
 
 
 # ── wheel ─────────────────────────────────────────────────────────────

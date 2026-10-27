@@ -3014,6 +3014,9 @@ pub struct Editor {
     start_note: String,
     where_config: Option<PathBuf>,
     where_data: Option<PathBuf>,
+    /// `[editor] remember` / `--private` (2026-10-27): whether `places.txt`,
+    /// `projects.txt` and the session are read and written at all.
+    remembers: bool,
     /// The data directory, for the global word list. Set by the front end.
     data_dir: Option<PathBuf>,
     /// Where this project's session is remembered — which files were open and
@@ -3967,6 +3970,7 @@ impl Editor {
             start_note: String::new(),
             where_config: None,
             where_data: None,
+            remembers: true,
             data_dir: None,
             session_file: None,
             turned_for_table: None,

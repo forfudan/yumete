@@ -193,6 +193,12 @@ pub struct EditorConfig {
     /// Off: a bare `yumete` is a blank page, and `yumete -c` is last time
     /// (2026-09-17, 「打 ye 應該建一個新的文檔」).
     pub session: bool,
+    /// Whether yumete keeps any memory of where it has been (2026-10-27):
+    /// the line each file was left on, the recent files and projects, and the
+    /// session. Off, it neither reads nor writes `places.txt`, `projects.txt`
+    /// or `sessions/` — vim's `viminfo=` and Neovim's `shada=""`. Recovery
+    /// copies are another matter and keep their own switch.
+    pub remember: bool,
     /// What language the editor says things in: `"zh"` (繁體, the
     /// default), `"zhs"` (简体) or `"en"`.
     pub language: String,
@@ -435,6 +441,7 @@ impl Default for EditorConfig {
             indent: 0,
             bands: 1,
             session: false,
+            remember: true,
             language: "zh".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
             show_chaifen: false,
@@ -3900,6 +3907,7 @@ struct RawEditor {
     indent: Option<usize>,
     bands: Option<usize>,
     session: Option<bool>,
+    remember: Option<bool>,
     language: Option<String>,
     zong_gap: Option<usize>,
     show_chaifen: Option<bool>,
@@ -4042,6 +4050,9 @@ impl RawConfig {
         }
         if other.editor.session.is_some() {
             self.editor.session = other.editor.session;
+        }
+        if other.editor.remember.is_some() {
+            self.editor.remember = other.editor.remember;
         }
         if other.editor.language.is_some() {
             self.editor.language = other.editor.language.clone();
@@ -4379,6 +4390,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.session {
             config.editor.session = on;
+        }
+        if let Some(on) = self.editor.remember {
+            config.editor.remember = on;
         }
         if let Some(name) = &self.editor.language {
             config.editor.language = name.clone();
