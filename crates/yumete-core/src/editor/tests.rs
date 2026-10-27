@@ -4728,6 +4728,44 @@ fn any_character_acts_as_a_pair() {
     assert_eq!(ed.selection(), (2, 3), "the selection is where `fx;` left it");
 }
 
+/// **`ms`, `md`, `mr` and `mi` act on every selection** (2026-10-27, helix's
+/// `m` group); `md`/`mr` refuse the whole command when a cursor has no pair
+/// or two share one, as helix's do.
+#[test]
+fn the_m_group_acts_on_every_selection() {
+    // A cursor on the first line's `b` (`fb;`), copied to the line below (`C`).
+    let run = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        (ed.current_buffer().text().to_string(), ed.status.clone())
+    };
+    assert_eq!(run("a b c\na b c\n", "fb;Cms(").0, "a (b) c\na (b) c\n", "ms wraps both");
+    assert_eq!(run("a (b) c\na (b) c\n", "fb;Cmd(").0, "a b c\na b c\n", "md takes off both");
+    assert_eq!(run("a (b) c\na (b) c\n", "fb;Cmr([").0, "a [b] c\na [b] c\n", "mr changes both");
+    assert_eq!(run("a *b* c\na *b* c\n", "fb;Cmd*").0, "a b c\na b c\n", "any character too");
+    // `mi(` selects inside each one's own pair, so `d` empties both.
+    assert_eq!(run("(ab) (cd)\n(ab) (cd)\n", "fa;Cmi(d").0, "() (cd)\n() (cd)\n");
+
+    // A cursor with no pair: the whole command is refused, not half done.
+    let (text, said) = run("a (b) c\na b c\n", "fb;Cmd(");
+    assert_eq!(text, "a (b) c\na b c\n", "nothing taken off");
+    assert_eq!(said, say!("edit.no-pair-to-delete"));
+
+    // Two cursors in one pair: taking it off twice would take the outer pair
+    // too, so nothing changes and the status line says why.
+    let mut ed = typed("[(a a)]\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('x'));
+    ed.on_key(Key::Char('s'));
+    ed.on_key(Key::Char('a'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), 2, "a cursor on each a");
+    press(&mut ed, "md(");
+    assert_eq!(ed.current_buffer().text(), "[(a a)]\n", "neither pair taken off");
+    assert_eq!(ed.status, say!("edit.one-pair-for-two-cursors"));
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {

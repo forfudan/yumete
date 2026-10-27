@@ -173,6 +173,12 @@ impl Editor {
                 {
                     self.each_selection(|e| e.on_normal_key(key));
                 } else if multi::edits_every_selection(&self.pending, key) {
+                    if let Key::Char(c) = key {
+                        if !self.every_selection_has_its_own_pair(self.pending, c) {
+                            self.pending = Pending::None;
+                            return KeyOutcome::Continue;
+                        }
+                    }
                     self.edit_each(|e| e.on_normal_key(key));
                 } else {
                     self.on_normal_key(key);

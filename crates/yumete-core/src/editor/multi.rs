@@ -801,6 +801,10 @@ pub(super) fn each_selection_key(pending: &super::Pending, key: crate::input::Ke
     match pending {
         // `f` `F` `t` `T` 補上的那一個字符：逐段各找各的。
         super::Pending::Find(_) => true,
+        // `mi`/`ma` and their object, `mm` (2026-10-27, helix's `m` group):
+        // each selection takes its own pair, as helix's transform does.
+        super::Pending::MatchPair { .. } => true,
+        super::Pending::Match => matches!(key, crate::input::Key::Char('m')),
         // Warning: **`g` 那一層只有幾個是移動。** `gf` 開檔、`gd` 看定義、`gw` 撒標籤，每一個
         // 都是「整個編輯器做一次」。Warning: `gg`/`ge` 也不逐段做：它們是「到檔首/檔尾」，
         // N 段一起去同一個地方，`normalize` 會把它們併成一段——那不是使用者要的。
@@ -828,6 +832,12 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
     match pending {
         // `r` 補上的那一個字符：逐段各換各的。
         super::Pending::Replace => true,
+        // `ms`, `md` and the second key of `mr` (2026-10-27, helix's `m`
+        // group): every selection is wrapped, unwrapped or changed — `md`/`mr`
+        // after `every_selection_has_its_own_pair` has said they may.
+        super::Pending::Surround | super::Pending::SurroundOff | super::Pending::SurroundTo(_) => {
+            matches!(key, crate::input::Key::Char(_))
+        }
         super::Pending::None => matches!(
             key,
             Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P') | Key::Char('>' | '<')
