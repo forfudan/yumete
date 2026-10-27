@@ -5743,6 +5743,12 @@ zhs = "尖括号"
 en = "angle brackets"
 
 [[message]]
+# m 組菜單最後一行：別的符號也當成一對（helix 的 "... or any character"）
+key = "hint.pair.any"
+zht = "……或任何符號"
+zhs = "……或任何符号"
+en = "… or any character"
+[[message]]
 # ms/md/mr 菜單：中文括號
 key = "hint.pair.cjk"
 zht = "中文括號"

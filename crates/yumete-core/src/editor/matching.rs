@@ -146,6 +146,11 @@ impl Editor {
             'c' if self.writes_code() => return self.select_object(crate::code::Object::Comment),
             c => match pair_of(c) {
                 Some((open, close)) => motion::Object::Pair { open, close },
+                // **Any character that is not a letter or a digit acts as a
+                // pair** (2026-10-27, helix's `select_textobject`): `mi$` in
+                // `$x$`, `mi*` in `*斜*`. A letter is the name of an object,
+                // so one that names none is still nothing.
+                None if !c.is_alphanumeric() => motion::Object::Pair { open: c, close: c },
                 None => {
                     self.object_missed = true;
                     return;
@@ -972,9 +977,9 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let Some((open, close)) = pair_of(c) else {
-            return;
-        };
+        // Any character wraps as a pair of itself (2026-10-27, helix's
+        // `surround_add`): `ms*` makes `*斜*`, `ms~` half of a strikethrough.
+        let (open, close) = pair_of(c).unwrap_or((c, c));
         let (start, end) = self.selection();
         let end = end.max(start);
         self.snapshot();
@@ -1089,9 +1094,7 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let Some((new_open, new_close)) = pair_of(to) else {
-            return;
-        };
+        let (new_open, new_close) = pair_of(to).unwrap_or((to, to));
         let rope = self.current_buffer().rope();
         // **`m` ＝ 最內層那一對**，同 helix（`surround_replace` 那一支也認它）。
         // 2026-10-06 補的：從前只認具體符號，`mrm[` 一點反應都没有。
