@@ -4766,6 +4766,44 @@ fn the_m_group_acts_on_every_selection() {
     assert_eq!(ed.status, say!("edit.one-pair-for-two-cursors"));
 }
 
+/// **Counts in the `m` group are pairs out** (2026-10-27, each measured
+/// against helix 25.07.1 on the same text): `2mi(`, `2md(`, `2mr([`, and with
+/// `m` the count-th pair of any kind. Too few pairs: nothing changes.
+#[test]
+fn a_count_in_the_m_group_is_that_many_pairs_out() {
+    let run = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(run("f(a(b)c)\n", "fb;2mi(d"), "f()\n");
+    assert_eq!(run("f(a(b)c)\n", "fb;2md("), "fa(b)c\n");
+    assert_eq!(run("f(a(b)c)\n", "fb;2mr(["), "f[a(b)c]\n");
+    assert_eq!(run("f[a(b)c]\n", "fb;2mdm"), "fa(b)c\n");
+    assert_eq!(run("f[a(b)c]\n", "fb;2mimd"), "f[]\n");
+    assert_eq!(run("f(a(b)c)\n", "fb;3md("), "f(a(b)c)\n", "no third pair");
+    // A count is `m`'s for the commands that take one, and not left over.
+    assert_eq!(run("f(a(b)c)\n", "fb;2mm;md("), "f(abc)\n", "`mm` spent it; `md(` took one");
+}
+
+/// **Outside any pair, `mi(`/`ma(` jump ahead under the vim keymap only**
+/// (2026-10-27, measured: vim 9.1 and nvim 0.12.5 take the next `(…)`,
+/// helix 25.07.1 selects nothing).
+#[test]
+fn only_the_vim_keymap_reaches_ahead_for_a_pair() {
+    let mut ed = typed("ab (cd) ef\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "ma(");
+    assert_eq!(ed.selection(), (0, 1), "helix: the selection stays where it was");
+
+    let mut ed = typed("ab (cd) ef\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "gg");
+    press(&mut ed, "da(");
+    assert_eq!(ed.current_buffer().text(), "ab  ef\n", "vim: the next pair");
+}
+
 /// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {

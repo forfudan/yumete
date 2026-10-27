@@ -22,6 +22,9 @@ in `docs/development.md` §5.2.
   read or written. `--private` does the same for one run. Recovery copies are still
   kept.
 
+- **Counts in the `m` group**, as in helix: `2mi(`, `2md(` and `2mr([` act on the
+  second pair out, and `2mim` on the second pair of any kind.
+
 - **The `m` group acts on every selection**, as helix's does: `ms`, `md`, `mr`, `mi`,
   `ma` and `mm` each take their own pair at every cursor, as one undo step. `md` and
   `mr` change nothing when a cursor has no pair, or when two cursors share one.
@@ -32,6 +35,10 @@ in `docs/development.md` §5.2.
   still the name of an object.
 
 ### Changed
+
+- **Under the helix keymap, `mi(` and `ma(` outside any pair take nothing**, as helix's
+  do; they used to reach ahead to the next pair, which is vim's rule and stays under the
+  vim keymap.
 
 - **The session file lists only which files were open.** The line each was left on is
   kept once, in `places.txt`, which already took you back to it; the two files used to

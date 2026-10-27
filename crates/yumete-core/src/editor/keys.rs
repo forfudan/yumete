@@ -1614,8 +1614,12 @@ impl Editor {
                     self.answer_with_char(waiting, c);
                 }
                 // Spent either way: a count typed before `f` belongs to that
-                // `f` and must not be left lying for the next command.
-                self.operator_count = None;
+                // `f` and must not be left lying for the next command — unless
+                // the answer asked for another key (`mr`'s first one), whose
+                // command the count is still waiting for (2026-10-27).
+                if self.pending == Pending::None {
+                    self.operator_count = None;
+                }
                 return;
             }
             Pending::Register => {
@@ -1682,6 +1686,11 @@ impl Editor {
             }
             Pending::Match => {
                 self.pending = Pending::None;
+                // Only `mi`/`ma`/`md`/`mr` take a count, as in helix; for the
+                // rest it is spent here and not left for the next command.
+                if !matches!(key, Key::Char('i' | 'a' | 'd' | 'r')) {
+                    self.operator_count = None;
+                }
                 match key {
                     Key::Char('m') => self.goto_matching_bracket(),
                     Key::Char('i') => self.pending = Pending::MatchPair { around: false },
@@ -2747,7 +2756,12 @@ impl Editor {
             Key::Char('N') => self.repeat(count, |e| e.repeat_search(!e.search_forward)),
             Key::Char(':') => self.open_the_command_line(""),
             // Match mode (Helix `m`): matching bracket, textobjects, surround.
-            Key::Char('m') => self.pending = Pending::Match,
+            // The count goes with it (2026-10-27): `2mi(` and `2md(` are the
+            // second pair out, as in helix.
+            Key::Char('m') => {
+                self.pending = Pending::Match;
+                self.operator_count = operator_count;
+            }
             // Overwrite every character of the selection with the next key.
             Key::Char('r') => self.pending = Pending::Replace,
             // Name the register the next yank, delete or paste will use.
@@ -3029,11 +3043,11 @@ impl Editor {
                 self.find_nth_char(kind, c, count, false);
             }
             Pending::Replace => self.replace_chars(c),
-            Pending::MatchPair { around } => self.select_pair(c, around),
+            Pending::MatchPair { around } => self.select_pair(c, around, self.pair_count()),
             Pending::Surround => self.surround_add(c),
-            Pending::SurroundOff => self.surround_delete(c),
+            Pending::SurroundOff => self.surround_delete(c, self.pair_count()),
             Pending::SurroundFrom => self.pending = Pending::SurroundTo(c),
-            Pending::SurroundTo(from) => self.surround_replace(from, c),
+            Pending::SurroundTo(from) => self.surround_replace(from, c, self.pair_count()),
             // Everything else waits for a letter naming a command, and those
             // are answered where they are read.
             _ => {}
