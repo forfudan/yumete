@@ -41,3 +41,6 @@ crates/yumete-cjk/src/common_words.txt
 # subagent 的臨時 worktree（`isolation: worktree`），不進倉
 .claude/worktrees/
 __pycache__/
+
+# Claude Code permissions for this machine (2026-10-27)
+/.claude/settings.local.json
