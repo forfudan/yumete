@@ -3401,6 +3401,19 @@ zhs = "这一份里找不到函数或类"
 en = "no functions or classes in this file"
 
 [[message]]
+# mi x，可是光標不在 HTML 元素裏
+key = "code.no-element-here"
+zht = "光標不在任何 HTML 元素裏"
+zhs = "光标不在任何 HTML 元素里"
+en = "the cursor is in no HTML element"
+[[message]]
+# mi e，可是光標不在鍵值對裏
+key = "code.no-entry-here"
+zht = "光標不在任何鍵值對裏"
+zhs = "光标不在任何键值对里"
+en = "the cursor is in no key and value"
+
+[[message]]
 # mi a：光標不在任何一個參數裏
 key = "code.no-parameter-here"
 zht = "光標不在任何參數裏"
@@ -3413,6 +3426,13 @@ key = "code.no-problems"
 zht = "這一份裏没有診斷"
 zhs = "这一份里没有诊断"
 en = "no diagnostics in this file"
+
+[[message]]
+# mi T，可是光標不在測試函數裏
+key = "code.no-test-here"
+zht = "光標不在任何測試函數裏"
+zhs = "光标不在任何测试函数里"
+en = "the cursor is in no test function"
 
 [[message]]
 # 命令行語法壞了
@@ -5650,6 +5670,20 @@ zhs = "注释（代码）/这一格（表格）"
 en = "comment (code), this cell (table)"
 
 [[message]]
+# mi/ma 菜單：x，HTML 元素
+key = "hint.obj.element"
+zht = "HTML 元素（代碼）"
+zhs = "HTML 元素（代码）"
+en = "HTML element (code)"
+
+[[message]]
+# mi/ma 菜單：e，鍵值對
+key = "hint.obj.entry"
+zht = "鍵值對（代碼）"
+zhs = "键值对（代码）"
+en = "key and value (code)"
+
+[[message]]
 # mi/ma 菜單：函數
 key = "hint.obj.function"
 zht = "函數（代碼）"
@@ -5697,6 +5731,13 @@ key = "hint.obj.sentence"
 zht = "句"
 zhs = "句"
 en = "sentence"
+
+[[message]]
+# mi/ma 菜單：T，測試函數
+key = "hint.obj.test"
+zht = "測試函數（代碼）"
+zhs = "测试函数（代码）"
+en = "test function (code)"
 
 [[message]]
 # mi/ma 菜單：類型定義

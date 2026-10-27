@@ -22,6 +22,10 @@ in `docs/development.md` §5.2.
   read or written. `--private` does the same for one run. Recovery copies are still
   kept.
 
+- **`mi T`, `mi e` and `mi x`**, as helix's `T` `e` `x`: the test function the cursor is
+  in (Rust, Python, Go, JavaScript, Java), the key and value or field (JSON, TOML, YAML,
+  Rust, Python, Go, JavaScript), and the HTML element.
+
 - **`mi f`, `mi t`, `mi a` and `mi c` work inside a Markdown code fence**: a function,
   type, parameter or comment in the ```` ``` ```` block the cursor is in, read with that
   block's language. They used to work only in files that are code throughout.
