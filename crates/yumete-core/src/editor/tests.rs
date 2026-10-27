@@ -24590,11 +24590,57 @@ fn a_motion_moves_every_selection_not_just_the_primary() {
     press(&mut ed, "gl");
     assert_eq!(ed.sel.len(), 3, "三段各到各自的行尾");
 
-    // Warning: `gg` 不逐段做：三段一起去檔首會被併成一段，那不是使用者要的。
+    // **`gg` moves every selection, and they merge into one** (2026-10-27,
+    // measured against helix 25.07.1, whose `goto_file_start_impl` transforms
+    // each). Until then `gg` moved the primary alone and left the others.
     let mut ed = typed("甲乙丙丁\n戊己庚辛\n壬癸子丑\n");
     press(&mut ed, "ggllCC");
     press(&mut ed, "gg");
-    assert_eq!(ed.sel.len(), 3, "gg 只動主選區，別的兩段留在原處");
+    assert_eq!(ed.sel.len(), 1, "三段一起到檔首，併成一段");
+}
+
+/// **The keys that reached the primary alone** (2026-10-27, measured against
+/// helix 25.07.1 with two cursors): `~`, `Home`/`End`, `ge`, the insert
+/// mode's arrows and `C-w`, and a paste at one cursor of two copied pieces.
+#[test]
+fn the_keys_that_moved_the_primary_alone_reach_every_selection() {
+    let lines = |ed: &Editor| ed.current_buffer().text();
+    // `~` at both cursors.
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "ggC~");
+    assert_eq!(lines(&ed), "Ab\nCd\n");
+    // `End` puts both on their own line's last character.
+    let mut ed = typed("abc\nabcde\n");
+    press(&mut ed, "ggC");
+    ed.on_key(Key::End);
+    let rope = ed.current_buffer().rope().clone();
+    let cols: Vec<usize> =
+        ed.sel.iter().map(|r| r.head - rope.line_to_char(rope.char_to_line(r.head))).collect();
+    assert_eq!(cols, vec![2, 4], "{cols:?}");
+    // `ge`: every selection to the last line, merged.
+    let mut ed = typed("ab\nab\nab\n");
+    press(&mut ed, "ggCge");
+    assert_eq!(ed.sel.len(), 1);
+    // Insert mode: `Right` then typing, at both cursors.
+    let mut ed = typed("ab\nab\n");
+    press(&mut ed, "ggCi");
+    ed.on_key(Key::Right);
+    press(&mut ed, "X");
+    ed.on_key(Key::Esc);
+    assert_eq!(lines(&ed), "aXb\naXb\n");
+    // Insert mode: `C-w` at both cursors.
+    let mut ed = typed("foo bar\nfoo bar\n");
+    press(&mut ed, "%");
+    ed.on_key(Key::Alt('s'));
+    press(&mut ed, "A");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Esc);
+    assert_eq!(lines(&ed), "foo \nfoo \n");
+    // Two pieces copied, pasted at one cursor: the first piece, as helix's
+    // `paste_impl` hands one value per selection.
+    let mut ed = typed("abc\nabc\n");
+    press(&mut ed, "ggCly,P");
+    assert_eq!(lines(&ed), "abc\nabbc\n");
 }
 
 /// **編輯逐段各做一次，而且只留一個撤銷點**（#405 Phase 1 第五步）。
