@@ -256,9 +256,14 @@ impl Editor {
         if !self.edit_insert(at, text) {
             return;
         }
-        self.sel.set_head(at + text.chars().count());
+        let n = text.chars().count();
+        // `i`'s selection is ahead of the caret, and moves with the text.
+        let tail = self.sel.anchor();
+        self.sel.set_head(at + n);
         // **`a` 開的那一趟不塌錨點**（2026-10-10，照 helix）：選區跟着打的字長。
-        if !self.keep_anchor_while_inserting {
+        if self.insert_keeps_tail && tail > at {
+            self.sel.set_anchor(tail + n);
+        } else if !self.keep_anchor_while_inserting {
             self.sel.set_anchor(self.sel.head());
         }
         self.refresh_goal_column();

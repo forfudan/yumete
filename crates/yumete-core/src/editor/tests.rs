@@ -24599,6 +24599,68 @@ fn a_motion_moves_every_selection_not_just_the_primary() {
     assert_eq!(ed.sel.len(), 1, "三段一起到檔首，併成一段");
 }
 
+/// **The multi-selection bugs measured against helix 25.07.1** (2026-10-27):
+/// `a` one character long at the other cursors, `>` twice on one line, `v j`
+/// overlaps left apart, `u` keeping one cursor, `i` dropping its selection,
+/// and the way a merged selection faces.
+#[test]
+fn several_selections_leave_insert_indent_merge_and_undo_as_helix_does() {
+    let spans = |ed: &Editor| -> Vec<String> {
+        let rope = ed.current_buffer().rope().clone();
+        ed.sel
+            .iter()
+            .map(|r| {
+                let (a, b) = r.span();
+                rope.slice(a..crate::motion::next_grapheme(&rope, b)).to_string()
+            })
+            .collect()
+    };
+    // `a`, type, `Esc`: every selection is the old one plus what was typed.
+    let mut ed = typed("ab\nab\nab\n");
+    press(&mut ed, "ggCaX");
+    ed.on_key(Key::Esc);
+    assert_eq!(spans(&ed), vec!["aX", "aX"]);
+    // `>` with two cursors on one line indents it once, and they move with it.
+    let mut ed = typed("a a\n");
+    press(&mut ed, "%sa");
+    ed.on_key(Key::Enter);
+    press(&mut ed, ">");
+    let pad = " ".repeat(ed.indent_width);
+    assert_eq!(ed.current_buffer().text(), format!("{pad}a a\n"));
+    assert_eq!(spans(&ed), vec!["a", "a"]);
+    // `C` `v` `j` on three lines: the two selections overlap and merge.
+    let mut ed = typed("abc\nabc\nabc\n");
+    press(&mut ed, "ggCvj");
+    assert_eq!(ed.sel.len(), 1, "{:?}", spans(&ed));
+    // `u` brings back every cursor, where the typing began.
+    let mut ed = typed("abc\nabc\n");
+    press(&mut ed, "ggCAX");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.sel.len(), 2);
+    assert_eq!(spans(&ed), vec!["\n", "\n"]);
+    // `i` keeps the selection, after what was typed.
+    let mut ed = typed("foo bar\nfoo bar\n");
+    press(&mut ed, "ggCwiX");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "Xfoo bar\nXfoo bar\n");
+    assert_eq!(spans(&ed), vec!["foo ", "foo "]);
+    // …and a move inside the insert drops it, as helix's `i` `→` does.
+    let mut ed = typed("foo bar\n");
+    press(&mut ed, "ggwi");
+    ed.on_key(Key::Right);
+    press(&mut ed, "X");
+    ed.on_key(Key::Esc);
+    assert_eq!(spans(&ed), vec!["o"]);
+    // `b` from the file's start merges backward, as helix's `Range::merge`.
+    let mut ed = typed("xa xb\n");
+    press(&mut ed, "%sx");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "b");
+    let one = ed.sel.primary();
+    assert!(one.anchor > one.head, "{one:?}");
+}
+
 /// **The keys that reached the primary alone** (2026-10-27, measured against
 /// helix 25.07.1 with two cursors): `~`, `Home`/`End`, `ge`, the insert
 /// mode's arrows and `C-w`, and a paste at one cursor of two copied pieces.

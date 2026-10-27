@@ -184,14 +184,47 @@ impl Editor {
                 } else {
                     self.on_normal_key(key);
                 }
+                // **An undo point is where the typing begins** (2026-10-27,
+                // helix's): `A` announces it and then goes to the line's end,
+                // and `u` comes back to that end, with every cursor.
+                //
+                // Warning: **`i`'s range kept in Normal mode's terms.** Its anchor is
+                // the gap after the last character while typing; `u` lands in
+                // Normal mode, where an end is the character itself. `a`'s is
+                // stored as it stands, head past the end, because helix stores
+                // it so: `w` `a` `X` `Esc` `u` gives back `foo b` there, measured.
+                if self.mode == Mode::Insert && self.key_preset != yumete_cjk::KeyPreset::Vim {
+                    let rope = self.current_buffer().rope().clone();
+                    let mut every = self.sel.clone();
+                    every.map(|one| match one.anchor > one.head {
+                        true => crate::selection::Range {
+                            anchor: motion::prev_grapheme(&rope, one.anchor).max(one.head),
+                            ..one
+                        },
+                        false => one,
+                    });
+                    let at = every.primary().head;
+                    self.current_buffer_mut().retarget_pending(at, every);
+                }
                 KeyOutcome::Continue
             }
             Mode::Insert => {
                 // Warning: **補全單子開着的時候一次就夠**：那是一張浮在上面的單子，`Tab` 與
                 // `C-n` 歸它，不是往 N 處各寫一次。
+                let (was_len, was_head) = (self.current_buffer().rope().len_chars(), self.sel.head());
                 match multi::types_at_every_selection(key) && self.offers_here().is_none() {
-                    true => self.edit_each_from(false, |e| e.on_insert_key(key)),
-                    false => self.on_insert_key(key),
+                    true => self.edit_each_from(false, |e| e.insert_key_carrying_the_tail(key)),
+                    false => self.insert_key_carrying_the_tail(key),
+                }
+                // **A move ends the selection `i` or `a` kept** (2026-10-27,
+                // measured: helix's `i` `→` `X` leaves a one-character cursor).
+                // From here on typing is plain typing, at every cursor.
+                if self.mode == Mode::Insert
+                    && self.current_buffer().rope().len_chars() == was_len
+                    && self.sel.head() != was_head
+                {
+                    self.insert_keeps_tail = false;
+                    self.keep_anchor_while_inserting = false;
                 }
                 KeyOutcome::Continue
             }
@@ -2640,9 +2673,24 @@ impl Editor {
             }
             Key::Char('i') => {
                 self.snapshot();
-                let pos = self.selection().0;
+                let (pos, end) = self.selection();
+                let ranged = self.has_selection();
                 self.set_cursor(pos);
                 self.enter_insert();
+                // **`i` keeps the selection, after what you type** (2026-10-27,
+                // helix's: `insert_mode` flips the range and keeps it). Until
+                // then it dropped to one character, which the manual said on
+                // purpose. The vim keymap's `i` leaves a cursor, as vim's does.
+                //
+                // Warning: **only for a real selection.** A bare cursor is not one
+                // here (`has_selection`), and keeping it would paint the
+                // character after the caret as selected all through the typing;
+                // `Esc` lands on that character either way, as in helix.
+                if self.key_preset != yumete_cjk::KeyPreset::Vim && ranged && end > pos {
+                    self.sel.set_anchor(end);
+                    self.insert_keeps_tail = true;
+                    self.keep_anchor_while_inserting = true;
+                }
                 self.type_it_again(count, None);
             }
             Key::Char('a') => {

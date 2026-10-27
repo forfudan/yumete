@@ -65,7 +65,33 @@ impl Editor {
     /// file's last change, whatever was edited in between.
     pub(super) fn snapshot(&mut self) {
         let at = self.sel.head();
-        self.current_buffer_mut().snapshot(at);
+        let every = self.sel.clone();
+        self.current_buffer_mut().snapshot_with(at, Some(every));
+    }
+
+    /// **Put back the selections an undo point kept** (2026-10-27, measured
+    /// against helix 25.07.1: after `C` `A` `X` `Esc` `u`, helix has both
+    /// cursors back where the typing began and this editor kept one).
+    ///
+    /// Warning: **the helix keymap only.** vim's `u` leaves one cursor at the
+    /// start of the change, and the vim keymap keeps doing that.
+    fn come_back_to(&mut self, cursor: usize, every: Option<crate::selection::Selections>) {
+        match every {
+            Some(every) if self.key_preset != yumete_cjk::KeyPreset::Vim => {
+                let len = self.current_buffer().rope().len_chars();
+                self.sel = every;
+                self.sel.map(|one| crate::selection::Range {
+                    anchor: one.anchor.min(len),
+                    head: one.head.min(len),
+                    ..one
+                });
+            }
+            _ => {
+                self.sel.set_head(cursor);
+                self.sel.set_anchor(cursor);
+            }
+        }
+        self.clamp_cursor();
     }
 
     /// Undo the last change to this buffer (`u` / `:undo`).
@@ -74,11 +100,10 @@ impl Editor {
             return;
         }
         let at = self.sel.head();
-        match self.current_buffer_mut().undo(at) {
-            Some(cursor) => {
-                self.sel.set_head(cursor);
-                self.sel.set_anchor(cursor);
-                self.clamp_cursor();
+        let every = self.sel.clone();
+        match self.current_buffer_mut().undo_with(at, Some(every)) {
+            Some((cursor, kept)) => {
+                self.come_back_to(cursor, kept);
                 // **A step back can move a record's boundary** (2026-10-21):
                 // undoing the line break typed into a cell leaves the grid's
                 // record map claiming a record two lines long, and then the
@@ -140,11 +165,10 @@ impl Editor {
             return;
         }
         let at = self.sel.head();
-        match self.current_buffer_mut().redo(at) {
-            Some(cursor) => {
-                self.sel.set_head(cursor);
-                self.sel.set_anchor(cursor);
-                self.clamp_cursor();
+        let every = self.sel.clone();
+        match self.current_buffer_mut().redo_with(at, Some(every)) {
+            Some((cursor, kept)) => {
+                self.come_back_to(cursor, kept);
                 // The same reason as `undo`'s: a step either way can put a
                 // record's boundary back or take it away.
                 self.rescan_records();

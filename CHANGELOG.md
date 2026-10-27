@@ -60,6 +60,11 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`i` keeps the selection**, as helix's does: what you type goes before it and the
+  selection is still there on `Esc`. Moving with the arrows while inserting drops it
+  to a cursor. `>` and `<` leave the cursor on the text it was on rather than on the
+  new indent. `u` restores whole selections, not only the cursor.
+
 - **The table cell is `mi l`, not `mi c`**: `c` is the comment only, as in helix.
 
 - **`mi s` no longer selects the line break after a paragraph's last sentence.** Under
@@ -84,6 +89,12 @@ in `docs/development.md` §5.2.
   takes only its `[` `]`, as helix's does; `mdk` takes the whole link.
 
 ### Fixed
+
+- **Several selections leave insert mode, indent, merge and undo as helix's do.**
+  After `a` and `Esc` the other selections were one character too long; `>` with two
+  cursors on one line indented it twice; overlapping selections after `v` `j` stayed
+  apart; `u` and `U` brought back one cursor and now bring back every selection, where
+  the typing began. A merged selection faces backward only when both pieces did.
 
 - **With several selections, every key acts at every cursor**, as in helix. `~`, `J`,
   `R`, the glyph group, `Home`, `End`, `H`, `L`, `{`, `}`, `gg`, `ge`, `]f` `]p` and their

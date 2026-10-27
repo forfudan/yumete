@@ -303,14 +303,14 @@ impl Selections {
                     // 「`prev` 的起點，到兩者較遠的那個終點」。
                     let lo = prev.span().0;
                     let hi = prev.span().1.max(one.span().1);
-                    // **方向跟着先來的那一個。** 方向是要留的信息（`;` 塌向哪一端看它），
-                    // 而先來的那一段是讀者先造出來的。
-                    // 目標列也跟着先來的那一個，理由同方向：它是讀者先造出來的那一段。
+                    // **Backward only when both were** (2026-10-27, helix's
+                    // `Range::merge`; measured: `b` from three cursors, the first
+                    // at the file's start, ends backward there). It used to
+                    // follow whichever came first. A one-character cursor faces
+                    // neither way, so it goes with the other.
+                    // 目標列跟着先來的那一個：它是讀者先造出來的那一段。
                     let (goal, goal_slot) = (prev.goal, prev.goal_slot);
-                    *prev = match prev.anchor <= prev.head {
-                        true => Range { anchor: lo, head: hi, goal, goal_slot },
-                        false => Range { anchor: hi, head: lo, goal, goal_slot },
-                    };
+                    *prev = merged(*prev, one, lo, hi, goal, goal_slot);
                 }
                 _ => out.push(one),
             }
@@ -323,6 +323,59 @@ impl Selections {
             .unwrap_or(0);
         self.ranges = out;
         was - self.ranges.len()
+    }
+}
+
+impl Selections {
+    /// **Merge selections that share a character, in Normal mode** (2026-10-27).
+    ///
+    /// [`Selections::normalize`] reads a range half-open, which is right in
+    /// Insert mode, where the head is a gap between two characters. In Normal
+    /// mode the head is *inside* its range (this editor's cursor covers its
+    /// grapheme), so `[0..=4]` and `[4..=8]` share the character at 4 —
+    /// helix's half-open `[0,5)` and `[4,9)` — and helix merges them. Measured:
+    /// `C` `v` `j` on three lines left two selections where helix has one.
+    /// Two cursors side by side, `[3..=3]` and `[4..=4]`, share nothing and
+    /// stay two, as in helix.
+    pub fn merge_sharing(&mut self) -> usize {
+        if self.ranges.len() < 2 {
+            return 0;
+        }
+        let was = self.ranges.len();
+        let primary = self.primary();
+        let mut out: Vec<Range> = Vec::with_capacity(was);
+        for one in std::mem::take(&mut self.ranges) {
+            match out.last_mut() {
+                Some(prev) if prev.span().1 >= one.span().0 => {
+                    let lo = prev.span().0;
+                    let hi = prev.span().1.max(one.span().1);
+                    let (goal, goal_slot) = (prev.goal, prev.goal_slot);
+                    *prev = merged(*prev, one, lo, hi, goal, goal_slot);
+                }
+                _ => out.push(one),
+            }
+        }
+        self.primary = out
+            .iter()
+            .position(|r| *r == primary)
+            // Merged away: the range that now covers it.
+            .or_else(|| {
+                let (a, b) = primary.span();
+                out.iter().position(|r| r.span().0 <= a && b <= r.span().1)
+            })
+            .unwrap_or(0);
+        self.ranges = out;
+        was - self.ranges.len()
+    }
+}
+
+/// Two ranges as one, from `lo` to `hi`: backward only when neither faces
+/// forward and one faces backward (helix's `Range::merge`).
+fn merged(a: Range, b: Range, lo: usize, hi: usize, goal: Option<usize>, goal_slot: Option<usize>) -> Range {
+    let backward = a.anchor >= a.head && b.anchor >= b.head && (a.anchor > a.head || b.anchor > b.head);
+    match backward {
+        true => Range { anchor: hi, head: lo, goal, goal_slot },
+        false => Range { anchor: lo, head: hi, goal, goal_slot },
     }
 }
 
@@ -410,15 +463,23 @@ mod tests {
         assert_eq!(s.primary().span(), (0, 100), "被併掉就認蓋住它的那一段");
     }
 
-    /// **方向是要留的信息。** 併起來的那一段，方向跟着先來的那一個。
+    /// **A merged range faces backward only when both did** (2026-10-27,
+    /// helix's `Range::merge`; until then it followed the one that came first).
     #[test]
-    fn a_merged_range_keeps_the_direction_of_the_one_that_came_first() {
+    fn a_merged_range_faces_backward_only_when_both_did() {
         let mut s = Selections::at(0);
         s.map(|_| at(9, 2)); // 反向：head 在前
         s.push(at(5, 15));
         assert_eq!(s.len(), 1);
         let it = s.primary();
         assert_eq!(it.span(), (2, 15));
-        assert!(it.head < it.anchor, "先來的那一段是反向的，併完還是：{it:?}");
+        assert!(it.head > it.anchor, "one faced forward, so forward: {it:?}");
+
+        let mut s = Selections::at(0);
+        s.map(|_| at(9, 2));
+        s.push(at(15, 5));
+        let it = s.primary();
+        assert_eq!(it.span(), (2, 15));
+        assert!(it.head < it.anchor, "both backward, so backward: {it:?}");
     }
 }

@@ -204,7 +204,10 @@ impl super::Editor {
             }
             out.push(self.sel.primary());
         }
-        let merged = self.sel.rebuild(out, which);
+        let mut merged = self.sel.rebuild(out, which);
+        if self.mode == crate::input::Mode::Normal {
+            merged += self.sel.merge_sharing();
+        }
         self.say_the_merge(merged);
     }
 
@@ -871,7 +874,9 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         super::Pending::Case => matches!(key, crate::input::Key::Char(_)),
         super::Pending::None => matches!(
             key,
-            Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P') | Key::Char('>' | '<')
+            Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P')
+        // Warning: **not `>` and `<`**: they indent every selection's lines in
+        // one pass, each line once (`Editor::indent`).
         // `~`, `J`, `A-J` and `R` changed the primary alone (2026-10-27,
         // measured against helix, which changes every selection).
         ) || matches!(key, Key::Char('~' | 'J' | 'R') | Key::Alt('J'))
