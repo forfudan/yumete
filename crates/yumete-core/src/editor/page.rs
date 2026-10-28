@@ -1849,7 +1849,16 @@ impl Editor {
     /// Warning: **問題只是放下，什麽時候發是前端的事**：服務器得先收到這一份的新正文，
     /// 否則它答的是上一版（見 `Servers::ask_next`）。
     pub(super) fn maybe_ask_what_comes_next(&mut self, just_typed: &str) {
-        if !self.writes_code() || self.mode != Mode::Insert {
+        if self.mode != Mode::Insert {
+            return;
+        }
+        // Words and paths the text itself offers (2026-10-28); in code, a path
+        // before the server is asked.
+        if self.offer_from_the_text(false) {
+            return;
+        }
+        if !self.writes_code() {
+            self.offering = None;
             return;
         }
         let Some(last) = just_typed.chars().last() else { return };

@@ -765,6 +765,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "word_completion",
+        group: Group::Editing,
+        kind: Kind::Count { low: 0, high: 20, zero: Some("set.zero.off") },
+        label: "set.editor.word-completion",
+        hint: "set.editor.word-completion.hint",
+        factory: "4",
+    },
+    Setting {
+        table: "editor",
         key: "indent_width",
         group: Group::Editing,
         kind: Kind::Count { low: 1, high: 16, zero: None },

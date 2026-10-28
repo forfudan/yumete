@@ -11,6 +11,14 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Word completion from the open files.** After four Latin letters
+  (`[editor] word_completion`, `0` off) a list of the words in every open file floats
+  under the caret, matched fuzzily as helix's word completion is; Chinese characters
+  come up after half as many, offering only longer words the segmenter finds. `C-n` /
+  `C-x` lists them at any length.
+- **Path completion where a path is typed**: any word with a `/` in it, or after `](`,
+  relative to the file's folder, as helix's path completion (plus Markdown links).
+
 - **A shell line has its own label, ghost and history.** A command line that starts
   with `!`, `sh` or one of the `pipe` commands shows a gold `Shell:` in place of the
   `:` (the `!` drawn inside it), offers the last shell command in grey for Tab, and

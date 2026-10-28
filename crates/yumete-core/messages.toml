@@ -10117,6 +10117,20 @@ zhs = "哪些按键会跨越行尾(vim 功能)。只允许 b h l < > ~"
 en = "which keys cross a line end, spelled as in vim: b h l < > ~ — vim keys only"
 
 [[message]]
+# 設置面板：編輯一組，[editor] word_completion
+key = "set.editor.word-completion"
+zht = "詞語補全"
+zhs = "词语补全"
+en = "word completion"
+
+[[message]]
+# 設置面板：[editor] word_completion 那一行底下的說明
+key = "set.editor.word-completion.hint"
+zht = "打幾個西文字母後，列出打開的文件裏出現過的詞；漢字是這個數的一半（向上取整）。C-n 隨時列出"
+zhs = "打几个西文字母后，列出打开的文件里出现过的词；汉字是这个数的一半（向上取整）。C-n 随时列出"
+en = "After this many Latin letters, list words that appear in the open files; for Chinese characters, half as many (rounded up). C-n lists them at any time"
+
+[[message]]
 # 設置：分词松紧
 key = "set.editor.word-level"
 zht = "分詞鬆緊"

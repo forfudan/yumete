@@ -88,7 +88,7 @@ impl Editor {
             // `C-x` 是 helix 的拼法（`default.rs` 的插入態 `completion`），
             // 2026-10-06 一併收下：兩個拼法開同一張單子，插入態裏 `C-x` 本來
             // 什麼都不做。
-            if self.ask_what_comes_next(true) {
+            if self.offer_from_the_text(true) || self.ask_what_comes_next(true) {
                 return;
             }
         }

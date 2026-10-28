@@ -380,6 +380,7 @@ pub fn apply(
     if config.editor.pages_vertical > 1 {
         editor.set_pages_vertical(config.editor.pages_vertical);
     }
+    editor.set_word_completion(config.editor.word_completion);
     if config.editor.pages_horizontal > 1 {
         editor.set_pages_horizontal(config.editor.pages_horizontal);
     }
