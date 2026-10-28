@@ -106,10 +106,6 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
-- **With two or more vertical pages, the text ends one row above the status line.**
-  When the height did not divide evenly, the rows left over sat at the bottom and
-  made a second blank row there; they now go between the pages.
-
 - **With two or more vertical bands, the cursor goes on into the next band.** It used
   to stop at the left edge of the top band while the page scrolled one column at a
   time, because the page counted only one band's columns as on screen.
