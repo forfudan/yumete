@@ -2358,7 +2358,9 @@ mod tests {
     /// **An answer wakes the loop; a log line does not** (2026-10-28).
     ///
     /// The fake server says one `window/logMessage` and then answers request 7.
-    /// Only the answer rings, and it rings once.
+    /// Only the answer rings, and it rings once. Unix only: the fake server
+    /// is a shell script.
+    #[cfg(unix)]
     #[test]
     fn an_answer_rings_the_doorbell_and_nothing_else_does() {
         let dir = tmp().join(format!("yumete-doorbell-{}", std::process::id()));
