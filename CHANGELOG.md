@@ -106,6 +106,9 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **In code, words fill in when the language server has nothing**, as Zed's
+  `"words": "fallback"`: in comments and strings, or in a language with no server, the
+  open files' words come up after the same number of letters as in prose.
 - **Code completion narrows as you type, without asking the server again.** Only the
   first letter of a name waits for the language server; each letter after it narrows
   the list on screen at once, and Backspace widens it, as in helix. Items that no

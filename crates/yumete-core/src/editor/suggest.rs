@@ -196,7 +196,7 @@ impl Editor {
     }
 
     /// The words of the open buffers the word before the caret can become.
-    fn word_offers(&mut self, by_hand: bool) -> Option<Vec<crate::lsp::Offer>> {
+    pub(super) fn word_offers(&mut self, by_hand: bool) -> Option<Vec<crate::lsp::Offer>> {
         let n = self.word_completion;
         if n == 0 && !by_hand {
             return None;

@@ -28508,6 +28508,54 @@ fn the_server_list_narrows_as_the_word_grows() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **In code, words stand in when the server has nothing** (2026-10-28), as
+/// Zed's `completions.words = "fallback"`: a comment, where rust-analyzer
+/// offers nothing, gets the open files' words; a server with something to
+/// say keeps the list to itself. The next letter narrows the words without
+/// asking again.
+#[test]
+fn in_code_words_stand_in_when_the_server_has_nothing() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let dir = tmp().join(format!("yumete-word-fallback-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let rs = dir.join("a.rs");
+    std::fs::write(&rs, "// whenever it rains\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&rs).unwrap();
+    press(&mut ed, "Go");
+    press(&mut ed, "// when");
+    assert!(labels(&ed).is_empty(), "nothing before the server answers");
+    assert!(ed.take_completion_query().is_some(), "the server is asked first");
+    ed.show_offers(Vec::new(), false);
+    assert_eq!(labels(&ed), ["whenever"], "it had nothing: the words stand in");
+    ed.on_key(Key::Char('e'));
+    assert_eq!(labels(&ed), ["whenever"]);
+    assert!(ed.take_completion_query().is_none(), "the server is not asked again");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+
+    // The server has something: its list alone.
+    press(&mut ed, "o");
+    press(&mut ed, "when");
+    ed.take_completion_query();
+    ed.show_offers(
+        vec![crate::lsp::Offer {
+            label: "when_ready".into(),
+            insert: "when_ready".into(),
+            kind: 3,
+            detail: None,
+            filter: None,
+            replacing: None,
+        }],
+        false,
+    );
+    assert_eq!(labels(&ed), ["when_ready"]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`:info`：這份檔案是什麼**（2026-10-08 定）。
 ///
 /// 由來：`:info docs` 那個名字讓人以為是「查看這個文檔的信息」，所以那一條改名
