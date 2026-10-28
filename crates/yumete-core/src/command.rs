@@ -287,6 +287,9 @@ pub enum Command {
     /// `:pipe-before` / `:pipe-after` / `:pipe-to` — the other three of
     /// helix's four (`!`, `A-!`, `A-|`); `:pipe` itself is [`Command::Pipe`].
     PipeInto(String, crate::editor::Put),
+    /// `:read <file>` — a file's contents into this buffer, as vim's `:r` and
+    /// helix's `:read`.
+    Read(String),
     /// `:wheel <n>` — how far one notch of the mouse wheel moves, in whichever
     /// unit the page is set in; `None` only reports (Feature #222).
     SetWheelStep(Option<usize>),
@@ -4417,6 +4420,19 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("pipe-after")),
             Some(line) => Ok(Command::PipeInto(line.to_string(), crate::editor::Put::After)),
+        }),
+    },
+    // `:read` (2026-10-28), what `:pipe-after cat <file>` did by way of a
+    // shell. Its `:r` stays with `:replace`.
+    Entry {
+        name: "read",
+        aliases: &[],
+        help: "cmd.commands.read",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| match p.arg(0) {
+            None => Err(CommandError::MissingArgument("read")),
+            Some(path) => Ok(Command::Read(path.to_string())),
         }),
     },
     Entry {

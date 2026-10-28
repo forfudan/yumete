@@ -11,6 +11,9 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`:read <file>`** puts a file's contents after each selection, as helix's
+  `:read`; under the vim keymap, on new lines below the cursor line, as vim's `:r`.
+
 - **`:r` is short for `:replace`**, as `:s` is for `:search`. vim and helix use `:r`
   for `:read`, which yumete does not have.
 
@@ -114,6 +117,11 @@ in `docs/development.md` §5.2.
   takes only its `[` `]`, as helix's does; `mdk` takes the whole link.
 
 ### Fixed
+
+- **A run with only a scratch buffer no longer wipes the session.** Typing into an
+  unnamed buffer and leaving with `:q!` used to delete the project's session, so the
+  next `ye -r` had nothing to bring back. With no file open, the last session now
+  stays, as persistence.nvim's `need = 1` does.
 
 - **With two or more vertical bands, the cursor goes on into the next band.** It used
   to stop at the left edge of the top band while the page scrolled one column at a
