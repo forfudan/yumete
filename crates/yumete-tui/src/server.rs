@@ -330,12 +330,23 @@ pub struct Servers {
     settle: std::time::Duration,
     /// What to put on the status line, once.
     pub says: Option<String>,
+    /// **Rung by a server's reader thread when an answer arrives** (2026-10-28).
+    ///
+    /// The loop used to look every [`LOOK_IN`] while something was owed, so a
+    /// completion list came up as much as 120 ms after the server had sent it.
+    /// Only answers ring: `$/progress` and diagnostics can come by the hundred
+    /// a second, and those still wait for the next look.
+    doorbell: Option<Doorbell>,
 
 }
+
+/// See [`Servers::ring_on_answers`].
+pub type Doorbell = std::sync::Arc<dyn Fn() + Send + Sync>;
 
 impl Default for Servers {
     fn default() -> Servers {
         Servers {
+            doorbell: None,
             running: HashMap::new(),
             serving: HashMap::new(),
             failed: HashSet::new(),
@@ -480,7 +491,7 @@ impl Servers {
                         std::env::split_paths(&path).any(|dir| dir.join(&named.command) == at)
                     })
                     .unwrap_or(false);
-                match start(named, editor, &at) {
+                match start(named, editor, &at, self.doorbell.clone()) {
                     Ok(server) => {
                         self.running.insert(named.command.clone(), server);
                         self.serving
@@ -1210,6 +1221,13 @@ impl Server {
 
 impl Servers {
     /// How long the event loop may sleep, or `None` to block.
+    /// **Wake the loop the moment a server answers**, instead of at its next
+    /// look (see the `doorbell` field). Servers started before this is set do
+    /// not ring.
+    pub fn ring_on_answers(&mut self, bell: Doorbell) {
+        self.doorbell = Some(bell);
+    }
+
     pub fn due_in(&self) -> Option<std::time::Duration> {
         let waiting = self.running.values().any(Server::owed);
         let settling = self.touched.is_some();
@@ -1429,7 +1447,12 @@ fn in_its_environment(command: &mut Command, at: &Path) {
 }
 
 /// Start one server and get its threads going.
-fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::Result<Server> {
+fn start(
+    named: &yumete_config::Server,
+    editor: &Editor,
+    at: &Path,
+    doorbell: Option<Doorbell>,
+) -> std::io::Result<Server> {
     // Warning: **起的是找到的那一個絕對路徑**，不是配置裏那個名字——不然 `Command`
     // 自己又去問一遍 `PATH`，項目裏那一個白找了（2026-09-29）。
     let mut command = Command::new(at);
@@ -1471,8 +1494,13 @@ fn start(named: &yumete_config::Server, editor: &Editor, at: &Path) -> std::io::
             }
             while let Some(message) = lsp::take_frame(&mut buf) {
                 trace("<<", &message);
-                if incoming.send(lsp::read(&message, HELLO)).is_err() {
+                let notice = lsp::read(&message, HELLO);
+                let answer = matches!(notice, Notice::Answer { .. });
+                if incoming.send(notice).is_err() {
                     return;
+                }
+                if let (true, Some(ring)) = (answer, &doorbell) {
+                    ring();
                 }
             }
         }
@@ -2313,5 +2341,46 @@ mod tests {
         assert!(editor.problems_listed().is_empty(), "空的一推就清乾淨");
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// **An answer wakes the loop; a log line does not** (2026-10-28).
+    ///
+    /// The fake server says one `window/logMessage` and then answers request 7.
+    /// Only the answer rings, and it rings once.
+    #[test]
+    fn an_answer_rings_the_doorbell_and_nothing_else_does() {
+        let dir = tmp().join(format!("yumete-doorbell-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut said = lsp::frame(r#"{"jsonrpc":"2.0","method":"window/logMessage","params":{"type":3,"message":"hi"}}"#);
+        said.extend(lsp::frame(r#"{"jsonrpc":"2.0","id":7,"result":null}"#));
+        std::fs::write(dir.join("said"), &said).unwrap();
+        let program = dir.join("fake-server");
+        std::fs::write(&program, format!("#!/bin/sh\ncat '{}'\nsleep 5\n", dir.join("said").display())).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let (rang, heard) = std::sync::mpsc::channel::<()>();
+        let rang = std::sync::Mutex::new(rang);
+        let bell: Doorbell = std::sync::Arc::new(move || {
+            let _ = rang.lock().unwrap().send(());
+        });
+        let named = yumete_config::Server { command: "fake-server".into(), args: Vec::new() };
+        let mut server = start(&named, &Editor::new(), &program, Some(bell)).expect("the fake server starts");
+
+        let timeout = std::time::Duration::from_secs(5);
+        heard.recv_timeout(timeout).expect("the answer rang");
+        assert!(
+            matches!(server.from.recv_timeout(timeout), Ok(Notice::Nothing)),
+            "the log line came first, without ringing",
+        );
+        assert!(matches!(server.from.recv_timeout(timeout), Ok(Notice::Answer { id: 7, .. })));
+        assert!(heard.try_recv().is_err(), "one answer, one ring");
+
+        if let Some(child) = server.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
