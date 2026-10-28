@@ -3821,8 +3821,8 @@ impl Editor {
         ("r", "hint.change"),
     ];
 
-    /// What `mi` / `ma` may be finished with: the objects, then the pairs.
-    pub(super) const OBJECT_KEYS: &'static [(&'static str, &'static str)] = &[
+    /// The objects `mi` / `ma` take; [`Self::object_rows`] adds the pairs.
+    const OBJECT_KEYS: &'static [(&'static str, &'static str)] = &[
         ("w", "hint.obj.word"),
         ("W", "hint.obj.big-word"),
         ("u", "hint.obj.clause"),
@@ -3839,33 +3839,35 @@ impl Editor {
         ("e", "hint.obj.entry"),
         ("x", "hint.obj.element"),
         ("g", "hint.obj.change"),
-        ("( [ { <", "hint.obj.brackets"),
-        ("\" ' `", "hint.obj.quotes"),
-        ("「 『 《", "hint.obj.cjk-too"),
-        // A space, not nothing: an empty key is drawn as a line across the
-        // whole menu, and this row belongs in the description column, as
-        // helix's `" "` row does.
-        (" ", "hint.pair.any"),
     ];
+
+    /// The pair rows both menus end with: a key, then the shapes it matches
+    /// that the eye can tell apart. The `…` stands for the look-alikes it
+    /// matches too (full width, half width, the vertical forms): listed, they
+    /// made rows of shapes nobody could tell apart (2026-10-28).
+    const PAIR_ROWS: &'static [(&'static str, &'static str)] = &[
+        ("(", "( …"),
+        ("[", "[ 「 【 〔 …"),
+        ("{", "{ 『 〖 …"),
+        ("<", "< « 〈 《 …"),
+        ("\"", "\" “ 〝 …"),
+        ("'", "' ‘ …"),
+        ("`", "` …"),
+    ];
+
+    /// What `mi` / `ma` may be finished with: the objects, then the pairs.
+    pub(super) fn object_rows() -> super::KeyRows {
+        Self::pair_rows(Self::OBJECT_KEYS)
+    }
 
     /// The pairs `ms` / `md` / `mr` take, after whatever `lead` adds above
     /// them (`m` for the nearest pair where that means something).
-    ///
-    /// 「`(` 或 `)`」 rather than the opener alone, because either half names
-    /// the pair — the 或 is a word of the interface and is said, not written.
     pub(super) fn pair_rows(lead: &[(&'static str, &'static str)]) -> super::KeyRows {
-        let or = say!("hint.key-or");
         let mut rows = Self::said(lead.iter().copied());
-        for (open, close, what) in [
-            ('(', ')', "hint.pair.round"),
-            ('[', ']', "hint.pair.square"),
-            ('{', '}', "hint.pair.curly"),
-            ('<', '>', "hint.pair.angle"),
-        ] {
-            rows.push((format!("{open} {or} {close}").into(), crate::messages::say(what, &[])));
-        }
-        rows.push(("\" ' `".into(), say!("hint.obj.quotes")));
-        rows.push(("「 『 《 【".into(), say!("hint.pair.cjk")));
+        rows.extend(Self::PAIR_ROWS.iter().map(|&(key, shapes)| (key.into(), shapes.to_string())));
+        // A space, not nothing: an empty key is drawn as a line across the
+        // whole menu, and this row belongs in the description column, as
+        // helix's `" "` row does.
         rows.push((" ".into(), say!("hint.pair.any")));
         rows
     }
