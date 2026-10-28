@@ -710,7 +710,7 @@ pub fn run(
     // is ever taken out of order: the rest of a wheel gesture, read early so it
     // can be drawn once instead of once a notch.
     // **Read on a thread of its own** (#360). See `spawn_reader`.
-    let events = spawn_reader();
+    let (events, doorbell) = spawn_reader();
     let mut inbox: std::collections::VecDeque<Event> = std::collections::VecDeque::new();
     let mut painted = std::time::Instant::now();
     // What the last frame cost — the terminal's answer to how fast it can be fed.
@@ -734,6 +734,7 @@ pub fn run(
     // that has one is really opened, and everything it says arrives through
     // `collect` below without anything here ever waiting on it.
     let mut servers = crate::server::Servers::default();
+    servers.ring_on_answers(doorbell);
     // **配置檔開着的時候，現查現說**（2026-10-20 作者定）。和上面那一行一樣是
     // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
     let mut config_watch = crate::settings::ConfigWatch::default();
@@ -1321,12 +1322,15 @@ pub fn run(
                 .min()
             {
                 None => match events.recv() {
-                    Ok(outcome) => outcome,
+                    Ok(Arrival::Terminal(outcome)) => outcome,
+                    // Back to the top, where `collect` takes the answer.
+                    Ok(Arrival::Answer) => continue,
                     // The reader is gone, which is the terminal saying it is done.
                     Err(_) => break Ok(()),
                 },
                 Some(wait) => match events.recv_timeout(wait) {
-                    Ok(outcome) => outcome,
+                    Ok(Arrival::Terminal(outcome)) => outcome,
+                    Ok(Arrival::Answer) => continue,
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         editor.vcs_tick();
                         editor.autosave_tick();
@@ -1988,8 +1992,16 @@ const WHEEL_DRAIN: std::time::Duration = std::time::Duration::from_millis(12);
 /// A reader that never draws cannot be blocked by drawing. The channel is
 /// unbounded, so the terminal's write to us always completes and it goes on
 /// consuming what we send.
-fn spawn_reader() -> std::sync::mpsc::Receiver<io::Result<Event>> {
+///
+/// The same channel carries the language servers' doorbell, the second thing
+/// handed back: the loop sleeps on this one channel, so whatever should wake
+/// it has to come through here.
+fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbell) {
     let (tx, rx) = std::sync::mpsc::channel();
+    let bell = tx.clone();
+    let doorbell: crate::server::Doorbell = std::sync::Arc::new(move || {
+        let _ = bell.send(Arrival::Answer);
+    });
     // **What the reader typed before the editor was on screen goes first.**
     // The two start-up probes read the descriptor directly and used to throw
     // away everything that was not the terminal's reply — which is the first
@@ -2002,7 +2014,7 @@ fn spawn_reader() -> std::sync::mpsc::Receiver<io::Result<Event>> {
             c => KeyCode::Char(c),
         };
         let event = KeyEvent::new(code, KeyModifiers::NONE);
-        if tx.send(Ok(Event::Key(event))).is_err() {
+        if tx.send(Arrival::Terminal(Ok(Event::Key(event)))).is_err() {
             break;
         }
     }
@@ -2011,11 +2023,18 @@ fn spawn_reader() -> std::sync::mpsc::Receiver<io::Result<Event>> {
         let failed = outcome.is_err();
         // A send that fails means the loop has gone; so does an error, and it
         // is delivered first so the loop can say why.
-        if tx.send(outcome).is_err() || failed {
+        if tx.send(Arrival::Terminal(outcome)).is_err() || failed {
             break;
         }
     });
-    rx
+    (rx, doorbell)
+}
+
+/// What wakes the loop: the terminal, or a language server that has answered.
+enum Arrival {
+    Terminal(io::Result<Event>),
+    /// Nothing to carry: the answer itself waits in the server's own channel.
+    Answer,
 }
 
 /// Move everything the reader has ready into the inbox, without waiting.
@@ -2037,11 +2056,16 @@ fn take_an_escape(inbox: &mut std::collections::VecDeque<Event>) -> bool {
 }
 
 fn take_what_arrived(
-    events: &std::sync::mpsc::Receiver<io::Result<Event>>,
+    events: &std::sync::mpsc::Receiver<Arrival>,
     inbox: &mut std::collections::VecDeque<Event>,
 ) {
-    while let Ok(Ok(event)) = events.try_recv() {
-        inbox.push_back(event);
+    loop {
+        match events.try_recv() {
+            Ok(Arrival::Terminal(Ok(event))) => inbox.push_back(event),
+            // The loop collects from the servers on every turn anyway.
+            Ok(Arrival::Answer) => {}
+            Ok(Arrival::Terminal(Err(_))) | Err(_) => break,
+        }
     }
 }
 
@@ -2054,7 +2078,7 @@ fn take_what_arrived(
 /// reordered.
 fn drain_the_flick(
     kind: MouseEventKind,
-    events: &std::sync::mpsc::Receiver<io::Result<Event>>,
+    events: &std::sync::mpsc::Receiver<Arrival>,
     inbox: &mut std::collections::VecDeque<Event>,
 ) -> usize {
     let began = std::time::Instant::now();
@@ -2666,7 +2690,7 @@ fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::
 fn hand_over<B: ratatui::backend::Backend + io::Write>(
     terminal: &mut ratatui::Terminal<B>,
     line: &str,
-    events: &std::sync::mpsc::Receiver<io::Result<Event>>,
+    events: &std::sync::mpsc::Receiver<Arrival>,
     in_dir: &std::path::Path,
 ) -> io::Result<()> {
     let _ = execute!(
@@ -2698,11 +2722,11 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
     // `read`. This waited forever the first time it was tried.
     loop {
         match events.recv() {
-            Ok(Ok(Event::Key(key))) if is_actionable(key.kind) => break,
-            Ok(Ok(_)) => {}
+            Ok(Arrival::Terminal(Ok(Event::Key(key)))) if is_actionable(key.kind) => break,
+            Ok(Arrival::Terminal(Ok(_))) | Ok(Arrival::Answer) => {}
             // The terminal has nothing more to say; do not wait for a key that
             // is not coming.
-            Ok(Err(_)) | Err(_) => break,
+            Ok(Arrival::Terminal(Err(_))) | Err(_) => break,
         }
     }
     execute!(

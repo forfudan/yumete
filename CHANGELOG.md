@@ -104,6 +104,10 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Code completion shows up as soon as the server answers.** The editor used to look
+  for a language server's answers every 120 ms, so a completion list could appear up to
+  that long after it arrived; an answer now wakes the editor at once.
+
 - **`:reload-config` puts back everything commands changed in the view**: the
   layout, every `:view-*` setting and the theme. It used to re-apply only what the
   config files wrote, so a page count or a `:theme` stayed on. A save in the settings
