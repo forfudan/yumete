@@ -25049,6 +25049,49 @@ fn a_bracket_key_reaches_its_whole_family() {
     assert_eq!(ed.current_buffer().text(), "\n", "（）不在 [ 這一族裏");
 }
 
+/// « », ｢ ｣, 〝 〞 and the vertical forms join the families by shape
+/// (2026-10-28), and the menus list one row per key ending in `…`.
+#[test]
+fn look_alikes_and_vertical_forms_join_their_families() {
+    let take_inside = |text: &str, key: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, "lll");
+        press(&mut ed, &format!("mi{key}"));
+        press(&mut ed, "d");
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(take_inside("他說«不要走»然後。\n", "<"), "他說«»然後。\n");
+    assert_eq!(take_inside("他說｢不要走｣然後。\n", "["), "他說｢｣然後。\n");
+    assert_eq!(take_inside("他說〝不要走〞然後。\n", "\""), "他說〝〞然後。\n");
+    assert_eq!(take_inside("他說﹁不要走﹂然後。\n", "["), "他說﹁﹂然後。\n");
+    assert_eq!(take_inside("他說﹃不要走﹄然後。\n", "{"), "他說﹃﹄然後。\n");
+    assert_eq!(take_inside("他說︵不要走︶然後。\n", "("), "他說︵︶然後。\n");
+    assert_eq!(take_inside("他讀︽紅樓夢︾很久。\n", "<"), "他讀︽︾很久。\n");
+
+    let mut ed = typed("x\n");
+    press(&mut ed, "mi");
+    let Hint::Keys(_, rows) = ed.hint() else { panic!("no key list") };
+    let pairs: Vec<(&str, &str)> = rows
+        .iter()
+        .skip_while(|(key, _)| key != "(")
+        .map(|(key, what)| (key.as_ref(), what.as_str()))
+        .collect();
+    assert_eq!(
+        &pairs[..7],
+        &[
+            ("(", "( …"),
+            ("[", "[ 「 【 〔 …"),
+            ("{", "{ 『 〖 …"),
+            ("<", "< « 〈 《 …"),
+            ("\"", "\" “ 〝 …"),
+            ("'", "' ‘ …"),
+            ("`", "` …"),
+        ]
+    );
+    assert_eq!(pairs.len(), 8, "then the any-symbol row");
+}
+
 /// **`mi k`/`ma k`：光標所在的那一段 Markdown 標記**（2026-09-28 定，一個鍵管九種；
 /// 2026-10-27 從 `m` 挪到 `k`，`m` 照 helix 只管最近的一對）。
 #[test]

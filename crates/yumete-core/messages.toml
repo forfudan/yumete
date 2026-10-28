@@ -5555,13 +5555,6 @@ zhs = "收下"
 en = "keep it"
 
 [[message]]
-# 菜單的鍵那一欄：「( 或 )」裏的那個或
-key = "hint.key-or"
-zht = "或"
-zhs = "或"
-en = "or"
-
-[[message]]
 # ' 之後那張小表：一個標記記在哪(檔名 第幾行)
 key = "hint.mark.at"
 zht = "{0} 第 {1} 行"
@@ -5653,13 +5646,6 @@ zhs = "大词(到空格为止)"
 en = "WORD (up to a space)"
 
 [[message]]
-# mi/ma 菜單：括號
-key = "hint.obj.brackets"
-zht = "括號"
-zhs = "括号"
-en = "brackets"
-
-[[message]]
 # mi/ma 菜單：l，光標所在的那一格(表格)
 key = "hint.obj.cell"
 zht = "單元格(表格)"
@@ -5672,13 +5658,6 @@ key = "hint.obj.change"
 zht = "這一處改動(git)"
 zhs = "这一处改动(git)"
 en = "the change here (git)"
-
-[[message]]
-# mi/ma 菜單：中文括號
-key = "hint.obj.cjk-too"
-zht = "中文括號也認"
-zhs = "中文括号也认"
-en = "Chinese brackets too"
 
 [[message]]
 # mi/ma 菜單：u，短句(到任何標點爲止)
@@ -5742,13 +5721,6 @@ key = "hint.obj.parameter"
 zht = "參數(代碼)"
 zhs = "参数(代码)"
 en = "parameter (code)"
-
-[[message]]
-# m 組菜單：引號
-key = "hint.obj.quotes"
-zht = "引號"
-zhs = "引号"
-en = "quotes"
 
 [[message]]
 # mi/ma 菜單：句
@@ -5821,45 +5793,11 @@ zhs = "盖掉"
 en = "write over"
 
 [[message]]
-# ms/md/mr 菜單：尖括號
-key = "hint.pair.angle"
-zht = "尖括號"
-zhs = "尖括号"
-en = "angle brackets"
-
-[[message]]
 # m 組菜單最後一行：別的符號也當成一對(helix 的 "... or any character")
 key = "hint.pair.any"
-zht = "……或任何符號"
-zhs = "……或任何符号"
-en = "… or any character"
-[[message]]
-# ms/md/mr 菜單：中文括號
-key = "hint.pair.cjk"
-zht = "中文括號"
-zhs = "中文括号"
-en = "Chinese brackets"
-
-[[message]]
-# ms/md/mr 菜單：花括號
-key = "hint.pair.curly"
-zht = "花括號"
-zhs = "花括号"
-en = "curly braces"
-
-[[message]]
-# ms/md/mr 菜單：圓括號
-key = "hint.pair.round"
-zht = "圓括號"
-zhs = "圆括号"
-en = "parentheses"
-
-[[message]]
-# ms/md/mr 菜單：方括號
-key = "hint.pair.square"
-zht = "方括號"
-zhs = "方括号"
-en = "square brackets"
+zht = "……或任何成對符號"
+zhs = "……或任何成对符号"
+en = "… or any paired symbol"
 
 [[message]]
 # 提示：挑選器——Enter 打開選中的那一條

@@ -525,7 +525,7 @@ impl Editor {
                     true => say!("hint.match.around"),
                     false => say!("hint.match.inside"),
                 },
-                Self::said(Self::OBJECT_KEYS.iter().copied()),
+                Self::object_rows(),
             ),
             Pending::Surround => (say!("hint.match.surround"), Self::pair_rows(&[])),
             Pending::SurroundOff => (

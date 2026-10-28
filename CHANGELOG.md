@@ -11,6 +11,12 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **More pairs for `mi` `ma` `ms` `md` `mr`.** `<` also takes « », `[` takes ｢ ｣, `"`
+  takes 〝 〞, and each bracket key takes the vertical forms of its family (﹁ ﹂ for
+  「 」, ︽ ︾ for 《 》, and so on), for texts set for vertical printing. The menus
+  list one row per key with the shapes you can tell apart, ending in `…` for the
+  look-alikes (full width, half width, vertical forms).
+
 - **`:view-pages-horizontal`: pages side by side**, the text running on from the left
   one to the right, as in a newspaper or Emacs's `follow-mode`. 1 to 4 pages, as many
   as leave each 30 cells of text. Each page has its own line-number gutter and wraps at
