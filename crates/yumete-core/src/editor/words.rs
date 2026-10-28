@@ -854,6 +854,12 @@ impl Editor {
     /// Insert already-composed text (an IME commit) at the cursor, as if typed.
     /// Meaningful in Insert mode; grouped as one undo step (Feature #27).
     pub fn insert_committed(&mut self, text: &str) {
+        let was = self.before_a_change();
+        self.insert_committed_now(text);
+        self.keep_the_signature_up(was);
+    }
+
+    fn insert_committed_now(&mut self, text: &str) {
         if text.is_empty() {
             return;
         }

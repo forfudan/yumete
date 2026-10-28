@@ -988,7 +988,13 @@ impl Servers {
         for (whose, server) in self.running.iter_mut() {
             loop {
                 match server.from.try_recv() {
-                    Ok(Notice::Ready) => {
+                    Ok(Notice::Ready { signature_triggers }) => {
+                        if !signature_triggers.is_empty() {
+                            let languages = self.serving.iter().filter(|(_, them)| them.contains(whose));
+                            for (language, _) in languages {
+                                editor.set_signature_triggers(language, signature_triggers.clone());
+                            }
+                        }
                         server.ready = true;
                         server.say_now(lsp::initialized());
                         for message in std::mem::take(&mut server.queued) {

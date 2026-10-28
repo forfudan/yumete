@@ -254,7 +254,11 @@ pub struct Place {
 pub enum Notice {
     /// The answer to [`initialize`]: the handshake is done and
     /// [`initialized`] must go back before the server will work.
-    Ready,
+    ///
+    /// `signature_triggers`: the characters it wants a `signatureHelp` asked
+    /// on (`signatureHelpProvider.triggerCharacters`, 2026-10-28), empty when
+    /// it named none.
+    Ready { signature_triggers: Vec<String> },
     /// `textDocument/publishDiagnostics` — everything now true about one file.
     Said { path: PathBuf, said: Vec<Problem> },
     /// A request *from* the server that wants an answer (`window/workDoneProgress
@@ -404,7 +408,13 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
     };
     let id = value.get("id").and_then(|i| i.as_i64());
     match (method, id) {
-        (None, Some(id)) if id == initialize_id => Notice::Ready,
+        (None, Some(id)) if id == initialize_id => Notice::Ready {
+            signature_triggers: value
+                .pointer("/result/capabilities/signatureHelpProvider/triggerCharacters")
+                .and_then(|t| t.as_array())
+                .map(|all| all.iter().filter_map(|t| t.as_str().map(str::to_string)).collect())
+                .unwrap_or_default(),
+        },
         (Some("textDocument/publishDiagnostics"), _) => said(&value),
         (Some("$/progress"), _) => working(&value),
         // A request from the server: it has both a method *and* an id.
@@ -1258,7 +1268,15 @@ mod tests {
 
     #[test]
     fn the_answer_to_initialize_is_the_handshake_and_a_server_request_is_not() {
-        assert_eq!(read(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, 1), Notice::Ready);
+        assert_eq!(read(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, 1), Notice::Ready { signature_triggers: Vec::new() });
+        assert_eq!(
+            read(
+                r#"{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"signatureHelpProvider":{"triggerCharacters":["(",",","<"]}}}}"#,
+                1
+            ),
+            Notice::Ready { signature_triggers: vec!["(".into(), ",".into(), "<".into()] },
+            "the server's own trigger characters",
+        );
         // Warning: **Every other answer comes back with its id** (#53 ②), because
         // only the front end knows which id it sent for what. It used to be
         // dropped here as 「nobody's business」; now `gd` has business.

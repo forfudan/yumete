@@ -2917,6 +2917,15 @@ pub struct Editor {
     signature_on: Option<usize>,
     /// 那一句補問的 hover，等前端取走（見 `show_signature`）。
     signature_doc_query: Option<(std::path::PathBuf, usize, usize)>,
+    /// **When to ask for the signature again** (2026-10-28): 120 ms after the
+    /// last edit or caret move while one is up, as helix and VS Code do.
+    signature_due: Option<std::time::Instant>,
+    /// The question out is one of those, or the one asked on entering Insert:
+    /// an empty answer closes the signature instead of falling back to hover.
+    signature_again: bool,
+    /// **Each language server's own trigger characters** (`signatureHelp
+    /// Provider.triggerCharacters`), by language. `(` and `,` until one says.
+    signature_triggers: HashMap<String, Vec<String>>,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
     /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
@@ -4020,6 +4029,9 @@ impl Editor {
             swapping_is_fine: false,
             signature_on: None,
             signature_doc_query: None,
+            signature_due: None,
+            signature_again: false,
+            signature_triggers: HashMap::new(),
             theme_request: None,
             trial: None,
             previewing: false,

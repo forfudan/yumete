@@ -9,6 +9,10 @@ use super::*;
 /// **一塊改動裏逐行的字節區間**——[`Editor::change_marks`] 的兩半各是一份。
 pub type ChangeMarks = Vec<Vec<std::ops::Range<usize>>>;
 
+/// How long the caret must be still before the signature is asked for again:
+/// helix's `TIMEOUT` in `handlers/signature_help.rs`, which it took from VS Code.
+const SIGNATURE_AGAIN: std::time::Duration = std::time::Duration::from_millis(120);
+
 impl Editor {
     // ---- Layout (Feature #61) ---------------------------------------------
 
@@ -1684,23 +1688,28 @@ impl Editor {
     /// 報的原話：「In insert mode, when I type `(`, I expect that the function doc can
     /// appear without triggering.」helix 的 `auto-signature-help` 是同一件事，出廠開着。
     ///
-    /// 三條規矩：
+    /// The rules, helix's since 2026-10-28 (`helix-term/src/handlers/signature_help.rs`):
     ///
-    /// - **只在插入態，只在代碼裏**，同 [`Self::maybe_ask_what_comes_next`]。
-    /// - **`(` 和 `,` 問**：一個是這一次調用的開頭，一個是下一個參數——協議管這兩個
-    ///   叫觸發字符，helix 與 VS Code 用的也是它們。
-    /// - **`)` 收**：這一次調用填完了，那一則就不再是答案。
+    /// - **Only in Insert, only in code**, as [`Self::maybe_ask_what_comes_next`].
+    /// - **The server's own trigger characters ask** (rust-analyzer: `(`, `,`,
+    ///   `<`); `(` and `,` until the server has said which.
+    /// - **Entering Insert asks**, and **while one is up, every edit or caret
+    ///   move asks again** after [`SIGNATURE_AGAIN`] — see
+    ///   [`Self::keep_the_signature_up`]. That is what keeps it up while an
+    ///   argument is typed and moves the gold to the parameter under the caret.
+    /// - **An empty answer to those closes it**, as helix's does; `)` no longer
+    ///   closes it by itself (in `f(g(x)`, `f` is still being filled).
     pub(super) fn maybe_ask_for_a_signature(&mut self, just_typed: &str) {
-        if !self.writes_code() || self.mode != Mode::Insert {
+        if !self.writes_code() || self.mode != Mode::Insert || just_typed.is_empty() {
             return;
         }
         let Some(last) = just_typed.chars().last() else { return };
-        if last == ')' {
-            self.signature = None;
-            self.signature_query = None;
-            return;
-        }
-        if last != '(' && last != ',' {
+        let before: String = {
+            let rope = self.current_buffer().rope();
+            let head = self.sel.head().min(rope.len_chars());
+            rope.slice(head.saturating_sub(4)..head).to_string()
+        };
+        if !self.signature_triggers_here().iter().any(|t| !t.is_empty() && before.ends_with(t.as_str())) {
             return;
         }
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
@@ -1719,7 +1728,7 @@ impl Editor {
         //   它說的是別人家的事。新答案回來之前什麼都不畫。
         // - 打的是 `,`：還是**同一次調用**，只是跳到下一個參數。左括號不動，
         //   舊答案留著畫——否則每打一個逗號那一扇就闃一下。
-        if last == '(' {
+        if last != ',' {
             self.signature = None;
             self.signature_on = self.sel.head().checked_sub(1);
         } else if self.signature_on.is_none() {
@@ -1727,6 +1736,88 @@ impl Editor {
             self.signature_on = self.sel.head().checked_sub(1);
         }
         self.signature_query = Some((path, line, utf16));
+        self.signature_again = false;
+        self.signature_due = None;
+    }
+
+    /// The trigger characters of the servers for this file's language.
+    fn signature_triggers_here(&self) -> Vec<String> {
+        let language = match self.current_buffer().syntax() {
+            crate::syntax::Syntax::Code(language) => language.name(),
+            _ => return Vec::new(),
+        };
+        match self.signature_triggers.get(language) {
+            Some(triggers) => triggers.clone(),
+            None => vec!["(".to_string(), ",".to_string()],
+        }
+    }
+
+    /// **A server said which characters ask for a signature** (on its
+    /// `initialize` answer). Two servers for one language: either one's.
+    pub fn set_signature_triggers(&mut self, language: &str, triggers: Vec<String>) {
+        let known = self.signature_triggers.entry(language.to_string()).or_default();
+        for trigger in triggers {
+            if !known.contains(&trigger) {
+                known.push(trigger);
+            }
+        }
+    }
+
+    /// **After every key and every committed string**: the half of helix's
+    /// signature rules that is not about one character (2026-10-28). `was` is
+    /// the mode, buffer, revision and caret before.
+    ///
+    /// Entering Insert asks at once (helix asks on the mode switch; at once
+    /// rather than after its 120 ms, as the trigger characters here have since
+    /// 2026-10-08: 「及時响应」). While a signature is up or asked for, an edit
+    /// or a caret move asks again once things have been still for
+    /// [`SIGNATURE_AGAIN`].
+    pub(super) fn keep_the_signature_up(&mut self, was: (Mode, u64, u64, usize)) {
+        if self.mode != Mode::Insert || !self.writes_code() {
+            return;
+        }
+        if was.0 != Mode::Insert {
+            if let Some(here) = self.where_the_cursor_is_in_code() {
+                self.signature = None;
+                self.signature_on = None;
+                self.signature_query = Some(here);
+                self.signature_again = true;
+                self.signature_due = None;
+            }
+            return;
+        }
+        let buffer = self.current_buffer();
+        if (was.1, was.2, was.3) == (buffer.id(), buffer.revision(), self.sel.head()) {
+            return;
+        }
+        // A trigger character has just asked.
+        if self.signature_query.is_some() {
+            return;
+        }
+        if self.signature.is_some() || self.signature_asked_at.is_some() || self.signature_due.is_some() {
+            self.signature_due = Some(std::time::Instant::now() + SIGNATURE_AGAIN);
+        }
+    }
+
+    /// How long until the signature is asked for again, if it is to be.
+    pub fn signature_due_in(&self) -> Option<std::time::Duration> {
+        self.signature_due.map(|due| due.saturating_duration_since(std::time::Instant::now()))
+    }
+
+    /// Ask again if it is time. The front end calls this every turn.
+    pub fn signature_tick(&mut self) {
+        let Some(due) = self.signature_due else { return };
+        if std::time::Instant::now() < due {
+            return;
+        }
+        self.signature_due = None;
+        if self.mode != Mode::Insert {
+            return;
+        }
+        if let Some(here) = self.where_the_cursor_is_in_code() {
+            self.signature_query = Some(here);
+            self.signature_again = true;
+        }
     }
 
     /// 簽名那一問，交給前端發。
@@ -1753,10 +1844,18 @@ impl Editor {
     /// 的 hover 答得好好的。原話：「優先顯示 signatureHelp，如果是 null，回退到
     /// hover（…則最多顯示正文部分第一段）」。
     pub fn show_signature(&mut self, one: Option<crate::lsp::Signature>) {
+        let again = std::mem::take(&mut self.signature_again);
         match one {
             Some(one) => {
                 self.signature_asked_at = None;
                 self.signature = Some((self.sel.head(), one));
+            }
+            // Asked again (or on entering Insert) and nothing: the caret has
+            // left the call. Closed, as helix's (2026-10-28).
+            None if again => {
+                self.signature_asked_at = None;
+                self.signature = None;
+                self.signature_on = None;
             }
             // 没有簽名：回頭問一句 hover，問在**被調用的那個名字**上。
             None => self.signature_doc_query = self.a_hover_on_the_callee(),
@@ -1824,14 +1923,18 @@ impl Editor {
         // **那一次調用還在嗎**。記下問的時候那個 `(` 在第幾格，這一格不再是它了，
         // 那一則就是上一次調用的答案，該收了。刪掉 `first_time_ever(` 再打 `println!`，
         // 原先那一格上現在是 `p`，就是這一條接住的。
-        let at = self.signature_on?;
-        let rope = self.current_buffer().rope();
-        // 那一格不再是標點，或者光標退到了它前面：那一次調用没了。
-        if at >= rope.len_chars()
-            || !matches!(rope.char(at), '(' | ',')
-            || self.sel.head() <= at
-        {
-            return None;
+        // Asked on entering Insert or again: no bracket was typed, and the
+        // server's next answer is what closes it.
+        if let Some(at) = self.signature_on {
+            let rope = self.current_buffer().rope();
+            // 那一格不再是觸發的那個字，或者光標退到了它前面：那一次調用没了。
+            let triggers = self.signature_triggers_here();
+            if at >= rope.len_chars()
+                || !triggers.iter().any(|t| t.starts_with(rope.char(at)))
+                || self.sel.head() <= at
+            {
+                return None;
+            }
         }
         self.signature.as_ref().map(|(_, one)| one)
     }

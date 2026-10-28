@@ -28605,7 +28605,7 @@ fn the_file_report_says_what_this_file_is() {
 /// **插入態打 `(` 就問一次簽名**（2026-10-08 報的：「In insert mode, when I type `(`,
 /// I expect that the function doc can appear」）。
 ///
-/// 三條規矩一起釘住：只在代碼裏、只在插入態、`)` 收。
+/// 三條規矩一起釘住：只在代碼裏、只在插入態、`)` 之後服務器說没有就收。
 #[test]
 fn typing_an_open_bracket_asks_what_goes_in_it() {
     let dir = tmp().join(format!("yumete-sig-{}", std::process::id()));
@@ -28634,8 +28634,13 @@ fn typing_an_open_bracket_asks_what_goes_in_it() {
     ed.on_key(Key::Char('1'));
     ed.on_key(Key::Char(','));
     assert!(ed.take_signature_query().is_some(), "`,` 也問");
-    // `)` 這一次調用填完了，那一則就收起來。
+    // `)`: the call is filled in. Since 2026-10-28 (helix's rule) it closes
+    // when the server, asked again, says the caret has left the call.
     ed.on_key(Key::Char(')'));
+    ed.signature_due = Some(std::time::Instant::now());
+    ed.signature_tick();
+    assert!(ed.take_signature_query().is_some(), "asked again after `)`");
+    ed.show_signature(None);
     assert!(ed.signature_here().is_none(), "`)` 之後不畫了");
 
     // 出插入態也收——它是打字當口的東西。
@@ -28720,6 +28725,77 @@ fn a_signature_goes_away_with_the_bracket_that_asked_for_it() {
     }
     assert!(ed.signature_here().is_none(), "上一次調用的答案不該站在新打的字旁邊");
 
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The signature stays up while an argument is typed** (2026-10-28), by
+/// helix's rules: entering Insert asks; while one is up, every edit asks again
+/// once the typing has been still for 120 ms, and an empty answer to that
+/// closes it (no hover fallback); `)` alone does not close it; the server's
+/// own trigger characters ask.
+#[test]
+fn the_signature_follows_the_caret_by_helix_rules() {
+    let dir = tmp().join(format!("yumete-sig-helix-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn main() {\n    push(1, 2);\n}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    let push = |active: Option<(usize, usize)>| crate::lsp::Signature {
+        label: "fn push(a: u8, b: u8)".into(),
+        active,
+    };
+    ed.goto_line(2);
+    // Onto the `2`, then Insert: asked at once, with nothing typed.
+    press(&mut ed, "f2");
+    assert!(ed.take_signature_query().is_none(), "Normal mode does not ask");
+    press(&mut ed, "i");
+    assert!(ed.take_signature_query().is_some(), "entering Insert asks");
+    ed.show_signature(Some(push(Some((15, 20)))));
+    assert!(ed.signature_here().is_some(), "up without a bracket typed");
+
+    // Typing in the argument: not asked at once, asked once things are still.
+    ed.on_key(Key::Char('0'));
+    assert!(ed.take_signature_query().is_none(), "not on every key");
+    assert!(ed.signature_due_in().is_some(), "but due");
+    ed.signature_tick();
+    assert!(ed.take_signature_query().is_none(), "not before the 120 ms");
+    ed.signature_due = Some(std::time::Instant::now());
+    ed.signature_tick();
+    assert!(ed.take_signature_query().is_some(), "asked again");
+    ed.show_signature(Some(push(Some((15, 20)))));
+    assert!(ed.signature_here().is_some());
+
+    // The caret leaves the call: the next answer is empty, and that closes it.
+    ed.on_key(Key::End);
+    ed.signature_due = Some(std::time::Instant::now());
+    ed.signature_tick();
+    assert!(ed.take_signature_query().is_some());
+    ed.show_signature(None);
+    assert!(ed.signature_here().is_none(), "an empty answer closes it");
+    assert!(ed.take_signature_doc_query().is_none(), "no hover fallback for an answer asked again");
+    ed.on_key(Key::Esc);
+
+    // `)` alone does not close it.
+    press(&mut ed, "o");
+    for c in "push(".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.take_signature_query().is_some());
+    ed.show_signature(Some(push(None)));
+    ed.on_key(Key::Char(')'));
+    assert!(ed.signature_here().is_some(), "`)` waits for the server to say");
+    ed.on_key(Key::Esc);
+
+    // The server's own trigger characters.
+    ed.set_signature_triggers(crate::code::Language::Rust.name(), vec!["(".into(), ",".into(), "<".into()]);
+    press(&mut ed, "o");
+    ed.take_signature_query();
+    for c in "Vec<".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.take_signature_query().is_some(), "`<` asks when the server says so");
     std::fs::remove_dir_all(&dir).ok();
 }
 

@@ -265,6 +265,8 @@ impl Editor {
                 // 那一則簽名是打字當口的東西，出了插入態就不是答案了。
                 self.signature = None;
                 self.signature_query = None;
+                self.signature_due = None;
+                self.signature_on = None;
                 // **The quotes are the editor's, on the way out too**
                 // (2026-10-21): a cell typed into leaves the file written the
                 // way `quote_for` would have written it, so a pair that is no
