@@ -1237,6 +1237,8 @@ pub fn run(
         // `gd` 的問題跟在 `follow` 後面——服務器得先知道這個檔（見 `ask`）。
         servers.ask(editor, config);
         servers.ask_what(editor, config);
+        // The signature's 120 ms re-ask, if it has come round (helix's rule).
+        editor.signature_tick();
         servers.ask_signature(editor, config);
         servers.ask_next(editor, config);
         let mut server_said_something = servers.collect(editor);
@@ -1301,6 +1303,8 @@ pub fn run(
                 editor.status_due_in(),
                 // 跟着光標的那一問（`空格 K`）：光標停穩三百毫秒就該問一句。
                 editor.docs_due_in(),
+                // The signature asked again once the typing has been still.
+                editor.signature_due_in(),
                 // Warning: **磁碟那一眼是鬧鐘之一，不是它自己一條路**（2026-10-11
                 // 報的：即時文檔要等三到五秒纔出來）。從前自動重載在這一段**之
                 // 前**自己 `recv_timeout(兩秒)` 然後 `continue`，於是它一開——而

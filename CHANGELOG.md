@@ -106,6 +106,11 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The signature stays up while you type the arguments**, as in helix: entering
+  Insert inside a call shows it, each edit or caret move asks again after 120 ms so the
+  highlighted parameter follows the caret, and it closes when the server says the caret
+  has left the call. The server's own trigger characters ask too (rust-analyzer adds
+  `<`), and `)` no longer closes it by itself.
 - **In code, words fill in when the language server has nothing**, as Zed's
   `"words": "fallback"`: in comments and strings, or in a language with no server, the
   open files' words come up after the same number of letters as in prose.

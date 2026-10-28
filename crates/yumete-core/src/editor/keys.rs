@@ -20,6 +20,19 @@ enum Shape {
 impl Editor {
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
+        let was = self.before_a_change();
+        let outcome = self.on_key_now(key);
+        self.keep_the_signature_up(was);
+        outcome
+    }
+
+    /// The mode, buffer, revision and caret, for [`Self::keep_the_signature_up`].
+    pub(super) fn before_a_change(&self) -> (Mode, u64, u64, usize) {
+        let buffer = self.current_buffer();
+        (self.mode, buffer.id(), buffer.revision(), self.sel.head())
+    }
+
+    fn on_key_now(&mut self, key: Key) -> KeyOutcome {
         // **A question standing takes every key** (#295), before recording and
         // before the sidebar: while one is on the screen there is no keystroke
         // that reaches the manuscript, and none that a macro should capture —
