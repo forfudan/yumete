@@ -207,6 +207,10 @@ pub struct EditorConfig {
     pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
+    /// How many Latin letters before the words of the open files are offered
+    /// by themselves (2026-10-28); 漢字 take half as many, rounded up. 0 is
+    /// never (`C-n` still asks). 0 to 20.
+    pub word_completion: usize,
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
     /// Off by default: it is a study aid, and it widens every candidate.
     pub show_chaifen: bool,
@@ -448,6 +452,7 @@ impl Default for EditorConfig {
             remember: true,
             language: "zh".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
+            word_completion: 4,
             show_chaifen: false,
             show_ruby: false,
             ruby_dialects: Vec::new(),
@@ -3915,6 +3920,7 @@ struct RawEditor {
     remember: Option<bool>,
     language: Option<String>,
     zong_gap: Option<usize>,
+    word_completion: Option<usize>,
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
     ruby_dialects: Option<Vec<String>>,
@@ -4067,6 +4073,9 @@ impl RawConfig {
         }
         if other.editor.zong_length.is_some() {
             self.editor.zong_length = other.editor.zong_length;
+        }
+        if other.editor.word_completion.is_some() {
+            self.editor.word_completion = other.editor.word_completion;
         }
         if other.editor.zong_gap.is_some() {
             self.editor.zong_gap = other.editor.zong_gap;
@@ -4421,6 +4430,10 @@ impl RawConfig {
             let kept = if length == 0 { 0 } else { length.clamp(8, 64) };
             config.editor.zong_length =
                 held(problems, "[editor] zong_length", length, kept, "0，或者 8 到 64");
+        }
+        if let Some(n) = self.editor.word_completion {
+            config.editor.word_completion =
+                held(problems, "[editor] word_completion", n, n.min(20), "0 到 20");
         }
         if let Some(gap) = self.editor.zong_gap {
             config.editor.zong_gap = held(problems, "[editor] zong_gap", gap, gap.min(4), "0 到 4");

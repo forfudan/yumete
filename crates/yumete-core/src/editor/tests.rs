@@ -25174,6 +25174,84 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
     assert_eq!(fresh.status(), say!("shell.no-previous"));
 }
 
+/// Words of the open buffers are offered as you write (2026-10-28): Latin
+/// after `word_completion` letters, matched fuzzily; 漢字 after ⌈N/2⌉, only
+/// words longer than that; `C-n` at any length; Tab takes one.
+#[test]
+fn words_of_the_open_buffers_are_offered_as_you_write() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let mut ed = typed("Straßenbahnhaltestelle und Donaudampfschiff\n");
+    press(&mut ed, "Go");
+    press(&mut ed, "Str");
+    assert!(labels(&ed).is_empty(), "three letters are not four");
+    press(&mut ed, "a");
+    assert_eq!(labels(&ed), ["Straßenbahnhaltestelle"]);
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.current_buffer().text(), "Straßenbahnhaltestelle und Donaudampfschiff\nStraßenbahnhaltestelle\n");
+    // Fuzzily, as helix: `Ddsf` is Donaudampfschiff.
+    press(&mut ed, " Ddsf");
+    assert_eq!(labels(&ed), ["Donaudampfschiff"]);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    // `C-n` asks at any length.
+    press(&mut ed, "o");
+    press(&mut ed, "Do");
+    assert!(labels(&ed).is_empty());
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(labels(&ed), ["Donaudampfschiff"]);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    // `0` turns it off.
+    ed.set_word_completion(0);
+    press(&mut ed, "o");
+    press(&mut ed, "Donau");
+    assert!(labels(&ed).is_empty());
+    ed.on_key(Key::Esc);
+
+    // 漢字: two of them at N = 4, and only the longer words.
+    let mut ed = typed("阿寧師兄走進書齋，阿寧也來了。\n");
+    ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
+        [("阿寧師兄".to_string(), 100), ("阿寧".to_string(), 100), ("書齋".to_string(), 100)],
+        1,
+    )));
+    press(&mut ed, "Go");
+    ed.insert_committed("阿");
+    assert!(labels(&ed).is_empty(), "one is not two");
+    ed.insert_committed("寧");
+    assert_eq!(labels(&ed), ["阿寧師兄"], "only what is longer than the two typed");
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("\n阿寧師兄\n"));
+}
+
+/// A path is completed where it is typed (2026-10-28): any word with a `/`
+/// in it, or anything right after `](`, relative to the file's folder.
+#[test]
+fn a_path_is_completed_where_it_is_typed() {
+    let dir = tmp().join(format!("yumete-path-offers-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("drafts")).unwrap();
+    std::fs::write(dir.join("chapter1.md"), "").unwrap();
+    std::fs::write(dir.join("drafts").join("note.md"), "").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("chapter1.md")).unwrap();
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    press(&mut ed, "i");
+    press(&mut ed, "see [it](ch");
+    assert_eq!(labels(&ed), ["chapter1.md"]);
+    press(&mut ed, ") and ./dr");
+    assert_eq!(labels(&ed), ["drafts/"]);
+    ed.on_key(Key::Tab);
+    press(&mut ed, "n");
+    assert_eq!(labels(&ed), ["note.md"]);
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.current_buffer().text(), "see [it](ch) and ./drafts/note.md");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// A shell line completes file names after its first word (2026-10-28), from
 /// the working directory, folders with a `/`, hidden ones only after a `.`;
 /// Tab and S-Tab walk them over the word.

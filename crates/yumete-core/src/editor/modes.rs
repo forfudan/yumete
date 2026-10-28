@@ -771,7 +771,7 @@ fn programs_on_the_path() -> &'static [String] {
 /// does not: a plain fuzzy match, as helix's program completion is. Letters
 /// next to each other, at the start, or after a `-` `_` `.` score more; a gap
 /// costs two points a letter. Case folds unless `typed` has a capital (smart case).
-fn in_order(name: &str, typed: &str) -> Option<i64> {
+pub(super) fn in_order(name: &str, typed: &str) -> Option<i64> {
     let fold = !typed.chars().any(char::is_uppercase);
     let same = |a: char, b: char| match fold {
         true => a.to_lowercase().eq(b.to_lowercase()),

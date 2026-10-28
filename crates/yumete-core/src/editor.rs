@@ -2452,6 +2452,13 @@ pub struct Editor {
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
     segmenter: Box<dyn Segmenter>,
+    /// `[editor] word_completion`: Latin letters before the word list opens
+    /// by itself, `0` never (see `suggest.rs`).
+    word_completion: usize,
+    /// Each open buffer's words, for that list.
+    word_index: HashMap<u64, suggest::WordIndex>,
+    /// The words of every line read so far, by the line's hash.
+    line_words: HashMap<u64, suggest::LineWords>,
     /// Where readings come from for `:ruby-auto` (Feature #234). Defaults to
     /// [`NoReader`], which knows nothing; the front end installs a reader over
     /// 宇浩's 字料層 once the data is loaded, exactly as it does the segmenter.
@@ -3880,6 +3887,9 @@ impl Editor {
             alias_count: None,
             expanding_alias: false,
             segmenter: Box::new(CategorySegmenter),
+            word_completion: 4,
+            word_index: HashMap::new(),
+            line_words: HashMap::new(),
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             own_words: yumete_cjk::WordList::default(),
@@ -5278,6 +5288,7 @@ mod ruby;
 mod search;
 mod session;
 mod shell;
+mod suggest;
 mod sidebar;
 mod tables;
 mod undo;
