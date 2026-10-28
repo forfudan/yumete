@@ -180,7 +180,8 @@ struct Heard {
     /// `Some(Some(…))` 有東西，`Some(None)` 答了說沒有，`None` 這一輪沒人答。
     told: Option<Option<lsp::Told>>,
     place: Option<Option<lsp::Place>>,
-    offers: Option<Vec<lsp::Offer>>,
+    /// The items, and whether any server said its list is incomplete.
+    offers: Option<(Vec<lsp::Offer>, bool)>,
     signature: Option<Option<lsp::Signature>>,
     /// 簽名回空之後那一句補問的 hover（2026-10-08）。
     signature_doc: Option<Option<lsp::Told>>,
@@ -216,11 +217,11 @@ impl Heard {
         self.signature_doc = Some(told);
     }
 
-    fn next_up(&mut self, offers: Vec<lsp::Offer>) {
-        if self.offers.as_ref().is_some_and(|had| !had.is_empty()) {
+    fn next_up(&mut self, offers: Vec<lsp::Offer>, incomplete: bool) {
+        if self.offers.as_ref().is_some_and(|(had, _)| !had.is_empty()) {
             return;
         }
-        self.offers = Some(offers);
+        self.offers = Some((offers, incomplete));
     }
 
     /// 交給編輯器。**還有人沒回話的那一種就先不說**——再等一輪。
@@ -259,8 +260,8 @@ impl Heard {
             _ => {}
         }
         match self.offers {
-            Some(offers) if !offers.is_empty() => editor.show_offers(offers),
-            Some(_) if !waiting(|s| s.asked_next) => editor.show_offers(Vec::new()),
+            Some((offers, incomplete)) if !offers.is_empty() => editor.show_offers(offers, incomplete),
+            Some(_) if !waiting(|s| s.asked_next) => editor.show_offers(Vec::new(), false),
             _ => {}
         }
         match self.signature {
@@ -1011,7 +1012,7 @@ impl Servers {
                     // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
-                    Ok(Notice::Answer { id, places, told, offers, signature }) => {
+                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature }) => {
                         if server.asked_signature == Some(id) {
                             server.asked_signature = None;
                             anything = true;
@@ -1024,7 +1025,7 @@ impl Servers {
                         } else if server.asked_next == Some(id) {
                             server.asked_next = None;
                             anything = true;
-                            heard.next_up(offers);
+                            heard.next_up(offers, incomplete);
                         } else if server.asked_what == Some(id) {
                             server.asked_what = None;
                             anything = true;
@@ -2247,6 +2248,7 @@ mod tests {
                 places: Vec::new(),
                 told: None,
                 offers: Vec::new(),
+                incomplete: false,
                 signature: None,
             })
             .unwrap();
@@ -2266,6 +2268,7 @@ mod tests {
                 places: Vec::new(),
                 told: Some("fn main()".into()),
                 offers: Vec::new(),
+                incomplete: false,
                 signature: None,
             })
             .unwrap();
@@ -2295,6 +2298,7 @@ mod tests {
                 places: Vec::new(),
                 told: None,
                 offers: Vec::new(),
+                incomplete: false,
                 signature: None,
             })
             .unwrap();

@@ -7,9 +7,11 @@
 //! already has: the float under the caret, Tab, `C-n`/`C-p`, Esc.
 //!
 //! - **Words** come from every open buffer. Latin words as helix indexes them
-//!   (3 to 50 letters, matched fuzzily); 漢字 words as the segmenter cuts them,
-//!   offered only when longer than what was typed and starting with it, so
-//!   what comes up is a name or a phrase of the book, not one more character.
+//!   (3 to 50 letters): those that start with what was typed first, in the
+//!   case typed, then those that hold its letters in order; 漢字 words as
+//!   the segmenter cuts them, offered only when longer than what was typed
+//!   and starting with it, so what comes up is a name or a phrase of the
+//!   project, not one more character.
 //! - **When**: after `[editor] word_completion` Latin letters (4 by default,
 //!   `0` off), or after ⌈N/2⌉ 漢字 — the rule as set on 2026-10-28: N = 3 or 4
 //!   gives 2, N = 1 or 2 gives 1. `C-n` / `C-x` asks at any length.
@@ -20,6 +22,36 @@
 //! the IME's, and this list never shares the screen with its candidates.
 
 use super::*;
+
+/// **`word` as a completion of `typed`, in the case typed** (2026-10-28), or
+/// `None` when it does not start with `typed` (case aside).
+///
+/// vim's `'infercase'`: a lowercase letter typed makes the rest lowercase, so
+/// `w` gives `when` even when the buffers only hold `When`; two or more
+/// letters typed with no lowercase among them make it uppercase, `WH` →
+/// `WHEN`; a lone `W` gives `When`. One change to vim's rule, asked for on the
+/// same day: **a word with a capital after its first letter is a name and is
+/// offered as written** — `java` gives `JavaScript`, `ht` gives `HTML`.
+fn in_the_case_typed(word: &str, typed: &str) -> Option<String> {
+    let mut letters = word.chars();
+    for want in typed.chars() {
+        let have = letters.next()?;
+        if !have.to_lowercase().eq(want.to_lowercase()) {
+            return None;
+        }
+    }
+    let rest: String = letters.collect();
+    if word.chars().skip(1).any(char::is_uppercase) {
+        return Some(word.to_string());
+    }
+    let shouting = typed.chars().count() >= 2
+        && typed.chars().any(char::is_uppercase)
+        && !typed.chars().any(char::is_lowercase);
+    Some(match shouting {
+        true => format!("{typed}{}", rest.to_uppercase()),
+        false => format!("{typed}{rest}"),
+    })
+}
 
 /// Words shorter than this are not worth offering (helix's `MIN_WORD_GRAPHEMES`).
 const SHORTEST: usize = 3;
@@ -80,6 +112,7 @@ impl Editor {
             at: self.sel.head(),
             items,
             picked: 0,
+            server: None,
         });
         true
     }
@@ -105,6 +138,7 @@ impl Editor {
             label,
             kind: 0,
             detail: None,
+            filter: None,
             replacing: Some(crate::lsp::Replacing {
                 line,
                 from: crate::problem::utf16_column(&text, to - typed),
@@ -189,22 +223,42 @@ impl Editor {
                 return None;
             }
             self.read_the_open_buffers();
-            let mut found: Vec<(i64, u32, &String)> = Vec::new();
-            let mut seen: HashMap<&str, ()> = HashMap::new();
+            // **Completion first, fuzzy after** (2026-10-28). A word that starts
+            // with what was typed is offered in the case typed (see
+            // [`in_the_case_typed`]), so `When` and `when` are one row; then the
+            // words that only hold the letters in order, as written.
+            // Shown → (fuzzy?, score, how often).
+            let mut found: HashMap<String, (bool, i64, u32)> = HashMap::new();
             for index in self.word_index.values() {
                 for (word, &count) in &index.latin {
-                    if *word == typed || seen.insert(word.as_str(), ()).is_some() {
+                    let (shown, fuzzy, score) = match in_the_case_typed(word, &typed) {
+                        Some(shown) => (shown, false, 0),
+                        None => match super::modes::in_order(word, &typed) {
+                            Some(score) => (word.clone(), true, score),
+                            None => continue,
+                        },
+                    };
+                    if shown == typed {
                         continue;
                     }
-                    if let Some(score) = super::modes::in_order(word, &typed) {
-                        found.push((score, count, word));
+                    let row = found.entry(shown).or_insert((fuzzy, score, 0));
+                    // The same word in two buffers is one word, counted once
+                    // per buffer; a completion beats a fuzzy reading of it.
+                    if row.0 && !fuzzy {
+                        *row = (false, 0, 0);
                     }
+                    row.2 += count;
                 }
             }
-            found.sort_by(|a, b| {
-                b.0.cmp(&a.0).then(b.1.cmp(&a.1)).then(a.2.len().cmp(&b.2.len())).then(a.2.cmp(b.2))
+            let mut found: Vec<(String, (bool, i64, u32))> = found.into_iter().collect();
+            found.sort_by(|(a, x), (b, y)| {
+                x.0.cmp(&y.0)
+                    .then(y.1.cmp(&x.1))
+                    .then(y.2.cmp(&x.2))
+                    .then(a.len().cmp(&b.len()))
+                    .then(a.cmp(b))
             });
-            let words: Vec<String> = found.into_iter().take(MOST).map(|(_, _, w)| w.clone()).collect();
+            let words: Vec<String> = found.into_iter().take(MOST).map(|(w, _)| w).collect();
             let items: Vec<_> = words.into_iter().map(|w| self.offer_over(line, length, w)).collect();
             return (!items.is_empty()).then_some(items);
         }

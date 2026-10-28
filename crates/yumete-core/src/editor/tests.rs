@@ -24452,8 +24452,9 @@ fn an_answer_to_a_question_that_was_dropped_is_not_shown() {
         insert: "counted".into(),
         kind: 3,
         detail: None,
+        filter: None,
         replacing: Some(crate::lsp::Replacing { line: 0, from: 0, to: 4 }),
-    }]);
+    }], false);
     assert!(ed.offers_here().is_none(), "作廢的答案不擺出來");
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -25223,6 +25224,39 @@ fn words_of_the_open_buffers_are_offered_as_you_write() {
     assert_eq!(labels(&ed), ["阿寧師兄"], "only what is longer than the two typed");
     ed.on_key(Key::Tab);
     assert!(ed.current_buffer().text().ends_with("\n阿寧師兄\n"));
+}
+
+/// A word that starts with what was typed comes first, in the case typed
+/// (2026-10-28): `when` gets `whenever` and not `When` (that is what was
+/// typed), `When` gets `Whenever`, `WHEN` gets `WHENEVER`; a name with a
+/// capital inside stays as written; words that only hold the letters in
+/// order come after.
+#[test]
+fn a_word_is_completed_in_the_case_typed_before_fuzzy_matches() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let mut ed = typed("When it rains, whenever. JavaScript and HTML. A worth.\n");
+    let ask = |ed: &mut Editor, word: &str| {
+        press(ed, "Go");
+        press(ed, word);
+        let got = labels(ed);
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Esc);
+        got
+    };
+    assert_eq!(ask(&mut ed, "when"), ["whenever"]);
+    assert_eq!(ask(&mut ed, "When"), ["Whenever"]);
+    assert_eq!(ask(&mut ed, "WHEN"), ["WHENEVER"]);
+    assert_eq!(ask(&mut ed, "java"), ["JavaScript"]);
+    assert_eq!(ask(&mut ed, "html"), ["HTML"]);
+    // By hand, at two letters: the completions, then the fuzzy one. A fresh
+    // buffer, since the lines above are words now too (`WHEN` among them).
+    let mut ed = typed("When it rains, whenever. A worth.\n");
+    press(&mut ed, "Go");
+    press(&mut ed, "wh");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(labels(&ed), ["when", "whenever", "worth"]);
 }
 
 /// A path is completed where it is typed (2026-10-28): any word with a `/`
@@ -27684,6 +27718,7 @@ fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
         insert: "counted".into(),
         kind: 0,
         detail: None,
+        filter: None,
         replacing: Some(Replacing { line, from, to }),
     };
 
@@ -27699,6 +27734,7 @@ fn a_completion_covers_only_the_line_it_names_and_never_the_break() {
             at,
             items: vec![one],
             picked: 0,
+            server: None,
         });
         ed
     };
@@ -27834,6 +27870,7 @@ fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
         insert: "counted".into(),
         kind: 0,
         detail: None,
+        filter: None,
         replacing: None,
     };
     let mut ed = typed("甲\n");
@@ -27845,6 +27882,7 @@ fn a_completion_list_belongs_to_the_buffer_it_was_asked_about() {
         at: 0,
         items: vec![offer],
         picked: 0,
+        server: None,
     });
     assert!(ed.offers_here().is_none(), "別的稿子問出來的單子，這裏不算數");
     assert!(!ed.take_the_offer(), "更不許蓋進來");
@@ -28320,6 +28358,7 @@ fn the_offer_list_is_ranked_by_what_has_been_typed() {
         insert: label.into(),
         kind: 2,
         detail: None,
+        filter: None,
         replacing: None,
     };
     // 服務器給的次序，照截圖。
@@ -28346,7 +28385,7 @@ fn the_offer_list_is_ranked_by_what_has_been_typed() {
         ed.on_key(Key::Char(c));
     }
     ed.completion_at = Some(ed.caret());
-    ed.show_offers(from_the_server());
+    ed.show_offers(from_the_server(), false);
     let (items, _) = ed.offers_here().expect("單子擺出來了");
     let order: Vec<&str> = items.iter().map(|o| o.label.as_str()).collect();
     assert_eq!(
@@ -28359,11 +28398,7 @@ fn the_offer_list_is_ranked_by_what_has_been_typed() {
             "unwrap_or_else",
             // 前綴，不計大小寫
             "UNWRAP_LOUD",
-            // 配不上的落到最後，但**一條都没少**
-            "is_some_and",
-            "is_none_or",
-            "expect",
-            "map",
+            // What does not match leaves the list (2026-10-28), as in helix.
         ],
         "{order:?}"
     );
@@ -28376,9 +28411,101 @@ fn the_offer_list_is_ranked_by_what_has_been_typed() {
     press(&mut ed, "A");
     ed.on_key(Key::Char('.'));
     ed.completion_at = Some(ed.caret());
-    ed.show_offers(from_the_server());
+    ed.show_offers(from_the_server(), false);
     let (items, _) = ed.offers_here().expect("單子擺出來了");
     assert_eq!(items[0].label, "is_some_and", "没打字就不重排");
+}
+
+/// **The next letter narrows the list on screen; the server is not asked
+/// again unless it said its list is incomplete** (2026-10-28), as helix does.
+/// The span `Tab` replaces grows with the word, and taking the word back
+/// widens the list again; taking it back to nothing closes it. An answer the
+/// caret has typed past (word characters only) is still shown, narrowed.
+#[test]
+fn the_server_list_narrows_as_the_word_grows() {
+    let offer = |label: &str, filter: Option<&str>| crate::lsp::Offer {
+        label: label.into(),
+        insert: label.trim_end_matches("()").into(),
+        kind: 2,
+        detail: None,
+        filter: filter.map(str::to_string),
+        // `n.t` asked after the `t`: the server replaces that one `t`.
+        replacing: Some(crate::lsp::Replacing { line: 0, from: 2, to: 3 }),
+    };
+    let from_the_server = || {
+        vec![
+            offer("to_string()", Some("to_string")),
+            offer("to_owned()", Some("to_owned")),
+            offer("try_into()", Some("try_into")),
+            offer("type_id()", Some("type_id")),
+        ]
+    };
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let dir = tmp().join(format!("yumete-narrow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let rs = dir.join("a.rs");
+    std::fs::write(&rs, "\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&rs).unwrap();
+    press(&mut ed, "i");
+    press(&mut ed, "n.t");
+    assert!(ed.take_completion_query().is_some(), "the first letter asks");
+    ed.show_offers(from_the_server(), false);
+    assert_eq!(labels(&ed), ["to_string()", "to_owned()", "try_into()", "type_id()"]);
+
+    // `o`, `_`, `s`: narrowed here, the server not asked.
+    for c in "o_s".chars() {
+        ed.on_key(Key::Char(c));
+        assert!(ed.take_completion_query().is_none(), "a complete list is not asked for again");
+    }
+    assert_eq!(labels(&ed), ["to_string()"], "matched by filterText, not the label");
+    // Backspace widens it again.
+    ed.on_key(Key::Backspace);
+    ed.on_key(Key::Backspace);
+    assert_eq!(labels(&ed), ["to_string()", "to_owned()", "try_into()"], "`to` is in try_into too, fuzzily");
+    // Tab replaces the whole `to`, not only the `t` the server saw.
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.current_buffer().text(), "n.to_string\n");
+    ed.on_key(Key::Esc);
+
+    // Taken back to nothing: closed.
+    press(&mut ed, "o");
+    press(&mut ed, "n.t");
+    ed.take_completion_query();
+    ed.show_offers(from_the_server(), false);
+    ed.on_key(Key::Backspace);
+    assert!(labels(&ed).is_empty(), "no word, no list");
+    ed.on_key(Key::Esc);
+
+    // Incomplete: narrowed now, and asked again.
+    press(&mut ed, "o");
+    press(&mut ed, "n.t");
+    ed.take_completion_query();
+    ed.show_offers(from_the_server(), true);
+    ed.on_key(Key::Char('y'));
+    assert_eq!(labels(&ed), ["type_id()", "try_into()"], "the prefix before the fuzzy one");
+    assert!(ed.take_completion_query().is_some(), "an incomplete list is asked for again");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+
+    // Typed past before the answer came: still shown, narrowed.
+    press(&mut ed, "o");
+    press(&mut ed, "n.t");
+    ed.take_completion_query();
+    for c in "yp".chars() {
+        ed.on_key(Key::Char(c));
+        ed.take_completion_query();
+    }
+    // The answer to the last question, asked after `typ`… arrives after `type`.
+    ed.on_key(Key::Char('e'));
+    ed.take_completion_query();
+    ed.completion_at = Some(ed.caret() - 1);
+    ed.show_offers(from_the_server(), false);
+    assert_eq!(labels(&ed), ["type_id()"]);
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// **`:info`：這份檔案是什麼**（2026-10-08 定）。
