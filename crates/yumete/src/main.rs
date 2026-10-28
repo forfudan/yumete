@@ -1292,6 +1292,9 @@ fn main() -> ExitCode {
     };
     // Written on the way out, whichever way out it was: an editor that only
     // remembered a clean exit would forget the session you most wanted back.
+    // The view only on a clean one: after a panic the state it would be read
+    // from is not to be trusted, and the last kept view stays.
+    editor.keep_view(yumete_tui::settings::view_to_keep(&editor, &config));
     editor.save_session();
     // **`空格 o p` — 換個項目接着幹**（2026-10-18 作者定）。
     //

@@ -17709,6 +17709,63 @@ fn the_session_opens_again_what_was_open() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// The view a session keeps (2026-10-28) is written beside it and run again
+/// before its files come back; the theme lines fold into one request.
+#[test]
+fn the_session_brings_back_how_the_page_looked() {
+    let dir = tmp().join(format!("yumete-session-view-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("state")).unwrap();
+    let one = dir.join("ch01.md");
+    std::fs::write(&one, "一\n二\n").unwrap();
+    let fresh = |dir: &std::path::Path| {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config.toml"), dir.join("state"));
+        ed.keep_session_in(dir.join("sessions"), dir);
+        ed
+    };
+    let mut ed = fresh(&dir);
+    ed.open_file(&one).unwrap();
+    ed.keep_view(vec![
+        "view-focus on".into(),
+        "view-pages-vertical 3".into(),
+        "theme heibai".into(),
+        "theme-mode light".into(),
+    ]);
+    ed.save_session();
+
+    let mut ed = fresh(&dir);
+    assert!(!ed.focus());
+    assert_eq!(ed.restore_session(), 1);
+    assert!(ed.focus());
+    assert_eq!(ed.pages_vertical(), 3);
+    assert_eq!(
+        ed.take_theme_request(),
+        Some((Some("heibai".to_string()), Some(crate::command::Mood::Light))),
+        "one request, the name and the mood"
+    );
+
+    // Nothing differs from the config any more: the view file goes.
+    let mut ed = fresh(&dir);
+    ed.open_file(&one).unwrap();
+    ed.keep_view(Vec::new());
+    ed.save_session();
+    let mut ed = fresh(&dir);
+    ed.restore_session();
+    assert!(!ed.focus());
+
+    // No file left to bring back: the view is not run either.
+    let mut ed = fresh(&dir);
+    ed.open_file(&one).unwrap();
+    ed.keep_view(vec!["view-focus on".into()]);
+    ed.save_session();
+    std::fs::remove_file(&one).unwrap();
+    let mut ed = fresh(&dir);
+    assert_eq!(ed.restore_session(), 0);
+    assert!(!ed.focus(), "a session with nothing to open leaves the page alone");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `[editor] remember = false` / `--private` (2026-10-27): nothing about
 /// where this editor has been is written, and nothing from before is read.
 #[test]

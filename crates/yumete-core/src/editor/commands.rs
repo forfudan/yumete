@@ -223,6 +223,7 @@ impl Editor {
             Command::ReloadConfig => {
                 // 核心只記一筆；重讀那件事歸前端（它知道配置檔在哪）。
                 self.config_reload = true;
+                self.config_back = true;
                 Ok(CommandOutcome::Continue)
             }
             Command::ReloadAuto(how) => {

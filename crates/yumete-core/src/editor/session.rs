@@ -583,6 +583,47 @@ impl Editor {
             let _ = std::fs::create_dir_all(parent);
         }
         let _ = std::fs::write(&file, out);
+        // The view goes with the files it was kept for: written when they
+        // are, gone when nothing differs from the config.
+        let view = Self::view_file(&file);
+        match &self.session_view {
+            None => {}
+            Some(lines) if lines.is_empty() => {
+                let _ = std::fs::remove_file(&view);
+            }
+            Some(lines) => {
+                let _ = std::fs::write(&view, lines.join("\n") + "\n");
+            }
+        }
+    }
+
+    /// **The view this session keeps** (2026-10-28): the `:` commands, without
+    /// the colon, that set the layout, the `:view-*` settings and the theme
+    /// where they differ from the config. The front end works them out, since
+    /// the theme is its; written by the next [`Self::save_session`].
+    pub fn keep_view(&mut self, lines: Vec<String>) {
+        self.session_view = Some(lines);
+    }
+
+    /// Where the view of the session in `file` is kept: beside it.
+    fn view_file(file: &Path) -> PathBuf {
+        file.with_extension("view.txt")
+    }
+
+    /// Run the kept view's commands. The theme ones each leave a request, and
+    /// the front end answers one request, so they are folded into one:
+    /// `:theme` gives the name and `:theme-mode` the mood.
+    fn replay_view(&mut self, text: &str) {
+        let mut theme: (Option<String>, Option<crate::command::Mood>) = (None, None);
+        for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+            let _ = self.execute(&format!(":{line}"));
+            if let Some((name, mood)) = self.theme_request.take() {
+                theme = (name.or(theme.0), mood.or(theme.1));
+            }
+        }
+        if theme.0.is_some() || theme.1.is_some() {
+            self.theme_request = Some(theme);
+        }
     }
 
     /// Open again what was open last time, each at the line it was left on.
@@ -598,6 +639,18 @@ impl Editor {
         let Ok(text) = std::fs::read_to_string(&file) else {
             return 0;
         };
+        // The view first, as the command line's settings go before its files:
+        // a file may turn the page, and a layout set after it would be
+        // refused. Only when a file will come back, so a session with nothing
+        // left to open does not change how the page looks.
+        let any = text
+            .lines()
+            .any(|line| PathBuf::from(line.split_once('\t').map_or(line, |(p, _)| p)).is_file());
+        if any {
+            if let Ok(view) = std::fs::read_to_string(Self::view_file(&file)) {
+                self.replay_view(&view);
+            }
+        }
         let mut opened = 0usize;
         let mut first = None;
         for line in text.lines() {
