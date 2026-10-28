@@ -25174,6 +25174,46 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
     assert_eq!(fresh.status(), say!("shell.no-previous"));
 }
 
+/// A shell line completes file names after its first word (2026-10-28), from
+/// the working directory, folders with a `/`, hidden ones only after a `.`;
+/// Tab and S-Tab walk them over the word.
+#[test]
+fn a_shell_line_completes_file_names() {
+    let dir = tmp().join(format!("yumete-shell-files-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("drafts")).unwrap();
+    for name in ["chapter1.md", "chapter2.md", ".hidden"] {
+        std::fs::write(dir.join(name), "").unwrap();
+    }
+    let mut ed = typed("x\n");
+    assert!(ed.set_working_dir(&dir));
+    let line = |ed: &Editor| ed.prompt().map(|(_, t)| t.to_string()).unwrap_or_default();
+    let offers = |ed: &Editor| ed.shell_offers().map(|(list, _, _)| list).unwrap_or_default();
+
+    press(&mut ed, ":!wc ch");
+    assert_eq!(offers(&ed), ["chapter1.md", "chapter2.md"]);
+    assert_eq!(ed.shell_offers().map(|(_, _, lead)| lead).as_deref(), Some("wc "));
+    ed.on_key(Key::Tab);
+    assert_eq!(line(&ed), "!wc chapter1.md");
+    ed.on_key(Key::Tab);
+    assert_eq!(line(&ed), "!wc chapter2.md");
+    ed.on_key(Key::BackTab);
+    assert_eq!(line(&ed), "!wc chapter1.md");
+    ed.on_key(Key::Esc);
+
+    press(&mut ed, ":sh ls d");
+    assert_eq!(offers(&ed), ["drafts/"]);
+    ed.on_key(Key::Esc);
+    press(&mut ed, ":!ls .h");
+    assert_eq!(offers(&ed), [".hidden"]);
+    ed.on_key(Key::Esc);
+    // A first word with nothing typed offers no programs: all of `$PATH` is
+    // no list.
+    press(&mut ed, ":!");
+    assert!(ed.shell_offers().is_none());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// `:read` puts a file in: helix's way at each selection's head, vim's on
 /// new lines below the cursor line. The helix answers are measured with
 /// helix 25.07.1 on `abc\ndef\n` and a file holding `INS\n`.

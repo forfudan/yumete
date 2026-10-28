@@ -472,10 +472,14 @@ impl Editor {
             // arm** 裏走歷史，`Tab`/`S-Tab` 走補全。所以兩對鍵各管一樣東西，
             // 和命令行上打了什麼無關——「看得見的那張」始終是 ⇥ 走的那張。
             // A shell line's ghost is the last shell command; Tab takes it.
-            Key::Tab if self.shell_ghost().is_some() => {
+            Key::Tab if self.completion.is_none() && self.shell_ghost().is_some() => {
                 let rest = self.shell_ghost().unwrap_or_default();
                 self.command_line.push_str(&rest);
                 self.command_caret = self.command_line.chars().count();
+            }
+            // Otherwise it walks the programs or files the word can become.
+            Key::Tab | Key::BackTab if command::shell_start(&self.command_line).is_some() => {
+                self.cycle_shell(if key == Key::Tab { 1 } else { -1 });
             }
             Key::Tab => {
                 self.cycle_completion(1);
