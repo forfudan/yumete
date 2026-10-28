@@ -1933,6 +1933,25 @@ impl Editor {
         }
     }
 
+    /// **Words stand in when the server has nothing** (2026-10-28), as Zed's
+    /// `completions.words = "fallback"`: an empty answer, or no server for the
+    /// language. In practice that is comments and strings, where rust-analyzer
+    /// offers nothing. Whether words came up.
+    fn words_stand_in(&mut self, list: &ServerList) -> bool {
+        if !list.all.is_empty() {
+            return false;
+        }
+        let Some(items) = self.word_offers(self.completion_by_hand) else { return false };
+        self.offering = Some(Offering {
+            buffer: self.current_buffer().id(),
+            at: self.sel.head(),
+            items,
+            picked: 0,
+            server: Some(list.clone()),
+        });
+        true
+    }
+
     /// The line of `at` and its UTF-16 column, as a server counts them.
     fn line_and_column(&self, at: usize) -> (usize, usize) {
         let rope = self.current_buffer().rope();
@@ -1951,8 +1970,12 @@ impl Editor {
             && rope.slice(asked..head).chars().all(|c| c.is_alphanumeric() || c == '_')
     }
 
-    /// Put a server's list up at the caret, narrowed. Whether anything is left.
+    /// Put a server's list up at the caret, narrowed, or the words that stand
+    /// in for an empty one. Whether anything is up.
     fn offer_the_server_list(&mut self, list: ServerList) -> bool {
+        if self.words_stand_in(&list) {
+            return true;
+        }
         let items = self.narrowed(&list);
         if items.is_empty() {
             self.offering = None;
@@ -2019,8 +2042,12 @@ impl Editor {
             return Some(false);
         }
         let again = list.incomplete;
+        let words = list.all.is_empty();
         Some(match self.offer_the_server_list(list) {
             true => again,
+            // Words that stood in for an empty answer: the server said there
+            // is nothing here, and a longer word does not change that.
+            false if words => again,
             // Nothing of it matches any more: ask afresh, as helix does.
             false => true,
         })

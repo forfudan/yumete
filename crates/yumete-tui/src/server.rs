@@ -942,8 +942,10 @@ impl Servers {
         let _ = config;
         let Some(language) = Self::language_of(editor) else { return };
         if self.first_for(language).is_none() {
+            // No server for this language: words stand in (see
+            // `Editor::show_offers`).
             if editor.take_completion_query().is_some() {
-                editor.no_offers();
+                editor.show_offers(Vec::new(), false);
             }
             return;
         }
