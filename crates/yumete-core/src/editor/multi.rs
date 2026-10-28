@@ -203,11 +203,14 @@ impl super::Editor {
         // 「這一段選的是整行」，而第一趟的 `extend_to_line_bounds` 會把它花掉，後面幾
         // 段於是按字符那一路走——`Vy` 三段只有一段拿整行。同上面那四格。
         let lines = self.vim_lines;
+        // A count typed inside a vim operator (`d2w`) is one too (2026-10-29).
+        let alias_count = self.alias_count;
         // 寄存器要分得出「這一趟」——見 `Editor::store`。
         self.edit_round += 1;
         for (nth, one) in was.iter().enumerate() {
             self.sel = crate::selection::Selections::one(*one);
             self.pending = pending;
+            self.alias_count = alias_count;
             self.count = count;
             self.operator_count = operator_count;
             self.pending_register = named;
@@ -291,11 +294,18 @@ impl super::Editor {
         let mode = self.mode;
         let extend = self.extend;
         let lines = self.vim_lines;
+        let alias_count = self.alias_count;
+        // **What was typed is recorded once, not once per cursor** (2026-10-29,
+        // review: `3iX` with two cursors replayed `XX` three times). Every
+        // cursor types the same keys, so the primary's recording is kept.
+        let recorded = self.insert_recording.clone();
+        let mut kept_recording = None;
         self.edit_round += 1;
         let mut out: Vec<Range> = Vec::with_capacity(was.len());
         let mut which = 0;
-        let ranges: Vec<Range> = was.iter().copied().collect();
-        for (nth, one) in ranges.iter().enumerate().rev() {
+        let mut ranges: Vec<Range> = was.iter().copied().collect();
+        for nth in (0..ranges.len()).rev() {
+            let one = &ranges[nth];
             let before = self.current_buffer().rope().len_chars();
             // Warning: **每一趟都先收進當下的文本裏**（2026-09-28 修）。從後往前做保住的是
             // 下標**不被後面的編輯挪走**，保不住「前面那幾段本來就没越界」——`%` 那個
@@ -309,6 +319,7 @@ impl super::Editor {
             one.head = one.head.min(before);
             self.sel = crate::selection::Selections::one(one);
             self.pending = pending;
+            self.alias_count = alias_count;
             self.count = count;
             self.operator_count = operator_count;
             self.pending_register = named;
@@ -317,33 +328,167 @@ impl super::Editor {
             self.vim_lines = lines;
             // Warning: **文檔次序，不是執行次序**：這一趟從後往前跑，而讀者數的是從上往下
             // 第幾個。`#` 寄存器讀它。
+            self.insert_recording.clone_from(&recorded);
             self.edit_nth = Some(nth);
+            let listening = self.current_buffer().id();
+            self.current_buffer_mut().journal = Some(Vec::new());
             what(self);
             self.edit_nth = None;
+            let changes = self.take_the_journal(listening);
             let after = self.current_buffer().rope().len_chars();
-            let moved = after as isize - before as isize;
-            if moved != 0 {
-                let top = after;
-                for done in out.iter_mut() {
-                    let shift = |at: usize| {
-                        ((at as isize + moved).max(0) as usize).min(top)
-                    };
-                    done.anchor = shift(done.anchor);
-                    done.head = shift(done.head);
+            match changes {
+                // **Through each change where it was made** (2026-10-29, review:
+                // `md` on a pair enclosing another cursor moved that cursor by
+                // both brackets, or not at all when it had not run yet). The
+                // ones still to run move too: an edit here can reach before
+                // them, as an opening bracket does.
+                Some(changes) => {
+                    for other in out.iter_mut().chain(ranges[..nth].iter_mut()) {
+                        other.anchor = through(&changes, other.anchor).min(after);
+                        other.head = through(&changes, other.head).min(after);
+                    }
+                }
+                // The whole text was swapped: the old rule, every finished
+                // one moved by the difference in length.
+                None => {
+                    let moved = after as isize - before as isize;
+                    for done in out.iter_mut() {
+                        let shift = |at: usize| ((at as isize + moved).max(0) as usize).min(after);
+                        done.anchor = shift(done.anchor);
+                        done.head = shift(done.head);
+                    }
                 }
             }
-            if one == primary {
+            if was.iter().nth(nth) == Some(&primary) {
                 which = nth;
+                kept_recording = Some(self.insert_recording.clone());
             }
             out.push(self.sel.primary());
         }
         // 收的時候是從後往前收的，擺回去。Warning: `which` 記的是**原來那一組**裏的下標，
         // 反過來之後纔對得上。
         out.reverse();
+        if let Some(kept) = kept_recording {
+            self.insert_recording = kept;
+        }
         self.current_buffer_mut().end_undo_group(grouping);
         let merged = self.sel.rebuild(out, which);
         self.clamp_cursor();
         self.refresh_goal_column();
+        self.say_the_merge(merged);
+    }
+
+    /// What [`Self::after_a_primary_edit`] needs: the buffer and its text
+    /// before a key that is not one every selection runs. `None` with one
+    /// selection, where there is nothing to follow.
+    pub(super) fn before_a_primary_edit(&mut self) -> Option<(u64, u64, ropey::Rope, Vec<Range>)> {
+        if !self.sel.is_plural() {
+            return None;
+        }
+        self.current_buffer_mut().journal = Some(Vec::new());
+        let buffer = self.current_buffer();
+        let others: Vec<Range> = self.sel.secondaries().copied().collect();
+        Some((buffer.id(), buffer.revision(), buffer.rope().clone(), others))
+    }
+
+    /// For each line a selection starts on, the first selection (in document
+    /// order) that starts there. See `J` in `keys.rs`.
+    pub(super) fn first_cursor_on_each_line(&self) -> std::collections::HashMap<usize, usize> {
+        let rope = self.current_buffer().rope();
+        let mut owners = std::collections::HashMap::new();
+        for (nth, one) in self.sel.iter().enumerate() {
+            let (from, _) = self.drawn(*one);
+            owners.entry(rope.char_to_line(from.min(rope.len_chars()))).or_insert(nth);
+        }
+        owners
+    }
+
+    /// For each number a selection's `C-a` would change, the first selection
+    /// that reaches it, keyed by where the number starts.
+    pub(super) fn first_cursor_on_each_number(&self) -> std::collections::HashMap<usize, usize> {
+        let mut owners = std::collections::HashMap::new();
+        for (nth, one) in self.sel.iter().enumerate() {
+            if let Some((from, _)) = self.number_from(one.head) {
+                owners.entry(from).or_insert(nth);
+            }
+        }
+        owners
+    }
+
+    /// Stop listening on buffer `id` and take what it heard. Asked by id: the
+    /// edit may have opened another buffer, and a journal left running there
+    /// would grow for the rest of the session.
+    fn take_the_journal(&mut self, id: u64) -> Option<Vec<(usize, usize, usize)>> {
+        let heard = self.buffers.iter_mut().find(|b| b.id() == id)?.journal.take();
+        heard.filter(|_| self.current_buffer().id() == id)
+    }
+
+    /// **The other selections follow an edit made at the primary alone**
+    /// (2026-10-29, review: after `Space c` with three cursors the other two
+    /// pointed at shifted text, and `iX` landed in the wrong places).
+    ///
+    /// The safety net for any key that edits once rather than at every
+    /// selection: the change is found as the one span where the old and new
+    /// text differ, and every other selection is moved through it — after it
+    /// by the difference in length, inside it to its start. A ropey clone is
+    /// shared, so keeping the old text costs nothing until it is compared.
+    pub(super) fn after_a_primary_edit(&mut self, before: Option<(u64, u64, ropey::Rope, Vec<Range>)>) {
+        let Some((id, revision, old, others)) = before else { return };
+        let changes = self.take_the_journal(id);
+        let buffer = self.current_buffer();
+        if buffer.id() != id || buffer.revision() == revision || !self.sel.is_plural() {
+            return;
+        }
+        // A key that placed every selection itself (`Space c` does) is not
+        // moved a second time.
+        if !self.sel.secondaries().copied().eq(others) {
+            return;
+        }
+        let new = buffer.rope().clone();
+        let primary = self.sel.primary_index();
+        // The changes as made, when the buffer kept them; else the one span
+        // where the texts differ.
+        if let Some(changes) = changes {
+            let top = new.len_chars();
+            let ranges: Vec<Range> = self
+                .sel
+                .iter()
+                .enumerate()
+                .map(|(nth, one)| match nth == primary {
+                    true => *one,
+                    false => Range {
+                        anchor: through(&changes, one.anchor).min(top),
+                        head: through(&changes, one.head).min(top),
+                        ..*one
+                    },
+                })
+                .collect();
+            let merged = self.sel.rebuild(ranges, primary);
+            self.say_the_merge(merged);
+            return;
+        }
+        let (same_start, same_end) = common_ends(&old, &new);
+        let old_end = old.len_chars() - same_end;
+        let moved = new.len_chars() as isize - old.len_chars() as isize;
+        let follow = |at: usize| -> usize {
+            if at < same_start {
+                at
+            } else if at >= old_end {
+                ((at as isize + moved).max(0) as usize).min(new.len_chars())
+            } else {
+                same_start
+            }
+        };
+        let ranges: Vec<Range> = self
+            .sel
+            .iter()
+            .enumerate()
+            .map(|(nth, one)| match nth == primary {
+                true => *one,
+                false => Range { anchor: follow(one.anchor), head: follow(one.head), ..*one },
+            })
+            .collect();
+        let merged = self.sel.rebuild(ranges, primary);
         self.say_the_merge(merged);
     }
 
@@ -900,6 +1045,11 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
         }
         // The Glyph group (`` `u `` `` `s `` …): every selection converted.
         super::Pending::Case => matches!(key, crate::input::Key::Char(_)),
+        // **A vim operator's motion, at every cursor** (2026-10-29, review:
+        // `dw`, `cw`, `yiw` reached the primary alone and left the others on
+        // stale indexes). A count or the first half of a two-key motion only
+        // sets the wait again, and does so the same at each.
+        super::Pending::VimOperator { .. } => true,
         super::Pending::None => matches!(
             key,
             Key::Char('d') | Key::Alt('d') | Key::Char('p' | 'P')
@@ -945,4 +1095,35 @@ pub(super) fn types_at_every_selection(key: crate::input::Key) -> bool {
             | Key::Ctrl('w' | 'u' | 'k' | 'h' | 'd')
             | Key::Alt('d')
     )
+}
+
+/// How many characters two texts share at the start, and how many at the end
+/// after that (never overlapping the start).
+fn common_ends(a: &ropey::Rope, b: &ropey::Rope) -> (usize, usize) {
+    let start = a.chars().zip(b.chars()).take_while(|(x, y)| x == y).count();
+    let room = a.len_chars().min(b.len_chars()) - start;
+    let end = a
+        .chars_at(a.len_chars())
+        .reversed()
+        .zip(b.chars_at(b.len_chars()).reversed())
+        .take(room)
+        .take_while(|(x, y)| x == y)
+        .count();
+    (start, end)
+}
+
+/// Where `at` lands after `changes` (`(at, removed, inserted)`, in the order
+/// made): before a change it stays, after it it moves by the difference,
+/// inside what was removed it goes to the change's start.
+fn through(changes: &[(usize, usize, usize)], mut at: usize) -> usize {
+    for &(start, removed, inserted) in changes {
+        if at < start {
+            continue;
+        }
+        at = match at >= start + removed {
+            true => at - removed + inserted,
+            false => start,
+        };
+    }
+    at
 }

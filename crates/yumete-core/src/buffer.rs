@@ -216,6 +216,13 @@ pub struct Buffer {
     /// ones that swap the whole thing (a re-read, an undo, a redo), where
     /// nothing about the old answer can be trusted.
     edit: Option<(usize, isize)>,
+    /// **Every change while a caller is listening** (2026-10-29): `(at,
+    /// removed, inserted)` in character counts, in the order made. A caller
+    /// moving other selections through an edit sets it to `Some(empty)` and
+    /// takes it back after; a change that swaps the whole text (a re-read, an
+    /// undo, a redo) sets it to `None`, which says 「the list cannot be
+    /// trusted」. See `Editor::edit_each_from`.
+    pub(crate) journal: Option<Vec<(usize, usize, usize)>>,
     /// **這一份稿子最後改在哪**（`g.`，2026-09-28）。字符下標，没改過就是 `None`。
     ///
     /// Warning: **不是撤銷歷史裏那個 `cursor`。** 那一格記的是「報撤銷點的那一刻光標在哪」，
@@ -358,6 +365,7 @@ impl Buffer {
             saved_depth: Some(0),
             saves: 0,
             edit: None,
+            journal: None,
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
@@ -420,6 +428,7 @@ impl Buffer {
             saved_depth: Some(0),
             saves: 0,
             edit: None,
+            journal: None,
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
@@ -530,6 +539,7 @@ impl Buffer {
             saved_depth: Some(0),
             saves: 0,
             edit: None,
+            journal: None,
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
@@ -683,6 +693,7 @@ impl Buffer {
         self.saved_depth = Some(0);
         self.revision = self.revision.wrapping_add(1);
         self.edit = None;
+        self.journal = None;
         self.cursor = self.cursor.min(self.rope.len_chars());
         // A fresh read is a fresh start: the undo stack described a document
         // that is no longer here.
@@ -848,6 +859,9 @@ impl Buffer {
         self.modified = true;
         self.revision += 1;
         self.edit = Some((char_idx, text.chars().count() as isize));
+        if let Some(journal) = self.journal.as_mut() {
+            journal.push((char_idx, 0, text.chars().count()));
+        }
         // **最後改動在哪**（`g.`，#405 之外，2026-09-28）。插入記的是**寫完之後的那一
         // 頭**，和 vi 的 `'.` 一樣：剛打完一段話按 `g.` 回來，要回到的是話的末尾。
         self.last_edit = Some(char_idx + text.chars().count());
@@ -870,6 +884,9 @@ impl Buffer {
         self.modified = true;
         self.revision += 1;
         self.edit = Some((at, -(taken as isize)));
+        if let Some(journal) = self.journal.as_mut() {
+            journal.push((at, taken, 0));
+        }
         // 刪掉的那一段没有「末尾」可回，回到它原來的起點。
         self.last_edit = Some(at);
         self.note_change(at);
@@ -896,6 +913,9 @@ impl Buffer {
         self.modified = true;
         self.revision += 1;
         self.edit = Some((start, text.chars().count() as isize - taken as isize));
+        if let Some(journal) = self.journal.as_mut() {
+            journal.push((start, taken, text.chars().count()));
+        }
         self.last_edit = Some(start + text.chars().count());
         Ok(())
     }
@@ -1559,6 +1579,7 @@ impl Buffer {
         self.history.redo.push(self.here(cursor, selections));
         self.revision += 1;
         self.edit = None;
+        self.journal = None;
         self.rope = prev.rope;
         // **走回去了算不算乾淨，問的是走到了哪裏**，不是那一格當初記了什麼。
         self.modified = match self.still_as_saved() {
@@ -1586,6 +1607,7 @@ impl Buffer {
         self.history.undo.push(self.here(cursor, selections));
         self.revision += 1;
         self.edit = None;
+        self.journal = None;
         self.rope = next.rope;
         self.modified = match self.still_as_saved() {
             Some(same) => !same,

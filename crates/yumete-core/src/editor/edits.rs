@@ -1677,46 +1677,101 @@ impl Editor {
             return;
         };
         let rope = self.current_buffer().rope().clone();
-        let (from, to) = self.selection();
-        let start = crate::motion::line_start(&rope, from.min(rope.len_chars()));
-        // **The last line the selection covers, not the one after it** (丟字第
-        // 二輪, 2026-10-07). A selection made with `x` ends on the *start* of
-        // the following line, so `line_end` there reached past the last line's
-        // break: the break went inside the comment (a blank line before the
-        // closing mark) and the file came back with no final newline.
-        let to = to.min(rope.len_chars());
-        let to = match to > start && crate::motion::line_start(&rope, to) == to {
-            true => to - 1,
-            false => to,
-        };
-        let end = crate::motion::line_end(&rope, to);
-        let text: String = rope.slice(start..end).to_string();
-        let rebuilt = match form {
+        // **Every selection's lines, decided together** (2026-10-29, review:
+        // `Space c` commented the primary's lines alone, as helix does not).
+        // helix's `toggle_comments` gathers the lines of every selection and
+        // decides once whether they are all commented, so three cursors on
+        // three lines toggle three lines the same way. Selections that share
+        // lines share one span.
+        let primary = self.sel.primary();
+        let mut spans: Vec<(usize, usize, bool)> = self
+            .sel
+            .iter()
+            .map(|one| {
+                let (from, to) = self.drawn(*one);
+                let (start, end) = lines_of(&rope, from, to);
+                (start, end, *one == primary)
+            })
+            .collect();
+        spans.sort();
+        let mut merged: Vec<(usize, usize, bool)> = Vec::new();
+        for (start, end, main) in spans {
+            match merged.last_mut() {
+                Some(last) if start <= last.1 => {
+                    last.1 = last.1.max(end);
+                    last.2 |= main;
+                }
+                _ => merged.push((start, end, main)),
+            }
+        }
+        let texts: Vec<String> = merged.iter().map(|&(a, b, _)| rope.slice(a..b).to_string()).collect();
+        let rebuilt: Vec<String> = match form {
             crate::comment::Form::Line(mark) => {
                 // Splitting on `\n` leaves each piece carrying its own `\r`,
                 // so a CRLF file comes back out of this one unchanged.
-                let lines: Vec<&str> = text.split('\n').collect();
-                crate::comment::toggle_line(&lines, mark).join("\n")
+                let pieces: Vec<Vec<&str>> = texts.iter().map(|t| t.split('\n').collect()).collect();
+                let every: Vec<&str> = pieces.iter().flatten().copied().collect();
+                let mut toggled = crate::comment::toggle_line(&every, mark).into_iter();
+                pieces
+                    .iter()
+                    .map(|lines| toggled.by_ref().take(lines.len()).collect::<Vec<_>>().join("\n"))
+                    .collect()
             }
             crate::comment::Form::Block(open, close) => {
                 let ending = self.current_buffer().ending();
-                crate::comment::toggle_block(&text, open, close, ending)
+                texts.iter().map(|t| crate::comment::toggle_block(t, open, close, ending)).collect()
             }
         };
-        if rebuilt == text {
+        if rebuilt == texts {
             return;
         }
         self.snapshot();
-        if !self.overwrite(start, end, &rebuilt) {
-            return;
+        let grouping = self.current_buffer_mut().begin_undo_group();
+        // From the last span up, so the earlier spans' starts still hold.
+        for (&(start, end, _), text) in merged.iter().zip(&rebuilt).rev() {
+            if !self.overwrite(start, end, text) {
+                self.current_buffer_mut().end_undo_group(grouping);
+                return;
+            }
         }
+        self.current_buffer_mut().end_undo_group(grouping);
         // The same lines stay selected, so the key can be pressed twice and
         // the second press undoes the first — which is what a toggle is.
-        let last = start + rebuilt.chars().count();
-        self.sel.set_anchor(start);
-        self.sel.set_head(crate::motion::prev_grapheme(self.current_buffer().rope(), last).max(start));
+        let mut shift: isize = 0;
+        let mut ranges = Vec::with_capacity(merged.len());
+        let mut which = 0;
+        for (nth, (&(old_start, old_end, main), text)) in merged.iter().zip(&rebuilt).enumerate() {
+            let start = (old_start as isize + shift) as usize;
+            let length = text.chars().count();
+            let last = start + length;
+            shift += length as isize - (old_end - old_start) as isize;
+            let head = crate::motion::prev_grapheme(self.current_buffer().rope(), last).max(start);
+            ranges.push(crate::selection::Range::new(start, head));
+            if main {
+                which = nth;
+            }
+        }
+        self.sel.rebuild(ranges, which);
         self.refresh_goal_column();
     }
+}
+
+/// The whole lines `from..to` touches, as `(start, end)` without the last
+/// line's break.
+///
+/// **The last line the selection covers, not the one after it** (丟字第二輪,
+/// 2026-10-07). A selection made with `x` ends on the *start* of the following
+/// line, so `line_end` there reached past the last line's break: the break
+/// went inside the comment (a blank line before the closing mark) and the file
+/// came back with no final newline.
+fn lines_of(rope: &ropey::Rope, from: usize, to: usize) -> (usize, usize) {
+    let start = crate::motion::line_start(rope, from.min(rope.len_chars()));
+    let to = to.min(rope.len_chars());
+    let to = match to > start && crate::motion::line_start(rope, to) == to {
+        true => to - 1,
+        false => to,
+    };
+    (start, crate::motion::line_end(rope, to))
 }
 
 /// **把一截擺進第 `nth` 格**，短了就先補空格子（`store` 的兩條路共用）。

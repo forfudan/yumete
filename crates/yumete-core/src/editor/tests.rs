@@ -31171,3 +31171,100 @@ fn the_page_counts_take_one_to_four() {
     assert!(!ed.status().is_empty(), "a bare one says the number");
     assert!(ed.execute("view-bands 2").is_err(), "the old name is gone");
 }
+
+/// **Several cursors, review fixes** (2026-10-29). Each case was a reviewer's
+/// reproduction against helix or vim.
+#[test]
+fn several_cursors_after_the_review() {
+    use yumete_cjk::KeyPreset;
+    let text = |ed: &Editor| ed.current_buffer().text().to_string();
+
+    // `Space c` comments every cursor's line, and the cursors stay on them.
+    let mut ed = typed("fn a() {}\nfn b() {}\nfn c() {}\n");
+    ed.set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Rust));
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('C'));
+    ed.on_key(Key::Char('C'));
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('c'));
+    assert_eq!(text(&ed), "// fn a() {}\n// fn b() {}\n// fn c() {}\n", "every line, one decision");
+    press(&mut ed, "iX");
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "X// fn a() {}\nX// fn b() {}\nX// fn c() {}\n", "no cursor left on stale text");
+
+    // vim: an operator and its motion run at every cursor.
+    let mut ed = typed("one two three\nfour five six seven\n");
+    ed.set_key_preset(KeyPreset::Vim);
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Alt('C'));
+    press(&mut ed, "dw");
+    assert_eq!(text(&ed), "two three\nfive six seven\n");
+    // …and `u` brings every cursor back, not only the primary.
+    press(&mut ed, "u");
+    press(&mut ed, "iQ");
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "Qone two three\nQfour five six seven\n");
+
+    // vim: a counted insert repeats at every cursor, once each.
+    let mut ed = typed("ab\ncd\n");
+    ed.set_key_preset(KeyPreset::Vim);
+    press(&mut ed, "j");
+    ed.on_key(Key::Alt('C'));
+    press(&mut ed, "3iX");
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "XXXab\nXXXcd\n");
+
+    // `J` with two cursors on one line joins it once (helix dedups).
+    let mut ed = typed("aa bb\ncc\ndd\nee\n");
+    press(&mut ed, "ggxsb");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "J");
+    assert_eq!(text(&ed), "aa bb cc\ndd\nee\n");
+
+    // `C-a` with two cursors that reach one number bumps it once.
+    let mut ed = typed("k k 9\n");
+    press(&mut ed, "xsk");
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Ctrl('a'));
+    assert_eq!(text(&ed), "k k 10\n");
+
+    // `md` on a pair that encloses another cursor moves that cursor by one
+    // bracket, not two, and not by none.
+    let mut ed = typed("(a\n[b]\nc)\n");
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Char('C'));
+    press(&mut ed, "mdm");
+    press(&mut ed, "iX");
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "Xa\nXb\nc\n");
+}
+
+/// **Block mode counts a tab to its stop and a combining mark as nothing**
+/// (2026-10-29, review), and a block pasted past the file's end lands one
+/// piece per line, as vim's does.
+#[test]
+fn block_mode_measures_tabs_and_marks_and_pastes_past_the_end() {
+    use yumete_cjk::KeyPreset;
+    let text = |ed: &Editor| ed.current_buffer().text().to_string();
+    let mut ed = typed("\tab\nxxxxxxxxab\n");
+    ed.set_key_preset(KeyPreset::Vim);
+    press(&mut ed, "ggl");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "jd");
+    assert_eq!(text(&ed), "\tb\nxxxxxxxxb\n", "the tab is eight columns");
+
+    let mut ed = typed("e\u{301}xy\nabc\n");
+    ed.set_key_preset(KeyPreset::Vim);
+    press(&mut ed, "gg");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "jd");
+    assert_eq!(text(&ed), "xy\nbc\n", "the accent goes with its letter");
+
+    let mut ed = typed("ab\ncd\nef\n");
+    ed.set_key_preset(KeyPreset::Vim);
+    press(&mut ed, "gg");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "jjlyGp");
+    assert_eq!(text(&ed), "ab\ncd\neabf\n cd\n ef\n", "one piece per line, as vim");
+}

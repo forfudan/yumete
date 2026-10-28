@@ -253,7 +253,13 @@ impl Editor {
                 let again = std::mem::take(&mut self.insert_again);
                 let typed = std::mem::take(&mut self.insert_recording);
                 if again > 0 && !typed.is_empty() {
-                    self.spend_the_insert_count(again, &typed);
+                    // At every cursor (2026-10-29, review: `3iX` with two
+                    // cursors repeated at the primary alone).
+                    let opened = self.insert_opened;
+                    self.edit_each_from(false, |e| {
+                        e.insert_opened = opened;
+                        e.spend_the_insert_count(again, &typed);
+                    });
                 }
                 // The session just ended is what `.` replays.
                 self.insert_recording.clear();

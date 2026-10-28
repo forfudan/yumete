@@ -220,9 +220,35 @@ impl Editor {
                             return KeyOutcome::Continue;
                         }
                     }
-                    self.edit_each(|e| e.on_normal_key(key));
+                    // **`J` joins a line once however many cursors are on it**
+                    // (2026-10-29, review: two on one line joined it twice;
+                    // helix sorts the joins and drops the repeats). The first
+                    // cursor on each line joins; the others ride along.
+                    let joins = matches!(key, Key::Char('J') | Key::Alt('J'));
+                    // Likewise `C-a`/`C-x`: two cursors that reach the same
+                    // number bump it once.
+                    let bumps = matches!(key, Key::Ctrl('a') | Key::Ctrl('x'));
+                    let owners = ((joins || bumps) && self.sel.is_plural()).then(|| match joins {
+                        true => self.first_cursor_on_each_line(),
+                        false => self.first_cursor_on_each_number(),
+                    });
+                    self.edit_each(|e| {
+                        if let Some(owners) = &owners {
+                            let rope = e.current_buffer().rope();
+                            let here = match joins {
+                                true => Some(rope.char_to_line(e.selection().0.min(rope.len_chars()))),
+                                false => e.number_from(e.sel.head()).map(|(from, _)| from),
+                            };
+                            if here.and_then(|at| owners.get(&at)) != e.edit_nth.as_ref() {
+                                return;
+                            }
+                        }
+                        e.on_normal_key(key)
+                    });
                 } else {
+                    let before = self.before_a_primary_edit();
                     self.on_normal_key(key);
+                    self.after_a_primary_edit(before);
                 }
                 // **An undo point is where the typing begins** (2026-10-27,
                 // helix's): `A` announces it and then goes to the line's end,
