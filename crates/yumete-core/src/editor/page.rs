@@ -394,25 +394,6 @@ impl Editor {
         self.indent
     }
 
-    /// How many pages the vertical page is cut into, one above the other (段組).
-    pub fn pages_vertical(&self) -> usize {
-        self.pages_vertical.max(1)
-    }
-
-    /// Cut the vertical page into `n` pages.
-    pub fn set_pages_vertical(&mut self, n: usize) {
-        self.pages_vertical = n.clamp(1, 4);
-        self.status = self.pages_vertical_report();
-    }
-
-    /// What a bare `:view-pages-vertical` answers.
-    pub(super) fn pages_vertical_report(&self) -> String {
-        match self.pages_vertical {
-            1 => say!("layout.pages-vertical-one"),
-            n => say!("layout.pages-vertical", n),
-        }
-    }
-
     /// How many pages the horizontal page is cut into, side by side.
     pub fn pages_horizontal(&self) -> usize {
         self.pages_horizontal.max(1)
@@ -432,6 +413,24 @@ impl Editor {
         }
     }
 
+    /// How many pages the vertical page is cut into, one above the other (段組).
+    pub fn pages_vertical(&self) -> usize {
+        self.pages_vertical.max(1)
+    }
+
+    /// Cut the vertical page into `n` pages.
+    pub fn set_pages_vertical(&mut self, n: usize) {
+        self.pages_vertical = n.clamp(1, 4);
+        self.status = self.pages_vertical_report();
+    }
+
+    /// What a bare `:view-pages-vertical` answers.
+    pub(super) fn pages_vertical_report(&self) -> String {
+        match self.pages_vertical {
+            1 => say!("layout.pages-vertical-one"),
+            n => say!("layout.pages-vertical", n),
+        }
+    }
 
     /// Set the first-line indent, in squares.
     pub fn set_indent(&mut self, n: usize) {

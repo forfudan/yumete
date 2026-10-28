@@ -447,12 +447,12 @@ pub enum Command {
     SetTabInserts(Option<bool>),
     /// `:indent-width [n]` — how many columns Tab and `>` move; bare reports.
     SetIndentWidth(Option<usize>),
-    /// `:view-pages-vertical 2` — how many pages the 縱書 page is cut into,
-    /// one above the other (段組). `None` asks.
-    SetPagesVertical(Option<usize>),
     /// `:view-pages-horizontal 2` — how many pages the horizontal page is cut
     /// into, side by side, the text running on from one to the next.
     SetPagesHorizontal(Option<usize>),
+    /// `:view-pages-vertical 2` — how many pages the 縱書 page is cut into,
+    /// one above the other (段組). `None` asks.
+    SetPagesVertical(Option<usize>),
 
     /// `:table-find row|column <pattern>` — the two directions a search can run.
     Search { pattern: String, by: Axis },
@@ -3875,23 +3875,6 @@ pub const COMMANDS: &[Entry] = &[
     // no meaning on a page already cut in three. Neither needs its layout to
     // be the one in use; the number waits until it is.
     Entry {
-        name: "view-pages-vertical",
-        aliases: &[],
-        help: "cmd.view.pages-vertical",
-        needs: &[],
-        params: &[Param::Free("<1–4>")],
-        build: Some(|p| match p.arg(0) {
-            None => Ok(Command::SetPagesVertical(None)),
-            Some(_) => match p.number(0)? {
-                n @ 1..=4 => Ok(Command::SetPagesVertical(Some(n))),
-                n => Err(CommandError::InvalidArgument {
-                    command: "view-pages-vertical",
-                    value: n.to_string(),
-                }),
-            },
-        }),
-    },
-    Entry {
         name: "view-pages-horizontal",
         aliases: &[],
         help: "cmd.view.pages-horizontal",
@@ -3903,6 +3886,23 @@ pub const COMMANDS: &[Entry] = &[
                 n @ 1..=4 => Ok(Command::SetPagesHorizontal(Some(n))),
                 n => Err(CommandError::InvalidArgument {
                     command: "view-pages-horizontal",
+                    value: n.to_string(),
+                }),
+            },
+        }),
+    },
+    Entry {
+        name: "view-pages-vertical",
+        aliases: &[],
+        help: "cmd.view.pages-vertical",
+        needs: &[],
+        params: &[Param::Free("<1–4>")],
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::SetPagesVertical(None)),
+            Some(_) => match p.number(0)? {
+                n @ 1..=4 => Ok(Command::SetPagesVertical(Some(n))),
+                n => Err(CommandError::InvalidArgument {
+                    command: "view-pages-vertical",
                     value: n.to_string(),
                 }),
             },
@@ -4347,7 +4347,10 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "replace",
-        aliases: &[],
+        // `:r` pairs with `:s` for `:search` (2026-10-28). vim and helix spend
+        // it on `:read`, which yumete does not have; an alias is not muscle
+        // memory the way a key is.
+        aliases: &["r"],
         help: "cmd.commands.replace",
         needs: &[],
         params: &[Param::Path],
@@ -7208,6 +7211,10 @@ mod tests {
         // `:s` 開高級搜索那扇面板。`s` 本來夾在 `search`/`set`/`shot`… 中間，
         // 哪個都不算——而聲明出來的簡寫壓過前綴規則，同 `w` 之於 `write`。
         assert_eq!(parse(":s"), Ok(Command::OpenSearch(crate::search_panel::Where::Buffer)));
+        assert_eq!(
+            parse(":r"),
+            Ok(Command::OpenReplace { scope: crate::search_panel::Where::Buffer, reshape: false })
+        );
         // 帶分隔符的那一種還是 vi 的一次性替換，兩條路分得清。
         assert!(matches!(parse(":s/天/X/"), Ok(Command::Substitute { .. })));
 
