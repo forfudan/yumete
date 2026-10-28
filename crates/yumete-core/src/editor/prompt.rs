@@ -471,6 +471,12 @@ impl Editor {
             // `ctrl!('p') | key!(Up)` 和 `ctrl!('n') | key!(Down)` 在**同一個
             // arm** 裏走歷史，`Tab`/`S-Tab` 走補全。所以兩對鍵各管一樣東西，
             // 和命令行上打了什麼無關——「看得見的那張」始終是 ⇥ 走的那張。
+            // A shell line's ghost is the last shell command; Tab takes it.
+            Key::Tab if self.shell_ghost().is_some() => {
+                let rest = self.shell_ghost().unwrap_or_default();
+                self.command_line.push_str(&rest);
+                self.command_caret = self.command_line.chars().count();
+            }
             Key::Tab => {
                 self.cycle_completion(1);
                 self.ask_for_a_trial();
@@ -729,19 +735,33 @@ impl Editor {
     /// restores the line you were typing). The two references disagree here and
     /// helix is the one followed, so the newest line is now the end of the road
     /// — `C-u` is the way back to an empty prompt.
+    ///
+    /// **A shell line walks only shell lines** (2026-10-28), as helix's shell
+    /// prompts keep a history of their own: with `!` (or `pipe `…) typed, the
+    /// other commands are passed over.
     fn walk_history(&mut self, back: bool, search: bool) {
+        // Decided where the walk starts, not at every step: a walk over all
+        // the commands that lands on a shell line goes on over all of them.
+        if self.history_at.is_none() {
+            self.history_shell = !search && command::shell_start(&self.command_line).is_some();
+        }
+        let shell = self.history_shell;
         let history = match search {
             true => &self.search_history,
             false => &self.command_history,
         };
-        let Some(end) = history.len().checked_sub(1) else {
+        let fits: Vec<usize> = (0..history.len())
+            .filter(|&i| !shell || command::shell_start(&history[i]).is_some())
+            .collect();
+        let (Some(&first), Some(&last)) = (fits.first(), fits.last()) else {
             return;
         };
-        let at = match back {
-            true => self.history_at.unwrap_or(history.len()).saturating_sub(1),
-            false => self.history_at.map_or(0, |i| i + 1),
-        }
-        .min(end);
+        let at = match (back, self.history_at) {
+            (true, None) => last,
+            (true, Some(h)) => fits.iter().rev().copied().find(|&i| i < h).unwrap_or(first),
+            (false, None) => first,
+            (false, Some(h)) => fits.iter().copied().find(|&i| i > h).unwrap_or(last),
+        };
         self.history_at = Some(at);
         self.command_line = history[at].clone();
         self.command_caret = self.command_line.chars().count();

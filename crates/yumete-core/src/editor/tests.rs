@@ -25115,6 +25115,65 @@ fn a_bracket_key_reaches_its_whole_family() {
     assert_eq!(ed.current_buffer().text(), "\n", "（）不在 [ 這一族裏");
 }
 
+/// A shell line (2026-10-28): `Shell:` for its label with the `!` hidden in
+/// it, the last shell command as its ghost, `C-p`/`C-n` over shell lines
+/// only, and vim's `!` for the previous command.
+#[test]
+fn a_shell_line_has_its_label_ghost_history_and_bang() {
+    let mut ed = typed("x\n");
+    let run = |ed: &mut Editor, line: &str| {
+        press(ed, ":");
+        press(ed, line);
+        ed.on_key(Key::Enter);
+        ed.take_shell_request().map(|s| s.line)
+    };
+    assert_eq!(run(&mut ed, "!echo a"), Some("echo a".to_string()));
+    ed.execute(":view-focus on").unwrap();
+    press(&mut ed, ":view-focus off");
+    ed.on_key(Key::Enter);
+    assert_eq!(run(&mut ed, "pipe-after echo b"), Some("echo b".to_string()));
+
+    // The label, and the `!` it stands for.
+    press(&mut ed, ":");
+    assert_eq!(ed.prompt_label().as_deref(), Some(":"));
+    press(&mut ed, "!");
+    assert_eq!(ed.prompt_label(), Some(say!("ui.prompt-shell")));
+    assert_eq!(ed.prompt_drawn(), "");
+    assert_eq!(ed.prompt_before_caret(), "");
+    // The ghost is the last shell command, whichever verb ran it.
+    assert_eq!(ed.prompt_ghost(), "echo b");
+    press(&mut ed, "ec");
+    assert_eq!(ed.prompt_ghost(), "ho b");
+    ed.on_key(Key::Tab);
+    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("!echo b"));
+    assert_eq!(ed.prompt_drawn(), "echo b");
+
+    // C-p walks shell lines only.
+    ed.on_key(Key::Ctrl('u'));
+    press(&mut ed, "!");
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("pipe-after echo b"));
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("!echo a"));
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("!echo a"), "stops at the oldest");
+    ed.on_key(Key::Esc);
+    // Without a verb, every command as before.
+    press(&mut ed, ":");
+    ed.on_key(Key::Ctrl('p'));
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("view-focus off"));
+    ed.on_key(Key::Esc);
+
+    // `!` is the previous `:!` command, `\!` a `!` of its own.
+    assert_eq!(run(&mut ed, "!!"), Some("echo a".to_string()));
+    assert_eq!(run(&mut ed, "!! | wc"), Some("echo a | wc".to_string()));
+    assert_eq!(run(&mut ed, "!echo hi\\!"), Some("echo hi!".to_string()));
+    let mut fresh = typed("x\n");
+    assert_eq!(run(&mut fresh, "!!"), None);
+    assert_eq!(fresh.status(), say!("shell.no-previous"));
+}
+
 /// `:read` puts a file in: helix's way at each selection's head, vim's on
 /// new lines below the cursor line. The helix answers are measured with
 /// helix 25.07.1 on `abc\ndef\n` and a file holding `INS\n`.

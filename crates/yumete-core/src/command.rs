@@ -5197,6 +5197,40 @@ pub fn by_segment(line: &str) -> Vec<Choice> {
         .collect()
 }
 
+/// **Where the terminal's part of a shell line starts** (2026-10-28), or `None`
+/// when the line is not one. The verbs are `!` and the five words that hand a
+/// line to the terminal: `!ls` gives 1, `pipe sort` gives 5. A word still
+/// being typed (`pipe` with no space after it) is not a verb yet.
+pub fn shell_start(line: &str) -> Option<usize> {
+    const VERBS: &[&str] = &["sh", "pipe", "pipe-before", "pipe-after", "pipe-to"];
+    let lead = line.len() - line.trim_start().len();
+    let body = &line[lead..];
+    if body.starts_with('!') {
+        return Some(lead + 1);
+    }
+    let (word, _) = body.split_once(char::is_whitespace)?;
+    VERBS.contains(&word).then(|| lead + word.len() + 1)
+}
+
+/// **vim's `!` in a `:!` line** (2026-10-28, `:help :!`): every `!` stands for
+/// the previous shell command, and `\!` is a `!` of its own. `None` when there
+/// is a `!` to replace and no previous command to replace it with.
+pub fn expand_bang(line: &str, previous: Option<&str>) -> Option<String> {
+    let mut out = String::new();
+    let mut chars = line.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'!') => {
+                chars.next();
+                out.push('!');
+            }
+            '!' => out.push_str(previous?),
+            c => out.push(c),
+        }
+    }
+    Some(out)
+}
+
 pub fn complete(prefix: &str) -> Vec<Choice> {
     complete_at(prefix).1
 }

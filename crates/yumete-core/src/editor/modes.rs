@@ -200,7 +200,46 @@ impl Editor {
     /// The prompt's text up to the caret — what the front end measures to put
     /// the terminal's cursor in the right cell.
     pub fn prompt_before_caret(&self) -> String {
-        self.command_line.chars().take(self.prompt_caret()).collect()
+        self.command_line
+            .chars()
+            .take(self.prompt_caret())
+            .skip(self.prompt_hidden())
+            .collect()
+    }
+
+    /// How many characters at the start of the line the label stands for: the
+    /// `!` of a `:!` line, which `Shell:` says instead (2026-10-28), so the
+    /// line does not read as bash's own `!ls`.
+    fn prompt_hidden(&self) -> usize {
+        match self.mode == Mode::Command && self.command_line.trim_start().starts_with('!') {
+            true => command::shell_start(&self.command_line).unwrap_or(0),
+            false => 0,
+        }
+    }
+
+    /// The prompt's text as it is drawn, after [`Self::prompt_label`].
+    pub fn prompt_drawn(&self) -> String {
+        match self.prompt() {
+            Some((_, text)) => text.chars().skip(self.prompt_hidden()).collect(),
+            None => String::new(),
+        }
+    }
+
+    /// The terminal's part of the newest shell line in the history, if any.
+    fn last_shell_line(&self) -> Option<&str> {
+        self.command_history.iter().rev().find_map(|line| {
+            let at = command::shell_start(line)?;
+            Some(line[at..].trim_start()).filter(|text| !text.is_empty())
+        })
+    }
+
+    /// The ghost of a shell line: the rest of the last shell command, while
+    /// what is typed after the verb is a start of it.
+    pub(super) fn shell_ghost(&self) -> Option<String> {
+        let at = command::shell_start(&self.command_line)?;
+        let typed = &self.command_line[at.min(self.command_line.len())..];
+        let last = self.last_shell_line()?;
+        (last.len() > typed.len() && last.starts_with(typed)).then(|| last[typed.len()..].to_string())
     }
 
     /// The active prompt (Command, Search, Ruby or `::`): what is written
@@ -247,6 +286,11 @@ impl Editor {
             // 被提示符佔着，所以按下 `A-j` 之後說一句是**看不見**的——量過，屏幕
             // 上一個字都不變。一個看不見的開關等於没有開關，所以狀態寫在這一行
             // 自己身上。
+            // **A line for the terminal says so** (2026-10-28): `!` and the
+            // words that run a shell command put `Shell:` where `:` was.
+            Mode::Command if command::shell_start(&self.command_line).is_some() => {
+                say!("ui.prompt-shell")
+            }
             Mode::Search => match (self.search_forward, self.search.wild) {
                 (true, false) => say!("ui.prompt-search"),
                 (true, true) => say!("ui.prompt-search-wild"),
@@ -279,6 +323,11 @@ impl Editor {
         // did, and the first character that does not match takes it away.
         if self.mode == Mode::Search && self.command_line.is_empty() {
             return self.last_search.clone();
+        }
+        // A shell line guesses the last shell command, as `/` guesses the last
+        // pattern (2026-10-28); Tab takes it.
+        if self.mode == Mode::Command && command::shell_start(&self.command_line).is_some() {
+            return self.shell_ghost().unwrap_or_default();
         }
         // The guess completes the *word* being typed, so a line with arguments
         // on it can still be guessed at: `:yume sch` guesses `eme`.
