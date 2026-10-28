@@ -7519,12 +7519,15 @@ fn draw_shell_offers(
     // Two cells back for the ring and the `› `, so the names line up with it.
     let x = (area.x + (yumete_cjk::str_width(&label) + yumete_cjk::str_width(&lead)) as u16)
         .saturating_sub(3);
+    // Standing on the command row, so its bottom border lies on the status
+    // line, where the 命令 panel's lies: the one covers the other edge to edge.
+    let row = status.y + 1;
     panel::draw(
         frame,
         config,
         area,
-        status.y,
-        crate::chrome::Spot::cell((x, status.y)),
+        row,
+        crate::chrome::Spot::cell((x, row)),
         false,
         &panel::Panel {
             stand: panel::Stand::UnderCaret,
@@ -7555,23 +7558,19 @@ fn draw_command_menu(
     };
     let ink = crate::theme::Palette::of(config);
     // **A shell line's programs and files float at the caret**, drawn the way
-    // code completion is (2026-10-28); the 命令 panel stands above them and
-    // keeps only what the line will do.
-    let floated = draw_shell_offers(frame, editor, config, area, status);
-    let status = match floated {
-        // The panel's bottom border sits on the row it is given; give it the
-        // row above the float, or it would draw over the float's top border.
-        Some(rect) => Rect { y: rect.y.saturating_sub(1), ..status },
-        None => status,
-    };
-    let joined = |menu: Option<Rect>| match (menu, floated) {
-        (Some(menu), Some(float)) => Some(menu.union(float)),
-        (menu, float) => menu.or(float),
+    // code completion is (2026-10-28). The 命令 panel keeps its place and
+    // keeps only what the line will do; the float is drawn after it, over
+    // it, so the panel does not move as the list grows and shrinks.
+    let offering = editor.shell_offers().is_some();
+    let float = |frame: &mut Frame| draw_shell_offers(frame, editor, config, area, status);
+    let joined = |frame: &mut Frame, menu: Option<Rect>| match (menu, float(frame)) {
+        (Some(menu), Some(over)) => Some(menu.union(over)),
+        (menu, over) => menu.or(over),
     };
     let (matches, selected) = editor.command_menu();
-    let matches = match floated {
-        Some(_) => Vec::new(),
-        None => matches,
+    let matches = match offering {
+        true => Vec::new(),
+        false => matches,
     };
     // Tab's pick is inked; without one nothing is, because the drawn text on
     // the command line is already saying what the guess is.
@@ -7649,7 +7648,7 @@ fn draw_command_menu(
     // 任何一張詞表上，而按下 Enter 它確實會把寬度定成 10。那時候整扇面板就是那
     // 一段話，底下那道橫線不必畫——橫線隔的是說明和單子，而單子是空的。
     if matches.is_empty() && about.is_empty() {
-        return joined(None);
+        return joined(frame, None);
     }
     let footer = match matches.is_empty() {
         true => String::new(),
@@ -7683,7 +7682,7 @@ fn draw_command_menu(
             whole: Some(whole_menu()),
         },
     );
-    joined(menu)
+    joined(frame, menu)
 }
 
 /// The `[^` and `](#` panel — the same shape as the `:` menu, in the text
