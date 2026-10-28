@@ -233,6 +233,104 @@ impl Editor {
         })
     }
 
+    /// **What the word being typed on a shell line can be finished with**
+    /// (2026-10-28), and where that word starts: program names from `$PATH`
+    /// for the first word and the first after `|`, `;` or `&`, file names after
+    /// it — helix's shell completer, matched by prefix. A program is not
+    /// offered before its first letter: the whole of `$PATH` is no list.
+    fn shell_choices(&self, line: &str) -> Option<(usize, Vec<String>)> {
+        const MOST: usize = 200;
+        let at = command::shell_start(line)?;
+        let rest = &line[at..];
+        let start = rest
+            .char_indices()
+            .rev()
+            .find(|(_, c)| c.is_whitespace())
+            .map_or(0, |(i, c)| i + c.len_utf8());
+        let word = &rest[start..];
+        let before = rest[..start].trim_end();
+        let program = before.is_empty() || before.ends_with(['|', ';', '&']);
+        let mut out: Vec<String> = match (program, word.is_empty()) {
+            (true, true) => Vec::new(),
+            (true, false) => programs_on_the_path()
+                .iter()
+                .filter(|name| name.starts_with(word))
+                .cloned()
+                .collect(),
+            (false, _) => self.files_starting(word),
+        };
+        out.truncate(MOST);
+        Some((at + start, out))
+    }
+
+    /// The files and folders `word` is the start of, folders ending in `/`.
+    /// Hidden ones only once a `.` is typed, as a shell's completion does.
+    fn files_starting(&self, word: &str) -> Vec<String> {
+        let (dir, base) = match word.rfind('/') {
+            Some(i) => (&word[..=i], &word[i + 1..]),
+            None => ("", word),
+        };
+        let root = match dir.is_empty() {
+            true => self.working_dir(),
+            false => self.here_path(dir),
+        };
+        let Ok(entries) = std::fs::read_dir(root) else {
+            return Vec::new();
+        };
+        let mut out: Vec<String> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let name = entry.file_name().into_string().ok()?;
+                let shown = base.starts_with('.') || !name.starts_with('.');
+                (shown && name.starts_with(base)).then(|| {
+                    let slash = if entry.path().is_dir() { "/" } else { "" };
+                    format!("{dir}{name}{slash}")
+                })
+            })
+            .collect();
+        out.sort();
+        out
+    }
+
+    /// **The list a shell line offers**, which one Tab is on, and the drawn
+    /// text before the word it completes, for the float to stand under that
+    /// word while Tab rewrites it (2026-10-28). Drawn the way code completion
+    /// is. Not while the last shell command is the ghost: Tab takes that first.
+    pub fn shell_offers(&self) -> Option<(Vec<String>, Option<usize>, String)> {
+        if self.mode != Mode::Command || (self.completion.is_none() && self.shell_ghost().is_some()) {
+            return None;
+        }
+        let asked = self.completion.as_ref().map_or(self.command_line.as_str(), |(p, _)| p.as_str());
+        let (start, list) = self.shell_choices(asked)?;
+        let lead = asked[..start].chars().skip(self.prompt_hidden()).collect();
+        (!list.is_empty()).then(|| (list, self.completion.as_ref().map(|(_, i)| *i), lead))
+    }
+
+    /// Step Tab through [`Self::shell_offers`], writing each over the word.
+    /// Whether there was anything to step through.
+    pub(super) fn cycle_shell(&mut self, step: isize) -> bool {
+        let prefix = match &self.completion {
+            Some((prefix, _)) => prefix.clone(),
+            None => self.command_line.clone(),
+        };
+        let Some((start, list)) = self.shell_choices(&prefix) else {
+            return false;
+        };
+        if list.is_empty() {
+            return false;
+        }
+        let n = list.len() as isize;
+        let next = match &self.completion {
+            Some((_, i)) => (*i as isize + step).rem_euclid(n),
+            None if step > 0 => 0,
+            None => n - 1,
+        } as usize;
+        self.command_line = format!("{}{}", &prefix[..start], list[next]);
+        self.command_caret = self.command_line.chars().count();
+        self.completion = Some((prefix, next));
+        true
+    }
+
     /// The ghost of a shell line: the rest of the last shell command, while
     /// what is typed after the verb is a start of it.
     pub(super) fn shell_ghost(&self) -> Option<String> {
@@ -638,4 +736,24 @@ impl Editor {
         // 走到了行尾（或者空行）：答前面那一個，同 `char_at_cursor`。
         last.map(str::to_string)
     }
+}
+
+/// Every program on `$PATH`, read once (helix reads it once too).
+fn programs_on_the_path() -> &'static [String] {
+    static PROGRAMS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    PROGRAMS.get_or_init(|| {
+        let Some(path) = std::env::var_os("PATH") else {
+            return Vec::new();
+        };
+        let mut names: Vec<String> = std::env::split_paths(&path)
+            .filter_map(|dir| std::fs::read_dir(dir).ok())
+            .flatten()
+            .flatten()
+            .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file() || t.is_symlink()))
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    })
 }

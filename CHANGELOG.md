@@ -15,7 +15,9 @@ in `docs/development.md` §5.2.
   with `!`, `sh` or one of the `pipe` commands shows a gold `Shell:` in place of the
   `:` (the `!` drawn inside it), offers the last shell command in grey for Tab, and
   `C-p`/`C-n` walk only shell lines. `!` in a `:!` line is the previous `:!` command,
-  as in vim: `:!!` runs it again, `\!` is a literal `!`.
+  as in vim: `:!!` runs it again, `\!` is a literal `!`. Tab completes program names
+  from `$PATH` for the first word and file names after it, in a float drawn like code
+  completion.
 
 - **`-r` and `:resume` bring back how the page looked**: the layout, the `:view-*`
   settings and the theme, where they differed from the config when you quit. They

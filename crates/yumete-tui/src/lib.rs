@@ -7485,6 +7485,64 @@ fn draw_search_hint(
     )
 }
 
+/// The float of programs and files a shell line offers, standing on the status
+/// line under the word being typed. One column, a window of nine, `›` on the
+/// one Tab is on: the code-completion float's shape.
+fn draw_shell_offers(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    area: Rect,
+    status: Rect,
+) -> Option<Rect> {
+    let (items, picked, lead) = editor.shell_offers()?;
+    const SHOWN: usize = 9;
+    let at = picked.unwrap_or(0);
+    let from = match items.len() <= SHOWN {
+        true => 0,
+        false => at.saturating_sub(SHOWN / 2).min(items.len() - SHOWN),
+    };
+    let rows: Vec<(String, String)> = items[from..(from + SHOWN).min(items.len())]
+        .iter()
+        .enumerate()
+        .map(|(n, item)| {
+            let mark = match picked == Some(from + n) {
+                true => "› ",
+                false => "  ",
+            };
+            (format!("{mark}{item}"), String::new())
+        })
+        .collect();
+    let label = editor.prompt_label().unwrap_or_default();
+    // Under the word being completed, not the caret: Tab rewrites the word,
+    // and a float that followed the caret would jump with every candidate.
+    // Two cells back for the ring and the `› `, so the names line up with it.
+    let x = (area.x + (yumete_cjk::str_width(&label) + yumete_cjk::str_width(&lead)) as u16)
+        .saturating_sub(3);
+    panel::draw(
+        frame,
+        config,
+        area,
+        status.y,
+        crate::chrome::Spot::cell((x, status.y)),
+        false,
+        &panel::Panel {
+            stand: panel::Stand::UnderCaret,
+            accent: None,
+            pages: false,
+            reading: false,
+            scroll: 0,
+            title: String::new(),
+            lede: None,
+            entry: false,
+            body: panel::Body::Keys(rows),
+            tag: Some(say!("lsp.which-of-them", at + 1, items.len())),
+            vertical_text: false,
+            marked: false,
+        },
+    )
+}
+
 fn draw_command_menu(
     frame: &mut Frame,
     editor: &Editor,
@@ -7496,7 +7554,25 @@ fn draw_command_menu(
         return None;
     };
     let ink = crate::theme::Palette::of(config);
+    // **A shell line's programs and files float at the caret**, drawn the way
+    // code completion is (2026-10-28); the 命令 panel stands above them and
+    // keeps only what the line will do.
+    let floated = draw_shell_offers(frame, editor, config, area, status);
+    let status = match floated {
+        // The panel's bottom border sits on the row it is given; give it the
+        // row above the float, or it would draw over the float's top border.
+        Some(rect) => Rect { y: rect.y.saturating_sub(1), ..status },
+        None => status,
+    };
+    let joined = |menu: Option<Rect>| match (menu, floated) {
+        (Some(menu), Some(float)) => Some(menu.union(float)),
+        (menu, float) => menu.or(float),
+    };
     let (matches, selected) = editor.command_menu();
+    let matches = match floated {
+        Some(_) => Vec::new(),
+        None => matches,
+    };
     // Tab's pick is inked; without one nothing is, because the drawn text on
     // the command line is already saying what the guess is.
     let highlight = selected.filter(|_| !matches.is_empty()).map(|i| i.min(matches.len() - 1));
@@ -7573,7 +7649,7 @@ fn draw_command_menu(
     // 任何一張詞表上，而按下 Enter 它確實會把寬度定成 10。那時候整扇面板就是那
     // 一段話，底下那道橫線不必畫——橫線隔的是說明和單子，而單子是空的。
     if matches.is_empty() && about.is_empty() {
-        return None;
+        return joined(None);
     }
     let footer = match matches.is_empty() {
         true => String::new(),
@@ -7583,7 +7659,7 @@ fn draw_command_menu(
     // are a couple of dozen of them, which is exactly the shape that wants
     // columns.
     let title = say!("ui.commands");
-    draw_list(
+    let menu = draw_list(
         frame,
         ink,
         config.panel.rounded,
@@ -7606,7 +7682,8 @@ fn draw_command_menu(
             // its rows.
             whole: Some(whole_menu()),
         },
-    )
+    );
+    joined(menu)
 }
 
 /// The `[^` and `](#` panel — the same shape as the `:` menu, in the text
