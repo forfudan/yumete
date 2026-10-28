@@ -142,10 +142,6 @@ pub struct Metrics {
     pub bands: usize,
     /// Rows from the top of one band to the top of the next, numbers included.
     pub band_height: u16,
-    /// Rows the bands could not share out evenly. They go between the bands,
-    /// one to a gap, so the last band still ends one row above the status
-    /// line; left at the bottom, they made a second blank row there.
-    pub leftover: u16,
 }
 
 impl Metrics {
@@ -188,7 +184,6 @@ impl Metrics {
         // A band too short to hold a 縱 at all is not a band; fall back to one.
         let bands = if band_height <= head_rows + 1 { 1 } else { bands };
         let band_height = height / bands as u16;
-        let leftover = height - band_height * bands as u16;
         let rows = band_height.saturating_sub(head_rows) as usize;
         // A 縱 is as long as the writer said, or — by default — as long as the
         // window allows. The window is the default in both directions and for
@@ -217,13 +212,7 @@ impl Metrics {
             margin,
             bands,
             band_height,
-            leftover,
         }
-    }
-
-    /// Rows from the top of the page to the top of `band`.
-    pub fn band_top(&self, band: u16) -> u16 {
-        band * self.band_height + band.min(self.leftover)
     }
 
     /// How wide a margin a 縱 needs on its right.
@@ -533,7 +522,7 @@ fn layout_page(
     // are where the sequence is put.
     let mut spots: Vec<(u16, u16)> = Vec::new();
     for band in 0..metrics.bands {
-        let top = area.y + metrics.band_top(band as u16) + metrics.head_rows;
+        let top = area.y + band as u16 * metrics.band_height + metrics.head_rows;
         let from = spots.len().min(margins.len());
         let xs = place(&metrics, area, &margins[from..], &overhangs[from..]);
         if xs.is_empty() {
@@ -1113,7 +1102,7 @@ pub fn draw(
         // One band per 段: each is a page of its own and each opens with its
         // own row of paragraph numbers.
         for band in 0..metrics.bands as u16 {
-            let top = area.y + metrics.band_top(band);
+            let top = area.y + band * metrics.band_height;
             for y in top..(top + metrics.head_rows).min(area.y + area.height) {
                 for x in area.x..area.x + area.width {
                     if let Some(cell) = buf.cell_mut((x, y)) {

@@ -17960,20 +17960,6 @@ fn squeezed(text: &str) -> String {
     }
 
     #[test]
-    fn rows_the_pages_cannot_share_go_between_them_not_at_the_bottom() {
-        let editor = editor_with("春江\n潮水");
-        let config = vertical_config();
-        let mut look = vertical::Look::of(&editor);
-        look.bands = 3;
-        // 29 rows into three pages of 9 leaves 2 over.
-        let m = vertical::Metrics::new(&config, 29, 2, look);
-        assert_eq!((m.bands, m.band_height, m.leftover), (3, 9, 2));
-        assert_eq!(m.band_top(1), 10, "one leftover row after the first page");
-        assert_eq!(m.band_top(2), 20, "and one after the second");
-        assert_eq!(m.band_top(2) + m.band_height, 29, "the last page ends at the bottom");
-    }
-
-    #[test]
     fn the_vertical_change_bar_costs_its_row_only_when_it_is_on() {
         let mut editor = editor_with("春江\n潮水");
         let mut config = vertical_config();
