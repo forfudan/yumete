@@ -12531,7 +12531,8 @@ fn draw_status(
     // ordinary line begins with the mode, and only it gets the gold below.
     let (status, mode) = if editor.sidebar_focused() && !command_row {
         (say!("ui.sidebar-mode", editor.sidebar_keys()), String::new())
-    } else if let (false, Some((_, text))) = (command_row, editor.prompt()) {
+    } else if let (false, Some(_)) = (command_row, editor.prompt()) {
+        let text = &editor.prompt_drawn();
         let prefix = editor.prompt_label().unwrap_or_default();
         // The composition in progress belongs at the caret, so a search reads as
         // the pattern being typed rather than jumping into place on commit. The
@@ -13298,7 +13299,8 @@ fn draw_command(
     // rather than one column in: the caret is placed by the same arithmetic in
     // `draw`, and a prompt that began a column further along than the caret
     // was told about is a prompt you cannot type into straight.
-    if let Some((_, text)) = editor.prompt() {
+    if editor.prompt().is_some() {
+        let text = &editor.prompt_drawn();
         let prefix = editor.prompt_label().unwrap_or_default();
         let line = format!("{prefix}{text}{}", prompt_preedit(editor, ime));
         // The guess is a rung back from what was actually typed — a colour,
@@ -13351,6 +13353,17 @@ fn draw_command(
                 x += yumete_cjk::str_width(&prefix) as u16;
                 let rest = format!("{text}{}", prompt_preedit(editor, ime));
                 put_text(buf, x, area.y, right, &drawable(&rest), page.fg(ink.mark()));
+                x += yumete_cjk::str_width(&rest) as u16;
+            }
+            // **A shell line's label is gold**, as `搜索:` is (2026-10-28): it
+            // says who the line is for, and the rest is what is typed.
+            None if editor.mode() == yumete_core::input::Mode::Command
+                && editor.prompt_label().is_some_and(|l| l != ":") =>
+            {
+                put_text(buf, x, area.y, right, &drawable(&prefix), label);
+                x += yumete_cjk::str_width(&prefix) as u16;
+                let rest = format!("{text}{}", prompt_preedit(editor, ime));
+                put_text(buf, x, area.y, right, &drawable(&rest), news);
                 x += yumete_cjk::str_width(&rest) as u16;
             }
             None => {

@@ -2323,6 +2323,9 @@ pub struct Editor {
     search_history: Vec<String>,
     /// How far back through a history `Up` has walked.
     history_at: Option<usize>,
+    /// Whether the walk through the history in progress keeps to shell lines,
+    /// decided by the line it started from.
+    history_shell: bool,
     /// A transient message for the status line (errors, confirmations).
     status: String,
     /// A pending multi-key operator (goto `g…` or find `f`/`t`/`F`/`T`).
@@ -2968,6 +2971,9 @@ pub struct Editor {
     open_request: Option<String>,
     /// A pending `:sh` or `:!`, waiting for the front end.
     shell_request: Option<Shell>,
+    /// The last command `:!` ran, after its own `!` were replaced: what the
+    /// next `!` stands for (vim's rule).
+    last_bang: Option<String>,
     /// The 字形 table waiting for opencc to come back (Feature #241).
     convert_patch: Option<crate::convert::Side>,
     /// **要換的是哪一段**（2026-09-22）——`None` 是整本書。
@@ -3841,6 +3847,7 @@ impl Editor {
             command_history: Vec::new(),
             search_history: Vec::new(),
             history_at: None,
+            history_shell: false,
             status: String::new(),
             pending: Pending::None,
             confirming: None,
@@ -4003,6 +4010,7 @@ impl Editor {
             open_request: None,
             preview_at: None,
             shell_request: None,
+            last_bang: None,
             convert_patch: None,
             convert_range: None,
             table: None,

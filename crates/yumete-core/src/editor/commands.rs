@@ -871,6 +871,20 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Shell { line, interactive } => {
+                // `:!` reads `!` as the previous command, as vim's does.
+                let line = match interactive {
+                    true => match command::expand_bang(&line, self.last_bang.as_deref()) {
+                        Some(line) => {
+                            self.last_bang = Some(line.clone());
+                            line
+                        }
+                        None => {
+                            self.status = say!("shell.no-previous");
+                            return Ok(CommandOutcome::Continue);
+                        }
+                    },
+                    false => line,
+                };
                 self.shell_request = Some(Shell {
                     line,
                     how: if interactive { How::Terminal } else { How::Capture },

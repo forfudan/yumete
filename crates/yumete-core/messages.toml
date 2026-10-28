@@ -11039,6 +11039,13 @@ zhs = "(没有输出)"
 en = "(no output)"
 
 [[message]]
+# :! 裏有 !，而還沒有跑過 :!，沒有可以代替它的命令
+key = "shell.no-previous"
+zht = "没有上一條終端命令"
+zhs = "没有上一条终端命令"
+en = "no previous shell command"
+
+[[message]]
 # :!命令 跑完，螢幕還在命令那邊，等你看完
 key = "shell.press-any-key"
 zht = "按任意鍵回到 yumete…"
@@ -12306,6 +12313,13 @@ key = "ui.prompt-search-wild"
 zht = "通配搜索: "
 zhs = "通配搜索: "
 en = "wide search: "
+
+[[message]]
+# 命令行：行首是 ! 或 :sh、:pipe 那一族時，畫在打的字前面的標籤
+key = "ui.prompt-shell"
+zht = "Shell: "
+zhs = "Shell: "
+en = "Shell: "
 
 [[message]]
 # 狀態欄：這一份是只讀的(:readonly on，或磁盤上就不許寫)
