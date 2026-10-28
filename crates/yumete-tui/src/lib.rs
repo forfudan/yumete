@@ -597,6 +597,14 @@ pub fn run(
     // alternate screen, because the question is put to the terminal and read
     // back off the descriptor.
     crate::theme::settle_at_startup(config);
+    // The theme a resumed session kept (2026-10-28) is a request left by the
+    // replay, answered here before the first frame rather than at the first key.
+    if let Some((name, mood)) = editor.take_theme_request() {
+        let _ = set_theme(config, name, mood);
+    }
+    if let Some(on) = editor.take_fill_request() {
+        crate::theme::set_fill(on, config);
+    }
     // `ratatui::init` for the raw mode, the alternate screen and the panic hook
     // that undoes both — and then a terminal of our own over it, so a wiki
     // name can be underlined with dots (#287, `backend.rs`).
@@ -1681,14 +1689,23 @@ pub fn run(
                 //
                 // Warning: **`layout` 傳 `None`**：`-v` 是這一趟啓動的答案，重載說了
                 // 不算——這時候配置說什麼就是什麼。
+                let back = editor.take_config_back();
                 if editor.take_config_reload() {
                     // 項目配置從**工作路徑**往上找，同啓動那一趟（2026-10-01）。
                     let (fresh, said) = Config::load_reporting_from(&editor.root());
                     settings::apply(&fresh, editor, None, None);
+                    if back {
+                        settings::view_back_to_config(editor, &fresh);
+                    }
                     settings::apply_ime(&fresh, ime);
                     *config = fresh;
+                    // Back to the saved settings means the saved theme too: what
+                    // `:theme` chose would otherwise stay on (2026-10-28).
+                    if back {
+                        crate::theme::forget_choices();
+                    }
                     // 主題是進程級的一格，要重新問一次，否則配色改了畫面不動。
-                    crate::theme::settle(config, None);
+                    crate::theme::settle(config, crate::theme::terminal_answer());
                     // Warning: **存完那一句不許被蓋掉**（2026-10-09）。設置面板存完會自己
                     // 要求重載，而讀者要看見的是「存進哪一份」——「配置重新載入了」是
                     // `:reload-config` 自己按下去的時候纔有人在等的答案。

@@ -1372,6 +1372,13 @@ impl Editor {
         std::mem::take(&mut self.config_reload)
     }
 
+    /// Whether the reload is `:reload-config` itself (2026-10-28): the way back
+    /// to the saved settings, so what `:theme` and the `:view-*` commands
+    /// changed goes too. A save in the settings panel reloads without this.
+    pub fn take_config_back(&mut self) -> bool {
+        std::mem::take(&mut self.config_back)
+    }
+
     /// **有人按過 `:check-config`** —— 前端去查那兩個檔，開一頁報告。
     pub fn take_config_check(&mut self) -> bool {
         std::mem::take(&mut self.config_check)

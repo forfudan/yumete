@@ -234,6 +234,93 @@ pub fn complaints(config: &Config) -> Vec<String> {
     said
 }
 
+/// **How the page looks, as the `:` commands that would set it** (2026-10-28),
+/// without the colon: the layout, the `:view-*` settings (not `:view-preview`,
+/// which starts a server) and the theme. Order matters where one sets another:
+/// `view-wrap 40` turns wrapping on, so the measure comes before the switch.
+fn view_lines(editor: &Editor) -> Vec<String> {
+    use yumete_core::editor::Hud;
+    use yumete_core::zong::Layout;
+    let on = |b: bool| if b { "on" } else { "off" };
+    vec![
+        match editor.layout() {
+            Layout::Vertical => "vertical".to_string(),
+            Layout::Horizontal => "horizontal".to_string(),
+        },
+        format!("view-wrap {}", editor.measure().unwrap_or(0)),
+        format!("view-wrap {}", on(editor.soft_wrap())),
+        format!("view-wrap-vertical {}", editor.zong_measure().unwrap_or(0)),
+        format!("view-pages-vertical {}", editor.pages_vertical()),
+        format!("view-pages-horizontal {}", editor.pages_horizontal()),
+        format!("view-margin {}", editor.margin().name()),
+        format!("view-hanging {}", on(editor.hanging_punctuation())),
+        format!("view-numbers-fill {}", on(editor.number_fill())),
+        format!("view-focus {}", on(editor.focus())),
+        format!("view-typewriter {}", on(editor.typewriter())),
+        format!(
+            "view-hud {}",
+            match editor.hud() {
+                Hud::Off => "off",
+                Hud::Basic => "basic",
+                Hud::Full => "full",
+            }
+        ),
+        format!("view-sentence {}", on(editor.sentences())),
+        format!("view-punct {}", on(editor.notes())),
+        format!("view-meter {}", on(editor.meter())),
+        format!("view-diff {}", on(editor.diff_gutter())),
+        format!("view-code {}", on(editor.code_colours())),
+        match editor.long_line() {
+            Some(upto) => format!("view-long-line {upto}"),
+            None => "view-long-line off".to_string(),
+        },
+    ]
+}
+
+/// **What the session keeps of how the page looks** (2026-10-28): each line of
+/// [`view_lines`] the config would not give, then the theme that `:theme`,
+/// `:theme-mode` or `:theme-fill` chose. What the config gives is worked out on
+/// a fresh editor with the config applied, so a `:reload-config` part-way
+/// through is counted, and a setting put back the way the config has it is
+/// not kept.
+pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
+    let given = view_lines(&as_configured(config));
+    let mut keep: Vec<String> =
+        view_lines(editor).into_iter().filter(|line| !given.contains(line)).collect();
+    if crate::theme::snapshot().is_some() {
+        keep.push(format!("theme {}", crate::theme::name(config)));
+    }
+    if let Some(dark) = crate::theme::chosen_mood() {
+        keep.push(format!("theme-mode {}", if dark { "dark" } else { "light" }));
+    }
+    if let Some(fill) = crate::theme::chosen_fill() {
+        keep.push(format!("theme-fill {}", if fill { "on" } else { "off" }));
+    }
+    keep
+}
+
+/// A fresh editor with `config` applied: what the config gives.
+fn as_configured(config: &Config) -> Editor {
+    let mut plain = Editor::new();
+    apply(config, &mut plain, None, None);
+    plain
+}
+
+/// **Every view setting back the way the config has it** (2026-10-28), for
+/// `:reload-config`. [`apply`] sets only what a config writes, so a page count,
+/// `:view-focus` or `:view-hud` set by command used to outlive the reload that
+/// was meant to undo it. The status line is the reload's to fill.
+pub fn view_back_to_config(editor: &mut Editor, config: &Config) {
+    let was = editor.status().to_string();
+    let now = view_lines(editor);
+    for line in view_lines(&as_configured(config)) {
+        if !now.contains(&line) {
+            let _ = editor.execute(&format!(":{line}"));
+        }
+    }
+    editor.set_status(was);
+}
+
 pub fn apply(
     config: &Config,
     editor: &mut Editor,
@@ -496,5 +583,32 @@ mod config_watch_tests {
         assert_eq!(core.len(), 1, "{core:?}");
         assert_eq!(core[0].severity, Severity::Warn);
         assert_eq!(core[0].line, 1);
+    }
+
+    /// A session keeps the view settings the config would not give, and none
+    /// that it would (2026-10-28).
+    #[test]
+    fn the_session_keeps_only_what_differs_from_the_config() {
+        let config = yumete_config::Config::default();
+        let mut ed = yumete_core::Editor::new();
+        super::apply(&config, &mut ed, None, None);
+        let view = |ed: &yumete_core::Editor| -> Vec<String> {
+            super::view_to_keep(ed, &config)
+                .into_iter()
+                .filter(|line| !line.starts_with("theme"))
+                .collect()
+        };
+        assert!(view(&ed).is_empty(), "{:?}", view(&ed));
+        ed.execute(":view-focus on").unwrap();
+        ed.execute(":view-pages-vertical 2").unwrap();
+        ed.execute(":vertical").unwrap();
+        assert_eq!(view(&ed), ["vertical", "view-pages-vertical 2", "view-focus on"]);
+        ed.execute(":view-focus off").unwrap();
+        assert_eq!(view(&ed), ["vertical", "view-pages-vertical 2"], "put back, not kept");
+
+        // `:reload-config` puts the rest back too.
+        ed.execute(":view-hud off").unwrap();
+        super::view_back_to_config(&mut ed, &config);
+        assert!(view(&ed).is_empty(), "{:?}", view(&ed));
     }
 }

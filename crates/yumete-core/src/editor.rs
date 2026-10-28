@@ -2572,6 +2572,9 @@ pub struct Editor {
     /// 核心不知道配置檔在哪，也不該知道：那是 XDG 的事，歸前端。核心只記「有人
     /// 要求了」，同十一支 `take_*_request` 一個形狀。
     config_reload: bool,
+    /// The reload is `:reload-config` itself, which puts back what commands
+    /// changed; the settings panel's reload after a save does not.
+    config_back: bool,
     /// **`:check-config` 按過了** —— 同上，前端下一趟取走並開一頁報告。
     config_check: bool,
     /// **`:settings` 按過了** —— 前端下一趟取走並開那扇面板。
@@ -3049,6 +3052,10 @@ pub struct Editor {
     /// Where this project's session is remembered — which files were open and
     /// where the cursor was in each.
     session_file: Option<PathBuf>,
+    /// The view the front end asked the session to keep: `:` commands such as
+    /// `theme heibai`, written beside the session (see `save_session`).
+    /// `None`: nobody asked, and the view file is left as it is.
+    session_view: Option<Vec<String>>,
     /// The layout a grid turned the page away from, so leaving gives it back.
     turned_for_table: Option<Layout>,
     /// Where the cursor was before each far jump, and how far back we have
@@ -3895,6 +3902,7 @@ impl Editor {
             asked_where_from: None,
             say_it_again: false,
             config_reload: false,
+            config_back: false,
             config_check: false,
             settings_request: false,
             settings_open: false,
@@ -4012,6 +4020,7 @@ impl Editor {
             surround_shown: None,
             data_dir: None,
             session_file: None,
+            session_view: None,
             turned_for_table: None,
             zong_gap: None,
             margin: yumete_cjk::Margin::default(),

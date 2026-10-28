@@ -156,6 +156,25 @@ pub fn choose_mood(dark: bool) {
     set_dark(dark);
 }
 
+/// The mood `:theme-mode` chose, if it chose one: `Some(true)` dark.
+pub fn chosen_mood() -> Option<bool> {
+    CHOSEN_MOOD.load(Ordering::Relaxed).then(dark)
+}
+
+/// What `:theme-fill` said, if it said anything.
+pub fn chosen_fill() -> Option<bool> {
+    FILL.load(Ordering::Relaxed).checked_sub(1).map(|fill| fill == 1)
+}
+
+/// **Forget what `:theme`, `:theme-mode` and `:theme-fill` chose**, so the
+/// config's answers are in force again (2026-10-28). `:reload-config` is the
+/// way back to the saved settings, and it used to leave a chosen theme on.
+pub fn forget_choices() {
+    put_back(None);
+    FILL.store(0, Ordering::Relaxed);
+    CHOSEN_MOOD.store(false, Ordering::Relaxed);
+}
+
 /// Whether the page is dark.
 pub fn dark() -> bool {
     MOOD.load(Ordering::Relaxed) == 1

@@ -11,6 +11,10 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`-r` and `:resume` bring back how the page looked**: the layout, the `:view-*`
+  settings and the theme, where they differed from the config when you quit. They
+  are kept beside the session as the commands that set them.
+
 - **`:read <file>`** puts a file's contents after each selection, as helix's
   `:read`; under the vim keymap, on new lines below the cursor line, as vim's `:r`.
 
@@ -83,6 +87,11 @@ in `docs/development.md` §5.2.
   under the vim keymap it is `iu` / `au`.
 
 ### Changed
+
+- **`:reload-config` puts back everything commands changed in the view**: the
+  layout, every `:view-*` setting and the theme. It used to re-apply only what the
+  config files wrote, so a page count or a `:theme` stayed on. A save in the settings
+  panel still reloads without this.
 
 - **Warning: `:view-bands` is now `:view-pages-vertical`, and `[editor] bands` is
   `pages_vertical`.** It takes 1 to 4 only: `on` and `off` are gone, and a config value
