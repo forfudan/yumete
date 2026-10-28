@@ -11,6 +11,9 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`:r` is short for `:replace`**, as `:s` is for `:search`. vim and helix use `:r`
+  for `:read`, which yumete does not have.
+
 - **More pairs for `mi` `ma` `ms` `md` `mr`.** `<` also takes « », `[` takes ｢ ｣, `"`
   takes 〝 〞, and each bracket key takes the vertical forms of its family (﹁ ﹂ for
   「 」, ︽ ︾ for 《 》, and so on), for texts set for vertical printing. The menus
