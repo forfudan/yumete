@@ -236,8 +236,11 @@ impl Editor {
     /// **What the word being typed on a shell line can be finished with**
     /// (2026-10-28), and where that word starts: program names from `$PATH`
     /// for the first word and the first after `|`, `;` or `&`, file names after
-    /// it — helix's shell completer, matched by prefix. A program is not
-    /// offered before its first letter: the whole of `$PATH` is no list.
+    /// it — helix's shell completer. Programs are matched fuzzily and best
+    /// first, as helix's are (`gt` finds `git`); files by prefix, as a shell's
+    /// are. Not the picker's scorer: it keeps the letters within a short
+    /// reach, and `gt` would miss `git`. A program is not offered before its
+    /// first letter: the whole of `$PATH` is no list.
     fn shell_choices(&self, line: &str) -> Option<(usize, Vec<String>)> {
         const MOST: usize = 200;
         let at = command::shell_start(line)?;
@@ -252,11 +255,17 @@ impl Editor {
         let program = before.is_empty() || before.ends_with(['|', ';', '&']);
         let mut out: Vec<String> = match (program, word.is_empty()) {
             (true, true) => Vec::new(),
-            (true, false) => programs_on_the_path()
-                .iter()
-                .filter(|name| name.starts_with(word))
-                .cloned()
-                .collect(),
+            (true, false) => {
+                let mut scored: Vec<(i64, &String)> = programs_on_the_path()
+                    .iter()
+                    .filter_map(|name| in_order(name, word).map(|score| (score, name)))
+                    .collect();
+                // Best first; among equals the shorter, then the alphabet.
+                scored.sort_by(|a, b| {
+                    b.0.cmp(&a.0).then(a.1.len().cmp(&b.1.len())).then(a.1.cmp(b.1))
+                });
+                scored.into_iter().map(|(_, name)| name.clone()).collect()
+            }
             (false, _) => self.files_starting(word),
         };
         out.truncate(MOST);
@@ -756,4 +765,53 @@ fn programs_on_the_path() -> &'static [String] {
         names.dedup();
         names
     })
+}
+
+/// **How well `name` holds the letters of `typed` in order**, or `None` when it
+/// does not: a plain fuzzy match, as helix's program completion is. Letters
+/// next to each other, at the start, or after a `-` `_` `.` score more; a gap
+/// costs two points a letter. Case folds unless `typed` has a capital (smart case).
+fn in_order(name: &str, typed: &str) -> Option<i64> {
+    let fold = !typed.chars().any(char::is_uppercase);
+    let same = |a: char, b: char| match fold {
+        true => a.to_lowercase().eq(b.to_lowercase()),
+        false => a == b,
+    };
+    let hay: Vec<char> = name.chars().collect();
+    let mut score = 0i64;
+    let mut from = 0usize;
+    let mut last: Option<usize> = None;
+    for want in typed.chars() {
+        let at = (from..hay.len()).find(|&i| same(hay[i], want))?;
+        score += match last {
+            Some(prev) if at == prev + 1 => 10,
+            Some(prev) => -2 * (at - prev - 1) as i64,
+            None => -2 * at as i64,
+        };
+        if at == 0 {
+            score += 15;
+        } else if matches!(hay[at - 1], '-' | '_' | '.') {
+            score += 8;
+        }
+        last = Some(at);
+        from = at + 1;
+    }
+    Some(score)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::in_order;
+
+    /// Programs match the way helix's do: the letters in order, anywhere.
+    #[test]
+    fn program_names_match_in_order_anywhere() {
+        assert!(in_order("git", "gt").is_some(), "gt finds git");
+        assert!(in_order("git", "tg").is_none(), "out of order does not");
+        assert!(in_order("gtester", "gt") > in_order("git", "gt"), "together beats apart");
+        // A long gap costs what the `-` before the `t` gains, and a tie goes
+        // to the shorter name when the list is sorted.
+        assert!(in_order("git", "gt") >= in_order("gpgme-tool", "gt"), "a long gap costs");
+        assert!(in_order("Git", "G").is_some() && in_order("git", "G").is_none(), "smart case");
+    }
 }
