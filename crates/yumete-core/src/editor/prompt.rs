@@ -323,7 +323,12 @@ impl Editor {
                         return self.put_back_what_was_overwritten(was);
                     }
                 }
+                let before = self.sel.head();
                 self.delete_before_cursor();
+                // The server's list widens again, as helix's does (2026-10-28).
+                if self.sel.head() < before && self.narrow_the_server_list(before) == Some(true) {
+                    self.ask_what_comes_next(false);
+                }
             }
             // Forward delete. It did nothing at all before — the key never
             // reached the editor, in any mode. `C-d` is helix's spelling of

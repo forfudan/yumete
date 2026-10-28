@@ -2263,6 +2263,24 @@ pub(crate) struct Offering {
     /// Which one is picked — always a real index, because an empty list is
     /// 「no offering」 and is never stored.
     pub(crate) picked: usize,
+    /// **The server's whole answer**, when the list is one (2026-10-28), so
+    /// the next letter narrows it here instead of waiting for a new answer.
+    /// `None` for words and paths, which are worked out afresh each time.
+    pub(crate) server: Option<ServerList>,
+}
+
+/// A language server's completion answer, kept whole. See
+/// [`Editor::narrow_the_server_list`].
+#[derive(Debug, Clone)]
+pub(crate) struct ServerList {
+    /// Every item, with the spans the server gave.
+    pub(crate) all: Vec<crate::lsp::Offer>,
+    /// `isIncomplete`: ask again as the word grows, narrowing meanwhile.
+    pub(crate) incomplete: bool,
+    /// The line and the UTF-16 column it was asked at: the spans are moved by
+    /// however far the caret has gone since.
+    pub(crate) line: usize,
+    pub(crate) column: usize,
 }
 
 impl Offering {

@@ -285,6 +285,9 @@ pub enum Notice {
         places: Vec<Place>,
         told: Option<Told>,
         offers: Vec<Offer>,
+        /// `isIncomplete` (2026-10-28): the server wants to be asked again as
+        /// the word grows. A complete list is only narrowed here after that.
+        incomplete: bool,
         /// 簽名那一問的答案（2026-10-08）。同上：讀出來擺着，前端拿它要的那一格。
         signature: Option<Signature>,
     },
@@ -337,6 +340,11 @@ pub struct Offer {
     /// The type, the signature, the module it comes from — one short line the
     /// server offers *about* the item. `None` when it offered none.
     pub detail: Option<String>,
+    /// **What the server filters this item by** (`filterText`, 2026-10-28),
+    /// when it is not the label. rust-analyzer's label for a function is
+    /// `to_string()`, and a list narrowed by the label alone would lose items
+    /// the server meant to match. See [`Offer::filter_text`].
+    pub filter: Option<String>,
     /// **How much of what is already typed this replaces** — which line, and
     /// the two UTF-16 code-unit columns on it.
     ///
@@ -357,6 +365,14 @@ pub struct Offer {
     /// language's words. `None` when the server sent no edit range, and then
     /// the caller replaces nothing.
     pub replacing: Option<Replacing>,
+}
+
+impl Offer {
+    /// What the typed word is matched against: the server's `filterText`, or
+    /// the label (helix's `filter_text`).
+    pub fn filter_text(&self) -> &str {
+        self.filter.as_deref().unwrap_or(&self.label)
+    }
 }
 
 /// The span one completion item overwrites: a line, and two columns on it.
@@ -401,6 +417,11 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             places: places(value.get("result")),
             told: told(value.get("result")),
             offers: offers(value.get("result")),
+            incomplete: value
+                .get("result")
+                .and_then(|r| r.get("isIncomplete"))
+                .and_then(|i| i.as_bool())
+                .unwrap_or(false),
             signature: signature(value.get("result")),
         },
         _ => Notice::Nothing,
@@ -753,6 +774,11 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
         }
         Some(Replacing { line, from: at("start", "character")?, to: at("end", "character")? })
     });
+    let filter = item
+        .get("filterText")
+        .and_then(|f| f.as_str())
+        .filter(|f| *f != label)
+        .map(str::to_string);
     Some(Offer {
         label,
         insert,
@@ -762,6 +788,7 @@ fn one_offer(item: &serde_json::Value) -> Option<Offer> {
             .and_then(|d| d.as_str())
             .map(|d| d.replace('\n', " ").trim().to_string())
             .filter(|d| !d.is_empty()),
+        filter,
         replacing,
     })
 }
@@ -910,63 +937,67 @@ fn without_the_holes(snippet: &str) -> String {
     out
 }
 
-/// **按已經打出來的那半個詞排一遍**（2026-10-08 報的）。
+/// **The server's list, narrowed by the half word already typed** (2026-10-08).
 ///
-/// 報的原話：「I typed "unwrap", the function hint (autocompletion), however, still
+/// Reported: 「I typed "unwrap", the function hint (autocompletion), however, still
 /// show the prediction using the original order. … items with exact prefix go first;
-/// fuzzy matching is nice-to-have but should go at bottoms.」截圖裏打完 `.unwrap`
-/// 之後單子頭三條還是 `is_some_and`／`is_none_or`／`expect`。
+/// fuzzy matching is nice-to-have but should go at bottoms.」
 ///
-/// **為什麼服務器不替我們排。** 一張 `isIncomplete: false` 的單子，協議的意思是
-/// 「這就是全部，接着打字由**你**自己篩」——rust-analyzer 因此一次給出那個點後面
-/// 全部 131 條，按它自己算的相關度排，而「使用者已經打了 `unwrap`」這件事它不再過
-/// 問。VS Code、helix 都在這一頭篩。
+/// **Why the server does not do it.** A list with `isIncomplete: false` means
+/// 「this is all of it; filter it yourself as they type」: rust-analyzer gives
+/// every item that can follow the point (131 after `.unwrap`'s `.`), in its own
+/// order, and does not hear about the letters typed after. VS Code and helix
+/// filter on their side.
 ///
-/// Warning: **只重排，不扔。** 配不上的落到最後，不從單子上消失——這一頭認的是 `label`，
-/// 而服務器真正拿來篩的是 `filterText`（還没接）。兩者不一樣的那天，扔掉的就是人要
-/// 的那一條；排到後面只是看不見，`C-n` 一路走下去還找得到。
+/// **Narrowed, not only re-ranked** (2026-10-28). An item that does not hold
+/// the typed letters in order leaves the list, as in helix (whose matcher only
+/// keeps what matches), so the list shrinks as the word grows. The 2026-10-08
+/// version kept them at the bottom because it matched the label while the
+/// server filters by `filterText`; it matches [`Offer::filter_text`] now, so
+/// what is dropped is what the server would drop too.
 ///
-/// 分五檔，檔內**保持服務器給的次序**（它那一檔是相關度，比這一頭懂得多）：
+/// Four tiers, each **in the server's own order** (its relevance, which knows
+/// the language better than this end does):
 ///
-/// | 檔 | 什麼 |
+/// | Tier | What |
 /// | --- | --- |
-/// | 0 | 整個就是它 |
-/// | 1 | 前綴，大小寫也對 |
-/// | 2 | 前綴，不計大小寫 |
-/// | 3 | 字母按順序出現過（模糊） |
-/// | 4 | 配不上 |
-pub fn rank(items: &mut [Offer], word: &str) {
+/// | 0 | the word itself |
+/// | 1 | starts with it, case and all |
+/// | 2 | starts with it, case aside |
+/// | 3 | holds its letters in order (fuzzy) |
+///
+/// An empty word (just after `.` or `::`) keeps the server's list as it came.
+pub fn narrow(items: &[Offer], word: &str) -> Vec<Offer> {
     if word.is_empty() {
-        return;
+        return items.to_vec();
     }
     let small = word.to_lowercase();
-    let tier = |offer: &Offer| -> u8 {
-        let label = offer.label.as_str();
-        if label == word {
-            return 0;
+    let tier = |offer: &Offer| -> Option<u8> {
+        let text = offer.filter_text();
+        if text == word {
+            return Some(0);
         }
-        if label.starts_with(word) {
-            return 1;
+        if text.starts_with(word) {
+            return Some(1);
         }
-        let quiet = label.to_lowercase();
+        let quiet = text.to_lowercase();
         if quiet.starts_with(&small) {
-            return 2;
+            return Some(2);
         }
-        // 字母按順序出現過就算模糊配得上——`unwrap` 配得上 `unwrap_or_default`，
-        // 也配得上 `u_n_w…`。不打分：這一檔本來就排在後面。
+        // The letters in order, anywhere: `unwrap` matches `unwrap_or_default`
+        // and `u_n_w…` alike. Not scored: this tier comes last anyway.
         let mut want = small.chars().peekable();
         for c in quiet.chars() {
             if want.peek() == Some(&c) {
                 want.next();
             }
         }
-        match want.peek().is_none() {
-            true => 3,
-            false => 4,
-        }
+        want.peek().is_none().then_some(3)
     };
-    // `sort_by_key` 是穩定排序，所以同一檔裏服務器給的次序一個字都不動。
-    items.sort_by_key(tier);
+    let mut kept: Vec<(u8, &Offer)> = items.iter().filter_map(|o| tier(o).map(|t| (t, o))).collect();
+    // A stable sort: within a tier the server's order stays.
+    kept.sort_by_key(|(t, _)| *t);
+    kept.into_iter().map(|(_, o)| o.clone()).collect()
 }
 
 /// Read a `SignatureHelp` answer. See [`Signature`].
@@ -1238,6 +1269,7 @@ mod tests {
                 places: Vec::new(),
                 told: None,
                 offers: Vec::new(),
+                incomplete: false,
                 signature: None,
             }
         );

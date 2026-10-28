@@ -1852,6 +1852,19 @@ impl Editor {
         if self.mode != Mode::Insert {
             return;
         }
+        // The server's list on screen narrows first (2026-10-28); the server
+        // is asked again only when its list said it is incomplete.
+        if !just_typed.is_empty() && just_typed.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            let before = self.sel.head().saturating_sub(just_typed.chars().count());
+            match self.narrow_the_server_list(before) {
+                Some(false) => return,
+                Some(true) => {
+                    self.ask_what_comes_next(false);
+                    return;
+                }
+                None => {}
+            }
+        }
         // Words and paths the text itself offers (2026-10-28); in code, a path
         // before the server is asked.
         if self.offer_from_the_text(false) {
@@ -1895,36 +1908,122 @@ impl Editor {
         self.completion_query.take()
     }
 
-    /// **答案回來了：把單子擺出來**（#53 ④）。
-    pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>) {
-        // Warning: **這張單子是關於問的時候那個位置的。** 問完又打了兩個字母，回來的
-        // 是「當時那個詞後面能接什麽」——擺出來就是在答一個過期的問題。
-        // Warning: **`!=`，不是 `is_some_and`。** `None` 在這裏不是「不知道問的時候在
-        // 哪」，而是**那個問題已經作廢了**——打了個空格或分號，
-        // `maybe_ask_what_comes_next` 把三格一起清掉了。用 `is_some_and` 寫，
-        // `None` 會當成「對得上」放行：單子擺出來，錨在**新**光標上，而
-        // `Tab` 拿的是服務器按**舊**正文算的 `replacing` 範圍——砍掉的是別的字。
-        // 2026-09-23 審出來的，是這一輪最重的一條：它改的是正文。
-        if self.completion_at.take() != Some(self.sel.head()) {
+    /// **The answer is back: put the list up** (#53 ④).
+    ///
+    /// Warning: **The list is about the point it was asked at.** `None` in
+    /// `completion_at` is not 「unknown」 but **that question was dropped**: a
+    /// space or `;` ended the word and `maybe_ask_what_comes_next` cleared it.
+    /// Shown anyway, the list would sit at the new caret while `Tab` used spans
+    /// the server worked out on the old text, and cut the wrong characters
+    /// (2026-09-23, the heaviest finding of that round: it changes the text).
+    ///
+    /// **An answer the caret has typed past is still the answer** (2026-10-28),
+    /// as long as only word characters were typed since: it is narrowed by the
+    /// longer word, as helix narrows the list on screen. Anything else in
+    /// between and it is stale.
+    pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>, incomplete: bool) {
+        let Some(asked) = self.completion_at.take() else { return };
+        if !self.only_word_typed_since(asked) {
             return;
         }
-        // **照已經打出來的那半個詞排一遍**（2026-10-08）。服務器給的是一張
-        // 「這個點後面能接什麼」的全單，相關度是它算的，而「使用者已經打了
-        // `unwrap`」這件事要這一頭自己認——規矩與理由在 [`crate::lsp::rank`]。
-        let mut items = items;
-        crate::lsp::rank(&mut items, &self.word_before_the_cursor());
-        match items.is_empty() {
-            true => self.no_offers(),
-            false => {
-                self.offering = Some(Offering {
-                    buffer: self.current_buffer().id(),
-                    at: self.sel.head(),
-                    items,
-                    picked: 0,
-                });
-                self.status = String::new();
-            }
+        let (line, column) = self.line_and_column(asked);
+        match self.offer_the_server_list(ServerList { all: items, incomplete, line, column }) {
+            true => self.status = String::new(),
+            false => self.no_offers(),
         }
+    }
+
+    /// The line of `at` and its UTF-16 column, as a server counts them.
+    fn line_and_column(&self, at: usize) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let at = at.min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        let text = rope.line(line).to_string();
+        (line, crate::problem::utf16_column(&text, at - rope.line_to_char(line)))
+    }
+
+    /// Only word characters between `asked` and the caret.
+    fn only_word_typed_since(&self, asked: usize) -> bool {
+        let head = self.sel.head();
+        let rope = self.current_buffer().rope();
+        asked <= head
+            && head <= rope.len_chars()
+            && rope.slice(asked..head).chars().all(|c| c.is_alphanumeric() || c == '_')
+    }
+
+    /// Put a server's list up at the caret, narrowed. Whether anything is left.
+    fn offer_the_server_list(&mut self, list: ServerList) -> bool {
+        let items = self.narrowed(&list);
+        if items.is_empty() {
+            self.offering = None;
+            return false;
+        }
+        self.offering = Some(Offering {
+            buffer: self.current_buffer().id(),
+            at: self.sel.head(),
+            items,
+            picked: 0,
+            server: Some(list),
+        });
+        true
+    }
+
+    /// The server's list as it stands for the caret now: narrowed by the word
+    /// before it ([`crate::lsp::narrow`]), and each span on this line moved by
+    /// however far the caret has gone since the question, so `Tab` replaces
+    /// the whole word typed and not only the part the server saw.
+    fn narrowed(&self, list: &ServerList) -> Vec<crate::lsp::Offer> {
+        let (line, column) = self.line_and_column(self.sel.head());
+        if line != list.line {
+            return Vec::new();
+        }
+        let moved = column as i64 - list.column as i64;
+        crate::lsp::narrow(&list.all, &self.word_before_the_cursor())
+            .into_iter()
+            .filter_map(|mut offer| {
+                if let Some(span) = offer.replacing.as_mut().filter(|span| span.line == line) {
+                    let to = span.to as i64 + moved;
+                    if to < span.from as i64 {
+                        return None;
+                    }
+                    span.to = to as usize;
+                }
+                Some(offer)
+            })
+            .collect()
+    }
+
+    /// **A letter typed or taken back narrows the list on screen** (2026-10-28).
+    ///
+    /// Reported: in helix only the first letter of a name waits for the
+    /// server; after it 「the list is shrinking and converge to only
+    /// `to_string`… no delay at all」. Read in helix: `update_filter` re-scores
+    /// the items it already has on every letter, and asks again only the
+    /// servers that said `isIncomplete`, keeping the narrowed list up until
+    /// their answer replaces it (`helix-term/src/ui/completion.rs`,
+    /// `handlers/completion.rs`). Taking the word back to nothing closes it.
+    ///
+    /// `before` is where the caret was. `None` when no server list stood
+    /// there; otherwise whether to ask the server again.
+    pub(super) fn narrow_the_server_list(&mut self, before: usize) -> Option<bool> {
+        let here = self.current_buffer().id();
+        let stands = self
+            .offering
+            .as_ref()
+            .is_some_and(|o| o.server.is_some() && (o.buffer, o.at) == (here, before));
+        if !stands {
+            return None;
+        }
+        let list = self.offering.take()?.server?;
+        if self.word_before_the_cursor().is_empty() {
+            return Some(false);
+        }
+        let again = list.incomplete;
+        Some(match self.offer_the_server_list(list) {
+            true => again,
+            // Nothing of it matches any more: ask afresh, as helix does.
+            false => true,
+        })
     }
 
     /// 服務器提不出什麽——**只有按過鍵問的那一次纔說出來**（見
@@ -1936,7 +2035,7 @@ impl Editor {
         }
     }
 
-    /// **光標前面那半個詞**——補全單子拿它重排（[`crate::lsp::rank`]）。
+    /// **光標前面那半個詞**——補全單子拿它篩（[`crate::lsp::narrow`]）。
     ///
     /// 從光標往回走，一直走到不是「名字的字」為止。`.`／`:` 不算在裏面：`self.unw`
     /// 問的是 `unw`，不是 `self.unw`——服務器給的那些 `label` 也只是方法名。

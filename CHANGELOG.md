@@ -13,7 +13,9 @@ in `docs/development.md` §5.2.
 
 - **Word completion from the open files.** After four Latin letters
   (`[editor] word_completion`, `0` off) a list of the words in every open file floats
-  under the caret, matched fuzzily as helix's word completion is; Chinese characters
+  under the caret: words that start with what you typed first, in the case you typed
+  (`when` offers `whenever`, `When` offers `Whenever`, names such as `JavaScript` stay as
+  written), then fuzzy matches as helix's word completion finds them; Chinese characters
   come up after half as many, offering only longer words the segmenter finds. `C-n` /
   `C-x` lists them at any length.
 - **Path completion where a path is typed**: any word with a `/` in it, or after `](`,
@@ -104,6 +106,11 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Code completion narrows as you type, without asking the server again.** Only the
+  first letter of a name waits for the language server; each letter after it narrows
+  the list on screen at once, and Backspace widens it, as in helix. Items that no
+  longer match leave the list instead of sinking to its end, matched by the server's
+  own filter text. The server is asked again only when it said its list is incomplete.
 - **Code completion shows up as soon as the server answers.** The editor used to look
   for a language server's answers every 120 ms, so a completion list could appear up to
   that long after it arrived; an answer now wakes the editor at once.
