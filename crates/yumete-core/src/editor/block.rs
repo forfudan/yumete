@@ -77,15 +77,30 @@ enum Rewrite {
 }
 
 /// The cells of a line: each character's position, display column and width.
-fn cells(rope: &crate::Rope, line: usize) -> Vec<(usize, usize, usize)> {
+///
+/// **A tab runs to the next stop and a combining mark takes no column**
+/// (2026-10-29, review: both counted one, so `C-v j d` past a tab deleted
+/// eight characters on the line below, and a block could cut `é` from its
+/// accent). A mark of width 0 takes its base's column and width, so a block
+/// that takes the letter takes the mark too.
+fn cells(rope: &crate::Rope, tab: usize, line: usize) -> Vec<(usize, usize, usize)> {
     let start = rope.line_to_char(line);
     let mut column = 0;
+    let tab = tab.max(1);
+    let mut base: Option<(usize, usize)> = None;
     crate::zong::line_chars(rope, line)
         .iter()
         .enumerate()
         .map(|(i, &c)| {
-            let width = yumete_cjk::char_width(c).max(1);
+            let width = match c {
+                '\t' => tab - column % tab,
+                _ => yumete_cjk::char_width(c),
+            };
+            if let (0, Some((at, wide))) = (width, base) {
+                return (start + i, at, wide);
+            }
             let cell = (start + i, column, width);
+            base = Some((column, width));
             column += width;
             cell
         })
@@ -93,24 +108,25 @@ fn cells(rope: &crate::Rope, line: usize) -> Vec<(usize, usize, usize)> {
 }
 
 /// A line's display width.
-fn width(rope: &crate::Rope, line: usize) -> usize {
-    cells(rope, line).last().map(|&(_, c, w)| c + w).unwrap_or(0)
+fn width(rope: &crate::Rope, tab: usize, line: usize) -> usize {
+    cells(rope, tab, line).last().map(|&(_, c, w)| c + w).unwrap_or(0)
 }
 
 /// Line and display column of `pos`, and the width of the character there.
-fn place(rope: &crate::Rope, pos: usize) -> (usize, usize, usize) {
+fn place(rope: &crate::Rope, tab: usize, pos: usize) -> (usize, usize, usize) {
     let pos = pos.min(rope.len_chars());
     let line = rope.char_to_line(pos);
-    match cells(rope, line).into_iter().find(|&(at, _, _)| at == pos) {
-        Some((_, column, w)) => (line, column, w),
-        None => (line, width(rope, line), 1),
+    match cells(rope, tab, line).into_iter().find(|&(at, _, _)| at == pos) {
+        // At least one: a caret on a zero-width character still marks a column.
+        Some((_, column, w)) => (line, column, w.max(1)),
+        None => (line, width(rope, tab, line), 1),
     }
 }
 
 /// The position on `line` where display column `column` begins, or the line's
 /// end when it is shorter.
-fn at_column(rope: &crate::Rope, line: usize, column: usize) -> usize {
-    cells(rope, line)
+fn at_column(rope: &crate::Rope, tab: usize, line: usize, column: usize) -> usize {
+    cells(rope, tab, line)
         .into_iter()
         .find(|&(_, c, w)| c + w > column)
         .map(|(at, _, _)| at)
@@ -122,8 +138,8 @@ impl super::Editor {
     /// display column (inclusive; `usize::MAX` after `$`).
     fn block_shape(&self, block: Block) -> (usize, usize, usize, usize) {
         let rope = self.current_buffer().rope();
-        let (la, ca, wa) = place(rope, block.anchor);
-        let (lc, cc, wc) = place(rope, block.cursor);
+        let (la, ca, wa) = place(rope, self.tab_stop, block.anchor);
+        let (lc, cc, wc) = place(rope, self.tab_stop, block.cursor);
         let left = ca.min(cc);
         let right = match block.to_line_end {
             true => usize::MAX,
@@ -139,7 +155,7 @@ impl super::Editor {
         let rope = self.current_buffer().rope();
         (first..=last)
             .filter_map(|line| {
-                let inside: Vec<usize> = cells(rope, line)
+                let inside: Vec<usize> = cells(rope, self.tab_stop, line)
                     .into_iter()
                     .filter(|&(_, c, w)| c + w > left && c <= right)
                     .map(|(at, _, _)| at)
@@ -158,7 +174,7 @@ impl super::Editor {
         let (first, last, left, right) = self.block_shape(block);
         let across = match block.to_line_end {
             true => 0,
-            false => at_column(rope, first, right).saturating_sub(at_column(rope, first, left)),
+            false => at_column(rope, self.tab_stop, first, right).saturating_sub(at_column(rope, self.tab_stop, first, left)),
         };
         Size { down: last - first, across, to_line_end: block.to_line_end }
     }
@@ -220,7 +236,7 @@ impl super::Editor {
         let quiet = self.pending == Pending::None && self.alias_held.is_empty() && self.count.is_none();
         if quiet {
             let (first, _, left, _) = self.block_shape(block);
-            let top_left = at_column(self.current_buffer().rope(), first, left);
+            let top_left = at_column(self.current_buffer().rope(), self.tab_stop, first, left);
             match key {
                 Key::Esc | Key::Ctrl('v') | Key::Ctrl('c') => return self.leave_block(block.cursor),
                 Key::Char('v' | 'V') => return self.leave_block(block.cursor),
@@ -231,10 +247,10 @@ impl super::Editor {
                 // The other corner on the same line: the columns trade places.
                 Key::Char('O') => {
                     let rope = self.current_buffer().rope();
-                    let (la, ca, _) = place(rope, block.anchor);
-                    let (lc, cc, _) = place(rope, block.cursor);
-                    let anchor = at_column(rope, la, cc);
-                    let cursor = at_column(rope, lc, ca);
+                    let (la, ca, _) = place(rope, self.tab_stop, block.anchor);
+                    let (lc, cc, _) = place(rope, self.tab_stop, block.cursor);
+                    let anchor = at_column(rope, self.tab_stop, la, cc);
+                    let cursor = at_column(rope, self.tab_stop, lc, ca);
                     self.block = Some(Block { anchor, cursor, ..block });
                     return self.show_block();
                 }
@@ -355,7 +371,7 @@ impl super::Editor {
     /// Take every line's piece out, bottom line first.
     fn block_delete(&mut self, block: Block) {
         let (first, _, left, _) = self.block_shape(block);
-        let corner = at_column(self.current_buffer().rope(), first, left);
+        let corner = at_column(self.current_buffer().rope(), self.tab_stop, first, left);
         self.sel = Selections::one(Range::at(corner));
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
@@ -392,7 +408,7 @@ impl super::Editor {
             }
         }
         self.current_buffer_mut().end_undo_group(grouping);
-        let top_left = at_column(self.current_buffer().rope(), first, left);
+        let top_left = at_column(self.current_buffer().rope(), self.tab_stop, first, left);
         self.leave_block(top_left);
     }
 
@@ -404,10 +420,10 @@ impl super::Editor {
         let grouping = self.current_buffer_mut().begin_undo_group();
         for line in (first..=last).rev() {
             let rope = self.current_buffer().rope();
-            if width(rope, line) < left || rope.line(line).len_chars() == 0 {
+            if width(rope, self.tab_stop, line) < left || rope.line(line).len_chars() == 0 {
                 continue;
             }
-            let at = at_column(rope, line, left);
+            let at = at_column(rope, self.tab_stop, line, left);
             if add {
                 if !self.edit_insert(at, &pad) {
                     break;
@@ -437,20 +453,20 @@ impl super::Editor {
         };
         let start = match kind {
             Lay::AtEnd => motion::line_end(&rope, rope.line_to_char(first)),
-            _ => at_column(&rope, first, column),
+            _ => at_column(&rope, self.tab_stop, first, column),
         };
         // The undo point is taken at the block's corner: vim's `u` comes back
         // there, to the first line, not to the line the cursor was on. `c`
         // took one already, before its cut, and the typing belongs to it: one
         // `u` takes back the whole change, as in vim.
-        self.sel = Selections::one(Range::at(at_column(&rope, first, left)));
+        self.sel = Selections::one(Range::at(at_column(&rope, self.tab_stop, first, left)));
         if op != 'c' {
             self.snapshot();
         }
         // `A` on a first line too short for the block pads it, as on the rest.
         let start = match kind {
-            Lay::After if width(&rope, first) < column => {
-                let pad = " ".repeat(column - width(&rope, first));
+            Lay::After if width(&rope, self.tab_stop, first) < column => {
+                let pad = " ".repeat(column - width(&rope, self.tab_stop, first));
                 let end = motion::line_end(&rope, rope.line_to_char(first));
                 match self.edit_insert(end, &pad) {
                     true => end + pad.chars().count(),
@@ -493,13 +509,13 @@ impl super::Editor {
             let grouping = self.current_buffer_mut().begin_undo_group();
             for line in (insert.first + 1..=insert.last).rev() {
                 let rope = self.current_buffer().rope().clone();
-                let wide = width(&rope, line);
+                let wide = width(&rope, self.tab_stop, line);
                 let end = motion::line_end(&rope, rope.line_to_char(line));
                 let (at, pad) = match insert.kind {
                     Lay::Before if wide < insert.column => continue,
-                    Lay::Before => (at_column(&rope, line, insert.column), String::new()),
+                    Lay::Before => (at_column(&rope, self.tab_stop, line, insert.column), String::new()),
                     Lay::After if wide < insert.column => (end, " ".repeat(insert.column - wide)),
-                    Lay::After => (at_column(&rope, line, insert.column), String::new()),
+                    Lay::After => (at_column(&rope, self.tab_stop, line, insert.column), String::new()),
                     Lay::AtEnd => (end, String::new()),
                 };
                 if !self.edit_insert(at, &format!("{pad}{typed}")) {
@@ -513,7 +529,7 @@ impl super::Editor {
         }
         // The block's top-left corner, as vim leaves it after `I`, `A`, `c`.
         let rope = self.current_buffer().rope().clone();
-        self.leave_block(at_column(&rope, insert.first, insert.left));
+        self.leave_block(at_column(&rope, self.tab_stop, insert.first, insert.left));
     }
 
     /// **What `.` plays to do it again**: the same block from the cursor, the
@@ -545,14 +561,18 @@ impl super::Editor {
             _ => self.register_parts.clone(),
         };
         let rope = self.current_buffer().rope().clone();
-        let (line, column, w) = place(&rope, self.sel.head());
-        let column = match after && width(&rope, line) > 0 {
+        let (line, column, w) = place(&rope, self.tab_stop, self.sel.head());
+        let column = match after && width(&rope, self.tab_stop, line) > 0 {
             true => column + w,
             false => column,
         };
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
-        for (i, piece) in pieces.iter().enumerate().rev() {
+        // **Top down** (2026-10-29, review: bottom up, the first piece past the
+        // file's end became its last line, and the next one up was then
+        // pasted into that line instead of onto its own). Each round reads the
+        // text afresh, so the order costs nothing.
+        for (i, piece) in pieces.iter().enumerate() {
             let target = line + i;
             let rope = self.current_buffer().rope().clone();
             if target > motion::last_line(&rope) {
@@ -570,10 +590,10 @@ impl super::Editor {
                 }
                 continue;
             }
-            let wide = width(&rope, target);
+            let wide = width(&rope, self.tab_stop, target);
             let (at, pad) = match wide < column {
                 true => (motion::line_end(&rope, rope.line_to_char(target)), " ".repeat(column - wide)),
-                false => (at_column(&rope, target, column), String::new()),
+                false => (at_column(&rope, self.tab_stop, target, column), String::new()),
             };
             if !self.edit_insert(at, &format!("{pad}{piece}")) {
                 break;
@@ -581,7 +601,7 @@ impl super::Editor {
         }
         self.current_buffer_mut().end_undo_group(grouping);
         let rope = self.current_buffer().rope().clone();
-        let at = at_column(&rope, line, column);
+        let at = at_column(&rope, self.tab_stop, line, column);
         self.sel = Selections::one(Range::at(at));
         self.clamp_cursor();
     }

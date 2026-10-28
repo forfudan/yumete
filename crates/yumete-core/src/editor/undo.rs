@@ -77,7 +77,11 @@ impl Editor {
     /// start of the change, and the vim keymap keeps doing that.
     fn come_back_to(&mut self, cursor: usize, every: Option<crate::selection::Selections>) {
         match every {
-            Some(every) if self.key_preset != yumete_cjk::KeyPreset::Vim => {
+            // **Several cursors come back as several under the vim keymap too**
+            // (2026-10-29, review: only the primary was put back and the others
+            // stayed at their post-edit places). vim has one cursor and its
+            // rule for where it lands stays for one; several are yumete's own.
+            Some(every) if self.key_preset != yumete_cjk::KeyPreset::Vim || every.is_plural() => {
                 let len = self.current_buffer().rope().len_chars();
                 self.sel = every;
                 self.sel.map(|one| crate::selection::Range {

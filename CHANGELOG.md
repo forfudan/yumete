@@ -162,6 +162,14 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Several cursors**:
+  - An edit that runs once now moves the other cursors with it instead of leaving them on shifted text.
+  - `Space c` comments every cursor's lines, deciding once for all of them, as helix does.
+  - Under the vim keymap, an operator and its motion (`dw`, `cw`, `yiw`) run at every cursor, `u` brings every cursor back, and a counted insert (`3iX`) repeats at each.
+  - `J` joins a line once however many cursors are on it, and `C-a`/`C-x` bump a number once.
+  - `md` on a pair that encloses another cursor no longer moves that cursor too far.
+- **Block mode** counts a tab to its next stop and a combining mark as part of its letter, so a block past a tab or over `é` takes the right characters; a block pasted past the end of the file puts one piece on each new line.
+
 - **A run with only a scratch buffer no longer wipes the session.** Typing into an
   unnamed buffer and leaving with `:q!` used to delete the project's session, so the
   next `ye -r` had nothing to bring back. With no file open, the last session now

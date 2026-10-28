@@ -618,41 +618,42 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    /// Add `delta` to the number at or after the cursor on its line
-    /// (Helix `C-a` / `C-x`).
-    pub(super) fn bump_number(&mut self, delta: i64) {
-        if self.refuse_readonly() {
-            return;
-        }
+    /// **The number `C-a` at `at` would change**: the one under it, else the
+    /// next along its line, with a `-` before it. Character positions,
+    /// half-open.
+    pub(super) fn number_from(&self, at: usize) -> Option<(usize, usize)> {
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.sel.head());
+        let at = at.min(rope.len_chars());
+        let line = rope.char_to_line(at);
         let line_start = rope.line_to_char(line);
-        let text = rope.line(line).to_string();
-        let chars: Vec<char> = text.chars().collect();
-        let col = self.sel.head() - line_start;
-
-        // The number under the cursor, else the next one along the line.
-        let Some(mut start) = (col..chars.len())
-            .find(|&i| chars[i].is_ascii_digit())
-            .map(|i| {
-                let mut s = i;
-                while s > 0 && chars[s - 1].is_ascii_digit() {
-                    s -= 1;
-                }
-                s
-            })
-        else {
-            return;
-        };
+        let chars: Vec<char> = rope.line(line).chars().collect();
+        let col = at - line_start;
+        let mut start = (col..chars.len()).find(|&i| chars[i].is_ascii_digit())?;
+        while start > 0 && chars[start - 1].is_ascii_digit() {
+            start -= 1;
+        }
         let mut end = start;
         while end < chars.len() && chars[end].is_ascii_digit() {
             end += 1;
         }
-        let negative = start > 0 && chars[start - 1] == '-';
-        if negative {
+        if start > 0 && chars[start - 1] == '-' {
             start -= 1;
         }
-        let digits: String = chars[start..end].iter().collect();
+        Some((line_start + start, line_start + end))
+    }
+
+    /// Add `delta` to the number at or after the cursor on its line. vim's
+    /// rule, which reaches ahead; helix changes only a selection that is a
+    /// number.
+    pub(super) fn bump_number(&mut self, delta: i64) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let Some((from, to)) = self.number_from(self.sel.head()) else { return };
+        let rope = self.current_buffer().rope();
+        let line_start = rope.line_to_char(rope.char_to_line(from));
+        let (start, end) = (from - line_start, to - line_start);
+        let digits: String = rope.slice(from..to).to_string();
         let Ok(value) = digits.parse::<i64>() else {
             return;
         };
