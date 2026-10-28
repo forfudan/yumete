@@ -571,10 +571,12 @@ impl Editor {
             let Some(path) = buffer.path() else { continue };
             out.push_str(&format!("{}\n", path.display()));
         }
+        // **No file open, so the last session stays** (2026-10-28). A run that
+        // only typed into a scratch buffer and left with `:q!` used to delete
+        // it, and the next `ye -r` had nothing to bring back. persistence.nvim
+        // does the same with `need = 1`: fewer file buffers than that, and it
+        // does not save.
         if out.is_empty() {
-            // Nothing was open, so there is nothing to come back to — and a
-            // stale session is worse than none.
-            let _ = std::fs::remove_file(&file);
             return;
         }
         if let Some(parent) = file.parent() {

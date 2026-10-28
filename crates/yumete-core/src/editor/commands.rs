@@ -903,6 +903,16 @@ impl Editor {
                 self.ask_the_shell(line, put);
                 Ok(CommandOutcome::Continue)
             }
+            Command::Read(path) => {
+                if self.current_buffer().is_readonly() {
+                    self.status = say!("readonly.refused");
+                    return Ok(CommandOutcome::Continue);
+                }
+                let text =
+                    std::fs::read_to_string(self.here_path(&path)).map_err(EditorError::Io)?;
+                self.read_in(&text);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Convert(ask) => {
                 self.convert(ask);
                 Ok(CommandOutcome::Continue)

@@ -17692,6 +17692,15 @@ fn the_session_opens_again_what_was_open() {
     ed.open_file(&two).unwrap();
     assert_eq!(ed.cursor_line(), 1, "ch02 on line 2");
 
+    // A run with only a scratch buffer, typed into and left with `:q!`,
+    // keeps the last session rather than wiping it (2026-10-28).
+    let mut ed = fresh(&dir);
+    press(&mut ed, "ihello");
+    ed.on_key(Key::Esc);
+    ed.save_session();
+    let mut ed = fresh(&dir);
+    assert_eq!(ed.restore_session(), 2, "the session before the scratch run");
+
     // A file that has since been deleted is simply not opened — a
     // convenience does not get to put an error on the screen every morning.
     std::fs::remove_file(&two).unwrap();
@@ -25047,6 +25056,41 @@ fn a_bracket_key_reaches_its_whole_family() {
     // 外面那一對 `【】`。這是有意的——按哪個鍵就找哪一族，想「不管哪一對」用 `md`。
     let ed = vim("【他說（不要走）啊】\n", "lllllda[");
     assert_eq!(ed.current_buffer().text(), "\n", "（）不在 [ 這一族裏");
+}
+
+/// `:read` puts a file in: helix's way at each selection's head, vim's on
+/// new lines below the cursor line. The helix answers are measured with
+/// helix 25.07.1 on `abc\ndef\n` and a file holding `INS\n`.
+#[test]
+fn read_puts_a_file_in_the_way_helix_and_vim_do() {
+    let file = tmp().join(format!("yumete-read-{}.txt", std::process::id()));
+    std::fs::write(&file, "INS\n").unwrap();
+    let read = format!(":read {}", file.display());
+    let helix = |keys: &str| {
+        let mut ed = typed("abc\ndef\n");
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.execute(&read).unwrap();
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(helix("l"), "abINS\nc\ndef\n", "after the character under the cursor");
+    assert_eq!(helix("x"), "abc\nINS\ndef\n", "after the whole line");
+    assert_eq!(helix("ll"), "abcINS\n\ndef\n");
+
+    let mut ed = typed("abc\ndef");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggl");
+    ed.execute(&read).unwrap();
+    assert_eq!(ed.current_buffer().text(), "abc\nINS\ndef", "below the cursor line");
+    assert_eq!(ed.cursor_line(), 1, "on the first line read in");
+    press(&mut ed, "G");
+    ed.execute(&read).unwrap();
+    assert_eq!(ed.current_buffer().text(), "abc\nINS\ndef\nINS\n", "after a last line with no break");
+
+    let mut ed = typed("abc\n");
+    assert!(ed.execute(":read /no/such/file").is_err());
+    assert_eq!(ed.current_buffer().text(), "abc\n");
+    let _ = std::fs::remove_file(&file);
 }
 
 /// « », ｢ ｣, 〝 〞 and the vertical forms join the families by shape

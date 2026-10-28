@@ -1510,6 +1510,14 @@ en = "close this file; leave only when it was the last one (`quit!` ignores chan
 find = "退出 離開 离开 關閉 关闭 exit close bc"
 
 [[message]]
+# : 命令選單：:read
+key = "cmd.commands.read"
+zht = "將文件内容插入選區之後"
+zhs = "将文件内容插入选区之后"
+en = "put a file's contents after the selection"
+find = "讀入 读入 插入文件 文件内容 read"
+
+[[message]]
 # : 命令選單裏 readonly 那一項的説明(commands 組)
 key = "cmd.commands.readonly"
 zht = "只讀：鎖住這一份，不許改"
