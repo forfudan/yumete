@@ -1410,7 +1410,7 @@ find = "git diff 差異 差异 提交 改動 改动 版本"
 key = "cmd.commands.git-show"
 zht = "把提交過的那一稿以只讀方式開在另一個編輯區"
 zhs = "把提交过的那一稿以只读方式开在另一个编辑区"
-en = "the committed draft, read-only, in the other work area"
+en = "the committed draft, read-only, in the other region"
 find = "提交 舊稿 旧稿 對照 对照 並排 并排 git show HEAD commit"
 
 [[message]]
@@ -4464,7 +4464,7 @@ en = "{0} hit(s), nothing changed"
 key = "git.show"
 zht = "{0} 那一稿開在另一個編輯區，只讀"
 zhs = "{0} 那一稿开在另一个编辑区，只读"
-en = "the draft at {0} is open in the other work area, read-only"
+en = "the draft at {0} is open in the other region, read-only"
 
 [[message]]
 # 在跳轉表裏前後走
@@ -4635,7 +4635,7 @@ en = "re-read .yumete/words.txt — this book's own words"
 key = "help.chinese.section-summary"
 zht = "漢字、標點、注音、輸入法"
 zhs = "汉字、标点、注音、输入法"
-en = "漢字, punctuation, readings, the IME"
+en = "漢字, punctuation, readings, the input method"
 
 [[message]]
 # 中文幫助：換方案
@@ -4887,14 +4887,14 @@ en = "a window of 80×24 is what this is laid out for; a side panel needs 36 col
 key = "help.common.word-elsewhere"
 zht = "這個詞還在哪裏：這邊找/副編輯區看"
 zhs = "这个词还在哪里：这边找/副编辑区看"
-en = "where else this word is: / here, ? in the other work area"
+en = "where else this word is: / here, ? in the other region"
 
 [[message]]
 # 常用幫助：按詞移動
 key = "help.common.word-motions"
 zht = "下一詞首、上一詞首、詞尾——認得漢字的詞"
 zhs = "下一词首、上一词首、词尾——认得汉字的词"
-en = "next word, previous word, end of word — it knows 漢字 words"
+en = "next word (漢字 words come from the dictionary) / back to a clause start / on to a clause end"
 
 [[message]]
 # 常用幫助：複製/貼上
@@ -5440,7 +5440,7 @@ en = "go to definition"
 key = "hint.goto.follow-note-elsewhere"
 zht = "前往定義(副窗顯示)"
 zhs = "前往定义(副窗显示)"
-en = "go to definition in second window"
+en = "go to definition in the other region"
 
 [[message]]
 # vim 鍵位下 g 選單裏的 J ——併行，一個空格都不補
@@ -5538,7 +5538,7 @@ en = "search the selection"
 key = "hint.goto.search-word-elsewhere"
 zht = "搜索所選内容(副窗顯示)"
 zhs = "搜索所选内容(副窗显示)"
-en = "search the selection in second window"
+en = "search the selection in the other region"
 
 [[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
@@ -6418,7 +6418,7 @@ en = "show docs of definition (sidebar)"
 key = "hint.space.yume"
 zht = "輸入法"
 zhs = "输入法"
-en = "the IME"
+en = "the input method"
 
 [[message]]
 # 表格提示：加一欄
@@ -6551,7 +6551,7 @@ en = "show record in sidebar"
 key = "hint.table.leave-the-window"
 zht = "退出全窗視圖"
 zhs = "退出全窗视图"
-en = "leave full-window view"
+en = "leave window view"
 
 [[message]]
 # 表格提示：重排對齊
@@ -6642,7 +6642,7 @@ en = "search down the columns (a column range can be given)"
 key = "hint.table.search-columns-elsewhere"
 zht = "按列搜索(副窗顯示)"
 zhs = "按列搜索(副窗显示)"
-en = "search down the columns in second window"
+en = "search down the columns in the other region"
 
 [[message]]
 # 表格提示：照這欄順排/倒排
@@ -6663,7 +6663,7 @@ en = "t table"
 key = "hint.table.whole-window"
 zht = "全窗視圖(表格獨佔窗口)"
 zhs = "全窗视图(表格独占窗口)"
-en = "full-window view: the table takes the window"
+en = "window view: the table takes the window"
 
 [[message]]
 # 表格提示：取這欄/貼一欄
@@ -6852,21 +6852,21 @@ en = "pick a scheme"
 key = "hint.yume.table"
 zht = "換碼表源"
 zhs = "换码表源"
-en = "where the 碼表 comes from"
+en = "switch to the installed 碼表"
 
 [[message]]
 # ␣z 輸入法那一組
 key = "hint.yume.title"
 zht = "輸入法"
 zhs = "输入法"
-en = "the IME"
+en = "the input method"
 
 [[message]]
 # ␣z 輸入法那一組
 key = "hint.yume.toggle"
 zht = "中 / ABC / 關"
 zhs = "中 / ABC / 关"
-en = "中 / ABC / off"
+en = "input method on / off (on is Chinese)"
 
 [[message]]
 # ␣z 輸入法那一組

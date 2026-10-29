@@ -20,8 +20,10 @@ scoop bucket add forfudan https://github.com/forfudan/scoop-bucket
 scoop install yumete
 ```
 
-**[docs/manual.md](docs/manual.md)** is the user manual — what the keys and
-commands do, how vertical layout works, and how to configure it.
+**[The documentation](https://zhuyuhao.com/yumete-docs/)** says what the keys
+and commands do, how vertical layout works, and how to configure it. It has a
+[book view](https://zhuyuhao.com/yumete-docs/book/) of the same pages, and its
+source is [yumete-docs](https://github.com/forfudan/yumete-docs).
 
 > Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). The borrowed
 > themes' MIT notices are in [licenses/](licenses/).
@@ -307,9 +309,7 @@ yumete/
 │   ├── yumete-ime/            # built-in Yume IME session (embeds yume-core)
 │   ├── yumete-tui/            # terminal UI (ratatui + crossterm)
 │   └── yumete/                # binary: CLI, launches the editor or preview
-├── scripts/build.sh           # release build → ./yumete (gitignored)
-└── docs/
-    └── manual.md           # the user manual
+└── scripts/build.sh           # release build → ./yumete (gitignored)
 ```
 
 ## Build & test
@@ -332,8 +332,8 @@ YUMETE_BIN_DIR=/usr/local/bin scripts/build.sh
 
 # Try it:
 ./yumete --help
-./yumete docs/manual.md          # interactive editor (in a terminal)
-./yumete --preview docs/manual.md # non-interactive preview
+./yumete README.md                # interactive editor (in a terminal)
+./yumete --preview README.md      # non-interactive preview
 ```
 
 `yume` must sit **beside** `yumete` (`../yume`): `yumete-ime` depends on

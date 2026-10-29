@@ -1,6 +1,6 @@
 //! **Every command `--help` teaches is one the editor has.**
 //!
-//! `docs/manual.md` and the tutor have had this test since #368
+//! The docs and the tutor have had this test since #368
 //! (`yumete-core/tests/documented_keys.rs`), and `--help` never did — it is a
 //! string in this crate, not a document, so the walk over the documents could
 //! not see it. It rotted exactly as the manual would have: an audit on

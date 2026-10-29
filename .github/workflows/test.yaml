@@ -88,6 +88,14 @@ jobs:
           path: yume
           ssh-key: ${{ secrets.YUME_DEPLOY_KEY }}
 
+      # The docs site. The tests that hold the documents to the editor read its
+      # pages (`crates/yumete-core/tests/site/mod.rs`), and the step at the end
+      # checks its generated tables. It is public, so no key.
+      - uses: actions/checkout@v4
+        with:
+          repository: forfudan/yumete-docs
+          path: yumete-docs
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
@@ -104,3 +112,20 @@ jobs:
       # (「別再踩」 in ../CLAUDE.md).
       - name: Test
         run: cargo test --workspace --locked --no-fail-fast
+
+      # **The site's tables are the editor's own** (`ye --docgen`): commands,
+      # keys, settings and languages, written from the tables the editor runs
+      # on. A difference here means the code moved and the docs did not:
+      # regenerate them into yumete-docs and commit them there. One row is
+      # enough; the tables do not depend on the platform.
+      - name: Docs tables are current
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          set -euo pipefail
+          cargo run -q --locked -p yumete -- --docgen=../yumete-docs/src/generated
+          if [[ -n "$(git -C ../yumete-docs status --porcelain -- src/generated)" ]]; then
+            git -C ../yumete-docs status --short -- src/generated
+            git -C ../yumete-docs diff -- src/generated | head -80
+            echo "!! the docs tables are stale: run 'ye --docgen=../yumete-docs/src/generated' and commit them in yumete-docs" >&2
+            exit 1
+          fi

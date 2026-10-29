@@ -4025,6 +4025,10 @@ impl Editor {
     ];
 
     /// What `]` and `[` may be finished with — 「下一個這種東西」.
+    /// The `z` group: where the cursor's line goes on the screen.
+    pub(super) const AIM_KEYS: &'static [(&'static str, &'static str)] =
+        &[("z", "hint.aim.middle"), ("t", "hint.aim.top"), ("b", "hint.aim.bottom")];
+
     pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] = &[
         ("m", "hint.hop.conflict"),
         ("g", "hint.hop.change"),
@@ -4179,6 +4183,46 @@ impl Editor {
     /// `空格 空格` 一加進來就露出這件事：鍵名是原樣畫出去的 `char`，而一個空格畫
     /// 出來就是一片空白——那一行看着像没有鍵。`␣` 是這個倉本來就在用的寫法
     /// （`HOP_DOWN_KEYS` 的「空行」那一條、竪排提示行裏的 `Pending::Space`）。
+    /// **Every key menu, for the generated keymap page** (`ye --docgen`,
+    /// 2026-10-29): each menu's title message, the key that opens it, and its
+    /// rows as (keys, message). The same tables the which-key panel draws, so
+    /// the page cannot list a key the editor does not have.
+    pub fn menus_for_docs() -> Vec<DocMenu> {
+        let rows = |table: &[(&'static str, &'static str)]| -> Vec<(String, &'static str)> {
+            table.iter().map(|(k, m)| (k.to_string(), *m)).collect()
+        };
+        let goto = rows(Self::GOTO_KEYS);
+        vec![
+            (
+                "hint.space.title",
+                "Space",
+                Self::SPACE_KEYS.iter().map(|(k, m)| (Self::key_name(*k).into_owned(), *m)).collect(),
+            ),
+            ("hint.goto.title", "g", goto),
+            ("hint.match.title", "m", rows(Self::MATCH_KEYS)),
+            // In prose and code alike, then the three a code file adds.
+            ("hint.hop.next", "]", [rows(Self::HOP_KEYS), rows(Self::HOP_KEYS_FORWARD), rows(Self::HOP_KEYS_CODE)].concat()),
+            ("hint.hop.previous", "[", [rows(Self::HOP_KEYS), rows(Self::HOP_KEYS_BACK), rows(Self::HOP_KEYS_CODE)].concat()),
+            ("hint.aim.title", "z", rows(Self::AIM_KEYS)),
+            ("hint.region.title", "C-w", rows(Self::REGION_KEYS)),
+            // Every key the group has in some table, the way in first: the
+            // menu itself shows only what works where the cursor stands.
+            ("hint.table.title", "Space t", {
+                let mut all = [rows(Self::TABLE_KEYS), rows(Self::TABLE_KEYS_PANE), rows(Self::TABLE_KEYS_MD)].concat();
+                for (keys, what) in Self::TABLE_KEYS_FILE {
+                    if !all.iter().any(|(k, _)| k.split(' ').any(|one| keys.split(' ').any(|two| one == two))) {
+                        all.push((keys.to_string(), *what));
+                    }
+                }
+                all
+            }),
+            ("hint.table.convert", "Space t x", rows(Self::TABLE_CONVERT_KEYS)),
+            ("hint.case.title", "`", rows(Self::CASE_KEYS)),
+            ("hint.open.title", "Space o", rows(Self::OPEN_KEYS)),
+            ("hint.yume.title", "Space z", rows(Self::YUME_KEYS)),
+        ]
+    }
+
     pub(super) fn key_name(key: char) -> std::borrow::Cow<'static, str> {
         match key {
             ' ' => "␣".into(),
@@ -4334,10 +4378,18 @@ impl Editor {
                     self.pending = Pending::YumeValue(c);
                 }
             }
-            Key::Char('y') => ask(self, "predict:"),
-            Key::Char('i') => ask(self, "scheme:"),
+            // The menu says 「on or off」, so the key flips; `:yume-autocompletion`
+            // on its own is the question (2026-10-30: this asked, and nobody
+            // answered `scheme:` or `comment:` at all).
+            Key::Char('y') => ask(self, "predict:toggle"),
+            // Picking is the command line with the scheme list open.
+            Key::Char('i') => self.open_the_command_line("yume-scheme "),
             Key::Char('n') => ask(self, "scheme:next"),
-            Key::Char('/') => ask(self, "comment:"),
+            Key::Char('/') => {
+                if let Err(err) = self.execute(":yume-chaifen toggle") {
+                    self.status = err.to_string();
+                }
+            }
             Key::Char('t') => ask(self, "~"),
             Key::Char('w') => ask(self, "?"),
             Key::Char('W') => ask(self, "where"),
@@ -4600,6 +4652,11 @@ fn typed_as(key: Key) -> Option<char> {
         Key::Esc => None,
     }
 }
+
+
+/// One key menu for the docs: its title message, the key that opens it, and
+/// its rows as (keys, message).
+pub type DocMenu = (&'static str, &'static str, Vec<(String, &'static str)>);
 
 #[cfg(test)]
 mod key_table_tests {

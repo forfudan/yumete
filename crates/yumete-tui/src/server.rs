@@ -534,6 +534,10 @@ impl Servers {
             // An unsaved buffer has no URI, and a server answers about files.
             return;
         };
+        // A prose file with a server gets the diagnostics lane (2026-10-30).
+        if matches!(language, "markdown" | "typst" | "text") {
+            editor.mark_served(path.clone());
+        }
         // **配了幾個就起幾個**（#425）：一種語言跑得了好幾個，各答各的一半。
         if !self.failed.contains(language) {
             let here = Self::look_from(editor);
@@ -2693,12 +2697,14 @@ mod tests {
         let (mut servers, heard, _tell) = Servers::pretend("markdown");
         let (mut editor, path) = editor_on("chapter.md", "那年冬天。\n");
         let mut config = Servers::stocked("markdown");
+        assert!(!editor.has_a_problem_lane(), "prose has no diagnostics lane before a server");
         servers.follow(&mut editor, &config);
         let sent: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
         assert!(
             sent.iter().any(|m| m.contains("textDocument/didOpen") && m.contains(r#""languageId":"markdown""#)),
             "{sent:?}"
         );
+        assert!(editor.has_a_problem_lane(), "a served chapter gets the lane, or its diagnostics have nowhere to go");
 
         let (mut servers, heard, _tell) = Servers::pretend("markdown");
         config.lsp.remove("markdown");
@@ -2706,6 +2712,7 @@ mod tests {
         servers.follow(&mut editor, &config);
         assert!(heard.try_recv().is_err(), "no server named for Markdown, nothing sent");
         assert_eq!(servers.language_of(&editor), None);
+        assert!(!editor.has_a_problem_lane());
 
         let (mut servers, heard, _tell) = Servers::pretend("text");
         let (mut editor, plain) = editor_on("notes.txt", "a line\n");

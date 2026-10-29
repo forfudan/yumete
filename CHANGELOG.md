@@ -27,6 +27,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The manual is now the documentation site**, https://zhuyuhao.com/yumete-docs/, rewritten shorter on helix's plan, with a book view of the same pages at `/book/`. Its key, command and settings tables are written by the editor itself (`ye --docgen`). Release archives no longer carry `docs/manual.md`.
 - **The interface language follows the system** when the config does not name one (`[editor] language = "auto"`, the new factory value): `zh_TW`/`zh_HK` is 繁體, other `zh` is 简体, anything else English — it used to be 繁體 everywhere. Set `language = "zh"` to keep 繁體 on an English system. `:tutor` has an English lesson for an English interface, and the Chinese lesson's `.` exercise and `:layout` (now `:vertical`) are brought up to date.
 - **Counting follows Word's rule**: a 漢字 is one and a Latin word is one. `:count`, the daily target and `:count-progress` used to count 漢字 only, so English read 0; Chinese counts are unchanged. `:count` reports the new count first.
 - **`.` under the helix keymap is helix's `.`**: it types the last insert again (the key that went into insert mode and what was typed) and no longer repeats a `d`, an `r` or a paste. The vim keymap keeps vim's `.`, which repeats any change.
@@ -37,6 +38,8 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **`Space z i`, `Space z n` and `Space z /` do what their menu says**: pick a scheme on the command line, switch to the next scheme, and show or hide the component breakdown beside the candidates. They used to answer that there was no such scheme. `Space z y` turns prediction on or off instead of only saying which it is.
+- **The `follow_link` action** (for `[keys]`) presses `gL`; it pressed `gx`, the two-letter jump.
 - **Visual `gu` `gU` `g~` under the vim keymap** change the selection. They waited for a motion as though nothing were selected, and the next key let them go having done nothing.
 
 ## 0.14.0 · 2026-10-29

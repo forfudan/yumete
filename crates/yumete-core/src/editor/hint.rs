@@ -506,13 +506,7 @@ impl Editor {
             // `z` 那一層只有三個鍵，一張三行的小表比一句話好認。
             Pending::Aim | Pending::AimStuck => (
                 say!("hint.aim.title"),
-                Self::said(
-                    [
-                        ("z", "hint.aim.middle"),
-                        ("t", "hint.aim.top"),
-                        ("b", "hint.aim.bottom"),
-                    ],
-                ),
+                Self::said(Self::AIM_KEYS.iter().copied()),
             ),
             // **Each step lists what it takes** (2026-10-27, helix's `m` group).
             // A line saying 「type a bracket」 told the reader there was a

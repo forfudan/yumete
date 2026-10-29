@@ -332,7 +332,7 @@ jobs:
           STAGE="dist/${PKG}"
           EXE=""
           [[ "${{ runner.os }}" == Windows ]] && EXE=".exe"
-          mkdir -p "${STAGE}/bin" "${STAGE}/docs"
+          mkdir -p "${STAGE}/bin"
           cp "target/release/yumete${EXE}" "${STAGE}/bin/"
           # Warning: No `2>/dev/null || …` here. It used to fall back to copying only
           # the README, so the day LICENSE moved, an Apache-2.0 project would
@@ -350,19 +350,8 @@ jobs:
           # licence of a theme whose colours are copied into the binary says
           # the notice goes with every copy (2026-10-25, `one-dark`).
           cp -R licenses "${STAGE}/"
-          # The manual travels with it: this editor's keys are not vi's, and a
-          # reader who installed it from a tap has nowhere else to look. It
-          # keeps its repository path, so `README.md`'s own link to
-          # `docs/manual.md` still resolves inside the tarball.
-          #
-          # Warning: **English only now** (2026-10-17 作者定). It used to carry the 简体
-          # manual too, 「so half the readers are not reading the other half's
-          # characters」 — but the two Chinese manuals left the repository that
-          # day (they live in `local/`, which git does not track), so a CI
-          # checkout has nothing to copy and the build stopped here. The
-          # Chinese manuals are on the website; the English one is the source
-          # text and travels with the binary.
-          cp docs/manual.md "${STAGE}/docs/"
+          # The manual no longer travels with it (2026-10-30): it became the
+          # docs site, which `ye --help` and the README both name.
           # See the header for why Windows gets a zip. `7z` is on that image;
           # `-mx=9` because this travels over a package manager's network, not
           # ours.

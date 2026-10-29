@@ -2855,10 +2855,8 @@ fn the_yume_group_asks_the_front_end_what_each_key_means() {
         (" zeo", "inline-preedit:off"),
         (" zec", "inline-preedit:composition"),
         (" zep", "inline-preedit:preview"),
-        (" zy", "predict:"),
-        (" zi", "scheme:"),
+        (" zy", "predict:toggle"),
         (" zn", "scheme:next"),
-        (" z/", "comment:"),
         (" zt", "~"),
         (" zw", "?"),
         (" zW", "where"),
@@ -2867,6 +2865,18 @@ fn the_yume_group_asks_the_front_end_what_each_key_means() {
     ] {
         assert_eq!(ask(keys).as_deref(), Some(want), "`{keys}`");
     }
+
+    // `Space z i` picks from the command line; `Space z /` flips the 拆分
+    // the way `:yume-chaifen toggle` does (2026-10-30: both used to send a
+    // request nobody answered).
+    let mut ed = typed("那年冬天。\n");
+    ed.set_ime_available(true);
+    press(&mut ed, " zi");
+    assert_eq!(ed.command_line(), "yume-scheme ");
+    let mut ed = typed("那年冬天。\n");
+    ed.set_ime_available(true);
+    press(&mut ed, " z/");
+    assert!(ed.take_chaifen_request().is_some(), "{}", ed.status());
 
     // **`空格 空格` 撤了**，不留別名（2026-10-17 作者定）。
     assert_eq!(ask("  "), None, "`空格 空格` 不再是開關");
