@@ -4874,7 +4874,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "help",
-        aliases: &[],
+        aliases: &["h"],
         help: "cmd.commands.help",
         needs: &[],
         params: &[Param::WordsOr { of: HELP_SECTIONS, default: None, or: "<題目>" }],
