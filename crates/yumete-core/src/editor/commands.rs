@@ -594,6 +594,11 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Recover => self.recover(),
+            Command::Reflow(width) => {
+                let width = width.unwrap_or(super::verbs::HELIX_TEXT_WIDTH);
+                self.edit_each(|e| e.reflow_selection(width));
+                Ok(CommandOutcome::Continue)
+            }
             Command::GotoLine(n) => {
                 // Warning: **`:40` is the file's line 40, in a grid as anywhere else**,
                 // and that is older than the grid. 2026-10-20 I read the rule

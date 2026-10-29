@@ -178,6 +178,7 @@ impl Editor {
             // is one change and `.` has to repeat all three levels of it.
             if self.mode == Mode::Normal && self.pending == Pending::None && self.count.is_none() {
                 self.edit_keys.clear();
+                self.edit_was_insert = false;
                 self.edit_revision = (self.current_buffer().id(), self.current_buffer().revision());
             }
             self.edit_keys.push(key);
@@ -341,6 +342,9 @@ impl Editor {
         // A block change is repeated as a block, from wherever `.` is pressed.
         if let Some(keys) = self.block_repeat.take() {
             if !self.repeating_edit {
+                if self.edit_was_insert {
+                    self.last_insert_keys = keys.clone();
+                }
                 self.last_edit_keys = keys;
             }
         }
@@ -738,6 +742,9 @@ impl Editor {
         if excluded || self.edit_keys.is_empty() {
             return;
         }
+        if self.edit_was_insert {
+            self.last_insert_keys = self.edit_keys.clone();
+        }
         self.last_edit_keys = std::mem::take(&mut self.edit_keys);
     }
 
@@ -805,6 +812,13 @@ impl Editor {
         if self.vim_lines {
             self.extend_to_line_bounds();
             self.vim_lines = false;
+        }
+        // `gq` leaves the cursor where vim does, on the last line it wrote.
+        if c == 'q' {
+            self.extend = false;
+            self.extend_to_line_bounds();
+            self.snapshot();
+            return self.fill_selected_lines();
         }
         let start = self.selection().0;
         match c {
@@ -1407,6 +1421,12 @@ impl Editor {
                 self.take_object(span);
                 self.extend_to_line_bounds();
                 self.indent(op == '>');
+            }
+            // **`gq`** — the lines the motion crosses, filled (2026-10-29).
+            'q' => {
+                self.take_object(span);
+                self.extend_to_line_bounds();
+                self.fill_selected_lines();
             }
             // **`gu`／`gU`／`g~`** — 換字形，選區就是那一段（2026-10-06）。
             'u' | 'U' | '~' => {
@@ -3483,9 +3503,19 @@ impl Editor {
             // 動作，`guw` 把一個詞轉小寫，`guu` 轉一整行（算子加倍那條規矩是通用的，
             // 所以這三個白拿）。**helix 鍵位下 `gu` 現在什麼都不是**：打讀音跳漢字
             // 2026-10-10 搬去了 `gz`，兩套鍵位一個拼法，見 `handle_goto` 那一條。
-            Key::Char(op @ ('u' | 'U' | '~'))
+            //
+            // **`gq` fills lines to the width** (2026-10-29, `:h gq`), the same
+            // kind of operator: `gqip` a paragraph, `gqq` a line.
+            //
+            // Warning: **In visual mode the selection is the motion** (`vlgU`,
+            // `Vjgq`). These four used to wait for one anyway, and the `:` or
+            // `Esc` that followed let go of them having done nothing.
+            Key::Char(op @ ('u' | 'U' | '~' | 'q'))
                 if self.key_preset == yumete_cjk::KeyPreset::Vim =>
             {
+                if self.extend {
+                    return self.vim_visual_key(op);
+                }
                 self.pending = Pending::VimOperator { op, first: None };
                 return;
             }
@@ -3852,6 +3882,7 @@ impl Editor {
         ("v", "hint.goto.reselect"),
         ("; ,", "hint.goto.walk-changes"),
         ("u U ~", "hint.goto.case-operators"),
+        ("q", "hint.goto.fill"),
         ("J", "hint.goto.join-without-a-space"),
         ("n N", "hint.goto.next-match"),
     ];

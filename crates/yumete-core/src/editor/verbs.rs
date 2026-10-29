@@ -5,6 +5,15 @@
 
 use super::*;
 
+/// **The width vim's `gq` fills to** with its factory `textwidth` of 0:
+/// 「the screen width, with a maximum width of 79」 (`:h gq`). A terminal
+/// narrower than that is rare enough that the maximum is the answer.
+const VIM_TEXT_WIDTH: usize = 79;
+
+/// **The width helix's `:reflow` fills to** without an argument: its
+/// factory `text-width`.
+pub(super) const HELIX_TEXT_WIDTH: usize = 80;
+
 impl Editor {
     // ---- Counts, repetition, and the Helix tutorial verbs -----------------
 
@@ -28,6 +37,7 @@ impl Editor {
         // `v i X Esc` came back to Normal still extending, and the next `j`
         // grew a selection instead of moving.
         self.extend = false;
+        self.edit_was_insert = true;
         self.insert_recording.clear();
         // Warning: **没花掉的插入計數在這裏清**（2026-10-06 夜審報的）。從前它只在
         // `Esc` 那一臂清，而回 Normal 的路不止那一條（`show_buffer` 就是一條），
@@ -391,6 +401,66 @@ impl Editor {
             }
         }
         self.clamp_cursor();
+    }
+
+    /// **vim's `gq`**: the selected lines filled to vim's width (see
+    /// [`crate::reflow::fill_like_vim`]), and the cursor on the first non-blank
+    /// of the last line written, where vim leaves it. The caller has taken the
+    /// undo point.
+    pub(super) fn fill_selected_lines(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let (start, end) = self.selection();
+        let rope = self.current_buffer().rope();
+        let first = rope.char_to_line(start);
+        let last = rope.char_to_line(end.saturating_sub(1).max(start));
+        let lines: Vec<String> = (first..=last).map(|n| motion::line_text(rope, n)).collect();
+        let filled = crate::reflow::fill_like_vim(&lines, VIM_TEXT_WIDTH, self.writes_code());
+        let from = rope.line_to_char(first);
+        let to = motion::line_end(rope, rope.line_to_char(last));
+        let text = filled.join(self.current_buffer().ending());
+        if rope.slice(from..to) != text.as_str() {
+            let done = self.current_buffer_mut().replace(from..to, &text);
+            if !self.applied(done) {
+                return;
+            }
+        }
+        let line = first + filled.len().saturating_sub(1);
+        let rope = self.current_buffer().rope();
+        let lead = motion::line_text(rope, line).chars().take_while(|c| c.is_whitespace()).count();
+        let at = rope.line_to_char(line) + lead;
+        self.sel.set_head(at);
+        self.sel.set_anchor(at);
+        self.refresh_goal_column();
+        self.clamp_cursor();
+    }
+
+    /// **helix's `:reflow`**: the selection refilled to `width` (see
+    /// [`crate::reflow::refill_like_helix`]), and selected again, as helix
+    /// leaves it. The breaks it writes are the file's own (#309).
+    pub(super) fn reflow_selection(&mut self, width: usize) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let (start, end) = self.selection();
+        let end = end.min(self.current_buffer().char_count());
+        if start >= end {
+            return;
+        }
+        let text = self.current_buffer().rope().slice(start..end).to_string();
+        let filled = crate::reflow::refill_like_helix(&text, width.max(1))
+            .replace('\n', self.current_buffer().ending());
+        if filled == text {
+            return;
+        }
+        self.snapshot();
+        if !self.overwrite(start, end, &filled) {
+            return;
+        }
+        let end = start + filled.chars().count();
+        self.sel.set_anchor(start);
+        self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
     }
 
     /// Rewrite every character of the selection through `f` (`~`, `` ` ``).

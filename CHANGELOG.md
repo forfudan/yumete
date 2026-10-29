@@ -12,6 +12,18 @@ in `docs/development.md` §5.2.
 ### Added
 
 - **`:h`** opens the help, as in vim.
+- **vim's `gq`** fills lines to 79 columns (`gqip`, `gqq`, `gq` on a visual selection): paragraphs stay apart, comment leaders and quote marks are written again on every line, list items hang, and Chinese is never cut.
+- **`:reflow [width]`**, helix's: each selection refilled to the width, 80 by default.
+
+### Changed
+
+- **`.` under the helix keymap is helix's `.`**: it types the last insert again (the key that went into insert mode and what was typed) and no longer repeats a `d`, an `r` or a paste. The vim keymap keeps vim's `.`, which repeats any change.
+- **Enter between an empty pair opens it onto three lines**, as helix does, with the closer on the line below; it used to ride down stuck to the caret.
+- **`o` in a code file indents after an opener** (`fn f() {`, `def f():`), as Enter already did.
+
+### Fixed
+
+- **Visual `gu` `gU` `g~` under the vim keymap** change the selection. They waited for a motion as though nothing were selected, and the next key let them go having done nothing.
 
 ## 0.14.0 · 2026-10-29
 

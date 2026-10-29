@@ -134,6 +134,35 @@ impl Editor {
         true
     }
 
+    /// **Enter between a pair opens it onto three lines**, as helix's
+    /// `insert_newline` does: the caret on a new line one level in, the
+    /// closer on the line after it at the indent `base` the opener's line
+    /// carries. Prose takes no indent (see [`Editor::indent_of_line`]).
+    /// Answers what went in before the caret, for the insert's recording.
+    pub(super) fn open_the_pair(&mut self, ending: &str, base: &str) -> Option<String> {
+        if self.mode != Mode::Insert || self.overwriting || self.table_here() {
+            return None;
+        }
+        let rope = self.current_buffer().rope();
+        let at = self.sel.head().min(rope.len_chars());
+        let (Some(prev), Some(next)) = (at.checked_sub(1).and_then(|p| rope.get_char(p)), rope.get_char(at)) else {
+            return None;
+        };
+        if self.auto_pairs.pair_of(prev) != Some((prev, next)) {
+            return None;
+        }
+        let inner = match self.writes_code() {
+            true => format!("{base}{}", self.indent_unit(base)),
+            false => String::new(),
+        };
+        let typed = format!("{ending}{inner}");
+        if !self.edit_insert(at, &format!("{typed}{ending}{base}")) {
+            return None;
+        }
+        self.put_the_caret(at + typed.chars().count());
+        Some(typed)
+    }
+
     /// Text typed one character at a time through the pairs: a count's
     /// repeats of an insert (`3i(`) come out as typing it three times would.
     pub(super) fn type_through_pairs(&mut self, text: &str) {

@@ -329,7 +329,7 @@ impl Editor {
     /// 解析不出來的時候（實測：`fn f() {` 自己一份檔，tree-sitter 給的是
     /// `(source_file (ERROR …))`，一個 `block` 都没有），兩頭都答 0，差也是 0，
     /// 於是照抄上一行——和 2026-10-08 早些時候做的 `autoindent` 一字不差。
-    pub(super) fn levels_to_open(&self, closing: Option<char>) -> isize {
+    pub(super) fn levels_to_open_at(&self, pos: usize, closing: Option<char>) -> isize {
         let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() else {
             return 0;
         };
@@ -344,7 +344,7 @@ impl Editor {
         };
         // 樹是按**字節**數的，而這一頭數字符。
         let rope = self.current_buffer().rope();
-        let at = self.sel.head().min(rope.len_chars());
+        let at = pos.min(rope.len_chars());
         let byte = rope.char_to_byte(at).min(held.source.len());
         let line = rope.char_to_line(at);
         // 算的是**新開的那一行**，所以門檻是光標這一行 ＋ 1。

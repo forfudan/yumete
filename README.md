@@ -148,13 +148,11 @@ whatever mark closes after them).
 
 Selection-first modal editing: Normal / Insert / Command, `x` to take a line,
 `v` / `;` to extend and collapse, `d` / `c` / `y` / `p` on the selection. A
-digit prefix is a count (`3w`, `10j`); `.` repeats the last change; `"a` names a
+digit prefix is a count (`3w`, `10j`); `.` repeats the last insert, as in helix; `"a` names a
 register and `q` / `Q` record and replay a macro; `C-o` / `C-i` walk a jump
 list, `M a` / `' a` name a place and come back to it across files.
 **Match mode** (`m`) jumps, selects and surrounds over 「」『』（）《》【】〔〕
 as well as the ASCII pairs.
-
-Warning: **There is no `t` / `T`.** That letter is the table mode's, all of it.
 
 Coming from vim, `:keymap vim` (or `[keys] preset = "vim"`) translates the keys
 that would *destroy text* if pressed out of habit: `d c y > <` become operators

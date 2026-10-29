@@ -539,7 +539,10 @@ fn a_dot_repeats_an_ime_replace() {
     // The code letters never reach `on_key`, so replaying the keys of an
     // IME `r` replays `r` alone — which would arm the pending state and
     // eat the reader's next key.
+    //
+    // vim's `.` (the vim keymap): nvim gives 銀銀銀 for `r銀l.l.`.
     let mut ed = typed("錢錢錢\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
     ed.on_key(Key::Char('r'));
     ed.insert_committed("銀");
     press(&mut ed, "l.");
@@ -548,6 +551,18 @@ fn a_dot_repeats_an_ime_replace() {
     // The next key is a key, not the answer to a question nobody asked.
     press(&mut ed, "l.");
     assert_eq!(ed.current_buffer().text(), "銀銀銀\n");
+
+    // helix's `.` repeats inserts only (#413): after `iX`, an `r` and a
+    // step, it writes the `X` again rather than the 銀.
+    let mut ed = typed("錢錢錢\n");
+    ed.goto_line(1);
+    press(&mut ed, "iX");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('r'));
+    ed.insert_committed("銀");
+    press(&mut ed, "l.");
+    assert_eq!(ed.current_buffer().text(), "X銀X錢錢\n");
+    assert!(!ed.wants_the_ime());
 }
 
 /// **注音改走 `:ruby`**（2026-09-30 定）。
@@ -7219,16 +7234,19 @@ fn a_repeat_can_never_repeat_itself() {
     // which does not unwind, so every unsaved buffer went with it. Two
     // causes, both here: a count made `.` the *second* key of its own
     // definition, and nothing stopped a repeat from re-entering.
+    //
+    // Since #413 (2026-10-29) helix's `.` repeats the last insert, so the
+    // change is an `iX`; helix 25.07.1 gives the same six `X`.
     let mut ed = typed("一二三四五六七八九十\n");
     ed.execute("1").unwrap();
-    ed.on_key(Key::Char('d'));
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('X'));
+    ed.on_key(Key::Esc);
     ed.on_key(Key::Char('3'));
     ed.on_key(Key::Char('.'));
     ed.on_key(Key::Char('.'));
     ed.on_key(Key::Char('.'));
-    // Still here — and `.` still means the `d`: one, then three, then one,
-    // then one.
-    assert_eq!(ed.current_buffer().text(), "七八九十\n");
+    assert_eq!(ed.current_buffer().text(), "XXXXXX一二三四五六七八九十\n");
 }
 
 #[test]
@@ -10637,21 +10655,14 @@ fn a_quoted_table_stays_a_quotation_even_when_walked_into() {
 
 #[test]
 fn dot_repeats_the_change_and_the_count_it_was_given() {
-    // `3>` indents three levels; `.` used to indent one, because the digit
-    // key started a fresh recording and threw the count away.
-    let mut ed = typed("一\n二\n");
+    // `3x` deletes three; `.` used to delete one, because the digit key
+    // started a fresh recording and threw the count away. vim's `.` (helix's
+    // repeats only inserts, #413); nvim gives `de` / `ij` too.
+    let mut ed = typed("abcde\nfghij\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
     ed.goto_line(1);
-    press(&mut ed, "3>");
-    let three = ed.current_buffer().text();
-    press(&mut ed, "j");
-    ed.on_key(Key::Char('.'));
-    let lines: Vec<usize> = ed
-        .current_buffer()
-        .text()
-        .lines()
-        .map(|l| l.len() - l.trim_start().len())
-        .collect();
-    assert_eq!(lines[0], lines[1], "the same three levels: {three:?}");
+    press(&mut ed, "3xj.");
+    assert_eq!(ed.current_buffer().text(), "de\nij\n");
 }
 
 #[test]
@@ -18651,33 +18662,49 @@ fn what_the_cursor_covers_is_what_an_edit_takes() {
 
 #[test]
 fn dot_repeats_the_change_it_actually_follows() {
-    // `.` sits next to `d`, and it used to repeat the last *typing
-    // session* whatever came after — so it had to refuse after a delete.
-    // Now it repeats the change it follows, so there is nothing to refuse.
-    let mut ed = Editor::new();
-    ed.on_key(Key::Char('i'));
-    type_keys(&mut ed, "abcdef");
-    ed.on_key(Key::Esc);
-    type_keys(&mut ed, "gg");
-    type_keys(&mut ed, "d.");
-    assert_eq!(ed.current_buffer().text(), "cdef", "d then . deletes twice");
-    // And after a typing session it repeats the typing.
+    // **Each keymap's own `.`** (#413, 2026-10-29). vim's repeats the change
+    // it follows, a delete included: `x.` deletes twice.
+    let mut ed = typed("abcdef\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.goto_line(1);
+    press(&mut ed, "x.");
+    assert_eq!(ed.current_buffer().text(), "cdef\n", "x then . deletes twice");
+
+    // helix's repeats the last insert, whatever came after it: `iX Esc gg
+    // d .` writes the `X` again instead of deleting again (helix 25.07.1
+    // gives `Xabcdef` too).
+    let mut ed = typed("abcdef\n");
+    ed.goto_line(1);
     ed.on_key(Key::Char('i'));
     type_keys(&mut ed, "X");
     ed.on_key(Key::Esc);
-    ed.on_key(Key::Char('.'));
-    assert_eq!(ed.current_buffer().text(), "XXcdef");
+    type_keys(&mut ed, "ggd.");
+    assert_eq!(ed.current_buffer().text(), "Xabcdef\n");
 }
 
 #[test]
 fn dot_repeats_an_operator_so_the_proofreading_loop_works() {
     // `n . n .` — search, fix, search, fix. The loop a manuscript is
     // proofread in, and the reason all three reviewers named `.`.
+    //
+    // helix's loop is `c`, the change being an insert (#413; helix 25.07.1
+    // gives the same text).
     let mut ed = typed("裏面\n那裏\n這裏\n");
     press(&mut ed, "gg");
     press(&mut ed, "/裏");
     ed.on_key(Key::Enter);
-    // `r` and its operand are one change, so `.` plays both back.
+    press(&mut ed, "c");
+    ed.on_key(Key::Char('裡'));
+    ed.on_key(Key::Esc);
+    press(&mut ed, "n.n.");
+    assert_eq!(ed.current_buffer().text(), "裡面\n那裡\n這裡\n");
+
+    // vim's is `r`: it and its operand are one change, so `.` plays both back.
+    let mut ed = typed("裏面\n那裏\n這裏\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "gg");
+    press(&mut ed, "/裏");
+    ed.on_key(Key::Enter);
     press(&mut ed, "r");
     ed.on_key(Key::Char('裡'));
     press(&mut ed, "n");
@@ -29601,6 +29628,104 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     assert_eq!(ed.current_buffer().text(), "fn f() {\n\n", "答不出來就不動");
 
     let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
+}
+
+/// **vim's `gq` fills lines, and in visual mode `gq` and `gU` take the
+/// selection** (2026-10-29; nvim with `tw=12` was asked the same cases in
+/// `reflow::tests`). Visual `gU` used to wait for a motion with a selection
+/// already there, and the next key let it go having done nothing.
+#[test]
+fn gq_fills_lines_and_visual_g_operators_take_the_selection() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        ed.goto_line(1);
+        ed
+    };
+    let long = "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen\nseventeen\n\nnext\n";
+    let mut ed = vim(long);
+    press(&mut ed, "gqip");
+    assert_eq!(
+        ed.current_buffer().text(),
+        "one two three four five six seven eight nine ten eleven twelve thirteen\nfourteen fifteen sixteen seventeen\n\nnext\n",
+        "nvim's answer, at its width of 79"
+    );
+    assert_eq!(ed.cursor_line(), 1, "on the last line written, as vim leaves it");
+
+    let mut ed = vim("ab\ncd\nef\n");
+    press(&mut ed, "Vjgq");
+    assert_eq!(ed.current_buffer().text(), "ab cd\nef\n");
+
+    let mut ed = vim("abc def\n");
+    press(&mut ed, "vlgU");
+    assert_eq!(ed.current_buffer().text(), "ABc def\n");
+}
+
+/// **helix's `:reflow`** refills the selection, as helix's does (measured
+/// with `scripts/oracle/hx_keys.py`, `x` then `:reflow 20`).
+#[test]
+fn reflow_refills_the_selection() {
+    let mut ed = typed("one two three four five six seven eight nine ten\neleven twelve\n");
+    ed.goto_line(1);
+    press(&mut ed, "x");
+    ed.execute(":reflow 20").unwrap();
+    assert_eq!(
+        ed.current_buffer().text(),
+        "one two three four\nfive six seven eight\nnine ten\neleven twelve\n"
+    );
+}
+
+/// **Enter between a pair opens it onto three lines, and `o` takes the
+/// levels the syntax tree opens**, as helix does (measured with
+/// `scripts/oracle/hx_keys.py`, 2026-10-29). Before, the closer rode down
+/// stuck to the caret (`{\n    x}`) and `o` after `fn f() {` started at
+/// column 0.
+#[test]
+fn enter_between_a_pair_and_o_after_an_opener_indent_as_helix_does() {
+    let dir = tmp().join(format!("yumete-pairopen-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let code = |name: &str, text: &str| {
+        let file = dir.join(name);
+        std::fs::write(&file, text).unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        ed.set_auto_pairs(AutoPairs::Basic);
+        ed
+    };
+    let enter_in = |ed: &mut Editor, open: &str| {
+        ed.goto_line(1);
+        press(ed, "A");
+        press(ed, open);
+        ed.on_key(Key::Enter);
+        press(ed, "x");
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text()
+    };
+    let mut ed = code("a.rs", "fn f() \n");
+    assert_eq!(enter_in(&mut ed, "{"), "fn f() {\n    x\n}\n");
+    let mut ed = code("b.rs", "    if a \n");
+    assert_eq!(enter_in(&mut ed, "{"), "    if a {\n        x\n    }\n", "the closer keeps the opener's indent");
+
+    // Prose opens the pair too, and takes no indent (the 2026-10-08 rule).
+    let mut ed = typed("see \n");
+    ed.set_auto_pairs(AutoPairs::Basic);
+    assert_eq!(enter_in(&mut ed, "("), "see (\nx\n)\n");
+
+    // With auto-pairs off nothing was closed for you, so nothing opens; and
+    // an unclosed `{` is a tree the indent cannot be read from, so no level
+    // either (helix gives the same).
+    let mut ed = code("c.rs", "fn f() \n");
+    ed.set_auto_pairs(AutoPairs::Off);
+    assert_eq!(enter_in(&mut ed, "{"), "fn f() {\nx\n");
+
+    // `o` after an opener goes one level in, as Enter did already.
+    let mut ed = code("d.rs", "fn f() {\n}\n");
+    ed.goto_line(1);
+    press(&mut ed, "ox");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "fn f() {\n    x\n}\n");
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 

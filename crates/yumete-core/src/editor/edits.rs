@@ -428,22 +428,23 @@ impl Editor {
     /// 眼下這一行要帶下去的那一段縮進（Enter 用的，截到光標為止）。
     ///
     /// **外加語法樹說的那幾級**（2026-10-08 第二期）：行尾一個 `(`、`{`、`[`，下一
-    /// 行就多縮一級；新那一行開頭是 `}` 之類就少一級。差由 [`Editor::levels_to_open`]
+    /// 行就多縮一級；新那一行開頭是 `}` 之類就少一級。差由 [`Editor::levels_to_open_at`]
     /// 算（helix 的 `Hybrid`），這裏只負責把它換成真的空白。
     pub(super) fn indent_to_carry(&self) -> String {
         let (line, at) = self.caret_in_line();
-        let carried = self.indent_of_line(line, Some(at));
+        self.indent_for_a_line_after(line, Some(at), self.sel.head())
+    }
+
+    /// The indent a line opened at `pos` gets: what `line` carries down (up
+    /// to column `upto`), plus the levels the syntax tree opens there. `o`
+    /// asks at the end of its line, Enter at the caret.
+    fn indent_for_a_line_after(&self, line: usize, upto: Option<usize>, pos: usize) -> String {
+        let carried = self.indent_of_line(line, upto);
         if !self.writes_code() {
             return carried;
         }
-        let levels = self.levels_to_open(None);
-        // **一級是多少格，照這一行自己的寫法**：它用 tab 就加一個 tab，用空格就加
-        // `indent_width` 個空格。問這一行比問設置準——一份檔混着兩種的時候，跟着
-        // 眼前這一段走纔不會把兩種拌在一起。
-        let unit = match carried.contains('\t') || (carried.is_empty() && !self.tab_spaces) {
-            true => "\t".to_string(),
-            false => " ".repeat(self.indent_width),
-        };
+        let levels = self.levels_to_open_at(pos, None);
+        let unit = self.indent_unit(&carried);
         match levels {
             0 => carried,
             n if n > 0 => format!("{carried}{}", unit.repeat(n as usize)),
@@ -458,6 +459,16 @@ impl Editor {
                 }
                 kept
             }
+        }
+    }
+
+    /// **一級是多少格，照這一行自己的寫法**：它用 tab 就加一個 tab，用空格就加
+    /// `indent_width` 個空格。問這一行比問設置準——一份檔混着兩種的時候，跟着
+    /// 眼前這一段走纔不會把兩種拌在一起。
+    pub(super) fn indent_unit(&self, carried: &str) -> String {
+        match carried.contains('\t') || (carried.is_empty() && !self.tab_spaces) {
+            true => "\t".to_string(),
+            false => " ".repeat(self.indent_width),
         }
     }
 
@@ -484,8 +495,11 @@ impl Editor {
             None => motion::line_end(self.current_buffer().rope(), self.sel.head()),
         };
         let row = self.blank_row();
-        // 縮進跟着下來，同 vim 的 `o`（2026-10-08）。
-        let indent = self.indent_of_line(self.cursor_line(), None);
+        // 縮進跟着下來，同 vim 的 `o`（2026-10-08）. **And the levels the
+        // syntax tree opens at the end of the line**, as helix's `o` does:
+        // after `fn f() {` or `def f():` the new line goes one in, as Enter's
+        // already did (2026-10-29).
+        let indent = self.indent_for_a_line_after(self.cursor_line(), None, end);
         // **The file's own line ending** (#309), not a literal `\n`.
         let ending = self.current_buffer().ending();
         let done = self.without_cell_guard(|e| {
