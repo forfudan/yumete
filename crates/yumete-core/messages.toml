@@ -1898,7 +1898,7 @@ find = "百科 詞條 词条 設定 设定 人物 地名 wiki encyclopedia"
 key = "cmd.commands.wiki-mark"
 zht = "正文裏怎麼給詞條名做記號：金色、下劃線，或者不做"
 zhs = "正文里怎么给词条名做记号：金色、下划线，或者不做"
-en = "how a wiki name is marked in the prose: 金, an underline, or not at all"
+en = "how a wiki name is marked in the text: 金, an underline, or not at all"
 find = "百科 詞條 词条 記號 记号 標記 标记 wiki mark"
 
 [[message]]
@@ -3107,7 +3107,7 @@ en = "a dotted underline across, a ground down a 縱"
 key = "cmd.wikis.off"
 zht = "正文裏不給詞條名做記號"
 zhs = "正文里不给词条名做记号"
-en = "stop marking wiki names in the prose"
+en = "stop marking wiki names in the text"
 
 [[message]]
 # : 命令選單裏 panel 那一項的説明(wiki 組)
@@ -3242,7 +3242,7 @@ find = "挖詞 挖词 認詞 认词 詞語 词语 words mine discover 工作 路
 key = "cmd.word-topics.habit"
 zht = "口頭禪：這一篇比别人多説的那些詞"
 zhs = "口头禅：这一篇比别人多説的那些词"
-en = "habit words: what this one says far more than prose does"
+en = "habit words: what this one says far more than ordinary text does"
 find = "口頭禪 口头禅 廢話 废话 贅詞 赘词 常用詞 常用词 habit crutch tic filler overused"
 
 [[message]]
@@ -4614,7 +4614,7 @@ en = "open a paragraph two squares in, and take the blank line between them off 
 key = "help.chinese.habit-words"
 zht = "口頭禪：這一篇比尋常文章多説的那些詞"
 zhs = "口头禅：这一篇比寻常文章多説的那些词"
-en = "habit words: what this one says far more than prose does"
+en = "habit words: what this one says far more than ordinary text does"
 
 [[message]]
 # 中文幫助：標點旁置
@@ -10449,7 +10449,7 @@ en = "column length"
 key = "set.editor.zong-length.hint"
 zht = "竪排時一縱寫幾個字。散文舒服的上限在 32 字前後"
 zhs = "竖排时一纵写几个字。散文舒服的上限在 32 字前后"
-en = "characters to a column when set down; prose reads well up to about 32"
+en = "characters to a column when set down; text reads well up to about 32"
 
 [[message]]
 # 設置面板：組——配色
@@ -12989,7 +12989,7 @@ en = "{0}: too deep or too many files (8 levels, 64 files at most), not read"
 key = "wiki.unmarkable"
 zht = "只有一個字、正文裏標不出來的詞條"
 zhs = "只有一个字、正文里标不出来的词条"
-en = "one-character entries, which cannot be marked in the prose"
+en = "one-character entries, which cannot be marked in the text"
 
 [[message]]
 # :wiki 報告裏：檔在，可是讀不了(權限、或者不是 UTF-8)
@@ -13173,7 +13173,7 @@ en = "{0} word(s) leaned on — gf goes to the line"
 key = "words.habit"
 zht = "{0}: 「{1}」{2} 次——比尋常文章多 {3} 倍"
 zhs = "{0}: 「{1}」{2} 次——比寻常文章多 {3} 倍"
-en = "{0}: 「{1}」 {2}× — {3} times more often than prose"
+en = "{0}: 「{1}」 {2}× — {3} times more often than ordinary text"
 
 [[message]]
 # :word-habit 但手上這份分詞器没有詞頻表，問不了「尋常文章説幾次」
