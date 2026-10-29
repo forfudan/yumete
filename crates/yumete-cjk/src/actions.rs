@@ -322,7 +322,7 @@ pub const ALL: &[Action] = &[
     keys("search_selection", "action.search-selection", "g/"),
     keys("goto_definition", "action.goto-definition", "gd"),
     keys("open_here", "action.open-here", "gf"),
-    keys("follow_link", "action.follow-link", "gx"),
+    keys("follow_link", "action.follow-link", "gL"),
     // ---- Files, panels, the session --------------------------------------
     // Warning: **`空格` 那一組的鍵搬過家，這張表要跟**（2026-10-12 掃出來的）。
     // `outline` 還寫着 ` o`——那一格 2026-10-08 讓給了 `s` 而 `o` 從此没綁，於是

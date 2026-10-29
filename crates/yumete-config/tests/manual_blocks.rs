@@ -1,4 +1,4 @@
-//! **Every `toml` block the manual prints is one a reader can paste.**
+//! **Every `toml` block the docs print is one a reader can paste.**
 //!
 //! The manual teaches the config file by showing it, and a block that does not
 //! parse is worse than a wrong sentence: TOML is all or nothing, so one
@@ -18,7 +18,8 @@
 //! Measured both ways: the raw form takes the whole file down, and
 //! `"<backspace>" = "@h"` binds and works.
 
-use std::path::Path;
+#[path = "../../yumete-core/tests/site/mod.rs"]
+mod site;
 
 /// The blocks that are **not** `config.toml` and must not be read as one.
 ///
@@ -26,8 +27,8 @@ use std::path::Path;
 /// because it fails to parse would skip exactly the bug this test is for.
 ///
 /// - `[table]` — a table schema, `.yumete/tables/*.toml`, a different file
-///   with a different shape.
-const NOT_THE_CONFIG: &[&str] = &["[table]"];
+///   with a different shape; `[ranges.…]` is a table in that same file.
+const NOT_THE_CONFIG: &[&str] = &["[table]", "[ranges."];
 
 /// Every ```toml fence in the manual, with the line it starts on.
 fn blocks(text: &str) -> Vec<(usize, String)> {
@@ -54,14 +55,15 @@ fn blocks(text: &str) -> Vec<(usize, String)> {
 
 #[test]
 fn every_config_block_in_the_manual_parses() {
-    let text = std::fs::read_to_string(Path::new("../../docs/manual.md"))
-        .expect("the manual, from this crate's directory");
-    let found = blocks(&text);
+    let found: Vec<(String, usize, String)> = site::pages()
+        .into_iter()
+        .flat_map(|(page, text)| blocks(&text).into_iter().map(move |(at, body)| (page.clone(), at, body)))
+        .collect();
     assert!(found.len() > 10, "only {} toml blocks read out of the manual", found.len());
 
     let mut wrong = Vec::new();
     let mut checked = 0;
-    for (at, body) in &found {
+    for (page, at, body) in &found {
         if NOT_THE_CONFIG.iter().any(|head| body.trim_start().starts_with(head)) {
             continue;
         }
@@ -73,7 +75,7 @@ fn every_config_block_in_the_manual_parses() {
             // that does not parse is never on purpose.
             if fault.fatal {
                 wrong.push(format!(
-                    "  docs/manual.md:{}: {}",
+                    "  {page}:{}: {}",
                     at + fault.line,
                     fault.said
                 ));
@@ -86,47 +88,5 @@ fn every_config_block_in_the_manual_parses() {
         "{} block(s) in the manual cannot be pasted into a config:\n{}",
         wrong.len(),
         wrong.join("\n")
-    );
-}
-
-/// **The count the manual prints is the count the panel draws.**
-///
-/// 「Eight groups, fifty-four items」 — it was fifty-nine on 2026-10-20, and
-/// nothing had ever compared the two.
-#[test]
-fn the_manual_counts_the_settings_the_panel_has() {
-    let text = std::fs::read_to_string(Path::new("../../docs/manual.md")).expect("the manual");
-    let said = |n: usize| -> String {
-        // Only the spellings this sentence has worn; a number this test cannot
-        // spell is a number it must not claim to have checked.
-        let words = [
-            (54, "fifty-four"),
-            (55, "fifty-five"),
-            (56, "fifty-six"),
-            (57, "fifty-seven"),
-            (58, "fifty-eight"),
-            (59, "fifty-nine"),
-            (60, "sixty"),
-            (61, "sixty-one"),
-            (62, "sixty-two"),
-            (63, "sixty-three"),
-            (64, "sixty-four"),
-            (65, "sixty-five"),
-        ];
-        words
-            .iter()
-            .find(|(k, _)| *k == n)
-            .map(|(_, w)| (*w).to_string())
-            .unwrap_or_else(|| panic!("spell {n} out in this test, then in the manual"))
-    };
-    let want = format!(
-        "**Eight groups, {} items**",
-        said(yumete_config::settings_ui::SETTINGS.len())
-    );
-    assert!(
-        text.contains(&want),
-        "the manual should say 「{want}」 — {} groups, {} items",
-        yumete_config::settings_ui::GROUPS.len(),
-        yumete_config::settings_ui::SETTINGS.len()
     );
 }

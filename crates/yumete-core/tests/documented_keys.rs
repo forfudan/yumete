@@ -17,58 +17,39 @@
 use yumete_core::command;
 use yumete_core::editor::Editor;
 
-/// The documents this net is cast over, read from the tree rather than embedded.
+mod site;
+
+/// The documents this net is cast over: the site's pages and the lesson.
 ///
-/// Warning: **The Chinese manual is no longer read** (2026-10-09). It is frozen until
-/// yumete settles, and a frozen document is one this test cannot help: the next
-/// command rename would turn it red and the only way to green would be to edit
-/// the very file we have decided to stop editing. Guarding it would reimpose the
-/// work that freezing it was meant to remove. It comes back when it is translated
-/// again.
-///
-/// **Frozen does not mean 「may say false things about the keys」** (2026-10-11 定).
-/// It stopped being translated; it did not stop being read by people. When a key
-/// or a command is renamed, the old name in there becomes an instruction to press
-/// something that now does something else — `gx` was documented as 「follow the
-/// link」 for two days while it opened the seek prompt. That is a typo's class of
-/// error and is fixed in passing. What the freeze rules out is the rest: chasing
-/// new features, filling gaps, and **a test that would force either**.
-///
-/// Warning: **reading this comment is not enough.** 2026-10-11 I read it, then argued
-/// the freeze had lapsed because the file had been edited twice that day — by me,
-/// an hour earlier, having read this. A premise does not lapse because you acted
-/// against it.
-fn documents() -> Vec<(&'static str, String)> {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    vec![
-        (
-            "docs/manual.md",
-            std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual"),
-        ),
-        ("tutor.rs", yumete_core::tutor::LESSON.to_string()),
-        ("tutor.rs (English)", yumete_core::tutor::LESSON_EN.to_string()),
-    ]
+/// The Chinese pages are not read until they are written; the site keeps
+/// their directories empty.
+fn documents() -> Vec<(String, String)> {
+    let mut out = site::pages();
+    out.push(("tutor.rs".into(), yumete_core::tutor::LESSON.to_string()));
+    out.push(("tutor.rs (English)".into(), yumete_core::tutor::LESSON_EN.to_string()));
+    out
 }
 
 /// Every run between backticks, with the line it stands on.
 fn quoted(text: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
-    // How far along a table row this editor's own answer stops. `None` outside
-    // a table that names another editor — see [`ours_stops_at`].
-    let mut ours: Option<usize> = None;
+    // Which cells of a table row are this editor's own answer. `None` outside
+    // a table that names another editor — see [`ours_cells`].
+    let mut ours: Option<std::ops::Range<usize>> = None;
     for (n, line) in text.lines().enumerate() {
         let row = line.trim_start().starts_with('|');
         if !row {
             ours = None;
         } else if ours.is_none() {
-            ours = ours_stops_at(line);
+            ours = ours_cells(line);
         }
         let held;
-        let mut rest = match (row, ours) {
-            (true, Some(upto)) => {
+        let mut rest = match (row, &ours) {
+            (true, Some(cells)) => {
                 held = line
                     .split('|')
-                    .take(upto + 2)
+                    .skip(cells.start)
+                    .take(cells.len())
                     .collect::<Vec<_>>()
                     .join("|");
                 held.as_str()
@@ -97,14 +78,23 @@ fn quoted(text: &str) -> Vec<(usize, String)> {
 /// write. So a header row that names this editor in one cell and something
 /// else after it cuts the row there: everything up to and including the
 /// yumete column is a promise, everything past it is somebody else's.
-fn ours_stops_at(header: &str) -> Option<usize> {
+///
+/// When another editor's column comes **before** yumete's (the site's 「Coming
+/// from helix」 table: key, what helix does, what yumete does), the key column
+/// holds the other editor's keys as much as ours, so only the yumete column
+/// is read.
+///
+/// The range is of `split('|')` pieces: a row that opens with `|` has an empty
+/// piece first, so a cell's piece index is one more than its place.
+fn ours_cells(header: &str) -> Option<std::ops::Range<usize>> {
     let cells: Vec<&str> = header.split('|').collect();
-    // `split` on a row that opens and closes with `|` gives an empty cell at
-    // each end, so a cell's own index is one less than its place here.
-    let at = cells
-        .iter()
-        .position(|cell| cell.trim().trim_matches('*') == "yumete")?;
-    (cells.len() > at + 2).then(|| at - 1)
+    let name = |cell: &str| cell.trim().trim_matches('*').to_ascii_lowercase();
+    let at = cells.iter().position(|cell| name(cell) == "yumete")?;
+    let other = |cell: &&str| matches!(name(cell).as_str(), "helix" | "vim" | "vi" | "nvim" | "neovim");
+    match cells[..at].iter().any(other) {
+        true => Some(at..at + 1),
+        false => (cells.len() > at + 2).then_some(0..at + 1),
+    }
 }
 
 /// The shape of a name this table can be asked about: lower-case ASCII, and a
@@ -178,6 +168,9 @@ const DISOWNED: &[&str] = &[
     // 置上去；把兩個方向定成命令，就是把那個詞佔住。
     ":layout vertical",
     ":layout horizontal",
+    // vim's, named on the 「Coming from vim」 page to say they are not here.
+    ":g",
+    ":normal",
     // 連那個不帶參數的互換也一併沒了：「沒有人想互換，想的是轉成竪排」。
     ":layout",
     ":lay",
@@ -270,12 +263,15 @@ fn each_name_the_documents_disown_really_is_missing() {
 #[test]
 fn every_command_the_documents_print_is_a_command_the_editor_has() {
     let mut asked = 0;
+    let mut wrong = Vec::new();
     for (doc, text) in documents() {
         for (line, quote) in quoted(&text) {
             let Some(rest) = quote.strip_prefix(':') else { continue };
             let mut words = rest.split_whitespace();
             let Some(head) = words.next() else { continue };
-            if !is_a_name(head) || DISOWNED.contains(&quote.as_str()) {
+            // `:view-` is a family being named, not a command (`:view- +17`
+            // is how the list folds one).
+            if !is_a_name(head) || head.ends_with('-') || DISOWNED.contains(&quote.as_str()) {
                 continue;
             }
             // The words below the head are checked only as far as they are
@@ -292,10 +288,11 @@ fn every_command_the_documents_print_is_a_command_the_editor_has() {
             }
             asked += 1;
             if let Err(word) = command::names_something(&line_to_ask) {
-                panic!("{doc}:{line} teaches `{quote}`, and `{word}` is not a word it has");
+                wrong.push(format!("  {doc}:{line} teaches `{quote}`, and `{word}` is not a word it has"));
             }
         }
     }
+    assert!(wrong.is_empty(), "{} command(s) the editor has not got:\n{}", wrong.len(), wrong.join("\n"));
     assert!(asked > 400, "only {asked} commands read out of the documents");
 }
 
@@ -311,9 +308,9 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
         return None;
     };
     if let Some(key) = rest {
-        // `空格` is two characters and one key.
+        // `空格` is two characters and one key, and so is `Space`.
         let lead = match head {
-            "空格" => '空',
+            "空格" | "Space" => '空',
             one => one.chars().next().filter(|_| one.chars().count() == 1)?,
         };
         // Warning: **Two levels, since the table group moved** (2026-09-21).
@@ -331,11 +328,11 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
         // **`空格 空格` 是「按兩下空格」**（2026-10-10）。手冊照人讀得懂的寫法寫；
         // 編輯器那張表裏它是 `' '`，所以這裏把那兩個漢字折回那一個字符。寫成
         // `空格 ␣` 也對得上，可那一行是給人看的。
-        if lead == '空' && key == "空格" {
+        if lead == '空' && matches!(key, "空格" | "Space" | "␣") {
             return Some((lead, " ".to_string()));
         }
         // 同上，退格那一個：手冊寫 `空格 退格`，表裏它是那個控制字符。
-        if lead == '空' && key == "退格" {
+        if lead == '空' && matches!(key, "退格" | "Backspace" | "⌫") {
             return Some((lead, "\u{8}".to_string()));
         }
         let mut key = key.chars();
@@ -379,8 +376,8 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
 // 「`[` 選單裏的 `]`」，於是同一個東西的兩種寫法一個過一個不過（2026-09-24）。
 // `](` is **the middle of a Markdown link**, where a path is completed
 // (2026-10-28), not `]` followed by `(`. `[@` opens a citation (2026-10-29),
-// typed into the page as `[^` is.
-const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[[", "](", "[@"];
+// typed into the page as `[^` is. `]]` closes a `[[wiki link]]`.
+const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[[", "]]", "](", "[@"];
 
 /// Sequences the documents print **in order to say the editor has not got them**.
 ///
@@ -395,11 +392,15 @@ const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[
 /// 免得你去找」 list had carried them since the core could not see the viewport;
 /// `Editor::screen_line` ended that, and a key that works must not stand on a
 /// list of keys that do not.
-const DISOWNED_KEYS: &[&str] = &["t s"];
+///
+/// `Space .` is helix's spelling of `Space E`, named on the 「Coming from
+/// helix」 page to say so.
+const DISOWNED_KEYS: &[&str] = &["t s", "Space ."];
 
 #[test]
 fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
     let mut asked = 0;
+    let mut wrong = Vec::new();
     for (doc, text) in documents() {
         for (line, quote) in quoted(&text) {
             if NOT_A_SEQUENCE.contains(&quote.as_str())
@@ -412,13 +413,16 @@ fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
             // `"`, `M` — and every two-letter word in the manual would be one
             // of those if this did not stop here.
             let Some(offers) = Editor::keys_after(lead) else { continue };
-            assert!(
-                offers.contains(&key),
-                "{doc}:{line} teaches `{quote}`, and the {lead} menu does not offer `{key}`"
-            );
+            // A vim motion after an operator (`dgE`) is not in the `g` menu;
+            // vim's own motion table answers for it.
+            let a_vim_motion = yumete_core::vim::step_for(&quote, yumete_core::motion::Grain::Word, None).is_some();
+            if !offers.contains(&key) && !a_vim_motion {
+                wrong.push(format!("  {doc}:{line} teaches `{quote}`, and the {lead} menu does not offer `{key}`"));
+            }
             asked += 1;
         }
     }
+    assert!(wrong.is_empty(), "{} key(s) the editor does not offer:\n{}", wrong.len(), wrong.join("\n"));
     assert!(asked >= 150, "only {asked} key sequences read out of the documents");
 }
 
@@ -463,6 +467,13 @@ fn the_comparison_table_hides_the_other_editors_and_no_more() {
         0,
         "nothing from past the yumete column: {said:?}"
     );
+
+    let doc = "| Key | helix | yumete |\n\
+               | --- | --- | --- |\n\
+               | `gy` | type definition | not bound |\n\
+               | `H` | not bound | previous sentence, `L` the next |\n";
+    let said: Vec<String> = quoted(doc).into_iter().map(|(_, q)| q).collect();
+    assert_eq!(said, ["L"], "with helix before it, only the yumete column is read");
 }
 
 /// **And every key the `空格` menu offers is a key the manual teaches.**
@@ -478,9 +489,9 @@ fn the_comparison_table_hides_the_other_editors_and_no_more() {
 /// how a key is spelled rather than on whether it is taught.
 #[test]
 fn every_key_the_space_menu_offers_is_taught_in_the_manual() {
-    let (doc, manual) = documents().into_iter().next().expect("the manual first");
-    let taught: Vec<String> = quoted(&manual)
-        .into_iter()
+    let taught: Vec<String> = documents()
+        .iter()
+        .flat_map(|(_, text)| quoted(text))
         .filter_map(|(_, quote)| leader_and_key(&quote))
         .filter(|(lead, _)| *lead == '空')
         .map(|(_, key)| key)
@@ -488,7 +499,7 @@ fn every_key_the_space_menu_offers_is_taught_in_the_manual() {
     for key in Editor::keys_after(' ').expect("the space menu") {
         assert!(
             taught.contains(&key),
-            "the menu offers `空格 {key}` and {doc} never says so"
+            "the menu offers `空格 {key}` and the site never says so"
         );
     }
 }

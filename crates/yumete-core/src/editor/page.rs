@@ -1127,6 +1127,18 @@ impl Editor {
         self.problems.set(path, whose, said);
     }
 
+    /// A language server serves this prose file (the front end says so when
+    /// it opens the file to one).
+    pub fn mark_served(&mut self, path: std::path::PathBuf) {
+        self.served.insert(path);
+    }
+
+    /// **Whether the gutter has a lane for diagnostics**: always in code, and
+    /// in prose when a server serves the file (2026-10-30).
+    pub fn has_a_problem_lane(&self) -> bool {
+        self.writes_code() || self.current_buffer().path().is_some_and(|p| self.served.contains(p))
+    }
+
     /// 第 `line` 行（0 起算）上最響的那一句話，給行號旁邊那一格。
     ///
     /// Warning: 和 [`Self::vcs_mark`] 一樣，**這一句只查手上這份，一個進程都不生**：

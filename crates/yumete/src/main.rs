@@ -108,6 +108,8 @@ fn reopen_in(there: &std::path::Path) -> std::io::Result<()> {
     }
 }
 
+mod docgen;
+
 fn main() -> ExitCode {
     // **第一次打開就問一次**，在任何東西碰數據目錄之前（見 `first_time_ever`）。
     let brand_new = first_time_ever();
@@ -217,6 +219,17 @@ fn main() -> ExitCode {
             "-V" | "--version" => {
                 println!("yumete {VERSION}");
                 return ExitCode::SUCCESS;
+            }
+            // **The site's generated tables** (2026-10-29): `ye --docgen=<dir>`.
+            s if s.starts_with("--docgen=") => {
+                let dir = &s["--docgen=".len()..];
+                return match docgen::write(std::path::Path::new(dir)) {
+                    Ok(()) => ExitCode::SUCCESS,
+                    Err(err) => {
+                        eprintln!("yumete: --docgen: {err}");
+                        ExitCode::FAILURE
+                    }
+                };
             }
             // Warning: **舊的那八個短名撤了**（2026-10-03 定：「舊的讓位……等到全
             // 部弄好了再看哪些值得 short alias」）。字母留給了搜索那一邊：今天
@@ -2194,6 +2207,7 @@ fn print_help() {
         .join(" ");
     println!(
         "yumete {VERSION} — a CJK-aware, Helix-like terminal editor with a built-in Yume IME.
+Documentation: https://zhuyuhao.com/yumete-docs/
 
 USAGE:
     yumete [FILE]...
@@ -2227,8 +2241,10 @@ OPTIONS:
                      it standing. Recovery copies are still kept.
         --tutor      Open the lesson (the same as `:tutor` inside the editor).
         --lang=LANG  Which language the editor says things in for this run:
-                     zh (繁體, the default), zhs (简体) or en. `[editor]
-                     language` in the config is the standing answer, and
+                     zh (繁體), zhs (简体) or en. Without it, the locale
+                     decides (LC_ALL, LC_MESSAGES, LANG: zh_TW and zh_HK
+                     are 繁體, other zh is 简体, anything else English).
+                     `[editor] language` in the config is the standing answer, and
                      `:language` switches it without restarting.
         --syntax     Which markup these files are written in: markdown, typst
                      or text. Outranks both the extension and the config.
@@ -2382,7 +2398,7 @@ KEYS (Normal mode, Helix-style):
     i  a      insert before / after the selection
     I  A      insert at line start / end
     o  O      open a line below / above
-    u  U  .   undo / redo / **repeat the last change** (r, d, c…Esc, ms(, a paste)
+    u  U  .   undo / redo / **repeat the last insert** (what you typed, as helix does)
     r         write the next key over every character of the selection —
               **中文 too**: the panel opens, and what you choose is what the
               selection becomes (a word replaces it rather than filling it)
@@ -2445,8 +2461,7 @@ KEYS (Normal mode, Helix-style):
 
 In Insert mode C-w takes back a word and C-u the line. The `:` and `/` prompts
 are editable: arrows, Home/End, C-w, C-u, and Up/Down through what you typed
-before. A key that means something in another editor and nothing here says what
-this one calls it — `$` answers 「行尾是 gl」 rather than doing nothing.
+before.
 
 Ruby mode (`:ruby`) edits the *reading*, which with readings laid out is not on
 screen to move the cursor into. It opens on the group under the cursor with its

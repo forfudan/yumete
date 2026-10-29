@@ -95,53 +95,14 @@ impl Editor {
         // 說的是此刻；這一行說的是往後。
         out.push_str(&format!("{}\n\n", say!("help.common.window-size")));
         out.push_str(&format!("## {}\n\n", say!("help.common.motion-title")));
-        for (keys, what) in [
-            ("h j k l", say!("help.common.hjkl")),
-            ("w b e", say!("help.common.word-motions")),
-            ("3w 5j", say!("help.common.count-first")),
-            ("g30g / 30G", say!("help.common.go-to-line")),
-            // Warning: **這一頁開頭寫着「每一節都是這個編輯器自己報上來的」，而下面
-            // 這幾行是手抄的。** 2026-09-24 審出來四條錯的：`L H` 說成整頁（其實
-            // 是上下一句，整頁是 `C-f`/`C-b`）、`gw`（没綁，編輯器自己會說「是
-            // gD 了」）、`) (`（没綁，它自己會說「一句一句走是 H/L」）、`}} {{`
-            // （是 `}` `{`——大括號當成 `format!` 的轉義寫了兩遍，而這裏不是格式
-            // 串，於是屏幕上真就印出兩個）。
-            //
-            // Warning: **`documented_keys` 那張網看不見這裏**：它只讀兩份手冊
-            // 與教程，不讀這一頁。手抄的鍵表就是這麽爛掉的。
-            ("gg ge", say!("help.common.start-end-of-file")),
-            ("gh gl gs", say!("help.common.line-start-end")),
-            ("C-d C-u", say!("help.common.half-page")),
-            ("gd gD", say!("help.common.follow-what-it-points-at")),
-            ("g/ g?", say!("help.common.word-elsewhere")),
-            ("/ n N", say!("help.common.search")),
-            ("C-o C-i", say!("help.common.jump-list")),
-            ("M a  'a", say!("help.common.marks")),
-        ] {
+        for (keys, what) in COMMON_MOTION {
+            let what = crate::messages::say(what, &[]);
             out.push_str(&format!("- `{keys}` — {what}
 "));
         }
         out.push_str(&format!("\n## {}\n\n", say!("help.common.editing-title")));
-        for (keys, what) in [
-            ("i a", say!("help.common.insert-before-after")),
-            ("o O", say!("help.common.open-line")),
-            ("d c", say!("help.common.delete-change")),
-            ("x", say!("help.common.select-line")),
-            ("v ;", say!("help.common.extend-collapse")),
-            ("L H", say!("help.common.sentence-motions")),
-            ("} {", say!("help.common.paragraph-motions")),
-            ("y p", say!("help.common.yank-put")),
-            ("u U", say!("help.common.undo-redo")),
-            (".", say!("help.common.repeat-edit")),
-            // Warning: **`Q` 先，`q` 後**（2026-10-02 更正）。這張表是**按位置**讀的
-            // （`u U` 撤銷/重做、`> <` 縮進/退縮進），而那一句是「錄一段按鍵/
-            // 放一遍」——寫成 `q Q` 就是教人用 `q` 開錄。真的綁法是 `Q` 錄、`q`
-            // 放（`keys.rs`），而那兩個鍵的註釋自己寫着「**調換了的一對是最糟的
-            // 那一種分歧**：手不讀字，就按下去，而這兩個按錯了不是没反應——它開
-            // 始錄，蓋掉你本來要放的那一段」（#404）。
-            ("Q q", say!("help.common.macros")),
-            ("> <", say!("help.common.indent")),
-        ] {
+        for (keys, what) in COMMON_EDITING {
+            let what = crate::messages::say(what, &[]);
             out.push_str(&format!("- `{keys}` — {what}
 "));
         }
@@ -258,3 +219,52 @@ impl Editor {
         out
     }
 }
+
+/// **The keys `:help` names first, in order** (2026-10-29: data, so the site's
+/// generated keymap page lists the same rows — `ye --docgen`).
+pub const COMMON_MOTION: &[(&str, &str)] = &[
+    ("h j k l", "help.common.hjkl"),
+    ("w b e", "help.common.word-motions"),
+    ("3w 5j", "help.common.count-first"),
+    ("g30g / 30G", "help.common.go-to-line"),
+    // Warning: **這一頁開頭寫着「每一節都是這個編輯器自己報上來的」，而下面
+    // 這幾行是手抄的。** 2026-09-24 審出來四條錯的：`L H` 說成整頁（其實
+    // 是上下一句，整頁是 `C-f`/`C-b`）、`gw`（没綁，編輯器自己會說「是
+    // gD 了」）、`) (`（没綁，它自己會說「一句一句走是 H/L」）、`}} {{`
+    // （是 `}` `{`——大括號當成 `format!` 的轉義寫了兩遍，而這裏不是格式
+    // 串，於是屏幕上真就印出兩個）。
+    //
+    // Warning: **`documented_keys` 那張網看不見這裏**：它只讀兩份手冊
+    // 與教程，不讀這一頁。手抄的鍵表就是這麽爛掉的。
+    ("gg ge", "help.common.start-end-of-file"),
+    ("gh gl gs", "help.common.line-start-end"),
+    ("C-d C-u", "help.common.half-page"),
+    ("gd gD", "help.common.follow-what-it-points-at"),
+    ("g/ g?", "help.common.word-elsewhere"),
+    ("/ n N", "help.common.search"),
+    ("C-o C-i", "help.common.jump-list"),
+    ("M a  'a", "help.common.marks"),
+];
+
+/// The editing rows of the same page.
+pub const COMMON_EDITING: &[(&str, &str)] = &[
+    ("i a", "help.common.insert-before-after"),
+    ("o O", "help.common.open-line"),
+    ("d c", "help.common.delete-change"),
+    ("x", "help.common.select-line"),
+    ("v ;", "help.common.extend-collapse"),
+    ("L H", "help.common.sentence-motions"),
+    ("} {", "help.common.paragraph-motions"),
+    ("y p", "help.common.yank-put"),
+    ("u U", "help.common.undo-redo"),
+    (".", "help.common.repeat-edit"),
+    // Warning: **`Q` 先，`q` 後**（2026-10-02 更正）。這張表是**按位置**讀的
+    // （`u U` 撤銷/重做、`> <` 縮進/退縮進），而那一句是「錄一段按鍵/
+    // 放一遍」——寫成 `q Q` 就是教人用 `q` 開錄。真的綁法是 `Q` 錄、`q`
+    // 放（`keys.rs`），而那兩個鍵的註釋自己寫着「**調換了的一對是最糟的
+    // 那一種分歧**：手不讀字，就按下去，而這兩個按錯了不是没反應——它開
+    // 始錄，蓋掉你本來要放的那一段」（#404）。
+    ("Q q", "help.common.macros"),
+    ("> <", "help.common.indent"),
+];
+

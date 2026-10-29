@@ -440,7 +440,7 @@ fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
     let lines = editor.current_buffer().line_count();
     let strips = horizontal_pages(editor, config, page);
     let first = strips.first().copied().unwrap_or(page);
-    let gutter = gutter_in(first.width as usize, lines, config.editor.line_numbers, editor.writes_code());
+    let gutter = gutter_in(first.width as usize, lines, config.editor.line_numbers, editor.has_a_problem_lane());
     editor.set_pages_on_screen(strips.len());
     editor.set_wrap_width((first.width as usize).saturating_sub(gutter));
     editor.set_page(page.height as usize * strips.len(), first.width.max(1) as usize);
@@ -4178,6 +4178,11 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         return engage(ime, want, config);
     }
     // The 碼表 the system has — `builtin`'s other half.
+    // `Space z n`: the next scheme in menu order, as ⌃⇧N is in Yume.
+    if tag == "scheme:next" {
+        let next = ime.scheme().next();
+        return switch_scheme(ime, next.tag(), config);
+    }
     if tag == "~" {
         let mut full = ImeSession::from_default_dirs(ime.scheme());
         if !full.available() {
@@ -7002,7 +7007,7 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
         // 刪掉的那幾行在**現在這份檔**裏沒有行號，所以標的是它們在 `HEAD` 裏的號
         //（`Run::was_at`）。號太長放不下就只留 `+ -`。
         let count = editor.current_buffer().line_count();
-        let gutter = gutter_width(count, config.editor.line_numbers, editor.writes_code());
+        let gutter = gutter_width(count, config.editor.line_numbers, editor.has_a_problem_lane());
         // 號碼那一截和正文**逐格相同**：`gutter_text` 排的是 `{:>w$}` 外加
         // `GUTTER_AIR` 兩格空氣，這裏把中間那一格空氣換成 `+ -`。
         let digits = gutter.saturating_sub(GUTTER_AIR);
@@ -8040,7 +8045,7 @@ fn text_at(
                 area.width as usize,
                 buffer.line_count(),
                 config.editor.line_numbers,
-                editor.writes_code(),
+                editor.has_a_problem_lane(),
             );
             let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
             let hide = |line: usize| editor.hidden_on_line(line);
@@ -11272,7 +11277,7 @@ fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
     let wide = |n: usize| rect.width.saturating_sub(PAGE_GAP * (n as u16 - 1)) / n as u16;
     while n > 1 {
         let w = wide(n) as usize;
-        let gutter = gutter_in(w, lines, config.editor.line_numbers, editor.writes_code());
+        let gutter = gutter_in(w, lines, config.editor.line_numbers, editor.has_a_problem_lane());
         if w.saturating_sub(gutter) >= PAGE_LEAST {
             break;
         }
@@ -11329,11 +11334,11 @@ fn draw_horizontal(
         text_area.width as usize,
         total_lines,
         mode,
-        editor.writes_code(),
+        editor.has_a_problem_lane(),
     );
     // Dropped with the gutter it lives in: there is no lane for a diagnostic
     // mark when there is no lane.
-    let problem_gutter = match gutter > 0 && editor.writes_code() && mode != LineNumbers::None {
+    let problem_gutter = match gutter > 0 && editor.has_a_problem_lane() && mode != LineNumbers::None {
         true => PROBLEM_GUTTER,
         false => 0,
     };
@@ -15256,7 +15261,7 @@ fn squeezed(text: &str) -> String {
             w as usize,
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
-            editor.writes_code(),
+            editor.has_a_problem_lane(),
         );
         editor.set_wrap_width((w as usize).saturating_sub(gutter));
         render(editor, config, w, h)
@@ -17853,7 +17858,7 @@ fn squeezed(text: &str) -> String {
         let gutter = gutter_width(
             editor.current_buffer().line_count(),
             config.editor.line_numbers,
-            editor.writes_code(),
+            editor.has_a_problem_lane(),
         );
         gutter as u16 - 1
     }

@@ -49,7 +49,7 @@ scenes() {
 挑選器-查詢|90x24| f雪
 跳轉標籤|80x20|gw
 跳轉標籤-竪排|60x24|:vertical\ngw
-大綱|90x24|:open MANUAL\n s
+大綱|90x24|:open OUTLINE\n s
 設置頁|100x30|:settings\n
 命令選單|80x20|:
 空格選單|80x20| 
@@ -83,7 +83,7 @@ fixture() {
     case "$1" in
         TABLE) printf '| 名 | 說明 | 數 |\n| --- | --- | --- |\n| 甲 | 第一條 | 12 |\n| 乙 | 第二條，長一些 | 345 |\n| ⚠️ | 有警告 | 6 |\n' ;;
         RUBY)  printf '那<ruby>韋<rt>wéi</rt></ruby>字念什麼。\n她伸手去碰，指尖一涼。\n' ;;
-        MANUAL) sed -n '1,60p' docs/manual.md ;;
+        OUTLINE) printf '# 雪夜\n\n那年冬天，雪下得早。\n\n## 第一章 山路\n\n山路斷了。\n\n### 門口\n\n她在門口站了很久。\n\n## 第二章 霜花\n\n霜花在窗上結成了葉子的樣子。\n\n### 後來\n\n後來又下了一場，比上次大。\n\n## 第三章 指尖\n\n她伸手去碰，指尖一涼。\n' ;;
         RUST)  printf '// 一個小程序\nfn counted(text: &str) -> usize {\n    text.chars().count()\n}\n\nfn main() {\n    println!("{}", counted("那年冬天"));\n}\n' ;;
         MOJO)  printf '# 一個小程序\n@value\nstruct Greeter(Movable):\n    var name: String\n\n    fn hello(self) raises -> None:\n        print("你好，", self.name)\n' ;;
         CONFLICT) printf '上面這一行兩邊都有。\n<<<<<<< HEAD\n我這邊寫的。\n=======\n他那邊寫的。\n>>>>>>> 別人\n下面這一行兩邊都有。\n' ;;
@@ -113,7 +113,7 @@ shoot() {
         case "${keys}" in
             *TABLE*) which=TABLE ;;
             *RUBY*) which=RUBY ;;
-            *MANUAL*) which=MANUAL ;;
+            *OUTLINE*) which=OUTLINE ;;
             *RUST*) which=RUST ;;
             *MOJO*) which=MOJO ;;
             *CONFLICT*) which=CONFLICT ;;
@@ -143,7 +143,7 @@ shoot() {
         # 場景裏寫的是 `:open TABLE`，那只是說「開哪一份稿子」——真正打開的是上面
         # 鋪好的那一個檔。
         local pressed="${keys}"
-        for tag in TABLE RUBY MANUAL RUST MOJO CONFLICT GITBIG GIT; do
+        for tag in TABLE RUBY OUTLINE RUST MOJO CONFLICT GITBIG GIT; do
             pressed="${pressed//:open ${tag}\\n/}"
         done
         # Warning: **錯誤不許混進底片，退出碼不許吞掉**（2026-10-02 修）。從前這一行是

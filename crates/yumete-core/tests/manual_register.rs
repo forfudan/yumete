@@ -50,15 +50,13 @@ fn without_code(line: &str) -> String {
     out
 }
 
+mod site;
+
 #[test]
 fn the_manual_dates_nothing_and_quotes_nobody() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    // Warning: **English only.** The Chinese manuals are frozen until yumete settles
-    // (2026-10-09), and a frozen document is one a test cannot help — the next cleanup
-    // would turn it red and the only way to green would be to edit the very file we
-    // decided to stop editing.
-    let text = std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual");
+    // English only: the site's Chinese pages are not written yet.
     let mut bad: Vec<String> = Vec::new();
+    for (page, text) in site::pages() {
     let mut fenced = false;
     for (n, line) in text.lines().enumerate() {
         if line.trim_start().starts_with("```") {
@@ -75,9 +73,10 @@ fn the_manual_dates_nothing_and_quotes_nobody() {
                 false => plain.contains(mark),
             };
             if hit {
-                bad.push(format!("  docs/manual.md:{}  {why}\n    {}", n + 1, line.trim()));
+                bad.push(format!("  {page}:{}  {why}\n    {}", n + 1, line.trim()));
             }
         }
+    }
     }
     assert!(
         bad.is_empty(),
@@ -122,10 +121,8 @@ fn regex_lite_hit(mark: &str, text: &str) -> bool {
 /// is exactly the moment to ask whether it is really one.
 #[test]
 fn the_manual_warns_about_few_enough_things_to_be_believed() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    let text = std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual");
     const CEILING: usize = 22;
-    let found = text.matches("Warning:").count();
+    let found: usize = site::pages().iter().map(|(_, text)| text.matches("Warning:").count()).sum();
     assert!(
         found <= CEILING,
         "{found} `Warning:` blocks in the manual, ceiling {CEILING}. \

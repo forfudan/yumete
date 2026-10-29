@@ -3315,6 +3315,10 @@ pub struct Editor {
     /// **Bibliographies read for citation keys**, by file, with the time
     /// each was read at (2026-10-29).
     bib_cache: RefCell<HashMap<PathBuf, ReadBibliography>>,
+    /// **Prose files a language server serves** (2026-10-30): they get the
+    /// diagnostics lane a code file always has, or a spelling server's
+    /// complaints would have nowhere to show.
+    served: std::collections::HashSet<PathBuf>,
     /// The drawn padding of the table last asked about (Feature #212).
     ///
     /// One table at a time: the page asks per line, every line of a table
@@ -4176,6 +4180,7 @@ impl Editor {
             count_cache: RefCell::default(),
             line_counts: RefCell::default(),
             bib_cache: RefCell::default(),
+            served: Default::default(),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             pipe_region: RefCell::new(None),
@@ -5427,6 +5432,7 @@ mod edits;
 mod fences;
 mod files;
 mod help;
+pub use help::{COMMON_EDITING, COMMON_MOTION};
 pub(crate) mod find;
 mod hint;
 mod info;
