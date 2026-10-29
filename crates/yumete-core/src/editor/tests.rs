@@ -29632,6 +29632,22 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
 }
 
+/// **The Unicode alarm names what the tinted cell stands for** (#252,
+/// 2026-10-29): on the cell after a zero-width space, on the hidden one
+/// itself, and on an odd space; nothing on an ordinary letter.
+#[test]
+fn the_alarm_names_the_hidden_character_at_the_caret() {
+    let mut ed = typed("pri\u{200B}ce a\u{00A0}b\n");
+    ed.goto_line(1);
+    assert_eq!(ed.alarm_at_cursor(), None, "p is just p");
+    press(&mut ed, "lll");
+    assert_eq!(ed.alarm_at_cursor(), Some('\u{200B}'), "on the hidden one");
+    press(&mut ed, "l");
+    assert_eq!(ed.alarm_at_cursor(), Some('\u{200B}'), "on the c it hides before");
+    press(&mut ed, "llll");
+    assert_eq!(ed.alarm_at_cursor(), Some('\u{00A0}'), "on the no-break space");
+}
+
 /// **`[@` and Typst's `@` finish from the bibliography beside the file**
 /// (2026-10-29): BibTeX keys with their titles, the hayagriva file a Typst
 /// document names, and the labels it sets.

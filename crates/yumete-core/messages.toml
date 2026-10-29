@@ -10326,6 +10326,20 @@ zhs = "竖排时一格里横着塞几个半角字，年份和页码就不会一�
 en = "half-width characters set across inside one cell, so a year is not one digit to a row"
 
 [[message]]
+# 設置面板：可疑字符
+key = "set.editor.unicode-alarm"
+zht = "可疑字符"
+zhs = "可疑字符"
+en = "suspicious characters"
+
+[[message]]
+# 設置面板：可疑字符的說明
+key = "set.editor.unicode-alarm.hint"
+zht = "零寬字符、雙向控制符後面那一格和非普通空格鋪上琥珀底色"
+zhs = "零宽字符、双向控制符后面那一格和非普通空格铺上琥珀底色"
+en = "tint the cell after a zero-width or bidi control, and any space that is not a plain space"
+
+[[message]]
 # 設置：竪排時 hjkl 怎麼走
 key = "set.editor.vertical-keys"
 zht = "竪排的 hjkl"
