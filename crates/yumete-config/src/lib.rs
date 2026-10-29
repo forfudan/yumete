@@ -322,6 +322,11 @@ pub struct EditorConfig {
     /// this" and "this is the wrong character"; for a 拆分表 it is the whole
     /// question. Given way to, right end first, when the line is crowded.
     pub char_info: bool,
+    /// **Which files show a live count on the status line** (2026-10-29):
+    /// `"text"` (default: Markdown, plain text, Typst — not code), `"all"`,
+    /// `"off"`. Counted by
+    /// Word's rule, the same as `:count` and the daily target.
+    pub status_count: String,
     /// Whether a search pattern with no capital in it ignores case (#301).
     ///
     /// On: a manuscript is 漢字, which has no case, so nearly every search
@@ -480,6 +485,7 @@ impl Default for EditorConfig {
             ruler: 0,
             measure: 0,
             char_info: true,
+            status_count: "text".to_string(),
             command_line: true,
             smart_case: true,
             fuzzy_search: false,
@@ -3948,6 +3954,7 @@ struct RawEditor {
     ruler: Option<usize>,
     measure: Option<usize>,
     char_info: Option<bool>,
+    status_count: Option<String>,
     command_line: Option<bool>,
     smart_case: Option<bool>,
     fuzzy_search: Option<bool>,
@@ -4148,6 +4155,9 @@ impl RawConfig {
         }
         if other.editor.char_info.is_some() {
             self.editor.char_info = other.editor.char_info;
+        }
+        if other.editor.status_count.is_some() {
+            self.editor.status_count = other.editor.status_count.clone();
         }
         if other.editor.command_line.is_some() {
             self.editor.command_line = other.editor.command_line;
@@ -4529,6 +4539,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.char_info {
             config.editor.char_info = on;
+        }
+        if let Some(which) = self.editor.status_count {
+            config.editor.status_count = which;
         }
         if let Some(on) = self.editor.command_line {
             config.editor.command_line = on;

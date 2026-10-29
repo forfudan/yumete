@@ -6025,8 +6025,9 @@ fn counting_separates_han_from_characters() {
     ed.execute(":count").unwrap();
     let report = ed.status().to_string();
     // 21 漢字, plus three marks; two paragraphs, the blank line not counted.
+    assert!(report.contains("字詞 21"), "{report}");
     assert!(report.contains("漢字 21"), "{report}");
-    assert!(report.contains("字數 24"), "{report}");
+    assert!(report.contains("字符 24"), "{report}");
     assert!(report.contains("2 段"), "{report}");
     assert!(report.starts_with("全篇"), "{report}");
 }
@@ -19011,8 +19012,9 @@ fn ruby_markup_is_not_counted_as_writing() {
     ed.execute(":count").unwrap();
     let report = ed.status().to_string();
     // 永和九年歲在癸丑 is eight 字; the tags are not writing.
+    assert!(report.contains("字詞 8"), "{report}");
     assert!(report.contains("漢字 8"), "{report}");
-    assert!(report.contains("字數 10"), "{report}");
+    assert!(report.contains("字符 10"), "{report}");
 }
 
 #[test]
@@ -29630,6 +29632,28 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
 }
 
+/// **The live count and each heading's count** (2026-10-29), by Word's rule:
+/// a 漢字 is one and a Latin word is one.
+#[test]
+fn the_live_count_and_the_outline_count_by_words_and_han() {
+    let mut ed = typed("# 第一章\n\n那年冬天下了雪。\n\n## 一\n\nHello world, again.\n\n# 第二章\n\n他說 OK 吧。\n");
+    assert_eq!(ed.live_count(), Some((None, 21)));
+    ed.goto_line(11);
+    press(&mut ed, "x");
+    assert_eq!(ed.live_count(), Some((Some(4), 21)), "the selected line, and the whole");
+
+    let dir = tmp().join(format!("yumete-outline-count-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    let rows = ed.panel(crate::sidebar::Side::Left).unwrap().rows().to_vec();
+    assert_eq!(
+        rows.iter().map(|r| r.aside.as_deref()).collect::<Vec<_>>(),
+        vec![Some("11"), Some("3"), Some("4")],
+        "a chapter counts its sections too"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **vim's `gq` fills lines, and in visual mode `gq` and `gU` take the
 /// selection** (2026-10-29; nvim with `tw=12` was asked the same cases in
 /// `reflow::tests`). Visual `gU` used to wait for a motion with a selection
@@ -30828,14 +30852,15 @@ fn j_walks_a_drawn_row_and_gj_walks_a_line_in_either_layout() {
 #[test]
 fn counting_han_skips_the_ruby_teardown_without_changing_the_answer() {
     let ed = Editor::new();
-    let count = |text: &str| ed.han_in_rope(&ropey::Rope::from_str(text));
+    let count = |text: &str| ed.units_in_rope(&ropey::Rope::from_str(text));
     assert_eq!(count("那年冬天"), 4, "沒有注音：一塊一塊地數");
-    assert_eq!(count("abc 123\n"), 0, "一個漢字都沒有");
+    // Word's rule since 2026-10-29: a Latin word is one too.
+    assert_eq!(count("abc 123\n"), 2, "two words, no 漢字");
     // 有注音的時候照舊拆：讀音那一半不算字數，底下那個字算。
     assert_eq!(count("<ruby>漢字<rt>かんじ</rt></ruby>"), 2, "算底下那兩個字");
     assert_eq!(count("<ruby>漢<rt>汉</rt></ruby>"), 1, "讀音裏的漢字不算");
     // 快路徑只看「有沒有可能」，所以一個假的 `<ruby` 也要走得通。
-    assert_eq!(count("他寫了 <ruby 這三個字"), 7, "不成組的標記不改答案");
+    assert_eq!(count("他寫了 <ruby 這三個字"), 8, "不成組的標記不改答案：七個字和 ruby 一個詞");
 }
 
 /// **vim 鍵位：空行上的 `dd`／`dw`、空行上的 `p`、末行的 `yy`**（2026-10-13 報的，

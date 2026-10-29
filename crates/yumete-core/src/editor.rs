@@ -3294,6 +3294,13 @@ pub struct Editor {
     long_line: Option<usize>,
     /// Where the fences are, and their code parsed — see `fences.rs`.
     code_cache: RefCell<fences::CodeCache>,
+    /// **The live count's last answers** (2026-10-29): the whole buffer's,
+    /// keyed by buffer and revision, and the selection's, keyed by its span
+    /// too — so a frame that changed nothing counts nothing.
+    count_cache: RefCell<(Option<WholeCount>, Option<PickedCount>)>,
+    /// The count up to each line of the buffer the 大綱 is showing, so a
+    /// heading's count is two lookups (2026-10-29). Keyed as the one above.
+    line_counts: RefCell<Option<(u64, u64, Vec<usize>)>>,
     /// The drawn padding of the table last asked about (Feature #212).
     ///
     /// One table at a time: the page asks per line, every line of a table
@@ -4146,6 +4153,8 @@ impl Editor {
             code_colours: true,
             long_line: Some(Self::LONG_LINE),
             code_cache: RefCell::default(),
+            count_cache: RefCell::default(),
+            line_counts: RefCell::default(),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             pipe_region: RefCell::new(None),
@@ -5155,6 +5164,11 @@ fn switch_case(c: char) -> String {
         c.to_string()
     }
 }
+
+/// The whole buffer's count: buffer, revision, count.
+type WholeCount = (u64, u64, usize);
+/// The selection's: buffer, revision, start, end, count.
+type PickedCount = (u64, u64, usize, usize, usize);
 
 /// Whether `c` is a full-width character, so joining lines across it needs no
 /// space.

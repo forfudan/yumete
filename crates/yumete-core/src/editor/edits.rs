@@ -9,7 +9,7 @@ use super::*;
 
 /// **寫作進度只記得動一本書**（2026-10-13）。記的是「開檔那一刻有多少字」，而數一
 /// 遍是整份的——一份語料檔既不該進進度表，也不值那一趟。
-const BIGGEST_TO_LOG: usize = 16 * 1024 * 1024;
+pub(super) const BIGGEST_TO_LOG: usize = 16 * 1024 * 1024;
 
 impl Editor {
     // ---- Editing (Features #9 / #10) --------------------------------------
@@ -1641,7 +1641,7 @@ impl Editor {
         let small_enough = self.buffers[self.current].rope().len_bytes() <= BIGGEST_TO_LOG;
         if let Some(path) = opened.filter(|_| small_enough) {
             if !self.opened_with.contains_key(&path) {
-                let han = self.han_in_rope(self.buffers[self.current].rope());
+                let han = self.units_in_rope(self.buffers[self.current].rope());
                 self.opened_with.insert(path, han);
             }
         }

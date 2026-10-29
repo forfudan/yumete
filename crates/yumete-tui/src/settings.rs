@@ -235,6 +235,10 @@ pub fn complaints(config: &Config) -> Vec<String> {
     if !word.is_empty() && yumete_core::editor::AutoPairs::parse(word).is_none() {
         said.push(format!("[editor] auto_pairs = \"{word}\" 只能是 off、basic、full"));
     }
+    let word = config.editor.status_count.trim();
+    if !word.is_empty() && !matches!(word, "text" | "all" | "off") {
+        said.push(format!("[editor] status_count = \"{word}\" 只能是 text、all、off"));
+    }
     said
 }
 

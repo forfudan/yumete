@@ -781,6 +781,7 @@ impl Editor {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: None,
                 })
                 .collect(),
             View::Outline => self.outline_rows(),
@@ -901,6 +902,7 @@ impl Editor {
     /// the same question, so the front end draws one mark for both views.
     fn outline_rows(&self) -> Vec<crate::sidebar::Row> {
         let headings = self.outline_headings();
+        let counts = self.section_counts(&headings);
         let folded = |key: &(PathBuf, usize)| {
             self.outline_panel()
                 .is_some_and(|panel| panel.is_folded(key))
@@ -940,9 +942,53 @@ impl Editor {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: counts[i].map(|n| n.to_string()),
             });
         }
         rows
+    }
+
+    /// **Each heading's count**, its own text and the headings under it, by
+    /// Word's rule (2026-10-29) — what a writer checks a chapter's length by.
+    /// `None` for a code file's symbols and for a chapter in another file.
+    fn section_counts(&self, headings: &[crate::sidebar::Heading]) -> Vec<Option<usize>> {
+        if self.writes_code() {
+            return vec![None; headings.len()];
+        }
+        let buffer = self.current_buffer();
+        let rope = buffer.rope();
+        let (id, revision) = (buffer.id(), buffer.revision());
+        let mut cache = self.line_counts.borrow_mut();
+        if !cache.as_ref().is_some_and(|(i, r, _)| (*i, *r) == (id, revision)) {
+            let mut upto = Vec::with_capacity(rope.len_lines() + 1);
+            upto.push(0);
+            let mut line = String::new();
+            for n in 0..rope.len_lines() {
+                line.clear();
+                line.extend(rope.line(n).chunks());
+                let mut units = crate::units::Units::default();
+                self.units_in_line(&line, &mut units);
+                upto.push(upto[n] + units.total());
+            }
+            *cache = Some((id, revision, upto));
+        }
+        let upto = &cache.as_ref().expect("filled above").2;
+        let last = upto.len() - 1;
+        headings
+            .iter()
+            .enumerate()
+            .map(|(i, heading)| {
+                if !heading.path.as_os_str().is_empty() {
+                    return None;
+                }
+                let end = headings[i + 1..]
+                    .iter()
+                    .find(|next| next.path.as_os_str().is_empty() && next.level <= heading.level)
+                    .map_or(last, |next| next.line.min(last));
+                let start = (heading.line + 1).min(end);
+                Some(upto[end] - upto[start])
+            })
+            .collect()
     }
 
     /// `h` in the 大綱: fold what the highlight is on, or the heading holding
@@ -1087,6 +1133,7 @@ impl Editor {
                     quiet: false,
                     // 記號的偏移跟着前綴挪，不然逐字上色會指到行號上。
                     marks: row.marks.iter().map(|s| s.start + at..s.end + at).collect(),
+                    aside: None,
                 }
             })
             .collect()
@@ -1110,6 +1157,7 @@ impl Editor {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: None,
             })
             .collect()
     }
@@ -1128,6 +1176,7 @@ impl Editor {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: None,
             })
             .collect()
     }
@@ -1143,6 +1192,7 @@ impl Editor {
             wash: None,
             quiet: false,
             marks: Vec::new(),
+            aside: None,
         };
         let plain = |name: String, quiet: bool| Row {
             path: PathBuf::new(),
@@ -1153,6 +1203,7 @@ impl Editor {
             wash: None,
             quiet,
             marks: Vec::new(),
+            aside: None,
         };
         let Some((ch, answer)) = self.dictionary.as_ref() else {
             return Vec::new();

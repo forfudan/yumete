@@ -3859,9 +3859,9 @@ en = "the selection"
 [[message]]
 # :count 報字數
 key = "count.report"
-zht = "{0}  漢字 {1}  字數 {2}(不含空白)  {3} 段"
-zhs = "{0}  汉字 {1}  字数 {2}(不含空白)  {3} 段"
-en = "{0}  {1} han  {2} characters (no spaces)  {3} paragraphs"
+zht = "{0}  字詞 {1}  漢字 {2}  字符 {3}(不含空白)  {4} 段"
+zhs = "{0}  字词 {1}  汉字 {2}  字符 {3}(不含空白)  {4} 段"
+en = "{0}  {1} words  {2} han  {3} characters (no spaces)  {4} paragraphs"
 
 [[message]]
 # :count 的範圍：全篇
@@ -10070,6 +10070,20 @@ zhs = "横排时长段落折到下一行；关掉则跑出右边看不见"
 en = "long lines fold when set across; off, they run past the right edge"
 
 [[message]]
+# 設置面板：狀態欄字數
+key = "set.editor.status-count"
+zht = "狀態欄字數"
+zhs = "状态栏字数"
+en = "count on the status line"
+
+[[message]]
+# 設置面板：狀態欄字數的說明
+key = "set.editor.status-count.hint"
+zht = "在狀態欄顯示全文的字數，有選區時也顯示選區的"
+zhs = "在状态栏显示全文的字数，有选区时也显示选区的"
+en = "how long the file is, on the status line, and the selection too when there is one"
+
+[[message]]
 # 設置：Tab 打什么
 key = "set.editor.tab-inserts"
 zht = "Tab 打什麽"
@@ -10789,6 +10803,27 @@ key = "set.pick.status-bar.sunken"
 zht = "比紙更沉"
 zhs = "比纸更沉"
 en = "status bar.sunken"
+
+[[message]]
+# 設置面板：狀態欄字數 all
+key = "set.pick.status-count.all"
+zht = "所有文件"
+zhs = "所有文件"
+en = "every file"
+
+[[message]]
+# 設置面板：狀態欄字數 off
+key = "set.pick.status-count.off"
+zht = "關"
+zhs = "关"
+en = "off"
+
+[[message]]
+# 設置面板：狀態欄字數 text
+key = "set.pick.status-count.text"
+zht = "文本文件"
+zhs = "文本文件"
+en = "text files"
 
 [[message]]
 # 設置：让开系统输入法——自动
@@ -12251,6 +12286,20 @@ key = "ui.commands"
 zht = "命令"
 zhs = "命令"
 en = "commands"
+
+[[message]]
+# 狀態欄的字數：全文
+key = "ui.count"
+zht = "{0} 字"
+zhs = "{0} 字"
+en = "{0} words"
+
+[[message]]
+# 狀態欄的字數：選區 / 全文
+key = "ui.count-of"
+zht = "{0} / {1} 字"
+zhs = "{0} / {1} 字"
+en = "{0} / {1} words"
 
 [[message]]
 # 空格 i：光標不在任何一行數據上(2026-09-30 報的：非表格的地方按下去，

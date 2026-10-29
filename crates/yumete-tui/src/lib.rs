@@ -8992,7 +8992,23 @@ fn draw_sidebar(
         // 停，於是一個長標題是**悄悄**斷在那裏——而「斷了」和「本來就這麼長」是
         // 兩件事，讀者得看得出是哪一件。搜索結果那邊早就是這麼畫的（`elide`）。
         let room = to.saturating_sub(from + 1) as usize;
+        // **A heading's count at the right edge**, quiet, the way a table of
+        // contents sets its page numbers (2026-10-29). It goes when the
+        // title would be left fewer than eight cells.
+        let aside = row.aside.as_deref().filter(|a| room >= yumete_cjk::str_width(a) + 9);
+        let room = match aside {
+            Some(a) => room - yumete_cjk::str_width(a) - 1,
+            None => room,
+        };
         put_text(buf, from + 1, y, to, &elide(&line, room), style);
+        if let Some(a) = aside {
+            let x = to.saturating_sub(yumete_cjk::str_width(a) as u16);
+            let quiet = match picked {
+                true => style,
+                false => text.fg(ink.quiet()),
+            };
+            put_text(buf, x, y, to, a, quiet);
+        }
     }
     // Only the search panel has a caret to report.
     None
@@ -12684,6 +12700,7 @@ fn draw_status(
     command_row: bool,
 ) {
     let buffer = editor.current_buffer();
+    let count = status_count_of(editor, config);
     let ink = crate::theme::Palette::of(config);
     // **A raised strip, or a sunken one — never a reversal.** Reversing gave a
     // white bar under a dark page: the loudest thing on the screen, saying the
@@ -12777,8 +12794,15 @@ fn draw_status(
         // Where you are, and nothing else. What just happened is the row
         // below's question — and with no command row it comes back here, because
         // a message nobody can see is not a message.
-        let where_ = position_of(editor);
+        let where_bare = position_of(editor);
         let where_short = position_short(editor);
+        // **The live count rides after the position** (2026-10-29) and is the
+        // first thing to give way: it says how long the file is, and the
+        // position says where you are, which is what this line is for.
+        let where_ = match count.is_empty() {
+            true => where_bare.clone(),
+            false => format!("{where_bare}   {count}"),
+        };
         // **Whole fields give way, in order — the line is never cut through a
         // word.** It used to be one `format!`, and a narrow window simply
         // sliced the end off it: at twenty columns `long.csv   Ln 1, Col 1`
@@ -12860,6 +12884,12 @@ fn draw_status(
             if yumete_cjk::str_width(&line) <= room {
                 break line;
             }
+            // The count goes first, before even the gap: the user's call
+            // (2026-10-29), and a narrow window keeps the line as it was.
+            if where_ != where_bare && where_ != where_short && !where_.is_empty() {
+                where_ = &where_bare;
+                continue;
+            }
             if gap > 1 {
                 gap = 1;
                 continue;
@@ -12935,6 +12965,13 @@ fn draw_status(
     // thing on the screen that answers 「is the character wrong, or the font?」.
     // 行 and 列 place the caret; 字 is the extra one. So when keeping 字 costs
     // the whole readout, 字 is what goes.
+    // The count goes before any of the readout does, here as in the loop
+    // above: before its block name, before 字.
+    let wanted = !right[0].is_empty() && fits(&status) != right[0];
+    let status = match wanted && !count.is_empty() {
+        true => status.replacen(&format!("   {count}"), "", 1),
+        false => status,
+    };
     let status = match fits(&status).is_empty() && right.iter().any(|t| !t.is_empty()) {
         true => status.replace(&position_of(editor), &position_short(editor)),
         false => status,
@@ -13847,6 +13884,21 @@ fn box_in(
 /// the 縱 is which run of it; 字 is how far down that run. "Ln" and "Col"
 /// would each mean two things here. In a grid the useful pair is the row and
 /// *which column* — "column 143" of a line of 拆分 means nothing to anybody.
+/// **The live count**, as the status line writes it (2026-10-29): empty where
+/// `[editor] status_count` says not to show it — by default, in a code file.
+fn status_count_of(editor: &Editor, config: &Config) -> String {
+    let show = match config.editor.status_count.trim() {
+        "all" => true,
+        "off" => false,
+        _ => !editor.writes_code(),
+    };
+    match show.then(|| editor.live_count()).flatten() {
+        Some((Some(picked), whole)) => say!("ui.count-of", picked, whole),
+        Some((None, whole)) => say!("ui.count", whole),
+        None => String::new(),
+    }
+}
+
 fn position_of(editor: &Editor) -> String {
     position_in(editor, true)
 }

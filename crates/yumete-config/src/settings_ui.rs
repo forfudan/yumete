@@ -221,6 +221,12 @@ const EDITOR_AUTO_PAIRS_WAYS: &[Choice] = &[
     Choice { word: "full", label: "set.pick.auto-pairs.full" },
 ];
 
+const EDITOR_STATUS_COUNT_WAYS: &[Choice] = &[
+    Choice { word: "text", label: "set.pick.status-count.text" },
+    Choice { word: "all", label: "set.pick.status-count.all" },
+    Choice { word: "off", label: "set.pick.status-count.off" },
+];
+
 const EDITOR_INDENT_HINT_WAYS: &[Choice] = &[
     Choice { word: "none", label: "set.pick.indent-hint.none" },
     Choice { word: "symbol", label: "set.pick.indent-hint.symbol" },
@@ -583,6 +589,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "set.editor.char-info",
         hint: "set.editor.char-info.hint",
         factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "status_count",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_STATUS_COUNT_WAYS),
+        label: "set.editor.status-count",
+        hint: "set.editor.status-count.hint",
+        factory: r#""text""#,
     },
     Setting {
         table: "editor",
