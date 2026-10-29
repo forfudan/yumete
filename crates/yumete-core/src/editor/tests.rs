@@ -31448,6 +31448,43 @@ fn block_mode_measures_tabs_and_marks_and_pastes_past_the_end() {
     };
     assert_eq!(cut("jld"), "xy\na c\n");
     assert_eq!(cut("jlld"), "xy\na \n");
+
+    // A yank takes the cut part as spaces, and `c` pads as `d` does, then
+    // types at the block's left edge (nvim 0.12.5, every row).
+    let block = |start: &str, keys: &str, then: &str| {
+        let mut ed = typed(start);
+        ed.set_key_preset(KeyPreset::Vim);
+        press(&mut ed, "gg");
+        press(&mut ed, &keys[..keys.find('|').unwrap()]);
+        ed.on_key(Key::Ctrl('v'));
+        press(&mut ed, &keys[keys.find('|').unwrap() + 1..]);
+        press(&mut ed, then);
+        match then {
+            "c" => press(&mut ed, "XY"),
+            "d" => return text(&ed),
+            // Put what was yanked on a line of its own at the end.
+            _ => press(&mut ed, "Go"),
+        }
+        ed.on_key(Key::Esc);
+        if then == "y" {
+            press(&mut ed, "P");
+        }
+        text(&ed)
+    };
+    // The column survives a line too short for it, as vim's `curswant`.
+    assert_eq!(block("abcdef\nab\nabcdef\n", "4l|jj", "d"), "abcdf\nab\nabcdf\n");
+    let wide = "abcd\na中b\nabcd\n";
+    let tabbed = "abcdefghij\nab\tc\nabcdefghij\n";
+    for (start, keys, yanked, changed) in [
+        (wide, "|ljj", ["ab", "a ", "ab"], "XYcd\nXY b\nXYcd\n"),
+        (wide, "2l|ljj", ["cd", " b", "cd"], "abXY\na XY\nabXY\n"),
+        (tabbed, "3l|ljj", ["de", "  ", "de"], "abcXYfghij\nab XY   c\nabcXYfghij\n"),
+        (tabbed, "|lllljj", ["abcde", "ab   ", "abcde"], "XYfghij\nXY   c\nXYfghij\n"),
+    ] {
+        let want = format!("{start}{}\n{}\n{}\n", yanked[0], yanked[1], yanked[2]);
+        assert_eq!(block(start, keys, "y"), want, "y {keys}");
+        assert_eq!(block(start, keys, "c"), changed, "c {keys}");
+    }
 }
 
 /// **The `m` group after the review** (2026-10-29): `m` passes over straight
