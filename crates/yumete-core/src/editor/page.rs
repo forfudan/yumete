@@ -845,14 +845,15 @@ impl Editor {
     /// 把一份算好的逐行差直接安進來，不去問 git。
     ///
     /// 渲染的測試走這一扇門——它們要的是「這一行是新添的」，不是一個真的 git
-    /// 倉。#298 的第二步（跟**磁碟上那一份**比）將來也從這裏進。
+    /// 倉。跟**存盤那一份**比（#298 ②）走的是 [`Editor::refresh_vcs`]。
     pub fn set_vcs(&mut self, changes: crate::vcs::Changes) {
         let buffer = self.current_buffer();
         let (id, revision) = (buffer.id(), buffer.revision());
         self.vcs.insert(id, (revision, changes));
     }
 
-    /// 第 `line` 行（0 起算）跟 git 那一份比起來是什麼來歷。
+    /// 第 `line` 行（0 起算）跟 git 那一份（不在 git 裏就是存盤那一份）比起來
+    /// 是什麼來歷。
     ///
     /// Warning: **這一句只查快取，一個子進程都不會生**——它一幀要被問幾十次。真正去
     /// 喊 `git` 的是 [`Editor::refresh_vcs`]，而它只在開檔、存檔、`:view-diff on`
@@ -1070,10 +1071,15 @@ impl Editor {
         // 一段的竪綫就没了——記號釘在磁碟那一份的行號上，而緩衝區已經挪過了）。
         // `HEAD` 裏那一份按 buffer 存住：它只在存檔、換檔、`git` 那邊動過的時候
         // 纔會變，而**每一次停手**都要重比一遍。
+        // **Git has nothing to say, so the saved file does** (#298 ②,
+        // 2026-10-29): outside a repository, or for a file the repository does
+        // not track, the bar compares the buffer with what was last saved —
+        // what changed since then. A file never saved has nothing to compare.
         let base = match (force, self.vcs_base.get(&id)) {
             (false, Some(base)) => Some(base.clone()),
             _ => {
-                let base = crate::vcs::Changes::head_text(&path);
+                let base = crate::vcs::Changes::head_text(&path)
+                    .or_else(|| std::fs::read_to_string(&path).ok());
                 match &base {
                     Some(text) => {
                         self.vcs_base.insert(id, text.clone());

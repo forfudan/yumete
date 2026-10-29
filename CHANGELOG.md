@@ -24,6 +24,7 @@ in `docs/development.md` §5.2.
 - **Counting follows Word's rule**: a 漢字 is one and a Latin word is one. `:count`, the daily target and `:count-progress` used to count 漢字 only, so English read 0; Chinese counts are unchanged. `:count` reports the new count first.
 - **`.` under the helix keymap is helix's `.`**: it types the last insert again (the key that went into insert mode and what was typed) and no longer repeats a `d`, an `r` or a paste. The vim keymap keeps vim's `.`, which repeats any change.
 - **Enter between an empty pair opens it onto three lines**, as helix does, with the closer on the line below; it used to ride down stuck to the caret.
+- **The change bar works outside git**: a file not in a repository, or one the repository does not track, is compared with its saved copy, so the bar shows what changed since the last save.
 - **An English file exports as English**: the page's language comes from the text (`lang="en"`, a Latin serif, spaced paragraphs, no two-字 indent), and a line break between two Latin lines is a space, as CommonMark reads it. Chinese keeps its line breaks and its indent.
 - **`o` in a code file indents after an opener** (`fn f() {`, `def f():`), as Enter already did.
 

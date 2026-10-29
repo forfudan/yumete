@@ -29632,6 +29632,32 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
 }
 
+/// **Outside git the change bar compares with the saved file** (#298 ②,
+/// 2026-10-29): a changed line is marked until the next save clears it.
+#[test]
+fn outside_git_the_change_bar_compares_with_the_saved_file() {
+    let dir = tmp().join(format!("yumete-saved-bar-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.txt");
+    std::fs::write(&file, "一\n二\n三\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    // The factory turns it on from the config; a bare editor starts with it off.
+    ed.set_diff_gutter(true);
+    assert_eq!(ed.vcs_mark(1), None, "nothing changed yet");
+    ed.goto_line(2);
+    press(&mut ed, "A改");
+    ed.on_key(Key::Esc);
+    ed.refresh_vcs(false);
+    assert_eq!(ed.vcs_mark(1), Some(crate::vcs::Change::Changed), "the edited line");
+    assert_eq!(ed.vcs_mark(0), None);
+    ed.execute(":w").unwrap();
+    ed.refresh_vcs(true);
+    assert_eq!(ed.vcs_mark(1), None, "saved, so nothing differs");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **helix's `:earlier` and `:later`** (2026-10-29): a number of steps, or a
 /// span of time read in helix's units.
 #[test]
