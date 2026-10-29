@@ -1593,6 +1593,16 @@ impl Editor {
             crate::picker::Item::Paste(None, name) => {
                 Some((name, head(self.clipboard_seen.as_deref()?)))
             }
+            // **A reference, with the lines around it** (2026-10-29), the
+            // way helix's reference picker previews.
+            crate::picker::Item::Place(label, path, line, _) => {
+                let lines = (line.saturating_sub(rows / 2)..line + rows / 2 + 1)
+                    .map_while(|n| self.line_of_file(&path, n))
+                    .collect();
+                Some((label, lines))
+            }
+            // A code action's title is the whole of what there is to show.
+            crate::picker::Item::Action(..) => None,
             // **The entry itself, beside the list of names** (2026-09-25).
             // The preview a picker already has is exactly the 「選中的條目浮窗
             // 顯示」 the request asked for — no second mechanism.
@@ -1657,6 +1667,8 @@ impl Editor {
             // **釘住它**，直到光標一動（2026-09-25）。面板關掉，鍵回正文——
             // 「直到光標移動」本來就要求鍵已經不在面板裏了。
             Some(crate::picker::Item::Wiki(name, _)) => self.pin_wiki_entry(name),
+            Some(crate::picker::Item::Place(_, path, line, column)) => self.go_to_place(&path, line, column),
+            Some(crate::picker::Item::Action(which, _)) => self.take_action(which),
             None => self.status = say!("picker.nothing-matched"),
         }
     }

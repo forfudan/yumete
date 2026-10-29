@@ -650,6 +650,10 @@ impl Editor {
                 self.git_diff_against(commit.as_deref());
                 Ok(CommandOutcome::Continue)
             }
+            Command::LspRename(name) => {
+                self.ask_rename(&name);
+                Ok(CommandOutcome::Continue)
+            }
             Command::GitShow(commit) => {
                 self.show_the_committed_draft(commit.as_deref());
                 Ok(CommandOutcome::Continue)

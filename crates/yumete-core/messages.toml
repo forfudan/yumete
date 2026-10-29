@@ -1478,6 +1478,14 @@ en = "redo to so many steps or so long on"
 find = "重做 以後 以后 時間 时间 redo later time"
 
 [[message]]
+# : 命令選單裏 lsp-rename 那一項的説明(commands 組)
+key = "cmd.commands.lsp-rename"
+zht = "讓語言服務器把光標下的名字各處一起改"
+zhs = "让语言服务器把光标下的名字各处一起改"
+en = "rename the name under the caret everywhere, through the language server"
+find = "改名 重命名 rename refactor lsp"
+
+[[message]]
 # : 命令選單裏 new 那一項的説明(commands 組)
 key = "cmd.commands.new"
 zht = "開一個空的緩衝區"
@@ -5484,6 +5492,13 @@ zhs = "打开这个文件"
 en = "open this file"
 
 [[message]]
+# g 選單裏的 r ——用到這個的每一處（語言服務器）
+key = "hint.goto.references"
+zht = "用到它的每一處"
+zhs = "用到它的每一处"
+en = "every place it is used"
+
+[[message]]
 # g 選單裏的 v(只在 vim 鍵位下)——重選上一次那一段
 key = "hint.goto.reselect"
 zht = "重選上一次那一段"
@@ -6170,6 +6185,13 @@ zhs = "宽窄"
 en = "wide / narrow"
 
 [[message]]
+# 空格組：這裏能做什麼（語言服務器）
+key = "hint.space.actions"
+zht = "代碼動作"
+zhs = "代码动作"
+en = "code actions"
+
+[[message]]
 # g 組：全項目搜索
 key = "hint.space.advanced-search"
 zht = "搜索面板"
@@ -6333,6 +6355,13 @@ key = "hint.space.record-panel"
 zht = "顯示表格行記錄(邊欄)"
 zhs = "显示表格行记录(边栏)"
 en = "show row record of table (sidebar)"
+
+[[message]]
+# 空格組：改名（語言服務器）
+key = "hint.space.rename"
+zht = "改名（各處一起改）"
+zhs = "改名（各处一起改）"
+en = "rename it everywhere"
 
 [[message]]
 # space b: 
@@ -7835,11 +7864,46 @@ en = "no command answers that — say it another way, or backspace to `:`"
 # ── lsp ──────────────────────────────────────────────
 
 [[message]]
+# 代碼動作做完了：哪一個，幾處，幾個檔
+key = "lsp.action-done"
+zht = "{0}：改了 {1} 處，在 {2} 個檔裏"
+zhs = "{0}：改了 {1} 处，在 {2} 个文件里"
+en = "{0}: {1} places in {2} files"
+
+[[message]]
+# 語言服務器要求改檔，改完了：幾處，幾個檔
+key = "lsp.applied"
+zht = "語言服務器改了 {0} 處，在 {1} 個檔裏"
+zhs = "语言服务器改了 {0} 处，在 {1} 个文件里"
+en = "the language server changed {0} places in {1} files"
+
+[[message]]
 # gd 問出去了，還没回話
 key = "lsp.asking"
 zht = "向語言服務器詢問定義位置"
 zhs = "向语言服务器询问定义位置"
 en = "asking the language server where this is defined"
+
+[[message]]
+# 空格 a 問出去了
+key = "lsp.asking-actions"
+zht = "向語言服務器詢問這裏可做的事"
+zhs = "向语言服务器询问这里可做的事"
+en = "asking the language server what it can do here"
+
+[[message]]
+# gr 問出去了
+key = "lsp.asking-references"
+zht = "向語言服務器詢問用到它的地方"
+zhs = "向语言服务器询问用到它的地方"
+en = "asking the language server where it is used"
+
+[[message]]
+# :lsp-rename 問出去了
+key = "lsp.asking-rename"
+zht = "請語言服務器改名"
+zhs = "请语言服务器改名"
+en = "asking the language server to rename it"
 
 [[message]]
 # 空格 k 問出去了，還没回話
@@ -7863,6 +7927,13 @@ zhs = "{0} 起不来({1})——档照常开，只是没人查错"
 en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
 
 [[message]]
+# gr、空格 r、空格 a 在非代碼檔裏
+key = "lsp.code-only"
+zht = "這個要問語言服務器，只在代碼檔裏用"
+zhs = "这个要问语言服务器，只在代码文件里用"
+en = "this asks the language server, so only in a code file"
+
+[[message]]
 # 起服務器用的是項目自己帶的那一個，不是 PATH 上的
 key = "lsp.from-the-project"
 zht = "語言服務器：本項目路徑中的 {0}"
@@ -7877,11 +7948,25 @@ zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装
 en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
 
 [[message]]
+# 空格 a 問了，服務器說這裏沒什麼可做
+key = "lsp.no-actions"
+zht = "語言服務器在這裏沒有可做的"
+zhs = "语言服务器在这里没有可做的"
+en = "the language server has nothing to do here"
+
+[[message]]
 # 語言服務器起來了、進程活着，卻一直不回 initialize
 key = "lsp.no-answer"
 zht = "{0} 的語言服務器已開啟但{1}秒未響應"
 zhs = "{0} 的语言服务器已开启但{1}秒未响应"
 en = "the {0} language server started but has not answered in {1} seconds"
+
+[[message]]
+# gr 問了，服務器說哪兒都沒用到
+key = "lsp.no-references"
+zht = "語言服務器未查到別處用到它"
+zhs = "语言服务器未查到别处用到它"
+en = "the language server found no other use of it"
 
 [[message]]
 # 按 空格 k 的時候：這個語言在設置裏根本没寫服務器
@@ -7924,6 +8009,34 @@ key = "lsp.ready"
 zht = "已就緒"
 zhs = "已就绪"
 en = "ready"
+
+[[message]]
+# 改名的答案是空的
+key = "lsp.rename-changed-nothing"
+zht = "語言服務器沒有要改的地方"
+zhs = "语言服务器没有要改的地方"
+en = "the language server had nothing to change"
+
+[[message]]
+# :lsp-rename 後面沒寫新名
+key = "lsp.rename-needs-a-name"
+zht = "要給一個新名：:lsp-rename <新名>"
+zhs = "要给一个新名：:lsp-rename <新名>"
+en = "give it a new name: :lsp-rename <name>"
+
+[[message]]
+# 語言服務器不肯改名，後面是它自己的話
+key = "lsp.rename-refused"
+zht = "語言服務器不改：{0}"
+zhs = "语言服务器不改：{0}"
+en = "the language server would not rename it: {0}"
+
+[[message]]
+# 改名做完了：幾處，幾個檔
+key = "lsp.renamed"
+zht = "已重命名 {0} 處（{1} 個文件）"
+zhs = "已重命名 {0} 处（{1} 个文件）"
+en = "renamed {0} places in {1} files"
 
 [[message]]
 # gd 問出去之前，服務器還在讀項目(#431，2026-10-01 寫的)
@@ -8208,6 +8321,13 @@ en = "candidate panel: {0}"
 # ── picker ────────────────────────────────────────────────────────────
 
 [[message]]
+# 空格 a 的挑選器標題
+key = "picker.actions"
+zht = "代碼操作"
+zhs = "代码操作"
+en = "code actions"
+
+[[message]]
 # 空格 b 開的換緩衝區那一格，標題
 key = "picker.buffers"
 zht = "緩衝區"
@@ -8265,6 +8385,13 @@ key = "picker.recent-projects"
 zht = "最近開過的項目"
 zhs = "最近开过的项目"
 en = "recent projects"
+
+[[message]]
+# gr 的挑選器標題
+key = "picker.references"
+zht = "引用（{0} 處）"
+zhs = "引用（{0} 处）"
+en = "where it is used ({0})"
 
 [[message]]
 # 挑詞條那扇面板的標題

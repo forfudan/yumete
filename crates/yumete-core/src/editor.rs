@@ -2580,6 +2580,17 @@ pub struct Editor {
     ///
     /// Warning: **列是 UTF-16 碼元**，因爲那是問出去的那一頭要的單位。
     definition_query: Option<(PathBuf, usize, usize)>,
+    /// **`gr`'s question, and where it was asked from** (#54, 2026-10-29).
+    references_query: Option<(PathBuf, usize, usize)>,
+    asked_refs_from: Option<(u64, usize)>,
+    /// `:lsp-rename`'s question: where, and the new name.
+    rename_query: Option<(PathBuf, usize, usize, String)>,
+    /// `空格 a`'s question: the file and the span, in (line, UTF-16 column).
+    actions_query: Option<ActionsQuery>,
+    /// What the server offered last, for the picker's choice to name.
+    offered_actions: Vec<crate::lsp::Action>,
+    /// A picked action's command, for the front end to send.
+    command_query: Option<(String, String, String)>,
     /// **`gd` 問出去的那一刻，光標在哪個緩衝區的哪一格**（2026-10-07 審出來的）。
     ///
     /// 答案是隔幾百毫秒纔回來的，而那幾百毫秒裏人没有停下來。從前答案一回來就
@@ -3980,6 +3991,12 @@ impl Editor {
             screenshot_request: None,
             dictionary_query: None,
             definition_query: None,
+            references_query: None,
+            asked_refs_from: None,
+            rename_query: None,
+            actions_query: None,
+            offered_actions: Vec::new(),
+            command_query: None,
             asked_where_from: None,
             say_it_again: false,
             config_reload: false,
@@ -5165,6 +5182,9 @@ fn switch_case(c: char) -> String {
     }
 }
 
+/// `空格 a`'s question: the file, and the span from and to, each (line,
+/// UTF-16 column).
+pub type ActionsQuery = (PathBuf, (usize, usize), (usize, usize));
 /// The whole buffer's count: buffer, revision, count.
 type WholeCount = (u64, u64, usize);
 /// The selection's: buffer, revision, start, end, count.
@@ -5426,6 +5446,7 @@ mod sidebar;
 mod tables;
 mod undo;
 mod verbs;
+mod refactor;
 mod wiki;
 pub use wiki::{WikiLine, WikiPart, WikiView};
 mod words;

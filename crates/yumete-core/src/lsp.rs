@@ -115,7 +115,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -163,6 +163,81 @@ pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> Str
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/definition","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
         uri = json_string(&uri_of(path)),
     )
+}
+
+/// `textDocument/references` — 「where else is this used?」 (`gr`, 2026-10-29),
+/// the declaration included, as helix asks it.
+pub fn references(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/references","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}},"context":{{"includeDeclaration":true}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `textDocument/rename` — the thing under the caret, called `new_name`
+/// wherever it is used (`:lsp-rename`, 2026-10-29).
+pub fn rename(id: i64, path: &Path, line: usize, utf16_column: usize, new_name: &str) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/rename","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}},"newName":{name}}}}}"#,
+        uri = json_string(&uri_of(path)),
+        name = json_string(new_name),
+    )
+}
+
+/// `textDocument/codeAction` — what can be done here (`空格 a`, 2026-10-29).
+///
+/// `from` and `to` are (line, UTF-16 column). `diagnostics` are the server's
+/// own diagnostics over that range, as it sent them: a quick fix is found by
+/// the complaint it fixes, so they go back word for word.
+pub fn code_action(id: i64, path: &Path, from: (usize, usize), to: (usize, usize), diagnostics: &[String]) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/codeAction","params":{{"textDocument":{{"uri":{uri}}},"range":{{"start":{{"line":{},"character":{}}},"end":{{"line":{},"character":{}}}}},"context":{{"diagnostics":[{}],"triggerKind":1}}}}}}"#,
+        from.0,
+        from.1,
+        to.0,
+        to.1,
+        diagnostics.join(","),
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `workspace/executeCommand` — a code action that is a command rather than
+/// an edit. The server usually answers by asking us to apply an edit
+/// ([`Notice::ApplyEdit`]).
+pub fn execute_command(id: i64, command: &str, arguments: &str) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"workspace/executeCommand","params":{{"command":{command},"arguments":{arguments}}}}}"#,
+        command = json_string(command),
+    )
+}
+
+/// The answer to a server's `workspace/applyEdit`.
+pub fn applied(id: &str, applied: bool) -> String {
+    format!(r#"{{"jsonrpc":"2.0","id":{id},"result":{{"applied":{applied}}}}}"#)
+}
+
+/// One change to one file: replace a span with text. Lines from zero, columns
+/// in **UTF-16 code units**, as the wire has them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextEdit {
+    pub path: PathBuf,
+    pub from: (usize, usize),
+    pub to: (usize, usize),
+    pub text: String,
+}
+
+/// **One thing a server offers to do** (`textDocument/codeAction`): the title
+/// to show, and an edit, or a command to run, or both.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action {
+    pub title: String,
+    pub edits: Vec<TextEdit>,
+    /// The command's name and its arguments as raw JSON, to send back as
+    /// [`execute_command`] has them.
+    pub command: Option<(String, String)>,
+    /// Which server offered it — a command goes back to the one that knows
+    /// it. Filled in by the front end; empty as read.
+    pub server: String,
 }
 
 /// `textDocument/hover` — 「這是什麽？」 (#53 ③).
@@ -260,7 +335,9 @@ pub enum Notice {
     /// it named none.
     Ready { signature_triggers: Vec<String> },
     /// `textDocument/publishDiagnostics` — everything now true about one file.
-    Said { path: PathBuf, said: Vec<Problem> },
+    /// `raw` keeps each diagnostic as the server wrote it, with the lines it
+    /// spans: a code action is asked with the ones it is about.
+    Said { path: PathBuf, said: Vec<Problem>, raw: Vec<(usize, usize, String)> },
     /// A request *from* the server that wants an answer (`window/workDoneProgress
     /// /create`, `client/registerCapability`). Warning: **An unanswered request can
     /// stall a server** — `rust-analyzer` waits on its own registration — so
@@ -294,7 +371,17 @@ pub enum Notice {
         incomplete: bool,
         /// 簽名那一問的答案（2026-10-08）。同上：讀出來擺着，前端拿它要的那一格。
         signature: Option<Signature>,
+        /// A rename's answer: the edits it makes (2026-10-29).
+        edits: Vec<TextEdit>,
+        /// A code action's answer: what is on offer.
+        actions: Vec<Action>,
+        /// What the server said when it refused (`error.message`), as a
+        /// rename refuses a keyword.
+        error: Option<String>,
     },
+    /// **The server asks us to change files** (`workspace/applyEdit`), the way
+    /// a code action that is a command finishes.
+    ApplyEdit { id: String, edits: Vec<TextEdit> },
     /// **服務器說它在忙，或者忙完了**（`$/progress`，2026-10-01）。
     ///
     /// `token` 是那一件活自己的號碼，`begin` 開一件、`end` 關一件（`report`
@@ -417,6 +504,10 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
         },
         (Some("textDocument/publishDiagnostics"), _) => said(&value),
         (Some("$/progress"), _) => working(&value),
+        (Some("workspace/applyEdit"), _) if asked.is_some() => Notice::ApplyEdit {
+            id: asked.unwrap_or_default(),
+            edits: workspace_edit(value.pointer("/params/edit")),
+        },
         // A request from the server: it has both a method *and* an id.
         (Some(_), Some(id)) => Notice::Asked { id: asked.unwrap_or_else(|| id.to_string()) },
         // 號碼是字串的請求——同上一檔，只是號碼不是數字。
@@ -433,9 +524,84 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
                 .and_then(|i| i.as_bool())
                 .unwrap_or(false),
             signature: signature(value.get("result")),
+            edits: workspace_edit(value.get("result")),
+            actions: actions(value.get("result")),
+            error: value
+                .pointer("/error/message")
+                .and_then(|m| m.as_str())
+                .map(|m| m.trim().to_string()),
         },
         _ => Notice::Nothing,
     }
+}
+
+/// **A `WorkspaceEdit`, flattened to edits**: `changes` (a map of URI to
+/// edits) or `documentChanges` (a list of per-file edits). Creating, renaming
+/// and deleting files are left out — nothing this editor asks for makes them.
+fn workspace_edit(value: Option<&serde_json::Value>) -> Vec<TextEdit> {
+    let Some(value) = value.filter(|v| v.is_object()) else {
+        return Vec::new();
+    };
+    let one = |path: &Path, edit: &serde_json::Value| -> Option<TextEdit> {
+        let at = |key: &str, end: &str| -> Option<usize> {
+            edit.pointer(&format!("/range/{key}/{end}"))?.as_u64().map(|n| n as usize)
+        };
+        Some(TextEdit {
+            path: path.to_path_buf(),
+            from: (at("start", "line")?, at("start", "character")?),
+            to: (at("end", "line")?, at("end", "character")?),
+            text: edit.get("newText")?.as_str()?.to_string(),
+        })
+    };
+    let mut out = Vec::new();
+    if let Some(changes) = value.get("changes").and_then(|c| c.as_object()) {
+        for (uri, edits) in changes {
+            let Some(path) = path_of(uri) else { continue };
+            for edit in edits.as_array().into_iter().flatten() {
+                out.extend(one(&path, edit));
+            }
+        }
+    }
+    for change in value.get("documentChanges").and_then(|c| c.as_array()).into_iter().flatten() {
+        let Some(path) = change.pointer("/textDocument/uri").and_then(|u| u.as_str()).and_then(path_of) else {
+            continue;
+        };
+        for edit in change.get("edits").and_then(|e| e.as_array()).into_iter().flatten() {
+            out.extend(one(&path, edit));
+        }
+    }
+    out
+}
+
+/// **A `codeAction` answer**: each entry a `CodeAction` (a title, an edit, a
+/// command) or a bare `Command`. One the server marks `disabled` is left out.
+fn actions(result: Option<&serde_json::Value>) -> Vec<Action> {
+    let Some(list) = result.and_then(|r| r.as_array()) else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter(|entry| entry.get("disabled").is_none())
+        .filter_map(|entry| {
+            let title = entry.get("title")?.as_str()?.to_string();
+            // A bare `Command` has its command as a string; a `CodeAction`
+            // has a `Command` object there.
+            let command = match entry.get("command") {
+                Some(serde_json::Value::String(name)) => Some((
+                    name.clone(),
+                    entry.get("arguments").map(|a| a.to_string()).unwrap_or_else(|| "[]".to_string()),
+                )),
+                Some(object) => object.get("command").and_then(|c| c.as_str()).map(|name| {
+                    (
+                        name.to_string(),
+                        object.get("arguments").map(|a| a.to_string()).unwrap_or_else(|| "[]".to_string()),
+                    )
+                }),
+                None => None,
+            };
+            let edits = workspace_edit(entry.get("edit"));
+            (!edits.is_empty() || command.is_some()).then_some(Action { title, edits, command, server: String::new() })
+        })
+        .collect()
 }
 
 /// `$/progress` — 一件活開了還是完了。
@@ -1072,12 +1238,17 @@ fn said(value: &serde_json::Value) -> Notice {
     let Some(path) = path_of(uri) else {
         return Notice::Nothing;
     };
-    let said = params
-        .and_then(|p| p.get("diagnostics"))
-        .and_then(|d| d.as_array())
-        .map(|list| list.iter().filter_map(one).collect())
-        .unwrap_or_default();
-    Notice::Said { path, said }
+    let list = params.and_then(|p| p.get("diagnostics")).and_then(|d| d.as_array());
+    let said = list.map(|list| list.iter().filter_map(one).collect()).unwrap_or_default();
+    let raw = list
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let line = |end: &str| entry.pointer(&format!("/range/{end}/line"))?.as_u64().map(|n| n as usize);
+            Some((line("start")?, line("end")?, entry.to_string()))
+        })
+        .collect();
+    Notice::Said { path, said, raw }
 }
 
 /// One entry of the `diagnostics` array.
@@ -1238,7 +1409,7 @@ mod tests {
               {"range":{"start":{"line":9,"character":0},"end":{"line":9,"character":4}},
                "severity":2,"message":"unused"}
             ]}}"#;
-        let Notice::Said { path, said } = read(message, 1) else {
+        let Notice::Said { path, said, .. } = read(message, 1) else {
             panic!("a publish is a publish");
         };
         assert_eq!(path, PathBuf::from("/tmp/a.rs"));
@@ -1263,7 +1434,7 @@ mod tests {
     #[test]
     fn an_empty_list_is_a_file_with_nothing_wrong_not_a_message_to_drop() {
         let message = r#"{"method":"textDocument/publishDiagnostics","params":{"uri":"file:///a","diagnostics":[]}}"#;
-        assert_eq!(read(message, 1), Notice::Said { path: PathBuf::from("/a"), said: Vec::new() });
+        assert_eq!(read(message, 1), Notice::Said { path: PathBuf::from("/a"), said: Vec::new(), raw: Vec::new() });
     }
 
     #[test]
@@ -1288,7 +1459,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None,
+                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
             }
         );
         // A *request* from the server has a method as well as an id, and must
@@ -1646,5 +1817,62 @@ mod tests {
             first_paragraph("`甲` 和 `乙` 都是字。\n").as_deref(),
             Some("`甲` 和 `乙` 都是字。")
         );
+    }
+
+    /// **A rename's edits in both of the protocol's shapes** (#54,
+    /// 2026-10-29): `changes`, a map of URI to edits, and `documentChanges`,
+    /// a list of per-file edits — rust-analyzer sends the second.
+    #[test]
+    fn a_workspace_edit_is_read_in_both_shapes() {
+        let changes = r#"{"jsonrpc":"2.0","id":7,"result":{"changes":{"file:///a/b.rs":[{"range":{"start":{"line":1,"character":8},"end":{"line":1,"character":9}},"newText":"b"}]}}}"#;
+        let Notice::Answer { edits, .. } = read(changes, 1) else { panic!() };
+        assert_eq!(
+            edits,
+            vec![TextEdit { path: PathBuf::from("/a/b.rs"), from: (1, 8), to: (1, 9), text: "b".into() }]
+        );
+        let documents = r#"{"jsonrpc":"2.0","id":7,"result":{"documentChanges":[{"textDocument":{"uri":"file:///a/b.rs","version":3},"edits":[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":2}},"newText":"pub"},{"range":{"start":{"line":4,"character":1},"end":{"line":4,"character":1}},"newText":"x"}]},{"kind":"create","uri":"file:///a/c.rs"}]}}"#;
+        let Notice::Answer { edits, .. } = read(documents, 1) else { panic!() };
+        assert_eq!(edits.len(), 2, "two edits; the file creation is left out");
+        assert_eq!(edits[1].from, (4, 1));
+        let refused = r#"{"jsonrpc":"2.0","id":7,"error":{"code":-32602,"message":"No references found at position"}}"#;
+        let Notice::Answer { edits, error, .. } = read(refused, 1) else { panic!() };
+        assert!(edits.is_empty());
+        assert_eq!(error.as_deref(), Some("No references found at position"));
+    }
+
+    /// **Code actions: a `CodeAction` with an edit, one with a command, a
+    /// bare `Command`, and a disabled one left out.**
+    #[test]
+    fn code_actions_are_read_with_their_edits_and_commands() {
+        let message = r#"{"jsonrpc":"2.0","id":8,"result":[
+            {"title":"Prefix with _","kind":"quickfix","edit":{"changes":{"file:///a/b.rs":[{"range":{"start":{"line":1,"character":8},"end":{"line":1,"character":8}},"newText":"_"}]}}},
+            {"title":"Extract","kind":"refactor","command":{"title":"Extract","command":"x.extract","arguments":[{"at":3}]}},
+            {"title":"Organize","command":"x.organize","arguments":["a"]},
+            {"title":"Inline","kind":"refactor.inline","disabled":{"reason":"nothing to inline"}}
+        ]}"#;
+        let Notice::Answer { actions, .. } = read(message, 1) else { panic!() };
+        let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+        assert_eq!(titles, vec!["Prefix with _", "Extract", "Organize"]);
+        assert_eq!(actions[0].edits.len(), 1);
+        assert_eq!(actions[1].command, Some(("x.extract".to_string(), r#"[{"at":3}]"#.to_string())));
+        assert_eq!(actions[2].command, Some(("x.organize".to_string(), r#"["a"]"#.to_string())));
+    }
+
+    /// **The server asks for an edit** (`workspace/applyEdit`), with a string
+    /// id or a number one, and the diagnostics keep their raw form.
+    #[test]
+    fn an_apply_edit_request_and_raw_diagnostics_are_read() {
+        let message = r#"{"jsonrpc":"2.0","id":"4","method":"workspace/applyEdit","params":{"edit":{"changes":{"file:///a/b.rs":[{"range":{"start":{"line":0,"character":3},"end":{"line":0,"character":7}},"newText":"start"}]}}}}"#;
+        let Notice::ApplyEdit { id, edits } = read(message, 1) else { panic!() };
+        assert_eq!(id, "\"4\"");
+        assert_eq!(edits[0].text, "start");
+        assert_eq!(applied(&id, true), r#"{"jsonrpc":"2.0","id":"4","result":{"applied":true}}"#);
+        let said = r#"{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":"file:///a/b.rs","diagnostics":[{"range":{"start":{"line":2,"character":0},"end":{"line":3,"character":1}},"message":"unused","code":"E1"}]}}"#;
+        let Notice::Said { raw, .. } = read(said, 1) else { panic!() };
+        assert_eq!(raw.len(), 1);
+        assert_eq!((raw[0].0, raw[0].1), (2, 3));
+        assert!(raw[0].2.contains(r#""code":"E1""#));
+        let asked = code_action(5, Path::new("/a/b.rs"), (2, 0), (2, 4), &[raw[0].2.clone()]);
+        assert!(asked.contains(r#""diagnostics":[{"#) && asked.contains("unused"), "{asked}");
     }
 }
