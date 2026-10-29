@@ -7,6 +7,12 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **`:h`** opens the help, as in vim.
+
 ## 0.14.0 · 2026-10-29
 
 Fifty-nine commits, three days after 0.13.0. Writing gets help it did not have:
