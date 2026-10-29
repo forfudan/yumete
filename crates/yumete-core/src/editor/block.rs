@@ -31,6 +31,10 @@ pub(super) struct Block {
     pub anchor: usize,
     pub cursor: usize,
     pub to_line_end: bool,
+    /// The column `j` and `k` aim the moving corner at, kept across a line
+    /// too short for it, as vim's `curswant` (2026-10-29: `C-v l j j` through
+    /// a tab or a short line came out at that line's column).
+    pub goal: Option<usize>,
 }
 
 /// What `I`, `A` and `c` are waiting to copy when insert ends.
@@ -133,6 +137,32 @@ fn at_column(rope: &crate::Rope, tab: usize, line: usize, column: usize) -> usiz
         .unwrap_or_else(|| motion::line_end(rope, rope.line_to_char(line)))
 }
 
+/// **The text of one line's piece, as a block yank takes it**: a wide
+/// character or a tab the block's edge cuts is taken as spaces, one for each
+/// of its columns inside the block (2026-10-29, nvim 0.12.5: `ll C-v l j y` on
+/// `abcd` over `a中b` takes `cd` and ` b`). A mark on a cut letter goes with
+/// it. `right` is inclusive, `usize::MAX` after `$`.
+fn piece_text(rope: &crate::Rope, tab: usize, line: usize, piece: std::ops::Range<usize>, left: usize, right: usize) -> String {
+    let mut out = String::new();
+    let mut cut_at = None;
+    for (at, column, wide) in cells(rope, tab, line) {
+        if !piece.contains(&at) {
+            continue;
+        }
+        let end = column + wide;
+        if column >= left && end <= right.saturating_add(1) {
+            out.push(rope.char(at));
+            continue;
+        }
+        // A mark has its letter's column: the letter's spaces stand for both.
+        if cut_at != Some(column) {
+            out.push_str(&" ".repeat(end.min(right.saturating_add(1)) - column.max(left)));
+            cut_at = Some(column);
+        }
+    }
+    out
+}
+
 impl super::Editor {
     /// The block's lines and columns: first and last line, left and right
     /// display column (inclusive; `usize::MAX` after `$`).
@@ -207,7 +237,7 @@ impl super::Editor {
                 let at = self.sel.head();
                 self.extend = false;
                 self.vim_lines = false;
-                self.block = Some(Block { anchor: at, cursor: at, to_line_end: false });
+                self.block = Some(Block { anchor: at, cursor: at, to_line_end: false, goal: None });
                 self.show_block();
             }
         }
@@ -241,7 +271,7 @@ impl super::Editor {
                 Key::Esc | Key::Ctrl('v') | Key::Ctrl('c') => return self.leave_block(block.cursor),
                 Key::Char('v' | 'V') => return self.leave_block(block.cursor),
                 Key::Char('o') => {
-                    self.block = Some(Block { anchor: block.cursor, cursor: block.anchor, ..block });
+                    self.block = Some(Block { anchor: block.cursor, cursor: block.anchor, goal: None, ..block });
                     return self.show_block();
                 }
                 // The other corner on the same line: the columns trade places.
@@ -251,7 +281,7 @@ impl super::Editor {
                     let (lc, cc, _) = place(rope, self.tab_stop, block.cursor);
                     let anchor = at_column(rope, self.tab_stop, la, cc);
                     let cursor = at_column(rope, self.tab_stop, lc, ca);
-                    self.block = Some(Block { anchor, cursor, ..block });
+                    self.block = Some(Block { anchor, cursor, goal: None, ..block });
                     return self.show_block();
                 }
                 Key::Char('d' | 'x' | 'D' | 'X') => {
@@ -330,7 +360,7 @@ impl super::Editor {
             }
         }
         // A motion: run it from the cursor's corner, alone.
-        self.sel = Selections::one(Range::at(block.cursor));
+        self.sel = Selections::one(Range { goal: block.goal, ..Range::at(block.cursor) });
         self.extend = false;
         let before = self.current_buffer().revision();
         self.on_normal_key(key);
@@ -344,6 +374,7 @@ impl super::Editor {
         ) || matches!(key, Key::Char(c) if c.is_ascii_digit());
         if let Some(b) = self.block.as_mut() {
             b.cursor = self.sel.head();
+            b.goal = self.sel.primary().goal;
             b.to_line_end = key == Key::Char('$') || (b.to_line_end && stays_at_the_end);
         }
         self.show_block();
@@ -356,9 +387,14 @@ impl super::Editor {
         let pieces = self.block_pieces(block);
         let (first, last, _, _) = self.block_shape(block);
         self.edit_round += 1;
+        let (_, _, left, right) = self.block_shape(block);
+        let right = match block.to_line_end {
+            true => usize::MAX,
+            false => right,
+        };
         for (nth, line) in (first..=last).enumerate() {
             let text = match pieces.iter().find(|&&(l, _, _)| l == line) {
-                Some(&(_, a, b)) => rope.slice(a..b).to_string(),
+                Some(&(_, a, b)) => piece_text(&rope, self.tab_stop, line, a..b, left, right),
                 None => String::new(),
             };
             self.edit_nth = Some(nth);

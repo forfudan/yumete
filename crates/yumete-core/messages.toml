@@ -10884,9 +10884,9 @@ en = "word mark.tint"
 [[message]]
 # 設置面板：存好了({0} ＝ 檔名)
 key = "set.saved"
-zht = "設置存入 {0}。:reload-config 或者下次啓動生效"
-zhs = "设置存入 {0}。:reload-config 或者下次启动生效"
-en = "settings written to {0}. :reload-config or next start applies them"
+zht = "設置已存入 {0} 並生效"
+zhs = "设置已存入 {0} 并生效"
+en = "settings written to {0} and applied"
 
 [[message]]
 # 設置面板：存好了，而這期間那個檔被外面改過({0} 檔名)
