@@ -18,8 +18,10 @@ in `docs/development.md` §5.2.
   under the caret: words that start with what you typed first, in the case you typed
   (`when` offers `whenever`, `When` offers `Whenever`, names such as `JavaScript` stay as
   written), then fuzzy matches as helix's word completion finds them; Chinese characters
-  come up after half as many, offering only longer words the segmenter finds. `C-n` /
-  `C-x` lists them at any length.
+  come up after half as many, offering only longer words the segmenter finds, a
+  simplified character finding the traditional words and the other way round. `C-n` /
+  `C-x` lists them at any length, and also offers the Chinese words that letters in
+  full pinyin spell (`shuzhai` offers the word for "study" as the file writes it).
 - **Path completion where a path is typed**: any word with a `/` in it, or after `](`,
   relative to the file's folder, as helix's path completion (plus Markdown links).
 
