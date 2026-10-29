@@ -29632,6 +29632,43 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
 }
 
+/// **helix's `:earlier` and `:later`** (2026-10-29): a number of steps, or a
+/// span of time read in helix's units.
+#[test]
+fn earlier_and_later_walk_the_history_by_steps_and_by_time() {
+    use crate::command::UndoSpan;
+    use std::time::Duration;
+    assert_eq!(UndoSpan::parse(None), Some(UndoSpan::Steps(1)));
+    assert_eq!(UndoSpan::parse(Some("3")), Some(UndoSpan::Steps(3)));
+    assert_eq!(UndoSpan::parse(Some("5m")), Some(UndoSpan::Time(Duration::from_secs(300))));
+    assert_eq!(UndoSpan::parse(Some("1h 30min")), Some(UndoSpan::Time(Duration::from_secs(5400))));
+    assert_eq!(UndoSpan::parse(Some("2 days")), Some(UndoSpan::Time(Duration::from_secs(172800))));
+    assert_eq!(UndoSpan::parse(Some("5m 3m")), None, "a unit once, as helix says");
+    assert_eq!(UndoSpan::parse(Some("5 weeks")), None);
+
+    let mut ed = typed("a\n");
+    ed.goto_line(1);
+    for word in ["b", "c", "d"] {
+        press(&mut ed, "A");
+        type_keys(&mut ed, word);
+        ed.on_key(Key::Esc);
+    }
+    assert_eq!(ed.current_buffer().text(), "abcd\n");
+    ed.execute(":earlier 2").unwrap();
+    assert_eq!(ed.current_buffer().text(), "ab\n");
+    ed.execute(":later").unwrap();
+    assert_eq!(ed.current_buffer().text(), "abc\n");
+    // An hour before any of it is before the first change: the oldest state
+    // there is, and an hour on is the newest.
+    ed.execute(":earlier 1h").unwrap();
+    assert!(!ed.current_buffer().text().contains('b'), "{:?}", ed.current_buffer().text());
+    ed.execute(":later 1h").unwrap();
+    assert_eq!(ed.current_buffer().text(), "abcd\n");
+    ed.execute(":later").unwrap();
+    assert_eq!(ed.status(), say!("edit.redo-at-newest"));
+    assert!(ed.execute(":earlier soon").is_err());
+}
+
 /// **The live count and each heading's count** (2026-10-29), by Word's rule:
 /// a 漢字 is one and a Latin word is one.
 #[test]

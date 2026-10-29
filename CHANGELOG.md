@@ -16,6 +16,7 @@ in `docs/development.md` §5.2.
 - **`:reflow [width]`**, helix's: each selection refilled to the width, 80 by default.
 - **A live count on the status line**, after the position: the file's, and the selection's beside it when there is one. It shows in text files by default (`[editor] status_count = "text" | "all" | "off"`, settings panel: Marks) and is the first thing to give way on a narrow window.
 - **The outline sidebar counts each heading**, its sections included, at the right edge.
+- **`:earlier` and `:later`**, helix's: undo or redo so many steps, or to the change nearest a span of time back or on (`:earlier 5m`, `:later 1h 30m`).
 
 ### Changed
 
