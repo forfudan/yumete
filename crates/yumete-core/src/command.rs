@@ -1170,14 +1170,6 @@ pub enum MarkdownBit {
     InlineNote,
 }
 
-/// The sections `:help` offers.
-const HELP_SECTIONS: &[Word] = &[
-    Word { name: "chinese", help: "help.chinese.section-summary", needs: &[] },
-    Word { name: "vertical", help: "help.vertical.title", needs: &[] },
-    Word { name: "table", help: "help.table.section-summary", needs: &[] },
-    Word { name: "commands", help: "help.common.every-command", needs: &[] },
-];
-
 /// One word a command accepts, and what may follow *it*.
 pub struct Word {
     pub name: &'static str,
@@ -4846,11 +4838,11 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "help",
-        aliases: &[],
+        aliases: &["h"],
         help: "cmd.commands.help",
         needs: &[],
-        params: &[Param::WordsOr { of: HELP_SECTIONS, default: None, or: "<題目>" }],
-        build: Some(|p| Ok(Command::Help(p.arg(0).map(|w| w.to_string())))),
+        params: &[Param::Free("<題目>")],
+        build: Some(|p| Ok(Command::Help(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "export",
@@ -5254,6 +5246,19 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
 /// three keystrokes away.
 fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     let line = line.strip_prefix(':').unwrap_or(line);
+    if let Some((head, tail)) = line.split_once(' ') {
+        if entry_named(head).is_some_and(|e| e.name == "help") {
+            let prefix = tail.trim_start();
+            let start = line.len() - prefix.len();
+            let choices = crate::help::completions(prefix).into_iter().map(|name| Choice {
+                family: None, name, alias: None, short: None,
+                help: "cmd.commands.help", leading: "", under: String::new(),
+                needs: &[], note: None,
+            }).collect();
+            return (start, choices);
+        }
+    }
+
     // **範圍不算名字的一部分**（2026-10-06 報的：`:s/` 畫得出那一行，`:%s/` 畫不出）。
     //
     // 替換那一條在表上叫 `s/pat/rep/`，而選單是拿打出來的那個詞去比前綴的——

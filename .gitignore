@@ -44,3 +44,6 @@ __pycache__/
 
 # Claude Code permissions for this machine (2026-10-27)
 /.claude/settings.local.json
+
+# Built documentation (HTML and PDF).
+/docs/book/

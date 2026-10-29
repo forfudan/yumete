@@ -4828,11 +4828,17 @@ zhs = "复制/粘贴"
 en = "yank / put"
 
 [[message]]
+# 當選定語言尚未有這一篇譯文，顯示英文正本時
+key = "help.fallback"
+zht = "本頁尚未翻譯，以下爲英文原文。"
+zhs = "本页尚未翻译，以下为英文原文。"
+en = "This page is not translated; showing the English source."
+[[message]]
 # :help 給了不認得的節名
 key = "help.no-such-section"
-zht = "没有「{0}」這一節——:help 有 chinese、vertical、table、commands"
-zhs = "没有「{0}」这一节——:help 有 chinese、vertical、table、commands"
-en = "there is no section 「{0}」 — :help has chinese, vertical, table, commands"
+zht = "找不到「{0}」的幫助——查閲 :help help；概覽有 chinese、vertical、table、commands"
+zhs = "找不到「{0}」的帮助——查阅 :help help；概览有 chinese、vertical、table、commands"
+en = "no help for 「{0}」 — try :help help; overview: chinese, vertical, table, commands"
 
 [[message]]
 # 幫助頁開頭那句：每一節都是編輯器自己報的
@@ -13061,4 +13067,3 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
-

@@ -1,0 +1,38 @@
+name: Documentation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  book:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install documentation tools
+        run: |
+          cargo install mdbook --version 0.4.52 --locked
+          sudo apt-get update
+          sudo apt-get install -y opencc fonts-noto-cjk
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+      - name: Check generated Simplified Chinese
+        run: python3 scripts/make_manual_sc.py --check
+      - name: Test documentation tools
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: python3 -m unittest discover -s scripts/tests -p 'test_docs.py'
+      - name: Build and check all languages (default PDF backend)
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: python3 scripts/docs.py build --pdf --backend default
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yumete-manuals
+          path: docs/book/
+          if-no-files-found: error

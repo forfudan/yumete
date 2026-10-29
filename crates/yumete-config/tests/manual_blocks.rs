@@ -18,7 +18,7 @@
 //! Measured both ways: the raw form takes the whole file down, and
 //! `"<backspace>" = "@h"` binds and works.
 
-use std::path::Path;
+include!("../../../docs/test_support.rs");
 
 /// The blocks that are **not** `config.toml` and must not be read as one.
 ///
@@ -54,8 +54,7 @@ fn blocks(text: &str) -> Vec<(usize, String)> {
 
 #[test]
 fn every_config_block_in_the_manual_parses() {
-    let text = std::fs::read_to_string(Path::new("../../docs/manual.md"))
-        .expect("the manual, from this crate's directory");
+    let text = manual_text();
     let found = blocks(&text);
     assert!(found.len() > 10, "only {} toml blocks read out of the manual", found.len());
 
@@ -95,7 +94,7 @@ fn every_config_block_in_the_manual_parses() {
 /// nothing had ever compared the two.
 #[test]
 fn the_manual_counts_the_settings_the_panel_has() {
-    let text = std::fs::read_to_string(Path::new("../../docs/manual.md")).expect("the manual");
+    let text = manual_text();
     let said = |n: usize| -> String {
         // Only the spellings this sentence has worn; a number this test cannot
         // spell is a number it must not claim to have checked.

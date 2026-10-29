@@ -1,13 +1,23 @@
 # 變更記錄 · Changelog
 
 寫給用它寫東西的人看的，不是給提交記錄看的：每一條說的是**你能做什麼**，
-以及**什麼變了**。編號對應 `docs/development.md` §5.2 的功能表。
+以及**什麼變了**。歷史條目中的功能編號沿用原有開發記錄。
 
 Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
 ## Unreleased
+
+- **PDF backends**: `scripts/docs.py build --pdf --backend` selects `default`,
+  `mdbook-pandoc`, `mdbook-pdf`, or `mdbook-typst`. Each backend has its own
+  configuration and filename; switching renderers retains the other PDFs.
+
+- **Documentation and help**: the manual is organized into linked mdBook chapters,
+  with HTML and PDF builds. `:help` accepts command, option and key identifiers;
+  help links work offline and keep jump history. Traditional Chinese is the Chinese
+  source; Simplified Chinese pages are generated with `scripts/make_manual_sc.py`.
+
 
 ### Added
 

@@ -1,0 +1,26 @@
+# Tested with mdbook-typst 0.1.10 and mdBook 0.4.52.
+[backend]
+mdbook-series = ["0.4"]
+renderer = "mdbook-typst"
+requires = ["typst"]
+result-path = "typst/yumete.pdf"
+fonts = "typst"
+
+[output.typst]
+command = "${RENDERER}"
+
+[output.typst.output]
+format = "pdf"
+name = "yumete.pdf"
+
+[output.typst.style]
+paper = "a4"
+text-size = "10pt"
+text-font = "${TYPST_FONT}"
+
+[output.typst.toc]
+enable = true
+depth = 3
+
+[output.typst.advanced]
+typst-markup-header = "${TYPST_HEADER}"

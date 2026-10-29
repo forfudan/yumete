@@ -1,0 +1,18 @@
+# Tested with mdbook-pdf 0.1.13 and mdBook 0.5.2.
+[backend]
+mdbook-series = ["0.5"]
+renderer = "mdbook-pdf"
+requires = []
+result-path = "pdf/output.pdf"
+chrome = true
+
+[output.pdf]
+command = "${RENDERER}"
+browser-binary-path = "${CHROME}"
+generate-document-outline = true
+generate-tagged-pdf = true
+prefer-css-page-size = true
+print-background = true
+display-header-footer = false
+paper-width = 8.2677
+paper-height = 11.6929

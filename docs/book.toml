@@ -1,0 +1,13 @@
+[book]
+title = "The yumete manual"
+language = "en"
+src = "en"
+
+[build]
+build-dir = "book/en"
+
+[output.html]
+additional-css = ["theme/print.css"]
+
+[output.html.print]
+enable = true

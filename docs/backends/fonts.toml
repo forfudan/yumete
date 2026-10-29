@@ -1,0 +1,19 @@
+# Select with DOCS_FONT_PROFILE; otherwise macos on Darwin, linux elsewhere.
+# These are installed font family names, not paths or downloadable fonts.
+[macos]
+main = "DejaVu Sans"
+sans = "DejaVu Sans"
+mono = "DejaVu Sans Mono"
+cjk = "PingFang SC"
+symbols = "Arial Unicode MS"
+typst = "Times New Roman"
+typst-mono = "Menlo"
+
+[linux]
+main = "DejaVu Sans"
+sans = "DejaVu Sans"
+mono = "DejaVu Sans Mono"
+cjk = "Noto Sans CJK SC"
+symbols = "Noto Sans Symbols 2"
+typst = "DejaVu Serif"
+typst-mono = "DejaVu Sans Mono"

@@ -1,0 +1,29 @@
+# Tested with mdbook-pandoc 0.10.0 and mdBook 0.4.52.
+[backend]
+mdbook-series = ["0.4"]
+renderer = "mdbook-pandoc"
+requires = ["pandoc", "tectonic", "fc-match"]
+result-path = "pandoc/pdf/yumete.pdf"
+fonts = "pandoc"
+
+[output.pandoc]
+command = "${RENDERER}"
+
+[output.pandoc.profile.pdf]
+output-file = "yumete.pdf"
+to = "latex"
+pdf-engine = "tectonic"
+table-of-contents = true
+
+[output.pandoc.profile.pdf.variables]
+documentclass = "book"
+papersize = "a4"
+fontsize = "10pt"
+geometry = "margin=18mm"
+mainfont = "${MAIN_FONT}"
+sansfont = "${SANS_FONT}"
+monofont = "${MONO_FONT}"
+CJKmainfont = "${CJK_FONT}"
+CJKsansfont = "${CJK_FONT}"
+CJKmonofont = "${CJK_FONT}"
+header-includes = "${PANDOC_HEADER}"

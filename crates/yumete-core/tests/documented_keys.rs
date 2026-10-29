@@ -14,6 +14,8 @@
 //! teaches something the editor does not have fails the build, and it fails
 //! naming the word.
 
+include!("../../../docs/test_support.rs");
+
 use yumete_core::command;
 use yumete_core::editor::Editor;
 
@@ -39,11 +41,10 @@ use yumete_core::editor::Editor;
 /// an hour earlier, having read this. A premise does not lapse because you acted
 /// against it.
 fn documents() -> Vec<(&'static str, String)> {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
     vec![
         (
             "docs/manual.md",
-            std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual"),
+            manual_text(),
         ),
         ("tutor.rs", yumete_core::tutor::LESSON.to_string()),
     ]

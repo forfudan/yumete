@@ -55,7 +55,89 @@ impl Editor {
     /// work in it: the way to learn an editor is to use it on something, and
     /// this is something.
     pub(super) fn open_help(&mut self, topic: Option<&str>) {
-        let (title, text) = match topic.map(str::trim).unwrap_or_default() {
+        let topic = topic.unwrap_or("").trim();
+        let (topic, requested_language) = match topic.rsplit_once('@') {
+            Some((topic, lang)) => (topic, Some(lang)),
+            None => (topic, None),
+        };
+        let language = match requested_language {
+            Some(lang) => match crate::messages::Language::parse(lang) {
+                Some(lang) => lang,
+                None => {
+                    self.status = say!("help.no-such-section", topic);
+                    return;
+                }
+            },
+            None => crate::messages::language(),
+        };
+        let lang = match language {
+            crate::messages::Language::English => "en",
+            crate::messages::Language::Simplified => "zh-Hans",
+            crate::messages::Language::Traditional => "zh-Hant",
+        };
+        // Explicit language requests use the book so they never depend on the
+        // process-wide locale used by the live overview generators.
+        let topic = if requested_language.is_some() {
+            match topic {
+                "" => "manual",
+                "chinese" => "philosophy",
+                "vertical" => "vertical-layout",
+                "table" => "tables",
+                "commands" => "command-reference",
+                other => other,
+            }
+        } else {
+            topic
+        };
+        // Page links and exact contextual identifiers share the same resolver.
+        if topic.contains('/') && topic.ends_with(".md") {
+            self.open_help_page(&format!("{lang}/{topic}"), 0, None);
+            return;
+        }
+        if !topic.is_empty()
+            && ![
+                "chinese", "vertical", "table", "commands", "中文", "竪排", "表格", "命令",
+            ]
+            .contains(&topic)
+        {
+            match crate::help::lookup(topic) {
+                Ok(at) => {
+                    let relative = at.page.strip_prefix("en/").unwrap_or(at.page);
+                    self.open_help_page(&format!("{lang}/{relative}"), at.line, None);
+                    return;
+                }
+                Err(candidates) if topic.starts_with('\'') && !candidates.is_empty() => {
+                    let text = candidates
+                        .iter()
+                        .map(|name| format!("- `:help {name}`\n"))
+                        .collect::<String>();
+                    self.open_help_buffer("options", &text);
+                    return;
+                }
+                _ => {}
+            }
+            let name = topic.strip_prefix(':').unwrap_or(topic);
+            if let Some(entry) = crate::command::COMMANDS
+                .iter()
+                .find(|e| e.name == name || e.aliases.contains(&name))
+            {
+                let text = format!(
+                    "# :{}\n\n`:{}` {}\n\n{}\n\n[Manual contents](help:{lang}/SUMMARY.md)\n",
+                    entry.name,
+                    entry.name,
+                    entry
+                        .params
+                        .iter()
+                        .map(crate::command::Param::hint)
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    crate::messages::say(entry.help, &[])
+                );
+                self.open_help_buffer(entry.name, &text);
+                return;
+            }
+        }
+        let (title, text) = match topic {
             "" => (say!("help.common.title"), self.help_common()),
             t if "chinese".starts_with(t) || "中文".starts_with(t) => {
                 (say!("help.chinese.title"), Self::help_chinese())
@@ -70,25 +152,144 @@ impl Editor {
                 (say!("help.commands.title"), Self::help_commands())
             }
             other => {
-                self.status = say!(
-                    "help.no-such-section",
-                    other
-                );
+                self.status = say!("help.no-such-section", other);
                 return;
             }
         };
-        let mut buffer = crate::Buffer::from_text(&text);
+        let text = format!("{text}\n[Manual contents](help:{lang}/SUMMARY.md) · [Help lookup](help:{lang}/help.md)\n");
+        self.open_help_buffer(&title, &text);
+    }
+
+    fn open_help_buffer(&mut self, title: &str, text: &str) {
+        self.remember_jump();
+        let mut buffer = crate::Buffer::from_text(text);
         buffer.name_as(&format!("[help · {title}]"));
+        buffer.set_readonly(true);
         self.add_buffer(buffer);
         self.status = say!("help.title", title);
+    }
+
+    pub(super) fn open_help_page(&mut self, requested: &str, line: usize, anchor: Option<&str>) {
+        let Some((lang, relative)) = requested.split_once('/') else {
+            return;
+        };
+        let Some((actual, body, fallback)) = crate::help::page(relative, lang) else {
+            self.status = say!("help.no-such-section", relative);
+            return;
+        };
+        let mut target_line = anchor
+            .and_then(|a| crate::help::anchor_line(body, a))
+            .unwrap_or(line);
+        if !fallback && lang != "en" && line != 0 && anchor.is_none() {
+            if let Some((_, english, _)) = crate::help::page(relative, "en") {
+                let original = english.lines().nth(line).unwrap_or("");
+                // Identifiers in tags, table cells and assignments survive translation.
+                let previous = english
+                    .lines()
+                    .take(line)
+                    .filter(|s| !s.trim().is_empty())
+                    .last()
+                    .unwrap_or("");
+                if previous.starts_with("<!-- help:") {
+                    target_line = body
+                        .lines()
+                        .position(|s| s.trim() == previous.trim())
+                        .and_then(|at| {
+                            body.lines()
+                                .enumerate()
+                                .skip(at + 1)
+                                .find(|(_, s)| {
+                                    !s.trim().is_empty() && !s.trim().starts_with("<!--")
+                                })
+                                .map(|(at, _)| at)
+                        })
+                        .unwrap_or(0);
+                } else {
+                    let identifier = if original.starts_with('|') {
+                        original.split('|').nth(1).unwrap_or("").trim()
+                    } else if let Some((left, _)) = original.split_once('=') {
+                        left.trim()
+                    } else {
+                        original.trim()
+                    };
+                    target_line = body
+                        .lines()
+                        .position(|s| s.contains(identifier))
+                        .unwrap_or(0);
+                }
+            }
+        }
+        let fallback_notice = say!("help.fallback");
+        let notice = crate::messages::table()
+            .get("help.fallback")
+            .map(|entry| match lang {
+                "zh-Hans" => entry.zhs,
+                "zh-Hant" => entry.zht,
+                _ => entry.en,
+            })
+            .unwrap_or(&fallback_notice);
+        let text = if fallback {
+            format!("> {notice}\n\n{body}")
+        } else {
+            body.to_string()
+        };
+        target_line += if fallback { 2 } else { 0 };
+        let name = format!("[help · {requested}]");
+        self.remember_jump();
+        if let Some(index) = self.buffers.iter().position(|b| b.display_name() == name) {
+            self.show_buffer(index);
+        } else {
+            let mut buffer = crate::Buffer::from_text(&text);
+            buffer.name_as(&name);
+            buffer.set_readonly(true);
+            self.add_buffer(buffer);
+        }
+        let rope = self.current_buffer().rope();
+        let at = rope.line_to_char(target_line.min(rope.len_lines().saturating_sub(1)));
+        self.set_cursor(at);
+        self.status = if fallback {
+            notice.to_string()
+        } else {
+            say!("help.title", actual)
+        };
+    }
+
+    /// Handle relative links in embedded Markdown before filesystem navigation.
+    pub(super) fn follow_help_link(&mut self, target: &str, anchor: Option<&str>) -> bool {
+        if let Some(requested) = target.strip_prefix("help:") {
+            self.open_help_page(requested, 0, anchor);
+            return true;
+        }
+        let name = self.current_buffer().display_name();
+        let Some(from) = name
+            .strip_prefix("[help · ")
+            .and_then(|s| s.strip_suffix(']'))
+        else {
+            return false;
+        };
+        if !from.ends_with(".md") {
+            return false;
+        }
+        let requested = if target.is_empty() {
+            Some(from.to_string())
+        } else {
+            crate::help::link(from, target)
+        };
+        if let Some(requested) = requested {
+            self.open_help_page(&requested, 0, anchor);
+            return true;
+        }
+        false
     }
 
     /// The keys a writer uses in the first hour, drawn from what is bound.
     pub(super) fn help_common(&self) -> String {
         let mut out = String::new();
-        out.push_str("# yumete
+        out.push_str(
+            "# yumete
 
-");
+",
+        );
         out.push_str(&format!("{}\n\n", say!("help.self-reported")));
         // **窗口要多大**（2026-10-03 定：「就说推荐窗口大小 80*24，这个先放在
         // help」）。擺不下側面板的時候 `空格 /` 會當場退回行內搜索並說一句，而那一句
@@ -118,8 +319,10 @@ impl Editor {
             ("C-o C-i", say!("help.common.jump-list")),
             ("M a  'a", say!("help.common.marks")),
         ] {
-            out.push_str(&format!("- `{keys}` — {what}
-"));
+            out.push_str(&format!(
+                "- `{keys}` — {what}
+"
+            ));
         }
         out.push_str(&format!("\n## {}\n\n", say!("help.common.editing-title")));
         for (keys, what) in [
@@ -142,8 +345,10 @@ impl Editor {
             ("Q q", say!("help.common.macros")),
             ("> <", say!("help.common.indent")),
         ] {
-            out.push_str(&format!("- `{keys}` — {what}
-"));
+            out.push_str(&format!(
+                "- `{keys}` — {what}
+"
+            ));
         }
         out.push_str(&format!("\n## {}\n\n", say!("help.common.space-title")));
         for (key, what) in Self::SPACE_KEYS {
@@ -171,20 +376,31 @@ impl Editor {
         for (keys, what) in [
             (":yume on", say!("help.chinese.toggle-ime")),
             (":yume-scheme", say!("help.chinese.switch-scheme")),
-            (":yume-chaifen on", say!("help.chinese.chaifen-under-candidates")),
+            (
+                ":yume-chaifen on",
+                say!("help.chinese.chaifen-under-candidates"),
+            ),
             ("w b e", say!("help.chinese.word-boundaries")),
             (":word-mark tint", say!("help.chinese.word-tint")),
-            (":word-list-reload", say!("help.chinese.reload-project-words")),
+            (
+                ":word-list-reload",
+                say!("help.chinese.reload-project-words"),
+            ),
             (":word-habit", say!("help.chinese.habit-words")),
             (":ruby", say!("help.chinese.annotate-reading")),
-            (":ruby-format html", say!("help.chinese.unify-reading-spelling")),
+            (
+                ":ruby-format html",
+                say!("help.chinese.unify-reading-spelling"),
+            ),
             (":render full", say!("render.wysiwyg")),
             (":indent 2", say!("help.chinese.first-line-indent")),
             (":view-hanging on", say!("help.chinese.hung-punctuation")),
             (":count", say!("help.chinese.count")),
         ] {
-            out.push_str(&format!("- `{keys}` — {what}
-"));
+            out.push_str(&format!(
+                "- `{keys}` — {what}
+"
+            ));
         }
         out
     }
@@ -203,8 +419,10 @@ impl Editor {
             (":indent 2", say!("help.vertical.first-line-indent")),
             (":render full", say!("help.vertical.wysiwyg")),
         ] {
-            out.push_str(&format!("- `{keys}` — {what}
-"));
+            out.push_str(&format!(
+                "- `{keys}` — {what}
+"
+            ));
         }
         out
     }
@@ -227,8 +445,10 @@ impl Editor {
             ("␣ty ␣tp", say!("help.table.yank-or-put-column")),
             (":table-rules off", say!("help.table.no-column-rules")),
         ] {
-            out.push_str(&format!("- `{keys}` — {what}
-"));
+            out.push_str(&format!(
+                "- `{keys}` — {what}
+"
+            ));
         }
         out
     }
@@ -256,5 +476,91 @@ impl Editor {
             ));
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn contextual_help_lands_on_reference_and_keeps_history() {
+        let mut ed = Editor::new();
+        let _ = ed.current_buffer_mut().insert(0, "我的稿子");
+        let manuscript = ed.current_buffer().id();
+        ed.execute(":h :w@en").unwrap();
+        assert!(ed.current_buffer().is_readonly());
+        assert!(ed
+            .current_buffer()
+            .rope()
+            .line(ed.cursor_line())
+            .to_string()
+            .contains("`:write`"));
+        ed.walk_jumps(true);
+        assert_eq!(ed.current_buffer().id(), manuscript);
+        ed.execute(":help 'scrolloff'@en").unwrap();
+        assert!(ed
+            .current_buffer()
+            .rope()
+            .line(ed.cursor_line())
+            .to_string()
+            .starts_with("scrolloff ="));
+        ed.execute(":help w@en").unwrap();
+        assert!(ed
+            .current_buffer()
+            .rope()
+            .line(ed.cursor_line())
+            .to_string()
+            .contains("`w`"));
+        ed.execute(":help i_<Esc>@en").unwrap();
+        assert!(ed
+            .current_buffer()
+            .rope()
+            .line(ed.cursor_line())
+            .to_string()
+            .contains("`Esc` leaves"));
+        let buffer = ed.current_buffer().id();
+        ed.execute(":help no-such-topic").unwrap();
+        assert_eq!(ed.current_buffer().id(), buffer);
+    }
+    #[test]
+    fn embedded_links_and_language_suffixes() {
+        let mut ed = Editor::new();
+        ed.execute(":help help@zh-Hant").unwrap();
+        assert!(ed.current_buffer().text().contains("查閲幫助"));
+        ed.open_help_page("zh-Hant/SUMMARY.md", 0, None);
+        assert!(ed.follow_help_link("manual/06-moving.md", None));
+        assert!(ed.buffer_name().contains("zh-Hant/manual/06-moving.md"));
+        assert!(
+            ed.current_buffer().text().contains("本頁尚未翻譯")
+                || ed.current_buffer().text().contains("英文")
+                || ed.current_buffer().text().contains("not translated")
+        );
+        ed.walk_jumps(true);
+        assert!(ed.buffer_name().contains("SUMMARY.md"));
+        ed.execute(":help <Space> f@en").unwrap();
+        assert!(ed
+            .current_buffer()
+            .rope()
+            .line(ed.cursor_line())
+            .to_string()
+            .contains("`空格 f`"));
+        ed.open_help_page("en/help.md", 0, None);
+        let text = ed.current_buffer().text();
+        let at = text[..text.find("[Manual contents]").unwrap()]
+            .chars()
+            .count();
+        ed.set_cursor(at);
+        ed.follow_link_here();
+        assert!(ed.buffer_name().contains("en/SUMMARY.md"));
+        ed.walk_jumps(true);
+        assert!(ed.buffer_name().contains("en/help.md"));
+    }
+    #[test]
+    fn help_completion_replaces_the_topic_only() {
+        let (at, choices) = crate::command::complete_at("help :wr");
+        assert_eq!(at, 5);
+        assert!(choices.iter().any(|c| c.written() == ":write"));
+        let (_, choices) = crate::command::complete_at("help 'scroll");
+        assert!(choices.iter().any(|c| c.written() == "'scrolloff'"));
     }
 }

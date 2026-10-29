@@ -14,6 +14,8 @@
 //! Warning: **This is the only thing that stops the cleanup decaying.** Care does not
 //! survive a month of feature work; a red build does.
 
+include!("../../../docs/test_support.rs");
+
 /// Everything that marks a sentence as a log entry rather than documentation.
 const BANNED: &[(&str, &str)] = &[
     (r"20\d\d-\d\d-\d\d", "a date: when a thing was decided is not the reader's business"),
@@ -52,12 +54,11 @@ fn without_code(line: &str) -> String {
 
 #[test]
 fn the_manual_dates_nothing_and_quotes_nobody() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
     // Warning: **English only.** The Chinese manuals are frozen until yumete settles
     // (2026-10-09), and a frozen document is one a test cannot help — the next cleanup
     // would turn it red and the only way to green would be to edit the very file we
     // decided to stop editing.
-    let text = std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual");
+    let text = manual_text();
     let mut bad: Vec<String> = Vec::new();
     let mut fenced = false;
     for (n, line) in text.lines().enumerate() {
@@ -122,8 +123,7 @@ fn regex_lite_hit(mark: &str, text: &str) -> bool {
 /// is exactly the moment to ask whether it is really one.
 #[test]
 fn the_manual_warns_about_few_enough_things_to_be_believed() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-    let text = std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual");
+    let text = manual_text();
     const CEILING: usize = 22;
     let found = text.matches("Warning:").count();
     assert!(

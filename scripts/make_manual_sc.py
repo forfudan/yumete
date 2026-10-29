@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""從 docs/manual_tc.md 生成簡體版 docs/manual_sc.md。
+"""從 docs/zh-Hant/ 分篇生成 docs/zh-Hans/；兼容舊版單文件手冊。
 
     scripts/make_manual_sc.py
 
-**繁體那一份是中文的正本。** 中文手冊只改 `docs/manual_tc.md`，簡體版跑這支重生成；反過來改
+**繁體那一份是中文的正本。** 中文手冊只改 `docs/zh-Hant/`，簡體版跑這支重生成；反過來改
 簡體版，下一次生成就沒了。
 
 Warning: **只有這一個方向是安全的。** 反過來（簡 → 繁）走 opencc 的 `s2t` 會被它的詞組
@@ -29,6 +29,7 @@ Warning: 這種地方**在手冊裏自己標**，成對包起來：
 九行的清單，手冊一改錨點就對不上，腳本就停。現在標記跟着文字走，改手冊不用管這支。
 """
 
+import argparse
 import re
 import subprocess
 import sys
@@ -52,12 +53,6 @@ MARK = "<!-- verbatim -->"
 # 成對的 verbatim 區塊，或者不是 verbatim 的一段。非貪婪，成對優先。
 CHUNK = re.compile(rf"({re.escape(MARK)}[\S\s]+?{re.escape(MARK)})|([\S\s]+?(?={re.escape(MARK)})|[\S\s]+)")
 
-HEAD = (
-    "<!-- 由 scripts/make_manual_sc.py 从 docs/manual_tc.md 生成，请勿直接编辑。\n"
-    "     Generated from docs/manual_tc.md — edit that one, then re-run the script.\n"
-    "     繁体正本用大陆通规繁体字形；<!-- verbatim --> 包住的片段原样保留繁体。 -->\n\n"
-)
-
 # 這幾個字形只出現在通規繁體裏（簡體寫 里 为 说 么 录）。轉完 verbatim 之外還剩下
 # 的就是漏網，停下來說。
 # Warning: 別把 `册 别 横 没 群` 放進來：通規繁體和簡體**本來就是同一個字形**，它們留在
@@ -79,24 +74,23 @@ WORDS = {
 MAINLAND = re.compile("|".join(re.escape(w) for w in WORDS))
 
 
-def main() -> int:
-    # **沒有正本就什麼都不做**（2026-10-17 作者定）。中文手冊搬出倉之後，一份乾
-    # 淨的 clone 裏本來就沒有它可讀，而那不是錯——這一支是作者改完中文手冊纔跑
-    # 的，不是建置的一環。
-    if SRC is None or OUT is None:
-        print("找不到 manual_tc.md（docs/ 或 local/ 都沒有），沒有要生成的東西")
-        return 0
-    text = SRC.read_text(encoding="utf-8")
+def convert(text: str) -> str:
     if text.count(MARK) % 2:
         print(f"!! {MARK} 的個數是奇數，有一處沒有配對", file=sys.stderr)
-        return 1
+        raise ValueError("conversion failed")
 
+    # Destinations, explicit anchors, and help identifiers must survive conversion.
+    protected = []
+    def protect(match):
+        protected.append(match.group(0))
+        return f"@@YUMETE-IDENTIFIER-{len(protected) - 1}@@"
+    text = re.sub(r"(?<=\]\()[^)\n]+(?=\))|<!-- (?:help:|help-index:|source-revision:).*?-->|<a\s+(?:id|name)=[^>]+>", protect, text)
     parts, out = [], []
     for m in CHUNK.finditer(text):
         parts.append((m.group(1) is not None, m.group(0)))
     if "".join(p for _, p in parts) != text:
         print("!! 切分之後拼不回原文，不敢寫", file=sys.stderr)
-        return 1
+        raise ValueError("conversion failed")
 
     plain = [p for kept, p in parts if not kept]
     # 一次呼叫轉全部，段與段之間放一個記號：逐段呼叫 opencc 會慢上千倍。
@@ -105,7 +99,7 @@ def main() -> int:
     SPLIT = "@@YUMETE-SPLIT@@"
     if SPLIT in text:
         print(f"!! 手冊裏出現了分隔記號 {SPLIT}，換一個", file=sys.stderr)
-        return 1
+        raise ValueError("conversion failed")
     try:
         done = subprocess.run(
             ["opencc", "-c", "t2s"],
@@ -116,25 +110,68 @@ def main() -> int:
         )
     except FileNotFoundError:
         print("!! 需要 opencc（brew install opencc）", file=sys.stderr)
-        return 1
+        raise ValueError("conversion failed")
     converted = done.stdout.split(SPLIT)
     if len(converted) != len(plain):
         print(f"!! opencc 把 {len(plain)} 段變成了 {len(converted)} 段", file=sys.stderr)
-        return 1
+        raise ValueError("conversion failed")
     it = iter(converted)
     for kept, piece in parts:
         out.append(piece if kept else MAINLAND.sub(lambda m: WORDS[m.group()], next(it)))
 
-    OUT.write_text(HEAD + "".join(out), encoding="utf-8")
-
+    result = "".join(out)
     body = "".join(p for kept, p in zip([k for k, _ in parts], out) if not kept)
     stray = sorted({c for c in body if c in TRAD_ONLY})
-    print(f"==> {OUT.relative_to(ROOT)}  ({OUT.stat().st_size:,} 位元組)")
-    print(f"    verbatim 區塊 {sum(1 for k, _ in parts if k)} 個")
     if stray:
-        print(f"    Warning: verbatim 之外還剩繁體字形：{' '.join(stray)}", file=sys.stderr)
-        return 1
-    return 0
+        raise ValueError(f"verbatim 之外還剩繁體字形：{' '.join(stray)}")
+    for i, value in enumerate(protected):
+        result = result.replace(f"@@YUMETE-IDENTIFIER-{i}@@", value)
+    return result
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--check", action="store_true", help="檢查生成物是否過期，不寫文件")
+    args = parser.parse_args()
+    traditional = ROOT / "docs" / "zh-Hant"
+    pairs = [(path, ROOT / "docs" / "zh-Hans" / path.relative_to(traditional))
+             for path in sorted(traditional.rglob("*.md"))] if traditional.is_dir() else []
+    if SRC is not None and OUT is not None:
+        pairs.append((SRC, OUT))
+    if not pairs:
+        print("沒有繁體正本，沒有要生成的東西")
+        return 0
+    failed = False
+    for src, dest in pairs:
+        try:
+            body = convert(src.read_text(encoding="utf-8"))
+        except ValueError as error:
+            print(f"!! {src.relative_to(ROOT)}: {error}", file=sys.stderr)
+            return 1
+        header = (f"<!-- Generated from {src.relative_to(ROOT).as_posix()} by scripts/make_manual_sc.py.\n"
+                  "     请编辑繁体正本，不要直接修改此文件。 -->\n\n")
+        expected = header + body
+        if args.check:
+            if not dest.is_file() or dest.read_text(encoding="utf-8") != expected:
+                print(f"!! 過期：{dest.relative_to(ROOT)}；請跑 python3 scripts/make_manual_sc.py", file=sys.stderr)
+                failed = True
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(expected, encoding="utf-8")
+            print(f"==> {dest.relative_to(ROOT)}")
+    # Only generated files may be removed; hand-written material is never deleted.
+    wanted = {dest for _, dest in pairs}
+    for path in (ROOT / "docs" / "zh-Hans").rglob("*.md"):
+        if path not in wanted and path.read_text().startswith("<!-- Generated from docs/zh-Hant/"):
+            if args.check:
+                print(f"!! 多餘生成物：{path.relative_to(ROOT)}", file=sys.stderr)
+                failed = True
+            else:
+                path.unlink()
+        elif path not in wanted:
+            print(f"!! 簡體文件沒有繁體正本：{path.relative_to(ROOT)}", file=sys.stderr)
+            failed = True
+    return int(failed)
 
 
 if __name__ == "__main__":

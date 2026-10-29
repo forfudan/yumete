@@ -1,0 +1,10 @@
+# The existing HTML-to-PDF pipeline, without an external mdBook renderer.
+[backend]
+mdbook-series = ["0.4", "0.5"]
+requires = []
+
+[chrome]
+arguments = [
+  "--headless", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer",
+  "--allow-file-access-from-files", "--generate-pdf-document-outline", "--timeout=30000",
+]

@@ -1,0 +1,19 @@
+% Wrap highlighted code blocks and permit breaks at separators in inline code.
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\},breaklines,breakanywhere}
+\usepackage{newunicodechar}
+\newfontfamily\symbolsfont{${SYMBOLS_FONT}}
+\newunicodechar{※}{{\sffamily\char"203B}}
+\newunicodechar{␊}{{\symbolsfont\char"240A}}
+\ExplSyntaxOn
+\cs_new_protected:Npn \yumete_code:n #1 {
+  \group_begin: \ttfamily
+  \tl_set:Nn \l_tmpa_tl {#1}
+  \tl_replace_all:Nnn \l_tmpa_tl {|} {|\allowbreak}
+  \tl_replace_all:Nnn \l_tmpa_tl {/} {/\allowbreak}
+  \tl_replace_all:Nnn \l_tmpa_tl {-} {-\allowbreak}
+  \tl_use:N \l_tmpa_tl
+  \group_end:
+}
+\DeclareRobustCommand{\texttt}[1]{\yumete_code:n{#1}}
+\ExplSyntaxOff

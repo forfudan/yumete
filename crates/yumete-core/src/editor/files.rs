@@ -1294,6 +1294,9 @@ impl Editor {
             self.status = say!("link.none-here");
             return;
         };
+        if self.follow_help_link(&link.target, link.anchor.as_deref()) {
+            return;
+        }
         match link_scheme(&link.target).as_deref() {
             Some("http") | Some("https") => {
                 // The fragment is the page's own business, so it goes back on.
