@@ -171,6 +171,12 @@ in `docs/development.md` §5.2.
   - `C-p` on a `:!` line brings back the command alone and keeps `:!`, instead of the `:pipe` it may have been run with.
   - `!` means the previous command whichever verb ran it.
   - A full-width space before `!` no longer hides part of the command.
+  - The cursor can no longer go before the hidden `!`, where a letter typed turned the line into a command.
+  - A shortened verb (`:pip sort`) is labelled Shell and completes file names, as `:pipe` does.
+  - Completing file names no longer reads the folder again on every frame.
+- **`:read`**: a CRLF file read into an LF one (or the other way) takes this file's line ending and leaves its byte-order mark behind; an empty file puts nothing in; the error names the file.
+- **Redo puts the cursors back where the change left them**, as helix's `U` does, instead of where they were when you pressed `u`; an undo after it puts them back where they were before the change.
+- **Markdown links with a space in the path**: completion after `](` writes a space as `%20` and `%` as `%25`, as VS Code does, and `gL` opens `my%20notes.md` as `my notes.md`.
 - **Completion**:
   - A slash on its own (`//`, `</`, ` / `) no longer lists the root folder, and Tab after `//` no longer writes a path into the file. A folder typed in full offers its `/`.
   - A language server's item without a replace range replaces the word you typed (`pri` gives `print`, not `priprint`).

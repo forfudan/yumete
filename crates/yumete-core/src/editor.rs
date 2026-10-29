@@ -2290,6 +2290,8 @@ impl Offering {
     }
 }
 
+/// Where a shell line's word starts and what it may become.
+type ShellChoices = Option<(usize, Vec<String>)>;
 
 /// The editor: a non-empty list of open buffers and the index of the active one.
 pub struct Editor {
@@ -3300,6 +3302,9 @@ pub struct Editor {
     /// walk is the whole table, so on a ten-thousand-row one that was a 5 ms
     /// hitch every time the page slid off the remembered rows (#320).
     pipe_region: RefCell<Option<(u64, u64, crate::mdtable::Region)>>,
+    /// The last shell line completed and its answer, so a frame drawn without
+    /// a key between does not read the folder again (2026-10-29, review).
+    shell_memo: RefCell<Option<(String, std::path::PathBuf, ShellChoices)>>,
     /// Every `|` table in the file, against the buffer and its revision.
     ///
     /// **Per document, not per line** (#275). `table_lines_at` is asked once
@@ -4120,6 +4125,7 @@ impl Editor {
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             pipe_region: RefCell::new(None),
+            shell_memo: RefCell::new(None),
             md_tables: RefCell::new(None),
             candidate: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),

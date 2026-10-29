@@ -972,11 +972,45 @@ pub fn link_at(line: &str, at: usize) -> Option<Link> {
         Some((before, after)) => (before.to_string(), Some(after.to_string())),
         None => (written, None),
     };
+    // A path written as a URL (`my%20file.md`) names the file with the space
+    // (2026-10-29, review); an address keeps its escapes for the browser.
+    let target = match wiki || target.contains(':') {
+        true => target,
+        false => percent_decoded(&target),
+    };
     Some(Link {
         target,
         anchor: anchor.filter(|a| !a.is_empty()),
         wiki,
     })
+}
+
+/// `%20` and the other `%XX` escapes read back as the characters they stand
+/// for; the text as it was when they do not spell UTF-8.
+pub fn percent_decoded(text: &str) -> String {
+    if !text.contains('%') {
+        return text.to_string();
+    }
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let hex = bytes
+            .get(at + 1..at + 3)
+            .filter(|h| h.iter().all(u8::is_ascii_hexdigit))
+            .and_then(|h| std::str::from_utf8(h).ok());
+        match (bytes[at], hex.and_then(|h| u8::from_str_radix(h, 16).ok())) {
+            (b'%', Some(byte)) => {
+                out.push(byte);
+                at += 3;
+            }
+            (byte, _) => {
+                out.push(byte);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| text.to_string())
 }
 
 /// How many delimiter characters start at `at`, or `None` when none do.

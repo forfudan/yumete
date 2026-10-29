@@ -25289,6 +25289,23 @@ fn a_path_is_completed_where_it_is_typed() {
     assert_eq!(labels(&ed), ["note.md"]);
     ed.on_key(Key::Tab);
     assert_eq!(ed.current_buffer().text(), "see [it](ch) and ./drafts/note.md");
+
+    // In a link a space is written `%20` and a `%` `%25`, as VS Code writes
+    // them, and what was typed so is read back; `gL` opens the file.
+    std::fs::write(dir.join("my notes 50%.md"), "").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("chapter1.md")).unwrap();
+    press(&mut ed, "i");
+    press(&mut ed, "[a](my");
+    assert_eq!(labels(&ed), ["my%20notes%2050%25.md"]);
+    press(&mut ed, "%20no");
+    assert_eq!(labels(&ed), ["my%20notes%2050%25.md"]);
+    ed.on_key(Key::Tab);
+    press(&mut ed, ")");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "[a](my%20notes%2050%25.md)");
+    press(&mut ed, "gglgL");
+    assert_eq!(ed.current_buffer().display_name(), "my notes 50%.md", "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -25362,8 +25379,30 @@ fn read_puts_a_file_in_the_way_helix_and_vim_do() {
     assert_eq!(ed.current_buffer().text(), "abc\nINS\ndef\nINS\n", "after a last line with no break");
 
     let mut ed = typed("abc\n");
-    assert!(ed.execute(":read /no/such/file").is_err());
+    let why = ed.execute(":read /no/such/file").unwrap_err().to_string();
+    assert!(why.starts_with("/no/such/file: "), "the error names the file: {why}");
     assert_eq!(ed.current_buffer().text(), "abc\n");
+
+    // An empty file puts nothing in; a CRLF file read into an LF one, and an
+    // LF file into a CRLF one, take the receiving file's ending, and the
+    // other file's byte-order mark stays behind.
+    std::fs::write(&file, "").unwrap();
+    let mut ed = typed("abc\ndef\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    ed.execute(&read).unwrap();
+    assert_eq!(ed.current_buffer().text(), "abc\ndef\n");
+    std::fs::write(&file, "\u{feff}one\r\ntwo\r\n").unwrap();
+    ed.execute(&read).unwrap();
+    assert_eq!(ed.current_buffer().text(), "abc\none\ntwo\ndef\n");
+    std::fs::write(&file, "one\ntwo").unwrap();
+    let mut ed = Editor::new();
+    ed.add_buffer(crate::Buffer::from_text("abc\r\ndef"));
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "G");
+    ed.execute(&read).unwrap();
+    assert_eq!(ed.current_buffer().text(), "abc\r\ndef\r\none\r\ntwo\r\n");
+    assert_eq!(ed.cursor_line(), 2);
     let _ = std::fs::remove_file(&file);
 }
 
@@ -31185,6 +31224,29 @@ fn several_cursors_after_the_review() {
     use yumete_cjk::KeyPreset;
     let text = |ed: &Editor| ed.current_buffer().text().to_string();
 
+    // helix's redo puts the cursors back where the change left them, and an
+    // undo after it back where they were before (helix 25.07.1, a `Z` typed
+    // at each cursor after the keys).
+    let marked = |keys: &[&str]| {
+        let mut ed = typed("abc\ndef\n");
+        press(&mut ed, "gg");
+        for k in keys {
+            match *k {
+                "Esc" => {
+                    ed.on_key(Key::Esc);
+                }
+                k => press(&mut ed, k),
+            }
+        }
+        press(&mut ed, "iZ");
+        ed.on_key(Key::Esc);
+        text(&ed)
+    };
+    assert_eq!(marked(&["lCiX", "Esc", "gguU"]), "aXZbc\ndXZef\n");
+    assert_eq!(marked(&["lCiX", "Esc", "uggU"]), "aXZbc\ndXZef\n");
+    assert_eq!(marked(&["CiX", "Esc", "u,U"]), "XZabc\nXZdef\n");
+    assert_eq!(marked(&["lCiX", "Esc", "uUggu"]), "aZbc\ndZef\n");
+
     // `Space c` comments every cursor's line, and the cursors stay on them.
     let mut ed = typed("fn a() {}\nfn b() {}\nfn c() {}\n");
     ed.set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Rust));
@@ -31410,6 +31472,22 @@ fn a_shell_line_quotes_names_and_counts_characters() {
 
     press(&mut ed, ":\u{3000}!echo hi");
     assert_eq!(ed.prompt_drawn(), "echo hi");
+    ed.on_key(Key::Esc);
+
+    // The caret stays after the `!` that `Shell:` stands for.
+    press(&mut ed, ":!ls");
+    ed.on_key(Key::Home);
+    press(&mut ed, "x");
+    assert_eq!(line(&ed), "!xls");
+    ed.on_key(Key::Left);
+    ed.on_key(Key::Left);
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!(line(&ed), "!xls");
+    ed.on_key(Key::End);
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(line(&ed), "!");
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(line(&ed), "!");
     ed.on_key(Key::Esc);
     std::fs::remove_dir_all(&dir).ok();
 }

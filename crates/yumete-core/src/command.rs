@@ -5209,7 +5209,10 @@ pub fn shell_start(line: &str) -> Option<usize> {
         return Some(lead + 1);
     }
     let (word, _) = body.split_once(char::is_whitespace)?;
-    VERBS.contains(&word).then(|| lead + word.len() + 1)
+    // By the parser's rule (2026-10-29, review): `:pip sort` runs `:pipe`,
+    // so it is a shell line too.
+    let named = entry_named(word)?.name;
+    VERBS.contains(&named).then(|| lead + word.len() + 1)
 }
 
 /// **vim's `!` in a `:!` line** (2026-10-28, `:help :!`): every `!` stands for
@@ -7932,6 +7935,18 @@ mod tests {
         );
         let said = too_big.unwrap_err().to_string();
         assert!(!said.contains("命令") && !said.contains("command"), "{said}");
+    }
+
+    /// A shell verb is named by the parser's prefix rule, as it runs.
+    #[test]
+    fn a_shell_verb_by_its_prefix_is_still_a_shell_line() {
+        assert_eq!(shell_start("!ls"), Some(1));
+        assert_eq!(shell_start("pipe sort"), Some(5));
+        assert_eq!(shell_start("pip sort"), Some(4));
+        assert_eq!(parse("pip sort"), Ok(Command::Pipe("sort".into())));
+        assert_eq!(shell_start("pipe-a cat"), Some(7));
+        assert_eq!(shell_start("pip"), None, "a word still being typed");
+        assert_eq!(shell_start("write a.md"), None);
     }
 }
 
