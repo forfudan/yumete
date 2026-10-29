@@ -24,6 +24,7 @@ pub mod command;
 pub mod comment;
 pub mod conflict;
 pub mod convert;
+pub mod dates;
 pub mod diag;
 pub mod diff;
 pub mod discover;
