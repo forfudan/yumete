@@ -601,6 +601,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "unicode_alarm",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "set.editor.unicode-alarm",
+        hint: "set.editor.unicode-alarm.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "scrolloff",
         group: Group::Interface,
         kind: Kind::Count { low: 0, high: 20, zero: None },

@@ -11560,6 +11560,7 @@ fn draw_horizontal(
     // Warning: **一幀問一次**：它要拿眼前這一份的真實路徑去比命中身上那個相對路徑。
     let search_marks = editor.search_marks();
     let faint_style = Style::default().bg(ink.faint_wash());
+    let alarm_style = Style::default().bg(ink.short_wash(crate::theme::Accent::Amber));
     // Asked of the editor, not of the range: the selection always covers the
     // cursor's own grapheme, so a bare cursor would otherwise be drawn as a
     // one-character highlight and the word-tint overlay would never appear.
@@ -12393,6 +12394,17 @@ fn draw_horizontal(
                 let b = to.saturating_sub(row.start).min(chars.len());
                 for style in styles.iter_mut().take(b).skip(a) {
                     *style = style.patch(faint_style);
+                }
+            }
+        }
+
+        // **The Unicode alarm** (#252, 2026-10-29): the cell after a hidden
+        // control, and a space that is not a space. Under the hits, which
+        // the reader asked for.
+        if config.editor.unicode_alarm {
+            for i in yumete_core::alarm::cells(&chars) {
+                if let Some(style) = styles.get_mut(i) {
+                    *style = style.patch(alarm_style);
                 }
             }
         }
@@ -14010,6 +14022,14 @@ fn char_info(editor: &Editor, config: &Config) -> [String; 3] {
     // reader could not see, beside a row number that already says 「—」.
     if editor.table_is_rowless() {
         return nothing();
+    }
+    // **The Unicode alarm names what the tint stands for** (#252): the tinted
+    // cell is an ordinary character, and the reason it is tinted is hidden
+    // before it.
+    if let Some(c) = editor.alarm_at_cursor().filter(|_| config.editor.unicode_alarm) {
+        let point = yumete_cjk::blocks::codepoint(c);
+        let name = yumete_core::alarm::name(c).unwrap_or_default();
+        return [format!("{point} · {name}"), point.clone(), point];
     }
     // **一個字簇，不是一個碼位**（2026-10-12）。屏幕上的一個「字」可以是好幾個：
     // 帶異體字選擇符的漢字是漢字 ＋ 一個 Plane-14 的標籤，`🈚️` 是 U+1F21A ＋

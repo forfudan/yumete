@@ -745,6 +745,23 @@ impl Editor {
     /// 者指着的是整個。
     ///
     /// 和 `char_at_cursor` 同一條收尾規矩：行末没有字就答前面那一個。
+    /// **The hidden character the tinted cell under the caret stands for**
+    /// (the Unicode alarm, #252): the zero-width or bidi control just before
+    /// the caret, or the odd space the caret is on.
+    pub fn alarm_at_cursor(&self) -> Option<char> {
+        let rope = self.current_buffer().rope();
+        let at = self.sel.head().min(rope.len_chars());
+        if let Some(c) = rope.get_char(at).filter(|&c| crate::alarm::alarm(c).is_some()) {
+            return Some(c);
+        }
+        let start = rope.line_to_char(rope.char_to_line(at));
+        (start..at)
+            .rev()
+            .map(|i| rope.char(i))
+            .take_while(|&c| crate::alarm::alarm(c) == Some(crate::alarm::Alarm::Hidden))
+            .last()
+    }
+
     pub fn grapheme_at_cursor(&self) -> Option<String> {
         // **An empty cell holds no character to name** (2026-10-22 報的). In
         // the grid the caret's position in an empty cell is the delimiter's,

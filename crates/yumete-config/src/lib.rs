@@ -327,6 +327,9 @@ pub struct EditorConfig {
     /// `"off"`. Counted by
     /// Word's rule, the same as `:count` and the daily target.
     pub status_count: String,
+    /// **The Unicode alarm** (#252, 2026-10-29): tint the cells where a
+    /// zero-width or bidi control hides, and spaces that are not U+0020.
+    pub unicode_alarm: bool,
     /// Whether a search pattern with no capital in it ignores case (#301).
     ///
     /// On: a manuscript is 漢字, which has no case, so nearly every search
@@ -486,6 +489,7 @@ impl Default for EditorConfig {
             measure: 0,
             char_info: true,
             status_count: "text".to_string(),
+            unicode_alarm: true,
             command_line: true,
             smart_case: true,
             fuzzy_search: false,
@@ -3955,6 +3959,7 @@ struct RawEditor {
     measure: Option<usize>,
     char_info: Option<bool>,
     status_count: Option<String>,
+    unicode_alarm: Option<bool>,
     command_line: Option<bool>,
     smart_case: Option<bool>,
     fuzzy_search: Option<bool>,
@@ -4158,6 +4163,9 @@ impl RawConfig {
         }
         if other.editor.status_count.is_some() {
             self.editor.status_count = other.editor.status_count.clone();
+        }
+        if other.editor.unicode_alarm.is_some() {
+            self.editor.unicode_alarm = other.editor.unicode_alarm;
         }
         if other.editor.command_line.is_some() {
             self.editor.command_line = other.editor.command_line;
@@ -4542,6 +4550,9 @@ impl RawConfig {
         }
         if let Some(which) = self.editor.status_count {
             config.editor.status_count = which;
+        }
+        if let Some(on) = self.editor.unicode_alarm {
+            config.editor.unicode_alarm = on;
         }
         if let Some(on) = self.editor.command_line {
             config.editor.command_line = on;

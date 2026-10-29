@@ -29,8 +29,10 @@ yumete-cjk = {path = "../yumete-cjk"}
 
 # Code inside a fence, coloured by its own grammar (#420). Only the fence is
 # parsed — never the manuscript — so the per-paragraph caches keep their shape.
-# Seven grammars, 1.34 MB between them; bash (1.3 MB alone) and the TIOBE ten
-# (+13 MB) were measured and left out.
+# Seven grammars, 1.34 MB between them, at first; bash (1.3 MB alone) and the
+# TIOBE ten (+13 MB) were measured and left out. On 2026-10-29 TypeScript/TSX,
+# C++, Bash and Lua went in for +7.6 MB (22.1 MB to 29.9 MB), chosen with that
+# figure in hand.
 streaming-iterator = "0.1"
 tree-sitter = "0.25"
 tree-sitter-css = "0.25"
