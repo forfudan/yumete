@@ -210,7 +210,12 @@ impl Changes {
         let strip = |s: &str| {
             s.split('\n').map(|l| l.trim_end_matches('\r')).collect::<Vec<_>>().join("\n")
         };
-        let dir = std::env::temp_dir().join(format!("yumete-vcs-{}", std::process::id()));
+        // **A directory of its own for each call** (2026-10-29): one per
+        // process let two callers at once — two tests on two threads — write
+        // over each other's `head` and delete the directory under the other.
+        static CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let call = CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("yumete-vcs-{}-{call}", std::process::id()));
         std::fs::create_dir_all(&dir).ok()?;
         let (a, b) = (dir.join("head"), dir.join("now"));
         std::fs::write(&a, strip(base)).ok()?;
