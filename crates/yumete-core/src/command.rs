@@ -647,6 +647,9 @@ pub enum Command {
     /// `:git-show [commit]` — the committed draft, read-only, in the other
     /// work area (#518).
     GitShow(Option<String>),
+    /// `:lsp-rename <新名>` — the thing under the caret, renamed by the
+    /// language server wherever it is used (#54).
+    LspRename(String),
     /// `:clipboard` — the 選擇器 over everything that could be pasted, which
     /// `空格 "` also opens (2026-09-25).
     PasteMenu,
@@ -1557,6 +1560,13 @@ fn resolve(word: &str) -> &str {
     {
         return word;
     }
+    // **A signposted old name is not a prefix** (2026-10-29): `:ls` points
+    // to `:buffer`, and once `:lsp-rename` existed it also began that name,
+    // so the prefix rule ran a rename where the reader meant a list. The
+    // signpost exists to answer that word; it answers it.
+    if RENAMED.iter().any(|(was, _)| *was == word) {
+        return word;
+    }
     // **`!` composes with the prefix rule.** `:expo html` resolved and
     // `:exp! html` did not, so the shorthand a writer had settled into stopped
     // working at exactly the moment they meant「yes, overwrite it」. The bang
@@ -1695,7 +1705,9 @@ pub fn shortest(
         .filter(|o| !(o.len() > name.len() + 1 && o.starts_with(name) && o.as_bytes()[name.len()] == b'-'))
         .collect();
     for (at, _) in name.char_indices().skip(1) {
-        if !others.iter().any(|o| o.starts_with(&name[..at])) {
+        // A signposted old name is never an abbreviation (see `resolve`).
+        let signposted = RENAMED.iter().any(|(was, _)| *was == &name[..at]);
+        if !signposted && !others.iter().any(|o| o.starts_with(&name[..at])) {
             return Some(&name[..at]);
         }
     }
@@ -4995,6 +5007,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Path],
         build: Some(|p| Ok(Command::Diff(p.arg(0).map(|s| s.to_string())))),
+    },
+    Entry {
+        name: "lsp-rename",
+        aliases: &[],
+        help: "cmd.commands.lsp-rename",
+        needs: &[],
+        params: &[Param::Free("<新名>")],
+        build: Some(|p| Ok(Command::LspRename(p.need(0)?.to_string()))),
     },
     Entry {
         name: "git-show",

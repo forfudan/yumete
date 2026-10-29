@@ -57,6 +57,12 @@ pub enum Item {
     /// yumete is one process in one terminal, so it does that by **going
     /// there and starting again** — see `Editor::reopen_request`.
     Project(String),
+    /// **A place in a file** — a reference `gr` found (2026-10-29): the row
+    /// shown (`file:line  text`), the file, the line and the character.
+    Place(String, std::path::PathBuf, usize, usize),
+    /// **A code action** `空格 a` offered, by its place in the offer, and its
+    /// title.
+    Action(usize, String),
 }
 
 impl Item {
@@ -64,7 +70,8 @@ impl Item {
     pub fn label(&self) -> &str {
         match self {
             Item::File(path) | Item::Project(path) | Item::Dir(path) => path,
-            Item::Buffer(_, name) | Item::Paste(_, name) => name,
+            Item::Buffer(_, name) | Item::Paste(_, name) | Item::Action(_, name) => name,
+            Item::Place(label, ..) => label,
             Item::Wiki(name, _) => name,
         }
     }

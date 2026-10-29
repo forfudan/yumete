@@ -3622,6 +3622,8 @@ impl Editor {
             // 「without leaving」.
             Key::Char('d') => self.show_definition(false),
             Key::Char('D') => self.show_definition(true),
+            // **helix's `gr`: every place this is used** (#54, 2026-10-29).
+            Key::Char('r') => self.ask_references(),
             // **一眼跳到屏幕上任何地方**（#406，2026-09-28）。查定義是 `gd`/`gD`
             // 了（2026-09-09 改的名），而 `gw` 從那天起只剩一句「它搬家了」——
             // Warning: 一個 helix 使用者按 `gw` 收到的是那句話，**看起來像個答案而答的
@@ -3788,6 +3790,8 @@ impl Editor {
         ('D', "hint.space.problems-panel"),
         ('x', "hint.space.change"),
         ('X', "hint.space.change-panel"),
+        ('r', "hint.space.rename"),
+        ('a', "hint.space.actions"),
         ('i', "hint.space.record"),
         ('I', "hint.space.record-panel"),
         ('w', "hint.region.title"),
@@ -3868,6 +3872,7 @@ impl Editor {
         ("n p", "hint.goto.next-or-previous-buffer"),
         ("d", "hint.goto.follow-note"),
         ("D", "hint.goto.follow-note-elsewhere"),
+        ("r", "hint.goto.references"),
         ("/", "hint.goto.search-word"),
         ("?", "hint.goto.search-word-elsewhere"),
         ("j k", "hint.goto.by-file-line"),
@@ -3903,6 +3908,7 @@ impl Editor {
         ("n p", "hint.goto.next-or-previous-buffer"),
         ("d", "hint.goto.follow-note"),
         ("D", "hint.goto.follow-note-elsewhere"),
+        ("r", "hint.goto.references"),
         ("/", "hint.goto.search-word"),
         ("?", "hint.goto.search-word-elsewhere"),
         ("h l", "hint.goto.by-file-line-vertical"),
@@ -4285,7 +4291,7 @@ impl Editor {
     ///
     /// Warning: 從前是三份抄的，而且抄漏了一行：`:` 不清 `completion`，另外兩個清
     /// （2026-09-23 審出來的）。同一件事兩種收尾，正是這個倉在防的那一族。
-    fn open_the_command_line(&mut self, line: &str) {
+    pub(super) fn open_the_command_line(&mut self, line: &str) {
         self.mode = Mode::Command;
         self.command_line = line.to_string();
         self.command_caret = self.command_line.chars().count();
@@ -4440,6 +4446,10 @@ impl Editor {
             // 進邊欄，同那一族的別的四個。`v` 是更好按的那一格，留着——這一件不是
             // 天天按的（原話：「感觉 git 还原不一定常用」）。
             Key::Char('x') => self.show_the_change_here(true),
+            // **helix's `空格 r` and `空格 a`** (#54, 2026-10-29): rename the
+            // thing under the caret everywhere, and what the server can do here.
+            Key::Char('r') => self.start_a_rename(),
+            Key::Char('a') => self.ask_actions(),
             Key::Char('X') => self.show_the_change_here(false),
             // **記錄**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
             // 格的事），這一對是順手。

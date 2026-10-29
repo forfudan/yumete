@@ -131,6 +131,14 @@ struct Server {
     asked_signature: Option<i64>,
     /// 簽名回空之後那一句補問的 hover（2026-10-08）。
     asked_signature_doc: Option<i64>,
+    /// `gr`, `:lsp-rename` and `空格 a` now out, and a code action's command
+    /// (#54, 2026-10-29). Each its own slot, for the reason `asked_what` has one.
+    asked_refs: Option<i64>,
+    asked_rename: Option<i64>,
+    asked_actions: Option<i64>,
+    /// **What this server last said was wrong, as it wrote it**, by file: a
+    /// code action is asked with the ones over its span.
+    raw: HashMap<PathBuf, Vec<(usize, usize, String)>>,
     /// **這一個服務器此刻開着幾件活**（`$/progress`，2026-10-01）。
     ///
     /// Warning: **數的是服務器自己說的，不是我們猜的。** 從前轉圈那八個點問的是
@@ -185,6 +193,10 @@ struct Heard {
     signature: Option<Option<lsp::Signature>>,
     /// 簽名回空之後那一句補問的 hover（2026-10-08）。
     signature_doc: Option<Option<lsp::Told>>,
+    /// `gr`'s places, the first server's that found any (#54).
+    refs: Option<Vec<lsp::Place>>,
+    /// A rename's edits, or what the server said in refusing.
+    rename: Option<(Vec<lsp::TextEdit>, Option<String>)>,
 }
 
 impl Heard {
@@ -215,6 +227,20 @@ impl Heard {
             return;
         }
         self.signature_doc = Some(told);
+    }
+
+    fn references(&mut self, places: Vec<lsp::Place>) {
+        if self.refs.as_ref().is_some_and(|had| !had.is_empty()) {
+            return;
+        }
+        self.refs = Some(places);
+    }
+
+    fn renamed(&mut self, edits: Vec<lsp::TextEdit>, error: Option<String>) {
+        if self.rename.as_ref().is_some_and(|(had, _)| !had.is_empty()) {
+            return;
+        }
+        self.rename = Some((edits, error));
     }
 
     fn next_up(&mut self, offers: Vec<lsp::Offer>, incomplete: bool) {
@@ -273,10 +299,25 @@ impl Heard {
         if let Some(Some(told)) = self.signature_doc {
             editor.show_signature_from_doc(&told.text);
         }
+        match self.refs {
+            Some(places) if !places.is_empty() => editor.show_references(places),
+            Some(_) if !waiting(|s| s.asked_refs) => editor.show_references(Vec::new()),
+            _ => {}
+        }
+        match self.rename {
+            Some((edits, _)) if !edits.is_empty() => editor.renamed(edits, None),
+            Some((_, error)) if !waiting(|s| s.asked_rename) => editor.renamed(Vec::new(), error),
+            _ => {}
+        }
     }
 }
 
 pub struct Servers {
+    /// **The code actions gathered so far** (#54): every server is asked, and
+    /// the picker opens once the last one has answered, with all of them.
+    gathered: Vec<lsp::Action>,
+    /// A `空格 a` is out and its picker not yet shown.
+    asking_actions: bool,
     /// **命令名 → 那個服務器**（#425，2026-09-30 從「語言名 →」改的）。
     ///
     /// 一種語言跑得了好幾個：Python 常見的是 `ruff` 挑毛病、`pylsp` 講文檔。
@@ -347,6 +388,8 @@ pub type Doorbell = std::sync::Arc<dyn Fn() + Send + Sync>;
 impl Default for Servers {
     fn default() -> Servers {
         Servers {
+            gathered: Vec::new(),
+            asking_actions: false,
             doorbell: None,
             running: HashMap::new(),
             serving: HashMap::new(),
@@ -704,6 +747,15 @@ impl Servers {
             if editor.take_definition_query().is_some() {
                 editor.no_definition();
             }
+            let dropped = editor.take_references_query().is_some()
+                | editor.take_rename_query().is_some()
+                | editor.take_actions_query().is_some()
+                | editor.take_command_query().is_some();
+            if dropped {
+                if let Some(cannot) = self.why_it_cannot_ask(editor, config, language) {
+                    editor.set_status(cannot.word);
+                }
+            }
             return;
         }
         // Warning: **問的是行列號，答的是服務器手上那份正文。** 打完字還沒過
@@ -725,6 +777,7 @@ impl Servers {
         if !self.told_the_latest(editor) {
             return;
         }
+        self.ask_the_other_questions(language, editor);
         // **已經發出去、還沒回話的時候別再發一遍。** 問話留在編輯器手上直到答案
         // 說得準為止（見 `Editor::definition_query`），所以這一道閘是它的另一半。
         if self.running.values().any(|server| server.asked_where.is_some()) {
@@ -736,6 +789,64 @@ impl Servers {
             |server, id| server.asked_where = Some(id),
             |id| lsp::definition(id, &path, line, column),
         );
+    }
+
+    /// **`gr`, `:lsp-rename`, `空格 a` and a picked action's command**
+    /// (#54, 2026-10-29). Taken when sent: their answers are not retried, as
+    /// a definition's is, because none of them is asked while typing.
+    fn ask_the_other_questions(&mut self, language: &str, editor: &mut Editor) {
+        if !self.running.values().any(|s| s.asked_refs.is_some()) {
+            if let Some((path, line, column)) = editor.take_references_query() {
+                self.ask_them_all(
+                    language,
+                    |server, id| server.asked_refs = Some(id),
+                    |id| lsp::references(id, &path, line, column),
+                );
+            }
+        }
+        if !self.running.values().any(|s| s.asked_rename.is_some()) {
+            if let Some((path, line, column, name)) = editor.take_rename_query() {
+                self.ask_them_all(
+                    language,
+                    |server, id| server.asked_rename = Some(id),
+                    |id| lsp::rename(id, &path, line, column, &name),
+                );
+            }
+        }
+        if !self.asking_actions {
+            if let Some((path, from, to)) = editor.take_actions_query() {
+                self.gathered.clear();
+                self.asking_actions = true;
+                for name in self.serving(language) {
+                    let Some(server) = self.running.get_mut(&name) else { continue };
+                    // The server's own complaints over the span, word for word.
+                    let over: Vec<String> = server
+                        .raw
+                        .get(&path)
+                        .into_iter()
+                        .flatten()
+                        .filter(|(first, last, _)| *first <= to.0 && *last >= from.0)
+                        .map(|(_, _, json)| json.clone())
+                        .collect();
+                    let id = server.next_ask;
+                    server.next_ask += 1;
+                    server.asked_actions = Some(id);
+                    server.say(lsp::code_action(id, &path, from, to, &over));
+                }
+                // Nobody to ask is an answer too: there is nothing on offer.
+                if !self.running.values().any(|s| s.asked_actions.is_some()) {
+                    self.asking_actions = false;
+                    editor.show_actions(Vec::new());
+                }
+            }
+        }
+        if let Some((whose, command, arguments)) = editor.take_command_query() {
+            if let Some(server) = self.running.get_mut(&whose) {
+                let id = server.next_ask;
+                server.next_ask += 1;
+                server.say(lsp::execute_command(id, &command, &arguments));
+            }
+        }
     }
 
     /// **同一個問題，發給這種語言的每一個服務器**（#425，2026-09-30）。
@@ -1001,7 +1112,8 @@ impl Servers {
                             server.say_now(message);
                         }
                     }
-                    Ok(Notice::Said { path, said }) => {
+                    Ok(Notice::Said { path, said, raw }) => {
+                        server.raw.insert(path.clone(), raw);
                         // 第一次回話——冷啓動結束了。
                         if answered.remove(&path) {
                             said_so = true;
@@ -1012,6 +1124,16 @@ impl Servers {
                         server.waiting = false;
                         anything = true;
                     }
+                    // **The server changes files** — how a code action that
+                    // is a command finishes (#54). Applied, and said so.
+                    Ok(Notice::ApplyEdit { id, edits }) => {
+                        let (files, places) = editor.apply_workspace_edit(&edits);
+                        server.say(lsp::applied(&id, places > 0 || edits.is_empty()));
+                        if places > 0 {
+                            editor.set_status(say!("lsp.applied", places, files));
+                        }
+                        anything = true;
+                    }
                     // Warning: An unanswered request can stall a server for good.
                     Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(&id)),
                     // **The answer to `gd`** — anything else with an id is an
@@ -1020,8 +1142,20 @@ impl Servers {
                     // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
-                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature }) => {
-                        if server.asked_signature == Some(id) {
+                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error }) => {
+                        if server.asked_refs == Some(id) {
+                            server.asked_refs = None;
+                            anything = true;
+                            heard.references(places);
+                        } else if server.asked_rename == Some(id) {
+                            server.asked_rename = None;
+                            anything = true;
+                            heard.renamed(edits, error);
+                        } else if server.asked_actions == Some(id) {
+                            server.asked_actions = None;
+                            anything = true;
+                            self.gathered.extend(actions.into_iter().map(|a| lsp::Action { server: whose.clone(), ..a }));
+                        } else if server.asked_signature == Some(id) {
                             server.asked_signature = None;
                             anything = true;
                             heard.signature(signature);
@@ -1100,6 +1234,13 @@ impl Servers {
         // **全都答完了纔說「沒什麽可說的」**（#425）。一個問題發給了好幾個服務
         // 器，第一個答得出東西的算數；有一個還沒回話，就再等一輪。
         heard.settle(self, editor);
+        if !self.gathered.is_empty() || anything {
+            let still = self.running.values().any(|s| s.asked_actions.is_some());
+            if !still && self.asking_actions {
+                self.asking_actions = false;
+                editor.show_actions(std::mem::take(&mut self.gathered));
+            }
+        }
         self.waiting_on = answered;
         // 等完了就把那句話收走——留着它會蓋住下一句真要說的話。
         if said_so && self.waiting_on.is_empty() {
@@ -1539,6 +1680,10 @@ fn start(
         asked_what: None,
         asked_signature: None,
         asked_signature_doc: None,
+        asked_refs: None,
+        asked_rename: None,
+        asked_actions: None,
+        raw: HashMap::new(),
         working: HashSet::new(),
         started: std::time::Instant::now(),
         working_since: None,
@@ -1643,6 +1788,10 @@ mod tests {
                     asked_what: None,
                     asked_signature: None,
                     asked_signature_doc: None,
+                    asked_refs: None,
+                    asked_rename: None,
+                    asked_actions: None,
+                    raw: HashMap::new(),
                     working: HashSet::new(),
                     started: std::time::Instant::now(),
                     working_since: None,
@@ -1938,7 +2087,7 @@ mod tests {
                 severity: Severity::Error,
                 message: "說不通".into(),
                 source: Some("rustc".into()),
-            }],
+            }], raw: Vec::new()
         })
         .unwrap();
         assert!(servers.collect(&mut editor), "有東西來了");
@@ -2150,7 +2299,7 @@ mod tests {
         assert_eq!(servers.due_in(), Some(LOOK_IN));
         // The answer comes, and the deadline goes with it.
         let (mut editor, path) = editor_on("e.rs", "fn main() {}\n");
-        tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
+        tell.send(Notice::Said { path, said: Vec::new(), raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), None);
     }
@@ -2163,7 +2312,7 @@ mod tests {
         let (mut servers, _heard, tell) = Servers::pretend("rust");
         let (mut editor, path) = editor_on("e.rs", "fn main() {}\n");
         servers.running.get_mut(&Servers::findable()).unwrap().asked_where = Some(FIRST_ASK);
-        tell.send(Notice::Said { path, said: Vec::new() }).unwrap();
+        tell.send(Notice::Said { path, said: Vec::new(), raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(servers.due_in(), Some(LOOK_IN), "問出去的還沒答，就不許睡死");
     }
@@ -2209,13 +2358,13 @@ mod tests {
             message: "bad type".into(),
             source: Some("pylsp".into()),
         };
-        from_ruff.send(Notice::Said { path: path.clone(), said: vec![lint] }).unwrap();
-        from_pylsp.send(Notice::Said { path: path.clone(), said: vec![typo] }).unwrap();
+        from_ruff.send(Notice::Said { path: path.clone(), said: vec![lint], raw: Vec::new() }).unwrap();
+        from_pylsp.send(Notice::Said { path: path.clone(), said: vec![typo], raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(editor.problems_listed().len(), 2, "兩家說的都在");
 
         // 三、ruff 那一條改好了，它推一份空的——**只**抹掉自己說的。
-        from_ruff.send(Notice::Said { path: path.clone(), said: Vec::new() }).unwrap();
+        from_ruff.send(Notice::Said { path: path.clone(), said: Vec::new(), raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         let left = editor.problems_listed();
         assert_eq!(left.len(), 1, "pylsp 說的還在：{left:?}");
@@ -2257,7 +2406,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None,
+                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2277,7 +2426,7 @@ mod tests {
                 told: Some("fn main()".into()),
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None,
+                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2307,7 +2456,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None,
+                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
             })
             .unwrap();
         }
@@ -2344,11 +2493,11 @@ mod tests {
             message: "說不通".into(),
             source: None,
         };
-        tell.send(Notice::Said { path: path.clone(), said: vec![one] }).unwrap();
+        tell.send(Notice::Said { path: path.clone(), said: vec![one], raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert_eq!(editor.problems_listed().len(), 1);
         // 推一份空的就清乾淨——單服務器下這一條從前就是這樣。
-        tell.send(Notice::Said { path: path.clone(), said: Vec::new() }).unwrap();
+        tell.send(Notice::Said { path: path.clone(), said: Vec::new(), raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
         assert!(editor.problems_listed().is_empty(), "空的一推就清乾淨");
 
@@ -2396,5 +2545,112 @@ mod tests {
             let _ = child.wait();
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`gr`, `:lsp-rename` and `空格 a` reach the server and come back**
+    /// (#54, 2026-10-29): two references open a picker, a rename's edit is
+    /// applied, the code-action request carries the diagnostics over its span,
+    /// and a picked command goes to the server that offered it, whose edit is
+    /// then applied and answered.
+    #[test]
+    fn references_rename_and_code_actions_go_out_and_come_back() {
+        use yumete_core::input::Key;
+        let (mut servers, heard, tell) = Servers::pretend("rust");
+        let (mut editor, path) = editor_on("refs.rs", "fn main() {\n    let a = 1;\n}\n");
+        let config = Servers::stocked("rust");
+        servers.follow(&mut editor, &config);
+        let id_of = |servers: &Servers, pick: fn(&Server) -> Option<i64>| {
+            servers.running.values().find_map(pick).expect("asked")
+        };
+        let answer = |id: i64, places: Vec<lsp::Place>, edits: Vec<lsp::TextEdit>, actions: Vec<lsp::Action>| {
+            Notice::Answer { id, places, told: None, offers: Vec::new(), incomplete: false, signature: None, edits, actions, error: None }
+        };
+        let place = |line: usize| lsp::Place { path: path.clone(), line, utf16_column: 4 };
+
+        // `gr`: two places, so a picker.
+        editor.execute(":2").unwrap();
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('r'));
+        // The first turn after a change only starts the settle; the second sends.
+        servers.follow(&mut editor, &config);
+        servers.follow(&mut editor, &config);
+        servers.ask(&mut editor, &config);
+        let id = id_of(&servers, |s| s.asked_refs);
+        tell.send(answer(id, vec![place(0), place(1)], Vec::new(), Vec::new())).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(editor.picker().map(|p| p.total()), Some(2), "two references, a picker");
+        editor.on_key(Key::Esc);
+
+        // `:lsp-rename b`: the edit comes back and is made.
+        editor.execute(":2").unwrap();
+        editor.on_key(Key::Char('w'));
+        editor.execute(":lsp-rename b").unwrap();
+        // The first turn after a change only starts the settle; the second sends.
+        servers.follow(&mut editor, &config);
+        servers.follow(&mut editor, &config);
+        servers.ask(&mut editor, &config);
+        let id = id_of(&servers, |s| s.asked_rename);
+        let edit = lsp::TextEdit { path: path.clone(), from: (1, 8), to: (1, 9), text: "b".into() };
+        tell.send(answer(id, Vec::new(), vec![edit], Vec::new())).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(editor.current_buffer().rope().to_string(), "fn main() {\n    let b = 1;\n}\n");
+
+        // `空格 a`: the diagnostics over line 2 go out with the question.
+        tell.send(Notice::Said {
+            path: path.clone(),
+            said: Vec::new(),
+            raw: vec![(1, 1, r#"{"message":"unused"}"#.into()), (0, 0, r#"{"message":"elsewhere"}"#.into())],
+        })
+        .unwrap();
+        servers.collect(&mut editor);
+        while heard.try_recv().is_ok() {}
+        editor.execute(":2").unwrap();
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('a'));
+        // The first turn after a change only starts the settle; the second sends.
+        servers.follow(&mut editor, &config);
+        servers.follow(&mut editor, &config);
+        servers.ask(&mut editor, &config);
+        let sent: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
+        let asked = sent
+            .iter()
+            .find(|m| m.contains("textDocument/codeAction"))
+            .unwrap_or_else(|| panic!("asked: {} / {sent:?}", editor.status()));
+        assert!(asked.contains("unused") && !asked.contains("elsewhere"), "{asked}");
+        let id = id_of(&servers, |s| s.asked_actions);
+        let fix = lsp::Action {
+            title: "prefix with _".into(),
+            edits: vec![lsp::TextEdit { path: path.clone(), from: (1, 8), to: (1, 8), text: "_".into() }],
+            command: None,
+            server: String::new(),
+        };
+        let run = lsp::Action {
+            title: "run it".into(),
+            edits: Vec::new(),
+            command: Some(("do.it".into(), "[1]".into())),
+            server: String::new(),
+        };
+        tell.send(answer(id, Vec::new(), Vec::new(), vec![fix, run])).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(editor.picker().map(|p| p.total()), Some(2), "two actions, a picker");
+
+        // The second is a command: it goes back to this server …
+        editor.on_key(Key::Down);
+        editor.on_key(Key::Enter);
+        // The first turn after a change only starts the settle; the second sends.
+        servers.follow(&mut editor, &config);
+        servers.follow(&mut editor, &config);
+        servers.ask(&mut editor, &config);
+        let sent: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
+        assert!(sent.iter().any(|m| m.contains("workspace/executeCommand") && m.contains("do.it")), "{sent:?}");
+        // … which answers by asking for an edit, made and acknowledged.
+        let edit = lsp::TextEdit { path: path.clone(), from: (0, 3), to: (0, 7), text: "start".into() };
+        tell.send(Notice::ApplyEdit { id: "9".into(), edits: vec![edit] }).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(editor.current_buffer().rope().to_string(), "fn start() {\n    let b = 1;\n}\n");
+        let sent: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
+        assert!(sent.iter().any(|m| m.contains(r#""id":9"#) && m.contains(r#""applied":true"#)), "{sent:?}");
+
+        let _ = std::fs::remove_file(&path);
     }
 }
