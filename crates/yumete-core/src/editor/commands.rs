@@ -534,6 +534,13 @@ impl Editor {
                 self.status = say!("layout.indent-width", self.indent_width);
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetAutoPairs(level) => {
+                if let Some(level) = level {
+                    self.auto_pairs = level;
+                }
+                self.status = say!("edit.auto-pairs", self.auto_pairs.name());
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetIndentHint(hint) => {
                 // 没給就只回答「現在是哪一檔」，用的是同一句話。
                 let hint = hint.unwrap_or(self.indent_hint);

@@ -336,6 +336,9 @@ impl Editor {
                     }
                 }
                 let before = self.sel.head();
+                if self.delete_an_empty_pair() {
+                    return;
+                }
                 self.delete_before_cursor();
                 // The server's list widens again, as helix's does (2026-10-28).
                 if self.sel.head() < before && self.narrow_the_server_list(before) == Some(true) {
@@ -405,7 +408,9 @@ impl Editor {
                 self.insert_recording.push(c);
                 let mut buf = [0u8; 4];
                 let one = c.encode_utf8(&mut buf).to_string();
-                self.insert_str(&one);
+                if !self.type_paired(c) {
+                    self.insert_str(&one);
+                }
                 self.maybe_ask_what_comes_next(&one);
                 self.maybe_ask_for_a_signature(&one);
             }

@@ -215,6 +215,12 @@ const EDITOR_VERTICAL_KEYS_WAYS: &[Choice] = &[
     Choice { word: "visual", label: "set.pick.vertical-keys.visual" },
 ];
 
+const EDITOR_AUTO_PAIRS_WAYS: &[Choice] = &[
+    Choice { word: "off", label: "set.pick.auto-pairs.off" },
+    Choice { word: "basic", label: "set.pick.auto-pairs.basic" },
+    Choice { word: "full", label: "set.pick.auto-pairs.full" },
+];
+
 const EDITOR_INDENT_HINT_WAYS: &[Choice] = &[
     Choice { word: "none", label: "set.pick.indent-hint.none" },
     Choice { word: "symbol", label: "set.pick.indent-hint.symbol" },
@@ -771,6 +777,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "set.editor.word-completion",
         hint: "set.editor.word-completion.hint",
         factory: "4",
+    },
+    Setting {
+        table: "editor",
+        key: "auto_pairs",
+        group: Group::Editing,
+        kind: Kind::Pick(EDITOR_AUTO_PAIRS_WAYS),
+        label: "set.editor.auto-pairs",
+        hint: "set.editor.auto-pairs.hint",
+        factory: r#""basic""#,
     },
     Setting {
         table: "editor",

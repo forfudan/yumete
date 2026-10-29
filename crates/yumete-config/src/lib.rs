@@ -132,6 +132,10 @@ pub struct EditorConfig {
     /// What is drawn in a paragraph's opening squares: `"none"` (default),
     /// `"color"`, `"symbol"`.
     pub indent_hint: String,
+    /// Which brackets and quotes close themselves as they are typed: `"off"`,
+    /// `"basic"` (default, helix's six), `"full"` (every pair the `m` group
+    /// knows). Checked and applied by the front end, as `indent_hint` is.
+    pub auto_pairs: String,
     /// The character the `symbol` hint draws in the first of them.
     pub indent_symbol: String,
     /// How a grid's columns are told apart (Feature #157).
@@ -440,6 +444,7 @@ impl Default for EditorConfig {
             diff_gutter: true,
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
+            auto_pairs: "basic".to_string(),
             indent_symbol: "↵".to_string(),
             table_rules: "line dash".to_string(),
             language_key: "C-^".to_string(),
@@ -3896,6 +3901,7 @@ struct RawEditor {
     diff_gutter: Option<bool>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
+    auto_pairs: Option<String>,
     indent_symbol: Option<String>,
     table_rules: Option<String>,
     language_key: Option<String>,
@@ -4027,6 +4033,9 @@ impl RawConfig {
         }
         if other.editor.indent_hint.is_some() {
             self.editor.indent_hint = other.editor.indent_hint.clone();
+        }
+        if other.editor.auto_pairs.is_some() {
+            self.editor.auto_pairs = other.editor.auto_pairs.clone();
         }
         if other.editor.indent_symbol.is_some() {
             self.editor.indent_symbol = other.editor.indent_symbol.clone();
@@ -4352,6 +4361,9 @@ impl RawConfig {
         }
         if let Some(hint) = self.editor.indent_hint {
             config.editor.indent_hint = hint;
+        }
+        if let Some(level) = self.editor.auto_pairs {
+            config.editor.auto_pairs = level;
         }
         if let Some(symbol) = self.editor.indent_symbol {
             config.editor.indent_symbol = symbol;

@@ -231,6 +231,10 @@ pub fn complaints(config: &Config) -> Vec<String> {
             "[editor] indent_hint = \"{word}\" 只能是 none、color、symbol"
         ));
     }
+    let word = config.editor.auto_pairs.trim();
+    if !word.is_empty() && yumete_core::editor::AutoPairs::parse(word).is_none() {
+        said.push(format!("[editor] auto_pairs = \"{word}\" 只能是 off、basic、full"));
+    }
     said
 }
 
@@ -475,6 +479,9 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_diff_gutter(config.editor.diff_gutter);
     if let Some(hint) = yumete_core::zong::IndentHint::parse(&config.editor.indent_hint) {
         editor.set_indent_hint(hint, Some(config.editor.indent_symbol.clone()));
+    }
+    if let Some(level) = yumete_core::editor::AutoPairs::parse(&config.editor.auto_pairs) {
+        editor.set_auto_pairs(level);
     }
     editor.set_chaifen(config.editor.show_chaifen);
     editor.set_usage_groups(config.editor.usage_groups.clone());

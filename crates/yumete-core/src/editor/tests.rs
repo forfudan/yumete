@@ -25,11 +25,14 @@ use yumete_cjk::{CategorySegmenter, DictionarySegmenter};
 fn typed(text: &str) -> Editor {
     let mut ed = Editor::new();
     ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
+    // The text as given: auto-pairs would close every `(` it holds.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     ed.on_key(Key::Char('i'));
     for c in text.chars() {
         ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
     }
     ed.on_key(Key::Esc);
+    ed.set_auto_pairs(crate::editor::AutoPairs::default());
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
     ed.current_buffer_mut()
@@ -4497,6 +4500,74 @@ fn indent_adds_and_removes_a_level() {
 
 /// helix's rule under the helix keymap: only a selection that is a number,
 /// whole, which then covers the new one (helix 25.07.1). vim's reaches ahead.
+/// **Auto-pairs** (2026-10-29): helix's rules, measured on 25.07.1, at three
+/// levels; the input method's commits pair as keys do under `full`.
+#[test]
+fn brackets_and_quotes_close_themselves() {
+    use crate::editor::AutoPairs;
+    let text = |ed: &Editor| ed.current_buffer().text().to_string();
+    // Type `keys` into `start` from Insert at its end (`A`); `|` marks the
+    // caret.
+    let run = |start: &str, level: AutoPairs, keys: &str| {
+        let mut ed = typed(start);
+        ed.set_auto_pairs(level);
+        press(&mut ed, "A");
+        press(&mut ed, keys);
+        let at = ed.cursor();
+        let mut out = text(&ed);
+        out.insert(out.char_indices().nth(at).map_or(out.len(), |(i, _)| i), '|');
+        out
+    };
+    let basic = AutoPairs::Basic;
+    assert_eq!(run("", basic, "("), "(|)");
+    assert_eq!(run("", basic, "(x)"), "(x)|", "the closer steps over");
+    assert_eq!(run("", basic, "\""), "\"|\"");
+    assert_eq!(run("a", basic, "\""), "a\"|", "a quote after a letter");
+    assert_eq!(run("don", basic, "'"), "don'|");
+    assert_eq!(run("", basic, "(())"), "(())|");
+    assert_eq!(run("", basic, "<"), "<|", "not one of helix's six");
+    assert_eq!(run("", basic, "「"), "「|");
+    assert_eq!(run("", AutoPairs::Full, "「"), "「|」");
+    assert_eq!(run("", AutoPairs::Full, "「話」"), "「話」|");
+    assert_eq!(run("", AutoPairs::Off, "("), "(|");
+
+    // Not before a letter, a digit or 漢字.
+    let mut ed = typed("中文");
+    press(&mut ed, "gg");
+    press(&mut ed, "i(");
+    assert_eq!(text(&ed), "(中文");
+
+    // Backspace inside an empty pair takes both.
+    let mut ed = typed("");
+    press(&mut ed, "i(");
+    ed.on_key(Key::Backspace);
+    assert_eq!(text(&ed), "");
+
+    // Through the input method under `full`: `“` pairs, and the `”` the next
+    // `"` commits steps over the closer.
+    let mut ed = typed("");
+    ed.set_auto_pairs(AutoPairs::Full);
+    press(&mut ed, "i");
+    ed.insert_committed("“");
+    ed.insert_committed("好");
+    ed.insert_committed("”");
+    ed.insert_committed("。");
+    assert_eq!(text(&ed), "“好”。");
+
+    // At every cursor.
+    let mut ed = typed("a\nb\n");
+    press(&mut ed, "ggC");
+    press(&mut ed, "A(");
+    assert_eq!(text(&ed), "a()\nb()\n");
+
+    // `[^` finished by Tab keeps the one closer the pair wrote.
+    let mut ed = typed("正文[^注]。\n\n[^注]: 一\n");
+    press(&mut ed, "ggA");
+    press(&mut ed, "[^");
+    ed.on_key(Key::Tab);
+    assert_eq!(text(&ed), "正文[^注]。[^注]\n\n[^注]: 一\n");
+}
+
 #[test]
 fn control_a_and_x_step_the_number_under_the_cursor() {
     let bump = |text: &str, keys: &str| {
@@ -21410,6 +21481,8 @@ fn a_heading_in_the_outline_folds_what_is_under_it() {
 #[test]
 fn a_footnote_tag_is_finished_from_what_the_file_already_holds() {
     let mut ed = typed("正文[^舊註]和[^7]。\n\n[^舊註]: 從前的話\n[^7]: 第七條\n");
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     // At the end of the first line, before the 。
     ed.on_key(Key::Char('A'));
     ed.on_key(Key::Char('['));
@@ -21447,6 +21520,8 @@ fn a_footnote_tag_is_finished_from_what_the_file_already_holds() {
 #[test]
 fn what_is_typed_after_the_caret_narrows_the_tags() {
     let mut ed = typed("[^甲]和[^乙]\n\n[^甲]: 一\n[^乙]: 二\n");
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     press(&mut ed, "ge");
     ed.on_key(Key::Char('A'));
     for c in "\n見[^甲".chars() {
@@ -21467,6 +21542,8 @@ fn what_is_typed_after_the_caret_narrows_the_tags() {
 #[test]
 fn a_link_is_finished_with_a_heading_of_this_file() {
     let mut ed = typed("# 卷一 開端\n\n## 第三節：雨\n\n見\n");
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     press(&mut ed, "ge");
     ed.on_key(Key::Char('A'));
     for c in "[那裏](#".chars() {
@@ -21513,6 +21590,8 @@ fn a_wiki_link_offers_the_files_near_this_one() {
     std::fs::write(dir.join("別處.md"), "別\n").unwrap();
 
     let mut ed = Editor::new();
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     ed.open_file(dir.join("卷一/一.md")).unwrap();
     ed.execute(":syntax markdown").unwrap();
     ed.on_key(Key::Char('G'));
@@ -21558,6 +21637,8 @@ fn a_wiki_link_survives_a_space_in_the_name() {
     std::fs::write(dir.join("卷一 開端.md"), "# 卷一\n").unwrap();
 
     let mut ed = Editor::new();
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     ed.open_file(dir.join("此章.md")).unwrap();
     ed.execute(":syntax markdown").unwrap();
     ed.on_key(Key::Char('G'));
@@ -21586,6 +21667,8 @@ fn a_wiki_link_closes_with_as_many_brackets_as_are_missing() {
 
     for already in ["", "]", "]]"] {
         let mut ed = Editor::new();
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
         ed.open_file(dir.join("此章.md")).unwrap();
         ed.execute(":syntax markdown").unwrap();
         ed.on_key(Key::Char('G'));
@@ -21613,6 +21696,8 @@ fn a_wiki_link_closes_with_as_many_brackets_as_are_missing() {
 #[test]
 fn tab_is_still_a_tab_where_there_is_no_reference() {
     let mut ed = typed("正文\n");
+    // Typed by hand, a `[` alone: auto-pairs would close it.
+    ed.set_auto_pairs(crate::editor::AutoPairs::Off);
     ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Text);
     ed.on_key(Key::Char('A'));
     ed.on_key(Key::Char('['));

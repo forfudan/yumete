@@ -446,6 +446,9 @@ pub enum Command {
     /// `:indent-hint color` — what, if anything, is drawn in the opening
     /// squares.
     SetIndentHint(Option<crate::zong::IndentHint>),
+    /// `:auto-pairs off|basic|full` — which brackets and quotes close
+    /// themselves as they are typed; bare reports.
+    SetAutoPairs(Option<crate::editor::AutoPairs>),
     /// `:indent-tab [spaces|tab]` — what Tab types in Insert mode; bare reports.
     SetTabInserts(Option<bool>),
     /// `:indent-width [n]` — how many columns Tab and `>` move; bare reports.
@@ -2274,6 +2277,12 @@ const KEYMAPS: &[Word] = &[
 const TAB_INSERTS: &[Word] = &[
     Word { name: "spaces", help: "cmd.tabs.spaces", needs: &[] },
     Word { name: "tab", help: "cmd.tabs.tab", needs: &[] },
+];
+
+const AUTO_PAIRS: &[Word] = &[
+    Word { name: "off", help: "set.pick.auto-pairs.off", needs: &[] },
+    Word { name: "basic", help: "set.pick.auto-pairs.basic", needs: &[] },
+    Word { name: "full", help: "set.pick.auto-pairs.full", needs: &[] },
 ];
 
 const HINTS: &[Word] = &[
@@ -4171,6 +4180,25 @@ pub const COMMANDS: &[Entry] = &[
                     }
                 },
             }))
+        }),
+    },
+    Entry {
+        name: "auto-pairs",
+        aliases: &[],
+        help: "cmd.commands.auto-pairs",
+        needs: &[],
+        params: &[Param::Words { of: AUTO_PAIRS, default: None }],
+        build: Some(|p| {
+            let Some(given) = p.arg(0) else {
+                return Ok(Command::SetAutoPairs(None));
+            };
+            match crate::editor::AutoPairs::parse(given) {
+                Some(level) => Ok(Command::SetAutoPairs(Some(level))),
+                None => Err(CommandError::InvalidArgument {
+                    command: "auto-pairs",
+                    value: given.to_string(),
+                }),
+            }
         }),
     },
     Entry {

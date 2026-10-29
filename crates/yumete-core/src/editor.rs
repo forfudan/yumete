@@ -2769,6 +2769,8 @@ pub struct Editor {
     object_missed: bool,
     /// What is drawn in a paragraph's opening squares, if anything.
     indent_hint: crate::zong::IndentHint,
+    /// `[editor] auto_pairs`: which brackets and quotes close themselves.
+    auto_pairs: AutoPairs,
     /// The character `IndentHint::Symbol` draws there.
     indent_symbol: String,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
@@ -4002,6 +4004,7 @@ impl Editor {
             problems: crate::problem::Problems::default(),
             object_missed: false,
             indent_hint: crate::zong::IndentHint::default(),
+            auto_pairs: AutoPairs::default(),
             indent_symbol: "↵".to_string(),
             count: None,
             edit_keys: Vec::new(),
@@ -5380,6 +5383,8 @@ mod memo;
 mod modes;
 mod multi;
 mod page;
+mod pairing;
+pub use pairing::AutoPairs;
 mod prompt;
 mod render;
 mod ruby;

@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Brackets and quotes close themselves**, as in helix (`:auto-pairs off|basic|full`, `[editor] auto_pairs`, settings panel: Editing). `basic`, the factory setting under both keymaps, pairs helix's six ASCII pairs; `full` pairs every bracket and quote the `m` group knows, the Chinese ones included, also when the input method commits them. Typing the closer steps over it, Backspace inside an empty pair takes both, and nothing pairs in front of a letter, a digit or a Chinese character.
 - **`[editor] completion_page_size`** (settings panel: Editing): how many items the word, code and shell completion lists show at once, 6 by default (was 9), as the input method's candidates.
 - **The completion list steps aside while the input method is composing**, so it no longer lies under the candidate panel; it comes back after the commit.
 - **Word completion from the open files.** After four Latin letters

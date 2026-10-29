@@ -663,7 +663,7 @@ impl Editor {
         for _ in 0..again {
             match opened {
                 // `i a I A` — 接着打，就在光標這裏。
-                None => self.insert_str(typed),
+                None => self.type_through_pairs(typed),
                 // Warning: **`o`/`O` 這兩路要自己拼字串，不許叫 `add_blank_line`**
                 // （2026-10-06 夜審報的，兩個病）。① 那一支自己 `snapshot()`，於是
                 // 「整段算一個命令」是假的——`3o` 打完要按三下 `u` 纔回得去；
