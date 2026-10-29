@@ -11,7 +11,13 @@
 //!   case typed, then those that hold its letters in order; 漢字 words as
 //!   the segmenter cuts them, offered only when longer than what was typed
 //!   and starting with it, so what comes up is a name or a phrase of the
-//!   project, not one more character.
+//!   project, not one more character. **A simplified character finds its
+//!   traditional forms and the other way round** (2026-10-29, the glyph sets
+//!   search uses): `书` offers `書齋` as it is written in the file.
+//! - **Full pinyin, on `C-n` only** (2026-10-29): letters that spell the
+//!   first characters of a 漢字 word syllable by syllable offer it, after
+//!   the Latin words that start with them, as search reads `shuzhai`. Not
+//!   while typing, where Latin words already come up by themselves.
 //! - **When**: after `[editor] word_completion` Latin letters (4 by default,
 //!   `0` off), or after ⌈N/2⌉ 漢字 — the rule as set on 2026-10-28: N = 3 or 4
 //!   gives 2, N = 1 or 2 gives 1. `C-n` / `C-x` asks at any length.
@@ -62,6 +68,16 @@ fn in_the_case_typed(word: &str, typed: &str) -> Option<String> {
             format!("{typed}{loud}")
         }
         false => format!("{typed}{rest}"),
+    })
+}
+
+/// **Whether `word` starts with `typed`, any form of each character
+/// counting** (2026-10-29): `书` starts `書齋`. The typed character is widened,
+/// as search widens it, so `发` reaches `髮` and `發` does not.
+fn starts_as_typed(word: &str, typed: &str) -> bool {
+    let mut letters = word.chars();
+    typed.chars().all(|want| {
+        letters.next().is_some_and(|have| have == want || crate::glyphs::shapes(want).contains(have))
     })
 }
 
@@ -296,7 +312,14 @@ impl Editor {
                     .then(a.len().cmp(&b.len()))
                     .then(a.cmp(b))
             });
-            let words: Vec<String> = found.into_iter().take(MOST).map(|(w, _)| w).collect();
+            let (started, fuzzy): (Vec<_>, Vec<_>) = found.into_iter().partition(|(_, row)| !row.0);
+            let words: Vec<String> = started
+                .into_iter()
+                .map(|(w, _)| w)
+                .chain(self.han_said_as(&typed, by_hand, &after))
+                .chain(fuzzy.into_iter().map(|(w, _)| w))
+                .take(MOST)
+                .collect();
             let items: Vec<_> = words.into_iter().map(|w| self.offer_over(line, length, w)).collect();
             return (!items.is_empty()).then_some(items);
         }
@@ -318,7 +341,7 @@ impl Editor {
                 for (word, &count) in &index.han {
                     let rest: Vec<char> = word.chars().skip(k).collect();
                     let written = after.len() >= rest.len() && after[..rest.len()] == rest[..];
-                    if word.chars().count() > k && word.starts_with(&typed) && !written {
+                    if word.chars().count() > k && starts_as_typed(word, &typed) && !written {
                         *found.entry(word).or_default() += count;
                     }
                 }
@@ -330,6 +353,29 @@ impl Editor {
             return (!items.is_empty()).then_some(items);
         }
         None
+    }
+
+    /// **The 漢字 words `typed` spells in full pinyin**, most used first; only
+    /// on `C-n`, and only when `typed` is all letters. A word already written
+    /// after the caret is not offered again.
+    fn han_said_as(&self, typed: &str, by_hand: bool, after: &[char]) -> Vec<String> {
+        if !by_hand || !typed.chars().all(|c| c.is_ascii_alphabetic()) {
+            return Vec::new();
+        }
+        let Some(said) = crate::pinyin::atoms(typed) else { return Vec::new() };
+        let mut found: HashMap<&String, u32> = HashMap::new();
+        for index in self.word_index.values() {
+            for (word, &count) in &index.han {
+                let spelled = crate::pinyin::spans_of(word, &said, true).first().is_some_and(|&(from, _)| from == 0);
+                let written = after.starts_with(&word.chars().collect::<Vec<_>>());
+                if spelled && !written {
+                    *found.entry(word).or_default() += count;
+                }
+            }
+        }
+        let mut found: Vec<(&String, u32)> = found.into_iter().collect();
+        found.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.len().cmp(&b.0.len())).then(a.0.cmp(b.0)));
+        found.into_iter().map(|(w, _)| w.clone()).collect()
     }
 
     /// Bring every open buffer's words up to date. **Only the lines that

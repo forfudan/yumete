@@ -25291,6 +25291,44 @@ fn words_of_the_open_buffers_are_offered_as_you_write() {
     assert!(ed.current_buffer().text().ends_with("\n阿寧師兄\n"));
 }
 
+/// A simplified character finds the traditional words and the other way
+/// round, and on `C-n` full pinyin spells 漢字 words (2026-10-29).
+#[test]
+fn chinese_words_are_found_by_either_form_and_by_pinyin() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let mut ed = typed("在書齋读书，书房也好。\n");
+    ed.set_segmenter(Box::new(crate::DictionarySegmenter::new(
+        [("書齋".to_string(), 100), ("书房".to_string(), 100), ("读书".to_string(), 100)],
+        1,
+    )));
+    ed.set_word_completion(2);
+    press(&mut ed, "Go");
+    ed.insert_committed("书");
+    assert_eq!(labels(&ed), ["书房", "書齋"], "written as in the file");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    press(&mut ed, "o");
+    press(&mut ed, "shuzhai");
+    assert!(labels(&ed).is_empty(), "pinyin waits for C-n");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(labels(&ed), ["書齋"]);
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("\n書齋\n"), "the letters are replaced");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "o");
+    press(&mut ed, "shu");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(labels(&ed), ["書齋", "书房"], "書齋 is in the file twice now");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    press(&mut ed, "o");
+    press(&mut ed, "shuzh");
+    ed.on_key(Key::Ctrl('n'));
+    assert!(labels(&ed).is_empty(), "whole syllables only, as search");
+}
+
 /// A word that starts with what was typed comes first, in the case typed
 /// (2026-10-28): `when` gets `whenever` and not `When` (that is what was
 /// typed), `When` gets `Whenever`, `WHEN` gets `WHENEVER`; a name with a
