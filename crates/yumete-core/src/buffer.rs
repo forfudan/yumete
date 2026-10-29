@@ -299,6 +299,11 @@ struct EditSnapshot {
     /// brings back every cursor on `u`, and one `usize` holds one of them.
     selections: Option<crate::selection::Selections>,
     modified: bool,
+    /// **The selections at the step's other end** (2026-10-29, measured
+    /// against helix 25.07.1): on an undo point, where the cursors stood when
+    /// the change was done, which is where helix's redo puts them; on a redo
+    /// point, where they stood before it, for the undo after that.
+    far: Option<(usize, Option<crate::selection::Selections>)>,
 }
 
 /// A buffer's undo and redo stacks.
@@ -325,6 +330,10 @@ struct History {
     /// pressed a hundred times to take back one keystroke, which reads as an
     /// undo that is broken rather than one that is precise.
     grouping: bool,
+    /// The text moved since the last undo or redo, so the top undo point is
+    /// the change still being made and [`Buffer::settle_after`] may say
+    /// where it left the cursors.
+    fresh: bool,
 }
 
 /// Hands out a fresh buffer id.
@@ -1477,7 +1486,19 @@ impl Buffer {
             cursor,
             selections,
             modified: self.modified,
+            far: None,
         });
+    }
+
+    /// Say where the change on top of the undo stack left the cursors, for a
+    /// redo to come back to. Does nothing after an undo or a redo.
+    pub fn settle_after(&mut self, cursor: usize, selections: crate::selection::Selections) {
+        if !self.history.fresh {
+            return;
+        }
+        if let Some(top) = self.history.undo.last_mut() {
+            top.far = Some((cursor, Some(selections)));
+        }
     }
 
     /// **Say where the change really begins**, before anything was typed
@@ -1519,6 +1540,7 @@ impl Buffer {
     /// Turn an announced undo point into a real one, now that the text has
     /// moved. Called from the two places that move it.
     fn earn_snapshot(&mut self) {
+        self.history.fresh = true;
         match self.history.pending.take() {
             Some(point) => {
                 // **分了叉，存檔那個位置就走不回去了**（見 [`Buffer::saved_depth`]）。
@@ -1576,7 +1598,17 @@ impl Buffer {
         // A point nobody earned is not a place to go back to.
         self.history.pending = None;
         let prev = self.history.undo.pop()?;
-        self.history.redo.push(self.here(cursor, selections));
+        self.history.fresh = false;
+        // The redo goes back to where the change left the cursors, when that
+        // was said; the cursor alone stays this one, for vim's rule.
+        let selections = match &prev.far {
+            Some((_, Some(after))) => Some(after.clone()),
+            _ => selections,
+        };
+        self.history.redo.push(EditSnapshot {
+            far: Some((prev.cursor, prev.selections.clone())),
+            ..self.here(cursor, selections)
+        });
         self.revision += 1;
         self.edit = None;
         self.journal = None;
@@ -1604,7 +1636,17 @@ impl Buffer {
             return None;
         }
         let next = self.history.redo.pop()?;
-        self.history.undo.push(self.here(cursor, selections));
+        self.history.fresh = false;
+        // The undo after this goes back to where the cursors were before the
+        // change, as the first undo did.
+        let back = match next.far.clone() {
+            Some(before) => before,
+            None => (cursor, selections),
+        };
+        self.history.undo.push(EditSnapshot {
+            far: Some((next.cursor, next.selections.clone())),
+            ..self.here(back.0, back.1)
+        });
         self.revision += 1;
         self.edit = None;
         self.journal = None;
@@ -1623,6 +1665,7 @@ impl Buffer {
             cursor,
             selections,
             modified: self.modified,
+            far: None,
         }
     }
 }

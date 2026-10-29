@@ -669,7 +669,11 @@ impl Editor {
     /// mistype as a command, and the same fingers type them.
     pub(super) fn edit_prompt(&mut self, key: Key) {
         let len = self.command_line.chars().count();
-        self.command_caret = self.command_caret.min(len);
+        // **The caret stays after the `!` that `Shell:` stands for**
+        // (2026-10-29, review): it could go before it, unseen, and a letter
+        // typed there turned the shell line into a command.
+        let floor = self.prompt_hidden().min(len);
+        self.command_caret = self.command_caret.clamp(floor, len);
         let byte = |line: &str, at: usize| -> usize {
             line.char_indices().nth(at).map(|(i, _)| i).unwrap_or(line.len())
         };
@@ -702,9 +706,9 @@ impl Editor {
                 self.command_line.replace_range(from..to, "");
                 self.command_caret -= 1;
             }
-            Key::Left => self.command_caret = self.command_caret.saturating_sub(1),
+            Key::Left => self.command_caret = self.command_caret.saturating_sub(1).max(floor),
             Key::Right => self.command_caret = (self.command_caret + 1).min(len),
-            Key::Home | Key::Ctrl('a') => self.command_caret = 0,
+            Key::Home | Key::Ctrl('a') => self.command_caret = floor,
             Key::End | Key::Ctrl('e') => self.command_caret = len,
             // The same two keys Insert has, and every terminal prompt.
             Key::Ctrl('w') => {
@@ -717,15 +721,18 @@ impl Editor {
                     .char_indices()
                     .rev()
                     .find(|(_, c)| c.is_whitespace())
-                    .map_or(0, |(i, c)| kept[..i + c.len_utf8()].chars().count());
+                    .map_or(0, |(i, c)| kept[..i + c.len_utf8()].chars().count())
+                    .max(floor);
                 let keep: String = head.chars().take(cut).collect();
                 let tail: String = self.command_line.chars().skip(self.command_caret).collect();
                 self.command_caret = keep.chars().count();
                 self.command_line = format!("{keep}{tail}");
             }
             Key::Ctrl('u') => {
-                self.command_line = self.command_line.chars().skip(self.command_caret).collect();
-                self.command_caret = 0;
+                let head = self.command_line.chars().take(floor);
+                let tail = self.command_line.chars().skip(self.command_caret);
+                self.command_line = head.chain(tail).collect();
+                self.command_caret = floor;
             }
             _ => {}
         }

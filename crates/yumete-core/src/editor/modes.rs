@@ -210,7 +210,7 @@ impl Editor {
     /// How many characters at the start of the line the label stands for: the
     /// `!` of a `:!` line, which `Shell:` says instead (2026-10-28), so the
     /// line does not read as bash's own `!ls`.
-    fn prompt_hidden(&self) -> usize {
+    pub(super) fn prompt_hidden(&self) -> usize {
         match self.mode == Mode::Command && self.command_line.trim_start().starts_with('!') {
             // Characters, not bytes (2026-10-29, review: a full-width space
             // before the `!` is three bytes, and three characters were hidden).
@@ -251,6 +251,18 @@ impl Editor {
     /// reach, and `gt` would miss `git`. A program is not offered before its
     /// first letter: the whole of `$PATH` is no list.
     fn shell_choices(&self, line: &str) -> Option<(usize, Vec<String>)> {
+        let dir = self.working_dir();
+        if let Some((asked, at, answer)) = self.shell_memo.borrow().as_ref() {
+            if asked == line && *at == dir {
+                return answer.clone();
+            }
+        }
+        let answer = self.shell_choices_now(line);
+        *self.shell_memo.borrow_mut() = Some((line.to_string(), dir, answer.clone()));
+        answer
+    }
+
+    fn shell_choices_now(&self, line: &str) -> Option<(usize, Vec<String>)> {
         const MOST: usize = 200;
         let at = command::shell_start(line)?;
         let rest = &line[at..];

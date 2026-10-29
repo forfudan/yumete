@@ -146,16 +146,17 @@ impl Editor {
                 false => len,
             };
             // The last line has no line break of its own to stand on.
+            let ending = self.current_buffer().ending();
             let lead = match at == len && len > 0 && rope.char(len - 1) != '\n' {
-                true => "\n",
+                true => ending,
                 false => "",
             };
             let tail = match text.ends_with('\n') {
                 true => "",
-                false => "\n",
+                false => ending,
             };
             if self.overwrite(at, at, &format!("{lead}{text}{tail}")) {
-                let first = at + lead.len();
+                let first = at + lead.chars().count();
                 self.sel.set_anchor(first);
                 self.sel.set_head(first);
                 self.clamp_cursor();

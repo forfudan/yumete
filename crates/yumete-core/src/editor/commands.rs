@@ -931,8 +931,25 @@ impl Editor {
                     self.status = say!("readonly.refused");
                     return Ok(CommandOutcome::Continue);
                 }
-                let text =
-                    std::fs::read_to_string(self.here_path(&path)).map_err(EditorError::Io)?;
+                // The name goes into the error, as vim's E484 has it: a bare
+                // "No such file or directory" does not say which.
+                let text = std::fs::read_to_string(self.here_path(&path)).map_err(|e| {
+                    EditorError::Io(std::io::Error::new(e.kind(), format!("{path}: {e}")))
+                })?;
+                // An empty file puts nothing in, not an empty line (vim).
+                if text.is_empty() {
+                    return Ok(CommandOutcome::Continue);
+                }
+                // Lines take this file's ending and lose the other file's
+                // byte-order mark, as vim reads them: a CRLF file read into an
+                // LF one does not leave it with two kinds of line.
+                let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+                let ending = self.current_buffer().ending();
+                let text = text.replace("\r\n", "\n");
+                let text = match ending {
+                    "\n" => text,
+                    _ => text.replace('\n', ending),
+                };
                 self.read_in(&text);
                 Ok(CommandOutcome::Continue)
             }

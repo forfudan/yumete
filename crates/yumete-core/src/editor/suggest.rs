@@ -183,6 +183,15 @@ impl Editor {
         if !by_hand && !in_a_link && !names_something {
             return None;
         }
+        // **A link's path is written as a URL** (2026-10-29, review), as VS
+        // Code's Markdown completion writes it: `%` as `%25` and a space as
+        // `%20`, so `my file.md` does not end the link at its space. What was
+        // typed is read back the same way.
+        let typed = token.rsplit('/').next().unwrap_or("").chars().count();
+        let token = match in_a_link {
+            true => crate::markdown::percent_decoded(&token),
+            false => token,
+        };
         let (dir, base) = match token.rfind('/') {
             Some(i) => (&token[..=i], &token[i + 1..]),
             None => ("", token.as_str()),
@@ -210,13 +219,16 @@ impl Editor {
                 // never offered `src/`).
                 (shown && name.starts_with(base) && (name != base || folder)).then(|| {
                     let slash = if folder { "/" } else { "" };
+                    let name = match in_a_link {
+                        true => name.replace('%', "%25").replace(' ', "%20"),
+                        false => name,
+                    };
                     format!("{name}{slash}")
                 })
             })
             .collect();
         names.sort();
         names.truncate(MOST);
-        let typed = base.chars().count();
         let items: Vec<_> = names.into_iter().map(|n| self.offer_over(line, typed, n)).collect();
         (!items.is_empty()).then_some(items)
     }

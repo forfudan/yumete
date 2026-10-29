@@ -23,7 +23,19 @@ impl Editor {
         let was = self.before_a_change();
         let outcome = self.on_key_now(key);
         self.keep_the_signature_up(was);
+        self.settle_the_change(was);
         outcome
+    }
+
+    /// A key that moved the text says where it left the cursors, for helix's
+    /// redo to come back to (see [`crate::Buffer::settle_after`]).
+    fn settle_the_change(&mut self, (_, id, revision, _): (Mode, u64, u64, usize)) {
+        let buffer = self.current_buffer();
+        if buffer.id() != id || buffer.revision() == revision {
+            return;
+        }
+        let (at, every) = (self.sel.head(), self.sel.clone());
+        self.current_buffer_mut().settle_after(at, every);
     }
 
     /// The mode, buffer, revision and caret, for [`Self::keep_the_signature_up`].
