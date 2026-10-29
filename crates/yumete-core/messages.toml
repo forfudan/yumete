@@ -1406,6 +1406,14 @@ en = "against what git has, word by word: HEAD unless a commit is named"
 find = "git diff 差異 差异 提交 改動 改动 版本"
 
 [[message]]
+# : 命令選單裏 git-show 那一項的説明(commands 組)
+key = "cmd.commands.git-show"
+zht = "把提交過的那一稿以只讀方式開在另一個編輯區"
+zhs = "把提交过的那一稿以只读方式开在另一个编辑区"
+en = "the committed draft, read-only, in the other work area"
+find = "提交 舊稿 旧稿 對照 对照 並排 并排 git show HEAD commit"
+
+[[message]]
 # : 命令選單裏 goto 那一項的説明(commands 組)
 key = "cmd.commands.goto"
 zht = "跳到某一行(`:42` 就夠了)"
@@ -4428,6 +4436,13 @@ en = "{0} hit(s), nothing changed"
 
 
 # ── goto ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :git-show 之後狀態行的一句話
+key = "git.show"
+zht = "{0} 那一稿開在另一個編輯區，只讀"
+zhs = "{0} 那一稿开在另一个编辑区，只读"
+en = "the draft at {0} is open in the other work area, read-only"
 
 [[message]]
 # 在跳轉表裏前後走

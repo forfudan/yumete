@@ -17,6 +17,7 @@ in `docs/development.md` §5.2.
 - **A live count on the status line**, after the position: the file's, and the selection's beside it when there is one. It shows in text files by default (`[editor] status_count = "text" | "all" | "off"`, settings panel: Marks) and is the first thing to give way on a narrow window.
 - **The outline sidebar counts each heading**, its sections included, at the right edge.
 - **`:export html` and `:export typst` carry a document's structure**: lists (nested, numbered or not), block quotes, footnotes (numbered as they are met; a list at the end in HTML, `#footnote[…]` in Typst), pipe tables with their alignment, and rules. They used to come out as their source.
+- **`:git-show [commit]`** opens the committed draft (`HEAD` by default) read-only in the other work area, on the line you are on, to read beside the one you are writing.
 - **`:earlier` and `:later`**, helix's: undo or redo so many steps, or to the change nearest a span of time back or on (`:earlier 5m`, `:later 1h 30m`).
 
 ### Changed

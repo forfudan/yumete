@@ -644,6 +644,9 @@ pub enum Command {
     /// `:git-diff [提交]` — the same, against what git has (2026-09-25).
     /// `None` is `HEAD`.
     GitDiff(Option<String>),
+    /// `:git-show [commit]` — the committed draft, read-only, in the other
+    /// work area (#518).
+    GitShow(Option<String>),
     /// `:clipboard` — the 選擇器 over everything that could be pasted, which
     /// `空格 "` also opens (2026-09-25).
     PasteMenu,
@@ -4992,6 +4995,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Path],
         build: Some(|p| Ok(Command::Diff(p.arg(0).map(|s| s.to_string())))),
+    },
+    Entry {
+        name: "git-show",
+        aliases: &[],
+        help: "cmd.commands.git-show",
+        needs: &[],
+        params: &[Param::Free("<提交>")],
+        build: Some(|p| Ok(Command::GitShow(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
         name: "git-diff",

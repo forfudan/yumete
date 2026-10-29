@@ -1067,6 +1067,51 @@ impl Editor {
         self.show_word_diff(&old, commit);
     }
 
+    /// **`:git-show [commit]`: the committed draft, read-only, in the other
+    /// work area** (#518, 2026-10-29) — vim-fugitive's `:Gsplit HEAD:%`, the
+    /// "two files" way of reading a change that §5.12.66 left for later. It
+    /// opens on the line the caret is on, near enough to read across; the
+    /// keys stay in the draft being written. Asking again replaces the copy
+    /// rather than stacking another.
+    pub(super) fn show_the_committed_draft(&mut self, commit: Option<&str>) {
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            self.status = say!("diff.no-file");
+            return;
+        };
+        let commit = commit.map(str::trim).filter(|c| !c.is_empty()).unwrap_or("HEAD");
+        let old = match crate::vcs::Changes::text_at(&path, commit) {
+            Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
+            Err(why) => {
+                self.status = say!("diff.git-said", commit, why);
+                return;
+            }
+        };
+        let name = format!("{} @ {commit}", self.current_buffer().display_name());
+        let mut copy = crate::Buffer::from_text(&old);
+        copy.name_as(&name);
+        copy.set_syntax(self.current_buffer().syntax());
+        copy.set_readonly(true);
+        let here = self.current;
+        let line = self.cursor_line();
+        let had = self
+            .buffers
+            .iter()
+            .position(|b| b.path().is_none() && b.display_name() == name);
+        match had {
+            Some(i) => {
+                self.buffers[i] = copy;
+                self.show_buffer(i);
+            }
+            None => self.add_buffer(copy),
+        }
+        let rope = self.current_buffer().rope();
+        let at = rope.line_to_char(line.min(rope.len_lines().saturating_sub(1)));
+        self.show_in_split(at, None, name.clone());
+        let here = self.buffers.iter().position(|b| b.path() == Some(path.as_path())).unwrap_or(here);
+        self.show_buffer(here);
+        self.status = say!("git.show", commit);
+    }
+
     /// 兩份正文，比出來，畫成那一份報告。`against` 是「跟誰比」的名字。
     ///
     /// **一條改動三行**（2026-10-16 改，原話：「It first list the paragraph

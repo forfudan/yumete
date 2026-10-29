@@ -29632,6 +29632,51 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
 }
 
+/// **`:git-show` opens the committed draft beside the one being written**
+/// (#518, 2026-10-29): read-only, in the other work area, with the keys left
+/// where they were; asking twice replaces the copy.
+#[test]
+fn git_show_opens_the_committed_draft_in_the_other_work_area() {
+    let dir = tmp().join(format!("yumete-git-show-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args(args)
+            .current_dir(&dir)
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@t")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@t")
+            .output()
+            .expect("git")
+    };
+    git(&["init", "-q", "."]);
+    let file = dir.join("a.md");
+    std::fs::write(&file, "一\n二\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "one"]);
+
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.goto_line(2);
+    press(&mut ed, "A改");
+    ed.on_key(Key::Esc);
+    ed.execute(":git-show").unwrap();
+    assert_eq!(ed.current_buffer().path(), Some(file.as_path()), "the keys stay in the draft");
+    assert_eq!(ed.current_buffer().text(), "一\n二改\n");
+    let pane = ed.other_pane().expect("the other work area is open");
+    let copy = ed.buffers.iter().find(|b| b.id() == pane.buffer).expect("its buffer");
+    assert_eq!(copy.text(), "一\n二\n", "the committed draft");
+    assert!(copy.is_readonly());
+    assert_eq!(copy.display_name(), "a.md @ HEAD");
+
+    let open = ed.buffers.len();
+    ed.execute(":git-show").unwrap();
+    assert_eq!(ed.buffers.len(), open, "asked again, replaced rather than stacked");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **Outside git the change bar compares with the saved file** (#298 ②,
 /// 2026-10-29): a changed line is marked until the next save clears it.
 #[test]
