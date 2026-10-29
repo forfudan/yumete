@@ -16,6 +16,7 @@ in `docs/development.md` §5.2.
 - **`:reflow [width]`**, helix's: each selection refilled to the width, 80 by default.
 - **A live count on the status line**, after the position: the file's, and the selection's beside it when there is one. It shows in text files by default (`[editor] status_count = "text" | "all" | "off"`, settings panel: Marks) and is the first thing to give way on a narrow window.
 - **The outline sidebar counts each heading**, its sections included, at the right edge.
+- **`:export html` and `:export typst` carry a document's structure**: lists (nested, numbered or not), block quotes, footnotes (numbered as they are met; a list at the end in HTML, `#footnote[…]` in Typst), pipe tables with their alignment, and rules. They used to come out as their source.
 - **`:earlier` and `:later`**, helix's: undo or redo so many steps, or to the change nearest a span of time back or on (`:earlier 5m`, `:later 1h 30m`).
 
 ### Changed
@@ -23,6 +24,7 @@ in `docs/development.md` §5.2.
 - **Counting follows Word's rule**: a 漢字 is one and a Latin word is one. `:count`, the daily target and `:count-progress` used to count 漢字 only, so English read 0; Chinese counts are unchanged. `:count` reports the new count first.
 - **`.` under the helix keymap is helix's `.`**: it types the last insert again (the key that went into insert mode and what was typed) and no longer repeats a `d`, an `r` or a paste. The vim keymap keeps vim's `.`, which repeats any change.
 - **Enter between an empty pair opens it onto three lines**, as helix does, with the closer on the line below; it used to ride down stuck to the caret.
+- **An English file exports as English**: the page's language comes from the text (`lang="en"`, a Latin serif, spaced paragraphs, no two-字 indent), and a line break between two Latin lines is a space, as CommonMark reads it. Chinese keeps its line breaks and its indent.
 - **`o` in a code file indents after an opener** (`fn f() {`, `def f():`), as Enter already did.
 
 ### Fixed

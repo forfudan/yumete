@@ -16,9 +16,17 @@
 //!   that export is horizontal on purpose rather than by omission, and says so
 //!   in a comment at the head of the file.
 //!
-//! Neither is a converter for arbitrary Markdown: headings, paragraphs and
-//! readings are what a manuscript is made of, and guessing at the rest would
-//! produce a file that looks right until it does not.
+//! Neither is a converter for arbitrary Markdown, but both carry what a
+//! manuscript is made of: headings, paragraphs and readings, and since
+//! 2026-10-29 the lists, block quotes, footnotes, pipe tables and rules a
+//! chapter or a paper has. Before that they came out as their source
+//! (`<p>- 第一点<br>`, `<p>[^1]: …</p>`).
+//!
+//! **Lines in a paragraph.** In Chinese a line break inside a paragraph is
+//! usually meant, so it stays one; between two Latin lines it is a hard-wrapped
+//! sentence going on, so it becomes a space, as CommonMark reads it. And the
+//! page's language comes from the text: an English file is no longer set as a
+//! Chinese book (`lang="zh"`, a 2em indent, CJK serif fonts).
 
 use crate::ruby::{self, Dialect, Dialects};
 
@@ -145,10 +153,10 @@ pub fn export(text: &str, format: Format, style: &Style) -> String {
     }
 }
 
-/// One block of the manuscript: what a paragraph or a heading is made of.
-enum Block<'a> {
-    Heading(usize, &'a str),
-    Paragraph(Vec<&'a str>),
+/// One block of the manuscript.
+enum Block {
+    Heading(usize, String),
+    Paragraph(Vec<String>),
     /// A fenced code block, fence lines and all, exactly as it was written.
     ///
     /// It has to be a block of its own: run through the paragraph path, the
@@ -156,70 +164,269 @@ enum Block<'a> {
     /// its three backticks as an empty code span and swallowed them — the
     /// third came out as `\``, and what reached the `.typ` file was not a code
     /// block at all (#386).
-    Code(Vec<&'a str>),
+    Code(Vec<String>),
+    /// `---`, `***` or `___` on a line of its own.
+    Rule,
+    /// The `>` lines, read again as blocks of their own.
+    Quote(Vec<Block>),
+    /// Items with one kind of marker, each item blocks of its own.
+    List { ordered: bool, start: usize, items: Vec<Vec<Block>> },
+    /// A pipe table: its heading row, how each column aligns, its rows.
+    Table { head: Vec<String>, align: Vec<crate::mdtable::Align>, rows: Vec<Vec<String>> },
 }
 
-/// Split `text` into headings and paragraphs.
+/// A footnote's name and the lines of its text, `[^1]: …`.
+type Note = (String, Vec<String>);
+
+/// The manuscript as blocks, and its footnotes' texts taken out of the flow.
+fn blocks(text: &str, source: crate::syntax::Syntax) -> (Vec<Block>, Vec<Note>) {
+    let lines: Vec<String> = text.lines().map(str::to_string).collect();
+    let mut notes = Vec::new();
+    let out = parse(&lines, source, &mut notes);
+    (out, notes)
+}
+
+/// Split `lines` into blocks.
 ///
 /// A heading is a line of hashes and a title, as it is everywhere else in
-/// yumete; a paragraph is a run of lines with no blank line in it. Consecutive
-/// lines are kept separate rather than joined, because in a Chinese manuscript
-/// a line break inside a paragraph is usually deliberate.
-fn blocks(text: &str, source: crate::syntax::Syntax) -> Vec<Block<'_>> {
+/// yumete; a paragraph is a run of lines with no blank line in it. Lists are
+/// read in Markdown and in Typst (`+` numbers there); quotes, tables, rules
+/// and footnotes in Markdown, which is where they are written that way.
+fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>) -> Vec<Block> {
+    use crate::syntax::Syntax;
     // 標題在 Markdown 裏是 `#`，在 Typst 裏是 `=`（2026-09-28）。
     let mark = match source {
-        crate::syntax::Syntax::Typst => '=',
+        Syntax::Typst => '=',
         _ => '#',
     };
+    let markdown = !matches!(source, Syntax::Typst | Syntax::Text);
+    let lists = !matches!(source, Syntax::Text);
     let mut out = Vec::new();
-    let mut lines: Vec<&str> = Vec::new();
-    let mut fence: Option<Vec<&str>> = None;
-    for line in text.lines() {
-        let trimmed = line.trim_end();
+    let mut para: Vec<String> = Vec::new();
+    let flush = |para: &mut Vec<String>, out: &mut Vec<Block>| {
+        if !para.is_empty() {
+            out.push(Block::Paragraph(std::mem::take(para)));
+        }
+    };
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i].trim_end();
+        let body = line.trim_start();
+        let indent = line.len() - body.len();
         // Inside a fence nothing is markup — not a blank line, not a `#`, not
         // a backtick. The fence is over when a line of its own opens with
-        // three backticks again.
-        if let Some(held) = &mut fence {
-            let closing = trimmed.trim_start().starts_with("```");
-            held.push(line);
-            if closing {
-                out.push(Block::Code(std::mem::take(&mut fence).unwrap_or_default()));
-                fence = None;
+        // three backticks again; one nobody closed still comes out, since the
+        // writer's text is the writer's, half-written or not.
+        if body.starts_with("```") {
+            flush(&mut para, &mut out);
+            let mut held = vec![lines[i].clone()];
+            i += 1;
+            while i < lines.len() {
+                held.push(lines[i].clone());
+                i += 1;
+                if lines[i - 1].trim().starts_with("```") {
+                    break;
+                }
             }
+            out.push(Block::Code(held));
             continue;
         }
-        if trimmed.trim_start().starts_with("```") {
-            if !lines.is_empty() {
-                out.push(Block::Paragraph(std::mem::take(&mut lines)));
-            }
-            fence = Some(vec![line]);
+        if body.is_empty() {
+            flush(&mut para, &mut out);
+            i += 1;
             continue;
         }
-        if trimmed.trim().is_empty() {
-            if !lines.is_empty() {
-                out.push(Block::Paragraph(std::mem::take(&mut lines)));
+        if markdown && indent == 0 {
+            if let Some((name, first)) = note_opening(body) {
+                flush(&mut para, &mut out);
+                let mut text = vec![first.to_string()];
+                i += 1;
+                while i < lines.len() && lines[i].starts_with([' ', '\t']) && !lines[i].trim().is_empty() {
+                    text.push(lines[i].trim().to_string());
+                    i += 1;
+                }
+                notes.push((name.to_string(), text));
+                continue;
             }
+        }
+        let depth = crate::markdown::heading_marks(line, mark).unwrap_or(0);
+        if depth > 0 && !line[depth..].trim().is_empty() {
+            flush(&mut para, &mut out);
+            out.push(Block::Heading(depth.min(6), line[depth..].trim().to_string()));
+            i += 1;
             continue;
         }
-        let depth = crate::markdown::heading_marks(trimmed, mark).unwrap_or(0);
-        if depth > 0 && !trimmed[depth..].trim().is_empty() {
-            if !lines.is_empty() {
-                out.push(Block::Paragraph(std::mem::take(&mut lines)));
+        // A setext heading: the paragraph above, underlined.
+        if markdown && !para.is_empty() && indent < 4 {
+            let level = match body {
+                b if b.chars().all(|c| c == '=') => Some(1),
+                b if b.len() >= 2 && b.chars().all(|c| c == '-') => Some(2),
+                _ => None,
+            };
+            if let Some(level) = level {
+                let title = std::mem::take(&mut para).join(" ");
+                out.push(Block::Heading(level, title));
+                i += 1;
+                continue;
             }
-            out.push(Block::Heading(depth.min(6), trimmed[depth..].trim()));
+        }
+        if markdown && indent < 4 && is_rule(body) {
+            flush(&mut para, &mut out);
+            out.push(Block::Rule);
+            i += 1;
             continue;
         }
-        lines.push(trimmed);
+        if markdown && indent < 4 && body.starts_with('>') {
+            flush(&mut para, &mut out);
+            let mut inner = Vec::new();
+            while i < lines.len() && lines[i].trim_start().starts_with('>') {
+                let rest = &lines[i].trim_start()[1..];
+                inner.push(rest.strip_prefix(' ').unwrap_or(rest).to_string());
+                i += 1;
+            }
+            out.push(Block::Quote(parse(&inner, source, notes)));
+            continue;
+        }
+        let table = match markdown && crate::mdtable::is_row(line) {
+            true => lines.get(i + 1).and_then(|l| crate::mdtable::rule_of(l)),
+            false => None,
+        };
+        if let Some(align) = table {
+            flush(&mut para, &mut out);
+            let head = crate::mdtable::split(line);
+            i += 2;
+            let mut rows = Vec::new();
+            while i < lines.len() && crate::mdtable::is_row(&lines[i]) {
+                rows.push(crate::mdtable::split(&lines[i]));
+                i += 1;
+            }
+            out.push(Block::Table { head, align, rows });
+            continue;
+        }
+        let opened = match lists {
+            true => list_item(line, source),
+            false => None,
+        };
+        if let Some(first) = opened {
+            flush(&mut para, &mut out);
+            let mut items = Vec::new();
+            let mut item = first;
+            loop {
+                // The item's own lines: its first, then what is indented past
+                // its marker, then — with no blank line between — a line that
+                // simply goes on (CommonMark's lazy continuation).
+                let mut held = vec![line_after(&lines[i], item.text)];
+                i += 1;
+                while i < lines.len() {
+                    let next = &lines[i];
+                    let blank = next.trim().is_empty();
+                    let deep = next.len() - next.trim_start().len() >= item.width;
+                    if !blank && deep {
+                        held.push(next[item.width.min(next.len())..].to_string());
+                    } else if blank {
+                        // A blank line ends the item unless what follows is
+                        // still inside it.
+                        let goes_on = lines.get(i + 1).is_some_and(|after| {
+                            !after.trim().is_empty() && after.len() - after.trim_start().len() >= item.width
+                        });
+                        if !goes_on {
+                            break;
+                        }
+                        held.push(String::new());
+                    } else if list_item(next, source).is_none()
+                        && !held.last().is_some_and(|l| l.trim().is_empty())
+                        && !next.trim_start().starts_with(['#', '>', '|'])
+                    {
+                        held.push(next.trim().to_string());
+                    } else {
+                        break;
+                    }
+                    i += 1;
+                }
+                items.push(parse(&held, source, notes));
+                // The next item, when it is a sibling: the same kind of marker
+                // at the same indent, with at most a blank line between.
+                let mut at = i;
+                while at < lines.len() && lines[at].trim().is_empty() {
+                    at += 1;
+                }
+                match lines.get(at).and_then(|l| list_item(l, source)) {
+                    Some(next) if next.indent == item.indent && next.ordered == item.ordered && at <= i + 1 => {
+                        i = at;
+                        item = next;
+                    }
+                    _ => break,
+                }
+            }
+            out.push(Block::List { ordered: first.ordered, start: first.start, items });
+            continue;
+        }
+        para.push(line.to_string());
+        i += 1;
     }
-    // A fence nobody closed still has to come out: the writer's text is the
-    // writer's, half-written or not.
-    if let Some(held) = fence {
-        out.push(Block::Code(held));
-    }
-    if !lines.is_empty() {
-        out.push(Block::Paragraph(lines));
-    }
+    flush(&mut para, &mut out);
     out
+}
+
+/// `[^name]: text` — a footnote's name and the start of its text.
+fn note_opening(line: &str) -> Option<(&str, &str)> {
+    let rest = line.strip_prefix("[^")?;
+    let close = rest.find("]:")?;
+    let name = &rest[..close];
+    (!name.is_empty() && !name.contains(char::is_whitespace)).then(|| (name, rest[close + 2..].trim()))
+}
+
+/// `---`, `***`, `___`, spaced or not: three or more of one of them, alone.
+fn is_rule(body: &str) -> bool {
+    let marks: Vec<char> = body.chars().filter(|c| !c.is_whitespace()).collect();
+    marks.len() >= 3 && matches!(marks[0], '-' | '*' | '_') && marks.iter().all(|&c| c == marks[0])
+}
+
+/// Where a list item's marker is and what it says.
+#[derive(Clone, Copy)]
+struct Item {
+    /// The marker's column.
+    indent: usize,
+    ordered: bool,
+    start: usize,
+    /// Where the item's text begins, in bytes: a line indented this far
+    /// belongs to the item.
+    width: usize,
+    /// The same, for the first line's text.
+    text: usize,
+}
+
+/// The list item `line` opens, if it opens one: `-`, `*` or `+` and a space,
+/// or a number and `.` or `)`. In Typst `+` numbers the item.
+fn list_item(line: &str, source: crate::syntax::Syntax) -> Option<Item> {
+    let body = line.trim_start();
+    let indent = line.len() - body.len();
+    if is_rule(body.trim_end()) {
+        return None;
+    }
+    let typst = source == crate::syntax::Syntax::Typst;
+    let digits = body.find(|c: char| !c.is_ascii_digit()).unwrap_or(body.len());
+    let (ordered, start, marker) = match body.chars().next()? {
+        '-' => (false, 1, 1),
+        '*' if !typst => (false, 1, 1),
+        '+' => (typst, 1, 1),
+        c if c.is_ascii_digit() && (1..=9).contains(&digits) && body[digits..].starts_with(['.', ')']) => {
+            (true, body[..digits].parse().ok()?, digits + 1)
+        }
+        _ => return None,
+    };
+    let after = &body[marker..];
+    let gap = after.len() - after.trim_start_matches(' ').len();
+    if !(after.is_empty() || gap > 0) {
+        return None;
+    }
+    let width = indent + marker + gap.clamp(1, 4);
+    Some(Item { indent, ordered, start, width, text: indent + marker + gap })
+}
+
+/// What follows the marker on an item's first line.
+fn line_after(line: &str, at: usize) -> String {
+    line.get(at..).unwrap_or_default().trim_end().to_string()
 }
 
 /// Rewrite one line for `dialect`: its readings, and its markup.
@@ -391,6 +598,12 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
         (Kind::Code, Dialect::Typst) => format!("`{text}`"),
         (Kind::Strike, Dialect::Typst) => format!("#strike[{text}]"),
         (Kind::Highlight, Dialect::Typst) => format!("#highlight[{text}]"),
+        // A footnote's mark, numbered once the whole text is out (see
+        // [`number_the_notes`]): the name, whatever escaping it came with.
+        (Kind::Footnote, _) => {
+            let name: String = text.chars().filter(|c| !matches!(c, '\\' | '[' | ']' | '^' | ':')).collect();
+            format!("{NOTE_OPEN}{name}{NOTE_CLOSE}")
+        }
         // A link's target is scaffolding for a manuscript, not part of the
         // book; its visible text is the book. The heading's own hashes are
         // handled a level up, where the heading is.
@@ -430,12 +643,18 @@ fn escape_typst(text: &str) -> String {
 /// A standalone HTML page — the export that reproduces what is on screen.
 fn html(text: &str, style: &Style) -> String {
     let mut out = String::new();
-    out.push_str("<!doctype html>\n<html lang=\"zh\">\n<meta charset=\"utf-8\">\n");
+    let text = crate::markdown::strip_comments(text);
+    let lang = language_of(&text);
+    let cjk = lang != "en";
+    out.push_str(&format!("<!doctype html>\n<html lang=\"{lang}\">\n<meta charset=\"utf-8\">\n"));
     out.push_str(&format!("<title>{}</title>\n", escape_html(&style.title)));
     out.push_str("<style>\n");
+    let fonts = match cjk {
+        true => "\"Source Han Serif\", \"Noto Serif CJK\", serif",
+        false => "Georgia, \"Times New Roman\", serif",
+    };
     out.push_str(&format!(
-        "body {{ font-family: \"Source Han Serif\", \"Noto Serif CJK\", serif; \
-         line-height: {LINE_HEIGHT}; margin: 4rem auto; }}\n"
+        "body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; margin: 4rem auto; }}\n"
     ));
     if style.vertical {
         // The one place outside a terminal where 縱書 costs a line of CSS. The
@@ -459,17 +678,47 @@ fn html(text: &str, style: &Style) -> String {
         // wherever it lands at the end of a 縱.
         out.push_str("body { hanging-punctuation: allow-end; }\n");
     }
-    out.push_str("p { text-indent: 2em; margin: 0; }\n");
+    // A Chinese paragraph opens with two 字 of indent and no gap; an English
+    // one, on a web page, with a gap and no indent.
+    match cjk {
+        true => out.push_str("p { text-indent: 2em; margin: 0; }\n"),
+        false => out.push_str("p { margin: 0 0 1em; }\n"),
+    }
     out.push_str("rt { font-size: 0.5em; }\n");
+    out.push_str(
+        "blockquote { margin: 1em 2em; }\n\
+         table { border-collapse: collapse; margin: 1em 0; }\n\
+         th, td { border: 1px solid #999; padding: 0.2em 0.6em; }\n\
+         .footnotes { font-size: 0.9em; }\n",
+    );
     out.push_str(&print_rules(style));
     out.push_str("</style>\n");
 
-    let text = crate::markdown::strip_comments(text);
-    for block in blocks(&text, style.source) {
+    let (blocks, notes) = blocks(&text, style.source);
+    let mut body = String::new();
+    html_blocks(&blocks, style, &mut body);
+    let (body, order) = number_the_notes(&body, &notes, |n, _| {
+        format!("<sup class=\"fn\"><a href=\"#fn-{n}\" id=\"fnref-{n}\">{n}</a></sup>")
+    });
+    out.push_str(&body);
+    if !order.is_empty() {
+        out.push_str("<section class=\"footnotes\">\n<hr>\n<ol>\n");
+        for (n, lines) in order.iter().enumerate() {
+            let n = n + 1;
+            out.push_str(&format!("<li id=\"fn-{n}\">{}</li>\n", html_lines(lines, style)));
+        }
+        out.push_str("</ol>\n</section>\n");
+    }
+    out
+}
+
+/// The blocks as HTML.
+fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
+    let line = |text: &str| line_into(text, style.dialects, Dialect::Html, escape_html, style.source);
+    for block in blocks {
         match block {
             Block::Heading(depth, title) => {
-                let inner = line_into(title, style.dialects, Dialect::Html, escape_html, style.source);
-                out.push_str(&format!("<h{depth}>{inner}</h{depth}>\n"));
+                out.push_str(&format!("<h{depth}>{}</h{depth}>\n", line(title)));
             }
             // The fence lines are markup, the rest is verbatim: `<pre>` keeps
             // its own whitespace, and the only thing owed to it is HTML's own
@@ -484,15 +733,152 @@ fn html(text: &str, style: &Style) -> String {
                 out.push_str(&format!("<pre><code>{}</code></pre>\n", body.join("\n")));
             }
             Block::Paragraph(lines) => {
-                let inner: Vec<String> = lines
-                    .iter()
-                    .map(|l| line_into(l, style.dialects, Dialect::Html, escape_html, style.source))
-                    .collect();
-                out.push_str(&format!("<p>{}</p>\n", inner.join("<br>\n")));
+                out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style)));
+            }
+            Block::Rule => out.push_str("<hr>\n"),
+            Block::Quote(inner) => {
+                out.push_str("<blockquote>\n");
+                html_blocks(inner, style, out);
+                out.push_str("</blockquote>\n");
+            }
+            Block::List { ordered, start, items } => {
+                let open = match (ordered, start) {
+                    (true, 1) => "<ol>".to_string(),
+                    (true, n) => format!("<ol start=\"{n}\">"),
+                    (false, _) => "<ul>".to_string(),
+                };
+                out.push_str(&open);
+                out.push('\n');
+                for item in items {
+                    // A one-paragraph item is set tight, as a list is read.
+                    match item.as_slice() {
+                        [Block::Paragraph(lines)] => {
+                            out.push_str(&format!("<li>{}</li>\n", html_lines(lines, style)));
+                        }
+                        _ => {
+                            out.push_str("<li>\n");
+                            html_blocks(item, style, out);
+                            out.push_str("</li>\n");
+                        }
+                    }
+                }
+                out.push_str(if *ordered { "</ol>\n" } else { "</ul>\n" });
+            }
+            Block::Table { head, align, rows } => {
+                let cell = |tag: &str, n: usize, text: &str| {
+                    let side = match align.get(n) {
+                        Some(crate::mdtable::Align::Center) => " style=\"text-align: center\"",
+                        Some(crate::mdtable::Align::Right) => " style=\"text-align: right\"",
+                        _ => "",
+                    };
+                    format!("<{tag}{side}>{}</{tag}>", line(text))
+                };
+                out.push_str("<table>\n<thead>\n<tr>");
+                for (n, text) in head.iter().enumerate() {
+                    out.push_str(&cell("th", n, text));
+                }
+                out.push_str("</tr>\n</thead>\n<tbody>\n");
+                for row in rows {
+                    out.push_str("<tr>");
+                    for (n, text) in row.iter().enumerate() {
+                        out.push_str(&cell("td", n, text));
+                    }
+                    out.push_str("</tr>\n");
+                }
+                out.push_str("</tbody>\n</table>\n");
             }
         }
     }
+}
+
+/// A paragraph's lines as one run of HTML: a line break stays one between
+/// lines of Chinese, where it is meant, and is a space between two Latin
+/// lines, where it is a sentence going on.
+fn html_lines(lines: &[String], style: &Style) -> String {
+    let mut out = String::new();
+    for (k, raw) in lines.iter().enumerate() {
+        if k > 0 {
+            let before = lines[k - 1].trim_end().chars().last();
+            let after = raw.trim_start().chars().next();
+            let latin = |c: Option<char>| c.is_some_and(|c| yumete_cjk::char_width(c) == 1);
+            let hard = lines[k - 1].ends_with("  ");
+            out.push_str(match latin(before) && latin(after) && !hard {
+                true => " ",
+                false => "<br>\n",
+            });
+        }
+        out.push_str(&line_into(raw.trim(), style.dialects, Dialect::Html, escape_html, style.source));
+    }
     out
+}
+
+/// The private-use marks a footnote reference is written as until the whole
+/// text is out and the notes can be numbered in the order they are met.
+const NOTE_OPEN: char = '\u{E000}';
+const NOTE_CLOSE: char = '\u{E001}';
+
+/// Every footnote mark in `body` replaced by `mark(n, note)`, numbered in the
+/// order the marks are met, and the notes in that order. A mark with no note
+/// stays as it was written; a note with no mark is left out.
+fn number_the_notes(
+    body: &str,
+    notes: &[Note],
+    mark: impl Fn(usize, &[String]) -> String,
+) -> (String, Vec<Vec<String>>) {
+    let mut out = String::with_capacity(body.len());
+    let mut order: Vec<(String, Vec<String>)> = Vec::new();
+    let mut rest = body;
+    while let Some(at) = rest.find(NOTE_OPEN) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + NOTE_OPEN.len_utf8()..];
+        let Some(close) = after.find(NOTE_CLOSE) else {
+            rest = after;
+            continue;
+        };
+        let name = &after[..close];
+        rest = &after[close + NOTE_CLOSE.len_utf8()..];
+        let n = match order.iter().position(|(seen, _)| seen == name) {
+            Some(k) => k + 1,
+            None => match notes.iter().find(|(had, _)| had == name) {
+                Some((_, text)) => {
+                    order.push((name.to_string(), text.clone()));
+                    order.len()
+                }
+                None => {
+                    out.push_str(&format!("[^{name}]"));
+                    continue;
+                }
+            },
+        };
+        out.push_str(&mark(n, &order[n - 1].1));
+    }
+    out.push_str(rest);
+    (out, order.into_iter().map(|(_, text)| text).collect())
+}
+
+/// The page's language, from what it is written in: kana makes it Japanese,
+/// more 漢字 than Latin words Chinese, and otherwise English.
+fn language_of(text: &str) -> &'static str {
+    let (mut han, mut kana, mut words, mut in_word) = (0usize, 0usize, 0usize, false);
+    for c in text.chars() {
+        if yumete_cjk::is_han(c) {
+            han += 1;
+            in_word = false;
+        } else if matches!(c as u32, 0x3041..=0x30FF) {
+            kana += 1;
+            in_word = false;
+        } else if c.is_alphabetic() {
+            words += usize::from(!in_word);
+            in_word = true;
+        } else {
+            in_word = false;
+        }
+    }
+    match (kana, han, words) {
+        (k, h, _) if k > 0 && k * 4 >= h => "ja",
+        (_, h, w) if h >= w => "zh",
+        _ => "en",
+    }
 }
 
 /// The half of the stylesheet that only a printer sees.
@@ -562,8 +948,18 @@ fn typst(text: &str, style: &Style) -> String {
 // that would only look like 縱書.\n",
         );
     }
-    out.push_str("#set text(font: \"Source Han Serif\", lang: \"zh\")\n");
-    out.push_str("#set par(first-line-indent: 2em, justify: true)\n");
+    let text = crate::markdown::strip_comments(text);
+    let lang = language_of(&text);
+    match lang {
+        "en" => {
+            out.push_str("#set text(lang: \"en\")\n");
+            out.push_str("#set par(justify: true)\n");
+        }
+        lang => {
+            out.push_str(&format!("#set text(font: \"Source Han Serif\", lang: \"{lang}\")\n"));
+            out.push_str("#set par(first-line-indent: 2em, justify: true)\n");
+        }
+    }
     out.push_str(
         "\n// yumete writes readings as `#ruby(base, reading)`; define it to
 // taste, or replace it with a package.\n\
@@ -571,39 +967,96 @@ fn typst(text: &str, style: &Style) -> String {
          #place(top + center, dy: -0.9em, text(size: 0.5em, reading))\n  #base\n]\n\n",
     );
 
-    let text = crate::markdown::strip_comments(text);
-    for block in blocks(&text, style.source) {
+    let (blocks, notes) = blocks(&text, style.source);
+    let mut body = String::new();
+    typst_blocks(&blocks, style, &mut body);
+    // Typst sets a footnote where it is called, so the note's text goes in
+    // at the mark.
+    let (body, _) = number_the_notes(&body, &notes, |_, text| {
+        let lines: Vec<String> = text
+            .iter()
+            .map(|l| line_into(l, style.dialects, Dialect::Typst, escape_typst, style.source))
+            .collect();
+        format!("#footnote[{}]", lines.join(" "))
+    });
+    out.push_str(&body);
+    out
+}
+
+/// The blocks as Typst markup.
+fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
+    let line = |text: &str| line_into(text, style.dialects, Dialect::Typst, escape_typst, style.source);
+    for block in blocks {
         match block {
             Block::Heading(depth, title) => {
-                let inner = line_into(title, style.dialects, Dialect::Typst, escape_typst, style.source);
-                out.push_str(&format!("{} {inner}\n\n", "=".repeat(depth)));
+                out.push_str(&format!("{} {}\n\n", "=".repeat(*depth), line(title)));
             }
             // **Straight through.** Typst spells a raw block with the same
             // three backticks Markdown does, so the writer's fence is already
             // Typst — reading anything inside it is the whole of #386.
             Block::Code(lines) => {
-                for line in lines {
-                    out.push_str(line);
+                for text in lines {
+                    out.push_str(text);
                     out.push('\n');
                 }
                 out.push('\n');
             }
             Block::Paragraph(lines) => {
-                for line in lines {
-                    out.push_str(&line_into(
-                        line,
-                        style.dialects,
-                        Dialect::Typst,
-                        escape_typst,
-                        style.source,
-                    ));
+                for text in lines {
+                    out.push_str(&line(text.trim()));
                     out.push('\n');
                 }
                 out.push('\n');
             }
+            Block::Rule => out.push_str("#line(length: 100%)\n\n"),
+            Block::Quote(inner) => {
+                let mut held = String::new();
+                typst_blocks(inner, style, &mut held);
+                out.push_str(&format!("#quote(block: true)[\n{}\n]\n\n", held.trim_end()));
+            }
+            // Typst's own list markup: `-` an item, `3.` a numbered one, and
+            // what belongs to an item indented under it.
+            Block::List { ordered, start, items } => {
+                for (n, item) in items.iter().enumerate() {
+                    let mut held = String::new();
+                    typst_blocks(item, style, &mut held);
+                    let marker = match ordered {
+                        true => format!("{}. ", start + n),
+                        false => "- ".to_string(),
+                    };
+                    for (k, text) in held.trim_end().lines().enumerate() {
+                        match (k, text.is_empty()) {
+                            (0, _) => out.push_str(&format!("{marker}{text}")),
+                            (_, true) => {}
+                            _ => out.push_str(&format!("  {text}")),
+                        }
+                        out.push('\n');
+                    }
+                }
+                out.push('\n');
+            }
+            Block::Table { head, align, rows } => {
+                let side = |a: &crate::mdtable::Align| match a {
+                    crate::mdtable::Align::Center => "center",
+                    crate::mdtable::Align::Right => "right",
+                    _ => "left",
+                };
+                let cells = |row: &[String]| -> String {
+                    row.iter().map(|c| format!("[{}]", line(c))).collect::<Vec<_>>().join(", ")
+                };
+                out.push_str(&format!(
+                    "#table(\n  columns: {},\n  align: ({},),\n  table.header({}),\n",
+                    head.len(),
+                    align.iter().map(side).collect::<Vec<_>>().join(", "),
+                    cells(head),
+                ));
+                for row in rows {
+                    out.push_str(&format!("  {},\n", cells(row)));
+                }
+                out.push_str(")\n\n");
+            }
         }
     }
-    out
 }
 
 #[cfg(test)]
@@ -985,5 +1438,66 @@ mod tests {
         let out = export("一\n二\n\n三\n", Format::Html, &s);
         assert!(out.contains("<p>一<br>\n二</p>"), "{out}");
         assert!(out.contains("<p>三</p>"), "{out}");
+    }
+
+    /// **Lists, quotes, footnotes, tables and rules come out as what they
+    /// are** (2026-10-29); before, each came out as its source.
+    #[test]
+    fn markdown_structure_reaches_both_formats() {
+        let mut flat = style();
+        flat.vertical = false;
+        let text = "# A Title\n\nWrapped at\nthe source.[^a]\n\n- one\n- two\n  1. inner\n\n> quoted\n> on\n\n---\n\n| N | C |\n| :- | -: |\n| x | 3 |\n\n[^a]: The note.\n";
+        let html = export(text, Format::Html, &flat);
+        assert!(html.contains("<html lang=\"en\">"), "{html}");
+        assert!(html.contains("<p>Wrapped at the source.<sup class=\"fn\"><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup></p>"), "{html}");
+        assert!(html.contains("<ul>\n<li>one</li>\n<li>\n<p>two</p>\n<ol>\n<li>inner</li>\n</ol>\n</li>\n</ul>"), "{html}");
+        assert!(html.contains("<blockquote>\n<p>quoted on</p>\n</blockquote>"), "{html}");
+        assert!(html.contains("<hr>\n<table>"), "{html}");
+        assert!(html.contains("<td style=\"text-align: right\">3</td>"), "{html}");
+        assert!(html.contains("<li id=\"fn-1\">The note.</li>"), "{html}");
+        assert!(!html.contains("[^a]"), "{html}");
+        assert!(html.contains("p { margin: 0 0 1em; }") && !html.contains("text-indent: 2em"), "{html}");
+
+        let typ = export(text, Format::Typst, &flat);
+        assert!(typ.contains("#set text(lang: \"en\")"), "{typ}");
+        assert!(typ.contains("the source.#footnote[The note.]"), "{typ}");
+        assert!(typ.contains("- one\n- two\n"), "{typ}");
+        assert!(typ.contains("  1. inner"), "{typ}");
+        assert!(typ.contains("#quote(block: true)[\nquoted\non\n]"), "{typ}");
+        assert!(typ.contains("#line(length: 100%)"), "{typ}");
+        assert!(typ.contains("align: (left, right,),\n  table.header([N], [C]),\n  [x], [3],"), "{typ}");
+    }
+
+    /// **A line break stays one in Chinese and is a space between Latin
+    /// lines**, and the page's language is the text's.
+    #[test]
+    fn line_breaks_and_the_language_follow_the_text() {
+        let mut flat = style();
+        flat.vertical = false;
+        let html = export("一\n二\n", Format::Html, &flat);
+        assert!(html.contains("<p>一<br>\n二</p>") && html.contains("lang=\"zh\""), "{html}");
+        assert!(html.contains("text-indent: 2em"), "{html}");
+        let html = export("one\ntwo\n", Format::Html, &flat);
+        assert!(html.contains("<p>one two</p>") && html.contains("lang=\"en\""), "{html}");
+        let html = export("一个 word\nand 二\n", Format::Html, &flat);
+        assert!(html.contains("<p>一个 word and 二</p>"), "Latin meets Latin at the break: {html}");
+        let html = export("かな漢字\n", Format::Html, &flat);
+        assert!(html.contains("lang=\"ja\""), "{html}");
+    }
+
+    /// A mark with no note stays as it was written; a note nobody marks is
+    /// left out; one note marked twice keeps its one number.
+    #[test]
+    fn footnotes_are_numbered_by_where_they_are_met() {
+        let mut flat = style();
+        flat.vertical = false;
+        let html = export("a[^x] b[^y] c[^x]\n\n[^y]: Why.\n[^x]: Ex.\n[^z]: Zed.\n", Format::Html, &flat);
+        assert!(html.contains("a<sup class=\"fn\"><a href=\"#fn-1\""), "{html}");
+        assert!(html.contains("b<sup class=\"fn\"><a href=\"#fn-2\""), "{html}");
+        assert!(html.contains("c<sup class=\"fn\"><a href=\"#fn-1\""), "{html}");
+        assert!(html.contains("<li id=\"fn-1\">Ex.</li>\n<li id=\"fn-2\">Why.</li>"), "{html}");
+        assert!(!html.contains("Zed"), "{html}");
+        let html = export("a[^none]\n", Format::Html, &flat);
+        assert!(html.contains("a[^none]"), "{html}");
     }
 }
