@@ -2771,6 +2771,12 @@ pub struct Editor {
     indent_hint: crate::zong::IndentHint,
     /// `[editor] auto_pairs`: which brackets and quotes close themselves.
     auto_pairs: AutoPairs,
+    /// The key just typed stepped over a closer: typing, not a move, so the
+    /// selection `i` or `a` keeps stays kept.
+    stepped_over: bool,
+    /// An undo or redo just put every selection back where the history kept
+    /// it: the follow-the-edit net must not move them again.
+    selections_restored: bool,
     /// The character `IndentHint::Symbol` draws there.
     indent_symbol: String,
     /// A pending count prefix, so `3w` moves three words (Helix counts).
@@ -4005,6 +4011,8 @@ impl Editor {
             object_missed: false,
             indent_hint: crate::zong::IndentHint::default(),
             auto_pairs: AutoPairs::default(),
+            stepped_over: false,
+            selections_restored: false,
             indent_symbol: "↵".to_string(),
             count: None,
             edit_keys: Vec::new(),

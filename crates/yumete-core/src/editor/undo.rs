@@ -76,6 +76,7 @@ impl Editor {
     /// Warning: **the helix keymap only.** vim's `u` leaves one cursor at the
     /// start of the change, and the vim keymap keeps doing that.
     fn come_back_to(&mut self, cursor: usize, every: Option<crate::selection::Selections>) {
+        self.selections_restored = true;
         match every {
             // **Several cursors come back as several under the vim keymap too**
             // (2026-10-29, review: only the primary was put back and the others

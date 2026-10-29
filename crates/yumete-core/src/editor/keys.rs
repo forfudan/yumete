@@ -7,6 +7,10 @@
 
 use super::*;
 
+/// The goal column vim's `$` leaves: past any line's end. Compared with,
+/// never added to, so it cannot overflow.
+const LINE_END_GOAL: usize = usize::MAX / 4;
+
 /// 一段是**整行**還是行內的一截——`do_vim_span` 那道「落在換行符上就什麼都不做」
 /// 的閘只擋後者（2026-10-13）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,7 +33,7 @@ impl Editor {
 
     /// A key that moved the text says where it left the cursors, for helix's
     /// redo to come back to (see [`crate::Buffer::settle_after`]).
-    fn settle_the_change(&mut self, (_, id, revision, _): (Mode, u64, u64, usize)) {
+    pub(super) fn settle_the_change(&mut self, (_, id, revision, _): (Mode, u64, u64, usize)) {
         let buffer = self.current_buffer();
         if buffer.id() != id || buffer.revision() == revision {
             return;
@@ -290,14 +294,17 @@ impl Editor {
                 // Warning: **補全單子開着的時候一次就夠**：那是一張浮在上面的單子，`Tab` 與
                 // `C-n` 歸它，不是往 N 處各寫一次。
                 let (was_len, was_head) = (self.current_buffer().rope().len_chars(), self.sel.head());
+                self.stepped_over = false;
                 match multi::types_at_every_selection(key) && self.offers_here().is_none() {
                     true => self.edit_each_from(false, |e| e.insert_key_carrying_the_tail(key)),
                     false => self.insert_key_carrying_the_tail(key),
                 }
                 // **A move ends the selection `i` or `a` kept** (2026-10-27,
                 // measured: helix's `i` `→` `X` leaves a one-character cursor).
-                // From here on typing is plain typing, at every cursor.
+                // From here on typing is plain typing, at every cursor. A closer
+                // stepped over is typing (2026-10-29, review).
                 if self.mode == Mode::Insert
+                    && !std::mem::take(&mut self.stepped_over)
                     && self.current_buffer().rope().len_chars() == was_len
                     && self.sel.head() != was_head
                 {
@@ -3181,9 +3188,12 @@ impl Editor {
             // Indent / unindent the selected lines.
             Key::Char('>') => self.repeat_writing(count, |e| e.indent(true)),
             Key::Char('<') => self.repeat_writing(count, |e| e.indent(false)),
-            // Increment / decrement the number at the cursor.
-            Key::Ctrl('a') => self.repeat_writing(count, |e| e.bump_number(1)),
-            Key::Ctrl('x') => self.repeat_writing(count, |e| e.bump_number(-1)),
+            // Increment / decrement the number at the cursor. **The count is
+            // the amount**, as in helix and vim (2026-10-29, review: repeating
+            // stopped after one pass whenever the number kept its width, so
+            // `3 C-a` on `7` gave `8` and on a time stepped one minute).
+            Key::Ctrl('a') => self.bump_number(count as i64),
+            Key::Ctrl('x') => self.bump_number(-(count as i64)),
             // Repeat the last insert, and the last `f`/`t`.
             Key::Char('.') => self.repeat_writing(count, |e| e.repeat_edit()),
             Key::Alt('.') => {
@@ -3431,7 +3441,15 @@ impl Editor {
                 return go(self, motion::Motion::LineStart)
             }
             Key::Char('l') if self.g_letter_is_pressable() => {
-                return go(self, motion::Motion::LineEnd)
+                go(self, motion::Motion::LineEnd);
+                // **vim's `$` sticks to the line end** (its `curswant` is
+                // MAXCOL): `j` after it goes to the end of the next line, however
+                // long (2026-10-29, review: `$` then `j` past a short line came
+                // back at the short line's column). helix's `gl` does not stick.
+                if self.key_preset == yumete_cjk::KeyPreset::Vim {
+                    self.sel.set_goal(Some(LINE_END_GOAL));
+                }
+                return;
             }
             Key::Char('s') => return go(self, motion::Motion::LineFirstNonBlank),
             // helix 的 `goto_last_modification`（`keymap/default.rs:88`）。

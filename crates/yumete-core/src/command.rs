@@ -4379,8 +4379,8 @@ pub const COMMANDS: &[Entry] = &[
     Entry {
         name: "replace",
         // `:r` pairs with `:s` for `:search` (2026-10-28). vim and helix spend
-        // it on `:read`, which yumete does not have; an alias is not muscle
-        // memory the way a key is.
+        // it on `:read`, which yumete spells out in full; an alias is not
+        // muscle memory the way a key is.
         aliases: &["r"],
         help: "cmd.commands.replace",
         needs: &[],

@@ -11402,8 +11402,8 @@ fn draw_horizontal(
     // (a search hit, `gg`, a mark), a step off an edge nudges by `scrolloff`,
     // and typewriter mode keeps the row being written in the middle whatever
     // it was.
-    // The caret's row on the chain of pages, once the page has been scrolled.
-    let mut caret_row: Option<usize> = None;
+    // The page of the chain the caret is on, once the page has been scrolled.
+    let mut caret_page: Option<usize> = None;
     if scrolls {
     let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_reach);
     let cursor_row = match editor.page_inset(found, last_reach, scrolloff) {
@@ -11467,7 +11467,22 @@ fn draw_horizontal(
         *viewport = wrap::advance(rope, *viewport, measure, 1);
         cursor_row -= 1;
     }
-    caret_row = Some(cursor_row);
+    // Which page the caret is on, packed as the pages pack their rows: a row
+    // with a reading takes two screen rows (2026-10-29, review: counted as
+    // one, a caret on page two still read as on page one).
+    caret_page = Some({
+        let rows = wrap::rows_from(rope, *viewport, measure, cursor_row + 1);
+        let (mut page_of, mut used) = (0usize, 0usize);
+        for row in &rows {
+            let need = 1 + usize::from(row_has_reading(editor, rope, row));
+            if used + need > height {
+                page_of += 1;
+                used = 0;
+            }
+            used += need;
+        }
+        page_of
+    });
     }
 
     // …and sideways, **by the page the caret is on** (2026-10-29, review: with
@@ -11476,7 +11491,7 @@ fn draw_horizontal(
     // the caret was, never moved). The first page keeps its offset while the
     // caret is on it; a later page works its own out each frame.
     let caret_on_this_page = match scrolls {
-        true => caret_row.is_some_and(|row| row < height),
+        true => caret_page == Some(0),
         false => wrap::distance(rope, *viewport, cursor_anchor, measure, last_row).is_some(),
     };
     if caret_on_this_page {
@@ -19692,9 +19707,9 @@ fn squeezed(text: &str) -> String {
             .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
             .find(|&(x, y)| buffer[(x, y)].symbol() == "吧")
             .expect("first candidate");
-        // The highlighted candidate sits on the selection's ground.
-        assert_eq!(buffer[cand].style().bg, Some(ink.selection()), "highlight");
-        assert_eq!(buffer[cand].style().fg, Some(ink.text()));
+        // The highlighted candidate is inverted, in the theme's colours.
+        assert_eq!(buffer[cand].style().bg, Some(ink.text()), "highlight");
+        assert_eq!(buffer[cand].style().fg, Some(crate::chrome::panel_ground(ink)));
     }
 
     #[test]

@@ -3883,6 +3883,13 @@ struct RawIme {
 #[serde(deny_unknown_fields)]
 struct RawPanel {
     markers: Option<String>,
+    /// Read and dropped: the panel takes the theme's colours since 2026-10-29,
+    /// and a config that still writes them (the manual's sample did) keeps
+    /// the rest of the file rather than failing whole.
+    #[allow(dead_code)]
+    ink: Option<String>,
+    #[allow(dead_code)]
+    paper: Option<String>,
     page_size: Option<usize>,
     rounded: Option<bool>,
     display: Option<String>,
@@ -5335,9 +5342,12 @@ mod tests {
             "##,
         );
         assert_eq!(c.panel.markers, "①②③");
-        // The colours are the theme's (2026-10-29): `[panel] ink` is no key.
-        let (_, said) = Config::from_toml_saying("[panel]\nink = \"#112233\"\n");
-        assert!(toml::from_str::<RawConfig>("[panel]\nink = \"#112233\"\n").is_err(), "{said:?}");
+        // The colours are the theme's (2026-10-29): an old `[panel] ink` is
+        // read and dropped, and the rest of the file still counts.
+        let (old, said) =
+            Config::from_toml_saying("[theme]\nname = \"github\"\n[panel]\nink = \"#112233\"\npaper = \"#445566\"\n");
+        assert!(said.is_empty(), "{said:?}");
+        assert_eq!(old.theme.name, "github");
         assert_eq!(c.panel.page_size, 5);
         assert!(!c.panel.rounded);
     }

@@ -237,7 +237,10 @@ impl super::Editor {
                 let at = self.sel.head();
                 self.extend = false;
                 self.vim_lines = false;
-                self.block = Some(Block { anchor: at, cursor: at, to_line_end: false, goal: None });
+                // The column the cursor was already aiming at comes along
+                // (2026-10-29, review: `j` onto a short line, then `C-v j`).
+                let goal = self.sel.primary().goal;
+                self.block = Some(Block { anchor: at, cursor: at, to_line_end: false, goal });
                 self.show_block();
             }
         }
@@ -548,6 +551,16 @@ impl super::Editor {
             // A line break was typed, or the caret left the line: vim copies
             // nothing then.
             false => String::new(),
+        };
+        // The closers auto-pairs wrote after the caret are part of what was
+        // typed (2026-10-29, review: `A(x` copied `(x` to the other lines).
+        let typed = {
+            let owed = self.closers_owed(&typed);
+            let after: String = rope.chars_at(caret.min(rope.len_chars())).take(owed.chars().count()).collect();
+            match !owed.is_empty() && after == owed {
+                true => format!("{typed}{owed}"),
+                false => typed,
+            }
         };
         // A line break, or the caret off the first line: nothing is copied,
         // and the cursor stays where `Esc` put it, as vim's does.

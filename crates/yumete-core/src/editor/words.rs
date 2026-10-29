@@ -856,6 +856,9 @@ impl Editor {
     pub fn insert_committed(&mut self, text: &str) {
         let was = self.before_a_change();
         self.insert_committed_now(text);
+        // Where redo comes back to, as for a key (2026-10-29, review: `r`,
+        // `ms` and Chinese typed through the input method were missed).
+        self.settle_the_change(was);
         self.keep_the_signature_up(was);
     }
 
@@ -1025,15 +1028,12 @@ impl Editor {
         let text = text.to_string();
         self.edit_each_from(self.mode != Mode::Insert, move |e| {
             e.insert_recording.push_str(&text);
-            // One character is a key typed through the input method, and
-            // pairs as one (`full`'s 「 and “).
-            let mut chars = text.chars();
-            let paired = match (chars.next(), chars.next()) {
-                (Some(c), None) => e.type_paired(c),
-                _ => false,
-            };
-            if !paired {
-                e.insert_str(&text);
+            // Through the pairs a character at a time, as helix takes a
+            // commit, so `.` and a count (which replay it a character at a
+            // time) write what this wrote (2026-10-29, review).
+            match e.mode == Mode::Insert && e.auto_pairs() != super::AutoPairs::Off {
+                true => e.type_through_pairs(&text),
+                false => e.insert_str(&text),
             }
             e.maybe_ask_what_comes_next(&text);
             e.maybe_ask_for_a_signature(&text);

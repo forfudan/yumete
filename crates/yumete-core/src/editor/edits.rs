@@ -670,20 +670,25 @@ impl Editor {
                 // ② 它把光標跟着原來那段文字往下挪，`O` 那一路算出來的落點是**已經
                 // 有字的那一行**，三遍全寫在同一行上（`3O` 打 `hi` 得
                 // `\n\nhihihi\nX`，而 vim 給 `hi\nhi\nhi\nX`）。
+                // The line break first, then the text typed through the pairs,
+                // as `3A(x` is (2026-10-29, review: `3o(x` closed only the first).
                 Some(true) => {
                     let at = motion::line_end(self.current_buffer().rope(), self.sel.head());
-                    let text = format!("{ending}{typed}");
-                    if !self.edit_insert(at, &text) {
+                    if !self.edit_insert(at, &ending) {
                         return;
                     }
-                    self.set_cursor(at + text.chars().count());
+                    self.set_cursor(at + ending.chars().count());
+                    self.type_through_pairs(typed);
+                    let end = motion::line_end(self.current_buffer().rope(), self.sel.head());
+                    self.set_cursor(end);
                 }
                 Some(false) => {
                     let at = motion::line_start(self.current_buffer().rope(), self.sel.head());
-                    let text = format!("{typed}{ending}");
-                    if !self.edit_insert(at, &text) {
+                    if !self.edit_insert(at, &ending) {
                         return;
                     }
+                    self.set_cursor(at);
+                    self.type_through_pairs(typed);
                     // 光標留在剛插進去那一行的頭上，下一遍就插在它前面——三遍寫出
                     // 來的是三行一樣的字，所以次序看不出來，而落點必須對。
                     self.set_cursor(at);

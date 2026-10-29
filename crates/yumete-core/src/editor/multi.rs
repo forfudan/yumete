@@ -382,6 +382,7 @@ impl super::Editor {
     /// before a key that is not one every selection runs. `None` with one
     /// selection, where there is nothing to follow.
     pub(super) fn before_a_primary_edit(&mut self) -> Option<(u64, u64, ropey::Rope, Vec<Range>)> {
+        self.selections_restored = false;
         if !self.sel.is_plural() {
             return None;
         }
@@ -435,6 +436,11 @@ impl super::Editor {
     pub(super) fn after_a_primary_edit(&mut self, before: Option<(u64, u64, ropey::Rope, Vec<Range>)>) {
         let Some((id, revision, old, others)) = before else { return };
         let changes = self.take_the_journal(id);
+        // `u` and `U` put every selection back themselves (2026-10-29,
+        // review: the restored cursors were moved a second time and merged).
+        if std::mem::take(&mut self.selections_restored) {
+            return;
+        }
         let buffer = self.current_buffer();
         if buffer.id() != id || buffer.revision() == revision || !self.sel.is_plural() {
             return;
