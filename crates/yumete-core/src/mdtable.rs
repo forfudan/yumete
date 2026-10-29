@@ -1861,9 +1861,16 @@ mod tests {
     }
 }
 
+// The docs are the site's pages now (2026-10-30), beside this repository.
+#[cfg(test)]
+#[path = "../tests/site/mod.rs"]
+mod site;
+
 #[cfg(test)]
 mod proof_292 {
     use super::*;
+
+    use super::site;
 
     /// **No table in this project's own docs can be lined up into megabytes**
     /// (#292).
@@ -1880,15 +1887,9 @@ mod proof_292 {
     /// What must never come back is the order of magnitude.
     #[test]
     fn no_table_in_the_docs_can_be_lined_up_into_megabytes() {
-        let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs");
         let mut worst: (usize, String) = (0, String::new());
         let mut total = 0usize;
-        for entry in std::fs::read_dir(&docs).expect("the docs are in the tree") {
-            let path = entry.expect("a readable directory entry").path();
-            if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                continue;
-            }
-            let text = std::fs::read_to_string(&path).expect("a readable document");
+        for (path, text) in site::pages() {
             let all: Vec<String> = text.lines().map(str::to_string).collect();
             let mut i = 0;
             while i < all.len() {
@@ -1906,7 +1907,7 @@ mod proof_292 {
                 let grew = after.saturating_sub(before);
                 total += grew;
                 if grew > worst.0 {
-                    worst = (grew, format!("{} line {}", path.display(), first + 1));
+                    worst = (grew, format!("{path} line {}", first + 1));
                 }
             }
         }
