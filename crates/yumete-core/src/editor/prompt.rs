@@ -314,6 +314,12 @@ impl Editor {
                 // The file's own line ending, so that one keystroke does not
                 // leave a CRLF manuscript with two kinds of line in it (#309).
                 let ending = self.current_buffer().ending().to_string();
+                let (line, column) = self.caret_in_line();
+                let base = self.indent_of_line(line, Some(column));
+                if let Some(typed) = self.open_the_pair(&ending, &base) {
+                    self.insert_recording.push_str(&typed);
+                    return;
+                }
                 // **縮進跟着下來**（2026-10-08 報的：「In `go file`, pressing enter
                 // in a code block won't auto indent」）。vim 的 `autoindent`、helix
                 // 的 `insert_newline` 都做這件事，而這一頭一件都不做——代碼檔裏每

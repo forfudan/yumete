@@ -1574,6 +1574,14 @@ en = "redo"
 find = "重做 恢復 恢复"
 
 [[message]]
+# : 命令選單裏 reflow 那一項的説明(commands 組)
+key = "cmd.commands.reflow"
+zht = "選區按寬度重排（默認 80 欄）"
+zhs = "选区按宽度重排（默认 80 栏）"
+en = "refill the selection to a width (80 columns by default)"
+find = "重排 換行 换行 硬換行 硬换行 reflow rewrap wrap fill gq"
+
+[[message]]
 # : 命令選單裏 reload 那一項的説明(commands 組)
 key = "cmd.commands.reload"
 zht = "把文件再讀一遍；加 ! 是丟掉你這裏的改動"
@@ -5343,6 +5351,13 @@ key = "hint.goto.end-of-file"
 zht = "文件末尾"
 zhs = "文件末尾"
 en = "end of file"
+
+[[message]]
+# vim 鍵位下 g 選單裏的 q ——按寬度重排，等一個動作
+key = "hint.goto.fill"
+zht = "按寬度重排，等待動作"
+zhs = "按宽度重排，等待动作"
+en = "fill the lines to the width — waits for a motion"
 
 [[message]]
 # g 組：首個非空白

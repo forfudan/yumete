@@ -2799,6 +2799,12 @@ pub struct Editor {
     edit_revision: (u64, u64),
     /// The last change's keys.
     last_edit_keys: Vec<Key>,
+    /// **Whether the command being watched went into Insert** (#413).
+    edit_was_insert: bool,
+    /// The last change that was a typing session — the key that went into
+    /// Insert and what was typed. helix's `.` repeats this and only this
+    /// (`repeat_last_insert`); vim's repeats [`Self::last_edit_keys`].
+    last_insert_keys: Vec<Key>,
     /// What the IME last committed into a `r` (§5.2.3 ②), so `.` can repeat it.
     ///
     /// The code letters are eaten by the IME and never reach [`Editor::on_key`],
@@ -4018,6 +4024,8 @@ impl Editor {
             edit_keys: Vec::new(),
             edit_revision: (0, 0),
             last_edit_keys: Vec::new(),
+            edit_was_insert: false,
+            last_insert_keys: Vec::new(),
             last_replacement: String::new(),
             marks: HashMap::new(),
             repeating_edit: false,

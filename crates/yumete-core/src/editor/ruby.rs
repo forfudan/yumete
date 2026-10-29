@@ -358,8 +358,19 @@ impl Editor {
     /// so every command is repeatable the day it is written and none of them
     /// has to be taught about `.` — the price being that the keys act on where
     /// the cursor is *now*, which is exactly what a person pressing `.` means.
+    ///
+    /// Warning: **Under the helix keymap it is helix's `.`**, which repeats the
+    /// last *insert* only (`repeat_last_insert`, measured with
+    /// `scripts/oracle/hx_keys.py` 2026-10-29: `iX Esc d .` writes the `X`
+    /// again; it does not delete again). The wide one was vim's, and with
+    /// the selection acting first a stray `.` deleted whatever was selected
+    /// now (#413, proposed 2026-09-12).
     pub(super) fn repeat_edit(&mut self) {
-        if self.last_edit_keys.is_empty() {
+        let keys = match self.key_preset {
+            yumete_cjk::KeyPreset::Helix => &self.last_insert_keys,
+            yumete_cjk::KeyPreset::Vim => &self.last_edit_keys,
+        };
+        if keys.is_empty() {
             self.status = say!("edit.nothing-to-repeat");
             return;
         }
@@ -368,7 +379,7 @@ impl Editor {
         if self.repeating_edit {
             return;
         }
-        let keys = self.last_edit_keys.clone();
+        let keys = keys.clone();
         self.repeating_edit = true;
         for key in keys {
             self.on_key(key);
