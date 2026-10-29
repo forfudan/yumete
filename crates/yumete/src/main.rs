@@ -2429,8 +2429,8 @@ KEYS (Normal mode, Helix-style):
               :write-all       save every file that changed
               :indent off|basic|full|<n>   first-line indent — a Chinese
                           paragraph's mark; full also folds the blank line
-              :view-pages-vertical 1–4    段組: pages one above the other
               :view-pages-horizontal 1–4  pages side by side, the text running on
+              :view-pages-vertical 1–4    段組: pages one above the other
               :word-list-reload   reread .yumete/words.txt — this book's own names
               :word-habit      口頭禪: what this one says far more than prose does
               :table <行>x<欄>   an empty table, the first row its headings

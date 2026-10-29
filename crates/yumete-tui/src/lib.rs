@@ -2328,6 +2328,11 @@ struct Viewport {
     /// with `:view-wrap off` a paragraph is one row of any length, and without this
     /// the page could only ever show its first screenful (Feature #221).
     left: usize,
+    /// **The sideways offset of each page after the first**, as last drawn
+    /// (2026-10-29): a page the caret is on slides to it, and a click on
+    /// that page must read the cells the way they were drawn. Index `k - 1`
+    /// for page `k`.
+    page_left: Vec<usize>,
     /// The paragraph and piece the rightmost visible 縱 sits at, in vertical
     /// layout. An anchor rather than a 縱 number: see `vertical::draw`.
     zong: Anchor,
@@ -5112,7 +5117,7 @@ fn draw(
                         _ => match next {
                             Some(mut from) => {
                                 let mut left = 0;
-                                draw_horizontal(
+                                let drawn = draw_horizontal(
                                     frame,
                                     editor,
                                     config,
@@ -5124,7 +5129,10 @@ fn draw(
                                     None,
                                     chain,
                                     false,
-                                )
+                                );
+                                seat.page_left.resize(k, 0);
+                                seat.page_left[k - 1] = left;
+                                drawn
                             }
                             // Past the end of the text: blank paper.
                             None => {
@@ -8067,7 +8075,7 @@ fn text_at(
             }
             let left = match page {
                 0 => viewport.left,
-                _ => 0,
+                k => viewport.page_left.get(k - 1).copied().unwrap_or(0),
             };
             let want_row = (mouse.row - area.y) as usize;
             let (_, row) = rows_on_screen(
@@ -11218,17 +11226,6 @@ fn tint_the_rules(
     }
 }
 
-/// Warning: **九個參數，而且不收 `too_many_arguments`**（2026-10-02 想過一輪，不改）。
-///
-/// 看着該併的是中間那三個 `&mut`：`viewport`、`left`、`span` 本來就是同一個
-/// [`Viewport`] 裏的三格，傳整個結構體就只剩七個。不這麼做的理由是**那個結構
-/// 體裏還有兩格不屬於這一支**——`zong` 是竪排的位置，`table` 是格狀的。現在橫
-/// 排這一支**夠不着它們**，所以「畫橫排的時候動不到竪排捲到哪裏」是編譯器保
-/// 着的；傳整個結構體就只剩下約定。拿一條編譯期的保證去換一個數字，不值。
-///
-/// 併了 `vertical::draw` 也得一起併（不然兩支一支傳結構體、一支傳字段，更亂），
-/// 而它只有七個，本來就不在警告裏。
-#[allow(clippy::too_many_arguments)]
 /// **The narrowest a page of `:view-pages-horizontal` may be**, in cells of
 /// text past its gutter (2026-10-28, decided: 「fall back to one column below
 /// 30 cells each」). Thirty cells is fifteen 漢字.
@@ -11279,6 +11276,12 @@ fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
 /// the pages as one page `chain` times as tall, and the others start where the
 /// page before them ended. The caret comes back only from the page it is on;
 /// the second value is where the next page starts, `None` past the end.
+///
+/// Warning: **Eleven parameters, and `too_many_arguments` allowed** (decided
+/// 2026-10-02). `viewport`, `left` and `span` are three fields of one
+/// [`Viewport`], but that struct also holds the vertical and grid positions,
+/// and passing it whole would let this function reach them; as it is, the
+/// compiler keeps horizontal drawing away from where 縱書 is scrolled to.
 #[allow(clippy::too_many_arguments)]
 fn draw_horizontal(
     frame: &mut Frame,
@@ -11373,14 +11376,6 @@ fn draw_horizontal(
     // half-screen jump — because a caret walking one 字 at a time along a long
     // line should not make the whole page slide out from under the reader.
     let page = (text_area.width as usize).saturating_sub(gutter).max(1);
-    if scrolls {
-        if cursor_pos.column < *left {
-            *left = cursor_pos.column;
-        } else if cursor_pos.column >= *left + page {
-            *left = cursor_pos.column + 1 - page;
-        }
-    }
-    let left = *left;
 
     // Scroll so the cursor's row stays on the page with `scrolloff` rows of
     // context above and below. Counted from the page's own anchor rather than
@@ -11400,6 +11395,8 @@ fn draw_horizontal(
     // (a search hit, `gg`, a mark), a step off an edge nudges by `scrolloff`,
     // and typewriter mode keeps the row being written in the middle whatever
     // it was.
+    // The caret's row on the chain of pages, once the page has been scrolled.
+    let mut caret_row: Option<usize> = None;
     if scrolls {
     let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_reach);
     let cursor_row = match editor.page_inset(found, last_reach, scrolloff) {
@@ -11433,17 +11430,58 @@ fn draw_horizontal(
     // because how many readings there are is a property of what is on screen.
     let mut cursor_row = cursor_row;
     while cursor_row > 0 {
-        let above = wrap::rows_from(rope, *viewport, measure, cursor_row + 1)
-            .iter()
-            .filter(|row| row_has_reading(editor, rope, row))
-            .count();
-        if cursor_row + above < reach {
+        let rows = wrap::rows_from(rope, *viewport, measure, cursor_row + 1);
+        let fits = match chain > 1 {
+            // **Page by page** (2026-10-29, review: with readings on and two
+            // pages the caret could sit on neither). Each page drops a row
+            // whose reading does not fit under it, so the chain holds fewer
+            // rows than one tall page would; rows are laid out the way the
+            // pages lay them, a reading taking two screen rows.
+            true => {
+                let (mut on_page, mut used) = (0usize, 0usize);
+                for row in &rows {
+                    let need = 1 + usize::from(row_has_reading(editor, rope, row));
+                    if used + need > height {
+                        on_page += 1;
+                        used = 0;
+                    }
+                    used += need;
+                }
+                on_page < chain
+            }
+            false => {
+                let above = rows.iter().filter(|row| row_has_reading(editor, rope, row)).count();
+                cursor_row + above < reach
+            }
+        };
+        if fits {
             break;
         }
         *viewport = wrap::advance(rope, *viewport, measure, 1);
         cursor_row -= 1;
     }
+    caret_row = Some(cursor_row);
     }
+
+    // …and sideways, **by the page the caret is on** (2026-10-29, review: with
+    // a table row on the second page, the first page slid sideways to the
+    // caret's column and its prose went blank, while the second page, where
+    // the caret was, never moved). The first page keeps its offset while the
+    // caret is on it; a later page works its own out each frame.
+    let caret_on_this_page = match scrolls {
+        true => caret_row.is_some_and(|row| row < height),
+        false => wrap::distance(rope, *viewport, cursor_anchor, measure, last_row).is_some(),
+    };
+    if caret_on_this_page {
+        if cursor_pos.column < *left {
+            *left = cursor_pos.column;
+        } else if cursor_pos.column >= *left + page {
+            *left = cursor_pos.column + 1 - page;
+        }
+    } else {
+        *left = 0;
+    }
+    let left = *left;
 
     // What is marked: the live pane's selection, or the hit the other one was
     // opened to show.
@@ -17055,6 +17093,86 @@ fn squeezed(text: &str) -> String {
     /// them** (2026-10-28). The right page starts where the left one ends,
     /// the cursor walks on into it, a click there lands in its text, and a
     /// window too narrow for two pages of thirty cells gets one.
+    /// **With a row of air above every row, the caret stays on a page**
+    /// (2026-10-29, review: with readings and two pages the scroll counted
+    /// one tall page, while each page drops a row whose reading does not fit;
+    /// the caret ended on neither page). An odd page height leaves each page
+    /// one spare screen row.
+    #[test]
+    fn the_caret_stays_on_a_page_when_rows_take_two() {
+        let text: String = (1..=40).map(|n| format!("line{n:02}\n")).collect();
+        let config = Config::default();
+        let _ = ink(&config);
+        let w = 90u16;
+        let (h, page) = (10u16..20)
+            .map(|h| {
+                let mut editor = editor_with(&text);
+                editor.set_pages_horizontal(2);
+                (h, page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes[0])
+            })
+            .find(|(_, page)| page.height % 2 == 1)
+            .expect("an odd page height");
+        let mut editor = editor_with(&text);
+        editor.set_pages_horizontal(2);
+        editor.execute(":view-margin always").unwrap();
+        settle_the_pages(&mut editor, &config, page);
+        let mut seats = Seats::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let per_page = page.height as usize / 2;
+        for _ in 0..2 * per_page {
+            editor.on_key(Key::Char('j'));
+            terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        }
+        let caret = caret_of(&mut terminal, &config);
+        let buffer = terminal.backend().buffer().clone();
+        let line: String = (0..w).map(|x| buffer[(x, caret.y)].symbol().to_string()).collect();
+        let want = format!("line{:02}", 2 * per_page + 1);
+        assert!(line.contains(&want), "the caret's row shows {want}: {line:?}");
+    }
+
+    /// **Only the page the caret is on slides sideways** (2026-10-29, review:
+    /// with the caret at the end of a long unwrapped line on the right page,
+    /// the left page slid to that column and its text went blank, and the
+    /// right page, where the caret was, never moved).
+    #[test]
+    fn only_the_caret_page_slides_sideways() {
+        // A table row is never wrapped, pages or not: what runs past the edge
+        // is reached sideways.
+        let mut text: String = (1..=12).map(|n| format!("line{n:02}\n")).collect();
+        text.push_str("| a | b |\n|---|---|\n");
+        for _ in 0..12 {
+            text.push_str(&format!("| {} | end |\n", "x".repeat(150)));
+        }
+        let mut editor = editor_with(&text);
+        editor.set_pages_horizontal(2);
+        let config = Config::default();
+        let _ = ink(&config);
+        let (w, h) = (90u16, 10u16);
+        let page = page_areas(&editor, &config, Rect::new(0, 0, w, h), 0).panes[0];
+        settle_the_pages(&mut editor, &config, page);
+        let mut seats = Seats::default();
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        // Walked, not jumped, to line 15, a table row past the left page's
+        // rows (a jump lands mid-chain, on the left page's last row).
+        assert!(page.height < 14, "line 15 is on the right page");
+        for _ in 0..14 {
+            editor.on_key(Key::Char('j'));
+            terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        }
+        editor.on_key(Key::Char('g'));
+        editor.on_key(Key::Char('l'));
+        terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        let caret = caret_of(&mut terminal, &config);
+        let buffer = terminal.backend().buffer().clone();
+        let [left, right] = horizontal_pages(&editor, &config, page)[..] else { panic!("two pages") };
+        let row = |r: Rect, y: u16| -> String { (r.x..r.x + r.width).map(|x| buffer[(x, y)].symbol().to_string()).collect() };
+        assert!(row(left, left.y).contains("line"), "the left page keeps its text: {:?}", row(left, left.y));
+        assert!(caret.x >= right.x && caret.x < right.x + right.width, "the caret is drawn on the right page: {caret:?}");
+        let shown: String = (left.y..left.y + left.height).map(|y| row(right, y)).collect();
+        assert!(shown.contains("end"), "the right page slid to the line's end");
+    }
+
     #[test]
     fn two_horizontal_pages_carry_one_text_left_to_right() {
         let text: String = (1..=40).map(|n| format!("line{n:02}\n")).collect();
