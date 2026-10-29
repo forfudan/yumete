@@ -408,7 +408,7 @@ impl super::Editor {
     pub(super) fn first_cursor_on_each_number(&self) -> std::collections::HashMap<usize, usize> {
         let mut owners = std::collections::HashMap::new();
         for (nth, one) in self.sel.iter().enumerate() {
-            if let Some((from, _)) = self.number_from(one.head) {
+            if let Some((from, _)) = self.number_to_bump(one.anchor, one.head) {
                 owners.entry(from).or_insert(nth);
             }
         }

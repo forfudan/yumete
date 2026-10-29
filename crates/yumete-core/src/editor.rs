@@ -2937,6 +2937,10 @@ pub struct Editor {
     quiet_view: bool,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
+    /// The theme and fill requests standing came from a replayed session, so
+    /// the front end answers them without a word of its own: the status line
+    /// is the resume's (2026-10-29, review: `:resume` said the theme's name).
+    theme_replayed: bool,
     /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
     /// prompt 事件）。前端每幀取一次。
     trial: Option<Trial>,
@@ -4047,6 +4051,7 @@ impl Editor {
             signature_triggers: HashMap::new(),
             quiet_view: false,
             theme_request: None,
+            theme_replayed: false,
             trial: None,
             previewing: false,
             clipboard_request: None,

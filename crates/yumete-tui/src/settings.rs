@@ -297,10 +297,19 @@ pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
         .into_iter()
         .filter(|line| !given.contains(line) || (wrap_differs && line.starts_with("view-wrap ")))
         .collect();
-    if crate::theme::snapshot().is_some() {
-        keep.push(format!("theme {}", crate::theme::name(config)));
+    // **Not what the config says already** (2026-10-29, review): a chosen
+    // theme or mood the config gives too was kept, and then outlived a later
+    // change to the config.
+    let name = crate::theme::name(config);
+    if crate::theme::snapshot().is_some() && name != config.theme.name {
+        keep.push(format!("theme {name}"));
     }
-    if let Some(mood) = crate::theme::chosen_mood() {
+    let configured = match config.theme.mode {
+        yumete_config::Mode::Auto => "system",
+        yumete_config::Mode::Dark => "dark",
+        yumete_config::Mode::Light => "light",
+    };
+    if let Some(mood) = crate::theme::chosen_mood().filter(|&mood| mood != configured) {
         keep.push(format!("theme-mode {mood}"));
     }
     if let Some(fill) = crate::theme::chosen_fill() {

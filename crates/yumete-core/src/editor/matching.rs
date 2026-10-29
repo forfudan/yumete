@@ -1381,10 +1381,22 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
-        // 光標往前挪開頭那一段的長度——`**` 是兩個字，不是一個。
+        // **The selection goes through the two removals, both ends**
+        // (2026-10-29, review: it collapsed to its head; helix 25.07.1 keeps
+        // `bc` of `(bcd)` selected after `md(`). The opener's length, not
+        // one: `**` is two characters.
         let opener = inn - out;
-        self.sel.set_head(self.sel.head().saturating_sub(opener));
-        self.sel.set_anchor(self.sel.head());
+        let closer = out_end - inn_end;
+        let through = |p: usize| match p {
+            p if p >= out_end => p - closer - opener,
+            p if p >= inn_end => inn_end - opener,
+            p if p >= inn => p - opener,
+            p if p >= out => out,
+            p => p,
+        };
+        let (anchor, head) = (through(self.sel.anchor()), through(self.sel.head()));
+        self.sel.set_anchor(anchor);
+        self.sel.set_head(head);
         self.clamp_cursor();
     }
 
