@@ -4746,8 +4746,9 @@ fn any_character_acts_as_a_pair() {
     assert_eq!(run("a $x$ b\n", "fx;mr$("), "a (x) b\n");
     assert_eq!(run("a (x) b\n", "fx;mr(_"), "a _x_ b\n");
     assert_eq!(run("a $xy$ b\n", "fx;mi$d"), "a $$ b\n");
-    // Read as a quote is: `a` takes the blank after it too, as `a"` does.
-    assert_eq!(run("a $xy$ b\n", "fx;ma$d"), "a b\n");
+    // Read as a quote is, and helix's `ma"` takes the marks and no blank
+    // (25.07.1; vim's `a"` takes the blank after, under the vim keymap).
+    assert_eq!(run("a $xy$ b\n", "fx;ma$d"), "a  b\n");
     // A letter is an object's name, and one that names nothing is nothing.
     let mut ed = typed("a x b\n");
     press(&mut ed, "ggfx;mix");
@@ -31364,6 +31365,19 @@ fn block_mode_measures_tabs_and_marks_and_pastes_past_the_end() {
     ed.on_key(Key::Ctrl('v'));
     press(&mut ed, "jjlyGp");
     assert_eq!(text(&ed), "ab\ncd\neabf\n cd\n ef\n", "one piece per line, as vim");
+
+    // A wide character the block cuts in half leaves a space for the half
+    // outside it (nvim 0.12.5).
+    let cut = |keys: &str| {
+        let mut ed = typed("xyzw\na漢bc\n");
+        ed.set_key_preset(KeyPreset::Vim);
+        press(&mut ed, "ggll");
+        ed.on_key(Key::Ctrl('v'));
+        press(&mut ed, keys);
+        text(&ed)
+    };
+    assert_eq!(cut("jld"), "xy\na c\n");
+    assert_eq!(cut("jlld"), "xy\na \n");
 }
 
 /// **The `m` group after the review** (2026-10-29): `m` passes over straight
@@ -31382,6 +31396,14 @@ fn the_m_group_after_the_review() {
     assert_eq!(run("[[a][b]]\n", "2md[", 5), "[a][b]\n", "out to the holder, not the sibling");
     assert_eq!(run("[(a)(b)]\n", "2mdm", 5), "(a)(b)\n");
     assert_eq!(run("（a (b) c）\n", "2md(", 4), "a (b) c\n", "a count crosses the family");
+    // helix counts quotes mark by mark outward (25.07.1): on the `b` of
+    // `x "a "b" c" y`, `2mi"` is `a "b" c`, `3mi"` nothing, `2md"` the
+    // outer two, and `ma"` the quotes with no blank.
+    assert_eq!(run("x \"a \"b\" c\" y\n", "2mi\"cQ", 6), "x \"Q\" y\n");
+    assert_eq!(run("x \"a \"b\" c\" y\n", "2ma\"cQ", 6), "x Q y\n");
+    assert_eq!(run("x \"a \"b\" c\" y\n", "3mi\"cQ", 6), "x \"a \"Q\" c\" y\n");
+    assert_eq!(run("x \"a \"b\" c\" y\n", "2md\"", 6), "x a \"b\" c y\n");
+    assert_eq!(run("x \"a \"b\" c\" y\n", "ma\"cQ", 6), "x \"a Q c\" y\n");
     // The selection goes through `md`, as helix 25.07.1 keeps it.
     assert_eq!(run("a (bcd) e\n", "vlmd(cQ", 3), "a Qd e\n");
     assert_eq!(run("a (bcd) e\n", "md(cQ", 3), "a Qcd e\n");
