@@ -552,6 +552,14 @@ impl Editor {
         //
         // 引號没有「外一層」（一行上的引號不套），它那邊 `count` 另有意思，見下。
         let nests = rope.char(start) != rope.char(end);
+        // **helix counts quotes outward, mark by mark** (2026-10-29): `2mi"`
+        // is the second quote on each side, not vim's 「quotes included」.
+        if !nests && !vim && count > 1 {
+            match super::nth_quotes_out(rope, here, rope.char(start), count) {
+                Some((a, b)) => (start, end) = (a, b),
+                None => return motion::Span::Missed,
+            }
+        }
         if nests {
             for _ in 1..count {
                 // One level out, never a sibling (`[[a][b]]`), and across the
@@ -568,7 +576,7 @@ impl Editor {
         // **引號上數目 ≥2 ＝ 連引號一起拿**（vim 的 `current_quote`：
         // `if (!include && count < 2) ++col_start;`，收那一頭同理）。空白不拿，
         // 那是 `a` 纔有的。
-        let whole = around || (!nests && count > 1);
+        let whole = around || (!nests && count > 1 && vim);
         let (mut anchor, head) = match whole {
             true => (start, end),
             false => (start + 1, end.saturating_sub(1)),
@@ -577,7 +585,8 @@ impl Editor {
         // **`a"` 連空白一起拿，`a(` 不拿**（vim 的 `current_quote` 末尾那一段，
         // 2026-10-12 量過）：收引號後面那一串空白，没有就拿開引號前面那一串。
         // 和 `aw` 同一條規矩，而括號那一族没有這一條。
-        if around && !nests {
+        // Not helix's: its `ma"` is the quotes and no more (25.07.1).
+        if around && !nests && vim {
             let (from, to) = super::line_bounds(rope, here);
             let mut at = head + 1;
             while at < to && rope.char(at).is_whitespace() {
@@ -1260,11 +1269,15 @@ impl Editor {
                 })
                 .max_by_key(|&(open, _)| open),
         }?;
+        if count > 1 && rope.char(found.0) == rope.char(found.1) {
+            // helix's `2md"`: the second quote out on each side.
+            return match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                true => None,
+                false => super::nth_quotes_out(rope, here, rope.char(found.0), count),
+            };
+        }
         for _ in 1..count {
-            let (open, close) = found;
-            if rope.char(open) == rope.char(close) {
-                return None;
-            }
+            let (open, _) = found;
             // One level out, never a sibling, and across the key's family.
             let kinds = match from {
                 'm' => PAIRS.to_vec(),

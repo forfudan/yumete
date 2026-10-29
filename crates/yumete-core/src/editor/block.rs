@@ -369,14 +369,29 @@ impl super::Editor {
     }
 
     /// Take every line's piece out, bottom line first.
+    ///
+    /// **A wide character the block's edge cuts in half leaves a space for
+    /// the half outside** (2026-10-29, review; nvim 0.12.5: `ll C-v j ll d`
+    /// on `xyzw` over `a漢bc` leaves `a `), so the text after the block keeps
+    /// its column.
     fn block_delete(&mut self, block: Block) {
-        let (first, _, left, _) = self.block_shape(block);
+        let (first, _, left, right) = self.block_shape(block);
         let corner = at_column(self.current_buffer().rope(), self.tab_stop, first, left);
         self.sel = Selections::one(Range::at(corner));
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
-        for (_, a, b) in self.block_pieces(block).into_iter().rev() {
+        for (line, a, b) in self.block_pieces(block).into_iter().rev() {
+            let cells = cells(self.current_buffer().rope(), self.tab_stop, line);
+            let column = |at: usize| cells.iter().find(|&&(pos, _, _)| pos == at).map(|&(_, c, w)| (c, w));
+            let before = column(a).map_or(0, |(c, _)| left.saturating_sub(c));
+            let after = match (block.to_line_end, column(b - 1)) {
+                (false, Some((c, w))) => (c + w).saturating_sub(right + 1),
+                _ => 0,
+            };
             if !self.edit_remove(a..b) {
+                break;
+            }
+            if before + after > 0 && !self.edit_insert(a, &" ".repeat(before + after)) {
                 break;
             }
         }

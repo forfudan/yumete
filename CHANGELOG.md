@@ -178,6 +178,8 @@ in `docs/development.md` §5.2.
   - Completing file names no longer reads the folder again on every frame.
 - **`:read`**: a CRLF file read into an LF one (or the other way) takes this file's line ending and leaves its byte-order mark behind; an empty file puts nothing in; the error names the file.
 - **Redo puts the cursors back where the change left them**, as helix's `U` does, instead of where they were when you pressed `u`; an undo after it puts them back where they were before the change.
+- **Quotes in the `m` group follow helix under the helix keymap**: `ma"` takes the quotes and no blank after them, and a count goes out quote by quote (`2mi"` on the `b` of `x "a "b" c" y` selects `a "b" c`, `2md"` takes off the outer two). They used to follow vim's rule.
+- **Block mode `d` through half of a wide character** leaves a space for the half outside the block, as vim does, so the text after it keeps its column.
 - **`md` keeps the selection**, moved past the pair it took off, as helix's does, instead of leaving one cursor.
 - **Sessions**: a theme or mood you chose that the config gives too is no longer kept, so a later change to the config is not overruled; `:resume` keeps saying how many files it reopened instead of the theme's name.
 - **Markdown links with a space in the path**: completion after `](` writes a space as `%20` and `%` as `%25`, as VS Code does, and `gL` opens `my%20notes.md` as `my notes.md`.

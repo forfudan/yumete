@@ -5199,6 +5199,20 @@ fn line_bounds(rope: &Rope, pos: usize) -> (usize, usize) {
     (from, to)
 }
 
+/// **helix's counted quote**: the `n`th `quote` before `pos` and the `n`th
+/// after it, across lines (2026-10-29, measured against helix 25.07.1: on
+/// the `b` of `x "a "b" c" y`, `2mi"` selects `a "b" c`, and `3mi"` nothing).
+/// `None` with the caret on a quote mark, which [`quoted`] answers.
+fn nth_quotes_out(rope: &Rope, pos: usize, quote: char, n: usize) -> Option<(usize, usize)> {
+    let len = rope.len_chars();
+    if pos >= len || rope.char(pos) == quote || n == 0 {
+        return None;
+    }
+    let before = (0..pos).rev().filter(|&i| rope.char(i) == quote).nth(n - 1)?;
+    let after = (pos + 1..len).filter(|&i| rope.char(i) == quote).nth(n - 1)?;
+    Some((before, after))
+}
+
 /// **光標那一行上，包着它的那一對引號**——vim 的 `current_quote`，照抄
 /// （`textobject.c:1747`，2026-10-12）。
 ///
