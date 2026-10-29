@@ -554,12 +554,9 @@ impl Editor {
         let nests = rope.char(start) != rope.char(end);
         if nests {
             for _ in 1..count {
-                let (open, close) = (rope.char(start), rope.char(end));
-                let outer = match start {
-                    0 => None,
-                    _ => super::surrounding(rope, start - 1, open, close),
-                };
-                match outer {
+                // One level out, never a sibling (`[[a][b]]`), and across the
+                // family (`（a (b) c）`) as the first step is (2026-10-29).
+                match super::next_pair_out(rope, start, &family) {
                     Some((a, b)) => (start, end) = (a, b),
                     None => return motion::Span::Missed,
                 }
@@ -1246,20 +1243,34 @@ impl Editor {
             // 連 `「」`【】一起找。這一支從前逐字符精確，於是 `md(` 在 `（甲乙）`
             // 上答「外面没有成對的符號」，而 `mi(` 選得中。vim 的 `ds[` 在中文稿
             // 子上同病。同族套着的時候取最裏面那一對，同 `pair_span`。
+            //
+            // **A quote is found the way `mi"` finds it** (2026-10-29): with
+            // the caret on a quote mark, vim's rule of counting the line's
+            // quotes from its start says which pair it belongs to. The old
+            // nearest-before-and-after paired the caret's own quote with the
+            // next one (`say "a" and "b"`, `md"` on the second `"` gave `say
+            // "a and b"`). helix refuses there in prose; decided to follow
+            // `mi"` instead. Only a pair around the caret: `md` never reaches
+            // ahead.
             ch => super::pair_family(ch)
                 .into_iter()
-                .filter_map(|(open, close)| surrounding(rope, here, open, close))
+                .filter_map(|(open, close)| match open == close {
+                    true => super::quoted(rope, here, open).filter(|&(a, b)| a <= here && here <= b),
+                    false => surrounding(rope, here, open, close),
+                })
                 .max_by_key(|&(open, _)| open),
         }?;
         for _ in 1..count {
             let (open, close) = found;
-            if rope.char(open) == rope.char(close) || open == 0 {
+            if rope.char(open) == rope.char(close) {
                 return None;
             }
-            found = match from {
-                'm' => self.innermost_pair_at(open - 1)?,
-                _ => surrounding(rope, open - 1, rope.char(open), rope.char(close))?,
+            // One level out, never a sibling, and across the key's family.
+            let kinds = match from {
+                'm' => PAIRS.to_vec(),
+                ch => super::pair_family(ch),
             };
+            found = super::next_pair_out(rope, open, &kinds)?;
         }
         Some(found)
     }
@@ -1407,11 +1418,19 @@ impl Editor {
         self.innermost_pair_at(self.caret())
     }
 
-    /// The innermost bracket or quote pair around `pos`.
+    /// The innermost pair around `pos` whose halves differ: brackets, and
+    /// quotes that open and close differently (“” 「」).
+    ///
+    /// Warning: **Not `"` `'` `` ` ``** (2026-10-29, review: on `(don't go,
+    /// it's fine)` `mdm` took the two apostrophes out). helix's closest-pair
+    /// search looks at brackets only; a straight quote cannot say which side
+    /// it is on, and in prose it is as often an apostrophe. `md"` names one
+    /// when one is meant.
     fn innermost_pair_at(&self, pos: usize) -> Option<(usize, usize)> {
         let rope = self.current_buffer().rope();
         PAIRS
             .iter()
+            .filter(|&&(open, close)| open != close)
             .filter_map(|&(open, close)| surrounding(rope, pos, open, close))
             .max_by_key(|&(start, _)| start)
     }

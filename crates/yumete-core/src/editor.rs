@@ -5242,6 +5242,40 @@ fn nth_ahead(
     find_forward(rope, at, open, close).map(|end| (at, end))
 }
 
+/// **The pair one level out from the one opening at `start`** (2026-10-29),
+/// the innermost of `kinds` (pairs whose halves differ) that holds it.
+///
+/// Warning: **Never a sibling.** The count's step out used to ask
+/// [`surrounding`] about `start - 1`, and when that character closed a sibling
+/// (`[[a][b]]` with the caret on `b`) it answered with the sibling: `2md[`
+/// gave `[a[b]]`. Scanning back from the opener, skipping whole pairs on the
+/// way, reaches the one that holds it. Several kinds at once so a count can
+/// step from `(` out to `（`, as the first step already does.
+fn next_pair_out(rope: &Rope, start: usize, kinds: &[(char, char)]) -> Option<(usize, usize)> {
+    kinds
+        .iter()
+        .filter(|&&(open, close)| open != close)
+        .filter_map(|&(open, close)| {
+            let mut depth = 0usize;
+            let mut at = start.min(rope.len_chars());
+            let mut back = rope.chars_at(at).reversed();
+            let opener = loop {
+                let c = back.next()?;
+                at -= 1;
+                if c == close {
+                    depth += 1;
+                } else if c == open {
+                    match depth {
+                        0 => break at,
+                        _ => depth -= 1,
+                    }
+                }
+            };
+            find_forward(rope, opener, open, close).map(|end| (opener, end))
+        })
+        .max_by_key(|&(opener, _)| opener)
+}
+
 /// The innermost `open`…`close` enclosing `pos`, as (opener index, closer index).
 ///
 /// A pair whose halves are identical (`"`, `'`) cannot be nested, so those are
