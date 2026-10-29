@@ -11,6 +11,8 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`[editor] completion_page_size`** (settings panel: Editing): how many items the word, code and shell completion lists show at once, 6 by default (was 9), as the input method's candidates.
+- **The completion list steps aside while the input method is composing**, so it no longer lies under the candidate panel; it comes back after the commit.
 - **Word completion from the open files.** After four Latin letters
   (`[editor] word_completion`, `0` off) a list of the words in every open file floats
   under the caret: words that start with what you typed first, in the case you typed
