@@ -1302,6 +1302,14 @@ en = "put the selection on the system clipboard"
 find = "複製 复制 拷貝 拷贝 copy yank 剪貼簿 剪贴板 貼上 粘贴 paste"
 
 [[message]]
+# : 菜單：:auto-pairs 那一行
+key = "cmd.commands.auto-pairs"
+zht = "輸入左括號時自動補上右括號：關、基本、完整。無參數時，報告當前檔位"
+zhs = "输入左括号时自动补上右括号：关、基本、完整。无参数时，报告当前档位"
+en = "type an opening bracket and its closer comes too: off, basic, full; bare says which it is now"
+find = "自動配對 自动配对 括號 括号 引號 引号 auto pairs"
+
+[[message]]
 # : 命令選單裏 buffer 那一項的説明(commands 組)
 key = "cmd.commands.buffer"
 zht = "開着的文件：列出、切換、關掉"
@@ -3970,6 +3978,13 @@ en = "{0}+ lines differ from 《{1}》 (first {0} listed) — gf goes there"
 
 
 # ── edit ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :auto-pairs 的回答({0} ＝ off／basic／full)
+key = "edit.auto-pairs"
+zht = "自動配對：{0}"
+zhs = "自动配对：{0}"
+en = "auto-pairs: {0}"
 
 [[message]]
 # 系統剪貼簿是空的
@@ -9577,6 +9592,20 @@ zhs = "「东亚歧义宽度」那些字符占一格还是两格。画歪了就�
 en = "ambiguous width"
 
 [[message]]
+# 設置面板：[editor] auto_pairs 那一行
+key = "set.editor.auto-pairs"
+zht = "自動配對"
+zhs = "自动配对"
+en = "auto-pairs"
+
+[[message]]
+# 設置面板：[editor] auto_pairs 那一行底下的說明
+key = "set.editor.auto-pairs.hint"
+zht = "輸入左括號或引號時自動補上右半邊；再打右半邊會跳過去"
+zhs = "输入左括号或引号时自动补上右半边；再打右半边会跳过去"
+en = "Typing an opening bracket or quote adds its closer; typing the closer then steps over it"
+
+[[message]]
 # 設置：抢救副本
 key = "set.editor.autosave"
 zht = "搶救副本"
@@ -10556,6 +10585,27 @@ key = "set.pick.ambiguous-width.wide"
 zht = "兩格"
 zhs = "两格"
 en = "ambiguous width.wide"
+
+[[message]]
+# 設置面板：自動配對 basic(ASCII 的括號與引號，同 helix)
+key = "set.pick.auto-pairs.basic"
+zht = "基本"
+zhs = "基本"
+en = "basic"
+
+[[message]]
+# 設置面板：自動配對 full(m 組認得的所有成對符號)
+key = "set.pick.auto-pairs.full"
+zht = "完整"
+zhs = "完整"
+en = "full"
+
+[[message]]
+# 設置面板：自動配對 off
+key = "set.pick.auto-pairs.off"
+zht = "關"
+zhs = "关"
+en = "off"
 
 [[message]]
 # 設置：候选怎么画——底行

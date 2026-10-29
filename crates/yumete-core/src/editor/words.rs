@@ -1025,7 +1025,16 @@ impl Editor {
         let text = text.to_string();
         self.edit_each_from(self.mode != Mode::Insert, move |e| {
             e.insert_recording.push_str(&text);
-            e.insert_str(&text);
+            // One character is a key typed through the input method, and
+            // pairs as one (`full`'s 「 and “).
+            let mut chars = text.chars();
+            let paired = match (chars.next(), chars.next()) {
+                (Some(c), None) => e.type_paired(c),
+                _ => false,
+            };
+            if !paired {
+                e.insert_str(&text);
+            }
             e.maybe_ask_what_comes_next(&text);
             e.maybe_ask_for_a_signature(&text);
         });
