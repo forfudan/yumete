@@ -4520,12 +4520,25 @@ fn control_a_and_x_step_the_number_under_the_cursor() {
     assert_eq!(bump("ab -5", "lllvl"), "ab -4");
     assert_eq!(bump("ab 0x0f", "lllvlll"), "ab 0x10");
     assert_eq!(bump("ab 0xFF", "lllvlll"), "ab 0x100");
+    // A selected date steps by days and a time by minutes, as in helix.
+    let mut ed = typed("on 2024-01-31.");
+    press(&mut ed, "gglllv9l");
+    ed.on_key(Key::Ctrl('a'));
+    assert_eq!(ed.current_buffer().text(), "on 2024-02-01.");
+    assert_eq!(ed.selection(), (3, 13), "the new date is selected");
+    assert_eq!(bump("at 23:59", "lllv4l"), "at 00:00");
+    assert_eq!(bump("on 2024-02-30", "lllv9l"), "on 2024-02-30", "no such day");
 
     let mut ed = typed("第 9 章");
     ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
     press(&mut ed, "gg");
     ed.on_key(Key::Ctrl('a'));
     assert_eq!(ed.current_buffer().text(), "第 10 章", "vim reaches ahead");
+    let mut ed = typed("2024-01-31");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "gg");
+    ed.on_key(Key::Ctrl('a'));
+    assert_eq!(ed.current_buffer().text(), "2025-01-31", "vim has no dates");
 }
 
 #[test]
@@ -4722,6 +4735,10 @@ fn every_step_of_m_lists_its_choices() {
         assert!(rows.contains(&("<".into(), "< >".into())), "{pressed}: {rows:?}");
     }
     assert!(shown("md").contains(&("[".into(), "[ 「 【 〔 …".into())), "md finds the family");
+    // `ms` also lists `Enter`, which puts the selection on lines of its own;
+    // `mr(` does not take it.
+    assert!(shown("ms").iter().any(|(k, _)| k == "Enter"), "ms lists Enter");
+    assert!(!shown("mr(").iter().any(|(k, _)| k == "Enter"), "mr( does not");
 }
 
 /// Under the vim keymap `dik`/`dak` are the Markdown marks and `dim` the

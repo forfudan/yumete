@@ -646,7 +646,8 @@ impl Editor {
     /// reaches ahead along the line from the cursor. helix's changes only a
     /// selection that is a number, whole (2026-10-29, measured against helix
     /// 25.07.1: the cursor on the `1` of `12` makes it `22`, a letter or
-    /// `12 ` with its space changes nothing).
+    /// `12 ` with its space changes nothing). A selection that is a date or a
+    /// time is one too ([`crate::dates`]).
     pub(super) fn number_to_bump(&self, anchor: usize, head: usize) -> Option<(usize, usize)> {
         if self.key_preset == yumete_cjk::KeyPreset::Vim {
             return self.number_from(head);
@@ -662,11 +663,12 @@ impl Editor {
             Some(hex) => !text.starts_with('-') && !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit()),
             None => !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()),
         };
-        whole.then_some((start, end))
+        (whole || crate::dates::stepped(&text, 1).is_some()).then_some((start, end))
     }
 
     /// Add `delta` to the number [`Self::number_to_bump`] finds. A `0x`
-    /// number stays hexadecimal, its width and the case of its letters kept.
+    /// number stays hexadecimal, its width and the case of its letters kept;
+    /// a date steps by days and a time by minutes.
     pub(super) fn bump_number(&mut self, delta: i64) {
         if self.refuse_readonly() {
             return;
@@ -676,6 +678,10 @@ impl Editor {
         let line_start = rope.line_to_char(rope.char_to_line(from));
         let (start, end) = (from - line_start, to - line_start);
         let digits: String = rope.slice(from..to).to_string();
+        if let Some(text) = crate::dates::stepped(&digits, delta).filter(|_| self.key_preset != yumete_cjk::KeyPreset::Vim) {
+            self.put_the_bumped(from, to, &text);
+            return;
+        }
         if let Some(hex) = digits.get(2..).filter(|_| digits[..2].eq_ignore_ascii_case("0x")) {
             let Ok(value) = i64::from_str_radix(hex, 16) else { return };
             let next = value.saturating_add(delta).max(0);

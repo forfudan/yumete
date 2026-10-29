@@ -57,7 +57,8 @@ in `docs/development.md` §5.2.
   list the objects: word, sentence, paragraph, the nearest pair, Markdown marks,
   function, type definition, parameter, comment, table cell, and the brackets and
   quotes. `md` and `mr` list the pairs they find, look-alikes included; `ms` and
-  `mr`'s second key list the pair each key writes. Each step used to show one line
+  `mr`'s second key list the pair each key writes, and `ms` also lists `Enter`,
+  which puts the selection on lines of its own. Each step used to show one line
   saying "type a bracket".
 
 - **`[editor] remember = false` keeps no memory of where you have been**, as vim's
@@ -109,7 +110,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
-- **`C-a` and `C-x` follow helix under the helix keymap**: they change the selection only when it is a whole number (`12`, `-5`, `007`, `0x0f`), and the new number is then selected. With the cursor on the `1` of `12` you get `22`; on a letter nothing changes. The vim keymap keeps vim's rule, the number at or after the cursor.
+- **`C-a` and `C-x` follow helix under the helix keymap**: they change the selection only when it is a whole number (`12`, `-5`, `007`, `0x0f`), and the new number is then selected. With the cursor on the `1` of `12` you get `22`; on a letter nothing changes. A selection that is a date or a time steps too, as in helix: `2024-01-31` by days to `2024-02-01`, `23:59` by minutes to `00:00`, a date with a time by minutes. The vim keymap keeps vim's rule, the number at or after the cursor.
 
 - **The signature stays up while you type the arguments**, as in helix: entering
   Insert inside a call shows it, each edit or caret move asks again after 120 ms so the

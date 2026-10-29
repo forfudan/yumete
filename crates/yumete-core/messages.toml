@@ -5808,6 +5808,13 @@ zhs = "……或任何成对符号"
 en = "… or any paired symbol"
 
 [[message]]
+# ms 菜單：Enter 在選區前後各寫一個換行符
+key = "hint.pair.lines"
+zht = "前後換行符"
+zhs = "前后换行符"
+en = "a line break on each side"
+
+[[message]]
 # 提示：挑選器——Enter 打開選中的那一條
 key = "hint.picker.open"
 zht = "打開"

@@ -527,7 +527,13 @@ impl Editor {
                 },
                 Self::object_rows(),
             ),
-            Pending::Surround => (say!("hint.match.surround"), Self::made_rows()),
+            Pending::Surround => {
+                // `Enter` sits above the "any other character" row: it is a
+                // key with its own meaning, not one more pair.
+                let mut rows = Self::made_rows();
+                rows.insert(rows.len() - 1, ("Enter".into(), say!("hint.pair.lines")));
+                (say!("hint.match.surround"), rows)
+            }
             Pending::SurroundOff => (
                 say!("hint.match.take-off"),
                 Self::pair_rows(&[("m", "hint.obj.nearest-pair"), ("k", "hint.obj.markup")]),
