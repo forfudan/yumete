@@ -945,8 +945,6 @@ pub const LATER: &[&str] = &[
     "theme.cyan_light",
     "theme.lime",
     "theme.lime_light",
-    "panel.ink",
-    "panel.paper",
     "ime.data_dirs",
     "export.page",
 ];

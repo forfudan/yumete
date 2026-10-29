@@ -654,10 +654,6 @@ pub struct PanelConfig {
     /// A value that is too short simply runs out and the rest fall back to
     /// plain digits.
     pub markers: String,
-    /// 墨 — the colour candidates are drawn in.
-    pub ink: (u8, u8, u8),
-    /// 紙 — the panel's ground.
-    pub paper: (u8, u8, u8),
     /// How many candidates a page offers — **6**, which is what every one of
     /// 宇浩's own front ends ships. A reader who knows 「第七個候選」 by where
     /// it sits should find it in the same place here; `:yume-menu-size` moves
@@ -780,9 +776,6 @@ impl Default for PanelConfig {
         PanelConfig {
             // 帶圈中文數字, which are unambiguously wide.
             markers: "１２３４５６７８９".to_string(),
-            // Yume's 墨香, dark: warm ink on a deep ground.
-            ink: (0xCF, 0xC6, 0xA9),
-            paper: (0x26, 0x2A, 0x27),
             page_size: 6,
             rounded: true,
             display: PanelDisplay::Box,
@@ -3126,7 +3119,8 @@ impl Config {
     //
     // 2026-10-07 那一輪立的規矩在底下，而它只掃到了一部分。漏的是兩族：
     //
-    // - **二十六個顏色格**（`[theme]` 的二十四個品色 ＋ `[panel] ink`／`paper`）。
+    // - **二十四個顏色格**（`[theme]` 的品色；`[panel] ink`／`paper` 2026-10-29
+    //   刪了，候選框跟主題走）。
     //   寫錯一個色，`parse_hex` 回 `None`，`into_config` 那一支就留着主題自己的
     //   顏色——而「留着主題的顏色」和「這一行没生效」在屏幕上一模一樣。
     // - **七個有閉合詞表的格**：`theme.ground`／`status_bar`、`editor.layout`／
@@ -3159,8 +3153,6 @@ impl Config {
         ("[theme] cyan_light", &raw.theme.cyan_light),
         ("[theme] lime", &raw.theme.lime),
         ("[theme] lime_light", &raw.theme.lime_light),
-        ("[panel] ink", &raw.panel.ink),
-        ("[panel] paper", &raw.panel.paper),
     ] {
         if let Some(word) = value.as_deref() {
             if parse_hex(word).is_none() {
@@ -3886,8 +3878,6 @@ struct RawIme {
 #[serde(deny_unknown_fields)]
 struct RawPanel {
     markers: Option<String>,
-    ink: Option<String>,
-    paper: Option<String>,
     page_size: Option<usize>,
     rounded: Option<bool>,
     display: Option<String>,
@@ -4196,12 +4186,6 @@ impl RawConfig {
         }
         if other.panel.markers.is_some() {
             self.panel.markers = other.panel.markers;
-        }
-        if other.panel.ink.is_some() {
-            self.panel.ink = other.panel.ink;
-        }
-        if other.panel.paper.is_some() {
-            self.panel.paper = other.panel.paper;
         }
         if other.panel.page_size.is_some() {
             self.panel.page_size = other.panel.page_size;
@@ -4711,12 +4695,6 @@ impl RawConfig {
             } else {
                 config.panel.markers = markers;
             }
-        }
-        if let Some(rgb) = self.panel.ink.as_deref().and_then(parse_hex) {
-            config.panel.ink = rgb;
-        }
-        if let Some(rgb) = self.panel.paper.as_deref().and_then(parse_hex) {
-            config.panel.paper = rgb;
         }
         if let Some(size) = self.panel.page_size {
             // Above nine there is no key left to choose with. **One is allowed**
@@ -5335,20 +5313,19 @@ mod tests {
     }
 
     #[test]
-    fn a_panel_skin_is_two_colours_and_a_marker_list() {
+    fn a_panel_takes_a_marker_list_and_its_colours_from_the_theme() {
         let c = Config::from_toml(
             r##"
             [panel]
             markers = "①②③"
-            ink = "#112233"
-            paper = "#445566"
             page_size = 5
             rounded = false
             "##,
         );
         assert_eq!(c.panel.markers, "①②③");
-        assert_eq!(c.panel.ink, (0x11, 0x22, 0x33));
-        assert_eq!(c.panel.paper, (0x44, 0x55, 0x66));
+        // The colours are the theme's (2026-10-29): `[panel] ink` is no key.
+        let (_, said) = Config::from_toml_saying("[panel]\nink = \"#112233\"\n");
+        assert!(toml::from_str::<RawConfig>("[panel]\nink = \"#112233\"\n").is_err(), "{said:?}");
         assert_eq!(c.panel.page_size, 5);
         assert!(!c.panel.rounded);
     }
@@ -5359,13 +5336,11 @@ mod tests {
             r##"
             [panel]
             markers = ""
-            ink = "not a colour"
             page_size = 99
             "##,
         );
         // An empty list would leave every candidate unnumbered.
         assert_eq!(c.panel.markers, PanelConfig::default().markers);
-        assert_eq!(c.panel.ink, PanelConfig::default().ink);
         // There is no tenth key to choose a tenth candidate with.
         assert_eq!(c.panel.page_size, 9);
     }

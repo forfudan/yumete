@@ -1913,89 +1913,59 @@ pub fn draw(
     (cursor_x, caret_y)
 }
 
-/// The candidate panel's skin, derived from two colours.
-///
-/// Yume's own themes are defined by **four numbers** — an ink and a paper for
-/// each mode — with every other shade interpolated along a ladder between them
-/// (`yume_core::themes::ink_ladder`). Reproducing the ladder rather than storing
-/// the resulting shades is what lets a skin be changed by editing a pair of
-/// values: the relationships between the shades stay right by construction, and
-/// yumete's panel is the same skin as the GUI frontends' when the endpoints
-/// match.
-///
-/// The default is 墨香 dark. Its green is deliberate and slight — R and G differ
-/// by about 5, so it reads as ink with a hint of pine rather than grey-green —
-/// and the paper is warm rather than white. Dark mode is not the light pair
-/// swapped: the ground goes deeper and the ink dimmer, or the panel glows at
-/// night.
+/// **The candidate panel's colours, taken from the theme** (2026-10-29: 「update
+/// the skin of integrated yume IME so that the candidate panel or candidate bar
+/// is aligned with the yumete theme」). It used to carry its own `[panel] ink`
+/// and `paper`, 墨香 dark at the factory, so on a light theme it stayed a dark
+/// box. Now it is drawn as the other floats are, the completion list among
+/// them: their ground and ring, candidates in the text's ink, the numbers and
+/// the code a step back, and the highlighted candidate on the selection's
+/// ground. The box, the strips and the vertical panel all read this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Skin {
-    ink: (u8, u8, u8),
-    paper: (u8, u8, u8),
+    paper: Color,
+    border: Color,
+    text: Color,
+    helper: Color,
+    highlight: Color,
 }
 
 impl Skin {
-    pub fn new(ink: (u8, u8, u8), paper: (u8, u8, u8)) -> Skin {
-        Skin { ink, paper }
-    }
-
-    /// One rung of the ladder: `0` is pure ink, [`yumete_config::rung::PAPER`]
-    /// pure paper — **the same scale the page uses**, so a rung can be named
-    /// here by the same constant it is named by everywhere else.
-    ///
-    /// Warning: It used to be its own 0–1000 while taking `rung::RULE` as an
-    /// argument; the day the page's ladder was restretched to 0–10000 that
-    /// argument became five times the scale and the mix overflowed.
-    ///
-    /// Mixed in sRGB, not linear light, because the hand-tuned original was
-    /// picked by eye in sRGB and mixing linearly comes out far lighter.
-    fn step(self, t: u32) -> Color {
-        let full = yumete_config::rung::PAPER as i64;
-        let t = (t as i64).min(yumete_config::rung::DEEP as i64);
-        let mix = |a: u8, b: u8| -> u8 {
-            let (a, b) = (a as i64, b as i64);
-            ((a * full + (b - a) * t + full / 2) / full).clamp(0, 255) as u8
-        };
-        Color::Rgb(
-            mix(self.ink.0, self.paper.0),
-            mix(self.ink.1, self.paper.1),
-            mix(self.ink.2, self.paper.2),
-        )
-    }
-
-    /// The panel's ground.
+    /// The panel's ground: the floats' ground.
     pub fn paper(self) -> Color {
-        self.step(yumete_config::rung::PAPER as u32)
+        self.paper
     }
-    /// The ring around the panel.
-    ///
-    /// [`yumete_config::rung::RULE`], which is where every other ring on the
-    /// screen is drawn — the which-key panel, the sidebar's edge, the ruler's
-    /// line. Four panels used to ring themselves at four different rungs, and
-    /// on one screen that reads as four different kinds of thing.
+    /// The ring around the panel, where every other ring is drawn.
     pub fn border(self) -> Color {
-        self.step(yumete_config::rung::RULE as u32)
+        self.border
     }
     /// A candidate.
     pub fn text(self) -> Color {
-        self.step(yumete_config::rung::TEXT as u32)
+        self.text
     }
-    /// Numbers and the code — one shade back from the candidates.
+    /// Numbers and the code, one step back from the candidates.
     pub fn helper(self) -> Color {
-        self.step(yumete_config::rung::ASIDE as u32)
+        self.helper
     }
     /// The ground of the highlighted candidate, and the text on it.
     pub fn highlight(self) -> Color {
-        self.step(yumete_config::rung::TEXT as u32)
+        self.highlight
     }
     pub fn on_highlight(self) -> Color {
-        self.step(yumete_config::rung::PAPER as u32)
+        self.text
     }
 }
 
 impl From<&Config> for Skin {
     fn from(config: &Config) -> Skin {
-        Skin::new(config.panel.ink, config.panel.paper)
+        let ink = crate::theme::Palette::of(config);
+        Skin {
+            paper: crate::chrome::panel_ground(ink),
+            border: ink.rule(),
+            text: ink.text(),
+            helper: ink.quiet(),
+            highlight: ink.selection(),
+        }
     }
 }
 

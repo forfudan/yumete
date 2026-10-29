@@ -18624,28 +18624,18 @@ fn squeezed(text: &str) -> String {
     }
 
     #[test]
-    fn the_panel_takes_its_markers_and_skin_from_the_config() {
+    fn the_panel_takes_its_markers_from_the_config() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
         let mut config = vertical_config();
         config.panel.markers = "壹貳參".to_string();
-        config.panel.ink = (0x10, 0x20, 0x30);
-        config.panel.paper = (0x90, 0xa0, 0xb0);
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 16);
 
         let text = buffer_text(&buffer);
         assert!(text.contains('壹'), "配置的編號字符沒用上: {text:?}");
         assert!(!text.contains('１'), "還在用默認編號");
-        // The ground is the configured paper, and the ladder runs from it.
-        assert!(
-            (0..buffer.area.height).any(|y| {
-                (0..buffer.area.width)
-                    .any(|x| buffer[(x, y)].style().bg == Some(Color::Rgb(0x90, 0xa0, 0xb0)))
-            }),
-            "配置的紙色沒用上"
-        );
     }
 
     /// **A click does not carry a half-typed word into another file** (#336).
@@ -19679,41 +19669,33 @@ fn squeezed(text: &str) -> String {
     }
 
     #[test]
-    fn the_candidate_panel_wears_the_ink_skin() {
+    fn the_candidate_panel_wears_the_theme() {
         let mut editor = Editor::new();
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
-        let config = vertical_config();
+        let mut config = vertical_config();
+        // A light theme: the panel used to stay 墨香 dark on it (2026-10-29).
+        config.theme = yumete_config::ThemeConfig::named("github").expect("a theme");
+        config.theme.mode = yumete_config::Mode::Light;
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 14);
+        let ink = crate::theme::Palette::of(&config);
 
-        // 墨香 dark: warm ink on a deep ground, ringed in a mid rung of the same
-        // ladder. Nothing in the panel falls back to the terminal default.
-        let paper = Color::Rgb(0x26, 0x2A, 0x27);
-        // rung::RULE — 第 50 檔 exactly, since the ladder was renumbered to
-        // one hundred and one stops of a hundred steps each (#451).
-        let ring = Color::Rgb(0x71, 0x6F, 0x61);
+        // The ground and the ring of every other float.
         let corner = (0..buffer.area.height)
             .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
             .find(|&(x, y)| buffer[(x, y)].symbol() == "\u{256d}")
             .expect("rounded top-left corner");
-        assert_eq!(buffer[corner].style().fg, Some(ring), "border not inked");
-        assert_eq!(
-            buffer[corner].style().bg,
-            Some(paper),
-            "panel ground missing"
-        );
+        assert_eq!(buffer[corner].style().fg, Some(ink.rule()), "the ring");
+        assert_eq!(buffer[corner].style().bg, Some(crate::chrome::panel_ground(ink)), "the ground");
 
         let cand = (0..buffer.area.height)
             .flat_map(|y| (0..buffer.area.width).map(move |x| (x, y)))
             .find(|&(x, y)| buffer[(x, y)].symbol() == "吧")
             .expect("first candidate");
-        // The highlighted candidate is ink-on-paper inverted.
-        assert_eq!(
-            buffer[cand].style().bg,
-            Some(Color::Rgb(0xCF, 0xC6, 0xA9)),
-            "highlight not inked"
-        );
+        // The highlighted candidate sits on the selection's ground.
+        assert_eq!(buffer[cand].style().bg, Some(ink.selection()), "highlight");
+        assert_eq!(buffer[cand].style().fg, Some(ink.text()));
     }
 
     #[test]
@@ -24759,15 +24741,16 @@ fn squeezed(text: &str) -> String {
         let config = vertical_config();
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 20);
 
-        // Numbered with the full-width digits — the vertical panel — and 墨香.
+        // Numbered with the full-width digits — the vertical panel — on the
+        // floats' ground.
         let text = buffer_text(&buffer);
         assert!(text.contains('１'), "vertical panel expected: {text:?}");
-        let paper = Color::Rgb(0x26, 0x2a, 0x27);
+        let paper = crate::chrome::panel_ground(crate::theme::Palette::of(&config));
         assert!(
             (0..buffer.area.height).any(|y| {
                 (0..buffer.area.width).any(|x| buffer[(x, y)].style().bg == Some(paper))
             }),
-            "panel should wear the ink ground"
+            "panel should wear the floats' ground"
         );
     }
 
