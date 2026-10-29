@@ -162,6 +162,15 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Sessions and `:reload-config`**:
+  - Quitting with a program file or a table in front no longer saves "horizontal" over the layout you chose.
+  - The wrap width is kept together with its on/off, so a resume does not turn wrapping on.
+  - `:reload-config` puts wrapping and settings that need vertical layout (`view-sentence`, `view-hanging`, `view-meter`) back the way the config has them.
+  - A resumed session no longer overrides `-v` or `--horizontal`.
+  - `:theme-mode system` is kept as "system".
+  - Quitting no longer asks the terminal about character widths after the screen is handed back (a 120 ms wait, and a stray reply at the shell prompt over ssh).
+  - Unticking "remember" in the settings panel stops the session being written without a restart.
+  - Setting a page count back to 1 in the panel takes effect.
 - **The `m` group**: `m` takes the nearest pair whose halves differ, so `mdm` no longer takes two apostrophes out of `don't` and `it's`; `md"`/`mr"` with the cursor on a quote mark take the pair `mi"` would; a count (`2md[`, `2mi(`) steps out to the pair that holds this one instead of a neighbouring pair, and across a bracket family (`2md(` reaches `（）`).
 - **Several cursors**:
   - An edit that runs once now moves the other cursors with it instead of leaving them on shifted text.

@@ -616,7 +616,7 @@ impl Editor {
     fn replay_view(&mut self, text: &str) {
         let mut theme: (Option<String>, Option<crate::command::Mood>) = (None, None);
         for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
-            let _ = self.execute(&format!(":{line}"));
+            self.execute_quietly(&format!(":{line}"));
             if let Some((name, mood)) = self.theme_request.take() {
                 theme = (name.or(theme.0), mood.or(theme.1));
             }

@@ -73,7 +73,7 @@ impl Editor {
             .copied()
             .filter(|need| !self.meets(*need))
             .collect();
-        if !unmet.is_empty() {
+        if !unmet.is_empty() && !self.quiet_view {
             if !force {
                 let what: Vec<String> = unmet.iter().map(|n| n.says()).collect();
                 self.status = say!(
@@ -339,7 +339,7 @@ impl Editor {
                 // the reader may well be 竪排 in the novel in the next buffer,
                 // and switching it off for them would be answering a question
                 // nobody asked. See `Editor::layout`.
-                if self.writes_code() && wants_vertical {
+                if self.writes_code() && wants_vertical && !self.quiet_view {
                     self.status = say!("layout.code-is-horizontal");
                     return Ok(CommandOutcome::Continue);
                 }

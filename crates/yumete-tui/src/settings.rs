@@ -243,7 +243,10 @@ fn view_lines(editor: &Editor) -> Vec<String> {
     use yumete_core::zong::Layout;
     let on = |b: bool| if b { "on" } else { "off" };
     vec![
-        match editor.layout() {
+        // What was chosen, not what this buffer shows: a program file or a
+        // drawn table is horizontal whatever the reader chose (2026-10-29,
+        // review: quitting on a `.rs` kept `horizontal` over a vertical config).
+        match editor.layout_chosen() {
             Layout::Vertical => "vertical".to_string(),
             Layout::Horizontal => "horizontal".to_string(),
         },
@@ -285,13 +288,20 @@ fn view_lines(editor: &Editor) -> Vec<String> {
 /// not kept.
 pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
     let given = view_lines(&as_configured(config));
-    let mut keep: Vec<String> =
-        view_lines(editor).into_iter().filter(|line| !given.contains(line)).collect();
+    let lines = view_lines(editor);
+    // **The wrap width and the switch go together** (2026-10-29, review): a
+    // kept `view-wrap 40` without its `view-wrap off` turned wrapping on when
+    // replayed, since a width turns it on.
+    let wrap_differs = lines.iter().filter(|l| l.starts_with("view-wrap ")).any(|l| !given.contains(l));
+    let mut keep: Vec<String> = lines
+        .into_iter()
+        .filter(|line| !given.contains(line) || (wrap_differs && line.starts_with("view-wrap ")))
+        .collect();
     if crate::theme::snapshot().is_some() {
         keep.push(format!("theme {}", crate::theme::name(config)));
     }
-    if let Some(dark) = crate::theme::chosen_mood() {
-        keep.push(format!("theme-mode {}", if dark { "dark" } else { "light" }));
+    if let Some(mood) = crate::theme::chosen_mood() {
+        keep.push(format!("theme-mode {mood}"));
     }
     if let Some(fill) = crate::theme::chosen_fill() {
         keep.push(format!("theme-fill {}", if fill { "on" } else { "off" }));
@@ -300,9 +310,15 @@ pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
 }
 
 /// A fresh editor with `config` applied: what the config gives.
+///
+/// Warning: **The editor half only** (2026-10-29, review): the whole of
+/// [`apply`] also asks the terminal about ambiguous widths and sets the
+/// process's language, and this runs at every quit, after the terminal has
+/// been handed back: a 120 ms wait, and over ssh a late reply printed at the
+/// shell prompt.
 fn as_configured(config: &Config) -> Editor {
     let mut plain = Editor::new();
-    apply(config, &mut plain, None, None);
+    apply_to_editor(config, &mut plain, None);
     plain
 }
 
@@ -312,10 +328,13 @@ fn as_configured(config: &Config) -> Editor {
 /// was meant to undo it. The status line is the reload's to fill.
 pub fn view_back_to_config(editor: &mut Editor, config: &Config) {
     let was = editor.status().to_string();
-    let now = view_lines(editor);
+    // Asked afresh before each line (2026-10-29, review): one line can change
+    // another (`view-wrap 0` turns wrapping on), so what was true before the
+    // first is not true before the third. Quietly, so a setting that needs
+    // 竪排 is put back on a horizontal page too.
     for line in view_lines(&as_configured(config)) {
-        if !now.contains(&line) {
-            let _ = editor.execute(&format!(":{line}"));
+        if !view_lines(editor).contains(&line) {
+            editor.execute_quietly(&format!(":{line}"));
         }
     }
     editor.set_status(was);
@@ -327,6 +346,12 @@ pub fn apply(
     layout: Option<yumete_core::zong::Layout>,
     language: Option<yumete_core::messages::Language>,
 ) {
+    apply_to_the_process(config, language);
+    apply_to_editor(config, editor, layout);
+}
+
+/// The settings that belong to the process rather than to one editor.
+fn apply_to_the_process(config: &Config, language: Option<yumete_core::messages::Language>) {
     // 進程級的那幾個：不屬於某一個 editor，但同樣是配置說了算。
     if !config.ime.data_dirs.is_empty() {
         yumete_config::set_data_dirs(config.ime.data_dirs.clone());
@@ -348,6 +373,16 @@ pub fn apply(
         language.or_else(|| yumete_core::messages::Language::parse(&config.editor.language))
     {
         yumete_core::messages::set_language(language);
+    }
+}
+
+/// The settings that belong to one editor.
+fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_core::zong::Layout>) {
+    // **`remember = false` takes hold without a restart** (2026-10-29, review:
+    // unticked in the panel, the session was still written at the next quit).
+    // Only off: turning it on needs the session's place, worked out at start.
+    if !config.editor.remember {
+        editor.set_remembering(false);
     }
     // 注音畫多少，以及認哪幾種寫法。
     //
@@ -377,11 +412,13 @@ pub fn apply(
     if config.editor.indent > 0 {
         editor.set_indent(config.editor.indent);
     }
-    if config.editor.pages_vertical > 1 {
+    // Warning: **1 is a page count now, not 「unset」** (2026-10-29, review: set
+    // back to 1 in the panel, two pages stayed).
+    if config.editor.pages_vertical > 0 {
         editor.set_pages_vertical(config.editor.pages_vertical);
     }
     editor.set_word_completion(config.editor.word_completion);
-    if config.editor.pages_horizontal > 1 {
+    if config.editor.pages_horizontal > 0 {
         editor.set_pages_horizontal(config.editor.pages_horizontal);
     }
     if config.editor.zong_length > 0 {
@@ -611,5 +648,55 @@ mod config_watch_tests {
         ed.execute(":view-hud off").unwrap();
         super::view_back_to_config(&mut ed, &config);
         assert!(view(&ed).is_empty(), "{:?}", view(&ed));
+    }
+
+    /// **The session and the reload after the review** (2026-10-29): the
+    /// layout chosen, not the one a program file shows; the wrap width kept
+    /// with its switch; a reload that puts wrapping and a 竪排-only setting
+    /// back although one line changes another and the page is horizontal.
+    #[test]
+    fn the_session_and_the_reload_after_the_review() {
+        let mut config = yumete_config::Config::default();
+        config.editor.soft_wrap = false;
+        let view = |ed: &yumete_core::Editor, config: &yumete_config::Config| -> Vec<String> {
+            super::view_to_keep(ed, config)
+                .into_iter()
+                .filter(|line| !line.starts_with("theme"))
+                .collect()
+        };
+        let fresh = |config: &yumete_config::Config| {
+            let mut ed = yumete_core::Editor::new();
+            super::apply_to_editor(config, &mut ed, None);
+            ed
+        };
+
+        // A code file in front does not make the session say `horizontal`.
+        let mut vertical = config.clone();
+        vertical.editor.layout = yumete_core::zong::Layout::Vertical;
+        let mut ed = fresh(&vertical);
+        ed.set_syntax(yumete_core::syntax::Syntax::Code(yumete_core::code::Language::Rust));
+        assert!(view(&ed, &vertical).is_empty(), "{:?}", view(&ed, &vertical));
+
+        // The width and the switch go together.
+        let mut ed = fresh(&config);
+        ed.execute(":view-wrap 40").unwrap();
+        ed.execute(":view-wrap off").unwrap();
+        let kept = view(&ed, &config);
+        assert!(kept.contains(&"view-wrap 40".to_string()) && kept.contains(&"view-wrap off".to_string()), "{kept:?}");
+
+        // The reload puts wrapping back off after a width turned it on.
+        let mut ed = fresh(&config);
+        ed.execute(":view-wrap 40").unwrap();
+        super::view_back_to_config(&mut ed, &config);
+        assert!(!ed.soft_wrap(), "wrapping back off, as the config has it");
+
+        // …and a 竪排-only setting, on a page the config turns horizontal.
+        let mut ed = fresh(&config);
+        ed.execute(":vertical").unwrap();
+        ed.execute(":view-sentence on").unwrap();
+        assert!(ed.sentences());
+        super::view_back_to_config(&mut ed, &config);
+        assert!(!ed.sentences(), "put back although it needs 竪排");
+        assert!(view(&ed, &config).is_empty(), "{:?}", view(&ed, &config));
     }
 }
