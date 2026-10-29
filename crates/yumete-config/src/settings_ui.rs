@@ -774,6 +774,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "completion_page_size",
+        group: Group::Editing,
+        kind: Kind::Count { low: 1, high: 20, zero: None },
+        label: "set.editor.completion-page-size",
+        hint: "set.editor.completion-page-size.hint",
+        factory: "6",
+    },
+    Setting {
+        table: "editor",
         key: "indent_width",
         group: Group::Editing,
         kind: Kind::Count { low: 1, high: 16, zero: None },

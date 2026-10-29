@@ -9628,6 +9628,20 @@ zhs = "状态栏底下再加一行：打命令、刚才怎么了、现在能按�
 en = "command line"
 
 [[message]]
+# 設置面板：[editor] completion_page_size 那一行
+key = "set.editor.completion-page-size"
+zht = "補全一頁幾條"
+zhs = "补全一页几条"
+en = "completion page size"
+
+[[message]]
+# 設置面板：[editor] completion_page_size 那一行底下的說明
+key = "set.editor.completion-page-size.hint"
+zht = "單詞、代碼和終端命令的補全列表一次顯示幾條"
+zhs = "单词、代码和终端命令的补全列表一次显示几条"
+en = "How many items the word, code and shell completion lists show at once"
+
+[[message]]
 # 設置：改动条
 key = "set.editor.diff-gutter"
 zht = "改動條"

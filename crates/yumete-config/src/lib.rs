@@ -211,6 +211,10 @@ pub struct EditorConfig {
     /// by themselves (2026-10-28); 漢字 take half as many, rounded up. 0 is
     /// never (`C-n` still asks). 0 to 20.
     pub word_completion: usize,
+    /// **How many completion items show at once** (2026-10-29): the word,
+    /// code and shell lists alike. 6, as the input method's candidates.
+    /// 1 to 20.
+    pub completion_page_size: usize,
     /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
     /// Off by default: it is a study aid, and it widens every candidate.
     pub show_chaifen: bool,
@@ -453,6 +457,7 @@ impl Default for EditorConfig {
             language: "zh".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
             word_completion: 4,
+            completion_page_size: 6,
             show_chaifen: false,
             show_ruby: false,
             ruby_dialects: Vec::new(),
@@ -3921,6 +3926,7 @@ struct RawEditor {
     language: Option<String>,
     zong_gap: Option<usize>,
     word_completion: Option<usize>,
+    completion_page_size: Option<usize>,
     show_chaifen: Option<bool>,
     show_ruby: Option<bool>,
     ruby_dialects: Option<Vec<String>>,
@@ -4073,6 +4079,9 @@ impl RawConfig {
         }
         if other.editor.zong_length.is_some() {
             self.editor.zong_length = other.editor.zong_length;
+        }
+        if other.editor.completion_page_size.is_some() {
+            self.editor.completion_page_size = other.editor.completion_page_size;
         }
         if other.editor.word_completion.is_some() {
             self.editor.word_completion = other.editor.word_completion;
@@ -4434,6 +4443,10 @@ impl RawConfig {
         if let Some(n) = self.editor.word_completion {
             config.editor.word_completion =
                 held(problems, "[editor] word_completion", n, n.min(20), "0 到 20");
+        }
+        if let Some(n) = self.editor.completion_page_size {
+            config.editor.completion_page_size =
+                held(problems, "[editor] completion_page_size", n, n.clamp(1, 20), "1 到 20");
         }
         if let Some(gap) = self.editor.zong_gap {
             config.editor.zong_gap = held(problems, "[editor] zong_gap", gap, gap.min(4), "0 到 4");

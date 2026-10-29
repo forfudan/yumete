@@ -5229,7 +5229,7 @@ fn draw(
     // answers it.
     let note_panel = match taken || editor.pending_menu().is_some() {
         true => None,
-        false => draw_note(frame, editor, config, text_area, footer.y, spot),
+        false => draw_note(frame, editor, config, text_area, footer.y, spot, ime.is_composing()),
     };
     panels.extend(keys_panel);
     panels.extend(note_panel);
@@ -6732,6 +6732,7 @@ fn draw_note(
     area: Rect,
     bottom: u16,
     caret: crate::chrome::Spot,
+    composing: bool,
 ) -> Option<Rect> {
     let vertical = editor.layout() == WritingLayout::Vertical;
     // **What the language server said about this line** (#53/#54,
@@ -6747,19 +6748,26 @@ fn draw_note(
     // **服務器提的那張單子浮在最最前**（#53 ④）。It is a list being *walked* —
     // the caret is in it, `C-n` moves inside it, `Tab` takes one — and a float
     // that covered the thing the hand is on would be the worst of the three.
-    if let Some((items, picked)) = editor.offers_here() {
+    // **Not while the input method is composing** (2026-10-29): the code being
+    // typed is the start of the next character, so the list under the caret
+    // is about a word that has already ended, and it lay under the IME's
+    // candidates. It comes back, worked out afresh, once the text is
+    // committed, and as it was if the composition is let go.
+    if let Some((items, picked)) = editor.offers_here().filter(|_| !composing) {
         // Warning: **只畫一小扇窗，不是整張單子**（2026-09-22 出圖纔看見）。
         // `Body::Keys` 是 `空格` 那張鍵表的形狀——它裝不下就往**寬**裏長，於是
         // rust-analyzer 提的六十二條鋪成了三欄、佔掉半個屏幕。補全單子不是鍵
         // 表：它是一列**走着看**的東西，VSCode、helix、vim 一律單欄十行上下，
         // 選到哪兒滾到哪兒。
-        const SHOWN: usize = 9;
-        let from = match items.len() <= SHOWN {
+        // `[editor] completion_page_size` (2026-10-29), 6 at the factory, as
+        // the input method's candidates.
+        let shown = config.editor.completion_page_size.max(1);
+        let from = match items.len() <= shown {
             true => 0,
             // 選中的那一條留在窗子中間偏上；到頭了就貼着頭尾，不留空行。
-            false => picked.saturating_sub(SHOWN / 2).min(items.len() - SHOWN),
+            false => picked.saturating_sub(shown / 2).min(items.len() - shown),
         };
-        let window = &items[from..(from + SHOWN).min(items.len())];
+        let window = &items[from..(from + shown).min(items.len())];
         let rows: Vec<(String, String)> = window
             .iter()
             .enumerate()
@@ -6792,7 +6800,7 @@ fn draw_note(
             body: panel::Body::Keys(rows),
             // 第幾條、一共幾條——單子只露一小截的時候，這是唯一說得出「還有」的
             // 地方，而「怎麽用」那一句在第一次之後就不必再讀了。
-            tag: Some(match items.len() > SHOWN {
+            tag: Some(match items.len() > shown {
                 true => say!("lsp.which-of-them", picked + 1, items.len()),
                 false => say!("lsp.take-it"),
             }),
@@ -7526,13 +7534,13 @@ fn draw_shell_offers(
     status: Rect,
 ) -> Option<Rect> {
     let (items, picked, lead) = editor.shell_offers()?;
-    const SHOWN: usize = 9;
+    let shown = config.editor.completion_page_size.max(1);
     let at = picked.unwrap_or(0);
-    let from = match items.len() <= SHOWN {
+    let from = match items.len() <= shown {
         true => 0,
-        false => at.saturating_sub(SHOWN / 2).min(items.len() - SHOWN),
+        false => at.saturating_sub(shown / 2).min(items.len() - shown),
     };
-    let rows: Vec<(String, String)> = items[from..(from + SHOWN).min(items.len())]
+    let rows: Vec<(String, String)> = items[from..(from + shown).min(items.len())]
         .iter()
         .enumerate()
         .map(|(n, item)| {
@@ -22773,6 +22781,31 @@ fn squeezed(text: &str) -> String {
     ///
     /// 一條測試管一整條路，因為它們是同一條路上的幾步：畫一幀量出這一頁的範圍、
     /// 落腳點落在 `e` 的單位上、標籤蓋住那個字而**不推開版面**、打下去跳過去。
+    /// **The completion list shows `completion_page_size` at a time**
+    /// (2026-10-29): six at the factory, as the input method's candidates.
+    #[test]
+    fn the_completion_list_shows_its_page_size() {
+        let words: Vec<String> = (0..10).map(|n| format!("wordy{}", char::from(b'a' + n))).collect();
+        let mut editor = editor_with(&format!("{}\n", words.join(" ")));
+        let mut config = Config::default();
+        config.editor.command_line = false;
+        let rows = |ed: &mut Editor, config: &Config| -> usize {
+            frame_to_text(ed, config, no_ime(), 120, 24, None)
+                .lines()
+                .filter(|line| line.contains("wordy"))
+                .count()
+                - 1
+        };
+        editor.on_key(yumete_core::input::Key::Char('G'));
+        editor.on_key(yumete_core::input::Key::Char('o'));
+        for c in "word".chars() {
+            editor.on_key(yumete_core::input::Key::Char(c));
+        }
+        assert_eq!(rows(&mut editor, &config), 6, "six at the factory");
+        config.editor.completion_page_size = 3;
+        assert_eq!(rows(&mut editor, &config), 3);
+    }
+
     #[test]
     fn jump_labels_stand_on_the_page_without_moving_it() {
         let mut editor = editor_with("那年冬天，雪下得早。\n山路斷了、她在門口站了很久。\n");
