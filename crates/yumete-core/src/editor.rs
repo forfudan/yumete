@@ -2926,6 +2926,8 @@ pub struct Editor {
     /// **Each language server's own trigger characters** (`signatureHelp
     /// Provider.triggerCharacters`), by language. `(` and `,` until one says.
     signature_triggers: HashMap<String, Vec<String>>,
+    /// A view line is being replayed: see [`Editor::execute_quietly`].
+    quiet_view: bool,
     /// A pending `:theme`, waiting for the front end that owns the palette.
     theme_request: Option<(Option<String>, Option<crate::command::Mood>)>,
     /// **命令行打到一半就看得見的那一條**（2026-10-07 定，照 helix 的三個
@@ -4032,6 +4034,7 @@ impl Editor {
             signature_due: None,
             signature_again: false,
             signature_triggers: HashMap::new(),
+            quiet_view: false,
             theme_request: None,
             trial: None,
             previewing: false,

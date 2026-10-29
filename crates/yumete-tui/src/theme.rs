@@ -151,14 +151,33 @@ static SETTLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::n
 /// Say the mood **and remember that it was asked for**, so nothing settles over
 /// it afterwards. What `:theme-mode` calls; `settle` is what start-up calls.
 pub fn choose_mood(dark: bool) {
+    CHOSE_SYSTEM.store(false, Ordering::Relaxed);
     CHOSEN_MOOD.store(true, Ordering::Relaxed);
     SETTLED.store(true, Ordering::Relaxed);
     set_dark(dark);
 }
 
-/// The mood `:theme-mode` chose, if it chose one: `Some(true)` dark.
-pub fn chosen_mood() -> Option<bool> {
-    CHOSEN_MOOD.load(Ordering::Relaxed).then(dark)
+/// `:theme-mode system` was the choice: the mood follows the terminal.
+static CHOSE_SYSTEM: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// `:theme-mode system`: the terminal's answer now, and **the choice kept as
+/// 「system」** (2026-10-29, review: a session ended in a dark terminal kept
+/// `dark`, and forced it on a light one).
+pub fn choose_the_terminals_mood(dark: bool) {
+    choose_mood(dark);
+    CHOSE_SYSTEM.store(true, Ordering::Relaxed);
+}
+
+/// The mood `:theme-mode` chose, if it chose one, as that command spells it.
+pub fn chosen_mood() -> Option<&'static str> {
+    if !CHOSEN_MOOD.load(Ordering::Relaxed) {
+        return None;
+    }
+    Some(match (CHOSE_SYSTEM.load(Ordering::Relaxed), dark()) {
+        (true, _) => "system",
+        (false, true) => "dark",
+        (false, false) => "light",
+    })
 }
 
 /// What `:theme-fill` said, if it said anything.
@@ -173,6 +192,7 @@ pub fn forget_choices() {
     put_back(None);
     FILL.store(0, Ordering::Relaxed);
     CHOSEN_MOOD.store(false, Ordering::Relaxed);
+    CHOSE_SYSTEM.store(false, Ordering::Relaxed);
 }
 
 /// Whether the page is dark.

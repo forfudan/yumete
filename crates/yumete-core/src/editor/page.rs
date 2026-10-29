@@ -50,6 +50,27 @@ impl Editor {
         self.layout_wanted
     }
 
+    /// **The layout the reader chose**, under a table's turn as well as a
+    /// program file's (2026-10-29): what a session keeps. A drawn grid turns
+    /// [`Self::layout_wanted`] horizontal and remembers what it was; this is
+    /// that.
+    pub fn layout_chosen(&self) -> Layout {
+        self.turned_for_table.unwrap_or(self.layout_wanted)
+    }
+
+    /// **Run a view line from a session or a reload** (2026-10-29): without
+    /// asking for its prerequisites and without satisfying them. `:view-sentence
+    /// off` under a horizontal config is refused by `execute` (it needs 竪排),
+    /// and `!` would turn the page 竪排 to allow it; a session or a reload only
+    /// wants the setting to hold its value. A program file's refusal of
+    /// `:vertical` is skipped for the same reason: the layout is the reader's,
+    /// and the next file may be a chapter.
+    pub fn execute_quietly(&mut self, line: &str) {
+        self.quiet_view = true;
+        let _ = self.execute(line);
+        self.quiet_view = false;
+    }
+
     /// Whether the buffer on the screen is a program rather than a manuscript.
     pub fn writes_code(&self) -> bool {
         matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_))

@@ -767,6 +767,11 @@ fn main() -> ExitCode {
     } else {
         0
     };
+    // **`-v` / `--horizontal` win over the layout a session kept** (2026-10-29,
+    // review: the session's view was replayed after the flag and undid it).
+    if let (true, Some(layout)) = (restored > 0, force_layout) {
+        editor.set_layout(layout);
+    }
     // **空手打開的那一屏**：沒給檔名、也沒從會話裏撈回什麼東西的時候畫（第 11 條）。
     //
     // Warning: **`--shot` 算「要畫」，不算「印出去」**——它畫的就是編輯器此刻的樣子，

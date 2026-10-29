@@ -2771,13 +2771,15 @@ pub fn set_theme(
         }
     }
     if let Some(mood) = mood {
-        crate::theme::choose_mood(match mood {
-            Mood::Dark => true,
-            Mood::Light => false,
+        match mood {
+            Mood::Dark => crate::theme::choose_mood(true),
+            Mood::Light => crate::theme::choose_mood(false),
             // Back to whatever the terminal said at start-up; a terminal that
             // never answered keeps what the config settled on.
-            Mood::System => crate::theme::terminal_answer().unwrap_or(crate::theme::dark()),
-        });
+            Mood::System => crate::theme::choose_the_terminals_mood(
+                crate::theme::terminal_answer().unwrap_or(crate::theme::dark()),
+            ),
+        }
     }
     // Warning: **說出來之前先把明暗定下來**（2026-10-09 審出來的）。這一句問
     // `dark()`，而那一格在還沒 settle 過的時候交的是預設值——離屏那條路
