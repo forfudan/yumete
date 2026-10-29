@@ -164,6 +164,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Pages**: only the page the cursor is on slides sideways to follow it along a long table row, so the first page's text no longer goes blank while the cursor is on the second; with readings or `:view-margin always`, the cursor no longer ends up on no page.
 - **The shell line**:
   - The grey ghost is the last command as it ran, with its `!` replaced, so Tab can no longer run a different command.
   - File names with a space or other shell characters are completed with backslashes.
