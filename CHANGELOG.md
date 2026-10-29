@@ -7,7 +7,16 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## Unreleased
+## 0.14.0 · 2026-10-29
+
+Fifty-nine commits, three days after 0.13.0. Writing gets help it did not have:
+the words of the open files are offered as you type, Chinese ones by either script
+or by pinyin, paths complete where they are typed, and brackets and quotes close
+themselves. The `m` group, several selections, `C-a` and the shell line now follow
+helix closely, and the vim keymap gains blockwise visual mode. Pages can stand side
+by side, the candidate bar wears the theme, and a resumed session brings back how the
+page looked. Three read-only reviews ran over the last part of the range; their
+findings are fixed in the commit before this one.
 
 ### Added
 
@@ -22,7 +31,8 @@ in `docs/development.md` §5.2.
   come up after half as many, offering only longer words the segmenter finds, a
   simplified character finding the traditional words and the other way round. `C-n` /
   `C-x` lists them at any length, and also offers the Chinese words that letters in
-  full pinyin spell (`shuzhai` offers the word for "study" as the file writes it).
+  full pinyin spell (`shuzhai` offers the word for "study" as the file writes it);
+  over a list that typing opened, `C-x` asks again this way.
 - **Path completion where a path is typed**: any word with a `/` in it, or after `](`,
   relative to the file's folder, as helix's path completion (plus Markdown links).
 
@@ -186,6 +196,8 @@ in `docs/development.md` §5.2.
 - **Redo puts the cursors back where the change left them**, as helix's `U` does, instead of where they were when you pressed `u`; an undo after it puts them back where they were before the change.
 - **Quotes in the `m` group follow helix under the helix keymap**: `ma"` takes the quotes and no blank after them, and a count goes out quote by quote (`2mi"` on the `b` of `x "a "b" c" y` selects `a "b" c`, `2md"` takes off the outer two). They used to follow vim's rule.
 - **Block mode `d` through half of a wide character** leaves a space for the half outside the block, as vim does, so the text after it keeps its column. `c` does the same before you type, and `y` takes the half inside as a space, or the columns of a tab it cuts as spaces.
+- **A count before `C-a` or `C-x` is the amount**, as in helix and vim: `3 C-a` on `7` gives `10`. It used to stop after one step whenever the number kept its width, so on a date or a time it stepped once.
+- **Under the vim keymap `$` sticks to the line end**, as vim's does: `j` after it goes to the end of the next line, also in visual and block mode.
 - **Block mode keeps its column across a short line**: `C-v` then `j` past a line too short for the column, or through a tab, comes back to the column it left, as vim's does.
 - **The settings panel's "written" line** no longer says to run `:reload-config`: saving has applied the settings at once since the panel reloads by itself.
 - **`md` keeps the selection**, moved past the pair it took off, as helix's does, instead of leaving one cursor.
