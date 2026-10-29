@@ -31268,3 +31268,21 @@ fn block_mode_measures_tabs_and_marks_and_pastes_past_the_end() {
     press(&mut ed, "jjlyGp");
     assert_eq!(text(&ed), "ab\ncd\neabf\n cd\n ef\n", "one piece per line, as vim");
 }
+
+/// **The `m` group after the review** (2026-10-29): `m` passes over straight
+/// quotes; `md"` on a quote mark takes the pair `mi"` would; a count steps
+/// out to the pair that holds this one, never a sibling, and across a family.
+#[test]
+fn the_m_group_after_the_review() {
+    let run = |start: &str, keys: &str, at: usize| {
+        let mut ed = typed(start);
+        ed.set_cursor(at);
+        press(&mut ed, keys);
+        ed.current_buffer().text().to_string()
+    };
+    assert_eq!(run("(don't go, it's fine)\n", "mdm", 7), "don't go, it's fine\n", "apostrophes are not a pair to `m`");
+    assert_eq!(run("say \"a\" and \"b\" ok\n", "md\"", 6), "say a and \"b\" ok\n", "the pair `mi\"` would take");
+    assert_eq!(run("[[a][b]]\n", "2md[", 5), "[a][b]\n", "out to the holder, not the sibling");
+    assert_eq!(run("[(a)(b)]\n", "2mdm", 5), "(a)(b)\n");
+    assert_eq!(run("（a (b) c）\n", "2md(", 4), "a (b) c\n", "a count crosses the family");
+}

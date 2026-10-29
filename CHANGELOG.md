@@ -162,6 +162,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **The `m` group**: `m` takes the nearest pair whose halves differ, so `mdm` no longer takes two apostrophes out of `don't` and `it's`; `md"`/`mr"` with the cursor on a quote mark take the pair `mi"` would; a count (`2md[`, `2mi(`) steps out to the pair that holds this one instead of a neighbouring pair, and across a bracket family (`2md(` reaches `（）`).
 - **Several cursors**:
   - An edit that runs once now moves the other cursors with it instead of leaving them on shifted text.
   - `Space c` comments every cursor's lines, deciding once for all of them, as helix does.
