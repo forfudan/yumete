@@ -129,7 +129,9 @@ impl Editor {
         let (tail, head) = (self.sel.anchor(), self.sel.head());
         let before = self.current_buffer().rope().len_chars();
         self.on_insert_key(key);
-        if tail <= head || self.mode != Mode::Insert {
+        // A closer stepped over moved the caret and wrote nothing: the kept
+        // tail stays where it is.
+        if tail <= head || self.mode != Mode::Insert || self.stepped_over {
             return;
         }
         let after = self.current_buffer().rope().len_chars();
@@ -663,7 +665,7 @@ impl Editor {
             Some(hex) => !text.starts_with('-') && !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit()),
             None => !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()),
         };
-        (whole || crate::dates::stepped(&text, 1).is_some()).then_some((start, end))
+        (whole || crate::dates::reads(&text)).then_some((start, end))
     }
 
     /// Add `delta` to the number [`Self::number_to_bump`] finds. A `0x`

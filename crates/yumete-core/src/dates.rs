@@ -48,6 +48,12 @@ struct Read {
     pm: Option<bool>,
 }
 
+/// Whether `text` is one of the forms, whatever stepping it would give: a
+/// date at the edge of the four-digit years still steps the other way.
+pub fn reads(text: &str) -> bool {
+    FORMS.iter().any(|form| read(text, form).is_some())
+}
+
 /// `text` stepped by `by` days or minutes, written in the form it came in, or
 /// `None` when it is not a date or a time.
 pub fn stepped(text: &str, by: i64) -> Option<String> {

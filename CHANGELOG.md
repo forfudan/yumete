@@ -42,7 +42,7 @@ in `docs/development.md` §5.2.
   `:read`; under the vim keymap, on new lines below the cursor line, as vim's `:r`.
 
 - **`:r` is short for `:replace`**, as `:s` is for `:search`. vim and helix use `:r`
-  for `:read`, which yumete does not have.
+  for `:read`, which yumete spells out in full.
 
 - **More pairs for `mi` `ma` `ms` `md` `mr`.** `<` also takes « », `[` takes ｢ ｣, `"`
   takes 〝 〞, and each bracket key takes the vertical forms of its family (﹁ ﹂ for
@@ -113,7 +113,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
-- **The input method's candidate bar follows the theme**: its ground, ring, numbers and highlight now come from the theme the way the completion list's do, so it no longer stays a dark box on a light theme. `[panel] ink` and `[panel] paper` are removed; a config that still sets them is reported like any unknown key.
+- **The input method's candidate bar follows the theme**: its ground, ring, code and highlight now come from the theme the way the completion list's do, so it no longer stays a dark box on a light theme. `[panel] ink` and `[panel] paper` are no longer read; a config that still sets them keeps working.
 - **`C-a` and `C-x` follow helix under the helix keymap**: they change the selection only when it is a whole number (`12`, `-5`, `007`, `0x0f`), and the new number is then selected. With the cursor on the `1` of `12` you get `22`; on a letter nothing changes. A selection that is a date or a time steps too, as in helix: `2024-01-31` by days to `2024-02-01`, `23:59` by minutes to `00:00`, a date with a time by minutes. The vim keymap keeps vim's rule, the number at or after the cursor.
 
 - **The signature stays up while you type the arguments**, as in helix: entering

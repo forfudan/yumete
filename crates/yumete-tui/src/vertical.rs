@@ -1918,9 +1918,10 @@ pub fn draw(
 /// is aligned with the yumete theme」). It used to carry its own `[panel] ink`
 /// and `paper`, 墨香 dark at the factory, so on a light theme it stayed a dark
 /// box. Now it is drawn as the other floats are, the completion list among
-/// them: their ground and ring, candidates in the text's ink, the numbers and
-/// the code a step back, and the highlighted candidate on the selection's
-/// ground. The box, the strips and the vertical panel all read this.
+/// them: their ground and ring, candidates in the text's ink, the code a step
+/// back (the vertical panel's numbers too). The highlighted candidate is
+/// inverted, the text's ink as its ground: the selection's colour stood only
+/// 1.6–2.2:1 off the ground, too faint in a one-line strip (2026-10-29). The box, the strips and the vertical panel all read this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Skin {
     paper: Color,
@@ -1952,7 +1953,7 @@ impl Skin {
         self.highlight
     }
     pub fn on_highlight(self) -> Color {
-        self.text
+        self.paper
     }
 }
 
@@ -1964,7 +1965,7 @@ impl From<&Config> for Skin {
             border: ink.rule(),
             text: ink.text(),
             helper: ink.quiet(),
-            highlight: ink.selection(),
+            highlight: ink.text(),
         }
     }
 }

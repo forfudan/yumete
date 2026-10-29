@@ -103,6 +103,7 @@ impl Editor {
         let wordy = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
         if c == close && next == Some(close) {
             self.put_the_caret(at + 1);
+            self.stepped_over = true;
             return true;
         }
         if c != open || wordy(next) || (open == close && wordy(prev)) {
@@ -142,6 +143,23 @@ impl Editor {
                 self.insert_str(c.encode_utf8(&mut buf));
             }
         }
+    }
+
+    /// **The closers `typed` leaves open**, innermost first: what auto-pairs
+    /// would have written after it. Empty when auto-pairs is off.
+    pub(super) fn closers_owed(&self, typed: &str) -> String {
+        let mut open: Vec<char> = Vec::new();
+        for c in typed.chars() {
+            let Some((o, close)) = self.auto_pairs.pair_of(c) else { continue };
+            match (open.last() == Some(&close), c == o) {
+                (true, _) if c == close => {
+                    open.pop();
+                }
+                (_, true) => open.push(close),
+                _ => {}
+            }
+        }
+        open.into_iter().rev().collect()
     }
 
     /// The caret to `pos`, a collapsed selection staying collapsed.

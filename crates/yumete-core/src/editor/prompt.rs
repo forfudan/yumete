@@ -67,6 +67,14 @@ impl Editor {
                         return;
                     }
                 }
+                // **`C-x` asks again, by hand**, over the list typing opened
+                // (2026-10-29, review): that list never holds the pinyin
+                // offers, and `C-n` inside it only moves.
+                Key::Ctrl('x') => {
+                    if self.offer_from_the_text(true) {
+                        return;
+                    }
+                }
                 // Warning: **不寫成 `Key::Esc if self.drop_the_offering()`**
                 // （`clippy::collapsible_if` 提的，不收）
                 // （2026-10-01 `clippy --fix` 提的，退回來了）。守衛裏帶副作用

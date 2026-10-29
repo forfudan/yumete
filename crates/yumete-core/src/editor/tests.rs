@@ -4567,7 +4567,131 @@ fn brackets_and_quotes_close_themselves() {
     press(&mut ed, "ggA");
     press(&mut ed, "[^");
     ed.on_key(Key::Tab);
-    assert_eq!(text(&ed), "正文[^注]。[^注]\n\n[^注]: 一\n");
+    press(&mut ed, "X");
+    assert_eq!(text(&ed), "正文[^注]。[^注]X\n\n[^注]: 一\n", "the caret steps past the closer");
+}
+
+/// **Undo and redo after the review of the fixes** (2026-10-29), against
+/// helix 25.07.1: `u` keeps every cursor, and redo after `r` comes back to
+/// the change.
+#[test]
+fn undo_keeps_every_cursor_and_redo_finds_the_change() {
+    let marked = |ed: &mut Editor| {
+        press(ed, "iZ");
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text().to_string()
+    };
+    let mut ed = typed("ab\ncd\nef\n");
+    press(&mut ed, "ggCCrxu");
+    assert_eq!(marked(&mut ed), "Zab\nZcd\nZef\n");
+    let mut ed = typed("aa\nbb\ncc\ndd\nee\n");
+    press(&mut ed, "ggCCJu");
+    assert_eq!(marked(&mut ed), "Zaa\nZbb\nZcc\ndd\nee\n");
+
+    // `r` then a character through the input method, as Chinese is typed.
+    let mut ed = typed("ab\ncd\nef\n");
+    press(&mut ed, "gglr");
+    ed.insert_committed("x");
+    press(&mut ed, "jjuU");
+    assert_eq!(marked(&mut ed), "aZx\ncd\nef\n");
+}
+
+/// **What the review of the dates, blocks and completion found** (2026-10-29),
+/// each against helix 25.07.1 or nvim 0.12.5.
+#[test]
+fn counts_blocks_and_pinyin_after_the_review() {
+    use yumete_cjk::KeyPreset;
+    let text = |ed: &Editor| ed.current_buffer().text().to_string();
+    // The count is the amount: helix `3 C-a` on `7` is `10`, on `23:59:59` a
+    // time three minutes on; vim's count is the amount too.
+    let bump = |start: &str, keys: &str, preset: KeyPreset| {
+        let mut ed = typed(start);
+        ed.set_key_preset(preset);
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.count = Some(3);
+        ed.on_key(Key::Ctrl('a'));
+        text(&ed)
+    };
+    assert_eq!(bump("7", "", KeyPreset::Helix), "10");
+    assert_eq!(bump("23:59:59", "v7l", KeyPreset::Helix), "00:02:59");
+    assert_eq!(bump("7", "", KeyPreset::Vim), "10");
+    // A date at the edge of four-digit years still steps down.
+    let mut ed = typed("9999-12-31");
+    press(&mut ed, "ggv9l");
+    ed.on_key(Key::Ctrl('x'));
+    assert_eq!(text(&ed), "9999-12-30");
+
+    // A block takes the column the cursor was aiming at (nvim: `af`).
+    let mut ed = typed_vim("abcdef\nab\nabcdef\n");
+    press(&mut ed, "llllj");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "jd");
+    assert_eq!(text(&ed), "abcdef\na\naf\n");
+    // vim's `$` sticks to the line end, past a short line.
+    let mut ed = typed_vim("abcdef\nab\nabcdef\n");
+    press(&mut ed, "llll");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "j$jd");
+    assert_eq!(text(&ed), "abcd\nab\nabcd\n");
+    let mut ed = typed_vim("abcdef\nab\nabcdef\n");
+    press(&mut ed, "llllvj$jd");
+    assert_eq!(text(&ed), "abcd\n");
+
+    // `C-x` over a list typing opened asks again by hand, pinyin included.
+    let mut ed = typed("在學習裏。xuexiing\n");
+    ed.set_segmenter(Box::new(crate::DictionarySegmenter::new([("學習".to_string(), 100)], 1)));
+    press(&mut ed, "Go");
+    press(&mut ed, "xuexi");
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    assert_eq!(labels(&ed), ["xuexiing"], "typing opened the Latin list");
+    ed.on_key(Key::Ctrl('x'));
+    assert_eq!(labels(&ed), ["xuexiing", "學習"]);
+}
+
+/// **What the auto-pairs review found** (2026-10-29), each against helix
+/// 25.07.1 or vim.
+#[test]
+fn auto_pairs_after_the_review() {
+    use crate::editor::AutoPairs;
+    let text = |ed: &Editor| ed.current_buffer().text().to_string();
+    // Stepping over a closer is typing: `a` keeps its selection (helix: ` bar`).
+    let mut ed = typed("foo bar\n");
+    press(&mut ed, "gge");
+    press(&mut ed, "a(x)");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "d");
+    assert_eq!(text(&ed), " bar\n");
+    // And `i` on a selection (helix: `ab(x)cd`).
+    let mut ed = typed("ab  cd\n");
+    press(&mut ed, "ggllwi(x)");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "d");
+    assert_eq!(text(&ed), "ab(x)cd\n");
+
+    // A vim block `A` copies the closer its typing owed.
+    let mut ed = typed_vim("foo\nbar\n");
+    ed.on_key(Key::Ctrl('v'));
+    press(&mut ed, "j$A(x");
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "foo(x)\nbar(x)\n");
+
+    // A counted `o` types each line through the pairs, as `3A` does.
+    let mut ed = typed_vim("foo\n");
+    press(&mut ed, "3o(x");
+    ed.on_key(Key::Esc);
+    assert_eq!(text(&ed), "foo\n(x)\n(x)\n(x)\n");
+
+    // An input-method commit of several characters pairs as they would typed.
+    let mut ed = typed("");
+    ed.set_auto_pairs(AutoPairs::Full);
+    press(&mut ed, "i");
+    ed.insert_committed("“你好");
+    assert_eq!(text(&ed), "“你好”");
+    ed.insert_committed("”");
+    assert_eq!(text(&ed), "“你好”");
 }
 
 #[test]

@@ -54,6 +54,17 @@ pub enum Refers {
 }
 
 impl Refers {
+    /// The bracket a finished reference ends with, and how many of it.
+    fn closer(self) -> (char, usize) {
+        match self {
+            Refers::Note => (']', 1),
+            Refers::Anchor => (')', 1),
+            Refers::File => (']', 2),
+        }
+    }
+}
+
+impl Refers {
     /// The panel's ring, the way a which-key panel is named.
     pub fn title(self) -> String {
         match self {
@@ -100,6 +111,9 @@ pub(super) struct Walking {
     pub(super) wrote: Option<String>,
     pub(super) choices: Vec<Candidate>,
     pub(super) index: usize,
+    /// Closers that were already there, which the caret stepped past after
+    /// the pick (2026-10-29, review: auto-pairs had written them).
+    pub(super) past: usize,
 }
 
 impl Editor {
@@ -384,6 +398,7 @@ impl Editor {
                     false => offer.choices.len() - 1,
                 };
                 Walking {
+                    past: 0,
                     refers: offer.refers,
                     at: offer.at,
                     typed: offer.typed,
@@ -397,13 +412,25 @@ impl Editor {
         // What this pick replaces: the writer's own text the first time, the
         // previous pick every time after.
         let taking = walk.wrote.clone().unwrap_or_else(|| walk.typed.clone());
-        let upto = self.sel.head();
+        let upto = self.sel.head().saturating_sub(walk.past).max(walk.at);
         let done =
             self.without_cell_guard(|e| e.current_buffer_mut().replace(walk.at..upto, &text));
         if !self.applied(done) {
             return false;
         }
-        self.sel.set_head(walk.at + text.chars().count());
+        // Past the closers the pick left out because they were there already
+        // (auto-pairs wrote them, or the hand did), so what is typed next goes
+        // after the reference, not into it.
+        let end = walk.at + text.chars().count();
+        let (bracket, want) = walk.refers.closer();
+        let written = text.chars().rev().take(want).take_while(|&c| c == bracket).count();
+        let rope = self.current_buffer().rope();
+        let past = rope
+            .chars_at(end.min(rope.len_chars()))
+            .take(want - written)
+            .take_while(|&c| c == bracket)
+            .count();
+        self.sel.set_head(end + past);
         self.sel.set_anchor(self.sel.head());
         self.refresh_goal_column();
         // `.` replays what the writer meant, which is the reference and not
@@ -416,7 +443,7 @@ impl Editor {
             self.insert_recording.truncate(keep);
         }
         self.insert_recording.push_str(&text);
-        self.reference = Some(Walking { wrote: Some(text), ..walk });
+        self.reference = Some(Walking { wrote: Some(text), past, ..walk });
         true
     }
 }

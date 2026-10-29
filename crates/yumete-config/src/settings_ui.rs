@@ -960,6 +960,10 @@ pub const LATER: &[&str] = &[
     "theme.cyan_light",
     "theme.lime",
     "theme.lime_light",
+    // Read and dropped (2026-10-29): the candidate panel takes the theme's
+    // colours, and an old config that still writes these keeps working.
+    "panel.ink",
+    "panel.paper",
     "ime.data_dirs",
     "export.page",
 ];
