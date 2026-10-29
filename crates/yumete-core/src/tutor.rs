@@ -83,9 +83,9 @@ pub const LESSON: &str = r#"# 宇夢小課堂
     `y` 複製      `p` 貼在後面
     `>` 縮進      `<` 退回去
 
-`.` 是「再做一次剛才那次改動」。
+`.` 是「重複上一次輸入」：進入輸入的那個鍵和打的字。
 
-  ⇒ 選一個詞，`d` 刪掉；換一行，按 `.`。
+  ⇒ 在一個詞前面按 `i`，打「很」，`Esc`；換到另一個詞前面，按 `.`。
 
 ────────────────────────────────────────────────────────────
 
@@ -122,12 +122,12 @@ pub const LESSON: &str = r#"# 宇夢小課堂
 
 ## 七、把它當成一本書
 
-  ⇒ 按 `:layout`，Enter。
+  ⇒ 按 `:vertical`，Enter。
 
 現在是**竪排**。`h` `l` 換縱（縱是往左疊的），`j` `k` 沿着這一縱走。
 `:view-wrap 24` 定一縱多少字，`:view-pages-vertical 2` 把一頁分成上下兩段。
 `:view-hanging on` 讓句讀掛到字旁邊去，像排印的書。
-再按一次 `:layout` 回橫排。
+按 `:horizontal` 回橫排。
 
   ⇒ 按 `:indent full`，Enter。段首空了兩格，段間那些空行收起來了——
      檔案沒有變，變的是版面。`:indent basic` 只縮進、空行留着，
@@ -189,6 +189,172 @@ pub const LESSON: &str = r#"# 宇夢小課堂
 課上完了。這份檔案是你的，隨便改。
 "#;
 
+/// **The lesson, in English** (2026-10-29), for a reader whose interface is
+/// English: the same ten steps, practised on English prose, with the Chinese
+/// input method and the vertical page kept to one section each.
+pub const LESSON_EN: &str = r#"# The yumete lesson
+
+This is **your own file**. Everything you do here changes it and nothing else.
+To start over: `:tutor` again opens a fresh copy.
+
+To leave: `:q`. To keep your changes first: `:w` — it already has a name.
+
+────────────────────────────────────────────────────────────
+
+## 1. Two modes, one Esc
+
+You are in **NORMAL** now: the letters on the keyboard are commands.
+Press `i` for **INSERT**, where typing is typing. `Esc` comes back.
+
+  ⇒ Move to the line below, press `i`, type a few words, press `Esc`.
+
+    This line is yours to change.
+
+Broke something? Press `u`. Again `u`. **`u` walks back**, `U` walks forward.
+Remember this one: every exercise below has a way back.
+
+────────────────────────────────────────────────────────────
+
+## 2. Moving
+
+`h` `j` `k` `l` are left, down, up, right. The arrow keys work too.
+
+  ⇒ Put the cursor at the start of the line below and press `w` three times.
+
+    The snow had not stopped, and the road over the hill was gone.
+
+`w` goes to the next word, `b` to the one before, `e` to the end of this one.
+`3w` is three of them — **a number in front is a count**.
+
+On a long line: `gh` its start, `gl` its end, `gs` its first non-blank.
+The whole file: `gg` the top, `ge` the end, `30G` (or `g30g`) line 30.
+`J` `K` scroll half a page, `L` `H` a whole one.
+
+────────────────────────────────────────────────────────────
+
+## 3. Selections — every move leaves one
+
+This is where yumete differs from vim: **you select first, then say what to
+do with it**. `w` has selected the word; press `d` now and that word goes.
+
+  ⇒ On the line below: `w` to select a word, `d` to delete it, `u` to bring
+     it back.
+
+    Yesterday the snow broke a branch off the old tree in the yard.
+
+  ⇒ Same line: `x` selects the whole line, `c` replaces it and lets you type.
+
+`v` turns on extending: moves grow the selection. `;` shrinks it to one
+character.
+
+────────────────────────────────────────────────────────────
+
+## 4. What to do with a selection
+
+    `d` delete      `c` change (and type)
+    `y` copy        `p` paste after it
+    `>` indent      `<` outdent
+
+`.` types the last insert again: the key that started it and what you typed.
+
+  ⇒ Put the cursor on a word, press `i`, type `very `, press `Esc`. Move to
+     another word and press `.`.
+
+Prefer vim's keys? `:keymap vim` — there `.` repeats any change, as vim's does.
+
+────────────────────────────────────────────────────────────
+
+## 5. Finding
+
+`/` opens a search; type and press Enter. `n` the next one, `N` the last one.
+
+  ⇒ Press `/`, type `snow`, Enter, then `n` a few times.
+
+With something selected, **`g/` asks where else it is** — no retyping.
+`g?` asks the same, and draws the answer in **the other work area**, so you
+stay where you are.
+
+  ⇒ Select a `snow` above and press `g?`. Look at the other half.
+  ⇒ `n` goes to the next one. `Esc` closes that half.
+
+Replacing: `:s/old/new/` on this line, `:%s/old/new/g` in the whole file.
+
+────────────────────────────────────────────────────────────
+
+## 6. Chinese, if you write it
+
+yumete has a Chinese input method built in. Writing only English? `:yume off`
+hands the keyboard back to your system, and it stays that way. `:yume on`
+takes it again; then a lone tap of **Shift** switches between Chinese and
+English.
+
+────────────────────────────────────────────────────────────
+
+## 7. The page
+
+  ⇒ `:view-wrap 60`, Enter: lines wrap at sixty columns.
+  ⇒ `:view-focus on`, Enter: everything but this paragraph fades.
+     `:view-focus off` brings it back.
+  ⇒ `:view-typewriter on`: the line you write stays in the middle of the
+     screen.
+
+`:vertical` sets the page vertically, the way a Chinese book is set;
+`:horizontal` comes back.
+
+────────────────────────────────────────────────────────────
+
+## 8. Tables
+
+Below is a table. Put the cursor in it and type `:table-render window`, Enter.
+
+| Word  | Count | Note     |
+| ----- | ----- | -------- |
+| snow  | 4     | weather  |
+| road  | 2     | place    |
+| tree  | 1     | thing    |
+
+`Tab` goes to the next cell. `i` types in a cell, `c` replaces it,
+`空格 t r` adds a row, `空格 t d` deletes one, `空格 t o` shows the source.
+`空格 t /` searches one column. `:table-render off` leaves.
+
+(`空格` is the space bar: `空格 t r` is Space, then `t`, then `r`.)
+
+────────────────────────────────────────────────────────────
+
+## 9. Not losing anything
+
+`:w` saves, `:q` quits, `:wq` does both.
+`:q` with changes unsaved stops you. Really mean it: `:q!`.
+
+What you are editing is copied beside it every few seconds; after a crash
+the next open asks whether to `:recover` it.
+
+`空格 f` finds a file, `空格 e` browses, `空格 b` switches files,
+`:sidebar explorer` opens the sidebar. `:count` says how long the file is.
+
+────────────────────────────────────────────────────────────
+
+## 10. Next
+
+    `:help`            the keys you will use
+    `:help commands`   every : command
+    `::`               search the commands by what they do
+
+Stop halfway through a key and the corner of the screen tells you what can
+come next; `g`, `m` and Space open a table of them.
+
+That is the lesson. This file is yours: change anything.
+"#;
+
+/// The lesson in the interface's language: English for English, Chinese
+/// otherwise.
+pub fn lesson() -> &'static str {
+    match crate::messages::language() {
+        crate::messages::Language::English => LESSON_EN,
+        _ => LESSON,
+    }
+}
+
 /// The lesson's own file name, numbered so a second `:tutor` starts fresh.
 pub fn file_name(n: usize) -> String {
     match n {
@@ -207,7 +373,7 @@ mod tests {
         // that teaches a keystroke the editor does not have is worse than none.
         for key in [
             "`i`", "`Esc`", "`u`", "`w`", "`b`", "`e`", "`x`", "`c`", "`d`", "`y`", "`p`",
-            "`gg`", "`ge`", "`30G`", "`g/`", "`g?`", "`n`", "`:w`", "`:q`", "`:layout`",
+            "`gg`", "`ge`", "`30G`", "`g/`", "`g?`", "`n`", "`:w`", "`:q`", "`:vertical`",
             "`:table-render window`", "`gd`", "`空格 t /`", "`:help`", "`空格 f`",
         ] {
             assert!(LESSON.contains(key), "the lesson never mentions {key}");
@@ -215,6 +381,19 @@ mod tests {
         // …and it is a document, not a reference: it has to *ask* the reader to
         // do things.
         assert!(LESSON.matches("⇒").count() >= 8, "not enough to do");
+    }
+
+    /// The English lesson teaches the same keys, and asks as much.
+    #[test]
+    fn the_english_lesson_teaches_the_keys_too() {
+        for key in [
+            "`i`", "`Esc`", "`u`", "`w`", "`b`", "`e`", "`x`", "`c`", "`d`", "`y`", "`p`",
+            "`gg`", "`ge`", "`30G`", "`g/`", "`g?`", "`n`", "`:w`", "`:q`", "`:vertical`",
+            "`:table-render window`", "`.`", "`空格 t /`", "`:help`", "`空格 f`",
+        ] {
+            assert!(LESSON_EN.contains(key), "the English lesson never mentions {key}");
+        }
+        assert!(LESSON_EN.matches("⇒").count() >= 8, "not enough to do");
     }
 
     #[test]

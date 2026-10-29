@@ -206,8 +206,8 @@ pub struct EditorConfig {
     /// or `sessions/` — vim's `viminfo=` and Neovim's `shada=""`. Recovery
     /// copies are another matter and keep their own switch.
     pub remember: bool,
-    /// What language the editor says things in: `"zh"` (繁體, the
-    /// default), `"zhs"` (简体) or `"en"`.
+    /// What language the editor says things in: `"auto"` (the default:
+    /// the locale's, 2026-10-29), `"zh"` (繁體), `"zhs"` (简体) or `"en"`.
     pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
@@ -467,7 +467,7 @@ impl Default for EditorConfig {
             pages_horizontal: 1,
             session: false,
             remember: true,
-            language: "zh".to_string(),
+            language: "auto".to_string(),
             zong_gap: DEFAULT_ZONG_GAP,
             word_completion: 4,
             completion_page_size: 6,

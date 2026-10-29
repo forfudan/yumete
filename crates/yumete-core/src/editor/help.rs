@@ -16,7 +16,7 @@ impl Editor {
         let Some(dir) = self.drafts_dir.as_ref().and_then(|d| d.parent()) else {
             // No data directory — the front end never said where it is. The
             // lesson still opens; it just has nowhere to live.
-            let mut buffer = crate::Buffer::from_text(crate::tutor::LESSON);
+            let mut buffer = crate::Buffer::from_text(crate::tutor::lesson());
             buffer.name_as("[tutor]");
             self.add_buffer(buffer);
             self.status = say!("tutor.open-unsaved");
@@ -33,7 +33,7 @@ impl Editor {
             self.status = say!("tutor.no-name-left");
             return;
         };
-        if let Err(err) = crate::buffer::write_file_atomically(&path, crate::tutor::LESSON) {
+        if let Err(err) = crate::buffer::write_file_atomically(&path, crate::tutor::lesson()) {
             self.status = say!("tutor.cannot-write", err);
             return;
         }
