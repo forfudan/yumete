@@ -56,8 +56,9 @@ in `docs/development.md` §5.2.
 - **Each step of the `m` group lists what it takes**, as helix's do. `mi` and `ma`
   list the objects: word, sentence, paragraph, the nearest pair, Markdown marks,
   function, type definition, parameter, comment, table cell, and the brackets and
-  quotes. `ms`, `md` and `mr` list the pairs. Each step used to show one line saying
-  "type a bracket".
+  quotes. `md` and `mr` list the pairs they find, look-alikes included; `ms` and
+  `mr`'s second key list the pair each key writes. Each step used to show one line
+  saying "type a bracket".
 
 - **`[editor] remember = false` keeps no memory of where you have been**, as vim's
   `viminfo=` does: no line to go back to, no recent files or projects, no session,

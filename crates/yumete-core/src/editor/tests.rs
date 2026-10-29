@@ -4707,6 +4707,21 @@ fn every_step_of_m_lists_its_choices() {
     assert!(mr.iter().any(|r| r == "m") && !mr.iter().any(|r| r == "k"), "{mr:?}");
     let to = keys_after("mr(");
     assert!(to.iter().any(|r| r.starts_with('[')) && !to.iter().any(|r| r == "m"), "{to:?}");
+
+    // What `ms` and `mr`'s second key write is the key's own pair, not its
+    // family: `ms[` writes `[…]` and nothing else.
+    let shown = |pressed: &str| -> Vec<(String, String)> {
+        let mut ed = typed("（甲）\n");
+        press(&mut ed, pressed);
+        let Hint::Keys(_, rows) = ed.hint() else { panic!("{pressed}: no key list") };
+        rows.into_iter().map(|(k, what)| (k.into_owned(), what)).collect()
+    };
+    for pressed in ["ms", "mr("] {
+        let rows = shown(pressed);
+        assert!(rows.contains(&("[".into(), "[ ]".into())), "{pressed}: {rows:?}");
+        assert!(rows.contains(&("<".into(), "< >".into())), "{pressed}: {rows:?}");
+    }
+    assert!(shown("md").contains(&("[".into(), "[ 「 【 〔 …".into())), "md finds the family");
 }
 
 /// Under the vim keymap `dik`/`dak` are the Markdown marks and `dim` the

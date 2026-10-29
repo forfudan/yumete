@@ -3923,6 +3923,22 @@ impl Editor {
         rows
     }
 
+    /// **The pairs `ms` and `mr`'s second key write**: each key's own pair and
+    /// no family (2026-10-29, review: the rows listed `[ 「 【 〔 …` and `ms[`
+    /// writes `[…]` alone). Any other character writes itself.
+    pub(super) fn made_rows() -> super::KeyRows {
+        let mut rows: super::KeyRows = Self::PAIR_ROWS
+            .iter()
+            .map(|&(key, _)| {
+                let c = key.chars().next().unwrap_or(' ');
+                let (open, close) = super::pair_of(c).unwrap_or((c, c));
+                (key.into(), format!("{open} {close}"))
+            })
+            .collect();
+        rows.push((" ".into(), say!("hint.pair.any")));
+        rows
+    }
+
     /// What `` ` `` may be finished with.
     ///
     /// The last row is `hint.vi.backtick` — 「vi 的記號：M 記、`'` 回去」. It is a

@@ -527,13 +527,13 @@ impl Editor {
                 },
                 Self::object_rows(),
             ),
-            Pending::Surround => (say!("hint.match.surround"), Self::pair_rows(&[])),
+            Pending::Surround => (say!("hint.match.surround"), Self::made_rows()),
             Pending::SurroundOff => (
                 say!("hint.match.take-off"),
                 Self::pair_rows(&[("m", "hint.obj.nearest-pair"), ("k", "hint.obj.markup")]),
             ),
             Pending::SurroundFrom => (say!("hint.change"), Self::pair_rows(&[("m", "hint.obj.nearest-pair")])),
-            Pending::SurroundTo(_) => (say!("hint.change-to"), Self::pair_rows(&[])),
+            Pending::SurroundTo(_) => (say!("hint.change-to"), Self::made_rows()),
             Pending::Hop { forward } => (
                 match forward {
                     true => say!("hint.hop.next"),
