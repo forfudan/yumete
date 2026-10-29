@@ -19674,10 +19674,9 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('i'));
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "b 吧 八\n");
         ime.input('b');
-        let mut config = vertical_config();
-        // A light theme: the panel used to stay 墨香 dark on it (2026-10-29).
-        config.theme = yumete_config::ThemeConfig::named("github").expect("a theme");
-        config.theme.mode = yumete_config::Mode::Light;
+        // The factory theme: a theme of its own here would move the mood, a
+        // global every test in this binary reads.
+        let config = vertical_config();
         let buffer = render_vertical_with(&mut editor, &config, &ime, 40, 14);
         let ink = crate::theme::Palette::of(&config);
 
