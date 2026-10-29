@@ -18,6 +18,7 @@ in `docs/development.md` §5.2.
 - **The outline sidebar counts each heading**, its sections included, at the right edge.
 - **`:export html` and `:export typst` carry a document's structure**: lists (nested, numbered or not), block quotes, footnotes (numbered as they are met; a list at the end in HTML, `#footnote[…]` in Typst), pipe tables with their alignment, and rules. They used to come out as their source.
 - **Rename, references and code actions from the language server**, on helix's keys: `gr` lists every place a name is used (one is gone to, several open a picker with the lines around each), `空格 r` renames it everywhere through `:lsp-rename <name>`, and `空格 a` offers the server's code actions over the selection, quick fixes found by the diagnostics there. A server's edits are applied across files, opening the ones not open, one undo point per file; nothing is saved.
+- **Prose can have a language server when the config names one** (`[[lsp.markdown]]`, `[[lsp.typst]]`, `[[lsp.text]]`): a spelling and grammar checker such as `harper-ls` reports in the gutter and through `空格 d`, and its fixes are `空格 a`. With nothing named, a manuscript hears nothing about servers, as before.
 - **`:git-show [commit]`** opens the committed draft (`HEAD` by default) read-only in the other work area, on the line you are on, to read beside the one you are writing.
 - **`:earlier` and `:later`**, helix's: undo or redo so many steps, or to the change nearest a span of time back or on (`:earlier 5m`, `:later 1h 30m`).
 

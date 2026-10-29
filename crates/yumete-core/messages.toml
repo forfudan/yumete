@@ -7927,13 +7927,6 @@ zhs = "{0} 起不来({1})——档照常开，只是没人查错"
 en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
 
 [[message]]
-# gr、空格 r、空格 a 在非代碼檔裏
-key = "lsp.code-only"
-zht = "這個要問語言服務器，只在代碼檔裏用"
-zhs = "这个要问语言服务器，只在代码文件里用"
-en = "this asks the language server, so only in a code file"
-
-[[message]]
 # 起服務器用的是項目自己帶的那一個，不是 PATH 上的
 key = "lsp.from-the-project"
 zht = "語言服務器：本項目路徑中的 {0}"
@@ -7988,6 +7981,13 @@ key = "lsp.not-installed"
 zht = "找不到 {0}，請在設置中檢查拼寫或確保其已經安裝"
 zhs = "找不到 {0}，请在设置中检查拼写或确保其已经安装"
 en = "{0} is not on this machine — check the spelling in :settings, or install it"
+
+[[message]]
+# gr、空格 r、空格 a 在沒接語言服務器的文件裏
+key = "lsp.not-served"
+zht = "此文件未綁定語言服務器"
+zhs = "此文件未绑定语言服务器"
+en = "no language server serves this file"
 
 [[message]]
 # 服務器提不出任何候選

@@ -9,11 +9,10 @@ use crate::lsp::{Action, Place, TextEdit};
 
 impl Editor {
     /// Where the caret is, as the wire wants it: the file, the line, and the
-    /// column in UTF-16 code units. `None` outside a code file with a path.
+    /// column in UTF-16 code units. `None` for a buffer with no path, which no
+    /// server can be asked about. Whether a server serves this kind of file is
+    /// the front end's to say (prose has one when the config names one).
     fn caret_for_the_server(&self) -> Option<(PathBuf, usize, usize)> {
-        if !matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
-            return None;
-        }
         let path = self.current_buffer().path()?.to_path_buf();
         let rope = self.current_buffer().rope();
         let head = self.sel.head().min(rope.len_chars());
@@ -30,7 +29,7 @@ impl Editor {
                 self.asked_refs_from = Some((self.current_buffer().id(), self.sel.head()));
                 self.status = say!("lsp.asking-references");
             }
-            None => self.status = say!("lsp.code-only"),
+            None => self.status = say!("lsp.buffer-unsaved"),
         }
     }
 
@@ -101,7 +100,7 @@ impl Editor {
     /// The rename is a command (`:lsp-rename <新名>`), so it can be typed too.
     pub(super) fn start_a_rename(&mut self) {
         if self.caret_for_the_server().is_none() {
-            self.status = say!("lsp.code-only");
+            self.status = say!("lsp.buffer-unsaved");
             return;
         }
         let word = self.name_under_the_caret();
@@ -134,7 +133,7 @@ impl Editor {
                 self.rename_query = Some((path, line, column, new_name.to_string()));
                 self.status = say!("lsp.asking-rename");
             }
-            None => self.status = say!("lsp.code-only"),
+            None => self.status = say!("lsp.buffer-unsaved"),
         }
     }
 
@@ -160,7 +159,7 @@ impl Editor {
     /// character under the caret.
     pub(super) fn ask_actions(&mut self) {
         let Some((path, ..)) = self.caret_for_the_server() else {
-            self.status = say!("lsp.code-only");
+            self.status = say!("lsp.buffer-unsaved");
             return;
         };
         let rope = self.current_buffer().rope();

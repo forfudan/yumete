@@ -316,6 +316,8 @@ pub struct Servers {
     /// **The code actions gathered so far** (#54): every server is asked, and
     /// the picker opens once the last one has answered, with all of them.
     gathered: Vec<lsp::Action>,
+    /// The prose kinds the config names a server for (2026-10-29).
+    prose: HashSet<&'static str>,
     /// A `空格 a` is out and its picker not yet shown.
     asking_actions: bool,
     /// **命令名 → 那個服務器**（#425，2026-09-30 從「語言名 →」改的）。
@@ -389,6 +391,7 @@ impl Default for Servers {
     fn default() -> Servers {
         Servers {
             gathered: Vec::new(),
+            prose: HashSet::new(),
             asking_actions: false,
             doorbell: None,
             running: HashMap::new(),
@@ -488,9 +491,17 @@ impl Servers {
     /// Warning: **Only real code.** Markdown, Typst and 文本 have language servers in
     /// the world, but this editor *is* the tool for those, and starting a
     /// second opinion about a manuscript is not what anybody asked for.
-    fn language_of(editor: &Editor) -> Option<&'static str> {
+    fn language_of(&self, editor: &Editor) -> Option<&'static str> {
+        use yumete_core::syntax::Syntax;
         match editor.current_buffer().syntax() {
-            yumete_core::syntax::Syntax::Code(language) => Some(language.name()),
+            Syntax::Code(language) => Some(language.name()),
+            // **Prose only when asked for** (2026-10-29): a writer who names a
+            // server for Markdown, Typst or plain text — harper-ls, ltex —
+            // gets its spelling and grammar; nobody else hears a word about
+            // servers on a manuscript.
+            Syntax::Markdown if self.prose.contains("markdown") => Some("markdown"),
+            Syntax::Typst if self.prose.contains("typst") => Some("typst"),
+            Syntax::Text if self.prose.contains("text") => Some("text"),
             _ => None,
         }
     }
@@ -498,7 +509,11 @@ impl Servers {
     /// Start, open, and update — everything that depends on where the cursor
     /// is. Called once a turn, after the keys have been handled.
     pub fn follow(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let Some(language) = Self::language_of(editor) else { return };
+        self.prose = ["markdown", "typst", "text"]
+            .into_iter()
+            .filter(|kind| config.lsp.get(*kind).is_some_and(|v| v.iter().any(|s| !s.command.is_empty())))
+            .collect();
+        let Some(language) = self.language_of(editor) else { return };
         let Some(_named) = Self::named(config, language, Some(&Self::look_from(editor))) else {
             // **打開的那一刻就說，別等人問**（2026-09-29 報的：「为什么不是在打开
             // 文件的时候就检查 LSP 并且显示消息」）。從前這裏是默默 `return`，於是
@@ -629,7 +644,9 @@ impl Servers {
             let message = match server.open.contains(&path) {
                 false => {
                     server.open.insert(path.clone());
-                    lsp::did_open(&path, language, server.version, &text)
+                    // LSP's word for plain text is `plaintext`.
+                    let id = if language == "text" { "plaintext" } else { language };
+                    lsp::did_open(&path, id, server.version, &text)
                 }
                 true => lsp::did_change(&path, server.version, &text),
             };
@@ -671,7 +688,7 @@ impl Servers {
     /// 名字是**命令名**，不是語言名：一種語言跑得了好幾個（#425），而「誰在服務
     /// 這一份」問的就是那幾個程序。`ready` ＝ 握完手了，問得了問題。
     pub fn watching(&self, editor: &Editor) -> Vec<(String, bool)> {
-        let Some(language) = Self::language_of(editor) else { return Vec::new() };
+        let Some(language) = self.language_of(editor) else { return Vec::new() };
         self.serving(language)
             .into_iter()
             .map(|name| {
@@ -682,7 +699,7 @@ impl Servers {
     }
 
     pub fn busy_since(&self, editor: &Editor) -> Option<std::time::Instant> {
-        let language = Self::language_of(editor)?;
+        let language = self.language_of(editor)?;
         self.serving(language)
             .iter()
             .filter_map(|name| self.running.get(name))
@@ -740,8 +757,17 @@ impl Servers {
     /// which reads exactly like 「this is written nowhere」. `follow` runs
     /// first on the same turn, so by the time this asks, `didOpen` is out.
     pub fn ask(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let _ = config;
-        let Some(language) = Self::language_of(editor) else { return };
+        let Some(language) = self.language_of(editor) else {
+            // `gr`, a rename or `空格 a` on a file no server serves.
+            let dropped = editor.take_references_query().is_some()
+                | editor.take_rename_query().is_some()
+                | editor.take_actions_query().is_some()
+                | editor.take_command_query().is_some();
+            if dropped {
+                editor.set_status(say!("lsp.not-served"));
+            }
+            return;
+        };
         if self.first_for(language).is_none() {
             // 服務器没起來，就照實說——而不是讓那句問話一直掛着。
             if editor.take_definition_query().is_some() {
@@ -928,7 +954,7 @@ impl Servers {
     /// The same shape as [`Self::ask`], and for the same reasons — a request
     /// wants an answer, and only this side knows which id it sent for what.
     pub fn ask_what(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let Some(language) = Self::language_of(editor) else { return };
+        let Some(language) = self.language_of(editor) else { return };
         // **問不出去的話，說清楚是哪一種問不出去**（2026-09-29 報的：「这句话的
         // 意思是服务器没有开启，还是服务器开启了但是没有找到相关文档？」）。
         //
@@ -1002,7 +1028,7 @@ impl Servers {
     /// 插入態打 `(` 或 `,` 就問一次（`Editor::signature_owed`）。同 `ask_what`：
     /// 服務器得先收到這一份的新正文，不然它照着上一版答。
     pub fn ask_signature(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let Some(language) = Self::language_of(editor) else { return };
+        let Some(language) = self.language_of(editor) else { return };
         if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
             return;
         }
@@ -1023,7 +1049,7 @@ impl Servers {
     /// 就是），可同一處的 `hover` 答得好好的——兩個是兩種請求，前者問的是「你站在
     /// 哪一次調用裏」，後者問的是「光標下那個符號」，而宏不是一次調用。
     pub fn ask_signature_doc(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
-        let Some(language) = Self::language_of(editor) else { return };
+        let Some(language) = self.language_of(editor) else { return };
         if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
             return;
         }
@@ -1051,7 +1077,7 @@ impl Servers {
     /// reason, and it is the whole of what makes the automatic half work.
     pub fn ask_next(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
         let _ = config;
-        let Some(language) = Self::language_of(editor) else { return };
+        let Some(language) = self.language_of(editor) else { return };
         if self.first_for(language).is_none() {
             // No server for this language: words stand in (see
             // `Editor::show_offers`).
@@ -2652,5 +2678,38 @@ mod tests {
         assert!(sent.iter().any(|m| m.contains(r#""id":9"#) && m.contains(r#""applied":true"#)), "{sent:?}");
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// **Prose has a server only when the config names one** (2026-10-29):
+    /// with `[lsp.markdown]` a chapter is opened to it, and plain text goes as
+    /// `plaintext`; with nothing named, not a word is sent.
+    #[test]
+    fn a_prose_file_is_served_only_when_the_config_names_a_server() {
+        let (mut servers, heard, _tell) = Servers::pretend("markdown");
+        let (mut editor, path) = editor_on("chapter.md", "那年冬天。\n");
+        let mut config = Servers::stocked("markdown");
+        servers.follow(&mut editor, &config);
+        let sent: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
+        assert!(
+            sent.iter().any(|m| m.contains("textDocument/didOpen") && m.contains(r#""languageId":"markdown""#)),
+            "{sent:?}"
+        );
+
+        let (mut servers, heard, _tell) = Servers::pretend("markdown");
+        config.lsp.remove("markdown");
+        let (mut editor, _) = editor_on("other.md", "那年冬天。\n");
+        servers.follow(&mut editor, &config);
+        assert!(heard.try_recv().is_err(), "no server named for Markdown, nothing sent");
+        assert_eq!(servers.language_of(&editor), None);
+
+        let (mut servers, heard, _tell) = Servers::pretend("text");
+        let (mut editor, plain) = editor_on("notes.txt", "a line\n");
+        editor.execute(":syntax text").unwrap();
+        servers.follow(&mut editor, &Servers::stocked("text"));
+        let sent: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
+        assert!(sent.iter().any(|m| m.contains(r#""languageId":"plaintext""#)), "{sent:?}");
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&plain);
     }
 }
