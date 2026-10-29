@@ -15,8 +15,7 @@ or by pinyin, paths complete where they are typed, and brackets and quotes close
 themselves. The `m` group, several selections, `C-a` and the shell line now follow
 helix closely, and the vim keymap gains blockwise visual mode. Pages can stand side
 by side, the candidate bar wears the theme, and a resumed session brings back how the
-page looked. Three read-only reviews ran over the last part of the range; their
-findings are fixed in the commit before this one.
+page looked.
 
 ### Added
 
