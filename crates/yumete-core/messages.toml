@@ -3577,6 +3577,13 @@ zhs = "新的一条"
 en = "a new one"
 
 [[message]]
+# [@ 和 Typst 的 @ 那一格補全面板的名字
+key = "complete.citation"
+zht = "文獻"
+zhs = "文献"
+en = "bibliography"
+
+[[message]]
 # 補全：面板叫什麼——附近的檔案
 key = "complete.file"
 zht = "附近的文件"
@@ -3598,6 +3605,13 @@ zhs = "本文件章节"
 en = "a heading in this file"
 
 # ── convert ───────────────────────────────────────────────────────────
+
+[[message]]
+# Typst 的 @ 補全裏，一個標籤旁邊那一句
+key = "complete.label"
+zht = "標籤"
+zhs = "标签"
+en = "label"
 
 [[message]]
 # :check-config 查完了，兩個檔都没毛病({0} 是查了幾個檔)
