@@ -164,6 +164,39 @@ impl Editor {
         }
     }
 
+    /// **helix's `:earlier` and `:later`** (2026-10-29): so many steps, or to
+    /// the change nearest a span of time back or ahead
+    /// ([`crate::buffer::Buffer::steps_for_span`]). A walk that goes nowhere
+    /// says so, as helix's 「Already at oldest change」 does.
+    pub(super) fn walk_the_undo_history(&mut self, span: crate::command::UndoSpan, back: bool) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let steps = match span {
+            crate::command::UndoSpan::Steps(n) => n,
+            crate::command::UndoSpan::Time(d) => {
+                self.current_buffer().steps_for_span(d, back).unsigned_abs()
+            }
+        };
+        if steps == 0 {
+            self.status = match back {
+                true => say!("edit.undo-at-oldest"),
+                false => say!("edit.redo-at-newest"),
+            };
+            return;
+        }
+        for _ in 0..steps {
+            let was = self.current_buffer().revision();
+            match back {
+                true => self.undo(),
+                false => self.redo(),
+            }
+            if self.current_buffer().revision() == was {
+                break;
+            }
+        }
+    }
+
     /// Redo the last undone change to this buffer (`:redo`).
     pub(super) fn redo(&mut self) {
         if self.refuse_readonly() {

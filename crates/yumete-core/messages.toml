@@ -1358,6 +1358,14 @@ en = "what changed, by word rather than by line"
 find = "比較 比较 差異 差异 改動 改动 對照 对照 diff compare changes"
 
 [[message]]
+# : 命令選單裏 earlier 那一項的説明(commands 組)
+key = "cmd.commands.earlier"
+zht = "撤銷至幾步或多久以前（5m、1h）"
+zhs = "撤销至几步或多久以前（5m、1h）"
+en = "undo to so many steps or so long ago (5m, 1h)"
+find = "撤銷 撤销 撤消 以前 時間 时间 undo earlier ago time"
+
+[[message]]
 # : 命令選單裏 exit 那一項的説明(commands 組)
 key = "cmd.commands.exit"
 zht = "改過纔存，然後退出(短寫 `:x`，也認 `:xit`)"
@@ -1452,6 +1460,14 @@ zht = "編輯器自己説話用哪種語言：`zh` 繁體/`zhs` 简体/`en` Engl
 zhs = "编辑器自己説话用哪种语言：`zh` 繁体/`zhs` 简体/`en` English"
 en = "which language the editor speaks: `zh` 繁體 / `zhs` 简体 / `en` English"
 find = "語言 语言 繁體 繁体 简体 簡體 英文 english language lang 界面"
+
+[[message]]
+# : 命令選單裏 later 那一項的説明(commands 組)
+key = "cmd.commands.later"
+zht = "重做至幾步或多久以後"
+zhs = "重做至几步或多久以后"
+en = "redo to so many steps or so long on"
+find = "重做 以後 以后 時間 时间 redo later time"
 
 [[message]]
 # : 命令選單裏 new 那一項的説明(commands 組)

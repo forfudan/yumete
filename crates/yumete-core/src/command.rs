@@ -198,6 +198,10 @@ pub enum Command {
     Convert(ConvertAsk),
     /// `:<n>` or `:goto <n>` — put the cursor on line `n`.
     GotoLine(usize),
+    /// `:earlier [n|span]` / `:later [n|span]` — helix's: so many undo steps,
+    /// or to the change nearest a time span back or ahead (2026-10-29).
+    Earlier(UndoSpan),
+    Later(UndoSpan),
     /// `:reflow [width]` — helix's: each selection refilled to `width`
     /// columns, 80 when it is left off (2026-10-29).
     Reflow(Option<usize>),
@@ -673,6 +677,51 @@ pub enum Command {
     /// `:format-ruby-<dialect>` — rewrite every reading in the buffer into one
     /// dialect, whatever it was written in.
     FormatRuby(Dialect),
+}
+
+/// How far `:earlier` and `:later` go: helix's `UndoKind`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UndoSpan {
+    Steps(usize),
+    Time(std::time::Duration),
+}
+
+impl UndoSpan {
+    /// helix's reading of the argument: nothing is one step, a number is that
+    /// many, and anything else is a span in systemd's units — `5m`, `1h 30m`,
+    /// `2 days` — each unit at most once.
+    pub fn parse(text: Option<&str>) -> Option<UndoSpan> {
+        let text = text.map(str::trim).unwrap_or_default();
+        if text.is_empty() {
+            return Some(UndoSpan::Steps(1));
+        }
+        if let Ok(n) = text.parse() {
+            return Some(UndoSpan::Steps(n));
+        }
+        const UNITS: &[(&[&str], u64)] = &[
+            (&["seconds", "second", "sec", "s"], 1),
+            (&["minutes", "minute", "min", "m"], 60),
+            (&["hours", "hour", "hr", "h"], 3600),
+            (&["days", "day", "d"], 86400),
+        ];
+        let mut seen = [false; 4];
+        let mut seconds = 0u64;
+        let mut rest = text;
+        while !rest.is_empty() {
+            let digits = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+            let n: u64 = rest[..digits].parse().ok()?;
+            rest = rest[digits..].trim_start();
+            let letters = rest.find(|c: char| !c.is_ascii_lowercase()).unwrap_or(rest.len());
+            let unit = &rest[..letters];
+            rest = rest[letters..].trim_start();
+            let at = UNITS.iter().position(|(forms, _)| forms.contains(&unit))?;
+            if std::mem::replace(&mut seen[at], true) {
+                return None;
+            }
+            seconds = seconds.checked_add(n.checked_mul(UNITS[at].1)?)?;
+        }
+        Some(UndoSpan::Time(std::time::Duration::from_secs(seconds)))
+    }
 }
 
 /// An error produced while parsing a command line.
@@ -3134,6 +3183,34 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Undo)),
+    },
+    Entry {
+        name: "earlier",
+        aliases: &["ear"],
+        help: "cmd.commands.earlier",
+        needs: &[],
+        params: &[Param::Free("<步數>｜<時間>")],
+        build: Some(|p| match UndoSpan::parse(p.arg(0)) {
+            Some(span) => Ok(Command::Earlier(span)),
+            None => Err(CommandError::InvalidArgument {
+                command: p.name,
+                value: p.arg(0).unwrap_or_default().to_string(),
+            }),
+        }),
+    },
+    Entry {
+        name: "later",
+        aliases: &["lat"],
+        help: "cmd.commands.later",
+        needs: &[],
+        params: &[Param::Free("<步數>｜<時間>")],
+        build: Some(|p| match UndoSpan::parse(p.arg(0)) {
+            Some(span) => Ok(Command::Later(span)),
+            None => Err(CommandError::InvalidArgument {
+                command: p.name,
+                value: p.arg(0).unwrap_or_default().to_string(),
+            }),
+        }),
     },
     Entry {
         name: "redo",

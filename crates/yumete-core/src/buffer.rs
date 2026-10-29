@@ -304,6 +304,10 @@ struct EditSnapshot {
     /// the change was done, which is where helix's redo puts them; on a redo
     /// point, where they stood before it, for the undo after that.
     far: Option<(usize, Option<crate::selection::Selections>)>,
+    /// **When the step out of this point was taken** (2026-10-29), which is
+    /// when the state on its far side began: `:earlier 5m` and `:later` find
+    /// their point by it, as helix's revisions are found by their timestamp.
+    at: SystemTime,
 }
 
 /// A buffer's undo and redo stacks.
@@ -1487,6 +1491,7 @@ impl Buffer {
             selections,
             modified: self.modified,
             far: None,
+            at: SystemTime::now(),
         });
     }
 
@@ -1542,7 +1547,9 @@ impl Buffer {
     fn earn_snapshot(&mut self) {
         self.history.fresh = true;
         match self.history.pending.take() {
-            Some(point) => {
+            Some(mut point) => {
+                // Stamped when it is earned: that is when the change was made.
+                point.at = SystemTime::now();
                 // **分了叉，存檔那個位置就走不回去了**（見 [`Buffer::saved_depth`]）。
                 // 撤回幾步再改一個字，重做那一支整個没了——而存檔的那一刻如果
                 // 在那一支上，從此没有任何一個位置和盤上一樣。
@@ -1607,6 +1614,7 @@ impl Buffer {
         };
         self.history.redo.push(EditSnapshot {
             far: Some((prev.cursor, prev.selections.clone())),
+            at: prev.at,
             ..self.here(cursor, selections)
         });
         self.revision += 1;
@@ -1645,6 +1653,7 @@ impl Buffer {
         };
         self.history.undo.push(EditSnapshot {
             far: Some((next.cursor, next.selections.clone())),
+            at: next.at,
             ..self.here(back.0, back.1)
         });
         self.revision += 1;
@@ -1666,7 +1675,53 @@ impl Buffer {
             selections,
             modified: self.modified,
             far: None,
+            at: SystemTime::now(),
         }
+    }
+
+    /// **How many steps back (negative) or forward reach the state nearest
+    /// `span` before or after this one** — helix's `jump_duration_backward` /
+    /// `_forward` over a history that is a line (2026-10-29). A state's time
+    /// is when the change that made it was made. The oldest state has none:
+    /// a target before the first change goes all the way back to it.
+    pub fn steps_for_span(&self, span: std::time::Duration, back: bool) -> isize {
+        let undo = &self.history.undo;
+        let redo = &self.history.redo;
+        let k = undo.len();
+        let last = k + redo.len();
+        // The times of states 1 ..= last, oldest first.
+        let times: Vec<SystemTime> =
+            undo.iter().map(|u| u.at).chain(redo.iter().rev().map(|r| r.at)).collect();
+        let Some(&first) = times.first() else {
+            return 0;
+        };
+        let now = match k {
+            0 => first,
+            k => times[k - 1],
+        };
+        let target = match back {
+            true => now.checked_sub(span),
+            false => now.checked_add(span),
+        };
+        let j = match target {
+            None if back => 0,
+            None => last,
+            Some(t) if t < first => 0,
+            Some(t) => match times.binary_search(&t) {
+                Ok(n) => n + 1,
+                Err(n) if n >= times.len() => last,
+                // Between states n and n + 1: the nearer, ties to the later.
+                Err(n) => {
+                    let before = t.duration_since(times[n - 1]).unwrap_or_default();
+                    let after = times[n].duration_since(t).unwrap_or_default();
+                    match before < after {
+                        true => n,
+                        false => n + 1,
+                    }
+                }
+            },
+        };
+        j as isize - k as isize
     }
 }
 

@@ -324,6 +324,14 @@ impl Editor {
                 self.redo();
                 Ok(CommandOutcome::Continue)
             }
+            Command::Earlier(span) => {
+                self.walk_the_undo_history(span, true);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::Later(span) => {
+                self.walk_the_undo_history(span, false);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetLayout(direction) => {
                 // A grid runs across and down; a 縱書 page runs down and to the
                 // left. There is no honest way to draw one as the other, so the
