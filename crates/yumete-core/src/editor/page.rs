@@ -1899,6 +1899,13 @@ impl Editor {
         self.signature_asked_at = None;
         let bracket = self.signature_on?;
         let rope = self.current_buffer().rope();
+        // **After a `(` only** (2026-10-29, review): rust-analyzer adds `<` to
+        // the triggers, and in `if v.len() < MAX` the walk back from `<` landed
+        // on `len` and floated its documentation as a signature. A macro's call
+        // opens with `(`; a comparison is not one.
+        if rope.get_char(bracket) != Some('(') {
+            return None;
+        }
         let head = rope.line_to_char(rope.char_to_line(bracket.min(rope.len_chars())));
         let mut at = bracket.min(rope.len_chars());
         for _ in 0..4 {
@@ -2029,7 +2036,11 @@ impl Editor {
 
     /// `C-n` 問出去的那一句，給前端發（下一趟循環取走）。
     pub fn take_completion_query(&mut self) -> Option<(std::path::PathBuf, usize, usize)> {
-        self.completion_query.take()
+        let asked = self.completion_query.take();
+        if asked.is_some() {
+            self.completion_sent = self.completion_at;
+        }
+        asked
     }
 
     /// **The answer is back: put the list up** (#53 ④).
@@ -2046,7 +2057,20 @@ impl Editor {
     /// longer word, as helix narrows the list on screen. Anything else in
     /// between and it is stale.
     pub fn show_offers(&mut self, items: Vec<crate::lsp::Offer>, incomplete: bool) {
-        let Some(asked) = self.completion_at.take() else { return };
+        // Not in Normal mode (review: "type a word, Esc" before the answer
+        // drew the list over Normal mode).
+        if self.mode != Mode::Insert {
+            self.completion_sent = None;
+            self.completion_at = None;
+            return;
+        }
+        let asked = match self.completion_sent.take() {
+            Some(sent) => sent,
+            None => match self.completion_at.take() {
+                Some(at) => at,
+                None => return,
+            },
+        };
         if !self.only_word_typed_since(asked) {
             return;
         }
@@ -2266,7 +2290,12 @@ impl Editor {
                 head + crate::problem::char_column(&text, span.from),
                 head + crate::problem::char_column(&text, span.to),
             ),
-            _ => (self.sel.head(), self.sel.head()),
+            // **No range: the word before the caret is replaced** (2026-10-29,
+            // review: pylsp sends `insertText` alone, and `pri` + Tab gave
+            // `priprint`). helix replaces from the start of the word there.
+            None => (self.sel.head() - self.word_before_the_cursor().chars().count(), self.sel.head()),
+            // A range on another line was worked out on other text: insert only.
+            Some(_) => (self.sel.head(), self.sel.head()),
         };
         // 打進去算**一次**編輯——`u` 一下把整個詞撤掉，而不是一個字母一個字母地
         // 撤（同 2026-09-21 定下的「一次插入是一次撤銷」）。

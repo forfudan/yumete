@@ -883,7 +883,13 @@ impl Editor {
                             return Ok(CommandOutcome::Continue);
                         }
                     },
-                    false => line,
+                    // Every shell verb's command is the previous one for the
+                    // next `!` (2026-10-29, review: after `:sh make`, `:!!` said
+                    // there was none while the ghost offered `make`).
+                    false => {
+                        self.last_bang = Some(line.clone());
+                        line
+                    }
                 };
                 self.shell_request = Some(Shell {
                     line,
@@ -902,6 +908,7 @@ impl Editor {
                     self.status = say!("readonly.refused");
                     return Ok(CommandOutcome::Continue);
                 }
+                self.last_bang = Some(line.clone());
                 self.ask_the_shell(line, crate::editor::Put::Replace);
                 Ok(CommandOutcome::Continue)
             }
@@ -915,6 +922,7 @@ impl Editor {
                     self.status = say!("readonly.refused");
                     return Ok(CommandOutcome::Continue);
                 }
+                self.last_bang = Some(line.clone());
                 self.ask_the_shell(line, put);
                 Ok(CommandOutcome::Continue)
             }

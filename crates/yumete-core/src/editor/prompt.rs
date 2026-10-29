@@ -273,6 +273,10 @@ impl Editor {
                 self.signature_query = None;
                 self.signature_due = None;
                 self.signature_on = None;
+                // A completion question out is about the typing just ended.
+                self.completion_at = None;
+                self.completion_query = None;
+                self.completion_sent = None;
                 // **The quotes are the editor's, on the way out too**
                 // (2026-10-21): a cell typed into leaves the file written the
                 // way `quote_for` would have written it, so a pair that is no
@@ -780,7 +784,14 @@ impl Editor {
             (false, Some(h)) => fits.iter().copied().find(|&i| i > h).unwrap_or(last),
         };
         self.history_at = Some(at);
-        self.command_line = history[at].clone();
+        // **A shell walk keeps the verb it started on** (2026-10-29, review:
+        // `:!` + C-p brought back `pipe sort`, which edits the buffer). helix's
+        // shell prompts share one register holding the command alone.
+        let verb_here = command::shell_start(&self.command_line).map(|v| self.command_line[..v].to_string());
+        self.command_line = match (shell, verb_here, command::shell_start(&history[at])) {
+            (true, Some(verb), Some(from)) => format!("{verb}{}", history[at][from..].trim_start()),
+            _ => history[at].clone(),
+        };
         self.command_caret = self.command_line.chars().count();
     }
 

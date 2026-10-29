@@ -2632,6 +2632,11 @@ pub struct Editor {
     /// because the query is *taken* by the front end and this has to outlive
     /// it until the answer lands.
     completion_at: Option<usize>,
+    /// **Where the question now out was asked** (2026-10-29, review): set when
+    /// the front end takes the query to send. `completion_at` moves on with
+    /// every letter, and while the server is busy a newer question waits
+    /// unsent, so the answer that arrives belongs to this one.
+    completion_sent: Option<usize>,
     /// **Whether that question was asked by hand** (`C-n`) rather than by the
     /// letter just typed (#53 ④).
     ///
@@ -3971,6 +3976,7 @@ impl Editor {
             server_busy_since: None,
             completion_query: None,
             completion_at: None,
+            completion_sent: None,
             completion_by_hand: false,
             offering: None,
             dictionary: None,

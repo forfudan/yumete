@@ -44,11 +44,23 @@ fn in_the_case_typed(word: &str, typed: &str) -> Option<String> {
     if word.chars().skip(1).any(char::is_uppercase) {
         return Some(word.to_string());
     }
+    // `ß` has no capital of its own in common use: it neither breaks a
+    // shout nor becomes `SS` in one, as vim's 'infercase' keeps it (review).
+    let lower = |c: char| c.is_lowercase() && c != 'ß';
     let shouting = typed.chars().count() >= 2
         && typed.chars().any(char::is_uppercase)
-        && !typed.chars().any(char::is_lowercase);
+        && !typed.chars().any(lower);
     Some(match shouting {
-        true => format!("{typed}{}", rest.to_uppercase()),
+        true => {
+            let loud: String = rest
+                .chars()
+                .map(|c| match c {
+                    'ß' => "ß".to_string(),
+                    c => c.to_uppercase().collect(),
+                })
+                .collect();
+            format!("{typed}{loud}")
+        }
         false => format!("{typed}{rest}"),
     })
 }
@@ -99,7 +111,7 @@ impl Editor {
         if self.mode != Mode::Insert {
             return false;
         }
-        let items = match self.path_offers() {
+        let items = match self.path_offers(by_hand) {
             Some(items) => items,
             None if self.writes_code() => return false,
             None => match self.word_offers(by_hand) {
@@ -148,7 +160,7 @@ impl Editor {
     }
 
     /// The files and folders a path before the caret can go on to.
-    fn path_offers(&self) -> Option<Vec<crate::lsp::Offer>> {
+    fn path_offers(&self, by_hand: bool) -> Option<Vec<crate::lsp::Offer>> {
         let (line, before) = self.before_the_caret();
         let stops = |c: char| c.is_whitespace() || "\"'`()[]<>{}=,;|".contains(c);
         let start = before.iter().rposition(|&c| stops(c)).map_or(0, |i| i + 1);
@@ -158,6 +170,17 @@ impl Editor {
             return None;
         }
         if !token.contains('/') && !(in_a_link && !token.is_empty()) {
+            return None;
+        }
+        // **A slash alone is not a path** (2026-10-29, review; decided against
+        // helix, which lists the root here too): `//` opening a comment, `</`
+        // closing a tag and ` / ` dividing listed `/`, and Tab after `//`
+        // wrote `//Applications/` into the file. A path names something
+        // (`src/`, `/usr/l`) or starts `./` `../` `~/`; `C-n` still asks.
+        let names_something = token.chars().any(|c| c != '/' && c != '.')
+            || token.starts_with("./")
+            || token.starts_with("../");
+        if !by_hand && !in_a_link && !names_something {
             return None;
         }
         let (dir, base) = match token.rfind('/') {
@@ -182,8 +205,11 @@ impl Editor {
             .filter_map(|entry| {
                 let name = entry.file_name().into_string().ok()?;
                 let shown = base.starts_with('.') || !name.starts_with('.');
-                (shown && name.starts_with(base) && name != base).then(|| {
-                    let slash = if entry.path().is_dir() { "/" } else { "" };
+                let folder = entry.path().is_dir();
+                // A folder typed in full still offers its `/` (review: `src`
+                // never offered `src/`).
+                (shown && name.starts_with(base) && (name != base || folder)).then(|| {
+                    let slash = if folder { "/" } else { "" };
                     format!("{name}{slash}")
                 })
             })
@@ -352,11 +378,16 @@ impl Editor {
             index.revision = Some(revision);
             self.word_index.insert(id, index);
         }
-        // The cache of cut lines only grows: dropped whole once it is far past
-        // what the open buffers hold (the next reading starts over).
-        if self.line_words.len() > 400_000 {
-            self.line_words.clear();
-            self.word_index.clear();
+        // **The cache of cut lines is pruned, never dropped** (2026-10-29,
+        // review: dropped whole past 400,000 lines, it was rebuilt and dropped
+        // again on every key once the open buffers alone held that many).
+        // What no open buffer has any more goes, once the cache is twice what
+        // they hold; what they hold stays, so the next reading is still a diff.
+        let live: usize = self.word_index.values().map(|index| index.lines.len()).sum();
+        if self.line_words.len() > 100_000 + 2 * live {
+            let kept: std::collections::HashSet<u64> =
+                self.word_index.values().flat_map(|index| index.lines.keys().copied()).collect();
+            self.line_words.retain(|stamp, _| kept.contains(stamp));
         }
     }
 
