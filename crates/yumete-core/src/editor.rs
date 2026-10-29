@@ -3312,6 +3312,9 @@ pub struct Editor {
     /// The count up to each line of the buffer the 大綱 is showing, so a
     /// heading's count is two lookups (2026-10-29). Keyed as the one above.
     line_counts: RefCell<Option<(u64, u64, Vec<usize>)>>,
+    /// **Bibliographies read for citation keys**, by file, with the time
+    /// each was read at (2026-10-29).
+    bib_cache: RefCell<HashMap<PathBuf, ReadBibliography>>,
     /// The drawn padding of the table last asked about (Feature #212).
     ///
     /// One table at a time: the page asks per line, every line of a table
@@ -4172,6 +4175,7 @@ impl Editor {
             code_cache: RefCell::default(),
             count_cache: RefCell::default(),
             line_counts: RefCell::default(),
+            bib_cache: RefCell::default(),
             pad_cache: RefCell::new(None),
             md_cache: RefCell::new(None),
             pipe_region: RefCell::new(None),
@@ -5185,6 +5189,8 @@ fn switch_case(c: char) -> String {
 /// `空格 a`'s question: the file, and the span from and to, each (line,
 /// UTF-16 column).
 pub type ActionsQuery = (PathBuf, (usize, usize), (usize, usize));
+/// A bibliography as read: when it was read, and its keys with their titles.
+type ReadBibliography = (std::time::SystemTime, Vec<(String, String)>);
 /// The whole buffer's count: buffer, revision, count.
 type WholeCount = (u64, u64, usize);
 /// The selection's: buffer, revision, start, end, count.

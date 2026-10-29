@@ -29632,6 +29632,46 @@ fn an_open_bracket_indents_the_next_line_one_more_level() {
     let _ = std::fs::remove_dir_all(tmp().join(format!("yumete-tsindent-{}", std::process::id())));
 }
 
+/// **`[@` and Typst's `@` finish from the bibliography beside the file**
+/// (2026-10-29): BibTeX keys with their titles, the hayagriva file a Typst
+/// document names, and the labels it sets.
+#[test]
+fn citations_complete_from_the_bibliography_and_the_labels() {
+    let dir = tmp().join(format!("yumete-cite-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("refs.bib"), "@book{knuth84,\n  title = {Literate Programming},\n}\n@article{lamport94, title={LaTeX}}\n").unwrap();
+    std::fs::write(dir.join("works.yml"), "harry:\n  type: Book\n  title: Phoenix\n").unwrap();
+    let md = dir.join("chapter.md");
+    std::fs::write(&md, "Text\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&md).unwrap();
+    ed.goto_line(1);
+    press(&mut ed, "A as shown [@kn");
+    let offer = ed.reference_offer().expect("a citation is open");
+    assert_eq!(offer.refers, crate::editor::complete::Refers::Cite);
+    assert_eq!(offer.choices.len(), 1);
+    assert_eq!(offer.choices[0].note.as_deref(), Some("Literate Programming"));
+    ed.on_key(Key::Tab);
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "Text as shown [@knuth84]\n", "one closing bracket, not two");
+
+    let typ = dir.join("paper.typ");
+    std::fs::write(&typ, "= Intro <intro>\n#bibliography(\"works.yml\")\n").unwrap();
+    ed.open_file(&typ).unwrap();
+    ed.goto_line(1);
+    press(&mut ed, "A see @");
+    let offer = ed.reference_offer().expect("a reference is open");
+    assert_eq!(offer.refers, crate::editor::complete::Refers::Label);
+    let keys: Vec<&str> = offer.choices.iter().map(|c| c.text.as_str()).collect();
+    assert_eq!(keys, vec!["intro", "harry", "knuth84", "lamport94"], "labels first, then the named file, then the .bib beside it");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "A mail a@b");
+    assert!(ed.reference_offer().is_none(), "an address is not a reference");
+    ed.on_key(Key::Esc);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **`:git-show` opens the committed draft beside the one being written**
 /// (#518, 2026-10-29): read-only, in the other work area, with the keys left
 /// where they were; asking twice replaces the copy.

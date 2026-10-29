@@ -51,6 +51,10 @@ pub enum Refers {
     Anchor,
     /// `[[` — another file near this one (#418 三).
     File,
+    /// `[@` — a citation key, Pandoc's syntax in Markdown (2026-10-29).
+    Cite,
+    /// `@` in Typst — a citation key, or a label the document sets.
+    Label,
 }
 
 impl Refers {
@@ -60,6 +64,9 @@ impl Refers {
             Refers::Note => (']', 1),
             Refers::Anchor => (')', 1),
             Refers::File => (']', 2),
+            Refers::Cite => (']', 1),
+            // Typst's `@key` is closed by whatever follows it.
+            Refers::Label => (']', 0),
         }
     }
 }
@@ -71,6 +78,7 @@ impl Refers {
             Refers::Note => say!("complete.footnote"),
             Refers::Anchor => say!("complete.heading"),
             Refers::File => say!("complete.file"),
+            Refers::Cite | Refers::Label => say!("complete.citation"),
         }
     }
 }
@@ -127,9 +135,11 @@ impl Editor {
         if self.mode != Mode::Insert {
             return None;
         }
-        if self.syntax() != crate::syntax::Syntax::Markdown {
-            return None;
-        }
+        let typst = match self.syntax() {
+            crate::syntax::Syntax::Markdown => false,
+            crate::syntax::Syntax::Typst => true,
+            _ => return None,
+        };
         // A grid's cell is one field wide and Tab already means「next cell」in
         // it; a footnote inside a table is not worth taking that key away.
         if self.table_here() {
@@ -144,7 +154,10 @@ impl Editor {
         // a `[`.
         let from = start.max(self.sel.head().saturating_sub(LOOK_BACK));
         let before: Vec<char> = rope.slice(from..self.sel.head()).chars().collect();
-        let (refers, typed) = trigger(&before)?;
+        let (refers, typed) = match typst {
+            true => typst_trigger(&before)?,
+            false => trigger(&before)?,
+        };
         // A `[^` quoted in a fence is four characters of somebody's example.
         //
         // Warning: **Asked after the trigger**, for the reason [`Self::continue_the_list`]
@@ -161,6 +174,8 @@ impl Editor {
             Refers::Note => self.note_choices(&typed),
             Refers::Anchor => self.anchor_choices(&typed),
             Refers::File => self.file_choices(&typed),
+            Refers::Cite => self.cite_choices(&typed, false),
+            Refers::Label => self.cite_choices(&typed, true),
         };
         match choices.is_empty() {
             true => None,
@@ -320,6 +335,89 @@ impl Editor {
             .collect()
     }
 
+    /// **The keys a citation can name** (2026-10-29): the bibliography's,
+    /// with each entry's title beside it, and in Typst the labels the
+    /// document sets too. Matched from the start of the key, case aside.
+    fn cite_choices(&self, typed: &str, typst: bool) -> Vec<Candidate> {
+        let text = self.current_buffer().rope().to_string();
+        let want = typed.to_lowercase();
+        let close = match typst {
+            true => String::new(),
+            false => self.closes_with(']'),
+        };
+        let mut out: Vec<Candidate> = Vec::new();
+        if typst {
+            out.extend(
+                crate::cite::typst_labels(&text)
+                    .into_iter()
+                    .filter(|label| label.to_lowercase().starts_with(&want))
+                    .map(|label| Candidate { text: label, note: Some(say!("complete.label")) }),
+            );
+        }
+        for (key, title) in self.bibliography_entries(&text, typst) {
+            if key.to_lowercase().starts_with(&want) && !out.iter().any(|c| c.text == key) {
+                out.push(Candidate {
+                    text: format!("{key}{close}"),
+                    note: (!title.is_empty()).then(|| first_words(title)),
+                });
+            }
+        }
+        out.truncate(MOST);
+        out
+    }
+
+    /// Every entry of the bibliographies this document can cite: the files it
+    /// names and the `.bib` files beside it, each read once per change on
+    /// disk.
+    fn bibliography_entries(&self, text: &str, typst: bool) -> Vec<(String, String)> {
+        let here = self.working_dir();
+        let Some(dir) = self
+            .current_buffer()
+            .path()
+            .map(|p| here.join(p))
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+        else {
+            return Vec::new();
+        };
+        let mut files: Vec<PathBuf> =
+            crate::cite::named_bibliographies(text, typst).into_iter().map(|p| dir.join(p)).collect();
+        if let Ok(listing) = std::fs::read_dir(&dir) {
+            let mut beside: Vec<PathBuf> = listing
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("bib")))
+                .collect();
+            beside.sort();
+            for path in beside {
+                if !files.contains(&path) {
+                    files.push(path);
+                }
+            }
+        }
+        let mut cache = self.bib_cache.borrow_mut();
+        let mut out: Vec<(String, String)> = Vec::new();
+        for file in files {
+            let Ok(stamp) = std::fs::metadata(&file).and_then(|m| m.modified()) else { continue };
+            let fresh = cache.get(&file).is_some_and(|(at, _)| *at == stamp);
+            if !fresh {
+                let Ok(body) = std::fs::read_to_string(&file) else { continue };
+                let ext = file.extension().map(|e| e.to_string_lossy().to_ascii_lowercase());
+                let entries = match ext.as_deref() {
+                    Some("bib") => crate::cite::bibtex_entries(&body),
+                    Some("yml" | "yaml") => crate::cite::hayagriva_entries(&body),
+                    _ => Vec::new(),
+                };
+                cache.insert(file.clone(), (stamp, entries));
+            }
+            for (key, title) in cache.get(&file).map(|(_, e)| e.clone()).unwrap_or_default() {
+                if !out.iter().any(|(k, _)| *k == key) {
+                    out.push((key, title));
+                }
+            }
+        }
+        out
+    }
+
     /// The bracket a pick has to close, or nothing when it is already there.
     ///
     /// `[^1]` typed backwards — the closing bracket first, then the tag — is
@@ -455,12 +553,13 @@ impl Editor {
 /// rather than about the line: `[^1]` further left on the same line is a
 /// finished reference and says nothing about this one.
 fn trigger(before: &[char]) -> Option<(Refers, String)> {
+    let cite = ends_at(before, &['[', '@']).map(|end| (end, Refers::Cite));
     let note = ends_at(before, &['[', '^']).map(|end| (end, Refers::Note));
     let anchor = ends_at(before, &[']', '(', '#']).map(|end| (end, Refers::Anchor));
     let file = ends_at(before, &['[', '[']).map(|end| (end, Refers::File));
     // The latest of the three, because none of them holds another: whichever
     // opened last is the one the caret is inside.
-    let (end, refers) = [note, anchor, file]
+    let (end, refers) = [note, anchor, file, cite]
         .into_iter()
         .flatten()
         .max_by_key(|&(end, _)| end)?;
@@ -473,11 +572,24 @@ fn trigger(before: &[char]) -> Option<(Refers, String)> {
     let broken = typed.chars().any(|c| {
         matches!(c, '[' | ']' | '(' | ')' | '#' | '^')
             || (c.is_whitespace() && refers != Refers::File)
+            || (c == '@' && refers == Refers::Cite)
     });
     match broken {
         true => None,
         false => Some((refers, typed)),
     }
+}
+
+/// **Typst's `@`**: the last one before the caret that starts a word, and the
+/// key typed since it. `a@b.com` is an address, not a reference.
+fn typst_trigger(before: &[char]) -> Option<(Refers, String)> {
+    let at = before.iter().rposition(|&c| c == '@')?;
+    if at > 0 && (before[at - 1].is_alphanumeric() || matches!(before[at - 1], '.' | '_' | '-')) {
+        return None;
+    }
+    let typed: String = before[at + 1..].iter().collect();
+    let key = |c: char| c.is_alphanumeric() || matches!(c, '-' | '_' | ':' | '.');
+    typed.chars().all(key).then_some((Refers::Label, typed))
 }
 
 /// Where the last `pattern` in `text` ends, if it is in there at all.
