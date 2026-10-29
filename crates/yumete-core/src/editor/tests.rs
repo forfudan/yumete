@@ -4529,6 +4529,8 @@ fn brackets_and_quotes_close_themselves() {
     assert_eq!(run("", basic, "「"), "「|");
     assert_eq!(run("", AutoPairs::Full, "「"), "「|」");
     assert_eq!(run("", AutoPairs::Full, "「話」"), "「話」|");
+    assert_eq!(run("", AutoPairs::Full, "<"), "<|", "`a < b` is not a pair");
+    assert_eq!(run("", AutoPairs::Full, "《"), "《|》");
     assert_eq!(run("", AutoPairs::Off, "("), "(|");
 
     // Not before a letter, a digit or 漢字.
