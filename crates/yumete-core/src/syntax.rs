@@ -230,6 +230,14 @@ mod tests {
         // The ones that say nothing are what the sniffing is for.
         assert_eq!(from_extension("ch01.txt"), None);
         assert_eq!(from_extension("ch01"), None);
+        // The four grammars of 2026-10-29: `.cpp` used to be sniffed, and a
+        // `#include` line read as Typst.
+        use crate::code::Language;
+        assert_eq!(from_extension("main.cpp"), Some(Syntax::Code(Language::Cpp)));
+        assert_eq!(from_extension("app.ts"), Some(Syntax::Code(Language::TypeScript)));
+        assert_eq!(from_extension("view.tsx"), Some(Syntax::Code(Language::Tsx)));
+        assert_eq!(from_extension(".zshrc"), Some(Syntax::Code(Language::Bash)));
+        assert_eq!(from_extension("init.lua"), Some(Syntax::Code(Language::Lua)));
     }
 
     #[test]
