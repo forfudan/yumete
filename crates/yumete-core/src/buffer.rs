@@ -1695,7 +1695,7 @@ fn dominant_ending(rope: &Rope) -> &'static str {
     // Warning: **走塊裏的位元組，別走 `rope.chars()`**（2026-10-13）。答案逐字相同
     // ——換行和回車都是 ASCII，不會是別的字的一截——而每一個字過一次樹是貴的：量
     // 過，3.91 GB 的檔上 5.34 秒對 0.96 秒。開一個檔走兩趟這種掃描（這一支和
-    // `han_in_rope`），佔了 17 秒裏的十秒。
+    // `units_in_rope`），佔了 17 秒裏的十秒。
     for chunk in rope.chunks() {
         for &b in chunk.as_bytes() {
             if b == b'\n' {

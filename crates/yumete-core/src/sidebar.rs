@@ -325,6 +325,9 @@ pub struct Row {
     /// 重一檔說「改的是這幾個字」。從前邊欄只有前一半，而浮窗兩半都有——同一
     /// 份 diff 在兩處不一樣，正是作者 2026-10-16 報來的那一條。
     pub marks: Vec<std::ops::Range<usize>>,
+    /// **A quiet figure at the right edge** (2026-10-29): the 大綱 writes each
+    /// heading's count there, the way a table of contents writes a page.
+    pub aside: Option<String>,
 }
 
 /// 一行底下鋪哪一種淡底。
@@ -699,6 +702,7 @@ impl Sidebar {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: None,
             });
             if expanded {
                 self.push_dir(&path, depth + 1);
@@ -714,6 +718,7 @@ impl Sidebar {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: None,
             });
         }
     }
@@ -816,6 +821,7 @@ mod tests {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: None,
             },
             Row {
                 path: PathBuf::new(),
@@ -826,6 +832,7 @@ mod tests {
                 wash: None,
                 quiet: false,
                 marks: Vec::new(),
+                aside: None,
             },
         ]);
         sidebar.step(true);

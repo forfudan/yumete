@@ -14,9 +14,12 @@ in `docs/development.md` §5.2.
 - **`:h`** opens the help, as in vim.
 - **vim's `gq`** fills lines to 79 columns (`gqip`, `gqq`, `gq` on a visual selection): paragraphs stay apart, comment leaders and quote marks are written again on every line, list items hang, and Chinese is never cut.
 - **`:reflow [width]`**, helix's: each selection refilled to the width, 80 by default.
+- **A live count on the status line**, after the position: the file's, and the selection's beside it when there is one. It shows in text files by default (`[editor] status_count = "text" | "all" | "off"`, settings panel: Marks) and is the first thing to give way on a narrow window.
+- **The outline sidebar counts each heading**, its sections included, at the right edge.
 
 ### Changed
 
+- **Counting follows Word's rule**: a 漢字 is one and a Latin word is one. `:count`, the daily target and `:count-progress` used to count 漢字 only, so English read 0; Chinese counts are unchanged. `:count` reports the new count first.
 - **`.` under the helix keymap is helix's `.`**: it types the last insert again (the key that went into insert mode and what was typed) and no longer repeats a `d`, an `r` or a paste. The vim keymap keeps vim's `.`, which repeats any change.
 - **Enter between an empty pair opens it onto three lines**, as helix does, with the closer on the line below; it used to ride down stuck to the caret.
 - **`o` in a code file indents after an opener** (`fn f() {`, `def f():`), as Enter already did.

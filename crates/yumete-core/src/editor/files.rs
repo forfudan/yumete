@@ -22,6 +22,40 @@ impl Editor {
     ///
     /// Ruby markup is not writing: `<ruby>永和<rt>えいわ</rt></ruby>` is two 字
     /// and two 字符, not the twenty-odd characters the tags take on disk.
+    /// **The live count**: the selection's, when one was made, and the whole
+    /// buffer's, by Word's rule ([`crate::units`]). `None` for a buffer past
+    /// [`super::edits::BIGGEST_TO_LOG`], which is a corpus rather than a chapter and would
+    /// cost a recount on every key.
+    pub fn live_count(&self) -> Option<(Option<usize>, usize)> {
+        let buffer = self.current_buffer();
+        let rope = buffer.rope();
+        if rope.len_bytes() > super::edits::BIGGEST_TO_LOG {
+            return None;
+        }
+        let (id, revision) = (buffer.id(), buffer.revision());
+        let mut cache = self.count_cache.borrow_mut();
+        let whole = match cache.0 {
+            Some((i, r, n)) if i == id && r == revision => n,
+            _ => {
+                let n = self.units_in_rope(rope);
+                cache.0 = Some((id, revision, n));
+                n
+            }
+        };
+        let picked = (self.span().0 != self.span().1).then(|| {
+            let (start, end) = self.selection();
+            match cache.1 {
+                Some((i, r, s, e, n)) if (i, r, s, e) == (id, revision, start, end) => n,
+                _ => {
+                    let n = self.units_in_text(&rope.slice(start..end).to_string());
+                    cache.1 = Some((id, revision, start, end, n));
+                    n
+                }
+            }
+        });
+        Some((picked, whole))
+    }
+
     pub(super) fn count_report(&self) -> String {
         let rope = self.current_buffer().rope();
         let (start, end) = self.selection();
@@ -34,7 +68,7 @@ impl Editor {
             (rope.to_string(), say!("count.whole-file"))
         };
         let (han, chars, paragraphs) = self.counts_of(&text);
-        say!("count.report", what, han, chars, paragraphs)
+        say!("count.report", what, self.units_in_text(&text), han, chars, paragraphs)
     }
 
     /// **`:info`：這份檔案是什麼**（2026-10-08 定）。
@@ -149,34 +183,30 @@ impl Editor {
         out
     }
 
-    /// **一行裏的 字** — the publisher's count, ruby markup reduced to its base.
+    /// **一行裏的 字** — the publisher's count, ruby markup reduced to its base,
+    /// counted by Word's rule ([`crate::units`]).
     ///
     /// The same rule [`Editor::count_report`] answers with, so 進度 and `:count`
-    /// can never disagree about how long a chapter is.
-    fn han_in_line(&self, line: &str) -> usize {
+    /// can never disagree about how long a chapter is. `n` carries a word that
+    /// runs on from the line's last piece into the next.
+    pub(super) fn units_in_line(&self, line: &str, n: &mut crate::units::Units) {
         let dialects = self.ruby;
         // 這一行裏不可能有注音組的話，走和「沒有方言」一樣的那一趟（見
-        // [`crate::ruby::might_be_in`]）。
-        if !crate::ruby::might_be_in(line, dialects) {
-            return line.chars().filter(|&c| is_han(c)).count();
-        }
-        // 没有注音方言就没有標記要還原——一趟掃過去，一個字節都不用抄。
-        if dialects.is_empty() {
-            return line.chars().filter(|&c| is_han(c)).count();
+        // [`crate::ruby::might_be_in`]）。没有注音方言就没有標記要還原。
+        if dialects.is_empty() || !crate::ruby::might_be_in(line, dialects) {
+            return n.feed(line);
         }
         let chars: Vec<char> = line.chars().collect();
-        let han = |slice: &[char]| slice.iter().filter(|&&c| is_han(c)).count();
-        let mut n = 0;
         let mut at = 0;
         for group in crate::ruby::groups(&chars, dialects) {
-            n += han(&chars[at..group.start]);
+            chars[at..group.start].iter().for_each(|&c| n.feed_char(c));
             // The base as it reads, not as it is written: a Typst call
             // holds `\"` where the sentence has a quote (#332).
             let base: String = group.base_text(&chars).iter().collect();
-            n += group.dialect.unescape(&base).chars().filter(|&c| is_han(c)).count();
+            n.feed(&group.dialect.unescape(&base));
             at = group.end;
         }
-        n + han(&chars[at..])
+        chars[at..].iter().for_each(|&c| n.feed_char(c));
     }
 
     /// **一整份稿子有幾個字，不抄一份出來數**（#343，2026-10-01）。
@@ -185,7 +215,14 @@ impl Editor {
     /// 子於是每存一次先抄一份八 MB 的 `String`，`without_markup` 再抄一份
     /// `Vec<char>`（一個 `char` 四字節，三十二 MB）。這一支按行走，峯值是最長
     /// 那一行；没有注音方言的時候連行都不抄。
-    pub(super) fn han_in_rope(&self, rope: &ropey::Rope) -> usize {
+    /// The same count over a piece of text, a selection's.
+    fn units_in_text(&self, text: &str) -> usize {
+        let mut n = crate::units::Units::default();
+        text.split_inclusive('\n').for_each(|line| self.units_in_line(line, &mut n));
+        n.total()
+    }
+
+    pub(super) fn units_in_rope(&self, rope: &ropey::Rope) -> usize {
         // **先問一句「這份正文裏到底有沒有注音」**（2026-10-13）。出廠的 `ruby` 是
         // `Dialects::only(Html)`——**不是空的**——所以從前每一份稿子都走底下那一支：
         // 逐行 `to_string()` 再逐行 `Vec<char>`，412 萬行就是 824 萬次分配。量過，
@@ -194,7 +231,11 @@ impl Editor {
         //
         // Warning: **一塊一塊地數，別走 `rope.chars()`**：答案逐字相同，而每個字過一
         // 次樹要多付三倍（5.18 秒對 1.54 秒）。
-        let plain = || rope.chunks().map(|c| c.chars().filter(|&c| is_han(c)).count()).sum();
+        let plain = || {
+            let mut n = crate::units::Units::default();
+            rope.chunks().for_each(|c| n.feed(c));
+            n.total()
+        };
         if self.ruby.is_empty() {
             return plain();
         }
@@ -211,16 +252,16 @@ impl Editor {
         }
         // Warning: **一個緩衝重複用，別一行一個 `String`**。報上來那個檔 412 萬行，而
         // 整份裏只有**兩行**帶注音——真的要逐行拆的時候，貴的不是拆，是那 412 萬次
-        // 分配。`han_in_line` 自己也先問一句 `might_be_in`，所以其餘那 412 萬行走的
+        // 分配。`units_in_line` 自己也先問一句 `might_be_in`，所以其餘那 412 萬行走的
         // 是和「沒有方言」一樣的那一趟。
         let mut line = String::new();
-        (0..rope.len_lines())
-            .map(|i| {
-                line.clear();
-                line.extend(rope.line(i).chunks());
-                self.han_in_line(&line)
-            })
-            .sum()
+        let mut n = crate::units::Units::default();
+        for i in 0..rope.len_lines() {
+            line.clear();
+            line.extend(rope.line(i).chunks());
+            self.units_in_line(&line, &mut n);
+        }
+        n.total()
     }
 
     /// Today, as the writer's own calendar has it (Feature #244).
@@ -523,7 +564,7 @@ impl Editor {
         if !here.is_some_and(|p| p.starts_with(&book)) {
             return;
         }
-        let now = self.han_in_rope(self.current_buffer().rope());
+        let now = self.units_in_rope(self.current_buffer().rope());
         let opened = full
             .as_ref()
             .and_then(|p| self.opened_with.get(p).copied())
@@ -550,7 +591,7 @@ impl Editor {
             .path()
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned());
-        let here = self.han_in_rope(self.current_buffer().rope());
+        let here = self.units_in_rope(self.current_buffer().rope());
         let date = self.today();
         if let Some(name) = name {
             let full = self.current_buffer().path().map(Path::to_path_buf);
