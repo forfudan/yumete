@@ -4495,17 +4495,37 @@ fn indent_adds_and_removes_a_level() {
     assert_eq!(ed.current_buffer().text(), "一\n二");
 }
 
+/// helix's rule under the helix keymap: only a selection that is a number,
+/// whole, which then covers the new one (helix 25.07.1). vim's reaches ahead.
 #[test]
 fn control_a_and_x_step_the_number_under_the_cursor() {
+    let bump = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        press(&mut ed, "gg");
+        press(&mut ed, keys);
+        ed.on_key(Key::Ctrl('a'));
+        ed.current_buffer().text().to_string()
+    };
     let mut ed = typed("第 9 章");
+    press(&mut ed, "ggll");
     ed.on_key(Key::Ctrl('a'));
     assert_eq!(ed.current_buffer().text(), "第 10 章");
+    assert_eq!(ed.selection(), (2, 4), "the new number is selected");
     ed.on_key(Key::Ctrl('x'));
     assert_eq!(ed.current_buffer().text(), "第 9 章");
-    // Zero padding survives.
-    let mut ed = typed("v007");
+    assert_eq!(bump("ab 12 x", "lll"), "ab 22 x", "the selected digit alone");
+    assert_eq!(bump("ab 12 x", ""), "ab 12 x", "a letter is no number");
+    assert_eq!(bump("ab 12 x", "ww"), "ab 12 x", "nor is `12 `");
+    assert_eq!(bump("v007", "lvll"), "v008", "zero padding survives");
+    assert_eq!(bump("ab -5", "lllvl"), "ab -4");
+    assert_eq!(bump("ab 0x0f", "lllvlll"), "ab 0x10");
+    assert_eq!(bump("ab 0xFF", "lllvlll"), "ab 0x100");
+
+    let mut ed = typed("第 9 章");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    press(&mut ed, "gg");
     ed.on_key(Key::Ctrl('a'));
-    assert_eq!(ed.current_buffer().text(), "v008");
+    assert_eq!(ed.current_buffer().text(), "第 10 章", "vim reaches ahead");
 }
 
 #[test]
@@ -8787,8 +8807,8 @@ fn a_locked_buffer_refuses_every_way_in() {
         ("i甲", &[Key::Char('i'), Key::Char('甲')]),
         ("J", &[Key::Char('J')]),
         ("ms(", &[Key::Char('m'), Key::Char('s'), Key::Char('(')]),
-        ("Ctrl-A", &[Key::Ctrl('a')]),
-        ("Ctrl-X", &[Key::Ctrl('x')]),
+        ("Ctrl-A", &[Key::Char('4'), Key::Char('l'), Key::Ctrl('a')]),
+        ("Ctrl-X", &[Key::Char('4'), Key::Char('l'), Key::Ctrl('x')]),
     ];
     for (name, keys) in ways {
         let mut open = Editor::new();
@@ -17116,6 +17136,7 @@ fn a_binding_takes_an_action_name_or_a_command_or_keys() {
 #[test]
 fn an_action_bound_to_a_chord_is_really_pressed() {
     let mut ed = typed("第 7 章");
+    press(&mut ed, "ggll");
     let mut aliases = std::collections::HashMap::new();
     aliases.insert("q".to_string(), "increment".to_string());
     aliases.insert("Q".to_string(), "decrement".to_string());
@@ -17739,11 +17760,16 @@ fn the_session_brings_back_how_the_page_looked() {
     assert_eq!(ed.restore_session(), 1);
     assert!(ed.focus());
     assert_eq!(ed.pages_vertical(), 3);
+    assert!(ed.take_theme_replayed(), "answered without a word over the resume's");
     assert_eq!(
         ed.take_theme_request(),
         Some((Some("heibai".to_string()), Some(crate::command::Mood::Light))),
         "one request, the name and the mood"
     );
+
+    // `:theme` typed is answered aloud.
+    ed.execute(":theme heibai").unwrap();
+    assert!(!ed.take_theme_replayed());
 
     // Nothing differs from the config any more: the view file goes.
     let mut ed = fresh(&dir);
@@ -31290,10 +31316,13 @@ fn several_cursors_after_the_review() {
     press(&mut ed, "J");
     assert_eq!(text(&ed), "aa bb cc\ndd\nee\n");
 
-    // `C-a` with two cursors that reach one number bumps it once.
+    // `C-a` with two cursors that reach one number bumps it once (vim's
+    // rule; helix's only takes a selection that is the number).
     let mut ed = typed("k k 9\n");
     press(&mut ed, "xsk");
     ed.on_key(Key::Enter);
+    ed.set_key_preset(KeyPreset::Vim);
+    assert_eq!(ed.sel.len(), 2);
     ed.on_key(Key::Ctrl('a'));
     assert_eq!(text(&ed), "k k 10\n");
 
@@ -31353,6 +31382,10 @@ fn the_m_group_after_the_review() {
     assert_eq!(run("[[a][b]]\n", "2md[", 5), "[a][b]\n", "out to the holder, not the sibling");
     assert_eq!(run("[(a)(b)]\n", "2mdm", 5), "(a)(b)\n");
     assert_eq!(run("（a (b) c）\n", "2md(", 4), "a (b) c\n", "a count crosses the family");
+    // The selection goes through `md`, as helix 25.07.1 keeps it.
+    assert_eq!(run("a (bcd) e\n", "vlmd(cQ", 3), "a Qd e\n");
+    assert_eq!(run("a (bcd) e\n", "md(cQ", 3), "a Qcd e\n");
+    assert_eq!(run("a (*bcd*) e\n", "vlmd*cQ", 4), "a (Qd) e\n");
 }
 
 /// **Completion after the review** (2026-10-29).

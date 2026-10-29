@@ -624,6 +624,7 @@ impl Editor {
         if theme.0.is_some() || theme.1.is_some() {
             self.theme_request = Some(theme);
         }
+        self.theme_replayed = self.theme_request.is_some() || self.fill_request.is_some();
     }
 
     /// Open again what was open last time, each at the line it was left on.

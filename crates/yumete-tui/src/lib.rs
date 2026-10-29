@@ -599,6 +599,7 @@ pub fn run(
     crate::theme::settle_at_startup(config);
     // The theme a resumed session kept (2026-10-28) is a request left by the
     // replay, answered here before the first frame rather than at the first key.
+    editor.take_theme_replayed();
     if let Some((name, mood)) = editor.take_theme_request() {
         let _ = set_theme(config, name, mood);
     }
@@ -1811,15 +1812,21 @@ pub fn run(
                         Trial::Keep => was_themed = None,
                     }
                 }
+                let quiet = editor.take_theme_replayed();
                 if let Some((name, mood)) = editor.take_theme_request() {
-                    editor.set_status(set_theme(config, name, mood));
+                    let said = set_theme(config, name, mood);
+                    if !quiet {
+                        editor.set_status(said);
+                    }
                 }
                 if let Some(on) = editor.take_fill_request() {
                     let on = crate::theme::set_fill(on, config);
-                    editor.set_status(match on {
-                        true => say!("theme.fill-on"),
-                        false => say!("theme.fill-off"),
-                    });
+                    if !quiet {
+                        editor.set_status(match on {
+                            true => say!("theme.fill-on"),
+                            false => say!("theme.fill-off"),
+                        });
+                    }
                 }
                 if let Some(on) = editor.take_chaifen_request() {
                     let settled = ime.set_annotations(on);

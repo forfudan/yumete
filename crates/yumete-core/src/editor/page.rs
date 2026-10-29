@@ -2346,6 +2346,12 @@ impl Editor {
         self.theme_request.take()
     }
 
+    /// Whether the theme and fill requests standing came from a replayed
+    /// session, to be answered quietly; asked once, before taking them.
+    pub fn take_theme_replayed(&mut self) -> bool {
+        std::mem::take(&mut self.theme_replayed)
+    }
+
     /// Take a pending `:theme-fill` — `Some(None)` is 「the other one」.
     pub fn take_fill_request(&mut self) -> Option<crate::command::Switch> {
         self.fill_request.take()

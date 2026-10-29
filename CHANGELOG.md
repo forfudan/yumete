@@ -108,6 +108,8 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`C-a` and `C-x` follow helix under the helix keymap**: they change the selection only when it is a whole number (`12`, `-5`, `007`, `0x0f`), and the new number is then selected. With the cursor on the `1` of `12` you get `22`; on a letter nothing changes. The vim keymap keeps vim's rule, the number at or after the cursor.
+
 - **The signature stays up while you type the arguments**, as in helix: entering
   Insert inside a call shows it, each edit or caret move asks again after 120 ms so the
   highlighted parameter follows the caret, and it closes when the server says the caret
@@ -176,6 +178,8 @@ in `docs/development.md` §5.2.
   - Completing file names no longer reads the folder again on every frame.
 - **`:read`**: a CRLF file read into an LF one (or the other way) takes this file's line ending and leaves its byte-order mark behind; an empty file puts nothing in; the error names the file.
 - **Redo puts the cursors back where the change left them**, as helix's `U` does, instead of where they were when you pressed `u`; an undo after it puts them back where they were before the change.
+- **`md` keeps the selection**, moved past the pair it took off, as helix's does, instead of leaving one cursor.
+- **Sessions**: a theme or mood you chose that the config gives too is no longer kept, so a later change to the config is not overruled; `:resume` keeps saying how many files it reopened instead of the theme's name.
 - **Markdown links with a space in the path**: completion after `](` writes a space as `%20` and `%` as `%25`, as VS Code does, and `gL` opens `my%20notes.md` as `my notes.md`.
 - **Completion**:
   - A slash on its own (`//`, `</`, ` / `) no longer lists the root folder, and Tab after `//` no longer writes a path into the file. A folder typed in full offers its `/`.

@@ -249,7 +249,7 @@ impl Editor {
                             let rope = e.current_buffer().rope();
                             let here = match joins {
                                 true => Some(rope.char_to_line(e.selection().0.min(rope.len_chars()))),
-                                false => e.number_from(e.sel.head()).map(|(from, _)| from),
+                                false => e.number_to_bump(e.sel.anchor(), e.sel.head()).map(|(from, _)| from),
                             };
                             if here.and_then(|at| owners.get(&at)) != e.edit_nth.as_ref() {
                                 return;

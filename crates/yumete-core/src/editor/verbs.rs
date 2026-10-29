@@ -642,18 +642,51 @@ impl Editor {
         Some((line_start + start, line_start + end))
     }
 
-    /// Add `delta` to the number at or after the cursor on its line. vim's
-    /// rule, which reaches ahead; helix changes only a selection that is a
-    /// number.
+    /// **The number `C-a` and `C-x` change for one selection.** vim's rule
+    /// reaches ahead along the line from the cursor. helix's changes only a
+    /// selection that is a number, whole (2026-10-29, measured against helix
+    /// 25.07.1: the cursor on the `1` of `12` makes it `22`, a letter or
+    /// `12 ` with its space changes nothing).
+    pub(super) fn number_to_bump(&self, anchor: usize, head: usize) -> Option<(usize, usize)> {
+        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+            return self.number_from(head);
+        }
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let start = anchor.min(head).min(len);
+        let end = motion::next_grapheme(rope, anchor.max(head).min(len));
+        let text: String = rope.slice(start..end).to_string();
+        let digits = text.strip_prefix('-').unwrap_or(&text);
+        let hex = digits.strip_prefix("0x").or_else(|| digits.strip_prefix("0X"));
+        let whole = match hex {
+            Some(hex) => !text.starts_with('-') && !hex.is_empty() && hex.chars().all(|c| c.is_ascii_hexdigit()),
+            None => !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()),
+        };
+        whole.then_some((start, end))
+    }
+
+    /// Add `delta` to the number [`Self::number_to_bump`] finds. A `0x`
+    /// number stays hexadecimal, its width and the case of its letters kept.
     pub(super) fn bump_number(&mut self, delta: i64) {
         if self.refuse_readonly() {
             return;
         }
-        let Some((from, to)) = self.number_from(self.sel.head()) else { return };
+        let Some((from, to)) = self.number_to_bump(self.sel.anchor(), self.sel.head()) else { return };
         let rope = self.current_buffer().rope();
         let line_start = rope.line_to_char(rope.char_to_line(from));
         let (start, end) = (from - line_start, to - line_start);
         let digits: String = rope.slice(from..to).to_string();
+        if let Some(hex) = digits.get(2..).filter(|_| digits[..2].eq_ignore_ascii_case("0x")) {
+            let Ok(value) = i64::from_str_radix(hex, 16) else { return };
+            let next = value.saturating_add(delta).max(0);
+            let width = hex.len();
+            let text = match hex.chars().any(|c| c.is_ascii_uppercase()) {
+                true => format!("{}{next:0width$X}", &digits[..2]),
+                false => format!("{}{next:0width$x}", &digits[..2]),
+            };
+            self.put_the_bumped(line_start + start, line_start + end, &text);
+            return;
+        }
         let Ok(value) = digits.parse::<i64>() else {
             return;
         };
@@ -671,15 +704,22 @@ impl Editor {
             next.to_string()
         };
 
+        self.put_the_bumped(line_start + start, line_start + end, &text);
+    }
+
+    /// Write the changed number over `from..to`. vim's cursor goes to its
+    /// start; helix's selection covers the new number.
+    fn put_the_bumped(&mut self, from: usize, to: usize, text: &str) {
         self.snapshot();
-        let done = self
-            .current_buffer_mut()
-            .replace(line_start + start..line_start + end, &text);
+        let done = self.current_buffer_mut().replace(from..to, text);
         if !self.applied(done) {
             return;
         }
-        self.sel.set_head(line_start + start);
-        self.sel.set_anchor(self.sel.head());
+        self.sel.set_anchor(from);
+        match self.key_preset == yumete_cjk::KeyPreset::Vim {
+            true => self.sel.set_head(from),
+            false => self.sel.set_head(from + text.chars().count() - 1),
+        }
         self.clamp_cursor();
     }
 }
