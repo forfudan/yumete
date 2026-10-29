@@ -35,7 +35,8 @@ pub enum AutoPairs {
     #[default]
     Basic,
     /// Every pair the `m` group knows, but the vertical presentation forms,
-    /// which nobody types.
+    /// which nobody types, and `< >`: in code `a < b` would come out
+    /// `a <> b` (2026-10-29, the reason helix's list leaves it out too).
     Full,
 }
 
@@ -64,7 +65,7 @@ impl AutoPairs {
 
     /// The pair `c` opens or closes at this level.
     fn pair_of(self, c: char) -> Option<(char, char)> {
-        let vertical = |c: char| ('\u{FE10}'..='\u{FE4F}').contains(&c);
+        let left_out = |c: char| c == '<' || ('\u{FE10}'..='\u{FE4F}').contains(&c);
         let table: &[(char, char)] = match self {
             AutoPairs::Off => return None,
             AutoPairs::Basic => BASIC,
@@ -72,7 +73,7 @@ impl AutoPairs {
         };
         table
             .iter()
-            .find(|&&(open, close)| (open == c || close == c) && !vertical(open))
+            .find(|&&(open, close)| (open == c || close == c) && !left_out(open))
             .copied()
     }
 }
