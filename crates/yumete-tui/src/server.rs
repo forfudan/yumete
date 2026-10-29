@@ -644,8 +644,13 @@ impl Servers {
             let message = match server.open.contains(&path) {
                 false => {
                     server.open.insert(path.clone());
-                    // LSP's word for plain text is `plaintext`.
-                    let id = if language == "text" { "plaintext" } else { language };
+                    // LSP's own words where they differ from ours: plain text is
+                    // `plaintext`, TSX is `typescriptreact` (helix's language-id).
+                    let id = match language {
+                        "text" => "plaintext",
+                        "tsx" => "typescriptreact",
+                        other => other,
+                    };
                     lsp::did_open(&path, id, server.version, &text)
                 }
                 true => lsp::did_change(&path, server.version, &text),

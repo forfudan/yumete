@@ -68,7 +68,11 @@ pub enum Token {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Language {
     C,
+    /// C++ (2026-10-29).
+    Cpp,
     Ada,
+    /// Shell scripts: bash, sh, zsh (2026-10-29).
+    Bash,
     Css,
     /// GAS（`.s`）——與 [`Language::Nasm`] 共用一套通用匯編語法，分家分的是註釋記號。
     Gas,
@@ -77,6 +81,8 @@ pub enum Language {
     Java,
     JavaScript,
     Json,
+    /// Lua (2026-10-29).
+    Lua,
     /// Mojo（`.mojo` `.🔥`）——語法是這個倉作者自己寫的，見
     /// <https://github.com/forfudan/tree-sitter-mojo>。
     Mojo,
@@ -87,14 +93,19 @@ pub enum Language {
     R,
     Rust,
     Toml,
+    /// TypeScript, and TSX, which is TypeScript with JSX in it (2026-10-29).
+    Tsx,
+    TypeScript,
     Yaml,
 }
 
 impl Language {
     /// Every language, for `:view-code`'s report and the tests.
-    pub const ALL: [Language; 17] = [
+    pub const ALL: [Language; 22] = [
         Language::Ada,
+        Language::Bash,
         Language::C,
+        Language::Cpp,
         Language::Css,
         Language::Gas,
         Language::Go,
@@ -102,6 +113,7 @@ impl Language {
         Language::Java,
         Language::JavaScript,
         Language::Json,
+        Language::Lua,
         Language::Mojo,
         Language::Nasm,
         Language::Pascal,
@@ -109,6 +121,8 @@ impl Language {
         Language::R,
         Language::Rust,
         Language::Toml,
+        Language::Tsx,
+        Language::TypeScript,
         Language::Yaml,
     ];
 
@@ -126,7 +140,9 @@ impl Language {
         Some(match word.as_str() {
             "ada" => Language::Ada,
             "asm" | "nasm" => Language::Nasm,
+            "bash" | "sh" | "shell" | "zsh" | "ksh" => Language::Bash,
             "c" => Language::C,
+            "cpp" | "c++" | "cxx" | "cc" | "hpp" => Language::Cpp,
             "css" => Language::Css,
             "gas" => Language::Gas,
             "go" | "golang" => Language::Go,
@@ -134,12 +150,15 @@ impl Language {
             "java" | "jav" => Language::Java,
             "javascript" | "js" | "mjs" | "cjs" | "jsx" | "node" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
+            "lua" => Language::Lua,
             "mojo" => Language::Mojo,
             "pascal" | "delphi" | "pas" => Language::Pascal,
             "python" | "py" | "python3" | "py3" => Language::Python,
             "r" => Language::R,
             "rust" | "rs" => Language::Rust,
             "toml" => Language::Toml,
+            "typescript" | "ts" => Language::TypeScript,
+            "tsx" => Language::Tsx,
             "yaml" | "yml" => Language::Yaml,
             _ => return None,
         })
@@ -169,12 +188,19 @@ impl Language {
             // `class` 那幾個詞判不對。代價說明白了還是比「一個顏色都没有」好——而
             // `.cpp`／`.ts` 老實地一個都不認（没帶那兩種語法）。
             "c" | "h" => Language::C,
+            // helix's list, less the ones C or another tool has first.
+            "cc" | "hh" | "c++" | "cpp" | "hpp" | "ipp" | "tpp" | "cxx" | "hxx" | "ixx" | "txx"
+            | "ino" | "cu" | "cuh" | "cppm" | "h++" | "ii" | "inl" => Language::Cpp,
+            "sh" | "bash" | "ash" | "dash" | "ksh" | "mksh" | "zsh" | "zshenv" | "zlogin"
+            | "zlogout" | "zprofile" | "zshrc" | "eclass" | "ebuild" | "bazelrc" | "bashrc"
+            | "bash_profile" | "bash_login" | "bash_logout" => Language::Bash,
             "css" => Language::Css,
             "go" => Language::Go,
             "html" | "htm" | "xhtml" => Language::Html,
             "java" | "jav" | "pde" => Language::Java,
             "js" | "mjs" | "cjs" | "jsx" => Language::JavaScript,
             "json" | "jsonc" | "json5" | "geojson" => Language::Json,
+            "lua" | "rockspec" => Language::Lua,
             // **第二個是真的副檔名**：Mojo 收 `.mojo` 和 `.🔥`（上游自己這麼定的）。
             "mojo" | "🔥" => Language::Mojo,
             "pas" | "pp" | "dpr" | "dpk" | "lpr" => Language::Pascal,
@@ -182,6 +208,8 @@ impl Language {
             "r" => Language::R,
             "rs" => Language::Rust,
             "toml" => Language::Toml,
+            "ts" | "mts" | "cts" => Language::TypeScript,
+            "tsx" => Language::Tsx,
             "yaml" | "yml" => Language::Yaml,
             _ => return None,
         })
@@ -191,7 +219,9 @@ impl Language {
     pub fn name(self) -> &'static str {
         match self {
             Language::Ada => "ada",
+            Language::Bash => "bash",
             Language::C => "c",
+            Language::Cpp => "cpp",
             Language::Css => "css",
             Language::Gas => "gas",
             Language::Go => "go",
@@ -199,6 +229,7 @@ impl Language {
             Language::Java => "java",
             Language::JavaScript => "javascript",
             Language::Json => "json",
+            Language::Lua => "lua",
             Language::Mojo => "mojo",
             Language::Nasm => "nasm",
             Language::Pascal => "pascal",
@@ -206,6 +237,8 @@ impl Language {
             Language::R => "r",
             Language::Rust => "rust",
             Language::Toml => "toml",
+            Language::Tsx => "tsx",
+            Language::TypeScript => "typescript",
             Language::Yaml => "yaml",
         }
     }
@@ -213,7 +246,9 @@ impl Language {
     fn grammar(self) -> tree_sitter::Language {
         match self {
             Language::Ada => tree_sitter_ada::LANGUAGE.into(),
+            Language::Bash => tree_sitter_bash::LANGUAGE.into(),
             Language::C => tree_sitter_c::LANGUAGE.into(),
+            Language::Cpp => tree_sitter_cpp::LANGUAGE.into(),
             Language::Css => tree_sitter_css::LANGUAGE.into(),
             // **一套語法兩門語言**：`tree-sitter-asm` 是通用匯編語法，三種行
             // 註釋（`#` `//` `;`）全認；分成 GAS 與 NASM 是為了 `空格 c` 寫得出
@@ -224,12 +259,15 @@ impl Language {
             Language::Java => tree_sitter_java::LANGUAGE.into(),
             Language::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
             Language::Json => tree_sitter_json::LANGUAGE.into(),
+            Language::Lua => tree_sitter_lua::LANGUAGE.into(),
             Language::Mojo => tree_sitter_mojo::LANGUAGE.into(),
             Language::Python => tree_sitter_python::LANGUAGE.into(),
             Language::Pascal => tree_sitter_pascal::LANGUAGE.into(),
             Language::R => tree_sitter_r::LANGUAGE.into(),
             Language::Rust => tree_sitter_rust::LANGUAGE.into(),
             Language::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
+            Language::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            Language::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
             Language::Yaml => tree_sitter_yaml::LANGUAGE.into(),
         }
     }
@@ -401,6 +439,17 @@ impl Language {
 "#,
             // Warning: **C 那一個叫 `HIGHLIGHT_QUERY`**，單數——同一族 crate 兩種拼法。
             Language::C => tree_sitter_c::HIGHLIGHT_QUERY,
+            // **Written to sit on top of another's** (2026-10-29): C++'s
+            // queries extend C's and TypeScript's extend JavaScript's, as the
+            // grammars' own READMEs say — so each is read with its base.
+            Language::Cpp => inherited(&CPP, tree_sitter_c::HIGHLIGHT_QUERY, tree_sitter_cpp::HIGHLIGHT_QUERY),
+            Language::TypeScript | Language::Tsx => inherited(
+                &TYPESCRIPT,
+                tree_sitter_javascript::HIGHLIGHT_QUERY,
+                tree_sitter_typescript::HIGHLIGHTS_QUERY,
+            ),
+            Language::Bash => tree_sitter_bash::HIGHLIGHT_QUERY,
+            Language::Lua => tree_sitter_lua::HIGHLIGHTS_QUERY,
             Language::Css => tree_sitter_css::HIGHLIGHTS_QUERY,
             Language::Gas | Language::Nasm => tree_sitter_asm::HIGHLIGHTS_QUERY,
             Language::Go => tree_sitter_go::HIGHLIGHTS_QUERY,
@@ -432,6 +481,9 @@ impl Language {
     fn tags(self) -> Option<&'static str> {
         Some(match self {
             Language::C => tree_sitter_c::TAGS_QUERY,
+            Language::Cpp => tree_sitter_cpp::TAGS_QUERY,
+            Language::TypeScript | Language::Tsx => tree_sitter_typescript::TAGS_QUERY,
+            Language::Lua => tree_sitter_lua::TAGS_QUERY,
             Language::Go => tree_sitter_go::TAGS_QUERY,
             Language::Java => tree_sitter_java::TAGS_QUERY,
             Language::JavaScript => tree_sitter_javascript::TAGS_QUERY,
@@ -452,7 +504,8 @@ impl Language {
             | Language::Nasm
             // 這兩門的 crate 同樣没把 `tags.scm` 導出來。
             | Language::Ada
-            | Language::Pascal => return None,
+            | Language::Pascal
+            | Language::Bash => return None,
         })
     }
 
@@ -518,9 +571,24 @@ impl Language {
                  (object (pair) @entry)
 "
             }
-            Language::C => {
+            Language::C | Language::Cpp => {
                 "(parameter_list (_) @parameter)
                  (comment) @comment
+"
+            }
+            Language::TypeScript | Language::Tsx => {
+                "(formal_parameters (_) @parameter)
+                 (comment) @comment
+                 ((call_expression function: (identifier) @_name) @test
+                  (#match? @_name \"^(it|test|describe)$\"))
+                 (object (pair) @entry)
+"
+            }
+            Language::Bash => "(comment) @comment\n",
+            Language::Lua => {
+                "(parameters (_) @parameter)
+                 (comment) @comment
+                 (table_constructor (field) @entry)
 "
             }
             Language::Java => {
@@ -578,7 +646,7 @@ impl Language {
 
     /// 編好的那份，連着每一格捕獲算哪一種對象。
     fn object_query(self) -> Option<&'static Objects> {
-        static CELLS: [OnceLock<Option<Objects>>; 17] = [const { OnceLock::new() }; 17];
+        static CELLS: [OnceLock<Option<Objects>>; 22] = [const { OnceLock::new() }; 22];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -602,7 +670,7 @@ impl Language {
 
     /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
     fn defines(self) -> Option<&'static Defines> {
-        static CELLS: [OnceLock<Option<Defines>>; 17] = [const { OnceLock::new() }; 17];
+        static CELLS: [OnceLock<Option<Defines>>; 22] = [const { OnceLock::new() }; 22];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -685,6 +753,35 @@ impl Language {
                     (declaration_list)] @indent
                    ["}" "]" ")"] @outdent"#
             }
+            // C++ is C's list and its own templates and classes.
+            Language::Cpp => {
+                r#"[(compound_statement) (field_declaration_list) (enumerator_list)
+                    (initializer_list) (argument_list) (parameter_list)
+                    (declaration_list) (template_argument_list)
+                    (template_parameter_list)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            // TypeScript is JavaScript's list and its types.
+            Language::TypeScript | Language::Tsx => {
+                r#"[(statement_block) (arguments) (formal_parameters) (object)
+                    (array) (class_body) (switch_body) (parenthesized_expression)
+                    (interface_body) (object_type) (enum_body) (type_arguments)
+                    (type_parameters)] @indent
+                   ["}" "]" ")"] @outdent"#
+            }
+            // A shell block ends on a word: `fi`, `done`, `esac`.
+            Language::Bash => {
+                r#"[(compound_statement) (do_group) (if_statement) (case_statement)
+                    (case_item) (subshell) (array)] @indent
+                   ["}" ")" "done" "fi" "esac" "else" "elif"] @outdent"#
+            }
+            // Lua's too: `end`, and `until` for a `repeat`.
+            Language::Lua => {
+                r#"[(function_declaration) (function_definition) (if_statement)
+                    (for_statement) (while_statement) (repeat_statement)
+                    (do_statement) (table_constructor) (arguments) (parameters)] @indent
+                   ["end" "}" ")" "until" "else" "elseif"] @outdent"#
+            }
             // R 只有三處：`{}`、呼叫的實參、函數的形參。
             Language::R => {
                 r#"[(braced_expression) (arguments) (parameters)] @indent
@@ -711,7 +808,7 @@ impl Language {
 
     /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
     fn indent_query(self) -> Option<&'static Query> {
-        static CELLS: [OnceLock<Option<Query>>; 17] = [const { OnceLock::new() }; 17];
+        static CELLS: [OnceLock<Option<Query>>; 22] = [const { OnceLock::new() }; 22];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         let text = self.indents();
         if text.is_empty() {
@@ -721,7 +818,7 @@ impl Language {
     }
 
     fn query(self) -> Option<&'static Compiled> {
-        static CELLS: [OnceLock<Option<Compiled>>; 17] = [const { OnceLock::new() }; 17];
+        static CELLS: [OnceLock<Option<Compiled>>; 22] = [const { OnceLock::new() }; 22];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -1207,6 +1304,16 @@ fn span(start: usize, end: usize, token: Token) -> Span {
     }
 }
 
+/// The C++ and TypeScript highlight queries, each read on top of the one it
+/// extends (see [`Language::highlights`]).
+static CPP: OnceLock<String> = OnceLock::new();
+static TYPESCRIPT: OnceLock<String> = OnceLock::new();
+
+/// `base` and then `own`, joined once and kept.
+fn inherited(cell: &'static OnceLock<String>, base: &str, own: &str) -> &'static str {
+    cell.get_or_init(|| format!("{base}\n{own}")).as_str()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1375,6 +1482,11 @@ mod tests {
             (Language::Rust, "fn f() {\n    g(\n    );\n}\n", "g("),
             (Language::JavaScript, "function f() {\n  g(\n  )\n}\n", "g("),
             (Language::Python, "def f():\n    g(\n    )\n", "g("),
+            (Language::Cpp, "template <class T> void f() {\n    g(\n    );\n}\n", "g("),
+            (Language::TypeScript, "function f(): void {\n  g(\n  )\n}\n", "g("),
+            (Language::Tsx, "function f() {\n  g(\n  )\n}\n", "g("),
+            (Language::Bash, "if true; then\n  echo\nfi\n", "then"),
+            (Language::Lua, "function f()\n  g(\n  )\nend\n", "g("),
         ];
         for (language, source, after) in cases {
             assert!(language.indent_query().is_some(), "{} 的查詢編得起來", language.name());
@@ -1462,6 +1574,11 @@ mod tests {
             // 「這個 build 認不出來」的例子——現在換成一種真的認不出來的。
             ("rust", Some(Language::Rust)),
             ("rs", Some(Language::Rust)),
+            ("ts", Some(Language::TypeScript)),
+            ("tsx", Some(Language::Tsx)),
+            ("c++", Some(Language::Cpp)),
+            ("sh", Some(Language::Bash)),
+            ("lua", Some(Language::Lua)),
             ("golang", Some(Language::Go)),
             ("haskell", None),
             ("", None),

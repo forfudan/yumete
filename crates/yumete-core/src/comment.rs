@@ -48,10 +48,15 @@ pub fn marks(syntax: Syntax) -> Marks {
                 | Language::Mojo => Marks { line: Some("#"), block: None },
                 // C 那一族的兩種註釋：`//` 與 `/* */`。
                 Language::JavaScript
+                | Language::TypeScript
+                | Language::Tsx
                 | Language::Go
                 | Language::Rust
                 | Language::C
+                | Language::Cpp
                 | Language::Java => Marks { line: Some("//"), block: Some(("/*", "*/")) },
+                Language::Bash => Marks { line: Some("#"), block: None },
+                Language::Lua => Marks { line: Some("--"), block: Some(("--[[", "]]")) },
                 Language::Css => Marks { line: None, block: Some(("/*", "*/")) },
                 // **匯編分兩門，分家分的就是這一格**（見 `code::Language::Gas`）。
                 // GAS 裏 `;` 是語句分隔符，NASM 裏 `#` 是錯——寫錯一邊真的編不過。
