@@ -1035,6 +1035,7 @@ impl Editor {
         self.signature_doc_query = None;
         self.completion_query = None;
         self.completion_at = None;
+        self.completion_sent = None;
     }
 
     /// Let go of everything derived from **the text**, the document staying the

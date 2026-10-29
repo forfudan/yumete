@@ -25149,11 +25149,12 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
     assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("!echo b"));
     assert_eq!(ed.prompt_drawn(), "echo b");
 
-    // C-p walks shell lines only.
+    // C-p walks shell lines only, keeping the verb it started on (2026-10-29,
+    // helix's shared shell register): `pipe-after echo b` comes back as `!echo b`.
     ed.on_key(Key::Ctrl('u'));
     press(&mut ed, "!");
     ed.on_key(Key::Ctrl('p'));
-    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("pipe-after echo b"));
+    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("!echo b"));
     ed.on_key(Key::Ctrl('p'));
     assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("!echo a"));
     ed.on_key(Key::Ctrl('p'));
@@ -25166,9 +25167,14 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
     assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("view-focus off"));
     ed.on_key(Key::Esc);
 
-    // `!` is the previous `:!` command, `\!` a `!` of its own.
-    assert_eq!(run(&mut ed, "!!"), Some("echo a".to_string()));
-    assert_eq!(run(&mut ed, "!! | wc"), Some("echo a | wc".to_string()));
+    // `!` is the previous shell command, whichever verb ran it (2026-10-29),
+    // `\!` a `!` of its own.
+    assert_eq!(run(&mut ed, "!!"), Some("echo b".to_string()));
+    assert_eq!(run(&mut ed, "!! | wc"), Some("echo b | wc".to_string()));
+    // The ghost is the command as it ran, not as typed.
+    press(&mut ed, ":!");
+    assert_eq!(ed.prompt_ghost(), "echo b | wc");
+    ed.on_key(Key::Esc);
     assert_eq!(run(&mut ed, "!echo hi\\!"), Some("echo hi!".to_string()));
     let mut fresh = typed("x\n");
     assert_eq!(run(&mut fresh, "!!"), None);
@@ -31285,4 +31291,125 @@ fn the_m_group_after_the_review() {
     assert_eq!(run("[[a][b]]\n", "2md[", 5), "[a][b]\n", "out to the holder, not the sibling");
     assert_eq!(run("[(a)(b)]\n", "2mdm", 5), "(a)(b)\n");
     assert_eq!(run("（a (b) c）\n", "2md(", 4), "a (b) c\n", "a count crosses the family");
+}
+
+/// **Completion after the review** (2026-10-29).
+#[test]
+fn completion_after_the_review() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let offer = |label: &str| crate::lsp::Offer {
+        label: label.into(),
+        insert: label.into(),
+        kind: 3,
+        detail: None,
+        filter: None,
+        replacing: None,
+    };
+    let dir = tmp().join(format!("yumete-complete-review-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    let rs = dir.join("a.rs");
+    std::fs::write(&rs, "\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&rs).unwrap();
+
+    // A slash alone is not a path; a name or `./` is.
+    press(&mut ed, "i");
+    press(&mut ed, "x //");
+    assert!(labels(&ed).is_empty(), "`//` lists nothing");
+    press(&mut ed, " ./s");
+    assert_eq!(labels(&ed), ["src/"]);
+    press(&mut ed, "rc");
+    assert_eq!(labels(&ed), ["src/"], "a folder typed in full still offers its slash");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+
+    // No range from the server: the typed word is replaced, not doubled.
+    press(&mut ed, "o");
+    press(&mut ed, "pri");
+    ed.take_completion_query();
+    ed.show_offers(vec![offer("print")], false);
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().contains("\nprint"), "{:?}", ed.current_buffer().text());
+    ed.on_key(Key::Esc);
+
+    // The answer belongs to the question sent, not to a newer one still waiting.
+    press(&mut ed, "o");
+    press(&mut ed, "s");
+    assert!(ed.take_completion_query().is_some(), "sent at `s`");
+    press(&mut ed, "e");
+    ed.show_offers(
+        vec![crate::lsp::Offer {
+            label: "self".into(),
+            insert: "self".into(),
+            kind: 14,
+            detail: None,
+            filter: None,
+            replacing: Some(crate::lsp::Replacing { line: 2, from: 0, to: 1 }),
+        }],
+        false,
+    );
+    ed.on_key(Key::Tab);
+    assert!(ed.current_buffer().text().ends_with("\nself\n"), "{:?}", ed.current_buffer().text());
+
+    // After Esc, an answer still on its way draws nothing.
+    press(&mut ed, "o");
+    press(&mut ed, "pr");
+    ed.take_completion_query();
+    ed.on_key(Key::Esc);
+    ed.show_offers(vec![offer("print")], false);
+    assert!(ed.offers_here().is_none(), "nothing over Normal mode");
+
+    // `<` asks for a signature, but an empty answer does not float `len`'s docs.
+    ed.set_signature_triggers(crate::code::Language::Rust.name(), vec!["(".into(), "<".into()]);
+    press(&mut ed, "o");
+    for c in "if v.len() <".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.take_signature_query().is_some());
+    ed.show_signature(None);
+    assert!(ed.take_signature_doc_query().is_none(), "no hover fallback after `<`");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// `ß` keeps its shape when the case typed is followed (vim's 'infercase').
+#[test]
+fn eszett_survives_the_case_typed() {
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.offers_here().map(|(items, _)| items.iter().map(|o| o.label.clone()).collect()).unwrap_or_default()
+    };
+    let mut ed = typed("Straßenbahn fährt\n");
+    press(&mut ed, "Go");
+    press(&mut ed, "STRA");
+    assert_eq!(labels(&ed), ["STRAßENBAHN"]);
+}
+
+/// **A shell line after the review** (2026-10-29): a file name with a space
+/// goes in quoted, and a quoted word is read back for the next Tab; a
+/// full-width space before the `!` hides the `!` and nothing more.
+#[test]
+fn a_shell_line_quotes_names_and_counts_characters() {
+    let dir = tmp().join(format!("yumete-shell-quote-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("my file.txt"), "").unwrap();
+    let mut ed = typed("x\n");
+    assert!(ed.set_working_dir(&dir));
+    let line = |ed: &Editor| ed.prompt().map(|(_, t)| t.to_string()).unwrap_or_default();
+    let offers = |ed: &Editor| ed.shell_offers().map(|(list, _, _)| list).unwrap_or_default();
+    press(&mut ed, ":!cat my");
+    assert_eq!(offers(&ed), ["my\\ file.txt"]);
+    ed.on_key(Key::Tab);
+    assert_eq!(line(&ed), "!cat my\\ file.txt");
+    ed.on_key(Key::Esc);
+    press(&mut ed, ":!cat my\\ f");
+    assert_eq!(offers(&ed), ["my\\ file.txt"], "the escaped space is part of the word");
+    ed.on_key(Key::Esc);
+
+    press(&mut ed, ":\u{3000}!echo hi");
+    assert_eq!(ed.prompt_drawn(), "echo hi");
+    ed.on_key(Key::Esc);
+    std::fs::remove_dir_all(&dir).ok();
 }

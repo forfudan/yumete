@@ -162,6 +162,19 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **The shell line**:
+  - The grey ghost is the last command as it ran, with its `!` replaced, so Tab can no longer run a different command.
+  - File names with a space or other shell characters are completed with backslashes.
+  - `C-p` on a `:!` line brings back the command alone and keeps `:!`, instead of the `:pipe` it may have been run with.
+  - `!` means the previous command whichever verb ran it.
+  - A full-width space before `!` no longer hides part of the command.
+- **Completion**:
+  - A slash on its own (`//`, `</`, ` / `) no longer lists the root folder, and Tab after `//` no longer writes a path into the file. A folder typed in full offers its `/`.
+  - A language server's item without a replace range replaces the word you typed (`pri` gives `print`, not `priprint`).
+  - An answer is placed by the question it answers, not a newer one still waiting, and no list appears after Esc.
+  - `<` no longer floats a method's documentation as a signature.
+  - With very many lines open, typing no longer re-reads every buffer.
+  - `ß` keeps its shape when the case typed is followed.
 - **Sessions and `:reload-config`**:
   - Quitting with a program file or a table in front no longer saves "horizontal" over the layout you chose.
   - The wrap width is kept together with its on/off, so a resume does not turn wrapping on.

@@ -212,7 +212,10 @@ impl Editor {
     /// line does not read as bash's own `!ls`.
     fn prompt_hidden(&self) -> usize {
         match self.mode == Mode::Command && self.command_line.trim_start().starts_with('!') {
-            true => command::shell_start(&self.command_line).unwrap_or(0),
+            // Characters, not bytes (2026-10-29, review: a full-width space
+            // before the `!` is three bytes, and three characters were hidden).
+            true => command::shell_start(&self.command_line)
+                .map_or(0, |at| self.command_line[..at].chars().count()),
             false => 0,
         }
     }
@@ -225,11 +228,17 @@ impl Editor {
         }
     }
 
-    /// The terminal's part of the newest shell line in the history, if any.
+    /// **The last shell command, as it ran** (2026-10-29, review: the ghost
+    /// read the history as typed, so after `:!! b` it offered `! b`, and Tab
+    /// then ran `echo a b b`). This session's last command is kept expanded;
+    /// before it runs one, the history's newest shell line with no `!` in it.
     fn last_shell_line(&self) -> Option<&str> {
+        if let Some(last) = self.last_bang.as_deref() {
+            return Some(last);
+        }
         self.command_history.iter().rev().find_map(|line| {
             let at = command::shell_start(line)?;
-            Some(line[at..].trim_start()).filter(|text| !text.is_empty())
+            Some(line[at..].trim_start()).filter(|text| !text.is_empty() && !text.contains('!'))
         })
     }
 
@@ -245,11 +254,17 @@ impl Editor {
         const MOST: usize = 200;
         let at = command::shell_start(line)?;
         let rest = &line[at..];
-        let start = rest
-            .char_indices()
-            .rev()
-            .find(|(_, c)| c.is_whitespace())
-            .map_or(0, |(i, c)| i + c.len_utf8());
+        // The word starts after the last blank a backslash does not keep.
+        let mut start = 0;
+        let mut kept = false;
+        for (i, c) in rest.char_indices() {
+            match (kept, c) {
+                (true, _) => kept = false,
+                (false, '\\') => kept = true,
+                (false, c) if c.is_whitespace() => start = i + c.len_utf8(),
+                _ => {}
+            }
+        }
         let word = &rest[start..];
         let before = rest[..start].trim_end();
         let program = before.is_empty() || before.ends_with(['|', ';', '&']);
@@ -266,7 +281,15 @@ impl Editor {
                 });
                 scored.into_iter().map(|(_, name)| name.clone()).collect()
             }
-            (false, _) => self.files_starting(word),
+            // **Quoted for the shell** (2026-10-29, review: `my file.txt` went
+            // in bare and the shell read two arguments). A backslash before
+            // each character the shell would read, as a shell's own
+            // completion writes it; what was typed is read the same way.
+            (false, _) => self
+                .files_starting(&unescape_for_the_shell(word))
+                .into_iter()
+                .map(|name| escape_for_the_shell(&name))
+                .collect(),
         };
         out.truncate(MOST);
         Some((at + start, out))
@@ -797,6 +820,33 @@ pub(super) fn in_order(name: &str, typed: &str) -> Option<i64> {
         from = at + 1;
     }
     Some(score)
+}
+
+/// A file name as a shell reads it back: a backslash before each character
+/// the shell would otherwise take as its own. `~` and `/` are left, so a
+/// typed `~/` still expands.
+fn escape_for_the_shell(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    for c in name.chars() {
+        if c.is_whitespace() || "\\'\"$`!*?[](){}&;|<>#".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// What [`escape_for_the_shell`] wrote, read back.
+fn unescape_for_the_shell(word: &str) -> String {
+    let mut out = String::with_capacity(word.len());
+    let mut chars = word.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => out.extend(chars.next()),
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 #[cfg(test)]
