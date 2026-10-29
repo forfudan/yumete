@@ -161,7 +161,7 @@ shoot() {
         # 「有 N 份沒存的草稿」）和他自己的詞庫（分詞着色看得見）。這一趟指到
         # `target/` 底下一個空的，所以底片只跟代碼走——他那邊開着幾扇 yumete、
         # 詞庫裏有什麼，一格都影響不到。
-        if ! ( cd "${work}" && XDG_DATA_HOME="${PWD}/../data" "${BIN}" --shot="${size}" --keys="${pressed}" 文.md ) \
+        if ! ( cd "${work}" && XDG_DATA_HOME="${PWD}/../data" "${BIN}" --lang=zh --shot="${size}" --keys="${pressed}" 文.md ) \
             > "${into}/${name}.txt" 2> "${whined}"; then
             printf 'Warning: 拍 %s 的時候 yumete 自己就退出了：\n' "${name}" >&2
             sed 's/^/    /' "${whined}" >&2

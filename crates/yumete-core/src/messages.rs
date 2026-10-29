@@ -80,6 +80,31 @@ impl Language {
     }
 }
 
+/// **The language a locale asks for** (2026-10-29), for a config that does
+/// not say: `zh_TW`, `zh_HK`, `zh_MO` or a `Hant` script is 繁體, any other
+/// `zh` is 简体, and everything else — `C` and `POSIX` among them — English.
+pub fn of_locale(locale: &str) -> Language {
+    let lower = locale.trim().to_ascii_lowercase();
+    if !lower.starts_with("zh") {
+        return Language::English;
+    }
+    let traditional = lower
+        .split(['_', '-', '.', '@'])
+        .skip(1)
+        .any(|part| matches!(part, "tw" | "hk" | "mo" | "hant"));
+    match traditional {
+        true => Language::Traditional,
+        false => Language::Simplified,
+    }
+}
+
+/// The locale this process runs in, as POSIX reads it: `LC_ALL`, then
+/// `LC_MESSAGES`, then `LANG`, the first one set.
+pub fn locale_language() -> Language {
+    let set = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
+    of_locale(&set("LC_ALL").or_else(|| set("LC_MESSAGES")).or_else(|| set("LANG")).unwrap_or_default())
+}
+
 /// The language in force.
 ///
 /// A global, the way the ambiguous-width setting is one: it is settled once at
@@ -270,6 +295,19 @@ macro_rules! say {
 
 #[cfg(test)]
 mod tests {
+    /// **What a locale asks for** (2026-10-29).
+    #[test]
+    fn a_locale_picks_the_script() {
+        assert_eq!(of_locale("zh_TW.UTF-8"), Language::Traditional);
+        assert_eq!(of_locale("zh_HK"), Language::Traditional);
+        assert_eq!(of_locale("zh-Hant-TW"), Language::Traditional);
+        assert_eq!(of_locale("zh_CN.UTF-8"), Language::Simplified);
+        assert_eq!(of_locale("zh"), Language::Simplified);
+        assert_eq!(of_locale("en_US.UTF-8"), Language::English);
+        assert_eq!(of_locale("C"), Language::English);
+        assert_eq!(of_locale(""), Language::English);
+    }
+
     use super::*;
 
     #[test]

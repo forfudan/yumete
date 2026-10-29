@@ -10900,6 +10900,13 @@ zhs = "正文里写首选"
 en = "preedit.top"
 
 [[message]]
+# 設置面板：界面語言 auto
+key = "set.pick.language.auto"
+zht = "跟隨系統"
+zhs = "跟随系统"
+en = "the system's"
+
+[[message]]
 # 設置：界面语言——English
 key = "set.pick.language.en"
 zht = "English"

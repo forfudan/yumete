@@ -46,6 +46,7 @@ fn documents() -> Vec<(&'static str, String)> {
             std::fs::read_to_string(format!("{root}/docs/manual.md")).expect("the manual"),
         ),
         ("tutor.rs", yumete_core::tutor::LESSON.to_string()),
+        ("tutor.rs (English)", yumete_core::tutor::LESSON_EN.to_string()),
     ]
 }
 

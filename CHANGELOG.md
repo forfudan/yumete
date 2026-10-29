@@ -27,6 +27,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The interface language follows the system** when the config does not name one (`[editor] language = "auto"`, the new factory value): `zh_TW`/`zh_HK` is 繁體, other `zh` is 简体, anything else English — it used to be 繁體 everywhere. Set `language = "zh"` to keep 繁體 on an English system. `:tutor` has an English lesson for an English interface, and the Chinese lesson's `.` exercise and `:layout` (now `:vertical`) are brought up to date.
 - **Counting follows Word's rule**: a 漢字 is one and a Latin word is one. `:count`, the daily target and `:count-progress` used to count 漢字 only, so English read 0; Chinese counts are unchanged. `:count` reports the new count first.
 - **`.` under the helix keymap is helix's `.`**: it types the last insert again (the key that went into insert mode and what was typed) and no longer repeats a `d`, an `r` or a paste. The vim keymap keeps vim's `.`, which repeats any change.
 - **Enter between an empty pair opens it onto three lines**, as helix does, with the closer on the line below; it used to ride down stuck to the caret.

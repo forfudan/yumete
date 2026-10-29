@@ -386,11 +386,32 @@ fn apply_to_the_process(config: &Config, language: Option<yumete_core::messages:
             crate::ambiguous::ask_the_terminal_about_width().unwrap_or(false)
         }
     });
-    if let Some(language) =
-        language.or_else(|| yumete_core::messages::Language::parse(&config.editor.language))
-    {
+    // **`auto` is the locale's** (2026-10-29): an English system starts in
+    // English, a Chinese one in its own script.
+    let language = language.or_else(|| yumete_core::messages::Language::parse(&config.editor.language));
+    let language = match config.editor.language.trim() {
+        "auto" | "" => language.or_else(|| Some(the_locale())),
+        _ => language,
+    };
+    if let Some(language) = language {
         yumete_core::messages::set_language(language);
     }
+}
+
+/// The language the locale asks for — in a test build, always 繁體.
+///
+/// Warning: **The language is process-wide, and the tests share a process.**
+/// A test that reloads a default config would otherwise switch every test
+/// after it into the machine's locale — English here, something else in CI —
+/// and they assert on the text they see (2026-10-29: twenty went red at once).
+#[cfg(not(test))]
+fn the_locale() -> yumete_core::messages::Language {
+    yumete_core::messages::locale_language()
+}
+
+#[cfg(test)]
+fn the_locale() -> yumete_core::messages::Language {
+    yumete_core::messages::Language::Traditional
 }
 
 /// The settings that belong to one editor.

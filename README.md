@@ -171,7 +171,7 @@ searches those descriptions **in Chinese** when you have forgotten the name.
 `:keymap` and the manual's own table say where another editor's keys went, and
 an unbound key says nothing at all — a hint would be the editor deciding why you
 pressed it. `:tutor` opens a lesson you learn by editing it, written on Chinese prose, where `w` and 縱書 can
-actually be taught.
+actually be taught; with an English interface it is an English lesson.
 
 ### A book is many files
 
@@ -283,7 +283,7 @@ read after the first frame rather than before it. (A build on a machine that has
 宇浩 installed is larger: it carries that machine's full 碼表 instead of the cut
 one, 3.7 MB against 0.25 MB.) Ten themes plus
 `system` / `dark` / `light`. The interface speaks **繁體, 简体 or English**
-(`[editor] language`). Config is global (`~/.config/yumete/config.toml`) with a
+(`[editor] language`), the system's by default. Config is global (`~/.config/yumete/config.toml`) with a
 per-project `.yumete/config.toml` over it, and a file that does not parse says
 which key is wrong instead of being dropped in silence.
 

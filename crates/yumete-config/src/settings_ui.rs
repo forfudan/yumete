@@ -304,6 +304,7 @@ const EDITOR_TAB_INSERTS_WAYS: &[Choice] = &[
 ];
 
 const EDITOR_LANGUAGE_WAYS: &[Choice] = &[
+    Choice { word: "auto", label: "set.pick.language.auto" },
     Choice { word: "zh", label: "set.pick.language.zh" },
     Choice { word: "zhs", label: "set.pick.language.zhs" },
     Choice { word: "en", label: "set.pick.language.en" },
@@ -908,7 +909,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Pick(EDITOR_LANGUAGE_WAYS),
         label: "set.editor.language",
         hint: "set.editor.language.hint",
-        factory: r#""zh""#,
+        factory: r#""auto""#,
     },
     Setting {
         table: "editor",
