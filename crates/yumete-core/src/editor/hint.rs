@@ -435,6 +435,12 @@ impl Editor {
             // motions and the reader knows them — what they need to be told is
             // that the editor is still holding the `d`.
             Pending::VimOperator { op, first } => {
+                // The `g` operators are spelled with their `g` (2026-10-30: the
+                // sign read 「qg」 for a half-typed `gqg`).
+                let op = match op {
+                    'q' | 'u' | 'U' | '~' => format!("g{op}"),
+                    other => other.to_string(),
+                };
                 return Some(Hint::Says(match first {
                     None => say!("hint.vim-operator", op, Self::vim_motion_list()),
                     Some(f) => say!("hint.vim-operator-more", op, f),

@@ -32431,3 +32431,34 @@ fn replacing_a_long_grapheme_measures_what_was_written() {
     press(&mut ed, "ggllrGd");
     assert_eq!(ed.current_buffer().rope().to_string(), "x  abcdefgh\nmore\n");
 }
+
+/// **A CSV opens with the selection in its first cell** (2026-10-30), not
+/// stretched back over the header line.
+#[test]
+fn a_csv_opens_with_the_selection_in_one_cell() {
+    let dir = tmp().join(format!("yumete-csv-seat-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("p.csv");
+    std::fs::write(&csv, "name,age,city\nAlice,30,Oslo\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    let (start, end) = ed.selection();
+    let rope = ed.current_buffer().rope();
+    // Seated the way a step into a cell seats it: on the cell's first
+    // character, and nothing of the header.
+    assert_eq!(rope.char_to_line(start), 1, "{}", ed.status());
+    assert_eq!(rope.slice(start..end).to_string(), "A", "{}", ed.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`gUgU` and friends are the line, as `gUU` is** (2026-10-30, nvim).
+#[test]
+fn doubled_g_operators_spelled_with_their_g_take_the_line() {
+    let mut ed = typed_vim("foo bar\nbaz\n");
+    press(&mut ed, "gUgUjgugu");
+    assert_eq!(ed.current_buffer().rope().to_string(), "FOO BAR\nbaz\n");
+    let mut ed = typed_vim("Foo\n");
+    press(&mut ed, "g~g~");
+    assert_eq!(ed.current_buffer().rope().to_string(), "fOO\n");
+}

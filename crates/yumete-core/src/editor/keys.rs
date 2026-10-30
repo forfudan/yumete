@@ -917,6 +917,11 @@ impl Editor {
         if first.is_none() && (c == op || c == '_') {
             return self.run_vim_line(op);
         }
+        // **`gqgq`, `gUgU`, `gugu`, `g~g~`** are the `g` operators doubled
+        // with their `g` spelled again (`:h gqgq`), the same lines as `gqq`.
+        if first == Some('g') && c == op && matches!(op, 'q' | 'u' | 'U' | '~') {
+            return self.run_vim_line(op);
+        }
         // **`d%`** (`:h %`, inclusive): from here to the other half of the
         // bracket under the cursor. The pair search is the editor's, which is
         // why it is here and not in the pure motion table.

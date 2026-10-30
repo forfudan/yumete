@@ -796,13 +796,19 @@ fn note_for(panel: &Panel) -> String {
             let mut note = said(setting.hint);
             // `0` 另有意思的那幾項，把那句話跟在後面——它只在這一項上成立，
             // 擺在總的說明裏等於讓人在別的項上也去想 0。
+            // In English the parentheses and the gap are ASCII (2026-10-30).
+            let english = yumete_core::messages::language() == yumete_core::messages::Language::English;
             if let Kind::Count { zero: Some(tag), .. } = setting.kind {
-                note.push_str(&format!("　（{}）", said(tag)));
+                match english {
+                    true => note.push_str(&format!(" ({})", said(tag))),
+                    false => note.push_str(&format!("　（{}）", said(tag))),
+                }
             }
             // Warning: **改的那一層被蓋着就說一句。** 不說的話，一個人在全局上按空格而
             // 本項目壓着這一項，螢幕上那一行紋絲不動——看起來像鍵壞了。
             if panel.shadowed(setting) {
-                note.push_str(&format!("　{}", say!("set.shadowed")));
+                let gap = if english { "  " } else { "　" };
+                note.push_str(&format!("{gap}{}", say!("set.shadowed")));
             }
             note
         }

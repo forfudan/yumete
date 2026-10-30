@@ -2515,7 +2515,13 @@ fn preview(editor: &Editor, config: &yumete_config::Config) {
             out,
             "── {name}{modified} — {lines} line(s), {chars} char(s){extra} ──",
             name = buf.display_name(),
-            lines = buf.line_count(),
+            // The text's lines, not the empty one after its last line ending
+            // (2026-10-30: a three-line file said four).
+            lines = {
+                let rope = buf.rope();
+                let ends = rope.len_chars() > 0 && rope.char(rope.len_chars() - 1) == '\n';
+                buf.line_count() - usize::from(ends && buf.line_count() > 1)
+            },
             chars = buf.char_count(),
         )?;
 
