@@ -29,7 +29,6 @@
 //! deliberately unimplemented: it would make every read slower to buy a
 //! freedom this data does not want.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -153,92 +152,6 @@ impl Column {
     }
 }
 
-/// A field that is *worked out* from a row rather than stored in it.
-///
-/// It never enters the grid and is never written back — it exists so the
-/// detail panel can answer "what is this character" without the answer having
-/// to be a column somebody has to keep up to date.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Detail {
-    pub name: String,
-    pub compute: Compute,
-}
-
-/// The two-and-a-half functions a computed field may use.
-///
-/// Not an expression language, and deliberately not extensible: every one of
-/// these is a fact about a character that the editor already knows, and a
-/// schema that could compute *anything* would be a scripting runtime with the
-/// serial numbers filed off.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Compute {
-    /// `codepoint(col)` — `U+4E00`.
-    Codepoint(String),
-    /// `block(col)` — the Unicode block's own name.
-    Block(String),
-    /// `range_label(col, ranges)` — a name from the schema's own range table,
-    /// so a project may call U+2B740 「CJK-D」 or anything else it likes.
-    RangeLabel(String, String),
-}
-
-impl Compute {
-    /// Which column it reads.
-    pub fn column(&self) -> &str {
-        match self {
-            Compute::Codepoint(c) | Compute::Block(c) | Compute::RangeLabel(c, _) => c,
-        }
-    }
-
-    /// Work it out for one cell's text.
-    pub fn apply(&self, cell: &str, ranges: &HashMap<String, Vec<Range>>) -> String {
-        // Every one of these is about a *character*, so an empty cell has no
-        // answer and a cell of several characters is asked about its first.
-        let Some(c) = cell.chars().next() else {
-            return String::new();
-        };
-        match self {
-            Compute::Codepoint(_) => yumete_cjk::blocks::codepoint(c),
-            Compute::Block(_) => yumete_cjk::blocks::block_of(c).unwrap_or("—").to_string(),
-            Compute::RangeLabel(_, table) => ranges
-                .get(table)
-                .and_then(|rs| rs.iter().find(|r| r.holds(c)))
-                .map(|r| r.name.clone())
-                .unwrap_or_default(),
-        }
-    }
-}
-
-/// One named span of the code space, from a schema's `[ranges.*]` table.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Range {
-    pub name: String,
-    pub first: u32,
-    pub last: u32,
-}
-
-impl Range {
-    fn holds(&self, c: char) -> bool {
-        (self.first..=self.last).contains(&(c as u32))
-    }
-}
-
-/// "The text in this cell names a row of this same table."
-///
-/// A **link**, and it was called `jump` until it was noticed that a jump is
-/// only one of the two directions it is read in. `Enter` follows it forward —
-/// 「⿰木目 is made of 木 and 目, and 木 has a row of its own」 — and backwards:
-/// *who names this?*, which the manual has always described in the same breath
-/// as 「這不是跳轉，是搜索」. One relation, two questions, and the name has to
-/// be the relation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Link {
-    /// The columns whose contents are keys.
-    pub from: Vec<String>,
-    /// The column those keys are found in.
-    pub to: String,
-}
-
-/// Everything the editor needs to read one kind of table.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schema {
     /// The file names this schema is for.
@@ -251,126 +164,104 @@ pub struct Schema {
     /// Whether the first line names the columns.
     pub header: bool,
     pub columns: Vec<Column>,
-    pub details: Vec<Detail>,
-    pub link: Option<Link>,
-    pub ranges: HashMap<String, Vec<Range>>,
 }
 
+/// The file a table's description lives in, beside the data: a Frictionless
+/// Data Package (2026-10-30, as decided). One per folder, listing each table
+/// file as a resource with its `schema` (fields, `primaryKey`) and `dialect`
+/// (delimiter, header). Nothing of yumete's own goes in it.
+pub const DATAPACKAGE: &str = "datapackage.json";
+
 impl Schema {
-    /// Read a schema from TOML.
-    pub fn parse(text: &str) -> Result<Schema, String> {
-        let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
-        let t = raw.table;
-        if t.column.is_empty() {
-            return Err("a table with no columns".to_string());
-        }
-        let delimiter = match t.delimiter.as_deref() {
+    /// This file's description out of a `datapackage.json`: the resource whose
+    /// `path` is `file`, or `None` when the package does not list it.
+    ///
+    /// Read loosely, as the standard asks: a package another tool wrote may
+    /// carry fields this editor has no use for, and they are left alone.
+    /// Only what would misread the file is an error — a delimiter that is not
+    /// one character, a `primaryKey` that names no field.
+    pub fn from_datapackage(text: &str, file: &str) -> Result<Option<Schema>, String> {
+        let package: serde_json::Value =
+            serde_json::from_str(text).map_err(|e| format!("{DATAPACKAGE}: {e}"))?;
+        let Some(resources) = package.get("resources").and_then(|r| r.as_array()) else {
+            return Ok(None);
+        };
+        let Some(resource) = resources.iter().find(|r| {
+            r.get("path").and_then(|p| p.as_str()).is_some_and(|p| {
+                p == file || Path::new(p).file_name().is_some_and(|n| n == file)
+            })
+        }) else {
+            return Ok(None);
+        };
+        let dialect = resource.get("dialect");
+        let delimiter = match dialect.and_then(|d| d.get("delimiter")).and_then(|d| d.as_str()) {
             None => ',',
-            // A line terminator is one character, and it is the one character
-            // that cannot separate two cells *of the same row*: rows are
-            // already separated by it.
-            Some(d) if d.chars().count() == 1 && !"\n\r".contains(d) => {
-                d.chars().next().unwrap()
-            }
+            Some(d) if d.chars().count() == 1 && !"\n\r".contains(d) => d.chars().next().unwrap(),
             Some(d) if "\n\r".contains(d) => {
                 return Err("a line break already separates rows, not cells".to_string())
             }
             Some(d) => return Err(format!("delimiter must be one character, not '{d}'")),
         };
-        // The only quoting this reads is none at all, and saying so out loud
-        // beats silently treating `"` as an ordinary character in a file whose
-        // is believed to be otherwise.
-        if let Some(q) = t.quoting.as_deref() {
-            if q != "none" {
-                return Err(format!(
-                    "quoting = '{q}' is not supported; this reads unquoted files only"
-                ));
-            }
+        let header = dialect
+            .and_then(|d| d.get("header"))
+            .and_then(|h| h.as_bool())
+            .unwrap_or(true);
+        let fields = resource
+            .get("schema")
+            .and_then(|s| s.get("fields"))
+            .and_then(|f| f.as_array());
+        let columns: Vec<Column> = fields
+            .map(|fields| {
+                fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, f)| {
+                        let name = f
+                            .get("name")
+                            .and_then(|n| n.as_str())
+                            .filter(|n| !n.trim().is_empty())
+                            .map(str::to_string)
+                            .unwrap_or_else(|| format!("{}", i + 1));
+                        Column {
+                            name,
+                            label: f.get("title").and_then(|t| t.as_str()).map(str::to_string),
+                            kind: match f.get("type").and_then(|t| t.as_str()) {
+                                Some("integer") => Kind::Int,
+                                Some("number") => Kind::Float,
+                                Some("boolean") => Kind::Bool,
+                                _ => Kind::String,
+                            },
+                            hidden: false,
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        if columns.is_empty() {
+            return Err(format!("{file}: a table with no fields"));
         }
-        let mut ranges = HashMap::new();
-        for (table, named) in raw.ranges {
-            let mut list = Vec::new();
-            for (name, span) in named {
-                if span.len() != 2 || span[0] > span[1] {
-                    return Err(format!("range '{name}' is not a pair first..last"));
-                }
-                list.push(Range {
-                    name,
-                    first: span[0],
-                    last: span[1],
-                });
-            }
-            list.sort_by_key(|r| r.first);
-            ranges.insert(table, list);
-        }
-        let names: Vec<&str> = t.column.iter().map(|c| c.name.as_str()).collect();
-        if let Some(key) = &t.key {
-            if !names.contains(&key.as_str()) {
-                return Err(format!("key = '{key}' is not a column"));
-            }
-        }
-        let mut details = Vec::new();
-        for d in &t.detail {
-            let compute = parse_compute(&d.compute)?;
-            if !names.contains(&compute.column()) {
-                return Err(format!(
-                    "'{}' computes from '{}', which is not a column",
-                    d.name,
-                    compute.column()
-                ));
-            }
-            if let Compute::RangeLabel(_, table) = &compute {
-                if !ranges.contains_key(table) {
-                    return Err(format!("'{}' uses ranges.{table}, which is missing", d.name));
-                }
-            }
-            details.push(Detail {
-                name: d.name.clone(),
-                compute,
-            });
-        }
-        let link = match t.link {
-            None => None,
-            Some(j) => {
-                for name in j.from.iter().chain(std::iter::once(&j.to)) {
-                    if !names.contains(&name.as_str()) {
-                        return Err(format!("link names '{name}', which is not a column"));
-                    }
-                }
-                Some(Link {
-                    from: j.from,
-                    to: j.to,
-                })
-            }
+        // `primaryKey` is a field name or a list of them; a row here is named
+        // by one field, so the first names the row.
+        let key = match resource.get("schema").and_then(|s| s.get("primaryKey")) {
+            None | Some(serde_json::Value::Null) => None,
+            Some(serde_json::Value::String(k)) => Some(k.clone()),
+            Some(serde_json::Value::Array(list)) => list.first().and_then(|k| k.as_str()).map(str::to_string),
+            Some(other) => return Err(format!("primaryKey must name a field, not {other}")),
         };
-        Ok(Schema {
-            files: t.file.into_vec(),
-            key: t.key,
+        if let Some(key) = &key {
+            if !columns.iter().any(|c| &c.name == key) {
+                return Err(format!("primaryKey = '{key}' is not a field"));
+            }
+        }
+        Ok(Some(Schema {
+            files: vec![file.to_string()],
+            key,
             delimiter,
-            header: t.header.unwrap_or(true),
-            columns: t
-                .column
-                .into_iter()
-                .map(|c| Column {
-                    name: c.name,
-                    label: c.label,
-                    kind: c.kind.unwrap_or_default(),
-                    hidden: c.hidden.unwrap_or(false),
-                })
-                .collect(),
-            details,
-            link,
-            ranges,
-        })
+            header,
+            columns,
+        }))
     }
 
-    /// A schema for a grid whose first row is **data**, its columns named by
-    /// number (#216).
-    ///
-    /// A 碼表 has no header — 「字⇥碼」 all the way down — so reading its first
-    /// line as the column names loses that line and calls one column 「一」.
-    /// The numbers are the names the column-number row already draws (#184),
-    /// so nothing new has to be shown for them to be usable.
     pub fn numbered(columns: usize, delimiter: char) -> Schema {
         Schema {
             files: Vec::new(),
@@ -385,9 +276,6 @@ impl Schema {
                     hidden: false,
                 })
                 .collect(),
-            details: Vec::new(),
-            link: None,
-            ranges: HashMap::new(),
         }
     }
 
@@ -424,9 +312,6 @@ impl Schema {
             delimiter,
             header: true,
             columns,
-            details: Vec::new(),
-            link: None,
-            ranges: HashMap::new(),
         }
     }
 
@@ -458,33 +343,6 @@ impl Schema {
 }
 
 /// `codepoint(char)`, `block(char)`, `range_label(char, cjk_blocks)`.
-fn parse_compute(text: &str) -> Result<Compute, String> {
-    let text = text.trim();
-    let (name, rest) = text
-        .split_once('(')
-        .ok_or_else(|| format!("'{text}' is not a call"))?;
-    let args = rest
-        .strip_suffix(')')
-        .ok_or_else(|| format!("'{text}' is missing its ')'"))?;
-    let args: Vec<&str> = args.split(',').map(str::trim).filter(|a| !a.is_empty()).collect();
-    match (name.trim(), args.as_slice()) {
-        ("codepoint", [c]) => Ok(Compute::Codepoint(c.to_string())),
-        ("block", [c]) => Ok(Compute::Block(c.to_string())),
-        ("range_label", [c, t]) => Ok(Compute::RangeLabel(c.to_string(), t.to_string())),
-        (f @ ("codepoint" | "block" | "range_label"), _) => {
-            Err(format!("{f} was given {} arguments", args.len()))
-        }
-        (f, _) => Err(format!("no such function: {f}")),
-    }
-}
-
-/// Find the schema for a file, by walking up from the directory it is in.
-///
-/// Up from the *file*, not from the working directory: a schema is a property
-/// of the data, not of the session that happened to open it. Opening the same
-/// CSV from anywhere must find the same schema — and with several files open
-/// at once from different projects, "the working directory" is not a thing
-/// each of them has.
 pub fn schema_for(path: &Path) -> Option<(PathBuf, Schema)> {
     schema_for_reporting(path).0
 }
@@ -498,97 +356,137 @@ pub fn schema_for(path: &Path) -> Option<(PathBuf, Schema)> {
 /// for every one of these; this is how it reaches a person.
 pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<String>) {
     let mut problems = Vec::new();
-    let mut dir = path.parent();
-    while let Some(d) = dir {
-        let tables = d.join(".yumete").join("tables");
-        if let Ok(entries) = std::fs::read_dir(&tables) {
-            let mut files: Vec<PathBuf> = entries
-                .flatten()
-                .map(|e| e.path())
-                .filter(|p| p.extension().is_some_and(|e| e == "toml"))
-                .collect();
-            // Read in a fixed order, so which schema wins never depends on
-            // what the file system felt like returning first.
-            files.sort();
-            for file in files {
-                let Ok(text) = std::fs::read_to_string(&file) else {
-                    continue;
-                };
-                match Schema::parse(&text) {
-                    Ok(schema) if schema.covers(path) => return (Some((file, schema)), problems),
-                    // A schema that parses but is for other files is not a
-                    // problem; one that does not parse is, whoever it is for.
-                    Ok(_) => {}
-                    Err(why) => problems.push(format!(
-                        "{}: {why}",
-                        file.file_name().unwrap_or_default().to_string_lossy()
-                    )),
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return (None, problems);
+    };
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    let package = dir.join(DATAPACKAGE);
+    let found = match std::fs::read_to_string(&package) {
+        Ok(text) => match Schema::from_datapackage(&text, name) {
+            Ok(Some(schema)) => Some((package, schema)),
+            Ok(None) => None,
+            Err(why) => {
+                problems.push(why);
+                None
+            }
+        },
+        Err(_) => None,
+    };
+    // **The old format is no longer read, and says so once** (2026-10-30):
+    // a `.yumete/tables/*.toml` up the tree that names this file would be
+    // silently ignored otherwise, and its writer would see the header row
+    // and wonder where their column names went.
+    if found.is_none() {
+        let mut up = Some(dir);
+        while let Some(d) = up {
+            if let Ok(entries) = std::fs::read_dir(d.join(".yumete").join("tables")) {
+                for entry in entries.flatten() {
+                    let file = entry.path();
+                    if file.extension().is_some_and(|e| e == "toml")
+                        && std::fs::read_to_string(&file).is_ok_and(|t| t.contains(name))
+                    {
+                        problems.push(format!(
+                            "{}: the .yumete/tables schema is no longer read; write a {DATAPACKAGE} beside the data with :table-schema write",
+                            file.display()
+                        ));
+                    }
                 }
             }
+            up = d.parent();
         }
-        dir = d.parent();
     }
-    (None, problems)
+    (found, problems)
 }
 
-/// A schema file to start from, written out of what the grid is reading this
-/// file as **right now** (#218).
+/// The `datapackage.json` for this folder with `file` described as `schema`
+/// reads it: the package as it stands with this one resource replaced or
+/// added, or a new package when there is none. Pretty-printed, two spaces.
 ///
-/// **The first thing it does is nothing.** The delimiter is the one the
-/// sniffer guessed, the header line is the one you kept or turned off (`t H`,
-/// #217), and the columns carry the names the first row gave them — so opening
-/// the file and reading it back changes not one cell of the grid. Every edit to
-/// it is then a correction to something visible, which is a far shorter way in
-/// than an empty page and a format to guess at.
-///
-/// `note` is the comment written at the top, so that the one sentence a person
-/// reads first is a message like every other and not a literal in here.
-pub fn starting_schema(file: &str, schema: &Schema, note: &str) -> String {
-    let mut out = format!("# {note}\n\n[table]\nfile = {}\n", quoted(file));
-    // Only what differs from the default is written. A starting schema that
-    // spells out every setting reads as a form to fill in; one that names the
-    // delimiter *because this file has an unusual one* teaches what the key is
-    // for.
+/// Only what differs from the standard's defaults is written into the
+/// dialect, so a comma-separated file with a header says nothing about
+/// either. The package's `name` and `$schema` are what other tools require
+/// of one; they are written when missing and never changed when present.
+pub fn datapackage_with(existing: Option<&str>, folder: &str, file: &str, schema: &Schema) -> Result<String, String> {
+    use serde_json::{json, Map, Value};
+    let mut package: Value = match existing {
+        Some(text) => serde_json::from_str(text).map_err(|e| format!("{DATAPACKAGE}: {e}"))?,
+        None => json!({}),
+    };
+    if !package.is_object() {
+        return Err(format!("{DATAPACKAGE}: not an object"));
+    }
+    let slug = |text: &str| -> String {
+        let mut out: String = text
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect();
+        while out.contains("--") {
+            out = out.replace("--", "-");
+        }
+        let out = out.trim_matches('-').to_string();
+        match out.is_empty() {
+            true => "table".to_string(),
+            false => out,
+        }
+    };
+    let object = package.as_object_mut().expect("an object");
+    object
+        .entry("$schema")
+        .or_insert_with(|| json!("https://datapackage.org/profiles/2.0/datapackage.json"));
+    object.entry("name").or_insert_with(|| json!(slug(folder)));
+    let mut fields = Vec::new();
+    for column in &schema.columns {
+        let mut field = Map::new();
+        field.insert("name".into(), json!(column.name));
+        if let Some(label) = &column.label {
+            field.insert("title".into(), json!(label));
+        }
+        let kind = match column.kind {
+            Kind::String => None,
+            Kind::Int => Some("integer"),
+            Kind::Float => Some("number"),
+            Kind::Bool => Some("boolean"),
+        };
+        if let Some(kind) = kind {
+            field.insert("type".into(), json!(kind));
+        }
+        fields.push(Value::Object(field));
+    }
+    let mut table = Map::new();
+    table.insert("fields".into(), Value::Array(fields));
+    if let Some(key) = &schema.key {
+        table.insert("primaryKey".into(), json!(key));
+    }
+    let mut dialect = Map::new();
     if schema.delimiter != ',' {
-        out.push_str(&format!("delimiter = {}\n", quoted(&schema.delimiter.to_string())));
+        dialect.insert("delimiter".into(), json!(schema.delimiter.to_string()));
     }
     if !schema.header {
-        out.push_str("header = false\n");
+        dialect.insert("header".into(), json!(false));
     }
-    if let Some(key) = &schema.key {
-        out.push_str(&format!("key = {}\n", quoted(key)));
+    let stem = Path::new(file).file_stem().and_then(|s| s.to_str()).unwrap_or(file);
+    let mut resource = Map::new();
+    resource.insert("name".into(), json!(slug(stem)));
+    resource.insert("path".into(), json!(file));
+    if !dialect.is_empty() {
+        resource.insert("dialect".into(), Value::Object(dialect));
     }
-    for column in &schema.columns {
-        out.push_str(&format!("\n[[table.column]]\nname = {}\n", quoted(&column.name)));
-        if let Some(label) = &column.label {
-            out.push_str(&format!("label = {}\n", quoted(label)));
-        }
-        if column.kind != Kind::String {
-            out.push_str(&format!("type = \"{:?}\"\n", column.kind));
-        }
-        if column.hidden {
-            out.push_str("hidden = true\n");
-        }
+    resource.insert("schema".into(), Value::Object(table));
+    let resource = Value::Object(resource);
+    let resources = object
+        .entry("resources")
+        .or_insert_with(|| json!([]));
+    let Some(list) = resources.as_array_mut() else {
+        return Err(format!("{DATAPACKAGE}: resources is not a list"));
+    };
+    match list.iter().position(|r| r.get("path").and_then(|p| p.as_str()) == Some(file)) {
+        Some(at) => list[at] = resource,
+        None => list.push(resource),
     }
-    out
-}
-
-/// A TOML basic string. The 拆分表's delimiter is a tab, which is exactly the
-/// character that cannot be written between two quotes as itself.
-fn quoted(text: &str) -> String {
-    let mut out = String::from("\"");
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\t' => out.push_str("\\t"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
+    serde_json::to_string_pretty(&package)
+        .map(|t| t + "\n")
+        .map_err(|e| e.to_string())
 }
 
 /// Where the delimiters that actually separate fields stand, in characters
@@ -938,73 +836,6 @@ pub fn cell_text(line: &str, span: (usize, usize)) -> String {
     line.chars().take(span.1).skip(span.0).collect()
 }
 
-// ---- The TOML as written -------------------------------------------------
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawFile {
-    table: RawTable,
-    #[serde(default)]
-    ranges: HashMap<String, HashMap<String, Vec<u32>>>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawTable {
-    file: OneOrMany,
-    #[serde(default)]
-    key: Option<String>,
-    delimiter: Option<String>,
-    quoting: Option<String>,
-    header: Option<bool>,
-    #[serde(default)]
-    column: Vec<RawColumn>,
-    #[serde(default)]
-    detail: Vec<RawDetail>,
-    link: Option<RawLink>,
-}
-
-/// `file = "a.csv"` and `file = ["a.csv", "b.csv"]` both read.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum OneOrMany {
-    One(String),
-    Many(Vec<String>),
-}
-
-impl OneOrMany {
-    fn into_vec(self) -> Vec<String> {
-        match self {
-            OneOrMany::One(s) => vec![s],
-            OneOrMany::Many(v) => v,
-        }
-    }
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawColumn {
-    name: String,
-    label: Option<String>,
-    #[serde(rename = "type")]
-    kind: Option<Kind>,
-    hidden: Option<bool>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawDetail {
-    name: String,
-    compute: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawLink {
-    from: Vec<String>,
-    to: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1016,114 +847,57 @@ mod tests {
         assert_eq!(sniff(&lines), Some(','));
     }
 
-    const DIVISION: &str = r#"
-[table]
-file = ["yuhao_division_golden_source.csv", "yuhao_division_pending.csv"]
-key = "char"
-delimiter = ","
-quoting = "none"
-
-[[table.column]]
-name = "char"
-label = "字"
-
-[[table.column]]
-name = "ids_y"
-label = "宇浩拆分"
-
-[[table.column]]
-name = "ids_g"
-
-[[table.detail]]
-name = "unicode"
-compute = "codepoint(char)"
-
-[[table.detail]]
-name = "block"
-compute = "range_label(char, cjk_blocks)"
-
-[table.link]
-from = ["ids_y", "ids_g"]
-to = "char"
-
-[ranges.cjk_blocks]
-"CJK" = [0x4E00, 0x9FFF]
-"CJK-D" = [0x2B740, 0x2B81F]
-"#;
+    const DIVISION: &str = r#"{
+  "name": "division",
+  "resources": [
+    {
+      "name": "golden",
+      "path": "yuhao_division_golden_source.csv",
+      "dialect": { "delimiter": "," },
+      "schema": {
+        "fields": [
+          { "name": "char", "title": "字" },
+          { "name": "ids_y", "title": "宇浩拆分" },
+          { "name": "ids_g" },
+          { "name": "weight", "type": "integer" }
+        ],
+        "primaryKey": "char"
+      }
+    },
+    { "name": "other", "path": "sub/other.csv", "schema": { "fields": [ { "name": "a" } ] } }
+  ]
+}"#;
 
     #[test]
-    fn a_schema_says_what_the_columns_are_and_what_they_are_called() {
-        let s = Schema::parse(DIVISION).unwrap();
-        assert_eq!(s.files.len(), 2, "golden and pending share one schema");
-        assert!(s.covers(Path::new("/x/yuhao_division_pending.csv")));
-        assert!(!s.covers(Path::new("/x/something_else.csv")));
+    fn a_datapackage_says_what_the_columns_are_and_what_they_are_called() {
+        let s = Schema::from_datapackage(DIVISION, "yuhao_division_golden_source.csv")
+            .unwrap()
+            .expect("listed");
         assert_eq!(s.delimiter, ',');
         assert!(s.header);
-        assert_eq!(s.columns[0].heading(), "字", "the label, when there is one");
+        assert_eq!(s.columns[0].heading(), "字", "the title, when there is one");
         assert_eq!(s.columns[2].heading(), "ids_g", "the name, when there is not");
-        assert_eq!(s.columns[0].kind, Kind::String, "the default");
+        assert_eq!(s.columns[3].kind, Kind::Int, "a Frictionless type");
         assert_eq!(s.index_of("ids_y"), Some(1));
-        assert_eq!(s.key.as_deref(), Some("char"), "what names a row");
-        assert_eq!(
-            s.link,
-            Some(Link {
-                from: vec!["ids_y".into(), "ids_g".into()],
-                to: "char".into()
-            })
+        assert_eq!(s.key.as_deref(), Some("char"), "primaryKey names a row");
+        assert!(
+            Schema::from_datapackage(DIVISION, "something_else.csv").unwrap().is_none(),
+            "a file the package does not list"
         );
+        assert!(Schema::from_datapackage(DIVISION, "other.csv").unwrap().is_some(), "by file name");
     }
 
     #[test]
-    fn a_computed_field_is_worked_out_not_stored() {
-        let s = Schema::parse(DIVISION).unwrap();
-        assert_eq!(s.details[0].compute, Compute::Codepoint("char".into()));
-        assert_eq!(s.details[0].compute.apply("一", &s.ranges), "U+4E00");
-        // The project's own vocabulary, from the schema's range table.
-        assert_eq!(s.details[1].compute.apply("一", &s.ranges), "CJK");
-        assert_eq!(s.details[1].compute.apply("\u{2B740}", &s.ranges), "CJK-D");
-        assert_eq!(s.details[1].compute.apply("", &s.ranges), "", "an empty cell");
-        // …or Unicode's own, when a schema would rather not keep a list.
-        let block = Compute::Block("char".into());
-        assert_eq!(block.apply("一", &s.ranges), "CJK Unified Ideographs");
-    }
-
-    #[test]
-    fn a_schema_that_does_not_add_up_says_so_rather_than_half_working() {
-        let bad = |body: &str| Schema::parse(body).unwrap_err();
-        assert!(bad("[table]\nfile = 'a.csv'").contains("no columns"));
-        assert!(bad(
-            "[table]\nfile = 'a.csv'\nquoting = 'minimal'\n[[table.column]]\nname = 'c'"
-        )
-        .contains("not supported"));
-        assert!(bad(
-            "[table]\nfile = 'a.csv'\ndelimiter = '::'\n[[table.column]]\nname = 'c'"
-        )
-        .contains("one character"));
-        // A computed field that reads a column nobody declared is a typo that
-        // would otherwise show up as a silently empty panel.
-        assert!(bad(
-            "[table]\nfile = 'a.csv'\n[[table.column]]\nname = 'c'\n\
-             [[table.detail]]\nname = 'u'\ncompute = 'codepoint(nope)'"
-        )
-        .contains("not a column"));
-        assert!(bad(
-            "[table]\nfile = 'a.csv'\n[[table.column]]\nname = 'c'\n\
-             [[table.detail]]\nname = 'u'\ncompute = 'shell(c)'"
-        )
-        .contains("no such function"));
-        assert!(bad(
-            "[table]\nfile = 'a.csv'\n[[table.column]]\nname = 'c'\n\
-             [table.link]\nfrom = ['c']\nto = 'nope'"
-        )
-        .contains("not a column"));
-        // Range tables have to exist before something names one.
-        assert!(bad(
-            "[table]\nfile = 'a.csv'\n[[table.column]]\nname = 'c'\n\
-             [[table.detail]]\nname = 'b'\ncompute = 'range_label(c, blocks)'"
-        )
-        .contains("missing"));
-        assert!(bad("[table]\nfile = 'a.csv'\nkey = 'nope'\n[[table.column]]\nname = 'c'")
-            .contains("not a column"));
+    fn a_datapackage_that_does_not_add_up_says_so_rather_than_half_working() {
+        let bad = |body: &str| Schema::from_datapackage(body, "a.csv").unwrap_err();
+        assert!(bad("{").contains("datapackage.json"));
+        assert!(bad(r#"{"resources":[{"path":"a.csv","schema":{"fields":[]}}]}"#).contains("no fields"));
+        assert!(bad(r#"{"resources":[{"path":"a.csv","dialect":{"delimiter":"::"},"schema":{"fields":[{"name":"c"}]}}]}"#)
+            .contains("one character"));
+        assert!(bad(r#"{"resources":[{"path":"a.csv","dialect":{"delimiter":"\n"},"schema":{"fields":[{"name":"c"}]}}]}"#)
+            .contains("separates rows"));
+        assert!(bad(r#"{"resources":[{"path":"a.csv","schema":{"fields":[{"name":"c"}],"primaryKey":"nope"}}]}"#)
+            .contains("not a field"));
     }
 
     #[test]
@@ -1134,7 +908,26 @@ to = "char"
             vec!["char", "ids_y", "3", "block"],
             "a blank header cell is named by its position, not left nameless"
         );
-        assert!(s.details.is_empty() && s.link.is_none(), "names only");
+    }
+
+    #[test]
+    fn a_datapackage_is_written_beside_the_data_and_keeps_its_neighbours() {
+        let s = Schema::from_header("char\tids_y\n", '\t');
+        let fresh = datapackage_with(None, "division", "d.tsv", &s).unwrap();
+        let back = Schema::from_datapackage(&fresh, "d.tsv").unwrap().expect("listed");
+        assert_eq!(back.delimiter, '\t');
+        assert_eq!(back.columns.len(), 2);
+        assert!(fresh.contains("\"name\": \"division\"") && fresh.contains("$schema"), "{fresh}");
+        // A second file joins the package; the first stays as it was.
+        let mut other = Schema::numbered(3, ';');
+        other.key = Some("1".to_string());
+        let both = datapackage_with(Some(&fresh), "division", "e.csv", &other).unwrap();
+        assert!(Schema::from_datapackage(&both, "d.tsv").unwrap().is_some());
+        let e = Schema::from_datapackage(&both, "e.csv").unwrap().expect("listed");
+        assert!(!e.header && e.delimiter == ';' && e.key.as_deref() == Some("1"));
+        // Written again, a file replaces its own resource rather than doubling it.
+        let again = datapackage_with(Some(&both), "division", "e.csv", &other).unwrap();
+        assert_eq!(again.matches("\"e.csv\"").count(), 1);
     }
 
     #[test]
@@ -1161,36 +954,36 @@ to = "char"
     }
 
     #[test]
-    fn the_schema_is_found_by_walking_up_from_the_file() {
+    fn the_schema_is_found_beside_the_file_and_an_old_one_is_named() {
         let root = std::env::temp_dir().join(format!("yumete-schema-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let deep = root.join("assets").join("division");
         std::fs::create_dir_all(&deep).unwrap();
-        // The schema sits beside the data…
-        std::fs::create_dir_all(deep.join(".yumete").join("tables")).unwrap();
-        std::fs::write(
-            deep.join(".yumete").join("tables").join("division.toml"),
-            DIVISION,
-        )
-        .unwrap();
+        std::fs::write(deep.join(DATAPACKAGE), DIVISION).unwrap();
         let csv = deep.join("yuhao_division_golden_source.csv");
-        std::fs::write(&csv, "char,ids_y,ids_g\n一,⿰木目,⿰木目\n").unwrap();
+        std::fs::write(&csv, "char,ids_y,ids_g,weight\n一,⿰木目,⿰木目,1\n").unwrap();
 
-        let (found, schema) = schema_for(&csv).expect("found from the file's own directory");
-        assert!(found.ends_with("division.toml"));
-        assert_eq!(schema.columns.len(), 3);
+        let (found, schema) = schema_for(&csv).expect("found beside the file");
+        assert!(found.ends_with(DATAPACKAGE));
+        assert_eq!(schema.columns.len(), 4);
 
-        // …and is still found for a file further down, since the walk goes up.
+        // Beside the data only: a package one folder up does not reach down.
         let nested = deep.join("卷一");
         std::fs::create_dir_all(&nested).unwrap();
-        let same = nested.join("yuhao_division_pending.csv");
+        let same = nested.join("yuhao_division_golden_source.csv");
         std::fs::write(&same, "char\n一\n").unwrap();
-        assert!(schema_for(&same).is_some(), "found from a directory below");
+        assert!(schema_for(&same).is_none());
 
-        // A file no schema names has none, rather than borrowing the nearest.
         let other = deep.join("notes.csv");
         std::fs::write(&other, "a,b\n1,2\n").unwrap();
         assert!(schema_for(&other).is_none());
+
+        // The old format is not read, and the reader is told once why not.
+        std::fs::create_dir_all(deep.join(".yumete").join("tables")).unwrap();
+        std::fs::write(deep.join(".yumete").join("tables").join("n.toml"), "[table]\nfile = 'notes.csv'\n").unwrap();
+        let (found, problems) = schema_for_reporting(&other);
+        assert!(found.is_none());
+        assert!(problems.iter().any(|p| p.contains("no longer read")), "{problems:?}");
 
         std::fs::remove_dir_all(&root).ok();
     }

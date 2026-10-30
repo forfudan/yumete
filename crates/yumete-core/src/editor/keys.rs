@@ -4456,7 +4456,6 @@ impl Editor {
         ("y p P", "hint.table.yank-or-paste-column"),
         ("v", "hint.table.replace-column"),
         ("H", "hint.table.first-row-is-data"),
-        ("e", "hint.table.schema"),
         ("i", "hint.table.detail-panel"),
     ];
 

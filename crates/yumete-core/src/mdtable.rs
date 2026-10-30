@@ -1472,9 +1472,6 @@ pub fn schema(header: &str) -> Schema {
         delimiter: '|',
         header: true,
         columns,
-        details: Vec::new(),
-        link: None,
-        ranges: HashMap::new(),
     }
 }
 

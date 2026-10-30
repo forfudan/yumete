@@ -377,9 +377,16 @@ pub enum Command {
     /// `:table-header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
     SetTableHeader(Switch),
-    /// `:table-schema` — the schema file in the other work area, written next
-    /// to the data first if none claims it yet (Feature #218).
-    OpenTableSchema,
+    /// `:table-schema` — how this table is read, on the status line; with
+    /// `write`, this file's description into the `datapackage.json` beside
+    /// the data (2026-10-30, as decided).
+    TableSchema { write: bool },
+    /// `:table-delimiter tab` — read this file as a grid cut by that
+    /// character, and remember the choice for this file.
+    TableDelimiter(char),
+    /// `:table-hide 7` / `:table-show 7` — a column drawn at no width, or
+    /// drawn again; remembered for this file, never written beside it.
+    HideTableColumn { column: usize, hide: bool },
     /// `:table-new 3 4` — an empty `|` table of this shape, blank lines around
     /// it, the cursor typing in its first heading (Feature #276). `rows`
     /// counts the heading; the rule row is not a row.
@@ -2687,6 +2694,13 @@ const SIDES: &[Word] = &[
 /// `on｜off`, and **the other way** — which the parser has always accepted
 /// and no word list ever said (#368). A word the menu cannot show is a word
 /// only the code knows about, which is the drift this table exists to stop.
+/// `:table-schema write`'s one word.
+const WRITE: &[Word] = &[Word {
+    name: "write",
+    help: "cmd.table.schema.write",
+    needs: &[Need::Table],
+}];
+
 const SWITCH: &[Word] = &[
     Word {
         name: "on",
@@ -4688,12 +4702,44 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.table.schema",
         needs: &[Need::Table],
-        params: &[],
-        build: Some(|_| {
-            // 「這張表到底是怎麼讀的」 — the answer is a file, so the command
-            // opens it rather than printing it (#218).
-            Ok(Command::OpenTableSchema)
+        params: &[Param::Words { of: WRITE, default: None }],
+        build: Some(|p| {
+            // 「這張表到底是怎麼讀的」 is a line; writing it down is asked for
+            // by name (2026-10-30, as decided).
+            Ok(Command::TableSchema { write: p.arg(0) == Some("write") })
         }),
+    },
+    Entry {
+        name: "table-delimiter",
+        aliases: &[],
+        help: "cmd.table.delimiter",
+        needs: &[],
+        params: &[Param::Free("<分隔符>")],
+        build: Some(|p| {
+            let word = p.need(0)?;
+            crate::table::delimiter_named(word)
+                .map(Command::TableDelimiter)
+                .ok_or(CommandError::InvalidArgument {
+                    command: "table-delimiter",
+                    value: word.to_string(),
+                })
+        }),
+    },
+    Entry {
+        name: "table-hide",
+        aliases: &[],
+        help: "cmd.table.hide",
+        needs: &[Need::Table],
+        params: &[Param::Free("<欄號>")],
+        build: Some(|p| Ok(Command::HideTableColumn { column: p.number(0)?, hide: true })),
+    },
+    Entry {
+        name: "table-show",
+        aliases: &[],
+        help: "cmd.table.show",
+        needs: &[Need::Table],
+        params: &[Param::Free("<欄號>")],
+        build: Some(|p| Ok(Command::HideTableColumn { column: p.number(0)?, hide: false })),
     },
     Entry {
         name: "table-jump",

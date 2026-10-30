@@ -54,11 +54,6 @@ impl Editor {
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| self.current_buffer().display_name().to_string());
         let key_at = schema.key.as_deref().and_then(|k| schema.index_of(k));
-        let jump_from: Vec<usize> = schema
-            .link
-            .as_ref()
-            .map(|j| j.from.iter().filter_map(|n| schema.index_of(n)).collect())
-            .unwrap_or_default();
         let want = schema.columns.len();
         let rope = self.current_buffer().rope();
         // The rule row is punctuation, not a row — it is the one line in a
@@ -125,40 +120,6 @@ impl Editor {
             }
         }
         // The components second, because answering them needs every key first.
-        let known: std::collections::HashSet<char> = keys
-            .iter()
-            .filter_map(|k| {
-                let mut c = k.chars();
-                c.next().filter(|_| c.next().is_none())
-            })
-            .collect();
-        for line in first..=last {
-            if Some(line) == rule {
-                continue;
-            }
-            let text = rope.line(line).to_string();
-            let spans = match separator {
-                Separator::Pipe => crate::mdtable::cells(&text),
-                Separator::Delimiter(d) => crate::table::cells(&text, d),
-            };
-            let mut missing: Vec<char> = Vec::new();
-            for &i in &jump_from {
-                let Some(&span) = spans.get(i) else { continue };
-                for c in crate::table::cell_text(&text, span).chars() {
-                    if is_ids_operator(c) || known.contains(&c) || missing.contains(&c) {
-                        continue;
-                    }
-                    missing.push(c);
-                }
-            }
-            if !missing.is_empty() {
-                let list: String = missing.iter().collect();
-                found.push(say!("chaifen.component-not-found", line + 1, list));
-            }
-            if found.len() >= LISTING_LIMIT {
-                break;
-            }
-        }
         if found.is_empty() {
             // The rule row was walked past, so it is not one of the rows the
             // count reports either.

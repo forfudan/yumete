@@ -628,13 +628,6 @@ impl Editor {
         // question one column to the left, while `cell_position`, which asks
         // the view, was pointing one column to the right.
         let spans = self.row_cells(line);
-        let value = |name: &str| -> String {
-            schema
-                .index_of(name)
-                .and_then(|i| spans.get(i))
-                .map(|&s| self.cell_shown(&text, s))
-                .unwrap_or_default()
-        };
         // Warning: **照這張表數，不照這個檔數**（2026-09-23 審出來的）。一個 `.csv`
         // 攤成整扇窗的時候，行號欄寫 1、狀態欄寫「行 1」，而這裏從前寫 2——
         // 同一行三個數字兩種口徑。`table_row_base` 就是那兩處用的那一個。
@@ -657,7 +650,7 @@ impl Editor {
             .get(cell)
             .map(|c| format!("{:>2} {}", cell + 1, c.heading()))
             .unwrap_or_default();
-        let mut rows: Vec<(String, Option<String>)> = schema
+        let rows: Vec<(String, Option<String>)> = schema
             .columns
             .iter()
             .enumerate()
@@ -687,15 +680,6 @@ impl Editor {
             // somewhere for them to go — and `t20,20g` reaches any of them by
             // number, which is what the numbers are for.
             .collect();
-        // Worked out, not stored — and marked as such, so nobody goes looking
-        // for a column that is not in the file.
-        for detail in &schema.details {
-            let from = value(detail.compute.column());
-            rows.push((
-                format!("{}*", detail.name),
-                Some(detail.compute.apply(&from, &schema.ranges)),
-            ));
-        }
         Some(Detail {
             title,
             here: here_name,
@@ -704,25 +688,24 @@ impl Editor {
         })
     }
 
-    /// The rows this cell's contents name, when its column is a foreign key.
+    /// The rows this cell's characters name, in a table with a key column.
     ///
     /// A 拆分 cell is a *sequence* of components, each of which is a character
     /// with a row of its own — so one cell points at several rows, and which
-    /// one is a question only a person can answer.
+    /// one is a question only a person can answer. **No column is declared
+    /// for it** (2026-10-30, as decided): any cell outside the key column is
+    /// read this way, since the key column's own cell *is* its row.
     fn cell_links(&self) -> Vec<(char, Option<usize>)> {
         let Some(view) = &self.table else {
             return Vec::new();
         };
-        let Some(link) = &view.schema.link else {
+        let Some(key) = view.schema.key.as_deref() else {
             return Vec::new();
         };
         let Some((line, cell)) = self.cell_position() else {
             return Vec::new();
         };
-        let Some(column) = view.schema.columns.get(cell) else {
-            return Vec::new();
-        };
-        if !link.from.contains(&column.name) {
+        if view.schema.index_of(key) == Some(cell) {
             return Vec::new();
         }
         let text = self.cell_text(line, cell);

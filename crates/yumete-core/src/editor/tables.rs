@@ -261,7 +261,12 @@ impl Editor {
                 // The guess is the sniffer's, over the same first lines
                 // `looks_delimited` reads, and a comma when it says nothing.
                 let lines = self.first_lines(20);
-                let delimiter = crate::table::sniff(&lines).unwrap_or(',');
+                // What was chosen for this file before the sniffer's guess.
+                let delimiter = self
+                    .table_choice_for(&path)
+                    .delimiter
+                    .or_else(|| crate::table::sniff(&lines))
+                    .unwrap_or(',');
                 let head = self.current_buffer().rope().line(0).to_string();
                 let schema = crate::table::Schema::from_header(&head, delimiter);
                 // Warning: **名字說了的那幾種不必「每行欄數一樣」**（2026-10-09 審出
@@ -325,6 +330,7 @@ impl Editor {
             reach: Reach::File,
             record_starts,
         });
+        self.apply_table_choice(&path);
         // A grid is read across: rows run left to right and columns stack down
         // the page, which is the one thing a 縱書 layout cannot do. Rather than
         // draw something incoherent, table mode is horizontal.
@@ -772,10 +778,20 @@ impl Editor {
             // one door that did not check, so opening a table in a 縱書
             // session left the invariant behind.
             self.turn_for_table();
+            self.apply_table_choice(&path);
         } else if !problems.is_empty() {
             // Opening a file says nothing about tables, ordinarily. A schema
             // that does not parse is the exception: it was meant to apply here.
             self.status = say!("table.schema-problems", listed(&problems));
+        }
+        // A delimiter chosen for this file before (`:table-delimiter`) opens
+        // it as a grid without the sniffer's say (2026-10-30, as decided).
+        if self.table.is_none() && problems.is_empty() {
+            if let Some(delimiter) = self.table_choice_for(&path).delimiter {
+                self.attach_text_grid(delimiter);
+                self.apply_table_choice(&path);
+                self.turn_for_table();
+            }
         }
         // **A plain-text file that is plainly a grid** (#380). No schema, no
         // `.csv` in the name, nobody to declare it — and yet every line has
@@ -789,6 +805,7 @@ impl Editor {
         if self.table.is_none() && problems.is_empty() && !self.wants_source_mode(&path) {
             if let Some(delimiter) = self.delimited_text_file() {
                 self.attach_text_grid(delimiter);
+                self.apply_table_choice(&path);
                 // Said, unlike the schema door: a schema is something the
                 // reader put there, and a guess is not. It also has to carry
                 // the way back, or the guess is a trap.
@@ -920,6 +937,79 @@ impl Editor {
     /// The view a recognised plain-text grid gets: inside the page rather than
     /// in the window, whole-file bounds, and the first row read as the header
     /// the way every other headerless door reads it.
+    /// **Put this file's remembered choices onto the view just built**: the
+    /// header setting and the hidden columns. The delimiter was taken before
+    /// the view was built, since it decides what the columns are.
+    fn apply_table_choice(&mut self, path: &Path) {
+        let choice = self.table_choice_for(path);
+        let header_now = self.table.as_ref().map(|v| v.schema.header);
+        if let (Some(want), Some(now)) = (choice.header, header_now) {
+            // A package beside the data outranks the memory: it is the file's
+            // own word, and the memory is only what somebody once pressed.
+            let by_a_package = self.table.as_ref().is_some_and(|v| !v.from.as_os_str().is_empty());
+            if want != now && !by_a_package {
+                let said = self.status.clone();
+                self.set_table_header(Some(want));
+                self.status = said;
+            }
+        }
+        if let Some(view) = self.table.as_mut() {
+            for (i, column) in view.schema.columns.iter_mut().enumerate() {
+                column.hidden = choice.hidden.contains(&(i + 1));
+            }
+        }
+    }
+
+    /// **`:table-delimiter tab`**: read this file as a grid cut by that
+    /// character, and remember it for this file (2026-10-30, as decided) —
+    /// the way a space-separated list is read as a table now that the
+    /// sniffer never guesses a space.
+    pub(super) fn set_table_delimiter(&mut self, delimiter: char) {
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
+            self.status = say!("table.no-file-name-no-schema");
+            return;
+        };
+        let mut choice = self.table_choice_for(&path);
+        choice.delimiter = Some(delimiter);
+        self.remember_table_choice(&path, &choice);
+        self.leave_table_quietly();
+        self.attach_text_grid(delimiter);
+        self.apply_table_choice(&path);
+        self.turn_for_table();
+        self.status = say!("table.delimiter-set", named_delimiter(delimiter));
+    }
+
+    /// **`:table-hide 7` / `:table-show 7`**: a column drawn at no width, or
+    /// drawn again — remembered for this file, never written beside it.
+    pub(super) fn hide_table_column(&mut self, column: usize, hide: bool) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = say!("table.not-in-a-table");
+            return;
+        };
+        let width = view.schema.columns.len();
+        if column == 0 || column > width {
+            self.status = say!("table.no-such-column", &column.to_string(), &width.to_string());
+            return;
+        }
+        if let Some(view) = self.table.as_mut() {
+            view.schema.columns[column - 1].hidden = hide;
+        }
+        if let Some(path) = self.current_buffer().path().map(Path::to_path_buf) {
+            let mut choice = self.table_choice_for(&path);
+            choice.hidden.retain(|&n| n != column);
+            if hide {
+                choice.hidden.push(column);
+                choice.hidden.sort_unstable();
+            }
+            self.remember_table_choice(&path, &choice);
+        }
+        self.snap_to_cell();
+        self.status = match hide {
+            true => say!("table.column-hidden", column),
+            false => say!("table.column-shown", column),
+        };
+    }
+
     fn attach_text_grid(&mut self, delimiter: char) {
         let head = self.current_buffer().rope().line(0).to_string();
         self.table = Some(TableView {
@@ -5091,6 +5181,11 @@ impl Editor {
         // neither the buffer nor its revision has moved, so nothing else would
         // notice that the answer just changed by one.
         *self.key_index.borrow_mut() = None;
+        if let Some(path) = self.current_buffer().path().map(Path::to_path_buf) {
+            let mut choice = self.table_choice_for(&path);
+            choice.header = Some(want);
+            self.remember_table_choice(&path, &choice);
+        }
         // The header is drawn frozen at the top and refuses every edit, so a
         // cursor left standing on it is a cursor in a cell nothing can be done
         // to — the same landing `enter_table` makes.
@@ -5134,15 +5229,35 @@ impl Editor {
     /// **The keys stay on the table.** The schema is opened in the *other*
     /// half, the way `空格 w` reads a place without leaving the one you are
     /// standing in — `空格 w` crosses over when there is something to type.
-    pub(super) fn open_schema(&mut self) {
+    /// **`:table-schema`**: how this table is read, and from where — a line on
+    /// the status bar, not a file (2026-10-30, as decided). The file is
+    /// `:table-schema write`.
+    pub(super) fn report_schema(&mut self) {
         let Some(view) = self.table.as_ref() else {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        // **A schema is about a file**, and neither a `|` table in a chapter
-        // nor a block recognised where it stands is one: they are a table
-        // *inside* a document, and a `.yumete/tables/` entry claiming the
-        // chapter would claim its prose too.
+        let columns = view.schema.columns.len();
+        let delimiter = named_delimiter(view.schema.delimiter);
+        let header = match view.schema.header {
+            true => say!("table.schema-header-yes"),
+            false => say!("table.schema-header-no"),
+        };
+        let from = match view.from.as_os_str().is_empty() {
+            true => say!("table.schema-from-nothing"),
+            false => view.from.display().to_string(),
+        };
+        self.status = say!("table.schema-read-as", columns, delimiter, header, from);
+    }
+
+    /// **`:table-schema write`**: this table's description into the
+    /// `datapackage.json` beside the data — made when there is none, this
+    /// file's resource replaced when there is (2026-10-30, as decided).
+    pub(super) fn write_schema(&mut self) {
+        let Some(view) = self.table.as_ref() else {
+            self.status = say!("table.not-in-a-table");
+            return;
+        };
         if view.bounds != Bounds::WholeFile {
             self.status = say!("table.schema-is-for-a-whole-file");
             return;
@@ -5151,96 +5266,26 @@ impl Editor {
             self.status = say!("table.no-file-name-no-schema");
             return;
         };
-        let from = match view.from.as_os_str().is_empty() {
-            false => view.from.clone(),
-            true => match self.write_starting_schema(&path) {
-                Some(file) => file,
-                // `write_starting_schema` has already said why.
-                None => return,
-            },
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
+        let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let file = dir.join(crate::table::DATAPACKAGE);
+        let existing = std::fs::read_to_string(&file).ok();
+        let text = match crate::table::datapackage_with(existing.as_deref(), &folder, &name, &view.schema) {
+            Ok(text) => text,
+            Err(why) => {
+                self.status = say!("table.schema-write-failed", file.display(), why);
+                return;
+            }
         };
-        // The buffer to come back to, by id: opening the schema may push a new
-        // buffer or show one already open, and either can move this one's
-        // index.
-        let table = self.current_buffer().id();
-        if let Err(why) = self.open_file(&from) {
-            self.status = say!("buffer.cannot-open", from.display(), why);
+        if let Err(why) = std::fs::write(&file, text) {
+            self.status = say!("table.schema-write-failed", file.display(), why);
             return;
         }
-        let name = from
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        // `show_in_split` tags the pane with whatever is current, which is why
-        // the schema is opened *first* and the table taken back after.
-        self.show_in_split(0, None, name.clone());
-        if let Some(index) = self.buffer_with(table) {
-            self.show_buffer(index);
-        }
-        self.status = say!("table.schema-in-the-other-area", name);
-    }
-
-    /// Write a schema next to the data that says what the grid is reading it
-    /// as, and answer with where it went.
-    ///
-    /// **Nothing that exists is written over.** A `.toml` already sitting at
-    /// that name and not claiming this file is somebody's, and the way to find
-    /// out what it says is to open it — which is what happens next.
-    fn write_starting_schema(&mut self, path: &Path) -> Option<PathBuf> {
-        let view = self.table.as_ref()?;
-        let name = path.file_name()?.to_string_lossy().into_owned();
-        let stem = path.file_stem()?.to_string_lossy().into_owned();
-        // Warning: **寫在讀那一趟找得到的地方**（2026-10-01）。讀那一頭
-        // （`table::schema_for`）是**從這個檔往上，每一層祖先的 `.yumete/tables/`
-        // 都找**，而寫這一頭從前只看 `path.parent()`——於是規格放在項目根上的
-        // 那種書，在子目録的一章上按 `空格 t e` 會在旁邊另造一個**被蓋住的**
-        // `tables/`，從此兩份誰也不知道誰。
-        //
-        // Warning: **不能改成 `root()`**（當天先那麼改過，審出來是錯的）：讀那一
-        // 趟是**檔的函數**，它的文檔寫着「從任何地方打開同一個 CSV 都要找到同
-        // 一份規格」。寫進項目根的話，項目**外**的檔寫完就再也讀不回來。
-        // **In the project's `.yumete/tables/`** (2026-10-30, as decided), or
-        // beside the file when it lies outside the project — the read side
-        // (`table::schema_for`) walks up from the file, so a schema at the
-        // root is found for every file under it.
-        let root = self.root();
-        let from = path.parent().unwrap_or_else(|| Path::new("."));
-        let tables = from
-            .ancestors()
-            .map(|d| d.join(".yumete").join("tables"))
-            .find(|d| d.is_dir())
-            .unwrap_or_else(|| match path.starts_with(&root) {
-                true => root.join(".yumete").join("tables"),
-                false => from.join(".yumete").join("tables"),
-            });
-        let file = tables.join(format!("{stem}.toml"));
-        if file.exists() {
-            return Some(file);
-        }
-        // **Nothing is written yet** (2026-10-30, as decided): the schema opens
-        // as an unsaved buffer bound to that path, and `:w` is what puts it on
-        // disk — so `--readonly`, `--private` and a glance at the schema leave
-        // the project as they found it, and no `.yumete/` appears in a
-        // subdirectory to become a project root of its own.
-        let text = crate::table::starting_schema(&name, &view.schema, &say!("table.schema-note"));
-        let table = self.current_buffer().id();
-        if let Err(why) = self.open_file(&file) {
-            self.status = say!("buffer.cannot-open", file.display(), why);
-            return None;
-        }
-        if self.current_buffer().char_count() == 0 {
-            let _ = self.current_buffer_mut().insert(0, &text);
-            self.set_cursor(0);
-        }
-        if let Some(index) = self.buffer_with(table) {
-            self.show_buffer(index);
-        }
-        // The view now has a schema file of its own, so a second `t e` opens
-        // this one rather than asking to write it again.
         if let Some(view) = self.table.as_mut() {
             view.from = file.clone();
         }
-        Some(file)
+        self.status = say!("table.schema-written", file.display());
     }
 
     /// **What `d`, `c` and `y` mean when the cell is the unit** — one
@@ -5716,7 +5761,6 @@ impl Editor {
                 // **`e` 是規格** (#218) — the file that says what these columns
                 // are, opened in the other half rather than described on the
                 // status line.
-                Key::Char('e') => self.open_schema(),
                 Key::Esc => {}
                 _ => self.status = Self::table_keys_say(Some(Bounds::WholeFile), self.the_pane_is_on()),
             }
@@ -6494,13 +6538,17 @@ impl Editor {
         }
         let asked = named.clone();
         let view = self.table.as_ref().expect("table_here");
-        let declared: Option<Vec<usize>> = view.schema.link.as_ref().map(|link| {
-            link.from
-                .iter()
-                .filter_map(|name| view.schema.index_of(name))
-                .collect()
-        });
+        // No column is declared a link any more (2026-10-30, as decided):
+        // with no argument the search runs over every column but the key
+        // column — 「who uses this」 is asked of the cells that name rows, not
+        // of the names themselves.
         let total = view.schema.columns.len();
+        let declared: Option<Vec<usize>> = view
+            .schema
+            .key
+            .as_deref()
+            .and_then(|k| view.schema.index_of(k))
+            .map(|key| (0..total).filter(|&i| i != key).collect());
         let columns: Vec<usize> = match named {
             // Said outright: 1-based, as the reader counts them.
             Some(named) => {
@@ -7265,7 +7313,7 @@ impl Editor {
             self.status = say!("table.not-in-a-table");
             return;
         };
-        if view.schema.link.is_none() && view.schema.key.is_none() {
+        if view.schema.key.is_none() {
             self.status = say!("table.schema-has-no-key-column");
             return;
         }
@@ -7312,8 +7360,8 @@ impl Editor {
         f: impl FnOnce(&HashMap<char, usize>) -> T,
     ) -> Option<T> {
         let view = self.table.as_ref()?;
-        let link = view.schema.link.as_ref()?;
-        let at = view.schema.index_of(&link.to)?;
+        let key = view.schema.key.as_deref()?;
+        let at = view.schema.index_of(key)?;
         let rope_lines = self.current_buffer().line_count();
         let want = (
             self.current_buffer().id(),
@@ -7388,10 +7436,10 @@ impl Editor {
         let Some(view) = &self.table else {
             return false;
         };
-        let Some(link) = &view.schema.link else {
+        let Some(key) = view.schema.key.as_deref() else {
             return false;
         };
-        match (self.cell_position(), view.schema.index_of(&link.to)) {
+        match (self.cell_position(), view.schema.index_of(key)) {
             (Some((_, cell)), Some(key)) => cell == key,
             _ => false,
         }

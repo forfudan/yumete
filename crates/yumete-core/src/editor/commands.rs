@@ -1290,8 +1290,19 @@ impl Editor {
                 self.set_table_header(now.map(|now| want.over(now)));
                 Ok(CommandOutcome::Continue)
             }
-            Command::OpenTableSchema => {
-                self.open_schema();
+            Command::TableSchema { write } => {
+                match write {
+                    true => self.write_schema(),
+                    false => self.report_schema(),
+                }
+                Ok(CommandOutcome::Continue)
+            }
+            Command::TableDelimiter(delimiter) => {
+                self.set_table_delimiter(delimiter);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::HideTableColumn { column, hide } => {
+                self.hide_table_column(column, hide);
                 Ok(CommandOutcome::Continue)
             }
             Command::NewTable { rows, columns } => {

@@ -20634,13 +20634,10 @@ fn squeezed(text: &str) -> String {
     fn a_table_file(tag: &str) -> (std::path::PathBuf, std::path::PathBuf) {
         let dir = std::env::temp_dir().join(format!("yumete-grid-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
-            dir.join(".yumete").join("tables").join("t.toml"),
-            "[table]\nfile = ['division.csv']\n\
-             [[table.column]]\nname = 'char'\n\
-             [[table.column]]\nname = 'ids_y'\n\
-             [[table.column]]\nname = 'note'\n",
+            dir.join("datapackage.json"),
+            r#"{"resources": [{"path": "division.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}, {"name": "note"}]}}]}"#,
         )
         .unwrap();
         let csv = dir.join("division.csv");
@@ -21520,12 +21517,10 @@ fn squeezed(text: &str) -> String {
     fn a_click_in_a_grid_lands_where_it_was_pointed() {
         let dir = std::env::temp_dir().join(format!("yumete-click-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
-            dir.join(".yumete").join("tables").join("t.toml"),
-            "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-             [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-             [[table.column]]\nname = 'note'\n",
+            dir.join("datapackage.json"),
+            r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}, {"name": "note"}], "primaryKey": "char"}}]}"#,
         )
         .unwrap();
         let csv = dir.join("d.csv");
