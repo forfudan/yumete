@@ -32663,3 +32663,15 @@ fn a_counted_ime_replace_repeats_with_its_count() {
     press(&mut ed, "l.");
     assert_eq!(ed.current_buffer().text(), "銀銀銀銀錢錢\n");
 }
+
+/// **vim's `2R` writes what was typed twice, over the text** (2026-10-30,
+/// nvim: `2RXY<Esc>` on `abcdef` gives `XYXYef`).
+#[test]
+fn vim_replace_mode_takes_a_count() {
+    let mut ed = typed_vim("abcdef\n");
+    press(&mut ed, "2RXY");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().rope().to_string(), "XYXYef\n");
+    press(&mut ed, "iZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "XYXZYef\n", "the cursor on the last one written");
+}
