@@ -32499,3 +32499,22 @@ fn insert_alt_d_takes_to_the_end_of_the_word() {
     ed.on_key(Key::Esc);
     assert_eq!(ed.current_buffer().rope().to_string(), "foo \n");
 }
+
+/// **`:q!` in a split closes the region, not the file** (2026-10-30): with
+/// one file open and the window split, it used to quit the editor and
+/// throw the changes away.
+#[test]
+fn quitting_a_split_closes_only_that_region() {
+    let mut ed = typed("one\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Ctrl('w'));
+    press(&mut ed, "s");
+    assert!(ed.other_pane().is_some(), "the window is split");
+    press(&mut ed, "oprecious");
+    ed.on_key(Key::Esc);
+    let out = ed.execute(":q!").expect(":q! answers");
+    assert_eq!(out, CommandOutcome::Continue, "the editor stays open");
+    assert!(ed.other_pane().is_none(), "the region closed");
+    assert!(ed.current_buffer().rope().to_string().contains("precious"), "the change stays");
+    assert_eq!(ed.execute(":q!").expect("again"), CommandOutcome::Quit, "the last region quits");
+}

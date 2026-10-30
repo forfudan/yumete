@@ -1314,6 +1314,12 @@ fn main() -> ExitCode {
             return ExitCode::from(101);
         }
     };
+    // **Closed from outside** (SIGHUP, SIGTERM) or the terminal gone: every
+    // dirty buffer gets its recovery copy now, not at the next five-second
+    // tick that will never come (2026-10-30).
+    if yumete_tui::hung_up() || outcome.is_err() {
+        editor.rescue_drafts();
+    }
     // Written on the way out, whichever way out it was: an editor that only
     // remembered a clean exit would forget the session you most wanted back.
     // The view only on a clean one: after a panic the state it would be read

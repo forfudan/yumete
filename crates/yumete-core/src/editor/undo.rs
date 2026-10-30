@@ -20,6 +20,15 @@ impl Editor {
     /// shell. `:qa` is the way out with files still open, and `:q` on the last
     /// one is the same thing.
     pub(super) fn quit(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
+        // **With the window split, `:q` and `:q!` close this region only**
+        // (2026-10-30, as helix and vim close a view): the file stays open with
+        // its changes, since the other region may be showing it. They used to
+        // close the file, or the whole editor with one file open, and `:q!`
+        // then threw the changes away.
+        if self.panel_focus().is_none() && self.other_pane().is_some() {
+            self.close_this_region();
+            return Ok(CommandOutcome::Continue);
+        }
         if self.buffers.len() > 1 {
             return self.close_buffer(force);
         }
