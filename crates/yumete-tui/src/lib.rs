@@ -5037,37 +5037,20 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     // is what keeps the measure untouched — both panes keep the full width in
     // 橫排 and the full height in 縱書, so not one row rewraps and not one 縱
     // is shortened. A divider carries the boundary and the caption.
-    let (panes, divider) = match editor.other_pane().is_some() {
-        false => ([text, Rect::new(text.x, text.y, 0, 0)], None),
-        true => match editor.layout() {
-            WritingLayout::Vertical if !editor.grid_has_the_pane() => {
-                let half = text.width.saturating_sub(1) / 2;
-                let rule = Rect::new(text.x + half, text.y, 1.min(text.width), text.height);
-                let right = Rect::new(
-                    text.x + half + 1,
-                    text.y,
-                    text.width.saturating_sub(half + 1),
-                    text.height,
-                );
-                let left = Rect::new(text.x, text.y, half, text.height);
-                // 縱 fill from the right edge, so the page you were reading
-                // keeps the right and the new one opens to the left of it.
-                ([right, left], Some(rule))
-            }
-            _ => {
-                let half = text.height.saturating_sub(1) / 2;
-                let rule = Rect::new(text.x, text.y + half, text.width, 1.min(text.height));
-                let top = Rect::new(text.x, text.y, text.width, half);
-                let bottom = Rect::new(
-                    text.x,
-                    text.y + half + 1,
-                    text.width,
-                    text.height.saturating_sub(half + 1),
-                );
-                ([top, bottom], Some(rule))
-            }
-        },
-    };
+    // **The windows, laid out by the editor's tree** (2026-10-30). Two
+    // slots still, until the viewports follow the tree (stage 2); a 縱書
+    // page puts the second half on the left.
+    let rtl = editor.splits_right_to_left();
+    let (placed, rules) = editor.windows().place(
+        yumete_core::window::Area::new(text.x, text.y, text.width, text.height),
+        rtl,
+    );
+    let rect = |a: yumete_core::window::Area| Rect::new(a.x, a.y, a.width, a.height);
+    let panes = [
+        placed.first().map(|p| rect(p.area)).unwrap_or(text),
+        placed.get(1).map(|p| rect(p.area)).unwrap_or(Rect::new(text.x, text.y, 0, 0)),
+    ];
+    let divider = rules.first().map(|r| rect(r.area));
     Areas {
         panels,
         tabs,

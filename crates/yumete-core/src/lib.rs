@@ -66,6 +66,7 @@ pub mod units;
 pub mod usage;
 pub mod vcs;
 pub mod wiki;
+pub mod window;
 pub mod words;
 pub mod wrap;
 pub mod written;

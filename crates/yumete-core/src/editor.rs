@@ -2752,11 +2752,17 @@ pub struct Editor {
     /// and the 拆分表 has nothing for it, which the panel has to say out loud
     /// rather than draw as an empty box.
     dictionary: Option<(String, Option<Found>)>,
-    /// The other work area, when the page is split (Feature #176).
-    other: Option<Pane>,
-    /// Which half of the screen holds the keys — **screen order**, so
-    /// switching panes never makes the top one jump to the bottom.
-    live_pane: usize,
+    /// **The windows** (2026-10-30): how the editing area is divided, as a
+    /// tree of ids ([`crate::window::Windows`]). Before this there were two
+    /// fixed halves, `other: Option<Pane>` and `live_pane: usize`.
+    windows: crate::window::Windows,
+    /// What each window **other than the live one** is showing: its buffer
+    /// and its place (Feature #176). The live window's state is the editor's
+    /// own (`current`, `sel`, `extend`); its entry here is stale until the
+    /// keys leave it, which is when it is written.
+    panes: std::collections::HashMap<crate::window::WindowId, Pane>,
+    /// The window that holds the keys.
+    live: crate::window::WindowId,
     /// **哪幾欄上鋪一道底紋**（`:rules`，#424，2026-09-30）。空 ＝ 一道都不鋪。
     ///
     /// 原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
@@ -4078,8 +4084,9 @@ impl Editor {
             completion_by_hand: false,
             offering: None,
             dictionary: None,
-            other: None,
-            live_pane: 0,
+            windows: crate::window::Windows::one(),
+            panes: std::collections::HashMap::new(),
+            live: 1,
             rules: Vec::new(),
             number_fill: false,
             diff_gutter: false,

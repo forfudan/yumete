@@ -680,12 +680,48 @@ impl Editor {
 
     /// The other work area, if the page is split.
     pub fn other_pane(&self) -> Option<&Pane> {
-        self.other.as_ref()
+        self.panes.get(&self.other_window()?)
+    }
+
+    /// The first window in screen order that is not the live one.
+    pub fn other_window(&self) -> Option<crate::window::WindowId> {
+        self.windows.leaves().into_iter().find(|&w| w != self.live)
+    }
+
+    /// The tree of windows, for the front end to lay out.
+    pub fn windows(&self) -> &crate::window::Windows {
+        &self.windows
+    }
+
+    /// The window holding the keys.
+    pub fn live_window(&self) -> crate::window::WindowId {
+        self.live
+    }
+
+    /// What a window other than the live one shows.
+    pub fn pane_of(&self, window: crate::window::WindowId) -> Option<&Pane> {
+        (window != self.live).then(|| self.panes.get(&window)).flatten()
+    }
+
+    /// How a new split lies by default: below on a horizontal page, beside
+    /// on a 縱書 page (where a column is the unit, so the cut goes between
+    /// columns).
+    pub(super) fn default_split(&self) -> crate::window::Split {
+        match self.layout() {
+            Layout::Vertical if !self.grid_has_the_pane() => crate::window::Split::Beside,
+            _ => crate::window::Split::Below,
+        }
+    }
+
+    /// Whether the second half of a **beside** split goes on the left: on a
+    /// 縱書 page, where reading runs right to left.
+    pub fn splits_right_to_left(&self) -> bool {
+        self.default_split() == crate::window::Split::Beside
     }
 
     /// Which half of the screen holds the keys (0 = the first drawn).
     pub fn live_pane(&self) -> usize {
-        self.live_pane
+        self.windows.index_of(self.live).unwrap_or(0)
     }
 
     /// Open the other work area, showing `at` in the current buffer.
@@ -694,17 +730,35 @@ impl Editor {
     /// point — the second area is for reading a place without leaving the one
     /// you are in.
     pub fn open_split(&mut self, at: usize, highlight: Option<(usize, usize)>, caption: String) {
+        self.split_live(self.default_split(), at, highlight, caption);
+    }
+
+    /// Split the live window `how`, the new window showing `at` in the
+    /// current buffer. With another window already open it is re-aimed
+    /// instead, which is what every caller of the old two-slot model meant.
+    pub(super) fn split_live(&mut self, how: crate::window::Split, at: usize, highlight: Option<(usize, usize)>, caption: String) {
         let buffer = self.current_buffer().id();
-        self.other = Some(Pane {
+        let at = at.min(self.current_buffer().rope().len_chars());
+        let pane = Pane {
             buffer,
-            cursor: at.min(self.current_buffer().rope().len_chars()),
-            anchor: at.min(self.current_buffer().rope().len_chars()),
+            cursor: at,
+            anchor: at,
             goal_column: None,
             goal_slot: None,
             extend: false,
             highlight,
             caption,
-        });
+        };
+        match self.other_window() {
+            Some(window) => {
+                self.panes.insert(window, pane);
+            }
+            None => {
+                if let Some(fresh) = self.windows.split(self.live, how) {
+                    self.panes.insert(fresh, pane);
+                }
+            }
+        }
     }
 
     /// Show something else in the other work area, opening it if need be.
@@ -714,7 +768,7 @@ impl Editor {
         // one document and shows another — and `空格 w` then goes to the one it
         // names.
         let buffer = self.current_buffer().id();
-        match self.other.as_mut() {
+        match self.other_window().and_then(|w| self.panes.get_mut(&w)) {
             Some(pane) => {
                 pane.buffer = buffer;
                 pane.cursor = at;
@@ -731,9 +785,21 @@ impl Editor {
     /// Which is the same act as「關掉另一個」 when there are two of them, and
     /// it means the half you are standing in can never vanish under you.
     pub fn close_split(&mut self) -> bool {
-        let had = self.other.take().is_some();
-        self.live_pane = 0;
-        had
+        let others: Vec<_> = self.windows.leaves().into_iter().filter(|&w| w != self.live).collect();
+        for window in &others {
+            self.windows.close(*window);
+            self.panes.remove(window);
+        }
+        !others.is_empty()
+    }
+
+    /// Close one window that is not the live one.
+    pub(super) fn close_window(&mut self, window: crate::window::WindowId) -> bool {
+        if window == self.live || !self.windows.close(window) {
+            return false;
+        }
+        self.panes.remove(&window);
+        true
     }
 
     /// Hand the keys to the other work area, and take back the place it held.
@@ -742,7 +808,19 @@ impl Editor {
     /// live pane's place is written into the pane it leaves, and the other's
     /// is installed. Nothing else in the editor learns that panes exist.
     pub fn switch_pane(&mut self) -> bool {
-        let Some(mut pane) = self.other.take() else {
+        match self.other_window() {
+            Some(window) => self.switch_to(window),
+            None => false,
+        }
+    }
+
+    /// Hand the keys to `window`: the live window's place is written into
+    /// its pane, and `window`'s pane is installed.
+    pub(super) fn switch_to(&mut self, window: crate::window::WindowId) -> bool {
+        if window == self.live || !self.windows.has(window) {
+            return false;
+        }
+        let Some(mut pane) = self.panes.remove(&window) else {
             return false;
         };
         let here = Pane {
@@ -776,8 +854,7 @@ impl Editor {
             }
             Some(_) => {}
             None => {
-                self.other = None;
-                self.live_pane = 0;
+                self.windows.close(window);
                 self.status = say!("pane.file-was-closed");
                 return false;
             }
@@ -790,10 +867,25 @@ impl Editor {
         self.sel.set_goal(pane.goal_column);
         self.sel.set_goal_slot(pane.goal_slot);
         self.extend = pane.extend;
-        self.other = Some(here);
-        self.live_pane = 1 - self.live_pane;
+        self.panes.insert(self.live, here);
+        self.live = window;
         self.refresh_goal_column();
         true
+    }
+
+    /// Drop every window whose buffer is `gone` — a window naming a buffer
+    /// that is not there is not a window. The live window is the editor's
+    /// own business (`current` has already moved).
+    pub(super) fn drop_windows_showing(&mut self, gone: impl Fn(u64) -> bool) {
+        let doomed: Vec<_> = self
+            .windows
+            .leaves()
+            .into_iter()
+            .filter(|&w| w != self.live && self.panes.get(&w).is_some_and(|p| gone(p.buffer)))
+            .collect();
+        for window in doomed {
+            self.close_window(window);
+        }
     }
 
     /// Whether the line-number band carries a ground of its own.
