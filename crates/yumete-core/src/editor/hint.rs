@@ -574,6 +574,7 @@ impl Editor {
             ),
             // **區域那一組**（2026-09-30，照 helix 的 `C-w`）。
             Pending::Region => (say!("hint.region.title"), Self::said(Self::REGION_KEYS.iter().copied())),
+            Pending::RegionNew => (say!("hint.region.new"), Self::said(Self::REGION_NEW_KEYS.iter().copied())),
             Pending::Conflict => (
                 say!("hint.conflict.title"),
                 Self::said(Self::CONFLICT_KEYS.iter().copied()),

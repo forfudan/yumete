@@ -1719,6 +1719,13 @@ impl Editor {
     /// [`Editor::new`] starts with, it is *replaced* rather than stacked on top
     /// of, so `yumete file` results in exactly one buffer.
     pub(super) fn add_buffer(&mut self, buffer: Buffer) {
+        self.add_buffer_kept(buffer, true)
+    }
+
+    /// [`Self::add_buffer`], saying whether the pristine scratch buffer may
+    /// be replaced. A blank window must not replace it: the window it was
+    /// split from is still showing it.
+    pub(super) fn add_buffer_kept(&mut self, buffer: Buffer, replace_pristine: bool) {
         // Remember where the buffer being left had its cursor, so coming back
         // to it returns to the same place.
         let at = self.sel.head();
@@ -1727,7 +1734,8 @@ impl Editor {
         // [`Editor::show_buffer`] 都要記——Warning: 那一支只收「已經開着的」，開新檔走的是
         // 這裏，兩條路都記上 `ga` 纔一直有答案。
         let leaving = self.current_buffer().id();
-        if self.buffers.len() == 1
+        if replace_pristine
+            && self.buffers.len() == 1
             && self.buffers[0].path().is_none()
             && self.buffers[0].char_count() == 0
         {

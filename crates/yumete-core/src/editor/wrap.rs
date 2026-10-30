@@ -396,6 +396,7 @@ impl Editor {
             Pending::YumeValue(_) => "␣z…",
             // 區域那一組：光標旁邊那個牌子寫 `C-w`（它有兩扇門，這一個短）。
             Pending::Region => "C-w",
+            Pending::RegionNew => "C-w n",
             Pending::Find(FindKind::Forward) => "f",
             Pending::Find(FindKind::Backward) => "F",
             Pending::Find(FindKind::Till) => "t",

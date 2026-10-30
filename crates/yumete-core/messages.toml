@@ -1431,6 +1431,13 @@ en = "the keys and the commands, opened as a file you can read and search"
 find = "幫助 帮助 说明 説明 手冊 手册 keys manual"
 
 [[message]]
+# : 命令選單裏 hnew 那一項的説明
+key = "cmd.commands.hnew"
+zht = "下面開一個空白窗口（同 C-w n s）"
+zhs = "下面开一个空白窗口（同 C-w n s）"
+en = "a blank window below this one (as C-w n s)"
+find = "分窗 分屏 新建 空白 split window 窗口 上下 below hnew"
+[[message]]
 # `:horizontal` ——`:layout horizontal` 的一個字的寫法
 key = "cmd.commands.horizontal"
 zht = "把這一頁轉成橫排"
@@ -1909,6 +1916,14 @@ zht = "竪排的 hjkl 走行文還是走版面"
 zhs = "竖排的 hjkl 走行文还是走版面"
 en = "whether hjkl follow the text or the screen when the page runs down"
 find = "hjkl 鍵位 键位 方向 移動 移动 竪排 竖排 邏輯 逻辑 視覺 视觉 keys motion logical visual"
+
+[[message]]
+# : 命令選單裏 vnew 那一項的説明
+key = "cmd.commands.vnew"
+zht = "旁邊開一個空白窗口（同 C-w n v）"
+zhs = "旁边开一个空白窗口（同 C-w n v）"
+en = "a blank window beside this one (as C-w n v)"
+find = "分窗 分屏 新建 空白 split window 窗口 左右 beside vnew"
 
 [[message]]
 # : 命令選單裏 vsplit 那一項的説明
@@ -6095,6 +6110,27 @@ key = "hint.region.into-bar"
 zht = "進左右欄"
 zhs = "进左右栏"
 en = "go into the left / right sidebar"
+
+[[message]]
+# C-w 提示：n 開一個空白窗口（helix 那裏是一組，後面跟 s 或 v）
+key = "hint.region.new"
+zht = "開一個空白窗口"
+zhs = "开一个空白窗口"
+en = "a blank window"
+
+[[message]]
+# C-w n 提示：s 在下面開空白窗口
+key = "hint.region.new-below"
+zht = "下面開一個空白窗口"
+zhs = "下面开一个空白窗口"
+en = "a blank window below"
+
+[[message]]
+# C-w n 提示：v 在旁邊開空白窗口
+key = "hint.region.new-beside"
+zht = "旁邊開一個空白窗口"
+zhs = "旁边开一个空白窗口"
+en = "a blank window beside"
 
 [[message]]
 # C-w w：走到下一個區域
@@ -13801,4 +13837,5 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
 

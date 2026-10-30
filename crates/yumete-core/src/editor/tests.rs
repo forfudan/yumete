@@ -32955,6 +32955,53 @@ fn windows_open_beside_and_below_and_close_one_at_a_time() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// `C-w n` (2026-10-31): helix's group, `s` a blank window below and `v`
+/// one beside; the vim preset opens it at once, below; `:hnew`/`:vnew` are
+/// the commands. The window split from keeps its buffer, even the empty one
+/// yumete starts with.
+#[test]
+fn a_blank_window_opens_below_or_beside_on_a_buffer_of_its_own() {
+    let mut ed = Editor::new();
+    let one = ed.live_window();
+    let first = ed.current_buffer().id();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('n'));
+    assert_eq!(ed.windows().len(), 1, "helix: `n` waits for where");
+    ed.on_key(Key::Char('v'));
+    let two = ed.live_window();
+    assert_eq!(ed.windows().leaves(), [one, two]);
+    assert_ne!(ed.current_buffer().id(), first, "a buffer of its own");
+    assert!(ed.current_buffer().path().is_none() && ed.current_buffer().char_count() == 0);
+    assert_eq!(ed.buffer_count(), 2, "the pristine buffer was not replaced");
+    assert_eq!(ed.pane_of(one).map(|p| p.buffer), Some(first));
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20), false);
+    assert_eq!(placed[1].area.x, 41, "v: beside");
+
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('n'));
+    ed.on_key(Key::Ctrl('s'));
+    assert_eq!(ed.windows().len(), 3, "C-s as well as s");
+    assert_eq!(ed.buffer_count(), 3);
+
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('n'));
+    ed.on_key(Key::Char('x'));
+    assert_eq!(ed.windows().len(), 3, "any other key opens nothing");
+
+    ed.execute(":vnew").unwrap();
+    ed.execute(":hnew").unwrap();
+    assert_eq!(ed.windows().len(), 5);
+    assert_eq!(ed.buffer_count(), 5);
+
+    let mut vim = Editor::new();
+    vim.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    vim.on_key(Key::Ctrl('w'));
+    vim.on_key(Key::Ctrl('n'));
+    assert_eq!(vim.windows().len(), 2, "vim: C-w C-n opens it at once");
+    let (placed, _) = vim.windows().place(crate::window::Area::new(0, 0, 80, 21), false);
+    assert_eq!(placed[1].area.y, 11, "below");
+}
+
 /// `:line-numbers` (2026-10-31): a word sets how the gutter counts for the
 /// session, bare says which is on; the config seeds the baseline.
 #[test]

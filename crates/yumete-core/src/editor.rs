@@ -231,6 +231,9 @@ enum Pending {
     ///
     /// 命令是 `:convert-table`；這一組是它的鍵位，`p` pipe、`c` csv、`t` tsv。
     TableConvert,
+    /// **`C-w n`: a blank window**, waiting for where (2026-10-31, helix's
+    /// `n` group): `s` below, `v` beside.
+    RegionNew,
     /// An `m` match sequence awaiting its verb (`m`, `i`, `a`, `s`, `d`, `r`).
     Match,
     /// **A vim operator waiting for its motion** — `d`, `c`, `y` under the vim
@@ -364,6 +367,7 @@ impl Pending {
             // 區域那一組等的是 `w`/`hjkl`/`e i E I`/`s q o`，一個要寫進去的
             // 字都没有。
             | Pending::Region
+            | Pending::RegionNew
             | Pending::Conflict => false,
             // **A vim operator is waiting for a *motion*, which is keys** — the
             // character `f` asks for is read by the motion itself.

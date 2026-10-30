@@ -535,8 +535,31 @@ impl Editor {
             Key::Char('v') => {
                 self.split_window(Split::Beside);
             }
+            // **`n` a blank window** (2026-10-31). helix makes it a group,
+            // `n s` below and `n v` beside; vim opens it at once, below.
+            Key::Char('n') => match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                true => {
+                    self.new_window(Split::Below);
+                }
+                false => self.pending = crate::editor::Pending::RegionNew,
+            },
             Key::Char('q') => self.close_this_region(),
             Key::Char('o') => self.close_other_regions(),
+            _ => {}
+        }
+    }
+
+    /// The key after `C-w n`: `s` below, `v` beside, with or without Ctrl,
+    /// as helix reads them.
+    pub(super) fn on_region_new_key(&mut self, key: Key) {
+        use crate::window::Split;
+        match key {
+            Key::Char('s') | Key::Ctrl('s') => {
+                self.new_window(Split::Below);
+            }
+            Key::Char('v') | Key::Ctrl('v') => {
+                self.new_window(Split::Beside);
+            }
             _ => {}
         }
     }
