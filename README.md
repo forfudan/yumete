@@ -26,8 +26,8 @@ It installs as `yumete`, and as `ye` for the one you type.
 
 ## Documentation
 
-**<https://zhuyuhao.com/yumete-docs/>**, also as a
-[book](https://zhuyuhao.com/yumete-docs/book/). What changed in each release is
+**<https://yumete.shurufa.app/>**, also as a
+[book](https://yumete.shurufa.app/book/). What changed in each release is
 in [CHANGELOG.md](CHANGELOG.md).
 
 ## Building from source
@@ -38,7 +38,7 @@ cargo test --workspace
 ```
 
 The input method crate depends on the `yume` repository checked out beside this
-one (`../yume`). See [Installation](https://zhuyuhao.com/yumete-docs/guide/installation)
+one (`../yume`). See [Installation](https://yumete.shurufa.app/guide/installation)
 for the options and for Windows.
 
 ## Licence
