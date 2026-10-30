@@ -992,7 +992,7 @@ en = "no character-set data — load a scheme first with :yume-scheme"
 key = "check.charset-outside"
 zht = "{0}: 「{1}」不在任何字集裏({2})，全文 {3} 處"
 zhs = "{0}: 「{1}」不在任何字集里({2})，全文 {3} 处"
-en = "{0}: 「{1}」 is in no standard ({2}), {3} time(s) in all"
+en = "{0}: 「{1}」 is in no standard ({2}); occurrences in the file: {3}"
 
 [[message]]
 # :check-charset 的結果那一份緩衝區的名字
