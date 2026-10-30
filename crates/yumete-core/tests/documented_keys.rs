@@ -397,6 +397,11 @@ const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[
 /// helix」 page to say so.
 const DISOWNED_KEYS: &[&str] = &["t s", "Space ."];
 
+/// **Keys the vim keymap has and the `g` menu does not list yet**: `gi`
+/// (2026-10-30) works, and its row in the menu waits for its Chinese label.
+/// Take it off this list in the commit that adds the row.
+const NOT_IN_A_MENU_YET: &[&str] = &["gi"];
+
 #[test]
 fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
     let mut asked = 0;
@@ -405,6 +410,7 @@ fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
         for (line, quote) in quoted(&text) {
             if NOT_A_SEQUENCE.contains(&quote.as_str())
                 || DISOWNED_KEYS.contains(&quote.as_str())
+                || NOT_IN_A_MENU_YET.contains(&quote.as_str())
             {
                 continue;
             }

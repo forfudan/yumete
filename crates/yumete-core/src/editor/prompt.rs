@@ -271,7 +271,8 @@ impl Editor {
                 }
                 // The session just ended is what `.` replays.
                 self.insert_recording.clear();
-                self.last_insert_stop = Some(self.sel.head());
+                let stop = self.sel.head();
+                self.current_buffer_mut().set_insert_stop(stop);
                 self.mode = Mode::Normal;
                 let caret = self.sel.head();
                 self.step_back_out_of_insert();

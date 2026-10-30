@@ -1004,6 +1004,18 @@ impl Editor {
         // A motion still owed a character (`df,`, `di(`) takes this one.
         if let Some(f) = first {
             if let Some(step) = crate::vim::step_for(&f.to_string(), grain, Some(c)) {
+                // `dfa` is a find too: `;` and `,` repeat it afterwards
+                // (`:h ;`, 2026-10-30).
+                let kind = match f {
+                    'f' => Some(FindKind::Forward),
+                    'F' => Some(FindKind::Backward),
+                    't' => Some(FindKind::Till),
+                    'T' => Some(FindKind::TillBack),
+                    _ => None,
+                };
+                if let Some(kind) = kind {
+                    self.last_find = Some((kind, c));
+                }
                 return self.run_vim_step(op, step);
             }
         }
@@ -3292,7 +3304,10 @@ impl Editor {
                         }
                         head = next;
                     }
-                    self.sel.set_head(head);
+                    // Head at the start, so `u` lands there (nvim: `w3~u`).
+                    let start = self.sel.head();
+                    self.sel.set_anchor(head);
+                    self.sel.set_head(start);
                 }
                 self.map_selection(switch_case);
                 // **vim 的 `~` 按完往前走一格**（`:h ~`），所以 `~~~` 在 `alpha`
@@ -3425,6 +3440,14 @@ impl Editor {
             Key::Ctrl('a') => self.bump_number(count as i64),
             Key::Ctrl('x') => self.bump_number(-(count as i64)),
             // Repeat the last insert, and the last `f`/`t`.
+            // **vim's `3.` replaces the count the change was made with**
+            // (`:h .`, nvim: `rX` then `3.` writes three), and the next bare
+            // `.` keeps the new one. Repeating the whole change three times
+            // wrote `X` over the same character three times.
+            Key::Char('.') if self.key_preset == yumete_cjk::KeyPreset::Vim && operator_count.is_some() => {
+                self.recount_the_last_edit(count.min(Self::WRITING_MAX));
+                self.repeat_edit();
+            }
             Key::Char('.') => self.repeat_writing(count, |e| e.repeat_edit()),
             Key::Alt('.') => {
                 if let Some((kind, c)) = self.last_find {
@@ -3740,14 +3763,14 @@ impl Editor {
                 self.repeat_search(!self.search_forward);
                 return;
             }
-            // **vim's `gi`**: insert again where the last Insert stopped
-            // (`:h gi`, measured: `wiX<Esc>jgiY` gives `foo XYbar`).
+            // **vim's `gi`**: insert again where the last Insert in this
+            // file stopped (`:h gi`, measured: `wiX<Esc>jgiY` gives
+            // `foo XYbar`), or at the cursor when there was none.
             Key::Char('i') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                if let Some(at) = self.last_insert_stop {
-                    let at = at.min(self.current_buffer().char_count());
+                if let Some(at) = self.current_buffer().insert_stop() {
                     self.set_cursor(at);
-                    self.enter_insert();
                 }
+                self.enter_insert();
                 return;
             }
             // 字形組在 vim 鍵位下的門（2026-10-06）：那一端的 `` ` `` 歸標記了。
@@ -3758,7 +3781,22 @@ impl Editor {
             // **vim 的 `gJ`：併行而不補空格**（2026-10-06，`:h gJ`）。裸 `J` 的接縫是
             // 算出來的（漢字之間不補、拉丁詞之間補一個），`gJ` 要的正是「什麼都別算」。
             Key::Char('J') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                let n = self.operator_count.take().unwrap_or(1).max(1);
+                // Visual `gJ` joins the lines selected and returns to Normal
+                // (`:h v_gJ`, 2026-10-30), as Visual `J` does.
+                let n = match self.extend {
+                    true => {
+                        let rope = self.current_buffer().rope();
+                        let (start, end) = self.selection();
+                        let lines = rope.char_to_line(end.saturating_sub(1).max(start)) - rope.char_to_line(start);
+                        let seat = rope.line_to_char(rope.char_to_line(start));
+                        self.extend = false;
+                        self.vim_lines = false;
+                        self.sel.set_anchor(seat);
+                        self.sel.set_head(seat);
+                        lines.max(1)
+                    }
+                    false => self.operator_count.take().unwrap_or(1).max(1),
+                };
                 self.repeat_writing(n, |e| e.join_lines_raw());
                 return;
             }

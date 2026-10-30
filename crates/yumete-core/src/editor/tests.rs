@@ -32569,3 +32569,97 @@ fn what_round_three_found_in_tonights_keys() {
     assert_eq!(crate::units::units("foo\u{200B}bar"), 2);
     assert_eq!(crate::units::units("cafe\u{301} re\u{301}sume\u{301}"), 2);
 }
+
+/// **Visual `gJ` returns to Normal, and `;` repeats a find made under an
+/// operator** (2026-10-30, nvim).
+#[test]
+fn vim_visual_gj_and_finds_under_operators() {
+    let mut ed = typed_vim("a\nb\nc\n");
+    press(&mut ed, "vjgJiZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "aZb\nc\n");
+    let mut ed = typed_vim("banana bandana\n");
+    press(&mut ed, "dfa;.");
+    assert_eq!(ed.current_buffer().rope().to_string(), "n bandana\n");
+}
+
+/// **vim's `"1` and `"2` hold the last deletes of whole lines** (2026-10-30,
+/// nvim: `dd"1p` and `dddd"2p`).
+#[test]
+fn vim_numbered_registers_keep_the_line_deletes() {
+    let mut ed = typed_vim("one\ntwo\nthree\n");
+    press(&mut ed, "dd\"1p");
+    assert_eq!(ed.current_buffer().rope().to_string(), "two\none\nthree\n");
+    let mut ed = typed_vim("one\ntwo\nthree\n");
+    press(&mut ed, "dddd\"2p");
+    assert_eq!(ed.current_buffer().rope().to_string(), "three\none\n");
+}
+
+/// **Round four's leftovers** (2026-10-30): `A-d` on trailing blanks takes
+/// them all (helix), `:q!` with a sidebar focused closes the sidebar, and
+/// vim's `gi` follows the text and falls back to the cursor (nvim).
+#[test]
+fn what_round_four_found_in_tonights_keys() {
+    for (text, want) in [("a  \n  b\n", "a\n  b\n"), ("a  \n", "a\n"), ("a  \n\n", "a\n\n")] {
+        let mut ed = typed(text);
+        press(&mut ed, "ggli");
+        ed.on_key(Key::Alt('d'));
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "A-d in {text:?}");
+    }
+
+    let mut ed = typed("one\n");
+    ed.execute(":sidebar outline").unwrap();
+    assert!(ed.panel_focus().is_some(), "the sidebar has the keys");
+    assert_eq!(ed.execute(":q!").expect(":q! answers"), CommandOutcome::Continue);
+    assert!(ed.panel_focus().is_none(), "the sidebar closed");
+    assert_eq!(ed.current_buffer().rope().to_string(), "one\n", "the text stays");
+
+    let path = tmp().join("yumete-gi-no-stop.txt");
+    std::fs::write(&path, "abc def\n").unwrap();
+    let mut ed = Editor::new();
+    ed.execute(":keymap vim").unwrap();
+    ed.open_file(&path).unwrap();
+    std::fs::remove_file(&path).ok();
+    press(&mut ed, "giX");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().rope().to_string(), "Xabc def\n", "no stop yet: at the cursor");
+    let mut ed = typed_vim("one\nabc def\nxyz\n");
+    press(&mut ed, "ggjwiQ");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "ggddjgiR");
+    assert_eq!(ed.current_buffer().rope().to_string(), "abc QRdef\nxyz\n");
+}
+
+/// **vim's `3.` replaces the change's count** (2026-10-30, nvim: `rXj3.`
+/// writes three, and a bare `.` after it writes three again).
+#[test]
+fn vim_counted_dot_replaces_the_count() {
+    let mut ed = typed_vim("abcdef\nabcdef\nabcdef\n");
+    press(&mut ed, "rXj3.j.");
+    assert_eq!(ed.current_buffer().rope().to_string(), "Xbcdef\nXXXdef\nabXXXf\n");
+    let mut ed = typed_vim("1\n2\n3\n4\n5\n6\n");
+    press(&mut ed, "2dd3.");
+    assert_eq!(ed.current_buffer().rope().to_string(), "6\n");
+}
+
+/// **`u` after a counted `r` or `~` puts the cursor at the start of what
+/// changed** (2026-10-30, nvim: `w3rXu` and `w3~u` stand on `d`).
+#[test]
+fn vim_undo_of_a_counted_r_lands_at_its_start() {
+    for keys in ["w3rXuiZ", "w3~uiZ"] {
+        let mut ed = typed_vim("abc def\n");
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), "abc Zdef\n", "{keys}");
+    }
+}
+
+/// **A counted IME `r` keeps its count for `.`** (2026-10-30): `2r銀` then
+/// `l.` writes two more, as `2rX` then `l.` does in nvim.
+#[test]
+fn a_counted_ime_replace_repeats_with_its_count() {
+    let mut ed = typed_vim("錢錢錢錢錢錢\n");
+    press(&mut ed, "2r");
+    ed.insert_committed("銀");
+    press(&mut ed, "l.");
+    assert_eq!(ed.current_buffer().text(), "銀銀銀銀錢錢\n");
+}

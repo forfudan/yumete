@@ -237,6 +237,10 @@ pub struct Buffer {
     changes: Vec<usize>,
     /// `g;`/`g,` 走到第幾條。一改東西就回到末尾——同 vim：新的一改，走查從頭算。
     changes_at: usize,
+    /// **Where the last Insert in this buffer stopped** (vim's `'^` mark, used
+    /// by `gi`). Kept here so it is per buffer and moves with the text before
+    /// it, as vim's marks do (2026-10-30).
+    insert_stop: Option<usize>,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -382,6 +386,7 @@ impl Buffer {
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
+            insert_stop: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -445,6 +450,7 @@ impl Buffer {
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
+            insert_stop: None,
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -556,6 +562,7 @@ impl Buffer {
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
+            insert_stop: None,
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -879,6 +886,7 @@ impl Buffer {
         // 頭**，和 vi 的 `'.` 一樣：剛打完一段話按 `g.` 回來，要回到的是話的末尾。
         self.last_edit = Some(char_idx + text.chars().count());
         self.note_change(char_idx + text.chars().count());
+        self.shift_insert_stop(char_idx, 0, text.chars().count());
         Ok(())
     }
 
@@ -903,6 +911,7 @@ impl Buffer {
         // 刪掉的那一段没有「末尾」可回，回到它原來的起點。
         self.last_edit = Some(at);
         self.note_change(at);
+        self.shift_insert_stop(at, taken, 0);
         Ok(())
     }
 
@@ -930,7 +939,30 @@ impl Buffer {
             journal.push((start, taken, text.chars().count()));
         }
         self.last_edit = Some(start + text.chars().count());
+        self.shift_insert_stop(start, taken, text.chars().count());
         Ok(())
+    }
+
+    /// Where the last Insert here stopped (`gi`); see the field.
+    pub fn insert_stop(&self) -> Option<usize> {
+        self.insert_stop.map(|at| at.min(self.rope.len_chars()))
+    }
+
+    /// Note where an Insert just stopped (`gi`).
+    pub fn set_insert_stop(&mut self, at: usize) {
+        self.insert_stop = Some(at);
+    }
+
+    /// Move the `gi` stop through an edit: `taken` characters at `at` became
+    /// `put`. A stop inside what was taken lands where the edit began.
+    fn shift_insert_stop(&mut self, at: usize, taken: usize, put: usize) {
+        if let Some(stop) = self.insert_stop.as_mut() {
+            if *stop >= at + taken {
+                *stop = *stop + put - taken;
+            } else if *stop > at {
+                *stop = at;
+            }
+        }
     }
 
     // ---- Crash recovery (Feature #79) -------------------------------------
@@ -1832,6 +1864,23 @@ fn swap_path_for(path: &Path) -> Option<PathBuf> {
 /// give a copy and the save that followed it the same time, and being offered a
 /// draft one does not need costs nothing, while not being offered one costs the
 /// work.
+/// Whether a process with this id is running (and is not this one).
+fn process_is_running(pid: i32) -> bool {
+    if pid <= 0 || pid as u32 == std::process::id() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        // Signal 0 only asks; EPERM means it exists under another user.
+        let answer = unsafe { libc::kill(pid, 0) };
+        answer == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> {
     let swap = swap_path_for(path)?;
     // The canonical name, and any copy a session kept beside it under a name of
@@ -1867,6 +1916,17 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .is_some_and(|n| n != plain && n != mine);
+        // **A copy whose yumete is still running is not left behind**
+        // (2026-10-30): offering it as a crashed run's work let `d` delete a
+        // live session's only copy, and that session, unchanged since, did not
+        // write it again. It is that session's to keep; it gets offered once
+        // the process is gone.
+        let suffix = at.file_name().map(|n| n.to_string_lossy().into_owned()).and_then(|n| {
+            n.strip_prefix(&format!("{plain}.")).map(str::to_string)
+        });
+        if someone_elses && suffix.as_deref().and_then(|d| d.parse::<i32>().ok()).is_some_and(process_is_running) {
+            return;
+        }
         let worth = someone_elses
             || match fs::metadata(path).and_then(|m| m.modified()) {
                 Ok(saved) => stamped >= saved,
@@ -2975,6 +3035,23 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
+    /// **A running yumete's copy is not offered** (2026-10-30): a second
+    /// session offered it as crashed work, and `d` deleted the live one's only
+    /// copy. Here the parent process (the test runner) stands in for it.
+    #[cfg(unix)]
+    #[test]
+    fn a_live_sessions_draft_is_not_offered() {
+        let dir = tmp().join(format!("yumete-live-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ch.md");
+        fs::write(&path, "底稿\n").unwrap();
+        let alive = unsafe { libc::getppid() };
+        fs::write(dir.join(format!(".ch.md.yumete.{alive}")), "活着那一份\n").unwrap();
+        assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
+        fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn a_draft_kept_under_a_name_of_its_own_is_still_found() {
         // If the *second* session is the one that crashes, its copy is the only
@@ -2985,7 +3062,7 @@ fn tmp() -> std::path::PathBuf {
         let path = dir.join("ch.md");
         fs::write(&path, "底稿\n").unwrap();
         std::thread::sleep(std::time::Duration::from_millis(20));
-        fs::write(dir.join(".ch.md.yumete.9999"), "第二個 session 的\n").unwrap();
+        fs::write(dir.join(".ch.md.yumete.909999"), "第二個 session 的\n").unwrap();
 
         assert_eq!(
             Buffer::open(&path).unwrap().recovered_draft(),
@@ -2993,7 +3070,7 @@ fn tmp() -> std::path::PathBuf {
         );
 
         // A neighbour whose suffix is not a process id is not a recovery copy.
-        fs::remove_file(dir.join(".ch.md.yumete.9999")).unwrap();
+        fs::remove_file(dir.join(".ch.md.yumete.909999")).unwrap();
         fs::write(dir.join(".ch.md.yumete.bak"), "手裏留的一份\n").unwrap();
         assert!(Buffer::open(&path).unwrap().recovered_draft().is_none());
 

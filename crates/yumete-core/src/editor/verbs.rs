@@ -562,13 +562,17 @@ impl Editor {
             }
             return;
         }
-        self.sel.set_anchor(head);
-        self.sel.set_head(end);
+        // Head at the start, so the undo point remembers the start and `u`
+        // lands there, as in vim (`w3rXu` stands on the first one).
+        self.sel.set_anchor(end);
+        self.sel.set_head(head);
         self.replace_chars(c);
-        // The cursor ends on the last character written, as vim leaves it.
+        // The cursor ends on the last character written, as vim leaves it,
+        // and `j` then keeps that column (nvim: `3rXj` stands on column 2).
         let at = self.sel.head();
         self.sel.set_anchor(at);
         self.clamp_cursor();
+        self.refresh_goal_column();
     }
 
     pub(super) fn replace_chars(&mut self, c: char) {

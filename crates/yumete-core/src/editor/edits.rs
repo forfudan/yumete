@@ -795,7 +795,12 @@ impl Editor {
             false => motion::next_word_start(rope, at, self.word_grain(), self.segmenter.as_ref()),
         };
         // Nothing further on this line: take the rest of the line's text.
+        // Only blanks left (`a␣␣` with the cursor on the first blank) is
+        // that case too: helix takes them all, not one (2026-10-30).
         let line_end = motion::line_end(rope, at);
+        if rope.slice(at..line_end).chars().all(char::is_whitespace) {
+            to = line_end;
+        }
         to = to.min(line_end).min(self.insert_ceiling());
         if to <= at {
             return;
@@ -1361,11 +1366,25 @@ impl Editor {
                     self.yanks.insert(0, text.clone());
                     self.yanks.truncate(YANKS);
                 }
+                // **vim's `"1`–`"9`: the last nine deletes of a line or more**
+                // (`:h quote1`, 2026-10-30), each pushing the older ones down.
+                let numbered = fresh
+                    && self.key_preset == yumete_cjk::KeyPreset::Vim
+                    && !self.storing_a_yank
+                    && text.contains('\n');
                 if fresh {
                     self.register_parts.clear();
                 }
                 keep_one_piece(&mut self.register_parts, nth, text);
                 self.register = self.register_parts.concat();
+                if numbered {
+                    for n in (b'1'..b'9').rev() {
+                        if let Some(older) = self.registers.remove(&(n as char)) {
+                            self.registers.insert((n + 1) as char, older);
+                        }
+                    }
+                    self.registers.insert('1', self.register_parts.clone());
+                }
             }
         }
     }
@@ -1514,7 +1533,9 @@ impl Editor {
     pub(super) fn yank_range(&mut self, (start, end): (usize, usize)) {
         let text = self.current_buffer().rope().slice(start..end).to_string();
         let named = self.pending_register;
+        self.storing_a_yank = true;
         self.store(text);
+        self.storing_a_yank = false;
         // **vim's `"0` is the last yank** (`:h quote0`, 2026-10-30): a delete
         // fills the unnamed register, and `"0p` still has what was yanked.
         if named.is_none() && self.key_preset == yumete_cjk::KeyPreset::Vim {
