@@ -3356,6 +3356,8 @@ impl Editor {
                 self.snapshot();
                 self.enter_insert();
                 self.overwriting = true;
+                // `2RXY<Esc>` writes `XY` twice, over the text (nvim: `XYXYef`).
+                self.insert_again = count.clamp(1, Self::WRITING_MAX) - 1;
             }
             // `2R`: two copies, as helix does it.
             Key::Char('R') => {
