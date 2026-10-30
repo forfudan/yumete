@@ -2052,7 +2052,10 @@ impl Editor {
             return;
         }
         let done = self.without_cell_guard(|e| e.current_buffer_mut().replace(start..end, &text));
-        let _ = self.applied(done);
+        if self.applied(done) {
+            // Lines replaced may hold a different set of record starts.
+            self.rescan_records();
+        }
     }
 
     // ---- Delimited text and `|` tables, both ways (Feature #227) ----------
@@ -2479,18 +2482,18 @@ impl Editor {
         parts: &crate::mdtable::Parts,
         row: usize,
         cell: usize,
-    ) {
+    ) -> bool {
         // Warning: **問的是盤上那張表，不是手裏這份改好的。** 排序、加行、加列那幾
         // 支在交過來之前已經 `Parts::square()` 過了——撕開的那一行補齊了，問它
         // 只會說「没事」。要問的是「這張表本來准不准動」。
         let before = crate::mdtable::parse(&self.md_lines(region));
         if let Some((column, width)) = crate::mdtable::runaway(&before) {
             self.status = say!("table.column-too-wide", column + 1, width);
-            return;
+            return false;
         }
         if let Some((bad, has, heading)) = crate::mdtable::torn(&before) {
             self.status = say!("table.row-torn", bad + 1, has, heading);
-            return;
+            return false;
         }
         self.snapshot();
         let lines = crate::mdtable::compose(parts);
@@ -2502,6 +2505,7 @@ impl Editor {
         if let Some(view) = self.table.as_mut() {
             view.goal = cell;
         }
+        true
     }
 
     /// Write an empty `|` table here and stand in its first heading (#276).
@@ -2588,8 +2592,9 @@ impl Editor {
         };
         let (row, cell) = self.md_at(&region);
         let at = parts.insert_row(if below { row + 1 } else { row });
-        self.md_write(&region, &parts, at, cell);
-        self.status = say!("table.row-added");
+        if self.md_write(&region, &parts, at, cell) {
+            self.status = say!("table.row-added");
+        }
         true
     }
 
@@ -2611,9 +2616,12 @@ impl Editor {
         };
         match parts.remove_row(row) {
             Ok(at) => {
-                self.store(taken);
-                self.md_write(&region, &parts, at, cell);
-                self.status = say!("table.row-deleted");
+                // Into the register only when the row really went (2026-10-30:
+                // a torn table refused and the register filled anyway).
+                if self.md_write(&region, &parts, at, cell) {
+                    self.store(taken);
+                    self.status = say!("table.row-deleted");
+                }
             }
             Err(why) => self.status = why.to_string(),
         }
@@ -2627,11 +2635,12 @@ impl Editor {
         let (row, cell) = self.md_at(&region);
         match parts.move_row(row, down) {
             Ok(at) => {
-                self.md_write(&region, &parts, at, cell);
-                self.status = match down {
-                    true => say!("table.row-moved-down"),
-                    false => say!("table.row-moved-up"),
-                };
+                if self.md_write(&region, &parts, at, cell) {
+                    self.status = match down {
+                        true => say!("table.row-moved-down"),
+                        false => say!("table.row-moved-up"),
+                    };
+                }
             }
             Err(why) => self.status = why.to_string(),
         }
@@ -2645,8 +2654,9 @@ impl Editor {
         let (row, cell) = self.md_at(&region);
         let at = parts.insert_column(if after { cell + 1 } else { cell });
         self.md_reschema(&parts);
-        self.md_write(&region, &parts, row, at);
-        self.status = say!("table.column-added");
+        if self.md_write(&region, &parts, row, at) {
+            self.status = say!("table.column-added");
+        }
     }
 
     /// Take the cursor's column out of every row.
@@ -2658,8 +2668,9 @@ impl Editor {
         match parts.remove_column(cell) {
             Ok(at) => {
                 self.md_reschema(&parts);
-                self.md_write(&region, &parts, row, at);
-                self.status = say!("table.column-deleted");
+                if self.md_write(&region, &parts, row, at) {
+                    self.status = say!("table.column-deleted");
+                }
             }
             Err(why) => self.status = why.to_string(),
         }
@@ -2674,11 +2685,12 @@ impl Editor {
         match parts.move_column(cell, right) {
             Ok(at) => {
                 self.md_reschema(&parts);
-                self.md_write(&region, &parts, row, at);
-                self.status = match right {
-                    true => say!("table.column-moved-right"),
-                    false => say!("table.column-moved-left"),
-                };
+                if self.md_write(&region, &parts, row, at) {
+                    self.status = match right {
+                        true => say!("table.column-moved-right"),
+                        false => say!("table.column-moved-left"),
+                    };
+                }
             }
             Err(why) => self.status = why.to_string(),
         }
@@ -2733,8 +2745,9 @@ impl Editor {
         };
         // Back to the header, because the row you were standing on is now
         // somewhere else and pretending otherwise would be a lie.
-        self.md_write(&region, &parts, 0, cell);
-        self.status = status;
+        if self.md_write(&region, &parts, 0, cell) {
+            self.status = status;
+        }
     }
 
     /// **Put the rows in order** by one column or several.
@@ -2985,6 +2998,11 @@ impl Editor {
         if !self.applied(done) {
             return;
         }
+        // **The records moved, so which lines start one has changed**
+        // (2026-10-30): a field holding a line break sorted to a new place left
+        // the old record starts standing, the grid drew the record in two, and
+        // the next `Space t d` deleted the wrong lines.
+        self.rescan_records();
         self.clamp_cursor();
         // The *text*, not the document: the table is still this table, and
         // asking the file what it is again would put the grid away.
@@ -3021,12 +3039,13 @@ impl Editor {
             return;
         }
         parts.aligns[cell] = align;
-        self.md_write(&region, &parts, row, cell);
-        self.status = match align {
-            crate::mdtable::Align::Left | crate::mdtable::Align::Plain => say!("table.column-left"),
-            crate::mdtable::Align::Center => say!("table.column-centred"),
-            crate::mdtable::Align::Right => say!("table.column-right"),
-        };
+        if self.md_write(&region, &parts, row, cell) {
+            self.status = match align {
+                crate::mdtable::Align::Left | crate::mdtable::Align::Plain => say!("table.column-left"),
+                crate::mdtable::Align::Center => say!("table.column-centred"),
+                crate::mdtable::Align::Right => say!("table.column-right"),
+            };
+        }
     }
 
     /// Re-read the column names after their number has changed.
@@ -4103,14 +4122,22 @@ impl Editor {
             return;
         }
         let text = self.recall();
-        let body = text.trim_end_matches('\n');
+        // **One terminator off, not all of them** (2026-10-30): a column whose
+        // last values are empty ends in empty lines, and trimming every `\n`
+        // dropped those cells, so the paste ran short and a stale value stayed.
+        let body = text.strip_suffix('\n').unwrap_or(&text);
         // What `␣t y` wrote: one value to a line, a value with a line break in
         // it quoted. Text that never closes a quote was not written by it, and
         // is read the way it always was, a line to a value.
-        let values: Vec<String> = match records_in(body, '\t') {
+        let mut values: Vec<String> = match records_in(body, '\t') {
             Some(records) => records.iter().map(|r| crate::table::unquote(r)).collect(),
             None => body.lines().map(str::to_string).collect(),
         };
+        // `lines` drops one empty line at the very end, and here that is an
+        // empty last value.
+        if body.ends_with('\n') {
+            values.push(String::new());
+        }
         if values.is_empty() {
             self.status = say!("edit.nothing-yanked-yet");
             return;
@@ -4137,8 +4164,9 @@ impl Editor {
                 row[cell] = crate::mdtable::escape(value);
             }
             self.md_reschema(&parts);
-            self.md_write(&region, &parts, 0, cell);
-            self.status = say!("table.pasted-column", n);
+            if self.md_write(&region, &parts, 0, cell) {
+                self.status = say!("table.pasted-column", n);
+            }
             return;
         }
         let Some((_, cell)) = self.cell_position() else {
@@ -4212,8 +4240,9 @@ impl Editor {
                 }
             }
             self.md_reschema(&parts);
-            self.md_write(&region, &parts, row, cell);
-            self.status = say!("table.pasted-grid", rows, columns);
+            if self.md_write(&region, &parts, row, cell) {
+                self.status = say!("table.pasted-grid", rows, columns);
+            }
             return;
         }
         let Some((line, cell)) = self.cell_position() else {
@@ -6008,8 +6037,9 @@ impl Editor {
                 // names and nothing may go above them.
                 let at = parts.insert_row(row + usize::from(after));
                 parts.rows[at] = crate::mdtable::split(&body);
-                self.md_write(&region, &parts, at, cell);
-                self.status = say!("table.pasted-as-new-row");
+                if self.md_write(&region, &parts, at, cell) {
+                    self.status = say!("table.pasted-as-new-row");
+                }
                 return;
             }
             self.snapshot();

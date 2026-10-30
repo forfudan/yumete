@@ -1336,6 +1336,10 @@ pub fn draw(
         // written `a \| b` was cut in two: a band drawn through the middle of
         // it, and the rest of the row shifted off its bands.
         let walls = editor.table_walls_on_line(zong.line);
+        // Asked once per 縱, not once per glyph: each answer re-reads the whole
+        // line, and a long `|` line took seconds a frame (2026-10-30: 40,000
+        // characters, 12.8 s).
+        let (table_row, table_rule) = (editor.line_is_table_row(zong.line), editor.line_is_table_rule(zong.line));
         // **A block's ground is a rectangle, and it is laid before the
         // writing** (2026-09-20). It used to be painted with each slot, and a
         // slot exists only where there is writing — so a `::: tip` lost a step
@@ -1486,8 +1490,8 @@ pub fn draw(
             // cushion in front of a `|` is off the page, and the slot that
             // draws the pipe begins at the cushion.
             let is_wall = walls.iter().any(|&w| w >= row.start && w < row.end.max(row.start + 1));
-            let symbol = match editor.line_is_table_row(zong.line) && (symbol != "|" || is_wall) {
-                true => match (symbol.as_str(), editor.line_is_table_rule(zong.line)) {
+            let symbol = match table_row && (symbol != "|" || is_wall) {
+                true => match (symbol.as_str(), table_rule) {
                     // Two cells: the cross, and the rule carrying on to the
                     // 縱 on its right — otherwise the band stops dead at the
                     // wall with a blank cell beside it.

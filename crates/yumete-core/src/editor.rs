@@ -4412,7 +4412,9 @@ impl Editor {
                 Aim::Bottom => last.saturating_sub(scrolloff),
                 // Warning: **夾在 `scrolloff` 裏頭**，同上面那一段說的理由：坐到邊上去
                 // 的話下一幀自己又被推開，滾一行變成跳三行。
-                Aim::Row(row) => row.clamp(scrolloff, last.saturating_sub(scrolloff)),
+                // `max` then `min`: with very few rows the bounds can cross,
+                // and `clamp` panics on that.
+                Aim::Row(row) => row.max(scrolloff).min(last.saturating_sub(scrolloff)),
             });
         }
         // Typewriter: the row being written stays in the middle and the paper

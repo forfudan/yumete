@@ -600,6 +600,12 @@ impl Editor {
         }
         // The selection is what it was: `r` writes over the text without moving
         // through it, so `r` then `l` steps one character, not two.
+        //
+        // **Measured on the new text** (2026-10-30): a family emoji is seven
+        // chars and becomes one, so the old end lies past it — near the end of
+        // the file that panicked, elsewhere it selected text that was not
+        // written, and the next `d` took it.
+        let end = start + text.chars().count();
         let head = motion::prev_grapheme(self.current_buffer().rope(), end).max(start);
         self.sel.set_anchor(start);
         self.sel.set_head(head);
