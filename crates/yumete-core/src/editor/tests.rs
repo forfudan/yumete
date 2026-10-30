@@ -32306,3 +32306,51 @@ fn vim_visual_line_operators_return_to_normal() {
         assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys} on {text:?}");
     }
 }
+
+/// **vim's `w` and `b` stop on an empty line** (2026-10-30, measured in nvim).
+#[test]
+fn vim_word_motions_stop_on_an_empty_line() {
+    for (keys, want) in [
+        ("wwwiZ", "one two three\nZ\nfour five\n"),
+        ("wwwwiZ", "one two three\n\nZfour five\n"),
+        ("jjbiZ", "one two three\nZ\nfour five\n"),
+    ] {
+        let mut ed = typed_vim("one two three\n\nfour five\n");
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys}");
+    }
+}
+
+/// **vim's `"0` keeps the last yank through a delete** (2026-10-30, nvim).
+#[test]
+fn vim_register_zero_is_the_last_yank() {
+    let mut ed = typed_vim("foo bar baz\n");
+    press(&mut ed, "yiwdw\"0P");
+    assert_eq!(ed.current_buffer().rope().to_string(), "foobar baz\n");
+}
+
+/// **vim's Insert `C-u` and `C-w` stop where the Insert began**
+/// (2026-10-30), each measured in nvim.
+#[test]
+fn vim_insert_takes_back_what_it_typed_first() {
+    let run = |keys: &str, ctrl: char, after: &str| {
+        let mut ed = typed_vim("foo bar baz\n");
+        press(&mut ed, keys);
+        ed.on_key(Key::Ctrl(ctrl));
+        press(&mut ed, after);
+        ed.on_key(Key::Esc);
+        ed.current_buffer().rope().to_string()
+    };
+    assert_eq!(run("Afoo bar", 'u', ""), "foo bar baz\n");
+    assert_eq!(run("wiab", 'u', ""), "foo bar baz\n");
+    assert_eq!(run("Afoo", 'w', "X"), "foo bar bazX\n");
+    assert_eq!(run("A  ", 'w', "X"), "foo bar bazX\n");
+}
+
+/// **helix's `2R` replaces with two copies** (2026-10-30, measured).
+#[test]
+fn a_count_on_r_is_copies() {
+    let mut ed = typed("foo bar baz\n");
+    press(&mut ed, "ggwyw2RiZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "foo Zfoo foo baz\n");
+}

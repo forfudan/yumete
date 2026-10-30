@@ -2416,6 +2416,9 @@ pub struct Editor {
     /// How many copies the next paste puts in as one piece (`3p`), as helix
     /// and vim both do it: one block, not three pastes each after the last.
     paste_copies: usize,
+    /// Where this Insert began, for vim's `C-u` and `C-w`, which take back
+    /// what was typed before going further (`:h i_CTRL-U`).
+    insert_began: Option<usize>,
     /// Keys recorded since `q` was pressed, if a macro is being recorded.
     recording: Option<Vec<Key>>,
     /// The last macro recorded, replayed by `Q`.
@@ -3957,6 +3960,7 @@ impl Editor {
             yanks: Vec::new(),
             pending_register: None,
             paste_copies: 1,
+            insert_began: None,
             recording: None,
             macro_keys: Vec::new(),
             replaying: false,

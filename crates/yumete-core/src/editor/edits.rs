@@ -748,6 +748,14 @@ impl Editor {
         if from >= at {
             from = motion::line_start(rope, at);
         }
+        // vim stops once where this Insert began (`:h i_CTRL-W`, measured):
+        // `Afoo<C-w>` takes back `foo` and not the word it was typed onto.
+        if let Some(began) = self.vim_insert_began(at) {
+            if from < began {
+                from = began;
+                self.insert_began = None;
+            }
+        }
         // Never out of the cell it is typing in, and never over a line break:
         // both are the invariants Insert mode already keeps.
         from = from.max(self.insert_floor());
@@ -855,8 +863,33 @@ impl Editor {
         }
     }
 
+    /// Where this Insert began, when vim's keys should stop there: under the
+    /// vim keymap, on the cursor's line, and before the cursor.
+    fn vim_insert_began(&self, at: usize) -> Option<usize> {
+        let began = self.insert_began?;
+        let rope = self.current_buffer().rope();
+        (self.key_preset == yumete_cjk::KeyPreset::Vim
+            && began < at
+            && began <= rope.len_chars()
+            && rope.char_to_line(began) == rope.char_to_line(at))
+            .then_some(began)
+    }
+
     pub(super) fn delete_to_line_start(&mut self) {
         let at = self.sel.head();
+        // vim's `C-u` takes back what this Insert typed first (`:h i_CTRL-U`,
+        // measured: `Afoo bar<C-u>` leaves the line as it was).
+        if let Some(began) = self.vim_insert_began(at) {
+            self.insert_began = None;
+            self.snapshot();
+            if self.edit_remove(began..at) {
+                self.set_cursor(began);
+                for _ in 0..at - began {
+                    self.insert_recording.pop();
+                }
+            }
+            return;
+        }
         let from = motion::line_start(self.current_buffer().rope(), at).max(self.insert_floor());
         // **Helix's `kill_to_line_start`** (2026-10-27, measured): back to the
         // first non-blank when the cursor is past it, so the indent stays; at
@@ -1469,7 +1502,13 @@ impl Editor {
     /// the cursor's own grapheme is always inside one.
     pub(super) fn yank_range(&mut self, (start, end): (usize, usize)) {
         let text = self.current_buffer().rope().slice(start..end).to_string();
+        let named = self.pending_register;
         self.store(text);
+        // **vim's `"0` is the last yank** (`:h quote0`, 2026-10-30): a delete
+        // fills the unnamed register, and `"0p` still has what was yanked.
+        if named.is_none() && self.key_preset == yumete_cjk::KeyPreset::Vim {
+            self.registers.insert('0', self.register_parts.clone());
+        }
         self.status = say!("edit.yanked-characters", end - start);
     }
 
