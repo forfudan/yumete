@@ -2495,7 +2495,7 @@ find = "注音 拼音 自動 自动 生成 標音 标音 逐詞 逐词 pinyin au
 key = "cmd.ruby.auto.rare"
 zht = "只注通用規範漢字表以外的那些字"
 zhs = "只注通用规范汉字表以外的那些字"
-en = "annotate only the characters outside 通用規範漢字表 and its traditional counterparts"
+en = "annotate only the characters no everyday list carries: 通用規範漢字表, its traditional forms, Taiwan's and Hong Kong's"
 find = "生僻 冷僻 罕見 罕见 難字 难字 字集 通用規範 通用规范 rare"
 
 [[message]]

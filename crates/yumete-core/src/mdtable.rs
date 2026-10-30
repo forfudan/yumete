@@ -1227,15 +1227,21 @@ fn push_run(runs: &mut Vec<(usize, String)>, at: usize, text: String) {
 pub enum Measure {
     /// 橫排: the cells a glyph covers.
     Cells,
-    /// 竪排: one slot per grapheme.
-    Slots,
+    /// 竪排: the slots a cell takes down the 縱 — one per grapheme, except
+    /// that a run of up to `packed` half-width alphanumerics shares one
+    /// (緃中横), exactly as the page packs it. Counted per grapheme it
+    /// disagreed with the page by the length of every Latin word, and the
+    /// rules of a turned table landed at different depths in each 縱
+    /// (2026-10-30).
+    Slots { packed: usize },
 }
 
 impl Measure {
-    fn of(self, g: &str) -> usize {
+    /// How many units `text` takes, with what is hidden already taken out.
+    fn of_text(self, text: &str) -> usize {
         match self {
-            Measure::Cells => yumete_cjk::grapheme_width(g),
-            Measure::Slots => 1,
+            Measure::Cells => yumete_cjk::graphemes(text).map(yumete_cjk::grapheme_width).sum(),
+            Measure::Slots { packed } => crate::zong::slot_count(text, packed),
         }
     }
 }
@@ -1250,14 +1256,14 @@ fn visible_width(
     let start = start.min(end);
     let text: String = chars[start..end].iter().collect();
     let mut at = start;
-    let mut width = 0;
+    let mut shown = String::new();
     for g in yumete_cjk::graphemes(&text) {
         if !hidden.iter().any(|&(a, b)| (a..b).contains(&at)) {
-            width += measure.of(g);
+            shown.push_str(g);
         }
         at += g.chars().count();
     }
-    width
+    measure.of_text(&shown)
 }
 
 /// A rule row for a table this wide, for a header that has not got one yet.

@@ -70,7 +70,7 @@ pub use segment::{
     Segmenter, WithWords, WordLevel, WordList, WordMark, WordSource,
 };
 pub use vertical::{
-    hangs_in_the_margin, margin_form, narrow_form, opens_a_pair, vertical_form,
+    hangs_in_the_margin, margin_form, narrow_form, opens_a_pair, vertical_form, vertical_quote_form,
     vertical_grapheme, Layout, VerticalKeys,
     DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, Margin, TATECHUYOKO_CLASSIC, TATECHUYOKO_MAX,
 };

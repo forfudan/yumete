@@ -988,7 +988,7 @@ impl Editor {
         };
         let buffer = self.current_buffer();
         let measure = match self.layout() {
-            crate::zong::Layout::Vertical => crate::mdtable::Measure::Slots,
+            crate::zong::Layout::Vertical => crate::mdtable::Measure::Slots { packed: self.tatechuyoko },
             _ => crate::mdtable::Measure::Cells,
         };
         let key = |first, last| PadKey {

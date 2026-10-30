@@ -382,6 +382,19 @@ pub fn vertical_form(c: char) -> Option<char> {
 /// the original text in the common case. Only single-character clusters are
 /// substituted: a base character carrying combining marks or an ideographic
 /// variation selector keeps the variation, which is what the reader chose.
+/// The vertical form of a curly quote, drawn only at `:render full`
+/// (2026-10-30, as decided): a double quote becomes the 『』 pair and a single
+/// one the 「」 pair, as a typesetter sets them in a vertical column.
+pub fn vertical_quote_form(c: char) -> Option<char> {
+    match c {
+        '“' => Some('﹃'),
+        '”' => Some('﹄'),
+        '‘' => Some('﹁'),
+        '’' => Some('﹂'),
+        _ => None,
+    }
+}
+
 pub fn vertical_grapheme(g: &str) -> Option<char> {
     let mut chars = g.chars();
     let first = chars.next()?;
