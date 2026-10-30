@@ -1796,6 +1796,11 @@ impl Editor {
                 self.on_region_key(key);
                 return;
             }
+            Pending::RegionNew => {
+                self.pending = Pending::None;
+                self.on_region_new_key(key);
+                return;
+            }
             Pending::Mark => {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
@@ -4353,8 +4358,15 @@ impl Editor {
         ("E I", "hint.region.into-bar"),
         ("s", "hint.region.split"),
         ("v", "hint.region.split-beside"),
+        ("n", "hint.region.new"),
         ("q", "hint.region.close"),
         ("o", "hint.region.only"),
+    ];
+
+    /// `C-w n`, helix's group of the same letter.
+    pub(super) const REGION_NEW_KEYS: &'static [(&'static str, &'static str)] = &[
+        ("s", "hint.region.new-below"),
+        ("v", "hint.region.new-beside"),
     ];
 
     pub(super) const CONFLICT_KEYS: &'static [(&'static str, &'static str)] = &[
@@ -4488,6 +4500,7 @@ impl Editor {
             ("hint.hop.previous", "[", [rows(Self::HOP_KEYS), rows(Self::HOP_KEYS_BACK), rows(Self::HOP_KEYS_CODE)].concat()),
             ("hint.aim.title", "z", rows(Self::AIM_KEYS)),
             ("hint.region.title", "C-w", rows(Self::REGION_KEYS)),
+            ("hint.region.new", "C-w n", rows(Self::REGION_NEW_KEYS)),
             // Every key the group has in some table, the way in first: the
             // menu itself shows only what works where the cursor stands.
             ("hint.table.title", "Space t", {

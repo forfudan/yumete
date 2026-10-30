@@ -614,6 +614,10 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::NewWindow(how) => {
+                self.new_window(how);
+                Ok(CommandOutcome::Continue)
+            }
             Command::Reflow(width) => {
                 let width = width.unwrap_or(super::verbs::HELIX_TEXT_WIDTH);
                 self.edit_each(|e| e.reflow_selection(width));

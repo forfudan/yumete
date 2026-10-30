@@ -802,6 +802,17 @@ impl Editor {
         self.switch_to(fresh)
     }
 
+    /// A new window holding a new empty buffer, the keys in it: `C-w n`,
+    /// `:hnew`, `:vnew`. The window it was split from keeps what it showed,
+    /// even when that is the empty buffer yumete starts with.
+    pub(super) fn new_window(&mut self, how: crate::window::Split) -> bool {
+        if !self.split_window(how) {
+            return false;
+        }
+        self.add_buffer_kept(crate::buffer::Buffer::scratch(), false);
+        true
+    }
+
     /// Close the other work area, keeping the one the keys are in.
     ///
     /// Which is the same act as「關掉另一個」 when there are two of them, and

@@ -221,6 +221,9 @@ pub enum Command {
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
     /// live one, showing `file` when one is named (2026-10-30).
     SplitWindow { how: crate::window::Split, file: Option<String> },
+    /// `:vnew` / `:hnew` — a new window beside or below, on a new empty
+    /// buffer (helix's commands, 2026-10-31).
+    NewWindow(crate::window::Split),
     /// `:hard-wrap [<columns>]`: the selection or the unit under the cursor
     /// re-filled under the syntax's own rules; `None` asks the setting
     /// (2026-10-30, see [`crate::hardwrap`]).
@@ -2902,6 +2905,22 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| {
             Ok(Command::SplitWindow { how: crate::window::Split::Below, file: p.arg(0).map(str::to_string) })
         }),
+    },
+    Entry {
+        name: "vnew",
+        aliases: &[],
+        help: "cmd.commands.vnew",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::NewWindow(crate::window::Split::Beside))),
+    },
+    Entry {
+        name: "hnew",
+        aliases: &[],
+        help: "cmd.commands.hnew",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::NewWindow(crate::window::Split::Below))),
     },
     Entry {
         name: "open",
