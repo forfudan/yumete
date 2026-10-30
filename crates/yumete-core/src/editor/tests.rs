@@ -32827,3 +32827,54 @@ fn links_are_found_across_the_project_and_the_panel_lists_them_both_ways() {
     assert!(ed.take_open_request().is_some_and(|p| p.ends_with("graph.html")));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// `:hard-wrap` (2026-10-30): the selection, or the unit under the cursor,
+/// re-filled without changing what the Markdown means; bare asks the
+/// setting; `0` joins.
+#[test]
+fn hard_wrap_takes_the_selection_or_the_unit_and_keeps_the_meaning() {
+    let dir = tmp().join(format!("yumete-hard-wrap-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let md = dir.join("a.md");
+    std::fs::write(&md, "# Title\n\njumps  \nover the lazy dog and keeps going on\n\n- item with words to wrap\n  more\n\n```\ncode is long enough to wrap\n```\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&md).unwrap();
+
+    // Bare, nothing set: a sentence, no change.
+    ed.goto_line(4);
+    ed.execute(":hard-wrap").unwrap();
+    assert_eq!(ed.status(), say!("hard-wrap.unset"));
+    assert!(ed.current_buffer().text().contains("over the lazy dog and keeps going on\n"));
+
+    // The unit under the cursor: the paragraph, hard break kept.
+    ed.execute(":hard-wrap 20").unwrap();
+    let text = ed.current_buffer().text();
+    assert!(text.contains("jumps  \nover the lazy dog\nand keeps going on\n\n- item"), "{text}");
+    assert_eq!(ed.status(), say!("hard-wrap.done", 2, 3, 20));
+    // One undo step.
+    ed.on_key(Key::Char('u'));
+    assert!(ed.current_buffer().text().contains("over the lazy dog and keeps going on\n"));
+
+    // On a heading: nothing to do, said so.
+    ed.goto_line(1);
+    ed.execute(":hard-wrap 20").unwrap();
+    assert_eq!(ed.status(), say!("hard-wrap.nothing"));
+
+    // The whole file selected: the fence is untouched, the item hangs.
+    press(&mut ed, "%");
+    ed.execute(":hard-wrap 20").unwrap();
+    let text = ed.current_buffer().text();
+    assert!(text.contains("- item with words to\n  wrap more\n"), "{text}");
+    assert!(text.contains("```\ncode is long enough to wrap\n```"), "{text}");
+
+    // `0` joins each unit; the setting makes bare work.
+    ed.set_hard_wrap(0);
+    ed.goto_line(7);
+    ed.execute(":hard-wrap 0").unwrap();
+    assert!(ed.current_buffer().text().contains("- item with words to wrap more\n"), "{}", ed.current_buffer().text());
+    ed.set_hard_wrap(12);
+    ed.execute(":hard-wrap").unwrap();
+    assert!(ed.current_buffer().text().contains("- item with\n  words to\n  wrap more\n"), "{}", ed.current_buffer().text());
+    std::fs::remove_dir_all(&dir).ok();
+}
