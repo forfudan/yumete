@@ -1316,7 +1316,7 @@ version = "0.1.0"
 
 [[package]]
 name = "yumete"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "libc",
  "yumete-config",
@@ -1327,7 +1327,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-cjk"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "unicode-segmentation",
  "unicode-width 0.2.0",
@@ -1335,7 +1335,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-config"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "serde",
  "toml",
@@ -1345,7 +1345,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-core"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "ignore",
  "libc",
@@ -1384,7 +1384,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-ime"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "yume-core",
  "yumete-cjk",
@@ -1393,7 +1393,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-tui"
-version = "0.14.0"
+version = "0.15.0"
 dependencies = [
  "libc",
  "ratatui",
