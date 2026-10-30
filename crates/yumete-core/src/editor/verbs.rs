@@ -52,6 +52,7 @@ impl Editor {
         self.overwriting = false;
         self.overwritten.clear();
         self.reference = None;
+        self.insert_began = Some(self.sel.head());
         self.mode = Mode::Insert;
     }
 
@@ -668,7 +669,8 @@ impl Editor {
         // answered `None`, so the reader who named a register was told 「nothing
         // has been yanked」 about a register they had just named.
         let named = self.pending_register;
-        let text = self.recall();
+        let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
+        let text = self.recall().repeat(copies);
         if text.is_empty() {
             // A key that does nothing and says nothing is indistinguishable
             // from a key that is broken — and the reader whose `y` went to a

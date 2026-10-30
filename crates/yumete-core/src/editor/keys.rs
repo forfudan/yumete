@@ -794,6 +794,32 @@ impl Editor {
     ///
     /// 三、**動完就回 Normal，光標落在那一段的開頭**。vim 的可視模式是為一次動作而
     /// 開的，一動完就結束；helix 的 select mode 不是，所以這一條只在這裏。
+    /// A vim word motion cut short at the first empty line it crosses
+    /// (2026-10-30): from `one two three` over a blank line, `w` lands on the
+    /// blank line and `b` from below comes back to it.
+    fn stop_on_an_empty_line(&self, span: motion::Span, forward: bool) -> motion::Span {
+        let motion::Span::Over { anchor, head } = span else { return span };
+        let rope = self.current_buffer().rope();
+        let empty = |line: usize| {
+            let text = rope.line(line);
+            text.len_chars() == 0 || text.chars().all(|c| c == '\n' || c == '\r')
+        };
+        // From where the caret is now: a caret reading's span may start at its
+        // own target.
+        let here = self.sel.head().min(rope.len_chars());
+        let (from, to) = (rope.char_to_line(here), rope.char_to_line(head.min(rope.len_chars())));
+        let hit = match forward {
+            true => (from + 1..=to).find(|&line| empty(line) && rope.line_to_char(line) < head),
+            false => (to..from).rev().find(|&line| empty(line) && rope.line_to_char(line) > head && rope.line_to_char(line) < here),
+        };
+        match hit {
+            Some(line) if line + 1 < rope.len_lines() || rope.line_to_char(line) < rope.len_chars() => {
+                motion::Span::Over { anchor, head: rope.line_to_char(line) }
+            }
+            _ => span,
+        }
+    }
+
     /// The character `column` characters into `line`, kept on the line.
     fn column_on_line(&self, line: usize, column: usize) -> usize {
         let rope = self.current_buffer().rope();
@@ -2366,6 +2392,13 @@ impl Editor {
                     .expect("the guard just asked");
                 self.repeat(count, |e| {
                     let span = e.read_motion(step.motion, motion::Reading::Caret);
+                    // **An empty line is a word to vim** (`:h word`, measured):
+                    // `w` and `b` stop on one; `e` passes it by.
+                    let span = match c {
+                        'w' | 'W' => e.stop_on_an_empty_line(span, true),
+                        'b' | 'B' => e.stop_on_an_empty_line(span, false),
+                        _ => span,
+                    };
                     e.jump_to(span);
                 });
             }
@@ -3255,7 +3288,11 @@ impl Editor {
                 self.enter_insert();
                 self.overwriting = true;
             }
-            Key::Char('R') => self.replace_with_register(),
+            // `2R`: two copies, as helix does it.
+            Key::Char('R') => {
+                self.paste_copies = count.clamp(1, Self::WRITING_MAX);
+                self.replace_with_register();
+            }
             // Search for whatever is selected (Helix `*`).
             // **`30G` goes to line 30 under either preset.** A bare `G` is the
             // vim preset's alone: there it is the last line, which is what `G`
