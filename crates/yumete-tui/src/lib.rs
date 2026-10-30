@@ -314,7 +314,7 @@ fn frame_to(
     editor.wait_for_the_picker();
     editor.refresh_the_edited_file();
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
-    let page = areas.panes[editor.live_pane().min(1)];
+    let page = areas.panes[editor.live_pane()];
     let lines = editor.current_buffer().line_count();
     settle_the_wrap(editor, config, page);
     if editor.layout() == WritingLayout::Vertical {
@@ -353,7 +353,7 @@ fn frame_to(
         terminal
             .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
             .expect("one frame to measure the page by");
-        if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+        if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
             editor.set_page_span(a, b);
         }
         editor.run_owed_jump();
@@ -363,7 +363,7 @@ fn frame_to(
         terminal
             .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings))
             .expect("one frame to measure the page by");
-        if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+        if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
             editor.set_page_span(a, b);
         }
         editor.run_owed_seek(only_han);
@@ -474,7 +474,7 @@ pub fn fit_the_page(
     // `None`，於是「視覺行」與「行文行」在離屏下根本分不出來）。同一條「算出
     // 來，别畫出來」——所以這裏只答折行，**不碰 `set_page`**：視口是另一件事，
     // 按鍵之前給了它會讓動作落在别處（見 `main.rs` 這一支的呼叫處）。
-    settle_the_wrap(editor, config, areas.panes[editor.live_pane().min(1)]);
+    settle_the_wrap(editor, config, areas.panes[editor.live_pane()]);
     // **挑選器擺不下就不許開着**（2026-10-19，見 [`picker_box`]）。問在這裏，是
     // 因為這一支是「每一幀一次、離屏那一支在按鍵之前一次」的那個鉤子——窄窗口
     // 下的行為要 `--shot` 也看得見。
@@ -488,7 +488,7 @@ pub fn fit_the_page(
     //
     // 那兩條帶子畫得下總有一個：各佔一行（一縱），而行是現成的。
     let shape = candidate_shape(editor, ime);
-    let pane = areas.panes[editor.live_pane().min(1)];
+    let pane = areas.panes[editor.live_pane()];
     ime.set_panel_has_room(shape.is_a_strip() || usize::from(room) > 3);
     // **帶子按長度縮，框按高度縮**（2026-10-16）。長度要量真的候選，所以先把頁
     // 開到使用者要的那麼大，問一次，再縮——縮過的頁讀不回原來要的是幾個，同
@@ -872,13 +872,13 @@ pub fn run(
             // whole text area is twice the page, so `C-f` turned two pages and
             // `C-d` moved a whole pane instead of half of one.
             let areas = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0);
-            let page = areas.panes[editor.live_pane().min(1)];
+            let page = areas.panes[editor.live_pane()];
             let lines = editor.current_buffer().line_count();
             // **Where the page starts**, from the scroll this loop already
             // keeps (#378): a table's columns are measured against the rows on
             // the screen, and this is the only place that knows which those
             // are. Last frame's, necessarily — it is settled while drawing.
-            editor.set_page_top(viewport[editor.live_pane().min(1)].top.line);
+            editor.set_page_top(viewport[editor.live_pane()].top.line);
             // **挑選器的「一頁」也是這裏量的**（2026-10-07）：那扇窗的高度只有
             // 畫的那一支算得出來，而 `PageUp`/`PageDown` 跑在核心裏。同上一句，
             // 上一幀的答案——窗口沒改大小的話兩幀一樣。
@@ -888,7 +888,7 @@ pub fn run(
             })));
             // **…以及這一頁真畫了哪一段**（#406）：`gw` 的落腳點只算屏幕上的，而
             // 「屏幕上」是畫的那一支上一幀量出來的。同上一句，上一幀的答案。
-            if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+            if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
                 editor.set_page_span(a, b);
             }
             if editor.layout() == WritingLayout::Vertical {
@@ -1023,7 +1023,7 @@ pub fn run(
             // 畫了哪一段，落腳點只算那一段裏的。跑完 `continue` 回去再畫一幀，那一
             // 幀上是標籤。
             if editor.take_owed_jump() {
-                if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+                if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
                     editor.set_page_span(a, b);
                 }
                 editor.run_owed_jump();
@@ -1031,7 +1031,7 @@ pub fn run(
             }
             // `go`/`gu` 同病，同一道門（§5.73）。
             if let Some(only_han) = editor.take_owed_seek() {
-                if let Some((a, b)) = viewport[editor.live_pane().min(1)].drawn_span {
+                if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
                     editor.set_page_span(a, b);
                 }
                 editor.run_owed_seek(only_han);
@@ -2433,7 +2433,11 @@ struct Viewport {
 /// the pages: the half you were reading stays where it is on the screen.
 #[derive(Default)]
 struct Seats {
-    panes: [Viewport; 2],
+    /// One per window, in the tree's order (`Windows::leaves`); a window
+    /// past the end gets a fresh one on first use (2026-10-30).
+    panes: Vec<Viewport>,
+    /// What an index not drawn yet reads, so a lookup never panics.
+    spare: Viewport,
     /// **兩扇邊欄各自捲到了第幾行**（左、右），跨幀記着。
     ///
     /// Warning: **不記就只能從選中那一行倒推**，而倒推不出來：「往上走到頂了纔翻頁」
@@ -2474,13 +2478,16 @@ fn window_start(stored: usize, selected: usize, room: usize, rows: usize) -> usi
 impl std::ops::Index<usize> for Seats {
     type Output = Viewport;
     fn index(&self, which: usize) -> &Viewport {
-        &self.panes[which.min(1)]
+        self.panes.get(which).unwrap_or(&self.spare)
     }
 }
 
 impl std::ops::IndexMut<usize> for Seats {
     fn index_mut(&mut self, which: usize) -> &mut Viewport {
-        &mut self.panes[which.min(1)]
+        if self.panes.len() <= which {
+            self.panes.resize_with(which + 1, Viewport::default);
+        }
+        &mut self.panes[which]
     }
 }
 
@@ -4948,19 +4955,20 @@ fn problem_cell(
 /// row, the tab bar and the detail panel — so the 縱 the cursor moved on was
 /// one longer than the 縱 on the screen, and a click resolved to the wrong
 /// character.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Areas {
     /// **The two panel slots**, indexed by [`Side`] (#293). A slot with
     /// nothing in it is zero columns wide, which is how the page stays exactly
     /// as wide as it was before there were two.
     panels: [Rect; 2],
-    /// The two work areas, **in screen order** — `panes[0]` is the one drawn
-    /// first (top, or right in 縱書). Which of them holds the keys is
-    /// [`Editor::live_pane`], and it is a different question on purpose:
-    /// switching panes must not make the top one jump to the bottom.
-    panes: [Rect; 2],
-    /// The rule between them, when there are two.
-    divider: Option<Rect>,
+    /// The windows, in the tree's order (`Windows::leaves`) — always one
+    /// at least. Which holds the keys is [`Editor::live_pane`], an index
+    /// into this, and it is a different question on purpose: splitting
+    /// must not make a window change its place under its viewport.
+    panes: Vec<Rect>,
+    /// The rules between windows, each with the window on its far side,
+    /// whose caption it carries.
+    dividers: Vec<(Rect, yumete_core::window::WindowId)>,
     tabs: Rect,
     /// **Two rows at the top of the page, or none** (#379): the column numbers
     /// and names of a table whose own head has scrolled away.
@@ -5046,18 +5054,23 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         rtl,
     );
     let rect = |a: yumete_core::window::Area| Rect::new(a.x, a.y, a.width, a.height);
-    let panes = [
-        placed.first().map(|p| rect(p.area)).unwrap_or(text),
-        placed.get(1).map(|p| rect(p.area)).unwrap_or(Rect::new(text.x, text.y, 0, 0)),
-    ];
-    let divider = rules.first().map(|r| rect(r.area));
+    let mut panes: Vec<Rect> = placed.iter().map(|p| rect(p.area)).collect();
+    if panes.is_empty() {
+        panes.push(text);
+    }
+    // The caption names the window being read: the far side unless that is
+    // the live one, then the near side.
+    let dividers: Vec<(Rect, yumete_core::window::WindowId)> = rules
+        .iter()
+        .map(|r| (rect(r.area), if r.second == editor.live_window() { r.first } else { r.second }))
+        .collect();
     Areas {
         panels,
         tabs,
         head,
         text,
         panes,
-        divider,
+        dividers,
         status,
         command,
     }
@@ -5077,7 +5090,7 @@ fn draw(
     // (#379). Asked before the page is divided, because the answer is how tall
     // the page is, and answered from last frame's scroll together with this
     // frame's cursor — see `table_head_is_off_the_page`.
-    let top = viewport[editor.live_pane().min(1)].top.line;
+    let top = viewport[editor.live_pane()].top.line;
     // Warning: **不給格子模式留這兩行**（2026-09-30 報的：拆分表捲過一行，
     // 整個表頭連同標尺往下掉兩行，上面空出兩行）。那條頂欄是給**散文裏的 `|`
     // 表**用的：正文照常滾，表頭滾沒了就在頁頂補一條。格子模式（`.csv` 整檔進
@@ -5088,13 +5101,13 @@ fn draw(
     let Areas {
         panels: slots,
         panes,
-        divider,
+        dividers,
         tabs: tab_area,
         head: head_area,
         text: text_area,
         status: status_area,
         command: command_area,
-    } = areas;
+    } = areas.clone();
     // Where a `:` or `/` is typed. Its own row when there is one; the status
     // line when the window is too short for two, because a prompt with nowhere
     // to be drawn is a prompt nobody can answer.
@@ -5136,19 +5149,35 @@ fn draw(
     // cursor; the other from the place it was left at, with its hit marked —
     // it has no cursor at all, which is what keeps this feature from being
     // multi-cursor by the back door.
-    let live = editor.live_pane().min(1);
+    let live = editor.live_pane();
+    let leaves = editor.windows().leaves();
     let mut cursor = (text_area.x, text_area.y);
     for (which, rect) in panes.iter().enumerate() {
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
         let seat = &mut viewport[which];
-        let peek = (which != live).then(|| editor.other_pane()).flatten();
+        let peek = (which != live)
+            .then(|| leaves.get(which).and_then(|&id| editor.pane_of(id)))
+            .flatten();
+        // A peeked window folds to its own width less its gutter, asked
+        // through a first peek since the gutter depends on its buffer
+        // (2026-10-30: windows beside each other wrapped at the live one's).
+        let folded = peek.map(|pane| {
+            let _look = editor.view_pane(pane);
+            let gutter = gutter_in(
+                rect.width as usize,
+                editor.current_buffer().line_count(),
+                config.editor.line_numbers,
+                editor.has_a_problem_lane(),
+            );
+            (rect.width as usize).saturating_sub(gutter)
+        });
         // **Everything below reads the file the caption names** (#281). The
         // whole dispatch is inside the scope, not only the drawing: which
         // layout a half is drawn in, and whether a grid has it, are questions
         // about *that* half's document and place.
-        let _viewing = peek.map(|pane| editor.view_pane(pane));
+        let _viewing = peek.map(|pane| editor.view_pane_wrapped(pane, folded.unwrap_or(rect.width as usize)));
         let at = match editor.layout() {
             // A grid is not prose and is not drawn as prose: no wrapping, no
             // markup, one row per line, columns that line up.
@@ -5192,7 +5221,7 @@ fn draw(
                             peek,
                             // Only the pane the keys are in gets the bar, and only in
                             // the layout that reserved it.
-                            (which == editor.live_pane().min(1)).then_some(head_area),
+                            (which == editor.live_pane()).then_some(head_area),
                             chain,
                             true,
                         ),
@@ -5243,8 +5272,9 @@ fn draw(
             cursor = at;
         }
     }
-    if let Some(rule) = divider {
-        draw_divider(frame, editor, config, rule);
+    for (rule, far) in &dividers {
+        let caption = editor.pane_of(*far).map(|p| p.caption.as_str());
+        draw_divider(frame, config, *rule, caption);
     }
     let (cursor_x, cursor_y) = cursor;
 
@@ -5434,7 +5464,7 @@ fn draw(
                 editor,
                 config,
                 (cursor_x, cursor_y),
-                areas.panes[editor.live_pane().min(1)],
+                areas.panes[editor.live_pane()],
             ),
             false => {
                 // **While `v` is on, a bare primary cursor keeps its block**
@@ -5449,7 +5479,7 @@ fn draw(
                         editor,
                         config,
                         (cursor_x, cursor_y),
-                        areas.panes[editor.live_pane().min(1)],
+                        areas.panes[editor.live_pane()],
                     );
                 }
                 frame.set_cursor_position(Position::new(cursor_x, cursor_y))
@@ -5511,7 +5541,7 @@ fn draw(
         // **The box is not up, so the candidates are a strip** (2026-10-16),
         // in one of the two places the setting names.
         let show_code = inline_text(editor, ime).is_empty();
-        let pane = areas.panes[editor.live_pane().min(1)];
+        let pane = areas.panes[editor.live_pane()];
         match shape {
             // `bottom`: the command row. One row, left to right in both
             // writing layouts — the 竪排 box runs right to left because it is
@@ -8109,12 +8139,12 @@ fn text_at(
     // 的）。這裏從前寫死 `0`，而 `draw` 給的是真的——於是 `|` 表的表頭一捲出
     // 去，整頁往下兩行而點擊照舊按没有表頭算，**每一下都落在低兩行的那一行
     // 上**。這一支和 `draw` 問的是同一句話，就要拿同一個答案。
-    let top = seats[editor.live_pane().min(1)].top.line;
+    let top = seats[editor.live_pane()].top.line;
     let head_rows =
         2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
     let areas =
         page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows);
-    let live = editor.live_pane().min(1);
+    let live = editor.live_pane();
     let area = areas.panes[live];
     if mouse.column < area.x
         || mouse.column >= area.x + area.width
@@ -13550,7 +13580,7 @@ fn reading_line(
 /// The boundary and the label for one row: 橫排 gets a `─` across the page
 /// with the caption at its left, 縱書 a `│` down it and no caption — a line of
 /// text cannot be written down one cell, and the status line says it instead.
-fn draw_divider(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
+fn draw_divider(frame: &mut Frame, config: &Config, area: Rect, caption: Option<&str>) {
     let ink = crate::theme::Palette::of(config);
     let rule = ink.page().fg(ink.rule());
     let buf = frame.buffer_mut();
@@ -13570,9 +13600,9 @@ fn draw_divider(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect)
     // the one you are standing in is named by the status line, which has said
     // where you are all along.
     if across {
-        if let Some(pane) = editor.other_pane() {
-            if !pane.caption.is_empty() {
-                let text = format!(" {} ", pane.caption);
+        if let Some(caption) = caption {
+            if !caption.is_empty() {
+                let text = format!(" {caption} ");
                 put_text(
                     buf,
                     area.x + 2,

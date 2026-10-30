@@ -70,9 +70,15 @@ impl Editor {
     /// 承認得對，可代價不該是把字吃掉。真有幾格就按幾格折：窄到那個地步本來就
     /// 不好看，但一個字都不會不見。
     pub fn set_wrap_width(&mut self, available: usize) {
+        self.wrap_width = Some(self.wrap_for(available));
+    }
+
+    /// The width text folds to in `available` cells: the measure when one is
+    /// set and fits, never under the floor.
+    pub fn wrap_for(&self, available: usize) -> usize {
         let width = self.measure.map_or(available, |m| m.min(available));
         let floor = crate::wrap::MIN_WRAP_WIDTH.min(available.max(1));
-        self.wrap_width = Some(width.max(floor));
+        width.max(floor)
     }
 
     /// The gap between 縱, if the writer has set one for this session.
@@ -187,7 +193,8 @@ impl Editor {
         // into the next page, and the text is meant to flow down them.
         let paged = self.pages_on_screen > 1;
         if (self.soft_wrap || paged) && self.layout() == Layout::Horizontal {
-            self.wrap_width
+            // A window being peeked at folds to its own width.
+            self.viewing_wrap.get().or(self.wrap_width)
         } else {
             None
         }

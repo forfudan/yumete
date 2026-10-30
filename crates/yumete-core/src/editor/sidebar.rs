@@ -7,6 +7,14 @@
 
 use super::*;
 
+/// One of the screen's regions: an editing window, or a sidebar. The word
+/// for either, because one key (`C-w w`) walks both kinds (2026-10-30).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Region {
+    Window(crate::window::WindowId),
+    Side(crate::sidebar::Side),
+}
+
 impl Editor {
     // ---- The side panels (Feature #94, #293) -------------------------------
 
@@ -474,98 +482,66 @@ impl Editor {
         }
     }
 
-    /// **這一刻站在第幾區。** 編號就是 `空格 1`–`4` 那四個號。
-    pub(super) fn which_region(&self) -> u32 {
-        use crate::sidebar::Side;
+    /// **Where the keys are**: a window, or a sidebar.
+    pub(super) fn which_region(&self) -> Region {
         match self.panel_focus() {
-            Some(Side::Left) => 3,
-            Some(Side::Right) => 4,
-            None => 1 + self.live_pane().min(1) as u32,
+            Some(side) => Region::Side(side),
+            None => Region::Window(self.live),
         }
     }
 
-    /// **那一區此刻在不在屏幕上。** 第一工作區永遠在。
-    pub(super) fn region_open(&self, nth: u32) -> bool {
+    /// Every region on the screen, in the order `C-w w` walks them: the
+    /// windows in tree order, then the left sidebar, then the right.
+    pub(super) fn regions_open(&self) -> Vec<Region> {
         use crate::sidebar::Side;
-        match nth {
-            1 => true,
-            2 => self.other_pane().is_some(),
-            3 => self.slot_showing(Side::Left),
-            4 => self.slot_showing(Side::Right),
-            _ => false,
+        let mut out: Vec<Region> = self.windows.leaves().into_iter().map(Region::Window).collect();
+        for side in [Side::Left, Side::Right] {
+            if self.slot_showing(side) {
+                out.push(Region::Side(side));
+            }
         }
+        out
     }
 
-    /// **`空格 w`/`C-w`：去下一個開着的區**（2026-09-26 定的）。
+    /// `C-w` and `空格 w`, then one letter: the same letters helix gives its
+    /// window mode, plus `e`/`i`/`E`/`I` for the sidebars helix has none of.
     ///
-    /// 原話：「可不可以把工作区和侧边栏统一成一个概念「区域」以简化思维模型……保留
-    /// space+w（切换到下个**可视**区域，按照第一工作区、第二工作区、左边栏、右边栏
-    /// 这样的顺序）」。
-    ///
-    /// Warning: **走的次序就是 `空格 1`–`4` 那四個號**，不是屏幕上從左到右的次序。這樣
-    /// 兩個鍵只有一套坐標：號碼是地址，`w` 是走一步，學會一個就學會另一個。從前
-    /// 這一支按屏幕排（左欄 → 正文 → 右欄），和號碼各說各的。
-    ///
-    /// Warning: **只走開着的**：不在的區不會被順手開出來——那是 `空格 1`–`4` 和 `空格 W`
-    /// 的事。「下一個」說的是眼前這幾個裏的下一個。
-    /// **區域那一組的一個鍵**（`C-w` 或 `空格 w` 之後，2026-09-30 定）。
-    ///
-    /// 照 helix 的 `C-w`（`keymap/default.rs:193`）：`w` 走下一個，`hjkl` 按方
-    /// 向走過去，`s` 切一刀，`q` 關掉，`o` 只留這一個。
-    ///
-    /// Warning: **`e`/`i` 是這一頭自己加的**：開關左右邊欄而**鍵不過去**。
-    /// helix 没有邊欄，所以没有這一對；原話：「_we / _wi for toggling left
-    /// and right sidebars……will not move focus to the sidebar」。大寫那一對
-    /// （`E`/`I`）是開了就走進去，而且**只開不關**——「it does not close the
-    /// sidebar as _we/_wi will do this」。
+    /// Warning: `Ctrl` may stay held — `C-w C-w` is `C-w w` — so a control
+    /// key is read as its letter first (2026-09-27: the held half of the group
+    /// used to fall on the floor).
     pub(super) fn on_region_key(&mut self, key: Key) {
         use crate::sidebar::Side;
-        // **`C-w C-w` 和 `C-w w` 是同一件事**（2026-10-06，對齊 helix）。helix 的
-        // 區域組每一格都綁着兩個拼法——`C-w C-w`、`C-w C-s`、`C-w C-o`、`C-w C-h`…
-        // （`default.rs` 的 window map）——因為按着 Ctrl 不放是這一組最自然的
-        // 按法。從前這裏只認 `Key::Char`，於是那半邊**整組靜默掉地**。
+        use crate::window::{Direction, Split};
         let key = match key {
             Key::Ctrl(c) => Key::Char(c),
             other => other,
         };
         match key {
             Key::Char('w') => self.next_region(),
-            // 按方向走。四個區域：左欄、正文、副編輯區、右欄。
-            //
-            // Warning: **走，不開**（2026-10-02 報的）。這四個從前和 `E`/`I`/
-            // `s` 共用 `go_to_region`，而那一支「没有就開一個」——於是 `空格 w j`
-            // 在只有一個編輯區的時候**切出一個新的**，`空格 w h` 在没開左欄的時候
-            // 把左欄開出來。原話：「_w + h/j/k/l 不是在可见的窗口里导航，而是会打
-            // 开新的窗口。这个是不对的。」選單自己早就分清楚了：`h j k l` 是「按
-            // 方向走」，`E I` 是「進左右欄」，`s` 是「切成兩個編輯區」。
-            //
-            // 那個方向没東西就**什麼都不做，也不說話**。原話：「你 j 到最下面一行
-            // 继续按 j 需要提示『没有更多行』吗？」——走到頭不是拒絕。
-            Key::Char('h') | Key::Left => self.walk_to_region(3),
-            Key::Char('l') | Key::Right => self.walk_to_region(4),
-            Key::Char('k') | Key::Up => self.walk_to_region(1),
-            Key::Char('j') | Key::Down => self.walk_to_region(2),
-            // 開關那一欄，鍵留在原地。
+            Key::Char('h') | Key::Left => self.walk_to_region(Direction::Left),
+            Key::Char('l') | Key::Right => self.walk_to_region(Direction::Right),
+            Key::Char('k') | Key::Up => self.walk_to_region(Direction::Up),
+            Key::Char('j') | Key::Down => self.walk_to_region(Direction::Down),
             Key::Char('e') => self.toggle_region(Side::Left),
             Key::Char('i') => self.toggle_region(Side::Right),
-            // 開出來並且走進去（已經開着就只是走進去）。
-            Key::Char('E') => self.go_to_region(3),
-            Key::Char('I') => self.go_to_region(4),
-            // 切一刀：眼下只有上下兩個編輯區，所以「切出來」和「走到第二個」
-            // 是同一件事（`go_to_region` 没有就開一個）。Warning: 往後真有第三
-            // 個編輯區的時候這兩件事要分家——`s` 是「再切一刀」，`j` 是「走下
-            // 去」。原話「We will expand it to more possibilities in
-            // future」指的就是這裏。
-            // `v` 是 helix 的豎切（`vsplit`）。眼下只有上下兩個編輯區，所以它
-            // 和 `s` 落在同一處；真切得了豎的那一天這兩個分家。
-            Key::Char('s') | Key::Char('v') => self.go_to_region(2),
+            Key::Char('E') => self.go_to_region(Region::Side(Side::Left)),
+            Key::Char('I') => self.go_to_region(Region::Side(Side::Right)),
+            // **`s` below, `v` beside** (2026-10-30, helix's letters): a new
+            // window on the same buffer at the same place, and the keys go
+            // to it. Until this day both opened the one second region.
+            Key::Char('s') => {
+                self.split_window(Split::Below);
+            }
+            Key::Char('v') => {
+                self.split_window(Split::Beside);
+            }
             Key::Char('q') => self.close_this_region(),
             Key::Char('o') => self.close_other_regions(),
             _ => {}
         }
     }
 
-    /// **開關那一側的邊欄，鍵不過去**（`C-w e`/`C-w i`，2026-09-30）。
+    /// `e`/`i`: a sidebar folded away or brought back, the keys staying put.
     pub(super) fn toggle_region(&mut self, side: crate::sidebar::Side) {
         match self.panel(side).is_some() {
             true => self.close_panel(side),
@@ -576,53 +552,43 @@ impl Editor {
         }
     }
 
+    /// `C-w w`: the next open region, wrapping. One region has nowhere to go.
     pub(super) fn next_region(&mut self) {
-        let open: Vec<u32> = (1..=4).filter(|&n| self.region_open(n)).collect();
+        let open = self.regions_open();
         if open.len() < 2 {
             return;
         }
         let here = self.which_region();
-        let at = open.iter().position(|&n| n == here).unwrap_or(0);
+        let at = open.iter().position(|&r| r == here).unwrap_or(0);
         self.go_to_region(open[(at + 1) % open.len()]);
     }
 
-
-    /// **`空格 q`：關掉站着的這一區**（2026-09-26 定的）。
-    ///
-    /// 邊欄就是關掉它自己——和在邊欄裏按 `q` 同一件事（定的，原話：「对于侧栏来说，q
-    /// 和 space+q 是一个意思」）。工作區是關掉這一半、鍵跟到另一半去。
-    ///
-    /// Warning: **只剩一個區就出聲，別靜悄悄**（定的，原話：「什么都不做，出一声」）。關掉
-    /// 最後一個工作區等於退出編輯器，而 `空格 q` 比 `:q` 好按得多——誤觸的代價是
-    /// 丟稿子。
+    /// `C-w q`: close the region the keys are in. The last window stays and
+    /// says so — closing it would mean leaving, and that is `:q`.
     pub(super) fn close_this_region(&mut self) {
         if let Some(side) = self.panel_focus() {
-            // **信息那一格要連「誰叫的」一起丟**（#426，2026-10-10 從 `q` 挪來）。
-            // `q` 現在是「鍵還給正文」，所以收走那一格的鍵只剩這一個——而光
-            // `close_panel` 收不乾淨：那一則下一幀會浮到光標旁邊去。
             if self.info_in_this_sidebar(side).is_some() {
                 return self.close_the_info(side);
             }
             return self.close_panel(side);
         }
-        if self.other_pane().is_none() {
+        let Some(target) = self.other_window() else {
             self.status = say!("region.only-one-left");
             return;
-        }
-        if self.switch_pane() {
-            self.close_split();
+        };
+        let leaving = self.live;
+        // The keys go to the nearest window first, so the one closed is
+        // never the one standing.
+        if self.switch_to(target) && self.close_window(leaving) {
             self.status = say!("pane.closed");
         }
     }
 
-    /// **`空格 Q`：只留一個工作區**（2026-09-26 定的）。
-    ///
-    /// 原話：「只保留一个工作区，优先保留光标所在的，回退到第一工作区」。所以站在
-    /// 第二工作區上按它，留下的是第二個；站在邊欄裏按它，留下第一個。
+    /// `C-w o`: keep only this window; every other window and both sidebars
+    /// go, and so does whatever was floating.
     pub(super) fn close_other_regions(&mut self) {
-        // 站在邊欄裏就退回工作區——留哪一個由「此刻在哪一個」決定，而邊欄不是。
         if self.panel_focus().is_some() {
-            self.go_to_region(1);
+            self.go_to_region(Region::Window(self.live));
         }
         for side in crate::sidebar::Side::BOTH {
             self.panels[side as usize] = None;
@@ -637,50 +603,74 @@ impl Editor {
         self.status = say!("region.only-this-one");
     }
 
-
-    /// **按方向走到第 `nth` 個區域——只走到開着的那些。**
-    ///
-    /// 和 [`Self::go_to_region`] 的分別就是這一句：那一支没有就開一個（`E`、
-    /// `I`、`s` 要的正是這個），這一支没有就不動。
-    fn walk_to_region(&mut self, nth: u32) {
-        if self.region_open(nth) {
-            self.go_to_region(nth);
+    /// `h j k l`: the region in that direction, by where the regions lie on
+    /// the screen; nothing when there is none. From the edge of the windows
+    /// a sideways step reaches a sidebar if it is open; from a sidebar the
+    /// step back lands in the window nearest to it.
+    fn walk_to_region(&mut self, direction: crate::window::Direction) {
+        use crate::sidebar::Side;
+        use crate::window::Direction;
+        let target = match self.which_region() {
+            Region::Window(id) => match self.window_neighbour(id, direction) {
+                Some(next) => Some(Region::Window(next)),
+                None => match direction {
+                    Direction::Left if self.slot_showing(Side::Left) => Some(Region::Side(Side::Left)),
+                    Direction::Right if self.slot_showing(Side::Right) => Some(Region::Side(Side::Right)),
+                    _ => None,
+                },
+            },
+            Region::Side(Side::Left) => match direction {
+                Direction::Right => Some(Region::Window(self.window_at_edge(Direction::Left))),
+                _ => None,
+            },
+            Region::Side(Side::Right) => match direction {
+                Direction::Left => Some(Region::Window(self.window_at_edge(Direction::Right))),
+                _ => None,
+            },
+        };
+        if let Some(target) = target {
+            self.go_to_region(target);
         }
     }
 
-    pub(super) fn go_to_region(&mut self, nth: u32) {
-        use crate::sidebar::Side;
-        match nth {
-            1 | 2 => {
-                let want = usize::from(nth == 2);
-                // 没有第二個工作區就開一個，開在站着的地方（`open_split` 的話）。
-                if want == 1 && self.other_pane().is_none() {
-                    let at = self.sel.head();
-                    let caption = self.current_buffer().display_name().to_string();
-                    self.open_split(at, None, caption);
-                }
+    /// The windows laid on a nominal screen — the tree splits by halves, so
+    /// which window is where does not depend on the real size.
+    fn window_neighbour(&self, id: crate::window::WindowId, direction: crate::window::Direction) -> Option<crate::window::WindowId> {
+        self.windows.neighbour(id, direction, Self::NOMINAL_SCREEN, self.splits_right_to_left())
+    }
+
+    /// The window touching the left or right edge of the screen, nearest the
+    /// top; the live one when it does.
+    fn window_at_edge(&self, edge: crate::window::Direction) -> crate::window::WindowId {
+        let (placed, _) = self.windows.place(Self::NOMINAL_SCREEN, self.splits_right_to_left());
+        let at_edge = |p: &crate::window::Placed| match edge {
+            crate::window::Direction::Left => p.area.x == 0,
+            _ => p.area.x + p.area.width == Self::NOMINAL_SCREEN.width,
+        };
+        if placed.iter().any(|p| p.id == self.live && at_edge(p)) {
+            return self.live;
+        }
+        placed.iter().filter(|p| at_edge(p)).min_by_key(|p| p.area.y).map_or(self.live, |p| p.id)
+    }
+
+    const NOMINAL_SCREEN: crate::window::Area = crate::window::Area { x: 0, y: 0, width: 1000, height: 1000 };
+
+    /// Go to a region, opening a sidebar that is not there yet.
+    pub(super) fn go_to_region(&mut self, region: Region) {
+        match region {
+            Region::Window(id) => {
                 self.panel_focus = None;
-                // 和 `which_region` 裏那一句同一個算法，別各算各的。
-                if self.other_pane().is_some() && self.live_pane().min(1) != want {
-                    self.switch_pane();
+                if id != self.live {
+                    self.switch_to(id);
                 }
             }
-            3 | 4 => {
-                let side = match nth {
-                    3 => Side::Left,
-                    _ => Side::Right,
-                };
+            Region::Side(side) => {
                 if !self.slot_showing(side) {
-                    // **Open the view that side owns** — `side_view` knows which,
-                    // and whether this file can hold it. `C-w E` and `C-w I`
-                    // always open the bar (2026-10-30): the older refusal when
-                    // nothing was assigned to the side left the key dead.
                     let view = self.side_view(side);
                     self.show_sidebar(view);
                 }
                 self.focus_slot(side);
             }
-            _ => {}
         }
     }
 

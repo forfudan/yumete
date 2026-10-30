@@ -607,6 +607,13 @@ impl Editor {
                 self.hard_wrap_lines(width);
                 Ok(CommandOutcome::Continue)
             }
+            Command::SplitWindow { how, file } => {
+                self.split_window(how);
+                if let Some(file) = file {
+                    self.open_file(self.here_path(file.as_ref())).map_err(EditorError::Io)?;
+                }
+                Ok(CommandOutcome::Continue)
+            }
             Command::Reflow(width) => {
                 let width = width.unwrap_or(super::verbs::HELIX_TEXT_WIDTH);
                 self.edit_each(|e| e.reflow_selection(width));

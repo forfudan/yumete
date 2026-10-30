@@ -15648,24 +15648,24 @@ fn the_panel_has_two_doors_and_esc_is_neither_of_them() {
     type_keys(&mut ed, " ws");
     assert!(ed.other_pane().is_some(), "切一刀纔開");
 
-    // Two halves of the writing and a panel: three regions, and `w` walks all
-    // three **in the order the numbers name** — 工作區一、二、左欄。
+    // Two windows and a panel: three regions, and `w` walks all three in
+    // the order they lie — the windows in tree order, then the left sidebar.
     ed.open_sidebar_at(&dir);
-    // `C-w k` 走到主編輯區——數字 2026-09-30 空出來留給緩衝區了。
-    type_keys(&mut ed, " wk");
+    // `C-w l` from the left sidebar lands back in the window the keys left
+    // (2026-10-30: walking is by position now, and the sidebar spans both).
+    type_keys(&mut ed, " wl");
     assert_eq!(ed.panel_focus(), None);
-    assert_eq!(ed.live_pane(), 0);
+    assert_eq!(ed.live_pane(), 1, "back where the keys were");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
-    assert_eq!(ed.panel_focus(), None, "the other half is a region too");
-    assert_eq!(ed.live_pane(), 1, "工作區二");
-    ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('w'));
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "then the left panel");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "after the last window, the left panel");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.panel_focus(), None, "round again");
-    assert_eq!(ed.live_pane(), 0, "回到工作區一");
+    assert_eq!(ed.live_pane(), 0, "the first window");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.live_pane(), 1, "the other window is a region too");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -27332,14 +27332,14 @@ fn the_direction_keys_walk_between_regions_and_never_open_one() {
     assert!(ed.panel(Side::Right).is_none(), "l 把右欄開出來了");
     assert_eq!(ed.status(), "", "走到頭不說話——同 j 走到最後一行");
 
-    // 開出來之後，同樣那幾個鍵就走得動了。四個方向是**絕對的**：`h` 左欄、
-    // `l` 右欄、`k` 正文、`j` 副編輯區——不是「從這裏往左一格」。
+    // 開出來之後，同樣那幾個鍵就走得動了。四個方向是**按位置的**（2026-10-30
+    // 改，窗口成了樹）：從左欄往右一步回到窗口，往上往下没有東西就不動。
     press(&mut ed, " wE");
     assert_eq!(ed.panel_focus(), Some(Side::Left));
-    press(&mut ed, " wl");
-    assert_eq!(ed.panel_focus(), Some(Side::Left), "右欄没開，l 不動");
     press(&mut ed, " wk");
-    assert_eq!(ed.panel_focus(), None, "k 回正文");
+    assert_eq!(ed.panel_focus(), Some(Side::Left), "邊欄上面没有東西，k 不動");
+    press(&mut ed, " wl");
+    assert_eq!(ed.panel_focus(), None, "l 回到窗口");
 
     // `s` 和 `E`/`I` 照舊是「没有就開一個」——那是它們的本分。
     press(&mut ed, " ws");
@@ -32876,5 +32876,81 @@ fn hard_wrap_takes_the_selection_or_the_unit_and_keeps_the_meaning() {
     ed.set_hard_wrap(12);
     ed.execute(":hard-wrap").unwrap();
     assert!(ed.current_buffer().text().contains("- item with\n  words to\n  wrap more\n"), "{}", ed.current_buffer().text());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// Windows (2026-10-30): `C-w v` opens one beside, `C-w s` one below, as
+/// many as there is room for; `h j k l` walk by where they lie; `C-w q`
+/// closes the one the keys are in; `:vsplit file` opens the file there.
+#[test]
+fn windows_open_beside_and_below_and_close_one_at_a_time() {
+    use crate::sidebar::Side;
+    let dir = tmp().join(format!("yumete-windows-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "# 甲\n\n一\n").unwrap();
+    std::fs::write(dir.join("b.md"), "# 乙\n\n二\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("a.md")).unwrap();
+    let one = ed.live_window();
+
+    // Beside: the new window takes the keys, shows the same buffer.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    let two = ed.live_window();
+    assert_ne!(two, one);
+    assert_eq!(ed.windows().leaves(), [one, two]);
+    assert_eq!(ed.live_pane(), 1);
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("a.md")));
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20), false);
+    assert_eq!(placed[0].area.x, 0, "{placed:?}");
+    assert_eq!(placed[1].area.x, 41, "beside: the second half on the right");
+
+    // Below, from the second: three windows; `h` walks back to the first.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    let three = ed.live_window();
+    assert_eq!(ed.windows().len(), 3);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.live_window(), one, "{}", ed.status());
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('l'));
+    assert!([two, three].contains(&ed.live_window()));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.live_window(), two);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.live_window(), three);
+
+    // `:vsplit b.md`: a fourth window with the other file; the others keep a.md.
+    ed.execute(&format!(":vsplit {}", dir.join("b.md").display())).unwrap();
+    assert_eq!(ed.windows().len(), 4);
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("b.md")));
+    assert!(ed.pane_of(one).is_some_and(|p| ed.buffer_with(p.buffer).is_some()));
+
+    // `C-w q` closes this one only; the keys land in a neighbour.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.windows().len(), 3);
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("a.md")));
+    assert_eq!(ed.buffer_count(), 2, "the buffer stays open");
+
+    // `C-w w` walks every region, sidebars included; `C-w o` keeps this one.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('E'));
+    assert_eq!(ed.panel_focus(), Some(Side::Left));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.panel_focus(), None, "after the left sidebar comes the first window");
+    assert_eq!(ed.live_window(), one);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('o'));
+    assert_eq!(ed.windows().leaves(), [one]);
+    assert!(ed.panel(Side::Left).is_none());
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.status(), say!("region.only-one-left"));
     std::fs::remove_dir_all(&dir).ok();
 }
