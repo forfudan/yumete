@@ -600,6 +600,12 @@ impl Editor {
 
     /// Replace the selection with the yank register (Helix `R`).
     pub(super) fn replace_with_register(&mut self) {
+        // `"+R` replaces with the system clipboard once the front end has it.
+        if matches!(self.pending_register, Some('+' | '*')) {
+            self.pending_register = None;
+            self.clipboard_read = Some(crate::editor::Pasting::Replace);
+            return;
+        }
         // Read before `recall`, which *takes* it: asking afterwards always
         // answered `None`, so the reader who named a register was told 「nothing
         // has been yanked」 about a register they had just named.

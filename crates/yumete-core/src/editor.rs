@@ -3822,6 +3822,8 @@ pub enum Pasting {
         to: crate::table::Shape,
         from: Option<crate::table::Shape>,
     },
+    /// `"+R`: the selection replaced by what the clipboard holds.
+    Replace,
 }
 
 /// What a [`Query`] is about.

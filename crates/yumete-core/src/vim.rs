@@ -85,6 +85,10 @@ pub fn step_for(typed: &str, grain: Grain, told: Option<char>) -> Option<Step> {
         ("l", _) | (" ", _) => step(Motion::Char { forward: true }, Reach::Exclusive),
         ("h", _) => step(Motion::Char { forward: false }, Reach::Exclusive),
         ("j", _) => step(Motion::Line { down: true }, Reach::Linewise),
+        // `+` and `-` are the next and previous line, linewise like `j` `k`
+        // (`:h +`); `d<Enter>` arrives here as `+`.
+        ("+", _) => step(Motion::Line { down: true }, Reach::Linewise),
+        ("-", _) => step(Motion::Line { down: false }, Reach::Linewise),
         ("k", _) => step(Motion::Line { down: false }, Reach::Linewise),
         ("G", _) => step(Motion::FileEnd, Reach::Linewise),
         ("gg", _) => step(Motion::FileStart, Reach::Linewise),

@@ -3660,7 +3660,10 @@ fn menu_size(ime: &mut ImeSession, n: &str) -> String {
             Ok(room) => page_for_window(n, room),
         });
     }
-    say!("ime.menu-size-is", ime.page_size())
+    match ime.page_size() {
+        1 => say!("ime.menu-size-is-one", 1),
+        n => say!("ime.menu-size-is", n),
+    }
 }
 
 /// `:yume-autocompletion` — 輸入預測 on, off, or (bare) the other one.
@@ -11516,10 +11519,17 @@ fn draw_horizontal(
         false => wrap::distance(rope, *viewport, cursor_anchor, measure, last_row).is_some(),
     };
     if caret_on_this_page {
+        // The caret's whole character has to be in view, not its first cell:
+        // a 漢字 at the edge used to leave its right half off the page and the
+        // caret on a blank cell (2026-10-30).
+        let wide = match at < rope.len_chars() {
+            true => yumete_cjk::char_width(rope.char(at)).max(1),
+            false => 1,
+        };
         if cursor_pos.column < *left {
             *left = cursor_pos.column;
-        } else if cursor_pos.column >= *left + page {
-            *left = cursor_pos.column + 1 - page;
+        } else if cursor_pos.column + wide > *left + page {
+            *left = (cursor_pos.column + wide).saturating_sub(page);
         }
     } else {
         *left = 0;
@@ -17378,10 +17388,12 @@ fn squeezed(text: &str) -> String {
         let config = bare();
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('l'));
-        // The caret rests past the twentieth 字, at column 40, in a window ten
-        // columns wide — so the cut falls at column 31, inside a 字.
-        let (buffer, caret) = render_caret(&editor, &config, 10, 4);
-        assert_eq!(caret.map(|p| p.x), Some(9), "the caret is on the page");
+        // The caret rests on the twentieth 字, columns 38 and 39, and the whole
+        // of it is brought into a window nine columns wide (2026-10-30: its
+        // second half used to be left off the page). The cut then falls at
+        // column 31, inside a 字.
+        let (buffer, caret) = render_caret(&editor, &config, 9, 4);
+        assert_eq!(caret.map(|p| p.x), Some(7), "the caret's 字 is on the page");
         assert_eq!(at(&buffer, 0, 0), " ", "the half 字 is air");
         assert_eq!(at(&buffer, 1, 0), "字", "and the whole ones follow it");
     }

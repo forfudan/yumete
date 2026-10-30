@@ -859,6 +859,11 @@ impl Editor {
                 return;
             }
         }
+        // `d<Enter>` is `d+` (`:h <CR>`): the next line, linewise.
+        let key = match (key, first) {
+            (Key::Enter, None) => Key::Char('+'),
+            (other, _) => other,
+        };
         let Key::Char(c) = key else {
             // Anything that is not a character — Esc among them — lets go of
             // the operator without pressing anything.
@@ -877,6 +882,40 @@ impl Editor {
         // rule, so this is where it belongs.
         if first.is_none() && (c == op || c == '_') {
             return self.run_vim_line(op);
+        }
+        // **`d%`** (`:h %`, inclusive): from here to the other half of the
+        // bracket under the cursor. The pair search is the editor's, which is
+        // why it is here and not in the pure motion table.
+        if first.is_none() && c == '%' {
+            self.count = None;
+            self.alias_count = None;
+            // Off a bracket, `%` looks along the line for the first one, and
+            // the span still starts where the cursor is.
+            let here = self.sel.head();
+            let found = {
+                let rope = self.current_buffer().rope();
+                let line_end = motion::line_last(rope, here);
+                (here..=line_end.max(here))
+                    .find(|&at| at < rope.len_chars() && "()[]{}（）［］｛｝「」『』《》〈〉【】〔〕".contains(rope.char(at)))
+            };
+            let other = found.and_then(|at| {
+                let saved = self.sel.clone();
+                self.sel.set_anchor(at);
+                self.sel.set_head(at);
+                let other = self.matching_bracket();
+                self.sel = saved;
+                other.map(|o| (at, o))
+            });
+            match other {
+                Some((at, other)) => {
+                    let (anchor, head) = (here.min(other).min(at), here.max(other).max(at));
+                    return self.do_vim(op, motion::Span::Over { anchor, head });
+                }
+                None => {
+                    self.status = say!("keys.not-a-motion", "%");
+                    return;
+                }
+            }
         }
         // **vim-surround's three** (2026-10-06): `ds{bracket}` takes a pair
         // off, `cs{old}{new}` swaps one, `ys{motion}{bracket}` puts one on.
@@ -4381,15 +4420,11 @@ impl Editor {
             // The menu says 「on or off」, so the key flips; `:yume-autocompletion`
             // on its own is the question (2026-10-30: this asked, and nobody
             // answered `scheme:` or `comment:` at all).
-            Key::Char('y') => ask(self, "predict:toggle"),
+            Key::Char('y') => self.run_the_line(":yume-autocompletion toggle"),
             // Picking is the command line with the scheme list open.
             Key::Char('i') => self.open_the_command_line("yume-scheme "),
             Key::Char('n') => ask(self, "scheme:next"),
-            Key::Char('/') => {
-                if let Err(err) = self.execute(":yume-chaifen toggle") {
-                    self.status = err.to_string();
-                }
-            }
+            Key::Char('/') => self.run_the_line(":yume-chaifen toggle"),
             Key::Char('t') => ask(self, "~"),
             Key::Char('w') => ask(self, "?"),
             Key::Char('W') => ask(self, "where"),
@@ -4401,29 +4436,38 @@ impl Editor {
 
     /// The value under `空格 z m` / `p` / `e`.
     fn handle_yume_value(&mut self, subject: char, key: Key) {
-        let ask = |e: &mut Self, what: String| e.scheme_request = Some(what);
         let Key::Char(c) = key else {
             if key != Key::Esc {
                 self.status = Self::said_keys(Self::yume_values(subject));
             }
             return;
         };
-        let what = match (subject, c) {
-            ('m', '0') => Some("commit:default".to_string()),
-            ('m', 'd') => Some("commit:delayed".to_string()),
-            ('m', 'u') => Some("commit:unique".to_string()),
-            ('m', 'f') => Some("commit:fluency".to_string()),
-            ('p', 'b') => Some("panel:box".to_string()),
-            ('p', 'm') => Some("panel:bottom".to_string()),
-            ('p', 'i') => Some("panel:inline".to_string()),
-            ('e', 'o') => Some("inline-preedit:off".to_string()),
-            ('e', 'c') => Some("inline-preedit:composition".to_string()),
-            ('e', 'p') => Some("inline-preedit:preview".to_string()),
+        // **The keys run the commands** (2026-10-30), so a key is refused
+        // where its command is: `Space z m u` with no 碼表 loaded used to say
+        // 「commit method: unique」 while `:yume-commit unique` said it could not.
+        let line = match (subject, c) {
+            ('m', '0') => Some(":yume-commit default"),
+            ('m', 'd') => Some(":yume-commit delayed"),
+            ('m', 'u') => Some(":yume-commit unique"),
+            ('m', 'f') => Some(":yume-commit fluency"),
+            ('p', 'b') => Some(":yume-panel box"),
+            ('p', 'm') => Some(":yume-panel bottom"),
+            ('p', 'i') => Some(":yume-panel inline"),
+            ('e', 'o') => Some(":yume-inline-preedit off"),
+            ('e', 'c') => Some(":yume-inline-preedit composition"),
+            ('e', 'p') => Some(":yume-inline-preedit preview"),
             _ => None,
         };
-        match what {
-            Some(what) => ask(self, what),
+        match line {
+            Some(line) => self.run_the_line(line),
             None => self.status = Self::said_keys(Self::yume_values(subject)),
+        }
+    }
+
+    /// Run a command line for a key, and say what went wrong when it did.
+    fn run_the_line(&mut self, line: &str) {
+        if let Err(err) = self.execute(line) {
+            self.status = err.to_string();
         }
     }
 

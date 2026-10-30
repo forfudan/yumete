@@ -32,6 +32,10 @@ impl Units {
             self.total += 1;
             self.in_word = false;
             self.joining = false;
+        } else if self.in_word && yumete_cjk::char_width(c) == 0 && !c.is_whitespace() {
+            // A combining mark belongs to the letter before it: `café` written
+            // with a separate accent, or Hindi's vowel signs, is one word.
+            self.joining = false;
         } else if c.is_alphanumeric() {
             if !self.in_word {
                 self.total += 1;

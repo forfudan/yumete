@@ -207,7 +207,10 @@ impl Changes {
     /// `base` 是 [`Changes::head_text`] 取來的那一份（按 buffer 存住，不必每次
     /// 重取）；`text` 是緩衝區現在的樣子。
     pub fn against(base: &str, text: &str, lines: usize) -> Option<Changes> {
+        // A byte-order mark is not text: the buffer holds none, and a file
+        // read from disk with one would otherwise mark line 1 as changed.
         let strip = |s: &str| {
+            let s = s.strip_prefix('\u{feff}').unwrap_or(s);
             s.split('\n').map(|l| l.trim_end_matches('\r')).collect::<Vec<_>>().join("\n")
         };
         // **A directory of its own for each call** (2026-10-29): one per

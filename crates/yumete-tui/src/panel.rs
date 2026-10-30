@@ -1103,7 +1103,9 @@ pub fn draw(
                 // act on. Then the 「…」 hangs off the one key it could draw.
                 let last = left > 0 && i + 1 == count && count > 1;
                 let (key, what) = match (last, left > 0 && count == 1) {
-                    (true, _) => ("…".to_string(), say!("menu.more", left)),
+                    // The cell this line takes was a key's too, so it counts
+                    // as one more not shown (2026-10-30: it said 4 of 5).
+                    (true, _) => ("…".to_string(), say!("menu.more", left + 1)),
                     (_, true) => (key.clone(), format!("{what} …")),
                     _ => (key.clone(), what.clone()),
                 };
