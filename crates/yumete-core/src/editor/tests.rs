@@ -12120,7 +12120,9 @@ fn a_table_with_no_schema_gets_one_written_beside_it() {
     // beside the data, written only when asked (`:table-schema write`).
     // This project's own 碼表 has no header and a tab between its two
     // columns, and both facts have to survive into the file.
-    let dir = tmp().join(format!("yumete-schema-{}", std::process::id()));
+    // Not `yumete-schema-<pid>`: `table::tests` uses that name in the same
+    // process, and the two removed each other's directory mid-test.
+    let dir = tmp().join(format!("yumete-datapackage-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let codes = dir.join("codes.txt");
