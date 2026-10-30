@@ -45,6 +45,9 @@ impl Leader {
 
     fn rest(&self) -> String {
         match self {
+            // A first-line indent (U+3000) is not carried onto the lines
+            // that follow: there it would read as another paragraph.
+            Leader::Plain(s) if s.contains('\u{3000}') => String::new(),
             Leader::Plain(s) | Leader::Again(s) => s.clone(),
             Leader::Once(s) => {
                 let indent: String = s.chars().take_while(|c| matches!(c, ' ' | '\t')).collect();
@@ -122,7 +125,13 @@ pub fn fill_like_vim(lines: &[String], width: usize, code: bool) -> Vec<String> 
             Some((leader, text)) => {
                 let goes_on = match (&held, &leader) {
                     (Some((Leader::Again(was), _)), Leader::Again(now)) => was == now,
-                    (Some((Leader::Plain(_) | Leader::Once(_), _)), Leader::Plain(_)) => true,
+                    // **A line opening with U+3000 is a paragraph of its own**
+                    // (2026-10-30, as decided): Chinese marks a paragraph by
+                    // the two-square indent, not by a blank line, so `gq`
+                    // must not run two of them together as vim would.
+                    (Some((Leader::Plain(_) | Leader::Once(_), _)), Leader::Plain(indent)) => {
+                        !indent.contains('\u{3000}')
+                    }
                     _ => false,
                 };
                 match (goes_on, held.as_mut()) {

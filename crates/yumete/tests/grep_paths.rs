@@ -23,7 +23,9 @@ fn hits_from_a_subdirectory_are_relative_to_where_you_stand() {
             .expect("the binary to run");
         let said = String::from_utf8_lossy(&out.stdout);
         let first = said.lines().next().unwrap_or_default();
-        let path = first.split(':').next().unwrap_or_default();
+        // `path:line:col:text` — split from the right, so a Windows drive
+        // letter's colon stays in the path.
+        let path = first.rsplitn(4, ':').last().unwrap_or_default();
         assert!(sub.join(path).is_file(), "{args:?} printed {first:?}, which is not a file under sub/");
     }
     let _ = std::fs::remove_dir_all(&root);

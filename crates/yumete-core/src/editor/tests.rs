@@ -6943,7 +6943,7 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     assert!(ed.execute(":table").is_ok());
     press(&mut ed, " ty");
     press(&mut ed, "ll");
-    press(&mut ed, " tp");
+    press(&mut ed, " tv");
     assert_eq!(
         ed.current_buffer().text(),
         "字,讀音,字\n永,ㄩㄥˇ,永\n\n之,ㄓ,之\n",
@@ -6957,7 +6957,7 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     // before anything is written, so there is nothing to undo.
     let before = ed.current_buffer().text();
     ed.store("部\n水\n\n長, 久\n".to_string());
-    press(&mut ed, " tp");
+    press(&mut ed, " tv");
     assert_eq!(ed.current_buffer().text(), before, "nothing was written");
     let (row, column) = (ed.status.find('4'), ed.status.find('3'));
     assert!(
@@ -6982,7 +6982,7 @@ fn a_cell_pasted_into_a_pipe_table_keeps_its_backslashes() {
     press(&mut ed, " tt");
     press(&mut ed, "l");
     ed.store("註\nC:\\ 與 |\n".to_string());
-    press(&mut ed, " tp");
+    press(&mut ed, " tv");
     // Written escaped…
     assert!(
         ed.current_buffer().text().contains(r"C:\\ 與 \|"),
@@ -10806,7 +10806,7 @@ fn a_whole_column_can_be_taken_and_put_back() {
     assert!(ed.status().contains("音"), "{}", ed.status());
     // Put it down the other column: one cell to a line, header included.
     press(&mut ed, "h");
-    press(&mut ed, " tp");
+    press(&mut ed, " tv");
     assert_eq!(
         ed.current_buffer().text(),
         "| 音 | 音 |\n| -- | -- |\n| mu | mu |\n| mo | mo |\n",
@@ -12168,8 +12168,25 @@ fn a_table_with_no_schema_gets_one_written_beside_it() {
     press(&mut ed, " tH");
     press(&mut ed, " te");
 
+    // **Nothing on disk until `:w`** (2026-10-30, as decided): the schema is
+    // an unsaved buffer in the other area, bound to its path.
     let written = dir.join(".yumete").join("tables").join("codes.toml");
-    let text = std::fs::read_to_string(&written).expect("a schema was written beside the data");
+    assert!(!written.exists(), "nothing is written by looking");
+    let text = {
+        let pane = ed.other_pane().expect("the schema is in the other area");
+        let i = ed.buffer_with(pane.buffer).unwrap();
+        assert!(ed.buffers[i].is_modified(), "it is unsaved");
+        ed.buffers[i].text().to_string()
+    };
+    // `:w` in the other area is what writes it, directory and all.
+    let table = ed.current_buffer().id();
+    let schema = ed.other_pane().unwrap().buffer;
+    let i = ed.buffer_with(schema).unwrap();
+    ed.show_buffer(i);
+    ed.execute(":w").unwrap();
+    assert!(written.is_file(), "written on :w");
+    ed.show_buffer(ed.buffer_with(table).unwrap());
+
     assert!(text.contains("file = \"codes.txt\""), "{text}");
     assert!(text.contains("delimiter = \"\\t\""), "the tab is escaped, not typed: {text}");
     assert!(text.contains("header = false"), "what 空格 t H just said: {text}");
@@ -19730,7 +19747,7 @@ fn putting_a_column_into_a_block_stops_at_the_blank_line() {
     press(&mut ed, " tt");
     press(&mut ed, " ty");
     press(&mut ed, "l");
-    press(&mut ed, " tp");
+    press(&mut ed, " tv");
     assert_eq!(ed.cell_text(0, 1), "木");
     assert_eq!(ed.cell_text(2, 1), "田");
     assert_eq!(
@@ -19907,7 +19924,7 @@ fn the_keys_a_block_does_not_answer_say_which_ones_it_does() {
     ed.execute(":1").unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, " td");
-    assert!(ed.status().contains("y p"), "{}", ed.status());
+    assert!(ed.status().contains("y v"), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), "木,AA\n目,BB\n田,CC\n");
 }
 
@@ -31607,7 +31624,7 @@ fn a_column_with_a_two_line_value_goes_out_and_comes_back_whole() {
 
     press(&mut ed, "l ty");
     assert_eq!(ed.status(), say!("table.yanked-column", "值", 4), "header and three records");
-    press(&mut ed, "l tp");
+    press(&mut ed, "l tv");
     assert_eq!(ed.status(), say!("table.pasted-column", 4));
     assert_eq!(
         ed.current_buffer().text(),
@@ -32419,7 +32436,7 @@ fn a_column_with_empty_last_cells_pastes_whole() {
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     press(&mut ed, "l ty");
-    press(&mut ed, "l tp");
+    press(&mut ed, "l tv");
     // The heading travels with its column.
     assert_eq!(ed.current_buffer().text(), "n,a,a\nA,1,1\nB,,\n", "{}", ed.status());
     let _ = std::fs::remove_dir_all(&dir);
@@ -32674,4 +32691,73 @@ fn vim_replace_mode_takes_a_count() {
     assert_eq!(ed.current_buffer().rope().to_string(), "XYXYef\n");
     press(&mut ed, "iZ");
     assert_eq!(ed.current_buffer().rope().to_string(), "XYXZYef\n", "the cursor on the last one written");
+}
+
+/// **The morning's decisions** (2026-10-30): vim's Esc leaves Visual with
+/// the cursor where it stood (nvim: `vll<Esc>iZ` and `lVj<Esc>iZ`); `gq`
+/// keeps paragraphs opened by U+3000 apart; `s` reads a regex; a `.txt`
+/// whose lines hold the same number of spaces is not a grid unless asked;
+/// `t p`/`t P` put a column in beside this one and `t v` writes over it.
+#[test]
+fn what_the_morning_decided() {
+    let mut ed = typed_vim("甲乙丙丁\n");
+    press(&mut ed, "vll");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "iZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "甲乙Z丙丁\n");
+    let mut ed = typed_vim("abc\ndef\n");
+    press(&mut ed, "lVj");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "iZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "abc\ndZef\n");
+
+    let mut ed = typed_vim("　　天色渐暗。\n　　他走进屋里。\n");
+    press(&mut ed, "ggVGgq");
+    assert_eq!(ed.current_buffer().rope().to_string(), "　　天色渐暗。\n　　他走进屋里。\n");
+    // A line with no indent after one is the same paragraph, wrapped.
+    let mut ed = typed_vim("　　天色渐暗，他\n走进屋里。\n");
+    press(&mut ed, "ggVGgq");
+    assert_eq!(ed.current_buffer().rope().to_string(), "　　天色渐暗，他走进屋里。\n");
+    let mut ed = typed_vim("aa bb\ncc dd\n");
+    press(&mut ed, "ggVGgq");
+    assert_eq!(ed.current_buffer().rope().to_string(), "aa bb cc dd\n");
+
+    let mut ed = typed("foo bar 中文 baz\n");
+    press(&mut ed, "%s[a-z]+");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.iter().count(), 3, "{}", ed.status());
+    press(&mut ed, "c-");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().rope().to_string(), "- - 中文 -\n");
+
+    let path = tmp().join("yumete-shopping-list.txt");
+    std::fs::write(&path, "buy milk tomorrow\ncall mum tonight\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    assert!(ed.table().is_none(), "two spaces a line is not a grid");
+    // Named, a space still cuts: the lines convert as three columns.
+    ed.execute(":convert-table space pipe").unwrap();
+    let text = ed.current_buffer().text().to_string();
+    assert!(text.starts_with("| buy") && text.contains("| tomorrow |"), "{text}");
+    std::fs::remove_file(&path).ok();
+
+    let dir = tmp().join(format!("yumete-column-beside-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("poets.csv");
+    for (keys, want) in [
+        (" tp", "姓,名,朝代,朝代\n李,白,唐,唐\n李,商隐,晚唐,晚唐\n"),
+        (" tP", "姓,朝代,名,朝代\n李,唐,白,唐\n李,晚唐,商隐,晚唐\n"),
+        (" tv", "姓,朝代,朝代\n李,唐,唐\n李,晚唐,晚唐\n"),
+    ] {
+        std::fs::write(&csv, "姓,名,朝代\n李,白,唐\n李,商隐,晚唐\n").unwrap();
+        let mut ed = Editor::new();
+        ed.open_file(&csv).unwrap();
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, "ll ty");
+        press(&mut ed, "h");
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), want, "{keys}: {}", ed.status());
+    }
+    std::fs::remove_dir_all(&dir).ok();
 }

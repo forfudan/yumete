@@ -288,10 +288,18 @@ impl Editor {
     ///
     /// `$$` 是 `regex` 那一頭「一個真的錢號」的寫法，所以照字面就是把 `$` 加倍。
     fn replacement(&self) -> String {
-        match self.search.regex {
+        match self.regex_on() {
             true => self.search.replace.clone(),
             false => self.search.replace.replace('$', "$$"),
         }
+    }
+
+    /// **Whether the pattern is a regex.** The search bar's own switch, and
+    /// always under `s`/`S`/`K`/`A-K` (2026-10-30, as decided): helix's
+    /// select/split/keep read a regex, so `%s[a-z]+` means the words there,
+    /// not those seven characters.
+    pub(super) fn regex_on(&self) -> bool {
+        self.search.regex || self.sift.is_some()
     }
 
     fn search_pattern(&self) -> String {
@@ -312,7 +320,7 @@ impl Editor {
         // Warning: **要試的是穿好衣服的那一整條**，不是中間那一段。`(?i)` 自己就
         // 佔一層嵌套（實測：248 層括號下 `[書书]` 編得過，`(?i)` 一加就編不過），
         // 所以只驗中間那一段等於没驗。
-        if self.search.regex && self.search.glyphs {
+        if self.regex_on() && self.search.glyphs {
             if let Some(wide) = crate::glyphs::widen_pattern(&self.search.query) {
                 let whole = self.dressed(wide);
                 if regex::Regex::new(&whole).is_ok() {
@@ -320,7 +328,7 @@ impl Editor {
                 }
             }
         }
-        let body = match (self.search.regex, self.search.glyphs) {
+        let body = match (self.regex_on(), self.search.glyphs) {
             // **正則底下也折字形，只折「原樣打出來的那些字」**（2026-10-01 定，
             // 問的：「正则情况下能否也能兼容繁简体？」）。
             //
@@ -2321,7 +2329,7 @@ impl Editor {
             how,
             said,
             keep_case: self.search.preserve_case,
-            doubled: !self.search.regex,
+            doubled: !self.regex_on(),
             shapes: self.search.glyphs,
             fold_case: match self.search.case {
                 Case::Insensitive => true,
@@ -2947,7 +2955,18 @@ fn look_in_one_file(
     if Some(full.as_path()) == here {
         return true;
     }
-    let shown = path.strip_prefix(root).unwrap_or(path).to_path_buf();
+    // **Against the real root when the spelt one does not match** (2026-10-30,
+    // CI on Windows): the runner's temp dir is a short `RUNNER~1` name while
+    // the walk hands back long ones, so the prefix never matched and every
+    // hit was printed absolute. Canonicalised only on that failure, so the
+    // common case costs nothing.
+    let shown = match path.strip_prefix(root) {
+        Ok(rel) => rel.to_path_buf(),
+        Err(_) => std::fs::canonicalize(root)
+            .ok()
+            .and_then(|real| full.strip_prefix(&real).ok().map(std::path::Path::to_path_buf))
+            .unwrap_or_else(|| path.to_path_buf()),
+    };
     // **Say where we are before reading it**, not after: the file about to
     // be read is the one the reader is waiting on.
     going.looking_at(&shown);
