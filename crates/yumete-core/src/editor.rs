@@ -99,6 +99,40 @@ struct Viewing {
 /// one while the override is open: 「reading only」 is not a rule anybody has
 /// to remember here, it is the only program that compiles.
 #[must_use = "the override lasts as long as this guard"]
+/// How the gutter numbers lines (`:line-numbers`, 2026-10-31). The config
+/// sets the baseline; the command chooses for the session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LineNumbers {
+    #[default]
+    Absolute,
+    /// The cursor line's own number, the others their distance from it — so
+    /// `3k` and `5j` read straight off the gutter. With a selection the
+    /// count runs from the head; with several cursors, from the primary.
+    Relative,
+    None,
+}
+
+impl LineNumbers {
+    pub const NAMES: [&'static str; 3] = ["absolute", "relative", "none"];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            LineNumbers::Absolute => "absolute",
+            LineNumbers::Relative => "relative",
+            LineNumbers::None => "none",
+        }
+    }
+
+    pub fn parse(word: &str) -> Option<LineNumbers> {
+        match word.trim().to_ascii_lowercase().as_str() {
+            "absolute" => Some(LineNumbers::Absolute),
+            "relative" => Some(LineNumbers::Relative),
+            "none" => Some(LineNumbers::None),
+            _ => None,
+        }
+    }
+}
+
 pub struct Viewed<'a> {
     editor: &'a Editor,
     previous: Option<Viewing>,
@@ -2512,6 +2546,10 @@ pub struct Editor {
     /// `[editor] hard_wrap`: the width `:hard-wrap` fills to when none is
     /// given; `0` is unset (2026-10-30).
     hard_wrap: usize,
+    /// `[editor] line_numbers`, as the config set it at startup.
+    line_numbers_baseline: LineNumbers,
+    /// What `:line-numbers` chose for this session, over the baseline.
+    line_numbers_chosen: Option<LineNumbers>,
     /// 雙鏈 (2026-10-30): the project's `[[links]]`, read when first asked.
     links: Option<crate::links::Index>,
     /// The thread reading them, until it answers.
@@ -4024,6 +4062,8 @@ impl Editor {
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             own_words: yumete_cjk::WordList::default(),
             hard_wrap: 0,
+            line_numbers_baseline: LineNumbers::Absolute,
+            line_numbers_chosen: None,
             links: None,
             links_building: None,
             links_look: crate::links::Look::List,

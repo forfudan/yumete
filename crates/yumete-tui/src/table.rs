@@ -436,7 +436,7 @@ pub fn char_at(
     // 表格視圖没有診斷那一欄：一張 CSV 不會有語言服務器。
     let gutter = crate::gutter_width(
         bottom.saturating_sub(editor.table_row_base()) + 1,
-        config.editor.line_numbers,
+        crate::numbers(editor, config),
         false,
     ) as u16;
     // The same numbers `draw` measured with, the caret's own cell included:
@@ -673,7 +673,7 @@ pub fn draw(
     // — the gutter's, the status line's, `t20g`'s — means the same thing.
     let base = editor.table_row_base();
     let gutter =
-        gutter_width(bottom_row.saturating_sub(base) + 1, config.editor.line_numbers, false) as u16;
+        gutter_width(bottom_row.saturating_sub(base) + 1, crate::numbers(editor, config), false) as u16;
     let room = area.width.saturating_sub(gutter) as usize;
     let mut widths = layout(
         editor,
@@ -1112,7 +1112,7 @@ pub fn draw(
                         editor.table_row_index(line),
                         editor.table_row_index(cursor_row),
                         gutter as usize,
-                        config.editor.line_numbers,
+                        crate::numbers(editor, config),
                         false,
                     ),
                     _ => String::new(),

@@ -266,6 +266,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
         format!("view-margin {}", editor.margin().name()),
         format!("view-hanging {}", on(editor.hanging_punctuation())),
         format!("view-numbers-fill {}", on(editor.number_fill())),
+        format!("line-numbers {}", editor.line_numbers().name()),
         format!("view-focus {}", on(editor.focus())),
         format!("view-typewriter {}", on(editor.typewriter())),
         format!(
@@ -460,6 +461,11 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         editor.set_measure(Some(config.editor.measure));
     }
     editor.set_hard_wrap(config.editor.hard_wrap);
+    editor.set_line_numbers_baseline(match config.editor.line_numbers {
+        yumete_config::LineNumbers::Absolute => yumete_core::editor::LineNumbers::Absolute,
+        yumete_config::LineNumbers::Relative => yumete_core::editor::LineNumbers::Relative,
+        yumete_config::LineNumbers::None => yumete_core::editor::LineNumbers::None,
+    });
     editor.set_paper(config.export.page.0, config.export.page.1);
     editor.set_indent_width(config.editor.indent_width);
     editor.set_tab_spaces(config.editor.tab_spaces);

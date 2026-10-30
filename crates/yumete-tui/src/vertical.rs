@@ -154,6 +154,7 @@ impl Metrics {
     /// somewhere to sit below a full 縱.
     pub fn new(config: &Config, height: u16, total_lines: usize, look: Look) -> Metrics {
         let Look {
+            numbers,
             ruby,
             hanging,
             zong,
@@ -163,7 +164,7 @@ impl Metrics {
             diff,
             metered,
         } = look;
-        let numbers = number_rows(config.editor.line_numbers, total_lines);
+        let numbers = number_rows(numbers, total_lines);
         // 改動條跟着行號走：號碼帶沒有，那一條也沒有。兩邊同一條規矩——橫排那
         // 一格本來就是行號後面那兩格空氣裏的一格，`:view-numbers none` 一關，
         // 整個 gutter 都不在了。
@@ -279,7 +280,7 @@ pub fn char_at(
         config,
         area.height,
         buffer.line_count(),
-        Look::of(editor),
+        Look::of(editor, config),
     );
     // The same two answers the horizontal page is drawn from — asked of the
     // editor, not worked out again here.
@@ -689,6 +690,8 @@ pub fn zong_length_for(config: &Config, height: u16, total_lines: usize, look: L
 /// the tick column are all worked out from them at once.
 #[derive(Debug, Clone, Copy)]
 pub struct Look {
+    /// How lines are numbered, from the editor (2026-10-31).
+    pub numbers: LineNumbers,
     /// Whether readings are laid out beside the 縱.
     pub ruby: bool,
     /// Whether 句讀 hang in the margin.
@@ -720,8 +723,9 @@ impl Look {
     /// Ask the editor. The flags come from *it*, not from the config: `:ruby-off`,
     /// `:view-hanging` and `:view-margin` change them at runtime, and a page laid out from
     /// the config would disagree with the grid the cursor moves on.
-    pub fn of(editor: &Editor) -> Look {
+    pub fn of(editor: &Editor, config: &Config) -> Look {
         Look {
+            numbers: crate::numbers(editor, config),
             ruby: !editor.ruby().is_empty(),
             hanging: editor.hanging_punctuation(),
             zong: editor.zong_measure(),
@@ -943,7 +947,7 @@ pub fn draw(
         config,
         area.height,
         total_lines,
-        Look::of(editor),
+        Look::of(editor, config),
     );
     let rope = buffer.rope();
 
@@ -1169,7 +1173,7 @@ pub fn draw(
     let show_segmentation = editor.segmentation_visible();
     let mark = editor.word_mark();
     let cursor_line = editor.cursor_line();
-    let numbers = config.editor.line_numbers;
+    let numbers = crate::numbers(editor, config);
     let tail = crate::tail_row(rope);
 
     // Warning: **問算出來的那一格，不是配置**（2026-10-02 一輪掃查報來的）。
