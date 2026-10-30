@@ -965,11 +965,8 @@ impl Editor {
         if self.current > i {
             self.current -= 1;
         }
-        // A pane naming a buffer that is gone is not a pane.
-        if self.other.as_ref().is_some_and(|pane| pane.buffer == id) {
-            self.other = None;
-            self.live_pane = 0;
-        }
+        // A window naming a buffer that is gone is not a window.
+        self.drop_windows_showing(|buffer| buffer == id);
         self.search_preview = None;
     }
 
@@ -1044,15 +1041,9 @@ impl Editor {
         // elsewhere — and they are one again when you come back to the file
         // and the text they were found in.
         self.table_on_open();
-        // A pane naming a buffer that is gone is not a pane.
-        if self
-            .other
-            .as_ref()
-            .is_some_and(|pane| self.buffer_with(pane.buffer).is_none())
-        {
-            self.other = None;
-            self.live_pane = 0;
-        }
+        // A window naming a buffer that is gone is not a window.
+        let ids: Vec<u64> = self.buffers.iter().map(|b| b.id()).collect();
+        self.drop_windows_showing(|buffer| !ids.contains(&buffer));
     }
 
     /// **問服務器的那幾句，和它答的那一則**（2026-10-09 補）。

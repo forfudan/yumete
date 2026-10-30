@@ -6748,7 +6748,7 @@ impl Editor {
         // …and except when the reader asked for the other answer: `/` finds it
         // **here**, `?` shows it over there. One pair of letters, in the goto
         // family and the table family alike.
-        if self.definition_preview && self.live_pane == 0 {
+        if self.definition_preview && self.live_pane() == 0 {
             let line = rope.char_to_line(from);
             let caption = say!(
                 "show.table-hit",
@@ -6812,8 +6812,8 @@ impl Editor {
     /// Which line the other work area is showing, for tests and for the
     /// status line.
     pub fn peeked_line(&self) -> Option<usize> {
-        let pane = self.other.as_ref()?;
-        Some(self.current_buffer().rope().char_to_line(pane.cursor))
+        let pane = self.other_pane()?;
+        Some(self.current_buffer().rope().char_to_line(pane.cursor()))
     }
 
     /// Whether the cursor sits at the first character of its cell.
