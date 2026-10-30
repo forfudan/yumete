@@ -218,6 +218,9 @@ pub enum Command {
     /// `:reflow [width]` — helix's: each selection refilled to `width`
     /// columns, 80 when it is left off (2026-10-29).
     Reflow(Option<usize>),
+    /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
+    /// live one, showing `file` when one is named (2026-10-30).
+    SplitWindow { how: crate::window::Split, file: Option<String> },
     /// `:hard-wrap [<columns>]`: the selection or the unit under the cursor
     /// re-filled under the syntax's own rules; `None` asks the setting
     /// (2026-10-30, see [`crate::hardwrap`]).
@@ -2869,6 +2872,26 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::ShowDir)),
+    },
+    Entry {
+        name: "vsplit",
+        aliases: &["vs"],
+        help: "cmd.commands.vsplit",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| {
+            Ok(Command::SplitWindow { how: crate::window::Split::Beside, file: p.arg(0).map(str::to_string) })
+        }),
+    },
+    Entry {
+        name: "hsplit",
+        aliases: &["hs", "split"],
+        help: "cmd.commands.hsplit",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| {
+            Ok(Command::SplitWindow { how: crate::window::Split::Below, file: p.arg(0).map(str::to_string) })
+        }),
     },
     Entry {
         name: "open",

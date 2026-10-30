@@ -78,7 +78,10 @@ pub struct Placed {
 pub struct Rule {
     pub area: Area,
     pub how: Split,
-    /// The window on the far side of the rule — what a caption on it names.
+    /// The window touching the rule on its near side (the last of the first
+    /// half) and on its far side (the first of the second half) — a caption
+    /// on the rule names whichever of them is being read, not written.
+    pub first: WindowId,
     pub second: WindowId,
 }
 
@@ -212,7 +215,7 @@ impl Windows {
                         }
                     };
                     go(first, a, rtl, out, rules);
-                    rules.push(Rule { area: rule, how: *how, second: first_leaf(second) });
+                    rules.push(Rule { area: rule, how: *how, first: last_leaf(first), second: first_leaf(second) });
                     go(second, b, rtl, out, rules);
                 }
             }
@@ -221,6 +224,12 @@ impl Windows {
             match node {
                 Node::Window(id) => *id,
                 Node::Split { first, .. } => first_leaf(first),
+            }
+        }
+        fn last_leaf(node: &Node) -> WindowId {
+            match node {
+                Node::Window(id) => *id,
+                Node::Split { second, .. } => last_leaf(second),
             }
         }
         let mut out = Vec::new();
@@ -286,7 +295,7 @@ mod tests {
         assert_eq!(placed[0].area, Area::new(0, 0, 80, 11));
         assert_eq!(rules[0].area, Area::new(0, 11, 80, 1));
         assert_eq!(placed[1].area, Area::new(0, 12, 80, 12));
-        assert_eq!(rules[0].second, 2);
+        assert_eq!((rules[0].first, rules[0].second), (1, 2));
 
         let mut w = Windows::one();
         w.split(1, Split::Beside);

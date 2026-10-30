@@ -811,8 +811,17 @@ impl Editor {
     /// Reading only: see [`Self::current_buffer_mut`]. A pane whose buffer has
     /// been closed overrides nothing and the live half is drawn twice, which is
     /// what the page did before this existed.
+    /// [`Self::view_pane`], with the text folded to `available` cells — the
+    /// peeked window's own width less its gutter.
+    pub fn view_pane_wrapped(&self, pane: &Pane, available: usize) -> Viewed<'_> {
+        let viewed = self.view_pane(pane);
+        self.viewing_wrap.set(Some(self.wrap_for(available)));
+        viewed
+    }
+
     pub fn view_pane(&self, pane: &Pane) -> Viewed<'_> {
         let previous = self.viewing.get();
+        let previous_wrap = self.viewing_wrap.get();
         if let Some(buffer) = self.buffers.iter().position(|b| b.id() == pane.buffer) {
             // Clamped **here**, once: the live half can have deleted the text
             // the pane was left standing in, and a stale offset walked into a
@@ -820,7 +829,7 @@ impl Editor {
             let at = pane.cursor().min(self.buffers[buffer].rope().len_chars());
             self.viewing.set(Some(Viewing { buffer, at }));
         }
-        Viewed { editor: self, previous }
+        Viewed { editor: self, previous, previous_wrap }
     }
 
     /// Where the caret is for the purpose of *drawing* — the pane's own place

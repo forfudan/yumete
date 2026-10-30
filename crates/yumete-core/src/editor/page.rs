@@ -780,6 +780,28 @@ impl Editor {
         }
     }
 
+    /// `C-w s` / `C-w v` / `:hsplit` / `:vsplit`: a new window `how` from the
+    /// live one, on the same buffer at the same place, and the keys go to it
+    /// (2026-10-30). `false` when the tree would not split.
+    pub(super) fn split_window(&mut self, how: crate::window::Split) -> bool {
+        let here = Pane {
+            buffer: self.current_buffer().id(),
+            cursor: self.sel.head(),
+            anchor: self.sel.anchor(),
+            goal_column: self.sel.goal(),
+            goal_slot: self.sel.goal_slot(),
+            extend: self.extend,
+            highlight: None,
+            caption: self.current_buffer().display_name().to_string(),
+        };
+        let Some(fresh) = self.windows.split(self.live, how) else {
+            return false;
+        };
+        self.panes.insert(fresh, here);
+        self.panel_focus = None;
+        self.switch_to(fresh)
+    }
+
     /// Close the other work area, keeping the one the keys are in.
     ///
     /// Which is the same act as「關掉另一個」 when there are two of them, and

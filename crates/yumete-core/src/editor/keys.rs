@@ -4352,6 +4352,7 @@ impl Editor {
         ("e i", "hint.region.toggle-bar"),
         ("E I", "hint.region.into-bar"),
         ("s", "hint.region.split"),
+        ("v", "hint.region.split-beside"),
         ("q", "hint.region.close"),
         ("o", "hint.region.only"),
     ];

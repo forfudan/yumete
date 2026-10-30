@@ -1401,9 +1401,9 @@ find = "git diff 差異 差异 提交 改動 改动 版本"
 [[message]]
 # : 命令選單裏 git-show 那一項的説明(commands 組)
 key = "cmd.commands.git-show"
-zht = "把提交過的那一稿以只讀方式開在另一個編輯區"
-zhs = "把提交过的那一稿以只读方式开在另一个编辑区"
-en = "the committed draft, read-only, in the other region"
+zht = "把提交過的那一稿以只讀方式開在另一個窗口"
+zhs = "把提交过的那一稿以只读方式开在另一个窗口"
+en = "the committed draft, read-only, in the other window"
 find = "提交 舊稿 旧稿 對照 对照 並排 并排 git show HEAD commit"
 
 [[message]]
@@ -1437,6 +1437,14 @@ zht = "把這一頁轉成橫排"
 zhs = "把这一页转成横排"
 en = "turn this page across"
 find = "橫排 横排 橫書 横书 排版 方向 layout horizontal across"
+
+[[message]]
+# : 命令選單裏 hsplit 那一項的説明
+key = "cmd.commands.hsplit"
+zht = "下面開一個窗口（同 C-w s）；帶文件名就在那裏打開它"
+zhs = "下面开一个窗口（同 C-w s）；带文件名就在那里打开它"
+en = "a window below this one (as C-w s); with a file, open it there"
+find = "分窗 分屏 split window 窗口 上下 below hsplit"
 
 [[message]]
 # : 命令選單裏 indent 那一項的説明(commands 組)
@@ -1901,6 +1909,14 @@ zht = "竪排的 hjkl 走行文還是走版面"
 zhs = "竖排的 hjkl 走行文还是走版面"
 en = "whether hjkl follow the text or the screen when the page runs down"
 find = "hjkl 鍵位 键位 方向 移動 移动 竪排 竖排 邏輯 逻辑 視覺 视觉 keys motion logical visual"
+
+[[message]]
+# : 命令選單裏 vsplit 那一項的説明
+key = "cmd.commands.vsplit"
+zht = "旁邊開一個窗口（同 C-w v）；帶文件名就在那裏打開它"
+zhs = "旁边开一个窗口（同 C-w v）；带文件名就在那里打开它"
+en = "a window beside this one (as C-w v); with a file, open it there"
+find = "分窗 分屏 split window 窗口 左右 beside vsplit"
 
 [[message]]
 # : 命令選單裏 wheel 那一項的説明(commands 組)
@@ -4518,9 +4534,9 @@ en = "{0} hit(s), nothing changed"
 [[message]]
 # :git-show 之後狀態行的一句話
 key = "git.show"
-zht = "{0} 那一稿開在另一個編輯區，只讀"
-zhs = "{0} 那一稿开在另一个编辑区，只读"
-en = "the draft at {0} is open in the other region, read-only"
+zht = "{0} 那一稿開在另一個窗口，只讀"
+zhs = "{0} 那一稿开在另一个窗口，只读"
+en = "the draft at {0} is open in the other window, read-only"
 
 [[message]]
 # 在跳轉表裏前後走
@@ -4969,9 +4985,9 @@ en = "a window of 80×24 is what this is laid out for; a side panel needs 36 col
 [[message]]
 # 常用幫助：這個詞還在哪裏
 key = "help.common.word-elsewhere"
-zht = "這個詞還在哪裏：這邊找/副編輯區看"
-zhs = "这个词还在哪里：这边找/副编辑区看"
-en = "where else this word is: / here, ? in the other region"
+zht = "這個詞還在哪裏：這邊找/另一個窗口看"
+zhs = "这个词还在哪里：这边找/另一个窗口看"
+en = "where else this word is: / here, ? in the other window"
 
 [[message]]
 # 常用幫助：按詞移動
@@ -5076,7 +5092,7 @@ en = "type in the cell / empty it"
 key = "help.table.who-uses-this"
 zht = "誰用了它——一欄一欄地找：這邊找/那邊看"
 zhs = "谁用了它——一栏一栏地找：这边找/那边看"
-en = "who uses this — down the columns: / here, ? in the other region"
+en = "who uses this — down the columns: / here, ? in the other window"
 
 [[message]]
 # 表格幫助：取這一欄/貼一欄
@@ -5522,9 +5538,9 @@ en = "go to definition"
 # goto group
 # go to the definition (in second window)
 key = "hint.goto.follow-note-elsewhere"
-zht = "前往定義(副窗顯示)"
-zhs = "前往定义(副窗显示)"
-en = "go to definition in the other region"
+zht = "前往定義(另一窗口顯示)"
+zhs = "前往定义(另一窗口显示)"
+en = "go to definition in the other window"
 
 [[message]]
 # g 選單裏的 i：vim 的 gi，回到上次插入停下的地方再插入
@@ -5627,9 +5643,9 @@ en = "search the selection"
 [[message]]
 # goto: search the selection, shown in the second window
 key = "hint.goto.search-word-elsewhere"
-zht = "搜索所選内容(副窗顯示)"
-zhs = "搜索所选内容(副窗显示)"
-en = "search the selection in the other region"
+zht = "搜索所選内容(另一窗口顯示)"
+zhs = "搜索所选内容(另一窗口显示)"
+en = "search the selection in the other window"
 
 [[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
@@ -6088,9 +6104,16 @@ en = "keep only this one"
 [[message]]
 # C-w s：切一刀，分成上下兩個編輯區
 key = "hint.region.split"
-zht = "切成兩個編輯區"
-zhs = "切成两个编辑区"
-en = "split in two"
+zht = "下面開一個窗口"
+zhs = "下面开一个窗口"
+en = "a window below"
+
+[[message]]
+# C-w 提示：v 在旁邊開一個窗口
+key = "hint.region.split-beside"
+zht = "旁邊開一個窗口"
+zhs = "旁边开一个窗口"
+en = "a window beside"
 
 [[message]]
 # C-w/空格 w 那一組的標題
@@ -6737,9 +6760,9 @@ en = "search down the columns (a column range can be given)"
 [[message]]
 # 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域
 key = "hint.table.search-columns-elsewhere"
-zht = "按列搜索(副窗顯示)"
-zhs = "按列搜索(副窗显示)"
-en = "search down the columns in the other region"
+zht = "按列搜索(另一窗口顯示)"
+zhs = "按列搜索(另一窗口显示)"
+en = "search down the columns in the other window"
 
 [[message]]
 # 表格提示：照這欄順排/倒排

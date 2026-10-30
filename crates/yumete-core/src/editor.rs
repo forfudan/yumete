@@ -102,11 +102,13 @@ struct Viewing {
 pub struct Viewed<'a> {
     editor: &'a Editor,
     previous: Option<Viewing>,
+    previous_wrap: Option<usize>,
 }
 
 impl Drop for Viewed<'_> {
     fn drop(&mut self) {
         self.editor.viewing.set(self.previous);
+        self.editor.viewing_wrap.set(self.previous_wrap);
     }
 }
 
@@ -3264,6 +3266,9 @@ pub struct Editor {
     paper: crate::export::Paper,
     /// The other work area, while it is being drawn (#281). See [`Viewing`].
     viewing: Cell<Option<Viewing>>,
+    /// The wrap width a window being peeked at should fold to — its own
+    /// width, not the live window's (2026-10-30, windows beside each other).
+    viewing_wrap: Cell<Option<usize>>,
     /// The question the editor has stopped to ask, if it has (#295).
     query: Option<Query>,
     /// One write may go through with the oversize gate already answered (#306).
@@ -4212,6 +4217,7 @@ impl Editor {
             hanging: false,
             paper: crate::export::Paper::A5,
             viewing: Cell::new(None),
+            viewing_wrap: Cell::new(None),
             query: None,
             oversize_answered: false,
             segment_memo: memo::LineMemo::default(),
