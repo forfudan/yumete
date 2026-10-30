@@ -2419,6 +2419,8 @@ pub struct Editor {
     /// Where this Insert began, for vim's `C-u` and `C-w`, which take back
     /// what was typed before going further (`:h i_CTRL-U`).
     insert_began: Option<usize>,
+    /// Where the last Insert ended, for vim's `gi` (`:h gi`, the `'^` mark).
+    last_insert_stop: Option<usize>,
     /// Keys recorded since `q` was pressed, if a macro is being recorded.
     recording: Option<Vec<Key>>,
     /// The last macro recorded, replayed by `Q`.
@@ -3961,6 +3963,7 @@ impl Editor {
             pending_register: None,
             paste_copies: 1,
             insert_began: None,
+            last_insert_stop: None,
             recording: None,
             macro_keys: Vec::new(),
             replaying: false,

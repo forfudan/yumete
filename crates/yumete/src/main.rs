@@ -2229,10 +2229,6 @@ ARGS:
             directory, each at the line it was left on.
 
 OPTIONS:
-    Single-letter flags are scarce and mostly unspent: -h, -V, -r, and the
-    search cluster below. Which of the rest are worth spending is a question
-    to answer once the search flags have settled.
-
         --table      Read the file as a grid. A schema in .yumete/tables/ names
                      the columns; without one, the file's own header row does.
                      A grid is always horizontal, so this overrides --vertical.
@@ -2255,8 +2251,9 @@ OPTIONS:
                      are 繁體, other zh is 简体, anything else English).
                      `[editor] language` in the config is the standing answer, and
                      `:language` switches it without restarting.
-        --syntax     Which markup these files are written in: markdown, typst
-                     or text. Outranks both the extension and the config.
+        --syntax     Which markup these files are written in: markdown, typst,
+                     text, or a code language (python, rust, …). Outranks
+                     both the extension and the config.
         --preview    Print a non-interactive preview instead of the editor.
 
 SEARCHING FROM THE SHELL:
@@ -2269,7 +2266,7 @@ SEARCHING FROM THE SHELL:
                      lets the short names be strung together — `-GO` can only
                      be read one way.
 
-                     **拼音 and 繁簡 are on**, which is the whole point:
+                     拼音 and 繁簡 are on, which is the whole point:
                      `ye --grep zhongguo` finds 中國 and 中国 both, and no
                      other grep on the machine can. `--chinese=off` turns it
                      off; `glyphs` and `pinyin` take one half each.
@@ -2294,7 +2291,7 @@ SEARCHING FROM THE SHELL:
         --files PAT  Print every file whose name matches PAT, best first, and
                      exit — fd's walk with fzf's matching (`fd | fzf -f`), and
                      it reads 拼音 too: `ye --files jia` finds 甲.md. Same
-                     matcher as 空格 f inside the editor.
+                     matcher as Space f inside the editor.
 
                      Letters and 漢字 mix in one query, which is how a real
                      one is written: `di120` finds 第120章.md, and
@@ -2356,7 +2353,7 @@ SEARCHING FROM THE SHELL:
                            per hit, so awk and xargs still read it.
 
                      What --grep and --files say for themselves — refusals,
-                     diagnostics — is **English**, whatever `[editor] language`
+                     diagnostics — is English, whatever `[editor] language`
                      is set to: it is read by other programs and by whoever is
                      assembling the pipe. `--lang` still wins if you ask.
         --shot[=WxH] Draw one frame — the page exactly as the editor would set
@@ -2375,7 +2372,7 @@ SEARCHING FROM THE SHELL:
                      `\\{{esc}}` `\\{{bs}}`.
                      A name this list does not hold is an error, not a warning.
                      `--keys='::竖排'` opens the command search with that in it.
-        --html       With --shot: the frame **with its colours**, as one
+        --html       With --shot: the frame with its colours, as one
                      self-contained HTML <pre>. What a theme is judged on.
         --timing     Print how long each part of starting up took, and exit.
     -h, --help       Print this help and exit.
@@ -2389,11 +2386,13 @@ KEYS (Normal mode, Helix-style):
     gn  gp    show the next / previous open file
     gf        open the file:line named on this line (`:search-project` results)
     Space     menu: s outline, f files (F from the working directory),
-              b buffers, / search, ? commands, n 字典 (how the character under
-              the cursor is written), d diagnostics, y copy, t tables, w areas
-    C-w       move between the sidebar and the text
+              b buffers, / search, ? commands, n character info (how the
+              character under the cursor is written), d diagnostics, y copy,
+              t tables, w regions
+    C-w       regions: w next, h j k l move, s split, q close, o only,
+              e i show or hide the sidebars
     gh gl gs  goto line start / end / first non-blank
-    {{ }}     previous / next paragraph — here a paragraph is a logical line
+    {{ }}       previous / next paragraph — here a paragraph is a logical line
     M a  ' a  name this place / go back to it, across files
     C-o C-i   the jump list: back to where a jump came from, and forward
     f F t T   find a character forward / backward; t T stop in front of it
@@ -2401,15 +2400,15 @@ KEYS (Normal mode, Helix-style):
     H  L      previous / next sentence — 。！？ and the mark that closes after
     J  K      join the lines / keep only the selections a pattern matches
     x  X      select the current line / extend to whole lines
-    v  ;  %   select (extend) mode / collapse / select the whole file
+    v  ;  %   Select mode / collapse / select the whole file
     d  c  R   delete / change / replace the selection with the register
     y  p  P   yank / paste after / before
     i  a      insert before / after the selection
     I  A      insert at line start / end
     o  O      open a line below / above
-    u  U  .   undo / redo / **repeat the last insert** (what you typed, as helix does)
+    u  U  .   undo / redo / repeat the last insert (what you typed, as helix does)
     r         write the next key over every character of the selection —
-              **中文 too**: the panel opens, and what you choose is what the
+              Chinese too: the panel opens, and what you choose is what the
               selection becomes (a word replaces it rather than filling it)
     \"a        use register a for the next yank / delete / paste
     Q  q      record a macro / play the last one back
@@ -2426,8 +2425,8 @@ KEYS (Normal mode, Helix-style):
               each takes a bracket, and m means the closest pair —
               「」『』（）《》【】〔〕 and the ASCII pairs
     / ? n N   search forward / backward; next / previous match
-    g/ g?     find what is selected: jump to it / show it in the other pane
-    t/ t?     the same, down a table's columns (t2-10? names the columns)
+    g/ g?     find what is selected: jump to it / show it in the other region
+    ␣t/ ␣t?   in a table: the same, down its columns (␣t2-10? names them)
     :         command line — Tab cycles the completion, and the list of
               commands appears above it and narrows as you type
               (:w  :w <path>  :q  :q!  :o <path>  :new
@@ -2436,10 +2435,10 @@ KEYS (Normal mode, Helix-style):
               :view-wrap [on|off|<n>]  soft-wrap; a number is a fixed measure
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
-              :recover[!]      load (or drop) a crash-recovery draft
-              :buffer|next|previous|close   the open files (gn / gp)
-              :search-project <re>  :toc  across the project / this file's headings
-              :export html|typst    write it out for a typesetter
+              :recover         use or drop a crash-recovery draft
+              :buffer  :buffer-next  :buffer-previous  :buffer-close
+              :search-project  :toc  across the project / this file's headings
+              :export html|typst|csv|tsv   write it out
               :vertical  :horizontal    :view-margin [never|dense|loose|always]
               :yume-chaifen   the 拆分 annotation beside candidates
               :yume-where     the six places 碼表 and 字料 are looked
@@ -2450,15 +2449,15 @@ KEYS (Normal mode, Helix-style):
                           is whatever follows the s (:s#a/b#c#); ranges are
                           :%s :1-40s :1,5,9s :.-$s; flags g i, f is literal,
                           c asks at each match, and n counts only
-              :replace [<scope>]   the search panel with a 「replace with」 row
+              :replace [<folder>]  the search panel with a replace row
               :write-all       save every file that changed
               :indent off|basic|full|<n>   first-line indent — a Chinese
                           paragraph's mark; full also folds the blank line
               :view-pages-horizontal 1–4  pages side by side, the text running on
               :view-pages-vertical 1–4    段組: pages one above the other
-              :word-list-reload   reread .yumete/words.txt — this project's own names
+              :word-list-reload   reread this project's word list and the global one
               :word-habit      口頭禪: what this one says far more than ordinary text does
-              :table <行>x<欄>   an empty table, the first row its headings
+              :table <rows>x<cols>   an empty table, the first row its headings
               :table-render off|basic|window how much of a grid is drawn
               :table-check     look the whole over: repeated row names, parts
                           no row has, rows whose column count is wrong
@@ -2485,10 +2484,12 @@ screen meaning: j and k read down and up a 縱, h and l step to the 縱 on the
 left and on the right. CJK punctuation is drawn in its vertical form; the file
 on disk is unchanged.
 
-In Insert mode, type to insert; Esc returns to Normal. If the Yume IME data is
-installed, Insert mode composes CJK: type a code to see candidates, Space or
-1–9 to select, -/= to page, Backspace to edit, Esc to cancel; tap Shift to
-toggle 中/英 (needs a terminal with the Kitty keyboard protocol)."
+In Insert mode, type to insert; Esc returns to Normal. With the input method on
+(:yume, or Space z z), Insert mode composes 漢字: 靈明 and 星陳 are built in,
+other schemes need the Yume data. Type a code to see candidates, Space or 1–9
+to select, -/= to page, Backspace to edit, Esc to cancel; tap Shift to switch
+中/ABC (needs the Kitty keyboard protocol; otherwise [editor] language_key,
+C-^ by default)."
     );
 }
 

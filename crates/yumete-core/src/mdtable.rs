@@ -514,10 +514,10 @@ impl Parts {
             // tells the reader to press `␣t H` — a key the `|` half does not
             // have (`set_table_header` refuses outright there: a `|` table
             // says which row is its header in the file, on the `---` line).
-            return Err("標題行不能刪：它是欄名");
+            return Err("table.heading-row-stays");
         }
         if at >= self.rows.len() {
-            return Err("没有這一行");
+            return Err("table.no-such-row");
         }
         self.rows.remove(at);
         // Land on the row that took its place, or on the last one when the
@@ -533,7 +533,7 @@ impl Parts {
         // is checked as well as `to`: a caller that asks about a row this table
         // does not have should get an answer, not a panic.
         if at == 0 || to == 0 || at >= self.rows.len() || to >= self.rows.len() {
-            return Err("到頭了");
+            return Err("table.no-further");
         }
         self.rows.swap(at, to);
         Ok(to)
@@ -554,10 +554,10 @@ impl Parts {
     pub fn remove_column(&mut self, at: usize) -> Result<usize, &'static str> {
         self.square();
         if self.columns() <= 1 {
-            return Err("只剩一欄了");
+            return Err("table.last-column-stays");
         }
         if at >= self.columns() {
-            return Err("没有這一欄");
+            return Err("table.column-not-there");
         }
         for row in &mut self.rows {
             row.remove(at);
@@ -620,7 +620,7 @@ impl Parts {
         self.square();
         let to = if right { at + 1 } else { at.wrapping_sub(1) };
         if at >= self.columns() || to >= self.columns() {
-            return Err("到頭了");
+            return Err("table.no-further");
         }
         for row in &mut self.rows {
             row.swap(at, to);

@@ -2623,7 +2623,7 @@ impl Editor {
                     self.status = say!("table.row-deleted");
                 }
             }
-            Err(why) => self.status = why.to_string(),
+            Err(why) => self.status = crate::messages::say(why, &[]),
         }
     }
 
@@ -2642,7 +2642,7 @@ impl Editor {
                     };
                 }
             }
-            Err(why) => self.status = why.to_string(),
+            Err(why) => self.status = crate::messages::say(why, &[]),
         }
     }
 
@@ -2672,7 +2672,7 @@ impl Editor {
                     self.status = say!("table.column-deleted");
                 }
             }
-            Err(why) => self.status = why.to_string(),
+            Err(why) => self.status = crate::messages::say(why, &[]),
         }
     }
 
@@ -2692,7 +2692,7 @@ impl Editor {
                     };
                 }
             }
-            Err(why) => self.status = why.to_string(),
+            Err(why) => self.status = crate::messages::say(why, &[]),
         }
     }
 

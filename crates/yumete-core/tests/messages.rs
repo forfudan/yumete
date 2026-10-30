@@ -186,6 +186,9 @@ fn said() -> BTreeMap<String, String> {
         tags.extend(literals(&text, "word: Some("));
         tags.extend(literals(&text, "', "));
         tags.extend(literals(&text, "\", "));
+        // `Err("table.no-further")` —— a pure function hands back the tag,
+        // and the editor says it (`mdtable.rs`, 2026-10-30).
+        tags.extend(literals(&text, "Err("));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {
             out.entry(tag).or_insert_with(|| file.to_string());
         }

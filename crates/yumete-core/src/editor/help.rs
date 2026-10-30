@@ -156,11 +156,11 @@ impl Editor {
             (":vertical", say!("help.vertical.turn-vertical")),
             ("h l", say!("help.vertical.previous-next-column")),
             ("j k", say!("help.vertical.down-up-column")),
-            (":view-wrap 24", say!("help.vertical.column-length")),
+            (":view-wrap-vertical 24", say!("help.vertical.column-length")),
             (":view-pages-vertical 2", say!("help.vertical.pages")),
             (":view-hanging on", say!("help.vertical.hung-punctuation")),
             (":view-margin always", say!("help.vertical.margin")),
-            (":view-sentence", say!("help.vertical.sentence")),
+            (":view-sentence on", say!("help.vertical.sentence")),
             (":indent 2", say!("help.vertical.first-line-indent")),
             (":render full", say!("help.vertical.wysiwyg")),
         ] {
@@ -173,7 +173,7 @@ impl Editor {
     pub(super) fn help_table(&self) -> String {
         let mut out = format!("# {}\n\n", say!("label.table"));
         for (keys, what) in [
-            (":table", say!("help.table.enter-table")),
+            (":table 3x4", say!("help.table.enter-table")),
             ("h j k l", say!("help.table.step-by-cell")),
             ("Tab S-Tab", say!("help.table.next-previous-cell")),
             ("i a c d", say!("help.table.type-in-cell")),
@@ -181,10 +181,10 @@ impl Editor {
             // 搬進了空格選單（`t`/`T` 還給 vi 的 till），而這一頁没跟着搬——
             // 上面寫的 `t r`、`t s` 按下去一個都不管用，`t` 當場成了 till。
             ("␣t/ ␣t?", say!("help.table.who-uses-this")),
-            ("␣to ␣tb ␣tf ␣tt", say!("help.table.four-surfaces")),
+            ("␣to ␣tb ␣tt ␣tq", say!("help.table.four-surfaces")),
             ("␣ti ␣tw", say!("help.table.detail-and-folds")),
             ("␣tr ␣td", say!("help.table.add-or-drop-row")),
-            ("␣ts ␣tS", say!("help.table.sort-by-column")),
+            ("␣t0s ␣t0S", say!("help.table.sort-by-column")),
             ("␣ty ␣tp", say!("help.table.yank-or-put-column")),
             (":table-rules off", say!("help.table.no-column-rules")),
         ] {

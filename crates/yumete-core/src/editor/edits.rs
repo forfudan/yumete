@@ -786,7 +786,14 @@ impl Editor {
     pub(super) fn delete_word_after_cursor(&mut self) {
         let at = self.sel.head();
         let rope = self.current_buffer().rope();
-        let mut to = motion::next_word_start(rope, at, self.word_grain(), self.segmenter.as_ref());
+        // **To the end of the word, not the start of the next** (helix's
+        // `delete_word_forward`, measured 2026-10-30): `foo   bar` with the
+        // cursor on `f` keeps its spaces; from the spaces it takes `   bar`.
+        let (_, last) = motion::next_word_end(rope, at, self.word_grain(), self.segmenter.as_ref());
+        let mut to = match last >= at && last < rope.len_chars() {
+            true => motion::next_grapheme(rope, last),
+            false => motion::next_word_start(rope, at, self.word_grain(), self.segmenter.as_ref()),
+        };
         // Nothing further on this line: take the rest of the line's text.
         let line_end = motion::line_end(rope, at);
         to = to.min(line_end).min(self.insert_ceiling());
