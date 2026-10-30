@@ -7,6 +7,12 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **`ye --export html|typst|csv|tsv|pdf FILE…`** writes a file out from the command line, beside it with the new extension or at `--out PATH`, printing the path written; an existing file is written over. `pdf` compiles through the `typst` compiler on the PATH: a `.typ` as it is, Markdown through the editor's own Typst export.
+
 ## 0.15.0 · 2026-10-30
 
 ### Added
