@@ -7461,10 +7461,19 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
 fn name_the_window(editor: &Editor, was: &mut String) {
     let buffer = editor.current_buffer();
     let name = buffer.display_name();
-    let now = match buffer.is_modified() {
-        true => format!("{} [+] — yumete", drawable(&name)),
-        false => format!("{} — yumete", drawable(&name)),
-    };
+    // **The project's folder after the file** (2026-10-30, as decided): with
+    // two tabs each on a `README.md`, the folder is what tells them apart —
+    // VS Code's `file - folder - app`, nvim's `file (dir) - Nvim`. Only a
+    // project's folder, found by its `.git` or `.yumete`: a lone file opened
+    // in the home directory does not get the home directory's name.
+    let root = editor.root();
+    let marked = [".yumete", ".yumete.toml", ".git", ".jj", ".svn"]
+        .iter()
+        .any(|m| root.join(m).exists());
+    let project = marked
+        .then(|| root.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .flatten();
+    let now = window_title(&name, buffer.is_modified(), project.as_deref());
     if *was == now {
         return;
     }
@@ -7487,6 +7496,23 @@ fn name_the_window(editor: &Editor, was: &mut String) {
 ///
 /// Borrowed when the text is clean, which is every row of every real
 /// manuscript.
+/// `note.md [+] — proj — yumete`: the file first, as every editor's title has
+/// it, the project's folder when there is one, and the name the window is
+/// found by in a list of tabs. Not the whole path: nvim's gets cut to
+/// `<…/scratchpad/ttl/proj` in a narrow tab.
+fn window_title(name: &str, modified: bool, project: Option<&str>) -> String {
+    let mut out = drawable(name).into_owned();
+    if modified {
+        out.push_str(" [+]");
+    }
+    if let Some(project) = project {
+        out.push_str(" — ");
+        out.push_str(&drawable(project));
+    }
+    out.push_str(" — yumete");
+    out
+}
+
 fn drawable(text: &str) -> std::borrow::Cow<'_, str> {
     match text.contains(|c: char| c.is_control()) {
         false => std::borrow::Cow::Borrowed(text),
@@ -27459,4 +27485,18 @@ fn squeezed(text: &str) -> String {
         assert_eq!(number(3), Some(ink.furniture()), "line 4 is past the break `x` took");
     }
 
+}
+
+#[cfg(test)]
+mod window_title_tests {
+    use super::window_title;
+
+    /// **File, project, app** (2026-10-30, as decided).
+    #[test]
+    fn the_title_names_the_file_the_project_and_the_app() {
+        assert_eq!(window_title("note.md", false, Some("proj")), "note.md — proj — yumete");
+        assert_eq!(window_title("note.md", true, Some("proj")), "note.md [+] — proj — yumete");
+        assert_eq!(window_title("note.md", false, None), "note.md — yumete", "no project, no folder");
+        assert_eq!(window_title("a\x1b]0;x\x07b", false, None), "a]0;xb — yumete", "a file's own escapes never reach the title");
+    }
 }
