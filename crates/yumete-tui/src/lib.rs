@@ -318,7 +318,7 @@ fn frame_to(
     let lines = editor.current_buffer().line_count();
     settle_the_wrap(editor, config, page);
     if editor.layout() == WritingLayout::Vertical {
-        let look = vertical::Look::of(editor);
+        let look = vertical::Look::of(editor, config);
         let metrics = vertical::Metrics::new(config, page.height, lines, look);
         editor.set_page(page.height as usize, metrics.capacity(page.width));
     } else {
@@ -426,7 +426,7 @@ fn settle_the_wrap(editor: &mut Editor, config: &Config, page: Rect) {
     let lines = editor.current_buffer().line_count();
     match editor.layout() == WritingLayout::Vertical {
         true => {
-            let look = vertical::Look::of(editor);
+            let look = vertical::Look::of(editor, config);
             editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
         }
         false => settle_the_pages(editor, config, page),
@@ -440,7 +440,7 @@ fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
     let lines = editor.current_buffer().line_count();
     let strips = horizontal_pages(editor, config, page);
     let first = strips.first().copied().unwrap_or(page);
-    let gutter = gutter_in(first.width as usize, lines, config.editor.line_numbers, editor.has_a_problem_lane());
+    let gutter = gutter_in(first.width as usize, lines, numbers(editor, config), editor.has_a_problem_lane());
     editor.set_pages_on_screen(strips.len());
     editor.set_wrap_width((first.width as usize).saturating_sub(gutter));
     editor.set_page(page.height as usize * strips.len(), first.width.max(1) as usize);
@@ -892,7 +892,7 @@ pub fn run(
                 editor.set_page_span(a, b);
             }
             if editor.layout() == WritingLayout::Vertical {
-                let look = vertical::Look::of(editor);
+                let look = vertical::Look::of(editor, config);
                 editor.set_zong_length(vertical::zong_length_for(config, page.height, lines, look));
                 // How much a page is, for `C-f`/`C-d`: how many 縱 actually fit,
                 // which with 段組 is a band's worth times the number of bands.
@@ -4740,6 +4740,18 @@ const PROBLEM_GUTTER: usize = 2;
 /// and 春夏秋冬天氣好 draws blank, which is this same bug one window wider.
 /// So the rule here is the one it is reaching for rather than the width it
 /// reaches for it at: the writing never gets fewer than two cells.
+/// How lines are numbered: what `:line-numbers` chose this session, else
+/// the config (2026-10-31).
+pub(crate) fn numbers(editor: &Editor, config: &Config) -> LineNumbers {
+    use yumete_core::editor::LineNumbers as Mode;
+    match editor.line_numbers_chosen() {
+        Some(Mode::Absolute) => LineNumbers::Absolute,
+        Some(Mode::Relative) => LineNumbers::Relative,
+        Some(Mode::None) => LineNumbers::None,
+        None => config.editor.line_numbers,
+    }
+}
+
 fn gutter_in(width: usize, total_lines: usize, mode: LineNumbers, code: bool) -> usize {
     let want = gutter_width(total_lines, mode, code);
     match width >= want + 2 {
@@ -5168,7 +5180,7 @@ fn draw(
             let gutter = gutter_in(
                 rect.width as usize,
                 editor.current_buffer().line_count(),
-                config.editor.line_numbers,
+                numbers(editor, config),
                 editor.has_a_problem_lane(),
             );
             (rect.width as usize).saturating_sub(gutter)
@@ -7107,7 +7119,7 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
         // 刪掉的那幾行在**現在這份檔**裏沒有行號，所以標的是它們在 `HEAD` 裏的號
         //（`Run::was_at`）。號太長放不下就只留 `+ -`。
         let count = editor.current_buffer().line_count();
-        let gutter = gutter_width(count, config.editor.line_numbers, editor.has_a_problem_lane());
+        let gutter = gutter_width(count, numbers(editor, config), editor.has_a_problem_lane());
         // 號碼那一截和正文**逐格相同**：`gutter_text` 排的是 `{:>w$}` 外加
         // `GUTTER_AIR` 兩格空氣，這裏把中間那一格空氣換成 `+ -`。
         let digits = gutter.saturating_sub(GUTTER_AIR);
@@ -8175,7 +8187,7 @@ fn text_at(
             let gutter = gutter_in(
                 area.width as usize,
                 buffer.line_count(),
-                config.editor.line_numbers,
+                numbers(editor, config),
                 editor.has_a_problem_lane(),
             );
             let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
@@ -11410,7 +11422,7 @@ fn horizontal_pages(editor: &Editor, config: &Config, rect: Rect) -> Vec<Rect> {
     let wide = |n: usize| rect.width.saturating_sub(PAGE_GAP * (n as u16 - 1)) / n as u16;
     while n > 1 {
         let w = wide(n) as usize;
-        let gutter = gutter_in(w, lines, config.editor.line_numbers, editor.has_a_problem_lane());
+        let gutter = gutter_in(w, lines, numbers(editor, config), editor.has_a_problem_lane());
         if w.saturating_sub(gutter) >= PAGE_LEAST {
             break;
         }
@@ -11462,7 +11474,7 @@ fn draw_horizontal(
     let height = text_area.height as usize;
     // The height the scrolling rules measure: every page of the chain.
     let reach = height * chain.max(1);
-    let mode = config.editor.line_numbers;
+    let mode = numbers(editor, config);
     let gutter = gutter_in(
         text_area.width as usize,
         total_lines,
@@ -15546,7 +15558,7 @@ fn squeezed(text: &str) -> String {
         editor.set_layout(WritingLayout::Vertical);
         editor.set_ruby(yumete_core::ruby::Dialects::NONE);
         let lines = editor.current_buffer().line_count();
-        let look = vertical::Look::of(editor);
+        let look = vertical::Look::of(editor, config);
         editor.set_zong_length(vertical::zong_length_for(config, h, lines, look));
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
         let mut viewport = Seats::default();
@@ -15585,7 +15597,7 @@ fn squeezed(text: &str) -> String {
     ) -> ratatui::buffer::Buffer {
         editor.set_layout(WritingLayout::Vertical);
         let lines = editor.current_buffer().line_count();
-        let look = vertical::Look::of(editor);
+        let look = vertical::Look::of(editor, config);
         // From the page's own rectangle, exactly as the event loop does it —
         // otherwise these tests would be asking about a page nobody draws.
         let page = page_areas(editor, config, Rect::new(0, 0, w, h), 0).text;
@@ -15669,6 +15681,7 @@ fn squeezed(text: &str) -> String {
 
         // `A` on three lines: the two secondaries sit on line breaks.
         let mut editor = editor_with("ab\nabcd\nabc\n");
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         press(&mut editor, &[Key::Char('%'), Key::Alt('s'), Key::Char('A')]);
         assert!(lit_after(&editor, "abcd", 4), "insert mode, on the break");
         assert!(lit_after(&editor, "abc", 3), "insert mode, on the break");
@@ -17166,6 +17179,7 @@ fn squeezed(text: &str) -> String {
         editor.set_candidate(vec![(0, 2, "候補".to_string())]);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let buffer = render_wrapped(&mut editor, &config, 20, 4);
         assert_eq!(row_text(&buffer, 0).trim_end(), "春夏候補秋冬");
@@ -17188,6 +17202,7 @@ fn squeezed(text: &str) -> String {
         editor.execute(":view-punct on").unwrap();
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let buffer = render_wrapped(&mut editor, &config, 20, 4);
         assert_eq!(row_text(&buffer, 0).trim_end(), "他說,，好");
@@ -17225,6 +17240,7 @@ fn squeezed(text: &str) -> String {
         editor.set_candidate(vec![(0, 2, "候補".to_string())]);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         editor.set_wrap_width(20);
         // On 秋 — which is drawn four cells further right than the file alone
@@ -17256,6 +17272,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_page_scrolls_sideways_to_keep_the_caret_on_it() {
         let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor.set_soft_wrap(false);
         let config = bare();
 
@@ -17313,12 +17330,55 @@ fn squeezed(text: &str) -> String {
     ///
     /// Line numbers that slid away with the text would leave the reader with
     /// no way to say where they are.
+    /// Relative numbers count from the head of a selection and from the
+    /// primary cursor (2026-10-31), as vim and helix were measured to.
+    #[test]
+    fn relative_numbers_count_from_the_head_and_the_primary_cursor() {
+        let text: String = (1..=12).map(|i| format!("line {i}\n")).collect();
+        let mut editor = editor_with(&text);
+        let mut config = bare();
+        config.editor.line_numbers = LineNumbers::Relative;
+        let gutter = |buffer: &ratatui::buffer::Buffer, row: u16| -> String {
+            row_text(buffer, row).chars().take(3).collect::<String>().trim().to_string()
+        };
+        // Cursor on line 5: its own number, the others their distance.
+        for _ in 0..4 {
+            editor.on_key(Key::Char('j'));
+        }
+        let buffer = render(&editor, &config, 30, 13);
+        assert_eq!(gutter(&buffer, 4), "5");
+        assert_eq!((gutter(&buffer, 3), gutter(&buffer, 5)), ("1".into(), "1".into()));
+        assert_eq!(gutter(&buffer, 0), "4");
+        // Lines 5 to 8 selected downward: the count runs from the head, 8.
+        for _ in 0..4 {
+            editor.on_key(Key::Char('x'));
+        }
+        let buffer = render(&editor, &config, 30, 13);
+        assert_eq!(gutter(&buffer, 7), "8");
+        assert_eq!(gutter(&buffer, 4), "3", "line 5 is three above the head");
+        assert_eq!(gutter(&buffer, 8), "1");
+        // Cursors on 5, 6, 7 and 8 (`C` adds one below, and the newest is
+        // the primary): the count runs from 8, as helix counts.
+        let mut editor = editor_with(&text);
+        for _ in 0..4 {
+            editor.on_key(Key::Char('j'));
+        }
+        for _ in 0..3 {
+            editor.on_key(Key::Char('C'));
+        }
+        let buffer = render(&editor, &config, 30, 13);
+        assert_eq!(gutter(&buffer, 7), "8");
+        assert_eq!(gutter(&buffer, 4), "3", "line 5, the first cursor, is three above the primary");
+        assert_eq!(gutter(&buffer, 8), "1");
+    }
+
     #[test]
     fn the_gutter_stays_where_it_is_while_the_writing_slides() {
         let mut editor = editor_with("abcdefghijklmnopqrstuvwxyz");
         editor.set_soft_wrap(false);
         let mut config = bare();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         editor.on_key(Key::Char('g'));
         editor.on_key(Key::Char('l'));
         let buffer = render(&editor, &config, 14, 4);
@@ -17553,6 +17613,7 @@ fn squeezed(text: &str) -> String {
         editor.set_candidate(vec![(0, 2, "候補".to_string())]);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         editor.set_wrap_width(20);
         let (w, h) = (20u16, 4u16);
@@ -18425,6 +18486,7 @@ fn squeezed(text: &str) -> String {
         with_diff(&mut editor, "@@ -1,0 +1,2 @@\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         let buffer = render(&editor, &config, 20, 6);
 
         let ink = ink(&config);
@@ -18444,6 +18506,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("春江\n潮水");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         with_diff(&mut editor, "@@ -1,0 +2,1 @@\n");
         let buffer = render_vertical(&mut editor, &config, 30, 12);
 
@@ -18470,6 +18533,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("春江\n潮水");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         with_diff(&mut editor, "@@ -2,1 +1,0 @@\n");
         let buffer = render_vertical(&mut editor, &config, 30, 12);
 
@@ -18484,10 +18548,11 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("春江\n潮水");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
-        let look = vertical::Look::of(&editor);
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
+        let look = vertical::Look::of(&editor, &config);
         let off = vertical::Metrics::new(&config, 12, 2, look);
         editor.set_diff_gutter(true);
-        let look = vertical::Look::of(&editor);
+        let look = vertical::Look::of(&editor, &config);
         let on = vertical::Metrics::new(&config, 12, 2, look);
 
         assert_eq!(off.diff_row, 0);
@@ -18497,7 +18562,8 @@ fn squeezed(text: &str) -> String {
 
         // 行號關掉，那一列也跟着没有——它是行號那一條的一部分。
         config.editor.line_numbers = LineNumbers::None;
-        let look = vertical::Look::of(&editor);
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
+        let look = vertical::Look::of(&editor, &config);
         assert_eq!(vertical::Metrics::new(&config, 12, 2, look).diff_row, 0);
     }
 
@@ -18564,6 +18630,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("春江\n潮水");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         editor.set_number_fill(true);
         let buffer = render_vertical(&mut editor, &config, 30, 12);
 
@@ -18582,6 +18649,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("甲乙丙\n丁戊己");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         // A one-cell gap, which the factory page no longer has (`:view-margin`, 2026-09-16).
         config.editor.zong_gap = 1;
         let buffer = render_vertical(&mut editor, &config, 20, 12);
@@ -19223,6 +19291,7 @@ fn squeezed(text: &str) -> String {
         ime.input('b');
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.panel.markers = "壹貳參".to_string();
         config.panel.rounded = false;
         let buffer = render_with(&editor, &config, &ime, 40, 16);
@@ -20246,6 +20315,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&"字".repeat(30));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         config.editor.ruler = 20;
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
@@ -20269,6 +20339,7 @@ fn squeezed(text: &str) -> String {
         // The measure is counted in writing, not in cells: turning the gutter
         // on moves the ruler over rather than eating twenty columns of text.
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         let gutter =
             gutter_width(editor.current_buffer().line_count(), LineNumbers::Absolute, false);
@@ -20503,6 +20574,7 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         let mut editor = editor_with("\u{0301}abc\ne\u{0301}f\n");
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
 
         let buffer = render_wrapped(&mut editor, &config, 20, 6);
         assert_eq!(row_text(&buffer, 0).trim_end(), "\u{25cc}abc");
@@ -20523,6 +20595,7 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::Absolute;
         let mut editor = editor_with("春夏秋冬\nabcd\n");
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
 
         let buffer = render_wrapped(&mut editor, &config, 4, 6);
         assert_eq!(row_text(&buffer, 0), "春夏", "the gutter went, the 漢字 stayed");
@@ -20545,6 +20618,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&"字".repeat(30));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         // Nothing configured: every mark on this page comes from `:view-wrap 20`.
         assert_eq!(config.editor.ruler, 0);
@@ -20663,6 +20737,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&"字".repeat(30));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
         // No configured ruler: the measure is the only thing saying where the
@@ -20716,6 +20791,7 @@ fn squeezed(text: &str) -> String {
         editor.open_file(&csv).unwrap();
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor.execute("2").unwrap();
         // One cell along at the top layer, then down into it: there is no
         // caret up there to measure (2026-10-21).
@@ -20763,6 +20839,7 @@ fn squeezed(text: &str) -> String {
         editor.open_file(&csv).unwrap();
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor.execute("2").unwrap();
         editor.on_key(Key::Char('l'));
         editor.on_key(Key::Enter);
@@ -20815,6 +20892,7 @@ fn squeezed(text: &str) -> String {
         editor.open_file(&csv).unwrap();
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor.execute("2").unwrap();
         editor.on_key(Key::Char('l'));
         editor.on_key(Key::Enter);
@@ -20844,6 +20922,7 @@ fn squeezed(text: &str) -> String {
         editor.open_file(&csv).unwrap();
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         let buffer = render(&editor, &config, 60, 10);
         let row = |y: u16| (0..60u16).map(|x| at(&buffer, x, y)).collect::<String>();
 
@@ -20884,6 +20963,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('l'));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         let buffer = render(&editor, &config, 60, 10);
         // Warning: **The box is a bracket now, not a ground** (#407, 2026-09-12).
         // The cell used to be filled with `ink.selection()`, which left a
@@ -20959,6 +21039,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('l'));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         let ink = ink(&config);
 
         // Warning: **the second cell of a wide glyph reads back as `Reset`**
@@ -21050,6 +21131,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('l'));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
 
         let edges = |editor: &Editor, config: &Config| -> Vec<String> {
             let buffer = render(editor, config, 60, 10);
@@ -21123,6 +21205,7 @@ fn squeezed(text: &str) -> String {
         config.editor.show_segmentation = false;
         let ink = ink(&config);
         let mut editor = Editor::new();
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor
             .current_buffer_mut()
             .insert(0, "前文\n| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
@@ -21182,6 +21265,7 @@ fn squeezed(text: &str) -> String {
         let ink = ink(&config);
         let want = ink.at(yumete_config::rung::HEAD);
         let mut editor = Editor::new();
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor.current_buffer_mut().insert(
             0,
             "::: danger\n| 字頭 | 讀音 |\n| --- | --- |\n| 木頭 | ==mu== |\n:::\n",
@@ -21241,6 +21325,7 @@ fn squeezed(text: &str) -> String {
         // 了，所以這一條問的從「有沒有那層底」換成「有沒有那兩道牆」。
         let want = ink.gold();
         let mut editor = Editor::new();
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor
             .current_buffer_mut()
             // **The prose line holds a `|`.** With a pipe-free line under the
@@ -21316,6 +21401,7 @@ fn squeezed(text: &str) -> String {
         config.editor.show_segmentation = false;
         let ink = ink(&config);
         let mut editor = Editor::new();
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor
             .current_buffer_mut()
             .insert(0, "| 字 | 讀音 |\n| --- | --- |\n| 木 | mu |\n")
@@ -21367,6 +21453,7 @@ fn squeezed(text: &str) -> String {
         config.editor.show_segmentation = false;
         let ink = ink(&config);
         let mut editor = Editor::new();
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         // `miao` is the widest cell of the second column, so the `mu` row is
         // padded by two columns the file does not hold.
         editor
@@ -21529,6 +21616,7 @@ fn squeezed(text: &str) -> String {
 
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         let buffer = render(&editor, &config, 60, 10);
         let row = |y: u16| (0..60u16).map(|x| at(&buffer, x, y)).collect::<String>();
         // The extra field is drawn: hiding it would hide the damage. Two rows
@@ -22050,7 +22138,7 @@ fn squeezed(text: &str) -> String {
         let page = page_areas(&editor, &config, area, 0).text;
         // Twenty rows, less the status line and the command row.
         assert_eq!(page.height, 18, "the page is not the terminal");
-        let look = vertical::Look::of(&editor);
+        let look = vertical::Look::of(&editor, &config);
         let lines = editor.current_buffer().line_count();
         let motion = vertical::zong_length_for(&config, page.height, lines, look);
         let drawn = vertical::Metrics::new(&config, page.height, lines, look).zong_len;
@@ -22460,6 +22548,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = metered("春眠不覺曉。\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         config.editor.show_segmentation = false;
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
@@ -22479,6 +22568,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = metered("春眠不覺曉。\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         config.editor.show_segmentation = false;
         editor.execute(":view-meter off").unwrap();
@@ -22495,6 +22585,7 @@ fn squeezed(text: &str) -> String {
         assert!(editor.status().contains("讀音") || editor.status().contains("reading"));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         config.editor.show_segmentation = false;
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
@@ -22576,6 +22667,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("第一段。\n第二段。\n第三段。\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         config.editor.show_segmentation = false;
         editor.on_key(Key::Char('j'));
@@ -22615,6 +22707,7 @@ fn squeezed(text: &str) -> String {
         let mut config = Config::default();
         config.theme.ground = yumete_config::Ground::Terminal;
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         config.editor.show_segmentation = false;
         editor.on_key(Key::Char('j'));
@@ -22742,6 +22835,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("第一段。\n第二段。\n第三段。\n");
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         config.editor.line_number_fill = true;
         config.editor.command_line = false;
 
@@ -23163,6 +23257,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天，雪下得早。\n山路斷了、她在門口站了很久。\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
 
         // Warning: **`frame_to_text`，不是 `render`**：標籤是**畫出來的那一幀**的性質，
@@ -23790,6 +23885,7 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Esc);
         let mut config = vertical_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         editor.execute("view-margin never").unwrap();
         editor.execute("1").unwrap();
         let buffer = render_vertical(&mut editor, &config, 40, 16);
@@ -23897,6 +23993,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("# 第一章\n那**年**冬天");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         // Warning: **Stand somewhere the assertions are not.** The caret's block is
         // painted into the page (2026-10-16), and this test reads the ink of
@@ -23932,6 +24029,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那**年**冬**天**");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
 
         // Source mode: the file is what is on the page.
@@ -23968,6 +24066,7 @@ fn squeezed(text: &str) -> String {
             editor_with("見[附錄](https://example.com/a/very/long/target/path/goes/on)後天冬");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         editor.execute(":render full").unwrap();
         for c in "gg".chars() {
@@ -23989,6 +24088,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那**年**冬天");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         editor.execute(":render full").unwrap();
         // Onto 天, clear of the construct whose markup has come off. (Standing
@@ -24019,6 +24119,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年\n```\nlet a = **b**;\n```\n冬天");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
 
         let buffer = render(&editor, &config, 40, 8);
@@ -24036,9 +24137,10 @@ fn squeezed(text: &str) -> String {
     fn the_word_overlay_is_the_quietest_layer() {
         // A `==highlight==` exists *to be* a ground; the word tint must not rub
         // it out, nor a container's colour.
-        let editor = editor_with("那==年==冬");
+        let mut editor = editor_with("那==年==冬");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = true;
         let buffer = render(&editor, &config, 40, 6);
 
@@ -24058,6 +24160,7 @@ fn squeezed(text: &str) -> String {
         );
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let buffer = render(&editor, &config, 40, 10);
 
@@ -24090,6 +24193,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年\n::: warning 小心\n這裏有**伏筆**\n:::\n冬天");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let buffer = render(&editor, &config, 40, 8);
 
@@ -24130,6 +24234,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天\n| 字 | 碼 |\n| --- | --- |\n| 天 | ab |\n山下起了雪");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let buffer = render(&editor, &config, 40, 8);
 
@@ -24163,9 +24268,10 @@ fn squeezed(text: &str) -> String {
 
     #[test]
     fn a_note_to_oneself_is_set_back_but_never_hidden() {
-        let editor = editor_with("寫到這裏 %%這句再想想%%");
+        let mut editor = editor_with("寫到這裏 %%這句再想想%%");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         let buffer = render(&editor, &config, 40, 8);
         // Still on the page — a note you cannot see is a note you will not act
@@ -24189,6 +24295,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那**年**冬天");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         editor.on_key(Key::Char('%'));
         let buffer = render(&editor, &config, 40, 8);
@@ -24207,6 +24314,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(editor.buffer_count(), 2);
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
 
         let buffer = render_with(&editor, &config, no_ime(), 40, 8);
         let bar = row_text(&buffer, 0);
@@ -24271,6 +24379,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
 
         // Without it, the text starts at the left edge.
         let plain = render_with(&editor, &config, no_ime(), 60, 12);
@@ -26404,6 +26513,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_long_paragraph_continues_on_the_next_row() {
         let mut editor = Editor::new();
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         editor
             .current_buffer_mut()
             .insert(0, "春夏秋冬春夏秋冬春夏").expect("the fixture buffer is writable");
@@ -26431,6 +26541,7 @@ fn squeezed(text: &str) -> String {
         editor.current_buffer_mut().insert(0, "春夏秋冬春夏").expect("the fixture buffer is writable");
         let mut config = wrap_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         let buf = render_wrapped(&mut editor, &config, 12, 5);
         let gutter = gutter_width(1, LineNumbers::Absolute, false);
         let first = row_text(&buf, 0);
@@ -26452,6 +26563,7 @@ fn squeezed(text: &str) -> String {
         editor.current_buffer_mut().insert(0, "春\n").expect("the fixture buffer is writable");
         let mut config = wrap_config();
         config.editor.line_numbers = LineNumbers::Absolute;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::Absolute);
         let buf = render_wrapped(&mut editor, &config, 12, 5);
         assert_eq!(row_text(&buf, 0).trim_end(), "1  春");
         assert_eq!(row_text(&buf, 1).trim_end(), "~");
@@ -26651,6 +26763,7 @@ fn squeezed(text: &str) -> String {
         let mut editor = metered("春眠不覺曉春眠不覺曉<ruby>春<rt>ㄔㄨㄣ</rt></ruby>\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         config.editor.show_segmentation = false;
         let buffer = render_with_ruby(&mut editor, &config, 12, 10);
@@ -26809,9 +26922,10 @@ fn squeezed(text: &str) -> String {
     /// Warning: **這一條一直沒人報，是因為寫 `Warning: ` 後面永遠跟一個空格**——蓋住的是空格。
     #[test]
     fn a_glyph_made_of_two_chars_takes_both_of_the_cells_it_is_drawn_in() {
-        let editor = editor_with("\u{26a0}\u{fe0f}後\n");
+        let mut editor = editor_with("\u{26a0}\u{fe0f}後\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         let buffer = render(&editor, &config, 20, 6);
         // Warning: **這一條現在是綠的，留着是釘子。** 普通的橫排正文是把整行交給 ratatui
@@ -26841,6 +26955,7 @@ fn squeezed(text: &str) -> String {
             .insert(0, "名稱XX\t說明\n\u{26a0}\u{fe0f}\t有警告\nXX\t有警告\n甲\t有警告\n");
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         assert!(editor.enter_table(), "{}", editor.status());
         let buffer = render(&editor, &config, 40, 10);
@@ -27129,6 +27244,7 @@ fn squeezed(text: &str) -> String {
         // 號碼欄、分詞、折疊標誌都會自己拿金的那一格或者佔掉座標——這一條只驗
         // 括號那一格。
         config.editor.line_numbers = LineNumbers::None;
+        editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
         (editor, config)
     }

@@ -32954,3 +32954,23 @@ fn windows_open_beside_and_below_and_close_one_at_a_time() {
     assert_eq!(ed.status(), say!("region.only-one-left"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// `:line-numbers` (2026-10-31): a word sets how the gutter counts for the
+/// session, bare says which is on; the config seeds the baseline.
+#[test]
+fn line_numbers_are_chosen_for_the_session_and_reported_bare() {
+    use crate::editor::LineNumbers;
+    let mut ed = typed("一\n二\n三\n");
+    assert_eq!(ed.line_numbers(), LineNumbers::Absolute);
+    ed.execute(":line-numbers").unwrap();
+    assert_eq!(ed.status(), say!("view.line-numbers", say!("label.line-numbers.absolute")));
+    ed.execute(":line-numbers relative").unwrap();
+    assert_eq!(ed.line_numbers(), LineNumbers::Relative);
+    assert_eq!(ed.status(), say!("view.line-numbers", say!("label.line-numbers.relative")));
+    ed.execute(":ln none").unwrap();
+    assert_eq!(ed.line_numbers(), LineNumbers::None);
+    assert!(ed.execute(":line-numbers sideways").is_err());
+    // The config's word is only the baseline under the session's choice.
+    ed.set_line_numbers_baseline(LineNumbers::Relative);
+    assert_eq!(ed.line_numbers(), LineNumbers::None);
+}

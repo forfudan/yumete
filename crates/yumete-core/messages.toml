@@ -3030,6 +3030,14 @@ en = "the little sign beside the caret: nothing, a pill, a bordered panel"
 find = "提示 光標 光标 面板 藥丸 药丸 hud"
 
 [[message]]
+# : 命令選單裏 line-numbers 那一項的説明(view 組)
+key = "cmd.view.line-numbers"
+zht = "行號顯示方式。absolute 絶對行號。relative 同光標位置之相對行號。none 不顯示。無參數時報告當前模式"
+zhs = "行号显示方式。absolute 绝对行号。relative 同光标位置之相对行号。none 不显示。无参数时报告当前模式"
+en = "how the gutter counts: absolute, relative to the cursor, or none; bare says which is on"
+find = "行號 行号 相對行號 相对行号 relative number rnu 行數 行数 gutter"
+
+[[message]]
 # `:view-long-line` 在命令表裏的説明
 key = "cmd.view.long-line"
 zht = "某行長度超過此字數，將停止上色"
@@ -7440,6 +7448,27 @@ key = "label.comma"
 zht = "、"
 zhs = "、"
 en = ", "
+
+[[message]]
+# :line-numbers 的參數 absolute
+key = "label.line-numbers.absolute"
+zht = "絶對行號"
+zhs = "绝对行号"
+en = "absolute"
+
+[[message]]
+# :line-numbers 的參數 none
+key = "label.line-numbers.none"
+zht = "不顯示"
+zhs = "不显示"
+en = "none"
+
+[[message]]
+# :line-numbers 的參數 relative：光標那一行寫自己的行號，別的行寫離它幾行
+key = "label.line-numbers.relative"
+zht = "相對行號"
+zhs = "相对行号"
+en = "relative to the cursor"
 
 [[message]]
 # :links 的參數 graph 的説明
@@ -13208,6 +13237,13 @@ key = "vertical-keys.visual-later"
 zht = "竪排的 hjkl 改成指哪就走哪(這一扇是橫排，轉過去纔看得見)"
 zhs = "竖排的 hjkl 改成指哪就走哪(这一扇是横排，转过去才看得见)"
 en = "hjkl down the page now go where they point (this region runs across)"
+
+[[message]]
+# :line-numbers 報現狀
+key = "view.line-numbers"
+zht = "行號：{0}"
+zhs = "行号：{0}"
+en = "line numbers: {0}"
 
 [[message]]
 # 滾輪一格走多遠——問的時候

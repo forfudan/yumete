@@ -302,6 +302,9 @@ pub enum Command {
     /// `:view-wrap` / `:view-wrap off` — whether a paragraph too wide for the terminal
     /// continues on the next screen row (Feature #77).
     SetSoftWrap(bool),
+    /// `:line-numbers [absolute|relative|none]`: how the gutter counts;
+    /// bare says which is on (2026-10-31).
+    LineNumbers(Option<crate::editor::LineNumbers>),
     /// `:which-wrap`——哪些鍵走得出一行的兩頭。`None` ＝ 裸寫，報現狀。
     WhichWrap(Option<String>),
     /// `:view-wrap <n>` — write to a measure of `n` columns rather than to the
@@ -2115,6 +2118,13 @@ const ZONG_WRAP: &[Word] = &[Word {
     help: "cmd.wrap.zong-0",
     needs: &[],
 }];
+
+/// `:line-numbers` takes one of these.
+const LINE_NUMBER_WORDS: &[Word] = &[
+    Word { name: "absolute", help: "label.line-numbers.absolute", needs: &[] },
+    Word { name: "relative", help: "label.line-numbers.relative", needs: &[] },
+    Word { name: "none", help: "label.line-numbers.none", needs: &[] },
+];
 
 const WRAP: &[Word] = &[
     Word {
@@ -4026,6 +4036,21 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[Param::Free("<字母>")],
         build: Some(|p| Ok(Command::WhichWrap(p.arg(0).map(str::to_string)))),
+    },
+    Entry {
+        name: "line-numbers",
+        aliases: &["ln"],
+        help: "cmd.view.line-numbers",
+        needs: &[],
+        params: &[Param::Words { of: LINE_NUMBER_WORDS, default: None }],
+        build: Some(|p| {
+            Ok(Command::LineNumbers(match p.arg(0) {
+                None => None,
+                Some(word) => Some(crate::editor::LineNumbers::parse(word).ok_or_else(|| {
+                    CommandError::InvalidArgument { command: "line-numbers", value: word.to_string() }
+                })?),
+            }))
+        }),
     },
     Entry {
         name: "view-wrap",

@@ -1442,6 +1442,18 @@ impl Editor {
                 self.status = say!("cmd.which-wrap.now", now);
                 Ok(CommandOutcome::Continue)
             }
+            Command::LineNumbers(mode) => {
+                if let Some(mode) = mode {
+                    self.line_numbers_chosen = Some(mode);
+                }
+                let now = self.line_numbers();
+                self.status = say!("view.line-numbers", crate::messages::say(match now {
+                    crate::editor::LineNumbers::Absolute => "label.line-numbers.absolute",
+                    crate::editor::LineNumbers::Relative => "label.line-numbers.relative",
+                    crate::editor::LineNumbers::None => "label.line-numbers.none",
+                }, &[]));
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetSoftWrap(on) => {
                 // **縱書 has nothing to turn off.** A 縱 is broken by the
                 // height of the window, and that is not the writer's to set —

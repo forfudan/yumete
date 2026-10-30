@@ -442,6 +442,22 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// `[editor] line_numbers`, as the config set it — the baseline a
+    /// session's `:line-numbers` sits over.
+    pub fn set_line_numbers_baseline(&mut self, mode: crate::editor::LineNumbers) {
+        self.line_numbers_baseline = mode;
+    }
+
+    /// What `:line-numbers` chose this session, if anything.
+    pub fn line_numbers_chosen(&self) -> Option<crate::editor::LineNumbers> {
+        self.line_numbers_chosen
+    }
+
+    /// How lines are numbered now: the session's choice over the config's.
+    pub fn line_numbers(&self) -> crate::editor::LineNumbers {
+        self.line_numbers_chosen.unwrap_or(self.line_numbers_baseline)
+    }
+
     /// `[editor] hard_wrap`, as the config set it.
     pub fn set_hard_wrap(&mut self, width: usize) {
         self.hard_wrap = width;
