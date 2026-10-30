@@ -5402,7 +5402,18 @@ pub fn complete_at(line: &str) -> (usize, Vec<Choice>) {
 /// in the list, and a list that had hidden eleven of twelve `view-…` behind
 /// their head would answer 「没有『密排』這種東西」 about a command that is
 /// three keystrokes away.
+/// [`complete_within_stripped`], with the start counted in the caller's own
+/// line (2026-10-30): the range and the `:` it strips are put back, or a
+/// caller slicing its line at the answer cut into `:12s#漢` mid-character and
+/// panicked on every frame.
 fn complete_within(line: &str, folding: bool) -> (usize, Vec<Choice>) {
+    let colon = usize::from(line.starts_with(':'));
+    let range = rows_before_a_substitution(&line[colon..]).unwrap_or(0);
+    let (start, choices) = complete_within_stripped(line, folding);
+    (start + colon + range, choices)
+}
+
+fn complete_within_stripped(line: &str, folding: bool) -> (usize, Vec<Choice>) {
     let line = line.strip_prefix(':').unwrap_or(line);
     // **範圍不算名字的一部分**（2026-10-06 報的：`:s/` 畫得出那一行，`:%s/` 畫不出）。
     //

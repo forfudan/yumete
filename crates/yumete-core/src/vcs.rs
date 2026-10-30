@@ -314,12 +314,21 @@ fn parse(diff: &str, lines: usize) -> Changes {
     let mut was: Vec<Vec<String>> = Vec::new();
     let mut taken: Vec<String> = Vec::new();
     let mut seen_a_header = false;
+    // How many removed lines the current hunk still owes.
+    let mut owed = 0usize;
     for row in diff.lines() {
         if !row.starts_with("@@ ") {
             // Warning: **`---` 是檔頭不是刪掉的行。** `-U0` 的輸出頭上有
             // `--- a/…`，照收就會把它當成原文的第一行。
-            if seen_a_header && row.starts_with('-') && !row.starts_with("---") {
+            //
+            // **But only before a hunk** (2026-10-30): inside one, a removed
+            // line that is itself `---` (a Markdown rule, a front-matter fence)
+            // shows as `----`, and skipping it lost that line on restore. A hunk
+            // owes exactly its old count of `-` rows; those are taken whatever
+            // they start with.
+            if seen_a_header && owed > 0 && row.starts_with('-') {
                 taken.push(row[1..].to_string());
+                owed -= 1;
             }
             continue;
         }
@@ -333,8 +342,10 @@ fn parse(diff: &str, lines: usize) -> Changes {
             // `was` 會比 `runs` 多一格，所以這裏就把它對齊掉。
             taken.clear();
             seen_a_header = false;
+            owed = 0;
             continue;
         };
+        owed = old_n;
         // 1 起算 → 0 起算。`+0,n` 不合規矩，但飽和減一句比一個 panic 便宜。
         let from = new_at.saturating_sub(1);
         match (old_n, new_n) {
@@ -408,6 +419,16 @@ mod tests {
             c.runs.iter().all(|run| !run.was.iter().any(|line| line.starts_with("-- a/"))),
             "檔頭混進原文了"
         );
+    }
+
+    /// **A removed `---` is a removed line** (2026-10-30): a Markdown rule or
+    /// a front-matter fence shows as `----` inside a hunk, and was skipped as
+    /// a file header, so restoring the change lost it.
+    #[test]
+    fn a_removed_rule_is_kept_for_restoring() {
+        let c = parse("--- a/doc.md\n+++ b/doc.md\n@@ -2,2 +2 @@\n----\n----\n+NEW\n", 3);
+        let run = c.run_at(1).expect("line 2 changed");
+        assert_eq!(run.was, ["---", "---"]);
     }
 
     #[test]

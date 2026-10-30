@@ -753,6 +753,12 @@ fn main() -> ExitCode {
             eprintln!("yumete: cannot open '{file}': {err}");
             return ExitCode::FAILURE;
         }
+        // **`--syntax` outranks the extension** (2026-10-30), as `--help`
+        // says: the default above only decides where the name says nothing,
+        // so `ye --syntax=text notes.md` was still read as Markdown.
+        if let Some(syntax) = named_syntax {
+            editor.set_syntax(syntax);
+        }
     }
     // **`ye 稿/` 開的是那本書，所以開完要看得見它。** 沒有一個檔可開的時候，
     // 那扇文件樹就是這一趟的答案（2026-09-27）。

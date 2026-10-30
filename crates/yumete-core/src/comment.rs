@@ -115,7 +115,10 @@ fn shared_indent(lines: &[&str]) -> usize {
     lines
         .iter()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| line.len() - line.trim_start().len())
+        // Spaces and tabs only (2026-10-30): `trim_start` also counts U+3000,
+        // three bytes, and a run mixing it with ASCII indents was then sliced
+        // inside the full-width space and panicked.
+        .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
         .min()
         .unwrap_or(0)
 }
@@ -214,6 +217,16 @@ pub fn toggle_block(text: &str, open: &str, close: &str, ending: &str) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A run indented partly with U+3000 does not panic (2026-10-30).
+    #[test]
+    fn a_full_width_indent_is_not_cut_in_half() {
+        let lines = [" a", "\u{3000}b"];
+        let out = toggle_line(&lines, "//");
+        assert_eq!(out, ["//  a", "// \u{3000}b"]);
+        let back: Vec<&str> = out.iter().map(String::as_str).collect();
+        assert_eq!(toggle_line(&back, "//"), lines);
+    }
 
     #[test]
     fn each_format_says_what_it_has_and_what_it_has_not() {

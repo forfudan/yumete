@@ -32354,3 +32354,80 @@ fn a_count_on_r_is_copies() {
     press(&mut ed, "ggwyw2RiZ");
     assert_eq!(ed.current_buffer().rope().to_string(), "foo Zfoo foo baz\n");
 }
+
+/// **Sorting a CSV re-reads which lines start a record** (2026-10-30). A
+/// field holding a line break, sorted to a new place, left the old starts
+/// standing: the grid drew the record in two, and `Space t d` then took the
+/// wrong lines and left an unclosed quote in the file.
+#[test]
+fn a_sorted_csv_keeps_its_records_whole() {
+    let dir = tmp().join(format!("yumete-sort-records-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("a.csv");
+    std::fs::write(
+        &csv,
+        "name,age,city\nAlice,30,\"Paris, FR\"\nBob,25,\"He said \"\"hi\"\"\"\nCarol,41,\"line1\nline2\"\nDan,,Oslo\n",
+    )
+    .unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " t2S");
+    press(&mut ed, "jj t d");
+    let text = ed.current_buffer().text();
+    assert_eq!(text.matches('"').count() % 2, 0, "every quote closed: {text:?}");
+    assert_eq!(text.contains("line1"), text.contains("line2\""), "Carol's field is whole or gone: {text:?}");
+    let kept = ["Alice", "Bob", "Carol", "Dan"].iter().filter(|n| text.contains(*n)).count();
+    assert_eq!(kept, 3, "one record went, whole: {text:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A torn Markdown table refuses an edit and says so** (2026-10-30): the
+/// refusal used to be overwritten by 「added a column」, and `Space t d` put
+/// the row in the register though nothing was deleted.
+#[test]
+fn a_refused_table_edit_does_not_claim_it_worked() {
+    let text = "| a | b |\n|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 |\n";
+    let mut ed = typed(text);
+    ed.goto_line(3);
+    assert!(ed.enter_table(), "{}", ed.status());
+    let said = say!("table.column-added");
+    press(&mut ed, " tc");
+    assert_eq!(ed.current_buffer().text(), text);
+    assert_ne!(ed.status(), said, "the refusal is what is said");
+    press(&mut ed, " td");
+    assert_eq!(ed.current_buffer().text(), text);
+    assert!(ed.register.is_empty(), "nothing was taken, so nothing is held");
+}
+
+/// **A yanked column keeps its empty last cells** (2026-10-30): pasted onto
+/// the next column, `B,,Y` must become `B,,` and not keep its stale `Y`.
+#[test]
+fn a_column_with_empty_last_cells_pastes_whole() {
+    let dir = tmp().join(format!("yumete-column-empty-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("e.csv");
+    std::fs::write(&csv, "n,a,c\nA,1,X\nB,,Y\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, "l ty");
+    press(&mut ed, "l tp");
+    // The heading travels with its column.
+    assert_eq!(ed.current_buffer().text(), "n,a,a\nA,1,1\nB,,\n", "{}", ed.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`r` over a grapheme of several code points** (2026-10-30): the selection
+/// is measured on the new text, or the end of the file panics.
+#[test]
+fn replacing_a_long_grapheme_measures_what_was_written() {
+    let mut ed = typed("e\u{301}");
+    press(&mut ed, "ggrG");
+    assert_eq!(ed.current_buffer().rope().to_string(), "G");
+    let mut ed = typed("x \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466} abcdefgh\nmore\n");
+    press(&mut ed, "ggllrGd");
+    assert_eq!(ed.current_buffer().rope().to_string(), "x  abcdefgh\nmore\n");
+}

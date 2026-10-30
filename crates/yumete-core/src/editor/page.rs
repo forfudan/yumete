@@ -1356,10 +1356,13 @@ impl Editor {
                 (start, end)
             }
         };
+        // In the file's own line ending: the diff was taken with `\r` off, and
+        // a CRLF file got its restored lines back with LF (2026-10-30).
+        let eol = self.current_buffer().ending().to_string();
         let text = match was.is_empty() {
             // 純添的那一段：還原就是把它拿掉。
             true => String::new(),
-            false => format!("{}\n", was.join("\n")),
+            false => format!("{}{eol}", was.join(&eol)),
         };
         self.snapshot();
         let _ = self.current_buffer_mut().replace(from..to, &text);

@@ -129,7 +129,9 @@ impl Columns {
             true => want_name,
             // 擺不下：值最多拿一半，名字拿剩下的——再窄也留六格給名字，不然那一欄
             // 只剩一個省略號。
-            false => room.saturating_sub(want_value.min(room / 2)).clamp(6, room),
+            // `max` then `min`, not `clamp`: under 22 columns `room` is below
+            // six, and `clamp(6, room)` panics (2026-10-30).
+            false => room.saturating_sub(want_value.min(room / 2)).max(6).min(room),
         };
         Columns { name, value: name + name_wide, right }
     }
