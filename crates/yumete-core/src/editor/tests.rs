@@ -32518,3 +32518,12 @@ fn quitting_a_split_closes_only_that_region() {
     assert!(ed.current_buffer().rope().to_string().contains("precious"), "the change stays");
     assert_eq!(ed.execute(":q!").expect("again"), CommandOutcome::Quit, "the last region quits");
 }
+
+/// **`A-J` joins every line a selection spans** (2026-10-30, helix).
+#[test]
+fn alt_j_joins_every_line_of_the_selection() {
+    let mut ed = typed("foo bar baz\nqux quux\nend\n");
+    press(&mut ed, "%");
+    ed.on_key(Key::Alt('J'));
+    assert_eq!(ed.current_buffer().rope().to_string(), "foo bar baz qux quux end\n");
+}

@@ -433,6 +433,15 @@ impl Editor {
             Mode::Command if command::shell_start(&self.command_line).is_some() => {
                 say!("ui.prompt-shell")
             }
+            // `s` `S` `A-k` `A-K` borrow this prompt, and say which they are in
+            // the reader's language (2026-10-30: English read 「search:」).
+            Mode::Search if self.sift.is_some() => match self.sift {
+                Some(crate::editor::multi::Sift::Select) => say!("ui.prompt-select"),
+                Some(crate::editor::multi::Sift::Split) => say!("ui.prompt-split"),
+                Some(crate::editor::multi::Sift::Keep) => say!("ui.prompt-keep"),
+                _ => say!("ui.prompt-remove"),
+            },
+            Mode::Ruby => say!("ui.prompt-ruby"),
             Mode::Search => match (self.search_forward, self.search.wild) {
                 (true, false) => say!("ui.prompt-search"),
                 (true, true) => say!("ui.prompt-search-wild"),
