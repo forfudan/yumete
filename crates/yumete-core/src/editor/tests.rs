@@ -6222,7 +6222,7 @@ fn a_table_exports_as_a_file_without_being_converted_in_place() {
     // so the test names it in full: `人物.md` alone would mean a file in
     // whatever directory the editor was started in.)
     ed.execute(&format!(":export csv {}", path.display())).unwrap();
-    assert!(ed.status.contains("這份稿子本身"), "{}", ed.status);
+    assert!(ed.status.contains("這個文件本身"), "{}", ed.status);
     assert_eq!(ed.current_buffer().text(), before, "the manuscript stands");
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),
@@ -16992,7 +16992,7 @@ fn no_writer_replaces_a_file_the_editor_is_holding() {
     for spelling in &spellings {
         ed.execute(&format!(":export typst {spelling}")).unwrap();
         assert!(
-            ed.status().contains("稿子本身") || ed.status().contains("正開着"),
+            ed.status().contains("文件本身") || ed.status().contains("正開着"),
             "{spelling}: {}",
             ed.status()
         );

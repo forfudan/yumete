@@ -792,8 +792,8 @@ en = "no file named on this line"
 [[message]]
 # 存一份還没有名字的稿子
 key = "buffer.no-name-yet"
-zht = "這份稿子還没有名字——:w 名字 存成新文件"
-zhs = "这份稿子还没有名字——:w 名字 存成新文件"
+zht = "這個緩衝區還没有名字——:w 名字 存成新文件"
+zhs = "这个缓冲区还没有名字——:w 名字 存成新文件"
 en = "this file has no name yet — :w <name> writes it as a new file"
 
 [[message]]
@@ -1032,8 +1032,8 @@ en = "no readings: without them a name one character out is indistinguishable fr
 [[message]]
 # :check-names 這本書還没有百科，没有名字可比
 key = "check.names-no-wiki"
-zht = "這本書還没有百科——:wiki-edit 起個頭，專名纔查得了"
-zhs = "这本书还没有百科——:wiki-edit 起个头，专名才查得了"
+zht = "本項目還没有百科——:wiki-edit 起個頭，專名纔查得了"
+zhs = "本项目还没有百科——:wiki-edit 起个头，专名才查得了"
 en = "this project has no wiki yet — :wiki-edit starts one, and then names can be checked"
 
 [[message]]
@@ -1264,8 +1264,8 @@ find = "衝突 冲突 合併 合并 merge conflict conflicts git"
 [[message]]
 # :check-names 在命令表裏的説明
 key = "cmd.check.names"
-zht = "查專名：稿子裏把百科的名字寫錯了一個同音字的地方(醉翁亭寫成醉翁停)"
-zhs = "查专名：稿子里把百科的名字写错了一个同音字的地方(醉翁亭写成醉翁停)"
+zht = "查專名：文件裏把百科的名字寫錯了一個同音字的地方(醉翁亭寫成醉翁停)"
+zhs = "查专名：文件里把百科的名字写错了一个同音字的地方(醉翁亭写成醉翁停)"
 en = "check names: a wiki name written with one homophone out of place"
 find = "專名 专名 人名 地名 百科 别字 同音 校對 校对 names typo homophone"
 
@@ -1448,8 +1448,8 @@ find = "縮進 缩进 首行 段落 indent paragraph"
 [[message]]
 # : 命令選單裏 info 那一項的説明(#426)
 key = "cmd.commands.info"
-zht = "信息：即時顯示哪一種(record/diagnostics/dictionary/wiki/docs；不寫就按稿子算)"
-zhs = "信息：即时显示哪一种(record/diagnostics/dictionary/wiki/docs；不写就按稿子算)"
+zht = "信息：即時顯示哪一種(record/diagnostics/dictionary/wiki/docs；不寫就按文件算)"
+zhs = "信息：即时显示哪一种(record/diagnostics/dictionary/wiki/docs；不写就按文件算)"
 en = "info: which of record / diagnostics / dictionary / wiki / docs follows the cursor (blank: by the file)"
 find = "信息 info 記錄 记录 診斷 诊断 字典 百科 文檔 文档 record diagnostics dictionary wiki docs 即時 即时 及時 及时"
 
@@ -1944,8 +1944,8 @@ find = "宇浩 官網 官网 輸入法 输入法 website"
 [[message]]
 # : 命令選單裏 yume 那一項的説明(commands 組)
 key = "cmd.commands.yume"
-zht = "宇夢輸入引擎開關：on 中文、off 關閉、abc 英文模式"
-zhs = "宇梦输入引擎开关：on 中文、off 关闭、abc 英文模式"
+zht = "宇夢輸入引擎開關：on 打開、off 關閉"
+zhs = "宇梦输入引擎开关：on 打开、off 关闭"
 en = "the Yume input engine's switch: on (中文) or off"
 find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin yo"
 
@@ -2063,8 +2063,8 @@ en = "the table under the cursor, comma separated"
 [[message]]
 # : 命令選單裏 html 那一項的説明(export 組)
 key = "cmd.export.html"
-zht = "一頁 HTML，直排的稿子出來還是直排"
-zhs = "一页 HTML，直排的稿子出来还是直排"
+zht = "一頁 HTML，直排的文件出來還是直排"
+zhs = "一页 HTML，直排的文件出来还是直排"
 en = "one HTML page, still vertical if the file is"
 
 [[message]]
@@ -2414,8 +2414,8 @@ en = "bring opencc up to date"
 [[message]]
 # : 命令選單裏 bottom 那一項的説明(panels 組)
 key = "cmd.panels.bottom"
-zht = "底行：候選橫着排在窗口最下面那一行，整頁留給稿子"
-zhs = "底行：候选横着排在窗口最下面那一行，整页留给稿子"
+zht = "底行：候選橫着排在窗口最下面那一行，整頁留給文件"
+zhs = "底行：候选横着排在窗口最下面那一行，整页留给文件"
 en = "bottom line: the candidates run across the foot of the window, the page is yours"
 find = "候選 候选 面板 空空如也 底行 bottom"
 
@@ -2430,8 +2430,8 @@ find = "候選 候选 面板 候選框 候选框 box"
 [[message]]
 # : 命令選單裏 inline 那一項的説明(panels 組)
 key = "cmd.panels.inline"
-zht = "行中：候選排在光標的下一行上，蓋住那一行稿子，離眼睛最近"
-zhs = "行中：候选排在光标的下一行上，盖住那一行稿子，离眼睛最近"
+zht = "行中：候選排在光標的下一行上，蓋住那一行文件，離眼睛最近"
+zhs = "行中：候选排在光标的下一行上，盖住那一行文件，离眼睛最近"
 en = "in the line: the candidates take the line under the caret, nearest the eye"
 find = "候選 候选 面板 行中 inline"
 
@@ -2495,7 +2495,7 @@ find = "注音 拼音 自動 自动 生成 標音 标音 逐詞 逐词 pinyin au
 key = "cmd.ruby.auto.rare"
 zht = "只注通用規範漢字表以外的那些字"
 zhs = "只注通用规范汉字表以外的那些字"
-en = "annotate only the characters outside 通用規範漢字表"
+en = "annotate only the characters outside 通用規範漢字表 and its traditional counterparts"
 find = "生僻 冷僻 罕見 罕见 難字 难字 字集 通用規範 通用规范 rare"
 
 [[message]]
@@ -3082,8 +3082,8 @@ en = "wiki names in gold, across and down alike (default)"
 [[message]]
 # : 命令選單裏 edit 那一項的説明(wiki 組)
 key = "cmd.wikis.edit"
-zht = "打開這本書的 .yumete/wiki.md，没有就建一個"
-zhs = "打开这本书的 .yumete/wiki.md，没有就建一个"
+zht = "打開本項目的 .yumete/wiki.md，没有就建一個"
+zhs = "打开本项目的 .yumete/wiki.md，没有就建一个"
 en = "open this project's .yumete/wiki.md, existing or not"
 find = "百科 詞條 词条 編輯 编辑 打開 打开 wiki edit"
 
@@ -3168,16 +3168,16 @@ find = "詞表 词表 全域 全局 global"
 [[message]]
 # : 命令選單裏 edit 那一項的説明(word-lists 組)
 key = "cmd.word-lists.local"
-zht = "開本書的詞表 .yumete/words.txt——人名、地名"
-zhs = "开本书的词表 .yumete/words.txt——人名、地名"
+zht = "開項目的詞表 .yumete/words.txt——人名、地名"
+zhs = "开项目的词表 .yumete/words.txt——人名、地名"
 en = "open this project's word list, .yumete/words.txt — names of people and places"
 find = "詞表 词表 人名 地名 自定義 自定义 edit"
 
 [[message]]
 # : 命令選單裏 reload 那一項的説明(word-lists 組)
 key = "cmd.word-lists.reload"
-zht = "重讀兩份詞表(本書的 ＋ 全域的)"
-zhs = "重读两份词表(本书的 ＋ 全域的)"
+zht = "重讀兩份詞表(項目的 ＋ 全域的)"
+zhs = "重读两份词表(项目的 ＋ 全域的)"
 en = "reread both word lists, this project's and the global one"
 find = "詞表 词表 重讀 重读 刷新 reload"
 
@@ -4191,8 +4191,8 @@ en = "no such format as '{0}' — html, typst, or csv/tsv for the table under th
 [[message]]
 # 導出的檔名就是稿子本身
 key = "export.same-as-the-manuscript"
-zht = "那是這份稿子本身——導出要另一個文件名"
-zhs = "那是这份稿子本身——导出要另一个文件名"
+zht = "那是這個文件本身——導出要另一個文件名"
+zhs = "那是这个文件本身——导出要另一个文件名"
 en = "that is the file itself — an export needs another name"
 
 [[message]]
@@ -4539,8 +4539,8 @@ en = "no headings in this file"
 [[message]]
 # 按了 ga 可是這一趟還没換過檔
 key = "goto.no-last-file"
-zht = "還没看過别的稿子"
-zhs = "还没看过别的稿子"
+zht = "還没看過别的文件"
+zhs = "还没看过别的文件"
 en = "no other file has been open yet"
 
 [[message]]
@@ -4626,8 +4626,8 @@ en = "hanging punctuation: 句讀 sit in the margin beside the character"
 [[message]]
 # 中文幫助：重讀本項目的詞
 key = "help.chinese.reload-project-words"
-zht = "重讀 .yumete/words.txt——這本書自己的詞"
-zhs = "重读 .yumete/words.txt——这本书自己的词"
+zht = "重讀 .yumete/words.txt——本項目自己的詞"
+zhs = "重读 .yumete/words.txt——本项目自己的词"
 en = "re-read .yumete/words.txt — this project's own words"
 
 [[message]]
@@ -4822,8 +4822,8 @@ en = "next paragraph / previous paragraph"
 [[message]]
 # 常用幫助：再做一次剛才那次改動
 key = "help.common.repeat-edit"
-zht = "再做一次剛才那次改動"
-zhs = "再做一次刚才那次改动"
+zht = "重複上一次輸入；vim 鍵位下是上一次改動"
+zhs = "重复上一次输入；vim 键位下是上一次改动"
 en = "repeat the last insert (vim keymap: the last change)"
 
 [[message]]
@@ -4892,8 +4892,8 @@ en = "where else this word is: / here, ? in the other region"
 [[message]]
 # 常用幫助：按詞移動
 key = "help.common.word-motions"
-zht = "下一詞首、上一詞首、詞尾——認得漢字的詞"
-zhs = "下一词首、上一词首、词尾——认得汉字的词"
+zht = "下一詞首、上一詞首、詞尾；漢字中 b 和 e 按小句走"
+zhs = "下一词首、上一词首、词尾；汉字中 b 和 e 按小句走"
 en = "next word / back to a word start / on to a word end (in 漢字 text, b and e go by clause)"
 
 [[message]]
@@ -5075,8 +5075,8 @@ en = "vertical writing"
 [[message]]
 # 竪排幫助：轉成竪排
 key = "help.vertical.turn-vertical"
-zht = "轉成竪排；:layout 來回切"
-zhs = "转成竖排；:layout 来回切"
+zht = "轉成竪排；:horizontal 轉回來"
+zhs = "转成竖排；:horizontal 转回来"
 en = "turn the page vertical; :horizontal turns it back"
 
 [[message]]
@@ -5443,6 +5443,13 @@ zhs = "前往定义(副窗显示)"
 en = "go to definition in the other region"
 
 [[message]]
+# g 選單裏的 i：vim 的 gi，回到上次插入停下的地方再插入
+key = "hint.goto.insert-again"
+zht = "回到上次插入處繼續插入"
+zhs = "回到上次插入处继续插入"
+en = "insert again where the last Insert stopped"
+
+[[message]]
 # vim 鍵位下 g 選單裏的 J ——併行，一個空格都不補
 key = "hint.goto.join-without-a-space"
 zht = "合併下一行，不補空格"
@@ -5457,7 +5464,7 @@ zhs = "跳到当前屏幕某位置"
 en = "go to a place on this screen"
 
 [[message]]
-# g 選單裏的 . ——回到這一份稿子最後改動的地方
+# g 選單裏的 . ——回到這一份文件最後改動的地方
 key = "hint.goto.last-change"
 zht = "回到最後改動的地方"
 zhs = "回到最后改动的地方"
@@ -5669,8 +5676,8 @@ en = "' go back to"
 [[message]]
 # ' 之後那張小表：標記指着的那個稿子已經關了
 key = "hint.mark.gone"
-zht = "(那個稿子關了)"
-zhs = "(那个稿子关了)"
+zht = "(那個文件關了)"
+zhs = "(那个文件关了)"
 en = "(that buffer is closed)"
 
 [[message]]
@@ -6850,8 +6857,8 @@ en = "pick a scheme"
 [[message]]
 # ␣z 輸入法那一組
 key = "hint.yume.table"
-zht = "換碼表源"
-zhs = "换码表源"
+zht = "改用安裝版碼表"
+zhs = "改用安装版码表"
 en = "switch to the installed 碼表"
 
 [[message]]
@@ -6864,8 +6871,8 @@ en = "the input method"
 [[message]]
 # ␣z 輸入法那一組
 key = "hint.yume.toggle"
-zht = "中 / ABC / 關"
-zhs = "中 / ABC / 关"
+zht = "輸入法開/關"
+zhs = "输入法开/关"
 en = "input method on / off (on is Chinese)"
 
 [[message]]
@@ -6972,15 +6979,15 @@ en = "this build carries no 碼表"
 [[message]]
 # 啟動時認出終端機報不出單獨的 Shift，説一次備用鍵是哪一個(#339)
 key = "ime.no-lone-shift"
-zht = "此終端機報不出單獨的 Shift，中/ABC 按 {0}(或 :yume on|abc)"
-zhs = "此终端报不出单独的 Shift，中/ABC 按 {0}(或 :yume on|abc)"
+zht = "此終端機報不出單獨的 Shift，中/ABC 按 {0}(或 :yume on|off)"
+zhs = "此终端报不出单独的 Shift，中/ABC 按 {0}(或 :yume on|off)"
 en = "this terminal cannot report a lone Shift; {0} switches 中/ABC"
 
 [[message]]
 # 同上，而 language_key 關着，於是連備用鍵也没有
 key = "ime.no-lone-shift-off"
-zht = "此終端機報不出單獨的 Shift，中/ABC 只能用 :yume on|abc(language_key 可綁一個鍵)"
-zhs = "此终端报不出单独的 Shift，中/ABC 只能用 :yume on|abc(language_key 可绑一个键)"
+zht = "此終端機報不出單獨的 Shift，中/ABC 只能用 :yume on|off(language_key 可綁一個鍵)"
+zhs = "此终端报不出单独的 Shift，中/ABC 只能用 :yume on|off(language_key 可绑一个键)"
 en = "this terminal cannot report a lone Shift; bind [editor] language_key to switch 中/ABC"
 
 [[message]]
@@ -7065,8 +7072,8 @@ en = "{0} shows it in the sidebar"
 [[message]]
 # `:info` 不帶名字：回到按稿子算
 key = "info.live-by-the-file"
-zht = "即時顯示：按稿子算(這一份是{0})"
-zhs = "即时显示：按稿子算(这一份是{0})"
+zht = "即時顯示：按文件算(這一份是{0})"
+zhs = "即时显示：按文件算(这一份是{0})"
 en = "following the cursor: by the file (here, {0})"
 
 [[message]]
@@ -7848,8 +7855,8 @@ en = "there is no link under the cursor"
 [[message]]
 # gx：連結指着絕對路徑，不是這本書裏的一篇
 key = "link.not-a-chapter"
-zht = "{0} 不是這本書裏的一篇——絕對路徑不跟"
-zhs = "{0} 不是这本书里的一篇——绝对路径不跟"
+zht = "{0} 不是本項目裏的一篇——絕對路徑不跟"
+zhs = "{0} 不是本项目里的一篇——绝对路径不跟"
 en = "{0} is not a file of this project — an absolute path is not followed"
 
 [[message]]
@@ -8607,8 +8614,8 @@ en = "{0}  {1} 字  {2}"
 [[message]]
 # :count-progress 但這一份還没有檔名，記不進哪本書
 key = "progress.no-file"
-zht = "這一份還没有名字，進度記不到哪本書上——先存一次"
-zhs = "这一份还没有名字，进度记不到哪本书上——先存一次"
+zht = "這一份還没有名字，進度記不到哪個項目上——先存一次"
+zhs = "这一份还没有名字，进度记不到哪个项目上——先存一次"
 en = "this one has no name yet, so there is nothing to record against — save it first"
 
 [[message]]
@@ -8621,15 +8628,15 @@ en = "nothing recorded yet: save once and today starts counting"
 [[message]]
 # :count-progress 的結果，没有設每日目標
 key = "progress.report"
-zht = "今天 {0} 字，本書 {1} 字，連續 {2} 天"
-zhs = "今天 {0} 字，本书 {1} 字，连续 {2} 天"
+zht = "今天 {0} 字，項目 {1} 字，連續 {2} 天"
+zhs = "今天 {0} 字，项目 {1} 字，连续 {2} 天"
 en = "{0} words today, {1} in the project, {2} day(s) running"
 
 [[message]]
 # :count-progress 的結果，設了每日目標
 key = "progress.report-target"
-zht = "今天 {0}/{1} 字({2}%)，本書 {3} 字，連續 {4} 天"
-zhs = "今天 {0}/{1} 字({2}%)，本书 {3} 字，连续 {4} 天"
+zht = "今天 {0}/{1} 字({2}%)，項目 {3} 字，連續 {4} 天"
+zhs = "今天 {0}/{1} 字({2}%)，项目 {3} 字，连续 {4} 天"
 en = "{0}/{1} words today ({2}%), {3} in the project, {4} day(s) running"
 
 [[message]]
@@ -8842,13 +8849,6 @@ en = "no draft kept — {0}"
 
 
 # ── register ──────────────────────────────────────────────────────────
-
-[[message]]
-# 空格 3/4：那一側一扇面板都不歸它
-key = "region.nothing-lives-there"
-zht = "這一側没有哪一扇面板歸它——`:sidebar-left` 可以挪一扇過去"
-zhs = "这一侧没有哪一扇面板归它——`:sidebar-left` 可以挪一扇过去"
-en = "no panel is open on that side — :sidebar opens one"
 
 [[message]]
 # 只剩一個區域，關不動了
@@ -9839,8 +9839,8 @@ en = "code highlight"
 [[message]]
 # 設置：代码上色——一句話
 key = "set.editor.code-highlight.hint"
-zht = "圍欄裏的代碼按它自己的語法上色(九種語言)；關掉則整塊一種紫"
-zhs = "围栏里的代码按它自己的语法上色(九种语言)；关掉则整块一种紫"
+zht = "圍欄裏的代碼按它自己的語法上色；關掉則整塊一種紫"
+zhs = "围栏里的代码按它自己的语法上色；关掉则整块一种紫"
 en = "code in a fence is coloured by its own language; off, the whole block is one colour"
 
 [[message]]
@@ -10545,8 +10545,8 @@ en = "scheme"
 [[message]]
 # 設置：输入方案——一句話
 key = "set.ime.scheme.hint"
-zht = "用哪一張碼表。只有靈明自帶，其餘要先裝"
-zhs = "用哪一张码表。只有灵明自带，其余要先装"
+zht = "用哪一套輸入方案（靈明和星陳自帶精華版），其他方案需安裝"
+zhs = "用哪一套输入方案（灵明和星陈自带精华版），其他方案需安装"
 en = "which 碼表 to type with. 靈明 and 星陳 come built in; the others need the data installed"
 
 [[message]]
@@ -11584,8 +11584,8 @@ en = "a table block in the text: its first row is data already"
 [[message]]
 # 在文中的表格區塊裏按了會重寫整個檔案的鍵
 key = "table.block-is-read-where-it-lies"
-zht = "文中的表格區塊只讀不改寫——要整理它，先 :table-pipe 或 :table-csv"
-zhs = "文中的表格区块只读不改写——要整理它，先 :table-pipe 或 :table-csv"
+zht = "文中的表格區塊只讀不改寫；先用 :convert-table 轉成真表格"
+zhs = "文中的表格区块只读不改写；先用 :convert-table 转成真表格"
 en = "a table block in a document is read where it lies, never rewritten — :convert-table pipe or csv converts it first"
 
 [[message]]
@@ -12045,8 +12045,8 @@ en = "the cursor is not in a | table"
 [[message]]
 # 表格命令用在表格外面
 key = "table.not-in-a-table"
-zht = "不是表格——先 :table-render full"
-zhs = "不是表格——先 :table-render full"
+zht = "不是表格——先 :table-render basic"
+zhs = "不是表格——先 :table-render basic"
 en = "not a table — :table-render basic first"
 
 [[message]]
@@ -12268,8 +12268,8 @@ en = "a schema is for a file that is nothing but a table — this one lives insi
 [[message]]
 # 新寫的 schema 檔頭一行的説明
 key = "table.schema-note"
-zht = "這份 schema 説的就是眼下看到的樣子。改完保存，:table-render off 再 :table-render full 就照新的讀。"
-zhs = "这份 schema 説的就是眼下看到的样子。改完保存，:table-render off 再 :table-render full 就照新的读。"
+zht = "這份 schema 説的就是眼下看到的樣子。改完保存，:table-render off 再 :table-render basic 就照新的讀。"
+zhs = "这份 schema 説的就是眼下看到的样子。改完保存，:table-render off 再 :table-render basic 就照新的读。"
 en = "this schema says what the grid is already doing. Edit, save, then :table-render off and :table-render basic again."
 
 [[message]]
@@ -12992,8 +12992,8 @@ en = "the wiki has no entry called {0}"
 [[message]]
 # :wiki 報告裏：這本書還没有百科
 key = "wiki.none"
-zht = "這本書還没有百科——:wiki-edit 會建 {0}"
-zhs = "这本书还没有百科——:wiki-edit 会建 {0}"
+zht = "本項目還没有百科——:wiki-edit 會建 {0}"
+zhs = "本项目还没有百科——:wiki-edit 会建 {0}"
 en = "this project has no wiki yet — :wiki-edit makes {0}"
 
 [[message]]
@@ -13041,8 +13041,8 @@ en = "{0}: {1} entries"
 [[message]]
 # :wiki 報告裏：引的路徑出了這本書(或是絕對路徑)，不讀
 key = "wiki.refused"
-zht = "{0}(在 {1} 裏引的)：不在這本書裏，不讀"
-zhs = "{0}(在 {1} 里引的)：不在这本书里，不读"
+zht = "{0}(在 {1} 裏引的)：不在本項目裏，不讀"
+zhs = "{0}(在 {1} 里引的)：不在本项目里，不读"
 en = "{0} (named in {1}): outside the project, not read"
 
 [[message]]
@@ -13083,15 +13083,15 @@ en = "{0}: cannot be read ({1})"
 [[message]]
 # 挖完了，名單寫出來給人看了(那個檔是覆蓋寫的，不會讀回來)
 key = "word.discover-found"
-zht = "找到 {0} 個本書自己的詞，已經按它們切了；名單在 {1}(每次覆蓋，只給你看)"
-zhs = "找到 {0} 个本书自己的词，已经按它们切了；名单在 {1}(每次覆盖，只给你看)"
+zht = "找到 {0} 個項目自己的詞，已經按它們切了；名單在 {1}(每次覆蓋，只給你看)"
+zhs = "找到 {0} 个项目自己的词，已经按它们切了；名单在 {1}(每次覆盖，只给你看)"
 en = "{0} word(s) of this project's own, already used for segmenting; the list is in {1} (overwritten each time, for reading only)"
 
 [[message]]
 # 那份名單檔的第一行抬頭(這一行進的是檔案，不是狀態欄)
 key = "word.discover-heading"
-zht = "# 本書自己的詞：掃了 {0} 個文件自動找出來的。每次 :word-discover 整份覆蓋。"
-zhs = "# 本书自己的词：扫了 {0} 个文件自动找出来的。每次 :word-discover 整份覆盖。"
+zht = "# 項目自己的詞：掃了 {0} 個文件自動找出來的。每次 :word-discover 整份覆蓋。"
+zhs = "# 项目自己的词：扫了 {0} 个文件自动找出来的。每次 :word-discover 整份覆盖。"
 en = "# This project's own words, found over {0} file(s). :word-discover overwrites all of it."
 
 [[message]]
@@ -13106,8 +13106,8 @@ en = "{0}	# {1}×"
 [[message]]
 # 挖了，一個字典不認得的詞都没有
 key = "word.discover-none"
-zht = "掃了 {0} 個文件，没有找到本書自己的詞——書裏的詞字典都認得"
-zhs = "扫了 {0} 个文件，没有找到本书自己的词——书里的词字典都认得"
+zht = "掃了 {0} 個文件，没有找到項目自己的詞——項目裏的詞字典都認得"
+zhs = "扫了 {0} 个文件，没有找到项目自己的词——项目里的词字典都认得"
 en = "{0} file(s) read, and no words of this project's own — the dictionary already knows them all"
 
 [[message]]
@@ -13197,8 +13197,8 @@ en = "no data directory known — this machine has no global word list"
 [[message]]
 # 分詞的詞表：詞表 ＋ 這本書自己的詞
 key = "word.source-and-book"
-zht = "{0} ＋ 本書 {1} 個詞"
-zhs = "{0} ＋ 本书 {1} 个词"
+zht = "{0} ＋ 項目 {1} 個詞"
+zhs = "{0} ＋ 项目 {1} 个词"
 en = "{0} + {1} from this project"
 
 [[message]]

@@ -114,6 +114,7 @@ static LANGUAGE: AtomicU8 = AtomicU8::new(0);
 
 /// Set the language the editor speaks.
 pub fn set_language(language: Language) {
+    yumete_cjk::set_speaks_english(language == Language::English);
     LANGUAGE.store(
         match language {
             Language::Traditional => 0,

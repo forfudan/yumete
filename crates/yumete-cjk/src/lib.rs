@@ -43,6 +43,22 @@ pub mod vertical;
 pub mod width;
 pub mod word;
 
+/// **Whether the editor speaks English** (2026-10-30), set once by the front
+/// end from the language it settled on. Kept here, below every crate, so a
+/// config complaint can be worded in the reader's language without the
+/// config crate depending on the messages table.
+static SPEAKS_ENGLISH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Say whether messages are to be English from now on.
+pub fn set_speaks_english(on: bool) {
+    SPEAKS_ENGLISH.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether messages are English (false: Chinese).
+pub fn speaks_english() -> bool {
+    SPEAKS_ENGLISH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub use grapheme::{
     cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, show_orphan_marks,
     prev_grapheme_boundary,

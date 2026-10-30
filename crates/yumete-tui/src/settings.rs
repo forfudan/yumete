@@ -422,11 +422,8 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     if !config.editor.remember {
         editor.set_remembering(false);
     }
-    // 注音畫多少，以及認哪幾種寫法。
-    //
-    // Warning: **方言那一行從前是 `:ruby {name}`**，而 `:ruby` 從來不收這個詞——它收的
-    // 是三個級別。所以 `ruby_dialects` 這一格**一直是死的**（叫的人還 `let _ =`
-    // 把錯吞了）。真正的命令是 `:ruby-html on` / `:ruby-typst on`。
+    // How much ruby is laid out. Both ruby syntaxes are always read, so
+    // there is no per-dialect switch here (`ruby_dialects` went 2026-10-30).
     editor
         .execute(match config.editor.show_ruby {
             true => ":ruby-render full",
@@ -435,9 +432,6 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
             false => ":ruby-render basic",
         })
         .ok();
-    for name in &config.editor.ruby_dialects {
-        let _ = editor.execute(&format!(":ruby-{name} on"));
-    }
     editor.set_key_aliases(config.keys.normal.clone());
     editor.set_key_preset(config.keys.preset);
     editor.set_which_wrap(config.editor.which_wrap.clone());
@@ -558,13 +552,12 @@ mod every_setting_is_pushed_here {
         // `:ruby-render off|basic|full` 這一行（它本來教的是一個已經退役的拼法）
         // 當場把這一條弄紅了，而没有任何東西跑回啓動那一段。釘的是命令串，命令
         // 串只出現在真去推它的地方。
-        for (what, needle) in [("顯示注音", "\":ruby-render "), ("注音寫法", "ruby_dialects")] {
-            assert!(here.contains(needle), "{what} 要在這個檔裏推：{needle}");
-            assert!(
-                !main.contains(needle),
-                "{what} 又跑回啓動那一段了（{needle}）——那樣 `:reload-config` 就推不到它"
-            );
-        }
+        let (what, needle) = ("顯示注音", "\":ruby-render ");
+        assert!(here.contains(needle), "{what} 要在這個檔裏推：{needle}");
+        assert!(
+            !main.contains(needle),
+            "{what} 又跑回啓動那一段了（{needle}）——那樣 `:reload-config` 就推不到它"
+        );
         // 這三樣兩頭都有，而且必須。前兩個要趕在第一幀／第一句話之前；上屏方式
         // 是因為啓動那一趟會把整個輸入法會話**換掉**（`ImeSession::language_only`），
         // 換完的那一個沒聽過 `apply_ime`。所以釘的是「這個檔裏也有」，不是「那邊
