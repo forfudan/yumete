@@ -1778,13 +1778,10 @@ fn the_arrows_in_insert_walk_a_cells_own_lines_from_either_door() {
 fn a_schema_beside_the_data_joins_a_record_that_runs_on() {
     let dir = tmp().join(format!("yumete-schemarecord-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['rows.csv']\n\
-         [[table.column]]\nname = 'name'\n\
-         [[table.column]]\nname = 'note'\n\
-         [[table.column]]\nname = 'n'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "rows.csv", "schema": {"fields": [{"name": "name"}, {"name": "note"}, {"name": "n"}]}}]}"#,
     )
     .unwrap();
     let csv = dir.join("rows.csv");
@@ -6844,15 +6841,10 @@ fn the_chords_turn_the_page() {
 fn a_table(tag: &str) -> (PathBuf, PathBuf) {
     let dir = tmp().join(format!("yumete-table-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("division.toml"),
-        "[table]\nfile = ['division.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\nlabel = '字'\n\
-         [[table.column]]\nname = 'ids_y'\n\
-         [[table.column]]\nname = 'ids_g'\n\
-         [[table.detail]]\nname = 'unicode'\ncompute = 'codepoint(char)'\n\
-         [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "division.csv", "schema": {"fields": [{"name": "char", "title": "字"}, {"name": "ids_y"}, {"name": "ids_g"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("division.csv");
@@ -7459,9 +7451,6 @@ fn the_detail_panel_says_what_the_whole_row_is() {
             (" 1 字".to_string(), Some("一".to_string())),
             (" 2 ids_y".to_string(), Some("⿰木目".to_string())),
             (" 3 ids_g".to_string(), Some("⿰木目".to_string())),
-            // Worked out, not stored, and marked so nobody looks for a
-            // column that is not in the file.
-            ("unicode*".to_string(), Some("U+4E00".to_string())),
         ]
     );
 
@@ -7477,12 +7466,10 @@ fn the_detail_panel_says_what_the_whole_row_is() {
 fn a_grid_sorts_by_the_columns_it_is_told() {
     let dir = tmp().join(format!("yumete-sort-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'block'\n\
-         [[table.column]]\nname = 'n'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "block"}, {"name": "n"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");
@@ -7852,12 +7839,10 @@ fn a_sequence_argument_belongs_to_its_own_sequence() {
 fn a_component_leads_to_its_own_row() {
     let dir = tmp().join(format!("yumete-jump-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-         [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");
@@ -7894,12 +7879,10 @@ fn the_key_index_is_not_rebuilt_while_a_cell_is_being_typed_in() {
     // hundred thousand rows that was ten milliseconds a character.
     let dir = tmp().join(format!("yumete-index-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-         [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");
@@ -8381,12 +8364,10 @@ fn percent_in_a_document_takes_the_table_and_stops() {
 fn a_grid_opens_on_cells_and_one_key_goes_inside_one() {
     let dir = tmp().join(format!("yumete-layer-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-         [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");
@@ -8457,35 +8438,17 @@ fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
     // the whole jump, and the only clue was 「照首行」 in the status line.
     let dir = tmp().join(format!("yumete-badschema-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
-    let schema = dir.join(".yumete").join("tables").join("t.toml");
+    std::fs::create_dir_all(&dir).unwrap();
+    let schema = dir.join("datapackage.json");
     let csv = dir.join("d.csv");
     std::fs::write(&csv, "char,ids_y\n一,⿰木目\n").unwrap();
 
     for (body, expect) in [
-        ("[table\nfile = 'd.csv'", "TOML"),
-        ("[table]\nfile = 'd.csv'", "no columns"),
-        (
-            "[table]\nfile = 'd.csv'\nkey = 'nope'\n[[table.column]]\nname = 'char'",
-            "not a column",
-        ),
-        (
-            "[table]\nfile = 'd.csv'\n[[table.column]]\nname = 'char'\n\
-             [[table.detail]]\nname = 'u'\ncompute = 'codepoint(nope)'",
-            "not a column",
-        ),
-        (
-            "[table]\nfile = 'd.csv'\nquoting = 'minimal'\n[[table.column]]\nname = 'char'",
-            "not supported",
-        ),
-        (
-            "[table]\nfile = 'd.csv'\ndelimiter = '::'\n[[table.column]]\nname = 'char'",
-            "one character",
-        ),
-        (
-            "[table]\nfile = 'd.csv'\ndelimiter = \"\\n\"\n[[table.column]]\nname = 'char'",
-            "separates rows",
-        ),
+        ("{", "datapackage.json"),
+        (r#"{"resources":[{"path":"d.csv","schema":{"fields":[]}}]}"#, "no fields"),
+        (r#"{"resources":[{"path":"d.csv","schema":{"fields":[{"name":"char"}],"primaryKey":"nope"}}]}"#, "not a field"),
+        (r#"{"resources":[{"path":"d.csv","dialect":{"delimiter":"::"},"schema":{"fields":[{"name":"char"}]}}]}"#, "one character"),
+        (r#"{"resources":[{"path":"d.csv","dialect":{"delimiter":"\n"},"schema":{"fields":[{"name":"char"}]}}]}"#, "separates rows"),
     ] {
         std::fs::write(&schema, body).unwrap();
         let mut ed = Editor::new();
@@ -8506,14 +8469,14 @@ fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
     // file's, and the header row stands in.
     std::fs::write(
         &schema,
-        "[table]\nfile = 'somethingelse.csv'\n[[table.column]]\nname = 'char'",
+        r#"{"resources":[{"path":"somethingelse.csv","schema":{"fields":[{"name":"char"}]}}]}"#,
     )
     .unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
     // Warning: **不抱怨那份 schema**——它寫的是別的文件。狀態欄現在說的是「表格畫好
     // 了」（`.csv` 打開就進表格，2026-09-22），那是另一件事。
-    for complaint in ["TOML", "no columns", "not a column"] {
+    for complaint in ["datapackage", "no fields", "not a field"] {
         assert!(!ed.status().contains(complaint), "{}", ed.status());
     }
     assert!(ed.enter_table());
@@ -8529,12 +8492,10 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     // is the other way round: *who uses this?*
     let dir = tmp().join(format!("yumete-who-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-         [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");
@@ -10371,13 +10332,10 @@ fn row_goes_straight_to_the_row_a_character_names() {
     // table meant `/^木,` and hoping no other row started that way.
     let dir = tmp().join(format!("yumete-row-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let tables = dir.join(".yumete").join("tables");
-    std::fs::create_dir_all(&tables).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        tables.join("d.toml"),
-        "[table]\nfile = \"d.csv\"\nkey = \"char\"\n\
-         [[table.column]]\nname = \"char\"\n[[table.column]]\nname = \"ids_y\"\n\
-         [table.link]\nfrom = [\"ids_y\"]\nto = \"char\"\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");
@@ -10442,27 +10400,29 @@ fn a_filter_over_whole_rows_is_a_table_operation() {
 #[test]
 fn a_hidden_column_is_read_and_written_but_not_walked() {
     // Two of the 拆分表's twenty-eight columns are empty in all 123,380
-    // rows and cost eight cells each across the whole page. `hidden` is
-    // for those — the file still has them, this reader does not care.
+    // rows and cost eight cells each across the whole page. `:table-hide`
+    // is for those — the file still has them, this reader does not care.
+    // **A way of looking, kept in the data directory** (2026-10-30, as
+    // decided): nothing about it goes beside the data.
     let dir = tmp().join(format!("yumete-hide-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let tables = dir.join(".yumete").join("tables");
-    std::fs::create_dir_all(&tables).unwrap();
     std::fs::write(
-        tables.join("h.toml"),
-        "[table]\nfile = \"h.csv\"\n\
-         [[table.column]]\nname = \"a\"\n\
-         [[table.column]]\nname = \"b\"\nhidden = true\n\
-         [[table.column]]\nname = \"c\"\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "h.csv", "schema": {"fields": [{"name": "a"}, {"name": "b"}, {"name": "c"}]}}]}"#,
     )
     .unwrap();
     let csv = dir.join("h.csv");
     let text = "a,b,c\n一,,三\n";
     std::fs::write(&csv, text).unwrap();
+    let paths = (dir.join("config.toml"), dir.join("data"));
     let mut ed = Editor::new();
+    ed.knows_its_paths(paths.0.clone(), paths.1.clone());
     ed.open_file(&csv).unwrap();
     assert!(ed.table().is_some());
-    assert!(!ed.column_shows(1), "b is hidden");
+    assert!(ed.column_shows(1), "nothing hidden yet");
+    ed.execute(":table-hide 2").unwrap();
+    assert!(!ed.column_shows(1), "b is hidden: {}", ed.status());
     ed.goto_line(2);
     assert_eq!(ed.cell_position().map(|(_, c)| c), Some(0));
     press(&mut ed, "l");
@@ -10476,6 +10436,16 @@ fn a_hidden_column_is_read_and_written_but_not_walked() {
     // …and the file is untouched: hidden is about reading, not about data.
     assert!(ed.execute("w").is_ok());
     assert_eq!(std::fs::read_to_string(&csv).unwrap(), text);
+    assert!(!std::fs::read_to_string(dir.join("datapackage.json")).unwrap().contains("hidden"));
+    assert!(paths.1.join("tables.txt").is_file(), "remembered in the data directory");
+
+    // Remembered for this file: the next session hides it too, until shown.
+    let mut again = Editor::new();
+    again.knows_its_paths(paths.0.clone(), paths.1.clone());
+    again.open_file(&csv).unwrap();
+    assert!(!again.column_shows(1), "still hidden");
+    again.execute(":table-show 2").unwrap();
+    assert!(again.column_shows(1));
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -10483,13 +10453,10 @@ fn a_hidden_column_is_read_and_written_but_not_walked() {
 fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     let dir = tmp().join(format!("yumete-check-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let tables = dir.join(".yumete").join("tables");
-    std::fs::create_dir_all(&tables).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        tables.join("c.toml"),
-        "[table]\nfile = \"c.csv\"\nkey = \"char\"\n\
-         [[table.column]]\nname = \"char\"\n[[table.column]]\nname = \"ids\"\n\
-         [table.link]\nfrom = [\"ids\"]\nto = \"char\"\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "c.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("c.csv");
@@ -10506,12 +10473,13 @@ fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     let out = ed.current_buffer().text();
     // **檔名不在行上**（2026-10-16）：整份報告說的就是這一個檔，緩衝區的名字
     // 已經寫着。行頭那個號就是去處，`gf` 讀它。
-    assert!(out.contains("\n2: ") && out.contains("卵"), "{out}");
+    // No column is declared a link any more (2026-10-30), so a component
+    // with no row is not a finding: the list opens on the wrong-width row.
+    assert!(!out.contains("卵"), "{out}");
     assert!(out.starts_with("3: ") && out.contains("欄"), "{out}");
     assert!(out.contains("\n5: ") && out.contains("重了"), "{out}");
     assert!(!out.contains("c.csv"), "檔名不該在行上：{out}");
     // ⿰ is grammar, so it is not reported as a missing component.
-    assert!(!out.contains('⿰'), "{out}");
     // A clean table says so and opens nothing.
     std::fs::write(&csv, "char,ids\n木,木\n目,目\n").unwrap();
     ed.open_file(&csv).unwrap();
@@ -11739,12 +11707,10 @@ fn every_far_jump_leaves_a_way_back() {
     // coming back meant remembering 相 and searching for it again.
     let dir = tmp().join(format!("yumete-jumps-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'ids_y'\n\
-         [table.link]\nfrom = ['ids_y']\nto = 'char'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "ids_y"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");
@@ -12150,7 +12116,9 @@ fn a_file_with_no_schema_is_read_by_its_own_header() {
 
 #[test]
 fn a_table_with_no_schema_gets_one_written_beside_it() {
-    // #218. This project's own 碼表 has no header and a tab between its two
+    // #218, redone 2026-10-30: the description is a `datapackage.json`
+    // beside the data, written only when asked (`:table-schema write`).
+    // This project's own 碼表 has no header and a tab between its two
     // columns, and both facts have to survive into the file.
     let dir = tmp().join(format!("yumete-schema-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -12162,56 +12130,28 @@ fn a_table_with_no_schema_gets_one_written_beside_it() {
     ed.set_root(&dir);
     ed.open_file(&codes).unwrap();
     assert!(ed.enter_table(), "a tab is a delimiter");
-    assert!(ed.table().unwrap().from.as_os_str().is_empty(), "nobody's schema yet");
+    assert!(ed.table().unwrap().from.as_os_str().is_empty(), "nobody's description yet");
 
-    // 「第一行是資料」 (#217), and then 「說出來」 (#218).
+    // 「第一行是資料」 (#217), then the bare command only *says* how it reads.
     press(&mut ed, " tH");
-    press(&mut ed, " te");
+    ed.execute(":table-schema").unwrap();
+    let written = dir.join("datapackage.json");
+    assert!(!written.exists(), "nothing is written by asking");
+    assert!(ed.status().contains("Tab"), "{}", ed.status());
 
-    // **Nothing on disk until `:w`** (2026-10-30, as decided): the schema is
-    // an unsaved buffer in the other area, bound to its path.
-    let written = dir.join(".yumete").join("tables").join("codes.toml");
-    assert!(!written.exists(), "nothing is written by looking");
-    let text = {
-        let pane = ed.other_pane().expect("the schema is in the other area");
-        let i = ed.buffer_with(pane.buffer).unwrap();
-        assert!(ed.buffers[i].is_modified(), "it is unsaved");
-        ed.buffers[i].text().to_string()
-    };
-    // `:w` in the other area is what writes it, directory and all.
-    let table = ed.current_buffer().id();
-    let schema = ed.other_pane().unwrap().buffer;
-    let i = ed.buffer_with(schema).unwrap();
-    ed.show_buffer(i);
-    ed.execute(":w").unwrap();
-    assert!(written.is_file(), "written on :w");
-    ed.show_buffer(ed.buffer_with(table).unwrap());
+    ed.execute(":table-schema write").unwrap();
+    let text = std::fs::read_to_string(&written).expect("written beside the data");
+    assert!(text.contains("\"path\": \"codes.txt\""), "{text}");
+    assert!(text.contains("\"delimiter\": \"\\t\""), "the tab is escaped, not typed: {text}");
+    assert!(text.contains("\"header\": false"), "what 空格 t H just said: {text}");
+    assert_eq!(text.matches("\"name\": \"").count(), 4, "package, resource, two fields: {text}");
+    assert_eq!(ed.table().unwrap().from, written, "the description claims the file now");
 
-    assert!(text.contains("file = \"codes.txt\""), "{text}");
-    assert!(text.contains("delimiter = \"\\t\""), "the tab is escaped, not typed: {text}");
-    assert!(text.contains("header = false"), "what 空格 t H just said: {text}");
-    assert_eq!(text.matches("[[table.column]]").count(), 2, "{text}");
-
-    // It is open in the other half, and the keys did not go with it.
-    let pane = ed.other_pane().expect("the schema is in the other area");
-    assert_eq!(pane.caption, "codes.toml");
-    // `set_root` canonicalises（macOS 的 `/var` 是 `/private/var` 的符號鏈接）。
-    assert_eq!(
-        ed.buffers[ed.buffer_with(pane.buffer).unwrap()]
-            .path()
-            .map(|p| std::fs::canonicalize(p).unwrap()),
-        Some(std::fs::canonicalize(&written).unwrap()),
-        "the pane names the schema"
-    );
-    assert_eq!(ed.current_buffer().path(), Some(codes.as_path()), "still on the table");
-    assert_eq!(ed.live_pane(), 0);
-
-    // And what it says is what was already on screen: reading the file
-    // again finds it and changes nothing.
+    // Reading the file again finds it and changes nothing.
     ed.leave_table();
     assert!(ed.enter_table());
     let view = ed.table().unwrap();
-    assert_eq!(view.from, written, "the schema claims the file now");
+    assert_eq!(view.from, written);
     assert!(!view.schema.header, "still 「第一行是資料」");
     assert_eq!(view.schema.delimiter, '\t');
     assert_eq!(view.schema.columns.len(), 2);
@@ -16076,11 +16016,10 @@ fn no_writer_changes_how_many_cells_a_row_has() {
 fn reformatting_the_readings_does_not_reshape_a_grid() {
     let dir = tmp().join(format!("yumete-rubygrid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
-        dir.join(".yumete").join("tables").join("t.toml"),
-        "[table]\nfile = ['d.csv']\nkey = 'char'\n\
-         [[table.column]]\nname = 'char'\n[[table.column]]\nname = 'note'\n",
+        dir.join("datapackage.json"),
+        r#"{"resources": [{"path": "d.csv", "schema": {"fields": [{"name": "char"}, {"name": "note"}], "primaryKey": "char"}}]}"#,
     )
     .unwrap();
     let csv = dir.join("d.csv");

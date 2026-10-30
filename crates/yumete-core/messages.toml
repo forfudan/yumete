@@ -902,13 +902,6 @@ en = "a tab does not go in a cell"
 # ── chaifen ───────────────────────────────────────────────────────────
 
 [[message]]
-# :lint 查一張拆分表，某一行拆出來的部件在表裏找不到
-key = "chaifen.component-not-found"
-zht = "{0}: 部件「{1}」查無此行"
-zhs = "{0}: 部件「{1}」查无此行"
-en = "{0}: no row for the component 「{1}」"
-
-[[message]]
 # :lint 查一張拆分表，兩行用了同一個行名
 key = "chaifen.duplicate-row-name"
 zht = "{0}: 行名「{1}」和第 {2} 行重了"
@@ -2729,9 +2722,9 @@ find = "語法 语法 排版 typst"
 [[message]]
 # : 命令選單裏 check 那一項的説明(table 組)
 key = "cmd.table.check"
-zht = "從頭看一遍：重複的行名、查無此行的部件、欄數不對的行、超出字集的字"
-zhs = "从头看一遍：重复的行名、查无此行的部件、栏数不对的行、超出字集的字"
-en = "look the whole table over: repeated row names, components with no row, rows of the wrong width"
+zht = "從頭看一遍：重複的行名、欄數不對的行、超出字集的字"
+zhs = "从头看一遍：重复的行名、栏数不对的行、超出字集的字"
+en = "look the whole table over: repeated row names, rows of the wrong width, characters outside the standards"
 find = "檢查 检查 校驗 校验 查錯 查错 check lint"
 
 [[message]]
@@ -2741,6 +2734,14 @@ zht = "轉為目標格式(csv,tsv,pipe)；兩個參數時第一個為源格式"
 zhs = "转为目标格式(csv,tsv,pipe)；两个参数时第一个为源格式"
 en = "convert to the named format (csv, tsv, pipe); with two words the first is the source"
 find = "表格 转换 轉換 格式 csv tsv pipe 分隔 convert table"
+
+[[message]]
+# : 命令選單裏 table-delimiter 的説明
+key = "cmd.table.delimiter"
+zht = "照這個分隔符把文件讀成表格，並記住(tab、space、comma、semicolon 或那個字符)"
+zhs = "照这个分隔符把文件读成表格，并记住(tab、space、comma、semicolon 或那个字符)"
+en = "read this file as a grid cut by that character, and remember it (tab, space, comma, semicolon or the character)"
+find = "分隔符 分隔 delimiter separator tab space"
 
 [[message]]
 # : 命令選單裏 detail 那一項的説明(table 組)
@@ -2765,6 +2766,14 @@ zht = "第一行是欄名，還是跟别的行一樣是數據"
 zhs = "第一行是栏名，还是跟别的行一样是数据"
 en = "whether the first row names the columns or is a row like any other"
 find = "表頭 表头 欄名 栏名 標題行 标题行 header"
+
+[[message]]
+# : 命令選單裏 table-hide 的説明
+key = "cmd.table.hide"
+zht = "把第 N 欄藏起來(只是不畫，照樣讀寫)，並記住"
+zhs = "把第 N 栏藏起来(只是不画，照样读写)，并记住"
+en = "hide column N (drawn at no width, still read and written), and remember it"
+find = "隱藏 隐藏 hide column"
 
 [[message]]
 # : 命令選單裏 jump 那一項的説明(table 組)
@@ -2801,10 +2810,25 @@ find = "欄線 栏线 分隔線 分隔线 rules"
 [[message]]
 # : 命令選單裏 schema 那一項的説明(table 組)
 key = "cmd.table.schema"
-zht = "把這張表的規格開在另一半——没有就先寫一份"
-zhs = "把这张表的规格开在另一半——没有就先写一份"
-en = "open this table's schema in the other region — writing a starting one if there is none"
+zht = "説這張表是怎麼讀的；write 寫進旁邊的 datapackage.json"
+zhs = "说这张表是怎么读的；write 写进旁边的 datapackage.json"
+en = "say how this table is read; write puts it into the datapackage.json beside the data"
 find = "規格 规格 欄位 栏位 定義 定义 schema"
+
+[[message]]
+# :table-schema write 那個詞的説明
+key = "cmd.table.schema.write"
+zht = "寫進旁邊的 datapackage.json"
+zhs = "写进旁边的 datapackage.json"
+en = "write it into the datapackage.json beside the data"
+
+[[message]]
+# : 命令選單裏 table-show 的説明
+key = "cmd.table.show"
+zht = "把藏起來的第 N 欄再畫出來"
+zhs = "把藏起来的第 N 栏再画出来"
+en = "draw hidden column N again"
+find = "顯示 显示 show column"
 
 [[message]]
 # : 命令選單裏 sort 那一項的説明(table 組)
@@ -6636,13 +6660,6 @@ key = "hint.table.replace-column"
 zht = "用複製的欄蓋掉該欄"
 zhs = "用复制的栏盖掉该栏"
 en = "write the yanked column over this one"
-
-[[message]]
-# 表格提示：規格檔
-key = "hint.table.schema"
-zht = "這張表格的元數據"
-zhs = "这张表格的元数据"
-en = "this table's metadata"
 
 [[message]]
 # 表格提示：一欄一欄找
@@ -11708,6 +11725,13 @@ zhs = "删了一栏"
 en = "deleted a column"
 
 [[message]]
+# :table-hide 之後
+key = "table.column-hidden"
+zht = "第 {0} 欄藏起來了"
+zhs = "第 {0} 栏藏起来了"
+en = "column {0} is hidden"
+
+[[message]]
 # 空格 t p/P 之後：插入了一欄，{0} 個值
 key = "table.column-inserted"
 zht = "插入了一欄({0} 格)"
@@ -11777,6 +11801,12 @@ zhs = "栏线：{0}"
 en = "column rules: {0}"
 
 [[message]]
+# :table-show 之後
+key = "table.column-shown"
+zht = "第 {0} 欄畫出來了"
+zhs = "第 {0} 栏画出来了"
+en = "column {0} is shown again"
+[[message]]
 # t F，但有一欄寬到没有窗口裝得下——對齊它只是在寫空格
 key = "table.column-too-wide"
 zht = "第 {0} 欄寬 {1} 格，没有窗口裝得下——對齊它只會寫出一大片空格。表没有動"
@@ -11796,6 +11826,13 @@ key = "table.cursor-not-in-a-table"
 zht = "光標不在表格裏"
 zhs = "光标不在表格里"
 en = "the cursor is not in a table"
+
+[[message]]
+# :table-delimiter 之後
+key = "table.delimiter-set"
+zht = "照 {0} 分欄，這個文件記住了"
+zhs = "照 {0} 分栏，这个文件记住了"
+en = "cut by {0}; remembered for this file"
 
 [[message]]
 # 想删掉格與格之間的 |
@@ -11989,9 +12026,9 @@ en = "could not detect the delimiter — name it, as in :convert-table , pipe or
 [[message]]
 # :table 用在没有檔名的緩衝區上
 key = "table.no-file-name-no-schema"
-zht = "没有文件名，就没有 schema 可以照——或者把光標放到 | 表格上"
-zhs = "没有文件名，就没有 schema 可以照——或者把光标放到 | 表格上"
-en = "no file name, so no schema to read it by — or put the cursor on a | table"
+zht = "没有文件名，就没有 datapackage.json 可以照——或者把光標放到 | 表格上"
+zhs = "没有文件名，就没有 datapackage.json 可以照——或者把光标放到 | 表格上"
+en = "no file name, so no datapackage.json to read it by — or put the cursor on a | table"
 
 [[message]]
 # 表格裏行或欄已經移到頭了
@@ -12259,18 +12296,32 @@ zhs = "分隔行是画出来的——用 t < = > 改对齐"
 en = "the rule row is drawn, not written — t < = > sets the alignment"
 
 [[message]]
-# 按行名跳，schema 没説哪一欄是行名
-key = "table.schema-has-no-key-column"
-zht = "這張表没説哪一欄是行名(schema 的 key)"
-zhs = "这张表没説哪一栏是行名(schema 的 key)"
-en = "this table does not name a key column (the schema's key)"
+# table.schema-read-as 的第四格：没有 datapackage.json，照首行讀的
+key = "table.schema-from-nothing"
+zht = "照首行讀，没有 datapackage.json"
+zhs = "照首行读，没有 datapackage.json"
+en = "read by its first row, no datapackage.json"
 
 [[message]]
-# t e：schema 開在另一半了
-key = "table.schema-in-the-other-area"
-zht = "{0} 開在另一半——␣w 過去改"
-zhs = "{0} 开在另一半——␣w 过去改"
-en = "{0} is open in the other region — Space w w goes there to edit it"
+# 按行名跳，schema 没説哪一欄是行名
+key = "table.schema-has-no-key-column"
+zht = "這張表没説哪一欄是行名(datapackage.json 的 primaryKey)"
+zhs = "这张表没説哪一栏是行名(datapackage.json 的 primaryKey)"
+en = "this table does not name a key column (primaryKey in datapackage.json)"
+
+[[message]]
+# table.schema-read-as 的第三格：第一行是資料
+key = "table.schema-header-no"
+zht = "第一行是資料"
+zhs = "第一行是资料"
+en = "the first row is data"
+
+[[message]]
+# table.schema-read-as 的第三格：第一行是欄名
+key = "table.schema-header-yes"
+zht = "第一行是欄名"
+zhs = "第一行是栏名"
+en = "the first row names the columns"
 
 [[message]]
 # t e 按在一份文件裏的表格上
@@ -12280,18 +12331,32 @@ zhs = "schema 是给整份表格文件的——这张表在文章里面"
 en = "a schema is for a file that is nothing but a table — this one lives inside a document"
 
 [[message]]
-# 新寫的 schema 檔頭一行的説明
-key = "table.schema-note"
-zht = "這份 schema 説的就是眼下看到的樣子。改完保存，:table-render off 再 :table-render basic 就照新的讀。"
-zhs = "这份 schema 説的就是眼下看到的样子。改完保存，:table-render off 再 :table-render basic 就照新的读。"
-en = "this schema says what the grid is already doing. Edit, save, then :table-render off and :table-render basic again."
-
-[[message]]
 # 進表格模式時，schema 檔有毛病
 key = "table.schema-problems"
 zht = "schema：{0}"
 zhs = "schema：{0}"
 en = "schema: {0}"
+
+[[message]]
+# :table-schema 的回答：幾欄、分隔符、表頭、照哪一份讀
+key = "table.schema-read-as"
+zht = "{0} 欄，分隔符 {1}，{2}；{3}"
+zhs = "{0} 栏，分隔符 {1}，{2}；{3}"
+en = "{0} columns, delimiter {1}, {2}; {3}"
+
+[[message]]
+# :table-schema write 寫不進去
+key = "table.schema-write-failed"
+zht = "寫不進 {0}：{1}"
+zhs = "写不进 {0}：{1}"
+en = "cannot write {0}: {1}"
+
+[[message]]
+# :table-schema write 寫好了
+key = "table.schema-written"
+zht = "寫進了 {0}"
+zhs = "写进了 {0}"
+en = "written into {0}"
 
 [[message]]
 # 排序：有一個引號從頭到尾不成對，這幾行不是這張表的記錄

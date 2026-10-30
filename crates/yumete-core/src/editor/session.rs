@@ -7,6 +7,12 @@ use super::*;
 
 /// **那份「我在哪裏」的檔名**，放在數據目錄裏（全局一份）。
 const PLACES_FILE: &str = "places.txt";
+/// **What this reader chose for each table file** — delimiter, header, hidden
+/// columns — one line a file: `path⇥delimiter⇥header⇥hidden` (2026-10-30, as
+/// decided). In the data directory and never beside the data: these are ways
+/// of looking at a file, not facts about it, and a project should not gain a
+/// file because somebody looked.
+const TABLES_FILE: &str = "tables.txt";
 
 /// **那份「我在哪些項目裏幹過活」**，同一個目錄，同一種形狀（2026-10-18）。
 ///
@@ -396,6 +402,43 @@ impl Editor {
     }
 
     /// **那份「我在哪裏」在哪**（`places.txt`），没有數據目錄就是没有。
+    fn tables_file(&self) -> Option<PathBuf> {
+        self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(TABLES_FILE))
+    }
+
+    /// What was chosen for this file last time, if anything was.
+    pub(super) fn table_choice_for(&self, path: &Path) -> TableChoice {
+        let Some(file) = self.tables_file() else { return TableChoice::default() };
+        let Ok(text) = std::fs::read_to_string(file) else { return TableChoice::default() };
+        let want = path.to_string_lossy();
+        text.lines()
+            .find(|line| line.split('\t').next() == Some(&*want))
+            .map(TableChoice::parse)
+            .unwrap_or_default()
+    }
+
+    /// Keep this file's choices; the line it had is replaced.
+    pub(super) fn remember_table_choice(&self, path: &Path, choice: &TableChoice) {
+        let Some(file) = self.tables_file() else { return };
+        let want = path.to_string_lossy().into_owned();
+        let mut out: Vec<String> = Vec::new();
+        if !choice.is_default() {
+            out.push(format!("{want}\t{}", choice.spelt()));
+        }
+        if let Ok(text) = std::fs::read_to_string(&file) {
+            out.extend(
+                text.lines()
+                    .filter(|line| line.split('\t').next() != Some(&*want) && !line.trim().is_empty())
+                    .map(str::to_string),
+            );
+        }
+        out.truncate(PLACES);
+        if let Some(parent) = file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&file, out.join("\n") + "\n");
+    }
+
     fn places_file(&self) -> Option<PathBuf> {
         self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(PLACES_FILE))
     }
@@ -1200,5 +1243,61 @@ impl Editor {
             true => say!("diff.too-many", LISTING_LIMIT, against),
             false => say!("diff.changed", n, against),
         };
+    }
+}
+
+/// One file's choices from `tables.txt`; see [`TABLES_FILE`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TableChoice {
+    /// The delimiter named with `:table-delimiter`, when one was.
+    pub delimiter: Option<char>,
+    /// Whether the first row names the columns, when it was said.
+    pub header: Option<bool>,
+    /// Columns drawn at no width, 1-based.
+    pub hidden: Vec<usize>,
+}
+
+impl TableChoice {
+    fn is_default(&self) -> bool {
+        *self == TableChoice::default()
+    }
+
+    /// `path⇥delimiter⇥header⇥hidden` after the path: `\t` and `\s` spell
+    /// the tab and the space, `-` is 「not said」, hidden columns are
+    /// comma-separated numbers.
+    fn parse(line: &str) -> TableChoice {
+        let mut parts = line.split('\t').skip(1);
+        let delimiter = match parts.next().unwrap_or("-") {
+            "-" | "" => None,
+            word => crate::table::delimiter_named(word),
+        };
+        let header = match parts.next().unwrap_or("-") {
+            "on" => Some(true),
+            "off" => Some(false),
+            _ => None,
+        };
+        let hidden = parts
+            .next()
+            .unwrap_or("")
+            .split(',')
+            .filter_map(|n| n.parse().ok())
+            .collect();
+        TableChoice { delimiter, header, hidden }
+    }
+
+    fn spelt(&self) -> String {
+        let delimiter = match self.delimiter {
+            None => "-".to_string(),
+            Some('\t') => "\\t".to_string(),
+            Some(' ') => "\\s".to_string(),
+            Some(c) => c.to_string(),
+        };
+        let header = match self.header {
+            None => "-",
+            Some(true) => "on",
+            Some(false) => "off",
+        };
+        let hidden: Vec<String> = self.hidden.iter().map(|n| n.to_string()).collect();
+        format!("{delimiter}\t{header}\t{}", hidden.join(","))
     }
 }

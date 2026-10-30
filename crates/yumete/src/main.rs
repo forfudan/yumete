@@ -2235,7 +2235,7 @@ ARGS:
             directory, each at the line it was left on.
 
 OPTIONS:
-        --table      Read the file as a grid. A schema in .yumete/tables/ names
+        --table      Read the file as a grid. A datapackage.json beside it names
                      the columns; without one, the file's own header row does.
                      A grid is always horizontal, so this overrides --vertical.
         --vertical   Lay the text out vertically for this run (縱書), overriding
