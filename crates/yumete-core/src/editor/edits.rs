@@ -1487,7 +1487,8 @@ impl Editor {
         // answered `None`, so the reader who named a register was told 「nothing
         // has been yanked」 about a register they had just named.
         let named = self.pending_register;
-        let text = self.recall();
+        let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
+        let text = self.recall().repeat(copies);
         if text.is_empty() {
             // A key that does nothing and says nothing is indistinguishable
             // from a key that is broken — and the reader whose `y` went to a
@@ -1560,6 +1561,27 @@ impl Editor {
         // The pasted text becomes the selection, ending on its last grapheme.
         let rope = self.current_buffer().rope();
         let head = motion::prev_grapheme(rope, at + len).max(at);
+        // **Under the vim keymap there is no selection to leave** (`:h p`,
+        // 2026-10-30, measured against nvim): a charwise paste puts the cursor
+        // on its last character, a linewise one on the first non-blank of its
+        // first line. Leaving the pasted text selected made the next `i` type
+        // at its start.
+        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+            let to = match line_wise {
+                true => {
+                    let first = match at_the_unterminated_end {
+                        true => rope.line_to_char(rope.char_to_line(at) + 1),
+                        false => at,
+                    };
+                    motion::line_first_non_blank(rope, first)
+                }
+                false => head,
+            };
+            self.sel.set_anchor(to);
+            self.sel.set_head(to);
+            self.refresh_goal_column();
+            return;
+        }
         self.sel.set_anchor(at);
         self.sel.set_head(head);
         self.refresh_goal_column();

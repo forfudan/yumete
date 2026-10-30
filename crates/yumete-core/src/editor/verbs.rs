@@ -509,6 +509,64 @@ impl Editor {
     /// The selection keeps its length — this writes over the text rather than
     /// replacing it with one character — so `r` on a selected word turns the
     /// whole word into that character, one for one.
+    /// **`r` and the key after it** (2026-10-30). Under the vim keymap a count
+    /// writes over that many characters of the line, failing (changing
+    /// nothing) when the line has fewer, and `r<Enter>` turns them into one
+    /// line break (`:h r`, measured against nvim). Otherwise it is helix's
+    /// `r`: every character of the selection.
+    pub(super) fn replace_by_key(&mut self, c: char) {
+        let count = self.operator_count.take().unwrap_or(1).max(1);
+        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+            return self.replace_chars(c);
+        }
+        // Visual `r` writes over the selection and leaves Visual mode, the
+        // cursor at its start (`:h v_r`).
+        if self.extend {
+            if self.vim_lines {
+                self.extend_to_line_bounds();
+                self.vim_lines = false;
+            }
+            let start = self.selection().0;
+            self.replace_chars(c);
+            self.extend = false;
+            self.sel.set_anchor(start);
+            self.sel.set_head(start);
+            self.clamp_cursor();
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head();
+        if head >= rope.len_chars() || matches!(rope.char(head), '\n' | '\r') {
+            return;
+        }
+        let last = motion::line_last(rope, head);
+        let mut end = head;
+        for _ in 1..count {
+            let next = motion::next_grapheme(rope, end);
+            if next > last {
+                return;
+            }
+            end = next;
+        }
+        if c == '\n' {
+            let stop = motion::next_grapheme(rope, end);
+            self.snapshot();
+            if self.overwrite(head, stop, "\n") {
+                self.sel.set_anchor(head + 1);
+                self.sel.set_head(head + 1);
+                self.clamp_cursor();
+            }
+            return;
+        }
+        self.sel.set_anchor(head);
+        self.sel.set_head(end);
+        self.replace_chars(c);
+        // The cursor ends on the last character written, as vim leaves it.
+        let at = self.sel.head();
+        self.sel.set_anchor(at);
+        self.clamp_cursor();
+    }
+
     pub(super) fn replace_chars(&mut self, c: char) {
         let (start, end) = self.selection();
         let end = end.min(self.current_buffer().char_count());

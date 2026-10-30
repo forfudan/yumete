@@ -80,6 +80,15 @@ impl Editor {
     /// **跳的那一格和畫成金的那一格是同一個答案**（2026-10-08）：兩支寫兩遍就意味
     /// 着頁面指着一格而 `mm` 跳到另一格。
     pub(super) fn goto_matching_bracket(&mut self) {
+        // Under the vim keymap `%` (which arrives here) looks along the line
+        // when the cursor is not on a bracket; helix's `mm` does not move.
+        if self.key_preset == yumete_cjk::KeyPreset::Vim && self.matching_bracket().is_none() {
+            if let Some((_, other)) = self.vim_percent_target() {
+                self.remember_jump();
+                self.move_head(other);
+                return;
+            }
+        }
         match self.matching_bracket() {
             Some(pos) => self.move_head(pos),
             // **A key that does nothing says why** (2026-10-17, found in
@@ -91,6 +100,27 @@ impl Editor {
             }
             None => {}
         }
+    }
+
+    /// **vim's `%`** (`:h %`, 2026-10-30): the bracket under the cursor, or
+    /// else the first one after it on the line, and that bracket's other
+    /// half, as `(bracket, other half)`.
+    pub(super) fn vim_percent_target(&mut self) -> Option<(usize, usize)> {
+        let here = self.sel.head();
+        let found = {
+            let rope = self.current_buffer().rope();
+            let line_end = motion::line_last(rope, here);
+            (here..=line_end.max(here)).find(|&at| {
+                at < rope.len_chars()
+                    && (closing_of(rope.char(at)).is_some() || opening_of(rope.char(at)).is_some())
+            })?
+        };
+        let saved = self.sel.clone();
+        self.sel.set_anchor(found);
+        self.sel.set_head(found);
+        let other = self.matching_bracket();
+        self.sel = saved;
+        other.map(|other| (found, other))
     }
 
     /// Select inside (`mi`) or around (`ma`) the pair named by `c`.

@@ -794,6 +794,14 @@ impl Editor {
     ///
     /// 三、**動完就回 Normal，光標落在那一段的開頭**。vim 的可視模式是為一次動作而
     /// 開的，一動完就結束；helix 的 select mode 不是，所以這一條只在這裏。
+    /// The character `column` characters into `line`, kept on the line.
+    fn column_on_line(&self, line: usize, column: usize) -> usize {
+        let rope = self.current_buffer().rope();
+        let line = line.min(rope.len_lines().saturating_sub(1));
+        let start = rope.line_to_char(line);
+        (start + column).min(motion::line_last(rope, start)).max(start)
+    }
+
     fn vim_visual_key(&mut self, c: char) {
         // `x`/`s` 原樣轉交：`d`/`c` 那兩個 arm 自己管整行與計數。
         if matches!(c, 'x' | 's') {
@@ -892,21 +900,7 @@ impl Editor {
             // Off a bracket, `%` looks along the line for the first one, and
             // the span still starts where the cursor is.
             let here = self.sel.head();
-            let found = {
-                let rope = self.current_buffer().rope();
-                let line_end = motion::line_last(rope, here);
-                (here..=line_end.max(here))
-                    .find(|&at| at < rope.len_chars() && "()[]{}（）［］｛｝「」『』《》〈〉【】〔〕".contains(rope.char(at)))
-            };
-            let other = found.and_then(|at| {
-                let saved = self.sel.clone();
-                self.sel.set_anchor(at);
-                self.sel.set_head(at);
-                let other = self.matching_bracket();
-                self.sel = saved;
-                other.map(|o| (at, o))
-            });
-            match other {
+            match self.vim_percent_target() {
                 Some((at, other)) => {
                     let (anchor, head) = (here.min(other).min(at), here.max(other).max(at));
                     return self.do_vim(op, motion::Span::Over { anchor, head });
@@ -1456,10 +1450,21 @@ impl Editor {
             'c' => self.apply(motion::Operator::Change { cut: true }, span),
             // `>` and `<` want the selection, because indenting is a
             // line-shaped edit the editor already knows how to do.
+            // The cursor keeps its column (nvim's `nostartofline`, measured).
             '>' | '<' => {
+                let (line, column) = {
+                    let rope = self.current_buffer().rope();
+                    let head = self.sel.head();
+                    let line = rope.char_to_line(head);
+                    (line, head - rope.line_to_char(line))
+                };
                 self.take_object(span);
                 self.extend_to_line_bounds();
                 self.indent(op == '>');
+                let to = self.column_on_line(line, column);
+                self.sel.set_anchor(to);
+                self.sel.set_head(to);
+                self.refresh_goal_column();
             }
             // **`gq`** — the lines the motion crosses, filled (2026-10-29).
             'q' => {
@@ -1819,6 +1824,10 @@ impl Editor {
                     self.answer_with_char(waiting, c);
                 } else if key == Key::Enter && waiting == Pending::Surround {
                     self.surround_with_lines();
+                } else if key == Key::Enter && waiting == Pending::Replace {
+                    // `r<Enter>`: a line break, in both keymaps (`:h r`,
+                    // helix's `replace` with a newline).
+                    self.answer_with_char(waiting, '\n');
                 }
                 // Spent either way: a count typed before `f` belongs to that
                 // `f` and must not be left lying for the next command — unless
@@ -1944,6 +1953,37 @@ impl Editor {
             if let Key::Char(c) = key {
                 if matches!(c, 'o' | 'u' | 'U' | '~' | 'p' | 'x' | 's' | 'y') && !self.user_bound(c) {
                     return self.vim_visual_key(c);
+                }
+                // **`J`, `>` and `<` end Visual mode** (`:h v_J`, `:h v_>`,
+                // 2026-10-30, measured against nvim): they act on the lines and
+                // leave Normal mode behind them, the cursor on the seam for `J`
+                // and, for the indents, in the column it was in (nvim's
+                // `nostartofline`). They used to leave SEL on, so the next `i`
+                // began a text object.
+                if matches!(c, 'J' | '>' | '<') && !self.user_bound(c) {
+                    if self.vim_lines {
+                        self.extend_to_line_bounds();
+                        self.vim_lines = false;
+                    }
+                    let (line, column) = {
+                        let rope = self.current_buffer().rope();
+                        let start = self.selection().0;
+                        let line = rope.char_to_line(start);
+                        (line, start - rope.line_to_char(line))
+                    };
+                    let was = std::mem::replace(&mut self.expanding_alias, true);
+                    self.on_normal_key(key);
+                    self.expanding_alias = was;
+                    self.extend = false;
+                    let to = match c {
+                        'J' => self.sel.head(),
+                        _ => self.column_on_line(line, column),
+                    };
+                    self.sel.set_anchor(to);
+                    self.sel.set_head(to);
+                    self.refresh_goal_column();
+                    self.clamp_cursor();
+                    return;
                 }
             }
         }
@@ -2803,8 +2843,15 @@ impl Editor {
                 let (anchor, head) = self.span();
                 self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });
             }
-            Key::Char('p') => self.repeat_writing(count, |e| e.paste(true)),
-            Key::Char('P') => self.repeat_writing(count, |e| e.paste(false)),
+            // A count is that many copies pasted as one piece, selected
+            // together (helix) or with the cursor where vim puts it.
+            Key::Char(c @ ('p' | 'P')) => {
+                self.paste_copies = count.clamp(1, Self::WRITING_MAX);
+                self.paste(c == 'p');
+                if count > Self::WRITING_MAX {
+                    self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
+                }
+            }
             // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).
             // **vim 預設下，可視模式裏的 `i`/`a` 是物件前綴**（2026-09-28 收到的反饋：
             // 「vi* 进入选择/高亮模式（目前是因为 i 键的关系，进入了插入模式）」）。
@@ -2998,7 +3045,11 @@ impl Editor {
                 self.operator_count = operator_count;
             }
             // Overwrite every character of the selection with the next key.
-            Key::Char('r') => self.pending = Pending::Replace,
+            Key::Char('r') => {
+                self.pending = Pending::Replace;
+                // vim's `3rX` writes over three characters (`:h r`).
+                self.operator_count = operator_count;
+            }
             // Name the register the next yank, delete or paste will use.
             Key::Char('"') => self.pending = Pending::Register,
             // Record a macro, and play the last one back.
@@ -3142,6 +3193,20 @@ impl Editor {
             // `` ` `` opens 「小寫/大寫/互換」, and `~` has always meant the
             // last of those on its own.
             Key::Char('~') => {
+                // vim's `3~` switches three characters (`:h ~`).
+                if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend && count > 1 {
+                    let rope = self.current_buffer().rope();
+                    let last = motion::line_last(rope, self.sel.head());
+                    let mut head = self.sel.head();
+                    for _ in 1..count {
+                        let next = motion::next_grapheme(rope, head);
+                        if next > last {
+                            break;
+                        }
+                        head = next;
+                    }
+                    self.sel.set_head(head);
+                }
                 self.map_selection(switch_case);
                 // **vim 的 `~` 按完往前走一格**（`:h ~`），所以 `~~~` 在 `alpha`
                 // 上給 `ALPha`；從前這裏三下都換同一個字，給的是 `Alpha`。
@@ -3245,8 +3310,23 @@ impl Editor {
             }
 
             // Indent / unindent the selected lines.
-            Key::Char('>') => self.repeat_writing(count, |e| e.indent(true)),
-            Key::Char('<') => self.repeat_writing(count, |e| e.indent(false)),
+            Key::Char(c @ ('>' | '<')) => {
+                // vim's `>>` keeps the cursor's column (nvim, `nostartofline`);
+                // helix's `>` keeps the selection on its text.
+                let kept = (self.key_preset == yumete_cjk::KeyPreset::Vim).then(|| {
+                    let rope = self.current_buffer().rope();
+                    let head = self.sel.head();
+                    let line = rope.char_to_line(head);
+                    (line, head - rope.line_to_char(line))
+                });
+                self.repeat_writing(count, |e| e.indent(c == '>'));
+                if let Some((line, column)) = kept {
+                    let to = self.column_on_line(line, column);
+                    self.sel.set_anchor(to);
+                    self.sel.set_head(to);
+                    self.refresh_goal_column();
+                }
+            }
             // Increment / decrement the number at the cursor. **The count is
             // the amount**, as in helix and vim (2026-10-29, review: repeating
             // stopped after one pass whenever the number kept its width, so
@@ -3297,7 +3377,7 @@ impl Editor {
                 // `find_char` 自己的事：找不到第 n 個就 `Missed`，一格不動。
                 self.find_nth_char(kind, c, count, false);
             }
-            Pending::Replace => self.replace_chars(c),
+            Pending::Replace => self.replace_by_key(c),
             Pending::MatchPair { around } => self.select_pair(c, around, self.pair_count()),
             Pending::Surround => self.surround_add(c),
             Pending::SurroundOff => self.surround_delete(c, self.pair_count()),
