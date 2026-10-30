@@ -1577,6 +1577,29 @@ impl Editor {
     /// dated name never collides, which is a better answer than asking about
     /// overwriting. The bang is kept for the name you spell out yourself,
     /// where a collision is still possible and still yours.
+    /// **`ye --export`** (2026-10-30): the same export as `:export!`, for the
+    /// command line — writing over an existing target, as a compiler does,
+    /// since a script runs it again and again. The answer is the status line
+    /// the editor would have shown, or why nothing was written.
+    pub fn export_from_the_command_line(&mut self, format: &str, target: Option<&str>) -> Result<String, String> {
+        // `:export csv` wants the table under the cursor; a file opened from
+        // the command line stands on line 1, so enter the grid first.
+        if crate::export::delimiter_of(format).is_some() && self.table().is_none() {
+            self.enter_table();
+        }
+        let before = self.status.clone();
+        match self.export(format, target, true) {
+            Ok(_) => {
+                let said = self.status.clone();
+                match said != before && !said.is_empty() {
+                    true => Ok(said),
+                    false => Err(say!("export.no-such-format", format)),
+                }
+            }
+            Err(err) => Err(err.to_string()),
+        }
+    }
+
     pub(super) fn take_a_picture(
         &mut self,
         shot: crate::command::Shot,

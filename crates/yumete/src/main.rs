@@ -125,6 +125,11 @@ fn main() -> ExitCode {
     // this says it for one run, which is what you want when the file is
     // called `.txt` and you know what is in it.
     let mut force_syntax: Option<String> = None;
+    // `--export FMT`: write the files named out as html, typst, csv, tsv or
+    // pdf and exit — the editor's own `:export`, with `typst compile` for the
+    // last (2026-10-30). `--out` is where; one file only, then.
+    let mut export: Option<String> = None;
+    let mut out: Option<String> = None;
     // `--shot` prints one frame — the page as it would be drawn — and exits.
     // `:shot` needs a window, a GUI session and a person; this is the same
     // picture for a headless machine, a bug report, or a reviewer who has to
@@ -207,6 +212,8 @@ fn main() -> ExitCode {
                 "--syntax" => force_syntax = Some(arg),
                 "--grep" => grep = Some(arg),
                 "--files" => listing = Some(arg),
+                "--export" => export = Some(arg),
+                "--out" => out = Some(arg),
                 _ => unreachable!("every owed flag is named here"),
             }
             continue;
@@ -261,6 +268,10 @@ fn main() -> ExitCode {
             // **管道那一邊。** 開關的名字照 rg，因為那是肌肉記憶所在。
             "--grep" => owed = Some("--grep"),
             s if s.starts_with("--grep=") => grep = Some(s["--grep=".len()..].to_string()),
+            "--export" => owed = Some("--export"),
+            s if s.starts_with("--export=") => export = Some(s["--export=".len()..].to_string()),
+            "--out" => owed = Some("--out"),
+            s if s.starts_with("--out=") => out = Some(s["--out=".len()..].to_string()),
             "--files" => owed = Some("--files"),
             s if s.starts_with("--files=") => listing = Some(s["--files=".len()..].to_string()),
             "--ignore-case" => {
@@ -681,6 +692,16 @@ fn main() -> ExitCode {
     // Where `:word-list global` writes, and where a reader's own dictionary is
     // read from — the front end's answer, because only it knows XDG.
     editor.keep_word_list_in(yumete_config::data_dir());
+    // **`--export` runs here**, after the config has been applied and before
+    // anything touches the data directory: the export reads the paper, the
+    // layout and the ruby settings the way `:export` in the editor does.
+    if let Some(format) = &export {
+        return run_export(&mut editor, format, &files, out.as_deref());
+    }
+    if out.is_some() {
+        eprintln!("yumete: --out only means something with --export");
+        return ExitCode::from(2);
+    }
     let drafts = yumete_config::data_dir().join("drafts");
     if std::fs::create_dir_all(&drafts).is_ok() {
         editor.keep_drafts_in(drafts);
@@ -1817,6 +1838,124 @@ fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
     incomplete
 }
 
+/// `ye --export FMT FILE…`: each file written out beside itself with the new
+/// extension, or at `--out` when one file is named. The path written goes to
+/// stdout, one a line, so a script can pick it up; anything wrong goes to
+/// stderr with a non-zero exit.
+///
+/// `pdf` is `typst compile`: a Typst file as it is, Markdown through the
+/// editor's own Typst export into a file beside the source (so images and
+/// includes resolve as they would in the `.typ`), compiled and removed.
+fn run_export(editor: &mut Editor, format: &str, files: &[String], out: Option<&str>) -> ExitCode {
+    let format = format.trim().to_ascii_lowercase();
+    let known = ["html", "htm", "typst", "typ", "csv", "tsv", "pdf"];
+    if !known.contains(&format.as_str()) {
+        eprintln!("yumete: --export takes html, typst, csv, tsv or pdf, not '{format}'");
+        return ExitCode::from(2);
+    }
+    if files.is_empty() {
+        eprintln!("yumete: --export wants a file to export");
+        return ExitCode::from(2);
+    }
+    if out.is_some() && files.len() > 1 {
+        eprintln!("yumete: --out names one file, and {} were given", files.len());
+        return ExitCode::from(2);
+    }
+    if format == "pdf" && !typst_is_installed() {
+        eprintln!("yumete: --export pdf needs the `typst` compiler on the PATH");
+        eprintln!("get it from https://github.com/typst/typst/releases, or `brew install typst`");
+        return ExitCode::from(1);
+    }
+    let mut failed = false;
+    for file in files {
+        let source = std::path::PathBuf::from(yumete_config::expand_tilde(file));
+        if !source.is_file() {
+            eprintln!("yumete: {}: not a file", source.display());
+            failed = true;
+            continue;
+        }
+        if let Err(err) = editor.open_file(&source) {
+            eprintln!("yumete: {}: {err}", source.display());
+            failed = true;
+            continue;
+        }
+        let result = match format.as_str() {
+            "pdf" => export_pdf(editor, &source, out),
+            _ => editor
+                .export_from_the_command_line(&format, out)
+                .map(|_| written_path(&source, &format, out)),
+        };
+        match result {
+            Ok(path) => println!("{}", path.display()),
+            Err(why) => {
+                eprintln!("yumete: {}: {why}", source.display());
+                failed = true;
+            }
+        }
+    }
+    match failed {
+        true => ExitCode::FAILURE,
+        false => ExitCode::SUCCESS,
+    }
+}
+
+/// Where `--export` put a file: `--out` as given, or beside the source.
+fn written_path(source: &std::path::Path, format: &str, out: Option<&str>) -> std::path::PathBuf {
+    match out {
+        Some(out) => std::path::PathBuf::from(yumete_config::expand_tilde(out)),
+        None => source.with_extension(match format {
+            "typst" | "typ" => "typ",
+            "html" | "htm" => "html",
+            other => other,
+        }),
+    }
+}
+
+fn typst_is_installed() -> bool {
+    std::process::Command::new("typst")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+fn export_pdf(
+    editor: &mut Editor,
+    source: &std::path::Path,
+    out: Option<&str>,
+) -> Result<std::path::PathBuf, String> {
+    let target = written_path(source, "pdf", out);
+    let is_typst = editor.current_buffer().syntax() == yumete_core::syntax::Syntax::Typst;
+    // A Typst file compiles as it is; anything else goes through the
+    // editor's Typst export first, into a file beside the source.
+    let (input, temporary) = match is_typst {
+        true => (source.to_path_buf(), None),
+        false => {
+            let stem = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            let draft = source.with_file_name(format!("{stem}.yumete-export.typ"));
+            let draft_text = draft.to_string_lossy().into_owned();
+            editor.export_from_the_command_line("typst", Some(&draft_text))?;
+            (draft.clone(), Some(draft))
+        }
+    };
+    let compiled = std::process::Command::new("typst")
+        .arg("compile")
+        .arg(&input)
+        .arg(&target)
+        .output()
+        .map_err(|e| format!("typst: {e}"));
+    if let Some(draft) = temporary {
+        let _ = std::fs::remove_file(draft);
+    }
+    let compiled = compiled?;
+    if !compiled.status.success() {
+        let said = String::from_utf8_lossy(&compiled.stderr);
+        return Err(format!("typst compile failed\n{}", said.trim_end()));
+    }
+    Ok(target)
+}
+
 fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     let ink = Ink(g.colour.unwrap_or_else(|| std::io::stdout().is_terminal()));
     let cwd = std::env::current_dir().unwrap_or_default();
@@ -2293,6 +2432,19 @@ SEARCHING FROM THE SHELL:
 
                      Several directories may be named, and a FILE may be named
                      instead of a directory.
+
+        --export FMT Write each FILE out as html, typst, csv, tsv or pdf and
+                     exit: beside the file with the new extension, or at
+                     --out PATH when one file is named. An existing file is
+                     written over, as a compiler's would be. The paper, layout
+                     and ruby settings of your config apply, as with :export
+                     in the editor; csv and tsv take the file's table.
+
+                     pdf needs the `typst` compiler on the PATH (brew install
+                     typst). A .typ file is compiled as it is, #include and
+                     images resolved from its own folder; Markdown goes
+                     through the editor's Typst export first.
+        --out PATH   Where --export writes, when one file is named.
 
         --files PAT  Print every file whose name matches PAT, best first, and
                      exit — fd's walk with fzf's matching (`fd | fzf -f`), and
