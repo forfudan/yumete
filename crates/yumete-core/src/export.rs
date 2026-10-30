@@ -1042,6 +1042,13 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                         true => format!("{}. ", start + n),
                         false => "- ".to_string(),
                     };
+                    // An empty item still takes its marker, or the numbers
+                    // after it shift (2026-10-30: `1.` alone vanished).
+                    if held.trim().is_empty() {
+                        out.push_str(marker.trim_end());
+                        out.push('\n');
+                        continue;
+                    }
                     for (k, text) in held.trim_end().lines().enumerate() {
                         match (k, text.is_empty()) {
                             (0, _) => out.push_str(&format!("{marker}{text}")),
@@ -1517,5 +1524,22 @@ mod tests {
         assert!(!html.contains("Zed"), "{html}");
         let html = export("a[^none]\n", Format::Html, &flat);
         assert!(html.contains("a[^none]"), "{html}");
+    }
+
+    /// **Found in review, 2026-10-30**: a U+3000-indented line after a list
+    /// item panicked; a hard break was lost; a writer's U+E000 vanished; an
+    /// empty first item lost its number in Typst.
+    #[test]
+    fn what_the_night_review_found_in_export() {
+        let mut flat = style();
+        flat.vertical = false;
+        let html = export("- 第一點\n\u{3000}\u{3000}續寫的一行\n", Format::Html, &flat);
+        assert!(html.contains("第一點"), "{html}");
+        let html = export("Roses are red,  \nviolets are blue.\n", Format::Html, &flat);
+        assert!(html.contains("red,<br>"), "{html}");
+        let html = export("私用\u{E000}字\n", Format::Html, &flat);
+        assert!(html.contains("私用\u{E000}字"), "{html}");
+        let typst = export("1.\n2. 二\n", Format::Typst, &flat);
+        assert!(typst.contains("1.\n2. 二"), "{typst}");
     }
 }

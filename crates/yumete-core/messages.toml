@@ -10897,7 +10897,7 @@ en = "the code in the text"
 key = "set.pick.inline-preedit.off"
 zht = "候選欄裏"
 zhs = "候选栏里"
-en = "inline-preedit.off"
+en = "in the candidate bar"
 
 [[message]]
 # 設置：正在打的那一段——正文里写首选
@@ -11072,14 +11072,14 @@ en = "lines"
 key = "set.pick.table-rules.line-dash"
 zht = "實線加虚線"
 zhs = "实线加虚线"
-en = "table rules.line dash"
+en = "lines and dashes"
 
 [[message]]
 # 設置：表格的栏线——实线加双线
 key = "set.pick.table-rules.line-double"
 zht = "實線加雙線"
 zhs = "实线加双线"
-en = "table rules.line double"
+en = "lines and double lines"
 
 [[message]]
 # 設置：表格的栏线——不画

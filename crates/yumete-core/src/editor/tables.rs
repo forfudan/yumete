@@ -3108,7 +3108,13 @@ impl Editor {
             return;
         }
         let at = self.sel.head();
-        if self.cell_here().is_some_and(|(from, to)| (from..=to).contains(&at)) {
+        if let Some((from, to)) = self.cell_here().filter(|(from, to)| (*from..=*to).contains(&at)) {
+            // The head is seated; the anchor has to be too (2026-10-30: just
+            // after opening a CSV it was still at the top of the file, so the
+            // first `g/` searched the whole header line).
+            if !(from..=to).contains(&self.sel.anchor()) {
+                self.sel.set_anchor(at);
+            }
             return;
         }
         self.snap_to_cell();
