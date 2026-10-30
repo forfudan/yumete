@@ -2722,8 +2722,8 @@ find = "語法 语法 排版 typst"
 [[message]]
 # : 命令選單裏 check 那一項的説明(table 組)
 key = "cmd.table.check"
-zht = "從頭看一遍：重複的行名、欄數不對的行、超出字集的字"
-zhs = "从头看一遍：重复的行名、栏数不对的行、超出字集的字"
+zht = "檢查整張表：行名重複、欄數不對、字不在字集裡"
+zhs = "检查整张表：行名重复、栏数不对、字不在字集里"
 en = "look the whole table over: repeated row names, rows of the wrong width, characters outside the standards"
 find = "檢查 检查 校驗 校验 查錯 查错 check lint"
 
@@ -11727,8 +11727,8 @@ en = "deleted a column"
 [[message]]
 # :table-hide 之後
 key = "table.column-hidden"
-zht = "第 {0} 欄藏起來了"
-zhs = "第 {0} 栏藏起来了"
+zht = "已藏起第 {0} 欄"
+zhs = "已藏起第 {0} 栏"
 en = "column {0} is hidden"
 
 [[message]]
@@ -11803,8 +11803,8 @@ en = "column rules: {0}"
 [[message]]
 # :table-show 之後
 key = "table.column-shown"
-zht = "第 {0} 欄畫出來了"
-zhs = "第 {0} 栏画出来了"
+zht = "第 {0} 欄已顯示"
+zhs = "第 {0} 栏已显示"
 en = "column {0} is shown again"
 [[message]]
 # t F，但有一欄寬到没有窗口裝得下——對齊它只是在寫空格
@@ -11830,8 +11830,8 @@ en = "the cursor is not in a table"
 [[message]]
 # :table-delimiter 之後
 key = "table.delimiter-set"
-zht = "照 {0} 分欄，這個文件記住了"
-zhs = "照 {0} 分栏，这个文件记住了"
+zht = "用 {0} 分欄；下次開這個文件也這樣"
+zhs = "用 {0} 分栏；下次开这个文件也这样"
 en = "cut by {0}; remembered for this file"
 
 [[message]]
@@ -12298,8 +12298,8 @@ en = "the rule row is drawn, not written — t < = > sets the alignment"
 [[message]]
 # table.schema-read-as 的第四格：没有 datapackage.json，照首行讀的
 key = "table.schema-from-nothing"
-zht = "照首行讀，没有 datapackage.json"
-zhs = "照首行读，没有 datapackage.json"
+zht = "照首行讀, 沒有 datapackage.json"
+zhs = "照首行读, 没有 datapackage.json"
 en = "read by its first row, no datapackage.json"
 
 [[message]]
@@ -12312,8 +12312,8 @@ en = "this table does not name a key column (primaryKey in datapackage.json)"
 [[message]]
 # table.schema-read-as 的第三格：第一行是資料
 key = "table.schema-header-no"
-zht = "第一行是資料"
-zhs = "第一行是资料"
+zht = "第一行是記錄"
+zhs = "第一行是记录"
 en = "the first row is data"
 
 [[message]]
@@ -12340,22 +12340,22 @@ en = "schema: {0}"
 [[message]]
 # :table-schema 的回答：幾欄、分隔符、表頭、照哪一份讀
 key = "table.schema-read-as"
-zht = "{0} 欄，分隔符 {1}，{2}；{3}"
-zhs = "{0} 栏，分隔符 {1}，{2}；{3}"
+zht = "{0} 欄, 分隔符 {1}, {2}; {3}"
+zhs = "{0} 栏, 分隔符 {1}, {2}; {3}"
 en = "{0} columns, delimiter {1}, {2}; {3}"
 
 [[message]]
 # :table-schema write 寫不進去
 key = "table.schema-write-failed"
-zht = "寫不進 {0}：{1}"
-zhs = "写不进 {0}：{1}"
+zht = "寫入 {0} 失敗：{1}"
+zhs = "写入 {0} 失败：{1}"
 en = "cannot write {0}: {1}"
 
 [[message]]
 # :table-schema write 寫好了
 key = "table.schema-written"
-zht = "寫進了 {0}"
-zhs = "写进了 {0}"
+zht = "已寫入 {0}"
+zhs = "已写入 {0}"
 en = "written into {0}"
 
 [[message]]
