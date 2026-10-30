@@ -7,7 +7,7 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## Unreleased
+## 0.15.0 · 2026-10-30
 
 ### Added
 
@@ -24,6 +24,13 @@ in `docs/development.md` §5.2.
 - **Invisible characters are marked**: the cell after a zero-width space, soft hyphen, mid-text byte-order mark or bidi control (the "Trojan Source" trick) gets an amber ground, as does a space that is not a plain space, and the status line names what is hidden when the caret is there. On by default (`[editor] unicode_alarm`, settings panel: Marks); U+3000, emoji joiners and variation selectors are left alone.
 - **`:git-show [commit]`** opens the committed draft (`HEAD` by default) read-only in the other work area, on the line you are on, to read beside the one you are writing.
 - **`:earlier` and `:later`**, helix's: undo or redo so many steps, or to the change nearest a span of time back or on (`:earlier 5m`, `:later 1h 30m`).
+- **A table file is described by a `datapackage.json` beside it** (a Frictionless Data Package): each table file is a `resource` with its `schema` (`fields` with `name`, `title`, `type`; `primaryKey`) and `dialect` (`delimiter`, `header`). A file the package lists opens as a table. `:table-schema` says how the current table is read; `:table-schema write` writes this file's description into the package beside the data, making the package when there is none. Nothing is written by looking.
+- **What you choose while reading a table is remembered for the file**, in yumete's data directory and never beside the data: `:table-delimiter space|tab|…` reads the file cut by that character, `:table-header` (and `Space t H`) says whether the first row names the columns, `:table-hide 7` / `:table-show 7` take a column off the page and put it back (it is still read and written).
+- **A GFM table written without its outer pipes** (`a | b` over `--- | ---`) is read, coloured, edited and exported as a table; `Space t F` writes the pipes in.
+- **`Space t p` and `Space t P` put a copied column in** to the right or left of this one, as `p`/`P` put a copied row; `Space t v` writes the copied column over this one.
+- **vim's numbered registers**: `"1` to `"9` hold the last deletes of a line or more; `"0` is the last yank; `"_` keeps nothing; `"+` and `"*` are the system clipboard for `y`, `p`, `P` and `R` in both keymaps.
+- **vim's `gi`** resumes the last Insert where it stopped, per file, following the text; `3.` repeats the last change with a new count; `2R` writes what is typed twice over the text; `;` and `,` repeat a find made under an operator (`dfa;`); `d%`, `d+`, `d-`, `d<Enter>` work.
+- **The terminal's title names the project**: `note.md [+] — proj — yumete`, the folder being the project root's (found by its `.git` or `.yumete`); a lone file stays `note.md — yumete`.
 
 ### Changed
 
@@ -35,12 +42,33 @@ in `docs/development.md` §5.2.
 - **The change bar works outside git**: a file not in a repository, or one the repository does not track, is compared with its saved copy, so the bar shows what changed since the last save.
 - **An English file exports as English**: the page's language comes from the text (`lang="en"`, a Latin serif, spaced paragraphs, no two-字 indent), and a line break between two Latin lines is a space, as CommonMark reads it. Chinese keeps its line breaks and its indent.
 - **`o` in a code file indents after an opener** (`fn f() {`, `def f():`), as Enter already did.
+- **The old table schema is no longer read.** `.yumete/tables/<name>.toml` (with its `link`, `detail` and `ranges`) is replaced by the `datapackage.json` above; opening a table such a file names says so once. To move over: open the table, set the header with `Space t H` if needed, run `:table-schema write`, and delete the TOML. The record panel and `Enter` still lead from a cell to the rows its characters name when the table has a `primaryKey`; with no column named, `Space t /` searches every column but the key column. `Space t e` is retired; `:table-check` no longer looks for components with no row.
+- **A plain `.txt` is no longer guessed to be a space-separated table.** Lines that all held the same number of spaces (a shopping list) opened as a three-column grid, and `:w` then wrote quotes nobody typed. Tab, comma and semicolon are still guessed; a space is named (`:table-delimiter space`, `:convert-table space …`).
+- **Config errors are reported in the interface's language**: every complaint has an English wording, and lists such as "only auto, always or never" come from the setting's own values. `[editor] ruby_dialects` is gone — both ruby syntaxes were always read — and a config that still has it is told so.
+- **In vertical layout, punctuation turns according to `:render`**: `off` draws the file's own marks, `basic` (the default) turns the CJK marks as before, and `full` also sets `“”` as `﹃﹄` and `‘’` as `﹁﹂`.
+- **`gq` keeps paragraphs that open with the two-square indent (U+3000) apart**: such a line is never joined to the one before it, and its filled continuation carries no indent.
+- **`s`, `S`, `K` and `A-K` read a regular expression** whatever the search bar's matching setting says, as helix's do: `%s[a-z]+` selects the words.
+- **Under the vim keymap, `v` or `V` and then `Esc` leaves nothing selected**, with the cursor where it stood, as in vim. The helix keymap keeps the selection, as helix does.
+- **`:q` and `:q!` in a split close the region**, as helix and vim close a view, and with a sidebar focused they close the sidebar; the last region quits. They used to close the file, or quit the editor, and `:q!` threw the changes away.
+- **`C-w E` and `C-w I` always open the sidebar** they go into.
+- **`:ruby-auto rare`** counts a character ordinary when any of the four everyday lists has it (通用規範漢字表, its traditional forms, Taiwan's, Hong Kong's); the menu says so.
+- **Messages**: stale command names (`:yume abc`, `:table-render full`, `:layout`, `:table-pipe`, `:sidebar-left`), the `Space z` labels, the `w`/`b`/`e` and `.` help lines, and "this book" is the project in 25 messages. About 120 English messages were rewritten against what the editor does, with `--help`, `:help` and the English `:tutor` checked line by line.
 
 ### Fixed
 
 - **`Space z i`, `Space z n` and `Space z /` do what their menu says**: pick a scheme on the command line, switch to the next scheme, and show or hide the component breakdown beside the candidates. They used to answer that there was no such scheme. `Space z y` turns prediction on or off instead of only saying which it is.
 - **The `follow_link` action** (for `[keys]`) presses `gL`; it pressed `gx`, the two-letter jump.
 - **Visual `gu` `gU` `g~` under the vim keymap** change the selection. They waited for a motion as though nothing were selected, and the next key let them go having done nothing.
+- **Closing the terminal window, or a `SIGTERM`, no longer loses what was typed**: the copy of every unsaved file is written on the way out, and the signal is heard even after a slow moment. The process used to end on the spot, and once aborted on a closed pty. A recovery copy that belongs to a yumete still running is not offered.
+- **The session is written whenever the open files change**, not only on a clean exit, so `-r` after a crash brings the files back.
+- **Five crashes**: `r` over an emoji family or a combining sequence near the end of the file; typing `:12s#漢`; `Space c` on lines indented partly with U+3000; `:settings` in a window under 22 columns; `:export` of a list followed by a U+3000-indented line. A long `|` line on a vertical page took 12.8 s a frame; now 0.35 s.
+- **Table edits that lost or faked data**: sorting a CSV with a multi-line field left stale record starts, so the next row delete took the wrong lines; a torn Markdown table refused an edit and then reported "added a column"; `Space t d` filled the register with a row it had not taken; a pasted column lost its empty last cells; a CSV with one quoted comma was "no delimiter in sight". Restoring a git change dropped removed lines that were `---` and wrote CRLF files back with LF.
+- **A turned table's rules line up in vertical layout**: cells are measured in the slots the page packs them into, so the rules sit at one depth in every 縱.
+- **Export**: hard line breaks were lost, and U+E000/U+E001 in the text were eaten by the footnote marks; a Typst export keeps the marker of an empty list item.
+- **vim keys measured against nvim**: `3p` pastes three copies as one piece and leaves a cursor where vim does; `3rX` and `3~` act on three characters and `u` lands at their start; `r<Enter>` writes the file's own line ending; `%` looks along the line; Visual `J`, `gJ`, `r`, `>` and `<` return to Normal, `>` and `<` keeping the column; `.` repeats a visual `>`, `<` or `J`; `w` and `b` stop on an empty line; Insert `C-u` and `C-w` stop where the Insert began; `gUgU`, `gugu`, `g~g~` and `gqgq` are the line; `a` on an empty line types there; `d%` with the partner behind the cursor.
+- **helix keys measured against helix 25.07.1**: Insert `A-d` takes to the end of the word and all of a run of trailing blanks; `A-J` joins every line a selection spans; `2R` pastes two copies; `Space z n` walks on past a scheme whose 碼表 is not installed.
+- **`--grep` from a subdirectory** printed paths that did not exist (hits were joined to the project root), and on Windows printed them absolute.
+- **A `|` table's padding on the page** used to be recomputed for the row the caret was on at `:render basic`; the word count split a word at a combining mark; the change bar marked line 1 of a file with a byte-order mark; the which-key "N more" count was one short; a wide character at the right edge with wrap off is scrolled fully into view.
 
 ## 0.14.0 · 2026-10-29
 
