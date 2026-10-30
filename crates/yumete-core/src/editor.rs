@@ -2419,14 +2419,15 @@ pub struct Editor {
     /// Where this Insert began, for vim's `C-u` and `C-w`, which take back
     /// what was typed before going further (`:h i_CTRL-U`).
     insert_began: Option<usize>,
-    /// Where the last Insert ended, for vim's `gi` (`:h gi`, the `'^` mark).
-    last_insert_stop: Option<usize>,
     /// The open files the session file last named, so the autosave tick
     /// writes it again only when they change.
     session_names: Vec<std::path::PathBuf>,
     /// The cursor's column when `V` was pressed: the selection then reaches
     /// the line's end, and vim's `>`/`<` put the cursor back in this column.
     vim_line_column: usize,
+    /// Set while a yank stores its text, so the store can tell a yank from
+    /// a delete (vim's `"0` is the one, `"1` the other).
+    storing_a_yank: bool,
     /// Keys recorded since `q` was pressed, if a macro is being recorded.
     recording: Option<Vec<Key>>,
     /// The last macro recorded, replayed by `Q`.
@@ -3969,9 +3970,9 @@ impl Editor {
             pending_register: None,
             paste_copies: 1,
             insert_began: None,
-            last_insert_stop: None,
             session_names: Vec::new(),
             vim_line_column: 0,
+            storing_a_yank: false,
             recording: None,
             macro_keys: Vec::new(),
             replaying: false,

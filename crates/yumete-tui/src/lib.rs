@@ -609,7 +609,19 @@ pub fn run(
     // `ratatui::init` for the raw mode, the alternate screen and the panic hook
     // that undoes both — and then a terminal of our own over it, so a wiki
     // name can be underlined with dots (#287, `backend.rs`).
-    drop(ratatui::init());
+    //
+    // **Not `ratatui::init`** (2026-10-30): its panic hook restores with
+    // `restore()`, which prints any failure with `eprintln!` — and when the
+    // window has closed, stderr is gone, that print panics inside the hook and
+    // the process aborts before a single recovery copy is written. The same
+    // three steps by hand, with a hook that cannot print.
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = ratatui::try_restore();
+        previous(info);
+    }));
+    ratatui::crossterm::terminal::enable_raw_mode()?;
+    execute!(stdout(), ratatui::crossterm::terminal::EnterAlternateScreen)?;
     let mut terminal = ratatui::Terminal::new(crate::backend::Dotted::new(stdout()))?;
 
     // Enable the Kitty keyboard protocol — the base level, which every session
@@ -925,6 +937,12 @@ pub fn run(
         // two of them that nobody was going to see. `FRAME_FLOOR` keeps a held
         // key from holding the page still.
         take_what_arrived(&events, &mut inbox);
+        // **The flag, not the message**: the one wake-up the watcher sends
+        // can be swallowed while the loop is busy (a save, a shell command),
+        // and then a SIGTERM went unheard for the rest of the run (2026-10-30).
+        if hung_up() {
+            break Ok(());
+        }
         let waiting = !inbox.is_empty();
         // The picture is wanted only when somebody asked for one, and the copy
         // is a walk of the whole screen: 24 µs at 120×40, 94 µs at 400×100,
@@ -1951,7 +1969,15 @@ pub fn run(
         }
         let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
     }
-    ratatui::restore();
+    // `try_restore`, not `restore`: the latter prints its failure with
+    // `eprintln!`, which panics when the terminal is gone (the window closed),
+    // and a panic here ran the restore hook again and aborted, before any
+    // recovery copy was written (2026-10-30). For the same reason the
+    // terminal is not dropped: its `Drop` shows the cursor and prints when it
+    // cannot. The cursor is shown here, quietly.
+    let _ = terminal.show_cursor();
+    std::mem::forget(terminal);
+    let _ = ratatui::try_restore();
     result
 }
 
@@ -1969,7 +1995,7 @@ pub fn restore_terminal() {
         DisableFocusChange,
         PopKeyboardEnhancementFlags
     );
-    ratatui::restore();
+    let _ = ratatui::try_restore();
 }
 
 /// How long one gesture is swallowed before the page is drawn anyway.
@@ -2033,10 +2059,11 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
     }
     catch_hang_ups();
     let watcher = tx.clone();
+    // It keeps ringing until the loop is gone: a wait elsewhere (`hand_over`)
+    // can take one ring and return to a loop that then blocks on `recv`.
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(100));
-        if hung_up() {
-            let _ = watcher.send(Arrival::HungUp);
+        if hung_up() && watcher.send(Arrival::HungUp).is_err() {
             break;
         }
     });

@@ -929,6 +929,15 @@ impl Editor {
                 let mut chars = each.chars();
                 chars.next().filter(|_| chars.next().is_none())
             };
+            // The count goes into what `.` replays, so `3r好` then `.` writes
+            // three again, as `3rx` then `.` does.
+            let mut replay: Vec<Key> = match self.operator_count {
+                Some(n) if n > 1 && self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                    n.to_string().chars().map(Key::Char).collect()
+                }
+                _ => Vec::new(),
+            };
+            replay.push(Key::Char('r'));
             self.edit_each(move |e| {
                 e.pending = Pending::None;
                 match single {
@@ -938,7 +947,7 @@ impl Editor {
             });
             self.pending = Pending::None;
             self.last_replacement = with;
-            self.last_edit_keys = vec![Key::Char('r')];
+            self.last_edit_keys = replay;
             self.edit_keys.clear();
             return;
         }

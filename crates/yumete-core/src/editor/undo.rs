@@ -24,8 +24,9 @@ impl Editor {
         // (2026-10-30, as helix and vim close a view): the file stays open with
         // its changes, since the other region may be showing it. They used to
         // close the file, or the whole editor with one file open, and `:q!`
-        // then threw the changes away.
-        if self.panel_focus().is_none() && self.other_pane().is_some() {
+        // then threw the changes away. From a focused sidebar they close the
+        // sidebar, as `:q` in vim's file-tree window does.
+        if self.panel_focus().is_some() || self.other_pane().is_some() {
             self.close_this_region();
             return Ok(CommandOutcome::Continue);
         }

@@ -347,6 +347,26 @@ impl Editor {
         };
     }
 
+    /// Write `n` as the count of the change `.` repeats, in place of the one
+    /// it was made with: after a register (`"a`), before the command.
+    pub(super) fn recount_the_last_edit(&mut self, n: usize) {
+        let keys = &self.last_edit_keys;
+        let lead = match keys.first() {
+            Some(Key::Char('"')) if keys.len() >= 2 => 2,
+            _ => 0,
+        };
+        let mut end = lead;
+        while let Some(Key::Char(c)) = keys.get(end) {
+            let first = end == lead;
+            if !c.is_ascii_digit() || (first && *c == '0') {
+                break;
+            }
+            end += 1;
+        }
+        let digits = n.to_string().chars().map(Key::Char).collect::<Vec<_>>();
+        self.last_edit_keys.splice(lead..end, digits);
+    }
+
     /// Replay the text typed during the last Insert session (Helix `.`).
     /// Do the last change again (`.`).
     ///
@@ -391,7 +411,12 @@ impl Editor {
         if self.pending == Pending::Replace && !self.last_replacement.is_empty() {
             self.pending = Pending::None;
             let text = self.last_replacement.clone();
-            self.replace_str(&text);
+            // One character takes the count back, as a typed one does.
+            let mut chars = text.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if self.key_preset == yumete_cjk::KeyPreset::Vim => self.replace_by_key(c),
+                _ => self.replace_str(&text),
+            }
         }
         self.repeating_edit = false;
     }
