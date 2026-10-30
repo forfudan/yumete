@@ -2493,8 +2493,8 @@ find = "注音 拼音 自動 自动 生成 標音 标音 逐詞 逐词 pinyin au
 [[message]]
 # : 命令選單裏 rare 那一項的説明(ruby.auto 組)
 key = "cmd.ruby.auto.rare"
-zht = "只注通用規範漢字表以外的那些字"
-zhs = "只注通用规范汉字表以外的那些字"
+zht = "只注陸、臺、港常用字表都沒有的字"
+zhs = "只注陆、台、港常用字表都没有的字"
 en = "annotate only the characters no everyday list carries: 通用規範漢字表, its traditional forms, Taiwan's and Hong Kong's"
 find = "生僻 冷僻 罕見 罕见 難字 难字 字集 通用規範 通用规范 rare"
 
@@ -11710,8 +11710,8 @@ en = "deleted a column"
 [[message]]
 # 空格 t p/P 之後：插入了一欄，{0} 個值
 key = "table.column-inserted"
-zht = "已插入一欄，{0} 個值"
-zhs = "已插入一栏，{0} 个值"
+zht = "插入了一欄({0} 格)"
+zhs = "插入了一栏({0} 格)"
 en = "a column put in with {0} values"
 
 [[message]]
