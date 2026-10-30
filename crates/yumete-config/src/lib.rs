@@ -197,7 +197,7 @@ pub struct EditorConfig {
     /// How many pages the horizontal page is cut into, side by side. 1 to 4.
     pub pages_horizontal: usize,
     /// Whether `yumete` with no file opens again what was open last time.
-    /// Off: a bare `yumete` is a blank page, and `yumete -c` is last time
+    /// Off: a bare `yumete` is a blank page, and `yumete -r` is last time
     /// (2026-09-17, 「打 ye 應該建一個新的文檔」).
     pub session: bool,
     /// Whether yumete keeps any memory of where it has been (2026-10-27):

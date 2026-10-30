@@ -368,7 +368,7 @@ pub fn buffer_end(rope: &Rope, _pos: usize) -> usize {
 pub enum Grain {
     /// `W` `B` `E`: split on whitespace and nothing else.
     Big,
-    /// `w` `b`: whatever the segmenter says.
+    /// `w` (and `b` `e` under the vim keymap): whatever the segmenter says.
     Word,
     /// `e`: one category at a time, with a 漢字 counting as a letter.
     Coarse,
