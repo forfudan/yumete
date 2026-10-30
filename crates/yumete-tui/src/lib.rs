@@ -13910,7 +13910,10 @@ fn status_count_of(editor: &Editor, config: &Config) -> String {
         _ => !editor.writes_code(),
     };
     match show.then(|| editor.live_count()).flatten() {
+        // English counts one word in the singular.
+        Some((Some(picked), 1)) => say!("ui.count-of-one", picked, 1),
         Some((Some(picked), whole)) => say!("ui.count-of", picked, whole),
+        Some((None, 1)) => say!("ui.count-one", 1),
         Some((None, whole)) => say!("ui.count", whole),
         None => String::new(),
     }

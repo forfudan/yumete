@@ -2788,9 +2788,9 @@ const SIDEBAR_PANELS: &[Word] = &[
 
 /// **`:info` 收的那五個詞**（#426）。界面上的標題是中文，這裏是打得出來的名字。
 ///
-/// Warning: **次序跟 [`crate::sidebar::Info::ALL`]**，也就是 `PageUp`/`PageDown`
-/// 翻過去的次序——選單上讀到的順序和按鍵走過的順序是同一個，纔不用記兩套。
-/// （從前這裏是半個字母序：四個排好了，`docs` 落在最後，兩套都不像。）
+/// The order follows [`crate::sidebar::Info::ALL`], so the menu lists the
+/// kinds in the order the panel shows them. (`PageUp`/`PageDown` in the panel
+/// scroll by a page; they do not step through the kinds.)
 const INFO_KINDS: &[Word] = &[
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },

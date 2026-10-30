@@ -1815,7 +1815,6 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
     let mut sink = std::io::stdout().lock();
     let mut found = 0usize;
     let mut incomplete = false;
-    let given_a_place = !where_.is_empty();
     // **分組是給人看的，管道裏仍是一行一條。** rg 自己就是這個規矩：接着終端機
     // 的時候檔名自成一行、底下只寫行列與正文，兩個檔之間空一行；一旦 stdout 不
     // 是終端機，每一行都要自己說得出自己是哪個檔的。
@@ -1854,9 +1853,13 @@ fn run_grep(pattern: &str, where_: &[String], g: &Grep) -> ExitCode {
         // Warning: **要在搜之前算好**（2026-10-03）：邊搜邊印，第一條命中來的時候
         // 路徑就得印得出來了。`search().root` 那時還沒填——它是走完纔填的，所以
         // `--project` 這一支自己先問一次 `project_root()`。
-        let root = match (g.project, given_a_place) {
-            (false, true) => at.clone(),
-            _ => editor.project_root(),
+        //
+        // Without `--project` the search runs from `at`, whether or not a place
+        // was named (2026-10-30: from a subdirectory with none named, hits were
+        // joined to the project root and printed as files that do not exist).
+        let root = match g.project {
+            false => at.clone(),
+            true => editor.project_root(),
         };
         // Warning: **讀的人半路走了不算出錯。** `ye --grep 霜 | head -2` 關掉管道那一頭，
         // 而 Rust 的 `println!` 遇上 EPIPE 是 **panic**——六千條命中的時候它當場吐

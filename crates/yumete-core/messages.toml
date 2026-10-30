@@ -6967,14 +6967,14 @@ en = "this build carries no 碼表"
 key = "ime.no-lone-shift"
 zht = "此終端機報不出單獨的 Shift，中/ABC 按 {0}(或 :yume on|abc)"
 zhs = "此终端报不出单独的 Shift，中/ABC 按 {0}(或 :yume on|abc)"
-en = "this terminal cannot report a lone Shift; {0} switches 中/ABC (or :yume on|abc)"
+en = "this terminal cannot report a lone Shift; {0} switches 中/ABC"
 
 [[message]]
 # 同上，而 language_key 關着，於是連備用鍵也没有
 key = "ime.no-lone-shift-off"
 zht = "此終端機報不出單獨的 Shift，中/ABC 只能用 :yume on|abc(language_key 可綁一個鍵)"
 zhs = "此终端报不出单独的 Shift，中/ABC 只能用 :yume on|abc(language_key 可绑一个键)"
-en = "this terminal cannot report a lone Shift; 中/ABC is :yume on|abc (bind language_key)"
+en = "this terminal cannot report a lone Shift; bind [editor] language_key to switch 中/ABC"
 
 [[message]]
 # 要換的方案系統裏没有碼表
@@ -10785,21 +10785,21 @@ en = "l or space goes into the settings"
 key = "set.pick.ambiguous-width.auto"
 zht = "問終端"
 zhs = "问终端"
-en = "ambiguous width.auto"
+en = "ask the terminal"
 
 [[message]]
 # 設置：歧义宽度——一格
 key = "set.pick.ambiguous-width.narrow"
 zht = "一格"
 zhs = "一格"
-en = "ambiguous width.narrow"
+en = "one cell"
 
 [[message]]
 # 設置：歧义宽度——两格
 key = "set.pick.ambiguous-width.wide"
 zht = "兩格"
 zhs = "两格"
-en = "ambiguous width.wide"
+en = "two cells"
 
 [[message]]
 # 設置面板：自動配對 basic(ASCII 的括號與引號，同 helix)
@@ -10827,63 +10827,63 @@ en = "off"
 key = "set.pick.display.bottom"
 zht = "底行"
 zhs = "底行"
-en = "display.bottom"
+en = "bottom line"
 
 [[message]]
 # 設置：候选怎么画——候选框
 key = "set.pick.display.box"
 zht = "候選框"
 zhs = "候选框"
-en = "display.box"
+en = "box"
 
 [[message]]
 # 設置：候选怎么画——行中
 key = "set.pick.display.inline"
 zht = "行中"
 zhs = "行中"
-en = "display.inline"
+en = "in the line"
 
 [[message]]
 # 設置：纸面——自己画纸
 key = "set.pick.ground.paint"
 zht = "自己畫紙"
 zhs = "自己画纸"
-en = "ground.paint"
+en = "paint the paper"
 
 [[message]]
 # 設置：纸面——还给终端
 key = "set.pick.ground.terminal"
 zht = "還給終端"
 zhs = "还给终端"
-en = "ground.terminal"
+en = "the terminal's own"
 
 [[message]]
 # 設置：段首记号——换颜色
 key = "set.pick.indent-hint.color"
 zht = "換顔色"
 zhs = "换颜色"
-en = "indent hint.color"
+en = "colour"
 
 [[message]]
 # 設置：段首记号——不画
 key = "set.pick.indent-hint.none"
 zht = "不畫"
 zhs = "不画"
-en = "indent hint.none"
+en = "none"
 
 [[message]]
 # 設置：段首记号——画符号
 key = "set.pick.indent-hint.symbol"
 zht = "畫符號"
 zhs = "画符号"
-en = "indent hint.symbol"
+en = "a mark"
 
 [[message]]
 # 設置：正在打的那一段——正文里写编码
 key = "set.pick.inline-preedit.composition"
 zht = "正文裏寫編碼"
 zhs = "正文里写编码"
-en = "preedit.code"
+en = "the code in the text"
 
 [[message]]
 # 設置：正在打的那一段——候选栏里
@@ -10897,7 +10897,7 @@ en = "inline-preedit.off"
 key = "set.pick.inline-preedit.preview"
 zht = "正文裏寫首選"
 zhs = "正文里写首选"
-en = "preedit.top"
+en = "the first candidate in the text"
 
 [[message]]
 # 設置面板：界面語言 auto
@@ -10911,63 +10911,63 @@ en = "the system's"
 key = "set.pick.language.en"
 zht = "English"
 zhs = "English"
-en = "language.en"
+en = "English"
 
 [[message]]
 # 設置：界面语言——繁体
 key = "set.pick.language.zh"
 zht = "繁體"
 zhs = "繁体"
-en = "language.zh"
+en = "繁體"
 
 [[message]]
 # 設置：界面语言——简体
 key = "set.pick.language.zhs"
 zht = "簡體"
 zhs = "简体"
-en = "language.zhs"
+en = "简体"
 
 [[message]]
 # 設置：行号——绝对
 key = "set.pick.line-numbers.absolute"
 zht = "絕對"
 zhs = "绝对"
-en = "line numbers.absolute"
+en = "absolute"
 
 [[message]]
 # 設置：行号——不画
 key = "set.pick.line-numbers.none"
 zht = "不畫"
 zhs = "不画"
-en = "line numbers.none"
+en = "none"
 
 [[message]]
 # 設置：行号——相对
 key = "set.pick.line-numbers.relative"
 zht = "相對"
 zhs = "相对"
-en = "line numbers.relative"
+en = "relative"
 
 [[message]]
 # 設置：深色浅色——问终端
 key = "set.pick.mode.auto"
 zht = "問終端"
 zhs = "问终端"
-en = "mode.auto"
+en = "ask the terminal"
 
 [[message]]
 # 設置：深色浅色——深色
 key = "set.pick.mode.dark"
 zht = "深色"
 zhs = "深色"
-en = "mode.dark"
+en = "dark"
 
 [[message]]
 # 設置：深色浅色——浅色
 key = "set.pick.mode.light"
 zht = "淺色"
 zhs = "浅色"
-en = "mode.light"
+en = "light"
 
 [[message]]
 # 設置：鍵位那一套——helix
@@ -10988,14 +10988,14 @@ en = "vim"
 key = "set.pick.status-bar.raised"
 zht = "往墨抬一階"
 zhs = "往墨抬一阶"
-en = "status bar.raised"
+en = "raised"
 
 [[message]]
 # 設置：状态栏的底——比纸更沉
 key = "set.pick.status-bar.sunken"
 zht = "比紙更沉"
 zhs = "比纸更沉"
-en = "status bar.sunken"
+en = "sunken"
 
 [[message]]
 # 設置面板：狀態欄字數 all
@@ -11023,42 +11023,42 @@ en = "text files"
 key = "set.pick.system.auto"
 zht = "自動"
 zhs = "自动"
-en = "system.auto"
+en = "auto"
 
 [[message]]
 # 設置：让开系统输入法——不管它
 key = "set.pick.system.keep"
 zht = "不管它"
 zhs = "不管它"
-en = "system.keep"
+en = "leave it"
 
 [[message]]
 # 設置：Tab 打什么——空格
 key = "set.pick.tab-inserts.spaces"
 zht = "空格"
 zhs = "空格"
-en = "tab inserts.spaces"
+en = "spaces"
 
 [[message]]
 # 設置：Tab 打什么——制表符
 key = "set.pick.tab-inserts.tab"
 zht = "製表符"
 zhs = "制表符"
-en = "tab inserts.tab"
+en = "a tab"
 
 [[message]]
 # 設置：表格的栏线——靠颜色分
 key = "set.pick.table-rules.color"
 zht = "靠顔色分"
 zhs = "靠颜色分"
-en = "table rules.color"
+en = "colour"
 
 [[message]]
 # 設置：表格的栏线——只有实线
 key = "set.pick.table-rules.line"
 zht = "只有實線"
 zhs = "只有实线"
-en = "table rules.line"
+en = "lines"
 
 [[message]]
 # 設置：表格的栏线——实线加虚线
@@ -11079,28 +11079,28 @@ en = "table rules.line double"
 key = "set.pick.table-rules.off"
 zht = "不畫"
 zhs = "不画"
-en = "table rules.off"
+en = "none"
 
 [[message]]
 # 設置：上方分页条——总是画
 key = "set.pick.tabs.always"
 zht = "總是畫"
 zhs = "总是画"
-en = "tabs.always"
+en = "always"
 
 [[message]]
 # 設置：上方分页条——有两个才画
 key = "set.pick.tabs.auto"
 zht = "有兩個才畫"
 zhs = "有两个才画"
-en = "tabs.auto"
+en = "two or more"
 
 [[message]]
 # 設置：上方分页条——不画
 key = "set.pick.tabs.never"
 zht = "不畫"
 zhs = "不画"
-en = "tabs.never"
+en = "never"
 
 [[message]]
 # 設置：竪排的 hjkl——邏輯那一種
@@ -11121,7 +11121,7 @@ en = "visual: j k down/up, h l left/right"
 key = "set.pick.word-level.balanced"
 zht = "適中"
 zhs = "适中"
-en = "word level.balanced"
+en = "balanced"
 
 [[message]]
 # setting: word segmentation granularity - loose
@@ -11129,7 +11129,7 @@ en = "word level.balanced"
 key = "set.pick.word-level.full"
 zht = "寬松"
 zhs = "宽松"
-en = "word level.full"
+en = "loose"
 
 [[message]]
 # setting: word segmentation granularity - strict
@@ -11137,42 +11137,42 @@ en = "word level.full"
 key = "set.pick.word-level.strict"
 zht = "嚴格"
 zhs = "严格"
-en = "word level.strict"
+en = "strict"
 
 [[message]]
 # setting: how to show word segmentation - color
 key = "set.pick.word-mark.color"
 zht = "不同顔色"
 zhs = "不同颜色"
-en = "word mark.color"
+en = "colour"
 
 [[message]]
 # setting: how to show word segmentation - brightness
 key = "set.pick.word-mark.ink"
 zht = "不同明度"
 zhs = "不同明度"
-en = "word mark.ink"
+en = "brightness"
 
 [[message]]
 # setting: how to show word segmentation - underline
 key = "set.pick.word-mark.line"
 zht = "下劃線"
 zhs = "下划线"
-en = "word mark.line"
+en = "underline"
 
 [[message]]
 # 設置面板：分詞標記不畫
 key = "set.pick.word-mark.off"
 zht = "不畫"
 zhs = "不画"
-en = "word mark.off"
+en = "none"
 
 [[message]]
 # setting: how to show word segmentation - tint
 key = "set.pick.word-mark.tint"
 zht = "不同底色"
 zhs = "不同底色"
-en = "word mark.tint"
+en = "tint"
 
 [[message]]
 # 設置面板：存好了({0} ＝ 檔名)
@@ -12013,7 +12013,7 @@ en = "the cursor is not in a | table"
 key = "table.not-in-a-table"
 zht = "不是表格——先 :table-render full"
 zhs = "不是表格——先 :table-render full"
-en = "not a table — :table-render full first"
+en = "not a table — :table-render basic first"
 
 [[message]]
 # 在表格裏往格子外面打字(牆上、補空裏)
@@ -12236,7 +12236,7 @@ en = "a schema is for a file that is nothing but a table — this one lives insi
 key = "table.schema-note"
 zht = "這份 schema 説的就是眼下看到的樣子。改完保存，:table-render off 再 :table-render full 就照新的讀。"
 zhs = "这份 schema 説的就是眼下看到的样子。改完保存，:table-render off 再 :table-render full 就照新的读。"
-en = "this schema says what the grid is already doing. Edit, save, then :table-render off and :table-render full again."
+en = "this schema says what the grid is already doing. Edit, save, then :table-render off and :table-render basic again."
 
 [[message]]
 # 進表格模式時，schema 檔有毛病
@@ -12493,6 +12493,20 @@ key = "ui.count-of"
 zht = "{0} / {1} 字"
 zhs = "{0} / {1} 字"
 en = "{0} / {1} words"
+
+[[message]]
+# 狀態欄的字數：選區 / 全文，全文只有一個詞的時候（英文要單數）
+key = "ui.count-of-one"
+zht = "{0} / {1} 字"
+zhs = "{0} / {1} 字"
+en = "{0} / {1} word"
+
+[[message]]
+# 狀態欄的字數：全文只有一個詞（英文要單數）
+key = "ui.count-one"
+zht = "{0} 字"
+zhs = "{0} 字"
+en = "{0} word"
 
 [[message]]
 # 空格 i：光標不在任何一行數據上(2026-09-30 報的：非表格的地方按下去，
