@@ -12259,13 +12259,6 @@ zhs = "分隔行是画出来的——用 t < = > 改对齐"
 en = "the rule row is drawn, not written — t < = > sets the alignment"
 
 [[message]]
-# 寫不下那份新的 schema
-key = "table.schema-cannot-write"
-zht = "寫不下「{0}」：{1}"
-zhs = "写不下「{0}」：{1}"
-en = "cannot write '{0}': {1}"
-
-[[message]]
 # 按行名跳，schema 没説哪一欄是行名
 key = "table.schema-has-no-key-column"
 zht = "這張表没説哪一欄是行名(schema 的 key)"
