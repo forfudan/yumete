@@ -12677,6 +12677,26 @@ zhs = "纵 {0}, 横 {1}"
 en = "Zong {0}, Heng {1}"
 
 [[message]]
+# 提示行：`A-k` 只留匹配的
+key = "ui.prompt-keep"
+zht = "只留/"
+zhs = "只留/"
+en = "keep:"
+
+[[message]]
+# 提示行：`A-K` 去掉匹配的
+key = "ui.prompt-remove"
+zht = "去掉/"
+zhs = "去掉/"
+en = "remove:"
+
+[[message]]
+# 提示行：`:ruby` 改讀音
+key = "ui.prompt-ruby"
+zht = "注"
+zhs = "注"
+en = "ruby:"
+[[message]]
 # `/` 搜索那一行的提示詞(helix 寫 search:)
 key = "ui.prompt-search"
 zht = "搜索: "
@@ -12705,11 +12725,25 @@ zhs = "通配搜索: "
 en = "wide search: "
 
 [[message]]
+# 提示行：`s` 選出匹配
+key = "ui.prompt-select"
+zht = "選出/"
+zhs = "选出/"
+en = "select:"
+
+[[message]]
 # 命令行：行首是 ! 或 :sh、:pipe 那一族時，畫在打的字前面的標籤
 key = "ui.prompt-shell"
 zht = "Shell: "
 zhs = "Shell: "
 en = "Shell: "
+
+[[message]]
+# 提示行：`S` 按匹配切開
+key = "ui.prompt-split"
+zht = "切開/"
+zhs = "切开/"
+en = "split:"
 
 [[message]]
 # 狀態欄：這一份是只讀的(:readonly on，或磁盤上就不許寫)
@@ -13423,5 +13457,4 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
-
 

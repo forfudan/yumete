@@ -796,10 +796,38 @@ pub fn sniff_among(lines: &[String], guesses: &[char]) -> Option<char> {
         return None;
     }
     guesses.iter().copied().find(|&c| {
-        let mut counts = rows.iter().map(|l| l.matches(c).count());
+        let counts = outside_quotes(&rows, c);
+        let mut counts = counts.into_iter();
         let first = counts.next().unwrap_or(0);
         first > 0 && counts.all(|n| n == first)
     })
+}
+
+/// **How many times `c` cuts each record**, counting only outside double
+/// quotes, a quoted field running over lines making one record (2026-10-30).
+/// Counted raw, `A,"x, y"` held two commas against its neighbours' one, and a
+/// real CSV with one quoted comma was "no delimiter in sight".
+fn outside_quotes(rows: &[&String], c: char) -> Vec<usize> {
+    let mut counts = Vec::new();
+    let mut quoted = false;
+    let mut n = 0;
+    for row in rows {
+        for ch in row.chars() {
+            match ch {
+                '"' => quoted = !quoted,
+                ch if ch == c && !quoted => n += 1,
+                _ => {}
+            }
+        }
+        if !quoted {
+            counts.push(n);
+            n = 0;
+        }
+    }
+    if quoted {
+        counts.push(n);
+    }
+    counts
 }
 
 /// **一張表的寫法**：`|` 表格，或者某個分隔符分開的文本（2026-10-02 定）。
@@ -979,6 +1007,13 @@ struct RawLink {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A quoted comma is not a delimiter (2026-10-30).
+    #[test]
+    fn a_quoted_comma_does_not_count_against_the_grid() {
+        let lines: Vec<String> = ["name,city", "A,\"x, y\"", "B,\"line1", "line2\""].map(String::from).to_vec();
+        assert_eq!(sniff(&lines), Some(','));
+    }
 
     const DIVISION: &str = r#"
 [table]

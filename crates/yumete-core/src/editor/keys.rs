@@ -3137,9 +3137,12 @@ impl Editor {
             // about terminal. Just be aligned」——鍵位對齊優先（§5.94）。
             // **`A-J`：併行，並且選中補出來的那一格**（2026-10-06，helix 的
             // `join_selections_space`）。接縫是算出來的，選中它纔看得見算成了什麼。
+            // A selection over several lines joins all of them, as `J` does
+            // (2026-10-30: it joined the first pair only).
             Key::Alt('J') => {
+                let n = self.join_count(operator_count);
                 self.select_the_seam = true;
-                self.repeat_writing(count, |e| e.join_lines());
+                self.repeat_writing(n, |e| e.join_lines());
                 self.select_the_seam = false;
             }
             Key::Ctrl('s') => {

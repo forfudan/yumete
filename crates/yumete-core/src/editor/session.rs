@@ -126,6 +126,15 @@ impl Editor {
             }
         }
         self.last_swap = Some(now);
+        // **The session is written when the open files change**, not only on
+        // a clean exit (2026-10-30: after a crash or a kill, `-r` reopened
+        // nothing, or the list from the run before).
+        let names: Vec<std::path::PathBuf> =
+            self.buffers.iter().filter_map(|b| b.path().map(std::path::Path::to_path_buf)).collect();
+        if names != self.session_names {
+            self.session_names = names;
+            self.save_session();
+        }
         let mut failed = None;
         if self.buffers[self.current].draft_is_stale() {
             if let Err(err) = self.buffers[self.current].write_swap() {
