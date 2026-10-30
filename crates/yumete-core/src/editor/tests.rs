@@ -32761,3 +32761,23 @@ fn what_the_morning_decided() {
     }
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A GFM table without outer pipes is read, coloured and lined up** (2026-10-30,
+/// as decided): `Space t F` writes the pipes in.
+#[test]
+fn a_table_without_outer_pipes_is_a_table() {
+    let mut ed = markdown("姓 | 名\n--- | ---\n李 | 白\n\n一句话 | 不是表格\n");
+    assert!(matches!(ed.block_of(0), crate::markdown::Block::Table { .. }), "{:?}", ed.block_of(0));
+    assert!(matches!(ed.block_of(2), crate::markdown::Block::Table { .. }));
+    assert!(!matches!(ed.block_of(4), crate::markdown::Block::Table { .. }), "a bar in prose");
+    assert!(ed.md_row_at(2));
+    assert!(!ed.md_row_at(4));
+    ed.goto_line(1);
+    assert!(ed.enter_table(), "{}", ed.status());
+    press(&mut ed, " tF");
+    let text = ed.current_buffer().text().to_string();
+    for line in text.lines().take(3) {
+        assert!(line.starts_with('|') && line.ends_with('|'), "{line:?}");
+    }
+    assert_eq!(crate::mdtable::split(text.lines().next().unwrap()), ["姓", "名"]);
+}

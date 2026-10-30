@@ -221,6 +221,41 @@ impl Editor {
         // must not turn the rest of the chapter into somebody's side of an
         // argument. So the conflicts are assembled first — which throws the
         // unclosed ones away — and only then do their lines take the label.
+        // **A table written without its outer pipes** (GFM; 2026-10-30, as
+        // decided): the scanner reads one line's opening and cannot see the
+        // rule row under a bare header, so those tables are found here, after
+        // the scan, where both lines are at hand. A bar in a sentence stays
+        // prose: only a rule row on the next line makes a table of it.
+        if markdown_syntax {
+            let text_of = |i: usize| -> Option<String> {
+                (i < lines).then(|| rope.line(i)).filter(|l| l.chunks().any(|c| c.contains('|'))).map(|l| l.to_string())
+            };
+            let rowish = |i: usize| {
+                text_of(i).is_some_and(|l| crate::mdtable::is_row(&l) || crate::mdtable::has_bar(&l))
+            };
+            let mut i = 0;
+            while i < blocks.len() {
+                let bare_header = matches!(blocks[i], crate::markdown::Block::Prose)
+                    && rowish(i)
+                    && text_of(i + 1).is_some_and(|l| crate::mdtable::rule_of(&l).is_some());
+                if !bare_header {
+                    i += 1;
+                    continue;
+                }
+                let mut nth = 0;
+                while i < blocks.len()
+                    && rowish(i)
+                    && matches!(
+                        blocks[i],
+                        crate::markdown::Block::Prose | crate::markdown::Block::Table { .. }
+                    )
+                {
+                    blocks[i] = crate::markdown::Block::Table { nth, inside: None };
+                    nth += 1;
+                    i += 1;
+                }
+            }
+        }
         let conflicts = crate::conflict::assemble(marks);
         for found in &conflicts {
             for line in found.lines() {

@@ -287,7 +287,8 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
             out.push(Block::Quote(parse(&inner, source, notes)));
             continue;
         }
-        let table = match markdown && crate::mdtable::is_row(line) {
+        let rowish = |l: &str| crate::mdtable::is_row(l) || crate::mdtable::has_bar(l);
+        let table = match markdown && rowish(line) {
             true => lines.get(i + 1).and_then(|l| crate::mdtable::rule_of(l)),
             false => None,
         };
@@ -296,7 +297,7 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
             let head = crate::mdtable::split(line);
             i += 2;
             let mut rows = Vec::new();
-            while i < lines.len() && crate::mdtable::is_row(&lines[i]) {
+            while i < lines.len() && rowish(&lines[i]) {
                 rows.push(crate::mdtable::split(&lines[i]));
                 i += 1;
             }
