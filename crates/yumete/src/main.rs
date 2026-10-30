@@ -2207,7 +2207,7 @@ fn print_help() {
         .join(" ");
     println!(
         "yumete {VERSION} — a CJK-aware, Helix-like terminal editor with a built-in Yume IME.
-Documentation: https://zhuyuhao.com/yumete-docs/
+Documentation: https://yumete.shurufa.app/
 
 USAGE:
     yumete [FILE]...
