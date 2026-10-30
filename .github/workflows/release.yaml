@@ -211,6 +211,14 @@ jobs:
           path: yume
           ssh-key: ${{ secrets.YUME_DEPLOY_KEY }}
 
+      # The docs site, as `test.yaml` has it: the tests that hold the
+      # documents to the editor read its pages, and the 0.15.0 release build
+      # failed on every platform for want of it (2026-10-30). Public, no key.
+      - uses: actions/checkout@v4
+        with:
+          repository: forfudan/yumete-docs
+          path: yumete-docs
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
