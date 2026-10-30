@@ -27,7 +27,7 @@ It installs as `yumete`, and as `ye` for the one you type.
 ## Documentation
 
 **<https://yumete.shurufa.app/>**, also as a
-[book](https://yumete.shurufa.app/book/). What changed in each release is
+[book](https://yumete.shurufa.app/). What changed in each release is
 in [CHANGELOG.md](CHANGELOG.md).
 
 ## Building from source
