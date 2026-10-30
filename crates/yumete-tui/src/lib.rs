@@ -983,6 +983,8 @@ pub fn run(
             // **挑選器的名單也是長出來的**（2026-10-09）：`空格 f` 的走查跑在旁邊，
             // 每一幀收一批，所以面板立刻就開得出來，不再凍最多五秒。
             editor.collect_picker_items();
+            // 雙鏈: the project's links, read on a thread, land here.
+            editor.collect_links_index();
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
@@ -7254,6 +7256,9 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
             }
             Some(Source::Again { .. }) => say!("wiki.again", &include.named),
             Some(Source::TooMany { .. }) => say!("wiki.too-many", &include.named),
+            Some(Source::Folder { files, entries, .. }) => {
+                say!("wiki.folder", include.named.trim_end_matches('/'), files.len(), entries)
+            }
         };
         return panel::draw(frame, config, area, bottom, caret, vertical, &panel::Panel {
             stand: panel::Stand::Corner,
@@ -9103,6 +9108,8 @@ fn draw_sidebar(
                 };
                 format!("{mark}{}", row.name)
             }
+            // The links panel keeps its marks and indent inside the name.
+            View::Links => row.name.clone(),
             // Handled above: they fill no rows.
             View::Search | View::Info => row.name.clone(),
         };
@@ -12229,9 +12236,23 @@ fn draw_horizontal(
         let wiki_color = editor.wiki_mark() == yumete_core::wiki::Mark::Color;
         if !wiki.is_empty() {
             let start_in_line = row.start - rope.line_to_char(row.line);
+            // **Inside `[[ ]]` the link wins** (2026-10-30): a file named like
+            // an entry is a link there, and the azure underline says so; the
+            // gold is for the name in running prose.
+            let linked: Vec<(usize, usize)> = match (&marked, show_markup) {
+                (Some((line, runs)), true) if *line == row.line => runs
+                    .iter()
+                    .filter(|r| matches!(r.kind, yumete_core::markdown::Kind::Link | yumete_core::markdown::Kind::WikiLink))
+                    .map(|r| (r.start.saturating_sub(start_in_line), r.end.saturating_sub(start_in_line)))
+                    .collect(),
+                _ => Vec::new(),
+            };
             for &(a, b) in &wiki {
                 let a = a.saturating_sub(start_in_line);
                 let b = b.saturating_sub(start_in_line).min(chars.len());
+                if linked.iter().any(|&(x, y)| a < y && x < b) {
+                    continue;
+                }
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
                     *style = match wiki_color {
                         true => style.fg(ink.gold()),

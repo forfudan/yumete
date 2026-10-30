@@ -2507,6 +2507,18 @@ pub struct Editor {
     /// apart from what autodetect found so that reloading one does not throw
     /// the other away.
     own_words: yumete_cjk::WordList,
+    /// 雙鏈 (2026-10-30): the project's `[[links]]`, read when first asked.
+    links: Option<crate::links::Index>,
+    /// The thread reading them, until it answers.
+    links_building: Option<std::sync::mpsc::Receiver<crate::links::Index>>,
+    /// Which face the links panel shows.
+    links_look: crate::links::Look,
+    /// The sections and neighbours folded away in it.
+    links_shut: std::collections::BTreeSet<String>,
+    /// What each row of the panel folds by, beside the rows themselves.
+    links_row_keys: Vec<Option<String>>,
+    /// Unlinked mentions last found: `(node, generation, hits)`.
+    links_mentions: RefCell<Option<(usize, u64, Vec<crate::links::Mention>)>>,
     /// 作品百科 (#287) — this book's wiki and the global one, as last read.
     wiki: crate::wiki::Wiki,
     /// How wiki names are marked on the page (§5.8.4).
@@ -3997,6 +4009,12 @@ impl Editor {
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             own_words: yumete_cjk::WordList::default(),
+            links: None,
+            links_building: None,
+            links_look: crate::links::Look::List,
+            links_shut: links::folded_at_first(),
+            links_row_keys: Vec::new(),
+            links_mentions: RefCell::default(),
             wiki: crate::wiki::Wiki::default(),
             wiki_mark: crate::wiki::Mark::Color,
             detected_words: yumete_cjk::WordList::default(),
@@ -5464,6 +5482,7 @@ mod jumps;
 mod seek;
 mod keys;
 mod labels;
+mod links;
 mod matching;
 mod memo;
 mod modes;

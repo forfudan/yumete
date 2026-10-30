@@ -36,6 +36,7 @@ pub mod export;
 pub mod glyphs;
 pub mod input;
 pub mod markdown;
+pub mod links;
 pub mod lookfor;
 pub mod lsp;
 pub mod messages;

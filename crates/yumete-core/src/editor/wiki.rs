@@ -53,6 +53,7 @@ impl Editor {
     /// any of them reads the whole graph again.
     pub(super) fn is_wiki_file(&self, path: &Path) -> bool {
         self.wiki.came_from(path)
+            || self.wiki.in_a_folder(path)
             || (path.file_name().is_some_and(|n| n == WIKI_MD)
                 && path.parent().is_some_and(|d| d.file_name().is_some_and(|n| n == ".yumete")))
     }
@@ -134,6 +135,9 @@ impl Editor {
                 Source::Refused { named, from } => say!("wiki.refused", named, shown(from)),
                 Source::Again { path } => say!("wiki.again", shown(path)),
                 Source::TooMany { named } => say!("wiki.too-many", named),
+                Source::Folder { path, files, entries } => {
+                    say!("wiki.folder", shown(path), files.len(), entries)
+                }
             };
             out.push_str(&format!("- {line}\n"));
         }
@@ -652,6 +656,7 @@ impl Editor {
             crate::wiki::Source::Again { path: p } => same(p) || p == &path,
             crate::wiki::Source::Refused { named: n, .. } => *n == named,
             crate::wiki::Source::TooMany { named: n } => *n == named,
+            crate::wiki::Source::Folder { path: p, .. } => same(p),
         });
         Some(WikiInclude { named, path, state: state.cloned() })
     }

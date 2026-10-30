@@ -11,7 +11,13 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Links between files**, Obsidian's shape. `[[name]]` is resolved across the whole project, nearest first, and `[[` completes from the whole project; `gd` follows, `gr` lists what links back. `:links` opens a panel on the left with two looks (`v` flips them): a list of linked-from, links-to, pages not there and unlinked mentions, or the file among its neighbours with a second hop that folds. `:links-export` writes the whole graph to `.yumete/graph.html` and opens it; `:links-reindex` reads the project again. Inside `[[ ]]` the link's colour wins over a wiki name's gold.
+- **A wiki can be a folder**, one file per entry: `.yumete/wiki/` is read when present, a `[yumete] 百科/` line or `wiki: 百科/` in `wiki.md`'s front matter names another, and `../` names the project itself so every file name is an entry. Sub-folders group, a file's headings are its sub-entries, and `aliases:` in its front matter adds names.
 - **`ye --export html|typst|csv|tsv|pdf FILE…`** writes a file out from the command line, beside it with the new extension or at `--out PATH`, printing the path written; an existing file is written over. `pdf` compiles through the `typst` compiler on the PATH: a `.typ` as it is, Markdown through the editor's own Typst export.
+
+### Fixed
+
+- A counted `J` from the line break itself (`A Esc 4J`) joined once and stopped: the count's early stop judged by the buffer's length and the cursor, and a join that swaps a line break for a space moves neither. It now watches the buffer's revision.
 
 ## 0.15.0 · 2026-10-30
 
