@@ -32,7 +32,7 @@ impl Units {
             self.total += 1;
             self.in_word = false;
             self.joining = false;
-        } else if self.in_word && yumete_cjk::char_width(c) == 0 && !c.is_whitespace() {
+        } else if self.in_word && is_combining(c) {
             // A combining mark belongs to the letter before it: `café` written
             // with a separate accent, or Hindi's vowel signs, is one word.
             self.joining = false;
@@ -69,6 +69,15 @@ fn east_asian(c: char) -> bool {
         || matches!(c as u32,
             0x3041..=0x309F | 0x30A0..=0x30FF | 0x31F0..=0x31FF | 0xFF66..=0xFF9D
             | 0xAC00..=0xD7A3)
+}
+
+
+/// A combining mark: zero-width and not a format character. U+200B, U+2060
+/// and U+FEFF are zero-width too, and they separate words (2026-10-30).
+fn is_combining(c: char) -> bool {
+    yumete_cjk::char_width(c) == 0
+        && !c.is_whitespace()
+        && !matches!(c, '\u{200B}'..='\u{200F}' | '\u{2060}'..='\u{206F}' | '\u{FEFF}' | '\u{00AD}')
 }
 
 #[cfg(test)]

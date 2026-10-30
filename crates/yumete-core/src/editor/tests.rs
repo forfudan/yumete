@@ -32231,6 +32231,10 @@ fn vim_operators_take_percent_plus_minus_and_enter() {
     let mut ed = typed_vim("a (b c) d\n");
     press(&mut ed, "lld%");
     assert_eq!(ed.current_buffer().rope().to_string(), "a  d\n");
+    // The partner behind the cursor: from it to the cursor, nothing further.
+    let mut ed = typed_vim("a(b\nx)y\n");
+    press(&mut ed, "jd%");
+    assert_eq!(ed.current_buffer().rope().to_string(), "a)y\n");
     // And `%` itself, measured the same way; helix's `mm` does not move.
     let mut ed = typed_vim("call(foo, \"bar\") end\n");
     press(&mut ed, "%iZ");
@@ -32526,4 +32530,42 @@ fn alt_j_joins_every_line_of_the_selection() {
     press(&mut ed, "%");
     ed.on_key(Key::Alt('J'));
     assert_eq!(ed.current_buffer().rope().to_string(), "foo bar baz qux quux end\n");
+}
+
+/// **Visual `>`/`<`: the cursor keeps its own column on the first line, and
+/// `.` repeats the indent** (2026-10-30, nvim with `set sw=4 et`).
+#[test]
+fn vim_visual_indent_keeps_the_column_and_repeats() {
+    let mut ed = typed_vim("  ab cd\n  ef gh\nx\n");
+    press(&mut ed, "lllVj<iZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "ab Zcd\nef gh\nx\n");
+    let mut ed = typed_vim("a\nb\nc\nd\n");
+    press(&mut ed, "V>.jiZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "        a\nZb\nc\nd\n");
+}
+
+
+
+/// **Round-three regressions** (2026-10-30), each against nvim: a charwise
+/// paste over lines leaves the cursor on its first character, `r<Enter>`
+/// keeps a CRLF file CRLF, and a zero-width space still separates words.
+#[test]
+fn what_round_three_found_in_tonights_keys() {
+    let mut ed = typed_vim("ab\ncd\nef\n");
+    press(&mut ed, "vjyG0PiZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "ab\ncd\nZab\ncef\n");
+
+    // A file read from disk knows its line ending.
+    let path = tmp().join(format!("yumete-crlf-r-{}.txt", std::process::id()));
+    std::fs::write(&path, "ab\r\ncd\r\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&path).unwrap();
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "r");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().rope().to_string(), "\r\nb\r\ncd\r\n");
+    let _ = std::fs::remove_file(&path);
+
+    assert_eq!(crate::units::units("foo\u{200B}bar"), 2);
+    assert_eq!(crate::units::units("cafe\u{301} re\u{301}sume\u{301}"), 2);
 }

@@ -550,11 +550,14 @@ impl Editor {
             end = next;
         }
         if c == '\n' {
+            // The file's own line ending: a CRLF file gets `\r\n`.
+            let ending = self.current_buffer().ending().to_string();
             let stop = motion::next_grapheme(rope, end);
             self.snapshot();
-            if self.overwrite(head, stop, "\n") {
-                self.sel.set_anchor(head + 1);
-                self.sel.set_head(head + 1);
+            if self.overwrite(head, stop, &ending) {
+                let after = head + ending.chars().count();
+                self.sel.set_anchor(after);
+                self.sel.set_head(after);
                 self.clamp_cursor();
             }
             return;
@@ -585,12 +588,15 @@ impl Editor {
         // got back was however many code points happened to be inside it —
         // and NFD Japanese and emoji are ordinary in a mixed manuscript.
         let slice = self.current_buffer().rope().slice(start..end).to_string();
+        // `r<Enter>` writes the file's own line ending (2026-10-30: LF in CRLF).
+        let ending = self.current_buffer().ending().to_string();
         let text: String = yumete_cjk::graphemes(&slice)
             .map(|had| match had.starts_with(['\n', '\r']) {
                 // A line ending is not a character anybody meant to write
                 // over: `x` selects a line including its newline, and `x r Z`
                 // used to run the line into the next one.
                 true => had.to_string(),
+                false if c == '\n' => ending.clone(),
                 false => c.to_string(),
             })
             .collect();

@@ -922,9 +922,19 @@ impl Editor {
         if self.pending == Pending::Replace {
             let with = text.to_string();
             let each = with.clone();
+            // One character goes the way a typed one does, so the vim rules —
+            // a count writes over that many, Visual `r` ends Visual — answer
+            // the same for 好 as for x (2026-10-30).
+            let single = {
+                let mut chars = each.chars();
+                chars.next().filter(|_| chars.next().is_none())
+            };
             self.edit_each(move |e| {
                 e.pending = Pending::None;
-                e.replace_str(&each);
+                match single {
+                    Some(c) if e.key_preset == yumete_cjk::KeyPreset::Vim => e.replace_by_key(c),
+                    _ => e.replace_str(&each),
+                }
             });
             self.pending = Pending::None;
             self.last_replacement = with;
