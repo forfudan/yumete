@@ -228,7 +228,7 @@ Remember this one: every exercise below has a way back.
 
 On a long line: `gh` its start, `gl` its end, `gs` its first non-blank.
 The whole file: `gg` the top, `ge` the end, `30G` (or `g30g`) line 30.
-`J` `K` scroll half a page, `L` `H` a whole one.
+`C-d` `C-u` scroll half a page, `C-f` `C-b` a whole one.
 
 ────────────────────────────────────────────────────────────
 
@@ -315,7 +315,8 @@ Below is a table. Put the cursor in it and type `:table-render window`, Enter.
 
 `Tab` goes to the next cell. `i` types in a cell, `c` replaces it,
 `空格 t r` adds a row, `空格 t d` deletes one, `空格 t o` shows the source.
-`空格 t /` searches one column. `:table-render off` leaves.
+`空格 t /` finds what is selected, down the columns (`空格 t 3/` searches
+column 3 only). `:table-render off` leaves.
 
 (`空格` is the space bar: `空格 t r` is Space, then `t`, then `r`.)
 
@@ -330,7 +331,8 @@ What you are editing is copied beside it every few seconds; after a crash
 the next open asks whether to `:recover` it.
 
 `空格 f` finds a file, `空格 e` browses, `空格 b` switches files,
-`:sidebar explorer` opens the sidebar. `:count` says how long the file is.
+`:sidebar explorer` opens the sidebar. `:count` says how long the file is
+(or the selection, when there is one).
 
 ────────────────────────────────────────────────────────────
 

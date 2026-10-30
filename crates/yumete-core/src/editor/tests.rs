@@ -23113,7 +23113,8 @@ fn the_four_chords_insert_mode_used_to_swallow() {
             ed.on_key(Key::Char('i'));
             ed.on_key(Key::Alt('d'));
         }),
-        "beta\n"
+        // To the word's end, the space kept (helix 25.07.1, measured 2026-10-30).
+        " beta\n"
     );
     // Warning: **`A-d` 不跨行**，和插入態每一條編輯一樣。
     assert_eq!(
@@ -32461,4 +32462,40 @@ fn doubled_g_operators_spelled_with_their_g_take_the_line() {
     let mut ed = typed_vim("Foo\n");
     press(&mut ed, "g~g~");
     assert_eq!(ed.current_buffer().rope().to_string(), "fOO\n");
+}
+
+/// **vim's `gi` inserts where the last Insert stopped** (2026-10-30, nvim).
+#[test]
+fn vim_gi_resumes_the_last_insert() {
+    let mut ed = typed_vim("foo bar\nbaz\n");
+    press(&mut ed, "wiX");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jgiY");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().rope().to_string(), "foo XYbar\nbaz\n");
+}
+
+/// **vim's `a` on an empty line types on that line** (2026-10-30, nvim).
+#[test]
+fn vim_append_on_an_empty_line_stays_on_it() {
+    let mut ed = typed_vim("\nfoo\n");
+    press(&mut ed, "aZ");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().rope().to_string(), "Z\nfoo\n");
+}
+
+/// **helix's Insert `A-d` takes to the end of the word** (2026-10-30,
+/// measured): the spaces after it stay.
+#[test]
+fn insert_alt_d_takes_to_the_end_of_the_word() {
+    let mut ed = typed("foo   bar\n");
+    press(&mut ed, "ggi");
+    ed.on_key(Key::Alt('d'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().rope().to_string(), "   bar\n");
+    let mut ed = typed("foo   bar\n");
+    press(&mut ed, "gglllli");
+    ed.on_key(Key::Alt('d'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().rope().to_string(), "foo \n");
 }

@@ -2934,6 +2934,20 @@ impl Editor {
                 // 後面插入」，所以打進去的字和原來那一段一起成為新的選區。
                 let from = self.selection().0;
                 let pos = self.append_position();
+                // vim's `a` on an empty line types on that line (`:h a`,
+                // measured: `aZ` on an empty first line gives `Z`); helix's
+                // appends after the line break, on the next line.
+                let pos = match self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend {
+                    true => {
+                        let rope = self.current_buffer().rope();
+                        let head = self.sel.head();
+                        match head < rope.len_chars() && matches!(rope.char(head), '\n' | '\r') {
+                            true => head,
+                            false => pos,
+                        }
+                    }
+                    false => pos,
+                };
                 self.set_cursor(pos);
                 self.enter_insert();
                 // **`a` 出門的時候要退回那一個字上**（2026-10-09，照 helix）。
@@ -3689,6 +3703,16 @@ impl Editor {
             }
             Key::Char('N') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
                 self.repeat_search(!self.search_forward);
+                return;
+            }
+            // **vim's `gi`**: insert again where the last Insert stopped
+            // (`:h gi`, measured: `wiX<Esc>jgiY` gives `foo XYbar`).
+            Key::Char('i') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                if let Some(at) = self.last_insert_stop {
+                    let at = at.min(self.current_buffer().char_count());
+                    self.set_cursor(at);
+                    self.enter_insert();
+                }
                 return;
             }
             // 字形組在 vim 鍵位下的門（2026-10-06）：那一端的 `` ` `` 歸標記了。
