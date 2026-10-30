@@ -2838,11 +2838,19 @@ fn a_quoted_comma_is_not_a_wall() {
 /// 案（⌃⇧N）、`/` 注解（⌃⇧/）、`3`–`9` 一頁幾條（⌃⇧3–9）。
 #[test]
 fn the_yume_group_asks_the_front_end_what_each_key_means() {
+    // With a 碼表 loaded: the keys run the `:yume-…` commands, and some of
+    // those need one.
     let ask = |keys: &str| {
         let mut ed = typed("那年冬天。\n");
+        ed.set_ime_available(true);
         press(&mut ed, keys);
         ed.take_scheme_request()
     };
+    // Without one, they are refused the way their commands are.
+    let mut bare = typed("那年冬天。\n");
+    press(&mut bare, " zmu");
+    assert_eq!(bare.take_scheme_request(), None, "{}", bare.status());
+    assert!(!bare.status().is_empty(), "and it says why");
     for (keys, want) in [
         (" zz", "lang:toggle"),
         (" zm0", "commit:default"),
@@ -32187,4 +32195,47 @@ fn a_shell_line_quotes_names_and_counts_characters() {
     assert_eq!(line(&ed), "!");
     ed.on_key(Key::Esc);
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`"_` keeps nothing, `"+` is the system clipboard** (2026-10-30), as in
+/// helix and vim. `"_d` used to fill register `_` and `"+y` stayed inside
+/// the editor.
+#[test]
+fn the_black_hole_and_clipboard_registers_mean_what_they_mean_elsewhere() {
+    let mut ed = typed("alpha bravo\n");
+    press(&mut ed, "ggwy");
+    assert_eq!(ed.register, "alpha ");
+    press(&mut ed, "w\"_d");
+    assert_eq!(ed.current_buffer().rope().to_string(), "alpha \n", "`\"_d` still deletes");
+    assert!(!ed.registers.contains_key(&'_'), "`\"_` stores nothing");
+    assert_eq!(ed.register, "alpha ", "and the unnamed register is untouched");
+
+    let mut ed = typed("alpha bravo\n");
+    press(&mut ed, "ggw\"+y");
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some("alpha "));
+    press(&mut ed, "\"+p");
+    assert!(matches!(ed.take_clipboard_read(), Some(Pasting::AsIs { after: true })));
+    press(&mut ed, "\"*R");
+    assert!(matches!(ed.take_clipboard_read(), Some(Pasting::Replace)));
+}
+
+/// **`d%`, `d+`, `d-` and `d<Enter>` under the vim keymap** (2026-10-30),
+/// measured against nvim: they used to say they were not motions.
+#[test]
+fn vim_operators_take_percent_plus_minus_and_enter() {
+    // Off a bracket, `%` finds the first one along the line.
+    let mut ed = typed_vim("a (b c) d\n");
+    press(&mut ed, "ld%");
+    assert_eq!(ed.current_buffer().rope().to_string(), "a d\n");
+    let mut ed = typed_vim("a (b c) d\n");
+    press(&mut ed, "lld%");
+    assert_eq!(ed.current_buffer().rope().to_string(), "a  d\n");
+    for (keys, enter) in [("d+", false), ("jd-", false), ("d", true)] {
+        let mut ed = typed_vim("one\ntwo\nthree\nfour\n");
+        press(&mut ed, keys);
+        if enter {
+            ed.on_key(Key::Enter);
+        }
+        assert_eq!(ed.current_buffer().rope().to_string(), "three\nfour\n", "{keys}");
+    }
 }

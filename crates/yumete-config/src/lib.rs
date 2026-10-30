@@ -3264,8 +3264,9 @@ impl Config {
     if let Some(word) = raw.editor.language.as_deref() {
         // ⚠️ **這一張單子抄自 `yumete_core::messages::Language::parse`**，因為
         // 這個 crate 不依賴那一個。那邊加一種寫法，這裏要跟。
+        // `auto` is the factory value (follow the locale), so it is known too.
         let known = [
-            "zh", "zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体",
+            "auto", "zh", "zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体",
             "zhs", "zh-hans", "zh-cn", "简体", "簡體", "en", "english",
         ];
         let said = word.trim().to_ascii_lowercase();
@@ -5617,6 +5618,8 @@ mod a_typo_is_said_out_loud {
         for text in [
             "[theme]\nname = \"黑白\"\nmode = \"dark\"\n",
             "[editor]\nline_numbers = \"relative\"\nambiguous_width = \"wide\"\nlanguage = \"en\"\n",
+            // The factory value, written out by the settings panel.
+            "[editor]\nlanguage = \"auto\"\n",
         ] {
             assert!(said(text).is_empty(), "{text:?} 是對的，不該報：{:?}", said(text));
         }

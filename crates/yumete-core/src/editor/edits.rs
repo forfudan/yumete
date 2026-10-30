@@ -1295,6 +1295,13 @@ impl Editor {
             }
         };
         match self.take_register() {
+            // **`"_` keeps nothing and `"+` / `"*` are the system clipboard**
+            // (2026-10-30), as in helix and vim: `"_d` deletes without touching
+            // what `p` puts, and `"+y` copies out of the editor.
+            Some('_') => {}
+            Some('+' | '*') => {
+                self.clipboard_request = Some(text);
+            }
             Some(name) => {
                 let parts = self.registers.entry(name).or_default();
                 if fresh {
@@ -1469,6 +1476,13 @@ impl Editor {
     /// Paste the register after (`p`) or before (`P`) the selection, and select
     /// the pasted text. Does nothing when the register is empty.
     pub(super) fn paste(&mut self, after: bool) {
+        // `"+p` asks the front end for the system clipboard and pastes what
+        // comes back, the way `Space p` does.
+        if matches!(self.pending_register, Some('+' | '*')) {
+            self.pending_register = None;
+            self.clipboard_paste(after);
+            return;
+        }
         // Read before `recall`, which *takes* it: asking afterwards always
         // answered `None`, so the reader who named a register was told 「nothing
         // has been yanked」 about a register they had just named.

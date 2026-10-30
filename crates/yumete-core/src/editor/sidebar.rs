@@ -2388,6 +2388,11 @@ impl Editor {
         }
         let after = match how {
             Pasting::AsIs { after } => after,
+            Pasting::Replace => {
+                self.store(text.to_string());
+                self.replace_with_register();
+                return;
+            }
             Pasting::AsTable { to, from } => {
                 let Some(text) = self.as_a_table(text, to, from) else {
                     return;

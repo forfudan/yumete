@@ -336,10 +336,10 @@ pub const ALL: &[Action] = &[
     keys("prev_buffer", "action.prev-buffer", "gp"),
     keys("outline", "action.outline", " s"),
     keys("dictionary", "action.dictionary", " n"),
-    keys("next_region", "action.next-region", " s"),
+    keys("next_region", "action.next-region", " ww"),
     keys("search_panel", "action.search-panel", " /"),
-    keys("command_menu", "action.command-menu", "?"),
-    keys("paste_menu", "action.paste-menu", "\""),
+    keys("command_menu", "action.command-menu", " ?"),
+    keys("paste_menu", "action.paste-menu", " \""),
     keys("comment_line", "action.comment-line", " c"),
     keys("comment_block", "action.comment-block", " C"),
     keys("copy_to_clipboard", "action.copy-to-clipboard", " y"),
@@ -352,3 +352,22 @@ pub const ALL: &[Action] = &[
     command("quit", "action.quit", "quit"),
     command("count_progress", "action.count-progress", "count-progress"),
 ];
+
+#[cfg(test)]
+mod no_two_alike {
+    use super::*;
+
+    /// **No two actions press the same keys** (2026-10-30). `next_region` was
+    /// `" s"`, a copy of `outline`'s, so binding it opened the outline; a
+    /// second name for one press is a slip, never a feature.
+    #[test]
+    fn every_action_presses_its_own_keys() {
+        let mut seen: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        for action in ALL {
+            let How::Keys(k) = action.how else { continue };
+            if let Some(other) = seen.insert(k, action.name) {
+                panic!("`{}` and `{other}` both press {k:?}", action.name);
+            }
+        }
+    }
+}

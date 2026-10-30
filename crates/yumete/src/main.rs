@@ -2269,12 +2269,12 @@ SEARCHING FROM THE SHELL:
                      off; `glyphs` and `pinyin` take one half each.
 
                      The text column is sixty characters either side of the
-                     match, not the whole line: a line of a novel is a
-                     paragraph.
+                     match, not the whole line: in Chinese text a line is
+                     often a whole paragraph.
 
                      Searches the current directory, as every shell tool does.
                      Name a directory to search that one instead, or
-                     --project to search up to the book's root (the nearest
+                     --project to search up to the project root (the nearest
                      .yumete or .git above you).
 
                      A path is printed the way you spelt it — name a symlinked
@@ -2335,7 +2335,7 @@ SEARCHING FROM THE SHELL:
                        -uu is this one and --hidden together. (rg's third
                        rung searches binaries; there is no such rung here —
                        a file with a NUL in its first 1024 bytes is not
-                       prose.) The spellings are rg's so the habit carries:
+                       text.) The spellings are rg's so the habit carries:
                        -. for the dot-files, -u for the ignored ones.
         --glob=G           Only files matching these globs (comma-separated).
         --exclude=G        Never these.
@@ -2450,8 +2450,8 @@ KEYS (Normal mode, Helix-style):
                           paragraph's mark; full also folds the blank line
               :view-pages-horizontal 1–4  pages side by side, the text running on
               :view-pages-vertical 1–4    段組: pages one above the other
-              :word-list-reload   reread .yumete/words.txt — this book's own names
-              :word-habit      口頭禪: what this one says far more than prose does
+              :word-list-reload   reread .yumete/words.txt — this project's own names
+              :word-habit      口頭禪: what this one says far more than ordinary text does
               :table <行>x<欄>   an empty table, the first row its headings
               :table-render off|basic|window how much of a grid is drawn
               :table-check     look the whole over: repeated row names, parts

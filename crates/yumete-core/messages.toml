@@ -794,7 +794,7 @@ en = "no file named on this line"
 key = "buffer.no-name-yet"
 zht = "這份稿子還没有名字——:w 名字 存成新文件"
 zhs = "这份稿子还没有名字——:w 名字 存成新文件"
-en = "this manuscript has no name yet — :w <name> writes it as a new file"
+en = "this file has no name yet — :w <name> writes it as a new file"
 
 [[message]]
 # :w 到一個父目錄還不存在的路徑
@@ -1034,7 +1034,7 @@ en = "no readings: without them a name one character out is indistinguishable fr
 key = "check.names-no-wiki"
 zht = "這本書還没有百科——:wiki-edit 起個頭，專名纔查得了"
 zhs = "这本书还没有百科——:wiki-edit 起个头，专名才查得了"
-en = "this book has no wiki yet — :wiki-edit starts one, and then names can be checked"
+en = "this project has no wiki yet — :wiki-edit starts one, and then names can be checked"
 
 [[message]]
 # :check-names 的緩衝區標題
@@ -1282,7 +1282,7 @@ find = "標點 标点 半角 全角 引號 引号 括號 括号 省略號 省略
 key = "cmd.check.usage"
 zht = "查用字：全文寫了兩種寫法的(裏/裡、為/爲、你自己配的人名)，列出少數那一邊"
 zhs = "查用字：全文写了两种写法的(里/裡、为/爲、你自己配的人名)，列出少数那一边"
-en = "check 用字: where the manuscript wrote the other spelling of something it usually spells one way"
+en = "check 用字: where the text wrote the other spelling of something it usually spells one way"
 find = "用字 異體字 异体字 一致 統一 统一 裏裡 為爲 校對 校对 consistency variant"
 
 [[message]]
@@ -1938,7 +1938,7 @@ find = "存了再退 保存退出 write and quit wq"
 key = "cmd.commands.yuhao"
 zht = "打開宇浩輸入法官網"
 zhs = "打开宇浩输入法官网"
-en = "open Yuhao IME website"
+en = "open the Yuhao input method website"
 find = "宇浩 官網 官网 輸入法 输入法 website"
 
 [[message]]
@@ -1946,7 +1946,7 @@ find = "宇浩 官網 官网 輸入法 输入法 website"
 key = "cmd.commands.yume"
 zht = "宇夢輸入引擎開關：on 中文、off 關閉、abc 英文模式"
 zhs = "宇梦输入引擎开关：on 中文、off 关闭、abc 英文模式"
-en = "the Yume input engine's switch: on 中文, off, abc English"
+en = "the Yume input engine's switch: on (中文) or off"
 find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin yo"
 
 [[message]]
@@ -2065,7 +2065,7 @@ en = "the table under the cursor, comma separated"
 key = "cmd.export.html"
 zht = "一頁 HTML，直排的稿子出來還是直排"
 zhs = "一页 HTML，直排的稿子出来还是直排"
-en = "one HTML page, still vertical if the manuscript is"
+en = "one HTML page, still vertical if the file is"
 
 [[message]]
 # : 命令選單裏 tsv 那一項的説明(export 組)
@@ -2079,7 +2079,7 @@ en = "the table under the cursor, tab separated"
 key = "cmd.export.typst"
 zht = "Typst 源碼，橫排，拿去排版印書"
 zhs = "Typst 源码，横排，拿去排版印书"
-en = "Typst source, horizontal, for setting a printed book"
+en = "Typst source, horizontal, for setting in print"
 
 [[message]]
 # : 命令選單裏 inline 那一項的説明(footnote-kinds 組)
@@ -2803,7 +2803,7 @@ find = "欄線 栏线 分隔線 分隔线 rules"
 key = "cmd.table.schema"
 zht = "把這張表的規格開在另一半——没有就先寫一份"
 zhs = "把这张表的规格开在另一半——没有就先写一份"
-en = "open this table's schema in the other area — writing a starting one if there is none"
+en = "open this table's schema in the other region — writing a starting one if there is none"
 find = "規格 规格 欄位 栏位 定義 定义 schema"
 
 [[message]]
@@ -3084,7 +3084,7 @@ en = "wiki names in 金, across and down alike (default)"
 key = "cmd.wikis.edit"
 zht = "打開這本書的 .yumete/wiki.md，没有就建一個"
 zhs = "打开这本书的 .yumete/wiki.md，没有就建一个"
-en = "open this book's .yumete/wiki.md, existing or not"
+en = "open this project's .yumete/wiki.md, existing or not"
 find = "百科 詞條 词条 編輯 编辑 打開 打开 wiki edit"
 
 [[message]]
@@ -3170,7 +3170,7 @@ find = "詞表 词表 全域 全局 global"
 key = "cmd.word-lists.local"
 zht = "開本書的詞表 .yumete/words.txt——人名、地名"
 zhs = "开本书的词表 .yumete/words.txt——人名、地名"
-en = "open this book's word list, .yumete/words.txt — names of people and places"
+en = "open this project's word list, .yumete/words.txt — names of people and places"
 find = "詞表 词表 人名 地名 自定義 自定义 edit"
 
 [[message]]
@@ -3178,7 +3178,7 @@ find = "詞表 词表 人名 地名 自定義 自定义 edit"
 key = "cmd.word-lists.reload"
 zht = "重讀兩份詞表(本書的 ＋ 全域的)"
 zhs = "重读两份词表(本书的 ＋ 全域的)"
-en = "reread both word lists, this book's and the global one"
+en = "reread both word lists, this project's and the global one"
 find = "詞表 词表 重讀 重读 刷新 reload"
 
 [[message]]
@@ -3550,7 +3550,7 @@ en = "unique"
 key = "commit.no-such-method"
 zht = "没有「{0}」這種上屏方式——default、delayed、unique、fluency"
 zhs = "没有「{0}」这种上屏方式——default、delayed、unique、fluency"
-en = "no commit method '{0}' — default, delayed, unique, fluency"
+en = "no commit method '{0}' — default, delayed, unique (or auto), fluency"
 
 [[message]]
 # 這個方案只能整句上屏
@@ -4193,7 +4193,7 @@ en = "no such format as '{0}' — html, typst, or csv/tsv for the table under th
 key = "export.same-as-the-manuscript"
 zht = "那是這份稿子本身——導出要另一個文件名"
 zhs = "那是这份稿子本身——导出要另一个文件名"
-en = "that is the manuscript itself — an export needs another name"
+en = "that is the file itself — an export needs another name"
 
 [[message]]
 # 導出的目標已經存在，要 :export!
@@ -4628,7 +4628,7 @@ en = "hanging punctuation: 句讀 sit in the margin beside the character"
 key = "help.chinese.reload-project-words"
 zht = "重讀 .yumete/words.txt——這本書自己的詞"
 zhs = "重读 .yumete/words.txt——这本书自己的词"
-en = "re-read .yumete/words.txt — this book's own words"
+en = "re-read .yumete/words.txt — this project's own words"
 
 [[message]]
 # 中文那一節的小標題
@@ -4838,7 +4838,7 @@ en = "search, next, previous"
 key = "help.common.select-line"
 zht = "選這一整行——小説裏一行就是一整段"
 zhs = "选这一整行——小説里一行就是一整段"
-en = "select the whole line — in a novel a line is a paragraph"
+en = "select the whole line — in Chinese text a line is usually a paragraph"
 
 [[message]]
 # 常用幫助：下一句/上一句
@@ -4992,7 +4992,7 @@ en = "type in the cell / empty it"
 key = "help.table.who-uses-this"
 zht = "誰用了它——一欄一欄地找：這邊找/那邊看"
 zhs = "谁用了它——一栏一栏地找：这边找/那边看"
-en = "who uses this — down the columns: / here, ? in the other area"
+en = "who uses this — down the columns: / here, ? in the other region"
 
 [[message]]
 # 表格幫助：取這一欄/貼一欄
@@ -5077,7 +5077,7 @@ en = "vertical writing"
 key = "help.vertical.turn-vertical"
 zht = "轉成竪排；:layout 來回切"
 zhs = "转成竖排；:layout 来回切"
-en = "turn the page vertical; :layout switches back and forth"
+en = "turn the page vertical; :horizontal turns it back"
 
 [[message]]
 # 竪排幫助：所見即所得
@@ -6154,7 +6154,7 @@ en = "sidebar"
 key = "hint.sidebar.back-to-text"
 zht = "切換區域"
 zhs = "切换区域"
-en = "switch area"
+en = "switch region"
 
 [[message]]
 # 邊欄底下那一行按鍵説明
@@ -6439,7 +6439,7 @@ en = "insert a new row (below / above)"
 key = "hint.table.after-t"
 zht = "␣t 後面：{0}"
 zhs = "␣t 后面：{0}"
-en = "after 空格 t: {0}"
+en = "after Space t: {0}"
 
 [[message]]
 # 表格提示：這欄靠左/居中/靠右
@@ -6719,7 +6719,7 @@ en = "{0}{1} is not finished"
 key = "hint.yume.after-z"
 zht = "␣z 後面：{0}"
 zhs = "␣z 后面：{0}"
-en = "after 空格 z: {0}"
+en = "after Space z: {0}"
 
 [[message]]
 # ␣z 輸入法那一組
@@ -6754,7 +6754,7 @@ en = "delayed"
 key = "hint.yume.commit-fluency"
 zht = "整句"
 zhs = "整句"
-en = "fluency"
+en = "whole-sentence (fluency)"
 
 [[message]]
 # ␣z 輸入法那一組
@@ -6918,7 +6918,7 @@ en = "ABC — the keys type what they say; a Shift tap goes back to 中文"
 key = "ime.autocompletion-is"
 zht = "輸入預測：{0}"
 zhs = "输入预测：{0}"
-en = "autocompletion: {0}"
+en = "prediction (autocompletion): {0}"
 
 [[message]]
 # :yume ! 切到編進二進制的那一份碼表(`! 方案名` 指定哪一家)
@@ -6954,6 +6954,13 @@ key = "ime.menu-size-is"
 zht = "候選面板一頁 {0} 條"
 zhs = "候选面板一页 {0} 条"
 en = "{0} candidates to a page"
+
+[[message]]
+# :yume-menu-size：一頁只剩一條的時候（英文要單數）
+key = "ime.menu-size-is-one"
+zht = "候選面板一頁 {0} 條"
+zhs = "候选面板一页 {0} 条"
+en = "{0} candidate to a page"
 
 [[message]]
 # :yume ! 要出廠碼表，而這個二進制没編進去
@@ -7002,7 +7009,7 @@ en = "not typing yet, and this build carries no 碼表 — install the data firs
 key = "ime.off"
 zht = "宇夢輸入引擎已關閉"
 zhs = "宇梦输入引擎已关闭"
-en = "Yume IME engine has been shut down"
+en = "input method off"
 
 [[message]]
 # 換到系統裝的那份碼表
@@ -7030,7 +7037,7 @@ en = "快捷符號 — press a letter to commit it"
 key = "ime.state"
 zht = "{0} · 碼表 {1} · 拆分 {2} · 上屏 {3}"
 zhs = "{0} · 码表 {1} · 拆分 {2} · 上屏 {3}"
-en = "{0} · 碼表 {1} · chaifen {2} · commit {3}"
+en = "{0} · 碼表 {1} · 拆分 {2} · commit {3}"
 
 [[message]]
 # :yume-table 直接指一個碼表檔，裝上了
@@ -7207,7 +7214,7 @@ en = "version"
 key = "intro.yuhao"
 zht = "打開宇浩輸入法官網"
 zhs = "打开宇浩输入法官网"
-en = "the Yuhao IME website"
+en = "the Yuhao input method website"
 
 [[message]]
 # gw：這一屏上没有可以跳的地方
@@ -7494,7 +7501,7 @@ en = "your text was left alone: {0}"
 key = "layout.code-is-horizontal"
 zht = "程序文件一律橫排；小説那一份的竪排照舊留着"
 zhs = "程序文件一律横排；小説那一份的竖排照旧留着"
-en = "a program file is always laid out across; your manuscript keeps its 縱書"
+en = "a program file is always laid out across; your text keeps its 縱書"
 
 [[message]]
 # :view-code off — 圍欄裏的代碼回到一種顏色
@@ -7843,7 +7850,7 @@ en = "there is no link under the cursor"
 key = "link.not-a-chapter"
 zht = "{0} 不是這本書裏的一篇——絕對路徑不跟"
 zhs = "{0} 不是这本书里的一篇——绝对路径不跟"
-en = "{0} is not a chapter of this book — an absolute path is not followed"
+en = "{0} is not a file of this project — an absolute path is not followed"
 
 [[message]]
 # gx 打開了本書的另一篇
@@ -8602,7 +8609,7 @@ en = "{0}  {1} 字  {2}"
 key = "progress.no-file"
 zht = "這一份還没有名字，進度記不到哪本書上——先存一次"
 zhs = "这一份还没有名字，进度记不到哪本书上——先存一次"
-en = "this one has no name yet, so there is no book to record against — save it first"
+en = "this one has no name yet, so there is nothing to record against — save it first"
 
 [[message]]
 # :count-progress 但 .yumete/progress.tsv 還一天都没有
@@ -8616,14 +8623,14 @@ en = "nothing recorded yet: save once and today starts counting"
 key = "progress.report"
 zht = "今天 {0} 字，本書 {1} 字，連續 {2} 天"
 zhs = "今天 {0} 字，本书 {1} 字，连续 {2} 天"
-en = "{0} 字 today, {1} in the book, {2} days running"
+en = "{0} 字 today, {1} in the project, {2} days running"
 
 [[message]]
 # :count-progress 的結果，設了每日目標
 key = "progress.report-target"
 zht = "今天 {0}/{1} 字({2}%)，本書 {3} 字，連續 {4} 天"
 zhs = "今天 {0}/{1} 字({2}%)，本书 {3} 字，连续 {4} 天"
-en = "{0}/{1} 字 today ({2}%), {3} in the book, {4} days running"
+en = "{0}/{1} 字 today ({2}%), {3} in the project, {4} days running"
 
 [[message]]
 # :count-progress 開出來的那一頁的標題
@@ -8841,7 +8848,7 @@ en = "no draft kept — {0}"
 key = "region.nothing-lives-there"
 zht = "這一側没有哪一扇面板歸它——`:sidebar-left` 可以挪一扇過去"
 zhs = "这一侧没有哪一扇面板归它——`:sidebar-left` 可以挪一扇过去"
-en = "no panel lives on that side — :sidebar-left moves one there"
+en = "no panel is open on that side — :sidebar opens one"
 
 [[message]]
 # 只剩一個區域，關不動了
@@ -9776,7 +9783,7 @@ en = "ambiguous width"
 key = "set.editor.ambiguous-width.hint"
 zht = "「東亞歧義寬度」那些字符佔一格還是兩格。畫歪了就改這裏"
 zhs = "「东亚歧义宽度」那些字符占一格还是两格。画歪了就改这里"
-en = "ambiguous width"
+en = "whether East Asian ambiguous-width characters such as — and … take one cell or two; change it if the caret sits off its character"
 
 [[message]]
 # 設置面板：[editor] auto_pairs 那一行
@@ -9804,7 +9811,7 @@ en = "autosave"
 key = "set.editor.autosave.hint"
 zht = "没保存的時候在文件旁邊留一份副本，崩了還能撈回來"
 zhs = "没保存的时候在文件旁边留一份副本，崩了还能捞回来"
-en = "autosave"
+en = "while a file is unsaved, keep a copy beside it, so a crash loses nothing"
 
 
 
@@ -9820,7 +9827,7 @@ en = "char info"
 key = "set.editor.char-info.hint"
 zht = "狀態欄右端説出光標下那個字的 Unicode 碼位和區塊名"
 zhs = "状态栏右端説出光标下那个字的 Unicode 码位和区块名"
-en = "char info"
+en = "the right end of the status line names the character under the caret: its code point and Unicode block"
 
 [[message]]
 # 設置：代码上色
@@ -9834,7 +9841,7 @@ en = "code highlight"
 key = "set.editor.code-highlight.hint"
 zht = "圍欄裏的代碼按它自己的語法上色(九種語言)；關掉則整塊一種紫"
 zhs = "围栏里的代码按它自己的语法上色(九种语言)；关掉则整块一种紫"
-en = "code highlight"
+en = "code in a fence is coloured by its own language; off, the whole block is one colour"
 
 [[message]]
 # 設置：命令行那一行
@@ -9848,7 +9855,7 @@ en = "command line"
 key = "set.editor.command-line.hint"
 zht = "狀態欄底下再加一行：打命令、剛纔怎麽了、現在能按什麽"
 zhs = "状态栏底下再加一行：打命令、刚才怎么了、现在能按什么"
-en = "command line"
+en = "a line under the status line for commands, for what just happened, and for the keys you can press now"
 
 [[message]]
 # 設置面板：[editor] completion_page_size 那一行
@@ -9876,7 +9883,7 @@ en = "diff gutter"
 key = "set.editor.diff-gutter.hint"
 zht = "行號旁邊那一格用底色説哪幾行跟 git 裏的不一樣"
 zhs = "行号旁边那一格用底色説哪几行跟 git 里的不一样"
-en = "diff gutter"
+en = "the cell beside the line number marks lines that differ from git, or from the saved file outside git"
 
 [[message]]
 # 設置：模糊搜索出厂开着
@@ -9890,7 +9897,7 @@ en = "fuzzy search"
 key = "set.editor.fuzzy-search.hint"
 zht = "搜索面板那個「模糊」開關一開始是開是關"
 zhs = "搜索面板那个「模糊」开关一开始是开是关"
-en = "fuzzy search"
+en = "whether the search panel's fuzzy switch starts on"
 
 [[message]]
 # 設置：標點旁置
@@ -9925,7 +9932,7 @@ en = "indent hint"
 key = "set.editor.indent-hint.hint"
 zht = "竪排時段落開頭畫一個記號，長段落裏找得到分段在哪"
 zhs = "竖排时段落开头画一个记号，长段落里找得到分段在哪"
-en = "indent hint"
+en = "on a vertical page, a mark at the head of each paragraph, so the breaks in a long one are easy to find"
 
 [[message]]
 # 設置：段首那个符号
@@ -9939,7 +9946,7 @@ en = "indent symbol"
 key = "set.editor.indent-symbol.hint"
 zht = "段首記號畫成什麽字。段首記號設成「畫符號」時才用得上"
 zhs = "段首记号画成什么字。段首记号设成「画符号」时才用得上"
-en = "indent symbol"
+en = "which character the paragraph mark is; used when the indent hint is set to a mark"
 
 [[message]]
 # 設置：缩进几列
@@ -9953,7 +9960,7 @@ en = "indent width"
 key = "set.editor.indent-width.hint"
 zht = "`>` 加、`<` 減的列數，也是 Tab 打出來的空格數"
 zhs = "`>` 加、`<` 减的列数，也是 Tab 打出来的空格数"
-en = "indent width"
+en = "how many columns > adds and < takes away, and how many spaces Tab types"
 
 [[message]]
 # 設置：首行縮進——一句話
@@ -9995,7 +10002,7 @@ en = "language key"
 key = "set.editor.language-key.hint"
 zht = "報不出單獨 Shift 的終端上，用這個鍵切中文/ABC"
 zhs = "报不出单独 Shift 的终端上，用这个键切中文/ABC"
-en = "language key"
+en = "the key that switches 中/ABC on a terminal that cannot report a lone Shift"
 
 [[message]]
 # 設置：界面语言——一句話
@@ -10030,7 +10037,7 @@ en = "line number fill"
 key = "set.editor.line-number-fill.hint"
 zht = "行號那一格用淡底色鋪滿，而不是只寫一個數"
 zhs = "行号那一格用淡底色铺满，而不是只写一个数"
-en = "line number fill"
+en = "fill the line-number column with a faint ground, not just the number"
 
 [[message]]
 # 設置：行号
@@ -10044,7 +10051,7 @@ en = "line numbers"
 key = "set.editor.line-numbers.hint"
 zht = "左邊那一欄畫第幾行。相對行號數的是「離光標幾行」，跳行時好按"
 zhs = "左边那一栏画第几行。相对行号数的是「离光标几行」，跳行时好按"
-en = "line numbers"
+en = "the column on the left that numbers the lines; relative numbers count from the caret, which makes jumps easy to type"
 
 [[message]]
 # 設置：邊欄
@@ -10169,7 +10176,7 @@ en = "scrolloff"
 key = "set.editor.scrolloff.hint"
 zht = "光標周圍至少留幾行(竪排是幾縱)不讓它貼到邊上"
 zhs = "光标周围至少留几行(竖排是几纵)不让它贴到边上"
-en = "scrolloff"
+en = "how many lines (columns, on a vertical page) to keep between the caret and the edge"
 
 [[message]]
 # 設置：接着上次
@@ -10183,7 +10190,7 @@ en = "session"
 key = "set.editor.session.hint"
 zht = "不帶文件名啓動時：開空白文檔，還是接着上次那些文件"
 zhs = "不带文件名启动时：开空白文档，还是接着上次那些文件"
-en = "session"
+en = "when started with no file: a blank page, or the files that were open last time"
 
 [[message]]
 # 設置：候选旁的拆分
@@ -10197,7 +10204,7 @@ en = "show chaifen"
 key = "set.editor.show-chaifen.hint"
 zht = "打字時在候選字旁邊寫出它的拆分"
 zhs = "打字时在候选字旁边写出它的拆分"
-en = "show chaifen"
+en = "while typing, show each candidate's 拆分 beside it"
 
 [[message]]
 # 設置：排出注音
@@ -10211,7 +10218,7 @@ en = "show ruby"
 key = "set.editor.show-ruby.hint"
 zht = "把注音排在字的旁邊。默認關：文件裏是什麽，畫面上就是什麽"
 zhs = "把注音排在字的旁边。默认关：文件里是什么，画面上就是什么"
-en = "show ruby"
+en = "lay readings out beside their characters. Off by default: what is in the file is what is on the page"
 
 [[message]]
 # 設置：智能大小写
@@ -10267,7 +10274,7 @@ en = "tab inserts"
 key = "set.editor.tab-inserts.hint"
 zht = "插入模式按 Tab 打出來的是什麽。Shift-Tab 打另一種"
 zhs = "插入模式按 Tab 打出来的是什么。Shift-Tab 打另一种"
-en = "tab inserts"
+en = "what Tab types in Insert mode; Shift-Tab types the other"
 
 [[message]]
 # 設置：TAB 有多宽
@@ -10281,7 +10288,7 @@ en = "tab width"
 key = "set.editor.tab-width.hint"
 zht = "一個 TAB 推進到幾的倍數。碼表就是靠它對齊的"
 zhs = "一个 TAB 推进到几的倍数。码表就是靠它对齐的"
-en = "tab width"
+en = "how far a tab character reaches: to the next multiple of this. Code tables line up by it"
 
 [[message]]
 # 設置：表格的栏线
@@ -10295,7 +10302,7 @@ en = "table rules"
 key = "set.editor.table-rules.hint"
 zht = "表格裏那些竪線畫成什麽樣"
 zhs = "表格里那些竖线画成什么样"
-en = "table rules"
+en = "how the column rules of a table are drawn"
 
 [[message]]
 # 設置：上方分页条
@@ -10309,7 +10316,7 @@ en = "tabs"
 key = "set.editor.tabs.hint"
 zht = "頂上那條列着打開了哪些文件的横條"
 zhs = "顶上那条列着打开了哪些文件的横条"
-en = "tabs"
+en = "the bar along the top that lists the open files"
 
 [[message]]
 # 設置：縱中橫
@@ -10365,7 +10372,7 @@ en = "wheel step"
 key = "set.editor.wheel-step.hint"
 zht = "滚輪撥一下走幾行。1 就是終端自己那一格"
 zhs = "滚轮拨一下走几行。1 就是终端自己那一格"
-en = "wheel step"
+en = "how many lines one notch of the wheel moves; 1 is the terminal's own step"
 
 [[message]]
 # 設置頁：哪些鍵跨行
@@ -10407,7 +10414,7 @@ en = "word level"
 key = "set.editor.word-level.hint"
 zht = "多容易把幾個字併成一個詞。嚴：只認没爭議的；松：詞典説是就是"
 zhs = "多容易把几个字并成一个词。严：只认没争议的；松：词典説是就是"
-en = "word level"
+en = "how readily characters are joined into a word: strict takes only the certain ones, loose whatever the dictionary has"
 
 [[message]]
 # 設置：分词标记
@@ -10421,7 +10428,7 @@ en = "word mark"
 key = "set.editor.word-mark.hint"
 zht = "分詞標記用哪一種畫法"
 zhs = "分词标记用哪一种画法"
-en = "word mark"
+en = "how word boundaries are shown"
 
 [[message]]
 # 設置：縱間距
@@ -10540,42 +10547,42 @@ en = "scheme"
 key = "set.ime.scheme.hint"
 zht = "用哪一張碼表。只有靈明自帶，其餘要先裝"
 zhs = "用哪一张码表。只有灵明自带，其余要先装"
-en = "scheme"
+en = "which 碼表 to type with. 靈明 and 星陳 come built in; the others need the data installed"
 
 [[message]]
 # 設置：启动就载入码表
 key = "set.ime.start"
 zht = "啓動就載入碼表"
 zhs = "启动就载入码表"
-en = "start"
+en = "load the 碼表 at start"
 
 [[message]]
 # 設置：启动就载入码表——一句話
 key = "set.ime.start.hint"
 zht = "默認不載入——分詞模型照常載入，碼表等你第一次打字"
 zhs = "默认不载入——分词模型照常载入，码表等你第一次打字"
-en = "start"
+en = "off by default: the word model loads as usual, and the 碼表 waits for the first Chinese you type"
 
 [[message]]
 # settings: suppress the system-level Yume IME in normal mode
 key = "set.ime.system"
 zht = "NORMAL模式下屏蔽系統版宇夢輸入法"
 zhs = "NORMAL模式下屏蔽系统版宇梦输入法"
-en = "system"
+en = "move the system input method aside in Normal mode"
 
 [[message]]
 # 設置：让开系统输入法——一句話
 key = "set.ime.system.hint"
 zht = "Normal 模態下請系統輸入法讓開，免得按鍵被它吃掉"
 zhs = "Normal 模态下请系统输入法让开，免得按键被它吃掉"
-en = "system"
+en = "in Normal mode, ask the system's input method to step aside, so it does not eat your keys"
 
 [[message]]
 # 設置面板：底下那一行鍵
 key = "set.keys"
 zht = "hl 換欄  jk 上下  ␣ 切換  i 改  d 撤掉這一層  e 開這個檔  Tab 切換全局/本地設置  :w 存  :q 退"
 zhs = "hl 换栏  jk 上下  ␣ 切换  i 改  d 撤掉这一层  e 开这个档  Tab 切换全局/本地设置  :w 存  :q 退"
-en = "hl panes  jk move  space toggle  i edit  d drop  e open it  Tab which file  :w save  :q leave"
+en = "hl left/right  jk move  space toggle  i edit  d drop  e open it  Tab which file  :w save  :q leave"
 
 [[message]]
 # 設置：Yumete 鍵位風味
@@ -10708,14 +10715,14 @@ en = "nothing changed"
 key = "set.panel.display"
 zht = "候選怎麽畫"
 zhs = "候选怎么画"
-en = "display"
+en = "where candidates go"
 
 [[message]]
 # 設置：候选怎么画——一句話
 key = "set.panel.display.hint"
 zht = "打字的時候候選畫在哪：光標旁邊的候選框、窗口最下面那一行，還是光標的下一行"
 zhs = "打字的时候候选画在哪：光标旁边的候选框、窗口最下面那一行，还是光标的下一行"
-en = "display"
+en = "where the candidates are drawn while you type: a box by the caret, the bottom line of the window, or the line under the caret"
 
 [[message]]
 # 設置：正在打的那一段写在哪
@@ -10729,7 +10736,7 @@ en = "preedit"
 key = "set.panel.inline-preedit.hint"
 zht = "正在打的那一段寫在候選欄裏，還是寫進正文；寫進正文的時候寫編碼還是寫首選"
 zhs = "正在打的那一段写在候选栏里，还是写进正文；写进正文的时候写编码还是写首选"
-en = "preedit"
+en = "whether what you are typing is written in the candidate bar or in the text, and if in the text, the code or the first candidate"
 
 [[message]]
 # 設置：候选的序号
@@ -10743,7 +10750,7 @@ en = "markers"
 key = "set.panel.markers.hint"
 zht = "候選前面那九個序號畫成什麽字"
 zhs = "候选前面那九个序号画成什么字"
-en = "markers"
+en = "the characters the nine candidate numbers are drawn as"
 
 [[message]]
 # 設置：候选一页几条
@@ -10757,7 +10764,7 @@ en = "page size"
 key = "set.panel.page-size.hint"
 zht = "候選框一頁列幾個字"
 zhs = "候选框一页列几个字"
-en = "page size"
+en = "how many candidates a page lists"
 
 [[message]]
 # 設置：面板圆角
@@ -10771,7 +10778,7 @@ en = "rounded"
 key = "set.panel.rounded.hint"
 zht = "面板的四個角是圓的還是方的"
 zhs = "面板的四个角是圆的还是方的"
-en = "rounded"
+en = "whether panel corners are round or square"
 
 [[message]]
 # 設置面板：底下那一行——還没選中哪一項
@@ -11214,7 +11221,7 @@ en = "fill"
 key = "set.theme.fill.hint"
 zht = "代碼塊和引用要不要坐在一塊淡底色上"
 zhs = "代码块和引用要不要坐在一块淡底色上"
-en = "fill"
+en = "whether code blocks and quotes sit on a faint ground"
 
 [[message]]
 # 設置：纸面
@@ -11228,7 +11235,7 @@ en = "ground"
 key = "set.theme.ground.hint"
 zht = "編輯器自己畫出紙的底色，還是把底色還給終端(終端設了透明就用這個)"
 zhs = "编辑器自己画出纸的底色，还是把底色还给终端(终端设了透明就用这个)"
-en = "ground"
+en = "the editor paints the paper itself, or leaves the background to the terminal (use this with a transparent terminal)"
 
 [[message]]
 # 設置：深色浅色
@@ -11242,7 +11249,7 @@ en = "mode"
 key = "set.theme.mode.hint"
 zht = "用深色那一套還是淺色那一套。「問終端」是去問終端底色是什麽"
 zhs = "用深色那一套还是浅色那一套。「问终端」是去问终端底色是什么"
-en = "mode"
+en = "the dark or the light half of the theme; ask the terminal checks what its background is"
 
 [[message]]
 # 設置：主题
@@ -11256,7 +11263,7 @@ en = "name"
 key = "set.theme.name.hint"
 zht = "用哪一套墨。十個内置主題，寫名字就行(「墨香」和 moxiang 一樣)"
 zhs = "用哪一套墨。十个内置主题，写名字就行(「墨香」和 moxiang 一样)"
-en = "name"
+en = "which ink to use: ten built-in themes, named by their names (墨香 and moxiang are the same)"
 
 [[message]]
 # 設置：状态栏的底
@@ -11270,7 +11277,7 @@ en = "status bar"
 key = "set.theme.status-bar.hint"
 zht = "底下那兩行比紙更沉，還是往墨的方向抬一階"
 zhs = "底下那两行比纸更沉，还是往墨的方向抬一阶"
-en = "status bar"
+en = "whether the two bottom lines sit lower than the paper or one step towards the ink"
 
 [[message]]
 # 設置面板：標題
@@ -11284,7 +11291,7 @@ en = "settings"
 key = "set.unsaved"
 zht = "改了還没存"
 zhs = "改了还没存"
-en = "unsaved"
+en = "changed, not saved"
 
 [[message]]
 # 設置：0 的意思——窗口有多高就多長
@@ -11579,7 +11586,7 @@ en = "a table block in the text: its first row is data already"
 key = "table.block-is-read-where-it-lies"
 zht = "文中的表格區塊只讀不改寫——要整理它，先 :table-pipe 或 :table-csv"
 zhs = "文中的表格区块只读不改写——要整理它，先 :table-pipe 或 :table-csv"
-en = "a table block in a document is read where it lies, never rewritten — :table-pipe or :table-csv converts it first"
+en = "a table block in a document is read where it lies, never rewritten — :convert-table pipe or csv converts it first"
 
 [[message]]
 # 進表格模式，照某個 schema 讀
@@ -12222,7 +12229,7 @@ en = "this table does not name a key column (the schema's key)"
 key = "table.schema-in-the-other-area"
 zht = "{0} 開在另一半——␣w 過去改"
 zhs = "{0} 开在另一半——␣w 过去改"
-en = "{0} is open in the other area — 空格 w to go and edit it"
+en = "{0} is open in the other region — Space w w goes there to edit it"
 
 [[message]]
 # t e 按在一份文件裏的表格上
@@ -12825,7 +12832,7 @@ en = "hjkl down the page: h l by character, j k by line"
 key = "vertical-keys.logical-later"
 zht = "竪排的 hjkl 改成 h l 走字、j k 走行(這一扇是橫排，轉過去纔看得見)"
 zhs = "竖排的 hjkl 改成 h l 走字、j k 走行(这一扇是横排，转过去才看得见)"
-en = "hjkl down the page now go by character and line (this pane runs across)"
+en = "hjkl down the page now go by character and line (this region runs across)"
 
 [[message]]
 # `:vertical-keys visual` 撥好了，而且這一扇正在竪排
@@ -12839,7 +12846,7 @@ en = "hjkl down the page: each key goes where it points"
 key = "vertical-keys.visual-later"
 zht = "竪排的 hjkl 改成指哪就走哪(這一扇是橫排，轉過去纔看得見)"
 zhs = "竖排的 hjkl 改成指哪就走哪(这一扇是横排，转过去才看得见)"
-en = "hjkl down the page now go where they point (this pane runs across)"
+en = "hjkl down the page now go where they point (this region runs across)"
 
 [[message]]
 # 滾輪一格走多遠——問的時候
@@ -12898,7 +12905,7 @@ en = "wiki marks: off"
 key = "wiki.missed"
 zht = "在這一章裏出現了，可是標不出來的"
 zhs = "在这一章里出现了，可是标不出来的"
-en = "in this chapter but not marked"
+en = "in this file but not marked"
 
 [[message]]
 # :wiki 報告裏：上面那一節的一行——名字，以及它出現在哪幾行
@@ -12926,7 +12933,7 @@ en = "the wiki has no entry called {0}"
 key = "wiki.none"
 zht = "這本書還没有百科——:wiki-edit 會建 {0}"
 zhs = "这本书还没有百科——:wiki-edit 会建 {0}"
-en = "this book has no wiki yet — :wiki-edit makes {0}"
+en = "this project has no wiki yet — :wiki-edit makes {0}"
 
 [[message]]
 # 引用那一行的面板底邊：怎麽打開它
@@ -12975,7 +12982,7 @@ en = "{0}: {1} entries"
 key = "wiki.refused"
 zht = "{0}(在 {1} 裏引的)：不在這本書裏，不讀"
 zhs = "{0}(在 {1} 里引的)：不在这本书里，不读"
-en = "{0} (named in {1}): outside the book, not read"
+en = "{0} (named in {1}): outside the project, not read"
 
 [[message]]
 # 百科重讀了(:wiki-reload，或存了一個百科檔)
@@ -13017,14 +13024,14 @@ en = "{0}: cannot be read ({1})"
 key = "word.discover-found"
 zht = "找到 {0} 個本書自己的詞，已經按它們切了；名單在 {1}(每次覆蓋，只給你看)"
 zhs = "找到 {0} 个本书自己的词，已经按它们切了；名单在 {1}(每次覆盖，只给你看)"
-en = "{0} word(s) of this book's own, segmenting already; the list is in {1} (overwritten each time, for reading only)"
+en = "{0} word(s) of this project's own, segmenting already; the list is in {1} (overwritten each time, for reading only)"
 
 [[message]]
 # 那份名單檔的第一行抬頭(這一行進的是檔案，不是狀態欄)
 key = "word.discover-heading"
 zht = "# 本書自己的詞：掃了 {0} 個文件自動找出來的。每次 :word-discover 整份覆蓋。"
 zhs = "# 本书自己的词：扫了 {0} 个文件自动找出来的。每次 :word-discover 整份覆盖。"
-en = "# This book's own words, found over {0} file(s). :word-discover overwrites all of it."
+en = "# This project's own words, found over {0} file(s). :word-discover overwrites all of it."
 
 [[message]]
 # 寫進詞表的一行：詞，還有它出現了幾次。中間那一個是**真的 tab**，不是 \t——
@@ -13040,7 +13047,7 @@ en = "{0}	# {1}×"
 key = "word.discover-none"
 zht = "掃了 {0} 個文件，没有找到本書自己的詞——書裏的詞字典都認得"
 zhs = "扫了 {0} 个文件，没有找到本书自己的词——书里的词字典都认得"
-en = "{0} file(s) read, and no words of this book's own — the dictionary already knows them all"
+en = "{0} file(s) read, and no words of this project's own — the dictionary already knows them all"
 
 [[message]]
 # 那份名單檔的第二行：説清楚它是寫出來給人看的，改它不算數
@@ -13131,7 +13138,7 @@ en = "no data directory known — this machine has no global word list"
 key = "word.source-and-book"
 zht = "{0} ＋ 本書 {1} 個詞"
 zhs = "{0} ＋ 本书 {1} 个词"
-en = "{0} + {1} from this book"
+en = "{0} + {1} from this project"
 
 [[message]]
 # 分詞的詞表：內置的那一份，帶條數

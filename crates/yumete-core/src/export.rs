@@ -264,7 +264,7 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
                 _ => None,
             };
             if let Some(level) = level {
-                let title = std::mem::take(&mut para).join(" ");
+                let title = std::mem::take(&mut para).iter().map(|l| l.trim()).collect::<Vec<_>>().join(" ");
                 out.push(Block::Heading(level, title));
                 i += 1;
                 continue;
@@ -320,14 +320,14 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
                 while i < lines.len() {
                     let next = &lines[i];
                     let blank = next.trim().is_empty();
-                    let deep = next.len() - next.trim_start().len() >= item.width;
+                    let deep = lead(next) >= item.width;
                     if !blank && deep {
                         held.push(next[item.width.min(next.len())..].to_string());
                     } else if blank {
                         // A blank line ends the item unless what follows is
                         // still inside it.
                         let goes_on = lines.get(i + 1).is_some_and(|after| {
-                            !after.trim().is_empty() && after.len() - after.trim_start().len() >= item.width
+                            !after.trim().is_empty() && lead(after) >= item.width
                         });
                         if !goes_on {
                             break;
@@ -361,7 +361,10 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
             out.push(Block::List { ordered: first.ordered, start: first.start, items });
             continue;
         }
-        para.push(line.to_string());
+        // The line as written, trailing spaces kept: two of them are a hard
+        // break, which `html_lines` reads (2026-10-30: trimmed here, every
+        // hard break was lost).
+        para.push(lines[i].trim_end_matches(['\r', '\n']).to_string());
         i += 1;
     }
     flush(&mut para, &mut out);
@@ -399,8 +402,8 @@ struct Item {
 /// The list item `line` opens, if it opens one: `-`, `*` or `+` and a space,
 /// or a number and `.` or `)`. In Typst `+` numbers the item.
 fn list_item(line: &str, source: crate::syntax::Syntax) -> Option<Item> {
-    let body = line.trim_start();
-    let indent = line.len() - body.len();
+    let indent = lead(line);
+    let body = &line[indent..];
     if is_rule(body.trim_end()) {
         return None;
     }
@@ -422,6 +425,16 @@ fn list_item(line: &str, source: crate::syntax::Syntax) -> Option<Item> {
     }
     let width = indent + marker + gap.clamp(1, 4);
     Some(Item { indent, ordered, start, width, text: indent + marker + gap })
+}
+
+/// **How far a line is indented, in bytes of spaces and tabs** (2026-10-30).
+///
+/// Only those two, as CommonMark counts indentation. `trim_start` also takes
+/// U+3000, the full-width space a Chinese paragraph opens with, which is three
+/// bytes: counted as indent it made `next[width..]` cut into the middle of one,
+/// and `:export` panicked on a list followed by an indented paragraph.
+fn lead(line: &str) -> usize {
+    line.len() - line.trim_start_matches([' ', '\t']).len()
 }
 
 /// What follows the marker on an item's first line.
@@ -812,10 +825,15 @@ fn html_lines(lines: &[String], style: &Style) -> String {
     out
 }
 
-/// The private-use marks a footnote reference is written as until the whole
-/// text is out and the notes can be numbered in the order they are met.
-const NOTE_OPEN: char = '\u{E000}';
-const NOTE_CLOSE: char = '\u{E001}';
+/// The marks a footnote reference is written as until the whole text is out
+/// and the notes can be numbered in the order they are met.
+///
+/// **Noncharacters, not private use** (2026-10-30): U+E000 and U+E001 were
+/// here, and a 字根 font puts real glyphs in the private-use area, so a
+/// writer's U+E000 vanished from the export. U+FDD0 and U+FDD1 are reserved by
+/// Unicode for exactly this, a program's own internal marks.
+const NOTE_OPEN: char = '\u{FDD0}';
+const NOTE_CLOSE: char = '\u{FDD1}';
 
 /// Every footnote mark in `body` replaced by `mark(n, note)`, numbered in the
 /// order the marks are met, and the notes in that order. A mark with no note
