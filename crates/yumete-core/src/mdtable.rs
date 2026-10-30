@@ -157,6 +157,31 @@ pub fn is_row(line: &str) -> bool {
     trimmed.starts_with('|') && trimmed.chars().count() > 1
 }
 
+/// Whether a line could be a row of a table written **without its outer
+/// pipes** (`a | b` over `--- | ---`), which GFM allows (2026-10-30, as
+/// decided): an unescaped `|` somewhere in it. On its own that is only a
+/// candidate — a sentence may hold a bar — so [`region`] and [`row_lines`]
+/// ask for the rule row under the first line before believing it.
+pub fn has_bar(line: &str) -> bool {
+    let trimmed = line.trim();
+    !trimmed.is_empty()
+        && !trimmed.starts_with("```")
+        && !trimmed.starts_with("~~~")
+        && !pipes_from(trimmed, false).is_empty()
+}
+
+/// Whether the lines `first..=last`, every one a row or a bar-holding
+/// candidate, are a table: piped rows always are; a table *written* in the
+/// pipeless style — its header bare, a rule row under it — is one too. A bare
+/// line under a piped table stays prose (「見上表 | 附註」 right after a
+/// table is a note, as it always was here), though GitHub would read it as a
+/// row.
+fn rows_make_a_table(mut line: impl FnMut(usize) -> Option<String>, first: usize, last: usize) -> bool {
+    let all_piped = (first..=last).all(|i| line(i).is_some_and(|l| is_row(&l)));
+    let bare_header = line(first).is_some_and(|l| !is_row(&l));
+    all_piped || (bare_header && first < last && line(first + 1).is_some_and(|l| rule_of(&l).is_some()))
+}
+
 /// Which lines of `text` are rows of a `|` table — one flag per line.
 ///
 /// **Whether or not `:table` was typed.** A table in a manuscript is a table
@@ -167,17 +192,33 @@ pub fn is_row(line: &str) -> bool {
 /// A row inside a fence is not one: `| a | b |` quoted in a code block is
 /// writing about a table, and the whole editor already agrees about that.
 pub fn row_lines(text: &str) -> Vec<bool> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = vec![false; lines.len()];
     let mut fenced = false;
-    text.lines()
-        .map(|line| {
-            let trimmed = line.trim_start();
-            if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
-                fenced = !fenced;
-                return false;
-            }
-            !fenced && is_row(line)
-        })
-        .collect()
+    let mut i = 0;
+    while i < lines.len() {
+        let trimmed = lines[i].trim_start();
+        if trimmed.starts_with("```") || trimmed.starts_with("~~~") {
+            fenced = !fenced;
+            i += 1;
+            continue;
+        }
+        if fenced || !(is_row(lines[i]) || has_bar(lines[i])) {
+            i += 1;
+            continue;
+        }
+        let first = i;
+        while i < lines.len() && (is_row(lines[i]) || has_bar(lines[i])) {
+            i += 1;
+        }
+        let last = i - 1;
+        let get = |n: usize| lines.get(n).map(|l| l.to_string());
+        let table = rows_make_a_table(get, first, last);
+        for (n, flag) in out.iter_mut().enumerate().take(last + 1).skip(first) {
+            *flag = table || is_row(lines[n]);
+        }
+    }
+    out
 }
 
 /// The character positions of the unescaped `|` in a line.
@@ -353,6 +394,11 @@ pub fn boxes_of(line: &str, wall: Wall) -> Vec<(usize, usize)> {
         return raw;
     }
     let mut raw: Vec<(usize, usize)> = bars.windows(2).map(|w| (w[0] + 1, w[1])).collect();
+    // A row may begin without its opening pipe too (GFM): what stands before
+    // the first one is then its first cell.
+    if chars[..bars[0]].iter().any(|c| !c.is_whitespace()) {
+        raw.insert(0, (0, bars[0]));
+    }
     // A row is allowed to end without its closing pipe. What follows the last
     // one is then a cell; when it is blank, the pipe *was* the closing one.
     let tail = (bars[bars.len() - 1] + 1, chars.len());
@@ -393,7 +439,7 @@ pub fn split(line: &str) -> Vec<String> {
 
 /// The alignments a `|:---|---:|` line declares, or `None` if it is not one.
 pub fn rule_of(line: &str) -> Option<Vec<Align>> {
-    if !is_row(line) {
+    if !is_row(line) && !has_bar(line) {
         return None;
     }
     let cells = split(line);
@@ -423,16 +469,33 @@ pub fn rule_of(line: &str) -> Option<Vec<Align>> {
 ///
 /// `line(i)` gives the text of line `i`, or `None` past the end of the file.
 pub fn region(mut line: impl FnMut(usize) -> Option<String>, at: usize) -> Option<Region> {
-    if !line(at).is_some_and(|l| is_row(&l)) {
+    let rowish = |l: &str| is_row(l) || has_bar(l);
+    if !line(at).is_some_and(|l| rowish(&l)) {
         return None;
     }
     let mut first = at;
-    while first > 0 && line(first - 1).is_some_and(|l| is_row(&l)) {
+    while first > 0 && line(first - 1).is_some_and(|l| rowish(&l)) {
         first -= 1;
     }
     let mut last = at;
-    while line(last + 1).is_some_and(|l| is_row(&l)) {
+    while line(last + 1).is_some_and(|l| rowish(&l)) {
         last += 1;
+    }
+    // A run with a pipeless line in it is a table only under a rule row;
+    // otherwise the piped rows alone are the table, if `at` is one of them.
+    if !rows_make_a_table(&mut line, first, last) {
+        if !line(at).is_some_and(|l| is_row(&l)) {
+            return None;
+        }
+        // The piped rows around `at`, and nothing bare.
+        first = at;
+        while first > 0 && line(first - 1).is_some_and(|l| is_row(&l)) {
+            first -= 1;
+        }
+        last = at;
+        while line(last + 1).is_some_and(|l| is_row(&l)) {
+            last += 1;
+        }
     }
     // Only the second line is the rule. A later row whose cells all happen to
     // be dashes is a row of dashes, and GitHub agrees.
@@ -1965,5 +2028,26 @@ mod proof_292 {
         // （+60,409）。`worst` 那一句没動——英文版最壞的那一張比中文版還窄。
         // 這正是上面說的「注定被反覆消音」：這一次連成因都寫得出來。
         assert!(total < 320_000, "every table together would add {total} bytes");
+    }
+}
+
+#[cfg(test)]
+mod bare_tables {
+    use super::*;
+
+    /// **A table written without its outer pipes is one under a rule row**
+    /// (GFM; 2026-10-30, as decided), and a bar in a sentence is not.
+    #[test]
+    fn a_table_without_outer_pipes_is_one_under_a_rule_row() {
+        let doc = ["姓 | 名", "--- | ---", "李 | 白", "", "a | b in a sentence", "| c |"];
+        let line = |i: usize| doc.get(i).map(|l| l.to_string());
+        let found = region(line, 0).expect("a table");
+        assert_eq!((found.first, found.last, found.rule, found.columns), (0, 2, Some(1), 2));
+        assert_eq!(region(line, 2).map(|r| r.first), Some(0));
+        assert!(region(line, 4).is_none(), "a bar in prose");
+        assert_eq!(region(line, 5).map(|r| (r.first, r.last)), Some((5, 5)), "a piped row stands alone");
+        assert_eq!(split("姓 | 名"), ["姓", "名"]);
+        assert_eq!(rule_of("--- | :---:").map(|a| a.len()), Some(2));
+        assert_eq!(row_lines(&doc.join("\n")), [true, true, true, false, false, true]);
     }
 }

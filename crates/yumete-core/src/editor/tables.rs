@@ -154,6 +154,12 @@ impl Editor {
     /// thing a vertical page cannot do, so the pane turns the page
     /// horizontal. `t b` draws no walls and leaves the page alone — which
     /// since 2026-10-21 is the only other answer there is.
+    /// Whether `line` is a row of a `|` table, counting a row written without
+    /// its outer pipes when the rule row under the header says so.
+    pub(super) fn md_row_at(&self, line: usize) -> bool {
+        crate::mdtable::region(|i| self.line_text(i), line).is_some_and(|r| r.holds(line))
+    }
+
     pub fn grid_is_drawn(&self) -> bool {
         self.table.as_ref().is_some_and(|view| view.pane)
     }
@@ -1098,7 +1104,7 @@ impl Editor {
         self.layout() == crate::zong::Layout::Vertical
             && self.table_padding_on()
             && self.wall_here(line).is_some()
-            && self.line_text(line).is_some_and(|l| crate::mdtable::is_row(&l))
+            && self.md_row_at(line)
     }
 
     /// Whether `line` is a table's `| --- |` rule row — the one that becomes
@@ -1141,7 +1147,7 @@ impl Editor {
     pub(super) fn md_row_in_a_fence(&self) -> bool {
         let rope = self.current_buffer().rope();
         let at = rope.char_to_line(self.caret().min(rope.len_chars()));
-        if !self.line_text(at).is_some_and(|l| crate::mdtable::is_row(&l)) {
+        if !self.md_row_at(at) {
             return false;
         }
         // The cached scan the renderer already runs, so this costs nothing
@@ -2264,7 +2270,7 @@ impl Editor {
         }
         // Already a table: `:table-pipe` on one would split every cell again on
         // whatever the sniffer guessed and hand back a wider, wrong table.
-        if lines.iter().all(|l| crate::mdtable::is_row(l)) {
+        if crate::mdtable::row_lines(&lines.join("\n")).iter().all(|&row| row) {
             self.status = say!("table.already-a-pipe-table");
             return;
         }
@@ -6818,9 +6824,8 @@ impl Editor {
         let rope = self.current_buffer().rope();
         let line = rope.char_to_line(span.0.min(rope.len_chars()));
         if rows_only {
-            let here = self.line_text(line).unwrap_or_default();
             // A row inside a fence is writing *about* a table.
-            if !crate::mdtable::is_row(&here) || self.block_of(line).is_literal() {
+            if !self.md_row_at(line) || self.block_of(line).is_literal() {
                 return None;
             }
         }
