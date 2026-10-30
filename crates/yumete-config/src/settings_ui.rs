@@ -420,6 +420,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "hard_wrap",
+        group: Group::Layout,
+        kind: Kind::Count { low: 1, high: 400, zero: Some("set.zero.hard-wrap-unset") },
+        label: "set.editor.hard-wrap",
+        hint: "set.editor.hard-wrap.hint",
+        factory: "0",
+    },
+    Setting {
+        table: "editor",
         key: "ruler",
         group: Group::Layout,
         kind: Kind::Count { low: 0, high: 400, zero: Some("set.zero.no-ruler") },

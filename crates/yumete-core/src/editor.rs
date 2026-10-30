@@ -2507,6 +2507,9 @@ pub struct Editor {
     /// apart from what autodetect found so that reloading one does not throw
     /// the other away.
     own_words: yumete_cjk::WordList,
+    /// `[editor] hard_wrap`: the width `:hard-wrap` fills to when none is
+    /// given; `0` is unset (2026-10-30).
+    hard_wrap: usize,
     /// 雙鏈 (2026-10-30): the project's `[[links]]`, read when first asked.
     links: Option<crate::links::Index>,
     /// The thread reading them, until it answers.
@@ -4009,6 +4012,7 @@ impl Editor {
             reader: Box::new(NoReader),
             project_words: std::rc::Rc::new(RefCell::new(yumete_cjk::WordList::default())),
             own_words: yumete_cjk::WordList::default(),
+            hard_wrap: 0,
             links: None,
             links_building: None,
             links_look: crate::links::Look::List,

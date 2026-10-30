@@ -34,6 +34,7 @@ pub mod drawn;
 pub mod editor;
 pub mod export;
 pub mod glyphs;
+pub mod hardwrap;
 pub mod input;
 pub mod markdown;
 pub mod links;

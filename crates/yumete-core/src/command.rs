@@ -218,6 +218,10 @@ pub enum Command {
     /// `:reflow [width]` — helix's: each selection refilled to `width`
     /// columns, 80 when it is left off (2026-10-29).
     Reflow(Option<usize>),
+    /// `:hard-wrap [<columns>]`: the selection or the unit under the cursor
+    /// re-filled under the syntax's own rules; `None` asks the setting
+    /// (2026-10-30, see [`crate::hardwrap`]).
+    HardWrap(Option<usize>),
     /// `:recover` — **問要不要用那一份草稿**（Feature #79）。
     ///
     /// Warning: **没有 `:recover!` 了**（2026-10-02 定）。它從前是「不問，直接把
@@ -4346,6 +4350,17 @@ pub const COMMANDS: &[Entry] = &[
                     }
                 },
             }))
+        }),
+    },
+    Entry {
+        name: "hard-wrap",
+        aliases: &[],
+        help: "cmd.commands.hard-wrap",
+        needs: &[],
+        params: &[Param::Free("<幾欄>")],
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::HardWrap(None)),
+            Some(_) => Ok(Command::HardWrap(Some(p.number(0)?))),
         }),
     },
     Entry {

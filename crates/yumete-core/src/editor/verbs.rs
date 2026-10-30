@@ -442,6 +442,76 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// `[editor] hard_wrap`, as the config set it.
+    pub fn set_hard_wrap(&mut self, width: usize) {
+        self.hard_wrap = width;
+    }
+
+    pub fn hard_wrap(&self) -> usize {
+        self.hard_wrap
+    }
+
+    /// **`:hard-wrap [N]`** (2026-10-30): the selected lines, or the unit
+    /// under the cursor, re-filled under the syntax's rules
+    /// ([`crate::hardwrap`]); `0` joins each unit into one line. With no
+    /// width and none set, it says so and changes nothing.
+    pub(super) fn hard_wrap_lines(&mut self, asked: Option<usize>) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let width = match asked {
+            Some(w) => w,
+            None if self.hard_wrap > 0 => self.hard_wrap,
+            None => {
+                self.status = say!("hard-wrap.unset");
+                return;
+            }
+        };
+        let syntax = self.current_buffer().syntax();
+        let rope = self.current_buffer().rope();
+        let all: Vec<String> = (0..rope.len_lines()).map(|n| motion::line_text(rope, n)).collect();
+        let (first, last) = match self.has_selection() {
+            true => {
+                let (start, end) = self.selection();
+                (rope.char_to_line(start), rope.char_to_line(end.saturating_sub(1).max(start)))
+            }
+            false => {
+                let here = rope.char_to_line(self.sel.head());
+                match crate::hardwrap::unit_around(&all, syntax, here) {
+                    Some(range) => (range.start, range.end - 1),
+                    None => {
+                        self.status = say!("hard-wrap.nothing");
+                        return;
+                    }
+                }
+            }
+        };
+        let last = last.min(all.len().saturating_sub(1));
+        let lines = &all[first..=last];
+        let filled = crate::hardwrap::hard_wrap(lines, syntax, width);
+        let from = rope.line_to_char(first);
+        let to = motion::line_end(rope, rope.line_to_char(last));
+        let text = filled.join(self.current_buffer().ending());
+        if rope.slice(from..to) != text.as_str() {
+            self.snapshot();
+            let done = self.current_buffer_mut().replace(from..to, &text);
+            if !self.applied(done) {
+                return;
+            }
+        }
+        self.status = match width {
+            0 => say!("hard-wrap.joined", lines.len(), filled.len()),
+            w => say!("hard-wrap.done", lines.len(), filled.len(), w),
+        };
+        let rope = self.current_buffer().rope();
+        let lead = motion::line_text(rope, first).chars().take_while(|c| c.is_whitespace()).count();
+        let at = rope.line_to_char(first) + lead;
+        self.sel.set_head(at);
+        self.sel.set_anchor(at);
+        self.refresh_goal_column();
+        self.clamp_cursor();
+    }
+
     /// **helix's `:reflow`**: the selection refilled to `width` (see
     /// [`crate::reflow::refill_like_helix`]), and selected again, as helix
     /// leaves it. The breaks it writes are the file's own (#309).

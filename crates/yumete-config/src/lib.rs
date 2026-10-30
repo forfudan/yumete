@@ -311,6 +311,9 @@ pub struct EditorConfig {
     /// line is, this folds the rows there and leaves the rest of the window as
     /// margin. `:view-wrap 50` sets it for one session (Feature #113).
     pub measure: usize,
+    /// The width `:hard-wrap` fills to when given none, in cells; `0` for
+    /// unset, which makes the bare command say so (2026-10-30).
+    pub hard_wrap: usize,
     /// Whether the status line names the character under the cursor
     /// (Feature #117).
     ///
@@ -483,6 +486,7 @@ impl Default for EditorConfig {
             syntax: String::new(),
             ruler: 0,
             measure: 0,
+            hard_wrap: 0,
             char_info: true,
             status_count: "text".to_string(),
             unicode_alarm: true,
@@ -4051,6 +4055,7 @@ struct RawEditor {
     syntax: Option<String>,
     ruler: Option<usize>,
     measure: Option<usize>,
+    hard_wrap: Option<usize>,
     char_info: Option<bool>,
     status_count: Option<String>,
     unicode_alarm: Option<bool>,
@@ -4248,6 +4253,9 @@ impl RawConfig {
         }
         if other.editor.measure.is_some() {
             self.editor.measure = other.editor.measure;
+        }
+        if other.editor.hard_wrap.is_some() {
+            self.editor.hard_wrap = other.editor.hard_wrap;
         }
         if other.editor.char_info.is_some() {
             self.editor.char_info = other.editor.char_info;
@@ -4640,6 +4648,10 @@ impl RawConfig {
         if let Some(measure) = self.editor.measure {
             config.editor.measure =
                 held(problems, "[editor] measure", measure, measure.min(400), &span(0, 400));
+        }
+        if let Some(width) = self.editor.hard_wrap {
+            config.editor.hard_wrap =
+                held(problems, "[editor] hard_wrap", width, width.min(400), &span(0, 400));
         }
         if let Some(on) = self.editor.char_info {
             config.editor.char_info = on;

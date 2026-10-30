@@ -459,6 +459,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     if config.editor.measure > 0 {
         editor.set_measure(Some(config.editor.measure));
     }
+    editor.set_hard_wrap(config.editor.hard_wrap);
     editor.set_paper(config.export.page.0, config.export.page.1);
     editor.set_indent_width(config.editor.indent_width);
     editor.set_tab_spaces(config.editor.tab_spaces);

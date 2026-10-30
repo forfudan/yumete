@@ -1415,6 +1415,14 @@ en = "go to a line (`:42` will do)"
 find = "跳行 行號 行号 goto line jump"
 
 [[message]]
+# : 命令選單裏 hard-wrap 那一項的説明
+key = "cmd.commands.hard-wrap"
+zht = "按寬度重排硬換行，不改意思：選區，或光標所在的那一段；0 = 每段併成一行；不帶數字照 hard_wrap 設置"
+zhs = "按宽度重排硬换行，不改意思：选区，或光标所在的那一段；0 = 每段并成一行；不带数字照 hard_wrap 设置"
+en = "re-fill to a width without changing meaning: the selection or the unit under the cursor; 0 joins each into one line; bare uses the hard_wrap setting"
+find = "硬換行 硬换行 重排 換行 换行 折行 wrap fill gq textwidth 寬度 宽度 段落 注釋 注释"
+
+[[message]]
 # : 命令選單裏 help 那一項的説明(commands 組)
 key = "cmd.commands.help"
 zht = "鍵和命令，開成一個可以讀、可以搜的文件"
@@ -4628,6 +4636,34 @@ en = "that file is closed"
 
 
 # ── help ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :hard-wrap 做完了：幾行變幾行，寬多少
+key = "hard-wrap.done"
+zht = "{0} 行 → {1} 行，寬 {2}"
+zhs = "{0} 行 → {1} 行，宽 {2}"
+en = "{0} lines → {1}, width {2}"
+
+[[message]]
+# :hard-wrap 0 做完了：幾行併成幾行
+key = "hard-wrap.joined"
+zht = "{0} 行併成 {1} 行"
+zhs = "{0} 行并成 {1} 行"
+en = "{0} lines joined into {1}"
+
+[[message]]
+# :hard-wrap 不選區時光標站在標題、代碼、空行上
+key = "hard-wrap.nothing"
+zht = "光標這一行沒有可以重排的段"
+zhs = "光标这一行没有可以重排的段"
+en = "nothing on this line to re-fill"
+
+[[message]]
+# :hard-wrap 不帶數字，而設置裏也沒設
+key = "hard-wrap.unset"
+zht = "沒設寬度：寫 :hard-wrap 50，或在設置裏填 hard_wrap"
+zhs = "没设宽度：写 :hard-wrap 50，或在设置里填 hard_wrap"
+en = "no width set: say :hard-wrap 50, or set hard_wrap in the settings"
 
 [[message]]
 # 中文幫助：給選中的字注音
@@ -10086,6 +10122,20 @@ zhs = "。，、？！：；「」 挂在边栏上，不占正文那一格"
 en = "。，、？！：；「」 hang in the margin instead of taking a cell"
 
 [[message]]
+# 設置面板：hard_wrap 的名字
+key = "set.editor.hard-wrap"
+zht = "硬換行寬度"
+zhs = "硬换行宽度"
+en = "hard-wrap width"
+
+[[message]]
+# 設置面板：hard_wrap 的説明
+key = "set.editor.hard-wrap.hint"
+zht = ":hard-wrap 不帶數字時用的寬度；改的是文件裏的換行，不是顯示"
+zhs = ":hard-wrap 不带数字时用的宽度；改的是文件里的换行，不是显示"
+en = "what a bare :hard-wrap fills to; it rewrites the file's line breaks, not the display"
+
+[[message]]
 # 設置：首行縮進
 key = "set.editor.indent"
 zht = "首行縮進"
@@ -11478,6 +11528,13 @@ key = "set.zero.as-wide-as-the-window"
 zht = "0 = 用窗口的寬度"
 zhs = "0 = 用窗口的宽度"
 en = "0 = as wide as the window"
+
+[[message]]
+# 設置面板：hard_wrap 為 0 時的字
+key = "set.zero.hard-wrap-unset"
+zht = "0 = 沒設"
+zhs = "0 = 没设"
+en = "0 = unset"
 
 [[message]]
 # 設置：0 的意思——不縮進
