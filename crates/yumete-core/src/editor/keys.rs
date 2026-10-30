@@ -932,8 +932,11 @@ impl Editor {
             // the span still starts where the cursor is.
             let here = self.sel.head();
             match self.vim_percent_target() {
-                Some((at, other)) => {
-                    let (anchor, head) = (here.min(other).min(at), here.max(other).max(at));
+                // From the cursor to where `%` lands, inclusive: the bracket it
+                // found along the line is not part of the span when its partner
+                // lies behind (2026-10-30: `jd%` on `a(b⏎x)y` took the `)` too).
+                Some((_, other)) => {
+                    let (anchor, head) = (here.min(other), here.max(other));
                     return self.do_vim(op, motion::Span::Over { anchor, head });
                 }
                 None => {
@@ -1992,19 +1995,43 @@ impl Editor {
                 // `nostartofline`). They used to leave SEL on, so the next `i`
                 // began a text object.
                 if matches!(c, 'J' | '>' | '<') && !self.user_bound(c) {
+                    // The cursor's own column, read before a linewise
+                    // selection is widened to whole lines (nvim keeps it).
+                    // Under `V` the selection already reaches the line's end, so
+                    // the column is the one `V` was pressed in. (Not yet followed
+                    // through `h`/`l` inside `V`, which vim does.)
+                    let column = match self.vim_lines {
+                        true => self.vim_line_column,
+                        false => {
+                            let rope = self.current_buffer().rope();
+                            let head = self.sel.head().min(rope.len_chars());
+                            head - rope.line_to_char(rope.char_to_line(head))
+                        }
+                    };
                     if self.vim_lines {
                         self.extend_to_line_bounds();
                         self.vim_lines = false;
                     }
-                    let (line, column) = {
+                    let (line, lines) = {
                         let rope = self.current_buffer().rope();
-                        let start = self.selection().0;
+                        let (start, end) = self.selection();
                         let line = rope.char_to_line(start);
-                        (line, start - rope.line_to_char(line))
+                        let last = rope.char_to_line(end.saturating_sub(1).max(start));
+                        (line, last - line + 1)
                     };
                     let was = std::mem::replace(&mut self.expanding_alias, true);
                     self.on_normal_key(key);
                     self.expanding_alias = was;
+                    // **`.` repeats it as the Normal-mode command it was**
+                    // (2026-10-30): `3>>` for three lines indented, `3J` for
+                    // three joined. Recorded as the bare `>` it was a waiting
+                    // operator that ate the next keys.
+                    let mut again: Vec<Key> = lines.to_string().chars().map(Key::Char).collect();
+                    match c {
+                        'J' => again.push(Key::Char('J')),
+                        _ => again.extend([Key::Char(c), Key::Char(c)]),
+                    }
+                    self.block_repeat = Some(again);
                     self.extend = false;
                     let to = match c {
                         'J' => self.sel.head(),
@@ -2596,6 +2623,11 @@ impl Editor {
             // (`V` → `x`) could take three lines only if told `3V`; a vim hand
             // types `Vjj`.
             Key::Char('V') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                self.vim_line_column = {
+                    let rope = self.current_buffer().rope();
+                    let head = self.sel.head().min(rope.len_chars());
+                    head - rope.line_to_char(rope.char_to_line(head))
+                };
                 self.select_line();
                 self.extend = true;
                 self.vim_lines = true;

@@ -875,9 +875,13 @@ impl Editor {
     fn vim_insert_began(&self, at: usize) -> Option<usize> {
         let began = self.insert_began?;
         let rope = self.current_buffer().rope();
+        // And inside what Insert may touch: in a table, the Insert may have
+        // begun in another cell of this line (2026-10-30: `Tab` then `C-u`
+        // did nothing, the span crossing the cell's wall).
         (self.key_preset == yumete_cjk::KeyPreset::Vim
             && began < at
             && began <= rope.len_chars()
+            && began >= self.insert_floor()
             && rope.char_to_line(began) == rope.char_to_line(at))
             .then_some(began)
     }
@@ -1621,6 +1625,9 @@ impl Editor {
                     };
                     motion::line_first_non_blank(rope, first)
                 }
+                // Charwise over several lines: on the first character pasted
+                // (`:h p`, measured: `vjyG0P` leaves it on the pasted `a`).
+                false if text.contains('\n') => at,
                 false => head,
             };
             self.sel.set_anchor(to);

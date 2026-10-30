@@ -2424,6 +2424,9 @@ pub struct Editor {
     /// The open files the session file last named, so the autosave tick
     /// writes it again only when they change.
     session_names: Vec<std::path::PathBuf>,
+    /// The cursor's column when `V` was pressed: the selection then reaches
+    /// the line's end, and vim's `>`/`<` put the cursor back in this column.
+    vim_line_column: usize,
     /// Keys recorded since `q` was pressed, if a macro is being recorded.
     recording: Option<Vec<Key>>,
     /// The last macro recorded, replayed by `Q`.
@@ -3968,6 +3971,7 @@ impl Editor {
             insert_began: None,
             last_insert_stop: None,
             session_names: Vec::new(),
+            vim_line_column: 0,
             recording: None,
             macro_keys: Vec::new(),
             replaying: false,
