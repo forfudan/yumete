@@ -2413,6 +2413,9 @@ pub struct Editor {
     /// The register the *next* yank, delete or paste will use, set by `"`.
     /// Cleared as soon as it is used, so it never leaks into the command after.
     pending_register: Option<char>,
+    /// How many copies the next paste puts in as one piece (`3p`), as helix
+    /// and vim both do it: one block, not three pastes each after the last.
+    paste_copies: usize,
     /// Keys recorded since `q` was pressed, if a macro is being recorded.
     recording: Option<Vec<Key>>,
     /// The last macro recorded, replayed by `Q`.
@@ -3953,6 +3956,7 @@ impl Editor {
             edit_round: 0,
             yanks: Vec::new(),
             pending_register: None,
+            paste_copies: 1,
             recording: None,
             macro_keys: Vec::new(),
             replaying: false,

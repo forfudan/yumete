@@ -32230,6 +32230,13 @@ fn vim_operators_take_percent_plus_minus_and_enter() {
     let mut ed = typed_vim("a (b c) d\n");
     press(&mut ed, "lld%");
     assert_eq!(ed.current_buffer().rope().to_string(), "a  d\n");
+    // And `%` itself, measured the same way; helix's `mm` does not move.
+    let mut ed = typed_vim("call(foo, \"bar\") end\n");
+    press(&mut ed, "%iZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "call(foo, \"bar\"Z) end\n");
+    let mut ed = typed("call(foo, \"bar\") end\n");
+    press(&mut ed, "ggmmiZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "Zcall(foo, \"bar\") end\n");
     for (keys, enter) in [("d+", false), ("jd-", false), ("d", true)] {
         let mut ed = typed_vim("one\ntwo\nthree\nfour\n");
         press(&mut ed, keys);
@@ -32237,5 +32244,65 @@ fn vim_operators_take_percent_plus_minus_and_enter() {
             ed.on_key(Key::Enter);
         }
         assert_eq!(ed.current_buffer().rope().to_string(), "three\nfour\n", "{keys}");
+    }
+}
+
+/// **`p` under the vim keymap leaves a cursor, not a selection** (2026-10-30),
+/// each case measured against nvim.
+#[test]
+fn vim_paste_leaves_the_cursor_where_vim_does() {
+    for (text, keys, want) in [
+        ("foo bar baz\n", "yw$piZ", "foo bar bazfooZ \n"),
+        ("one\ntwo\n", "yy3piZ", "one\nZone\none\none\ntwo\n"),
+        ("last line", "yypiZ", "last line\nZlast line"),
+    ] {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys} on {text:?}");
+    }
+}
+
+/// **`r` and `~` with counts, and `r<Enter>`** (2026-10-30), each measured
+/// against nvim (vim keymap) and helix 25.07.1 (helix keymap).
+#[test]
+fn replace_and_switch_case_take_counts_and_enter() {
+    for (text, keys, want) in [
+        ("foo bar\n", "3rX", "XXX bar\n"),
+        ("中文abc测试\n", "3rX", "XXXbc测试\n"),
+        ("foo bar baz\n", "$5rX", "foo bar baz\n"),
+        ("foo bar\n", "3~", "FOO bar\n"),
+    ] {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "vim {keys} on {text:?}");
+    }
+    let mut ed = typed_vim("foo bar baz\n");
+    press(&mut ed, "wr");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().rope().to_string(), "foo \nar baz\n", "vim r<Enter>");
+
+    let mut ed = typed("foo bar baz\n");
+    press(&mut ed, "ggwr");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "iZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "Z\n\n\n\nbar baz\n", "helix r<Enter>");
+    let mut ed = typed("foo bar baz\n");
+    press(&mut ed, "ggwy3piZ");
+    assert_eq!(ed.current_buffer().rope().to_string(), "foo Zfoo foo foo bar baz\n", "helix 3p");
+}
+
+/// **Visual `J`, `r`, `>` end Visual mode, and `>>` keeps the column**
+/// (2026-10-30), measured against nvim with `set et sw=4`.
+#[test]
+fn vim_visual_line_operators_return_to_normal() {
+    for (text, keys, want) in [
+        ("a\nb\nc\n", "vjJiZ", "aZ b\nc\n"),
+        ("foo bar\n", "wvlr-iZ", "foo Z--r\n"),
+        ("a\nb\n", "Vj>iZ", "Z    a\n    b\n"),
+        ("a\nb\n", ">>iZ", "Z    a\nb\n"),
+    ] {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().rope().to_string(), want, "{keys} on {text:?}");
     }
 }
