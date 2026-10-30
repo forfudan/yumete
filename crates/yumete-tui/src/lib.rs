@@ -1330,12 +1330,14 @@ pub fn run(
                     Ok(Arrival::Terminal(outcome)) => outcome,
                     // Back to the top, where `collect` takes the answer.
                     Ok(Arrival::Answer) => continue,
+                    Ok(Arrival::HungUp) => break Ok(()),
                     // The reader is gone, which is the terminal saying it is done.
                     Err(_) => break Ok(()),
                 },
                 Some(wait) => match events.recv_timeout(wait) {
                     Ok(Arrival::Terminal(outcome)) => outcome,
                     Ok(Arrival::Answer) => continue,
+                    Ok(Arrival::HungUp) => break Ok(()),
                     Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                         editor.vcs_tick();
                         editor.autosave_tick();
@@ -2029,6 +2031,15 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
             break;
         }
     }
+    catch_hang_ups();
+    let watcher = tx.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        if hung_up() {
+            let _ = watcher.send(Arrival::HungUp);
+            break;
+        }
+    });
     std::thread::spawn(move || loop {
         let outcome = event::read();
         let failed = outcome.is_err();
@@ -2046,6 +2057,39 @@ enum Arrival {
     Terminal(io::Result<Event>),
     /// Nothing to carry: the answer itself waits in the server's own channel.
     Answer,
+    /// SIGHUP or SIGTERM: the terminal closed, or the system is shutting the
+    /// editor down. The loop ends and every dirty buffer gets its recovery
+    /// copy on the way out (see [`hung_up`]).
+    HungUp,
+}
+
+/// **The terminal closed or the editor was told to stop** (2026-10-30).
+///
+/// Closing a terminal window sends SIGHUP, a shutdown sends SIGTERM, and
+/// either used to end the process on the spot: whatever was typed since the
+/// last recovery copy (up to five seconds of it) was lost. The handler only
+/// sets this flag, which is all a signal handler may safely do; a thread
+/// watching it wakes the loop, and `main` writes the copies.
+static HUNG_UP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether SIGHUP or SIGTERM arrived during this run.
+pub fn hung_up() -> bool {
+    HUNG_UP.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[cfg(unix)]
+extern "C" fn on_hang_up(_: libc::c_int) {
+    HUNG_UP.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Catch SIGHUP and SIGTERM instead of dying of them.
+fn catch_hang_ups() {
+    #[cfg(unix)]
+    unsafe {
+        let handler = on_hang_up as extern "C" fn(libc::c_int) as libc::sighandler_t;
+        libc::signal(libc::SIGHUP, handler);
+        libc::signal(libc::SIGTERM, handler);
+    }
 }
 
 /// Move everything the reader has ready into the inbox, without waiting.
@@ -2075,7 +2119,7 @@ fn take_what_arrived(
             Ok(Arrival::Terminal(Ok(event))) => inbox.push_back(event),
             // The loop collects from the servers on every turn anyway.
             Ok(Arrival::Answer) => {}
-            Ok(Arrival::Terminal(Err(_))) | Err(_) => break,
+            Ok(Arrival::HungUp) | Ok(Arrival::Terminal(Err(_))) | Err(_) => break,
         }
     }
 }
@@ -2742,7 +2786,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
             Ok(Arrival::Terminal(Ok(_))) | Ok(Arrival::Answer) => {}
             // The terminal has nothing more to say; do not wait for a key that
             // is not coming.
-            Ok(Arrival::Terminal(Err(_))) | Err(_) => break,
+            Ok(Arrival::HungUp) | Ok(Arrival::Terminal(Err(_))) | Err(_) => break,
         }
     }
     execute!(
@@ -4182,9 +4226,20 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     }
     // The 碼表 the system has — `builtin`'s other half.
     // `Space z n`: the next scheme in menu order, as ⌃⇧N is in Yume.
+    // Past the schemes whose 碼表 is not installed (2026-10-30: it stopped at
+    // the first of those and said so on every press), round to the start.
     if tag == "scheme:next" {
-        let next = ime.scheme().next();
-        return switch_scheme(ime, next.tag(), config);
+        let start = ime.scheme();
+        let mut next = start.next();
+        let mut said = String::new();
+        while next != start {
+            said = switch_scheme(ime, next.tag(), config);
+            if ime.scheme() == next && ime.available() {
+                return said;
+            }
+            next = next.next();
+        }
+        return said;
     }
     if tag == "~" {
         let mut full = ImeSession::from_default_dirs(ime.scheme());
@@ -7962,7 +8017,9 @@ fn the_caret_reads_back(
 ) {
     let rope = editor.current_buffer().rope();
     let want = editor.cursor();
-    if want >= rope.len_chars() || rope.char(want) == '\n' {
+    // A line ending has no cell of its own, `\r\n` as much as `\n`
+    // (2026-10-30: the end of a CRLF line flooded the log every frame).
+    if want >= rope.len_chars() || matches!(rope.char(want), '\n' | '\r') {
         return;
     }
     let mouse = ratatui::crossterm::event::MouseEvent {
