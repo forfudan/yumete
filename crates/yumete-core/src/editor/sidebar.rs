@@ -669,19 +669,10 @@ impl Editor {
                     _ => Side::Right,
                 };
                 if !self.slot_showing(side) {
-                    // **開那一側該開的那一扇**——問 `side_view`，別各算各的。
-                    //
-                    // Warning: **從前這裏自己又找了一遍**（`View::ALL` 裏第一個歸這
-                    // 一側的），於是它繞過了兩件 `side_view` 知道的事：這一份稿子
-                    // 容不容得下那一扇（散文没有文檔），以及右邊那一格此刻「應該」
-                    // 擺文檔還是診斷。報上來的就是這個：在一行有警告的地方按
-                    // `空格 4`，開出來的是**空的文檔面板**。
-                    if self.views_on(side).is_empty() && self.side_view(side) == crate::sidebar::View::Explorer
-                        && self.side_of(crate::sidebar::Panel::Files) != side
-                    {
-                        self.status = say!("region.nothing-lives-there");
-                        return;
-                    }
+                    // **Open the view that side owns** — `side_view` knows which,
+                    // and whether this file can hold it. `C-w E` and `C-w I`
+                    // always open the bar (2026-10-30): the older refusal when
+                    // nothing was assigned to the side left the key dead.
                     let view = self.side_view(side);
                     self.show_sidebar(view);
                 }

@@ -954,7 +954,6 @@ pub const SETTINGS: &[Setting] = &[
 /// 一組一組填，這張表跟着縮短。Warning: **它不是「不做」的名單**——那一張是
 /// [`NOT_IN_THE_PANEL`]，兩者的區別是「還没輪到」與「有理由不進去」。
 pub const LATER: &[&str] = &[
-    "editor.ruby_dialects",
     "editor.usage_groups",
     "editor.syntax",
     // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**
@@ -1010,6 +1009,8 @@ pub const NOT_IN_THE_PANEL: &[&str] = &[
     "editor.segmentation_threshold",
     // Folded into `word_mark` as its `off` (2026-10-25); kept to say so.
     "editor.show_segmentation",
+    // Gone (2026-10-30): both ruby syntaxes were always read; kept to say so.
+    "editor.ruby_dialects",
     // **一張表，面板畫不出來**：勾和數字說不完「哪個鍵配哪個動作」。
     // 2026-10-18 定：不進面板的只有它，風味那一格進（它只是一個勾）。
     "keys.normal",

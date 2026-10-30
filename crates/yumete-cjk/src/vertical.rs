@@ -165,6 +165,9 @@ impl VerticalKeys {
         }
     }
 
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["logical", "visual"];
+
     /// Parse a `:vertical-keys` argument or a `vertical_keys` config value.
     pub fn parse(value: &str) -> Option<VerticalKeys> {
         match value.trim().to_ascii_lowercase().as_str() {
@@ -201,6 +204,9 @@ impl Layout {
             Layout::Vertical => Layout::Horizontal,
         }
     }
+
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["vertical", "horizontal"];
 
     /// Parse a layout from a config value or a `:layout` argument.
     pub fn parse(value: &str) -> Option<Layout> {

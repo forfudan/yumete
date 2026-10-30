@@ -26,6 +26,9 @@ impl KeyPreset {
         }
     }
 
+    /// The names the config writes.
+    pub const NAMES: &'static [&'static str] = &["helix", "vim"];
+
     pub fn parse(word: &str) -> Option<KeyPreset> {
         match word.trim().to_ascii_lowercase().as_str() {
             "helix" => Some(KeyPreset::Helix),

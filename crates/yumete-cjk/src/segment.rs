@@ -164,6 +164,9 @@ pub enum WordMark {
 }
 
 impl WordMark {
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["color", "ink", "tint", "line"];
+
     /// Parse a `:word-mark` argument or a `word_mark` config value.
     pub fn parse(value: &str) -> Option<WordMark> {
         match value.trim().to_ascii_lowercase().as_str() {
@@ -223,6 +226,9 @@ pub enum WordLevel {
 }
 
 impl WordLevel {
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["off", "strict", "balanced", "full"];
+
     /// Parse a `:word-level` argument or a `word_level` config value.
     pub fn parse(value: &str) -> Option<WordLevel> {
         match value.trim().to_ascii_lowercase().as_str() {

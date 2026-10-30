@@ -4145,6 +4145,7 @@ impl Editor {
     /// 說謊是同一件事。
     pub(super) const GOTO_KEYS_VIM: &'static [(&'static str, &'static str)] = &[
         ("v", "hint.goto.reselect"),
+        ("i", "hint.goto.insert-again"),
         ("; ,", "hint.goto.walk-changes"),
         ("u U ~", "hint.goto.case-operators"),
         ("q", "hint.goto.fill"),

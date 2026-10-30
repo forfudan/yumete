@@ -228,9 +228,6 @@ pub struct EditorConfig {
     /// is what is on the page, until you ask otherwise. `:ruby-on` lays them
     /// out, and 所見即所得 mode lays them out along with everything else.
     pub show_ruby: bool,
-    /// Extra ruby dialects to lay out beyond the one the file's extension
-    /// implies — a document that mixes them names them all here.
-    pub ruby_dialects: Vec<String>,
     /// The reader's own 用字 groups for `:check-usage` (#233), each line 「甲
     /// 乙」 — the spellings that mean the same thing here, the one to settle
     /// on first.
@@ -473,7 +470,6 @@ impl Default for EditorConfig {
             completion_page_size: 6,
             show_chaifen: false,
             show_ruby: false,
-            ruby_dialects: Vec::new(),
             usage_groups: Vec::new(),
             tatechuyoko: 4,
             code_highlight: true,
@@ -515,6 +511,9 @@ pub enum Tabs {
 
 impl Tabs {
     /// Parse a config value.
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["auto", "always", "never"];
+
     pub fn parse(value: &str) -> Option<Tabs> {
         match value.trim().to_ascii_lowercase().as_str() {
             "auto" => Some(Tabs::Auto),
@@ -720,6 +719,9 @@ impl PanelDisplay {
     }
 
     /// Read a name, or `None` — an unknown word is a typo, not a fourth mode.
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["box", "bottom", "inline"];
+
     pub fn parse(word: &str) -> Option<PanelDisplay> {
         match word {
             "box" => Some(PanelDisplay::Box),
@@ -771,6 +773,9 @@ impl InlinePreedit {
     }
 
     /// Read a name, or `None` — an unknown word is a typo, not a fourth mode.
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["off", "composition", "preview"];
+
     pub fn parse(word: &str) -> Option<InlinePreedit> {
         match word {
             "off" => Some(InlinePreedit::Off),
@@ -848,6 +853,9 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["auto", "system", "dark", "light"];
+
     fn parse(name: &str) -> Option<Mode> {
         match name.trim().to_ascii_lowercase().as_str() {
             "auto" | "system" | "自動" | "自动" => Some(Mode::Auto),
@@ -2616,6 +2624,9 @@ pub enum RunKind {
 }
 
 impl RunKind {
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["once", "server", "filter"];
+
     fn parse(word: &str) -> Option<RunKind> {
         match word.trim() {
             "once" | "" => Some(RunKind::Once),
@@ -2704,33 +2715,95 @@ impl Runner {
     /// rather than a command that runs and does something else.
     pub fn fault(&self) -> Option<String> {
         if self.run.trim().is_empty() {
-            return Some("空的命令".to_string());
+            return Some(said("空的命令".to_string(), "the command is empty".to_string()));
         }
         if let Some(c) = self.run.chars().find(|c| "|;&<>`$".contains(*c)) {
-            return Some(format!(
-                "命令裏有 '{c}'——這裏不經過 shell，管道和重定向不會照你想的跑"
+            return Some(said(
+                format!("命令裏有 '{c}'——這裏不經過 shell，管道和重定向不會照你想的跑"),
+                format!("the command has '{c}': it does not run through a shell, so pipes and redirects do not work"),
             ));
         }
         let mut rest = self.run.as_str();
         while let Some(at) = rest.find('{') {
             let after = &rest[at + 1..];
             let Some(end) = after.find('}') else {
-                return Some("{ 没有配對的 }".to_string());
+                return Some(said("{ 没有配對的 }".to_string(), "a { with no }".to_string()));
             };
             let name = &after[..end];
             if !["file", "dir", "name"].contains(&name) {
-                return Some(format!(
-                    "不認識的佔位符 {{{name}}}——只有 {{file}} {{dir}} {{name}}"
+                return Some(said(
+                    format!("不認識的佔位符 {{{name}}}——只有 {{file}} {{dir}} {{name}}"),
+                    format!("unknown placeholder {{{name}}}; only {{file}} {{dir}} {{name}}"),
                 ));
             }
             rest = &after[end + 1..];
         }
         if self.argv("x").is_none() {
-            return Some("引號没有配對".to_string());
+            return Some(said("引號没有配對".to_string(), "a quote with no partner".to_string()));
         }
         None
     }
 }
+
+/// **A complaint in the language the editor speaks** (2026-10-30): the
+/// Chinese as it has always read, and the English beside it. The language is
+/// [`yumete_cjk::speaks_english`], set by the front end before it loads.
+fn said(zh: String, en: String) -> String {
+    match yumete_cjk::speaks_english() {
+        true => en,
+        false => zh,
+    }
+}
+
+/// `[table] key = "word"` is not one of `names` — the list is generated from
+/// the type's own `NAMES`, so a new value never has to be written out twice.
+fn one_of(at: &str, word: &str, names: &[&str]) -> String {
+    let zh = match names {
+        [a, b] => format!("{a} 或 {b}"),
+        _ => names.join("、"),
+    };
+    let en = match names {
+        [a, b] => format!("{a} or {b}"),
+        [rest @ .., last] => format!("{}, or {last}", rest.join(", ")),
+        [] => String::new(),
+    };
+    said(
+        format!("{at} = \"{word}\" 只能是 {zh}"),
+        format!("{at} = \"{word}\": only {en}"),
+    )
+}
+
+/// `low` to `high`, as a complaint says a range.
+fn span(low: usize, high: usize) -> String {
+    said(format!("{low} 到 {high}"), format!("{low} to {high}"))
+}
+
+/// 0, or `low` to `high`: a range that 0 also turns off.
+fn zero_or(low: usize, high: usize) -> String {
+    said(format!("0，或者 {low} 到 {high}"), format!("0, or {low} to {high}"))
+}
+
+/// The ways `[ime] commit` is written.
+const COMMIT_NAMES: &[&str] = &["default", "delayed", "unique", "fluency"];
+/// `[theme] ground`.
+const GROUND_NAMES: &[&str] = &["paint", "terminal"];
+/// `[theme] status_bar`.
+const STATUS_BAR_NAMES: &[&str] = &["raised", "sunken"];
+/// `[editor] line_numbers`.
+const LINE_NUMBER_NAMES: &[&str] = &["absolute", "relative", "none"];
+/// `[editor] ambiguous_width`.
+const AMBIGUOUS_WIDTH_NAMES: &[&str] = &["auto", "wide", "narrow"];
+/// `[editor] language`: the names, then every spelling each one is known by.
+const LANGUAGES: &[(&str, &[&str])] = &[
+    ("auto", &[]),
+    ("zh", &["zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体"]),
+    ("zhs", &["zh-hans", "zh-cn", "简体", "簡體"]),
+    ("en", &["english"]),
+];
+/// `[editor] tab_inserts`.
+const TAB_INSERTS_NAMES: &[&str] = &["spaces", "tab"];
+/// `[ime] system`.
+const SYSTEM_IME_NAMES: &[&str] = &["auto", "keep"];
 
 /// The fully-resolved configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -3024,9 +3097,12 @@ impl Config {
                             // loud rather than dropped, or a writer whose own
                             // line stopped working would never learn why.
                             if parsed.editor.screenshot.take().is_some() {
-                                problems.push(format!(
-                                    "{}：screenshot 只認全域設定——它經過 shell",
-                                    local.display()
+                                problems.push(said(
+                                    format!("{}：screenshot 只認全域設定——它經過 shell", local.display()),
+                                    format!(
+                                        "{}: screenshot is read from the global config only, since it runs through the shell",
+                                        local.display()
+                                    ),
                                 ));
                             }
                             // Warning: **鍵位表也只認全域，而這一條是 2026-09-24 審出
@@ -3051,9 +3127,15 @@ impl Config {
                             // 照舊寫得動（那兩樣真的是項目屬性，同 rust-toolchain）。
                             if !parsed.keys.normal.is_empty() {
                                 parsed.keys.normal.clear();
-                                problems.push(format!(
-                                    "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
-                                    local.display()
+                                problems.push(said(
+                                    format!(
+                                        "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
+                                        local.display()
+                                    ),
+                                    format!(
+                                        "{}: [keys.normal] is read from the global config only, since a string of keys can hold a whole command line",
+                                        local.display()
+                                    ),
                                 ));
                             }
                             raw.merge(parsed);
@@ -3082,14 +3164,25 @@ impl Config {
     // `segmentation_threshold = 50` stopped doing anything would have no
     // way to find out that the question is now spelled `word_level`.
     if raw.editor.segmentation_threshold.is_some() {
-        problems.push(
-            "segmentation_threshold 已經没有了——改成 word_level = \"strict\"/\"balanced\"/\"full\""
-                .to_string(),
-        );
+        problems.push(said(
+            "segmentation_threshold 已經没有了——改成 word_level = \"strict\"/\"balanced\"/\"full\"".to_string(),
+            "segmentation_threshold is gone: write word_level = \"strict\"/\"balanced\"/\"full\"".to_string(),
+        ));
     }
     // 2026-10-25: on/off went into `word_mark`, as its `off`.
     if raw.editor.show_segmentation.is_some() {
-        problems.push("show_segmentation 已經没有了——改成 word_mark = \"off\"".to_string());
+        problems.push(said(
+            "show_segmentation 已經没有了——改成 word_mark = \"off\"".to_string(),
+            "show_segmentation is gone: write word_mark = \"off\"".to_string(),
+        ));
+    }
+    // 2026-10-30: both ruby syntaxes were always read, so the key never did
+    // anything; it is gone rather than kept as a switch that cannot switch.
+    if raw.editor.ruby_dialects.is_some() {
+        problems.push(said(
+            "ruby_dialects 已經没有了——兩種注音寫法本來就都認".to_string(),
+            "ruby_dialects is gone: both ruby syntaxes are always read".to_string(),
+        ));
     }
 
     // …and a setting that changed **shape** is said out loud too.
@@ -3098,8 +3191,13 @@ impl Config {
     // characters share the slot, and guessing two for it would quietly make
     // that decision for a reader who asked for a longer group.
     if let Some(RawTatechuyoko::Switch(on)) = raw.editor.tatechuyoko {
-        problems.push(format!(
-            "tatechuyoko = {on} 現在要寫成一個數——一格裝幾個半角字，{TATECHUYOKO_CLASSIC} 是老辦法，最多 {TATECHUYOKO_MAX}，0 是關"
+        problems.push(said(
+            format!(
+                "tatechuyoko = {on} 現在要寫成一個數——一格裝幾個半角字，{TATECHUYOKO_CLASSIC} 是老辦法，最多 {TATECHUYOKO_MAX}，0 是關"
+            ),
+            format!(
+                "tatechuyoko = {on} is now a number: how many half-width characters share a cell; {TATECHUYOKO_CLASSIC} is the old way, at most {TATECHUYOKO_MAX}, 0 is off"
+            ),
         ));
     }
 
@@ -3112,9 +3210,7 @@ impl Config {
     // and this is where it is said out loud.
     if let Some(mode) = raw.ime.commit.as_deref() {
         if !commit_is_a_word(mode) {
-            problems.push(format!(
-                "[ime] commit = \"{mode}\" 不是上屏方式——default、delayed、unique（auto）、fluency"
-            ));
+            problems.push(one_of("[ime] commit", mode, COMMIT_NAMES));
         }
     }
 
@@ -3124,9 +3220,8 @@ impl Config {
     // silently does nothing — so it is named here.
     if let Some(word) = raw.editor.margin.as_deref() {
         if Margin::parse(word).is_none() {
-            problems.push(format!(
-                "[editor] margin = \"{word}\" 只能是 never、dense、loose、always"
-            ));
+            let names: Vec<&str> = Margin::ALL.into_iter().map(|m| m.name()).collect();
+            problems.push(one_of("[editor] margin", word, &names));
         }
     }
 
@@ -3171,7 +3266,10 @@ impl Config {
     ] {
         if let Some(word) = value.as_deref() {
             if parse_hex(word).is_none() {
-                problems.push(format!("{name} = \"{word}\" 只能是一個 #RRGGBB"));
+                problems.push(said(
+                    format!("{name} = \"{word}\" 只能是一個 #RRGGBB"),
+                    format!("{name} = \"{word}\": only a #RRGGBB colour"),
+                ));
             }
         }
     }
@@ -3180,7 +3278,7 @@ impl Config {
             word.trim().to_ascii_lowercase().as_str(),
             "paint" | "theme" | "自己" | "terminal" | "終端" | "终端"
         ) {
-            problems.push(format!("[theme] ground = \"{word}\" 只能是 paint 或 terminal"));
+            problems.push(one_of("[theme] ground", word, GROUND_NAMES));
         }
     }
     if let Some(word) = raw.theme.status_bar.as_deref() {
@@ -3188,41 +3286,34 @@ impl Config {
             word.trim().to_ascii_lowercase().as_str(),
             "raised" | "quiet" | "淡" | "sunken" | "deep" | "沉"
         ) {
-            problems
-                .push(format!("[theme] status_bar = \"{word}\" 只能是 raised 或 sunken"));
+            problems.push(one_of("[theme] status_bar", word, STATUS_BAR_NAMES));
         }
     }
     if let Some(word) = raw.editor.layout.as_deref() {
         if yumete_cjk::Layout::parse(word).is_none() {
-            problems
-                .push(format!("[editor] layout = \"{word}\" 只能是 vertical 或 horizontal"));
+            problems.push(one_of("[editor] layout", word, yumete_cjk::Layout::NAMES));
         }
     }
     if let Some(word) = raw.editor.tabs.as_deref() {
         if Tabs::parse(word).is_none() {
-            problems
-                .push(format!("[editor] tabs = \"{word}\" 只能是 auto、always、never"));
+            problems.push(one_of("[editor] tabs", word, Tabs::NAMES));
         }
     }
     if let Some(word) = raw.editor.word_level.as_deref() {
         if yumete_cjk::WordLevel::parse(word).is_none() {
-            problems.push(format!(
-                "[editor] word_level = \"{word}\" 只能是 off、strict、balanced、full"
-            ));
+            problems.push(one_of("[editor] word_level", word, yumete_cjk::WordLevel::NAMES));
         }
     }
     if let Some(word) = raw.editor.word_mark.as_deref() {
         if word != "off" && yumete_cjk::WordMark::parse(word).is_none() {
-            problems.push(format!(
-                "[editor] word_mark = \"{word}\" 只能是 off、color、ink、tint、line"
-            ));
+            let mut names = vec!["off"];
+            names.extend_from_slice(yumete_cjk::WordMark::NAMES);
+            problems.push(one_of("[editor] word_mark", word, &names));
         }
     }
     if let Some(word) = raw.editor.vertical_keys.as_deref() {
         if yumete_cjk::VerticalKeys::parse(word).is_none() {
-            problems.push(format!(
-                "[editor] vertical_keys = \"{word}\" 只能是 logical、visual"
-            ));
+            problems.push(one_of("[editor] vertical_keys", word, yumete_cjk::VerticalKeys::NAMES));
         }
     }
 
@@ -3233,14 +3324,15 @@ impl Config {
     // 理由就是終結這件事，而這幾格漏了。
     if let Some(word) = raw.theme.name.as_deref() {
         if !word.trim().is_empty() && ThemeConfig::named(word).is_none() {
-            problems.push(format!(
-                "[theme] name = \"{word}\" 不是主題的名字——:theme 按一下 Tab 看有哪些"
+            problems.push(said(
+                format!("[theme] name = \"{word}\" 不是主題的名字——:theme 按一下 Tab 看有哪些"),
+                format!("[theme] name = \"{word}\" is not a theme; :theme and Tab list them"),
             ));
         }
     }
     if let Some(word) = raw.theme.mode.as_deref() {
         if Mode::parse(word).is_none() {
-            problems.push(format!("[theme] mode = \"{word}\" 只能是 auto、system、dark、light"));
+            problems.push(one_of("[theme] mode", word, Mode::NAMES));
         }
     }
     if let Some(word) = raw.editor.line_numbers.as_deref() {
@@ -3249,57 +3341,53 @@ impl Config {
         let known = ["absolute", "abs", "relative", "rel", "none", "off", "false"];
         let word = word.trim();
         if !known.contains(&word.to_ascii_lowercase().as_str()) {
-            problems.push(format!(
-                "[editor] line_numbers = \"{word}\" 只能是 absolute、relative、none"
-            ));
+            problems.push(one_of("[editor] line_numbers", word, LINE_NUMBER_NAMES));
         }
     }
     if let Some(word) = raw.editor.ambiguous_width.as_deref() {
         if !["auto", "wide", "narrow"].contains(&word.trim().to_ascii_lowercase().as_str()) {
-            problems.push(format!(
-                "[editor] ambiguous_width = \"{word}\" 只能是 auto、wide、narrow"
-            ));
+            problems.push(one_of("[editor] ambiguous_width", word, AMBIGUOUS_WIDTH_NAMES));
         }
     }
     if let Some(word) = raw.editor.language.as_deref() {
-        // ⚠️ **這一張單子抄自 `yumete_core::messages::Language::parse`**，因為
-        // 這個 crate 不依賴那一個。那邊加一種寫法，這裏要跟。
-        // `auto` is the factory value (follow the locale), so it is known too.
-        let known = [
-            "auto", "zh", "zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体",
-            "zhs", "zh-hans", "zh-cn", "简体", "簡體", "en", "english",
-        ];
-        let said = word.trim().to_ascii_lowercase();
-        if !said.is_empty() && !known.contains(&said.as_str()) {
-            problems.push(format!("[editor] language = \"{word}\" 只能是 zh、zhs、en"));
+        // Warning: **`LANGUAGES` is copied from `yumete_core::messages::Language::parse`**,
+        // because this crate does not depend on that one. A spelling added
+        // there is added here. `auto` is the factory value (follow the locale).
+        let written = word.trim().to_ascii_lowercase();
+        let known = LANGUAGES
+            .iter()
+            .any(|(name, aliases)| *name == written || aliases.contains(&written.as_str()));
+        if !written.is_empty() && !known {
+            let names: Vec<&str> = LANGUAGES.iter().map(|(name, _)| *name).collect();
+            problems.push(one_of("[editor] language", word, &names));
         }
     }
     if let Some(word) = raw.panel.display.as_deref() {
         if PanelDisplay::parse(word).is_none() {
-            problems.push(format!("[panel] display = \"{word}\" 不是候選面板的畫法"));
+            problems.push(one_of("[panel] display", word, PanelDisplay::NAMES));
         }
     }
     if let Some(word) = raw.panel.inline_preedit.as_deref() {
         if InlinePreedit::parse(word).is_none() {
-            problems.push(format!("[panel] inline_preedit = \"{word}\" 不是編碼的擺法"));
+            problems.push(one_of("[panel] inline_preedit", word, InlinePreedit::NAMES));
         }
     }
 
     if let Some(word) = raw.keys.preset.as_deref() {
         if KeyPreset::parse(word).is_none() {
-            problems.push(format!("[keys] preset = \"{word}\" 只能是 helix 或 vim"));
+            problems.push(one_of("[keys] preset", word, KeyPreset::NAMES));
         }
     }
 
     if let Some(word) = raw.editor.tab_inserts.as_deref() {
         if !matches!(word, "spaces" | "tab") {
-            problems.push(format!("[editor] tab_inserts = \"{word}\" 只能是 spaces 或 tab"));
+            problems.push(one_of("[editor] tab_inserts", word, TAB_INSERTS_NAMES));
         }
     }
 
     if let Some(word) = raw.ime.system.as_deref() {
         if !SystemImePolicy::is_written(word) {
-            problems.push(format!("[ime] system = \"{word}\" 只能是 auto 或 keep"));
+            problems.push(one_of("[ime] system", word, SYSTEM_IME_NAMES));
         }
     }
 
@@ -3313,9 +3401,7 @@ impl Config {
                 kind: RunKind::parse(runner.kind.as_deref().unwrap_or("")).unwrap_or_default(),
             };
             if RunKind::parse(runner.kind.as_deref().unwrap_or("")).is_none() {
-                problems.push(format!(
-                    "[language.{language}] {verb}: kind 只能是 once、server 或 filter"
-                ));
+                problems.push(one_of(&format!("[language.{language}] {verb}: kind"), runner.kind.as_deref().unwrap_or(""), RunKind::NAMES));
             } else if let Some(fault) = checked.fault() {
                 problems.push(format!("[language.{language}] {verb}: {fault}"));
             }
@@ -3363,9 +3449,16 @@ impl Config {
             true => "本地",
             false => "全局",
         };
-        format!(
-            "{which}配置檔出錯，使用出廠設置。{}: {detail}",
-            path.display()
+        said(
+            format!("{which}配置檔出錯，使用出廠設置。{}: {detail}", path.display()),
+            format!(
+                "The {} config file has an error; the factory settings are in use. {}: {detail}",
+                match local {
+                    true => "local",
+                    false => "global",
+                },
+                path.display()
+            ),
         )
     }
 
@@ -4114,9 +4207,6 @@ impl RawConfig {
         if other.editor.show_ruby.is_some() {
             self.editor.show_ruby = other.editor.show_ruby;
         }
-        if other.editor.ruby_dialects.is_some() {
-            self.editor.ruby_dialects = other.editor.ruby_dialects.clone();
-        }
         if other.editor.usage_groups.is_some() {
             self.editor.usage_groups = other.editor.usage_groups.clone();
         }
@@ -4310,7 +4400,10 @@ impl RawConfig {
         /// `want` 鉗進 `low..=high`，鉗動了就記一條。`range` 是給人看的那半句。
         fn held(problems: &mut Vec<String>, at: &str, want: usize, got: usize, range: &str) -> usize {
             if got != want {
-                problems.push(format!("{at}：輸入的 {want} 不在合法範圍 {range}"));
+                problems.push(said(
+                    format!("{at}：輸入的 {want} 不在合法範圍 {range}"),
+                    format!("{at}: {want} is outside {range}"),
+                ));
             }
             got
         }
@@ -4337,8 +4430,8 @@ impl RawConfig {
                 false => want.clamp(low, high),
             };
             let range = match zeroed {
-                true => format!("0，或者 {low} 到 {high}"),
-                false => format!("{low} 到 {high}"),
+                true => zero_or(low, high),
+                false => span(low, high),
             };
             held(problems, &format!("[{table}] {key}"), want, got, &range)
         }
@@ -4370,9 +4463,12 @@ impl RawConfig {
         if let Some(key) = self.editor.language_key {
             match LanguageKey::parse(&key) {
                 Some(_) => config.editor.language_key = key,
-                None => problems.push(format!(
-                    "[editor] language_key：不認得「{key}」——只能是 off、F1 到 F12、\
-                     C-<字母> 或 A-<字母>"
+                None => problems.push(said(
+                    format!(
+                        "[editor] language_key：不認得「{key}」——只能是 off、F1 到 F12、\
+                         C-<字母> 或 A-<字母>"
+                    ),
+                    format!("[editor] language_key: \"{key}\" is not a key; only off, F1 to F12, C-<letter> or A-<letter>"),
                 )),
             }
         }
@@ -4431,15 +4527,15 @@ impl RawConfig {
         if let Some(n) = self.editor.indent {
             // Two is the Chinese convention and eight is more than anyone
             // means; a number outside that is a typo, not a preference.
-            config.editor.indent = held(problems, "[editor] indent", n, n.min(8), "0 到 8");
+            config.editor.indent = held(problems, "[editor] indent", n, n.min(8), &span(0, 8));
         }
         if let Some(n) = self.editor.pages_vertical {
             config.editor.pages_vertical =
-                held(problems, "[editor] pages_vertical", n, n.clamp(1, 4), "1 到 4");
+                held(problems, "[editor] pages_vertical", n, n.clamp(1, 4), &span(1, 4));
         }
         if let Some(n) = self.editor.pages_horizontal {
             config.editor.pages_horizontal =
-                held(problems, "[editor] pages_horizontal", n, n.clamp(1, 4), "1 到 4");
+                held(problems, "[editor] pages_horizontal", n, n.clamp(1, 4), &span(1, 4));
         }
         if let Some(on) = self.editor.session {
             config.editor.session = on;
@@ -4460,27 +4556,24 @@ impl RawConfig {
             // 不是口味：比它窄，一個全角字會被擠到自己那一行上，没完没了。
             let kept = if length == 0 { 0 } else { length.clamp(8, 64) };
             config.editor.zong_length =
-                held(problems, "[editor] zong_length", length, kept, "0，或者 8 到 64");
+                held(problems, "[editor] zong_length", length, kept, &zero_or(8, 64));
         }
         if let Some(n) = self.editor.word_completion {
             config.editor.word_completion =
-                held(problems, "[editor] word_completion", n, n.min(20), "0 到 20");
+                held(problems, "[editor] word_completion", n, n.min(20), &span(0, 20));
         }
         if let Some(n) = self.editor.completion_page_size {
             config.editor.completion_page_size =
-                held(problems, "[editor] completion_page_size", n, n.clamp(1, 20), "1 到 20");
+                held(problems, "[editor] completion_page_size", n, n.clamp(1, 20), &span(1, 20));
         }
         if let Some(gap) = self.editor.zong_gap {
-            config.editor.zong_gap = held(problems, "[editor] zong_gap", gap, gap.min(4), "0 到 4");
+            config.editor.zong_gap = held(problems, "[editor] zong_gap", gap, gap.min(4), &span(0, 4));
         }
         if let Some(on) = self.editor.show_chaifen {
             config.editor.show_chaifen = on;
         }
         if let Some(on) = self.editor.show_ruby {
             config.editor.show_ruby = on;
-        }
-        if let Some(dialects) = self.editor.ruby_dialects {
-            config.editor.ruby_dialects = dialects;
         }
         if let Some(groups) = self.editor.usage_groups {
             config.editor.usage_groups = groups;
@@ -4498,7 +4591,7 @@ impl RawConfig {
                     "[editor] tatechuyoko",
                     at_most,
                     kept,
-                    &format!("0，或者 {TATECHUYOKO_CLASSIC} 到 {TATECHUYOKO_MAX}"),
+                    &zero_or(TATECHUYOKO_CLASSIC, TATECHUYOKO_MAX),
                 ),
             };
         }
@@ -4522,13 +4615,15 @@ impl RawConfig {
         if let Some(written) = self.editor.which_wrap.as_deref() {
             let (kept, bad) = yumete_cjk::read_which_wrap(written);
             if bad.contains(&'s') {
-                problems.push(format!(
-                    "[editor] which_wrap = \"{written}\"：s 不是合法字母。空格在yumete中是菜單鍵"
+                problems.push(said(
+                    format!("[editor] which_wrap = \"{written}\"：s 不是合法字母。空格在yumete中是菜單鍵"),
+                    format!("[editor] which_wrap = \"{written}\": s is not allowed; Space is the menu key in yumete"),
                 ));
             }
             if bad.iter().any(|c| *c != 's') {
-                problems.push(format!(
-                    "[editor] which_wrap = \"{written}\"：出現了不合法字母。只允許 b h l < > ~"
+                problems.push(said(
+                    format!("[editor] which_wrap = \"{written}\"：出現了不合法字母。只允許 b h l < > ~"),
+                    format!("[editor] which_wrap = \"{written}\": only the letters b h l < > ~"),
                 ));
             }
             config.editor.which_wrap = kept;
@@ -4540,11 +4635,11 @@ impl RawConfig {
             config.editor.autosave = on;
         }
         if let Some(ruler) = self.editor.ruler {
-            config.editor.ruler = held(problems, "[editor] ruler", ruler, ruler.min(400), "0 到 400");
+            config.editor.ruler = held(problems, "[editor] ruler", ruler, ruler.min(400), &span(0, 400));
         }
         if let Some(measure) = self.editor.measure {
             config.editor.measure =
-                held(problems, "[editor] measure", measure, measure.min(400), "0 到 400");
+                held(problems, "[editor] measure", measure, measure.min(400), &span(0, 400));
         }
         if let Some(on) = self.editor.char_info {
             config.editor.char_info = on;
@@ -4574,7 +4669,7 @@ impl RawConfig {
         }
         if let Some(ticks) = self.editor.paper_ticks {
             config.editor.paper_ticks =
-                held(problems, "[editor] paper_ticks", ticks, ticks.min(64), "0 到 64");
+                held(problems, "[editor] paper_ticks", ticks, ticks.min(64), &span(0, 64));
         }
         if let Some(syntax) = self.editor.syntax {
             config.editor.syntax = syntax;
@@ -4732,9 +4827,16 @@ impl RawConfig {
                     true => format!("「{markers}」"),
                     false => format!("「{markers}」裏的「{narrow}」"),
                 };
-                problems.push(format!(
-                    "[panel] markers：{which}不是全角的——序號要全角，\
-                     不然候選欄的格子對不齊"
+                let which_en = match narrow == markers {
+                    true => format!("\"{markers}\" is"),
+                    false => format!("\"{narrow}\" in \"{markers}\" are"),
+                };
+                problems.push(said(
+                    format!(
+                        "[panel] markers：{which}不是全角的——序號要全角，\
+                         不然候選欄的格子對不齊"
+                    ),
+                    format!("[panel] markers: {which_en} not full-width, and the candidate cells would not line up"),
                 ));
             } else {
                 config.panel.markers = markers;
@@ -4745,7 +4847,7 @@ impl RawConfig {
             // — yume itself allows it, and a page of one is a real setting: the
             // panel then says what Space would commit and nothing else.
             config.panel.page_size =
-                held(problems, "[panel] page_size", size, size.clamp(1, 9), "1 到 9");
+                held(problems, "[panel] page_size", size, size.clamp(1, 9), &span(1, 9));
         }
         if let Some(rounded) = self.panel.rounded {
             config.panel.rounded = rounded;
@@ -4763,9 +4865,15 @@ impl RawConfig {
         // `0x0`、`bogus` 都是，而同一個檔裏別的壞值每一條都說得出口。
         if let Some(page) = self.export.page.as_deref() {
             if parse_page(page).is_none() {
-                problems.push(format!(
-                    "[export] page：不認得「{page}」——只能是 a4 a5 a6 b5 b6 letter \
-                     16開 32開 大32開，或者「137x195」這樣的毫米數"
+                problems.push(said(
+                    format!(
+                        "[export] page：不認得「{page}」——只能是 a4 a5 a6 b5 b6 letter \
+                         16開 32開 大32開，或者「137x195」這樣的毫米數"
+                    ),
+                    format!(
+                        "[export] page: \"{page}\" is not a page size; only a4 a5 a6 b5 b6 letter \
+                         16開 32開 大32開, or millimetres such as \"137x195\""
+                    ),
                 ));
             }
         }
@@ -4788,9 +4896,15 @@ impl RawConfig {
             } else if yumete_cjk::actions::bound(&v).is_some() {
                 config.keys.normal.insert(k, v);
             } else {
-                problems.push(format!(
-                    "[keys.normal] {k} = \"{v}\" 不是動作名，這一條没裝上——\
-                     動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{v}\""
+                problems.push(said(
+                    format!(
+                        "[keys.normal] {k} = \"{v}\" 不是動作名，這一條没裝上——\
+                         動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{v}\""
+                    ),
+                    format!(
+                        "[keys.normal] {k} = \"{v}\" is not an action, so it was not bound; \
+                         :keymap-actions lists them, and a string of keys is written \"@{v}\""
+                    ),
                 ));
             }
         }
@@ -5721,4 +5835,77 @@ mod a_typo_is_said_out_loud {
         assert_eq!(TOKYO_NIGHT.headings[5], (0x74, 0x7C, 0xA1));
     }
 
+}
+
+/// **Every name a complaint lists is one the value accepts** (2026-10-30):
+/// the lists are generated from `NAMES`, so this is what keeps a name from
+/// being listed that `parse` then refuses, or accepted but never listed.
+#[cfg(test)]
+mod complaint_names {
+    use super::*;
+
+    #[test]
+    fn every_listed_name_parses() {
+        for name in Tabs::NAMES {
+            assert!(Tabs::parse(name).is_some(), "tabs {name}");
+        }
+        for name in PanelDisplay::NAMES {
+            assert!(PanelDisplay::parse(name).is_some(), "display {name}");
+        }
+        for name in InlinePreedit::NAMES {
+            assert!(InlinePreedit::parse(name).is_some(), "inline_preedit {name}");
+        }
+        for name in Mode::NAMES {
+            assert!(Mode::parse(name).is_some(), "mode {name}");
+        }
+        for name in RunKind::NAMES {
+            assert!(RunKind::parse(name).is_some(), "kind {name}");
+        }
+        for name in COMMIT_NAMES {
+            assert!(commit_is_a_word(name), "commit {name}");
+        }
+        for name in SYSTEM_IME_NAMES {
+            assert!(SystemImePolicy::is_written(name), "system {name}");
+        }
+        for name in yumete_cjk::Layout::NAMES {
+            assert!(yumete_cjk::Layout::parse(name).is_some(), "layout {name}");
+        }
+        for name in yumete_cjk::WordLevel::NAMES {
+            assert!(yumete_cjk::WordLevel::parse(name).is_some(), "word_level {name}");
+        }
+        for name in yumete_cjk::WordMark::NAMES {
+            assert!(yumete_cjk::WordMark::parse(name).is_some(), "word_mark {name}");
+        }
+        for name in yumete_cjk::VerticalKeys::NAMES {
+            assert!(yumete_cjk::VerticalKeys::parse(name).is_some(), "vertical_keys {name}");
+        }
+        for name in KeyPreset::NAMES {
+            assert!(KeyPreset::parse(name).is_some(), "preset {name}");
+        }
+        for (name, aliases) in LANGUAGES {
+            for word in std::iter::once(name).chain(aliases.iter()) {
+                let faults = crate::faults::faults_in(&format!("[editor]\nlanguage = \"{word}\"\n"));
+                assert!(faults.is_empty(), "language {word}: {faults:?}");
+            }
+        }
+    }
+
+    /// The list is the type's own, and the English comes from the same list.
+    #[test]
+    fn the_complaint_lists_the_names_in_both_languages() {
+        let said = |text: &str| -> Vec<String> {
+            crate::faults::faults_in(text).into_iter().map(|f| f.said).collect()
+        };
+        assert_eq!(said("[editor]\ntabs = \"maybe\"\n"), ["[editor] tabs = \"maybe\" 只能是 auto、always、never"]);
+        yumete_cjk::set_speaks_english(true);
+        let problems = said("[editor]\ntabs = \"maybe\"\n[keys]\npreset = \"emacs\"\n");
+        yumete_cjk::set_speaks_english(false);
+        assert_eq!(
+            problems,
+            [
+                "[editor] tabs = \"maybe\": only auto, always, or never",
+                "[keys] preset = \"emacs\": only helix or vim",
+            ]
+        );
+    }
 }
