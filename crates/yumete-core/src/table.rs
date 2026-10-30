@@ -762,13 +762,14 @@ pub const BLOCK_GUESSES: [char; 4] = ['\t', ',', ';', '&'];
 
 /// The delimiters a **plain-text file** may turn out to be cut by (#380).
 ///
-/// The three above and a space, in that order of confidence. A space is not
-/// among [`GUESSES`] because that list is also asked of a document, where a
-/// space is what words are separated by; asked of a whole file whose every
-/// line holds the same number of them, it is a column separator. The order
-/// matters: a file cut by tabs usually has spaces inside its fields, so the
-/// stronger mark has to be tried first.
-pub const TEXT_GUESSES: [char; 4] = ['\t', ',', ';', ' '];
+/// The three above, in that order of confidence: a file cut by tabs usually
+/// has spaces inside its fields, so the stronger mark has to be tried first.
+///
+/// **No space** (2026-10-30, as decided). A shopping list whose lines all
+/// hold two spaces was read as a three-column grid, and `:w` then wrote
+/// quotes around a cell nobody had quoted: `call mum "tonight and dad"`. A
+/// space-separated table is asked for by name (`:table space`, `-t`).
+pub const TEXT_GUESSES: [char; 3] = ['\t', ',', ';'];
 
 /// Which character splits these lines into cells, if one plainly does.
 ///

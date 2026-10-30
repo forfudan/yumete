@@ -157,15 +157,13 @@ impl Reader for YumeReader {
         // The 字集 column reads `簡繁古臺港-CJK`: the 字集 marks, then the
         // Unicode block.
         //
-        // **Every standard in daily use counts, not 簡 alone.** 簡 is
-        // 通用規範漢字表 — a list of *simplified* standard forms — so asking it
-        // and nothing else answered 「生僻」 for 說, 為, 這, 裏, 學 and 國, which
-        // is every second character of a 繁體 manuscript: the reading went over
-        // half the page and `rare` became the mode it exists to avoid. A
-        // character is ordinary if any of the four current standards carries
-        // it. 古 is deliberately not among them — a character only 古籍 has is
-        // exactly the one a reader stumbles on.
-        const EVERYDAY: [char; 4] = ['簡', '繁', '臺', '港'];
+        // **通用規範漢字表 and its traditional counterparts** (2026-10-30: the
+        // rule as decided). 簡 alone answered 「生僻」 for 說, 為, 這, 裏, 學 and
+        // 國 — every second character of a 繁體 manuscript — so 繁, the
+        // traditional forms the table maps to, counts too. 臺 and 港 do not:
+        // a character only those lists carry is one a reader stumbles on, and
+        // so is one only 古籍 has.
+        const EVERYDAY: [char; 2] = ['簡', '繁'];
         let field = self.charset(ch)?;
         let (tags, _block) = yumete_cjk::split_charset(&field);
         Some(!EVERYDAY.iter().any(|t| tags.contains(*t)))

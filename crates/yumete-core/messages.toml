@@ -6631,6 +6631,13 @@ zhs = "上一格"
 en = "previous cell"
 
 [[message]]
+# 空格 t 菜單：v，把複製的欄蓋到這一欄上
+key = "hint.table.replace-column"
+zht = "用複製的欄蓋掉該欄"
+zhs = "用复制的栏盖掉该栏"
+en = "write the yanked column over this one"
+
+[[message]]
 # 表格提示：規格檔
 key = "hint.table.schema"
 zht = "這張表格的元數據"
@@ -6675,9 +6682,16 @@ en = "window view: the table takes the window"
 [[message]]
 # 表格提示：取這欄/貼一欄
 key = "hint.table.yank-or-paste-column"
-zht = "複製/粘貼該欄"
-zhs = "复制/粘贴该栏"
-en = "yank / paste this column"
+zht = "複製該欄/貼到右邊/貼到左邊"
+zhs = "复制该栏/贴到右边/贴到左边"
+en = "yank this column / paste it to the right / to the left"
+
+[[message]]
+# 空格 t 菜單（文中的區塊）：y 複製、v 蓋掉——區塊不改結構，所以没有插入
+key = "hint.table.yank-or-replace-column"
+zht = "複製該欄/用複製的欄蓋掉該欄"
+zhs = "复制该栏/用复制的栏盖掉该栏"
+en = "yank this column / write the yanked column over it"
 
 [[message]]
 # 面板底下那一行：q 把鍵還給正文，面板留着(關那一格是 C-w q)
@@ -11692,6 +11706,13 @@ key = "table.column-deleted"
 zht = "删了一欄"
 zhs = "删了一栏"
 en = "deleted a column"
+
+[[message]]
+# 空格 t p/P 之後：插入了一欄，{0} 個值
+key = "table.column-inserted"
+zht = "已插入一欄，{0} 個值"
+zhs = "已插入一栏，{0} 个值"
+en = "a column put in with {0} values"
 
 [[message]]
 # 要取的那一欄是空的

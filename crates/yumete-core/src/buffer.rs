@@ -1359,7 +1359,12 @@ impl Buffer {
         if parent.is_dir() {
             return Ok(());
         }
-        match force {
+        // **The schema folder is always made** (2026-10-30): a schema opened
+        // by `Space t e` lives under `.yumete/tables/` and is written with a
+        // plain `:w`, so that folder cannot be a typo. The rest of `.yumete/`
+        // still asks for `:w!`, as any other missing folder does.
+        let ours = parent.ends_with(Path::new(".yumete").join("tables"));
+        match force || ours {
             true => fs::create_dir_all(parent),
             // Warning: **說的是他打的那個路徑，不是絕對路徑。** 狀態欄那一行很貴
             // ——整條 `/private/tmp/claude-501/…/proj/.yumete` 把後半句

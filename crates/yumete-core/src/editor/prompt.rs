@@ -855,9 +855,12 @@ impl Editor {
                     self.last_search = pattern;
                 }
                 // **正則那一族借這一扇**（#405 Phase 2）：同一條規則，做的是另一件事。
-                if let Some(what) = self.sift.take() {
+                if let Some(what) = self.sift {
                     self.search.query = self.last_search.clone();
-                    return self.sift(what);
+                    // Still set while the pattern is read: `regex_on` asks it.
+                    self.sift(what);
+                    self.sift = None;
+                    return;
                 }
                 let forward = self.search_forward;
                 self.repeat_search(forward);

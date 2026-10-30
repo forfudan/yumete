@@ -4122,11 +4122,9 @@ impl Editor {
             .collect()
     }
 
-    /// Write what was yanked down the cursor's column (`t p`).
-    fn put_column(&mut self) {
-        if self.refuse_readonly() {
-            return;
-        }
+    /// The values `t y` put in the register, one to a cell, or `None` (and a
+    /// word on the status line) when there are none.
+    fn yanked_column(&mut self) -> Option<Vec<String>> {
         let text = self.recall();
         // **One terminator off, not all of them** (2026-10-30): a column whose
         // last values are empty ends in empty lines, and trimming every `\n`
@@ -4146,8 +4144,19 @@ impl Editor {
         }
         if values.is_empty() {
             self.status = say!("edit.nothing-yanked-yet");
+            return None;
+        }
+        Some(values)
+    }
+
+    /// Write what was yanked over the cursor's column (`t v`).
+    fn put_column(&mut self) {
+        if self.refuse_readonly() {
             return;
         }
+        let Some(values) = self.yanked_column() else {
+            return;
+        };
         let n = values.len();
         if let Some((region, mut parts)) = self.md_parts() {
             // **A `|` cell is one line** (2026-10-23). A column yanked out of a
@@ -4210,6 +4219,101 @@ impl Editor {
         }
         self.snap_to_cell();
         self.status = say!("table.pasted-column", written);
+    }
+
+    /// Put what was yanked in as a **new column** beside the cursor's: `t p`
+    /// to the right, `t P` to the left (2026-10-30, as decided, so the column
+    /// keys answer like the row keys `p`/`P`; writing over a column is `t v`).
+    ///
+    /// Every record gets a cell, with the yanked value where there is one and
+    /// empty beyond — a delimited row with one cell fewer is no longer a row
+    /// of the same table. A block read where it lies is not restructured.
+    fn put_column_beside(&mut self, after: bool) {
+        if self.refuse_readonly() {
+            return;
+        }
+        if self.block_region().is_some() {
+            self.status = say!("table.block-is-read-where-it-lies");
+            return;
+        }
+        let Some(values) = self.yanked_column() else {
+            return;
+        };
+        let n = values.len();
+        if let Some((region, mut parts)) = self.md_parts_to_edit() {
+            if let Some(nth) = values.iter().position(|v| v.contains('\n')) {
+                self.status = say!("table.column-value-has-a-line-break", nth + 1);
+                return;
+            }
+            let (row, cell) = self.md_at(&region);
+            let at = parts.insert_column(if after { cell + 1 } else { cell });
+            for (r, value) in values.iter().enumerate() {
+                while r >= parts.rows.len() {
+                    parts.insert_row(parts.rows.len());
+                }
+                let width = parts.columns().max(at + 1);
+                let row = &mut parts.rows[r];
+                row.resize(width, String::new());
+                row[at] = crate::mdtable::escape(value);
+            }
+            self.md_reschema(&parts);
+            if self.md_write(&region, &parts, row, at) {
+                self.status = say!("table.column-inserted", n);
+            }
+            return;
+        }
+        let Some((_, cell)) = self.cell_position() else {
+            return;
+        };
+        let Some(view) = self.table.as_ref() else { return };
+        let (d, header) = (view.schema.delimiter, view.schema.header);
+        let lines = self.record_lines();
+        if let Some((r, _)) = values.iter().enumerate().find(|(_, v)| v.contains(d)) {
+            let row = lines.get(r).map(|l| l + 1).unwrap_or(r + 1);
+            self.status = say!("table.cell-holds-the-delimiter", row, cell + 1, d);
+            return;
+        }
+        self.snapshot();
+        // From the bottom up, as `put_column` writes: a value with a line
+        // break moves the lines under it.
+        let mut written = 0;
+        for (r, line) in lines.iter().copied().enumerate().rev() {
+            let Some((from, to)) = self.cell_span_to_edit(line, cell) else {
+                continue;
+            };
+            let value = values.get(r).map(String::as_str).unwrap_or("");
+            let quoted = crate::table::quote_for(value, d);
+            let (at, text) = match after {
+                true => (to, format!("{d}{quoted}")),
+                false => (from, format!("{quoted}{d}")),
+            };
+            if !self.without_cell_guard(|e| e.edit_insert(at, &text)) {
+                return;
+            }
+            written += usize::from(r < values.len());
+        }
+        // The schema gains the column too, named by the header when there is
+        // one, or by its number.
+        let at = if after { cell + 1 } else { cell };
+        if let Some(view) = self.table.as_mut() {
+            let mut column = view.schema.columns.get(cell).cloned().unwrap_or_else(|| crate::table::Column {
+                name: String::new(),
+                label: None,
+                kind: Default::default(),
+                hidden: false,
+            });
+            column.name = match header {
+                true => values.first().cloned().unwrap_or_default(),
+                false => (at + 1).to_string(),
+            };
+            column.label = None;
+            column.hidden = false;
+            let at = at.min(view.schema.columns.len());
+            view.schema.columns.insert(at, column);
+        }
+        self.rescan_records();
+        self.snap_to_cell();
+        self.status = say!("table.column-inserted", written);
     }
 
     /// Put a block of cells in, starting at the cursor's.
@@ -5089,24 +5193,41 @@ impl Editor {
         // Warning: **不能改成 `root()`**（當天先那麼改過，審出來是錯的）：讀那一
         // 趟是**檔的函數**，它的文檔寫着「從任何地方打開同一個 CSV 都要找到同
         // 一份規格」。寫進項目根的話，項目**外**的檔寫完就再也讀不回來。
+        // **In the project's `.yumete/tables/`** (2026-10-30, as decided), or
+        // beside the file when it lies outside the project — the read side
+        // (`table::schema_for`) walks up from the file, so a schema at the
+        // root is found for every file under it.
+        let root = self.root();
         let from = path.parent().unwrap_or_else(|| Path::new("."));
         let tables = from
             .ancestors()
             .map(|d| d.join(".yumete").join("tables"))
             .find(|d| d.is_dir())
-            .unwrap_or_else(|| from.join(".yumete").join("tables"));
+            .unwrap_or_else(|| match path.starts_with(&root) {
+                true => root.join(".yumete").join("tables"),
+                false => from.join(".yumete").join("tables"),
+            });
         let file = tables.join(format!("{stem}.toml"));
         if file.exists() {
             return Some(file);
         }
+        // **Nothing is written yet** (2026-10-30, as decided): the schema opens
+        // as an unsaved buffer bound to that path, and `:w` is what puts it on
+        // disk — so `--readonly`, `--private` and a glance at the schema leave
+        // the project as they found it, and no `.yumete/` appears in a
+        // subdirectory to become a project root of its own.
         let text = crate::table::starting_schema(&name, &view.schema, &say!("table.schema-note"));
-        if let Err(why) = std::fs::create_dir_all(&tables) {
-            self.status = say!("table.schema-cannot-write", file.display(), why);
+        let table = self.current_buffer().id();
+        if let Err(why) = self.open_file(&file) {
+            self.status = say!("buffer.cannot-open", file.display(), why);
             return None;
         }
-        if let Err(why) = std::fs::write(&file, text) {
-            self.status = say!("table.schema-cannot-write", file.display(), why);
-            return None;
+        if self.current_buffer().char_count() == 0 {
+            let _ = self.current_buffer_mut().insert(0, &text);
+            self.set_cursor(0);
+        }
+        if let Some(index) = self.buffer_with(table) {
+            self.show_buffer(index);
         }
         // The view now has a schema file of its own, so a second `t e` opens
         // this one rather than asking to write it again.
@@ -5512,7 +5633,9 @@ impl Editor {
                     self.search_columns_in(columns);
                 }
                 Key::Char('y') => self.yank_column(),
-                Key::Char('p') => self.put_column(),
+                Key::Char('p') => self.put_column_beside(true),
+                Key::Char('P') => self.put_column_beside(false),
+                Key::Char('v') => self.put_column(),
                 // **排序也在這一塊上做得了**（2026-10-03 定，原話：「我会先
                 // 在逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq 回到正
                 // 文」）。上面那一段註釋寫着「排序會把整份檔案按表格自己的行重建
@@ -5547,7 +5670,9 @@ impl Editor {
         if self.md_region().is_none() {
             match key {
                 Key::Char('y') => self.yank_column(),
-                Key::Char('p') => self.put_column(),
+                Key::Char('p') => self.put_column_beside(true),
+                Key::Char('P') => self.put_column_beside(false),
+                Key::Char('v') => self.put_column(),
                 // **The detail panel is a table key** (#215). It answered to
                 // `空格 d` for as long as the panel was the only thing that
                 // knew a row's twenty-eight fields — but `空格` is the
@@ -5607,7 +5732,9 @@ impl Editor {
             Key::Char('h') | Key::Left => self.md_move_column(false),
             Key::Char('l') | Key::Right => self.md_move_column(true),
             Key::Char('y') => self.yank_column(),
-            Key::Char('p') => self.put_column(),
+            Key::Char('p') => self.put_column_beside(true),
+            Key::Char('P') => self.put_column_beside(false),
+            Key::Char('v') => self.put_column(),
             // `t i` — see the note on the delimited file's copy of this key.
             Key::Char('i') => self.show_the_record_here(true),
             Key::Char('I') => self.show_the_record_here(false),

@@ -2688,6 +2688,26 @@ impl Editor {
                 // 的，因為那一下 Esc 順手把它收了；現在它不收，於是「還有選區」
                 // 不再是 Esc 有事可做——不改這一句的話，選區留着的時候 Esc 永遠
                 // 說不出那一句。
+                // **vim's Esc leaves Visual with nothing selected and the
+                // cursor where it stood** (2026-10-30, as decided; `:h v_<Esc>`).
+                // After `V` the cursor goes back to the column it was in.
+                if self.key_preset == yumete_cjk::KeyPreset::Vim && self.extend {
+                    let at = match self.vim_lines {
+                        true => {
+                            let rope = self.current_buffer().rope();
+                            let line = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+                            self.column_on_line(line, self.vim_line_column)
+                        }
+                        false => self.sel.head(),
+                    };
+                    self.extend = false;
+                    self.vim_lines = false;
+                    self.sel.set_anchor(at);
+                    self.sel.set_head(at);
+                    self.clamp_cursor();
+                    self.refresh_goal_column();
+                    return;
+                }
                 let idle = !self.extend;
                 self.extend = false;
                 if idle {
@@ -4394,7 +4414,7 @@ impl Editor {
         ("/", "hint.table.search-columns"),
         ("?", "hint.table.search-columns-elsewhere"),
         ("g", "hint.table.go-to-cell"),
-        ("y p", "hint.table.yank-or-paste-column"),
+        ("y v", "hint.table.yank-or-replace-column"),
         ("1s 1S", "hint.table.sort-by-column"),
     ];
 
@@ -4408,7 +4428,8 @@ impl Editor {
         ("d D", "hint.table.delete-row-or-column"),
         ("j k", "hint.table.move-row"),
         ("h l", "hint.table.move-column"),
-        ("y p", "hint.table.yank-or-paste-column"),
+        ("y p P", "hint.table.yank-or-paste-column"),
+        ("v", "hint.table.replace-column"),
         ("1s 1S", "hint.table.sort-by-column"),
         ("< = >", "hint.table.align-column"),
         // `F`, not `f` — the lowercase letter is 完整表格 since #283, and a
@@ -4432,7 +4453,8 @@ impl Editor {
         ("r R", "hint.table.add-row"),
         ("d", "hint.table.delete-row"),
         ("j k", "hint.table.move-row"),
-        ("y p", "hint.table.yank-or-paste-column"),
+        ("y p P", "hint.table.yank-or-paste-column"),
+        ("v", "hint.table.replace-column"),
         ("H", "hint.table.first-row-is-data"),
         ("e", "hint.table.schema"),
         ("i", "hint.table.detail-panel"),
