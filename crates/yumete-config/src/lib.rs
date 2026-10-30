@@ -5890,22 +5890,14 @@ mod complaint_names {
         }
     }
 
-    /// The list is the type's own, and the English comes from the same list.
+    /// The list is the type's own. The English half lives in
+    /// `tests/complaints_english.rs`: the language is a process-wide switch,
+    /// and flipping it here reddened a neighbour at random (2026-10-30).
     #[test]
-    fn the_complaint_lists_the_names_in_both_languages() {
+    fn the_complaint_lists_the_names() {
         let said = |text: &str| -> Vec<String> {
             crate::faults::faults_in(text).into_iter().map(|f| f.said).collect()
         };
         assert_eq!(said("[editor]\ntabs = \"maybe\"\n"), ["[editor] tabs = \"maybe\" 只能是 auto、always、never"]);
-        yumete_cjk::set_speaks_english(true);
-        let problems = said("[editor]\ntabs = \"maybe\"\n[keys]\npreset = \"emacs\"\n");
-        yumete_cjk::set_speaks_english(false);
-        assert_eq!(
-            problems,
-            [
-                "[editor] tabs = \"maybe\": only auto, always, or never",
-                "[keys] preset = \"emacs\": only helix or vim",
-            ]
-        );
     }
 }

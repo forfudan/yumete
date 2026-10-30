@@ -265,6 +265,48 @@ impl Editor {
     /// 「find a word anywhere in the book」 and 「point at this stack on my
     /// desk」 are different questions (#419, `[^361]`).
     fn file_choices(&self, typed: &str) -> Vec<Candidate> {
+        // **The whole project, nearest first** (2026-10-30, reversing #419's
+        // 「near here」): what `[[` offers is what `gd` can follow, and
+        // `gd` now looks across the project. Nearness keeps 「this stack on
+        // my desk」 at the top of the list; the rest is below it. Until the
+        // index has been read once, the old walk of this folder answers.
+        let Some(index) = self.links.as_ref() else {
+            return self.file_choices_nearby(typed);
+        };
+        let close = self.closes_with_n(']', 2);
+        let Some(mine) = self.current_file_path() else { return Vec::new() };
+        let here: Vec<std::path::Component> = mine.parent().map(|p| p.components().collect()).unwrap_or_default();
+        let real = std::fs::canonicalize(&mine).ok();
+        let want = typed.to_lowercase();
+        let mut found: Vec<(usize, String, Option<String>)> = Vec::new();
+        for (i, path) in index.files.iter().enumerate() {
+            if *path == mine || (real.is_some() && std::fs::canonicalize(path).ok() == real) {
+                continue;
+            }
+            let shown = index.spelling(i);
+            let name = path.file_stem().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+            if !(want.is_empty() || shown.to_lowercase().contains(&want) || name.contains(&want)) {
+                continue;
+            }
+            let shared = path.components().zip(here.iter()).take_while(|(a, b)| a == *b).count();
+            let under = path
+                .strip_prefix(&index.root)
+                .ok()
+                .and_then(|rel| rel.parent().map(as_a_link_spells_it))
+                .filter(|d| !d.is_empty());
+            found.push((shared, shown, under));
+        }
+        found.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+        found
+            .into_iter()
+            .take(MOST)
+            .map(|(_, shown, under)| Candidate { text: format!("{shown}{close}"), note: under })
+            .collect()
+    }
+
+    /// The folder this file is in and what is under it — what `[[` offered
+    /// before the project index existed, and still does until it is read.
+    fn file_choices_nearby(&self, typed: &str) -> Vec<Candidate> {
         let close = self.closes_with_n(']', 2);
         // 同 `here_folder`：相對的緩衝區路徑按工作路徑算（2026-10-01）。
         let here = self.working_dir();

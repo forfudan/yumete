@@ -173,11 +173,16 @@ impl Editor {
         let mut group: Option<bool> = None;
         for _ in 0..n {
             let (before, anchor) = (self.sel.head(), self.sel.anchor());
-            let revision = self.current_buffer().char_count();
+            // Warning: **The buffer's revision, not its length** (2026-10-30).
+            // `4J` with the cursor on the line break joined once and stopped:
+            // a join swaps one `\n` for one space and leaves the cursor on
+            // the seam, so by length and position it looked like nothing had
+            // happened. The revision moves on every edit, however it nets out.
+            let revision = self.current_buffer().revision();
             action(self);
             if self.sel.head() == before
                 && self.sel.anchor() == anchor
-                && self.current_buffer().char_count() == revision
+                && self.current_buffer().revision() == revision
             {
                 break;
             }

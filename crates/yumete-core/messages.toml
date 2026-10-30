@@ -1471,6 +1471,30 @@ en = "redo to so many steps or so long on"
 find = "重做 以後 以后 時間 时间 redo later time"
 
 [[message]]
+# : 命令選單裏 links 那一項的説明
+key = "cmd.commands.links"
+zht = "開鏈接面板：哪些文件 [[鏈]] 到這裏、這裏鏈到哪裏；list 列表、graph 圖、off 關掉"
+zhs = "开链接面板：哪些文件 [[链]] 到这里、这里链到哪里；list 列表、graph 图、off 关掉"
+en = "the links panel: what [[links]] here and what this links to — list, graph, or off"
+find = "雙鏈 双链 反向鏈接 反向链接 backlinks graph obsidian 鏈接 链接"
+
+[[message]]
+# : 命令選單裏 links-export 那一項的説明
+key = "cmd.commands.links-export"
+zht = "把整個項目的鏈接圖寫成 .yumete/graph.html，並在瀏覽器打開"
+zhs = "把整个项目的链接图写成 .yumete/graph.html，并在浏览器打开"
+en = "write the whole project's link graph to .yumete/graph.html and open it in the browser"
+find = "雙鏈 双链 圖 图 graph html obsidian 導出 导出 鏈接圖 链接图"
+
+[[message]]
+# : 命令選單裏 links-reindex 那一項的説明
+key = "cmd.commands.links-reindex"
+zht = "重讀整個項目的 [[鏈接]]"
+zhs = "重读整个项目的 [[链接]]"
+en = "read the project's [[links]] again"
+find = "雙鏈 双链 重讀 重读 索引 reindex refresh 鏈接 链接"
+
+[[message]]
 # : 命令選單裏 lsp-rename 那一項的説明(commands 組)
 key = "cmd.commands.lsp-rename"
 zht = "讓語言服務器把光標下的名字各處一起改"
@@ -6202,6 +6226,12 @@ zhs = "j k 滚动 · J K 半页 · g G 两端 · Tab 换视图 · w 宽窄 · C-
 en = "j k scroll · J K half a page · g G ends · Tab view · w width · C-w next region · q back to text"
 
 [[message]]
+# 雙鏈面板的提示行：v 這個鍵
+key = "hint.sidebar.links-look"
+zht = "列表/圖"
+zhs = "列表/图"
+en = "list/graph"
+[[message]]
 # 提示：上下移動
 key = "hint.sidebar.move"
 zht = "上下"
@@ -7353,6 +7383,20 @@ zhs = "、"
 en = ", "
 
 [[message]]
+# :links 的參數 graph 的説明
+key = "label.links.graph"
+zht = "圖：本文件居中，鄰居在上下"
+zhs = "图：本文件居中，邻居在上下"
+en = "a graph: this file among its neighbours"
+
+[[message]]
+# :links 的參數 list 的説明
+key = "label.links.list"
+zht = "列表：鏈入、鏈出、提及三段"
+zhs = "列表：链入、链出、提及三段"
+en = "a list: linked from, links to, mentions"
+
+[[message]]
 # 一句話裏「關着」那半個詞(:yume ? 的拆分那一格)
 key = "label.off"
 zht = "關"
@@ -7407,6 +7451,13 @@ key = "label.panel.info"
 zht = "信息"
 zhs = "信息"
 en = "Info"
+
+[[message]]
+# 標籤：鏈接那一扇面板的名字（2026-10-30 定：叫「鏈接」不叫「雙鏈」）
+key = "label.panel.links"
+zht = "鏈接"
+zhs = "链接"
+en = "Links"
 
 [[message]]
 # 標籤：大綱
@@ -7913,6 +7964,90 @@ en = "{0}: this kind of link is not handed to the machine — only http and http
 
 
 [[message]]
+# 雙鏈面板的一段：鏈到了不存在的頁
+key = "links.dangling"
+zht = "鏈到了沒有的頁"
+zhs = "链到了没有的页"
+en = "Pages not there"
+
+[[message]]
+# :links-export 寫不了
+key = "links.export-failed"
+zht = "寫 {0} 失敗：{1}"
+zhs = "写 {0} 失败：{1}"
+en = "could not write {0}: {1}"
+
+[[message]]
+# :links-export 寫好了
+key = "links.exported"
+zht = "圖寫到了 {0}，正在用瀏覽器打開"
+zhs = "图写到了 {0}，正在用浏览器打开"
+en = "the graph is at {0}, opening it in the browser"
+
+[[message]]
+# 雙鏈面板的一段：鏈到本文件的
+key = "links.in"
+zht = "鏈入"
+zhs = "链入"
+en = "Linked from"
+
+[[message]]
+# 雙鏈面板的一段：寫了本文件的名字卻沒加 [[ ]] 的
+key = "links.mentions"
+zht = "提到了但沒加鏈接"
+zhs = "提到了但没加链接"
+en = "Unlinked mentions"
+
+[[message]]
+# 雙鏈面板的圖樣：鄰居太多，列不完
+key = "links.more"
+zht = "……還有 {0} 個"
+zhs = "……还有 {0} 个"
+en = "…and {0} more"
+
+[[message]]
+# gr：沒有文件鏈到這裏
+key = "links.no-backlinks"
+zht = "沒有文件鏈到這裏"
+zhs = "没有文件链到这里"
+en = "nothing links here"
+
+[[message]]
+# 雙鏈面板：這個文件一條鏈接都沒有
+key = "links.none"
+zht = "還沒有鏈接；寫 [[ 就有了"
+zhs = "还没有链接；写 [[ 就有了"
+en = "No links yet; type [[ to make one"
+
+[[message]]
+# 雙鏈面板：當前文件不是 Markdown，不在圖裏
+key = "links.not-a-node"
+zht = "不是 Markdown 文件，不在鏈接圖裏"
+zhs = "不是 Markdown 文件，不在链接图里"
+en = "not a Markdown file, so not in the graph"
+
+[[message]]
+# 雙鏈面板的一段：本文件鏈出去的
+key = "links.out"
+zht = "鏈出"
+zhs = "链出"
+en = "Links to"
+
+[[message]]
+# 雙鏈面板：索引還在後臺讀
+key = "links.reading"
+zht = "正在讀整個項目的鏈接……"
+zhs = "正在读整个项目的链接……"
+en = "reading the project's links…"
+
+[[message]]
+# :links-reindex 讀完了
+key = "links.reindexed"
+zht = "重讀了 {0} 個文件的鏈接"
+zhs = "重读了 {0} 个文件的链接"
+en = "links of {0} files read again"
+
+[[message]]
 # `::` 那一行按了 ⇥/⏎，可是一條都没找着
 key = "lookfor.nothing-to-take"
 zht = "没有找到相符的命令——換一個説法，或者退格回到 `:`"
@@ -8386,6 +8521,12 @@ zht = "代碼操作"
 zhs = "代码操作"
 en = "code actions"
 
+[[message]]
+# gr 在 Markdown 裏開的挑選器的標題
+key = "picker.backlinks"
+zht = "鏈到這裏的（{0} 處）"
+zhs = "链到这里的（{0} 处）"
+en = "linked from ({0})"
 [[message]]
 # 空格 b 開的換緩衝區那一格，標題
 key = "picker.buffers"
@@ -13011,6 +13152,14 @@ key = "wiki.again"
 zht = "{0}：已經讀過一次，這一次不再讀"
 zhs = "{0}：已经读过一次，这一次不再读"
 en = "{0}: already read once, not read again"
+
+
+[[message]]
+# :wiki-where 報告裏：一個詞條文件夾(一檔一條)讀了幾個檔、幾條
+key = "wiki.folder"
+zht = "{0}/：{1} 個檔，{2} 條"
+zhs = "{0}/：{1} 个档，{2} 条"
+en = "{0}/: {1} files, {2} entries"
 
 [[message]]
 # 同名詞條裏，全局百科那一部分前面的標記

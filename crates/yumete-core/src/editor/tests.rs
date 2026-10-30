@@ -4494,6 +4494,15 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     ed.goto_line(3);
     press(&mut ed, "k2J");
     assert_eq!(ed.current_buffer().text(), "一\n二三\n四\n五\n", "{}", ed.current_buffer().text());
+
+    // **From the line break itself, with Latin text** (2026-10-30, reported as
+    // 「4J only joins one line」): a join puts a space where the `\n` was and
+    // leaves the cursor on the seam, so the count's early stop — 「nothing
+    // moved」 — used to read the first join as a no-op.
+    let mut ed = typed("aa\nbb\ncc\ndd\nee\n");
+    press(&mut ed, "ll");
+    press(&mut ed, "4J");
+    assert_eq!(ed.current_buffer().text(), "aa bb cc dd\nee\n", "{}", ed.current_buffer().text());
 }
 
 #[test]
@@ -14945,9 +14954,10 @@ fn the_panels_go_where_yumete_puts_them() {
     assert!(ed.panel(Side::Left).is_some(), "the tree opens on the left");
     assert!(ed.panel(Side::Right).is_none());
 
-    // **`Tab` walks the views that share this slot, and only those** — four
-    // on the left, and the 信息 slot is not among them.
-    for want in [View::Buffers, View::Outline, View::Search, View::Explorer] {
+    // **`Tab` walks the views that share this slot, and only those** — five
+    // on the left (雙鏈 joined on 2026-10-30), and the 信息 slot is not
+    // among them.
+    for want in [View::Buffers, View::Outline, View::Search, View::Links, View::Explorer] {
         ed.on_key(Key::Tab);
         assert_eq!(ed.panel(Side::Left).unwrap().view(), want);
     }
@@ -32721,4 +32731,99 @@ fn a_table_without_outer_pipes_is_a_table() {
         assert!(line.starts_with('|') && line.ends_with('|'), "{line:?}");
     }
     assert_eq!(crate::mdtable::split(text.lines().next().unwrap()), ["姓", "名"]);
+}
+
+/// 雙鏈 (2026-10-30): `[[name]]` is found across the project nearest first,
+/// the links panel lists what links here and what this links to, `v` turns
+/// it into the fan of neighbours, `gr` offers the backlinks, and `[[`
+/// completes from the whole project.
+#[test]
+fn links_are_found_across_the_project_and_the_panel_lists_them_both_ways() {
+    use crate::sidebar::{Side, View};
+    let dir = tmp().join(format!("yumete-links-editor-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for sub in [".yumete", "卷一", "卷二", "百科/人物"] {
+        std::fs::create_dir_all(dir.join(sub)).unwrap();
+    }
+    std::fs::write(dir.join("卷一/第一章.md"), "# 第一章\n\n她去了[[雨夜]]，見[[安寧]]。安寧笑了。\n").unwrap();
+    std::fs::write(dir.join("卷一/雨夜.md"), "一\n").unwrap();
+    std::fs::write(dir.join("卷二/第四章.md"), "再到[[雨夜]]，再見[[安寧]]。\n").unwrap();
+    std::fs::write(dir.join("卷二/雨夜.md"), "二\n").unwrap();
+    std::fs::write(dir.join("百科/人物/安寧.md"), "主角，見[[第一章]]。\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+
+    // `gd` on `[[雨夜]]`: the one in this volume, not 卷二's.
+    ed.goto_line(3);
+    let col = "她去了[[雨".chars().count();
+    for _ in 0..col {
+        ed.on_key(Key::Char('l'));
+    }
+    press(&mut ed, "gd");
+    assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("卷一/雨夜.md")), "{:?} {}", ed.current_buffer().path(), ed.status());
+
+    // The panel, in the list look: 雨夜 is linked from 第一章 only.
+    ed.execute(":links").unwrap();
+    assert_eq!(ed.showing(View::Links), Some(Side::Left));
+    for _ in 0..200 {
+        ed.collect_links_index();
+    }
+    let rows = ed.panel(Side::Left).unwrap().rows().to_vec();
+    let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+    assert!(names[0].contains(&say!("links.in")), "{names:?}");
+    assert_eq!(rows[0].aside.as_deref(), Some("1"), "{names:?}");
+    assert!(names[1].contains("卷一/第一章:3"), "{names:?}");
+    assert!(!rows[1].marks.is_empty(), "the brackets are marked: {:?}", rows[1]);
+    let mentions = rows.iter().find(|r| r.name.contains(&say!("links.mentions"))).expect("a mentions header");
+    assert!(!mentions.expanded, "mentions start folded");
+
+    // `v`: the fan. 第一章 above the centre as an in-link.
+    ed.on_key(Key::Char('v'));
+    let rows = ed.panel(Side::Left).unwrap().rows().to_vec();
+    let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+    assert!(names.iter().any(|n| n.contains("卷一/第一章") && n.contains('←')), "{names:?}");
+    assert!(names.iter().any(|n| n.starts_with("▣ 卷一/雨夜")), "{names:?}");
+    ed.on_key(Key::Char('v'));
+
+    // Back in 第一章: `gr` away from a link offers what links to this file.
+    ed.on_key(Key::Char('q'));
+    ed.open_file(dir.join("卷一/第一章.md")).unwrap();
+    ed.goto_line(1);
+    press(&mut ed, "gr");
+    assert_eq!(ed.picker().map(|p| p.total()), Some(1), "{}", ed.status());
+    ed.on_key(Key::Esc);
+
+    // `[[` completes from the whole project, this folder first; a name two
+    // files share is spelt with its path.
+    ed.goto_line(3);
+    press(&mut ed, "A[[");
+    let offer = ed.reference_offer().expect("a link is open");
+    // (Auto-pairs already closed the brackets, so the texts carry none.)
+    let texts: Vec<&str> = offer.choices.iter().map(|c| c.text.trim_end_matches(']')).collect();
+    assert_eq!(texts[0], "卷一/雨夜", "{texts:?}");
+    assert!(texts.contains(&"安寧"), "{texts:?}");
+    assert!(texts.contains(&"卷二/雨夜"), "{texts:?}");
+    ed.on_key(Key::Esc);
+
+    // The mentions, once unfolded: 「安寧笑了」 in 第一章 names 安寧 without brackets.
+    ed.open_file(dir.join("百科/人物/安寧.md")).unwrap();
+    ed.execute(":links list").unwrap();
+    let side = ed.showing(View::Links).unwrap();
+    let at = ed.panel(side).unwrap().rows().iter().position(|r| r.name.contains(&say!("links.mentions"))).unwrap();
+    for _ in 0..at {
+        ed.on_key(Key::Char('j'));
+    }
+    ed.on_key(Key::Char('l'));
+    let rows = ed.panel(side).unwrap().rows().to_vec();
+    let mention = rows.iter().find(|r| r.name.contains("卷一/第一章:3") && r.name.contains("安寧笑了"));
+    assert!(mention.is_some(), "{:?}", rows.iter().map(|r| &r.name).collect::<Vec<_>>());
+
+    // The graph page.
+    ed.execute(":links-export").unwrap();
+    let page = std::fs::read_to_string(dir.join(".yumete/graph.html")).unwrap();
+    assert!(page.contains("\"name\":\"卷一/第一章\""));
+    assert!(ed.take_open_request().is_some_and(|p| p.ends_with("graph.html")));
+    std::fs::remove_dir_all(&dir).ok();
 }

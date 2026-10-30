@@ -249,13 +249,17 @@ impl Editor {
             };
             // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，
             // 另外四個管用卻没人知道（2026-09-23 審出來的）。
-            return Hint::Keys(say!("hint.sidebar"), vec![
-                    ("j k J K g G".into(), walking),
+            let mut keys = vec![("j k J K g G".into(), walking)];
+            if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Links) {
+                keys.push(("v".into(), say!("hint.sidebar.links-look")));
+            }
+            keys.extend([
                     ("Tab".into(), say!("hint.sidebar.other-view")),
                     ("w".into(), say!("hint.sidebar.width")),
                     (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
                     ("q".into(), say!("hint.to-the-text")),
                 ]);
+            return Hint::Keys(say!("hint.sidebar"), keys);
         }
         // A reference standing half-typed, with the panel already open under
         // it: Tab is the key, and it is a key that means nothing anywhere else

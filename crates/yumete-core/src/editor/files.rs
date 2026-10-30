@@ -1371,8 +1371,15 @@ impl Editor {
             .and_then(|p| p.parent().map(Path::to_path_buf))
             .unwrap_or_else(|| PathBuf::from("."));
         // A `[[wiki]]` names a page, it does not spell a file: the suffix is
-        // this manuscript's, not the writer's to type again.
+        // this manuscript's, not the writer's to type again. The page is
+        // looked for across the whole project, nearest first — the same
+        // resolver the links panel and completion use (2026-10-30).
         let mut tries = vec![here.join(named)];
+        if link.wiki {
+            if let Some(found) = self.resolve_link(&link.target) {
+                tries.insert(0, found);
+            }
+        }
         if link.wiki {
             let suffix = self
                 .current_buffer()

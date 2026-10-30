@@ -23,6 +23,11 @@ impl Editor {
 
     /// **`gr`: where else is this used?**
     pub(super) fn ask_references(&mut self) {
+        // A Markdown file has no server; what it has is `[[links]]`, and
+        // 「where is this used」 is 「what links here」 (2026-10-30).
+        if self.current_buffer().syntax() == crate::syntax::Syntax::Markdown {
+            return self.show_backlinks();
+        }
         match self.caret_for_the_server() {
             Some(at) => {
                 self.references_query = Some(at);

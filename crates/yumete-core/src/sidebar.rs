@@ -136,14 +136,16 @@ pub enum Panel {
     Outline,
     /// Look for a pattern, and what it found.
     Search,
+    /// What links to this file and what it links to (雙鏈, 2026-10-30).
+    Links,
     /// **光標底下這個東西是什麽**——六種內容共用的那一格（[`Info`]，#426）。
     Info,
 }
 
 impl Panel {
     /// Every one of them, in the order a setting file lists them.
-    pub const ALL: [Panel; 5] =
-        [Panel::Files, Panel::Buffers, Panel::Outline, Panel::Search, Panel::Info];
+    pub const ALL: [Panel; 6] =
+        [Panel::Files, Panel::Buffers, Panel::Outline, Panel::Search, Panel::Links, Panel::Info];
 
     /// Its name in the config file and on the command line.
     pub fn key(self) -> &'static str {
@@ -155,6 +157,7 @@ impl Panel {
             Panel::Buffers => "buffers",
             Panel::Outline => "outline",
             Panel::Search => "search",
+            Panel::Links => "links",
             Panel::Info => "info",
         }
     }
@@ -177,6 +180,7 @@ impl Panel {
             Panel::Buffers => "label.panel.buffers",
             Panel::Outline => "label.panel.outline",
             Panel::Search => "label.panel.search",
+            Panel::Links => "label.panel.links",
             Panel::Info => "label.panel.info",
         }
     }
@@ -189,6 +193,7 @@ impl From<View> for Panel {
             View::Buffers => Panel::Buffers,
             View::Outline => Panel::Outline,
             View::Search => Panel::Search,
+            View::Links => Panel::Links,
             View::Info => Panel::Info,
         }
     }
@@ -212,6 +217,9 @@ pub enum View {
     Outline,
     /// Look for a pattern, and what it found — Feature #419.
     Search,
+    /// The links into and out of the file being written, as sections or as
+    /// the file among its neighbours (雙鏈, 2026-10-30).
+    Links,
     /// **光標底下這個東西是什麽**——六種內容輪流佔着的那一格（#426）。
     ///
     /// Warning: **它不是五扇面板，是一格。** 標題是算出來的（擺着哪一種就寫哪
@@ -222,8 +230,8 @@ pub enum View {
 
 impl View {
     /// Every view, in the order `Tab` walks them.
-    pub const ALL: [View; 5] =
-        [View::Explorer, View::Buffers, View::Outline, View::Search, View::Info];
+    pub const ALL: [View; 6] =
+        [View::Explorer, View::Buffers, View::Outline, View::Search, View::Links, View::Info];
 }
 
 /// **一個側欄有多寬**，四檔，分母都是十（2026-09-26 定的）。
@@ -545,6 +553,17 @@ impl Sidebar {
             // is read rather than walked into — neither fills these rows
             // (`refresh_panel`).
             View::Search | View::Info => return None,
+            // A section header folds (the editor answers `h`/`l`); a
+            // neighbour opens its file; a link's line goes to the line.
+            View::Links => {
+                if row.path.as_os_str().is_empty() {
+                    return None;
+                }
+                return Some(match row.is_dir {
+                    true => Chosen::File(row.path),
+                    false => Chosen::FileLine(row.path, row.depth),
+                });
+            }
             View::Explorer => {}
         }
         if !row.is_dir {

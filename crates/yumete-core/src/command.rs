@@ -78,6 +78,19 @@ pub enum WikiCommand {
 // Warning: **Not `Copy` since #452.** The scope a 認詞 reads is [`Where`], which
 // carries a `PathBuf` in one of its arms — the same type `:search` uses, and
 // sharing it is the point: 「這一篇/這個文件夾/這個倉」 is one idea.
+/// `:links` and its family.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinksCommand {
+    /// `:links [list|graph]` — the panel, in that look (or the one it had).
+    Show(Option<crate::links::Look>),
+    /// `:links off`.
+    Off,
+    /// `:links-export` — the whole graph as `.yumete/graph.html`, opened.
+    Export,
+    /// `:links-reindex` — read the project's links again.
+    Reindex,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WordCommand {
     /// `:word` — which dictionary is in force, and how many words this book adds.
@@ -253,6 +266,8 @@ pub enum Command {
     Word(WordCommand),
     /// 作品百科 (#287) — the report, one entry, or one of the settings.
     Wiki(WikiCommand),
+    /// 雙鏈 (2026-10-30) — the links panel, the graph page, the index.
+    Links(LinksCommand),
     /// **`:info`：這份檔案是什麼**（2026-10-08）。
     ///
     /// 和 [`Command::YumeWhere`] 同一條路：答案是**一頁**，而且有一行只有前端答
@@ -2797,6 +2812,7 @@ const SIDEBAR_PANELS: &[Word] = &[
     Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
     Word { name: "outline", help: "label.panel.outline", needs: &[] },
     Word { name: "search", help: "label.panel.search", needs: &[] },
+    Word { name: "links", help: "label.panel.links", needs: &[] },
     Word { name: "info", help: "label.panel.info", needs: &[] },
 ];
 
@@ -2805,6 +2821,13 @@ const SIDEBAR_PANELS: &[Word] = &[
 /// The order follows [`crate::sidebar::Info::ALL`], so the menu lists the
 /// kinds in the order the panel shows them. (`PageUp`/`PageDown` in the panel
 /// scroll by a page; they do not step through the kinds.)
+/// `:links` takes one of these.
+const LINKS_LOOKS: &[Word] = &[
+    Word { name: "list", help: "label.links.list", needs: &[] },
+    Word { name: "graph", help: "label.links.graph", needs: &[] },
+    Word { name: "off", help: "label.sidebar-off", needs: &[] },
+];
+
 const INFO_KINDS: &[Word] = &[
     Word { name: "dictionary", help: "label.panel.dictionary", needs: &[] },
     Word { name: "wiki", help: "label.panel.wiki", needs: &[] },
@@ -3337,6 +3360,40 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| {
             Ok(Command::KeymapYumeteFlavor(switched(p)))
         }),
+    },
+    Entry {
+        name: "links",
+        aliases: &[],
+        help: "cmd.commands.links",
+        needs: &[],
+        params: &[Param::Words { of: LINKS_LOOKS, default: None }],
+        build: Some(|p| {
+            Ok(Command::Links(match p.arg(0) {
+                None => LinksCommand::Show(None),
+                Some("list") => LinksCommand::Show(Some(crate::links::Look::List)),
+                Some("graph") => LinksCommand::Show(Some(crate::links::Look::Graph)),
+                Some("off") => LinksCommand::Off,
+                Some(other) => {
+                    return Err(CommandError::InvalidArgument { command: "links", value: other.to_string() })
+                }
+            }))
+        }),
+    },
+    Entry {
+        name: "links-export",
+        aliases: &[],
+        help: "cmd.commands.links-export",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Links(LinksCommand::Export))),
+    },
+    Entry {
+        name: "links-reindex",
+        aliases: &[],
+        help: "cmd.commands.links-reindex",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Links(LinksCommand::Reindex))),
     },
     Entry {
         name: "wiki-panel",

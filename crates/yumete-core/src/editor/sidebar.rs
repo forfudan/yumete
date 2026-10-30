@@ -33,7 +33,9 @@ impl Editor {
     pub fn side_of(&self, panel: crate::sidebar::Panel) -> crate::sidebar::Side {
         use crate::sidebar::{Panel, Side};
         match panel {
-            Panel::Files | Panel::Buffers | Panel::Outline | Panel::Search => Side::Left,
+            Panel::Files | Panel::Buffers | Panel::Outline | Panel::Search | Panel::Links => {
+                Side::Left
+            }
             Panel::Info => Side::Right,
         }
     }
@@ -776,6 +778,8 @@ impl Editor {
                 })
                 .collect(),
             View::Outline => self.outline_rows(),
+            // 雙鏈: sections of links, or the file among its neighbours.
+            View::Links => self.links_rows(),
             // Its own store, its own shape: a form and a list of hits, not
             // rows of a tree (#419).
             View::Search => return,
@@ -1384,6 +1388,12 @@ impl Editor {
             self.panel_focus = None;
             return;
         };
+        // 雙鏈: `v` flips the look, `h`/`l` fold — before the list's own keys.
+        if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Links)
+            && self.on_links_key(key)
+        {
+            return;
+        }
         // 光標放上去的那一個在眼前，鍵就歸它——常駐那一個在底下等着，不收鍵。
         if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info) {
             // **百科是一段文章，要滾不要走**（2026-09-22）：它軟折行，只有畫的

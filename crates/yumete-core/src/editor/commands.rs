@@ -476,6 +476,7 @@ impl Editor {
             }
             Command::Word(what) => self.word_command(what),
             Command::Wiki(what) => self.wiki_command(what),
+            Command::Links(what) => self.links_command(what),
             Command::KeymapYumeteFlavor(how) => {
                 if !how.is_a_question() {
                     self.set_keymap_flavor(how.over(self.keymap_flavor()));
@@ -1770,6 +1771,8 @@ impl Editor {
             // **磁碟上那一份**而 revision 没動——存檔不是一次編輯。
             self.refresh_vcs(true);
             self.note_progress();
+            // 雙鏈: this file's links read again from the text in memory.
+            self.links_note_saved();
             // **A save is when new prose exists** (#448), so it is when 自動認詞
             // is worth asking about again — the front end still holds it to
             // once every few minutes, so saving twice in a row costs nothing.
