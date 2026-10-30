@@ -195,6 +195,11 @@ impl Editor {
             .with_open_line(self.open_line())
             .with_hanging(self.hanging_punctuation())
             .with_readings(self.margin.shown())
+            .with_forms(match self.render {
+                Render::Off => crate::zong::Forms::Source,
+                Render::Basic => crate::zong::Forms::Marks,
+                Render::Full => crate::zong::Forms::Quotes,
+            })
             .with_sentences(self.sentences)
             .with_drawn(drawn)
             .with_turned_tables(turned)

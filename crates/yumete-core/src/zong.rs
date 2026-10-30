@@ -96,6 +96,8 @@ pub struct Grid<'a> {
     /// the source it is, tags and all. A page with no margin still reads the
     /// markup; it just has nowhere to put the reading.
     pub readings: bool,
+    /// Which characters are drawn in their vertical form; see [`Forms`].
+    pub forms: Forms,
     /// Whether 句讀 hang in the margin rather than taking a square each
     /// (標點旁置).
     pub hanging: bool,
@@ -223,6 +225,7 @@ impl<'a> Grid<'a> {
             zong_len: zong_len.max(1),
             ruby,
             readings: true,
+            forms: Forms::Marks,
             hanging: false,
             sentences: false,
             tatechuyoko: 0,
@@ -258,6 +261,11 @@ impl<'a> Grid<'a> {
             readings: on,
             ..self
         }
+    }
+
+    /// Which characters take their vertical form (the `:render` level's say).
+    pub fn with_forms(self, forms: Forms) -> Grid<'a> {
+        Grid { forms, ..self }
     }
 
     /// The same grid, hanging 句讀 in the margin.
@@ -538,7 +546,7 @@ fn insert_drawn(slots: &mut Vec<Slot>, chars_len: usize, grid: Grid, drawn: &[cr
                 Slot {
                     start: anchor,
                     end: anchor,
-                    text: rotate(&piece),
+                    text: rotate(&piece, grid.forms),
                     ruby: None,
                     mark: None,
                     ink: Some(run.ink),
@@ -636,7 +644,7 @@ fn push_plain(
                     slots.push(Slot {
                         start: opened_at,
                         end: at,
-                        text: rotate(&chars[opened_at..at.min(chars.len())].iter().collect::<String>()),
+                        text: rotate(&chars[opened_at..at.min(chars.len())].iter().collect::<String>(), grid.forms),
                         ruby: None,
                         mark: None,
                         ink: None,
@@ -730,7 +738,7 @@ fn push_plain(
                         slots.push(Slot {
                             start: earlier_at,
                             end: at,
-                            text: rotate(&chars[at - 1].to_string()),
+                            text: rotate(&chars[at - 1].to_string(), grid.forms),
                             ruby: None,
                             mark: None,
                             ink: None,
@@ -738,7 +746,7 @@ fn push_plain(
                         slots.push(Slot {
                             start: at,
                             end: from + w[1],
-                            text: rotate(&body),
+                            text: rotate(&body, grid.forms),
                             ruby: None,
                             mark: None,
                             ink: None,
@@ -760,7 +768,7 @@ fn push_plain(
                         slots.push(Slot {
                             start: swallowed.take().unwrap_or(at),
                             end: from + w[1],
-                            text: rotate(&body),
+                            text: rotate(&body, grid.forms),
                             ruby: None,
                             mark: None,
                             ink: None,
@@ -784,7 +792,7 @@ fn push_plain(
         slots.push(Slot {
             start,
             end: from + w[1],
-            text: rotate(&body),
+            text: rotate(&body, grid.forms),
             ruby: None,
             mark,
             ink: None,
@@ -918,7 +926,7 @@ fn push_ruby(
         slots.push(Slot {
             start,
             end,
-            text: rotate(&body),
+            text: rotate(&body, grid.forms),
             ruby: row.checked_sub(reading_top).and_then(|i| reading.get(i)).copied(),
             mark: None,
             ink: None,
@@ -966,11 +974,33 @@ fn push_ruby(
     }
 }
 
+/// **Which characters take their vertical presentation form** — decided by the
+/// `:render` level (2026-10-30, as decided).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Forms {
+    /// `:render off`: the file's own characters, 。 and 「 as typed.
+    Source,
+    /// `:render basic`: the CJK marks, 。→︒ and 「→﹁.
+    #[default]
+    Marks,
+    /// `:render full`: the curly quotes too, “”→﹃﹄ and ‘’→﹁﹂.
+    Quotes,
+}
+
 /// Substitute the vertical presentation form, if the body is a lone character
-/// that has one.
-fn rotate(body: &str) -> String {
-    match yumete_cjk::vertical_grapheme(body) {
-        Some(c) => c.to_string(),
+/// that has one at this level.
+fn rotate(body: &str, forms: Forms) -> String {
+    let mut chars = body.chars();
+    let (Some(c), None) = (chars.next(), chars.next()) else {
+        return body.to_string();
+    };
+    let mapped = match forms {
+        Forms::Source => None,
+        Forms::Marks => yumete_cjk::vertical_form(c),
+        Forms::Quotes => yumete_cjk::vertical_form(c).or_else(|| yumete_cjk::vertical_quote_form(c)),
+    };
+    match mapped {
+        Some(m) => m.to_string(),
         None => body.to_string(),
     }
 }
@@ -990,6 +1020,11 @@ fn rotate(body: &str) -> String {
 ///
 /// The result always has at least one element, so `offsets.len() - 1` is the
 /// slot count and `offsets[i]` is where slot `i` begins.
+/// How many slots `text` takes down a 縱, packed the way the page packs it.
+pub fn slot_count(text: &str, at_most: usize) -> usize {
+    slot_offsets(text, at_most).len().saturating_sub(1)
+}
+
 fn slot_offsets(text: &str, at_most: usize) -> Vec<usize> {
     let all: Vec<&str> = graphemes(text).collect();
     let mut offsets = Vec::with_capacity(all.len() + 1);
@@ -1870,6 +1905,7 @@ mod tests {
         zong_len: 32,
         ruby: Dialects::NONE,
         readings: true,
+        forms: Forms::Marks,
         hanging: false,
         sentences: false,
         tatechuyoko: 0,
@@ -3279,3 +3315,23 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod forms_tests {
+    use super::*;
+
+    /// **The `:render` level decides the vertical forms** (2026-10-30, as
+    /// decided): off draws the file's own marks, basic the CJK forms, and
+    /// full the curly quotes as corner brackets too.
+    #[test]
+    fn the_render_level_decides_the_vertical_forms() {
+        let texts = |forms: Forms| -> Vec<String> {
+            line_slots_plain("他说：“走。”", Grid::plain(20, Dialects::NONE).with_forms(forms))
+                .into_iter()
+                .map(|s| s.text)
+                .collect()
+        };
+        assert_eq!(texts(Forms::Source), ["他", "说", "：", "“", "走", "。", "”"]);
+        assert_eq!(texts(Forms::Marks), ["他", "说", "︓", "“", "走", "︒", "”"]);
+        assert_eq!(texts(Forms::Quotes), ["他", "说", "︓", "﹃", "走", "︒", "﹄"]);
+    }
+}
