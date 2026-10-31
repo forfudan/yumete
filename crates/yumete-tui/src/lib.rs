@@ -826,7 +826,14 @@ pub fn run(
         // Warning: **挑選器從前有兩層，那一層也要進這個元組**（2026-10-02 修，
         // 2026-10-08 隨着那一層一起去掉）。現在它只有打字這一層，走的是
         // `is_prompt()` 那條路，豎線是對的。
-        let shown = (editor.mode(), editor.is_extending());
+        // **Typing a value in the settings panel is typing** (2026-10-31): the
+        // editor stays in Normal behind the panel, so its mode alone left a
+        // block over the value being typed.
+        let typing_a_setting = settings.panel.as_ref().is_some_and(|p| p.typing.is_some());
+        let shown = match typing_a_setting {
+            true => (Mode::Insert, false),
+            false => (editor.mode(), editor.is_extending()),
+        };
         if last_mode != Some(shown) {
             let (mode, extending) = shown;
             // A block in Normal, a bar in Insert — the shape a modal editor is
@@ -5616,18 +5623,37 @@ fn draw(
     // 鍵位）正好接手原來狀態行與命令行的位子，一行不浪費，頁面高度也不會因為冒
     // 出一句話就整頁跳。
     if let Some(page) = settings {
+        // **Two rows at the foot** (2026-10-31, replacing 09-25's one): the
+        // page's key row stays where it is, and the command row under it
+        // carries what is said and the `:` being typed. Reported: a message
+        // covered the keys, and the page has the room. With no command row
+        // (a window too short for one) the page keeps the whole window.
+        let page_area = match command_area.height {
+            1 if command_area.y > area.y => Rect { height: command_area.y - area.y, ..area },
+            _ => area,
+        };
         // Warning: **不在打字就一個字都別設**，光標自己會藏起來。從前這裏把它停在窗口
         // 左上角——理由是「別留在正文裏」（系統輸入法的候選框跟着硬件光標跑），
         // 可那一格正好在「設置」左邊，看着像頁面上多了一根豎槓。**藏起來纔是那個
         // 理由要的東西**；上面那一支負責讓正文不去設它。
-        if let Some(at) = settings_page::draw(frame, page, config, area) {
+        if let Some(at) = settings_page::draw(frame, page, config, page_area) {
             frame.set_cursor_position(at);
         }
-        // **有話說的時候纔蓋回來**：`:w` 打在這一行上，「存了」也說在這一行上。
-        // 沒話說的時候那一行是這一頁的鍵位行。
-        let talking = editor.prompt().is_some() || !editor.status().is_empty();
-        if talking && command_area.height == 1 {
-            draw_command(frame, editor, config, ime, command_area);
+        if command_area.height == 1 {
+            let talking = editor.prompt().is_some() || !editor.status().is_empty();
+            match talking {
+                true => draw_command(frame, editor, config, ime, command_area),
+                // Silent, the row is blank: the editor's own key hints are
+                // about the document, which is not what the keys are on.
+                false => {
+                    let blank = crate::theme::Palette::of(config).page();
+                    for x in command_area.x..command_area.x + command_area.width {
+                        if let Some(cell) = frame.buffer_mut().cell_mut((x, command_area.y)) {
+                            cell.set_symbol(" ").set_style(blank);
+                        }
+                    }
+                }
+            }
         }
     }
     // Last, and over everything: the editor is stopped behind it (#295).
@@ -15221,8 +15247,23 @@ fn squeezed(text: &str) -> String {
             !last.contains(&editor_name()),
             "正文的檔名不該露出來：{last:?}"
         );
-        // 這一頁自己的鍵位行在最後那一行上——命令行閒着的時候畫的就是鍵位提示。
-        assert!(last.contains("hl") || row(h - 2).contains("hl"), "{last:?}");
+        // **Two rows at the foot** (2026-10-31): the last is the command row,
+        // blank while nothing is said, and the page's keys stand above it.
+        assert!(last.trim().is_empty(), "the command row is blank: {last:?}");
+        assert!((2..5).any(|up| row(h - up).contains("hl")), "the keys above it");
+
+        // A message goes on the command row and leaves the keys alone.
+        let mut ed = ed;
+        ed.set_status("saved".to_string());
+        terminal
+            .draw(|frame| draw(frame, &ed, &config, no_ime(), &mut viewport, Some(&page)))
+            .unwrap();
+        let buf = terminal.backend().buffer().clone();
+        let row = |y: u16| -> String {
+            (0..w).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()
+        };
+        assert!(row(h - 1).contains("saved"), "{:?}", row(h - 1));
+        assert!((2..5).any(|up| row(h - up).contains("hl")), "the keys are still there");
     }
 
     /// 那份測試文檔叫什麼——`editor_with` 開的是一個沒有名字的草稿。

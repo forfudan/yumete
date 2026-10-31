@@ -29,6 +29,21 @@
 /// that draws it wide draws the rest of the ambiguous block wide too.
 const ASK_WITH: &str = "—";
 
+/// **Whether the terminal draws an ambiguous character in two cells**,
+/// asked once a run and remembered (2026-10-31).
+///
+/// The probe writes on the screen behind the frame's back: a `—` where the
+/// cursor stands, then a wiped row in the terminal's own colour. At start-up
+/// that is a scratch line; asked again while the page is up — every `:w` on
+/// the settings panel and every `:reload-config` re-applies the settings — it
+/// left a dark band across the row the cursor was on, which the next frame
+/// did not repaint because as far as it knew nothing there had changed. The
+/// font does not change within a run, so the first answer stands.
+pub fn ask_the_terminal_about_width() -> Option<bool> {
+    static ANSWER: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
+    *ANSWER.get_or_init(probe)
+}
+
 /// Ask the terminal whether an ambiguous character takes two cells.
 ///
 /// `None` if there is nothing to ask (not a terminal) or it does not answer.
@@ -41,7 +56,7 @@ const ASK_WITH: &str = "—";
 /// current line and erases it afterwards. It has to run **before** the
 /// alternate screen is entered, while that line is still scratch.
 #[cfg(unix)]
-pub fn ask_the_terminal_about_width() -> Option<bool> {
+fn probe() -> Option<bool> {
     use std::io::{IsTerminal, Read, Write};
     use std::os::fd::AsRawFd;
     use std::time::{Duration, Instant};
@@ -130,7 +145,7 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
 /// late or not at all. Print the character at the start of the line, ask, and
 /// erase what was printed.
 #[cfg(windows)]
-pub fn ask_the_terminal_about_width() -> Option<bool> {
+fn probe() -> Option<bool> {
     use std::io::{IsTerminal, Write};
 
     let mut out = std::io::stdout();
@@ -154,7 +169,7 @@ pub fn ask_the_terminal_about_width() -> Option<bool> {
 }
 
 #[cfg(not(any(unix, windows)))]
-pub fn ask_the_terminal_about_width() -> Option<bool> {
+fn probe() -> Option<bool> {
     None
 }
 

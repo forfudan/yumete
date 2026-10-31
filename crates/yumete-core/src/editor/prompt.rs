@@ -543,7 +543,12 @@ impl Editor {
                 let line = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
-                remember_line(&mut self.command_history, &line);
+                // Not what is typed on the settings panel (2026-10-31): its
+                // `:w` and `:q` are the panel's, and walking back through the
+                // editor's history should not step on them.
+                if !self.settings_open {
+                    remember_line(&mut self.command_history, &line);
+                }
                 match self.execute(&line) {
                     Ok(CommandOutcome::Quit) => return KeyOutcome::Quit,
                     Ok(CommandOutcome::Continue) => {}

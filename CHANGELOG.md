@@ -22,11 +22,13 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The settings panel**: typing a value shows a bar cursor, and the key row then lists only Enter, Esc and Backspace. `c` types a value from empty, where `i` adds to the one there. Messages and the `:` line have their own row under the key hints instead of covering them, and `:w` and `:q` typed on the panel stay out of the command history.
 - **Closing a window hands the keys back to the window you were in before it**, as VS Code and tmux do, instead of to the first window on screen. If that one is gone too, they go to the window that takes the room, as in vim.
 - **Recovery copies are now `.chapter.md.<number>.yumete-swp`**, and a save in progress is a `….yumete-tmp` beside the file, so `*.yumete-swp` and `*.yumete-tmp` in a `.gitignore` cover them; `*.yumete` would also have hidden the `.yumete/` folder. Copies under the older names are still found and offered.
 
 ### Fixed
 
+- Saving on the settings panel, or `:reload-config`, left a dark band across one row of the page: the check of how wide the terminal draws `—` ran again mid-session, printed on the screen and wiped that row. It now runs once, at start-up.
 - A counted `J` from the line break itself (`A Esc 4J`) joined once and stopped: the count's early stop judged by the buffer's length and the cursor, and a join that swaps a line break for a space moves neither. It now watches the buffer's revision.
 
 ## 0.15.0 · 2026-10-30
