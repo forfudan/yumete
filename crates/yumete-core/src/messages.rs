@@ -3,7 +3,7 @@
 //! Every message is written at its call site as a **tag**: a short English
 //! name for the condition that says it — `readonly.refused`, `table.entered`,
 //! `hint.goto.title`. The sentences themselves live in
-//! [`messages.toml`](../messages.toml), one block per tag, with a language on
+//! `messages/*.toml`, one block per tag, with a language on
 //! each line.
 //!
 //! It was the other way round: the Chinese sentence *was* the key, written
@@ -134,8 +134,25 @@ pub fn language() -> Language {
     }
 }
 
-/// The table, as written.
-const TABLE: &str = include_str!("../messages.toml");
+/// The table, as written: one file per area under `messages/`, each holding
+/// the tags of the prefixes its first line names (2026-10-31; it was one
+/// file of 14,000 lines).
+const TABLES: &[&str] = &[
+    include_str!("../messages/action.toml"),
+    include_str!("../messages/cmd.toml"),
+    include_str!("../messages/code.toml"),
+    include_str!("../messages/editing.toml"),
+    include_str!("../messages/files.toml"),
+    include_str!("../messages/help.toml"),
+    include_str!("../messages/hint.toml"),
+    include_str!("../messages/ime.toml"),
+    include_str!("../messages/page.toml"),
+    include_str!("../messages/search.toml"),
+    include_str!("../messages/settings.toml"),
+    include_str!("../messages/table.toml"),
+    include_str!("../messages/ui.toml"),
+    include_str!("../messages/writing.toml"),
+];
 
 /// One message, in every language it has been written in.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -175,7 +192,7 @@ impl Entry {
 /// Tag → the sentences, built once.
 pub fn table() -> &'static HashMap<&'static str, Entry> {
     static ONCE: std::sync::OnceLock<HashMap<&'static str, Entry>> = std::sync::OnceLock::new();
-    ONCE.get_or_init(|| parse(TABLE))
+    ONCE.get_or_init(|| TABLES.iter().flat_map(|text| parse(text)).collect())
 }
 
 /// Read the table.
@@ -358,7 +375,7 @@ mod tests {
         // into `zht`. `zht` cannot be checked here because the parser already
         // drops a block without it; `zhs` can, and a missing one is now the
         // shape of the mistake — a message drafted in the second language.
-        let table = parse(TABLE);
+        let table = super::table();
         let missing: Vec<&str> = table
             .iter()
             .filter(|(_, entry)| entry.zhs.is_empty())
@@ -369,9 +386,9 @@ mod tests {
 
     #[test]
     fn every_entry_is_tagged_and_every_language_it_has_takes_the_same_holes() {
-        let table = parse(TABLE);
+        let table = super::table();
         assert!(table.len() > 500, "the table is {} entries", table.len());
-        for (key, entry) in &table {
+        for (key, entry) in table {
             assert!(
                 key.chars()
                     .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '.' || c == '-'),

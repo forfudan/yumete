@@ -59,14 +59,14 @@ pub struct Named {
 
 /// **八組，畫出來的次序。**
 pub const GROUPS: &[Named] = &[
-    Named { group: Group::Layout, label: "set.group.layout" },
-    Named { group: Group::Marks, label: "set.group.marks" },
-    Named { group: Group::Interface, label: "set.group.interface" },
-    Named { group: Group::Colours, label: "set.group.colours" },
-    Named { group: Group::Ime, label: "set.group.ime" },
-    Named { group: Group::Editing, label: "set.group.editing" },
-    Named { group: Group::Files, label: "set.group.files" },
-    Named { group: Group::Keys, label: "set.group.keys" },
+    Named { group: Group::Layout, label: "settings.group.layout" },
+    Named { group: Group::Marks, label: "settings.group.marks" },
+    Named { group: Group::Interface, label: "settings.group.interface" },
+    Named { group: Group::Colours, label: "settings.group.colours" },
+    Named { group: Group::Ime, label: "settings.group.ime" },
+    Named { group: Group::Editing, label: "settings.group.editing" },
+    Named { group: Group::Files, label: "settings.group.files" },
+    Named { group: Group::Keys, label: "settings.group.keys" },
 ];
 
 impl Group {
@@ -76,7 +76,7 @@ impl Group {
             .iter()
             .find(|n| n.group == self)
             .map(|n| n.label)
-            .unwrap_or("set.group.layout")
+            .unwrap_or("settings.group.layout")
     }
 }
 
@@ -179,72 +179,72 @@ const SCHEME_NAMES: &[Choice] = &[
 ];
 
 const LAYOUT_WAYS: &[Choice] = &[
-    Choice { word: "horizontal", label: "set.layout.horizontal" },
-    Choice { word: "vertical", label: "set.layout.vertical" },
+    Choice { word: "horizontal", label: "settings.layout.horizontal" },
+    Choice { word: "vertical", label: "settings.layout.vertical" },
 ];
 
 const MARGIN_WAYS: &[Choice] = &[
-    Choice { word: "never", label: "set.margin.never" },
-    Choice { word: "dense", label: "set.margin.dense" },
-    Choice { word: "loose", label: "set.margin.loose" },
-    Choice { word: "always", label: "set.margin.always" },
+    Choice { word: "never", label: "settings.margin.never" },
+    Choice { word: "dense", label: "settings.margin.dense" },
+    Choice { word: "loose", label: "settings.margin.loose" },
+    Choice { word: "always", label: "settings.margin.always" },
 ];
 
 const EDITOR_LINE_NUMBERS_WAYS: &[Choice] = &[
-    Choice { word: "absolute", label: "set.pick.line-numbers.absolute" },
-    Choice { word: "relative", label: "set.pick.line-numbers.relative" },
-    Choice { word: "none", label: "set.pick.line-numbers.none" },
+    Choice { word: "absolute", label: "settings.pick.line-numbers.absolute" },
+    Choice { word: "relative", label: "settings.pick.line-numbers.relative" },
+    Choice { word: "none", label: "settings.pick.line-numbers.none" },
 ];
 
 const EDITOR_WORD_LEVEL_WAYS: &[Choice] = &[
-    Choice { word: "strict", label: "set.pick.word-level.strict" },
-    Choice { word: "balanced", label: "set.pick.word-level.balanced" },
-    Choice { word: "full", label: "set.pick.word-level.full" },
+    Choice { word: "strict", label: "settings.pick.word-level.strict" },
+    Choice { word: "balanced", label: "settings.pick.word-level.balanced" },
+    Choice { word: "full", label: "settings.pick.word-level.full" },
 ];
 
 const EDITOR_WORD_MARK_WAYS: &[Choice] = &[
-    Choice { word: "off", label: "set.pick.word-mark.off" },
-    Choice { word: "color", label: "set.pick.word-mark.color" },
-    Choice { word: "ink", label: "set.pick.word-mark.ink" },
-    Choice { word: "tint", label: "set.pick.word-mark.tint" },
-    Choice { word: "line", label: "set.pick.word-mark.line" },
+    Choice { word: "off", label: "settings.pick.word-mark.off" },
+    Choice { word: "color", label: "settings.pick.word-mark.color" },
+    Choice { word: "ink", label: "settings.pick.word-mark.ink" },
+    Choice { word: "tint", label: "settings.pick.word-mark.tint" },
+    Choice { word: "line", label: "settings.pick.word-mark.line" },
 ];
 
 const EDITOR_VERTICAL_KEYS_WAYS: &[Choice] = &[
-    Choice { word: "logical", label: "set.pick.vertical-keys.logical" },
-    Choice { word: "visual", label: "set.pick.vertical-keys.visual" },
+    Choice { word: "logical", label: "settings.pick.vertical-keys.logical" },
+    Choice { word: "visual", label: "settings.pick.vertical-keys.visual" },
 ];
 
 const EDITOR_AUTO_PAIRS_WAYS: &[Choice] = &[
-    Choice { word: "off", label: "set.pick.auto-pairs.off" },
-    Choice { word: "basic", label: "set.pick.auto-pairs.basic" },
-    Choice { word: "full", label: "set.pick.auto-pairs.full" },
+    Choice { word: "off", label: "settings.pick.auto-pairs.off" },
+    Choice { word: "basic", label: "settings.pick.auto-pairs.basic" },
+    Choice { word: "full", label: "settings.pick.auto-pairs.full" },
 ];
 
 const EDITOR_STATUS_COUNT_WAYS: &[Choice] = &[
-    Choice { word: "text", label: "set.pick.status-count.text" },
-    Choice { word: "all", label: "set.pick.status-count.all" },
-    Choice { word: "off", label: "set.pick.status-count.off" },
+    Choice { word: "text", label: "settings.pick.status-count.text" },
+    Choice { word: "all", label: "settings.pick.status-count.all" },
+    Choice { word: "off", label: "settings.pick.status-count.off" },
 ];
 
 const EDITOR_INDENT_HINT_WAYS: &[Choice] = &[
-    Choice { word: "none", label: "set.pick.indent-hint.none" },
-    Choice { word: "symbol", label: "set.pick.indent-hint.symbol" },
-    Choice { word: "color", label: "set.pick.indent-hint.color" },
+    Choice { word: "none", label: "settings.pick.indent-hint.none" },
+    Choice { word: "symbol", label: "settings.pick.indent-hint.symbol" },
+    Choice { word: "color", label: "settings.pick.indent-hint.color" },
 ];
 
 const EDITOR_TABLE_RULES_WAYS: &[Choice] = &[
-    Choice { word: "line dash", label: "set.pick.table-rules.line-dash" },
-    Choice { word: "line", label: "set.pick.table-rules.line" },
-    Choice { word: "line double", label: "set.pick.table-rules.line-double" },
-    Choice { word: "color", label: "set.pick.table-rules.color" },
-    Choice { word: "off", label: "set.pick.table-rules.off" },
+    Choice { word: "line dash", label: "settings.pick.table-rules.line-dash" },
+    Choice { word: "line", label: "settings.pick.table-rules.line" },
+    Choice { word: "line double", label: "settings.pick.table-rules.line-double" },
+    Choice { word: "color", label: "settings.pick.table-rules.color" },
+    Choice { word: "off", label: "settings.pick.table-rules.off" },
 ];
 
 const EDITOR_TABS_WAYS: &[Choice] = &[
-    Choice { word: "auto", label: "set.pick.tabs.auto" },
-    Choice { word: "always", label: "set.pick.tabs.always" },
-    Choice { word: "never", label: "set.pick.tabs.never" },
+    Choice { word: "auto", label: "settings.pick.tabs.auto" },
+    Choice { word: "always", label: "settings.pick.tabs.always" },
+    Choice { word: "never", label: "settings.pick.tabs.never" },
 ];
 
 /// 上屏方式的三檔。**名字借命令那一套**（`commit.name.*`）：同一件事在設置頁和
@@ -258,62 +258,62 @@ const IME_COMMIT_WAYS: &[Choice] = &[
 ];
 
 const PANEL_DISPLAY_WAYS: &[Choice] = &[
-    Choice { word: "box", label: "set.pick.display.box" },
-    Choice { word: "bottom", label: "set.pick.display.bottom" },
-    Choice { word: "inline", label: "set.pick.display.inline" },
+    Choice { word: "box", label: "settings.pick.display.box" },
+    Choice { word: "bottom", label: "settings.pick.display.bottom" },
+    Choice { word: "inline", label: "settings.pick.display.inline" },
 ];
 
 const PANEL_PREEDIT_WAYS: &[Choice] = &[
-    Choice { word: "off", label: "set.pick.inline-preedit.off" },
-    Choice { word: "composition", label: "set.pick.inline-preedit.composition" },
-    Choice { word: "preview", label: "set.pick.inline-preedit.preview" },
+    Choice { word: "off", label: "settings.pick.inline-preedit.off" },
+    Choice { word: "composition", label: "settings.pick.inline-preedit.composition" },
+    Choice { word: "preview", label: "settings.pick.inline-preedit.preview" },
 ];
 
 const THEME_MODE_WAYS: &[Choice] = &[
-    Choice { word: "auto", label: "set.pick.mode.auto" },
-    Choice { word: "dark", label: "set.pick.mode.dark" },
-    Choice { word: "light", label: "set.pick.mode.light" },
+    Choice { word: "auto", label: "settings.pick.mode.auto" },
+    Choice { word: "dark", label: "settings.pick.mode.dark" },
+    Choice { word: "light", label: "settings.pick.mode.light" },
 ];
 
 const THEME_GROUND_WAYS: &[Choice] = &[
-    Choice { word: "paint", label: "set.pick.ground.paint" },
-    Choice { word: "terminal", label: "set.pick.ground.terminal" },
+    Choice { word: "paint", label: "settings.pick.ground.paint" },
+    Choice { word: "terminal", label: "settings.pick.ground.terminal" },
 ];
 
 const THEME_STATUS_BAR_WAYS: &[Choice] = &[
-    Choice { word: "sunken", label: "set.pick.status-bar.sunken" },
-    Choice { word: "raised", label: "set.pick.status-bar.raised" },
+    Choice { word: "sunken", label: "settings.pick.status-bar.sunken" },
+    Choice { word: "raised", label: "settings.pick.status-bar.raised" },
 ];
 
 /// Warning: **兩個詞，没有同義詞**（`SystemImePolicy::parse` 自己的註釋這麽寫）：別的
 /// 字一律讀成 `auto`。所以這裏不許多寫一個「看着像」的選項——面板上切過去、檔裏
 /// 寫下去，而編輯器當它是 `auto`。2026-09-24 那條「改一項要真的改得動」逮到的。
 const KEYS_PRESET_WAYS: &[Choice] = &[
-    Choice { word: "helix", label: "set.pick.preset.helix" },
-    Choice { word: "vim", label: "set.pick.preset.vim" },
+    Choice { word: "helix", label: "settings.pick.preset.helix" },
+    Choice { word: "vim", label: "settings.pick.preset.vim" },
 ];
 
 const IME_SYSTEM_WAYS: &[Choice] = &[
-    Choice { word: "auto", label: "set.pick.system.auto" },
-    Choice { word: "keep", label: "set.pick.system.keep" },
+    Choice { word: "auto", label: "settings.pick.system.auto" },
+    Choice { word: "keep", label: "settings.pick.system.keep" },
 ];
 
 const EDITOR_TAB_INSERTS_WAYS: &[Choice] = &[
-    Choice { word: "spaces", label: "set.pick.tab-inserts.spaces" },
-    Choice { word: "tab", label: "set.pick.tab-inserts.tab" },
+    Choice { word: "spaces", label: "settings.pick.tab-inserts.spaces" },
+    Choice { word: "tab", label: "settings.pick.tab-inserts.tab" },
 ];
 
 const EDITOR_LANGUAGE_WAYS: &[Choice] = &[
-    Choice { word: "auto", label: "set.pick.language.auto" },
-    Choice { word: "zh", label: "set.pick.language.zh" },
-    Choice { word: "zhs", label: "set.pick.language.zhs" },
-    Choice { word: "en", label: "set.pick.language.en" },
+    Choice { word: "auto", label: "settings.pick.language.auto" },
+    Choice { word: "zh", label: "settings.pick.language.zh" },
+    Choice { word: "zhs", label: "settings.pick.language.zhs" },
+    Choice { word: "en", label: "settings.pick.language.en" },
 ];
 
 const EDITOR_AMBIGUOUS_WIDTH_WAYS: &[Choice] = &[
-    Choice { word: "auto", label: "set.pick.ambiguous-width.auto" },
-    Choice { word: "wide", label: "set.pick.ambiguous-width.wide" },
-    Choice { word: "narrow", label: "set.pick.ambiguous-width.narrow" },
+    Choice { word: "auto", label: "settings.pick.ambiguous-width.auto" },
+    Choice { word: "wide", label: "settings.pick.ambiguous-width.wide" },
+    Choice { word: "narrow", label: "settings.pick.ambiguous-width.narrow" },
 ];
 
 /// **整張表。**
@@ -343,8 +343,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "layout",
         group: Group::Layout,
         kind: Kind::Pick(LAYOUT_WAYS),
-        label: "set.editor.layout",
-        hint: "set.editor.layout.hint",
+        label: "settings.editor.layout",
+        hint: "settings.editor.layout.hint",
         factory: r#""horizontal""#,
     },
     Setting {
@@ -352,8 +352,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "vertical_keys",
         group: Group::Layout,
         kind: Kind::Pick(EDITOR_VERTICAL_KEYS_WAYS),
-        label: "set.editor.vertical-keys",
-        hint: "set.editor.vertical-keys.hint",
+        label: "settings.editor.vertical-keys",
+        hint: "settings.editor.vertical-keys.hint",
         factory: r#""visual""#,
     },
     Setting {
@@ -368,9 +368,9 @@ pub const SETTINGS: &[Setting] = &[
         // Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-vertical` 對齊：那一頭
         // 用的是 `wrap::MIN_WRAP_WIDTH`，而比它窄會把一個全角字擠到自己那一行上。
         // 從前面板說 4、命令說 8、檔案說 4——同一個設置三個下界。
-        kind: Kind::Count { low: 8, high: 64, zero: Some("set.zero.as-tall-as-the-window") },
-        label: "set.editor.zong-length",
-        hint: "set.editor.zong-length.hint",
+        kind: Kind::Count { low: 8, high: 64, zero: Some("settings.zero.as-tall-as-the-window") },
+        label: "settings.editor.zong-length",
+        hint: "settings.editor.zong-length.hint",
         factory: "0",
     },
     Setting {
@@ -378,8 +378,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "zong_gap",
         group: Group::Layout,
         kind: Kind::Count { low: 0, high: 4, zero: None },
-        label: "set.editor.zong-gap",
-        hint: "set.editor.zong-gap.hint",
+        label: "settings.editor.zong-gap",
+        hint: "settings.editor.zong-gap.hint",
         factory: "0",
     },
     Setting {
@@ -387,8 +387,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "pages_vertical",
         group: Group::Layout,
         kind: Kind::Count { low: 1, high: 4, zero: None },
-        label: "set.editor.pages-vertical",
-        hint: "set.editor.pages-vertical.hint",
+        label: "settings.editor.pages-vertical",
+        hint: "settings.editor.pages-vertical.hint",
         factory: "1",
     },
     Setting {
@@ -396,44 +396,44 @@ pub const SETTINGS: &[Setting] = &[
         key: "pages_horizontal",
         group: Group::Layout,
         kind: Kind::Count { low: 1, high: 4, zero: None },
-        label: "set.editor.pages-horizontal",
-        hint: "set.editor.pages-horizontal.hint",
+        label: "settings.editor.pages-horizontal",
+        hint: "settings.editor.pages-horizontal.hint",
         factory: "1",
     },
     Setting {
         table: "editor",
         key: "indent",
         group: Group::Layout,
-        kind: Kind::Count { low: 0, high: 8, zero: Some("set.zero.no-indent") },
-        label: "set.editor.indent",
-        hint: "set.editor.indent.hint",
+        kind: Kind::Count { low: 0, high: 8, zero: Some("settings.zero.no-indent") },
+        label: "settings.editor.indent",
+        hint: "settings.editor.indent.hint",
         factory: "0",
     },
     Setting {
         table: "editor",
         key: "measure",
         group: Group::Layout,
-        kind: Kind::Count { low: 0, high: 400, zero: Some("set.zero.as-wide-as-the-window") },
-        label: "set.editor.measure",
-        hint: "set.editor.measure.hint",
+        kind: Kind::Count { low: 0, high: 400, zero: Some("settings.zero.as-wide-as-the-window") },
+        label: "settings.editor.measure",
+        hint: "settings.editor.measure.hint",
         factory: "0",
     },
     Setting {
         table: "editor",
         key: "hard_wrap",
         group: Group::Layout,
-        kind: Kind::Count { low: 1, high: 400, zero: Some("set.zero.hard-wrap-unset") },
-        label: "set.editor.hard-wrap",
-        hint: "set.editor.hard-wrap.hint",
+        kind: Kind::Count { low: 1, high: 400, zero: Some("settings.zero.hard-wrap-unset") },
+        label: "settings.editor.hard-wrap",
+        hint: "settings.editor.hard-wrap.hint",
         factory: "0",
     },
     Setting {
         table: "editor",
         key: "ruler",
         group: Group::Layout,
-        kind: Kind::Count { low: 0, high: 400, zero: Some("set.zero.no-ruler") },
-        label: "set.editor.ruler",
-        hint: "set.editor.ruler.hint",
+        kind: Kind::Count { low: 0, high: 400, zero: Some("settings.zero.no-ruler") },
+        label: "settings.editor.ruler",
+        hint: "settings.editor.ruler.hint",
         factory: "0",
     },
     Setting {
@@ -441,8 +441,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "which_wrap",
         group: Group::Keys,
         kind: Kind::Text,
-        label: "set.editor.which-wrap",
-        hint: "set.editor.which-wrap.hint",
+        label: "settings.editor.which-wrap",
+        hint: "settings.editor.which-wrap.hint",
         factory: r#""b""#,
     },
     Setting {
@@ -450,8 +450,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "insert_final_newline",
         group: Group::Layout,
         kind: Kind::Tick,
-        label: "set.editor.insert-final-newline",
-        hint: "set.editor.insert-final-newline.hint",
+        label: "settings.editor.insert-final-newline",
+        hint: "settings.editor.insert-final-newline.hint",
         factory: "true",
     },
     Setting {
@@ -459,8 +459,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "soft_wrap",
         group: Group::Layout,
         kind: Kind::Tick,
-        label: "set.editor.soft-wrap",
-        hint: "set.editor.soft-wrap.hint",
+        label: "settings.editor.soft-wrap",
+        hint: "settings.editor.soft-wrap.hint",
         factory: "true",
     },
     Setting {
@@ -468,8 +468,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "hanging_punctuation",
         group: Group::Layout,
         kind: Kind::Tick,
-        label: "set.editor.hanging-punctuation",
-        hint: "set.editor.hanging-punctuation.hint",
+        label: "settings.editor.hanging-punctuation",
+        hint: "settings.editor.hanging-punctuation.hint",
         factory: "false",
     },
     Setting {
@@ -477,8 +477,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "margin",
         group: Group::Layout,
         kind: Kind::Pick(MARGIN_WAYS),
-        label: "set.editor.margin",
-        hint: "set.editor.margin.hint",
+        label: "settings.editor.margin",
+        hint: "settings.editor.margin.hint",
         factory: r#""dense""#,
     },
     Setting {
@@ -487,18 +487,18 @@ pub const SETTINGS: &[Setting] = &[
         group: Group::Layout,
         // 一格裝幾個半角字：**0（關），或者 2 到 8**。`into_config` 把 1 當成 0
         // （`at_most >= TATECHUYOKO_CLASSIC`），所以 `low` 是 2 而不是 0。
-        kind: Kind::Count { low: 2, high: 8, zero: Some("set.zero.off") },
-        label: "set.editor.tatechuyoko",
-        hint: "set.editor.tatechuyoko.hint",
+        kind: Kind::Count { low: 2, high: 8, zero: Some("settings.zero.off") },
+        label: "settings.editor.tatechuyoko",
+        hint: "settings.editor.tatechuyoko.hint",
         factory: "4",
     },
     Setting {
         table: "editor",
         key: "paper_ticks",
         group: Group::Layout,
-        kind: Kind::Count { low: 0, high: 64, zero: Some("set.zero.off") },
-        label: "set.editor.paper-ticks",
-        hint: "set.editor.paper-ticks.hint",
+        kind: Kind::Count { low: 0, high: 64, zero: Some("settings.zero.off") },
+        label: "settings.editor.paper-ticks",
+        hint: "settings.editor.paper-ticks.hint",
         factory: "0",
     },
     Setting {
@@ -506,8 +506,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "line_numbers",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_LINE_NUMBERS_WAYS),
-        label: "set.editor.line-numbers",
-        hint: "set.editor.line-numbers.hint",
+        label: "settings.editor.line-numbers",
+        hint: "settings.editor.line-numbers.hint",
         factory: r#""absolute""#,
     },
     Setting {
@@ -515,8 +515,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "line_number_fill",
         group: Group::Marks,
         kind: Kind::Tick,
-        label: "set.editor.line-number-fill",
-        hint: "set.editor.line-number-fill.hint",
+        label: "settings.editor.line-number-fill",
+        hint: "settings.editor.line-number-fill.hint",
         factory: "false",
     },
     Setting {
@@ -524,8 +524,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "diff_gutter",
         group: Group::Marks,
         kind: Kind::Tick,
-        label: "set.editor.diff-gutter",
-        hint: "set.editor.diff-gutter.hint",
+        label: "settings.editor.diff-gutter",
+        hint: "settings.editor.diff-gutter.hint",
         factory: "true",
     },
     Setting {
@@ -533,8 +533,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "word_level",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_WORD_LEVEL_WAYS),
-        label: "set.editor.word-level",
-        hint: "set.editor.word-level.hint",
+        label: "settings.editor.word-level",
+        hint: "settings.editor.word-level.hint",
         factory: r#""balanced""#,
     },
     Setting {
@@ -542,8 +542,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "word_mark",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_WORD_MARK_WAYS),
-        label: "set.editor.word-mark",
-        hint: "set.editor.word-mark.hint",
+        label: "settings.editor.word-mark",
+        hint: "settings.editor.word-mark.hint",
         factory: r#""color""#,
     },
     Setting {
@@ -551,8 +551,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "code_highlight",
         group: Group::Marks,
         kind: Kind::Tick,
-        label: "set.editor.code-highlight",
-        hint: "set.editor.code-highlight.hint",
+        label: "settings.editor.code-highlight",
+        hint: "settings.editor.code-highlight.hint",
         factory: "true",
     },
     Setting {
@@ -560,8 +560,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "show_ruby",
         group: Group::Marks,
         kind: Kind::Tick,
-        label: "set.editor.show-ruby",
-        hint: "set.editor.show-ruby.hint",
+        label: "settings.editor.show-ruby",
+        hint: "settings.editor.show-ruby.hint",
         factory: "false",
     },
     Setting {
@@ -569,8 +569,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "indent_hint",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_INDENT_HINT_WAYS),
-        label: "set.editor.indent-hint",
-        hint: "set.editor.indent-hint.hint",
+        label: "settings.editor.indent-hint",
+        hint: "settings.editor.indent-hint.hint",
         factory: r#""none""#,
     },
     Setting {
@@ -578,8 +578,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "indent_symbol",
         group: Group::Marks,
         kind: Kind::Text,
-        label: "set.editor.indent-symbol",
-        hint: "set.editor.indent-symbol.hint",
+        label: "settings.editor.indent-symbol",
+        hint: "settings.editor.indent-symbol.hint",
         factory: r#""↵""#,
     },
     Setting {
@@ -587,8 +587,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "table_rules",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_TABLE_RULES_WAYS),
-        label: "set.editor.table-rules",
-        hint: "set.editor.table-rules.hint",
+        label: "settings.editor.table-rules",
+        hint: "settings.editor.table-rules.hint",
         factory: r#""line dash""#,
     },
     Setting {
@@ -596,8 +596,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "char_info",
         group: Group::Marks,
         kind: Kind::Tick,
-        label: "set.editor.char-info",
-        hint: "set.editor.char-info.hint",
+        label: "settings.editor.char-info",
+        hint: "settings.editor.char-info.hint",
         factory: "true",
     },
     Setting {
@@ -605,8 +605,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "status_count",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_STATUS_COUNT_WAYS),
-        label: "set.editor.status-count",
-        hint: "set.editor.status-count.hint",
+        label: "settings.editor.status-count",
+        hint: "settings.editor.status-count.hint",
         factory: r#""text""#,
     },
     Setting {
@@ -614,8 +614,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "unicode_alarm",
         group: Group::Marks,
         kind: Kind::Tick,
-        label: "set.editor.unicode-alarm",
-        hint: "set.editor.unicode-alarm.hint",
+        label: "settings.editor.unicode-alarm",
+        hint: "settings.editor.unicode-alarm.hint",
         factory: "true",
     },
     Setting {
@@ -623,8 +623,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "scrolloff",
         group: Group::Interface,
         kind: Kind::Count { low: 0, high: 20, zero: None },
-        label: "set.editor.scrolloff",
-        hint: "set.editor.scrolloff.hint",
+        label: "settings.editor.scrolloff",
+        hint: "settings.editor.scrolloff.hint",
         factory: "3",
     },
     Setting {
@@ -632,8 +632,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "wheel_step",
         group: Group::Interface,
         kind: Kind::Count { low: 1, high: 10, zero: None },
-        label: "set.editor.wheel-step",
-        hint: "set.editor.wheel-step.hint",
+        label: "settings.editor.wheel-step",
+        hint: "settings.editor.wheel-step.hint",
         factory: "3",
     },
     Setting {
@@ -641,8 +641,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "tabs",
         group: Group::Interface,
         kind: Kind::Pick(EDITOR_TABS_WAYS),
-        label: "set.editor.tabs",
-        hint: "set.editor.tabs.hint",
+        label: "settings.editor.tabs",
+        hint: "settings.editor.tabs.hint",
         factory: r#""auto""#,
     },
     Setting {
@@ -650,8 +650,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "command_line",
         group: Group::Interface,
         kind: Kind::Tick,
-        label: "set.editor.command-line",
-        hint: "set.editor.command-line.hint",
+        label: "settings.editor.command-line",
+        hint: "settings.editor.command-line.hint",
         factory: "true",
     },
     Setting {
@@ -659,8 +659,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "rounded",
         group: Group::Interface,
         kind: Kind::Tick,
-        label: "set.panel.rounded",
-        hint: "set.panel.rounded.hint",
+        label: "settings.panel.rounded",
+        hint: "settings.panel.rounded.hint",
         factory: "true",
     },
     Setting {
@@ -668,8 +668,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "name",
         group: Group::Colours,
         kind: Kind::PickOr(THEME_NAMES),
-        label: "set.theme.name",
-        hint: "set.theme.name.hint",
+        label: "settings.theme.name",
+        hint: "settings.theme.name.hint",
         factory: r#""ink""#,
     },
     Setting {
@@ -677,8 +677,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "mode",
         group: Group::Colours,
         kind: Kind::Pick(THEME_MODE_WAYS),
-        label: "set.theme.mode",
-        hint: "set.theme.mode.hint",
+        label: "settings.theme.mode",
+        hint: "settings.theme.mode.hint",
         factory: r#""auto""#,
     },
     Setting {
@@ -686,8 +686,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "ground",
         group: Group::Colours,
         kind: Kind::Pick(THEME_GROUND_WAYS),
-        label: "set.theme.ground",
-        hint: "set.theme.ground.hint",
+        label: "settings.theme.ground",
+        hint: "settings.theme.ground.hint",
         factory: r#""paint""#,
     },
     Setting {
@@ -695,8 +695,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "status_bar",
         group: Group::Colours,
         kind: Kind::Pick(THEME_STATUS_BAR_WAYS),
-        label: "set.theme.status-bar",
-        hint: "set.theme.status-bar.hint",
+        label: "settings.theme.status-bar",
+        hint: "settings.theme.status-bar.hint",
         factory: r#""sunken""#,
     },
     Setting {
@@ -704,8 +704,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "fill",
         group: Group::Colours,
         kind: Kind::Tick,
-        label: "set.theme.fill",
-        hint: "set.theme.fill.hint",
+        label: "settings.theme.fill",
+        hint: "settings.theme.fill.hint",
         factory: "false",
     },
     Setting {
@@ -713,8 +713,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "scheme",
         group: Group::Ime,
         kind: Kind::PickOr(SCHEME_NAMES),
-        label: "set.ime.scheme",
-        hint: "set.ime.scheme.hint",
+        label: "settings.ime.scheme",
+        hint: "settings.ime.scheme.hint",
         factory: r#""lingming""#,
     },
     // **上屏方式也有一行**（2026-10-16 補）。`[ime] commit` 從前只有命令與配置
@@ -725,8 +725,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "commit",
         group: Group::Ime,
         kind: Kind::Pick(IME_COMMIT_WAYS),
-        label: "set.ime.commit",
-        hint: "set.ime.commit.hint",
+        label: "settings.ime.commit",
+        hint: "settings.ime.commit.hint",
         factory: r#""default""#,
     },
     Setting {
@@ -734,8 +734,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "start",
         group: Group::Ime,
         kind: Kind::Tick,
-        label: "set.ime.start",
-        hint: "set.ime.start.hint",
+        label: "settings.ime.start",
+        hint: "settings.ime.start.hint",
         factory: "false",
     },
     Setting {
@@ -743,8 +743,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "system",
         group: Group::Ime,
         kind: Kind::Pick(IME_SYSTEM_WAYS),
-        label: "set.ime.system",
-        hint: "set.ime.system.hint",
+        label: "settings.ime.system",
+        hint: "settings.ime.system.hint",
         factory: r#""auto""#,
     },
     // **候選欄那幾項歸「輸入法」，不歸「界面」**（2026-10-10 作者提）。原話：
@@ -760,8 +760,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "display",
         group: Group::Ime,
         kind: Kind::Pick(PANEL_DISPLAY_WAYS),
-        label: "set.panel.display",
-        hint: "set.panel.display.hint",
+        label: "settings.panel.display",
+        hint: "settings.panel.display.hint",
         factory: r#""box""#,
     },
     Setting {
@@ -769,8 +769,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "inline_preedit",
         group: Group::Ime,
         kind: Kind::Pick(PANEL_PREEDIT_WAYS),
-        label: "set.panel.inline-preedit",
-        hint: "set.panel.inline-preedit.hint",
+        label: "settings.panel.inline-preedit",
+        hint: "settings.panel.inline-preedit.hint",
         factory: r#""off""#,
     },
     Setting {
@@ -778,8 +778,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "page_size",
         group: Group::Ime,
         kind: Kind::Count { low: 1, high: 9, zero: None },
-        label: "set.panel.page-size",
-        hint: "set.panel.page-size.hint",
+        label: "settings.panel.page-size",
+        hint: "settings.panel.page-size.hint",
         factory: "6",
     },
     Setting {
@@ -787,8 +787,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "markers",
         group: Group::Ime,
         kind: Kind::Text,
-        label: "set.panel.markers",
-        hint: "set.panel.markers.hint",
+        label: "settings.panel.markers",
+        hint: "settings.panel.markers.hint",
         factory: r#""１２３４５６７８９""#,
     },
     Setting {
@@ -799,17 +799,17 @@ pub const SETTINGS: &[Setting] = &[
         // 畫出什麼（注音、詞界、縮排提示）。
         group: Group::Ime,
         kind: Kind::Tick,
-        label: "set.editor.show-chaifen",
-        hint: "set.editor.show-chaifen.hint",
+        label: "settings.editor.show-chaifen",
+        hint: "settings.editor.show-chaifen.hint",
         factory: "false",
     },
     Setting {
         table: "editor",
         key: "word_completion",
         group: Group::Editing,
-        kind: Kind::Count { low: 0, high: 20, zero: Some("set.zero.off") },
-        label: "set.editor.word-completion",
-        hint: "set.editor.word-completion.hint",
+        kind: Kind::Count { low: 0, high: 20, zero: Some("settings.zero.off") },
+        label: "settings.editor.word-completion",
+        hint: "settings.editor.word-completion.hint",
         factory: "4",
     },
     Setting {
@@ -817,8 +817,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "auto_pairs",
         group: Group::Editing,
         kind: Kind::Pick(EDITOR_AUTO_PAIRS_WAYS),
-        label: "set.editor.auto-pairs",
-        hint: "set.editor.auto-pairs.hint",
+        label: "settings.editor.auto-pairs",
+        hint: "settings.editor.auto-pairs.hint",
         factory: r#""basic""#,
     },
     Setting {
@@ -826,8 +826,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "completion_page_size",
         group: Group::Editing,
         kind: Kind::Count { low: 1, high: 20, zero: None },
-        label: "set.editor.completion-page-size",
-        hint: "set.editor.completion-page-size.hint",
+        label: "settings.editor.completion-page-size",
+        hint: "settings.editor.completion-page-size.hint",
         factory: "6",
     },
     Setting {
@@ -835,8 +835,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "indent_width",
         group: Group::Editing,
         kind: Kind::Count { low: 1, high: 16, zero: None },
-        label: "set.editor.indent-width",
-        hint: "set.editor.indent-width.hint",
+        label: "settings.editor.indent-width",
+        hint: "settings.editor.indent-width.hint",
         factory: "4",
     },
     Setting {
@@ -844,8 +844,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "tab_width",
         group: Group::Editing,
         kind: Kind::Count { low: 1, high: 16, zero: None },
-        label: "set.editor.tab-width",
-        hint: "set.editor.tab-width.hint",
+        label: "settings.editor.tab-width",
+        hint: "settings.editor.tab-width.hint",
         factory: "8",
     },
     Setting {
@@ -853,8 +853,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "tab_inserts",
         group: Group::Editing,
         kind: Kind::Pick(EDITOR_TAB_INSERTS_WAYS),
-        label: "set.editor.tab-inserts",
-        hint: "set.editor.tab-inserts.hint",
+        label: "settings.editor.tab-inserts",
+        hint: "settings.editor.tab-inserts.hint",
         factory: r#""spaces""#,
     },
     Setting {
@@ -862,8 +862,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "reload_auto",
         group: Group::Files,
         kind: Kind::Tick,
-        label: "set.editor.reload-auto",
-        hint: "set.editor.reload-auto.hint",
+        label: "settings.editor.reload-auto",
+        hint: "settings.editor.reload-auto.hint",
         factory: "true",
     },
     Setting {
@@ -871,8 +871,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "autosave",
         group: Group::Files,
         kind: Kind::Tick,
-        label: "set.editor.autosave",
-        hint: "set.editor.autosave.hint",
+        label: "settings.editor.autosave",
+        hint: "settings.editor.autosave.hint",
         factory: "true",
     },
     Setting {
@@ -880,8 +880,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "smart_case",
         group: Group::Editing,
         kind: Kind::Tick,
-        label: "set.editor.smart-case",
-        hint: "set.editor.smart-case.hint",
+        label: "settings.editor.smart-case",
+        hint: "settings.editor.smart-case.hint",
         factory: "true",
     },
     Setting {
@@ -889,8 +889,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "fuzzy_search",
         group: Group::Editing,
         kind: Kind::Tick,
-        label: "set.editor.fuzzy-search",
-        hint: "set.editor.fuzzy-search.hint",
+        label: "settings.editor.fuzzy-search",
+        hint: "settings.editor.fuzzy-search.hint",
         factory: "false",
     },
     Setting {
@@ -898,8 +898,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "session",
         group: Group::Files,
         kind: Kind::Tick,
-        label: "set.editor.session",
-        hint: "set.editor.session.hint",
+        label: "settings.editor.session",
+        hint: "settings.editor.session.hint",
         factory: "false",
     },
     Setting {
@@ -907,8 +907,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "remember",
         group: Group::Files,
         kind: Kind::Tick,
-        label: "set.editor.remember",
-        hint: "set.editor.remember.hint",
+        label: "settings.editor.remember",
+        hint: "settings.editor.remember.hint",
         factory: "true",
     },
     Setting {
@@ -916,8 +916,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "language",
         group: Group::Interface,
         kind: Kind::Pick(EDITOR_LANGUAGE_WAYS),
-        label: "set.editor.language",
-        hint: "set.editor.language.hint",
+        label: "settings.editor.language",
+        hint: "settings.editor.language.hint",
         factory: r#""auto""#,
     },
     Setting {
@@ -925,8 +925,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "ambiguous_width",
         group: Group::Layout,
         kind: Kind::Pick(EDITOR_AMBIGUOUS_WIDTH_WAYS),
-        label: "set.editor.ambiguous-width",
-        hint: "set.editor.ambiguous-width.hint",
+        label: "settings.editor.ambiguous-width",
+        hint: "settings.editor.ambiguous-width.hint",
         factory: r#""auto""#,
     },
     Setting {
@@ -934,8 +934,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "language_key",
         group: Group::Keys,
         kind: Kind::Text,
-        label: "set.editor.language-key",
-        hint: "set.editor.language-key.hint",
+        label: "settings.editor.language-key",
+        hint: "settings.editor.language-key.hint",
         factory: r#""C-^""#,
     },
     Setting {
@@ -943,8 +943,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "flavor",
         group: Group::Keys,
         kind: Kind::Tick,
-        label: "set.keys.flavor",
-        hint: "set.keys.flavor.hint",
+        label: "settings.keys.flavor",
+        hint: "settings.keys.flavor.hint",
         factory: "false",
     },
     Setting {
@@ -952,8 +952,8 @@ pub const SETTINGS: &[Setting] = &[
         key: "preset",
         group: Group::Keys,
         kind: Kind::Pick(KEYS_PRESET_WAYS),
-        label: "set.keys.preset",
-        hint: "set.keys.preset.hint",
+        label: "settings.keys.preset",
+        hint: "settings.keys.preset.hint",
         factory: r#""helix""#,
     },
 ];

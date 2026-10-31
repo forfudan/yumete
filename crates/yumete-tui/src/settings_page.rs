@@ -302,7 +302,7 @@ impl Seat {
                 // 不是同一回事，而開出來的是檔裏那一份。
                 if dirty && !self.warned {
                     self.warned = true;
-                    editor.set_status(say!("set.leaving-unsaved"));
+                    editor.set_status(say!("settings.leaving-unsaved"));
                     return true;
                 }
                 self.leave(editor, false);
@@ -355,19 +355,19 @@ impl Seat {
                 // 沒有這一下，存盤只是把字寫進檔裏，眼前這一頁照舊按舊設置畫。
                 let wrote = matches!(said, Ok(Some(_)));
                 editor.set_status(match said {
-                    Ok(None) => say!("set.nothing-to-save"),
+                    Ok(None) => say!("settings.nothing-to-save"),
                     // 這期間那個檔被外面改過 —— 說一句，那比「有幾個鍵註釋掉了」
                     // 要緊：眼前這一頁的值可能已經不是檔裏寫的了。
                     Ok(Some(spoke)) if !spoke.changed_underneath.is_empty() => {
-                        say!("set.saved-moved", named)
+                        say!("settings.saved-moved", named)
                     }
-                    Ok(Some(spoke)) if spoke.commented_out.is_empty() => say!("set.saved", named),
+                    Ok(Some(spoke)) if spoke.commented_out.is_empty() => say!("settings.saved", named),
                     Ok(Some(spoke)) => say!(
-                        "set.saved-said",
+                        "settings.saved-said",
                         named,
                         spoke.commented_out.join(&say!("label.comma"))
                     ),
-                    Err(why) => say!("set.cannot-save", why),
+                    Err(why) => say!("settings.cannot-save", why),
                 });
                 if wrote {
                     editor.set_config_reload();
@@ -387,7 +387,7 @@ impl Seat {
         match dirty && !self.warned {
             true => {
                 self.warned = true;
-                editor.set_status(say!("set.leaving-unsaved"));
+                editor.set_status(say!("settings.leaving-unsaved"));
             }
             false => {
                 self.panel = None;
@@ -478,7 +478,7 @@ pub fn draw(
     // 「改的是全局還是本項目」擠在右邊路徑的前面——那是這扇面板最要緊的一格狀態，
     // 而它和路徑同一個顏色、同一個位置。原話：「左上標題改爲『設置 [{0}]』……用金字
     // 會更醒目。右側的文件名用正常顔色」。
-    let title = format!("{} [{}]", say!("set.title"), said(panel.into.layer().label()));
+    let title = format!("{} [{}]", say!("settings.title"), said(panel.into.layer().label()));
     put_text(buf, area.x + 1, area.y, right, &title, head);
     let sheet = panel.sheet();
     let where_to = match (&sheet.path, sheet.there) {
@@ -487,10 +487,10 @@ pub fn draw(
         // 存盤時它是被**建出來**的，而建在哪裏是一件該先看得見的事。原話：「如果没有
         // 文件，顯示{預期文件名}+ 表示保存後創建」。
         (Some(p), false) => format!("{}+", shorten(p)),
-        (None, _) => say!("set.no-file"),
+        (None, _) => say!("settings.no-file"),
     };
     let dirty = match panel.dirty() {
-        true => format!("{}  {where_to}", say!("set.unsaved")),
+        true => format!("{}  {where_to}", say!("settings.unsaved")),
         false => where_to,
     };
     // Warning: **撞上標題就縮**。從前它只 `saturating_sub`，於是 40 欄的窗口上那條路徑
@@ -505,7 +505,7 @@ pub fn draw(
     // 或者光一個 `[全局]`——於是 74 欄以下**改了東西沒有任何提示**，而那正是這一
     // 行存在的理由。中間插一檔：徽章 ＋ `[全局]`，路徑先丟。2026-09-24 審出來的。
     let badge = match panel.dirty() {
-        true => format!("{}  {short}", say!("set.unsaved")),
+        true => format!("{}  {short}", say!("settings.unsaved")),
         false => short.clone(),
     };
     let line = match right.saturating_sub(title_ends) as usize {
@@ -543,8 +543,8 @@ pub fn draw(
     // While a value is typed only Enter, Esc and Backspace mean anything
     // (2026-10-31: the row went on listing the other keys).
     let keys = match panel.typing.is_some() {
-        true => say!("set.keys-typing"),
-        false => say!("set.keys"),
+        true => say!("settings.keys-typing"),
+        false => say!("settings.keys"),
     };
     // **說明和三層同一塊**（2026-10-13 報的）。原話：「描述欄可以合并到『出厂』『全
     // 局』『本项目』這個框中……这样的话用户的閲讀顺序是符合的：描述+现在的状态和来
@@ -642,7 +642,7 @@ pub fn draw(
     let mut caret = None;
     let from = col.name;
     if rows.is_empty() {
-        put_text(buf, from, area.y + 2, right, &say!("set.group.not-yet"), quiet);
+        put_text(buf, from, area.y + 2, right, &say!("settings.group.not-yet"), quiet);
     }
     // **光標走到哪，那一行就跳進畫面**（2026-10-09 作者定）。
     //
@@ -749,13 +749,13 @@ pub fn draw(
                 }
                 let value = match said_value {
                     Some(v) => drawn(setting, v),
-                    None => say!("set.layer.unset"),
+                    None => say!("settings.layer.unset"),
                 };
                 let name = said(layer.label());
                 let pad = 8usize.saturating_sub(yumete_cjk::str_width(&name));
                 let mut line = format!("{name}{}{value}", " ".repeat(pad));
                 // 擠不下就不說那一句：半句「← 現在」比沒有這一句難讀。
-                let mark = format!("   {}", say!("set.layer.in-force"));
+                let mark = format!("   {}", say!("settings.layer.in-force"));
                 let room = right.saturating_sub(split + 3) as usize;
                 if *layer == shown.from
                     && yumete_cjk::str_width(&line) + yumete_cjk::str_width(&mark) <= room
@@ -823,11 +823,11 @@ fn note_for(panel: &Panel) -> String {
             // 本項目壓着這一項，螢幕上那一行紋絲不動——看起來像鍵壞了。
             if panel.shadowed(setting) {
                 let gap = if english { "  " } else { "　" };
-                note.push_str(&format!("{gap}{}", say!("set.shadowed")));
+                note.push_str(&format!("{gap}{}", say!("settings.shadowed")));
             }
             note
         }
-        _ => say!("set.pick-a-group"),
+        _ => say!("settings.pick-a-group"),
     }
 }
 
@@ -984,7 +984,7 @@ mod tests {
         let page = shot(&p, 110, 24);
         assert!(page.contains("32"), "框裏那段字：\n{page}");
         assert!(!page.contains('▏'), "no drawn bar; the cursor is one:\n{page}");
-        assert!(page.contains(&say!("set.keys-typing")), "the typing keys:\n{page}");
+        assert!(page.contains(&say!("settings.keys-typing")), "the typing keys:\n{page}");
         assert!(!page.contains("hl 換欄"), "not the browsing keys:\n{page}");
     }
 

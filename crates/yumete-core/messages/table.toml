@@ -1,0 +1,982 @@
+# prefixes: table cell
+#
+# What the editor says, one block per tag; see README.md beside this file.
+
+[[message]]
+# 表格模式下往格子裏打分隔符(拆分表是製表符，Markdown 是 |)
+key = "cell.refuses-delimiter"
+zht = "'{0}' 是格與格的分隔——格子裏寫不了它"
+zhs = "'{0}' 是格与格的分隔——格子里写不了它"
+en = "'{0}' separates the cells — a cell cannot hold one"
+
+[[message]]
+# 表格模式下往格子裏貼或打一個換行
+key = "cell.refuses-newline"
+zht = "換行會把這一行切成兩行"
+zhs = "换行会把这一行切成两行"
+en = "a line break would cut this row in two"
+
+[[message]]
+# 表格模式下往格子裏貼或打一個製表符
+key = "cell.refuses-tab"
+zht = "製表符進不了格子"
+zhs = "制表符进不了格子"
+en = "a tab does not go in a cell"
+
+
+# ── chaifen ───────────────────────────────────────────────────────────
+
+[[message]]
+# :table-pipe：這一段本來就是 | 表格
+key = "table.already-a-pipe-table"
+zht = "這一段本來就是 | 表格"
+zhs = "这一段本来就是 | 表格"
+en = "this is already a | table"
+
+[[message]]
+# 對齊，本來就是齊的
+key = "table.already-aligned"
+zht = "已經是對齊的"
+zhs = "已经是对齐的"
+en = "already lined up"
+
+[[message]]
+# :sort 但本來就是這個順序
+key = "table.already-in-that-order"
+zht = "已經是這個順序了"
+zhs = "已经是这个顺序了"
+en = "already in that order"
+
+[[message]]
+# 本來就不在表格模式
+key = "table.already-off"
+zht = "本來就不在表格裏"
+zhs = "本来就不在表格里"
+en = "not reading anything as a grid"
+
+[[message]]
+# t n，但這張表已經在表格操作模式
+key = "table.already-operated"
+zht = "已經是基本表格了——t t 全窗，t o 源碼"
+zhs = "已经是基本表格了——t t 全窗，t o 源码"
+en = "already at the basic level — ␣t t takes the window, ␣t o is the source"
+
+[[message]]
+# t t，但這張表已經佔着整個窗口
+key = "table.already-the-window"
+zht = "已經是全窗表格了——␣t q 交回窗口，␣t o 退出"
+zhs = "已经是全窗表格了——␣t q 交回窗口，␣t o 退出"
+en = "already the whole window — ␣t q gives it back, ␣t o leaves"
+
+[[message]]
+# 竪排下進了真表格顯示，整頁跟着轉橫(接在剛説完的那句後面)
+key = "table.also-turned-horizontal"
+zht = "{0}(已轉橫排)"
+zhs = "{0}(已转横排)"
+en = "{0} — set horizontally"
+
+[[message]]
+# 在格首按退格
+key = "table.backspace-would-join-cells"
+zht = "格首：再删就把兩格併成一格了"
+zhs = "格首：再删就把两格并成一格了"
+en = "start of a cell: one more would join it to the one before"
+
+[[message]]
+# :table 在文中認出一個分隔區塊(#216)
+key = "table.block-entered"
+zht = "文中的表格區塊：{0} 欄 {1} 行，用「{2}」分欄"
+zhs = "文中的表格区块：{0} 栏 {1} 行，用「{2}」分栏"
+en = "a table block in the document: {0} columns, {1} rows, split by '{2}'"
+
+[[message]]
+# t H：文中的表格區塊本來就没有欄名行
+key = "table.block-first-row-is-data"
+zht = "文中的表格區塊：第一行本來就是數據"
+zhs = "文中的表格区块：第一行本来就是数据"
+en = "a table block in the text: its first row is data already"
+
+[[message]]
+# 在文中的表格區塊裏按了會重寫整個檔案的鍵
+key = "table.block-is-read-where-it-lies"
+zht = "文中的表格區塊只讀不改寫；先用 :convert-table 轉成真表格"
+zhs = "文中的表格区块只读不改写；先用 :convert-table 转成真表格"
+en = "a table block in a document is read where it lies, never rewritten — :convert-table pipe or csv converts it first"
+
+[[message]]
+# 進表格模式，照某個 schema 讀
+key = "table.by-schema"
+zht = "照 {0}"
+zhs = "照 {0}"
+en = "by {0}"
+
+[[message]]
+# 清空一格。不報字數：數的是源文，帶引號的格子報得比看得見的多
+key = "table.cell-cleared"
+zht = "清空了一格"
+zhs = "清空了一格"
+en = "cleared a cell"
+
+[[message]]
+# 格內 `l`／`→` 撞到這一格的遠端那面牆(設計 §04「到邊了說一句」)
+key = "table.cell-ends-here"
+zht = "這一格到頭了，`Tab` 去下一格"
+zhs = "这一格到头了，`Tab` 去下一格"
+en = "this cell ends here — `Tab` for the next one"
+
+[[message]]
+# :table-csv：某一格裏就有那個分隔符，不能拆
+key = "table.cell-holds-the-delimiter"
+zht = "第 {0} 行第 {1} 欄裏就有「{2}」——換個分隔符，或者先改那一格"
+zhs = "第 {0} 行第 {1} 栏里就有「{2}」——换个分隔符，或者先改那一格"
+en = "row {0}, column {1} holds a '{2}' of its own — pick another delimiter, or change that cell first"
+
+[[message]]
+# 要動的那一格是空的
+key = "table.cell-is-empty"
+zht = "這一格是空的"
+zhs = "这一格是空的"
+en = "this cell is empty"
+
+[[message]]
+# 表格裏貼進一格，換掉原來的
+key = "table.cell-replaced"
+zht = "換掉了一格"
+zhs = "换掉了一格"
+en = "replaced the cell"
+
+[[message]]
+# 格內 `h`／`←` 撞到這一格的近端那面牆
+key = "table.cell-starts-here"
+zht = "這一格從這裏起，`S-Tab` 去上一格"
+zhs = "这一格从这里起，`S-Tab` 去上一格"
+en = "this cell starts here — `S-Tab` for the one before"
+
+[[message]]
+# tg 給的不是「行,欄」兩個數
+key = "table.cell-wants-a-comma"
+zht = "去某一格要兩個數：`␣t20,20g` 第 20 行第 20 欄。`-` 是範圍，`␣t2-10/` 那樣用"
+zhs = "去某一格要两个数：`␣t20,20g` 第 20 行第 20 栏。`-` 是范围，`␣t2-10/` 那样用"
+en = "a cell takes two numbers: `␣t20,20g` is row 20, column 20. `-` is a range, as in `␣t2-10/`"
+
+[[message]]
+# R 貼一段格子，而從光標那一格到行尾不夠寬——一格都不動
+key = "table.cells-do-not-fit"
+zht = "放不下 {0} 格：從這裏到行尾只剩 {1} 格"
+zhs = "放不下 {0} 格：从这里到行尾只剩 {1} 格"
+en = "{0} cells will not fit — {1} left from here to the end of the row"
+
+[[message]]
+# 表格：貼進來的那一段蓋掉了從這一格起的幾格
+key = "table.cells-replaced"
+zht = "換掉了 {0} 格"
+zhs = "换掉了 {0} 格"
+en = "replaced {0} cell(s)"
+
+[[message]]
+# :check 查完表格，没有問題
+key = "table.check-clean"
+zht = "{0}：{1} 行，没查出問題"
+zhs = "{0}：{1} 行，没查出问题"
+en = "{0}: {1} row(s), nothing wrong"
+
+[[message]]
+# :check 查出了問題
+key = "table.check-problems"
+zht = "查出 {0} 條——gf 跳到那一行"
+zhs = "查出 {0} 条——gf 跳到那一行"
+en = "{0} problem(s) — gf goes to the row"
+
+[[message]]
+# 加了一欄之後
+key = "table.column-added"
+zht = "加了一欄"
+zhs = "加了一栏"
+en = "added a column"
+
+[[message]]
+# 這一欄改居中
+key = "table.column-centred"
+zht = "這一欄：居中"
+zhs = "这一栏：居中"
+en = "this column: centred"
+
+[[message]]
+# 删掉一欄之後
+key = "table.column-deleted"
+zht = "删了一欄"
+zhs = "删了一栏"
+en = "deleted a column"
+
+[[message]]
+# :table-hide 之後
+key = "table.column-hidden"
+zht = "已藏起第 {0} 欄"
+zhs = "已藏起第 {0} 栏"
+en = "column {0} is hidden"
+
+[[message]]
+# 空格 t p/P 之後：插入了一欄，{0} 個值
+key = "table.column-inserted"
+zht = "插入了一欄({0} 格)"
+zhs = "插入了一栏({0} 格)"
+en = "a column put in with {0} values"
+
+[[message]]
+# 要取的那一欄是空的
+key = "table.column-is-empty"
+zht = "這一欄是空的"
+zhs = "这一栏是空的"
+en = "this column is empty"
+
+[[message]]
+# 這一欄改靠左
+key = "table.column-left"
+zht = "這一欄：靠左"
+zhs = "这一栏：靠左"
+en = "this column: left"
+
+[[message]]
+# 表格模式下把一欄往左挪一格(t H)
+key = "table.column-moved-left"
+zht = "左移一欄"
+zhs = "左移一栏"
+en = "column moved left"
+
+[[message]]
+# 表格模式下把一欄往右挪一格(t L)
+key = "table.column-moved-right"
+zht = "右移一欄"
+zhs = "右移一栏"
+en = "column moved right"
+
+[[message]]
+# 管道表：要刪的欄不存在
+key = "table.column-not-there"
+zht = "没有這一欄"
+zhs = "没有这一栏"
+en = "there is no such column"
+
+[[message]]
+# 欄號那一行關掉
+key = "table.column-numbers-off"
+zht = "欄號：關"
+zhs = "栏号：关"
+en = "column numbers: off"
+
+[[message]]
+# 欄號那一行打開
+key = "table.column-numbers-on"
+zht = "欄號：開"
+zhs = "栏号：开"
+en = "column numbers: on"
+
+[[message]]
+# 這一欄改靠右
+key = "table.column-right"
+zht = "這一欄：靠右"
+zhs = "这一栏：靠右"
+en = "this column: right"
+
+[[message]]
+# 欄線換了畫法
+key = "table.column-rules"
+zht = "欄線：{0}"
+zhs = "栏线：{0}"
+en = "column rules: {0}"
+
+[[message]]
+# :table-show 之後
+key = "table.column-shown"
+zht = "第 {0} 欄已顯示"
+zhs = "第 {0} 栏已显示"
+en = "column {0} is shown again"
+
+[[message]]
+# t F，但有一欄寬到没有窗口裝得下——對齊它只是在寫空格
+key = "table.column-too-wide"
+zht = "第 {0} 欄寬 {1} 格，没有窗口裝得下——對齊它只會寫出一大片空格。表没有動"
+zhs = "第 {0} 栏宽 {1} 格，没有窗口装得下——对齐它只会写出一大片空格。表没有动"
+en = "column {0} is {1} squares wide — no window holds it, and lining it up would write nothing but spaces. The table is untouched"
+
+[[message]]
+# 整欄貼進 | 表格，有一個值帶換行(從分隔符檔案抄來的兩行格子)；整欄拒收
+key = "table.column-value-has-a-line-break"
+zht = "本表格不允許單元格内換行，第 {0} 個值存在換行"
+zhs = "本表格不允许单元格内换行，第 {0} 个值存在换行"
+en = "this table's cells cannot hold a line break, and value {0} has one"
+
+[[message]]
+# 進 | 表格模式，光標不在表格裏
+key = "table.cursor-not-in-a-table"
+zht = "光標不在表格裏"
+zhs = "光标不在表格里"
+en = "the cursor is not in a table"
+
+[[message]]
+# :table-delimiter 之後
+key = "table.delimiter-set"
+zht = "用 {0} 分欄；下次開這個文件也這樣"
+zhs = "用 {0} 分栏；下次开这个文件也这样"
+en = "cut by {0}; remembered for this file"
+
+[[message]]
+# 想删掉格與格之間的 |
+key = "table.divider-cannot-be-deleted"
+zht = "格與格之間的分隔符删不掉"
+zhs = "格与格之间的分隔符删不掉"
+en = "the divider between cells cannot be deleted"
+
+[[message]]
+# 在格子裏按 Enter
+key = "table.enter-makes-no-newline"
+zht = "一格之內：Enter 不換行——Tab 走下一格"
+zhs = "一格之内：Enter 不换行——Tab 走下一格"
+en = "inside a cell: Enter makes no new line — Tab goes to the next cell"
+
+[[message]]
+# 進表格模式，報幾欄
+key = "table.entered"
+zht = "表格：{0} 欄"
+zhs = "表格：{0} 栏"
+en = "table: {0} columns"
+
+[[message]]
+# 進表格模式，順帶補了分隔行
+key = "table.entered-rule-added"
+zht = "表格：{0} 欄(補上了分隔行)"
+zhs = "表格：{0} 栏(补上了分隔行)"
+en = "table: {0} columns — added the rule row"
+
+[[message]]
+# 進表格模式，順帶轉了橫排
+key = "table.entered-turned-horizontal"
+zht = "表格：{0} 欄，{1}(已轉橫排)"
+zhs = "表格：{0} 栏，{1}(已转横排)"
+en = "table: {0} columns, {1} — set horizontally"
+
+[[message]]
+# 進表格模式，報幾欄與欄名來源
+key = "table.entered-with-header"
+zht = "表格：{0} 欄，{1}"
+zhs = "表格：{0} 栏，{1}"
+en = "table: {0} columns, {1}"
+
+[[message]]
+# 表格模式：某一欄的引號裏包着換行，於是一條記錄佔了兩行——這一種讀不了
+key = "table.field-runs-on"
+zht = "{0} 有跨行的欄位(引號裏包着換行)，表格模式一行就是一條記錄，讀不了這一種"
+zhs = "{0} 有跨行的栏位(引号里包着换行)，表格模式一行就是一条记录，读不了这一种"
+en = "{0} has a field that runs onto the next line; this grid is one record to a line and cannot read that"
+
+[[message]]
+# :table 用在一個每行欄數不一樣的檔案上
+key = "table.file-is-not-a-grid"
+zht = "「{0}」不像表格——每行要有同樣多的欄，或者把光標放到 | 表格上"
+zhs = "「{0}」不像表格——每行要有同样多的栏，或者把光标放到 | 表格上"
+en = "'{0}' is not a table — every line needs the same columns, or put the cursor on a | table"
+
+[[message]]
+# 表格裏 :| 過濾，外部命令送回來的行欄數對不上
+key = "table.filter-changed-shape"
+zht = "命令送回來的第 {0} 行是 {1} 欄，這張表是 {2} 欄——没有換"
+zhs = "命令送回来的第 {0} 行是 {1} 栏，这张表是 {2} 栏——没有换"
+en = "line {0} came back with {1} columns and this table has {2} — nothing replaced"
+
+[[message]]
+# t w 把過寬的格子收起尾巴
+key = "table.folds-off"
+zht = "格子：全文(超過 {0} 格的欄跑出畫面)"
+zhs = "格子：全文(超过 {0} 格的栏跑出画面)"
+en = "cells: whole (columns past {0} run off the page)"
+
+[[message]]
+# t w 把過寬的格子收起尾巴
+key = "table.folds-on"
+zht = "格子：最寬 {0} 格，尾巴收起({1})"
+zhs = "格子：最宽 {0} 格，尾巴收起({1})"
+en = "cells: {0} wide at most, tails folded ({1})"
+
+[[message]]
+# t t：把整個窗口交給表格
+key = "table.given-the-window"
+zht = "全窗表格——␣t q 交回窗口，␣t o 退出"
+zhs = "全窗表格——␣t q 交回窗口，␣t o 退出"
+en = "the whole window — ␣t q gives it back, ␣t o leaves"
+
+[[message]]
+# 想删掉標題行
+key = "table.header-cannot-be-deleted"
+zht = "標題行不可編輯，請先用 ␣t H 將其轉爲數據行"
+zhs = "标题行不可编辑，请先用 ␣t H 将其转为数据行"
+en = "the header row cannot be edited; ␣t H turns it into a data row first"
+
+[[message]]
+# 欄名取自首行
+key = "table.header-from-first-row"
+zht = "照首行"
+zhs = "照首行"
+en = "by its own header row"
+
+[[message]]
+# t H：第一行改當資料，欄名用編號
+key = "table.header-is-data"
+zht = "第一行當數據了，{0} 欄按編號叫"
+zhs = "第一行当数据了，{0} 栏按编号叫"
+en = "the first row is data now; {0} columns, named by number"
+
+[[message]]
+# t H：第一行改當欄名
+key = "table.header-is-row-one"
+zht = "第一行當欄名了：{0} 欄"
+zhs = "第一行当栏名了：{0} 栏"
+en = "the first row names the columns now: {0} of them"
+
+[[message]]
+# t H：| 表格的欄名行是檔案自己説的
+key = "table.header-is-the-rule-row"
+zht = "| 表格的第一行就是欄名——下面那行 --- 説的"
+zhs = "| 表格的第一行就是栏名——下面那行 --- 説的"
+en = "a | table says which row is its header — the --- line under it does"
+
+[[message]]
+# 管道表：刪行刪到標題行
+key = "table.heading-row-stays"
+zht = "標題行不能刪：它是欄名"
+zhs = "标题行不能删：它是栏名"
+en = "the heading row cannot be deleted: it names the columns"
+
+[[message]]
+# 表格轉換：光標在圍欄裏，那是代碼不是表格
+key = "table.inside-a-fence"
+zht = "這幾行在代碼圍欄中，非表格"
+zhs = "这几行在代码围栏中，非表格"
+en = "these lines are inside a code fence, not a table"
+
+[[message]]
+# 表格裏想併兩行
+key = "table.join-would-change-columns"
+zht = "兩行併成一行會改欄數——先 :table-render off"
+zhs = "两行并成一行会改栏数——先 :table-render off"
+en = "joining two rows would change the column count — `:table-render off` first"
+
+[[message]]
+# 跳到某一行的表格
+key = "table.jumped-to-line"
+zht = "第 {0} 行的表格"
+zhs = "第 {0} 行的表格"
+en = "the table on line {0}"
+
+[[message]]
+# 管道表：刪欄刪到只剩一欄
+key = "table.last-column-stays"
+zht = "只剩一欄了"
+zhs = "只剩一栏了"
+en = "only one column is left"
+
+[[message]]
+# 對齊完成
+key = "table.lined-up"
+zht = "對齊好了"
+zhs = "对齐好了"
+en = "lined up"
+
+[[message]]
+# 打開一個看起來就是分欄的純文本檔案，自動以表格模式打開(#380)
+key = "table.looks-delimited"
+zht = "本文件格式似乎是 {0} 分欄，故而以表格模式打開，按 t o 回到源碼模式"
+zhs = "本文件格式似乎是 {0} 分栏，故而以表格模式打开，按 t o 回到源码模式"
+en = "this file looks {0}-delimited, so it opens as a table; ␣t o for the source"
+
+[[message]]
+# :table 在段落中間按下——新建一張表會把那一段寫壞，所以不猜，攔住
+key = "table.needs-a-blank-line"
+zht = "當前位置非空行，請在空行中使用此命令"
+zhs = "当前位置非空行，请在空行中使用此命令"
+en = "this line is not empty — use this command on a blank line"
+
+[[message]]
+# ] 空格 / [ 空格 想在表格中間插一個空行
+key = "table.no-blank-line-inside"
+zht = "空行會把表格斷成兩張——用 t r 加一行"
+zhs = "空行会把表格断成两张——用 t r 加一行"
+en = "a blank line would cut the table in two — ␣t r adds a row"
+
+[[message]]
+# :table-pipe：看不出什麼在分欄
+key = "table.no-delimiter-in-sight"
+zht = "無法自動檢測分隔符，請手動聲明，例如 :convert-table , pipe 或 :convert-table tab pipe"
+zhs = "无法自动检测分隔符，请手动声明，例如 :convert-table , pipe 或 :convert-table tab pipe"
+en = "could not detect the delimiter — name it, as in :convert-table , pipe or :convert-table tab pipe"
+
+[[message]]
+# :table 用在没有檔名的緩衝區上
+key = "table.no-file-name-no-schema"
+zht = "没有文件名，就没有 datapackage.json 可以照——或者把光標放到 | 表格上"
+zhs = "没有文件名，就没有 datapackage.json 可以照——或者把光标放到 | 表格上"
+en = "no file name, so no datapackage.json to read it by — or put the cursor on a | table"
+
+[[message]]
+# 表格裏行或欄已經移到頭了
+key = "table.no-further"
+zht = "到頭了"
+zhs = "到头了"
+en = "no further"
+
+[[message]]
+# 後面没有表格了
+key = "table.no-next"
+zht = "後面没有表格了"
+zhs = "后面没有表格了"
+en = "no table after this one"
+
+[[message]]
+# 全窗裏 mm：另一半括號不在這一格
+key = "table.no-pair-in-this-cell"
+zht = "這一格裏配不上另一半"
+zhs = "这一格里配不上另一半"
+en = "the other half of the pair is not in this cell"
+
+[[message]]
+# 前面没有表格了
+key = "table.no-previous"
+zht = "前面没有表格了"
+zhs = "前面没有表格了"
+en = "no table before this one"
+
+[[message]]
+# 表格刪到只剩表頭，而按的鍵説的是「這一格」
+key = "table.no-rows"
+zht = "只剩表頭，沒有數據行"
+zhs = "只剩表头，没有数据行"
+en = "only the header is left; this table has no data rows"
+
+[[message]]
+# t < = > 用在没有分隔行的表上
+key = "table.no-rule-row-to-align"
+zht = "没有分隔行，無從對齊"
+zhs = "没有分隔行，无从对齐"
+en = "no rule row, so there is no alignment to set"
+
+[[message]]
+# t1s/:table-sort 給的欄號超出這張表的欄數
+key = "table.no-such-column"
+zht = "這張表只有 {1} 欄，没有第 {0} 欄"
+zhs = "这张表只有 {1} 栏，没有第 {0} 栏"
+en = "this table has {1} columns, so there is no column {0}"
+
+[[message]]
+# 管道表：要刪的行不存在
+key = "table.no-such-row"
+zht = "没有這一行"
+zhs = "没有这一行"
+en = "there is no such row"
+
+[[message]]
+# 表格裏按行名跳，表裏没有
+key = "table.no-such-row-name"
+zht = "表裏没有「{0}」"
+zhs = "表里没有「{0}」"
+en = "no '{0}' in this table"
+
+[[message]]
+# :table-csv：光標不在 | 表格裏
+key = "table.not-in-a-pipe-table"
+zht = "光標不在 | 表格裏"
+zhs = "光标不在 | 表格里"
+en = "the cursor is not in a | table"
+
+[[message]]
+# 表格命令用在表格外面
+key = "table.not-in-a-table"
+zht = "不是表格——先 :table-render basic"
+zhs = "不是表格——先 :table-render basic"
+en = "not a table — :table-render basic first"
+
+[[message]]
+# 在表格裏往格子外面打字(牆上、補空裏)
+key = "table.not-inside-a-cell"
+zht = "這裏不在格子裏——按 Tab 進格子"
+zhs = "这里不在格子里——按 Tab 进格子"
+en = "this is not inside a cell — Tab steps into one"
+
+[[message]]
+# 想在標題行上面加一行
+key = "table.nothing-above-the-header"
+zht = "標題行上面加不了——加在它下面了"
+zhs = "标题行上面加不了——加在它下面了"
+en = "nothing goes above the header — added it below instead"
+
+[[message]]
+# :convert-table：手上没有可轉的東西
+key = "table.nothing-to-convert"
+zht = "這裏没有可以轉的行"
+zhs = "这里没有可以转的行"
+en = "no lines here to convert"
+
+[[message]]
+# :table-pipe 轉好了
+key = "table.now-a-pipe-table"
+zht = "作成了 | 表格：{0} 行 {1} 欄，照「{2}」分的"
+zhs = "作成了 | 表格：{0} 行 {1} 栏，照「{2}」分的"
+en = "a | table: {0} rows, {1} columns, split on '{2}'"
+
+[[message]]
+# :table-csv 轉好了
+key = "table.now-delimited"
+zht = "拆成了分隔文本：{0} 行，用「{1}」分欄"
+zhs = "拆成了分隔文本：{0} 行，用「{1}」分栏"
+en = "delimited: {0} rows, split by '{1}'"
+
+[[message]]
+# 離開表格模式
+key = "table.off"
+zht = "表格：關"
+zhs = "表格：关"
+en = "table: off"
+
+[[message]]
+# 離開表格模式，並轉回竪排
+key = "table.off-back-to-vertical"
+zht = "表格：關(已轉回竪排)"
+zhs = "表格：关(已转回竖排)"
+en = "table: off — set vertically again"
+
+[[message]]
+# 進 | 表格模式，只有一欄
+key = "table.one-column-only"
+zht = "只有一欄——表格至少要兩欄，或者先寫好 |---| 那一行"
+zhs = "只有一栏——表格至少要两栏，或者先写好 |---| 那一行"
+en = "one column only — a table needs two, or write the |---| line first"
+
+[[message]]
+# t b：一個字都没藏，按鍵歸表格(基本表格)
+key = "table.operated"
+zht = "基本表格——一個字都没藏，t t 全窗，t o 源碼"
+zhs = "基本表格——一个字都没藏，t t 全窗，t o 源码"
+en = "the basic level — nothing hidden, ␣t t takes the window, ␣t o is the source"
+
+[[message]]
+# 格子窗裏按 p，而寄存器裏是一格或一段格子：一行的格數是表的，插不進去
+key = "table.p-only-puts-records"
+zht = "p 只可插入記錄，覆蓋單元格請按 R"
+zhs = "p 只可插入记录，覆盖单元格请按 R"
+en = "p only puts records in — press R to write over cells"
+
+[[message]]
+# 貼進的格子比表格的欄數寬
+key = "table.paste-does-not-fit"
+zht = "貼不下：這張表只有 {0} 欄"
+zhs = "贴不下：这张表只有 {0} 栏"
+en = "does not fit: this table has {0} columns"
+
+[[message]]
+# 表格裏貼成新的一行
+key = "table.pasted-as-new-row"
+zht = "貼成新的一行"
+zhs = "贴成新的一行"
+en = "pasted as a new row"
+
+[[message]]
+# 貼了一整欄
+key = "table.pasted-column"
+zht = "貼了一欄({0} 格)"
+zhs = "贴了一栏({0} 格)"
+en = "pasted a column ({0} cells)"
+
+[[message]]
+# 表格裏貼進一片格子
+key = "table.pasted-grid"
+zht = "貼進了 {0}×{1} 格"
+zhs = "贴进了 {0}×{1} 格"
+en = "pasted {0}×{1} cells"
+
+[[message]]
+# 不在全窗表格模式下按了 t q
+key = "table.q-is-for-the-window"
+zht = "␣t q 只在全窗表格裏交回窗口——退出表格按 ␣t o"
+zhs = "␣t q 只在全窗表格里交回窗口——退出表格按 ␣t o"
+en = "␣t q gives back the window, and only the window — ␣t o leaves the table"
+
+[[message]]
+# R 用寄存器裏的幾條記錄蓋掉這裏的幾條
+key = "table.records-replaced"
+zht = "換掉了 {0} 條記錄"
+zhs = "换掉了 {0} 条记录"
+en = "replaced {0} record(s)"
+
+[[message]]
+# :replace 面板改了欄數——它打不出 :s 的 t 旗標，所以名的是自己的 !
+key = "table.replace-would-change-width"
+zht = "第 {0} 行會從 {1} 格變成 {2} 格。真要改欄數，用 `:replace!`"
+zhs = "第 {0} 行会从 {1} 格变成 {2} 格。真要改栏数，用 `:replace!`"
+en = "row {0} would go from {1} cells to {2} — use `:replace!` to mean it"
+
+[[message]]
+# 加了一行之後
+key = "table.row-added"
+zht = "加了一行"
+zhs = "加了一行"
+en = "added a row"
+
+[[message]]
+# 報光標在第幾行第幾欄
+key = "table.row-and-column"
+zht = "第 {0} 行 · 第 {1} 欄"
+zhs = "第 {0} 行 · 第 {1} 栏"
+en = "row {0} · column {1}"
+
+[[message]]
+# 删掉一行之後
+key = "table.row-deleted"
+zht = "删了一行"
+zhs = "删了一行"
+en = "deleted a row"
+
+[[message]]
+# 表格裏按行名跳，找到了
+key = "table.row-found-at-line"
+zht = "「{0}」在第 {1} 行"
+zhs = "「{0}」在第 {1} 行"
+en = "'{0}' is on line {1}"
+
+[[message]]
+# 表格模式下把一行往下挪一格(t J，或 :move)
+key = "table.row-moved-down"
+zht = "下移一行"
+zhs = "下移一行"
+en = "row moved down"
+
+[[message]]
+# 表格模式下把一行往上挪一格(t K，或 :move)
+key = "table.row-moved-up"
+zht = "上移一行"
+zhs = "上移一行"
+en = "row moved up"
+
+[[message]]
+# 表格裏按行名跳，給的不是單個字
+key = "table.row-name-not-one-char"
+zht = "「{0}」不是一個字——行名是一個字"
+zhs = "「{0}」不是一个字——行名是一个字"
+en = "'{0}' is not one character — a row is named by one"
+
+[[message]]
+# t F：某一行的格子比標題多，整張表原樣不動，並説出是哪一行
+key = "table.row-torn"
+zht = "第 {0} 行有 {1} 格，標題只有 {2} 格——整張表原樣留着。多半是某一格裏的 | 没有轉義"
+zhs = "第 {0} 行有 {1} 格，标题只有 {2} 格——整张表原样留着。多半是某一格里的 | 没有转义"
+en = "row {0} has {1} cells and the heading has {2} — the table is left as it is, most often an unescaped | in a cell"
+
+[[message]]
+# 替換會改掉某一行的欄數
+key = "table.row-would-change-width"
+zht = "第 {0} 行會從 {1} 格變成 {2} 格"
+zhs = "第 {0} 行会从 {1} 格变成 {2} 格"
+en = "row {0} would go from {1} cells to {2}"
+
+[[message]]
+# 想改 |---| 那一行的內容
+key = "table.rule-row-is-drawn"
+zht = "分隔行是畫出來的——用 t < = > 改對齊"
+zhs = "分隔行是画出来的——用 t < = > 改对齐"
+en = "the rule row is drawn, not written — t < = > sets the alignment"
+
+[[message]]
+# table.schema-read-as 的第四格：没有 datapackage.json，照首行讀的
+key = "table.schema-from-nothing"
+zht = "照首行讀, 沒有 datapackage.json"
+zhs = "照首行读, 没有 datapackage.json"
+en = "read by its first row, no datapackage.json"
+
+[[message]]
+# 按行名跳，schema 没説哪一欄是行名
+key = "table.schema-has-no-key-column"
+zht = "這張表没説哪一欄是行名(datapackage.json 的 primaryKey)"
+zhs = "这张表没説哪一栏是行名(datapackage.json 的 primaryKey)"
+en = "this table does not name a key column (primaryKey in datapackage.json)"
+
+[[message]]
+# table.schema-read-as 的第三格：第一行是資料
+key = "table.schema-header-no"
+zht = "第一行是記錄"
+zhs = "第一行是记录"
+en = "the first row is data"
+
+[[message]]
+# table.schema-read-as 的第三格：第一行是欄名
+key = "table.schema-header-yes"
+zht = "第一行是欄名"
+zhs = "第一行是栏名"
+en = "the first row names the columns"
+
+[[message]]
+# t e 按在一份文件裏的表格上
+key = "table.schema-is-for-a-whole-file"
+zht = "schema 是給整份表格文件的——這張表在文章裏面"
+zhs = "schema 是给整份表格文件的——这张表在文章里面"
+en = "a schema is for a file that is nothing but a table — this one lives inside a document"
+
+[[message]]
+# 進表格模式時，schema 檔有毛病
+key = "table.schema-problems"
+zht = "schema：{0}"
+zhs = "schema：{0}"
+en = "schema: {0}"
+
+[[message]]
+# :table-schema 的回答：幾欄、分隔符、表頭、照哪一份讀
+key = "table.schema-read-as"
+zht = "{0} 欄, 分隔符 {1}, {2}; {3}"
+zhs = "{0} 栏, 分隔符 {1}, {2}; {3}"
+en = "{0} columns, delimiter {1}, {2}; {3}"
+
+[[message]]
+# :table-schema write 寫不進去
+key = "table.schema-write-failed"
+zht = "寫入 {0} 失敗：{1}"
+zhs = "写入 {0} 失败：{1}"
+en = "cannot write {0}: {1}"
+
+[[message]]
+# :table-schema write 寫好了
+key = "table.schema-written"
+zht = "已寫入 {0}"
+zhs = "已写入 {0}"
+en = "written into {0}"
+
+[[message]]
+# 排序：有一個引號從頭到尾不成對，這幾行不是這張表的記錄
+key = "table.sort-quote-never-closes"
+zht = "{0} 有一個引號沒有收尾，排不了序——`:table-check` 指得出是哪一行"
+zhs = "{0} 有一个引号没有收尾，排不了序——`:table-check` 指得出是哪一行"
+en = "{0} has a quote that never closes, so there is no sorting it — `:table-check` points at the line"
+
+[[message]]
+# 光按 ts/tS，没説照哪一欄
+key = "table.sort-wants-a-column"
+zht = "排序要指明欄：`␣t1s` 第一欄、`␣t0s` 你站的這一欄、`␣t1,5,9s` 好幾欄"
+zhs = "排序要指明栏：`␣t1s` 第一栏、`␣t0s` 你站的这一栏、`␣t1,5,9s` 好几栏"
+en = "a sort names its column: `␣t1s` the first, `␣t0s` the one you are in, `␣t1,5,9s` several"
+
+[[message]]
+# t1a 之後按了 s/S/Esc 以外的鍵，排序鏈斷掉
+key = "table.sort-wants-its-action"
+zht = "排序還没發令：`s` 順排、`S` 倒排，`Esc` 作罷"
+zhs = "排序还没发令：`s` 顺排、`S` 倒排，`Esc` 作罢"
+en = "the sort has not been asked to run yet: `s` ascending, `S` descending, `Esc` to drop it"
+
+[[message]]
+# :sort 排好了
+key = "table.sorted"
+zht = "排好了：{0}"
+zhs = "排好了：{0}"
+en = "sorted: {0}"
+
+[[message]]
+# 照某一欄順排
+key = "table.sorted-ascending"
+zht = "照「{0}」順排(數字當數字比，其餘按碼位)"
+zhs = "照「{0}」顺排(数字当数字比，其余按码位)"
+en = "sorted by '{0}', up — numbers as numbers, everything else by code point"
+
+[[message]]
+# 照某一欄倒排
+key = "table.sorted-descending"
+zht = "照「{0}」倒排(數字當數字比，其餘按碼位)"
+zhs = "照「{0}」倒排(数字当数字比，其余按码位)"
+en = "sorted by '{0}', down — numbers as numbers, everything else by code point"
+
+[[message]]
+# :s 會改掉表格的行數
+key = "table.substitution-would-change-rows"
+zht = "這次替換會把 {0} 行變成 {1} 行——表格裏不改行數"
+zhs = "这次替换会把 {0} 行变成 {1} 行——表格里不改行数"
+en = "this would turn {0} rows into {1} — a grid keeps its rows"
+
+[[message]]
+# :s 會改掉某一行的欄數，提示 t 旗標
+key = "table.substitution-would-change-width"
+zht = "第 {0} 行會從 {1} 格變成 {2} 格——真要改欄數，加 t 旗標(`:%s/…/…/gt`)"
+zhs = "第 {0} 行会从 {1} 格变成 {2} 格——真要改栏数，加 t 旗标(`:%s/…/…/gt`)"
+en = "row {0} would go from {1} cells to {2} — add the t flag to mean it (`:%s/…/…/gt`)"
+
+[[message]]
+# :table 用在代碼塊裏的表格上
+key = "table.table-inside-a-code-block"
+zht = "這是代碼塊裏的表格——那是引文，不是表格"
+zhs = "这是代码块里的表格——那是引文，不是表格"
+en = "that table is inside a code block — a quotation, not a table"
+
+[[message]]
+# t s 排序，行數不夠
+key = "table.too-few-rows-to-sort"
+zht = "行太少，排不了"
+zhs = "行太少，排不了"
+en = "too few rows to sort"
+
+[[message]]
+# 竪排下進表格模式
+key = "table.vertical-not-allowed"
+zht = "表格是橫排的——先 :table-render off"
+zhs = "表格是横排的——先 :table-render off"
+en = "a table is always horizontal — :table-render off first"
+
+[[message]]
+# 全窗表格裏，gg/G/:120/搜尋想走到表外
+key = "table.window-holds-you"
+zht = "全窗表格只走這張表——␣t q 交回窗口，␣t ] 去下一張"
+zhs = "全窗表格只走这张表——␣t q 交回窗口，␣t ] 去下一张"
+en = "the whole-window table holds this table — ␣t q gives the window back, ␣t ] goes to the next"
+
+[[message]]
+# t w 的第一檔：把過寬的格子折到下面幾行
+key = "table.wrap-on"
+zht = "單元格軟折行"
+zhs = "单元格软折行"
+en = "cells: soft-wrapped"
+
+[[message]]
+# 寫下了一張空表，光標停在第一格
+key = "table.written"
+zht = "{0} 行 {1} 欄的空表——首行是欄名，⇥ 走下一格"
+zhs = "{0} 行 {1} 栏的空表——首行是栏名，⇥ 走下一格"
+en = "an empty {0}×{1} table — the first row names the columns, ⇥ for the next cell"
+
+[[message]]
+# 表格裏取了一格
+key = "table.yanked-cell"
+zht = "取了一格({0} 個字)"
+zhs = "取了一格({0} 个字)"
+en = "yanked a cell ({0} character(s))"
+
+[[message]]
+# 表格：一段格子進了寄存器
+key = "table.yanked-cells"
+zht = "取了 {0} 格"
+zhs = "取了 {0} 格"
+en = "yanked {0} cell(s)"
+
+[[message]]
+# 取了一整欄
+key = "table.yanked-column"
+zht = "取了一欄「{0}」({1} 格)"
+zhs = "取了一栏「{0}」({1} 格)"
+en = "yanked the '{0}' column ({1} cells)"
+
+[[message]]
+# x/% 選出整條記錄之後按 y
+key = "table.yanked-records"
+zht = "取了 {0} 條記錄"
+zhs = "取了 {0} 条记录"
+en = "yanked {0} record(s)"
+
+[[message]]
+# 表格裏取了一行
+key = "table.yanked-row"
+zht = "取了一行"
+zhs = "取了一行"
+en = "yanked a row"
+
+
+# ── theme ─────────────────────────────────────────────────────────────

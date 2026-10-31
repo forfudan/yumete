@@ -1,4 +1,4 @@
-//! Every tag the editor says has an entry in `messages.toml`, and nothing else
+//! Every tag the editor says has an entry in `messages/*.toml`, and nothing else
 //! does.
 //!
 //! **Both halves matter, and for opposite reasons.** A tag with no entry is
@@ -25,6 +25,28 @@ fn root() -> PathBuf {
         .and_then(|p| p.parent())
         .expect("crates/yumete-core is two below the root")
         .to_path_buf()
+}
+
+/// Every messages file: its name without `.toml`, and what it says.
+fn message_files() -> Vec<(String, String)> {
+    let dir = root().join("crates/yumete-core/messages");
+    let mut out: Vec<(String, String)> = std::fs::read_dir(&dir)
+        .expect("crates/yumete-core/messages")
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+        .map(|p| {
+            let stem = p.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+            (stem, std::fs::read_to_string(&p).expect("a messages file"))
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// All of them, one after another.
+fn all_messages() -> String {
+    message_files().into_iter().map(|(_, text)| text).collect::<Vec<_>>().join("\n")
 }
 
 /// Every file that says anything: **every `.rs` under `crates/*/src/`**.
@@ -174,10 +196,10 @@ fn said() -> BTreeMap<String, String> {
         // **那張設置表的名字與說明也是標籤**（`yumete-config/src/settings_ui.rs`）。
         // Warning: 它們是**結構體字段**，不經過 `say!`——面板畫的時候纔翻譯。所以這張網
         // 不多開這兩個口子的話，一張三十個標籤的表可以一條條目都沒有而全樹皆綠，
-        // 而面板上會逐行寫着 `set.editor.zong-length` 這樣的東西。
+        // 而面板上會逐行寫着 `settings.editor.zong-length` 這樣的東西。
         tags.extend(literals(&text, "label:"));
         tags.extend(literals(&text, "hint:"));
-        // `Kind::Count { zero: Some("set.zero.off") }` —— `0` 另有意思時說的
+        // `Kind::Count { zero: Some("settings.zero.off") }` —— `0` 另有意思時說的
         // 那一句。開口寫足 `zero: Some(` 而不是光一個 `Some(`：後者會把全樹每一個
         // `Some("…")` 都掃進來，而那裏面躺着檔名、擴展名、命令名。
         tags.extend(literals(&text, "zero: Some("));
@@ -208,8 +230,7 @@ struct Entry {
 
 /// The table: tag → what was written under it.
 fn table() -> BTreeMap<String, Entry> {
-    let text = std::fs::read_to_string(root().join("crates/yumete-core/messages.toml"))
-        .expect("messages.toml");
+    let text = all_messages();
     let unquote = |v: &str| Some(v.trim().strip_prefix('"')?.strip_suffix('"')?.to_string());
     let mut out = BTreeMap::new();
     let mut note = false;
@@ -255,7 +276,7 @@ fn every_tag_the_editor_says_has_an_entry() {
         .collect();
     assert!(
         missing.is_empty(),
-        "said but not in messages.toml — the editor will say the tag itself:\n{}",
+        "said but not in messages/ — the editor will say the tag itself:\n{}",
         missing.join("\n")
     );
 }
@@ -266,7 +287,7 @@ fn the_table_holds_no_entry_the_editor_never_says() {
     let stale: Vec<&String> = table.keys().filter(|k| !said.contains_key(*k)).collect();
     assert!(
         stale.is_empty(),
-        "in messages.toml but said by nothing — a renamed or deleted tag, and \
+        "in messages/ but said by nothing — a renamed or deleted tag, and \
          work for whoever translates it next:\n{}",
         stale
             .iter()
@@ -303,8 +324,7 @@ fn an_escape_is_not_a_thing_this_file_understands() {
     // literal backslash-t into `.yumete/words.txt`, so every word it mined read
     // back as 「阿寧\t」 and none of them ever segmented anything. Put a real
     // tab in the file instead.
-    let text = std::fs::read_to_string(root().join("crates/yumete-core/messages.toml"))
-        .expect("messages.toml");
+    let text = all_messages();
     let bad: Vec<String> = text
         .lines()
         .filter(|l| {
@@ -448,21 +468,55 @@ fn the_table_is_in_order() {
     // The section rules (`# ── table ──`) are the file's own headings and stay
     // put; this asks only that the keys read in order from top to bottom, which
     // they do across the rules as well, the sections being alphabetical too.
-    let text = std::fs::read_to_string(root().join("crates/yumete-core/messages.toml"))
-        .expect("messages.toml");
-    let keys: Vec<&str> = text
-        .lines()
-        .filter_map(|l| l.trim().strip_prefix("key = \""))
-        .filter_map(|l| l.strip_suffix('"'))
-        .collect();
-    let out_of_order: Vec<String> = keys
-        .windows(2)
-        .filter(|pair| pair[1] < pair[0])
-        .map(|pair| format!("{} comes before {}", pair[1], pair[0]))
-        .collect();
+    // Each file is in order on its own (2026-10-31: the one file became one
+    // per area).
+    let mut out_of_order: Vec<String> = Vec::new();
+    for (file, text) in message_files() {
+        let keys: Vec<&str> = text
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("key = \""))
+            .filter_map(|l| l.strip_suffix('"'))
+            .collect();
+        out_of_order.extend(
+            keys.windows(2)
+                .filter(|pair| pair[1] < pair[0])
+                .map(|pair| format!("{file}.toml: {} comes before {}", pair[1], pair[0])),
+        );
+    }
     assert!(
         out_of_order.is_empty(),
-        "messages.toml is sorted by key:\n{}",
+        "each messages file is sorted by key (python3 scripts/sort_messages.py):\n{}",
         out_of_order.join("\n")
     );
+}
+
+/// **A tag lives in the file of its prefix** (2026-10-31): each file's
+/// first line names its prefixes (`# prefixes: cmd`), and a prefix belongs
+/// to one file only, so a tag is found by its name and a file stays about
+/// one area.
+#[test]
+fn each_tag_lives_in_the_file_of_its_prefix() {
+    let mut owner: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut wrong: Vec<String> = Vec::new();
+    let files = message_files();
+    for (file, text) in &files {
+        let first = text.lines().next().unwrap_or_default();
+        let prefixes = first.strip_prefix("# prefixes:").unwrap_or_else(|| panic!("{file}.toml: first line names its prefixes"));
+        for prefix in prefixes.split_whitespace() {
+            if let Some(other) = owner.insert(prefix.to_string(), file.clone()) {
+                wrong.push(format!("`{prefix}` is named by both {other}.toml and {file}.toml"));
+            }
+        }
+    }
+    for (file, text) in &files {
+        for key in text.lines().filter_map(|l| l.trim().strip_prefix("key = \"")).filter_map(|l| l.strip_suffix('"')) {
+            let prefix = key.split('.').next().unwrap_or_default();
+            match owner.get(prefix) {
+                Some(home) if home == file => {}
+                Some(home) => wrong.push(format!("{key} is in {file}.toml; its prefix is {home}.toml's")),
+                None => wrong.push(format!("{key}: no file names the prefix `{prefix}`")),
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }

@@ -1,0 +1,393 @@
+# prefixes: ime yume chaifen language scheme
+#
+# What the editor says, one block per tag; see README.md beside this file.
+
+[[message]]
+# :lint 查一張拆分表，兩行用了同一個行名
+key = "chaifen.duplicate-row-name"
+zht = "{0}: 行名「{1}」和第 {2} 行重了"
+zhs = "{0}: 行名「{1}」和第 {2} 行重了"
+en = "{0}: the name 「{1}」 is already row {2}"
+
+[[message]]
+# :check table 走到一行，它的引號没關上——下一行是同一條記錄
+key = "chaifen.field-runs-on"
+zht = "{0}: 引號没關上——下一行還是同一條記錄，這張表一行只讀一條"
+zhs = "{0}: 引号没关上——下一行还是同一条记录，这张表一行只读一条"
+en = "{0}: this quote is never closed — the next line is the same record, and this grid reads one to a line"
+
+[[message]]
+# :lint 的結果那一份緩衝區的名字
+key = "chaifen.lint-results"
+zht = "[查 {0}]"
+zhs = "[查 {0}]"
+en = "[lint {0}]"
+
+[[message]]
+# :yume-chaifen off ——關了
+key = "chaifen.off"
+zht = "拆分 off"
+zhs = "拆分 off"
+en = "拆分 off"
+
+[[message]]
+# :yume-chaifen on ——候選後面掛拆分注解，開了
+key = "chaifen.on"
+zht = "拆分 on"
+zhs = "拆分 on"
+en = "拆分 on"
+
+[[message]]
+# :yume-chaifen on，但這個方案没有拆分表
+key = "chaifen.unavailable"
+zht = "拆分 unavailable for this scheme"
+zhs = "拆分 unavailable for this scheme"
+en = "拆分 unavailable for this scheme"
+
+[[message]]
+# :lint 查一張拆分表，某一行的欄數和表頭對不上
+key = "chaifen.wrong-column-count"
+zht = "{0}: 這一行是 {1} 欄，該是 {2} 欄"
+zhs = "{0}: 这一行是 {1} 栏，该是 {2} 栏"
+en = "{0}: {1} columns here, {2} expected"
+
+# ── check ─────────────────────────────────────────────────────────────
+
+[[message]]
+# Shift 點一下切到 ABC：yume 還接着鍵盤，按鍵直通
+key = "ime.abc"
+zht = "ABC：按鍵直通，Shift 點一下回中文"
+zhs = "ABC：按键直通，Shift 点一下回中文"
+en = "ABC — the keys type what they say; a Shift tap goes back to 中文"
+
+[[message]]
+# :yume-autocompletion ——輸入預測此刻開着還是關着
+key = "ime.autocompletion-is"
+zht = "輸入預測：{0}"
+zhs = "输入预测：{0}"
+en = "prediction (autocompletion): {0}"
+
+[[message]]
+# :yume ! 切到編進二進制的那一份碼表(`! 方案名` 指定哪一家)
+key = "ime.builtin-scheme"
+zht = "方案：{0}(出廠自帶的碼表)"
+zhs = "方案：{0}(出厂自带的码表)"
+en = "scheme: {0} (the built-in 碼表)"
+
+[[message]]
+# 輸入法切到中文
+key = "ime.chinese"
+zht = "中文({0})"
+zhs = "中文({0})"
+en = "Chinese ({0})"
+
+[[message]]
+# 狀態欄右端：Insert 模式，輸入法在中文那一邊
+key = "ime.chinese-tag"
+zht = "[中 {0}]"
+zhs = "[中 {0}]"
+en = "[中 {0}]"
+
+[[message]]
+# 碼表載入要十分之幾秒，那一格畫在動手之前(#341)
+key = "ime.loading"
+zht = "正在載入碼表…"
+zhs = "正在载入码表…"
+en = "loading the 碼表…"
+
+[[message]]
+# :yume-menu-size ——候選面板一頁幾條
+key = "ime.menu-size-is"
+zht = "候選面板一頁 {0} 條"
+zhs = "候选面板一页 {0} 条"
+en = "{0} candidates to a page"
+
+[[message]]
+# :yume-menu-size：一頁只剩一條的時候（英文要單數）
+key = "ime.menu-size-is-one"
+zht = "候選面板一頁 {0} 條"
+zhs = "候选面板一页 {0} 条"
+en = "{0} candidate to a page"
+
+[[message]]
+# :yume ! 要出廠碼表，而這個二進制没編進去
+key = "ime.no-builtin-table"
+zht = "這個二進制不帶碼表"
+zhs = "这个二进制不带码表"
+en = "this build carries no 碼表"
+
+[[message]]
+# 啟動時認出終端機報不出單獨的 Shift，説一次備用鍵是哪一個(#339)
+key = "ime.no-lone-shift"
+zht = "此終端機報不出單獨的 Shift，中/ABC 按 {0}(或 :yume on|off)"
+zhs = "此终端报不出单独的 Shift，中/ABC 按 {0}(或 :yume on|off)"
+en = "this terminal cannot report a lone Shift; {0} switches 中/ABC"
+
+[[message]]
+# 同上，而 language_key 關着，於是連備用鍵也没有
+key = "ime.no-lone-shift-off"
+zht = "此終端機報不出單獨的 Shift，中/ABC 只能用 :yume on|off(language_key 可綁一個鍵)"
+zhs = "此终端报不出单独的 Shift，中/ABC 只能用 :yume on|off(language_key 可绑一个键)"
+en = "this terminal cannot report a lone Shift; bind [editor] language_key to switch 中/ABC"
+
+[[message]]
+# 要換的方案系統裏没有碼表
+key = "ime.no-table-installed"
+zht = "系統裏没有裝 {0} 的碼表"
+zhs = "系统里没有装 {0} 的码表"
+en = "no 碼表 for {0} is installed"
+
+[[message]]
+# :yume ?，而這一次還没有載過碼表
+key = "ime.not-started"
+zht = "還没開始打字——`:yume-scheme` 載入碼表"
+zhs = "还没开始打字——`:yume-scheme` 载入码表"
+en = "not typing yet — `:yume-scheme` loads a 碼表"
+
+[[message]]
+# :yume ?，而這個二進制連出廠碼表都没編進去
+key = "ime.not-started-no-builtin"
+zht = "還没開始打字，而且這個二進制不帶碼表——先裝數據"
+zhs = "还没开始打字，而且这个二进制不带码表——先装数据"
+en = "not typing yet, and this build carries no 碼表 — install the data first"
+
+[[message]]
+# :yume off 把鍵盤整個交還給系統(第三個狀態，不是 ABC)
+key = "ime.off"
+zht = "宇夢輸入引擎已關閉"
+zhs = "宇梦输入引擎已关闭"
+en = "input method off"
+
+[[message]]
+# 換到系統裝的那份碼表
+key = "ime.scheme-from-system"
+zht = "方案：{0}(系統裝的碼表)"
+zhs = "方案：{0}(系统装的码表)"
+en = "scheme: {0} (the system's own 碼表)"
+
+[[message]]
+# :yume-scheme 換好了方案
+key = "ime.scheme-now"
+zht = "方案：{0}"
+zhs = "方案：{0}"
+en = "scheme: {0}"
+
+[[message]]
+# 快捷符號面板的頭一行(分號開的那個特殊面板)
+key = "ime.shortcut"
+zht = "快捷符號　按字母上屏"
+zhs = "快捷符号　按字母上屏"
+en = "quick symbols — press a letter to commit one"
+
+[[message]]
+# :yume ? ——輸入法此刻的樣子
+key = "ime.state"
+zht = "{0} · 碼表 {1} · 拆分 {2} · 上屏 {3}"
+zhs = "{0} · 码表 {1} · 拆分 {2} · 上屏 {3}"
+en = "{0} · 碼表 {1} · 拆分 {2} · commit {3}"
+
+[[message]]
+# :yume-table 直接指一個碼表檔，裝上了
+key = "ime.table-loaded"
+zht = "碼表：{0}"
+zhs = "码表：{0}"
+en = "碼表: {0}"
+
+[[message]]
+# :yume-table 裝上了，但檔案裏有幾條長得放不進碼表，跳過了
+key = "ime.table-skipped"
+zht = "跳過 {0} 條過長的"
+zhs = "跳过 {0} 条过长的"
+en = "{0} over-long rows skipped"
+
+
+# ── label ─────────────────────────────────────────────────────────────
+
+[[message]]
+# 外部命令起不來
+key = "language.cannot-run"
+zht = "跑不動：{0}"
+zhs = "跑不动：{0}"
+en = "could not run it: {0}"
+
+[[message]]
+# 外部命令跑完，没有輸出
+key = "language.done"
+zht = "{0}：跑完了"
+zhs = "{0}：跑完了"
+en = "{0}: done"
+
+[[message]]
+# 設定裏那條命令其實是服務器
+key = "language.is-a-server"
+zht = "{0} 是個服務器——用 :view-preview 開它"
+zhs = "{0} 是个服务器——用 :view-preview 开它"
+en = "{0} is a server — :view-preview starts it"
+
+[[message]]
+# 設定裏没説這種檔要跑什麼
+key = "language.no-such-action"
+zht = "{0} 没有説 {1} 要跑什麼——在配置裏寫 [language.{0}] {1} = …"
+zhs = "{0} 没有説 {1} 要跑什么——在配置里写 [language.{0}] {1} = …"
+en = "{0} does not say what {1} runs — write [language.{0}] {1} = … in the config"
+
+[[message]]
+# 外部命令把正文換掉了
+key = "language.replaced"
+zht = "{0}：換好了"
+zhs = "{0}：换好了"
+en = "{0}: replaced"
+
+[[message]]
+# 外部命令要先存檔
+key = "language.save-first"
+zht = "先保存——外面的程序讀的是文件"
+zhs = "先保存——外面的程序读的是文件"
+en = "save first — the program outside reads the file"
+
+[[message]]
+# 外部命令失敗，正文没動
+key = "language.text-untouched"
+zht = "没有動你的字：{0}"
+zhs = "没有动你的字：{0}"
+en = "your text was left alone: {0}"
+
+
+# ── layout ────────────────────────────────────────────────────────────
+
+
+
+[[message]]
+# 換方案時順帶報面板
+key = "scheme.panel-is"
+zht = "面板 {0}"
+zhs = "面板 {0}"
+en = "panel {0}"
+
+[[message]]
+# 換方案時順帶報內嵌
+key = "scheme.preedit-is"
+zht = "正在打的那一段 {0}"
+zhs = "正在打的那一段 {0}"
+en = "preedit {0}"
+
+[[message]]
+# 這個方案的碼表没有裝——怎麼裝
+key = "scheme.table-not-installed"
+zht = "{0} 的碼表没有裝——裝一份宇浩輸入法，或者在 `[ime] data_dirs` 裏寫上碼表所在的目錄"
+zhs = "{0} 的码表没有装——装一份宇浩输入法，或者在 `[ime] data_dirs` 里写上码表所在的目录"
+en = "no 碼表 installed for {0} — install the 宇浩 input method, or name the directory your tables are in under `[ime] data_dirs`"
+
+[[message]]
+# `:yume-where`：出廠自帶(前面都没有的時候)
+key = "yume.where.builtin"
+zht = "出廠自帶(前面都没有的時候)"
+zhs = "出厂自带(前面都没有的时候)"
+en = "built in (when none of the above answered)"
+
+[[message]]
+# `:yume-where`：二進制裏那張全息拆分表。它不分方案，所以不
+# 走 `builtin-is` 那一行，也没有自己的版本——那個日期是碼表的。
+key = "yume.where.builtin-chaifen"
+zht = "宇浩拆分表"
+zhs = "宇浩拆分表"
+en = "宇浩 拆分表"
+
+[[message]]
+# `:yume-where`：出廠自帶的碼表，一家一行。{0} 是方案名，{1} 是版本(「精華版
+# 日期」那一段是編譯時戳的，見 `yumete-ime/build.rs`)。
+key = "yume.where.builtin-is"
+zht = "{0} {1}"
+zhs = "{0} {1}"
+en = "{0} {1}"
+
+[[message]]
+# `:yume-where`：可執行文件旁邊
+key = "yume.where.from.beside-exe"
+zht = "可執行文件旁邊"
+zhs = "可执行文件旁边"
+en = "beside the executable"
+
+[[message]]
+# `:yume-where`：配置 [ime] data_dirs
+key = "yume.where.from.config"
+zht = "配置 [ime] data_dirs"
+zhs = "配置 [ime] data_dirs"
+en = "config [ime] data_dirs"
+
+[[message]]
+# `:yume-where`：環境變量 $YUMETE_DATA_DIR
+key = "yume.where.from.env"
+zht = "環境變量 $YUMETE_DATA_DIR"
+zhs = "环境变量 $YUMETE_DATA_DIR"
+en = "$YUMETE_DATA_DIR"
+
+[[message]]
+# `:yume-where`：裝在可執行文件的 prefix 裏(brew install yume-data)
+key = "yume.where.from.prefix"
+zht = "裝在可執行文件的 prefix 裏(brew install yume-data)"
+zhs = "装在可执行文件的 prefix 里(brew install yume-data)"
+en = "installed into the binary's prefix (brew install yume-data)"
+
+[[message]]
+# `:yume-where`：系統安裝的宇夢輸入法自帶數據
+key = "yume.where.from.yume"
+zht = "系統安裝的宇夢輸入法自帶數據"
+zhs = "系统安装的宇梦输入法自带数据"
+en = "data kept by the installed Yume"
+
+[[message]]
+# `:yume-where`：碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。
+key = "yume.where.head"
+zht = "碼表和字料到哪裏找的。先找到的先用；都没有，就用出廠自帶的那一份。"
+zhs = "码表和字料到哪里找的。先找到的先用；都没有，就用出厂自带的那一份。"
+en = "Where 碼表 and 字料 are looked for. First one holding a file wins; when none do, the built-in tables answer."
+
+[[message]]
+# `:yume-where`：{0}. {1}
+key = "yume.where.layer"
+zht = "{0}. {1}"
+zhs = "{0}. {1}"
+en = "{0}. {1}"
+
+[[message]]
+# `:yume-where`：數據在哪
+key = "yume.where.name"
+zht = "數據在哪"
+zhs = "数据在哪"
+en = "where the data is"
+
+[[message]]
+# `:yume-where`：一張碼表都没掛上的時候，「當前掛載的是」後面那一句
+key = "yume.where.no-table"
+zht = "未掛載碼表"
+zhs = "未挂载码表"
+en = "no 碼表 mounted"
+
+[[message]]
+# `:yume-where`：第一層空着——那一層只有自己寫配置纔有，所以順帶說怎麼寫
+key = "yume.where.not-named"
+zht = "(没有寫——要自己指一個目錄，就在 `[ime] data_dirs` 裏寫)"
+zhs = "(没有写——要自己指一个目录，就在 `[ime] data_dirs` 里写)"
+en = "(not named — to point at a directory of your own, set `[ime] data_dirs`)"
+
+[[message]]
+# `:yume-where`：(没有)
+key = "yume.where.nothing"
+zht = "(没有)"
+zhs = "(没有)"
+en = "(nothing)"
+
+[[message]]
+# `:yume-where`：現在答話的是：{0}
+key = "yume.where.now"
+zht = "當前掛載的是：{0}"
+zhs = "当前挂载的是：{0}"
+en = "mounted now: {0}"
+
+[[message]]
+# `:yume-where`：開在一個新緩衝區裏了
+key = "yume.where.opened"
+zht = "開在一個新緩衝區裏了"
+zhs = "开在一个新缓冲区里了"
+en = "opened in a buffer of its own"
