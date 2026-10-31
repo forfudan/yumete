@@ -205,6 +205,14 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         // `i` 和 `Enter` 一樣，照這一項自己的改法來。從前 `i` 停在一個勾或者一個
         // 幾選一上**一聲不吭地什麽都不做**，而提示行每一行都寫着 `i 改`。
         Key::Char('i') => panel.change_here(),
+        // **`c` starts from empty** (2026-10-31), as vim's `cc`: `i` keeps the
+        // value and adds to it, so 16 and then 12 read 1612.
+        Key::Char('c') => {
+            panel.begin_typing();
+            if let Some(typing) = panel.typing.as_mut() {
+                typing.clear();
+            }
+        }
         Key::Char('d') => panel.drop_here(),
         Key::Tab => panel.flip_into(),
         Key::Char('g') => {
@@ -532,7 +540,12 @@ pub fn draw(
     let split = area.x + GROUPS_WIDE;
     let bottom = area.y + area.height;
     let note = note_for(panel);
-    let keys = say!("set.keys");
+    // While a value is typed only Enter, Esc and Backspace mean anything
+    // (2026-10-31: the row went on listing the other keys).
+    let keys = match panel.typing.is_some() {
+        true => say!("set.keys-typing"),
+        false => say!("set.keys"),
+    };
     // **說明和三層同一塊**（2026-10-13 報的）。原話：「描述欄可以合并到『出厂』『全
     // 局』『本项目』這個框中……这样的话用户的閲讀顺序是符合的：描述+现在的状态和来
     // 源」——它們是同一個問題的兩半，拆成兩塊讀起來要跳一次。所以說明也縮進右半邊，
@@ -690,7 +703,7 @@ pub fn draw(
         );
         // 值 —— 正在打字的那一項畫的是框裏的字，不是算出來的值。
         let value = match (here, panel.typing.as_ref()) {
-            (true, Some(typed)) => format!("{typed}▏"),
+            (true, Some(typed)) => typed.clone(),
             _ => drawn(setting, &shown.value),
         };
         // **底色說「在這一行」，反白的那一格說「動的是它」**（2026-10-09）。兩個記號
@@ -712,8 +725,10 @@ pub fn draw(
         let room = col.value_ends().saturating_sub(col.value) as usize;
         let value = crate::elide(&value, room);
         put_text(buf, col.value, y, col.value_ends(), &value, value_style);
+        // The terminal's own caret, after the last character: the cursor
+        // shape is a bar while typing (2026-10-31), so no bar is drawn.
         if here && panel.typing.is_some() {
-            let at = col.value + yumete_cjk::str_width(&value).saturating_sub(1) as u16;
+            let at = col.value + yumete_cjk::str_width(&value) as u16;
             caret =
                 Some(ratatui::layout::Position { x: at.min(col.value_ends().saturating_sub(1)), y });
         }
@@ -956,7 +971,9 @@ mod tests {
         assert!(!page.contains("稿紙刻度"), "末一項該被切掉：\n{page}");
     }
 
-    /// **`i` 打字的時候，畫的是框裏那段字加一個光標。**
+    /// **`i` 打字的時候，畫的是框裏那段字**; the caret is the terminal's own,
+    /// a bar after it (2026-10-31), and the key row lists only the keys that
+    /// mean anything while typing.
     #[test]
     fn a_row_being_typed_into_shows_what_is_being_typed() {
         let mut p = Panel::open(None, None);
@@ -965,7 +982,30 @@ mod tests {
         p.begin_typing();
         p.typing = Some("32".into());
         let page = shot(&p, 110, 24);
-        assert!(page.contains("32▏"), "框裏那段字與光標：\n{page}");
+        assert!(page.contains("32"), "框裏那段字：\n{page}");
+        assert!(!page.contains('▏'), "no drawn bar; the cursor is one:\n{page}");
+        assert!(page.contains(&say!("set.keys-typing")), "the typing keys:\n{page}");
+        assert!(!page.contains("hl 換欄"), "not the browsing keys:\n{page}");
+    }
+
+    /// **`c` starts from empty, `i` from the value** (2026-10-31).
+    #[test]
+    fn c_retypes_a_value_and_i_adds_to_it() {
+        let mut p = Panel::open(None, None);
+        p.across(true);
+        p.row = p.rows().iter().position(|s| s.key == "zong_length").unwrap();
+        press(&mut p, Key::Char('i'));
+        let kept = p.typing.clone().expect("typing");
+        assert!(!kept.is_empty(), "i keeps the value");
+        press(&mut p, Key::Esc);
+        press(&mut p, Key::Char('c'));
+        assert_eq!(p.typing.as_deref(), Some(""), "c clears it");
+        press(&mut p, Key::Char('3'));
+        press(&mut p, Key::Char('2'));
+        press(&mut p, Key::Enter);
+        assert!(p.typing.is_none());
+        let shown = p.shown(p.here().unwrap());
+        assert_eq!(shown.value.to_string(), "32");
     }
 
     /// **走是 `q`；`Esc` 退一步，不關**（2026-10-09 作者報的：「a defensive esc to the

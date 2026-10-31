@@ -21059,6 +21059,29 @@ fn write_quit_all_on_the_settings_panel_closes_the_panel() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// What is typed on the settings panel stays out of the command history
+/// (2026-10-31): its `:w` and `:q` are the panel's, and `Up` on the editor's
+/// command line walked back into them.
+#[test]
+fn the_settings_panel_leaves_no_command_history() {
+    let mut ed = Editor::new();
+    let typed = |ed: &mut Editor, line: &str| {
+        ed.on_key(Key::Char(':'));
+        for c in line.chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Enter);
+    };
+    typed(&mut ed, "count");
+    ed.set_settings_open(true);
+    typed(&mut ed, "w");
+    let _ = ed.take_settings_save();
+    ed.set_settings_open(false);
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Up);
+    assert_eq!(ed.prompt().map(|(_, line)| line.to_string()).as_deref(), Some("count"));
+}
+
 /// **A whole-document rewrite asks the grid the same question `:s` does**
 /// (#350).
 ///
