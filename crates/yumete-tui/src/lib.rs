@@ -1281,6 +1281,9 @@ pub fn run(
         if spinning != editor.server_busy_since().is_some() {
             server_said_something = true;
         }
+        if std::mem::take(&mut servers.filled) {
+            server_said_something = true;
+        }
         if let Some(word) = servers.says.take() {
             editor.set_status(word);
             // **這一句也要當場畫出來**（2026-09-29 報的：打開 `.py` 收不到那句
@@ -10978,10 +10981,15 @@ fn draw_picker(
             // two cells in, with the slash eaten, so every directory in `␣e`
             // read as a file that had wandered right.
             let last = clusters.len().saturating_sub(1);
-            let name_at = clusters[..last]
-                .iter()
-                .rposition(|&(_, g)| g == "/" || g == "\\")
-                .map_or(0, |i| i + 1);
+            // A picker of columns is drawn as written (2026-10-31): its
+            // path column moved behind the name would leave the rows ragged.
+            let name_at = match picker.verbatim {
+                true => 0,
+                false => clusters[..last]
+                    .iter()
+                    .rposition(|&(_, g)| g == "/" || g == "\\")
+                    .map_or(0, |i| i + 1),
+            };
             let mut x = left.x + 1;
             if mark_wide > 0 {
                 let under = match picked {
@@ -18325,6 +18333,7 @@ fn squeezed(text: &str) -> String {
             severity,
             message: "說不通".into(),
             source: Some("rust-analyzer".into()),
+            code: None,
         }
     }
 
@@ -24515,7 +24524,10 @@ fn squeezed(text: &str) -> String {
         // Space alone says what its second half can be — which-key, so the set
         // is discoverable without leaving the page.
         editor.on_key(Key::Char(' '));
-        let text = page_text(&render_with(&editor, &config, no_ime(), 60, 24));
+        // 80 columns (2026-10-31): with helix's `S`, `l` and `L` the menu has
+        // 34 rows, and 60 columns by 24 lines shows all but the last two
+        // under its 「還有 2 個」.
+        let text = page_text(&render_with(&editor, &config, no_ime(), 80, 24));
         // Warning: **每一格的字數隨着條數走**（2026-10-18）。`空格 空格`／`空格 退格`
         // 把這張表從 27 條帶到 29 條，而 24 行的窗口給它 9 行深——27 條三欄剛好
         // 鋪滿，29 條就得開第四欄，於是每一格窄了一截，「文件挑選器(項目路徑)」
@@ -24810,8 +24822,10 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天");
         // 左大綱、右字典——出廠 `sides` 把這兩個分在兩邊。
         // （字典 2026-09-30 從 `空格 D` 搬到了 `空格 N`，`d`/`D` 讓給診斷。）
-        // （大綱那一鍵 2026-10-08 從 `空格 o` 併到了 `空格 s`——helix 的那一格。）
-        for key in " s N".chars() {
+        // （大綱 2026-10-31 沒有鍵了：`空格 s` 是 helix 的符號挑選器，大綱走
+        // `:sidebar outline`。）
+        editor.execute(":sidebar outline").unwrap();
+        for key in " N".chars() {
             editor.on_key(Key::Char(key));
         }
         // 一欄兩堵牆，兩欄就是四堵。問正文那一行：上下兩條邊有焦點時整條是金的。
@@ -24821,7 +24835,7 @@ fn squeezed(text: &str) -> String {
                 .map(|x| buffer[(x, 1)].style().fg == Some(gold))
                 .collect()
         };
-        // Warning: **`空格 N` 不收鍵**（2026-10-13 定），所以鍵還在 `空格 s` 開的
+        // Warning: **`空格 N` 不收鍵**（2026-10-13 定），所以鍵還在大綱
         // 那一欄裏——左邊。右邊那一扇是開着的，只是沒人在裏面。
         let buffer = render(&editor, &config, 80, 10);
         assert_eq!(

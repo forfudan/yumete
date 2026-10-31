@@ -4067,13 +4067,16 @@ impl Editor {
         ('y', "hint.space.copy-to-clipboard"),
         ('p', "hint.space.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
-        ('s', "hint.space.outline"),
+        ('s', "hint.space.symbols"),
+        ('S', "hint.space.project-symbols"),
         ('n', "hint.space.dictionary"),
         ('N', "hint.space.dictionary-panel"),
         ('k', "hint.space.what-is-this"),
         ('K', "hint.space.what-is-this-panel"),
-        ('d', "hint.space.problems"), // diagnostics
-        ('D', "hint.space.problems-panel"),
+        ('d', "hint.space.diagnostics"),
+        ('D', "hint.space.project-diagnostics"),
+        ('l', "hint.space.problems"),
+        ('L', "hint.space.problems-panel"),
         ('x', "hint.space.change"),
         ('X', "hint.space.change-panel"),
         ('r', "hint.space.rename"),
@@ -4752,7 +4755,12 @@ impl Editor {
             // （「我天天按它」不是理由）兩條，留對齊的那一個。
             //
             // `o` 從此没綁，按下去**一個字都不說**（2026-10-08 那條規矩，§5.111）。
-            Key::Char('s') => self.show_sidebar(crate::sidebar::View::Outline),
+            // **helix's four pickers** (2026-10-31): symbols in this file and
+            // in the project, diagnostics in this file and in the project.
+            // The outline sidebar these keys used to open is `:sidebar
+            // outline`; the problem at the cursor moved to `l`/`L`.
+            Key::Char('s') => self.open_symbol_picker(),
+            Key::Char('S') => self.open_project_symbol_picker(),
             // 定義 (#215): the 拆分表 on the character under the cursor. The
             // table detail panel this key used to open is a table key, and now
             // lives in the table group as `t i`.
@@ -4794,8 +4802,10 @@ impl Editor {
             }
             // **診斷搬到 `d`/`D`**（2026-09-30 定，照 helix：`space d` 是
             // diagnostics picker）。同形：小寫浮，大寫進邊欄。
-            Key::Char('d') => self.show_the_problem_here(true),
-            Key::Char('D') => self.show_the_problem_here(false),
+            Key::Char('d') => self.open_diagnostics_picker(false),
+            Key::Char('D') => self.open_diagnostics_picker(true),
+            Key::Char('l') => self.show_the_problem_here(true),
+            Key::Char('L') => self.show_the_problem_here(false),
             // **`空格 x`/`X`：這一塊改之前寫的是什麼**（2026-10-11）。小寫浮、大寫
             // 進邊欄，同那一族的別的四個。`v` 是更好按的那一格，留着——這一件不是
             // 天天按的（原話：「感觉 git 还原不一定常用」）。

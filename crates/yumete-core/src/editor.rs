@@ -2657,6 +2657,10 @@ pub struct Editor {
     /// **`gr`'s question, and where it was asked from** (#54, 2026-10-29).
     references_query: Option<(PathBuf, usize, usize)>,
     asked_refs_from: Option<(u64, usize)>,
+    /// **The symbol pickers' question for the language server** (`空格 s`/`S`,
+    /// 2026-10-31), and which picker the answer is for.
+    symbols_query: Option<symbols::SymbolAsk>,
+    symbols_wanted: Option<symbols::SymbolWant>,
     /// `:lsp-rename`'s question: where, and the new name.
     rename_query: Option<(PathBuf, usize, usize, String)>,
     /// `空格 a`'s question: the file and the span, in (line, UTF-16 column).
@@ -4104,6 +4108,8 @@ impl Editor {
             definition_query: None,
             references_query: None,
             asked_refs_from: None,
+            symbols_query: None,
+            symbols_wanted: None,
             rename_query: None,
             actions_query: None,
             offered_actions: Vec::new(),
@@ -5564,6 +5570,8 @@ mod search;
 mod session;
 mod shell;
 mod suggest;
+mod symbols;
+pub use symbols::SymbolAsk;
 mod sidebar;
 mod tables;
 mod undo;

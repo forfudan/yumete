@@ -109,6 +109,7 @@ impl ConfigWatch {
             severity,
             message,
             source: Some(String::from(Self::WHOSE)),
+            code: None,
         };
         let mut out: Vec<Problem> = yumete_config::faults::faults_in(text)
             .into_iter()
