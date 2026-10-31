@@ -728,6 +728,10 @@ impl Editor {
                 self.open_project_picker();
                 Ok(CommandOutcome::Continue)
             }
+            Command::ChangedFiles => {
+                self.open_changed_picker();
+                Ok(CommandOutcome::Continue)
+            }
             Command::Tutor => {
                 self.open_tutor();
                 Ok(CommandOutcome::Continue)

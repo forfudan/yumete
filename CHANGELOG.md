@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`Space g` lists the changed files** (`:changed-files`), helix's key: every file git reports in the repository you are working in, staged ones included, with a letter (`M` modified, `A` added, `D` deleted, `R` renamed, `U` untracked, `C` in conflict) in green when the change is all staged, gold when some is not, red in conflict; and every open buffer with unsaved changes, marked `+`. The buffer, file and recent-files pickers mark unsaved files with `+` too.
 - **`C-w n`** opens a blank window, helix's way: `C-w n s` below, `C-w n v` beside. Under the vim preset `C-w n` (and `C-w C-n`) opens it below at once. `:hnew` and `:vnew` are the commands.
 - **The session keeps the windows.** `ye -r` brings back how they were split, the file and place in each, which sidebars were open and where the keys were. A window whose file has gone is left out; `:resume` adds files and leaves the windows alone.
 - **`:line-numbers absolute|relative|none`** sets how the gutter counts for the session, bare says which is on; `[editor] line_numbers` stays the starting point. Relative numbers were already there: the cursor line keeps its own number, the others their distance, counted from the head of a selection and from the primary cursor. Now documented, with the rules pinned by tests.

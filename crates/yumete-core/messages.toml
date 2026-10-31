@@ -1319,6 +1319,13 @@ en = "change the working directory"
 find = "cd chdir change-current-directory 工作路徑 工作路径 目錄 目录 切換 切换"
 
 [[message]]
+# : 命令選單裏 changed-files 那一項的説明
+key = "cmd.commands.changed-files"
+zht = "存在改動文件"
+zhs = "存在改动文件"
+en = "the files git reports as changed, and the unsaved buffers (as Space g)"
+find = "改動 改动 修改 變更 变更 git status 暫存 暂存 changed modified staged unsaved"
+[[message]]
 # 命令：:clipboard —— 粘貼選單(空格 " 是同一扇)
 key = "cmd.commands.clipboard"
 zht = "粘貼選單：剪貼簿和取過的那幾段，挑一個貼(␣" 也是)"
@@ -6398,6 +6405,13 @@ zhs = "显示改动(边栏)"
 en = "show the change (sidebar)"
 
 [[message]]
+# 空格菜單：g 開「存在改動文件」挑選器
+key = "hint.space.changed-files"
+zht = "存在改動文件"
+zhs = "存在改动文件"
+en = "changed files"
+
+[[message]]
 # 空格 C：塊注釋(没有塊注釋的格式退到行注釋)
 key = "hint.space.comment-block"
 zht = "塊注釋"
@@ -8657,6 +8671,13 @@ key = "picker.buffers"
 zht = "緩衝區"
 zhs = "缓冲区"
 en = "buffers"
+
+[[message]]
+# 空格 g 那一扇挑選器的標題：git 報的改動文件與沒存的緩衝區
+key = "picker.changed-files"
+zht = "存在改動文件"
+zhs = "存在改动文件"
+en = "changed files"
 
 [[message]]
 # 空格 f 開的挑檔案那一格，標題
@@ -13843,6 +13864,7 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
 
 
 

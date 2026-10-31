@@ -10696,6 +10696,34 @@ fn draw_picker(
         .iter()
         .map(|i| (i.label().to_string(), picker.hits(i.label()), i.blurb().to_string()))
         .collect();
+    // **What changed, before the name** (2026-10-31): `+` for unsaved
+    // changes, then, in the changed-files picker only, git's letter, green
+    // when all of it is staged, gold when some is not, red in conflict. Git
+    // is asked only by that picker; the `+` costs nothing, the editor knows
+    // its buffers. The column is drawn only where something carries a mark,
+    // so a picker with nothing unsaved in it does not move.
+    let unsaved: Vec<String> = editor
+        .unsaved_paths()
+        .iter()
+        .map(|p| match &picker.root {
+            Some(root) => p.strip_prefix(root).unwrap_or(p).display().to_string(),
+            None => p.display().to_string(),
+        })
+        .collect();
+    let dirty = |item: &yumete_core::picker::Item| -> bool {
+        use yumete_core::picker::Item;
+        match item {
+            Item::Buffer(i, _) => editor.buffer_unsaved(*i),
+            Item::File(path) | Item::Changed(path, _) => unsaved.iter().any(|u| u == path),
+            _ => false,
+        }
+    };
+    let lettered = picker.items().iter().any(|i| matches!(i, yumete_core::picker::Item::Changed(..)));
+    let mark_wide: u16 = match (lettered, picker.items().iter().any(&dirty)) {
+        (true, _) => 3,
+        (false, true) => 2,
+        (false, false) => 0,
+    };
     // The code being composed shows in the query, where a `/` search shows it
     // too: the reader has to see 「di3」 turn into 「第」 before choosing.
     let preedit = prompt_preedit(editor, ime);
@@ -10937,6 +10965,26 @@ fn draw_picker(
                 .rposition(|&(_, g)| g == "/" || g == "\\")
                 .map_or(0, |i| i + 1);
             let mut x = left.x + 1;
+            if mark_wide > 0 {
+                let under = match picked {
+                    true => on,
+                    false => ground,
+                };
+                let row = matches[which];
+                if dirty(row) {
+                    put_text(buf, x, y, limit, "+", under.fg(ink.gold()));
+                }
+                if let yumete_core::picker::Item::Changed(_, Some((letter, staging))) = row {
+                    use yumete_core::vcs::Staging;
+                    let tint = match staging {
+                        Staging::Staged => ink.green(),
+                        Staging::Unstaged => ink.gold(),
+                        Staging::Conflict => ink.mark(),
+                    };
+                    put_text(buf, x + 1, y, limit, &letter.to_string(), under.fg(tint));
+                }
+                x += mark_wide;
+            }
             let mut ink_at = |at: Option<usize>, g: &str, x: &mut u16, quiet: bool| {
                 let w = yumete_cjk::grapheme_width(g) as u16;
                 if *x + w > limit {
@@ -25594,6 +25642,71 @@ fn squeezed(text: &str) -> String {
                 keys.concat()
             );
         }
+    }
+
+    /// **`Space g`, 存在改動文件** (2026-10-31): every file git reports, staged
+    /// ones too, with VS Code's letter — green all staged, gold some not —
+    /// and the unsaved buffers with a `+`, a clean file among them.
+    #[test]
+    fn the_changed_files_picker_letters_what_git_says_and_marks_what_is_unsaved() {
+        let dir = std::env::temp_dir().join(format!("yumete-changed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let git = |args: &[&str]| {
+            let ok = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&dir)
+                .args(["-c", "user.name=t", "-c", "user.email=t@t"])
+                .args(args)
+                .output()
+                .is_ok_and(|o| o.status.success());
+            assert!(ok, "git {args:?}");
+        };
+        for f in ["clean", "edited", "staged"] {
+            std::fs::write(dir.join(format!("{f}.md")), format!("{f}\n")).unwrap();
+        }
+        git(&["init", "-q"]);
+        git(&["add", "."]);
+        git(&["commit", "-qm", "init"]);
+        std::fs::write(dir.join("edited.md"), "edited\nmore\n").unwrap();
+        std::fs::write(dir.join("staged.md"), "staged\nmore\n").unwrap();
+        git(&["add", "staged.md"]);
+
+        let mut editor = Editor::new();
+        assert!(editor.set_working_dir(&dir));
+        editor.open_file(dir.join("clean.md")).unwrap();
+        editor.on_key(Key::Char('i'));
+        editor.on_key(Key::Char('x'));
+        editor.on_key(Key::Esc);
+        editor.on_key(Key::Char(' '));
+        editor.on_key(Key::Char('g'));
+        let picker = editor.picker().expect("Space g opens it");
+        let labels: Vec<&str> = picker.items().iter().map(|i| i.label()).collect();
+        assert_eq!(labels, ["edited.md", "staged.md", "clean.md"], "git's, then the unsaved");
+
+        let config = Config::default();
+        let buf = render_with(&editor, &config, no_ime(), 100, 24);
+        let ink = ink(&config);
+        // The leftmost: the list stands left of the preview, whose title
+        // names the file too.
+        let find = |name: &str| -> (u16, u16) {
+            (0..24u16)
+                .filter_map(|y| {
+                    let row: String = (0..100u16).map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol())).collect();
+                    row.find(name).map(|at| (row[..at].chars().count() as u16, y))
+                })
+                .min()
+                .unwrap_or_else(|| panic!("{name} not drawn"))
+        };
+        let (x, y) = find("staged.md");
+        let letter = buf.cell((x - 2, y)).unwrap();
+        assert_eq!((letter.symbol(), letter.fg), ("M", ink.green()), "all staged: green");
+        let (x, y) = find("edited.md");
+        let letter = buf.cell((x - 2, y)).unwrap();
+        assert_eq!((letter.symbol(), letter.fg), ("M", ink.gold()), "not staged: gold");
+        let (x, y) = find("clean.md");
+        assert_eq!(buf.cell((x - 3, y)).unwrap().symbol(), "+", "unsaved, git sees nothing");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **A query that matches nothing, and the frame still draws** (2026-09-17).

@@ -666,6 +666,9 @@ pub enum Command {
     RecentFilesGlobal,
     /// `:recent-projects` — the directories a session was ever kept for.
     RecentProjects,
+    /// `:changed-files` — the files git reports and the unsaved buffers
+    /// (`空格 g`, 2026-10-31).
+    ChangedFiles,
     /// `:toc [n]` — list the headings, or go to the nth.
     Outline(Option<usize>),
     /// `:table-jump 木` — go to the row this table names by that character.
@@ -5146,6 +5149,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::RecentFilesGlobal)),
+    },
+    Entry {
+        name: "changed-files",
+        aliases: &[],
+        help: "cmd.commands.changed-files",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::ChangedFiles)),
     },
     Entry {
         name: "recent-projects",

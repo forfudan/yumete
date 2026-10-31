@@ -63,13 +63,17 @@ pub enum Item {
     /// **A code action** `空格 a` offered, by its place in the offer, and its
     /// title.
     Action(usize, String),
+    /// **A changed file** — `空格 g` (2026-10-31): its path from the picker's
+    /// root, and what git says of it, when git says anything (a buffer with
+    /// unsaved changes in a file git thinks clean has none).
+    Changed(String, Option<(char, crate::vcs::Staging)>),
 }
 
 impl Item {
     /// The text shown in the list, and matched against.
     pub fn label(&self) -> &str {
         match self {
-            Item::File(path) | Item::Project(path) | Item::Dir(path) => path,
+            Item::File(path) | Item::Project(path) | Item::Dir(path) | Item::Changed(path, _) => path,
             Item::Buffer(_, name) | Item::Paste(_, name) | Item::Action(_, name) => name,
             Item::Place(label, ..) => label,
             Item::Wiki(name, _) => name,
@@ -225,6 +229,11 @@ impl Picker {
     /// Recomputed on each call rather than cached: a picker holds a few hundred
     /// paths, and being always right about what is on screen is worth more here
     /// than saving a scan.
+    /// Everything it holds, matched or not.
+    pub fn items(&self) -> &[Item] {
+        &self.items
+    }
+
     pub fn matches(&self) -> Vec<&Item> {
         // 平手的第二條：散文檔在前（`false` 排前面，所以存的是「不是散文」）。
         let rest = |i: usize| !self.prose.get(i).copied().unwrap_or(false);
