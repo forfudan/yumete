@@ -32,6 +32,10 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- A key bound to a command line ran it but ignored the result: `"C-q" = ":quit"` never quit, and a failing command said nothing. A run of keys that types `:quit` lost it the same way. Both are heard now.
+- `goto_next_paragraph` and `goto_prev_paragraph` moved one line; they now go a paragraph, as `]p` and `[p` do.
+- Under the vim keymap, named actions did the vim key's thing: `delete_selection` waited for a motion like vim's `d`. An action now does the same under either keymap.
+- A key bound to one other key (`"C-q" = "@w"`) moved only the first of several cursors.
 - A `.csv` with an old `.yumete/tables/*.toml` naming it opened as plain text, and `Space t t` refused it: the notice that the old schema is no longer read was treated as a broken schema. It is now only said, and the file opens as a grid by its header row.
 - Saving on the settings panel, or `:reload-config`, left a dark band across one row of the page: the check of how wide the terminal draws `—` ran again mid-session, printed on the screen and wiped that row. It now runs once, at start-up.
 - A counted `J` from the line break itself (`A Esc 4J`) joined once and stopped: the count's early stop judged by the buffer's length and the cursor, and a join that swaps a line break for a space moves neither. It now watches the buffer's revision.

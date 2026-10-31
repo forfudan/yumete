@@ -113,7 +113,9 @@ def read_helix(default_rs: Path) -> dict[str, str]:
 def read_yumete(keys_rs: Path, keymap_rs: Path) -> tuple[dict[str, str], dict[str, str]]:
     """The top-level ``match key``, and what the vim preset lays over it."""
     text = keys_rs.read_text(encoding="utf-8")
-    start = text.index("    fn on_normal_key(&mut self, key: Key) {")
+    # The visibility in front may change (it became `pub(super)`), so the
+    # anchor is the signature alone.
+    start = text.index("fn on_normal_key(&mut self, key: Key) {")
     body = text[start:text.index("\n    /// Hand a half-finished key", start)]
     at = body.rindex("\n        match key {")
     arms = body[at:].splitlines()[2:]

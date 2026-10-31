@@ -28,7 +28,10 @@ impl Editor {
         let outcome = self.on_key_now(key);
         self.keep_the_signature_up(was);
         self.settle_the_change(was);
-        outcome
+        match std::mem::take(&mut self.quit_from_binding) {
+            true => KeyOutcome::Quit,
+            false => outcome,
+        }
     }
 
     /// A key that moved the text says where it left the cursors, for helix's
@@ -226,12 +229,18 @@ impl Editor {
                     }
                     return KeyOutcome::Continue;
                 }
-                if multi::each_selection_key(&self.pending, key)
-                    || self.copies_every_selection(key)
+                // **Judged by the key it becomes** (2026-10-31): a one-key
+                // binding (`"C-q" = "@w"`) is swapped inside
+                // `on_normal_key`, after this choice, so `w` there moved
+                // only the first cursor. The key itself still goes in as
+                // pressed; the binding swaps it there as before.
+                let acting = self.one_key_binding(key).unwrap_or(key);
+                if multi::each_selection_key(&self.pending, acting)
+                    || self.copies_every_selection(acting)
                 {
                     self.each_selection(|e| e.on_normal_key(key));
-                } else if multi::edits_every_selection(&self.pending, key) {
-                    if let Key::Char(c) = key {
+                } else if multi::edits_every_selection(&self.pending, acting) {
+                    if let Key::Char(c) = acting {
                         if !self.every_selection_has_its_own_pair(self.pending, c) {
                             self.pending = Pending::None;
                             return KeyOutcome::Continue;
@@ -241,10 +250,10 @@ impl Editor {
                     // (2026-10-29, review: two on one line joined it twice;
                     // helix sorts the joins and drops the repeats). The first
                     // cursor on each line joins; the others ride along.
-                    let joins = matches!(key, Key::Char('J') | Key::Alt('J'));
+                    let joins = matches!(acting, Key::Char('J') | Key::Alt('J'));
                     // Likewise `C-a`/`C-x`: two cursors that reach the same
                     // number bump it once.
-                    let bumps = matches!(key, Key::Ctrl('a') | Key::Ctrl('x'));
+                    let bumps = matches!(acting, Key::Ctrl('a') | Key::Ctrl('x'));
                     let owners = ((joins || bumps) && self.sel.is_plural()).then(|| match joins {
                         true => self.first_cursor_on_each_line(),
                         false => self.first_cursor_on_each_number(),
@@ -1542,6 +1551,38 @@ impl Editor {
         self.yank_whole_lines = false;
     }
 
+    /// The key a one-key binding turns `key` into (`"C-q" = "@w"` → `w`),
+    /// when nothing is pending or held, as the binding layer in
+    /// [`Self::on_normal_key`] would swap it. `None` for anything else.
+    fn one_key_binding(&self, key: Key) -> Option<Key> {
+        if self.pending != Pending::None
+            || self.expanding_alias
+            || !self.alias_held.is_empty()
+            || self.key_aliases.is_empty()
+        {
+            return None;
+        }
+        let typed = match key {
+            Key::Char(c) if !(c.is_ascii_digit() && self.count.is_some()) => c.to_string(),
+            Key::Char(_) => return None,
+            Key::Alt(c) => format!("{}{c}", yumete_cjk::actions::ALT),
+            key => typed_as(key)?.to_string(),
+        };
+        if self.key_aliases.keys().any(|k| k.len() > typed.len() && k.starts_with(typed.as_str())) {
+            return None;
+        }
+        match yumete_cjk::actions::bound(self.key_aliases.get(&typed)?)? {
+            yumete_cjk::actions::Bound::Keys(k) => {
+                let mut cs = k.chars();
+                match (cs.next(), cs.next()) {
+                    (Some(c), None) => Some(Key::Char(c)),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// **What the right-hand side of a binding says to do** (#429).
     ///
     /// Three kinds, each marked as what it is (see [`yumete_cjk::actions::bound`]):
@@ -1561,20 +1602,37 @@ impl Editor {
     /// something ever does, the manuscript is not where it gets to say so.
     fn run_binding(&mut self, bound: &str) {
         match yumete_cjk::actions::bound(bound) {
-            Some(yumete_cjk::actions::Bound::Command(line)) => {
-                let _ = self.execute(&format!(":{line}"));
-            }
+            Some(yumete_cjk::actions::Bound::Command(line)) => self.run_bound_command(line),
             // `A-d`、`C-o` 這種寫法在這裏纔翻成內部拼法。
             Some(yumete_cjk::actions::Bound::Keys(keys)) => {
                 self.play_keys(&yumete_cjk::actions::written(keys))
             }
             Some(yumete_cjk::actions::Bound::Named(action)) => match action.how {
-                yumete_cjk::actions::How::Keys(keys) => self.play_keys(keys),
-                yumete_cjk::actions::How::Command(line) => {
-                    let _ = self.execute(&format!(":{line}"));
+                // **An action's keys are helix's** (2026-10-31): they are
+                // written in the helix preset's language, so they are played
+                // in it. Under the vim preset they used to reach vim's arms:
+                // `delete_selection` was vim's `d`, waiting for a motion. A
+                // user's own `@` run keeps meaning the preset's keys.
+                yumete_cjk::actions::How::Keys(keys) => {
+                    let preset = std::mem::replace(&mut self.key_preset, yumete_cjk::KeyPreset::Helix);
+                    self.play_keys(keys);
+                    self.key_preset = preset;
                 }
+                yumete_cjk::actions::How::Command(line) => self.run_bound_command(line),
             },
             None => {}
+        }
+    }
+
+    /// **A command line a binding names, run as if typed** — and what it
+    /// says heard (2026-10-31). It used to be `let _ = self.execute(…)`, so a
+    /// bound `:quit` never left and a failing command said nothing; reported
+    /// with `"C-q" = ":quit"`.
+    fn run_bound_command(&mut self, line: &str) {
+        match self.execute(&format!(":{line}")) {
+            Ok(crate::editor::CommandOutcome::Quit) => self.quit_from_binding = true,
+            Ok(crate::editor::CommandOutcome::Continue) => {}
+            Err(err) => self.status = err.to_string(),
         }
     }
 
@@ -1585,7 +1643,11 @@ impl Editor {
     /// `空格 f` 在 vim 鍵位下該怎麼走就怎麼走。
     pub(super) fn play_keys_now(&mut self, keys: &str) {
         for c in keys.chars() {
-            self.on_key(pressed(c));
+            if self.on_key(pressed(c)) == KeyOutcome::Quit {
+                // Said again for the `on_key` above this one, which took it.
+                self.quit_from_binding = true;
+                return;
+            }
         }
     }
 
@@ -1623,15 +1685,20 @@ impl Editor {
                 }
             }
             // Alt 那一種是兩個 `char`（見 `actions::ALT`）：一下按出去，走兩格。
-            if c == yumete_cjk::actions::ALT {
-                if let Some(&next) = spelled.get(at + 1) {
-                    self.on_key(Key::Alt(next));
-                }
-                at += 2;
-                continue;
+            let key = match c == yumete_cjk::actions::ALT {
+                true => match spelled.get(at + 1) {
+                    Some(&next) => Key::Alt(next),
+                    None => break,
+                },
+                false => pressed(c),
+            };
+            at += if c == yumete_cjk::actions::ALT { 2 } else { 1 };
+            // A run that reaches a quit (`@:quit<enter>`) stops there, and the
+            // `on_key` above this one is told.
+            if self.on_key(key) == KeyOutcome::Quit {
+                self.quit_from_binding = true;
+                break;
             }
-            self.on_key(pressed(c));
-            at += 1;
         }
         self.expanding_alias = outer;
     }

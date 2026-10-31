@@ -266,8 +266,9 @@ pub const ALL: &[Action] = &[
     keys("goto_last_line", "action.goto-last-line", "G"),
     keys("goto_prev_sentence", "action.goto-prev-sentence", "H"),
     keys("goto_next_sentence", "action.goto-next-sentence", "L"),
-    keys("goto_prev_paragraph", "action.goto-prev-paragraph", "gk"),
-    keys("goto_next_paragraph", "action.goto-next-paragraph", "gj"),
+    // helix's `[p`/`]p` (2026-10-31): these pressed `gk`/`gj`, one file line.
+    keys("goto_prev_paragraph", "action.goto-prev-paragraph", "[p"),
+    keys("goto_next_paragraph", "action.goto-next-paragraph", "]p"),
     keys("half_page_down", "action.half-page-down", "\u{4}"),
     keys("half_page_up", "action.half-page-up", "\u{15}"),
     keys("jump_backward", "action.jump-backward", "\u{f}"),
