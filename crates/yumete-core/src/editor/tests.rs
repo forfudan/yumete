@@ -12608,12 +12608,8 @@ fn one_key_moves_between_the_two_panes() {
     ed.on_key(Key::Char('w'));
     assert!(!ed.sidebar_focused());
 
-    // With no sidebar open it does nothing at all. （2026-10-08：大綱那一鍵從
-    // `空格 o` 併到了 `空格 s`——helix 把「這份檔裏的符號」放在 `s`。）
-    ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('s'));
-    ed.on_key(Key::Char(' '));
-    ed.on_key(Key::Char('s'));
+    // With no sidebar open it does nothing at all.
+    ed.execute(":sidebar off").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
@@ -12635,25 +12631,26 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     ed.open_sidebar_showing(&dir, crate::sidebar::View::Explorer);
     assert!(ed.sidebar_focused());
 
-    // A *different* view's key means 「show me the outline」, not 「close」.
-    type_keys(&mut ed, " s");
+    // A *different* view's door means 「show me the outline」, not 「close」 —
+    // `:toc`, since `空格 s` became helix's symbol picker (2026-10-31).
+    ed.execute(":toc").unwrap();
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Outline);
     assert!(ed.sidebar_focused());
 
-    // The same key again closes it: a toggle that cannot undo itself is not
+    // The same door again closes it: a toggle that cannot undo itself is not
     // a toggle.
-    type_keys(&mut ed, " s");
+    ed.execute(":toc").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
 
     // `C-w` hands the keys back without putting it away, and the key takes
     // them again rather than closing something the writer is not in.
-    type_keys(&mut ed, " s");
+    ed.execute(":toc").unwrap();
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_some() && !ed.sidebar_focused());
-    type_keys(&mut ed, " s");
+    ed.execute(":toc").unwrap();
     assert!(ed.sidebar_focused(), "the keys came back");
-    type_keys(&mut ed, " s");
+    ed.execute(":toc").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "and now it closes");
 
     // **The file tree in the sidebar has no key of its own** (2026-10-20 作者
@@ -21059,6 +21056,80 @@ fn write_quit_all_on_the_settings_panel_closes_the_panel() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// helix's four pickers on `空格 s` `S` `d` `D` (2026-10-31). With no
+/// language server, `s` is the outline and `S` the project's headings, each
+/// with the heading above it; `d` and `D` list the diagnostics in helix's
+/// columns, the worst first on a line; `l` is where the problem at the
+/// cursor went.
+#[test]
+fn the_symbol_and_diagnostics_pickers_follow_helix() {
+    let dir = tmp().join(format!("yumete-four-pickers-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("卷一")).unwrap();
+    std::fs::create_dir_all(dir.join(".yumete")).unwrap();
+    let ch1 = dir.join("卷一").join("ch1.md");
+    std::fs::write(&ch1, "# 第一章\n\n雪。\n\n## 初雪\n\n# 第二章\n").unwrap();
+    std::fs::write(dir.join("after.md"), "# 後記\n").unwrap();
+    let mut ed = Editor::new();
+    assert!(ed.set_working_dir(&dir));
+    ed.open_file(&ch1).unwrap();
+
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('s'));
+    let labels = |ed: &Editor| -> Vec<String> {
+        ed.picker().map(|p| p.items().iter().map(|i| i.label().to_string()).collect()).unwrap_or_default()
+    };
+    assert_eq!(labels(&ed), ["#  第一章", "## 初雪   第一章", "#  第二章"]);
+    // The server is asked too; with none, the outline stands.
+    let ask = ed.take_symbols_query().expect("asked");
+    ed.symbols_without_a_server(ask);
+    ed.on_key(Key::Char('二'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.cursor_line(), 6, "Enter goes to the heading");
+
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('S'));
+    let ask = ed.take_symbols_query().expect("asked");
+    assert_eq!(ask, crate::editor::SymbolAsk::Workspace(String::new()));
+    ed.symbols_without_a_server(ask);
+    let rows = labels(&ed);
+    assert_eq!(rows.len(), 4, "{rows:?}");
+    assert!(rows[0].starts_with("#  後記") && rows[0].ends_with("after.md"), "{rows:?}");
+    assert!(rows[2].contains("初雪") && rows[2].contains("第一章") && rows[2].contains("ch1.md"), "{rows:?}");
+    ed.on_key(Key::Esc);
+
+    use crate::problem::{Problem, Severity};
+    let said = |line, severity, message: &str, code: Option<&str>| Problem {
+        line,
+        utf16_column: 0,
+        severity,
+        message: message.into(),
+        source: Some("rustc".into()),
+        code: code.map(str::to_string),
+    };
+    ed.set_problems(ch1.clone(), "test".into(), vec![
+        said(2, Severity::Hint, "a hint", None),
+        said(2, Severity::Error, "an error", Some("E1")),
+    ]);
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('d'));
+    assert_eq!(labels(&ed), ["ERROR rustc E1 an error", "HINT  rustc    a hint"]);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('D'));
+    let rows = labels(&ed);
+    assert!(rows[0].starts_with("ERROR rustc E1 ") && rows[0].contains("ch1.md") && rows[0].ends_with("an error"), "{rows:?}");
+    ed.on_key(Key::Esc);
+
+    // `空格 l`: the problem at the cursor, in a float, as `d` used to.
+    ed.set_cursor(ed.current_buffer().rope().line_to_char(2));
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('l'));
+    assert!(ed.picker().is_none());
+    assert_ne!(ed.status(), say!("problem.none-here"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// An old `.yumete/tables` schema beside a `.csv` is said and stops nothing
 /// (2026-10-31): it was reported as a broken schema, so the file opened as
 /// plain text and `␣tt` refused it.
@@ -24403,6 +24474,7 @@ fn the_line_the_cursor_is_on_says_what_the_server_said() {
         severity,
         message: message.to_string(),
         source: who.map(str::to_string),
+        code: None,
     };
     let dir = tmp().join(format!("yumete-here-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -24459,6 +24531,7 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
         severity,
         message: message.to_string(),
         source: Some("rust-analyzer".into()),
+        code: None,
     };
     let mut ed = Editor::new();
 
@@ -24728,7 +24801,7 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     // 檔案樹與大綱**同在左邊**，後一個把前一個頂掉了，前置條件又寫的是 `any`
     // ——`空格 S` 就算只收左邊，這一條照樣綠。出廠 `sides` 前四格全是左，右邊
     // 那一個是字典。
-    press(&mut ed, " s"); // 大綱：左
+    ed.execute(":sidebar outline").unwrap(); // 大綱：左
     press(&mut ed, " N"); // 字典：右
     for side in Side::BOTH {
         // Warning: 別再寫 `panel(side).is_some() || info_in_this_sidebar(side)
@@ -27221,6 +27294,7 @@ fn a_diagnostic_never_stacks_on_top_of_the_docs_float() {
         severity: crate::problem::Severity::Warn,
         message: "說不通".into(),
         source: None,
+        code: None,
     }]);
 
     // 出廠診斷即時：光標在這一行上，它自己浮出來。
@@ -27459,6 +27533,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
         severity: crate::problem::Severity::Warn,
         message: "說不通".into(),
         source: None,
+        code: None,
     }]);
 
     // 一格都没有：`空格 k` 浮。
@@ -27467,7 +27542,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
     assert_eq!(ed.hover_afloat(), Some("fn one()"), "没地方就浮");
 
     // `空格 I` 把**診斷**送進邊欄——文檔並没有佔着那一格。
-    press(&mut ed, " D");
+    press(&mut ed, " L");
     assert!(ed.showing(View::Info).is_some(), "那一格開了");
     assert_eq!(ed.info_now(), Some(Info::Problems), "擺的是診斷");
 
@@ -27479,7 +27554,7 @@ fn the_slot_is_a_place_whatever_is_in_it() {
     assert!(ed.problem_afloat().is_none(), "診斷讓開了");
 
     // 反過來：`空格 i` 把它換回診斷。
-    press(&mut ed, " d");
+    press(&mut ed, " l");
     assert_eq!(ed.info_now(), Some(Info::Problems), "換回診斷");
 
     // Warning: **`Tab` 不在五種之間轉**（報的原話：「文檔、诊断不可能同时出现
@@ -27512,6 +27587,7 @@ fn the_slot_opens_showing_whichever_it_ought_to() {
         severity: crate::problem::Severity::Warn,
         message: "說不通".into(),
         source: None,
+        code: None,
     }]);
 
     // 出廠診斷即時：開出來是診斷。

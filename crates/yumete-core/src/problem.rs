@@ -70,6 +70,9 @@ pub struct Problem {
     pub message: String,
     /// Which server said it (`rust-analyzer`, `gopls`), when it says.
     pub source: Option<String>,
+    /// The server's code for it (`E0308`), when it gives one: a column of the
+    /// diagnostics pickers, as in helix (2026-10-31).
+    pub code: Option<String>,
 }
 
 /// **A UTF-16 offset into `line`, as a character offset.**
@@ -194,7 +197,7 @@ mod tests {
     use super::*;
 
     fn at(line: usize, severity: Severity) -> Problem {
-        Problem { line, utf16_column: 0, severity, message: "…".into(), source: None }
+        Problem { line, utf16_column: 0, severity, message: "…".into(), source: None, code: None }
     }
 
     #[test]

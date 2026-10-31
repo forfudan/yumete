@@ -134,6 +134,8 @@ struct Server {
     /// `gr`, `:lsp-rename` and `空格 a` now out, and a code action's command
     /// (#54, 2026-10-29). Each its own slot, for the reason `asked_what` has one.
     asked_refs: Option<i64>,
+    /// `空格 s`/`S`'s question (2026-10-31).
+    asked_symbols: Option<i64>,
     asked_rename: Option<i64>,
     asked_actions: Option<i64>,
     /// **What this server last said was wrong, as it wrote it**, by file: a
@@ -195,6 +197,8 @@ struct Heard {
     signature_doc: Option<Option<lsp::Told>>,
     /// `gr`'s places, the first server's that found any (#54).
     refs: Option<Vec<lsp::Place>>,
+    /// The symbol pickers' answer, the first server's that named any.
+    symbols: Option<Vec<lsp::Symbol>>,
     /// A rename's edits, or what the server said in refusing.
     rename: Option<(Vec<lsp::TextEdit>, Option<String>)>,
 }
@@ -234,6 +238,13 @@ impl Heard {
             return;
         }
         self.refs = Some(places);
+    }
+
+    fn symbols(&mut self, symbols: Vec<lsp::Symbol>) {
+        if self.symbols.as_ref().is_some_and(|had| !had.is_empty()) {
+            return;
+        }
+        self.symbols = Some(symbols);
     }
 
     fn renamed(&mut self, edits: Vec<lsp::TextEdit>, error: Option<String>) {
@@ -302,6 +313,11 @@ impl Heard {
         match self.refs {
             Some(places) if !places.is_empty() => editor.show_references(places),
             Some(_) if !waiting(|s| s.asked_refs) => editor.show_references(Vec::new()),
+            _ => {}
+        }
+        match self.symbols {
+            Some(symbols) if !symbols.is_empty() => editor.show_symbols(symbols),
+            Some(_) if !waiting(|s| s.asked_symbols) => editor.show_symbols(Vec::new()),
             _ => {}
         }
         match self.rename {
@@ -374,6 +390,10 @@ pub struct Servers {
     settle: std::time::Duration,
     /// What to put on the status line, once.
     pub says: Option<String>,
+    /// **The editor was given something to draw without a server's answer**
+    /// (2026-10-31): a symbol picker's fallback rows. The loop draws again,
+    /// as it does after an answer, or they wait for the next key.
+    pub filled: bool,
     /// **Rung by a server's reader thread when an answer arrives** (2026-10-28).
     ///
     /// The loop used to look every [`LOOK_IN`] while something was owed, so a
@@ -406,6 +426,7 @@ impl Default for Servers {
             waiting_on: HashSet::new(),
             settle: SETTLE,
             says: None,
+            filled: false,
         }
     }
 }
@@ -767,6 +788,11 @@ impl Servers {
     /// first on the same turn, so by the time this asks, `didOpen` is out.
     pub fn ask(&mut self, editor: &mut Editor, config: &yumete_config::Config) {
         let Some(language) = self.language_of(editor) else {
+            // `空格 s`/`S` on a file no server serves: what yumete reads itself.
+            if let Some(ask) = editor.take_symbols_query() {
+                editor.symbols_without_a_server(ask);
+                self.filled = true;
+            }
             // `gr`, a rename or `空格 a` on a file no server serves.
             let dropped = editor.take_references_query().is_some()
                 | editor.take_rename_query().is_some()
@@ -778,6 +804,10 @@ impl Servers {
             return;
         };
         if self.first_for(language).is_none() {
+            if let Some(ask) = editor.take_symbols_query() {
+                editor.symbols_without_a_server(ask);
+                self.filled = true;
+            }
             // 服務器没起來，就照實說——而不是讓那句問話一直掛着。
             if editor.take_definition_query().is_some() {
                 editor.no_definition();
@@ -830,6 +860,20 @@ impl Servers {
     /// (#54, 2026-10-29). Taken when sent: their answers are not retried, as
     /// a definition's is, because none of them is asked while typing.
     fn ask_the_other_questions(&mut self, language: &str, editor: &mut Editor) {
+        // A live query typed while the last is still out waits its turn, in
+        // the editor; only the newest is asked then.
+        if !self.running.values().any(|s| s.asked_symbols.is_some()) {
+            if let Some(ask) = editor.take_symbols_query() {
+                self.ask_them_all(
+                    language,
+                    |server, id| server.asked_symbols = Some(id),
+                    |id| match &ask {
+                        yumete_core::editor::SymbolAsk::Document(path) => lsp::document_symbol(id, path),
+                        yumete_core::editor::SymbolAsk::Workspace(query) => lsp::workspace_symbol(id, query),
+                    },
+                );
+            }
+        }
         if !self.running.values().any(|s| s.asked_refs.is_some()) {
             if let Some((path, line, column)) = editor.take_references_query() {
                 self.ask_them_all(
@@ -1177,8 +1221,12 @@ impl Servers {
                     // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
-                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error }) => {
-                        if server.asked_refs == Some(id) {
+                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols }) => {
+                        if server.asked_symbols == Some(id) {
+                            server.asked_symbols = None;
+                            anything = true;
+                            heard.symbols(symbols);
+                        } else if server.asked_refs == Some(id) {
                             server.asked_refs = None;
                             anything = true;
                             heard.references(places);
@@ -1716,6 +1764,7 @@ fn start(
         asked_signature: None,
         asked_signature_doc: None,
         asked_refs: None,
+        asked_symbols: None,
         asked_rename: None,
         asked_actions: None,
         raw: HashMap::new(),
@@ -1824,6 +1873,7 @@ mod tests {
                     asked_signature: None,
                     asked_signature_doc: None,
                     asked_refs: None,
+                    asked_symbols: None,
                     asked_rename: None,
                     asked_actions: None,
                     raw: HashMap::new(),
@@ -2122,6 +2172,7 @@ mod tests {
                 severity: Severity::Error,
                 message: "說不通".into(),
                 source: Some("rustc".into()),
+                code: None,
             }], raw: Vec::new()
         })
         .unwrap();
@@ -2385,6 +2436,7 @@ mod tests {
             severity: Severity::Warn,
             message: "unused".into(),
             source: Some("ruff".into()),
+            code: None,
         };
         let typo = Problem {
             line: 0,
@@ -2392,6 +2444,7 @@ mod tests {
             severity: Severity::Error,
             message: "bad type".into(),
             source: Some("pylsp".into()),
+            code: None,
         };
         from_ruff.send(Notice::Said { path: path.clone(), said: vec![lint], raw: Vec::new() }).unwrap();
         from_pylsp.send(Notice::Said { path: path.clone(), said: vec![typo], raw: Vec::new() }).unwrap();
@@ -2441,7 +2494,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2461,7 +2514,7 @@ mod tests {
                 told: Some("fn main()".into()),
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2491,7 +2544,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
             })
             .unwrap();
         }
@@ -2527,6 +2580,7 @@ mod tests {
             severity: Severity::Warn,
             message: "說不通".into(),
             source: None,
+            code: None,
         };
         tell.send(Notice::Said { path: path.clone(), said: vec![one], raw: Vec::new() }).unwrap();
         servers.collect(&mut editor);
@@ -2598,7 +2652,7 @@ mod tests {
             servers.running.values().find_map(pick).expect("asked")
         };
         let answer = |id: i64, places: Vec<lsp::Place>, edits: Vec<lsp::TextEdit>, actions: Vec<lsp::Action>| {
-            Notice::Answer { id, places, told: None, offers: Vec::new(), incomplete: false, signature: None, edits, actions, error: None }
+            Notice::Answer { id, places, told: None, offers: Vec::new(), incomplete: false, signature: None, edits, actions, symbols: Vec::new(), error: None }
         };
         let place = |line: usize| lsp::Place { path: path.clone(), line, utf16_column: 4 };
 

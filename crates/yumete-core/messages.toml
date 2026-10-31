@@ -6433,6 +6433,13 @@ zhs = "复制到系统剪贴板"
 en = "copy to the system clipboard"
 
 [[message]]
+# 空格菜單：這個文件的診斷（helix 的同一個鍵）
+key = "hint.space.diagnostics"
+zht = "診斷挑選器"
+zhs = "诊断挑选器"
+en = "diagnostics picker"
+
+[[message]]
 # 空格組：字典
 key = "hint.space.dictionary"
 zht = "顯示漢字信息(浮窗)"
@@ -6484,14 +6491,6 @@ zhs = "开上次的"
 en = "open something recent"
 
 [[message]]
-# space g: outline 
-# 大綱
-key = "hint.space.outline"
-zht = "顯示大綱"
-zhs = "显示大纲"
-en = "show outline"
-
-[[message]]
 # 空格選單：空格再按一下，往下一頁
 key = "hint.space.page-down"
 zht = "下一頁"
@@ -6535,6 +6534,20 @@ zhs = "显示诊断信息(边栏)"
 en = "show diagnostics (sidebar)"
 
 [[message]]
+# 空格菜單：項目裏每個文件的診斷（helix 的同一個鍵）
+key = "hint.space.project-diagnostics"
+zht = "項目診斷挑選器"
+zhs = "项目诊断挑选器"
+en = "project diagnostics picker"
+
+[[message]]
+# 空格菜單：項目裏的符號：隨查詢問語言服務器，沒有服務器時是各文件的標題（helix 的同一個鍵）
+key = "hint.space.project-symbols"
+zht = "項目符號挑選器"
+zhs = "项目符号挑选器"
+en = "project symbol picker"
+
+[[message]]
 # 空格選單：這一行攤開，浮窗
 key = "hint.space.record"
 zht = "顯示表格行記錄(浮窗)"
@@ -6562,6 +6575,13 @@ key = "hint.space.switch-buffer"
 zht = "緩衝區挑選器"
 zhs = "缓冲区挑选器"
 en = "open buffer picker"
+
+[[message]]
+# 空格菜單：這個文件的符號：語言服務器說的，沒有服務器時是大綱（helix 的同一個鍵）
+key = "hint.space.symbols"
+zht = "符號挑選器"
+zhs = "符号挑选器"
+en = "symbol picker"
 
 [[message]]
 # 空格 t：表格那一組
@@ -8680,6 +8700,13 @@ zhs = "存在改动文件"
 en = "changed files"
 
 [[message]]
+# 挑選器標題：這個文件的診斷
+key = "picker.diagnostics"
+zht = "診斷挑選器"
+zhs = "诊断挑选器"
+en = "diagnostics picker"
+
+[[message]]
 # 空格 f 開的挑檔案那一格，標題
 key = "picker.files"
 zht = "文件"
@@ -8711,6 +8738,19 @@ en = "registers"
 # ── preview ───────────────────────────────────────────────────────────
 
 [[message]]
+# 挑選器標題：項目裏每個文件的診斷
+key = "picker.project-diagnostics"
+zht = "項目診斷挑選器"
+zhs = "项目诊断挑选器"
+en = "project diagnostics picker"
+[[message]]
+# 挑選器標題：項目裏的符號：隨查詢問語言服務器，沒有服務器時是各文件的標題
+key = "picker.project-symbols"
+zht = "項目符號挑選器"
+zhs = "项目符号挑选器"
+en = "project symbol picker"
+
+[[message]]
 # 最近開過的檔／項目，接着上次
 key = "picker.recent-everywhere"
 zht = "最近開過的檔(全部項目)"
@@ -8737,6 +8777,13 @@ key = "picker.references"
 zht = "引用（{0} 處）"
 zhs = "引用（{0} 处）"
 en = "where it is used ({0})"
+
+[[message]]
+# 挑選器標題：這個文件的符號：語言服務器說的，沒有服務器時是大綱
+key = "picker.symbols"
+zht = "符號挑選器"
+zhs = "符号挑选器"
+en = "symbol picker"
 
 [[message]]
 # 挑詞條那扇面板的標題
@@ -13864,6 +13911,7 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
 
 
 

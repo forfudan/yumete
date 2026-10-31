@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **helix's symbol and diagnostics pickers** on `Space s` `S` `d` `D`: this file's symbols (kind, name, container), the project's (asked of the language server again as you type), this file's diagnostics and the project's (severity, source, code, message). Where no server serves the file, `Space s` lists its outline (headings, or code's functions and classes) and `Space S` the headings of every Markdown and Typst file in the project, each with the heading above it; helix refuses there.
 - **`Space g` lists the changed files** (`:changed-files`), helix's key: every file git reports in the repository you are working in, staged ones included, with a letter (`M` modified, `A` added, `D` deleted, `R` renamed, `U` untracked, `C` in conflict) in green when the change is all staged, gold when some is not, red in conflict; and every open buffer with unsaved changes, marked `+`. The buffer, file and recent-files pickers mark unsaved files with `+` too.
 - **`C-w n`** opens a blank window, helix's way: `C-w n s` below, `C-w n v` beside. Under the vim preset `C-w n` (and `C-w C-n`) opens it below at once. `:hnew` and `:vnew` are the commands.
 - **The session keeps the windows.** `ye -r` brings back how they were split, the file and place in each, which sidebars were open and where the keys were. A window whose file has gone is left out; `:resume` adds files and leaves the windows alone.
@@ -23,6 +24,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Keys moved for helix's pickers**: the problem at the cursor is now `Space l` (float) and `Space L` (sidebar), where `d` and `D` were; the outline sidebar has no key and opens with `:sidebar outline` or `:toc`.
 - **The settings panel**: typing a value shows a bar cursor, and the key row then lists only Enter, Esc and Backspace. `c` types a value from empty, where `i` adds to the one there. Messages and the `:` line have their own row under the key hints instead of covering them, and `:w` and `:q` typed on the panel stay out of the command history.
 - **Closing a window hands the keys back to the window you were in before it**, as VS Code and tmux do, instead of to the first window on screen. If that one is gone too, they go to the window that takes the room, as in vim.
 - **Recovery copies are now `.chapter.md.<number>.yumete-swp`**, and a save in progress is a `….yumete-tmp` beside the file, so `*.yumete-swp` and `*.yumete-tmp` in a `.gitignore` cover them; `*.yumete` would also have hidden the `.yumete/` folder. Copies under the older names are still found and offered.

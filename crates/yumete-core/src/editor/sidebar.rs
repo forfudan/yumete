@@ -2199,6 +2199,19 @@ impl Editor {
             self.mode = Mode::Normal;
             return;
         };
+        let before = picker.live.then(|| picker.query().to_string());
+        self.picker_key(key);
+        // A live picker asks its server again when the query changed.
+        if let Some(before) = before {
+            let now = self.picker.as_ref().map(|p| p.query().to_string());
+            if let Some(now) = now.filter(|now| *now != before) {
+                self.ask_symbols_again(&now);
+            }
+        }
+    }
+
+    fn picker_key(&mut self, key: Key) {
+        let Some(picker) = self.picker.as_mut() else { return };
         match key {
             // **一下就關。** 没有層可退回去了。
             Key::Esc => self.close_picker(),

@@ -153,6 +153,14 @@ pub struct Picker {
     /// 關掉的是兩檔，不是五個：**大小寫、繁簡、拼音照舊**。所以 `ye --files` 比
     /// `ye --grep` 還多一條——後者的大小寫是智能的，這裏一律不分。
     loose: bool,
+    /// **Rows drawn as written**, not name first and folders after
+    /// (2026-10-31): the symbol and diagnostics pickers are columns — kind,
+    /// name, container, path — and moving the path's folders would break them.
+    pub verbatim: bool,
+    /// **The server is asked again as the query changes** (`空格 S`,
+    /// 2026-10-31), as helix's workspace symbol picker does; the answer
+    /// replaces the rows ([`Picker::replace_items`]).
+    pub live: bool,
     /// **名單那一列有幾行**——翻一頁翻的就是這個數（2026-10-07）。
     ///
     /// 這個編輯器没有 viewport（`Editor::page_lines` 那一格同理），所以畫的那一
@@ -184,6 +192,8 @@ impl Picker {
             bonus: vec![0; count],
             prose: vec![false; count],
             loose: true,
+            verbatim: false,
+            live: false,
             // 畫之前先按過鍵的話（`--keys`、測試），一頁就是這個數。
             rows: 10,
         }
@@ -218,6 +228,16 @@ impl Picker {
             self.bonus.push(bonus);
             self.prose.push(prose);
         }
+    }
+
+    /// **New rows for the same picker**, the query kept: a server's answer
+    /// arriving, or the headings a picker with no server falls back to.
+    pub fn replace_items(&mut self, items: Vec<Item>) {
+        let count = items.len();
+        self.items = items;
+        self.bonus = vec![0; count];
+        self.prose = vec![false; count];
+        self.selected = 0;
     }
 
     /// What has been typed so far.

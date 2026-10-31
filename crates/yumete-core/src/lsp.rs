@@ -115,7 +115,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}},"symbol":{{}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"documentSymbol":{{"hierarchicalDocumentSymbolSupport":true}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -172,6 +172,102 @@ pub fn references(id: i64, path: &Path, line: usize, utf16_column: usize) -> Str
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/references","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}},"context":{{"includeDeclaration":true}}}}}}"#,
         uri = json_string(&uri_of(path)),
     )
+}
+
+/// `textDocument/documentSymbol` — what this file defines (`空格 s`,
+/// 2026-10-31, helix's symbol picker).
+pub fn document_symbol(id: i64, path: &Path) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/documentSymbol","params":{{"textDocument":{{"uri":{uri}}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `workspace/symbol` — what the project defines that matches `query`
+/// (`空格 S`, 2026-10-31), asked again as the query changes, as helix does.
+pub fn workspace_symbol(id: i64, query: &str) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"workspace/symbol","params":{{"query":{query}}}}}"#,
+        query = json_string(query),
+    )
+}
+
+/// One symbol a server named: what it is called, what kind of thing it is
+/// (LSP's names, as helix shows them), what it sits in, and where.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Symbol {
+    pub name: String,
+    pub kind: &'static str,
+    pub container: Option<String>,
+    /// `None` for a document's own symbols: they are in the file asked about.
+    pub path: Option<PathBuf>,
+    pub line: usize,
+    /// Warning: In **UTF-16 code units**, as it arrived.
+    pub utf16_column: usize,
+}
+
+/// LSP's `SymbolKind`, by number, as helix spells it.
+fn symbol_kind(n: i64) -> &'static str {
+    const NAMES: [&str; 26] = [
+        "file", "module", "namespace", "package", "class", "method", "property", "field", "constructor", "enum",
+        "interface", "function", "variable", "constant", "string", "number", "boolean", "array", "object", "key",
+        "null", "enum_member", "struct", "event", "operator", "type_param",
+    ];
+    usize::try_from(n - 1).ok().and_then(|i| NAMES.get(i)).copied().unwrap_or("symbol")
+}
+
+/// A `documentSymbol` or `workspace/symbol` answer, flattened: a
+/// `DocumentSymbol` tree (each child's container is its parent's name), or
+/// `SymbolInformation` / `WorkspaceSymbol` entries, which say their own.
+fn symbols(result: Option<&serde_json::Value>) -> Vec<Symbol> {
+    fn walk(value: &serde_json::Value, container: Option<&str>, out: &mut Vec<Symbol>) {
+        let Some(name) = value.get("name").and_then(|n| n.as_str()) else { return };
+        let kind = symbol_kind(value.get("kind").and_then(|k| k.as_i64()).unwrap_or(0));
+        let at = |range: Option<&serde_json::Value>| -> (usize, usize) {
+            let start = range.and_then(|r| r.get("start"));
+            let n = |key: &str| start.and_then(|s| s.get(key)).and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+            (n("line"), n("character"))
+        };
+        match value.get("location") {
+            // SymbolInformation / WorkspaceSymbol.
+            Some(location) => {
+                let path = location.get("uri").and_then(|u| u.as_str()).and_then(path_of);
+                let (line, utf16_column) = at(location.get("range"));
+                out.push(Symbol {
+                    name: name.to_string(),
+                    kind,
+                    container: value
+                        .get("containerName")
+                        .and_then(|c| c.as_str())
+                        .filter(|c| !c.is_empty())
+                        .map(str::to_string),
+                    path,
+                    line,
+                    utf16_column,
+                });
+            }
+            // DocumentSymbol, with its children.
+            None => {
+                let (line, utf16_column) = at(value.get("selectionRange").or_else(|| value.get("range")));
+                out.push(Symbol {
+                    name: name.to_string(),
+                    kind,
+                    container: container.map(str::to_string),
+                    path: None,
+                    line,
+                    utf16_column,
+                });
+                for child in value.get("children").and_then(|c| c.as_array()).into_iter().flatten() {
+                    walk(child, Some(name), out);
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for value in result.and_then(|r| r.as_array()).into_iter().flatten() {
+        walk(value, None, &mut out);
+    }
+    out
 }
 
 /// `textDocument/rename` — the thing under the caret, called `new_name`
@@ -325,6 +421,10 @@ pub struct Place {
 }
 
 /// What a message from the server turned out to be.
+///
+/// The answer is the large one, and every message is moved once, from the
+/// reader thread through a channel: boxing it would buy nothing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Notice {
     /// The answer to [`initialize`]: the handshake is done and
@@ -375,6 +475,8 @@ pub enum Notice {
         edits: Vec<TextEdit>,
         /// A code action's answer: what is on offer.
         actions: Vec<Action>,
+        /// A `documentSymbol` or `workspace/symbol` answer (2026-10-31).
+        symbols: Vec<Symbol>,
         /// What the server said when it refused (`error.message`), as a
         /// rename refuses a keyword.
         error: Option<String>,
@@ -526,6 +628,7 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             signature: signature(value.get("result")),
             edits: workspace_edit(value.get("result")),
             actions: actions(value.get("result")),
+            symbols: symbols(value.get("result")),
             error: value
                 .pointer("/error/message")
                 .and_then(|m| m.as_str())
@@ -1269,6 +1372,12 @@ fn one(entry: &serde_json::Value) -> Option<Problem> {
         severity,
         message,
         source: entry.get("source").and_then(|s| s.as_str()).map(str::to_string),
+        // A number or a string, the specification says.
+        code: match entry.get("code") {
+            Some(serde_json::Value::String(text)) => Some(text.clone()),
+            Some(serde_json::Value::Number(n)) => Some(n.to_string()),
+            _ => None,
+        },
     })
 }
 
@@ -1357,6 +1466,35 @@ fn json_string(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// `documentSymbol` answers come as a tree or a flat list, and
+    /// `workspace/symbol` answers flat with their files (2026-10-31): all
+    /// flattened, a child's container its parent's name, kinds as helix
+    /// names them.
+    #[test]
+    fn symbols_are_read_from_trees_and_from_lists() {
+        let tree = r#"{"jsonrpc":"2.0","id":4,"result":[{"name":"Beta","kind":19,"range":{"start":{"line":3,"character":0},"end":{"line":3,"character":30}},"selectionRange":{"start":{"line":3,"character":5},"end":{"line":3,"character":9}},"children":[{"name":"gamma","kind":6,"range":{"start":{"line":3,"character":12},"end":{"line":3,"character":28}},"selectionRange":{"start":{"line":3,"character":15},"end":{"line":3,"character":20}}}]}]}"#;
+        let Notice::Answer { symbols, .. } = read(tree, 1) else { panic!() };
+        let got: Vec<(&str, &str, Option<&str>, usize, usize)> =
+            symbols.iter().map(|s| (s.kind, s.name.as_str(), s.container.as_deref(), s.line, s.utf16_column)).collect();
+        assert_eq!(got, [("object", "Beta", None, 3, 5), ("method", "gamma", Some("Beta"), 3, 15)]);
+
+        let list = r#"{"jsonrpc":"2.0","id":5,"result":[{"name":"gamma","kind":12,"containerName":"Beta","location":{"uri":"file:///p/b.rs","range":{"start":{"line":3,"character":15},"end":{"line":3,"character":20}}}}]}"#;
+        let Notice::Answer { symbols, .. } = read(list, 1) else { panic!() };
+        assert_eq!(symbols[0].kind, "function");
+        assert_eq!(symbols[0].container.as_deref(), Some("Beta"));
+        assert_eq!(symbols[0].path.as_deref(), Some(Path::new("/p/b.rs")));
+        assert_eq!((symbols[0].line, symbols[0].utf16_column), (3, 15));
+    }
+
+    /// A diagnostic's code is kept, a number or a string (2026-10-31).
+    #[test]
+    fn a_diagnostics_code_is_kept() {
+        let message = r#"{"method":"textDocument/publishDiagnostics","params":{"uri":"file:///a","diagnostics":[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":1}},"message":"m","code":"E0308"},{"range":{"start":{"line":1,"character":0},"end":{"line":1,"character":1}},"message":"n","code":7}]}}"#;
+        let Notice::Said { said, .. } = read(message, 1) else { panic!() };
+        let codes: Vec<Option<&str>> = said.iter().map(|p| p.code.as_deref()).collect();
+        assert_eq!(codes, [Some("E0308"), Some("7")]);
+    }
+
     use super::*;
 
     #[test]
@@ -1459,7 +1597,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
             }
         );
         // A *request* from the server has a method as well as an id, and must
