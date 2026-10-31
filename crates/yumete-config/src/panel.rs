@@ -709,7 +709,10 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let tmp = dir.join(format!(".yumete-set-{}-{}", std::process::id(), nanos));
+    // The same shape as yumete-core's temporary files (2026-10-31), so one
+    // ignore line, `*.yumete-tmp`, covers a crash in the middle of either.
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = dir.join(format!(".{}.{}-{}.yumete-tmp", name.trim_start_matches('.'), std::process::id(), nanos));
     let written = (|| -> std::io::Result<()> {
         // Warning: **只讀的檔就不動它。** 同 `buffer.rs:1337`：`rename` 換的是目録項，
         // 檔自己的權限攔不住——`chmod 444 config.toml` 是有人說「這份別動」。
@@ -733,7 +736,7 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
         file.sync_all()
     })();
     // 每一條出路都把目録還原成它來時的樣子——磁碟滿的那一次不留一個
-    // `.yumete-set-…` 在人家的 `.config` 裏。
+    // `….yumete-tmp` 在人家的 `.config` 裏。
     if let Err(err) = written.and_then(|()| std::fs::rename(&tmp, path)) {
         let _ = std::fs::remove_file(&tmp);
         return Err(err);

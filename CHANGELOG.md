@@ -11,12 +11,19 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`C-w n`** opens a blank window, helix's way: `C-w n s` below, `C-w n v` beside. Under the vim preset `C-w n` (and `C-w C-n`) opens it below at once. `:hnew` and `:vnew` are the commands.
+- **The session keeps the windows.** `ye -r` brings back how they were split, the file and place in each, which sidebars were open and where the keys were. A window whose file has gone is left out; `:resume` adds files and leaves the windows alone.
 - **`:line-numbers absolute|relative|none`** sets how the gutter counts for the session, bare says which is on; `[editor] line_numbers` stays the starting point. Relative numbers were already there: the cursor line keeps its own number, the others their distance, counted from the head of a selection and from the primary cursor. Now documented, with the rules pinned by tests.
 - **Windows.** The editing area is now a tree of windows, as many as fit: `C-w v` opens one beside, `C-w s` one below, `:vsplit [file]` and `:hsplit [file]` do the same from the command line and open the file there. A new window shows the file you are in; from then on `:open` and the pickers change the window you are in only. `C-w h j k l` walk by position, through the sidebars at the edges; `C-w q` and `:q` close the window you are in; `C-w o` keeps it alone. Each window scrolls and folds its lines by itself, and the rule between two windows names the one you are not in. The words: a *region* is a window or a sidebar, and "the other window" replaces "the second editor region" everywhere.
 - **Links between files**, Obsidian's shape. `[[name]]` is resolved across the whole project, nearest first, and `[[` completes from the whole project; `gd` follows, `gr` lists what links back. `:links` opens a panel on the left with two looks (`v` flips them): a list of linked-from, links-to, pages not there and unlinked mentions, or the file among its neighbours with a second hop that folds. `:links-export` writes the whole graph to `.yumete/graph.html` and opens it; `:links-reindex` reads the project again. Inside `[[ ]]` the link's colour wins over a wiki name's gold.
 - **`:hard-wrap [N]`** re-fills the selection, or the unit under the cursor, to N cells without changing what the text means: Markdown hard breaks, fences, tables, headings and reference definitions stay as written, quotes and lists keep their markers, Typst headings and code lines are left alone, and in code only comments and Python docstrings are filled, with their markers repeated. Chinese breaks between characters with kinsoku; `0` joins each unit into one line; bare reads the new `[editor] hard_wrap` setting. `gq` and `:reflow` stay the plain vim and helix fillers.
 - **A wiki can be a folder**, one file per entry: `.yumete/wiki/` is read when present, a `[yumete] 百科/` line or `wiki: 百科/` in `wiki.md`'s front matter names another, and `../` names the project itself so every file name is an entry. Sub-folders group, a file's headings are its sub-entries, and `aliases:` in its front matter adds names.
 - **`ye --export html|typst|csv|tsv|pdf FILE…`** writes a file out from the command line, beside it with the new extension or at `--out PATH`, printing the path written; an existing file is written over. `pdf` compiles through the `typst` compiler on the PATH: a `.typ` as it is, Markdown through the editor's own Typst export.
+
+### Changed
+
+- **Closing a window hands the keys back to the window you were in before it**, as VS Code and tmux do, instead of to the first window on screen. If that one is gone too, they go to the window that takes the room, as in vim.
+- **Recovery copies are now `.chapter.md.<number>.yumete-swp`**, and a save in progress is a `….yumete-tmp` beside the file, so `*.yumete-swp` and `*.yumete-tmp` in a `.gitignore` cover them; `*.yumete` would also have hidden the `.yumete/` folder. Copies under the older names are still found and offered.
 
 ### Fixed
 

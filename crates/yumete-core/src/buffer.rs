@@ -967,8 +967,10 @@ impl Buffer {
 
     // ---- Crash recovery (Feature #79) -------------------------------------
 
-    /// Where this buffer's recovery copy lives: a dotfile beside the document,
-    /// `chapter.md` → `.chapter.md.yumete`.
+    /// The recovery copy's name from before 2026-10-31, `chapter.md` →
+    /// `.chapter.md.yumete` — still read and still removed by a discard, never
+    /// written; a scratch buffer's copy in the data directory. A session
+    /// writes [`Self::session_swap_path`].
     ///
     /// Beside the document on purpose. A novel is written over weeks on one
     /// directory; a recovery copy filed away under `~/.local/state` is one the
@@ -1042,8 +1044,7 @@ impl Buffer {
         if self.path.is_none() {
             return Some(swap);
         }
-        let name = swap.file_name()?.to_string_lossy().into_owned();
-        Some(swap.with_file_name(format!("{name}.{}", self.draft_tag)))
+        draft_path_for(self.path.as_deref()?, &self.draft_tag)
     }
 
     /// Stand in for another yumete — **a test's way of being two sessions**.
@@ -1849,8 +1850,55 @@ fn decode<'a>(bytes: &'a [u8], path: &Path) -> io::Result<std::borrow::Cow<'a, s
     })
 }
 
-/// Where a document's recovery copy lives: a dotfile beside it,
-/// `chapter.md` → `.chapter.md.yumete`.
+/// **The recovery copy's ending** (2026-10-31): its own word, so the
+/// ignore line people write first, `*.yumete-swp`, can never take the
+/// project's `.yumete/` folder or `.yumete.toml` with it — `*.yumete` did.
+/// The changing part comes before it, as Kate's `.file.kate-swp`, so one
+/// pattern covers every copy.
+pub const DRAFT_ENDING: &str = ".yumete-swp";
+
+/// **The ending of a file being written** — a save's temporary file, a
+/// settings write — removed by the write itself and left only by a crash in
+/// the middle of one (2026-10-31).
+pub const TEMP_ENDING: &str = ".yumete-tmp";
+
+/// Where a session writes the recovery copy of `path`: a dotfile beside it,
+/// `chapter.md` → `.chapter.md.4321.yumete-swp`, the number being the
+/// session's (#305).
+fn draft_path_for(path: &Path, tag: &str) -> Option<PathBuf> {
+    let name = path.file_name()?.to_string_lossy();
+    let dir = match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    Some(dir.join(format!(".{name}.{tag}{DRAFT_ENDING}")))
+}
+
+/// The session's number in a recovery copy of the file called `name`, in
+/// either spelling: `.ch1.md.4321.yumete-swp`, or `.ch1.md.yumete.4321` from
+/// before 2026-10-31. Digits only, so a file the writer keeps beside the
+/// chapter is never mistaken for a copy.
+fn draft_tag<'a>(file: &'a str, name: &str) -> Option<&'a str> {
+    let tag = match file.strip_suffix(DRAFT_ENDING) {
+        Some(rest) => rest.strip_prefix(&format!(".{name}."))?,
+        None => file.strip_prefix(&format!(".{name}.yumete."))?,
+    };
+    (!tag.is_empty() && tag.chars().all(|c| c.is_ascii_digit())).then_some(tag)
+}
+
+/// A temporary file beside `target` for a write to it: `.ch1.md.4321-<nanos>.yumete-tmp`.
+pub fn temp_path_for(target: &Path) -> PathBuf {
+    let dir = match target.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    dir.join(format!(".{}.{}-{nanos}{TEMP_ENDING}", name.trim_start_matches('.'), std::process::id()))
+}
+
+/// The recovery copy's name before 2026-10-31, `chapter.md` →
+/// `.chapter.md.yumete`: read, never written.
 fn swap_path_for(path: &Path) -> Option<PathBuf> {
     let name = path.file_name()?.to_string_lossy();
     let dir = match path.parent() {
@@ -1888,14 +1936,15 @@ fn process_is_running(pid: i32) -> bool {
 
 fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> {
     let swap = swap_path_for(path)?;
-    // The canonical name, and any copy a session kept beside it under a name of
-    // its own (`.ch1.md.yumete.4321`, see [`Buffer::session_swap_path`]). Those
-    // are left by a session that reopened a file while somebody's draft was
-    // still there — and if *that* session is the one that crashed, its copy is
-    // the only place its work is.
+    // Every copy a session kept beside the file under a name of its own
+    // (`.ch1.md.4321.yumete-swp`, see [`Buffer::session_swap_path`]), and the
+    // two older spellings: `.ch1.md.yumete.4321`, and the plain
+    // `.ch1.md.yumete` from before #305. A copy left by a session that
+    // crashed is the only place its work is, whatever it is called.
     let mut found: Vec<(std::time::SystemTime, String, PathBuf)> = Vec::new();
     let plain = swap.file_name()?.to_string_lossy().into_owned();
-    let mine = format!("{plain}.{tag}");
+    let document = path.file_name()?.to_string_lossy().into_owned();
+    let mine = draft_path_for(path, tag)?.file_name()?.to_string_lossy().into_owned();
     let mut consider = |at: PathBuf| {
         let Ok(draft) = fs::read_to_string(&at) else { return };
         // A copy written before 2026-09-14 carries the document's BOM, which
@@ -1926,9 +1975,10 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
         // live session's only copy, and that session, unchanged since, did not
         // write it again. It is that session's to keep; it gets offered once
         // the process is gone.
-        let suffix = at.file_name().map(|n| n.to_string_lossy().into_owned()).and_then(|n| {
-            n.strip_prefix(&format!("{plain}.")).map(str::to_string)
-        });
+        let suffix = at
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .and_then(|n| draft_tag(&n, &document).map(str::to_string));
         if someone_elses && suffix.as_deref().and_then(|d| d.parse::<i32>().ok()).is_some_and(process_is_running) {
             return;
         }
@@ -1942,20 +1992,13 @@ fn read_draft(path: &Path, rope: &Rope, tag: &str) -> Option<(String, PathBuf)> 
             found.push((stamped, draft, at));
         }
     };
-    let name = plain.clone();
     consider(swap.clone());
     if let Some(dir) = swap.parent() {
         if let Ok(entries) = fs::read_dir(dir) {
             for entry in entries.flatten() {
                 let this = entry.file_name();
                 let this = this.to_string_lossy();
-                // `.ch1.md.yumete.4321` and nothing else: a suffix of digits,
-                // so a file the writer happens to keep beside the chapter is
-                // never mistaken for a recovery copy.
-                let digits = this
-                    .strip_prefix(&format!("{name}."))
-                    .is_some_and(|tail| !tail.is_empty() && tail.chars().all(|c| c.is_ascii_digit()));
-                if digits {
+                if draft_tag(&this, &document).is_some() {
                     consider(entry.path());
                 }
             }
@@ -2152,10 +2195,6 @@ fn write_bytes_with_model(
         Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
         _ => PathBuf::from("."),
     };
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
     // **A file marked read-only stays read-only.** The rename replaces the
     // directory entry, so the mode on the file itself never stops it — the
     // writer has to. `chmod 444 稿子.md` is somebody saying 「這份不要動」, and
@@ -2178,14 +2217,14 @@ fn write_bytes_with_model(
     {
         use std::os::unix::fs::MetadataExt;
         if fs::metadata(&path).is_ok_and(|m| m.nlink() > 1) {
-            let aside = dir.join(format!(".yumete-old-{}-{}", std::process::id(), nanos));
+            let aside = temp_path_for(&path);
             return write_in_place(&path, &aside, write);
         }
     }
-    let tmp = dir.join(format!(".yumete-tmp-{}-{}", std::process::id(), nanos));
+    let tmp = temp_path_for(&path);
     // Every way out of the write leaves the directory as it found it. Only the
     // rename used to clean up after itself, so a disk-full `:w` on a 9.6 MB
-    // novel left a `.yumete-tmp-…` beside the manuscript, once per attempt.
+    // novel left a temporary file beside the manuscript, once per attempt.
     let written = (|| -> io::Result<()> {
         let mut file = fs::File::create(&tmp)?;
         // The manuscript's own permissions, kept: `File::create` takes the
@@ -2282,14 +2321,19 @@ fn write_in_place(
 
 /// 給一份撞了名字的草稿找一個空名字，**而且還要找得回來**。
 ///
-/// `read_draft` 掃目錄時只認「`.<名字>.yumete.` 後面全是數字」的那些，所以挪過去
-/// 的名字也得是純數字。在原來那個 pid 後面接三位數就夠：它比任何一個真 pid 都長，
-/// 所以 `owner_still_running` 解不出來、判作「主人走了」——而那正是實情。
+/// `read_draft` only takes a copy whose number is all digits, so the name it
+/// moves to is digits too: three more after the pid, longer than any real
+/// pid, so `owner_still_running` reads it as 「the owner has gone」, which is
+/// the truth. `.ch1.md.4321.yumete-swp` → `.ch1.md.4321000.yumete-swp`.
 fn draft_moved_aside(swap: &Path) -> Option<PathBuf> {
     let name = swap.file_name()?.to_string_lossy().into_owned();
-    let (stem, tag) = name.rsplit_once('.')?;
+    let (base, ending) = match name.strip_suffix(DRAFT_ENDING) {
+        Some(base) => (base.to_string(), DRAFT_ENDING),
+        None => (name.clone(), ""),
+    };
+    let (stem, tag) = base.rsplit_once('.')?;
     for n in 0..1000u32 {
-        let candidate = swap.with_file_name(format!("{stem}.{tag}{n:03}"));
+        let candidate = swap.with_file_name(format!("{stem}.{tag}{n:03}{ending}"));
         if !candidate.exists() {
             return Some(candidate);
         }
@@ -2299,8 +2343,8 @@ fn draft_moved_aside(swap: &Path) -> Option<PathBuf> {
 
 /// **那一份草稿的主人還在跑嗎**（2026-10-10 報的）。
 ///
-/// 草稿的名字帶着寫它的那個進程：有檔名的是 `.卷一.md.yumete.<pid>`，没檔名的是
-/// `scratch-<pid>-<序號>.yumete`。崩掉的那一回留下的没人收，**可還活着的那一個
+/// 草稿的名字帶着寫它的那個進程：有檔名的是 `.卷一.md.<pid>.yumete-swp`（10-31
+/// 以前是 `.卷一.md.yumete.<pid>`），没檔名的是 `scratch-<pid>-<序號>.yumete-swp`。崩掉的那一回留下的没人收，**可還活着的那一個
 /// 進程留下的是它此刻唯一的保險**——它打了字還没存，而只要它不再敲鍵就不會重寫
 /// （`draft_is_stale` 是假的）。從前收下草稿與撿孤兒兩條路都無條件把那個檔刪了。
 ///
@@ -2321,7 +2365,10 @@ fn owner_pid(draft: &std::path::Path) -> Option<u32> {
     let name = draft.file_name()?.to_string_lossy().into_owned();
     let tag = match name.strip_prefix("scratch-") {
         Some(rest) => rest.split('-').next().unwrap_or(""),
-        None => name.rsplit('.').next().unwrap_or(""),
+        None => match name.strip_suffix(DRAFT_ENDING) {
+            Some(base) => base.rsplit('.').next().unwrap_or(""),
+            None => name.rsplit('.').next().unwrap_or(""),
+        },
     };
     let pid = tag.parse::<u32>().ok()?;
     // 頭幾個號是系統自己的（unix 的 init／launchd 是 1，Windows 的 System 是 4），
@@ -2813,7 +2860,7 @@ fn tmp() -> std::path::PathBuf {
             .unwrap()
             .filter_map(Result::ok)
             .map(|e| e.file_name().to_string_lossy().to_string())
-            .filter(|n| n.starts_with(".yumete-tmp-"))
+            .filter(|n| n.ends_with(TEMP_ENDING))
             .collect();
         assert!(leftovers.is_empty(), "{leftovers:?}");
 
@@ -2843,7 +2890,7 @@ fn tmp() -> std::path::PathBuf {
             .unwrap()
             .filter_map(Result::ok)
             .map(|e| e.file_name().to_string_lossy().to_string())
-            .filter(|n| n.starts_with(".yumete-tmp-"))
+            .filter(|n| n.ends_with(TEMP_ENDING))
             .collect();
         assert!(leftovers.is_empty(), "{leftovers:?}");
 
@@ -2915,7 +2962,7 @@ fn tmp() -> std::path::PathBuf {
         let swap = b.recovery_copy().expect("a copy was written").to_path_buf();
         assert_eq!(
             swap.file_name().unwrap().to_string_lossy(),
-            format!(".chapter.md.yumete.{}", std::process::id())
+            format!(".chapter.md.{}.yumete-swp", std::process::id())
         );
         assert!(swap.exists());
 
@@ -2956,7 +3003,7 @@ fn tmp() -> std::path::PathBuf {
         // The crashed session's work is untouched…
         assert_eq!(fs::read_to_string(&left).unwrap(), "崩潰前寫的\n");
         // …and this session's is on disk too, under a name of its own.
-        let mine = dir.join(format!(".chapter.md.yumete.{}", std::process::id()));
+        let mine = dir.join(format!(".chapter.md.{}.yumete-swp", std::process::id()));
         assert!(mine.exists(), "this session keeps a draft of its own");
         assert_eq!(fs::read_to_string(&mine).unwrap(), "今天的：第一稿\n");
 
@@ -3026,8 +3073,8 @@ fn tmp() -> std::path::PathBuf {
         b.insert(0, "乙").expect("writable");
         b.write_swap().unwrap();
 
-        let ja = dir.join(".shared.md.yumete.900001");
-        let yi = dir.join(".shared.md.yumete.900002");
+        let ja = dir.join(".shared.md.900001.yumete-swp");
+        let yi = dir.join(".shared.md.900002.yumete-swp");
         assert_eq!(fs::read_to_string(&ja).unwrap(), "甲底稿\n", "A's draft is still A's");
         assert_eq!(fs::read_to_string(&yi).unwrap(), "乙底稿\n");
 
@@ -3243,6 +3290,45 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
+    /// The recovery copy's name (2026-10-31): the session's number, then
+    /// `.yumete-swp`, so `*.yumete-swp` ignores every copy and nothing else.
+    /// Copies under the two older names are still found; a file beside the
+    /// chapter that only looks like one is not.
+    #[test]
+    fn recovery_copies_end_in_their_own_word_and_old_names_are_still_read() {
+        let dir = tmp().join(format!("yumete-draftnames-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("ch.md");
+        fs::write(&path, "正文\n").unwrap();
+        let mut b = Buffer::open(&path).unwrap();
+        b.insert(0, "改").expect("writable");
+        b.write_swap().unwrap();
+        let name = b.recovery_copy().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        assert_eq!(name, format!(".ch.md.{}.yumete-swp", std::process::id()));
+        assert_eq!(draft_tag(&name, "ch.md"), Some(&*std::process::id().to_string()));
+        assert_eq!(draft_tag(".ch.md.yumete.4321", "ch.md"), Some("4321"), "the older spelling");
+        assert_eq!(draft_tag(".ch.md.bak.yumete-swp", "ch.md"), None, "digits only");
+        assert_eq!(draft_tag(".other.md.4321.yumete-swp", "ch.md"), None, "another file's");
+        b.clear_swap();
+
+        // A crashed session's copy under the new name is offered; so is one
+        // under the old numbered name.
+        for left in [".ch.md.999991.yumete-swp", ".ch.md.yumete.999992"] {
+            let at = dir.join(left);
+            fs::write(&at, "沒存的\n").unwrap();
+            let again = Buffer::open(&path).unwrap();
+            assert_eq!(again.recovered_draft(), Some("沒存的\n"), "{left}");
+            fs::remove_file(&at).unwrap();
+        }
+
+        // A save's temporary file is named for the file and ends in its own word.
+        let temp = temp_path_for(&path);
+        let temp = temp.file_name().unwrap().to_string_lossy();
+        assert!(temp.starts_with(".ch.md.") && temp.ends_with(TEMP_ENDING), "{temp}");
+        fs::remove_dir_all(&dir).ok();
+    }
+
     /// **還活着的那個進程留下的草稿不許刪**（2026-10-10 報的）。
     #[test]
     fn a_draft_whose_owner_is_still_running_is_not_an_orphan() {
@@ -3278,6 +3364,9 @@ fn tmp() -> std::path::PathBuf {
             owner_still_running(Path::new(&format!("scratch-{pid}-3.yumete"))),
             "没檔名那一種的名字也要認得出 pid"
         );
+        // The names written since 2026-10-31, the number before the ending.
+        assert!(owner_still_running(Path::new(&format!(".a.md.{pid}.yumete-swp"))));
+        assert!(owner_still_running(Path::new(&format!("scratch-{pid}-3.yumete-swp"))));
         let _ = child.kill();
         let _ = child.wait();
         assert!(
