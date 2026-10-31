@@ -3,6 +3,20 @@
 # What the editor says, one block per tag; see README.md beside this file.
 
 [[message]]
+# 命令說明：add_mark（草稿）
+key = "action.add-mark"
+zht = "設標記(再按一個字母)"
+zhs = "设标记(再按一个字母)"
+en = "set a mark (then a letter)"
+
+[[message]]
+# 命令說明：align_selections（草稿）
+key = "action.align-selections"
+zht = "把各個選區對齊"
+zhs = "把各个选区对齐"
+en = "line the selections up"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.append-mode"
 zht = "在選區後插入"
@@ -17,6 +31,13 @@ zht = "打開緩衝區選擇器"
 zhs = "打开缓冲区选择器"
 en = "open the buffer picker"
 find = "緩衝 缓冲 稿子 切換 切换 開著的 开着的 buffer picker"
+
+[[message]]
+# 命令說明：case_mode（草稿）
+key = "action.case-mode"
+zht = "字形組：大小寫、繁簡"
+zhs = "字形组：大小写、繁简"
+en = "the case group: upper and lower case, traditional and simplified"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -51,6 +72,13 @@ en = "every command"
 find = "命令 所有命令 列表 清單 清单 command menu palette"
 
 [[message]]
+# 命令說明：command_mode（草稿）
+key = "action.command-mode"
+zht = "命令行"
+zhs = "命令行"
+en = "the command line"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.comment-block"
 zht = "整段註釋"
@@ -65,6 +93,20 @@ zht = "註釋這一行"
 zhs = "注释这一行"
 en = "comment this line"
 find = "註釋 注释 一行 comment line"
+
+[[message]]
+# 命令說明：copy_selection_on_next_line（草稿）
+key = "action.copy-selection-on-next-line"
+zht = "在下一行復制一個選區"
+zhs = "在下一行复制一个选区"
+en = "copy the selection onto the next line"
+
+[[message]]
+# 命令說明：copy_selection_on_prev_line（草稿）
+key = "action.copy-selection-on-prev-line"
+zht = "在上一行復制一個選區"
+zhs = "在上一行复制一个选区"
+en = "copy the selection onto the previous line"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -91,6 +133,13 @@ en = "the number under the cursor, minus one"
 find = "數字 数字 減 减 減一 减一 decrement"
 
 [[message]]
+# 命令說明：delete_char_backward（草稿）
+key = "action.delete-char-backward"
+zht = "刪除光標前的一個字"
+zhs = "删除光标前的一个字"
+en = "delete the character before the cursor"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 # Warning: **2026-10-08 這四句換了主人，一個字都没改。** 從前 `delete_selection`
 # 掛的是「不動寄存器」那一句，而它真按的是 `d`——`d` 自 2026-09-28 起進寄存器。
@@ -109,12 +158,33 @@ en = "delete the selection, leaving the register"
 find = "删 删除 去掉 delete"
 
 [[message]]
+# 命令說明：delete_to_line_end（草稿）
+key = "action.delete-to-line-end"
+zht = "刪到行尾"
+zhs = "删到行尾"
+en = "delete to the end of the line"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.dictionary"
 zht = "字典：光標下那個字的拆分"
 zhs = "字典：光标下那个字的拆分"
 en = "the 拆分 of the character under the cursor"
 find = "字典 拆分 部件 查字 dictionary chaifen"
+
+[[message]]
+# 命令說明：earlier（草稿）
+key = "action.earlier"
+zht = "撤銷(和 u 一樣)"
+zhs = "撤销(和 u 一样)"
+en = "undo, as u does"
+
+[[message]]
+# 命令說明：ensure_selections_forward（草稿）
+key = "action.ensure-selections-forward"
+zht = "讓每個選區都朝前"
+zhs = "让每个选区都朝前"
+en = "make every selection face forward"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -141,12 +211,47 @@ en = "open the file picker"
 find = "打開 打开 文件 檔案 档案 挑 picker open file"
 
 [[message]]
+# 命令說明：find_next_char（草稿）
+key = "action.find-next-char"
+zht = "往後找一個字，選到它"
+zhs = "往后找一个字，选到它"
+en = "find a character forward, selecting up to it"
+
+[[message]]
+# 命令說明：find_prev_char（草稿）
+key = "action.find-prev-char"
+zht = "往前找一個字，選到它"
+zhs = "往前找一个字，选到它"
+en = "find a character backward, selecting back to it"
+
+[[message]]
+# 命令說明：find_till_char（草稿）
+key = "action.find-till-char"
+zht = "往後找一個字，選到它前面"
+zhs = "往后找一个字，选到它前面"
+en = "find a character forward, selecting up to just before it"
+
+[[message]]
+# 命令說明：flip_selections（草稿）
+key = "action.flip-selections"
+zht = "光標換到選區另一頭"
+zhs = "光标换到选区另一头"
+en = "move the cursor to the other end of the selection"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.follow-link"
 zht = "前往光標下的鏈接位置"
 zhs = "前往光标下的链接位置"
 en = "follow the link under the cursor"
 find = "鏈接 链接 跟着 跳過去 跳过去 link follow"
+
+[[message]]
+# 命令說明：goto_column（草稿）
+key = "action.goto-column"
+zht = "到這一行的第幾列(用計數)"
+zhs = "到这一行的第几列(用计数)"
+en = "to column N of this line (the count)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -189,6 +294,13 @@ en = "the last line"
 find = "最後一行 最后一行 末行 last line"
 
 [[message]]
+# 命令說明：goto_line（草稿）
+key = "action.goto-line"
+zht = "到第幾行(用計數)"
+zhs = "到第几行(用计数)"
+en = "to line N (the count)"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-line-end"
 zht = "行尾"
@@ -203,6 +315,27 @@ zht = "行首"
 zhs = "行首"
 en = "the start of the line"
 find = "行首 開頭 开头 start"
+
+[[message]]
+# 命令說明：goto_mark（草稿）
+key = "action.goto-mark"
+zht = "回到標記(再按一個字母)"
+zhs = "回到标记(再按一个字母)"
+en = "go to a mark (then a letter)"
+
+[[message]]
+# 命令說明：goto_mode（草稿）
+key = "action.goto-mode"
+zht = "g 組：前往"
+zhs = "g 组：前往"
+en = "the g group: go to"
+
+[[message]]
+# 命令說明：goto_next_line_nonwhitespace（草稿）
+key = "action.goto-next-line-nonwhitespace"
+zht = "下一行的第一個非空白字符"
+zhs = "下一行的第一个非空白字符"
+en = "the next line's first character that is not a space"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -235,6 +368,27 @@ zht = "上一句"
 zhs = "上一句"
 en = "the previous sentence"
 find = "上一句 句子 previous sentence"
+
+[[message]]
+# 命令說明：goto_window_bottom（草稿）
+key = "action.goto-window-bottom"
+zht = "屏幕最下面那一行"
+zhs = "屏幕最下面那一行"
+en = "the bottom line on screen"
+
+[[message]]
+# 命令說明：goto_window_center（草稿）
+key = "action.goto-window-center"
+zht = "屏幕中間那一行"
+zhs = "屏幕中间那一行"
+en = "the middle line on screen"
+
+[[message]]
+# 命令說明：goto_window_top（草稿）
+key = "action.goto-window-top"
+zht = "屏幕最上面那一行"
+zhs = "屏幕最上面那一行"
+en = "the top line on screen"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -301,12 +455,145 @@ en = "join with the next line"
 find = "合併 合并 併行 并行 連起來 连起来 焊 join merge"
 
 [[message]]
+# 命令說明：join_selections_space（草稿）
+key = "action.join-selections-space"
+zht = "合併行並選中接縫"
+zhs = "合并行并选中接缝"
+en = "join lines and select where they meet"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.jump-backward"
 zht = "跳轉表：回到剛纔那個位置"
 zhs = "跳转表：回到刚才那个位置"
 en = "back to where you jumped from"
 find = "回去 返回 跳轉 跳转 剛纔 刚才 back jump"
+
+[[message]]
+# 命令說明：jump_forward（草稿）
+key = "action.jump-forward"
+zht = "跳轉表：再往前一處"
+zhs = "跳转表：再往前一处"
+en = "forward again in the jump list"
+
+[[message]]
+# 命令說明：jump_next_long_word_end（草稿）
+key = "action.jump-next-long-word-end"
+zht = "光標跳到下一個大詞尾(不選中)"
+zhs = "光标跳到下一个大词尾(不选中)"
+en = "the cursor to the next long word's end, selecting nothing"
+
+[[message]]
+# 命令說明：jump_next_long_word_start（草稿）
+key = "action.jump-next-long-word-start"
+zht = "光標跳到下一個大詞首(不選中)"
+zhs = "光标跳到下一个大词首(不选中)"
+en = "the cursor to the next long word's start, selecting nothing"
+
+[[message]]
+# 命令說明：jump_next_paragraph（草稿）
+key = "action.jump-next-paragraph"
+zht = "光標跳到下一段(不選中)"
+zhs = "光标跳到下一段(不选中)"
+en = "the cursor to the next paragraph, selecting nothing"
+
+[[message]]
+# 命令說明：jump_next_sentence（草稿）
+key = "action.jump-next-sentence"
+zht = "光標跳到下一句(不選中)"
+zhs = "光标跳到下一句(不选中)"
+en = "the cursor to the next sentence, selecting nothing"
+
+[[message]]
+# 命令說明：jump_next_word_end（草稿）
+key = "action.jump-next-word-end"
+zht = "光標跳到下一個詞尾(不選中)"
+zhs = "光标跳到下一个词尾(不选中)"
+en = "the cursor to the next word's end, selecting nothing"
+
+[[message]]
+# 命令說明：jump_next_word_start（草稿）
+key = "action.jump-next-word-start"
+zht = "光標跳到下一個詞首(不選中)"
+zhs = "光标跳到下一个词首(不选中)"
+en = "the cursor to the next word's start, selecting nothing"
+
+[[message]]
+# 命令說明：jump_prev_long_word_start（草稿）
+key = "action.jump-prev-long-word-start"
+zht = "光標跳到上一個大詞首(不選中)"
+zhs = "光标跳到上一个大词首(不选中)"
+en = "the cursor to the previous long word's start, selecting nothing"
+
+[[message]]
+# 命令說明：jump_prev_paragraph（草稿）
+key = "action.jump-prev-paragraph"
+zht = "光標跳到上一段(不選中)"
+zhs = "光标跳到上一段(不选中)"
+en = "the cursor to the previous paragraph, selecting nothing"
+
+[[message]]
+# 命令說明：jump_prev_sentence（草稿）
+key = "action.jump-prev-sentence"
+zht = "光標跳到上一句(不選中)"
+zhs = "光标跳到上一句(不选中)"
+en = "the cursor to the previous sentence, selecting nothing"
+
+[[message]]
+# 命令說明：jump_prev_word_start（草稿）
+key = "action.jump-prev-word-start"
+zht = "光標跳到上一個詞首(不選中)"
+zhs = "光标跳到上一个词首(不选中)"
+en = "the cursor to the previous word's start, selecting nothing"
+
+[[message]]
+# 命令說明：keep_primary_selection（草稿）
+key = "action.keep-primary-selection"
+zht = "只留主選區"
+zhs = "只留主选区"
+en = "keep only the primary selection"
+
+[[message]]
+# 命令說明：keep_selections（草稿）
+key = "action.keep-selections"
+zht = "只留配得上正則的選區"
+zhs = "只留配得上正则的选区"
+en = "keep the selections that match a pattern"
+
+[[message]]
+# 命令說明：later（草稿）
+key = "action.later"
+zht = "重做(和 U 一樣)"
+zhs = "重做(和 U 一样)"
+en = "redo, as U does"
+
+[[message]]
+# 命令說明：left_bracket_mode（草稿）
+key = "action.left-bracket-mode"
+zht = "[ 組：往前找上一處"
+zhs = "[ 组：往前找上一处"
+en = "the [ group: the previous one of something"
+
+[[message]]
+# 命令說明：match_mode（草稿）
+key = "action.match-mode"
+zht = "配對組：括號、引號、對象"
+zhs = "配对组：括号、引号、对象"
+en = "the match group: brackets, quotes, objects"
+
+[[message]]
+# 命令說明：merge_consecutive_selections（草稿）
+key = "action.merge-consecutive-selections"
+zht = "把相連的選區合起來"
+zhs = "把相连的选区合起来"
+en = "merge the selections that touch"
+
+[[message]]
+# 命令說明：merge_selections（草稿）
+key = "action.merge-selections"
+zht = "把所有選區合成一個"
+zhs = "把所有选区合成一个"
+en = "merge every selection into one"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -325,20 +612,18 @@ en = "one character right"
 find = "右 右邊 右边 一個字 一个字 right"
 
 [[message]]
-# :keymap-actions 那張表裏這一行寫什麽
+# 命令說明：move_line_down（草稿）
 key = "action.move-line-down"
-zht = "下一行(屏幕上的)"
-zhs = "下一行(屏幕上的)"
-en = "one line down, on screen"
-find = "下 下一行 往下 down"
+zht = "下一行(文件裏的)"
+zhs = "下一行(文件里的)"
+en = "one line down, in the file"
 
 [[message]]
-# :keymap-actions 那張表裏這一行寫什麽
+# 命令說明：move_line_up（草稿）
 key = "action.move-line-up"
-zht = "上一行(屏幕上的)"
-zhs = "上一行(屏幕上的)"
-en = "one line up, on screen"
-find = "上 上一行 往上 up"
+zht = "上一行(文件裏的)"
+zhs = "上一行(文件里的)"
+en = "one line up, in the file"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -355,6 +640,13 @@ zht = "下一個大詞首(按空格分)"
 zhs = "下一个大词首(按空格分)"
 en = "the next long word's start"
 find = "大詞 大词 詞首 词首 空格 WORD"
+
+[[message]]
+# 命令說明：move_next_paragraph（草稿）
+key = "action.move-next-paragraph"
+zht = "選到下一段"
+zhs = "选到下一段"
+en = "select on to the next paragraph"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -381,12 +673,35 @@ en = "the previous long word's start"
 find = "大詞 大词 上一個 上一个 WORD back"
 
 [[message]]
+# 命令說明：move_prev_paragraph（草稿）
+key = "action.move-prev-paragraph"
+zht = "選到上一段"
+zhs = "选到上一段"
+en = "select back to the previous paragraph"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-prev-word-start"
 zht = "上一個詞首"
 zhs = "上一个词首"
 en = "the previous word's start"
 find = "詞首 词首 上一個詞 上一个词 word back"
+
+[[message]]
+# :keymap-actions 那張表裏這一行寫什麽
+key = "action.move-visual-line-down"
+zht = "下一行(屏幕上的)"
+zhs = "下一行(屏幕上的)"
+en = "one line down, on screen"
+find = "下 下一行 往下 down"
+
+[[message]]
+# :keymap-actions 那張表裏這一行寫什麽
+key = "action.move-visual-line-up"
+zht = "上一行(屏幕上的)"
+zhs = "上一行(屏幕上的)"
+en = "one line up, on screen"
+find = "上 上一行 往上 up"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -403,6 +718,13 @@ zht = "下一個區域"
 zhs = "下一个区域"
 en = "the next region"
 find = "區域 区域 分屏 窗口 next region window"
+
+[[message]]
+# 命令說明：normal_mode（草稿）
+key = "action.normal-mode"
+zht = "退出延伸模式，收起臨時顯示的東西"
+zhs = "退出延伸模式，收起临时显示的东西"
+en = "leave Select mode and put away what was shown for a moment"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -429,12 +751,61 @@ en = "open the file this line names"
 find = "打開 打开 檔名 档名 路徑 路径 open here"
 
 [[message]]
+# 命令說明：operator_change（草稿）
+key = "action.operator-change"
+zht = "改寫(再按一個動作)"
+zhs = "改写(再按一个动作)"
+en = "change (then a motion)"
+
+[[message]]
+# 命令說明：operator_delete（草稿）
+key = "action.operator-delete"
+zht = "刪除(再按一個動作)"
+zhs = "删除(再按一个动作)"
+en = "delete (then a motion)"
+
+[[message]]
+# 命令說明：operator_indent（草稿）
+key = "action.operator-indent"
+zht = "增加縮進(再按一個動作)"
+zhs = "增加缩进(再按一个动作)"
+en = "indent (then a motion)"
+
+[[message]]
+# 命令說明：operator_unindent（草稿）
+key = "action.operator-unindent"
+zht = "減少縮進(再按一個動作)"
+zhs = "减少缩进(再按一个动作)"
+en = "unindent (then a motion)"
+
+[[message]]
+# 命令說明：operator_yank（草稿）
+key = "action.operator-yank"
+zht = "複製(再按一個動作)"
+zhs = "复制(再按一个动作)"
+en = "yank (then a motion)"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.outline"
 zht = "大綱邊欄"
 zhs = "大纲边栏"
 en = "the outline"
 find = "大綱 大纲 目錄 目录 標題 标题 outline symbols"
+
+[[message]]
+# 命令說明：page_down（草稿）
+key = "action.page-down"
+zht = "前進一頁"
+zhs = "前进一页"
+en = "a page down"
+
+[[message]]
+# 命令說明：page_up（草稿）
+key = "action.page-up"
+zht = "後退一頁"
+zhs = "后退一页"
+en = "a page up"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -485,12 +856,47 @@ en = "close this one"
 find = "關 关 退出 關掉 关掉 quit close"
 
 [[message]]
+# 命令說明：record_macro（草稿）
+key = "action.record-macro"
+zht = "開始或停止錄宏"
+zhs = "开始或停止录宏"
+en = "start or stop recording a macro"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.redo"
 zht = "重做"
 zhs = "重做"
 en = "redo"
 find = "重做 恢復 恢复 redo"
+
+[[message]]
+# 命令說明：remove_primary_selection（草稿）
+key = "action.remove-primary-selection"
+zht = "去掉主選區"
+zhs = "去掉主选区"
+en = "remove the primary selection"
+
+[[message]]
+# 命令說明：remove_selections（草稿）
+key = "action.remove-selections"
+zht = "去掉配得上正則的選區"
+zhs = "去掉配得上正则的选区"
+en = "remove the selections that match a pattern"
+
+[[message]]
+# 命令說明：repeat_find_char（草稿）
+key = "action.repeat-find-char"
+zht = "再找一次剛纔那個字"
+zhs = "再找一次刚才那个字"
+en = "find that character again"
+
+[[message]]
+# 命令說明：repeat_find_char_reverse（草稿）
+key = "action.repeat-find-char-reverse"
+zht = "反方向再找一次剛纔那個字"
+zhs = "反方向再找一次刚才那个字"
+en = "find that character again, the other way"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -501,12 +907,75 @@ en = "repeat the last insert (vim keymap: the last change)"
 find = "重複 重复 再做一次 repeat"
 
 [[message]]
+# 命令說明：repeat_last_motion（草稿）
+key = "action.repeat-last-motion"
+zht = "再做一次剛纔的 f 或 t"
+zhs = "再做一次刚才的 f 或 t"
+en = "repeat the last f or t"
+
+[[message]]
+# 命令說明：replace（草稿）
+key = "action.replace"
+zht = "把選中的每個字換成另一個字"
+zhs = "把选中的每个字换成另一个字"
+en = "replace each selected character with another"
+
+[[message]]
+# 命令說明：replace_mode（草稿）
+key = "action.replace-mode"
+zht = "覆寫模式：打字蓋掉原文"
+zhs = "覆写模式：打字盖掉原文"
+en = "Replace mode: typing writes over the text"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.replace-with-yanked"
 zht = "用寄存器內容替換選區"
 zhs = "用寄存器内容替换选区"
 en = "replace the selection with the register"
 find = "替換 替换 寄存器 粘貼 粘贴 replace register"
+
+[[message]]
+# 命令說明：replay_macro（草稿）
+key = "action.replay-macro"
+zht = "回放宏"
+zhs = "回放宏"
+en = "replay the macro"
+
+[[message]]
+# 命令說明：right_bracket_mode（草稿）
+key = "action.right-bracket-mode"
+zht = "] 組：往後找下一處"
+zhs = "] 组：往后找下一处"
+en = "the ] group: the next one of something"
+
+[[message]]
+# 命令說明：rotate_selection_contents_backward（草稿）
+key = "action.rotate-selection-contents-backward"
+zht = "各選區的內容往前輪換"
+zhs = "各选区的内容往前轮换"
+en = "rotate the selections' contents backward"
+
+[[message]]
+# 命令說明：rotate_selection_contents_forward（草稿）
+key = "action.rotate-selection-contents-forward"
+zht = "各選區的內容往後輪換"
+zhs = "各选区的内容往后轮换"
+en = "rotate the selections' contents forward"
+
+[[message]]
+# 命令說明：rotate_selections_backward（草稿）
+key = "action.rotate-selections-backward"
+zht = "主選區換成上一個"
+zhs = "主选区换成上一个"
+en = "make the previous selection the primary one"
+
+[[message]]
+# 命令說明：rotate_selections_forward（草稿）
+key = "action.rotate-selections-forward"
+zht = "主選區換成下一個"
+zhs = "主选区换成下一个"
+en = "make the next selection the primary one"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -539,6 +1008,13 @@ zht = "存盤"
 zhs = "存盘"
 en = "save"
 find = "存 存盤 存盘 保存 寫入 写入 save write"
+
+[[message]]
+# 命令說明：save_selection（草稿）
+key = "action.save-selection"
+zht = "把這裏記進跳轉表"
+zhs = "把这里记进跳转表"
+en = "save this place in the jump list"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -581,12 +1057,47 @@ en = "look for what is selected"
 find = "這個詞 这个词 還在哪 还在哪 選中 选中 search selection"
 
 [[message]]
+# 命令說明：search_selection_detect_word_boundaries（草稿）
+key = "action.search-selection-detect-word-boundaries"
+zht = "找選中的那段(整詞)"
+zhs = "找选中的那段(整词)"
+en = "look for what is selected, as a whole word"
+
+[[message]]
+# 命令說明：search_selection_exact（草稿）
+key = "action.search-selection-exact"
+zht = "找選中的那段(原樣)"
+zhs = "找选中的那段(原样)"
+en = "look for what is selected, exactly as written"
+
+[[message]]
+# 命令說明：search_word_backward（草稿）
+key = "action.search-word-backward"
+zht = "往回找光標下的詞"
+zhs = "往回找光标下的词"
+en = "search backward for the word under the cursor"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.select-all"
 zht = "選中整個文件"
 zhs = "选中整个文件"
 en = "select the whole file"
 find = "全選 全选 整個文件 整个文件 all"
+
+[[message]]
+# 命令說明：select_around_object（草稿）
+key = "action.select-around-object"
+zht = "選中整個對象(再按一個對象)"
+zhs = "选中整个对象(再按一个对象)"
+en = "select around an object (then which)"
+
+[[message]]
+# 命令說明：select_inner_object（草稿）
+key = "action.select-inner-object"
+zht = "選中對象的裏面(再按一個對象)"
+zhs = "选中对象的里面(再按一个对象)"
+en = "select inside an object (then which)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -597,12 +1108,96 @@ en = "select this line"
 find = "選行 选行 整行 當前行 当前行 line"
 
 [[message]]
+# 命令說明：select_line_mode（草稿）
+key = "action.select-line-mode"
+zht = "整行選擇模式"
+zhs = "整行选择模式"
+en = "line-wise Select mode"
+
+[[message]]
+# 命令說明：select_regex（草稿）
+key = "action.select-regex"
+zht = "在選區裏按正則選出"
+zhs = "在选区里按正则选出"
+en = "select what matches a pattern inside the selection"
+
+[[message]]
+# 命令說明：select_register（草稿）
+key = "action.select-register"
+zht = "選寄存器(再按一個字母)"
+zhs = "选寄存器(再按一个字母)"
+en = "pick a register (then a letter)"
+
+[[message]]
+# 命令說明：shell_append_output（草稿）
+key = "action.shell-append-output"
+zht = "把外部命令的輸出接在選區後"
+zhs = "把外部命令的输出接在选区后"
+en = "append a command's output after the selection"
+
+[[message]]
+# 命令說明：shell_insert_output（草稿）
+key = "action.shell-insert-output"
+zht = "把外部命令的輸出插在選區前"
+zhs = "把外部命令的输出插在选区前"
+en = "insert a command's output before the selection"
+
+[[message]]
+# 命令說明：shell_pipe（草稿）
+key = "action.shell-pipe"
+zht = "用外部命令處理選區，換掉它"
+zhs = "用外部命令处理选区，换掉它"
+en = "pipe the selection through a command, replacing it"
+
+[[message]]
+# 命令說明：shell_pipe_to（草稿）
+key = "action.shell-pipe-to"
+zht = "把選區交給外部命令，不改文本"
+zhs = "把选区交给外部命令，不改文本"
+en = "pipe the selection to a command, keeping the text"
+
+[[message]]
+# 命令說明：shrink_to_line_bounds（草稿）
+key = "action.shrink-to-line-bounds"
+zht = "把選區縮到整行"
+zhs = "把选区缩到整行"
+en = "shrink the selection to whole lines"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.sidebar"
 zht = "左邊欄(開關)"
 zhs = "左边栏(开关)"
 en = "the left sidebar"
 find = "邊欄 边栏 側欄 侧栏 左邊 左边 sidebar"
+
+[[message]]
+# 命令說明：space_mode（草稿）
+key = "action.space-mode"
+zht = "空格菜單"
+zhs = "空格菜单"
+en = "the Space menu"
+
+[[message]]
+# 命令說明：split_selection（草稿）
+key = "action.split-selection"
+zht = "按正則把選區拆開"
+zhs = "按正则把选区拆开"
+en = "split the selection on a pattern"
+
+[[message]]
+# 命令說明：split_selection_on_newline（草稿）
+key = "action.split-selection-on-newline"
+zht = "按行把選區拆開"
+zhs = "按行把选区拆开"
+en = "split the selection into its lines"
+
+[[message]]
+# 命令說明：sticky_view_mode（草稿）
+key = "action.sticky-view-mode"
+zht = "視圖組(按完不收)"
+zhs = "视图组(按完不收)"
+en = "the view group, staying open"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -613,12 +1208,47 @@ en = "switch case"
 find = "大小寫 大小写 互換 互换 case swap"
 
 [[message]]
+# 命令說明：till_prev_char（草稿）
+key = "action.till-prev-char"
+zht = "往前找一個字，選到它後面"
+zhs = "往前找一个字，选到它后面"
+en = "find a character backward, selecting back to just after it"
+
+[[message]]
+# 命令說明：trim_selections（草稿）
+key = "action.trim-selections"
+zht = "去掉每個選區兩頭的空白"
+zhs = "去掉每个选区两头的空白"
+en = "trim the spaces off both ends of each selection"
+
+[[message]]
+# 命令說明：two_thirds_page_down（草稿）
+key = "action.two-thirds-page-down"
+zht = "前進三分之二頁"
+zhs = "前进三分之二页"
+en = "two thirds of a page down"
+
+[[message]]
+# 命令說明：two_thirds_page_up（草稿）
+key = "action.two-thirds-page-up"
+zht = "後退三分之二頁"
+zhs = "后退三分之二页"
+en = "two thirds of a page up"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.undo"
 zht = "撤銷"
 zhs = "撤销"
 en = "undo"
 find = "撤銷 撤销 回退 後悔 后悔 undo"
+
+[[message]]
+# 命令說明：undo_line（草稿）
+key = "action.undo-line"
+zht = "撤銷這一行的所有改動"
+zhs = "撤销这一行的所有改动"
+en = "undo every change on this line"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -629,12 +1259,40 @@ en = "unindent"
 find = "縮進 缩进 左移 減少 减少 unindent outdent"
 
 [[message]]
+# 命令說明：view_mode（草稿）
+key = "action.view-mode"
+zht = "視圖組：把光標行放到屏幕頂、中、底"
+zhs = "视图组：把光标行放到屏幕顶、中、底"
+en = "the view group: put the cursor line at the top, middle or bottom"
+
+[[message]]
+# 命令說明：vim_redo（草稿）
+key = "action.vim-redo"
+zht = "重做(vim 的 C-r)"
+zhs = "重做(vim 的 C-r)"
+en = "redo, vim's C-r"
+
+[[message]]
+# 命令說明：vim_repeat_last_change（草稿）
+key = "action.vim-repeat-last-change"
+zht = "用新的計數再做一次剛纔的改動"
+zhs = "用新的计数再做一次刚才的改动"
+en = "repeat the last change with a new count"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.wiki-panel"
 zht = "百科頁"
 zhs = "百科页"
 en = "the wiki page"
 find = "百科 詞條 词条 人物 設定 设定 wiki"
+
+[[message]]
+# 命令說明：window_mode（草稿）
+key = "action.window-mode"
+zht = "窗口組"
+zhs = "窗口组"
+en = "the window group"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
