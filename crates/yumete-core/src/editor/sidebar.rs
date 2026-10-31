@@ -2092,10 +2092,22 @@ impl Editor {
             }
             None => (here, Vec::new()),
         };
-        for buffer in self.buffers.iter().filter(|b| b.is_modified()) {
-            let Some(path) = buffer.path() else { continue };
-            let shown = path.strip_prefix(&root).unwrap_or(path).display().to_string();
+        // Git spells the top `C:/Users/…` on Windows and a buffer's path may be
+        // `\\?\C:\Users\…`: both resolved, and compared with forward slashes,
+        // which is how git writes the paths it lists (2026-10-31, CI).
+        let root = std::fs::canonicalize(&root).unwrap_or(root);
+        for path in self.unsaved_paths() {
+            let Ok(inside) = path.strip_prefix(&root) else { continue };
+            let shown = crate::picker::slashed(inside);
             if !items.iter().any(|i| i.label() == shown) {
+                items.push(crate::picker::Item::Changed(shown, None));
+            }
+        }
+        // An unsaved buffer outside the repository, by its whole path.
+        for path in self.buffers.iter().filter(|b| b.is_modified()).filter_map(|b| b.path()) {
+            let full = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            let shown = full.display().to_string();
+            if full.strip_prefix(&root).is_err() && !items.iter().any(|i| i.label() == shown) {
                 items.push(crate::picker::Item::Changed(shown, None));
             }
         }

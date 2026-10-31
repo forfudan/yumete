@@ -10702,19 +10702,37 @@ fn draw_picker(
     // is asked only by that picker; the `+` costs nothing, the editor knows
     // its buffers. The column is drawn only where something carries a mark,
     // so a picker with nothing unsaved in it does not move.
+    // Every spelling of each unsaved file, against the root as given and as
+    // resolved, with forward slashes: a row's path may be either.
+    let roots: Vec<std::path::PathBuf> = picker
+        .root
+        .iter()
+        .flat_map(|r| [r.clone(), std::fs::canonicalize(r).unwrap_or_else(|_| r.clone())])
+        .collect();
     let unsaved: Vec<String> = editor
         .unsaved_paths()
         .iter()
-        .map(|p| match &picker.root {
-            Some(root) => p.strip_prefix(root).unwrap_or(p).display().to_string(),
-            None => p.display().to_string(),
+        .flat_map(|p| {
+            let mut spelled: Vec<String> = roots
+                .iter()
+                .filter_map(|r| p.strip_prefix(r).ok())
+                .map(yumete_core::picker::slashed)
+                .collect();
+            spelled.push(yumete_core::picker::slashed(p));
+            spelled
         })
         .collect();
     let dirty = |item: &yumete_core::picker::Item| -> bool {
         use yumete_core::picker::Item;
         match item {
             Item::Buffer(i, _) => editor.buffer_unsaved(*i),
-            Item::File(path) | Item::Changed(path, _) => unsaved.iter().any(|u| u == path),
+            // Nothing unsaved is the common case, and a file picker may hold
+            // a hundred thousand rows: no work per row then.
+            Item::File(_) | Item::Changed(..) if unsaved.is_empty() => false,
+            Item::File(path) | Item::Changed(path, _) => {
+                let path = path.replace('\\', "/");
+                unsaved.contains(&path)
+            }
             _ => false,
         }
     };

@@ -90,6 +90,12 @@ impl Item {
     }
 }
 
+/// A relative path as a picker row spells it for comparing: forward
+/// slashes, as git writes them, on every system (2026-10-31).
+pub fn slashed(path: &std::path::Path) -> String {
+    path.display().to_string().replace('\\', "/")
+}
+
 /// An open picker.
 #[derive(Debug, Clone)]
 pub struct Picker {
