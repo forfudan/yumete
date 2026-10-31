@@ -661,6 +661,9 @@ impl Editor {
                 yumete_cjk::actions::How::Command(line) => {
                     let _ = self.execute(line);
                 }
+                yumete_cjk::actions::How::Normal => {
+                    self.run_normal(action.name);
+                }
             },
             lookfor::What::Command(choice) => {
                 let line = choice.written();

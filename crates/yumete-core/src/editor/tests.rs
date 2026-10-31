@@ -17377,6 +17377,29 @@ fn a_one_key_binding_moves_every_cursor() {
     assert_eq!(ed.current_buffer().text(), "two\nfour\n", "both cursors moved a word");
 }
 
+/// **A bound name runs that command, whatever the preset** (2026-10-31,
+/// step 1): a vim-only command bound under helix's keymap does vim's thing,
+/// and a count reaches it.
+#[test]
+fn a_bound_command_runs_by_name_under_either_preset() {
+    let mut ed = typed("one two three four\n");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("K".to_string(), "move_next_word_start".to_string());
+    ed.set_key_aliases(aliases);
+    press(&mut ed, "gg");
+    press(&mut ed, "2K");
+    let (from, to) = ed.selection();
+    let picked: String = ed.current_buffer().rope().slice(from..to).to_string();
+    let mut plain = typed("one two three four\n");
+    press(&mut plain, "gg2w");
+    let (a, b) = plain.selection();
+    assert_eq!(picked, plain.current_buffer().rope().slice(a..b).to_string(), "a count reaches the command, as `2w`");
+    press(&mut ed, ";");
+    // vim's `X`, under the helix preset, where `X` is something else.
+    assert!(ed.run_normal("delete_char_backward"));
+    assert_eq!(ed.current_buffer().text(), "one tw three four\n", "vim's X: the character before the cursor");
+}
+
 #[test]
 fn key_aliases_remap_normal_mode_keys() {
     let mut ed = Editor::new();

@@ -35,9 +35,6 @@ pub(super) type NormalCommand = (&'static str, fn(&mut Editor, Cx), Key);
 /// **Every Normal command, by name**, with its method and the key it answers
 /// to by default: the vim preset's own where it has one, helix's otherwise.
 ///
-/// Read by the tests until the keymap is built from it (pass B of step 1);
-/// until then the `match` in `on_normal_key` is what dispatches.
-#[allow(dead_code)]
 pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("move_char_left", Editor::cmd_move_char_left, Key::Char('h')),
     ("move_char_right", Editor::cmd_move_char_right, Key::Char('l')),
@@ -184,7 +181,277 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("repeat_last_motion", Editor::cmd_repeat_last_motion, Key::Alt('.')),
 ];
 
+/// A condition a vim entry needs besides the preset; when it does not hold,
+/// helix's entry for the key answers, as the `match` it replaced fell through.
+pub(super) type When = fn(&Editor, &Cx) -> bool;
+
+/// **The default keymap, helix's** (2026-10-31): each key and the command it
+/// runs. The vim preset reads [`VIM_NORMAL`] first.
+pub(super) const HELIX_NORMAL: &[(Key, &str)] = &[
+    (Key::Char('h'), "move_char_left"),
+    (Key::Left, "move_char_left"),
+    (Key::Char('l'), "move_char_right"),
+    (Key::Right, "move_char_right"),
+    (Key::Char('k'), "move_visual_line_up"),
+    (Key::Up, "move_visual_line_up"),
+    (Key::Char('j'), "move_visual_line_down"),
+    (Key::Down, "move_visual_line_down"),
+    (Key::Home, "goto_line_start"),
+    (Key::End, "goto_line_end"),
+    (Key::Char('w'), "move_next_word_start"),
+    (Key::Char('e'), "move_next_word_end"),
+    (Key::Char('b'), "move_prev_word_start"),
+    (Key::Char('}'), "move_next_paragraph"),
+    (Key::Char('{'), "move_prev_paragraph"),
+    (Key::Char('L'), "goto_next_sentence"),
+    (Key::Char('H'), "goto_prev_sentence"),
+    (Key::Char('M'), "add_mark"),
+    (Key::Char('\''), "goto_mark"),
+    (Key::Char('z'), "view_mode"),
+    (Key::Char('Z'), "sticky_view_mode"),
+    (Key::Char(']'), "right_bracket_mode"),
+    (Key::Char('['), "left_bracket_mode"),
+    (Key::Char('W'), "move_next_long_word_start"),
+    (Key::Char('E'), "move_next_long_word_end"),
+    (Key::Char('B'), "move_prev_long_word_start"),
+    (Key::Char('g'), "goto_mode"),
+    (Key::Char(' '), "space_mode"),
+    (Key::Char('f'), "find_next_char"),
+    (Key::Char('F'), "find_prev_char"),
+    (Key::Char('t'), "find_till_char"),
+    (Key::Char('T'), "till_prev_char"),
+    (Key::Char('v'), "select_mode"),
+    (Key::Esc, "normal_mode"),
+    (Key::Char(';'), "collapse_selection"),
+    (Key::Char('C'), "copy_selection_on_next_line"),
+    (Key::Alt('C'), "copy_selection_on_prev_line"),
+    (Key::Char(','), "keep_primary_selection"),
+    (Key::Alt(','), "remove_primary_selection"),
+    (Key::Alt('-'), "merge_selections"),
+    (Key::Alt('_'), "merge_consecutive_selections"),
+    (Key::Alt(':'), "ensure_selections_forward"),
+    (Key::Alt('x'), "shrink_to_line_bounds"),
+    (Key::Alt('s'), "split_selection_on_newline"),
+    (Key::Char(')'), "rotate_selections_forward"),
+    (Key::Char('('), "rotate_selections_backward"),
+    (Key::Char('_'), "trim_selections"),
+    (Key::Char('&'), "align_selections"),
+    (Key::Alt(')'), "rotate_selection_contents_forward"),
+    (Key::Alt('('), "rotate_selection_contents_backward"),
+    (Key::Char('s'), "select_regex"),
+    (Key::Char('S'), "split_selection"),
+    (Key::Alt('k'), "keep_selections"),
+    (Key::Alt('K'), "remove_selections"),
+    (Key::Char('x'), "extend_line_below"),
+    (Key::Char('d'), "delete_selection"),
+    (Key::Char('c'), "change_selection"),
+    (Key::Alt('d'), "delete_selection_noyank"),
+    (Key::Alt('c'), "change_selection_noyank"),
+    (Key::Char('y'), "yank"),
+    (Key::Char('p'), "paste_after"),
+    (Key::Char('P'), "paste_before"),
+    (Key::Char('i'), "insert_mode"),
+    (Key::Char('a'), "append_mode"),
+    (Key::Char('I'), "insert_at_line_start"),
+    (Key::Char('A'), "insert_at_line_end"),
+    (Key::Char('o'), "open_below"),
+    (Key::Char('O'), "open_above"),
+    (Key::Char('u'), "undo"),
+    (Key::Char('U'), "redo"),
+    (Key::Alt('u'), "earlier"),
+    (Key::Alt('U'), "later"),
+    (Key::Char('|'), "shell_pipe"),
+    (Key::Char('!'), "shell_insert_output"),
+    (Key::Alt('!'), "shell_append_output"),
+    (Key::Alt('|'), "shell_pipe_to"),
+    (Key::Char('/'), "search"),
+    (Key::Char('?'), "rsearch"),
+    (Key::Char('n'), "search_next"),
+    (Key::Char('N'), "search_prev"),
+    (Key::Char(':'), "command_mode"),
+    (Key::Char('m'), "match_mode"),
+    (Key::Char('r'), "replace"),
+    (Key::Char('"'), "select_register"),
+    (Key::Char('Q'), "record_macro"),
+    (Key::Char('q'), "replay_macro"),
+    (Key::Ctrl('w'), "window_mode"),
+    (Key::Ctrl('f'), "page_down"),
+    (Key::PageDown, "page_down"),
+    (Key::Ctrl('b'), "page_up"),
+    (Key::PageUp, "page_up"),
+    (Key::Alt('J'), "join_selections_space"),
+    (Key::Ctrl('s'), "save_selection"),
+    (Key::Ctrl('o'), "jump_backward"),
+    (Key::Ctrl('i'), "jump_forward"),
+    (Key::Tab, "jump_forward"),
+    (Key::Ctrl('d'), "half_page_down"),
+    (Key::Ctrl('u'), "half_page_up"),
+    (Key::Ctrl('n'), "two_thirds_page_down"),
+    (Key::Ctrl('p'), "two_thirds_page_up"),
+    (Key::Char('J'), "join_selections"),
+    (Key::Char('K'), "keep_selections"),
+    (Key::Alt(';'), "flip_selections"),
+    (Key::Char('%'), "select_all"),
+    (Key::Char('X'), "extend_to_line_bounds"),
+    (Key::Char('`'), "case_mode"),
+    (Key::Char('~'), "switch_case"),
+    (Key::Char('*'), "search_selection_detect_word_boundaries"),
+    (Key::Alt('*'), "search_selection_exact"),
+    (Key::Char('R'), "replace_with_yanked"),
+    (Key::Char('G'), "goto_line"),
+    (Key::Char('>'), "indent"),
+    (Key::Char('<'), "unindent"),
+    (Key::Ctrl('a'), "increment"),
+    (Key::Ctrl('x'), "decrement"),
+    (Key::Char('.'), "repeat_last_change"),
+    (Key::Alt('.'), "repeat_last_motion"),
+];
+
+/// **The vim preset's own keys**, before helix's: the commands that do
+/// something else under vim, each with the condition it needs, if any.
+pub(super) const VIM_NORMAL: &[(Key, &str, Option<When>)] = &[
+    (Key::Backspace, "move_char_left", None),
+    (Key::Char('k'), "move_line_up", None),
+    (Key::Up, "move_line_up", None),
+    (Key::Char('j'), "move_line_down", None),
+    (Key::Down, "move_line_down", None),
+    (Key::Enter, "goto_next_line_nonwhitespace", None),
+    (Key::Char('w'), "jump_next_word_start", Some(when::vim_word_motion)),
+    (Key::Char('W'), "jump_next_long_word_start", Some(when::vim_word_motion)),
+    (Key::Char('b'), "jump_prev_word_start", Some(when::vim_word_motion)),
+    (Key::Char('B'), "jump_prev_long_word_start", Some(when::vim_word_motion)),
+    (Key::Char('e'), "jump_next_word_end", Some(when::vim_word_motion)),
+    (Key::Char('E'), "jump_next_long_word_end", Some(when::vim_word_motion)),
+    (Key::Char('{'), "jump_prev_paragraph", Some(when::vim_word_motion)),
+    (Key::Char('}'), "jump_next_paragraph", Some(when::vim_word_motion)),
+    (Key::Char('H'), "goto_window_top", None),
+    (Key::Char('M'), "goto_window_center", None),
+    (Key::Char('L'), "goto_window_bottom", None),
+    (Key::Char('('), "jump_prev_sentence", None),
+    (Key::Char(')'), "jump_next_sentence", None),
+    (Key::Char('m'), "add_mark", Some(when::typed)),
+    (Key::Char('V'), "select_line_mode", None),
+    (Key::Char(';'), "repeat_find_char", Some(when::a_find_to_repeat)),
+    (Key::Char(','), "repeat_find_char_reverse", Some(when::a_find_to_repeat)),
+    (Key::Char('d'), "operator_delete", Some(when::not_extending)),
+    (Key::Char('c'), "operator_change", Some(when::not_extending)),
+    (Key::Char('y'), "operator_yank", Some(when::not_extending)),
+    (Key::Char('>'), "operator_indent", Some(when::not_extending)),
+    (Key::Char('<'), "operator_unindent", Some(when::not_extending)),
+    (Key::Char('D'), "delete_to_line_end", None),
+    (Key::Char('i'), "select_inner_object", Some(when::extending)),
+    (Key::Char('a'), "select_around_object", Some(when::extending)),
+    (Key::Char('U'), "undo_line", None),
+    (Key::Char('|'), "goto_column", None),
+    (Key::Ctrl('r'), "vim_redo", None),
+    (Key::Char('X'), "delete_char_backward", None),
+    (Key::Char('`'), "goto_mark", None),
+    (Key::Char('#'), "search_word_backward", None),
+    (Key::Char('R'), "replace_mode", Some(when::not_extending)),
+    (Key::Char('.'), "vim_repeat_last_change", Some(when::counted)),
+];
+
+/// The conditions [`VIM_NORMAL`] names.
+mod when {
+    use super::*;
+
+    /// Pressed by a person, not replayed from a run of keys: the vim
+    /// preset's own table plays helix's keys, and those mean helix's thing.
+    pub(super) fn typed(e: &Editor, _: &Cx) -> bool {
+        !e.expanding_alias
+    }
+
+    /// A vim word or paragraph motion that has a caret reading.
+    pub(super) fn vim_word_motion(e: &Editor, cx: &Cx) -> bool {
+        let Key::Char(c) = cx.key else { return false };
+        !e.expanding_alias && crate::vim::step_for(&c.to_string(), e.word_grain(), None).is_some()
+    }
+
+    /// There is an `f`/`t` to repeat, and a person pressed the key.
+    pub(super) fn a_find_to_repeat(e: &Editor, _: &Cx) -> bool {
+        e.last_find.is_some() && !e.expanding_alias
+    }
+
+    pub(super) fn not_extending(e: &Editor, _: &Cx) -> bool {
+        !e.extend
+    }
+
+    pub(super) fn extending(e: &Editor, _: &Cx) -> bool {
+        e.extend
+    }
+
+    /// A count was typed before the key.
+    pub(super) fn counted(_: &Editor, cx: &Cx) -> bool {
+        cx.operator_count.is_some()
+    }
+}
+
+/// **Names a config may still use**, and the command each is: names
+/// written before the command list that helix spells differently. They stay,
+/// so no config breaks.
+pub(super) const OLD_NAMES: &[(&str, &str)] = &[
+    ("extend_mode", "select_mode"),
+    ("select_line", "extend_line_below"),
+    ("join_lines", "join_selections"),
+];
+
+/// The method behind a command's name, or one of its [`OLD_NAMES`].
+pub(super) fn normal_command(name: &str) -> Option<&'static NormalCommand> {
+    let name = OLD_NAMES.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| new);
+    NORMAL_COMMANDS.iter().find(|(n, _, _)| *n == name)
+}
+
+/// **The key a command is on in helix's keymap**, written as a person
+/// writes it (`f`, `A-d`, `C-o`): what `::` shows beside a command, which
+/// has no editor to ask which preset is in use.
+pub(crate) fn default_key_written(name: &str) -> Option<String> {
+    let name = normal_command(name)?.0;
+    HELIX_NORMAL
+        .iter()
+        .find(|(_, n)| *n == name)
+        .map(|(key, _)| yumete_cjk::actions::spell(&super::keys::key_internal(*key)))
+}
+
 impl Editor {
+    /// **Run a Normal command by name**, as a binding or `::` does
+    /// (2026-10-31): the count typed before the key that asked, and the key
+    /// the command answers to by default (commands sharing one body tell
+    /// their names apart by it). `false` when no command has the name.
+    pub(super) fn run_normal(&mut self, name: &str) -> bool {
+        let Some(&(_, run, key)) = normal_command(name) else { return false };
+        let operator_count = self.count;
+        let count = self.take_count();
+        run(self, Cx { key, count, operator_count, continuing_zong: false });
+        true
+    }
+
+    /// **The key a command is on now**, under the preset in use: the vim
+    /// preset's own entry first, helix's after. `None` when it has none.
+    pub(super) fn normal_key_for(&self, name: &str) -> Option<Key> {
+        let name = normal_command(name)?.0;
+        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+            if let Some((key, _, _)) = VIM_NORMAL.iter().find(|(_, n, _)| *n == name) {
+                return Some(*key);
+            }
+        }
+        HELIX_NORMAL.iter().find(|(_, n)| *n == name).map(|(key, _)| *key)
+    }
+
+    /// **The command `cx.key` runs in Normal mode**, by the default keymap:
+    /// the vim preset's own entry when it has one whose condition holds,
+    /// helix's otherwise.
+    pub(super) fn normal_command_for(&self, cx: &Cx) -> Option<&'static str> {
+        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+            let vim = VIM_NORMAL
+                .iter()
+                .find(|(key, _, when)| *key == cx.key && when.is_none_or(|holds| holds(self, cx)));
+            if let Some((_, name, _)) = vim {
+                return Some(name);
+            }
+        }
+        HELIX_NORMAL.iter().find(|(key, _)| *key == cx.key).map(|(_, name)| *name)
+    }
+
     // **Across the break.** A line is not a wall: `l` off the end of one
     // sentence lands on the start of the next, and `h` walks back over the
     // break the same way. The line-bound pair is still what measures a line;
@@ -1809,14 +2076,6 @@ mod tests {
         "delete_char_backward", "search_word_backward", "replace_mode", "vim_repeat_last_change",
     ];
 
-    /// The bindable names written before the command list, and the command
-    /// each is: a name helix spells differently stays, so no config breaks.
-    const OLD_NAMES: &[(&str, &str)] = &[
-        ("extend_mode", "select_mode"),
-        ("select_line", "extend_line_below"),
-        ("join_lines", "join_selections"),
-    ];
-
     #[test]
     fn every_normal_command_has_one_name() {
         let mut seen = std::collections::HashSet::new();
@@ -1829,26 +2088,26 @@ mod tests {
         }
     }
 
-    /// **An action and the command on its key agree on the name** (the
-    /// `outline` action pressed `空格 s` for weeks after that key became the
-    /// symbol picker, and nothing said so). Every action whose keys are one
-    /// top-level key is that key's helix command, by its name or an old one.
+    /// **Every Normal action is a command, and every command a bindable
+    /// name** (2026-10-31): the config reads its names from
+    /// `yumete_cjk::actions`, and the code is here; the two lists say the
+    /// same names.
     #[test]
-    fn the_actions_on_one_key_are_the_commands_on_it() {
-        for action in yumete_cjk::actions::ALL {
-            let yumete_cjk::actions::How::Keys(keys) = action.how else { continue };
-            let key = match keys.chars().collect::<Vec<_>>()[..] {
-                [yumete_cjk::actions::ALT, c] => Key::Alt(c),
-                [c] => crate::editor::keys::pressed(c),
-                _ => continue,
-            };
-            let helix: Vec<&str> = NORMAL_COMMANDS
-                .iter()
-                .filter(|(name, _, k)| *k == key && !VIM_ONLY.contains(name))
-                .map(|(name, _, _)| *name)
-                .collect();
-            let wanted = OLD_NAMES.iter().find(|(old, _)| *old == action.name).map_or(action.name, |(_, new)| new);
-            assert!(helix.contains(&wanted), "{} is on {keys:?}, whose command is {helix:?}", action.name);
+    fn the_bindable_names_and_the_commands_agree() {
+        let normal: Vec<&str> = yumete_cjk::actions::ALL
+            .iter()
+            .filter(|a| a.how == yumete_cjk::actions::How::Normal)
+            .map(|a| a.name)
+            .collect();
+        for name in &normal {
+            assert!(normal_command(name).is_some(), "the action {name} has no command");
+        }
+        // Every key in either table names a command.
+        for (key, name) in HELIX_NORMAL {
+            assert!(normal_command(name).is_some(), "{key:?} names {name}, which is no command");
+        }
+        for (key, name, _) in VIM_NORMAL {
+            assert!(normal_command(name).is_some(), "{key:?} names {name}, which is no command");
         }
     }
 }
