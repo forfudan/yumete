@@ -833,6 +833,13 @@ impl Editor {
         if self.table.is_none() && problems.is_empty() && self.names_itself_a_grid(&path) {
             self.enter_table();
         }
+        // An old `.yumete/tables` schema that names this file is said, last,
+        // so no other word on the way in covers it — and it stops nothing.
+        let old = crate::table::old_schemas_naming(&path);
+        if !old.is_empty() {
+            self.status = say!("table.schema-problems", listed(&old));
+            self.open_notice = Some(self.status.clone());
+        }
         // **And where its records start** (2026-10-22 reported). The schema
         // door above builds its view right here instead of going through
         // `enter_table`, and this is the one thing it never asked for: a field

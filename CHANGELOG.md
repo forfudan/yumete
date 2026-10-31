@@ -28,6 +28,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- A `.csv` with an old `.yumete/tables/*.toml` naming it opened as plain text, and `Space t t` refused it: the notice that the old schema is no longer read was treated as a broken schema. It is now only said, and the file opens as a grid by its header row.
 - Saving on the settings panel, or `:reload-config`, left a dark band across one row of the page: the check of how wide the terminal draws `—` ran again mid-session, printed on the screen and wiped that row. It now runs once, at start-up.
 - A counted `J` from the line break itself (`A Esc 4J`) joined once and stopped: the count's early stop judged by the buffer's length and the cursor, and a join that swaps a line break for a space moves neither. It now watches the buffer's revision.
 

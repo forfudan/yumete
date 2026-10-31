@@ -372,11 +372,31 @@ pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<Stri
         },
         Err(_) => None,
     };
-    // **The old format is no longer read, and says so once** (2026-10-30):
-    // a `.yumete/tables/*.toml` up the tree that names this file would be
-    // silently ignored otherwise, and its writer would see the header row
-    // and wonder where their column names went.
-    if found.is_none() {
+    (found, problems)
+}
+
+/// **The old format is no longer read, and says so** (2026-10-30): a
+/// `.yumete/tables/*.toml` up the tree that names this file would be silently
+/// ignored otherwise, and its writer would see the header row and wonder
+/// where their column names went.
+///
+/// Warning: **a notice, never a problem** (2026-10-31). It used to travel in
+/// [`schema_for_reporting`]'s problems, which mean 「the schema meant for this
+/// file is broken」 and stop every way into the grid — so a `.csv` with an
+/// old TOML beside it opened as plain text and `␣tt` refused it, the one file
+/// table mode was made for. Nothing reads the old file now, so there is
+/// nothing broken: the file opens as any `.csv` does, and this is said.
+pub fn old_schemas_naming(path: &Path) -> Vec<String> {
+    let mut notices = Vec::new();
+    let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+        return notices;
+    };
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    // A package that describes the file is what it is read by; nothing to say.
+    if schema_for(path).is_some() {
+        return notices;
+    }
+    {
         let mut up = Some(dir);
         while let Some(d) = up {
             if let Ok(entries) = std::fs::read_dir(d.join(".yumete").join("tables")) {
@@ -385,7 +405,7 @@ pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<Stri
                     if file.extension().is_some_and(|e| e == "toml")
                         && std::fs::read_to_string(&file).is_ok_and(|t| t.contains(name))
                     {
-                        problems.push(format!(
+                        notices.push(format!(
                             "{}: the .yumete/tables schema is no longer read; write a {DATAPACKAGE} beside the data with :table-schema write",
                             file.display()
                         ));
@@ -395,7 +415,7 @@ pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<Stri
             up = d.parent();
         }
     }
-    (found, problems)
+    notices
 }
 
 /// The `datapackage.json` for this folder with `file` described as `schema`
@@ -983,7 +1003,9 @@ mod tests {
         std::fs::write(deep.join(".yumete").join("tables").join("n.toml"), "[table]\nfile = 'notes.csv'\n").unwrap();
         let (found, problems) = schema_for_reporting(&other);
         assert!(found.is_none());
-        assert!(problems.iter().any(|p| p.contains("no longer read")), "{problems:?}");
+        assert!(problems.is_empty(), "a notice, not a problem: {problems:?}");
+        let notices = old_schemas_naming(&other);
+        assert!(notices.iter().any(|p| p.contains("no longer read")), "{notices:?}");
 
         std::fs::remove_dir_all(&root).ok();
     }
