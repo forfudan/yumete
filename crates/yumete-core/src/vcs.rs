@@ -391,9 +391,115 @@ fn parse(diff: &str, lines: usize) -> Changes {
     Changes { runs }
 }
 
+/// **Where a changed file stands with git** (2026-10-31): the colour of its
+/// letter in the changed-files picker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Staging {
+    /// Everything changed is in the index: `git commit` takes all of it.
+    Staged,
+    /// Something is still only in the working tree, or the file is untracked.
+    Unstaged,
+    /// A merge left it in conflict.
+    Conflict,
+}
+
+/// One file `git status` reports, by its path from the repository's top.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileStatus {
+    pub path: String,
+    /// VS Code's letters, which git's own two columns fold into: `M` modified,
+    /// `A` added, `D` deleted, `R` renamed or copied, `U` untracked, `C` in
+    /// conflict.
+    pub letter: char,
+    pub staging: Staging,
+}
+
+/// **Every changed file in the repository holding `dir`**, and that
+/// repository's top (2026-10-31, `Space g`).
+///
+/// One `git status` for the whole repository, asked when the picker opens,
+/// never while drawing. `None` outside a repository or without git.
+pub fn status(dir: &Path) -> Option<(PathBuf, Vec<FileStatus>)> {
+    let run = |args: &[&str]| -> Option<Vec<u8>> {
+        let out = std::process::Command::new("git").arg("-C").arg(dir).args(args).output().ok()?;
+        out.status.success().then_some(out.stdout)
+    };
+    let top = run(&["rev-parse", "--show-toplevel"])?;
+    let top = PathBuf::from(String::from_utf8_lossy(&top).trim());
+    let raw = run(&["status", "--porcelain=v1", "-z", "--untracked-files=all"])?;
+    Some((top, parse_status(&raw)))
+}
+
+/// `git status --porcelain=v1 -z`, read: `XY path\0`, with a second path
+/// after a rename or copy (the old name, dropped). `X` is the index, `Y` the
+/// working tree.
+pub fn parse_status(raw: &[u8]) -> Vec<FileStatus> {
+    let mut out = Vec::new();
+    let mut fields = raw.split(|&b| b == 0).filter(|f| !f.is_empty());
+    while let Some(field) = fields.next() {
+        if field.len() < 4 {
+            continue;
+        }
+        let (x, y) = (field[0] as char, field[1] as char);
+        let path = String::from_utf8_lossy(&field[3..]).into_owned();
+        if matches!(x, 'R' | 'C') || matches!(y, 'R' | 'C') {
+            fields.next();
+        }
+        let conflict = matches!((x, y), ('D', 'D') | ('A', 'A') | ('U', _) | (_, 'U'));
+        let (letter, staging) = match (x, y) {
+            ('!', '!') => continue,
+            ('?', '?') => ('U', Staging::Unstaged),
+            _ if conflict => ('C', Staging::Conflict),
+            _ => {
+                let staging = match y {
+                    ' ' => Staging::Staged,
+                    _ => Staging::Unstaged,
+                };
+                // The working tree's letter when it has one: that is the
+                // change still to be dealt with.
+                let kind = if y != ' ' { y } else { x };
+                let letter = match kind {
+                    'A' => 'A',
+                    'D' => 'D',
+                    'R' | 'C' => 'R',
+                    _ => 'M',
+                };
+                // A new file with more edits on top is still a new file.
+                let letter = if x == 'A' && letter == 'M' { 'A' } else { letter };
+                (letter, staging)
+            }
+        };
+        out.push(FileStatus { path, letter, staging });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `git status -z` read into VS Code's letters, coloured by the index
+    /// (2026-10-31): what is all staged is green, what still has working-tree
+    /// changes is gold, a conflict red.
+    #[test]
+    fn status_is_read_into_letters_and_staging() {
+        let raw = b" M edited.md\0M  staged.md\0MM half.md\0?? new.md\0A  added.md\0AM added-then-edited.md\0 D gone.md\0R  to.md\0from.md\0UU fight.md\0!! ignored.md\0";
+        let got: Vec<(String, char, Staging)> =
+            parse_status(raw).into_iter().map(|f| (f.path, f.letter, f.staging)).collect();
+        let want = [
+            ("edited.md", 'M', Staging::Unstaged),
+            ("staged.md", 'M', Staging::Staged),
+            ("half.md", 'M', Staging::Unstaged),
+            ("new.md", 'U', Staging::Unstaged),
+            ("added.md", 'A', Staging::Staged),
+            ("added-then-edited.md", 'A', Staging::Unstaged),
+            ("gone.md", 'D', Staging::Unstaged),
+            ("to.md", 'R', Staging::Staged),
+            ("fight.md", 'C', Staging::Conflict),
+        ];
+        let want: Vec<(String, char, Staging)> = want.iter().map(|(p, l, s)| (p.to_string(), *l, *s)).collect();
+        assert_eq!(got, want);
+    }
 
     /// **改之前寫的是什麼，也要留着**（2026-10-11）。
     ///

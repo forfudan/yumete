@@ -4063,6 +4063,7 @@ impl Editor {
         ('e', "hint.space.explorer"),  // project dir
         ('E', "hint.space.explorer-here"),  // this file's dir
         ('b', "hint.space.switch-buffer"),
+        ('g', "hint.space.changed-files"),
         ('y', "hint.space.copy-to-clipboard"),
         ('p', "hint.space.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
@@ -4830,6 +4831,8 @@ impl Editor {
             Key::Char('e') => self.open_explorer(),
             Key::Char('E') => self.open_explorer_here(),
             Key::Char('b') => self.open_buffer_picker(),
+            // helix's changed-file picker (2026-10-31).
+            Key::Char('g') => self.open_changed_picker(),
             // **高級搜索** (#419). It used to prefill `:grep `, and `:grep` is
             // gone: what to look for is typed in the panel's own box, which
             // arrives with the last pattern in it, selected.

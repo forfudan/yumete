@@ -1562,7 +1562,7 @@ impl Editor {
                     .collect();
                 Some((name, shown))
             }
-            crate::picker::Item::File(path) => {
+            crate::picker::Item::File(path) | crate::picker::Item::Changed(path, _) => {
                 let full = match self.picker.as_ref().and_then(|p| p.root.as_ref()) {
                     Some(root) => root.join(&path),
                     None => PathBuf::from(&path),
@@ -1650,7 +1650,7 @@ impl Editor {
         let root = self.picker.as_ref().and_then(|p| p.root.clone());
         self.close_picker();
         match chosen {
-            Some(crate::picker::Item::File(path)) => {
+            Some(crate::picker::Item::File(path) | crate::picker::Item::Changed(path, _)) => {
                 let full = match &root {
                     Some(root) => root.join(&path),
                     None => PathBuf::from(&path),
@@ -2071,6 +2071,58 @@ impl Editor {
             false => say!("picker.recent-everywhere"),
         };
         self.show_the_picker(crate::picker::Picker::new(&title, items));
+    }
+
+    /// **存在改動文件** — `空格 g`, helix's key (2026-10-31).
+    ///
+    /// Every file git reports for the repository holding the working
+    /// directory — staged ones too, which helix's picker leaves out — and
+    /// every open buffer with unsaved changes, whether git sees a change in
+    /// it or not. So it also answers vim's `:ls +`. One `git status`, asked
+    /// now. Outside a repository it lists the unsaved buffers alone.
+    pub(super) fn open_changed_picker(&mut self) {
+        let here = self.working_dir();
+        let (root, mut items) = match crate::vcs::status(&here) {
+            Some((top, files)) => {
+                let items: Vec<crate::picker::Item> = files
+                    .into_iter()
+                    .map(|f| crate::picker::Item::Changed(f.path, Some((f.letter, f.staging))))
+                    .collect();
+                (top, items)
+            }
+            None => (here, Vec::new()),
+        };
+        for buffer in self.buffers.iter().filter(|b| b.is_modified()) {
+            let Some(path) = buffer.path() else { continue };
+            let shown = path.strip_prefix(&root).unwrap_or(path).display().to_string();
+            if !items.iter().any(|i| i.label() == shown) {
+                items.push(crate::picker::Item::Changed(shown, None));
+            }
+        }
+        let mut picker = crate::picker::Picker::new(&say!("picker.changed-files"), items);
+        picker.root = Some(root);
+        self.show_the_picker(picker);
+    }
+
+    /// **Which open files have unsaved changes**, by every spelling of their
+    /// path a picker row may use: as opened, and resolved. For the `+` the
+    /// pickers draw beside a name (2026-10-31).
+    pub fn unsaved_paths(&self) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for path in self.buffers.iter().filter(|b| b.is_modified()).filter_map(|b| b.path()) {
+            out.push(path.to_path_buf());
+            if let Ok(full) = std::fs::canonicalize(path) {
+                if full != path {
+                    out.push(full);
+                }
+            }
+        }
+        out
+    }
+
+    /// Whether open buffer `i` has unsaved changes.
+    pub fn buffer_unsaved(&self, i: usize) -> bool {
+        self.buffers.get(i).is_some_and(|b| b.is_modified())
     }
 
     /// **最近開過的項目** — `:recent-projects` (2026-10-18 作者定).
