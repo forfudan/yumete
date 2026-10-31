@@ -17295,6 +17295,88 @@ fn yank_and_paste_duplicate_the_selection() {
     assert_eq!(ed.current_buffer().text(), "ababc");
 }
 
+/// **A bound command line is heard** (2026-10-31, reported with
+/// `"C-q" = ":quit"`): its quit leaves, as a run of keys reaching `:quit`
+/// does, and its error is shown. Both used to be dropped.
+#[test]
+fn a_bound_quit_leaves_and_a_bound_error_is_said() {
+    let bind = |left: &str, right: &str| {
+        let mut ed = Editor::new();
+        let mut aliases = std::collections::HashMap::new();
+        aliases.insert(left.to_string(), right.to_string());
+        ed.set_key_aliases(aliases);
+        ed
+    };
+    let mut ed = bind("Q", ":quit");
+    assert_eq!(ed.on_key(Key::Char('Q')), KeyOutcome::Quit, "a bound :quit leaves");
+    let mut ed = bind("Q", "@:quit\n");
+    assert_eq!(ed.on_key(Key::Char('Q')), KeyOutcome::Quit, "so does a run of keys that types it");
+    let mut ed = bind("Q", ":no-such-command");
+    assert_eq!(ed.on_key(Key::Char('Q')), KeyOutcome::Continue);
+    assert!(!ed.status().is_empty(), "the error is said");
+    // A modified buffer is not left by a bound :quit either, and says why.
+    let mut ed = bind("Q", ":quit");
+    type_keys(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.on_key(Key::Char('Q')), KeyOutcome::Continue);
+    assert!(!ed.status().is_empty(), "{}", ed.status());
+}
+
+/// **The paragraph actions go a paragraph** (2026-10-31): they pressed
+/// `gj`/`gk` and moved one line; helix's keys are `]p` and `[p`.
+#[test]
+fn the_paragraph_actions_go_a_paragraph() {
+    let mut a = typed("one\ntwo\n\nthree\nfour\n");
+    let mut b = typed("one\ntwo\n\nthree\nfour\n");
+    press(&mut a, "gg");
+    press(&mut b, "gg");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("Q".to_string(), "goto_next_paragraph".to_string());
+    a.set_key_aliases(aliases);
+    a.on_key(Key::Char('Q'));
+    press(&mut b, "]p");
+    assert_eq!(a.cursor(), b.cursor());
+    assert_ne!(a.cursor_line(), 1, "not one line down");
+}
+
+/// **An action does the same under either preset** (2026-10-31): its keys
+/// are helix's. Under the vim preset `delete_selection` used to play vim's
+/// `d`, which waits for a motion, and `redo` vim's `U`.
+#[test]
+fn actions_mean_the_same_under_the_vim_preset() {
+    let mut ed = typed("abc\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("Q".to_string(), "delete_selection".to_string());
+    aliases.insert("K".to_string(), "redo".to_string());
+    ed.set_key_aliases(aliases);
+    press(&mut ed, "gg0");
+    ed.on_key(Key::Char('Q'));
+    assert_eq!(ed.current_buffer().text(), "bc\n", "deleted, not waiting for a motion");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "abc\n");
+    ed.on_key(Key::Char('K'));
+    assert_eq!(ed.current_buffer().text(), "bc\n", "redone");
+    assert_eq!(ed.key_preset(), yumete_cjk::KeyPreset::Vim, "and the preset is back");
+}
+
+/// **A one-key binding acts on every cursor** (2026-10-31): `"C-q" = "@w"`
+/// moved only the first, because which cursors a key acts on was decided
+/// from the key pressed, before the binding swapped it.
+#[test]
+fn a_one_key_binding_moves_every_cursor() {
+    let mut ed = typed("one two\nthree four\n");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("C-q".to_string(), "@w".to_string());
+    ed.set_key_aliases(aliases);
+    press(&mut ed, "gg");
+    press(&mut ed, "C");
+    assert_eq!(ed.sel.len(), 2);
+    ed.on_key(Key::Ctrl('q'));
+    press(&mut ed, "d");
+    assert_eq!(ed.current_buffer().text(), "two\nfour\n", "both cursors moved a word");
+}
+
 #[test]
 fn key_aliases_remap_normal_mode_keys() {
     let mut ed = Editor::new();

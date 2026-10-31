@@ -2661,6 +2661,10 @@ pub struct Editor {
     /// 2026-10-31), and which picker the answer is for.
     symbols_query: Option<symbols::SymbolAsk>,
     symbols_wanted: Option<symbols::SymbolWant>,
+    /// **A binding asked to leave** (2026-10-31): a bound `:quit`, or a run of
+    /// keys ending in one, sits several calls below [`Editor::on_key`], which
+    /// is the only one that can say so; it reads and clears this.
+    quit_from_binding: bool,
     /// `:lsp-rename`'s question: where, and the new name.
     rename_query: Option<(PathBuf, usize, usize, String)>,
     /// `空格 a`'s question: the file and the span, in (line, UTF-16 column).
@@ -4110,6 +4114,7 @@ impl Editor {
             asked_refs_from: None,
             symbols_query: None,
             symbols_wanted: None,
+            quit_from_binding: false,
             rename_query: None,
             actions_query: None,
             offered_actions: Vec::new(),
