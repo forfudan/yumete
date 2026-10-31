@@ -18499,7 +18499,9 @@ fn a_draft_is_decided_when_the_file_is_opened_and_takes_two_answers() {
 /// 如果有十幾個文件你寫得完嗎？」——一行放不下，而每一份自己有面板。
 #[test]
 fn each_file_with_a_draft_is_asked_about_when_you_turn_to_it() {
-    let dir = tmp().join(format!("yumete-two-drafts-{}", std::process::id()));
+    // Its own folder: `two_unnamed_drafts_never_share_a_file` had the
+    // same name, and each run removed the other's drafts (flaky, 2026-10-31).
+    let dir = tmp().join(format!("yumete-draft-per-file-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     for n in ["a", "b"] {
@@ -18546,7 +18548,7 @@ fn a_failed_save_as_leaves_the_buffer_where_it_was() {
     type_keys(&mut ed, "改");
     ed.on_key(Key::Esc);
     ed.autosave_tick();
-    let swap = dir.join(format!(".chapter.md.yumete.{}", std::process::id()));
+    let swap = dir.join(format!(".chapter.md.{}.yumete-swp", std::process::id()));
     assert!(swap.exists());
 
     // A save-as into a directory that does not exist must change nothing:
@@ -18576,7 +18578,7 @@ fn quitting_takes_the_recovery_copies_with_it() {
     type_keys(&mut ed, "改");
     ed.on_key(Key::Esc);
     ed.current_buffer_mut().write_swap().unwrap();
-    let swap = dir.join(format!(".draft.md.yumete.{}", std::process::id()));
+    let swap = dir.join(format!(".draft.md.{}.yumete-swp", std::process::id()));
     assert!(swap.exists());
 
     // `:q!` is the writer discarding these changes; offering them back on
@@ -20792,7 +20794,7 @@ fn a_round_of_recovery_copies_is_bounded_and_the_backlog_drains() {
         "one round held up the keyboard for {first:?} (one chapter costs {one:?})"
     );
     assert!(
-        dir.join(format!(".ch007.md.yumete.{}", std::process::id())).exists(),
+        dir.join(format!(".ch007.md.{}.yumete-swp", std::process::id())).exists(),
         "the chapter being typed into is never the one that waits"
     );
     if ed.swap_backlog {
@@ -20857,8 +20859,8 @@ fn a_recovery_copy_that_is_current_is_not_written_again() {
         ed.swap_backlog
     } {}
     for i in 0..8 {
-        assert!(dir.join(format!(".ch{i}.md.yumete.{}", std::process::id())).exists());
-        std::fs::remove_file(dir.join(format!(".ch{i}.md.yumete.{}", std::process::id()))).unwrap();
+        assert!(dir.join(format!(".ch{i}.md.{}.yumete-swp", std::process::id())).exists());
+        std::fs::remove_file(dir.join(format!(".ch{i}.md.{}.yumete-swp", std::process::id()))).unwrap();
     }
 
     // Nothing has been typed since, so nothing is owed and nothing is written
@@ -20870,7 +20872,7 @@ fn a_recovery_copy_that_is_current_is_not_written_again() {
     }
     for i in 0..8 {
         assert!(
-            !dir.join(format!(".ch{i}.md.yumete.{}", std::process::id())).exists(),
+            !dir.join(format!(".ch{i}.md.{}.yumete-swp", std::process::id())).exists(),
             "chapter {i} was written again with nothing having changed in it"
         );
     }
@@ -20884,7 +20886,7 @@ fn a_recovery_copy_that_is_current_is_not_written_again() {
     ed.autosave_tick();
     for i in 0..8 {
         assert_eq!(
-            dir.join(format!(".ch{i}.md.yumete.{}", std::process::id())).exists(),
+            dir.join(format!(".ch{i}.md.{}.yumete-swp", std::process::id())).exists(),
             i == 5,
             "chapter {i}"
         );

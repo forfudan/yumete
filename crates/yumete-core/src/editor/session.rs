@@ -917,7 +917,7 @@ impl Editor {
         for buffer in self.buffers.iter_mut() {
             if buffer.path().is_none() && buffer.is_modified() {
                 let id = buffer.id();
-                buffer.keep_drafts_at(dir.join(format!("scratch-{session}-{id}.yumete")));
+                buffer.keep_drafts_at(dir.join(format!("scratch-{session}-{id}{}", crate::buffer::DRAFT_ENDING)));
             }
         }
     }
