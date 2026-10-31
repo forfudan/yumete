@@ -4067,6 +4067,7 @@ impl Editor {
         ('y', "hint.space.copy-to-clipboard"),
         ('p', "hint.space.paste-from-clipboard"),
         ('P', "hint.space.paste-before"),
+        ('R', "hint.space.replace-from-clipboard"),
         ('s', "hint.space.symbols"),
         ('S', "hint.space.project-symbols"),
         ('n', "hint.space.dictionary"),
@@ -4862,6 +4863,9 @@ impl Editor {
             Key::Char('y') => self.copy_to_clipboard(),
             Key::Char('p') => self.clipboard_paste(true),
             Key::Char('P') => self.clipboard_paste(false),
+            // helix's `空格 R` (2026-10-31): the selection replaced by the
+            // system clipboard, as `"+R` already did.
+            Key::Char('R') => self.clipboard_replace(),
             _ => {}
         }
     }
