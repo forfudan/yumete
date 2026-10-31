@@ -803,7 +803,12 @@ fn main() -> ExitCode {
     let printing = force_preview || !std::io::stdout().is_terminal();
     let wants_last_time = config.editor.session || resume;
     let restored = if files.is_empty() && !printing && !fresh && wants_last_time {
-        editor.restore_session()
+        let opened = editor.restore_session();
+        // The windows come back only with the files they show.
+        if opened > 0 {
+            editor.restore_windows();
+        }
+        opened
     } else {
         0
     };

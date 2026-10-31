@@ -32955,6 +32955,167 @@ fn windows_open_beside_and_below_and_close_one_at_a_time() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// The session keeps the windows (2026-10-31): the tree, each window's file
+/// and place, which window has the keys, the sidebars open. A window whose
+/// file has gone is not rebuilt, and its half goes to its neighbour.
+#[test]
+fn a_session_brings_the_windows_back() {
+    use crate::sidebar::Side;
+    use crate::window::{Split, Step};
+    let dir = tmp().join(format!("yumete-session-windows-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (data, work) = (dir.join("data"), dir.join("work"));
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::create_dir_all(&data).unwrap();
+    let a = work.join("a.md");
+    let b = work.join("b.md");
+    std::fs::write(&a, "first line\nsecond line\n").unwrap();
+    std::fs::write(&b, "other file\nwith two lines\n").unwrap();
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config"), data.clone());
+        ed.keep_session_in(data.join("sessions"), &work);
+        ed
+    };
+
+    let mut ed = fresh();
+    ed.open_file(&a).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    ed.execute(&format!(":open {}", b.display())).unwrap();
+    ed.on_key(Key::Char('j'));
+    let at_b = ed.cursor();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('k'));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('e'));
+    assert!(ed.panel(Side::Left).is_some());
+    assert_eq!(ed.panel_focus(), None);
+    let steps = ed.windows().steps();
+    let keys_at = ed.windows().index_of(ed.live_window());
+    ed.save_session();
+
+    let mut back = fresh();
+    assert!(back.restore_session() > 0);
+    back.restore_windows();
+    let shape = |ed: &Editor| {
+        ed.windows()
+            .steps()
+            .into_iter()
+            .map(|s| match s {
+                Step::Window(_) => None,
+                Step::Split(how) => Some(how),
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(shape(&back), [Some(Split::Beside), None, Some(Split::Below), None, None]);
+    assert_eq!(back.windows().len(), steps.iter().filter(|s| matches!(s, Step::Window(_))).count());
+    assert_eq!(back.windows().index_of(back.live_window()), keys_at, "the keys where they were");
+    assert!(back.current_buffer().path().is_some_and(|p| p.ends_with("b.md")));
+    assert_eq!(back.cursor(), at_b, "and at the same place");
+    let first = back.windows().leaves()[0];
+    let shown = back.pane_of(first).and_then(|p| back.buffer_with(p.buffer)).unwrap();
+    assert!(back.buffers[shown].path().is_some_and(|p| p.ends_with("a.md")), "the first window shows a.md");
+    assert!(back.panel(Side::Left).is_some(), "the sidebar is open");
+    assert_eq!(back.panel_focus(), None);
+
+    // The keys in the sidebar come back there.
+    back.on_key(Key::Ctrl('w'));
+    back.on_key(Key::Char('E'));
+    assert_eq!(back.panel_focus(), Some(Side::Left));
+    back.save_session();
+    let mut side = fresh();
+    assert!(side.restore_session() > 0);
+    side.restore_windows();
+    assert_eq!(side.panel_focus(), Some(Side::Left));
+    assert_eq!(side.windows().len(), 3);
+
+    // b.md gone: both of its windows go, and a.md has the page.
+    std::fs::remove_file(&b).unwrap();
+    let mut gone = fresh();
+    assert!(gone.restore_session() > 0);
+    gone.restore_windows();
+    assert_eq!(gone.windows().len(), 1);
+    assert!(gone.current_buffer().path().is_some_and(|p| p.ends_with("a.md")));
+
+    // One window and no sidebar: nothing kept.
+    let mut one = fresh();
+    one.open_file(&a).unwrap();
+    one.save_session();
+    assert!(!std::fs::read_dir(data.join("sessions"))
+        .unwrap()
+        .any(|e| e.unwrap().file_name().to_string_lossy().ends_with(".windows.txt")));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Closing a window (2026-10-31) hands the keys to the window they were in
+/// last, as VS Code and tmux do, not to the first window on screen; with no
+/// such window left, to the one that takes the room, as vim does.
+#[test]
+fn closing_a_window_goes_back_to_the_one_used_last() {
+    let mut ed = Editor::new();
+    let top = ed.live_window();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    let middle = ed.live_window();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    let bottom = ed.live_window();
+    assert_eq!(ed.windows().leaves(), [top, middle, bottom]);
+
+    // From the bottom into the middle, close: back to the bottom.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.live_window(), middle);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.live_window(), bottom, "not the first window on screen");
+
+    // Three again; from the top into the middle, close: back to the top.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.live_window(), top);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    let fresh = ed.live_window();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('k'));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.live_window(), top);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('j'));
+    assert_eq!(ed.live_window(), fresh);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.live_window(), top);
+
+    // Every window used before is gone: the one that takes the room.
+    let mut ed = Editor::new();
+    ed.execute(":hsplit").unwrap();
+    ed.execute(":hsplit").unwrap();
+    let [one, two, three] = ed.windows().leaves()[..] else { panic!() };
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('o'));
+    assert_eq!(ed.windows().leaves(), [three]);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    let [_, middle, below] = ed.windows().leaves()[..] else { panic!() };
+    assert!(![one, two].contains(&middle));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.live_window(), middle);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('q'));
+    assert_eq!(ed.live_window(), below);
+}
+
 /// `C-w n` (2026-10-31): helix's group, `s` a blank window below and `v`
 /// one beside; the vim preset opens it at once, below; `:hnew`/`:vnew` are
 /// the commands. The window split from keeps its buffer, even the empty one
