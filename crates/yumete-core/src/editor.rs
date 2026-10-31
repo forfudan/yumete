@@ -2807,6 +2807,11 @@ pub struct Editor {
     panes: std::collections::HashMap<crate::window::WindowId, Pane>,
     /// The window that holds the keys.
     live: crate::window::WindowId,
+    /// **The windows the keys have been in, the latest first**, the live one
+    /// not among them (2026-10-31). Closing a window hands the keys to the
+    /// first of these still standing, as VS Code and tmux do; ids are never
+    /// reused, so a closed one is only skipped.
+    window_history: Vec<crate::window::WindowId>,
     /// **哪幾欄上鋪一道底紋**（`:rules`，#424，2026-09-30）。空 ＝ 一道都不鋪。
     ///
     /// 原話：「在给定的列显示一道竖线（底纹）。比如默认80。用户也可以填
@@ -4136,6 +4141,7 @@ impl Editor {
             windows: crate::window::Windows::one(),
             panes: std::collections::HashMap::new(),
             live: 1,
+            window_history: Vec::new(),
             rules: Vec::new(),
             number_fill: false,
             diff_gutter: false,

@@ -177,6 +177,44 @@ impl Windows {
         go(&mut self.root, id)
     }
 
+    /// The window that takes the room `id` leaves when it closes: its
+    /// sibling, or, when the sibling is itself split, the window of it that
+    /// touches `id` — the first of a second half, the last of a first. This
+    /// is vim's choice; closing the middle of three stacked windows gives the
+    /// room and the answer to the one below. `None` for the last window.
+    pub fn heir(&self, id: WindowId) -> Option<WindowId> {
+        fn go(node: &Node, id: WindowId) -> Option<WindowId> {
+            let Node::Split { first, second, .. } = node else { return None };
+            if **first == Node::Window(id) {
+                return Some(first_leaf(second));
+            }
+            if **second == Node::Window(id) {
+                return Some(last_leaf(first));
+            }
+            go(first, id).or_else(|| go(second, id))
+        }
+        go(&self.root, id)
+    }
+
+    /// The tree written out first-half-first: a split, then its two halves.
+    /// What a session keeps; [`Self::split`] read along the same order
+    /// builds it again.
+    pub fn steps(&self) -> Vec<Step> {
+        fn walk(node: &Node, out: &mut Vec<Step>) {
+            match node {
+                Node::Window(id) => out.push(Step::Window(*id)),
+                Node::Split { how, first, second } => {
+                    out.push(Step::Split(*how));
+                    walk(first, out);
+                    walk(second, out);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.root, &mut out);
+        out
+    }
+
     /// Keep `id` alone. `false` when `id` is no window.
     pub fn only(&mut self, id: WindowId) -> bool {
         if !self.has(id) {
@@ -220,18 +258,6 @@ impl Windows {
                 }
             }
         }
-        fn first_leaf(node: &Node) -> WindowId {
-            match node {
-                Node::Window(id) => *id,
-                Node::Split { first, .. } => first_leaf(first),
-            }
-        }
-        fn last_leaf(node: &Node) -> WindowId {
-            match node {
-                Node::Window(id) => *id,
-                Node::Split { second, .. } => last_leaf(second),
-            }
-        }
         let mut out = Vec::new();
         let mut rules = Vec::new();
         go(&self.root, area, rtl, &mut out, &mut rules);
@@ -252,6 +278,27 @@ impl Windows {
         };
         placed.iter().find(|p| p.id != id && p.area.contains(x, y)).map(|p| p.id)
     }
+}
+
+fn first_leaf(node: &Node) -> WindowId {
+    match node {
+        Node::Window(id) => *id,
+        Node::Split { first, .. } => first_leaf(first),
+    }
+}
+
+fn last_leaf(node: &Node) -> WindowId {
+    match node {
+        Node::Window(id) => *id,
+        Node::Split { second, .. } => last_leaf(second),
+    }
+}
+
+/// One node of the tree in [`Windows::steps`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    Split(Split),
+    Window(WindowId),
 }
 
 /// A step from one window to the next on screen.
@@ -306,6 +353,25 @@ mod tests {
         let (placed, _) = w.place(Area::new(0, 0, 81, 24), false);
         assert_eq!(placed[0].area, Area::new(0, 0, 40, 24));
         assert_eq!(placed[1].area, Area::new(41, 0, 40, 24));
+    }
+
+    #[test]
+    fn the_heir_is_the_window_that_takes_the_room() {
+        // Three stacked, as vim measured 2026-10-31: the middle's room and
+        // the keys go below, the top's to the middle, the bottom's up.
+        let mut w = Windows::one();
+        let two = w.split(1, Split::Below).unwrap();
+        let three = w.split(two, Split::Below).unwrap();
+        assert_eq!(w.heir(two), Some(three));
+        assert_eq!(w.heir(1), Some(two));
+        assert_eq!(w.heir(three), Some(two));
+        // 1 | (2 / 3): closing 1 goes to the top of the column beside it.
+        let mut w = Windows::one();
+        let two = w.split(1, Split::Beside).unwrap();
+        let three = w.split(two, Split::Below).unwrap();
+        assert_eq!(w.heir(1), Some(two));
+        assert_eq!(w.heir(two), Some(three));
+        assert_eq!(Windows::one().heir(1), None);
     }
 
     #[test]

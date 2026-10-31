@@ -635,6 +635,17 @@ impl Editor {
             let _ = std::fs::create_dir_all(parent);
         }
         let _ = std::fs::write(&file, out);
+        // The windows likewise: written with the files, gone when there is
+        // one window and no sidebar.
+        let windows = Self::windows_file(&file);
+        match self.windows_to_keep() {
+            lines if lines.is_empty() => {
+                let _ = std::fs::remove_file(&windows);
+            }
+            lines => {
+                let _ = std::fs::write(&windows, lines.join("\n") + "\n");
+            }
+        }
         // The view goes with the files it was kept for: written when they
         // are, gone when nothing differs from the config.
         let view = Self::view_file(&file);
@@ -646,6 +657,167 @@ impl Editor {
             Some(lines) => {
                 let _ = std::fs::write(&view, lines.join("\n") + "\n");
             }
+        }
+    }
+
+    /// **The windows this session keeps** (2026-10-31): the tree, each
+    /// window's file and place, which region has the keys, and which
+    /// sidebars are open. Nothing to keep — one window, no sidebar — is an
+    /// empty list.
+    ///
+    /// One line a node, first half first: `below` or `beside` for a split,
+    /// then its two halves; `window⇥path⇥cursor⇥anchor` for a window, the
+    /// path empty for a buffer with no file. Then `keys⇥n` (the n-th
+    /// window) or `keys⇥left`/`keys⇥right`, and `sidebar⇥panel` for each
+    /// sidebar open.
+    fn windows_to_keep(&self) -> Vec<String> {
+        use crate::sidebar::Side;
+        use crate::window::{Split, Step};
+        let sidebars: Vec<_> = Side::BOTH.into_iter().filter_map(|side| self.panel(side)).collect();
+        if self.windows.len() < 2 && sidebars.is_empty() {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for step in self.windows.steps() {
+            match step {
+                Step::Split(Split::Below) => out.push("below".to_string()),
+                Step::Split(Split::Beside) => out.push("beside".to_string()),
+                Step::Window(id) => {
+                    let (buffer, cursor, anchor) = match id == self.live {
+                        true => (Some(self.current_buffer()), self.sel.head(), self.sel.anchor()),
+                        false => match self.panes.get(&id) {
+                            Some(pane) => (
+                                self.buffer_with(pane.buffer).map(|i| &self.buffers[i]),
+                                pane.cursor,
+                                pane.anchor,
+                            ),
+                            None => (None, 0, 0),
+                        },
+                    };
+                    let path = buffer.and_then(|b| b.path()).map(|p| p.display().to_string()).unwrap_or_default();
+                    out.push(format!("window\t{path}\t{cursor}\t{anchor}"));
+                }
+            }
+        }
+        match self.panel_focus() {
+            Some(Side::Left) => out.push("keys\tleft".to_string()),
+            Some(Side::Right) => out.push("keys\tright".to_string()),
+            None => out.push(format!("keys\t{}", self.windows.index_of(self.live).unwrap_or(0))),
+        }
+        for panel in sidebars {
+            out.push(format!("sidebar\t{}", crate::sidebar::Panel::from(panel.view()).key()));
+        }
+        out
+    }
+
+    /// Where the windows of the session in `file` are kept: beside it.
+    fn windows_file(file: &Path) -> PathBuf {
+        file.with_extension("windows.txt")
+    }
+
+    /// **Lay the windows out as the session left them** (2026-10-31), after
+    /// [`Self::restore_session`] has opened its files — only on the way in,
+    /// with no file named, so `:resume` adds files and leaves the windows.
+    ///
+    /// A window whose file is gone, or that showed a buffer with no file, is
+    /// not rebuilt; its half goes to the other. A file a window showed that
+    /// was not among the session's files is opened for it.
+    pub fn restore_windows(&mut self) {
+        let Some(file) = self.session_file.clone() else { return };
+        let Ok(text) = std::fs::read_to_string(Self::windows_file(&file)) else { return };
+        if self.windows.len() > 1 {
+            return;
+        }
+        let mut lines = text.lines();
+        let Some(shape) = Shape::read(&mut lines) else { return };
+        let mut keys = None;
+        let mut sidebars = Vec::new();
+        for line in lines {
+            match line.split_once('\t') {
+                Some(("keys", at)) => keys = Some(at.to_string()),
+                Some(("sidebar", name)) => sidebars.extend(crate::sidebar::Panel::parse(name)),
+                _ => {}
+            }
+        }
+        // Which window had the keys, marked before the tree is pruned.
+        let mut shape = shape;
+        if let Some(n) = keys.as_deref().and_then(|k| k.parse::<usize>().ok()) {
+            shape.mark(n, &mut 0);
+        }
+        // Every file a window showed, open; the windows on nothing dropped.
+        let mut found = std::collections::HashMap::new();
+        for path in shape.paths() {
+            let open = self.buffers.iter().position(|b| b.path() == Some(path.as_path()));
+            let index = match open {
+                Some(i) => Some(i),
+                None if path.is_file() => self.open_file(&path).ok().map(|_| self.current),
+                None => None,
+            };
+            if let Some(i) = index {
+                found.insert(path, self.buffers[i].id());
+            }
+        }
+        if let Some(shape) = shape.prune(&|path| found.contains_key(path)) {
+            let mut placed = Vec::new();
+            self.grow(self.live, shape, &mut placed);
+            let mut keys_in = None;
+            for (id, leaf) in placed {
+                let Some(index) = found.get(&leaf.path).and_then(|&b| self.buffer_with(b)) else { continue };
+                let len = self.buffers[index].rope().len_chars();
+                if leaf.keys {
+                    keys_in = Some(id);
+                }
+                if id == self.live {
+                    self.show_buffer(index);
+                    self.sel.set_head(leaf.cursor.min(len));
+                    self.sel.set_anchor(leaf.anchor.min(len));
+                    self.refresh_goal_column();
+                    continue;
+                }
+                let buffer = &self.buffers[index];
+                self.panes.insert(
+                    id,
+                    Pane {
+                        buffer: buffer.id(),
+                        cursor: leaf.cursor.min(len),
+                        anchor: leaf.anchor.min(len),
+                        goal_column: None,
+                        goal_slot: None,
+                        extend: false,
+                        highlight: None,
+                        caption: buffer.display_name().to_string(),
+                    },
+                );
+            }
+            if let Some(id) = keys_in {
+                self.switch_to(id);
+            }
+        }
+        for panel in sidebars {
+            if let Some(view) = Editor::view_of(panel) {
+                self.open_panel_without_the_keys(self.side_of(panel), view);
+            }
+        }
+        match keys.as_deref() {
+            Some("left") => self.go_to_region(super::sidebar::Region::Side(crate::sidebar::Side::Left)),
+            Some("right") => self.go_to_region(super::sidebar::Region::Side(crate::sidebar::Side::Right)),
+            _ => {}
+        }
+        self.status = String::new();
+    }
+
+    /// Split `at` along `shape`, first halves keeping `at`, and hand back
+    /// each window with what it is to show.
+    fn grow(&mut self, at: crate::window::WindowId, shape: Shape, out: &mut Vec<(crate::window::WindowId, Leaf)>) {
+        match shape {
+            Shape::Split(how, first, second) => match self.windows.split(at, how) {
+                Some(fresh) => {
+                    self.grow(at, *first, out);
+                    self.grow(fresh, *second, out);
+                }
+                None => self.grow(at, *first, out),
+            },
+            Shape::Leaf(leaf) => out.push((at, leaf)),
         }
     }
 
@@ -1299,5 +1471,78 @@ impl TableChoice {
         };
         let hidden: Vec<String> = self.hidden.iter().map(|n| n.to_string()).collect();
         format!("{delimiter}\t{header}\t{}", hidden.join(","))
+    }
+}
+
+/// A kept window tree, read back ([`Editor::restore_windows`]).
+enum Shape {
+    Split(crate::window::Split, Box<Shape>, Box<Shape>),
+    Leaf(Leaf),
+}
+
+/// One kept window: its file (empty when it had none), its place, and
+/// whether it had the keys.
+struct Leaf {
+    path: PathBuf,
+    cursor: usize,
+    anchor: usize,
+    keys: bool,
+}
+
+impl Shape {
+    /// One node and everything under it; `None` on anything malformed.
+    fn read<'a>(lines: &mut impl Iterator<Item = &'a str>) -> Option<Shape> {
+        use crate::window::Split;
+        let line = lines.next()?;
+        match line {
+            "below" | "beside" => {
+                let how = if line == "below" { Split::Below } else { Split::Beside };
+                let first = Shape::read(lines)?;
+                let second = Shape::read(lines)?;
+                Some(Shape::Split(how, Box::new(first), Box::new(second)))
+            }
+            _ => {
+                let mut parts = line.strip_prefix("window\t")?.split('\t');
+                let path = PathBuf::from(parts.next()?);
+                let cursor = parts.next()?.parse().ok()?;
+                let anchor = parts.next()?.parse().ok()?;
+                Some(Shape::Leaf(Leaf { path, cursor, anchor, keys: false }))
+            }
+        }
+    }
+
+    /// Mark the `n`-th window, counting first halves first.
+    fn mark(&mut self, n: usize, seen: &mut usize) {
+        match self {
+            Shape::Split(_, first, second) => {
+                first.mark(n, seen);
+                second.mark(n, seen);
+            }
+            Shape::Leaf(leaf) => {
+                leaf.keys = *seen == n;
+                *seen += 1;
+            }
+        }
+    }
+
+    /// Every file the windows name, empty paths left out.
+    fn paths(&self) -> Vec<PathBuf> {
+        match self {
+            Shape::Split(_, first, second) => [first.paths(), second.paths()].concat(),
+            Shape::Leaf(leaf) if leaf.path.as_os_str().is_empty() => Vec::new(),
+            Shape::Leaf(leaf) => vec![leaf.path.clone()],
+        }
+    }
+
+    /// The tree without the windows whose file is not `kept`; a split that
+    /// loses one half becomes the other.
+    fn prune(self, kept: &dyn Fn(&PathBuf) -> bool) -> Option<Shape> {
+        match self {
+            Shape::Split(how, first, second) => match (first.prune(kept), second.prune(kept)) {
+                (Some(a), Some(b)) => Some(Shape::Split(how, Box::new(a), Box::new(b))),
+                (one, other) => one.or(other),
+            },
+            Shape::Leaf(leaf) => kept(&leaf.path).then_some(Shape::Leaf(leaf)),
+        }
     }
 }

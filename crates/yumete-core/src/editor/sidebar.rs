@@ -595,13 +595,13 @@ impl Editor {
             }
             return self.close_panel(side);
         }
-        let Some(target) = self.other_window() else {
+        let Some(target) = self.window_after_closing() else {
             self.status = say!("region.only-one-left");
             return;
         };
         let leaving = self.live;
-        // The keys go to the nearest window first, so the one closed is
-        // never the one standing.
+        // The keys go to the window they were in last, then the one closed
+        // behind them, so the one closed is never the one standing.
         if self.switch_to(target) && self.close_window(leaving) {
             self.status = say!("pane.closed");
         }

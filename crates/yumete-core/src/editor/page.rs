@@ -901,9 +901,23 @@ impl Editor {
         self.sel.set_goal_slot(pane.goal_slot);
         self.extend = pane.extend;
         self.panes.insert(self.live, here);
+        let leaving = self.live;
+        self.window_history.retain(|&w| w != window && w != leaving && self.windows.has(w));
+        self.window_history.insert(0, leaving);
         self.live = window;
         self.refresh_goal_column();
         true
+    }
+
+    /// Where the keys go when the live window closes: the window they were
+    /// in last, or, when none of those is left, the one that takes the room
+    /// (2026-10-31, chosen over vim's room rule and helix's tree order).
+    pub(super) fn window_after_closing(&self) -> Option<crate::window::WindowId> {
+        self.window_history
+            .iter()
+            .copied()
+            .find(|&w| w != self.live && self.windows.has(w))
+            .or_else(|| self.windows.heir(self.live))
     }
 
     /// Drop every window whose buffer is `gone` — a window naming a buffer
