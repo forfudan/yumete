@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Every Normal-mode key has an action name** (about 170), so any of them can be bound in `[keys.normal]` and found with `::`. A name does the same thing under either keymap: `delete_char_backward` is vim's `X` under helix's keys too. `:keymap-actions` shows the key each is on under the keymap in use.
 - **`Space R` replaces the selection with the system clipboard**, helix's key, as `"+R` already did.
 - **helix's symbol and diagnostics pickers** on `Space s` `S` `d` `D`: this file's symbols (kind, name, container), the project's (asked of the language server again as you type), this file's diagnostics and the project's (severity, source, code, message). Where no server serves the file, `Space s` lists its outline (headings, or code's functions and classes) and `Space S` the headings of every Markdown and Typst file in the project, each with the heading above it; helix refuses there.
 - **`Space g` lists the changed files** (`:changed-files`), helix's key: every file git reports in the repository you are working in, staged ones included, with a letter (`M` modified, `A` added, `D` deleted, `R` renamed, `U` untracked, `C` in conflict) in green when the change is all staged, gold when some is not, red in conflict; and every open buffer with unsaved changes, marked `+`. The buffer, file and recent-files pickers mark unsaved files with `+` too.

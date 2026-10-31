@@ -508,7 +508,6 @@ impl Editor {
             motion::line_start(self.current_buffer().rope(), self.sel.head())
         });
         self.move_head(pos);
-
     }
 
     #[allow(unused_variables)]
@@ -518,7 +517,6 @@ impl Editor {
             motion::line_last(self.current_buffer().rope(), self.sel.head())
         });
         self.move_head(pos);
-
     }
 
     // **`Enter`, `+` and `-`** — vim's three ways of saying 「the next
@@ -535,7 +533,6 @@ impl Editor {
             let home = e.run_motion(motion::Motion::LineFirstNonBlank);
             e.jump_to(home);
         });
-
     }
 
     // **A standalone motion, read vim's way** (B3, 2026-09-20).
@@ -569,7 +566,6 @@ impl Editor {
             };
             e.jump_to(span);
         });
-
     }
 
     // Word motions (Helix `w`/`b`/`e`, and WORD `W`/`B`/`E`).
@@ -671,7 +667,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         let Key::Char(one) = key else { return };
         self.go_to_screen(one, count);
-
     }
 
     // **vim 的句子動作是 `(`/`)`**（2026-10-06）。
@@ -704,7 +699,6 @@ impl Editor {
             );
             e.take_span(span);
         });
-
     }
 
     // Warning: **上面那一支要排在這兩個前面**（寫的時候當場撞的，當天第二
@@ -762,7 +756,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.pending = Pending::Hop { forward: key == Key::Char(']') };
         self.operator_count = operator_count;
-
     }
 
     #[allow(unused_variables)]
@@ -798,7 +791,6 @@ impl Editor {
         // `zong_motion` 取走了，而 `gj gj` 要和 `h h` 一樣守着同一個目標
         // 格——下一鍵纔是那個動作。
         self.zong_motion = continuing_zong;
-
     }
 
     // Helix's Space menu: the things that are not motions.
@@ -829,7 +821,6 @@ impl Editor {
             _ => FindKind::TillBack,
         });
         self.operator_count = operator_count;
-
     }
 
     // Select (extend) mode and collapse (Helix `v` / `;`).
@@ -849,7 +840,6 @@ impl Editor {
         self.select_line();
         self.extend = true;
         self.vim_lines = true;
-
     }
 
     #[allow(unused_variables)]
@@ -857,7 +847,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.extend = !self.extend;
         self.vim_lines = false;
-
     }
 
     // Esc is every modal editor's way out. It leaves select mode and
@@ -927,7 +916,6 @@ impl Editor {
         if idle {
             self.say_it_again = true;
         }
-
     }
 
     // `;` collapses the selection but leaves select mode standing —
@@ -955,7 +943,6 @@ impl Editor {
             // `find_nth_char` 裏，不靠把它叫 n 遍。
             self.find_nth_char(kind, ch, count, true);
         }
-
     }
 
     #[allow(unused_variables)]
@@ -965,7 +952,6 @@ impl Editor {
         if self.extend {
             self.status = say!("selection.collapsed-in-extend");
         }
-
     }
 
     // **多選區**（#405）：`C`/`A-C` 往下/往上再加一段，`,` 只留主選區。
@@ -1134,7 +1120,6 @@ impl Editor {
         let Key::Char(op) = key else { return };
         self.pending = Pending::VimOperator { op, first: None };
         self.count = operator_count;
-
     }
 
     // Warning: **2026-09-28 整族換成了 helix 的拼法**（#405 要 `C` 這個鍵）。從前是
@@ -1222,7 +1207,6 @@ impl Editor {
             }
         };
         self.apply(op, motion::Span::Over { anchor, head });
-
     }
 
     // Yank / paste (Helix `y` / `p` / `P`).
@@ -1232,7 +1216,6 @@ impl Editor {
         if operator_count.is_none() && self.info_afloat() == Some(crate::sidebar::Info::Change) && self.change_here().is_some() {
             let text = self.change_here().map(|run| run.was.join("\n"));
             self.clipboard_request = text;
-
         } else {
             if self.vim_lines {
                 self.extend_to_line_bounds();
@@ -1240,7 +1223,6 @@ impl Editor {
             }
             let (anchor, head) = self.span();
             self.apply(motion::Operator::Yank, motion::Span::Over { anchor, head });
-
         }
     }
 
@@ -1255,7 +1237,6 @@ impl Editor {
         if count > Self::WRITING_MAX {
             self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
         }
-
     }
 
     // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).
@@ -1274,7 +1255,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         let Key::Char(key) = key else { return };
         self.pending = Pending::MatchPair { around: key == 'a' };
-
     }
 
     #[allow(unused_variables)]
@@ -1300,7 +1280,6 @@ impl Editor {
             self.keep_anchor_while_inserting = true;
         }
         self.type_it_again(count, None);
-
     }
 
     #[allow(unused_variables)]
@@ -1338,7 +1317,6 @@ impl Editor {
             self.keep_anchor_while_inserting = true;
         }
         self.type_it_again(count, None);
-
     }
 
     // **全窗裏這兩個也是這一格的兩頭**（2026-10-17，審查找出來的）。
@@ -1369,7 +1347,6 @@ impl Editor {
         self.set_cursor(pos);
         self.enter_insert();
         self.type_it_again(count, None);
-
     }
 
     #[allow(unused_variables)]
@@ -1384,7 +1361,6 @@ impl Editor {
         self.set_cursor(pos);
         self.enter_insert();
         self.type_it_again(count, None);
-
     }
 
     #[allow(unused_variables)]
@@ -1393,7 +1369,6 @@ impl Editor {
         self.snapshot();
         self.open_line_below();
         self.type_it_again(count, Some(true));
-
     }
 
     #[allow(unused_variables)]
@@ -1402,7 +1377,6 @@ impl Editor {
         self.snapshot();
         self.open_line_above();
         self.type_it_again(count, Some(false));
-
     }
 
     // **改動的帶子開着的時候，`u`／`y` 歸它**（2026-10-11）。
@@ -1428,7 +1402,6 @@ impl Editor {
             self.restore_the_change_here();
             // 問題答完了，帶子收起來——它畫的那幾行此刻已經是另一份文本。
             self.info_asked = None;
-
         } else {
             self.repeat_writing(count, |e| e.undo());
         }
@@ -1440,7 +1413,6 @@ impl Editor {
     pub(super) fn cmd_undo_line(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.repeat_writing(1, |e| e.undo_this_line());
-
     }
 
     #[allow(unused_variables)]
@@ -1496,7 +1468,6 @@ impl Editor {
         self.sel.collapse_to(at);
         self.clamp_cursor();
         self.refresh_goal_column();
-
     }
 
     #[allow(unused_variables)]
@@ -1532,7 +1503,6 @@ impl Editor {
         self.command_caret = self.command_line.chars().count();
         // A new search takes `n` back from the table's.
         self.hits = None;
-
     }
 
     #[allow(unused_variables)]
@@ -1543,7 +1513,6 @@ impl Editor {
         self.command_line.clear();
         self.command_caret = self.command_line.chars().count();
         self.hits = None;
-
     }
 
     // In a table with a search open, `n` walks *its* answers: they are
@@ -1556,7 +1525,6 @@ impl Editor {
             self.repeat(count, |e| {
                 e.walk_table_hits(true);
             });
-
         } else {
             self.repeat(count, |e| e.repeat_search(e.search_forward));
         }
@@ -1569,7 +1537,6 @@ impl Editor {
             self.repeat(count, |e| {
                 e.walk_table_hits(false);
             });
-
         } else {
             self.repeat(count, |e| e.repeat_search(!e.search_forward));
         }
@@ -1589,7 +1556,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.pending = Pending::Match;
         self.operator_count = operator_count;
-
     }
 
     // Overwrite every character of the selection with the next key.
@@ -1599,7 +1565,6 @@ impl Editor {
         self.pending = Pending::Replace;
         // vim's `3rX` writes over three characters (`:h r`).
         self.operator_count = operator_count;
-
     }
 
     // Name the register the next yank, delete or paste will use.
@@ -1676,7 +1641,6 @@ impl Editor {
         self.select_the_seam = true;
         self.repeat_writing(n, |e| e.join_lines());
         self.select_the_seam = false;
-
     }
 
     #[allow(unused_variables)]
@@ -1684,7 +1648,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.remember_jump();
         self.status = say!("jump.selection-saved");
-
     }
 
     #[allow(unused_variables)]
@@ -1751,7 +1714,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         if self.joining_welds_a_grid() {
             self.status = say!("table.join-would-change-columns");
-
         } else {
             let n = self.join_count(operator_count);
             let kept = self.sel.primary();
@@ -1772,7 +1734,6 @@ impl Editor {
                 self.sel.set_head(moved(kept.head));
                 self.clamp_cursor();
             }
-
         }
     }
 
@@ -1802,7 +1763,6 @@ impl Editor {
     pub(super) fn cmd_vim_redo(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.repeat(count, |e| e.redo());
-
     }
 
     #[allow(unused_variables)]
@@ -1810,7 +1770,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.snapshot();
         self.cut_before_cursor(count);
-
     }
 
     #[allow(unused_variables)]
@@ -1867,7 +1826,6 @@ impl Editor {
             self.sel.set_anchor(at);
             self.clamp_cursor();
         }
-
     }
 
     // **`*` 只記下要找什麼，光標不動**（2026-10-06，對齊 helix）。
@@ -1906,7 +1864,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.definition_preview = false;
         self.search_the_page(true);
-
     }
 
     // Replacing the selection with the register. Joining is on `gJ`:
@@ -1923,7 +1880,6 @@ impl Editor {
         self.overwriting = true;
         // `2RXY<Esc>` writes `XY` twice, over the text (nvim: `XYXYef`).
         self.insert_again = count.clamp(1, Self::WRITING_MAX) - 1;
-
     }
 
     // `2R`: two copies, as helix does it.
@@ -1932,7 +1888,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.paste_copies = count.clamp(1, Self::WRITING_MAX);
         self.replace_with_register();
-
     }
 
     // Search for whatever is selected (Helix `*`).
@@ -1988,7 +1943,6 @@ impl Editor {
             // helix 鍵位：不帶數的 `G` 不動——`ge` 纔是末行。
             false => {}
         }
-
     }
 
     // Indent / unindent the selected lines.
@@ -2011,7 +1965,6 @@ impl Editor {
             self.sel.set_head(to);
             self.refresh_goal_column();
         }
-
     }
 
     // Increment / decrement the number at the cursor. **The count is
@@ -2040,7 +1993,6 @@ impl Editor {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.recount_the_last_edit(count.min(Self::WRITING_MAX));
         self.repeat_edit();
-
     }
 
     #[allow(unused_variables)]
@@ -2055,7 +2007,6 @@ impl Editor {
         if let Some((kind, c)) = self.last_find {
             self.find_nth_char(kind, c, count, true);
         }
-
     }
 }
 
