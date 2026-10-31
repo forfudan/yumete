@@ -9,7 +9,7 @@ use super::*;
 
 /// The goal column vim's `$` leaves: past any line's end. Compared with,
 /// never added to, so it cannot overflow.
-const LINE_END_GOAL: usize = usize::MAX / 4;
+pub(super) const LINE_END_GOAL: usize = usize::MAX / 4;
 
 /// 一段是**整行**還是行內的一截——`do_vim_span` 那道「落在換行符上就什麼都不做」
 /// 的閘只擋後者（2026-10-13）。
@@ -78,18 +78,26 @@ impl Editor {
         // macro captures the text typed in Insert and the pattern typed at a
         // prompt too — a macro that can only move is not much of one.
         if self.recording.is_some() && !self.expanding_alias {
-            // `Q` ends the recording — but only the `Q` that is a *command*.
-            // A `Q` that some half-finished sequence is waiting for is an
-            // operand: `fQ` is "find Q", and dropping its second half left the
-            // macro as a bare `f`, which on replay swallowed whatever came
-            // next. One reviewer's macro deleted their buffer that way.
-            let ends_it = matches!(key, Key::Char('Q'))
-                && self.mode == Mode::Normal
-                && self.pending == Pending::None;
-            if !ends_it {
-                if let Some(keys) = self.recording.as_mut() {
-                    keys.push(key);
+            // **Every key goes in, and stopping cuts back to where the keys
+            // that stopped it began** (2026-10-31). It used to leave out a
+            // `Q` that was a command, so a recording stopped by any other key
+            // (`"C-r" = "record_macro"`, or `Space q` bound to it) ended with
+            // that key, and replaying the macro started a new recording.
+            // Warning: **only the `Q` that is a command stops it**: a `Q` that
+            // a half-finished sequence is waiting for is an operand (`fQ` is
+            // 「find Q」), and dropping it once left a bare `f` that swallowed
+            // whatever came next on replay — one reviewer's macro deleted their
+            // buffer that way. A key that begins a sequence is where that
+            // sequence's keys begin, so that is the mark.
+            if let Some(keys) = self.recording.as_mut() {
+                if self.mode == Mode::Normal
+                    && self.pending == Pending::None
+                    && self.alias_held.is_empty()
+                    && self.count.is_none()
+                {
+                    self.recording_from = keys.len();
                 }
+                keys.push(key);
             }
         }
         // **一份已經不作數的字典答案，這裏丟掉**（2026-09-23 審出來的）。
@@ -234,14 +242,14 @@ impl Editor {
                 // `on_normal_key`, after this choice, so `w` there moved
                 // only the first cursor. The key itself still goes in as
                 // pressed; the binding swaps it there as before.
-                let acting = self.one_key_binding(key).unwrap_or(key);
-                if multi::each_selection_key(&self.pending, acting)
-                    || self.copies_every_selection(acting)
+                let (waiting, acting) = self.one_key_binding(key).unwrap_or((self.pending, key));
+                if multi::each_selection_key(&waiting, acting)
+                    || (waiting == self.pending && self.copies_every_selection(acting))
                 {
                     self.each_selection(|e| e.on_normal_key(key));
-                } else if multi::edits_every_selection(&self.pending, acting) {
+                } else if multi::edits_every_selection(&waiting, acting) {
                     if let Key::Char(c) = acting {
-                        if !self.every_selection_has_its_own_pair(self.pending, c) {
+                        if !self.every_selection_has_its_own_pair(waiting, c) {
                             self.pending = Pending::None;
                             return KeyOutcome::Continue;
                         }
@@ -837,7 +845,7 @@ impl Editor {
         (start + column).min(motion::line_last(rope, start)).max(start)
     }
 
-    fn vim_visual_key(&mut self, c: char) {
+    pub(super) fn vim_visual_key(&mut self, c: char) {
         // `x`/`s` 原樣轉交：`d`/`c` 那兩個 arm 自己管整行與計數。
         if matches!(c, 'x' | 's') {
             let as_if = match c {
@@ -1554,7 +1562,7 @@ impl Editor {
     /// The key a one-key binding turns `key` into (`"C-q" = "@w"` → `w`),
     /// when nothing is pending or held, as the binding layer in
     /// [`Self::on_normal_key`] would swap it. `None` for anything else.
-    fn one_key_binding(&self, key: Key) -> Option<Key> {
+    fn one_key_binding(&self, key: Key) -> Option<(Pending, Key)> {
         if self.pending != Pending::None
             || self.expanding_alias
             || !self.alias_held.is_empty()
@@ -1573,13 +1581,16 @@ impl Editor {
         }
         match yumete_cjk::actions::bound(self.key_aliases.get(&typed)?)? {
             // A named command acts on the cursors its own key does.
+            // A named command acts on the cursors its own key does, in its
+            // own group (`"C-h" = "goto_line_start"` moves every cursor, as
+            // `gh` does).
             yumete_cjk::actions::Bound::Named(action) if action.how == yumete_cjk::actions::How::Normal => {
-                super::normal::normal_command(action.name).map(|&(_, _, key)| key)
+                super::normal::place_of(action.name, &self.group_context())
             }
             yumete_cjk::actions::Bound::Keys(k) => {
                 let mut cs = k.chars();
                 match (cs.next(), cs.next()) {
-                    (Some(c), None) => Some(Key::Char(c)),
+                    (Some(c), None) => Some((Pending::None, Key::Char(c))),
                     _ => None,
                 }
             }
@@ -1612,16 +1623,6 @@ impl Editor {
                 self.play_keys(&yumete_cjk::actions::written(keys))
             }
             Some(yumete_cjk::actions::Bound::Named(action)) => match action.how {
-                // **An action's keys are helix's** (2026-10-31): they are
-                // written in the helix preset's language, so they are played
-                // in it. Under the vim preset they used to reach vim's arms:
-                // `delete_selection` was vim's `d`, waiting for a motion. A
-                // user's own `@` run keeps meaning the preset's keys.
-                yumete_cjk::actions::How::Keys(keys) => {
-                    let preset = std::mem::replace(&mut self.key_preset, yumete_cjk::KeyPreset::Helix);
-                    self.play_keys(keys);
-                    self.key_preset = preset;
-                }
                 yumete_cjk::actions::How::Command(line) => self.run_bound_command(line),
                 yumete_cjk::actions::How::Normal => {
                     self.run_normal(action.name);
@@ -1640,21 +1641,6 @@ impl Editor {
             Ok(crate::editor::CommandOutcome::Quit) => self.quit_from_binding = true,
             Ok(crate::editor::CommandOutcome::Continue) => {}
             Err(err) => self.status = err.to_string(),
-        }
-    }
-
-    /// **按下這一串鍵，當作人按的**（2026-10-06，給 `::` 挑中一個快捷鍵用）。
-    ///
-    /// Warning: **不走 [`Self::play_keys`]**：那一支是別名層的內部管道，它撥着
-    /// `expanding_alias`，於是播出去的鍵繞開別名層——而這裏要的正好相反，
-    /// `空格 f` 在 vim 鍵位下該怎麼走就怎麼走。
-    pub(super) fn play_keys_now(&mut self, keys: &str) {
-        for c in keys.chars() {
-            if self.on_key(pressed(c)) == KeyOutcome::Quit {
-                // Said again for the `on_key` above this one, which took it.
-                self.quit_from_binding = true;
-                return;
-            }
         }
     }
 
@@ -1730,151 +1716,13 @@ impl Editor {
         // A pending multi-key operator consumes this key.
         // 按過的那一串，趁各層還没把自己關掉（見 `no_such_combination`）。
         let typed_before = self.typed_so_far();
+        // **A group's key**: the group's own rows say what it runs (step 3
+        // of the keymap plan; `groups.rs`).
+        if let Some(group) = self.pending.group() {
+            self.on_group_key(group, key, &typed_before, continuing_zong);
+            return;
+        }
         match self.pending {
-            Pending::Table => {
-                // 命令＋選擇＋動作: `t20,20g` is 「table · row 20, column 20 ·
-                // go」, and the sequence stays open while the digits arrive.
-                //
-                // A sort names as many columns as it likes before it acts
-                // (`t1a2d8as`), so `a`/`d` are asked first: they close one
-                // column and leave the sequence open for the next.
-                if self.take_sort_key(key) || self.take_sequence_argument(key) {
-                    return;
-                }
-                self.pending = Pending::None;
-                // **A chain that has named a column ends in `s` or `S`.**
-                // Without this, every `t` verb stays live in the middle of a
-                // sort, and `d` — which is both 「降序」 and 「delete this
-                // row」, one missing digit apart — took `t1ad` as 「delete」
-                // and threw the columns away. So once a column has been
-                // named, the only ways out are the action, `Esc`, and being
-                // told what went wrong.
-                if !self.sort_keys.is_empty() && !matches!(key, Key::Char('s' | 'S') | Key::Esc) {
-                    self.sequence = None;
-                    self.sort_keys.clear();
-                    self.status = say!("table.sort-wants-its-action");
-                    return;
-                }
-                self.table_structure(key);
-                self.sequence = None;
-                self.sort_keys.clear();
-                return;
-            }
-            Pending::TableConvert => {
-                self.pending = Pending::None;
-                self.convert_table_key(key);
-                return;
-            }
-            Pending::Hop { forward } => {
-                self.pending = Pending::None;
-                match key {
-                    // **`]c` 是註釋，`]m` 是合併衝突**（2026-10-06 定「`]c` 歸
-                    // 註釋，衝突換個鍵」）。helix 的 `]c` 一直是 `goto_next_comment`
-                    // （`keymap/default.rs:118`）；衝突搬到 `m`（merge），helix 那張
-                    // 表上那個字母空着。
-                    Key::Char('m') => self.go_to_conflict(forward),
-                    Key::Char('c') => self.go_to_object_nearby(forward, crate::code::Object::Comment),
-                    // **`]d`/`[d` 下一個診斷，`]D`/`[D` 第一個/最後一個**
-                    // （2026-10-06 定，照 helix `default.rs:112-113`）。
-                    Key::Char('d') => self.go_to_problem(forward, false),
-                    Key::Char('D') => self.go_to_problem(forward, true),
-                    // **類是 `t` 不是 `c`**（2026-10-06 當天改正）。先按記憶綁成了
-                    // `c`，於是它和「合併衝突」撞了一整輪——而 helix 的 `]c` 是
-                    // **註釋**、`]t` 纔是類（`keymap/default.rs:117-118`）。照抄
-                    // 參考實現，不照記憶；撞車也就跟着没了。
-                    Key::Char('t') => self.go_to_definition_nearby(forward, false),
-                    // **`]g`/`[g` 跳改動**，helix 的 `goto_next_change`（2026-10-06）。
-                    Key::Char('g') => self.go_to_change(forward),
-                    // **`]f`/`[f` 跳到下一個函數**（2026-10-06，helix 的 `]f`）。
-                    Key::Char('f') => self.go_to_definition_nearby(forward, true),
-                    // **`]p` / `[p` 是段落**，helix 的 `goto_next_paragraph` /
-                    // `goto_prev_paragraph`（2026-10-06 補的）。這裏 `}` / `{`
-                    // 早就是同一件事，這兩個是 helix 的手會按的那個拼法。
-                    Key::Char('p') => {
-                        let span = self.run_motion(motion::Motion::Paragraph { forward });
-                        self.take_span(span);
-                    }
-                    // **`]空格` / `[空格` 加一條空行，人不動**（helix 的
-                    // `add_newline_below` / `_above`，2026-10-06 補的）。
-                    Key::Char(' ') => {
-                        let n = self.operator_count.take().unwrap_or(1).max(1);
-                        self.add_blank_line(forward, n);
-                    }
-                    Key::Esc => {}
-                    _ => self.no_such_combination(&typed_before, key),
-                }
-                return;
-            }
-            // **`z` 那一層**（2026-09-28，helix 的 view mode 的那三個）。
-            // **`z` 那一層，照 helix 的 view mode 補齊**（2026-10-06，
-            // `keymap/default.rs` 的 `"z" => { "View" ... }`）。
-            //
-            // helix 那一層裏大半條目做的就是這個編輯器已經有的事——`z C-d` 是
-            // `page_cursor_half_down`，和裸 `C-d` 同一支；`z/` 就是 `/`。所以它們
-            // 在這裏是**同一支的第二個拼法**，不是新功能：一個 helix 的手按下去
-            // 得到它預期的結果，而不是「`z` 不認得這個鍵」。
-            //
-            // Warning: **`zj`／`zk`（只滾視窗不動光標）還没有**，見 §5.98：視窗的位置
-            // 在渲染層，核心只讀得到、改不動。
-            Pending::Aim | Pending::AimStuck => {
-                // `Z` 那一層按完不收，`Esc` 纔收（helix 的 sticky view mode）。
-                let stuck = self.pending == Pending::AimStuck;
-                self.pending = Pending::None;
-                if stuck && key != Key::Esc {
-                    self.pending = Pending::AimStuck;
-                }
-                let n = self.operator_count.take().unwrap_or(1).max(1);
-                match key {
-                    Key::Char('z') | Key::Char('c') => self.aim_the_page(crate::editor::Aim::Middle),
-                    Key::Char('t') => self.aim_the_page(crate::editor::Aim::Top),
-                    Key::Char('b') => self.aim_the_page(crate::editor::Aim::Bottom),
-                    // **`zj`／`zk` 只滾視窗，光標的文字不動**（helix 的
-                    // `scroll_down`／`scroll_up`）。擠到邊上纔把光標一起帶走。
-                    Key::Char('j') | Key::Down => self.scroll_the_page(true, n),
-                    Key::Char('k') | Key::Up => self.scroll_the_page(false, n),
-                    // 半頁：`z C-d`／`z空格` 往下，`z C-u`／`z退格` 往上。
-                    Key::Ctrl('d') | Key::Char(' ') => self.move_page(n, false, 0.5),
-                    Key::Ctrl('u') | Key::Backspace => self.move_page(n, true, 0.5),
-                    // 整頁。
-                    Key::Ctrl('f') | Key::PageDown => self.move_page(n, false, 1.0),
-                    Key::Ctrl('b') | Key::PageUp => self.move_page(n, true, 1.0),
-                    // 搜索那四個，和外面同一支。
-                    Key::Char(one @ ('/' | '?')) => {
-                        self.mode = Mode::Search;
-                        self.search_forward = one == '/';
-                        self.command_line.clear();
-                        self.command_caret = 0;
-                        self.hits = None;
-                    }
-                    Key::Char('n') => self.repeat_search(self.search_forward),
-                    Key::Char('N') => self.repeat_search(!self.search_forward),
-                    Key::Esc => {}
-                    _ => self.no_such_combination(&typed_before, key),
-                }
-                return;
-            }
-            Pending::Conflict => {
-                self.pending = Pending::None;
-                match key {
-                    Key::Char('o') => self.resolve_conflict(crate::conflict::Keep::Ours),
-                    Key::Char('t') => self.resolve_conflict(crate::conflict::Keep::Theirs),
-                    Key::Char('b') => self.resolve_conflict(crate::conflict::Keep::Both),
-                    Key::Esc => {}
-                    _ => self.no_such_combination(&typed_before, key),
-                }
-                return;
-            }
-            // **區域那一組**（2026-09-30 定，照 helix 的 `C-w`）。
-            Pending::Region => {
-                self.pending = Pending::None;
-                self.on_region_key(key);
-                return;
-            }
-            Pending::RegionNew => {
-                self.pending = Pending::None;
-                self.on_region_new_key(key);
-                return;
-            }
             Pending::Mark => {
                 self.pending = Pending::None;
                 if let Key::Char(c) = key {
@@ -1887,42 +1735,6 @@ impl Editor {
                 if let Key::Char(c) = key {
                     self.go_to_mark(c);
                 }
-                return;
-            }
-            Pending::Goto => {
-                // **命令＋選擇＋動作.** Inside a sequence the digits are its
-                // *argument*, not a repetition: `g30g` is 「goto · line 30」,
-                // the way `t20,20g` names a cell and `t1a2d8as` names three
-                // columns to sort by. The verb ends the sequence, so no
-                // separator and no space is needed — and the sequence stays
-                // open while digits are being typed.
-                if self.take_sequence_argument(key) {
-                    return;
-                }
-                self.pending = Pending::None;
-                self.handle_goto(key, continuing_zong);
-                self.operator_count = None;
-                self.sequence = None;
-                return;
-            }
-            Pending::Space => {
-                self.pending = Pending::None;
-                self.handle_space(key);
-                return;
-            }
-            Pending::Yume => {
-                self.pending = Pending::None;
-                self.handle_yume(key);
-                return;
-            }
-            Pending::Open => {
-                self.pending = Pending::None;
-                self.handle_open_recent(key);
-                return;
-            }
-            Pending::YumeValue(subject) => {
-                self.pending = Pending::None;
-                self.handle_yume_value(subject, key);
                 return;
             }
             // The five that are waiting for a character of the manuscript.
@@ -1992,58 +1804,6 @@ impl Editor {
                     self.status = String::new();
                 }
             }
-            Pending::Case => {
-                self.pending = Pending::None;
-                match key {
-                    Key::Char('l') => self.map_selection(|c| c.to_lowercase().collect()),
-                    Key::Char('u') => self.map_selection(|c| c.to_uppercase().collect()),
-                    Key::Char('`') => self.map_selection(switch_case),
-                    // **簡繁也是「把選區裏的字換一種寫法」**（2026-09-22）。
-                    // 一鍵一檔，第二個字母各不相同——`tw`/`hk` 拼全了，`` `t ``
-                    // 就既是命令又是前綴，只能靠超時猜。
-                    Key::Char('s') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::S),
-                    Key::Char('t') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::T),
-                    Key::Char('w') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Tw),
-                    // **香港繁從 `h` 讓到 `k`**（2026-10-11）：`h` 給了半形，而
-                    // 這一族的首字母取的是目標的名字（`l`ower／`u`pper／`s`簡／
-                    // `t`繁），`h`alfwidth 與 `f`ullwidth 正是這條規矩。
-                    Key::Char('k') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::Hk),
-                    // **全形 ↔ 半形**（2026-10-11）。只動 Unicode 那張正式的對應表
-                    // （`FF01`–`FF5E` 對 `21`–`7E`，外加全形空格）：逐字一對一、
-                    // 兩邊都轉得回來。中文標點 `「」『』、。` 不在那張表上，一個
-                    // 都不碰——見 `to_halfwidth` 的註釋。
-                    Key::Char('h') => self.map_selection(crate::editor::to_halfwidth),
-                    Key::Char('f') => self.map_selection(crate::editor::to_fullwidth),
-                    Key::Char('c') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::C),
-                    Key::Char('g') => self.convert_selection(crate::convert::Side::S, crate::convert::Side::G),
-                    // Warning: **這一個從繁體起步，另外六個從簡體。** opencc 只有
-                    // `t2jp`/`jp2t` 兩條日文路，没有 `s2jp`——寫 `S` 的那一版
-                    // 按下去什麽都不會發生（2026-09-23 審出來的）。
-                    Key::Char('j') => self.convert_selection(crate::convert::Side::T, crate::convert::Side::Jp),
-                    Key::Esc => {}
-                    _ => self.no_such_combination(&typed_before, key),
-                }
-                return;
-            }
-            Pending::Match => {
-                self.pending = Pending::None;
-                // Only `mi`/`ma`/`md`/`mr` take a count, as in helix; for the
-                // rest it is spent here and not left for the next command.
-                if !matches!(key, Key::Char('i' | 'a' | 'd' | 'r')) {
-                    self.operator_count = None;
-                }
-                match key {
-                    Key::Char('m') => self.goto_matching_bracket(),
-                    Key::Char('i') => self.pending = Pending::MatchPair { around: false },
-                    Key::Char('a') => self.pending = Pending::MatchPair { around: true },
-                    Key::Char('s') => self.pending = Pending::Surround,
-                    Key::Char('d') => self.pending = Pending::SurroundOff,
-                    Key::Char('r') => self.pending = Pending::SurroundFrom,
-                    Key::Esc => {}
-                    _ => self.no_such_combination(&typed_before, key),
-                }
-                return;
-            }
             // **A vim operator, waiting for its motion** (#429, 2026-09-18).
             Pending::VimOperator { op, first } => {
                 self.vim_operator_key(op, first, key);
@@ -2052,6 +1812,8 @@ impl Editor {
             // 撤銷斷點只在插入模式裏按，走到 Normal 這一支就是它已經過期了。
             Pending::UndoBreak => self.pending = Pending::None,
             Pending::None => {}
+            // The groups, answered above.
+            _ => {}
         }
 
         // **vim 的可視模式，那五個按下去會改錯字的鍵**（2026-10-06）。
@@ -2296,7 +2058,6 @@ impl Editor {
         let operator_count = self.count;
         let count = self.take_count();
 
-
         // Read as a grid, `hjkl` walk cells. Before the vertical branch because
         // a table is read across, whatever the file's writing layout is.
         if self.table_here() && self.table_motion(key, count) {
@@ -2516,529 +2277,6 @@ impl Editor {
             .max(1)
     }
 
-    /// `gh`/`gl` 這兩個字母，人按得出來嗎——helix 按得出，vim 鍵位下按不出，而
-    /// 別名展開的照走。見 `handle_goto` 裏那兩臂。
-    fn g_letter_is_pressable(&self) -> bool {
-        self.key_preset != yumete_cjk::KeyPreset::Vim || self.expanding_alias
-    }
-
-    /// `g` ＋ 上下在竪排下走一縱嗎——vim 的 `gj`/`gk` 是視覺行，而竪排的視覺行
-    /// 就是一縱。見 `handle_goto` 裏那兩臂。
-    ///
-    /// 兩套方案同一個答案：`g` 那一層不跟着 `hjkl` 轉（見 `handle_goto` 開頭）。
-    fn walks_a_zong_with_g(&self) -> bool {
-        self.layout() == Layout::Vertical && self.key_preset == yumete_cjk::KeyPreset::Vim
-    }
-
-    fn handle_goto(&mut self, key: Key, continuing_zong: bool) {
-        // `10gg` is "goto line 10", the way Helix reads a count before `gg`;
-        // a bare `gg` is the same thing with the count 1.
-        if key == Key::Char('g') {
-            // `g30g` — the sequence's own argument — and `30gg`, vi's order.
-            let line = self.sequence_span().map(|(n, _)| n).or(self.operator_count.take());
-            if let Some(n) = line.filter(|&n| n > 0) {
-                return self.goto_grid_row(n);
-            }
-        }
-        // **`g` 那一層的四個字母一個都不轉**（2026-10-13 定）。2026-09-17 到
-        // 10-13 之間，視覺那一套下它們跟着 `hjkl` 轉了九十度（行文那一套從
-        // 10-12 起就不轉了）。現在兩套方案的 `g` 層逐格相同，原話：「竖排视觉方
-        // 案只影响 hjkl 四个键……hjkl 是最常用的方向键，所以用户难以調整。gh gj
-        // gk gl 的逻辑性更大，所以不需要更改」——差異壓到最小的那四個鍵上。
-        //
-        // 方向鍵仍舊轉：它們永遠按螢幕走，而竪排的「往下」就是順着這一行讀下去，
-        // 也就是它的末尾。
-        let key = match (self.layout() == Layout::Vertical, key) {
-            (true, Key::Down) => Key::Char('l'),
-            (true, Key::Up) => Key::Char('h'),
-            (_, key) => key,
-        };
-        // `gg` and `ge` cross a document; `gh`, `gl` and `gs` cross a line.
-        // `remember_jump`'s own doc comment said every far motion went through
-        // `goto_line` and so had a way back — and `gg`/`ge` did not, because
-        // they are the two that do not name a line number.
-        if matches!(key, Key::Char('g') | Key::Char('e')) {
-            self.remember_jump();
-        }
-        // **Five of these are motions now** (B1, 2026-09-20) — named, so the
-        // vim grammar can ask for the same five without anybody replaying `g`
-        // and then a letter. The consumer is unchanged: a goto **collapses**
-        // (`move_head`), which is exactly the reading `jump_to` wraps.
-        let go = |e: &mut Self, what: motion::Motion| {
-            // **At the top layer 「this line」 is 「this row's cells」**
-            // (2026-10-21 作者報的: 「in CEL mode, `gh` and `gl` does not work
-            // in helix mode」). `0`/`$`/`Home`/`End` are claimed by the layer
-            // model itself (`Claim::Cell(Step::RecordStart)`), but `g h`/`g l`
-            // /`g s` are a `g` sequence and never reach `table_motion` — so
-            // the helix hand could not reach a motion the vim hand could, and
-            // what it got instead was the cell's own two ends, which is where
-            // the cursor already was. One answer, both spellings.
-            let step = match what {
-                motion::Motion::LineStart | motion::Motion::LineFirstNonBlank => {
-                    Some(crate::table::layer::Step::RecordStart)
-                }
-                motion::Motion::LineEnd => Some(crate::table::layer::Step::RecordEnd),
-                _ => None,
-            };
-            if let Some(step) = step.filter(|_| e.cell_is_the_unit()) {
-                return e.step_cells(step, 1);
-            }
-            // **全窗裏「這一行」是「這一格」**（2026-10-17 作者定）。`g h`/`g l`
-            // /`g s` — and so vim's `0`/`$`/`^`, which expand to them — used to
-            // run to the row's own ends and park on a wall. 全窗 is a view of
-            // the content; the ends it has are the cell's — and **inside** one
-            // that is still the whole of the answer.
-            let edge = match what {
-                motion::Motion::LineStart | motion::Motion::LineFirstNonBlank => {
-                    e.cell_edge(false)
-                }
-                motion::Motion::LineEnd => e.cell_edge(true),
-                _ => None,
-            };
-            if let Some(at) = edge {
-                e.move_head(at);
-                return;
-            }
-            // **And the file's two ends are the table's two rows** (2026-10-17).
-            // 全窗 is a window onto one table and nothing walks out of it, so
-            // `g g` and `g e` already ended inside it — but by way of 「the
-            // window holds you」, which drags the caret back without placing
-            // it: `g e` landed on the last row's trailing `|`. Asking for the
-            // row by number lands in a cell.
-            //
-            // Warning: **the top layer only** (2026-10-21). Inside a cell the
-            // cell is the document, so its two ends are what `g g` and `g e`
-            // mean there — which is also what makes vim's `ggVG` 「the whole
-            // cell」 without anything being taught to spell it. The clamp in
-            // `Editor::walled` does that half; this has to stand aside for it,
-            // or the row jump answers first and leaves the cell.
-            let rows = (!e.table_layer().walled())
-                .then(|| e.grid_has_the_pane().then(|| e.table_row_span()).flatten())
-                .flatten();
-            if let Some((first, last)) = rows {
-                match what {
-                    motion::Motion::FileStart => return e.goto_grid_row(1),
-                    motion::Motion::FileEnd => return e.goto_grid_row(last - first + 1),
-                    _ => {}
-                }
-            }
-            let span = e.run_motion(what);
-            e.jump_to(span);
-        };
-        match key {
-            Key::Char('g') => return go(self, motion::Motion::FileStart),
-            // Warning: **vim 鍵位下 `ge`/`gE` 是 vim 的 `ge`**（2026-10-02 定
-            // 「照參考實現」）：往回到上一個詞的末尾。helix 鍵位下照舊是「到檔
-            // 尾」。兩套鍵位在這一格上真的各說各的，所以這裏分家。
-            Key::Char('e' | 'E') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                let grain = match key {
-                    Key::Char('E') => motion::Grain::Big,
-                    _ => self.word_grain(),
-                };
-                let count = self.operator_count.take().unwrap_or(1).max(1);
-                return self.repeat(count, |e| {
-                    let span = e.read_motion(motion::Motion::WordEndBack(grain), motion::Reading::Caret);
-                    e.jump_to(span);
-                });
-            }
-            Key::Char('e') => return go(self, motion::Motion::FileEnd),
-            // Warning: **vim 鍵位下這兩個字母按不出來**（2026-10-13 定「對齊」）。
-            // vim 的 `gh` 是進 Select 模式、`gl` 没綁，而行首行末在那一套裏是
-            // `0`/`$`——借 helix 的字母再給一遍是重複，而且把 `gh` 佔住了。
-            //
-            // **別名照走**：`0`/`$`/`^` 在 vim 鍵位下就是展開成 `gh`/`gl`/`gs` 的
-            // （`keymap.rs` 那張表），那是這幾個動作的內部拼法，不是人按的鍵。所
-            // 以問的是「是不是人剛按出來的」，不是「這個鍵存不存在」——`::` 挑中
-            // 一個動作、`[keys.normal]` 裏寫 `"X" = "gl"`，走的都是別名那條路。
-            Key::Char('h') if self.g_letter_is_pressable() => {
-                return go(self, motion::Motion::LineStart)
-            }
-            Key::Char('l') if self.g_letter_is_pressable() => {
-                go(self, motion::Motion::LineEnd);
-                // **vim's `$` sticks to the line end** (its `curswant` is
-                // MAXCOL): `j` after it goes to the end of the next line, however
-                // long (2026-10-29, review: `$` then `j` past a short line came
-                // back at the short line's column). helix's `gl` does not stick.
-                if self.key_preset == yumete_cjk::KeyPreset::Vim {
-                    self.sel.set_goal(Some(LINE_END_GOAL));
-                }
-                return;
-            }
-            Key::Char('s') => return go(self, motion::Motion::LineFirstNonBlank),
-            // helix 的 `goto_last_modification`（`keymap/default.rs:88`）。
-            Key::Char('.') => return self.goto_last_modification(),
-            // **`g;`/`g,` 走改動表**（vim，2026-10-06）。`g.` 回最後改的那一處；
-            // 這一對是在改過的地方之間走。helix 没有這兩個，所以只在 vim 鍵位下。
-            Key::Char(';' | ',') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                return self.walk_changes(key == Key::Char(';'));
-            }
-            // …以及 `goto_last_accessed_file`（同一張表 :84）。
-            // **`gt`/`gc`/`gb`：光標到這一屏的頂/中/底**（2026-10-06，helix 的
-            // `goto_window_top`/`_center`/`_bottom`，`keymap/default.rs:52-54`）。
-            //
-            // §5.84 把這三個擱着，理由是「核心不知道第一可見行」——那條理由當天
-            // 失效了：`H`/`M`/`L` 做成真動作的時候，`Editor::screen_line` 就是
-            // 這個問題的答案，而前端每一幀都交 `page_span`。
-            //
-            // Warning: **`z` 那一層是反過來的**：`zt`/`zc`/`zb` 挪**視窗**，讓光標那一行
-            // 跑到頂/中/底；這三個挪**光標**，讓它跑到視窗的頂/中/底。同一組字母，
-            // 兩件互補的事，helix 也是這麼分的。
-            Key::Char(one @ ('t' | 'c' | 'b')) => {
-                let which = match one {
-                    't' => 'H',
-                    'b' => 'L',
-                    _ => 'M',
-                };
-                let nth = self.operator_count.take().unwrap_or(1);
-                return self.go_to_screen(which, nth);
-            }
-            // **vim 的 `gu`／`gU`／`g~` 是大小寫算子**（2026-10-06，`:h gu`）：等一個
-            // 動作，`guw` 把一個詞轉小寫，`guu` 轉一整行（算子加倍那條規矩是通用的，
-            // 所以這三個白拿）。**helix 鍵位下 `gu` 現在什麼都不是**：打讀音跳漢字
-            // 2026-10-10 搬去了 `gz`，兩套鍵位一個拼法，見 `handle_goto` 那一條。
-            //
-            // **`gq` fills lines to the width** (2026-10-29, `:h gq`), the same
-            // kind of operator: `gqip` a paragraph, `gqq` a line.
-            //
-            // Warning: **In visual mode the selection is the motion** (`vlgU`,
-            // `Vjgq`). These four used to wait for one anyway, and the `:` or
-            // `Esc` that followed let go of them having done nothing.
-            Key::Char(op @ ('u' | 'U' | '~' | 'q'))
-                if self.key_preset == yumete_cjk::KeyPreset::Vim =>
-            {
-                if self.extend {
-                    return self.vim_visual_key(op);
-                }
-                self.pending = Pending::VimOperator { op, first: None };
-                return;
-            }
-            // **vim 的 `gn`／`gN` 走到下一處／上一處匹配**（`:h gn`）。helix 的
-            // `gn`／`gp` 是換稿子，所以這兩個只在 vim 鍵位下讓出去；換稿子那一對
-            // 在那一端仍舊按 `空格 b` 挑。
-            Key::Char('n') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                self.repeat_search(self.search_forward);
-                return;
-            }
-            Key::Char('N') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                self.repeat_search(!self.search_forward);
-                return;
-            }
-            // **vim's `gi`**: insert again where the last Insert in this
-            // file stopped (`:h gi`, measured: `wiX<Esc>jgiY` gives
-            // `foo XYbar`), or at the cursor when there was none.
-            Key::Char('i') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                if let Some(at) = self.current_buffer().insert_stop() {
-                    self.set_cursor(at);
-                }
-                self.enter_insert();
-                return;
-            }
-            // 字形組在 vim 鍵位下的門（2026-10-06）：那一端的 `` ` `` 歸標記了。
-            Key::Char('`') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                self.pending = Pending::Case;
-                return;
-            }
-            // **vim 的 `gJ`：併行而不補空格**（2026-10-06，`:h gJ`）。裸 `J` 的接縫是
-            // 算出來的（漢字之間不補、拉丁詞之間補一個），`gJ` 要的正是「什麼都別算」。
-            Key::Char('J') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                // Visual `gJ` joins the lines selected and returns to Normal
-                // (`:h v_gJ`, 2026-10-30), as Visual `J` does.
-                let n = match self.extend {
-                    true => {
-                        let rope = self.current_buffer().rope();
-                        let (start, end) = self.selection();
-                        let lines = rope.char_to_line(end.saturating_sub(1).max(start)) - rope.char_to_line(start);
-                        let seat = rope.line_to_char(rope.char_to_line(start));
-                        self.extend = false;
-                        self.vim_lines = false;
-                        self.sel.set_anchor(seat);
-                        self.sel.set_head(seat);
-                        lines.max(1)
-                    }
-                    false => self.operator_count.take().unwrap_or(1).max(1),
-                };
-                self.repeat_writing(n, |e| e.join_lines_raw());
-                return;
-            }
-            Key::Char('a') => return self.goto_last_file(),
-            _ => {}
-        }
-        // What is left here goes somewhere that is not a motion of the page (a
-        // file, a definition, the other pane), so every arm answers for itself.
-        //
-        // Warning: **`gJ` and `gK` are both gone.** `gJ` went on 2026-10-06, when `J`
-        // itself became join-lines and `gJ` was left a second spelling of one
-        // thing (「gJ gK 的别名不需要了」). `gK` — join this line onto the one
-        // above — went on 2026-10-14: 「seems redundant (not in vim or helix).」
-        // Neither editor binds it, and joining upwards is `k` then `J`, which
-        // is how both of them expect you to say it.
-        match key {
-            // **`gj` and `gk` walk lines of the file, as helix's do** — `j`
-            // and `k` walk the rows on the screen, and in a manuscript a line
-            // of the file is a paragraph, so this is the next paragraph at
-            // the same column. Warning: Until 2026-09-17 this was a copy of `j`/`k`,
-            // on a comment that had helix the wrong way round (「In helix the
-            // plain pair walks logical lines」 — it is `move_visual_line_down`).
-            // `gj`/`gk` 是同一對的另一半，所以跟着翻過來：vim 的 `gj` 走屏幕的
-            // 行，helix 的 `gj` 走文件的行。
-            // Warning: **竪排下 vim 那一半走縱**（2026-10-13 報的）。vim 的 `gj`
-            // 是**視覺**行，而竪排的一個視覺行就是一縱；`move_vertical` 在竪排下
-            // 没有視覺行可走（竪排不折行，`wrap_width` 是 `None`），於是退化成行
-            // 文行——`gj` 和 `j` 落在同一處，一段折成三縱也一步跨到下一段去。
-            // helix 那一半不動：它的 `gj` 要的就是檔案的那一行。
-            //
-            // 走到這一臂而且是竪排，就一定是行文那一套（視覺那一套在上面轉成了
-            // `gl`／`gh`），或者是別名展開出來的——後者說的也是「下一個視覺行」。
-            Key::Char('j') | Key::Down if self.walks_a_zong_with_g() => {
-                let count = self.operator_count.take().unwrap_or(1).max(1);
-                let mut first = continuing_zong;
-                self.repeat(count, move |e| {
-                    e.move_zong_from(true, first);
-                    first = true;
-                });
-            }
-            Key::Char('k') | Key::Up if self.walks_a_zong_with_g() => {
-                let count = self.operator_count.take().unwrap_or(1).max(1);
-                let mut first = continuing_zong;
-                self.repeat(count, move |e| {
-                    e.move_zong_from(false, first);
-                    first = true;
-                });
-            }
-            Key::Char('j') | Key::Down => {
-                let count = self.operator_count.take().unwrap_or(1).max(1);
-                match self.key_preset == yumete_cjk::KeyPreset::Vim {
-                    true => self.repeat(count, |e| e.move_vertical(false)),
-                    false => self.repeat(count, |e| e.move_textual_line(false)),
-                }
-            }
-            Key::Char('k') | Key::Up => {
-                let count = self.operator_count.take().unwrap_or(1).max(1);
-                match self.key_preset == yumete_cjk::KeyPreset::Vim {
-                    true => self.repeat(count, |e| e.move_vertical(true)),
-                    false => self.repeat(count, |e| e.move_textual_line(true)),
-                }
-            }
-            // Goto the next / previous buffer, as Helix binds them.
-            Key::Char('n') => self.next_buffer(),
-            Key::Char('p') => self.prev_buffer(),
-            // Open the file named on this line — a `:grep` hit, or a line
-            // pasted in from any other tool that prints `path:line:`.
-            Key::Char('f') => self.goto_file_under_cursor(),
-            // **`gL` follows what is written here.** vim and Helix both keep
-            // 「open the thing under the cursor」 on this key, and in a
-            // manuscript the thing under the cursor is a link.
-            Key::Char('L') => self.follow_link(),
-            // **`gd` goes, `gD` shows.** The pair every editor has: `gd` is
-            // *go to definition* — on a footnote that is the note, in a 拆分
-            // column the row the component names — and `gD` is the same
-            // question answered in the other work area, without leaving.
-            //
-            // The capital is the whole rule: this editor already says 「the
-            // same question, shown over there」 twice (`g/`/`g?`, `t/`/`t?`),
-            // and `w` said nothing at all. One letter, and the shift key means
-            // 「without leaving」.
-            Key::Char('d') => self.show_definition(false),
-            Key::Char('D') => self.show_definition(true),
-            // **helix's `gr`: every place this is used** (#54, 2026-10-29).
-            Key::Char('r') => self.ask_references(),
-            // **一眼跳到屏幕上任何地方**（#406，2026-09-28）。查定義是 `gd`/`gD`
-            // 了（2026-09-09 改的名），而 `gw` 從那天起只剩一句「它搬家了」——
-            // Warning: 一個 helix 使用者按 `gw` 收到的是那句話，**看起來像個答案而答的
-            // 是另一個問題**。現在它就是 helix 的那個 `gw`。
-            Key::Char('w') => self.start_jump(),
-            // **按「那裏寫的什麼」跳**（§5.73，2026-10-04 定）。`gw` 是屏幕發號碼，
-            // 這兩個是打那裏寫的字。**一個鍵一種文字**：`o` 只問西文、打字面、定長
-            // 兩個字母；`u` 只問中文、打讀音、不定長（`zh`/`sh`/`ji` 那幾個擁擠的
-            // 聲母兩個字母收不住）。分開的理由是候選面板畫在光標處，會蓋住要跳的
-            // 地方——見 `seek.rs` 開頭。
-            //
-            // Warning: **字母是查出來的，不是挑出來的。** `s`/`S`（flash 用的那兩個）
-            // 在這個倉是「選出所有匹配」「拿匹配當分隔符」。
-            //
-            // Warning: **這裏從前寫着「`g` 組兩邊都空着的小寫只有 `o q u v z`」，
-            // 那是錯的**（2026-10-10 查出來的）：`o`／`q`／`u`／`v` 四個 vim 自己
-            // 都佔着，而同一個檔上面幾十行就把 vim 的 `gu` 綁成了大小寫算子。按兩
-            // 家自己的源頭數（`vim/runtime/doc/index.txt` 的 Normal mode 索引、
-            // helix 的 `keymap/default.rs:39-63`），**兩邊都空着的小寫只有 `x`
-            // 和 `z`**。挑鍵之前去那兩個檔裏數，別讀這一類注釋。
-            // **`gv` 重選上一次那一段**（vim，2026-10-06）。helix 没有這個命令，
-            // 所以它只在 vim 鍵位下——`g` 那一組在這一端本來就空着一個 `v`。
-            Key::Char('v') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                let Some((anchor, head)) = self.last_selection else {
-                    self.status = say!("selection.nothing-to-reselect");
-                    return;
-                };
-                let len = self.current_buffer().rope().len_chars();
-                self.sel.set_anchor(anchor.min(len));
-                self.sel.set_head(head.min(len));
-                self.extend = true;
-                self.clamp_cursor();
-                self.refresh_goal_column();
-            }
-            // **`gx` 跳單詞、`gz` 跳漢字，兩套鍵位同一個拼法**（2026-10-10 定）。
-            //
-            // 從前是 `go`／`gu`，而**那兩個字母 vim 自己都佔着**：`go` 是
-            // 「cursor to byte N」（`runtime/doc/index.txt:798`）、`gu` 是小寫算
-            // 子。`gu` 那一邊讓了（vim 下跑算子），於是跳漢字在 vim 下没有 `g`
-            // 門，只好另開一個 `空格 u`——一個格子買一件 helix 那端已經有的事。
-            // `go` 那一邊連讓都没讓。
-            //
-            // 兩家自己的源頭量出來：vim 的 `g` 佔 `adefghijkmnopqrstuvw`，helix
-            // 的佔 `abcdefghjklmnprstwy`（`keymap/default.rs:39-63`），**兩家都
-            // 空着的小寫只有 `x` 和 `z`**。所以這兩件事搬到那兩個字母上，兩套鍵
-            // 位一個拼法，`空格 u` 也就不必存在了。
-            //
-            // 「跟着鏈接走」讓出 `gx`，去 `gL`（link），兩家都没佔。
-            Key::Char('x') => self.start_seek(false),
-            Key::Char('z') => self.start_seek(true),
-            // **`/` here, `?` over there.** 「這個詞還在哪裏」 — the selection,
-            // or what the cursor is on — searched across the whole document.
-            // `g/` is the sugar `/` has always wanted: search for *this*,
-            // without retyping it. `g?` is the same answer shown in the other
-            // work area, so the place you are standing is still on the screen.
-            //
-            // It used to be `Enter`, which is the key a writer presses by
-            // accident: one keystroke too many in Normal mode and the page
-            // jumped somewhere else.
-            Key::Char('/') => {
-                self.definition_preview = false;
-                self.search_the_page(false)
-            }
-            Key::Char('?') => {
-                self.definition_preview = true;
-                self.search_the_page(false)
-            }
-            _ => {}
-        }
-    }
-    
-    // shortcut: space group
-    // The keys `Space` opens, and what each of them is for — the list the
-    // which-key overlay draws, so what is offered and what happens cannot
-    // drift apart.
-    /// **`空格 o` — 開上次的那一組**（2026-10-18 作者定）。
-    ///
-    /// 三件事，三份不同的清單——這也是別家編輯器一致的形狀（VS Code 的
-    /// 「Open Recent」列文件夾、`⌘P` 列檔，而「重開上次的窗」是第三件；vim 的
-    /// `:oldfiles` 和 `:mksession` 同理）。yumete 的數據本來就是這麼分的：
-    /// `places.txt` 是檔，`sessions/` 是每個項目開着哪幾個。
-    ///
-    /// **兩個檔的挑選器而不是一個帶開關的**，因為挑選器一開門就是插入態
-    /// （`PIC.INS`），數字鍵在裏面是查詢裏的字，不是鍵。
-    pub const OPEN_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("f", "hint.open.recent-files"),
-        ("g", "hint.open.recent-files-global"),
-        ("p", "hint.open.recent-projects"),
-        ("r", "hint.open.resume"),
-    ];
-
-    /// **`空格 z` — 輸入法那一組**（2026-10-17 作者定）。
-    ///
-    /// 原話：「In Yume, we have many shortcuts too with (shift + control + a
-    /// letter). I want them to be aligned as much as possible.」So the letter
-    /// under `z` is **Yume's own ⌃⇧ letter** wherever Yume has one, and the
-    /// value under it is a letter of that value's own name. Measured off
-    /// Yume's factory table (`yume-core/src/hotkeys.rs`, 26 rows) that day:
-    ///
-    /// ```text
-    /// ⌃⇧M 上屏方式   ⌃⇧Y 輸入預測   ⌃⇧I 選方案   ⌃⇧N 下一個方案
-    /// ⌃⇧/ 注解       ⌃⇧3–9 一頁幾條
-    /// ```
-    ///
-    /// Warning: **The letters Yume uses and yumete has no answer for stay empty** —
-    /// `O U D L H K J A .` and `0`. Lining the two up is only worth doing if
-    /// the day yumete grows one of those, the letter is already the same on
-    /// both sides and nobody's hand has to change.
-    ///
-    /// Warning: **`空格 空格` is gone**, and this group's `z` is what it was. Two
-    /// spellings for one thing is what this repo does not keep.
-    pub const YUME_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("z", "hint.yume.toggle"),
-        ("m", "hint.yume.commit"),
-        ("p", "hint.yume.panel"),
-        ("e", "hint.yume.preedit"),
-        ("y", "hint.yume.predict"),
-        ("i", "hint.yume.scheme"),
-        ("n", "hint.yume.next-scheme"),
-        ("3-9", "hint.yume.menu-size"),
-        ("/", "hint.yume.chaifen"),
-        ("t", "hint.yume.table"),
-        ("w", "hint.yume.which"),
-        ("W", "hint.yume.where"),
-    ];
-
-    /// The values under the three letters that have any — `m`, `p`, `e`.
-    pub fn yume_values(subject: char) -> &'static [(&'static str, &'static str)] {
-        match subject {
-            'm' => &[
-                ("0", "hint.yume.commit-default"),
-                ("d", "hint.yume.commit-delayed"),
-                ("u", "hint.yume.commit-unique"),
-                ("f", "hint.yume.commit-fluency"),
-            ],
-            'p' => &[
-                ("b", "hint.yume.panel-box"),
-                ("m", "hint.yume.panel-bottom"),
-                ("i", "hint.yume.panel-inline"),
-            ],
-            _ => &[
-                ("o", "hint.yume.preedit-off"),
-                ("c", "hint.yume.preedit-composition"),
-                ("p", "hint.yume.preedit-preview"),
-            ],
-        }
-    }
-
-    pub const SPACE_KEYS: &'static [(char, &'static str)] = &[
-        ('f', "hint.space.open-file"),  // project dir
-        ('F', "hint.space.open-file-here"),  // working dir
-        ('e', "hint.space.explorer"),  // project dir
-        ('E', "hint.space.explorer-here"),  // this file's dir
-        ('b', "hint.space.switch-buffer"),
-        ('g', "hint.space.changed-files"),
-        ('y', "hint.space.copy-to-clipboard"),
-        ('p', "hint.space.paste-from-clipboard"),
-        ('P', "hint.space.paste-before"),
-        ('R', "hint.space.replace-from-clipboard"),
-        ('s', "hint.space.symbols"),
-        ('S', "hint.space.project-symbols"),
-        ('n', "hint.space.dictionary"),
-        ('N', "hint.space.dictionary-panel"),
-        ('k', "hint.space.what-is-this"),
-        ('K', "hint.space.what-is-this-panel"),
-        ('d', "hint.space.diagnostics"),
-        ('D', "hint.space.project-diagnostics"),
-        ('l', "hint.space.problems"),
-        ('L', "hint.space.problems-panel"),
-        ('x', "hint.space.change"),
-        ('X', "hint.space.change-panel"),
-        ('r', "hint.space.rename"),
-        ('a', "hint.space.actions"),
-        ('i', "hint.space.record"),
-        ('I', "hint.space.record-panel"),
-        ('w', "hint.region.title"),
-        ('t', "hint.space.table"),
-        ('"', "menu.paste.title"),
-        ('c', "hint.space.comment-line"),
-        ('C', "hint.space.comment-block"),
-        ('m', "hint.conflict.title"),
-        ('o', "hint.space.open-recent"),
-        ('z', "hint.space.yume"),
-        ('/', "hint.space.advanced-search"),
-        ('?', "hint.space.all-commands"),
-        // **空格 空格 / 空格 退格 翻頁**（2026-10-18 要的）。A reader holding a
-        // book with one hand reaches for the space bar, which is what every
-        // reader on every platform pages with; here the bar is this menu's
-        // own leader, so the page turn is the bar pressed twice.
-        //
-        // The whole page, not the half `J`/`K` take: `C-f`/`C-b` and
-        // `PageDown`/`PageUp` are the same turn, and these two are the ones a
-        // hand finds without leaving the home row.
-        (' ', "hint.space.page-down"),
-        ('\u{8}', "hint.space.page-up"),
-    ];
-
     /// **What a bare count may be finished with** — only the keys where N means
     /// something other than 「do it N times」 (2026-10-14).
     ///
@@ -3077,78 +2315,6 @@ impl Editor {
         (";", "hint.count.nth-find"),
         ("gt gc gb", "hint.count.screen-row"),
         ("…", "hint.count.otherwise"),
-    ];
-
-    /// What `g` may be finished with.
-    pub(super) const GOTO_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("g", "hint.goto.start-of-file"),
-        ("<N>g", "hint.goto.line-n"),
-        ("e", "hint.goto.end-of-file"),
-        ("h l", "hint.goto.line-start-or-end"),
-        ("s", "hint.goto.first-non-blank"),
-        ("f", "hint.goto.open-this-file"),
-        ("L", "hint.goto.follow-link"),
-        ("w", "hint.goto.jump-labels"),
-        ("x", "hint.goto.seek-written"),
-        ("z", "hint.goto.seek-reading"),
-        ("a", "hint.goto.last-file"),
-        ("n p", "hint.goto.next-or-previous-buffer"),
-        ("d", "hint.goto.follow-note"),
-        ("D", "hint.goto.follow-note-elsewhere"),
-        ("r", "hint.goto.references"),
-        ("/", "hint.goto.search-word"),
-        ("?", "hint.goto.search-word-elsewhere"),
-        ("j k", "hint.goto.by-file-line"),
-        (".", "hint.goto.last-change"),
-        ("t c b", "hint.goto.screen-top-middle-bottom"),
-    ];
-
-    /// **vim 鍵位下多出來的那一行**：`gv` 重選上一次那一段。helix 没有這個命令，
-    /// 所以它不在上面兩張表上——提示行裏列一個在這一端按不出東西的鍵，和那張表
-    /// 說謊是同一件事。
-    pub(super) const GOTO_KEYS_VIM: &'static [(&'static str, &'static str)] = &[
-        ("v", "hint.goto.reselect"),
-        ("i", "hint.goto.insert-again"),
-        ("; ,", "hint.goto.walk-changes"),
-        ("u U ~", "hint.goto.case-operators"),
-        ("q", "hint.goto.fill"),
-        ("J", "hint.goto.join-without-a-space"),
-        ("n N", "hint.goto.next-match"),
-    ];
-
-    /// The same menu on a 縱書 page, where the four directions turn (see
-    /// `handle_goto`).
-    pub(super) const GOTO_KEYS_VERTICAL: &'static [(&'static str, &'static str)] = &[
-        ("g", "hint.goto.start-of-file"),
-        ("<N>g", "hint.goto.line-n"),
-        ("e", "hint.goto.end-of-file"),
-        ("k j", "hint.goto.line-start-or-end"),
-        ("s", "hint.goto.first-non-blank"),
-        ("f", "hint.goto.open-this-file"),
-        ("L", "hint.goto.follow-link"),
-        ("w", "hint.goto.jump-labels"),
-        ("x", "hint.goto.seek-written"),
-        ("z", "hint.goto.seek-reading"),
-        ("n p", "hint.goto.next-or-previous-buffer"),
-        ("d", "hint.goto.follow-note"),
-        ("D", "hint.goto.follow-note-elsewhere"),
-        ("r", "hint.goto.references"),
-        ("/", "hint.goto.search-word"),
-        ("?", "hint.goto.search-word-elsewhere"),
-        ("h l", "hint.goto.by-file-line-vertical"),
-        (".", "hint.goto.last-change"),
-        ("t c b", "hint.goto.screen-top-middle-bottom"),
-        ("a", "hint.goto.last-file"),
-    ];
-
-    /// What `m` may be finished with — 「這一對」，以及拿它做什麼.
-    pub(super) const MATCH_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("m", "hint.match.pair"),
-        ("i", "hint.match.inside"),
-        ("a", "hint.match.around"),
-        ("s", "hint.match.surround"),
-        ("d", "hint.match.take-off"),
-        ("r", "hint.change"),
     ];
 
     /// The objects `mi` / `ma` take; [`Self::object_rows`] adds the pairs.
@@ -3218,28 +2384,6 @@ impl Editor {
         rows
     }
 
-    /// What `` ` `` may be finished with.
-    ///
-    /// The last row is `hint.vi.backtick` — 「vi 的記號：M 記、`'` 回去」. It is a
-    /// row in a menu the reader opened, not a guess about why a key was
-    /// pressed, which is why it outlived the phrasebook (2026-10-08).
-    pub(super) const CASE_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("l", "hint.case.lower"),
-        ("u", "hint.case.upper"),
-        ("`", "hint.case.switch"),
-        ("s", "hint.case.to-s"),
-        ("t", "hint.case.to-t"),
-        ("w", "hint.case.to-tw"),
-        ("f", "hint.case.to-full"),
-        ("h", "hint.case.to-half"),
-        ("k", "hint.case.to-hk"),
-        ("c", "hint.case.to-c"),
-        ("g", "hint.case.to-g"),
-        ("j", "hint.case.to-jp"),
-        ("", "hint.vi.backtick"),
-    ];
-
-
     pub(super) const CONFIRM_KEYS: &'static [(&'static str, &'static str)] = &[
         ("y", "hint.confirm.yes"),
         ("n", "hint.confirm.no"),
@@ -3248,215 +2392,8 @@ impl Editor {
         ("l", "hint.confirm.last"),
     ];
 
-    /// What `]` and `[` may be finished with — 「下一個這種東西」.
-    /// The `z` group: where the cursor's line goes on the screen.
-    pub(super) const AIM_KEYS: &'static [(&'static str, &'static str)] =
-        &[("z", "hint.aim.middle"), ("t", "hint.aim.top"), ("b", "hint.aim.bottom")];
-
-    pub(super) const HOP_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("m", "hint.hop.conflict"),
-        ("g", "hint.hop.change"),
-        ("d D", "hint.hop.problem"),
-    ];
-
-    /// Warning: **這兩張是**換**的，不是疊的**（2026-10-06 出圖看出來的）。先寫成疊
-    /// 加，於是代碼檔的面板上 `c` 出現兩次（「合併衝突」和「類」），稿子的面板上
-    /// 列着一個按下去永遠找不到東西的 `f`。提示行要跟着**這一個檔**走。
-    ///
-    /// `c` 在代碼檔裏是「類」，在稿子裏是「合併衝突」。一個鍵兩個意思本來是這個
-    /// 倉最不肯要的事，而這兩種檔從不是同一個檔：`]c` 在 `.rs` 上找衝突標記永遠
-    /// 一無所獲，在 `.md` 上找類也是。
-    pub(super) const HOP_KEYS_CODE: &'static [(&'static str, &'static str)] = &[
-        ("f", "hint.hop.function"),
-        ("t", "hint.hop.class"),
-        ("c", "hint.hop.comment"),
-    ];
-
-    /// The two that read differently depending on which way `[` / `]` points.
-    ///
-    /// Warning: **段落那一行借的是 `:keymap-actions` 的名字**（`action.goto-next-paragraph`
-    /// / `action.goto-prev-paragraph`）：同一件事在兩張表上，寫成兩句話只會讓
-    /// 它們慢慢說岔。
-    pub(super) const HOP_KEYS_FORWARD: &'static [(&'static str, &'static str)] =
-        &[("p", "action.goto-next-paragraph"), ("␣", "hint.hop.blank-below")];
-
-    pub(super) const HOP_KEYS_BACK: &'static [(&'static str, &'static str)] =
-        &[("p", "action.goto-prev-paragraph"), ("␣", "hint.hop.blank-above")];
-
-    /// What `空格 m` may be finished with — which side of the conflict to keep.
-    /// **區域那一組**（`C-w`/`空格 w`，2026-09-30 定）。
-    ///
-    /// 照 helix 的 `C-w`（`keymap/default.rs:193`）：`w` 走一步、`hjkl` 按方向
-    /// 走、`s` 切一刀、`q` 關、`o` 只留這一個。`e`/`i`/`E`/`I` 是這一頭自己
-    /// 加的——helix 没有邊欄這件東西。
-    pub(super) const REGION_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("w", "hint.region.next"),
-        ("h j k l", "hint.region.go"),
-        ("e i", "hint.region.toggle-bar"),
-        ("E I", "hint.region.into-bar"),
-        ("s", "hint.region.split"),
-        ("v", "hint.region.split-beside"),
-        ("n", "hint.region.new"),
-        ("q", "hint.region.close"),
-        ("o", "hint.region.only"),
-    ];
-
-    /// `C-w n`, helix's group of the same letter.
-    pub(super) const REGION_NEW_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("s", "hint.region.new-below"),
-        ("v", "hint.region.new-beside"),
-    ];
-
-    pub(super) const CONFLICT_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("o", "hint.conflict.ours"),
-        ("t", "hint.conflict.theirs"),
-        ("b", "hint.conflict.both"),
-    ];
-
-    /// What `t` offers **wherever the cursor is**.
-    ///
-    /// **The way in comes first.** `t` is a group in every mode (#206), so most
-    /// of the time it is pressed by somebody who is *not* in a table yet — and
-    /// the menu used to open with 「照這欄順排」 and never once mention `t t`.
-    /// These six work anywhere, so they head every list, and on a page with no
-    /// table under the cursor they are the whole list.
-    const TABLE_KEYS: &'static [(&'static str, &'static str)] = &[
-        // **一個系列，照它們的次序排**（2026-09-30 定：「t 放到 f 后面，q 放到
-        // t 后面。这五个是一个系列」）。`o b t` 是同一個問題的三個答案——這張表
-        // 畫成什麼樣——由淺入深，`q` 是從最深那一檔退回來。
-        //
-        // **`f` 2026-10-21 併進 `b`**，於是這一系列從五個變四個：它只多畫一道
-        // 牆，而要看網格的人要的是 `t t`。
-        ("o", "hint.table.back-to-prose"),
-        ("b", "hint.table.operate-it"),
-        ("t", "hint.table.whole-window"),
-        ("q", "hint.table.leave-the-window"),
-        ("] [", "hint.table.next-or-previous"),
-        // 2026-10-02 定：命令是 `:convert-table`，鍵位摺在這一組底下。
-        ("x", "hint.table.convert"),
-    ];
-
-    /// What `t` adds **once a table has the window**, and only there.
-    ///
-    /// 格子多寬 is a preference about how the view draws, not about where the
-    /// cursor is standing — so it used to head every list. It belongs to the
-    /// pane alone since 2026-10-22: 源碼 and 基本 draw every cell whole and
-    /// may not do otherwise (「we promised users that in `tb` mode, no letters
-    /// or symbols from the source code is hidden」), and **a list that offers
-    /// a key the editor would refuse is the one thing these lists may not
-    /// be** — that is what `TABLE_KEYS_FILE` was written for.
-    const TABLE_KEYS_PANE: &'static [(&'static str, &'static str)] =
-        &[("w", "hint.table.fold-wide-cells")];
-
-    /// `空格 t x` 底下那三個格式。名字直接寫——它們就是命令上打的那三個詞。
-    /// `空格 t x` 底下那三種格式。**小寫是轉換，大寫是把剪貼板貼成那一種**
-    /// （2026-10-02 定）——和這一組的習慣一致：大寫是「另一個方向」或者
-    /// 「重的那一個」（`r R`、`c C`、`d D`、`F`）。
-    pub(super) const TABLE_CONVERT_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("p P", "hint.table.convert-pipe"),
-        ("c C", "hint.table.convert-csv"),
-        ("t T", "hint.table.convert-tsv"),
-    ];
-
-    /// What `t` adds inside a fenced block. A block is read where it lies
-    /// (#216), so the keys that rewrite a file are not offered — because they
-    /// are refused.
-    const TABLE_KEYS_BLOCK: &'static [(&'static str, &'static str)] = &[
-        ("/", "hint.table.search-columns"),
-        ("?", "hint.table.search-columns-elsewhere"),
-        ("g", "hint.table.go-to-cell"),
-        ("y v", "hint.table.yank-or-replace-column"),
-        ("1s 1S", "hint.table.sort-by-column"),
-    ];
-
-    /// What `t` adds inside a Markdown table.
-    const TABLE_KEYS_MD: &'static [(&'static str, &'static str)] = &[
-        ("/", "hint.table.search-columns"),
-        ("?", "hint.table.search-columns-elsewhere"),
-        ("g", "hint.table.go-to-cell"),
-        ("r R", "hint.table.add-row"),
-        ("c C", "hint.table.add-column"),
-        ("d D", "hint.table.delete-row-or-column"),
-        ("j k", "hint.table.move-row"),
-        ("h l", "hint.table.move-column"),
-        ("y p P", "hint.table.yank-or-paste-column"),
-        ("v", "hint.table.replace-column"),
-        ("1s 1S", "hint.table.sort-by-column"),
-        ("< = >", "hint.table.align-column"),
-        // `F`, not `f` — the lowercase letter is 完整表格 since #283, and a
-        // capital is what a command that rewrites every row of the file should
-        // have wanted.
-        ("F", "hint.table.line-it-up"),
-        ("i", "hint.table.detail-panel"),
-    ];
-
-    /// What `t` adds in a delimited file, where the columns are the schema's.
-    ///
-    /// **What this table can actually do**, not what tables can do: `n`/`D`/
-    /// `h`/`l` are not offered here because they are refused here, and the menu
-    /// that listed them was the one place the editor said a key existed and
-    /// then said it did not.
-    const TABLE_KEYS_FILE: &'static [(&'static str, &'static str)] = &[
-        ("/", "hint.table.search-columns"),
-        ("?", "hint.table.search-columns-elsewhere"),
-        ("g", "hint.table.go-to-cell"),
-        ("1s 1S", "hint.table.sort-by-column"),
-        ("r R", "hint.table.add-row"),
-        ("d", "hint.table.delete-row"),
-        ("j k", "hint.table.move-row"),
-        ("y p P", "hint.table.yank-or-paste-column"),
-        ("v", "hint.table.replace-column"),
-        ("H", "hint.table.first-row-is-data"),
-        ("i", "hint.table.detail-panel"),
-    ];
-
-    /// A table of key names read out in the reader's language.
-    /// **空格鍵在鍵名那一欄寫成 `␣`**（2026-10-10）。
-    ///
-    /// `空格 空格` 一加進來就露出這件事：鍵名是原樣畫出去的 `char`，而一個空格畫
-    /// 出來就是一片空白——那一行看着像没有鍵。`␣` 是這個倉本來就在用的寫法
-    /// （`HOP_DOWN_KEYS` 的「空行」那一條、竪排提示行裏的 `Pending::Space`）。
-    /// **Every key menu, for the generated keymap page** (`ye --docgen`,
-    /// 2026-10-29): each menu's title message, the key that opens it, and its
-    /// rows as (keys, message). The same tables the which-key panel draws, so
-    /// the page cannot list a key the editor does not have.
-    pub fn menus_for_docs() -> Vec<DocMenu> {
-        let rows = |table: &[(&'static str, &'static str)]| -> Vec<(String, &'static str)> {
-            table.iter().map(|(k, m)| (k.to_string(), *m)).collect()
-        };
-        let goto = rows(Self::GOTO_KEYS);
-        vec![
-            (
-                "hint.space.title",
-                "Space",
-                Self::SPACE_KEYS.iter().map(|(k, m)| (Self::key_name(*k).into_owned(), *m)).collect(),
-            ),
-            ("hint.goto.title", "g", goto),
-            ("hint.match.title", "m", rows(Self::MATCH_KEYS)),
-            // In prose and code alike, then the three a code file adds.
-            ("hint.hop.next", "]", [rows(Self::HOP_KEYS), rows(Self::HOP_KEYS_FORWARD), rows(Self::HOP_KEYS_CODE)].concat()),
-            ("hint.hop.previous", "[", [rows(Self::HOP_KEYS), rows(Self::HOP_KEYS_BACK), rows(Self::HOP_KEYS_CODE)].concat()),
-            ("hint.aim.title", "z", rows(Self::AIM_KEYS)),
-            ("hint.region.title", "C-w", rows(Self::REGION_KEYS)),
-            ("hint.region.new", "C-w n", rows(Self::REGION_NEW_KEYS)),
-            // Every key the group has in some table, the way in first: the
-            // menu itself shows only what works where the cursor stands.
-            ("hint.table.title", "Space t", {
-                let mut all = [rows(Self::TABLE_KEYS), rows(Self::TABLE_KEYS_PANE), rows(Self::TABLE_KEYS_MD)].concat();
-                for (keys, what) in Self::TABLE_KEYS_FILE {
-                    if !all.iter().any(|(k, _)| k.split(' ').any(|one| keys.split(' ').any(|two| one == two))) {
-                        all.push((keys.to_string(), *what));
-                    }
-                }
-                all
-            }),
-            ("hint.table.convert", "Space t x", rows(Self::TABLE_CONVERT_KEYS)),
-            ("hint.case.title", "`", rows(Self::CASE_KEYS)),
-            ("hint.open.title", "Space o", rows(Self::OPEN_KEYS)),
-            ("hint.yume.title", "Space z", rows(Self::YUME_KEYS)),
-        ]
-    }
-
+    /// A key as a menu writes it: the space bar as `␣` (a space drawn is a
+    /// blank, and the row looked keyless), Backspace as `⌫`.
     pub(super) fn key_name(key: char) -> std::borrow::Cow<'static, str> {
         match key {
             ' ' => "␣".into(),
@@ -3473,98 +2410,6 @@ impl Editor {
             .collect()
     }
 
-    /// 「`空格 t` 後面可以按這些」——**從那幾張真表生出來**。
-    ///
-    /// Warning: 從前這是三則手抄的文案（`hint.table.after-t`/`block-keys`/
-    /// `csv-keys`）。抄的那一份與真表對不上五處：少了 `b`/`w`/`F`，多了一個
-    /// 根本不存在的 `n`，`1s 1S` 抄成了 `s S`——而「光按 `t s` 什麽都不會發生」
-    /// 正是 `documented_keys.rs` 的 `DISOWNED_KEYS` 記着的那一條
-    /// （2026-09-23 審出來的）。按錯鍵的人看見的就這一行，它不能是另一份說法。
-    /// 「這一組後面可以按這些」——從那張真表生出來，同 `table_keys_say`。
-    pub(super) fn said_keys(keys: &[(&'static str, &'static str)]) -> String {
-        let keys: Vec<&str> = keys.iter().map(|&(k, _)| k).collect();
-        say!("hint.yume.after-z", keys.join(" "))
-    }
-
-    pub(super) fn table_keys_say(inside: Option<Bounds>, pane: bool) -> String {
-        let keys: Vec<&str> =
-            Self::table_keys(inside, pane).into_iter().map(|(k, _)| k).collect();
-        say!("hint.table.after-t", keys.join(" "))
-    }
-
-    /// The keys `t` offers, given what the cursor is standing in and whether
-    /// a table has the window.
-    pub(super) fn table_keys(
-        inside: Option<Bounds>,
-        pane: bool,
-    ) -> Vec<(&'static str, &'static str)> {
-        let mut keys = Self::TABLE_KEYS.to_vec();
-        if pane {
-            keys.extend(Self::TABLE_KEYS_PANE.iter().copied());
-        }
-        keys.extend(
-            match inside {
-                Some(Bounds::Block) => Self::TABLE_KEYS_BLOCK,
-                Some(Bounds::Md) => Self::TABLE_KEYS_MD,
-                Some(Bounds::WholeFile) => Self::TABLE_KEYS_FILE,
-                None => &[],
-            }
-            .iter()
-            .copied(),
-        );
-        keys
-    }
-
-    /// Every key that may follow `leader`, in **any** context.
-    ///
-    /// The menus themselves stay context-sensitive on purpose — `t` inside a
-    /// Markdown table offers what a Markdown table can do, and a delimited file
-    /// offers what a schema can — so this does not replace them. It is their
-    /// union, and it has one reader: the test that asks whether a key sequence
-    /// the documents print is a key sequence the editor has. §5.2.2 found the
-    /// same name wrong in two places eight times over; this is the second place
-    /// made answerable.
-    ///
-    /// `None` means **any character follows**: `f`, `r`, `"`, `M`, `'` and the
-    /// `mi`/`ma`/`ms`/`mr` pairs take a letter or a bracket the writer chooses,
-    /// so there is no list for a document to be checked against.
-    pub fn keys_after(leader: char) -> Option<Vec<String>> {
-        let spell = |rows: &[(&'static str, &'static str)]| -> Vec<String> {
-            rows.iter()
-                .flat_map(|(keys, _)| keys.split_whitespace().map(str::to_string))
-                .collect()
-        };
-        Some(match leader {
-            // 空 is the first character of how the documents spell it: `空格 f`.
-            ' ' | '空' => Self::SPACE_KEYS.iter().map(|(k, _)| k.to_string()).collect(),
-            // Warning: **每一個前綴的**所有**分表都要在這裏**（2026-10-06）。這一支是
-            // 「手冊教的鍵，編輯器給不給得出」那個測試的唯一真相來源，而這兩組
-            // 的表是按版面/鍵位/方向分開的：漏一張，手冊裏那幾行就**驗過了、
-            // 全綠**，而它們根本没被對過（`t` 那一條 2026-09-23 就是這麼漏的，
-            // 註釋在下面）。
-            'g' => [
-                spell(Self::GOTO_KEYS),
-                spell(Self::GOTO_KEYS_VERTICAL),
-                spell(Self::GOTO_KEYS_VIM),
-            ]
-            .concat(),
-            'm' => spell(Self::MATCH_KEYS),
-            '`' => spell(Self::CASE_KEYS),
-            ']' | '[' => [
-                spell(Self::HOP_KEYS),
-                spell(Self::HOP_KEYS_CODE),
-                spell(Self::HOP_KEYS_FORWARD),
-                spell(Self::HOP_KEYS_BACK),
-            ]
-            .concat(),
-            // Warning: **`t` 不在這張表上了。** 2026-09-21 表格組搬到了 `空格 t`，而
-            // 這裏一直還答得出表格鍵——於是教程裏那幾行舊拼法（`t r`、`t1s`）
-            // 逐條「驗過」，全綠（2026-09-23 審出來的）。`t` 現在只是 vi 的
-            // till：一個吃任何字符的鍵，和 `f`/`r`/`"` 一樣，没有單子。
-            _ => return None,
-        })
-    }
-
     /// **開命令行**——`:`、`!`、`空格 ?` 都走這一支。
     ///
     /// Warning: 從前是三份抄的，而且抄漏了一行：`:` 不清 `completion`，另外兩個清
@@ -3576,232 +2421,13 @@ impl Editor {
         self.completion = None;
     }
 
-    /// Run one key of a `Space` sequence.
-    /// **`空格 o` 底下那一個字母**（2026-10-18 作者定）——見 [`Editor::OPEN_KEYS`].
-    fn handle_open_recent(&mut self, key: Key) {
-        match key {
-            Key::Char('f') => self.open_recent_picker(true),
-            Key::Char('g') => self.open_recent_picker(false),
-            Key::Char('p') => self.open_project_picker(),
-            Key::Char('r') => {
-                let opened = self.restore_session();
-                self.status = match opened {
-                    0 => say!("recent.nothing-to-resume"),
-                    n => say!("cli.picked-up-where-you-left-off", n),
-                };
-            }
-            Key::Esc => {}
-            _ => self.status = Self::said_keys(Self::OPEN_KEYS),
-        }
-    }
-
-    /// **`空格 z` 底下那一個字母**（2026-10-17 作者定）——見 [`Editor::YUME_KEYS`].
-    ///
-    /// Three of them take a value and so open one more level
-    /// ([`Pending::YumeValue`]); the rest act at once. Everything here rides
-    /// `scheme_request`, the same string the `:yume-…` commands set: the
-    /// front end is the one holding the IME session, and a key is not a
-    /// second way of asking it.
-    fn handle_yume(&mut self, key: Key) {
-        let ask = |e: &mut Self, what: &str| e.scheme_request = Some(what.to_string());
-        match key {
-            // 中 / ABC / 關 — what `空格 空格` was until today.
-            Key::Char('z') => ask(self, "lang:toggle"),
-            Key::Char('m' | 'p' | 'e') => {
-                if let Key::Char(c) = key {
-                    self.pending = Pending::YumeValue(c);
-                }
-            }
-            // The menu says 「on or off」, so the key flips; `:yume-autocompletion`
-            // on its own is the question (2026-10-30: this asked, and nobody
-            // answered `scheme:` or `comment:` at all).
-            Key::Char('y') => self.run_the_line(":yume-autocompletion toggle"),
-            // Picking is the command line with the scheme list open.
-            Key::Char('i') => self.open_the_command_line("yume-scheme "),
-            Key::Char('n') => ask(self, "scheme:next"),
-            Key::Char('/') => self.run_the_line(":yume-chaifen toggle"),
-            Key::Char('t') => ask(self, "~"),
-            Key::Char('w') => ask(self, "?"),
-            Key::Char('W') => ask(self, "where"),
-            Key::Char(n @ '3'..='9') => ask(self, &format!("menu:{n}")),
-            Key::Esc => {}
-            _ => self.status = Self::said_keys(Self::YUME_KEYS),
-        }
-    }
-
-    /// The value under `空格 z m` / `p` / `e`.
-    fn handle_yume_value(&mut self, subject: char, key: Key) {
-        let Key::Char(c) = key else {
-            if key != Key::Esc {
-                self.status = Self::said_keys(Self::yume_values(subject));
-            }
-            return;
-        };
-        // **The keys run the commands** (2026-10-30), so a key is refused
-        // where its command is: `Space z m u` with no 碼表 loaded used to say
-        // 「commit method: unique」 while `:yume-commit unique` said it could not.
-        let line = match (subject, c) {
-            ('m', '0') => Some(":yume-commit default"),
-            ('m', 'd') => Some(":yume-commit delayed"),
-            ('m', 'u') => Some(":yume-commit unique"),
-            ('m', 'f') => Some(":yume-commit fluency"),
-            ('p', 'b') => Some(":yume-panel box"),
-            ('p', 'm') => Some(":yume-panel bottom"),
-            ('p', 'i') => Some(":yume-panel inline"),
-            ('e', 'o') => Some(":yume-inline-preedit off"),
-            ('e', 'c') => Some(":yume-inline-preedit composition"),
-            ('e', 'p') => Some(":yume-inline-preedit preview"),
-            _ => None,
-        };
-        match line {
-            Some(line) => self.run_the_line(line),
-            None => self.status = Self::said_keys(Self::yume_values(subject)),
-        }
-    }
-
     /// Run a command line for a key, and say what went wrong when it did.
-    fn run_the_line(&mut self, line: &str) {
+    pub(super) fn run_the_line(&mut self, line: &str) {
         if let Err(err) = self.execute(line) {
             self.status = err.to_string();
         }
     }
 
-    fn handle_space(&mut self, key: Key) {
-        match key {
-            // **`空格 w` 是區域那一組的門**（2026-09-30 定）。從前這一層躺着三
-            // 套說同一件事的詞彙——`空格 1234`（點名去）、`空格 !@#$`（關那
-            // 一區）、`空格 w/W/q/Q`（走一步/全開/關/只留）。現在一組一套。
-            //
-            // Warning: **數字空出來了，留給緩衝區**（2026-09-30 定）：
-            // 「each buffer will be indexed by 1, 2, 3, 4 before the file
-            // name……Then users can use space + N to quickly switch between
-            // them.」——檔數上十位就補零，所以那是一套不必按空格確認的前綴碼。
-            Key::Char('w') => self.pending = Pending::Region,
-            // **大綱在 `空格 s`，只在這一格**（2026-10-08 去重）。
-            //
-            // helix 把「這份檔裏的符號」放在 `空格 s`（`lsp_or_syntax_symbol_picker`），
-            // 這個編輯器從前放在 `空格 o`，2026-10-06 兩個拼法一起留着。報上來的是
-            // 選單上兩行「大綱」。
-            //
-            // Warning: **去掉的是 `o` 那一個**，雖然它是這裏一直用的那一個。查過 helix 的
-            // 空格選單全部二十八格：`s` 有主（就是這件事），而 `o` **一格都没有**
-            // ——所以 `s` 是對齊、`o` 是自己發明的。照「對齊是第一要務」與 §5.94
-            // （「我天天按它」不是理由）兩條，留對齊的那一個。
-            //
-            // `o` 從此没綁，按下去**一個字都不說**（2026-10-08 那條規矩，§5.111）。
-            // **helix's four pickers** (2026-10-31): symbols in this file and
-            // in the project, diagnostics in this file and in the project.
-            // The outline sidebar these keys used to open is `:sidebar
-            // outline`; the problem at the cursor moved to `l`/`L`.
-            Key::Char('s') => self.open_symbol_picker(),
-            Key::Char('S') => self.open_project_symbol_picker(),
-            // 定義 (#215): the 拆分表 on the character under the cursor. The
-            // table detail panel this key used to open is a table key, and now
-            // lives in the table group as `t i`.
-            // **`空格 n` 只開浮窗**（2026-09-22 定）：看一眼那個字，邊欄一點都
-            // 不動。Warning: 再按一次收起來。
-            Key::Char('n') => match self.grapheme_at_cursor() {
-                Some(ch) => {
-                    self.look_up_afloat(&ch);
-                }
-                None => self.set_status(say!("ui.nothing-to-look-up")),
-            },
-            // **`空格 N` 在邊欄裏開**——同一份答案，鍵跟過去，讀得完長的那些。
-            // 大寫是「同一件事的更大版本」，同 `空格 c`/`空格 C`。
-            Key::Char('N') => match self.grapheme_at_cursor() {
-                Some(ch) => {
-                    self.look_up(&ch);
-                }
-                None => self.set_status(say!("ui.nothing-to-look-up")),
-            },
-            // 旁注 (§5.2.3 ②). A page carries one or two, and a reading is
-            // typed at leisure — so it is worth a key, and worth a second one.
-            // The levels, `auto` and `format` stay `:ruby` commands: those are
-            // said once a document, not once a word.
-            // **`空格 k`：這是什麽？**（#53 ③，2026-09-21）helix 的 hover 也是這
-            // 一個鍵。只在代碼檔上問得出去；稿子上按到就照實說一句，而不是無聲。
-            // `空格 k` 浮窗、`空格 K` 進邊欄——與字典那一對同一條規矩
-            // （2026-09-22）。
-            Key::Char('k') => {
-                if !self.ask_what_this_is(true) {
-                    self.set_status(say!("lsp.not-code"));
-                }
-            }
-            // `空格 K`：查一次，**一定畫進邊欄**（没開就開出來）。`空格 k` 看
-            // 那一扇開没開：開着就畫進去，没開就浮。
-            Key::Char('K') => {
-                if !self.ask_what_this_is(false) {
-                    self.set_status(say!("lsp.not-code"));
-                }
-            }
-            // **診斷搬到 `d`/`D`**（2026-09-30 定，照 helix：`space d` 是
-            // diagnostics picker）。同形：小寫浮，大寫進邊欄。
-            Key::Char('d') => self.open_diagnostics_picker(false),
-            Key::Char('D') => self.open_diagnostics_picker(true),
-            Key::Char('l') => self.show_the_problem_here(true),
-            Key::Char('L') => self.show_the_problem_here(false),
-            // **`空格 x`/`X`：這一塊改之前寫的是什麼**（2026-10-11）。小寫浮、大寫
-            // 進邊欄，同那一族的別的四個。`v` 是更好按的那一格，留着——這一件不是
-            // 天天按的（原話：「感觉 git 还原不一定常用」）。
-            Key::Char('x') => self.show_the_change_here(true),
-            // **helix's `空格 r` and `空格 a`** (#54, 2026-10-29): rename the
-            // thing under the caret everywhere, and what the server can do here.
-            Key::Char('r') => self.start_a_rename(),
-            Key::Char('a') => self.ask_actions(),
-            Key::Char('X') => self.show_the_change_here(false),
-            // **記錄**——`空格 t i` 的別名（同日定）。`t i` 是它的本家（它是表
-            // 格的事），這一對是順手。
-            // 切哪一頭由前端定——它手裏纔有「此刻挂着没有」。
-            Key::Char('o') => self.pending = Pending::Open,
-            Key::Char('z') => self.pending = Pending::Yume,
-            Key::Char('i') => self.show_the_record_here(true),
-            Key::Char('I') => self.show_the_record_here(false),
-            Key::Char('"') => self.open_paste_picker(),
-            // 衝突 (#249): the three keys that end one. Under `空格` rather
-            // than a letter of its own because every letter has one already,
-            // and because a merge conflict is a thing that happens to a file
-            // a few times a year — not a motion a writer's fingers know.
-            Key::Char('m') => self.pending = Pending::Conflict,
-            // 表格組（2026-09-21 從 `t` 搬來，讓 `t`/`T` 回去當 till）。
-            Key::Char('t') => self.pending = Pending::Table,
-            Key::Char('c') => self.toggle_comment(crate::comment::Prefer::Line),
-            Key::Char('C') => self.toggle_comment(crate::comment::Prefer::Block),
-            Key::Char('f') => self.open_file_picker(),
-            Key::Char('F') => self.open_file_picker_here(),
-            // **挑選器式的瀏覽，不是邊欄那棵樹**（2026-10-20 作者定，原話：「In
-            // helix, _e and _E do not open the sidebar but a picker-like
-            // explorer. That is what I also want to have.」）。邊欄那一扇只走
-            // `:sidebar explorer`，不佔鍵。
-            Key::Char('e') => self.open_explorer(),
-            Key::Char('E') => self.open_explorer_here(),
-            Key::Char('b') => self.open_buffer_picker(),
-            // helix's changed-file picker (2026-10-31).
-            Key::Char('g') => self.open_changed_picker(),
-            // **高級搜索** (#419). It used to prefill `:grep `, and `:grep` is
-            // gone: what to look for is typed in the panel's own box, which
-            // arrives with the last pattern in it, selected.
-            Key::Char('/') => self.open_search(),
-            // 空的命令行畫的就是命令一覽，所以這一格和 `:` 是同一扇門。
-            Key::Char('?') => self.open_the_command_line(""),
-            // 工作區 (Feature #176): one key, three meanings that are the same
-            // meaning — 「另一個工作區」. Nothing open: open one, showing this
-            // same place. Open: hand it the keys. `W`:收掉，留下你站着的這半。
-            // **四個動詞，一個名詞**（2026-09-26 定的）。`w` 走一步、`W` 全開、
-            // `q` 關這個、`Q` 只留一個工作區；`1`–`4` 是同一套坐標下的點名。
-
-            // 翻頁，見 [`Editor::SPACE_KEYS`]. 退格 reaches this menu because it
-            // is handed the whole `Key`, not the character a key may carry.
-            Key::Char(' ') => self.move_page(1, false, 1.0),
-            Key::Backspace => self.move_page(1, true, 1.0),
-            Key::Char('y') => self.copy_to_clipboard(),
-            Key::Char('p') => self.clipboard_paste(true),
-            Key::Char('P') => self.clipboard_paste(false),
-            // helix's `空格 R` (2026-10-31): the selection replaced by the
-            // system clipboard, as `"+R` already did.
-            Key::Char('R') => self.clipboard_replace(),
-            _ => {}
-        }
-    }
 }
 
 /// **The key a played character stands for** — the other half of
@@ -3917,43 +2543,13 @@ fn typed_as(key: Key) -> Option<char> {
     }
 }
 
-
 /// One key menu for the docs: its title message, the key that opens it, and
 /// its rows as (keys, message).
-pub type DocMenu = (&'static str, &'static str, Vec<(String, &'static str)>);
+pub type DocMenu = (&'static str, String, Vec<(String, &'static str)>);
 
 #[cfg(test)]
 mod key_table_tests {
     use super::*;
-
-    /// **`:keymap-actions` 說的鍵要真的按得出那件事**（2026-10-12 掃出來的）。
-    ///
-    /// 空格那一組的鍵搬過幾次家，而 `actions.rs` 那張表没跟上：`outline` 還寫着
-    /// `空格 o`（那一格 2026-10-08 讓給了 `s`，`o` 從此没綁），`dictionary` 還寫
-    /// 着 `空格 d`（那一格 2026-09-30 讓給了診斷）——於是 `x = "outline"` 一聲不
-    /// 吭，而 `x = "dictionary"` **打開的是另一扇窗**。兩種都比没有這條記錄更壞。
-    ///
-    /// 這裏只驗得了空格那一組（它有一張明寫的表）；別的前綴各自散在 `match` 裏，
-    /// 窮舉不出來。
-    #[test]
-    fn every_action_on_the_space_menu_names_a_key_it_offers() {
-        let offered: Vec<char> = Editor::SPACE_KEYS.iter().map(|&(c, _)| c).collect();
-        for action in yumete_cjk::actions::ALL {
-            let yumete_cjk::actions::How::Keys(keys) = action.how else {
-                continue;
-            };
-            let mut chars = keys.chars();
-            if chars.next() != Some(' ') {
-                continue;
-            }
-            let Some(second) = chars.next() else { continue };
-            assert!(
-                offered.contains(&second),
-                "{}：表裏寫着 `空格 {second}`，而空格那一組没有這一格",
-                action.name
-            );
-        }
-    }
 
     /// **一個鍵寫得進配置，就要按得出來**——兩個方向逐條對着（2026-10-12）。
     ///

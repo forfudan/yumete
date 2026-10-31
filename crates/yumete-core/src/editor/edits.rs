@@ -1238,13 +1238,15 @@ impl Editor {
     /// Start recording keys, or stop and keep what was recorded (Helix `q`).
     pub(super) fn toggle_recording(&mut self) {
         match self.recording.take() {
-            Some(keys) => {
+            Some(mut keys) => {
+                keys.truncate(self.recording_from);
                 let n = keys.len();
                 self.macro_keys = keys;
                 self.status = say!("macro.recorded-keys", n);
             }
             None => {
                 self.recording = Some(Vec::new());
+                self.recording_from = 0;
                 self.status = say!("macro.recording");
             }
         }

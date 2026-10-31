@@ -189,10 +189,15 @@ fn said() -> BTreeMap<String, String> {
         let text = source(file);
         let mut tags = literals(&text, "say!(");
         // A command's `help` is a tag too: the `:` menu translates it as it
-        // draws it. So is the label beside a key in a key table, which is
-        // declared as the second half of a pair — `('c', "…")` in `SPACE_KEYS`,
-        // and `("g", "…")` in the eight tables that now sit beside it.
+        // draws it. So is the label beside a key in a key table: the last
+        // string of a group's row (`ch('c', "comment_line", "…")` in
+        // `groups.rs`), and the second of a pair (`("g", "…")`) in the few
+        // tables of waiting keys that sit beside them.
         tags.extend(literals(&text, "help:"));
+        // A key group's menu title, and the line it says when a key it does
+        // not have is pressed (`groups.rs`).
+        tags.extend(literals(&text, "title:"));
+        tags.extend(literals(&text, "SayKeys("));
         // **那張設置表的名字與說明也是標籤**（`yumete-config/src/settings_ui.rs`）。
         // Warning: 它們是**結構體字段**，不經過 `say!`——面板畫的時候纔翻譯。所以這張網
         // 不多開這兩個口子的話，一張三十個標籤的表可以一條條目都沒有而全樹皆綠，

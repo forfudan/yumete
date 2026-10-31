@@ -17,6 +17,27 @@ zhs = "把各个选区对齐"
 en = "line the selections up"
 
 [[message]]
+# 命令說明：align_view_bottom（草稿）
+key = "action.align-view-bottom"
+zht = "光標行挪到屏幕底下"
+zhs = "光标行挪到屏幕底下"
+en = "put the cursor's line at the bottom of the screen"
+
+[[message]]
+# 命令說明：align_view_center（草稿）
+key = "action.align-view-center"
+zht = "光標行挪到屏幕中間"
+zhs = "光标行挪到屏幕中间"
+en = "put the cursor's line in the middle of the screen"
+
+[[message]]
+# 命令說明：align_view_top（草稿）
+key = "action.align-view-top"
+zht = "光標行挪到屏幕頂上"
+zhs = "光标行挪到屏幕顶上"
+en = "put the cursor's line at the top of the screen"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.append-mode"
 zht = "在選區後插入"
@@ -93,6 +114,27 @@ zht = "註釋這一行"
 zhs = "注释这一行"
 en = "comment this line"
 find = "註釋 注释 一行 comment line"
+
+[[message]]
+# 命令說明：convert_table_to_csv（草稿）
+key = "action.convert-table-to-csv"
+zht = "表格轉成 csv"
+zhs = "表格转成 csv"
+en = "convert the table to csv"
+
+[[message]]
+# 命令說明：convert_table_to_pipe（草稿）
+key = "action.convert-table-to-pipe"
+zht = "表格轉成 pipe"
+zhs = "表格转成 pipe"
+en = "convert the table to pipe"
+
+[[message]]
+# 命令說明：convert_table_to_tsv（草稿）
+key = "action.convert-table-to-tsv"
+zht = "表格轉成 tsv"
+zhs = "表格转成 tsv"
+en = "convert the table to tsv"
 
 [[message]]
 # 命令說明：copy_selection_on_next_line（草稿）
@@ -278,6 +320,13 @@ en = "the start of the file"
 find = "開頭 开头 檔頭 档头 最前 start top"
 
 [[message]]
+# 命令說明：goto_first_diag（草稿）
+key = "action.goto-first-diag"
+zht = "第一條診斷"
+zhs = "第一条诊断"
+en = "the first diagnostic"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-first-nonwhitespace"
 zht = "第一個非空白字符"
@@ -286,12 +335,26 @@ en = "the first character that is not a space"
 find = "非空白 行首 第一個字 第一个字 nonblank first"
 
 [[message]]
+# 命令說明：goto_last_diag（草稿）
+key = "action.goto-last-diag"
+zht = "最後一條診斷"
+zhs = "最后一条诊断"
+en = "the last diagnostic"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-last-line"
 zht = "最後一行"
 zhs = "最后一行"
 en = "the last line"
 find = "最後一行 最后一行 末行 last line"
+
+[[message]]
+# 命令說明：goto_left_sidebar（草稿）
+key = "action.goto-left-sidebar"
+zht = "進左欄"
+zhs = "进左栏"
+en = "into the left sidebar"
 
 [[message]]
 # 命令說明：goto_line（草稿）
@@ -331,6 +394,55 @@ zhs = "g 组：前往"
 en = "the g group: go to"
 
 [[message]]
+# 命令說明：goto_newer_change（草稿）
+key = "action.goto-newer-change"
+zht = "往新走一處改動"
+zhs = "往新走一处改动"
+en = "on to a newer change"
+
+[[message]]
+# 命令說明：goto_next_change（草稿）
+key = "action.goto-next-change"
+zht = "下一處改動(git)"
+zhs = "下一处改动(git)"
+en = "the next change (git)"
+
+[[message]]
+# 命令說明：goto_next_class（草稿）
+key = "action.goto-next-class"
+zht = "下一個類"
+zhs = "下一个类"
+en = "the next class"
+
+[[message]]
+# 命令說明：goto_next_comment（草稿）
+key = "action.goto-next-comment"
+zht = "下一處註釋"
+zhs = "下一处注释"
+en = "the next comment"
+
+[[message]]
+# 命令說明：goto_next_conflict（草稿）
+key = "action.goto-next-conflict"
+zht = "下一處合併衝突"
+zhs = "下一处合并冲突"
+en = "the next merge conflict"
+
+[[message]]
+# 命令說明：goto_next_diag（草稿）
+key = "action.goto-next-diag"
+zht = "下一條診斷"
+zhs = "下一条诊断"
+en = "the next diagnostic"
+
+[[message]]
+# 命令說明：goto_next_function（草稿）
+key = "action.goto-next-function"
+zht = "下一個函數"
+zhs = "下一个函数"
+en = "the next function"
+
+[[message]]
 # 命令說明：goto_next_line_nonwhitespace（草稿）
 key = "action.goto-next-line-nonwhitespace"
 zht = "下一行的第一個非空白字符"
@@ -354,6 +466,62 @@ en = "the next sentence"
 find = "下一句 句子 next sentence"
 
 [[message]]
+# 命令說明：goto_next_table（草稿）
+key = "action.goto-next-table"
+zht = "下一張表"
+zhs = "下一张表"
+en = "the next table"
+
+[[message]]
+# 命令說明：goto_older_change（草稿）
+key = "action.goto-older-change"
+zht = "往舊走一處改動"
+zhs = "往旧走一处改动"
+en = "back to an older change"
+
+[[message]]
+# 命令說明：goto_prev_change（草稿）
+key = "action.goto-prev-change"
+zht = "上一處改動(git)"
+zhs = "上一处改动(git)"
+en = "the previous change (git)"
+
+[[message]]
+# 命令說明：goto_prev_class（草稿）
+key = "action.goto-prev-class"
+zht = "上一個類"
+zhs = "上一个类"
+en = "the previous class"
+
+[[message]]
+# 命令說明：goto_prev_comment（草稿）
+key = "action.goto-prev-comment"
+zht = "上一處註釋"
+zhs = "上一处注释"
+en = "the previous comment"
+
+[[message]]
+# 命令說明：goto_prev_conflict（草稿）
+key = "action.goto-prev-conflict"
+zht = "上一處合併衝突"
+zhs = "上一处合并冲突"
+en = "the previous merge conflict"
+
+[[message]]
+# 命令說明：goto_prev_diag（草稿）
+key = "action.goto-prev-diag"
+zht = "上一條診斷"
+zhs = "上一条诊断"
+en = "the previous diagnostic"
+
+[[message]]
+# 命令說明：goto_prev_function（草稿）
+key = "action.goto-prev-function"
+zht = "上一個函數"
+zhs = "上一个函数"
+en = "the previous function"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-prev-paragraph"
 zht = "上一段"
@@ -368,6 +536,20 @@ zht = "上一句"
 zhs = "上一句"
 en = "the previous sentence"
 find = "上一句 句子 previous sentence"
+
+[[message]]
+# 命令說明：goto_prev_table（草稿）
+key = "action.goto-prev-table"
+zht = "上一張表"
+zhs = "上一张表"
+en = "the previous table"
+
+[[message]]
+# 命令說明：goto_right_sidebar（草稿）
+key = "action.goto-right-sidebar"
+zht = "進右欄"
+zhs = "进右栏"
+en = "into the right sidebar"
 
 [[message]]
 # 命令說明：goto_window_bottom（草稿）
@@ -519,6 +701,13 @@ zhs = "光标跳到下一个词首(不选中)"
 en = "the cursor to the next word's start, selecting nothing"
 
 [[message]]
+# 命令說明：jump_prev_long_word_end（草稿）
+key = "action.jump-prev-long-word-end"
+zht = "光標跳到上一個大詞尾(不選中)"
+zhs = "光标跳到上一个大词尾(不选中)"
+en = "the cursor back to the previous long word's end, selecting nothing"
+
+[[message]]
 # 命令說明：jump_prev_long_word_start（草稿）
 key = "action.jump-prev-long-word-start"
 zht = "光標跳到上一個大詞首(不選中)"
@@ -540,11 +729,46 @@ zhs = "光标跳到上一句(不选中)"
 en = "the cursor to the previous sentence, selecting nothing"
 
 [[message]]
+# 命令說明：jump_prev_word_end（草稿）
+key = "action.jump-prev-word-end"
+zht = "光標跳到上一個詞尾(不選中)"
+zhs = "光标跳到上一个词尾(不选中)"
+en = "the cursor back to the previous word's end, selecting nothing"
+
+[[message]]
 # 命令說明：jump_prev_word_start（草稿）
 key = "action.jump-prev-word-start"
 zht = "光標跳到上一個詞首(不選中)"
 zhs = "光标跳到上一个词首(不选中)"
 en = "the cursor to the previous word's start, selecting nothing"
+
+[[message]]
+# 命令說明：jump_view_down（草稿）
+key = "action.jump-view-down"
+zht = "去下面那一區"
+zhs = "去下面那一区"
+en = "to the region below"
+
+[[message]]
+# 命令說明：jump_view_left（草稿）
+key = "action.jump-view-left"
+zht = "去左邊那一區"
+zhs = "去左边那一区"
+en = "to the region on the left"
+
+[[message]]
+# 命令說明：jump_view_right（草稿）
+key = "action.jump-view-right"
+zht = "去右邊那一區"
+zhs = "去右边那一区"
+en = "to the region on the right"
+
+[[message]]
+# 命令說明：jump_view_up（草稿）
+key = "action.jump-view-up"
+zht = "去上面那一區"
+zhs = "去上面那一区"
+en = "to the region above"
 
 [[message]]
 # 命令說明：keep_primary_selection（草稿）
@@ -665,6 +889,13 @@ en = "the next word's start"
 find = "詞首 词首 詞 词 下一個詞 下一个词 word"
 
 [[message]]
+# 命令說明：move_next_zong（草稿）
+key = "action.move-next-zong"
+zht = "竪排時到下一縱(文件裏的)"
+zhs = "竖排时到下一纵(文件里的)"
+en = "on a vertical page, on to the next line of the file"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-prev-long-word-start"
 zht = "上一個大詞首"
@@ -686,6 +917,13 @@ zht = "上一個詞首"
 zhs = "上一个词首"
 en = "the previous word's start"
 find = "詞首 词首 上一個詞 上一个词 word back"
+
+[[message]]
+# 命令說明：move_prev_zong（草稿）
+key = "action.move-prev-zong"
+zht = "竪排時到上一縱(文件裏的)"
+zhs = "竖排时到上一纵(文件里的)"
+en = "on a vertical page, back to the previous line of the file"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -772,11 +1010,32 @@ zhs = "增加缩进(再按一个动作)"
 en = "indent (then a motion)"
 
 [[message]]
+# 命令說明：operator_lowercase（草稿）
+key = "action.operator-lowercase"
+zht = "轉小寫(再按一個動作)"
+zhs = "转小写(再按一个动作)"
+en = "to lowercase (then a motion)"
+
+[[message]]
+# 命令說明：operator_switch_case（草稿）
+key = "action.operator-switch-case"
+zht = "大小寫互換(再按一個動作)"
+zhs = "大小写互换(再按一个动作)"
+en = "switch case (then a motion)"
+
+[[message]]
 # 命令說明：operator_unindent（草稿）
 key = "action.operator-unindent"
 zht = "減少縮進(再按一個動作)"
 zhs = "减少缩进(再按一个动作)"
 en = "unindent (then a motion)"
+
+[[message]]
+# 命令說明：operator_uppercase（草稿）
+key = "action.operator-uppercase"
+zht = "轉大寫(再按一個動作)"
+zhs = "转大写(再按一个动作)"
+en = "to uppercase (then a motion)"
 
 [[message]]
 # 命令說明：operator_yank（草稿）
@@ -838,6 +1097,27 @@ zht = "粘貼選單：挑一個寄存器"
 zhs = "粘贴菜单：挑一个寄存器"
 en = "the paste menu"
 find = "寄存器 粘貼 粘贴 選單 选单 register paste"
+
+[[message]]
+# 命令說明：paste_table_as_csv（草稿）
+key = "action.paste-table-as-csv"
+zht = "剪貼板貼成 csv 表格"
+zhs = "剪贴板贴成 csv 表格"
+en = "paste the clipboard as a csv table"
+
+[[message]]
+# 命令說明：paste_table_as_pipe（草稿）
+key = "action.paste-table-as-pipe"
+zht = "剪貼板貼成 pipe 表格"
+zhs = "剪贴板贴成 pipe 表格"
+en = "paste the clipboard as a pipe table"
+
+[[message]]
+# 命令說明：paste_table_as_tsv（草稿）
+key = "action.paste-table-as-tsv"
+zht = "剪貼板貼成 tsv 表格"
+zhs = "剪贴板贴成 tsv 表格"
+en = "paste the clipboard as a tsv table"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1015,6 +1295,20 @@ key = "action.save-selection"
 zht = "把這裏記進跳轉表"
 zhs = "把这里记进跳转表"
 en = "save this place in the jump list"
+
+[[message]]
+# 命令說明：scroll_down（草稿）
+key = "action.scroll-down"
+zht = "屏幕往下滾一行(光標的字不動)"
+zhs = "屏幕往下滚一行(光标的字不动)"
+en = "scroll the view down a line, the cursor keeping its place in the text"
+
+[[message]]
+# 命令說明：scroll_up（草稿）
+key = "action.scroll-up"
+zht = "屏幕往上滾一行(光標的字不動)"
+zhs = "屏幕往上滚一行(光标的字不动)"
+en = "scroll the view up a line, the cursor keeping its place in the text"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1208,11 +1502,144 @@ en = "switch case"
 find = "大小寫 大小写 互換 互换 case swap"
 
 [[message]]
+# 命令說明：table_add_column_left（草稿）
+key = "action.table-add-column-left"
+zht = "左邊加一欄"
+zhs = "左边加一栏"
+en = "add a column to the left"
+
+[[message]]
+# 命令說明：table_add_column_right（草稿）
+key = "action.table-add-column-right"
+zht = "右邊加一欄"
+zhs = "右边加一栏"
+en = "add a column to the right"
+
+[[message]]
+# 命令說明：table_add_row_above（草稿）
+key = "action.table-add-row-above"
+zht = "上面插入新行"
+zhs = "上面插入新行"
+en = "insert a new row above"
+
+[[message]]
+# 命令說明：table_add_row_below（草稿）
+key = "action.table-add-row-below"
+zht = "下面插入新行"
+zhs = "下面插入新行"
+en = "insert a new row below"
+
+[[message]]
+# 命令說明：table_align_center（草稿）
+key = "action.table-align-center"
+zht = "這欄居中"
+zhs = "这栏居中"
+en = "this column to the centre"
+
+[[message]]
+# 命令說明：table_align_left（草稿）
+key = "action.table-align-left"
+zht = "這欄靠左"
+zhs = "这栏靠左"
+en = "this column to the left"
+
+[[message]]
+# 命令說明：table_align_right（草稿）
+key = "action.table-align-right"
+zht = "這欄靠右"
+zhs = "这栏靠右"
+en = "this column to the right"
+
+[[message]]
+# 命令說明：table_delete_column（草稿）
+key = "action.table-delete-column"
+zht = "删除這一欄"
+zhs = "删除这一栏"
+en = "delete this column"
+
+[[message]]
+# 命令說明：table_move_column_left（草稿）
+key = "action.table-move-column-left"
+zht = "這欄左移"
+zhs = "这栏左移"
+en = "move this column left"
+
+[[message]]
+# 命令說明：table_move_column_right（草稿）
+key = "action.table-move-column-right"
+zht = "這欄右移"
+zhs = "这栏右移"
+en = "move this column right"
+
+[[message]]
+# 命令說明：table_move_row_down（草稿）
+key = "action.table-move-row-down"
+zht = "這行下移"
+zhs = "这行下移"
+en = "move this row down"
+
+[[message]]
+# 命令說明：table_move_row_up（草稿）
+key = "action.table-move-row-up"
+zht = "這行上移"
+zhs = "这行上移"
+en = "move this row up"
+
+[[message]]
+# 命令說明：table_paste_column_left（草稿）
+key = "action.table-paste-column-left"
+zht = "把複製的欄貼到左邊"
+zhs = "把复制的栏贴到左边"
+en = "paste the yanked column to the left"
+
+[[message]]
+# 命令說明：table_paste_column_right（草稿）
+key = "action.table-paste-column-right"
+zht = "把複製的欄貼到右邊"
+zhs = "把复制的栏贴到右边"
+en = "paste the yanked column to the right"
+
+[[message]]
+# 命令說明：table_sort_ascending（草稿）
+key = "action.table-sort-ascending"
+zht = "按列升序排列(␣t1s)"
+zhs = "按列升序排列(␣t1s)"
+en = "sort by column, ascending (␣t1s)"
+
+[[message]]
+# 命令說明：table_sort_descending（草稿）
+key = "action.table-sort-descending"
+zht = "按列降序排列(␣t1S)"
+zhs = "按列降序排列(␣t1S)"
+en = "sort by column, descending (␣t1S)"
+
+[[message]]
+# 命令說明：table_yank_column（草稿）
+key = "action.table-yank-column"
+zht = "複製這一欄"
+zhs = "复制这一栏"
+en = "yank this column"
+
+[[message]]
 # 命令說明：till_prev_char（草稿）
 key = "action.till-prev-char"
 zht = "往前找一個字，選到它後面"
 zhs = "往前找一个字，选到它后面"
 en = "find a character backward, selecting back to just after it"
+
+[[message]]
+# 命令說明：toggle_left_sidebar（草稿）
+key = "action.toggle-left-sidebar"
+zht = "開關左欄"
+zhs = "开关左栏"
+en = "open or close the left sidebar"
+
+[[message]]
+# 命令說明：toggle_right_sidebar（草稿）
+key = "action.toggle-right-sidebar"
+zht = "開關右欄"
+zhs = "开关右栏"
+en = "open or close the right sidebar"
 
 [[message]]
 # 命令說明：trim_selections（草稿）
@@ -1295,12 +1722,68 @@ zhs = "窗口组"
 en = "the window group"
 
 [[message]]
+# 命令說明：window_new_mode（草稿）
+key = "action.window-new-mode"
+zht = "空白窗口組：s 下面，v 旁邊"
+zhs = "空白窗口组：s 下面，v 旁边"
+en = "the blank-window group: s below, v beside"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.yank"
 zht = "複製"
 zhs = "复制"
 en = "yank"
 find = "複製 复制 拷貝 拷贝 copy yank"
+
+[[message]]
+# 命令說明：yume_menu_size_3（草稿）
+key = "action.yume-menu-size-3"
+zht = "候選欄一頁 3 條"
+zhs = "候选栏一页 3 条"
+en = "3 candidates on a page"
+
+[[message]]
+# 命令說明：yume_menu_size_4（草稿）
+key = "action.yume-menu-size-4"
+zht = "候選欄一頁 4 條"
+zhs = "候选栏一页 4 条"
+en = "4 candidates on a page"
+
+[[message]]
+# 命令說明：yume_menu_size_5（草稿）
+key = "action.yume-menu-size-5"
+zht = "候選欄一頁 5 條"
+zhs = "候选栏一页 5 条"
+en = "5 candidates on a page"
+
+[[message]]
+# 命令說明：yume_menu_size_6（草稿）
+key = "action.yume-menu-size-6"
+zht = "候選欄一頁 6 條"
+zhs = "候选栏一页 6 条"
+en = "6 candidates on a page"
+
+[[message]]
+# 命令說明：yume_menu_size_7（草稿）
+key = "action.yume-menu-size-7"
+zht = "候選欄一頁 7 條"
+zhs = "候选栏一页 7 条"
+en = "7 candidates on a page"
+
+[[message]]
+# 命令說明：yume_menu_size_8（草稿）
+key = "action.yume-menu-size-8"
+zht = "候選欄一頁 8 條"
+zhs = "候选栏一页 8 条"
+en = "8 candidates on a page"
+
+[[message]]
+# 命令說明：yume_menu_size_9（草稿）
+key = "action.yume-menu-size-9"
+zht = "候選欄一頁 9 條"
+zhs = "候选栏一页 9 条"
+en = "9 candidates on a page"
 
 [[message]]
 # :keymap-actions 那張清單的開頭一段

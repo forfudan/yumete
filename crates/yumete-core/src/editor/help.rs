@@ -47,7 +47,7 @@ impl Editor {
     /// the editor itself.
     ///
     /// Written from the same declarations the editor runs on — `COMMANDS`,
-    /// `SPACE_KEYS`, the which-key lists — so it cannot drift from what the
+    /// the Space group's rows, the which-key lists — so it cannot drift from what the
     /// keys actually do. A manual can be out of date; this cannot be, because
     /// there is nothing here to keep up to date.
     ///
@@ -107,8 +107,7 @@ impl Editor {
 "));
         }
         out.push_str(&format!("\n## {}\n\n", say!("help.common.space-title")));
-        for (key, what) in Self::SPACE_KEYS {
-            let key = Self::key_name(*key);
+        for (key, what) in super::groups::SPACE.menu(&super::groups::Context::for_docs()) {
             out.push_str(&format!(
                 "- `\u{2423}{key}` — {}
 ",

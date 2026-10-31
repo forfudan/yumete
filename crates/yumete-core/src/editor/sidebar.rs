@@ -503,67 +503,6 @@ impl Editor {
         out
     }
 
-    /// `C-w` and `空格 w`, then one letter: the same letters helix gives its
-    /// window mode, plus `e`/`i`/`E`/`I` for the sidebars helix has none of.
-    ///
-    /// Warning: `Ctrl` may stay held — `C-w C-w` is `C-w w` — so a control
-    /// key is read as its letter first (2026-09-27: the held half of the group
-    /// used to fall on the floor).
-    pub(super) fn on_region_key(&mut self, key: Key) {
-        use crate::sidebar::Side;
-        use crate::window::{Direction, Split};
-        let key = match key {
-            Key::Ctrl(c) => Key::Char(c),
-            other => other,
-        };
-        match key {
-            Key::Char('w') => self.next_region(),
-            Key::Char('h') | Key::Left => self.walk_to_region(Direction::Left),
-            Key::Char('l') | Key::Right => self.walk_to_region(Direction::Right),
-            Key::Char('k') | Key::Up => self.walk_to_region(Direction::Up),
-            Key::Char('j') | Key::Down => self.walk_to_region(Direction::Down),
-            Key::Char('e') => self.toggle_region(Side::Left),
-            Key::Char('i') => self.toggle_region(Side::Right),
-            Key::Char('E') => self.go_to_region(Region::Side(Side::Left)),
-            Key::Char('I') => self.go_to_region(Region::Side(Side::Right)),
-            // **`s` below, `v` beside** (2026-10-30, helix's letters): a new
-            // window on the same buffer at the same place, and the keys go
-            // to it. Until this day both opened the one second region.
-            Key::Char('s') => {
-                self.split_window(Split::Below);
-            }
-            Key::Char('v') => {
-                self.split_window(Split::Beside);
-            }
-            // **`n` a blank window** (2026-10-31). helix makes it a group,
-            // `n s` below and `n v` beside; vim opens it at once, below.
-            Key::Char('n') => match self.key_preset == yumete_cjk::KeyPreset::Vim {
-                true => {
-                    self.new_window(Split::Below);
-                }
-                false => self.pending = crate::editor::Pending::RegionNew,
-            },
-            Key::Char('q') => self.close_this_region(),
-            Key::Char('o') => self.close_other_regions(),
-            _ => {}
-        }
-    }
-
-    /// The key after `C-w n`: `s` below, `v` beside, with or without Ctrl,
-    /// as helix reads them.
-    pub(super) fn on_region_new_key(&mut self, key: Key) {
-        use crate::window::Split;
-        match key {
-            Key::Char('s') | Key::Ctrl('s') => {
-                self.new_window(Split::Below);
-            }
-            Key::Char('v') | Key::Ctrl('v') => {
-                self.new_window(Split::Beside);
-            }
-            _ => {}
-        }
-    }
-
     /// `e`/`i`: a sidebar folded away or brought back, the keys staying put.
     pub(super) fn toggle_region(&mut self, side: crate::sidebar::Side) {
         match self.panel(side).is_some() {
@@ -630,7 +569,7 @@ impl Editor {
     /// the screen; nothing when there is none. From the edge of the windows
     /// a sideways step reaches a sidebar if it is open; from a sidebar the
     /// step back lands in the window nearest to it.
-    fn walk_to_region(&mut self, direction: crate::window::Direction) {
+    pub(super) fn walk_to_region(&mut self, direction: crate::window::Direction) {
         use crate::sidebar::Side;
         use crate::window::Direction;
         let target = match self.which_region() {

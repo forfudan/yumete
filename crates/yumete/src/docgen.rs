@@ -90,7 +90,7 @@ fn keys() -> String {
                 (k, say(m, &[]))
             })
             .collect();
-        table(&mut out, format!("{} ({})", say(title, &[]), code(prefix)), rows);
+        table(&mut out, format!("{} ({})", say(title, &[]), code(&prefix)), rows);
     }
     out
 }

@@ -401,6 +401,13 @@ impl Editor {
                 false => say!("seek.ask-letters", so_far),
             }));
         }
+        // **A group's menu is its own rows** (step 3 of the keymap plan,
+        // `groups.rs`): what a key there does and the line it shows are
+        // written once, side by side.
+        if let Some(group) = self.pending.group() {
+            let (title, rows) = self.group_menu(group);
+            return Some(Hint::Keys(title, rows));
+        }
         let keys = match self.pending {
             // 撤銷已經斷了，剩下那個 `u` 吞不吞都行——没什麽要提示的。
             Pending::UndoBreak => return None,
@@ -450,43 +457,8 @@ impl Editor {
                     Some(f) => say!("hint.vim-operator-more", op, f),
                 }));
             }
-            Pending::Space => (
-                say!("hint.space.title"),
-                Self::SPACE_KEYS
-                    .iter()
-                    // Warning: These keys are `char`, and a `char` is not a
-                    // `&'static str`. This used to `Box::leak` one string per
-                    // key to make it into one; the key column is a `Cow` now,
-                    // so the owned string simply goes in.
-                    .map(|(key, what)| {
-                        (Self::key_name(*key), crate::messages::say(what, &[]))
-                    })
-                    .collect(),
-            ),
-            Pending::Goto => (
-                say!("hint.goto.title"),
-                Self::said(
-                    match self.layout() == crate::zong::Layout::Vertical {
-                        true => Self::GOTO_KEYS_VERTICAL.iter().copied(),
-                        false => Self::GOTO_KEYS.iter().copied(),
-                    }
-                    .chain(
-                        match self.key_preset == yumete_cjk::KeyPreset::Vim {
-                            true => Self::GOTO_KEYS_VIM,
-                            false => &[],
-                        }
-                        .iter()
-                        .copied(),
-                    ),
-                ),
-            ),
             Pending::Find(_) => (say!("hint.find"), vec![("".into(), say!("hint.type-a-character"))]),
             Pending::Replace => (say!("hint.overwrite"), vec![("".into(), say!("hint.type-a-character-to-overwrite"))]),
-            Pending::Case => (say!("hint.case.title"), Self::said(Self::CASE_KEYS.iter().copied())),
-            Pending::TableConvert => (
-                say!("hint.table.convert"),
-                Self::said(Self::TABLE_CONVERT_KEYS.iter().copied()),
-            ),
             Pending::Confirm => {
                 (say!("hint.confirm.title"), Self::said(Self::CONFIRM_KEYS.iter().copied()))
             }
@@ -512,12 +484,6 @@ impl Editor {
                 rows.push(("#".into(), say!("hint.register.hash")));
                 (say!("hint.register.title"), rows)
             }
-            Pending::Match => (say!("hint.match.title"), Self::said(Self::MATCH_KEYS.iter().copied())),
-            // `z` 那一層只有三個鍵，一張三行的小表比一句話好認。
-            Pending::Aim | Pending::AimStuck => (
-                say!("hint.aim.title"),
-                Self::said(Self::AIM_KEYS.iter().copied()),
-            ),
             // **Each step lists what it takes** (2026-10-27, helix's `m` group).
             // A line saying 「type a bracket」 told the reader there was a
             // choice and not what it was; helix lists the pairs and the
@@ -544,41 +510,6 @@ impl Editor {
             ),
             Pending::SurroundFrom => (say!("hint.change"), Self::pair_rows(&[("m", "hint.obj.nearest-pair")])),
             Pending::SurroundTo(_) => (say!("hint.change-to"), Self::made_rows()),
-            Pending::Hop { forward } => (
-                match forward {
-                    true => say!("hint.hop.next"),
-                    false => say!("hint.hop.previous"),
-                },
-                Self::said(
-                    Self::HOP_KEYS
-                        .iter()
-                        .copied()
-                        // 代碼檔纔有函數和類，稿子裏列出來也按不出東西。
-                        .chain(
-                            match self.writes_code() {
-                                true => Self::HOP_KEYS_CODE,
-                                false => &[],
-                            }
-                            .iter()
-                            .copied(),
-                        )
-                        .chain(
-                            match forward {
-                                true => Self::HOP_KEYS_FORWARD,
-                                false => Self::HOP_KEYS_BACK,
-                            }
-                            .iter()
-                            .copied(),
-                        ),
-                ),
-            ),
-            // **區域那一組**（2026-09-30，照 helix 的 `C-w`）。
-            Pending::Region => (say!("hint.region.title"), Self::said(Self::REGION_KEYS.iter().copied())),
-            Pending::RegionNew => (say!("hint.region.new"), Self::said(Self::REGION_NEW_KEYS.iter().copied())),
-            Pending::Conflict => (
-                say!("hint.conflict.title"),
-                Self::said(Self::CONFLICT_KEYS.iter().copied()),
-            ),
             Pending::Mark => (say!("hint.mark.set-here"), vec![("a–z".into(), say!("hint.mark.name-it"))]),
             // **哪幾個字母記過位置，分別記在哪**（2026-09-29，同 `"` 那一張）。
             //
@@ -601,29 +532,8 @@ impl Editor {
                 };
                 (say!("hint.mark.go-back"), rows)
             }
-            // **Which list is a question about the cursor, not the mode.** It
-            // used to be `md_region().is_none()`, which is *also* true of a
-            // Markdown table nobody has opened yet — so standing in one of
-            // 手冊's own tables offered the delimited file's keys.
-            // 輸入法那一組（2026-10-17）——`空格 z`，以及它底下那三個有值的。
-            Pending::Open => (
-                say!("hint.open.title"),
-                Self::said(Editor::OPEN_KEYS.to_vec()),
-            ),
-            Pending::Yume => (say!("hint.yume.title"), Self::said(Editor::YUME_KEYS.to_vec())),
-            Pending::YumeValue(subject) => (
-                say!("hint.yume.title"),
-                Self::said(Editor::yume_values(subject).to_vec()),
-            ),
-            Pending::Table => {
-                let inside = match self.table.as_ref().map(|v| v.bounds) {
-                    Some(Bounds::Block) if self.block_region().is_some() => Some(Bounds::Block),
-                    Some(Bounds::Md) if self.md_region().is_some() => Some(Bounds::Md),
-                    Some(Bounds::WholeFile) => Some(Bounds::WholeFile),
-                    _ => None,
-                };
-                (say!("hint.table.title"), Self::said(Self::table_keys(inside, self.the_pane_is_on())))
-            }
+            // The groups, answered above.
+            _ => return None,
         };
         Some(Hint::Keys(keys.0, keys.1))
     }

@@ -58,9 +58,9 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("move_prev_word_start", Editor::cmd_move_prev_word_start, Key::Char('b')),
     ("move_next_paragraph", Editor::cmd_move_next_paragraph, Key::Char('}')),
     ("move_prev_paragraph", Editor::cmd_move_prev_paragraph, Key::Char('{')),
-    ("goto_window_top", Editor::cmd_goto_window, Key::Char('H')),
-    ("goto_window_center", Editor::cmd_goto_window, Key::Char('M')),
-    ("goto_window_bottom", Editor::cmd_goto_window, Key::Char('L')),
+    ("goto_window_top", |e, cx| e.go_to_screen('H', cx.count), Key::Char('H')),
+    ("goto_window_center", |e, cx| e.go_to_screen('M', cx.count), Key::Char('M')),
+    ("goto_window_bottom", |e, cx| e.go_to_screen('L', cx.count), Key::Char('L')),
     ("jump_prev_sentence", Editor::cmd_jump_by_sentence, Key::Char('(')),
     ("jump_next_sentence", Editor::cmd_jump_by_sentence, Key::Char(')')),
     ("goto_next_sentence", Editor::cmd_goto_next_sentence, Key::Char('L')),
@@ -398,18 +398,51 @@ pub(super) const OLD_NAMES: &[(&str, &str)] = &[
 /// The method behind a command's name, or one of its [`OLD_NAMES`].
 pub(super) fn normal_command(name: &str) -> Option<&'static NormalCommand> {
     let name = OLD_NAMES.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| new);
-    NORMAL_COMMANDS.iter().find(|(n, _, _)| *n == name)
+    NORMAL_COMMANDS
+        .iter()
+        .chain(super::group_commands::GROUP_COMMANDS)
+        .find(|(n, _, _)| *n == name)
 }
 
-/// **The key a command is on in helix's keymap**, written as a person
-/// writes it (`f`, `A-d`, `C-o`): what `::` shows beside a command, which
-/// has no editor to ask which preset is in use.
-pub(crate) fn default_key_written(name: &str) -> Option<String> {
+/// **Where a command is in the default keymap**: the group it is in
+/// (`Pending::None` for the top level) and its key there, under the preset
+/// `at` says: the vim preset's own entry first, helix's after, then the
+/// groups'. `None` when no key reaches it.
+pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pending, Key)> {
     let name = normal_command(name)?.0;
-    HELIX_NORMAL
-        .iter()
-        .find(|(_, n)| *n == name)
-        .map(|(key, _)| yumete_cjk::actions::spell(&super::keys::key_internal(*key)))
+    if at.vim {
+        if let Some((key, _, _)) = VIM_NORMAL.iter().find(|(_, n, _)| *n == name) {
+            return Some((Pending::None, *key));
+        }
+    }
+    // A helix key the vim preset gives to something else is not this
+    // command's under vim (`j` is `move_line_down` there).
+    let taken = |key: &Key| at.vim && VIM_NORMAL.iter().any(|(k, _, when)| k == key && when.is_none());
+    if let Some((key, _)) = HELIX_NORMAL.iter().find(|(key, n)| *n == name && !taken(key)) {
+        return Some((Pending::None, *key));
+    }
+    super::groups::GROUPS.iter().find_map(|group| {
+        group
+            .binds()
+            .find(|bind| bind.run == name && at.holds(bind.when) && !bind.says.is_empty())
+            .map(|bind| (group.pending, bind.key))
+    })
+}
+
+/// **The keys that reach a command**, in a binding's spelling (`gh`,
+/// `" f"`): the group's keys and the command's own.
+pub(super) fn keys_of(place: (Pending, Key)) -> String {
+    let (pending, key) = place;
+    let path = pending.group().map_or("", |group| group.path);
+    format!("{path}{}", super::keys::key_internal(key))
+}
+
+/// **The keys a command is on in helix's keymap**, written as a person
+/// writes them (`f`, `A-d`, `C-o`, `<space>f`): what `::` shows beside a
+/// command, which has no editor to ask which preset is in use.
+pub(crate) fn default_key_written(name: &str) -> Option<String> {
+    let place = place_of(name, &super::groups::Context::for_docs())?;
+    Some(yumete_cjk::actions::spell(&keys_of(place)))
 }
 
 impl Editor {
@@ -425,16 +458,10 @@ impl Editor {
         true
     }
 
-    /// **The key a command is on now**, under the preset in use: the vim
-    /// preset's own entry first, helix's after. `None` when it has none.
-    pub(super) fn normal_key_for(&self, name: &str) -> Option<Key> {
-        let name = normal_command(name)?.0;
-        if self.key_preset == yumete_cjk::KeyPreset::Vim {
-            if let Some((key, _, _)) = VIM_NORMAL.iter().find(|(_, n, _)| *n == name) {
-                return Some(*key);
-            }
-        }
-        HELIX_NORMAL.iter().find(|(_, n)| *n == name).map(|(key, _)| *key)
+    /// **The keys a command is on now**, in a binding's spelling, under the
+    /// preset in use. `None` when it has none.
+    pub(super) fn normal_keys_for(&self, name: &str) -> Option<String> {
+        place_of(name, &self.group_context()).map(keys_of)
     }
 
     /// **The command `cx.key` runs in Normal mode**, by the default keymap:
@@ -500,23 +527,20 @@ impl Editor {
         self.repeat(cx.count, |e| e.move_textual_line(false))
     }
 
-    // 全窗裏這兩個也是這一格的兩頭——同 `g h`/`g l`，見 `cell_edge`。
-    #[allow(unused_variables)]
-    pub(super) fn cmd_goto_line_start(&mut self, cx: Cx) {
-        let Cx { key, count, operator_count, continuing_zong } = cx;
-        let pos = self.cell_edge(false).unwrap_or_else(|| {
-            motion::line_start(self.current_buffer().rope(), self.sel.head())
-        });
-        self.move_head(pos);
+    // **`Home`/`End` and `g h`/`g l` are one command each**, as in helix
+    // (2026-10-31). In a table these are the cell's two ends, and where the
+    // cell is the unit, the record's (`goto_motion`).
+    pub(super) fn cmd_goto_line_start(&mut self, _: Cx) {
+        self.goto_motion(motion::Motion::LineStart);
     }
 
-    #[allow(unused_variables)]
-    pub(super) fn cmd_goto_line_end(&mut self, cx: Cx) {
-        let Cx { key, count, operator_count, continuing_zong } = cx;
-        let pos = self.cell_edge(true).unwrap_or_else(|| {
-            motion::line_last(self.current_buffer().rope(), self.sel.head())
-        });
-        self.move_head(pos);
+    // vim's `$` remembers that it went to the end, so `j` keeps to line
+    // ends; under the vim preset this does too.
+    pub(super) fn cmd_goto_line_end(&mut self, _: Cx) {
+        self.goto_motion(motion::Motion::LineEnd);
+        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+            self.sel.set_goal(Some(super::keys::LINE_END_GOAL));
+        }
     }
 
     // **`Enter`, `+` and `-`** — vim's three ways of saying 「the next
@@ -662,12 +686,6 @@ impl Editor {
     // vim 綁上去了。
     //
     // 屏幕畫了哪一段是前端每幀交過來的（`set_page_span`，`gw` 也靠它）。
-    #[allow(unused_variables)]
-    pub(super) fn cmd_goto_window(&mut self, cx: Cx) {
-        let Cx { key, count, operator_count, continuing_zong } = cx;
-        let Key::Char(one) = key else { return };
-        self.go_to_screen(one, count);
-    }
 
     // **vim 的句子動作是 `(`/`)`**（2026-10-06）。
     //

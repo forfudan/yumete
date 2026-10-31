@@ -345,7 +345,7 @@ impl Editor {
         // Warning: **這張表 2026-09-30 換過鍵，而這一句没跟上**（2026-10-01 審出
         // 來的）：字典從 `D` 搬到了 `N`，診斷從 `I` 搬到了 `D`，記錄拿到了
         // `I`——於是命令行說的那個鍵按下去是**另一扇面板**。它跟的是
-        // `SPACE_KEYS`（`keys.rs`），改鍵的時候兩處要一起改。
+        // 空格那一組的行（`groups.rs` 的 `SPACE`），改鍵的時候兩處要一起改。
         let key = match self.info_now() {
             Some(Info::Dictionary) => "N",
             Some(Info::Wiki | Info::Docs) => "K",

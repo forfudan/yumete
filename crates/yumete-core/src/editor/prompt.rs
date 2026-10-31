@@ -657,7 +657,6 @@ impl Editor {
         self.close_prompt();
         match what {
             lookfor::What::Keys(action) => match action.how {
-                yumete_cjk::actions::How::Keys(keys) => self.play_keys_now(keys),
                 yumete_cjk::actions::How::Command(line) => {
                     let _ = self.execute(line);
                 }

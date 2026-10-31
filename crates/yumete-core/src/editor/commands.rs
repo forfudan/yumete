@@ -801,12 +801,11 @@ impl Editor {
                 listing.push_str("\n\n| 名字 | 做什麽 | 現在是哪個鍵 |\n| --- | --- | --- |\n");
                 for action in yumete_cjk::actions::ALL {
                     let now = match action.how {
-                        yumete_cjk::actions::How::Keys(keys) => yumete_cjk::actions::spell(keys),
                         yumete_cjk::actions::How::Command(line) => format!(":{line}"),
                         // The key it is on under the preset in use.
                         yumete_cjk::actions::How::Normal => self
-                            .normal_key_for(action.name)
-                            .map(|key| yumete_cjk::actions::spell(&super::keys::key_internal(key)))
+                            .normal_keys_for(action.name)
+                            .map(|keys| yumete_cjk::actions::spell(&keys))
                             .unwrap_or_default(),
                     };
                     listing.push_str(&format!(

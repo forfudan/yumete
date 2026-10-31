@@ -2470,6 +2470,10 @@ pub struct Editor {
     storing_a_yank: bool,
     /// Keys recorded since `q` was pressed, if a macro is being recorded.
     recording: Option<Vec<Key>>,
+    /// How long the recording was when the keys being pressed now began:
+    /// what stopping it keeps, so the keys that asked to stop are not part
+    /// of the macro, whichever they are.
+    recording_from: usize,
     /// The last macro recorded, replayed by `Q`.
     macro_keys: Vec<Key>,
     /// Whether a macro is being replayed, so it cannot record or replay itself.
@@ -4055,6 +4059,7 @@ impl Editor {
             vim_line_column: 0,
             storing_a_yank: false,
             recording: None,
+            recording_from: 0,
             macro_keys: Vec::new(),
             replaying: false,
             keymap_flavor: false,
@@ -5551,6 +5556,8 @@ mod detail;
 mod edits;
 mod fences;
 mod files;
+mod group_commands;
+mod groups;
 mod help;
 pub use help::{COMMON_EDITING, COMMON_MOTION};
 pub(crate) mod find;

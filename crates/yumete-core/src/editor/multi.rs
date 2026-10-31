@@ -964,8 +964,8 @@ impl super::Editor {
 /// （從後往前做，一個撤銷點）。
 ///
 /// Warning: **不收要再等一個鍵的**（`f` `t` `g` `m` `[` `]` `空格` 這些前綴）：真正該逐段做的
-/// 是**補上那個字符的時候**，不是按下前綴的時候。那一半在 `answer_with_char` 與
-/// `handle_goto` 裏各包一次，見它們自己的註釋。
+/// 是**補上那個字符的時候**，不是按下前綴的時候。那一半見 [`each_selection_key`] 的
+/// `Pending` 各臂與 `answer_with_char`。
 fn moves_every_selection(key: crate::input::Key) -> bool {
     use crate::input::Key;
     matches!(

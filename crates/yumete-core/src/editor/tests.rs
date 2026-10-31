@@ -16190,9 +16190,8 @@ fn help_is_the_editor_describing_itself() {
     assert!(ed.buffer_name().contains("help"), "{}", ed.buffer_name());
     // Every key the Space menu declares is in it, because it is *made* of
     // that list rather than written beside it.
-    for (key, _) in Editor::SPACE_KEYS {
-        // 鍵名走同一支（`Editor::key_name`）：空格鍵在表裏是 `' '`，畫出來是 `␣`。
-        let key = Editor::key_name(*key);
+    for (key, _) in super::groups::SPACE.menu(&super::groups::Context::for_docs()) {
+        // 鍵名走同一支：空格鍵在表裏是 `' '`，畫出來是 `␣`。
         assert!(text.contains(&format!("\u{2423}{key}")), "\u{2423}{key} missing");
     }
     assert!(text.contains("g/") && text.contains("gd"), "{text}");
@@ -20288,7 +20287,7 @@ fn the_page_draws_every_cell_whole_and_the_width_key_is_not_on_its_list() {
     assert_eq!(ed.cell_width_now(), CellWidth::Whole, "t w draws nothing here");
 
     let listed = |pane: bool| {
-        Editor::table_keys(Some(Bounds::Md), pane).iter().any(|&(k, _)| k == "w")
+        Editor::table_keys(Some(Bounds::Md), pane).iter().any(|(k, _)| k == "w")
     };
     assert!(!listed(false), "and the page's list does not offer it");
     assert!(listed(true), "the pane's does");
@@ -33418,4 +33417,52 @@ fn line_numbers_are_chosen_for_the_session_and_reported_bare() {
     // The config's word is only the baseline under the session's choice.
     ed.set_line_numbers_baseline(LineNumbers::Relative);
     assert_eq!(ed.line_numbers(), LineNumbers::None);
+}
+
+/// **A key inside a group is a command by name** (2026-10-31, step 3 of
+/// the keymap plan): `goto_line_start` bound to a key does what `g h` does,
+/// at every cursor, and `file_picker` opens the picker `Space f` does.
+#[test]
+fn a_group_key_is_bindable_by_its_name() {
+    let bind = |ed: &mut Editor, left: &str, right: &str| {
+        let mut aliases = std::collections::HashMap::new();
+        aliases.insert(left.to_string(), right.to_string());
+        ed.set_key_aliases(aliases);
+    };
+    let mut a = typed("abc\ndef\n");
+    let mut b = typed("abc\ndef\n");
+    press(&mut a, "ggllC");
+    press(&mut b, "ggllC");
+    bind(&mut a, "Q", "goto_line_start");
+    a.on_key(Key::Char('Q'));
+    press(&mut b, "gh");
+    type_keys(&mut a, "ix");
+    type_keys(&mut b, "ix");
+    a.on_key(Key::Esc);
+    b.on_key(Key::Esc);
+    assert_eq!(a.current_buffer().text(), "xabc\nxdef\n", "both cursors went");
+    assert_eq!(a.current_buffer().text(), b.current_buffer().text());
+}
+
+/// **A recording stopped by a bound key leaves that key out** (2026-10-31).
+/// Only a literal `Q` used to be left out, so a macro stopped by a binding
+/// ended with the binding's key, and replaying it started a new recording.
+#[test]
+fn a_macro_stopped_by_a_binding_does_not_hold_the_binding() {
+    let mut ed = typed("abc\n");
+    let mut aliases = std::collections::HashMap::new();
+    aliases.insert("R".to_string(), "record_macro".to_string());
+    ed.set_key_aliases(aliases);
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('l'));
+    ed.on_key(Key::Char('R'));
+    assert_eq!(ed.macro_keys, vec![Key::Char('l')]);
+    // The default key leaves itself out the same way, and a `Q` that `f`
+    // is waiting for is kept.
+    let mut ed = typed("aQc\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('Q'));
+    press(&mut ed, "fQ");
+    ed.on_key(Key::Char('Q'));
+    assert_eq!(ed.macro_keys, vec![Key::Char('f'), Key::Char('Q')]);
 }

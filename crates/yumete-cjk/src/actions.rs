@@ -21,11 +21,13 @@
 //! Names follow helix's wherever helix has the same action, so that a reader
 //! coming from that editor can guess, and a reader leaving it can search.
 
-/// How an action is carried out, until it is a code path of its own.
+/// How an action is carried out.
+///
+/// Every key is a command now (2026-10-31, step 3 of the keymap plan), so
+/// no action presses keys any more: the last of them, the keys inside the
+/// groups (`gh`, `空格 f`), became commands of their own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum How {
-    /// Press these keys, as the alias layer does.
-    Keys(&'static str),
     /// Run this command line, without the `:`.
     Command(&'static str),
     /// **A Normal command, by this action's own name** (2026-10-31): the
@@ -236,10 +238,6 @@ pub fn bound(rhs: &str) -> Option<Bound<'_>> {
     action(rhs).map(Bound::Named)
 }
 
-const fn keys(name: &'static str, help: &'static str, k: &'static str) -> Action {
-    Action { name, help, how: How::Keys(k) }
-}
-
 const fn normal(name: &'static str, help: &'static str) -> Action {
     Action { name, help, how: How::Normal }
 }
@@ -250,10 +248,8 @@ const fn command(name: &'static str, help: &'static str, c: &'static str) -> Act
 
 /// **Every action a key may be bound to**, in the order the manual lists them.
 ///
-/// Not every key the editor answers: a key that takes an argument (`f`, `r`,
-/// `M`) or opens a group (`g`, `m`, `t`, `空格`) is a *prefix*, and binding a
-/// prefix to one action would take its whole group away. Those are left out
-/// until the group itself is a named thing.
+/// Every Normal key is here by name, the keys inside the groups (`g h`,
+/// `空格 f`, `C-w s`) as well as the keys that open them (`goto_mode`).
 pub const ALL: &[Action] = &[
     // ---- Moving ---------------------------------------------------------
     normal("move_char_left", "action.move-char-left"),
@@ -269,21 +265,21 @@ pub const ALL: &[Action] = &[
     normal("move_next_long_word_start", "action.move-next-long-word-start"),
     normal("move_prev_long_word_start", "action.move-prev-long-word-start"),
     normal("move_next_long_word_end", "action.move-next-long-word-end"),
-    keys("goto_line_start", "action.goto-line-start", "gh"),
-    keys("goto_line_end", "action.goto-line-end", "gl"),
-    keys("goto_first_nonwhitespace", "action.goto-first-nonwhitespace", "gs"),
-    keys("goto_file_start", "action.goto-file-start", "gg"),
-    keys("goto_file_end", "action.goto-file-end", "ge"),
+    normal("goto_line_start", "action.goto-line-start"),
+    normal("goto_line_end", "action.goto-line-end"),
+    normal("goto_first_nonwhitespace", "action.goto-first-nonwhitespace"),
+    normal("goto_file_start", "action.goto-file-start"),
+    normal("goto_file_end", "action.goto-file-end"),
     // **Not `G`** (2026-10-31): under the helix preset a bare `G` does
     // nothing, as in helix, and actions play helix's keys — so this one did
     // nothing at all. `ge` then `gh` is helix's `goto_last_line`: the last
     // line, at its start.
-    keys("goto_last_line", "action.goto-last-line", "gegh"),
+    normal("goto_last_line", "action.goto-last-line"),
     normal("goto_prev_sentence", "action.goto-prev-sentence"),
     normal("goto_next_sentence", "action.goto-next-sentence"),
     // helix's `[p`/`]p` (2026-10-31): these pressed `gk`/`gj`, one file line.
-    keys("goto_prev_paragraph", "action.goto-prev-paragraph", "[p"),
-    keys("goto_next_paragraph", "action.goto-next-paragraph", "]p"),
+    normal("goto_prev_paragraph", "action.goto-prev-paragraph"),
+    normal("goto_next_paragraph", "action.goto-next-paragraph"),
     normal("half_page_down", "action.half-page-down"),
     normal("half_page_up", "action.half-page-up"),
     normal("jump_backward", "action.jump-backward"),
@@ -335,33 +331,27 @@ pub const ALL: &[Action] = &[
     normal("rsearch", "action.rsearch"),
     normal("search_next", "action.search-next"),
     normal("search_prev", "action.search-prev"),
-    keys("search_selection", "action.search-selection", "g/"),
-    keys("goto_definition", "action.goto-definition", "gd"),
-    keys("open_here", "action.open-here", "gf"),
-    keys("follow_link", "action.follow-link", "gL"),
+    normal("search_selection", "action.search-selection"),
+    normal("goto_definition", "action.goto-definition"),
+    normal("open_here", "action.open-here"),
+    normal("follow_link", "action.follow-link"),
     // ---- Files, panels, the session --------------------------------------
-    // Warning: **`空格` 那一組的鍵搬過家，這張表要跟**（2026-10-12 掃出來的）。
-    // `outline` 還寫着 ` o`——那一格 2026-10-08 讓給了 `s` 而 `o` 從此没綁，於是
-    // `x = "outline"` 按下去一聲不吭；`dictionary` 還寫着 ` d`，而那一格 2026-09-30
-    // 讓給了診斷，於是它**打開的是另一扇窗**。`ruby` 的 ` r` 根本没綁過，改走它
-    // 自己的命令。守着這三條的是 `keys.rs` 那一條「每個 ` x` 都要在 `SPACE_KEYS`
-    // 裏」的測試。
-    keys("file_picker", "action.file-picker", " f"),
-    keys("buffer_picker", "action.buffer-picker", " b"),
-    keys("next_buffer", "action.next-buffer", "gn"),
-    keys("prev_buffer", "action.prev-buffer", "gp"),
+    normal("file_picker", "action.file-picker"),
+    normal("buffer_picker", "action.buffer-picker"),
+    normal("next_buffer", "action.next-buffer"),
+    normal("prev_buffer", "action.prev-buffer"),
     // `空格 s` became helix's symbol picker on 2026-10-31; the outline
     // sidebar is a command now.
     command("outline", "action.outline", "sidebar outline"),
-    keys("dictionary", "action.dictionary", " n"),
-    keys("next_region", "action.next-region", " ww"),
-    keys("search_panel", "action.search-panel", " /"),
-    keys("command_menu", "action.command-menu", " ?"),
-    keys("paste_menu", "action.paste-menu", " \""),
-    keys("comment_line", "action.comment-line", " c"),
-    keys("comment_block", "action.comment-block", " C"),
-    keys("copy_to_clipboard", "action.copy-to-clipboard", " y"),
-    keys("paste_from_clipboard", "action.paste-from-clipboard", " p"),
+    normal("dictionary", "action.dictionary"),
+    normal("next_region", "action.next-region"),
+    normal("search_panel", "action.search-panel"),
+    normal("command_menu", "action.command-menu"),
+    normal("paste_menu", "action.paste-menu"),
+    normal("comment_line", "action.comment-line"),
+    normal("comment_block", "action.comment-block"),
+    normal("copy_to_clipboard", "action.copy-to-clipboard"),
+    normal("paste_from_clipboard", "action.paste-from-clipboard"),
     command("ruby", "action.ruby", "ruby"),
     command("sidebar", "action.sidebar", "sidebar"),
     command("wiki_panel", "action.wiki-panel", "wiki panel"),
@@ -464,22 +454,198 @@ pub const ALL: &[Action] = &[
     normal("goto_line", "action.goto-line"),
     normal("vim_repeat_last_change", "action.vim-repeat-last-change"),
     normal("repeat_last_motion", "action.repeat-last-motion"),
+    // ---- The groups' keys (2026-10-31): `g`, `Space`, `[` `]`, `z`, `m`,
+    // `C-w`, the backtick group, `Space t` and the rest, each by name ----
+    normal("jump_prev_word_end", "action.jump-prev-word-end"),
+    normal("jump_prev_long_word_end", "action.jump-prev-long-word-end"),
+    normal("goto_word", "hint.goto.jump-labels"),
+    normal("goto_word_by_letters", "hint.goto.seek-written"),
+    normal("goto_char_by_pinyin", "hint.goto.seek-reading"),
+    normal("goto_last_accessed_file", "hint.goto.last-file"),
+    normal("goto_definition_other_window", "hint.goto.follow-note-elsewhere"),
+    normal("goto_reference", "hint.goto.references"),
+    normal("search_selection_other_window", "hint.goto.search-word-elsewhere"),
+    normal("move_next_zong", "action.move-next-zong"),
+    normal("move_prev_zong", "action.move-prev-zong"),
+    normal("goto_last_modification", "hint.goto.last-change"),
+    normal("reselect_last_selection", "hint.goto.reselect"),
+    normal("insert_at_last_insert", "hint.goto.insert-again"),
+    normal("goto_older_change", "action.goto-older-change"),
+    normal("goto_newer_change", "action.goto-newer-change"),
+    normal("operator_lowercase", "action.operator-lowercase"),
+    normal("operator_uppercase", "action.operator-uppercase"),
+    normal("operator_switch_case", "action.operator-switch-case"),
+    normal("operator_fill", "hint.goto.fill"),
+    normal("join_selections_no_space", "hint.goto.join-without-a-space"),
+    normal("file_picker_in_current_directory", "hint.space.open-file-here"),
+    normal("file_explorer", "hint.space.explorer"),
+    normal("file_explorer_in_current_buffer_directory", "hint.space.explorer-here"),
+    normal("changed_file_picker", "hint.space.changed-files"),
+    normal("paste_clipboard_before", "hint.space.paste-before"),
+    normal("replace_selections_with_clipboard", "hint.space.replace-from-clipboard"),
+    normal("symbol_picker", "hint.space.symbols"),
+    normal("workspace_symbol_picker", "hint.space.project-symbols"),
+    normal("dictionary_panel", "hint.space.dictionary-panel"),
+    normal("hover", "hint.space.what-is-this"),
+    normal("hover_panel", "hint.space.what-is-this-panel"),
+    normal("diagnostics_picker", "hint.space.diagnostics"),
+    normal("workspace_diagnostics_picker", "hint.space.project-diagnostics"),
+    normal("show_diagnostic", "hint.space.problems"),
+    normal("show_diagnostic_panel", "hint.space.problems-panel"),
+    normal("show_change", "hint.space.change"),
+    normal("show_change_panel", "hint.space.change-panel"),
+    normal("rename_symbol", "hint.space.rename"),
+    normal("code_action", "hint.space.actions"),
+    normal("show_record", "hint.space.record"),
+    normal("show_record_panel", "hint.space.record-panel"),
+    normal("table_mode", "hint.space.table"),
+    normal("conflict_mode", "hint.conflict.title"),
+    normal("open_recent_mode", "hint.space.open-recent"),
+    normal("yume_mode", "hint.space.yume"),
+    normal("goto_next_conflict", "action.goto-next-conflict"),
+    normal("goto_prev_conflict", "action.goto-prev-conflict"),
+    normal("goto_next_change", "action.goto-next-change"),
+    normal("goto_prev_change", "action.goto-prev-change"),
+    normal("goto_next_diag", "action.goto-next-diag"),
+    normal("goto_prev_diag", "action.goto-prev-diag"),
+    normal("goto_last_diag", "action.goto-last-diag"),
+    normal("goto_first_diag", "action.goto-first-diag"),
+    normal("goto_next_function", "action.goto-next-function"),
+    normal("goto_prev_function", "action.goto-prev-function"),
+    normal("goto_next_class", "action.goto-next-class"),
+    normal("goto_prev_class", "action.goto-prev-class"),
+    normal("goto_next_comment", "action.goto-next-comment"),
+    normal("goto_prev_comment", "action.goto-prev-comment"),
+    normal("add_newline_below", "hint.hop.blank-below"),
+    normal("add_newline_above", "hint.hop.blank-above"),
+    normal("align_view_center", "action.align-view-center"),
+    normal("align_view_top", "action.align-view-top"),
+    normal("align_view_bottom", "action.align-view-bottom"),
+    normal("scroll_down", "action.scroll-down"),
+    normal("scroll_up", "action.scroll-up"),
+    normal("match_brackets", "hint.match.pair"),
+    normal("select_textobject_inner", "hint.match.inside"),
+    normal("select_textobject_around", "hint.match.around"),
+    normal("surround_add", "hint.match.surround"),
+    normal("surround_delete", "hint.match.take-off"),
+    normal("surround_replace", "hint.change"),
+    normal("jump_view_left", "action.jump-view-left"),
+    normal("jump_view_down", "action.jump-view-down"),
+    normal("jump_view_up", "action.jump-view-up"),
+    normal("jump_view_right", "action.jump-view-right"),
+    normal("toggle_left_sidebar", "action.toggle-left-sidebar"),
+    normal("toggle_right_sidebar", "action.toggle-right-sidebar"),
+    normal("goto_left_sidebar", "action.goto-left-sidebar"),
+    normal("goto_right_sidebar", "action.goto-right-sidebar"),
+    normal("hsplit", "hint.region.split"),
+    normal("vsplit", "hint.region.split-beside"),
+    normal("hsplit_new", "hint.region.new-below"),
+    normal("vsplit_new", "hint.region.new-beside"),
+    normal("window_new_mode", "action.window-new-mode"),
+    normal("wclose", "hint.region.close"),
+    normal("wonly", "hint.region.only"),
+    normal("switch_to_lowercase", "hint.case.lower"),
+    normal("switch_to_uppercase", "hint.case.upper"),
+    normal("convert_to_simplified", "hint.case.to-s"),
+    normal("convert_to_traditional", "hint.case.to-t"),
+    normal("convert_to_taiwan_traditional", "hint.case.to-tw"),
+    normal("convert_to_hong_kong_traditional", "hint.case.to-hk"),
+    normal("convert_to_mainland_traditional", "hint.case.to-c"),
+    normal("convert_to_classical_traditional", "hint.case.to-g"),
+    normal("convert_to_japanese", "hint.case.to-jp"),
+    normal("switch_to_halfwidth", "hint.case.to-half"),
+    normal("switch_to_fullwidth", "hint.case.to-full"),
+    normal("conflict_keep_ours", "hint.conflict.ours"),
+    normal("conflict_keep_theirs", "hint.conflict.theirs"),
+    normal("conflict_keep_both", "hint.conflict.both"),
+    normal("recent_file_picker", "hint.open.recent-files"),
+    normal("global_recent_file_picker", "hint.open.recent-files-global"),
+    normal("project_picker", "hint.open.recent-projects"),
+    normal("resume_session", "hint.open.resume"),
+    normal("yume_toggle", "hint.yume.toggle"),
+    normal("yume_commit_mode", "hint.yume.commit"),
+    normal("yume_panel_mode", "hint.yume.panel"),
+    normal("yume_preedit_mode", "hint.yume.preedit"),
+    normal("yume_toggle_prediction", "hint.yume.predict"),
+    normal("yume_pick_scheme", "hint.yume.scheme"),
+    normal("yume_next_scheme", "hint.yume.next-scheme"),
+    normal("yume_menu_size_3", "action.yume-menu-size-3"),
+    normal("yume_menu_size_4", "action.yume-menu-size-4"),
+    normal("yume_menu_size_5", "action.yume-menu-size-5"),
+    normal("yume_menu_size_6", "action.yume-menu-size-6"),
+    normal("yume_menu_size_7", "action.yume-menu-size-7"),
+    normal("yume_menu_size_8", "action.yume-menu-size-8"),
+    normal("yume_menu_size_9", "action.yume-menu-size-9"),
+    normal("yume_toggle_chaifen", "hint.yume.chaifen"),
+    normal("yume_installed_table", "hint.yume.table"),
+    normal("yume_table_source", "hint.yume.which"),
+    normal("yume_data_location", "hint.yume.where"),
+    normal("yume_commit_default", "hint.yume.commit-default"),
+    normal("yume_commit_delayed", "hint.yume.commit-delayed"),
+    normal("yume_commit_unique", "hint.yume.commit-unique"),
+    normal("yume_commit_fluency", "hint.yume.commit-fluency"),
+    normal("yume_panel_box", "hint.yume.panel-box"),
+    normal("yume_panel_bottom", "hint.yume.panel-bottom"),
+    normal("yume_panel_inline", "hint.yume.panel-inline"),
+    normal("yume_preedit_off", "hint.yume.preedit-off"),
+    normal("yume_preedit_composition", "hint.yume.preedit-composition"),
+    normal("yume_preedit_preview", "hint.yume.preedit-preview"),
+    normal("table_source_view", "hint.table.back-to-prose"),
+    normal("table_basic_view", "hint.table.operate-it"),
+    normal("table_window_view", "hint.table.whole-window"),
+    normal("table_leave_window", "hint.table.leave-the-window"),
+    normal("goto_next_table", "action.goto-next-table"),
+    normal("goto_prev_table", "action.goto-prev-table"),
+    normal("table_convert_mode", "hint.table.convert"),
+    normal("table_cell_width", "hint.table.fold-wide-cells"),
+    normal("table_search_columns", "hint.table.search-columns"),
+    normal("table_search_columns_other_window", "hint.table.search-columns-elsewhere"),
+    normal("table_goto_cell", "hint.table.go-to-cell"),
+    normal("table_yank_column", "action.table-yank-column"),
+    normal("table_replace_column", "hint.table.replace-column"),
+    normal("table_paste_column_right", "action.table-paste-column-right"),
+    normal("table_paste_column_left", "action.table-paste-column-left"),
+    normal("table_add_row_below", "action.table-add-row-below"),
+    normal("table_add_row_above", "action.table-add-row-above"),
+    normal("table_add_column_right", "action.table-add-column-right"),
+    normal("table_add_column_left", "action.table-add-column-left"),
+    normal("table_delete_row", "hint.table.delete-row"),
+    normal("table_delete_column", "action.table-delete-column"),
+    normal("table_move_row_down", "action.table-move-row-down"),
+    normal("table_move_row_up", "action.table-move-row-up"),
+    normal("table_move_column_left", "action.table-move-column-left"),
+    normal("table_move_column_right", "action.table-move-column-right"),
+    normal("table_align_left", "action.table-align-left"),
+    normal("table_align_center", "action.table-align-center"),
+    normal("table_align_right", "action.table-align-right"),
+    normal("table_line_up", "hint.table.line-it-up"),
+    normal("table_record_panel", "hint.table.detail-panel"),
+    normal("table_first_row_is_data", "hint.table.first-row-is-data"),
+    normal("table_sort_ascending", "action.table-sort-ascending"),
+    normal("table_sort_descending", "action.table-sort-descending"),
+    normal("convert_table_to_pipe", "action.convert-table-to-pipe"),
+    normal("paste_table_as_pipe", "action.paste-table-as-pipe"),
+    normal("convert_table_to_csv", "action.convert-table-to-csv"),
+    normal("paste_table_as_csv", "action.paste-table-as-csv"),
+    normal("convert_table_to_tsv", "action.convert-table-to-tsv"),
+    normal("paste_table_as_tsv", "action.paste-table-as-tsv"),
 ];
 
 #[cfg(test)]
 mod no_two_alike {
     use super::*;
 
-    /// **No two actions press the same keys** (2026-10-30). `next_region` was
-    /// `" s"`, a copy of `outline`'s, so binding it opened the outline; a
-    /// second name for one press is a slip, never a feature.
+    /// **No two actions share a name, or a command line** (2026-10-30, when
+    /// `next_region` pressed `outline`'s keys and binding it opened the
+    /// outline: a second name for one thing is a slip, never a feature).
     #[test]
-    fn every_action_presses_its_own_keys() {
-        let mut seen: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+    fn every_action_is_its_own() {
+        let mut names = std::collections::HashSet::new();
+        let mut lines = std::collections::HashSet::new();
         for action in ALL {
-            let How::Keys(k) = action.how else { continue };
-            if let Some(other) = seen.insert(k, action.name) {
-                panic!("`{}` and `{other}` both press {k:?}", action.name);
+            assert!(names.insert(action.name), "`{}` twice", action.name);
+            if let How::Command(line) = action.how {
+                assert!(lines.insert(line), "`{}` runs `{line}`, as another action does", action.name);
             }
         }
     }

@@ -11,7 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
-- **Every Normal-mode key has an action name** (about 170), so any of them can be bound in `[keys.normal]` and found with `::`. A name does the same thing under either keymap: `delete_char_backward` is vim's `X` under helix's keys too. `:keymap-actions` shows the key each is on under the keymap in use.
+- **Every Normal-mode key has an action name**, the keys inside the groups too (about 340 in all), so any of them can be bound in `[keys.normal]` and found with `::`: `"A-f" = "file_picker"` puts `Space f` on `Alt-f` as well, and `goto_line_start`, `hsplit`, `goto_next_diag` and `table_add_row_below` are `g h`, `C-w s`, `]d` and `Space t r`. A name does the same thing under either keymap: `delete_char_backward` is vim's `X` under helix's keys too. `:keymap-actions` shows the keys each is on under the keymap in use. The names are helix's wherever helix has the command.
 - **`Space R` replaces the selection with the system clipboard**, helix's key, as `"+R` already did.
 - **helix's symbol and diagnostics pickers** on `Space s` `S` `d` `D`: this file's symbols (kind, name, container), the project's (asked of the language server again as you type), this file's diagnostics and the project's (severity, source, code, message). Where no server serves the file, `Space s` lists its outline (headings, or code's functions and classes) and `Space S` the headings of every Markdown and Typst file in the project, each with the heading above it; helix refuses there.
 - **`Space g` lists the changed files** (`:changed-files`), helix's key: every file git reports in the repository you are working in, staged ones included, with a letter (`M` modified, `A` added, `D` deleted, `R` renamed, `U` untracked, `C` in conflict) in green when the change is all staged, gold when some is not, red in conflict; and every open buffer with unsaved changes, marked `+`. The buffer, file and recent-files pickers mark unsaved files with `+` too.
@@ -30,6 +30,9 @@ in `docs/development.md` §5.2.
 - **Keys moved for helix's pickers**: the problem at the cursor is now `Space l` (float) and `Space L` (sidebar), where `d` and `D` were; the outline sidebar has no key and opens with `:sidebar outline` or `:toc`.
 - **The settings panel**: typing a value shows a bar cursor, and the key row then lists only Enter, Esc and Backspace. `c` types a value from empty, where `i` adds to the one there. Messages and the `:` line have their own row under the key hints instead of covering them, and `:w` and `:q` typed on the panel stay out of the command history.
 - **Closing a window hands the keys back to the window you were in before it**, as VS Code and tmux do, instead of to the first window on screen. If that one is gone too, they go to the window that takes the room, as in vim.
+- **`Home` and `End` are `g h` and `g l`**, one command each as in helix: in a table whose cells are the unit they go to the record's start and end, as `g h` and `g l` did. Under the vim keymap `End` remembers the line end as `$` does.
+- **`Space o` followed by a key it does not have** says the key is not a combination, as the other groups do; it used to list the `Space z` keys.
+- **The `g` menu under the vim keymap** lists what the keys do there: `g e` back to a word's end, no `g h` or `g l`, and `` g ` `` for the case group.
 - **Recovery copies are now `.chapter.md.<number>.yumete-swp`**, and a save in progress is a `….yumete-tmp` beside the file, so `*.yumete-swp` and `*.yumete-tmp` in a `.gitignore` cover them; `*.yumete` would also have hidden the `.yumete/` folder. Copies under the older names are still found and offered.
 
 ### Fixed
@@ -41,6 +44,9 @@ in `docs/development.md` §5.2.
 - A key bound to one other key (`"C-q" = "@w"`) moved only the first of several cursors.
 - A `.csv` with an old `.yumete/tables/*.toml` naming it opened as plain text, and `Space t t` refused it: the notice that the old schema is no longer read was treated as a broken schema. It is now only said, and the file opens as a grid by its header row.
 - Saving on the settings panel, or `:reload-config`, left a dark band across one row of the page: the check of how wide the terminal draws `—` ran again mid-session, printed on the screen and wiped that row. It now runs once, at start-up.
+- The `g` menu on a vertical page offered `g k` and `g j` for a line's start and end, though `g h` and `g l` have done that on every page since 2026-10-13; each menu is now read off the keys themselves, so it cannot drift from them.
+- A macro recording stopped by any key but a literal `Q` (a key bound to `record_macro`) kept that key, so replaying the macro started a new recording.
+- `Space t` then `Esc` outside a table said the cursor was not in a table; `Esc` now just closes the menu.
 - A counted `J` from the line break itself (`A Esc 4J`) joined once and stopped: the count's early stop judged by the buffer's length and the cursor, and a join that swaps a line break for a space moves neither. It now watches the buffer's revision.
 
 ## 0.15.0 · 2026-10-30

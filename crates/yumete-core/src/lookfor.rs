@@ -415,7 +415,6 @@ impl Hit {
         match &self.what {
             What::Command(c) => c.written(),
             What::Keys(a) => match a.how {
-                yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
                 yumete_cjk::actions::How::Command(c) => format!(":{c}"),
                 yumete_cjk::actions::How::Normal => {
                     crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())
@@ -504,7 +503,6 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
         .iter()
         .map(|c| c.written())
         .chain(actions.iter().map(|a| match a.how {
-            yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
             yumete_cjk::actions::How::Command(c) => format!(":{c}"),
             yumete_cjk::actions::How::Normal => {
                 crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())
@@ -727,7 +725,6 @@ mod how_well_does_it_find {
         }
         for a in yumete_cjk::actions::ALL {
             let name = match a.how {
-                yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
                 yumete_cjk::actions::How::Command(c) => format!(":{c}"),
                 yumete_cjk::actions::How::Normal => {
                     crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())
@@ -783,7 +780,6 @@ mod how_well_does_it_find {
         for a in yumete_cjk::actions::ALL {
             let Some(e) = table.get(a.help) else { continue };
             let name = match a.how {
-                yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
                 yumete_cjk::actions::How::Command(c) => format!(":{c}"),
                 yumete_cjk::actions::How::Normal => {
                     crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())

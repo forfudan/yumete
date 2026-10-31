@@ -348,7 +348,7 @@ impl Editor {
 
     pub fn typed_so_far(&self) -> String {
         // **`gx`/`gz` 打到一半，HUD 寫的是 `gxa`、`gzdon`**（2026-10-04 定；鍵在
-        // 2026-10-10 從 `go`/`gu` 搬過來，見 `handle_goto`）。
+        // 2026-10-10 從 `go`/`gu` 搬過來，見 `groups.rs` 的 `GOTO`）。
         //
         // Warning: **按下 `x`/`z` 的那一刻 `pending` 就回到了 `None`**，而這兩個鍵
         // 還要再打幾個字母才算完——HUD 從那一刻起到標籤亮起來為止一個字都不說，
