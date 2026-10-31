@@ -250,8 +250,11 @@ pub const ALL: &[Action] = &[
     // ---- Moving ---------------------------------------------------------
     keys("move_char_left", "action.move-char-left", "h"),
     keys("move_char_right", "action.move-char-right", "l"),
-    keys("move_line_up", "action.move-line-up", "k"),
-    keys("move_line_down", "action.move-line-down", "j"),
+    // **helix's names for what `k`/`j` do** (2026-10-31): these were called
+    // `move_line_up`/`move_line_down`, which in helix are `gk`/`gj`, a whole
+    // line of the file. The behaviour is the one they always had, on screen.
+    keys("move_visual_line_up", "action.move-line-up", "k"),
+    keys("move_visual_line_down", "action.move-line-down", "j"),
     keys("move_next_word_start", "action.move-next-word-start", "w"),
     keys("move_prev_word_start", "action.move-prev-word-start", "b"),
     keys("move_next_word_end", "action.move-next-word-end", "e"),
@@ -263,7 +266,11 @@ pub const ALL: &[Action] = &[
     keys("goto_first_nonwhitespace", "action.goto-first-nonwhitespace", "gs"),
     keys("goto_file_start", "action.goto-file-start", "gg"),
     keys("goto_file_end", "action.goto-file-end", "ge"),
-    keys("goto_last_line", "action.goto-last-line", "G"),
+    // **Not `G`** (2026-10-31): under the helix preset a bare `G` does
+    // nothing, as in helix, and actions play helix's keys — so this one did
+    // nothing at all. `ge` then `gh` is helix's `goto_last_line`: the last
+    // line, at its start.
+    keys("goto_last_line", "action.goto-last-line", "gegh"),
     keys("goto_prev_sentence", "action.goto-prev-sentence", "H"),
     keys("goto_next_sentence", "action.goto-next-sentence", "L"),
     // helix's `[p`/`]p` (2026-10-31): these pressed `gk`/`gj`, one file line.
@@ -335,7 +342,9 @@ pub const ALL: &[Action] = &[
     keys("buffer_picker", "action.buffer-picker", " b"),
     keys("next_buffer", "action.next-buffer", "gn"),
     keys("prev_buffer", "action.prev-buffer", "gp"),
-    keys("outline", "action.outline", " s"),
+    // `空格 s` became helix's symbol picker on 2026-10-31; the outline
+    // sidebar is a command now.
+    command("outline", "action.outline", "sidebar outline"),
     keys("dictionary", "action.dictionary", " n"),
     keys("next_region", "action.next-region", " ww"),
     keys("search_panel", "action.search-panel", " /"),
