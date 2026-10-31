@@ -1,0 +1,782 @@
+# prefixes: help intro tutor version cli shot need start
+#
+# What the editor says, one block per tag; see README.md beside this file.
+
+[[message]]
+# 崩潰之後，在正常螢幕上留的那一句：救回幾份草稿、日誌在哪
+key = "cli.crashed"
+zht = "yumete 崩潰了。已保住 {0} 份草稿(`:recover` 取回)；詳情見 {1}"
+zhs = "yumete 崩溃了。已保住 {0} 份草稿(`:recover` 取回)；详情见 {1}"
+en = "yumete crashed. {0} draft(s) kept — :recover takes them back; details in {1}"
+
+[[message]]
+# 啓動時接着上次的檔案
+key = "cli.picked-up-where-you-left-off"
+zht = "接着上次：開了 {0} 個文件"
+zhs = "接着上次：开了 {0} 个文件"
+en = "picking up where you left off: opened {0} file(s)"
+
+[[message]]
+# 啓動時報用的是哪個方案
+key = "cli.scheme"
+zht = "方案：{0}"
+zhs = "方案：{0}"
+en = "scheme: {0}"
+
+[[message]]
+# 啓動時要換的方案没有碼表
+key = "cli.scheme-table-not-installed"
+zht = "{0} 的碼表没有裝——:yume-scheme 換一個"
+zhs = "{0} 的码表没有装——:yume-scheme 换一个"
+en = "{0}'s table is not installed — :yume-scheme picks another"
+
+
+# ── cmd ───────────────────────────────────────────────────────────────
+
+[[message]]
+# 中文幫助：給選中的字注音
+key = "help.chinese.annotate-reading"
+zht = "給選中的字注音"
+zhs = "给选中的字注音"
+en = "annotate the selection with a reading"
+
+[[message]]
+# 中文幫助：候選下顯示拆分
+key = "help.chinese.chaifen-under-candidates"
+zht = "候選詞下面顯示拆分"
+zhs = "候选词下面显示拆分"
+en = "show the 拆分 under each candidate"
+
+[[message]]
+# 中文幫助：數字數
+key = "help.chinese.count"
+zht = "數字數：漢字多少、連標點西文一共多少、幾段"
+zhs = "数字数：汉字多少、连标点西文一共多少、几段"
+en = "count: how many 漢字, how many characters in all, how many paragraphs"
+
+[[message]]
+# 中文幫助：段首空兩格
+key = "help.chinese.first-line-indent"
+zht = "段首空兩格，段間的空行就收起來"
+zhs = "段首空两格，段间的空行就收起来"
+en = "open a paragraph two squares in, and take the blank line between them off the page"
+
+[[message]]
+# 中文幫助：口頭禪
+key = "help.chinese.habit-words"
+zht = "口頭禪：這一篇比尋常文章多説的那些詞"
+zhs = "口头禅：这一篇比寻常文章多説的那些词"
+en = "habit words: what this one says far more than ordinary text does"
+
+[[message]]
+# 中文幫助：標點旁置
+key = "help.chinese.hung-punctuation"
+zht = "標點旁置：句讀掛在字旁邊的邊欄裏"
+zhs = "标点旁置：句读挂在字旁边的边栏里"
+en = "hanging punctuation: 句讀 sit in the margin beside the character"
+
+[[message]]
+# 中文幫助：重讀本項目的詞
+key = "help.chinese.reload-project-words"
+zht = "重讀 .yumete/words.txt——本項目自己的詞"
+zhs = "重读 .yumete/words.txt——本项目自己的词"
+en = "re-read .yumete/words.txt — this project's own words"
+
+[[message]]
+# 中文那一節的小標題
+key = "help.chinese.section-summary"
+zht = "漢字、標點、注音、輸入法"
+zhs = "汉字、标点、注音、输入法"
+en = "漢字, punctuation, readings, the input method"
+
+[[message]]
+# 中文幫助：換方案
+key = "help.chinese.switch-scheme"
+zht = "換方案：靈明、星陳、卿雲、日月、拼音"
+zhs = "换方案：灵明、星陈、卿云、日月、拼音"
+en = "switch scheme: lingming, xingchen, qingyun, riyue, pinyin"
+
+[[message]]
+# 幫助分節：中文
+key = "help.chinese.title"
+zht = "中文"
+zhs = "中文"
+en = "Chinese"
+
+[[message]]
+# 中文幫助：開/關輸入法
+key = "help.chinese.toggle-ime"
+zht = "接管鍵盤(`:yume off` 交還給系統)；接管着的時候，單獨按一下 Shift 切 中/ABC"
+zhs = "接管键盘(`:yume off` 交还给系统)；接管着的时候，单独按一下 Shift 切 中/ABC"
+en = "take the keyboard (`:yume off` hands it back); a lone Shift tap switches 中/ABC"
+
+[[message]]
+# 中文幫助：注音寫法統一
+key = "help.chinese.unify-reading-spelling"
+zht = "把全篇的注音統一成一種寫法(html｜typst)"
+zhs = "把全篇的注音统一成一种写法(html｜typst)"
+en = "make every reading in the file use one spelling (html or typst)"
+
+[[message]]
+# 中文幫助：詞的邊界是分詞算出來的
+key = "help.chinese.word-boundaries"
+zht = "詞的邊界是分詞算出來的，不是空格"
+zhs = "词的边界是分词算出来的，不是空格"
+en = "word boundaries come from segmentation, not from spaces"
+
+[[message]]
+# 中文幫助：分詞著色
+key = "help.chinese.word-tint"
+zht = "把分出來的詞用底色標出來"
+zhs = "把分出来的词用底色标出来"
+en = "tint each word the segmenter found"
+
+[[message]]
+# 幫助分節：命令
+key = "help.commands.title"
+zht = "命令"
+zhs = "命令"
+en = "commands"
+
+[[message]]
+# 常用幫助：數字在前是次數
+key = "help.common.count-first"
+zht = "數字在前是次數"
+zhs = "数字在前是次数"
+en = "a number in front is a count"
+
+[[message]]
+# 常用幫助：删掉選區/換掉選區
+key = "help.common.delete-change"
+zht = "删掉選區/換掉選區(換完就在打字了)"
+zhs = "删掉选区/换掉选区(换完就在打字了)"
+en = "delete the selection / change it (and you are typing)"
+
+[[message]]
+# 常用幫助的小標題：改
+key = "help.common.editing-title"
+zht = "改"
+zhs = "改"
+en = "editing"
+
+[[message]]
+# 常用幫助：所有 : 命令
+key = "help.common.every-command"
+zht = "所有 : 命令"
+zhs = "所有 : 命令"
+en = "every : command"
+
+[[message]]
+# 常用幫助：延伸模式開關/收成一個字
+key = "help.common.extend-collapse"
+zht = "延伸模式開關/收成一個字；Esc 也退出延伸"
+zhs = "延伸模式开关/收成一个字；Esc 也退出延伸"
+en = "Select mode on-off / collapse to one character; Esc also leaves Select mode"
+
+[[message]]
+# 常用幫助：去/看它指的地方
+key = "help.common.follow-what-it-points-at"
+zht = "去/看它指的地方：腳註的註、拆分的那一行"
+zhs = "去/看它指的地方：脚注的注、拆分的那一行"
+en = "go to / show what this points at: a footnote's note, a component's row"
+
+[[message]]
+# 常用幫助：去第 30 行
+key = "help.common.go-to-line"
+zht = "去第 30 行"
+zhs = "去第 30 行"
+en = "go to line 30"
+
+[[message]]
+# 常用幫助：前進/後退半頁
+key = "help.common.half-page"
+zht = "前進/後退半頁；三分之二是 C-n/C-p，整頁是 C-f/C-b"
+zhs = "前进/后退半页；三分之二是 C-n/C-p，整页是 C-f/C-b"
+en = "half a page forward/back; C-n / C-p for two thirds, C-f / C-b for a whole one"
+
+[[message]]
+# 常用幫助：左下上右
+key = "help.common.hjkl"
+zht = "左下上右；竪排裏是沿着縱走"
+zhs = "左下上右；竖排里是沿着纵走"
+en = "left, down, up, right — down the column in vertical layout"
+
+[[message]]
+# 常用幫助：縮進/退縮進
+key = "help.common.indent"
+zht = "縮進/退縮進"
+zhs = "缩进/退缩进"
+en = "indent / unindent"
+
+[[message]]
+# 常用幫助：在光標前/後打字
+key = "help.common.insert-before-after"
+zht = "在光標前/後開始打字"
+zhs = "在光标前/后开始打字"
+en = "start typing before/after the cursor"
+
+[[message]]
+# 常用幫助：跳回去/再跳回來
+key = "help.common.jump-list"
+zht = "跳回去/再跳回來"
+zhs = "跳回去/再跳回来"
+en = "jump back / forward again"
+
+[[message]]
+# 常用幫助：行首/行尾/首個非空白
+key = "help.common.line-start-end"
+zht = "行首/行尾/首個非空白"
+zhs = "行首/行尾/首个非空白"
+en = "line start / line end / first non-blank"
+
+[[message]]
+# 常用幫助：錄一段按鍵/放一遍
+key = "help.common.macros"
+zht = "錄一段按鍵/放一遍"
+zhs = "录一段按键/放一遍"
+en = "record keys / play them back"
+
+[[message]]
+# 常用幫助：記住這裏/回到那裏
+key = "help.common.marks"
+zht = "記住這裏/回到那裏"
+zhs = "记住这里/回到那里"
+en = "remember this place / go back to it"
+
+[[message]]
+# 常用幫助：動——命令＋選擇＋動作
+key = "help.common.motion-title"
+zht = "動：命令＋選擇＋動作"
+zhs = "动：命令＋选择＋动作"
+en = "moving: command + selection + action"
+
+[[message]]
+# 常用幫助：下面/上面開新的一行
+key = "help.common.open-line"
+zht = "下面/上面開新的一行，直接打字"
+zhs = "下面/上面开新的一行，直接打字"
+en = "open a line below/above and start typing"
+
+[[message]]
+# 常用幫助：别的幾節
+key = "help.common.other-sections"
+zht = "别的幾節"
+zhs = "别的几节"
+en = "the other sections"
+
+[[message]]
+# 常用幫助：下一段/上一段
+key = "help.common.paragraph-motions"
+zht = "下一段/上一段"
+zhs = "下一段/上一段"
+en = "next paragraph / previous paragraph"
+
+[[message]]
+# 常用幫助：再做一次剛才那次改動
+key = "help.common.repeat-edit"
+zht = "重複上一次輸入；vim 鍵位下是上一次改動"
+zhs = "重复上一次输入；vim 键位下是上一次改动"
+en = "repeat the last insert (vim keymap: the last change)"
+
+[[message]]
+# 常用幫助：搜索、下一處、上一處
+key = "help.common.search"
+zht = "搜索、下一處、上一處"
+zhs = "搜索、下一处、上一处"
+en = "search, next, previous"
+
+[[message]]
+# 常用幫助：選這一整行
+key = "help.common.select-line"
+zht = "選這一整行——小説裏一行就是一整段"
+zhs = "选这一整行——小説里一行就是一整段"
+en = "select the whole line — in Chinese text a line is usually a paragraph"
+
+[[message]]
+# 常用幫助：下一句/上一句
+key = "help.common.sentence-motions"
+zht = "下一句/上一句"
+zhs = "下一句/上一句"
+en = "next sentence / previous sentence"
+
+[[message]]
+# 常用幫助的小標題：空格開頭的
+key = "help.common.space-title"
+zht = "空格開頭的"
+zhs = "空格开头的"
+en = "what Space opens"
+
+[[message]]
+# 常用幫助：檔首/檔尾
+key = "help.common.start-end-of-file"
+zht = "文件開頭/末尾"
+zhs = "文件开头/末尾"
+en = "start / end of the file"
+
+[[message]]
+# 幫助分節：常用
+key = "help.common.title"
+zht = "常用"
+zhs = "常用"
+en = "the usual keys"
+
+[[message]]
+# 常用幫助：撤銷/重做
+key = "help.common.undo-redo"
+zht = "撤銷/重做"
+zhs = "撤销/重做"
+en = "undo / redo"
+
+[[message]]
+# 常用幫助：推薦的窗口大小
+key = "help.common.window-size"
+zht = "推薦窗口大小 80×24。側面板要 36 欄纔擺得下。"
+zhs = "推荐窗口大小 80×24。侧面板要 36 栏才摆得下。"
+en = "a window of 80×24 is what this is laid out for; a side panel needs 36 columns."
+
+[[message]]
+# 常用幫助：這個詞還在哪裏
+key = "help.common.word-elsewhere"
+zht = "這個詞還在哪裏：這邊找/另一個窗口看"
+zhs = "这个词还在哪里：这边找/另一个窗口看"
+en = "where else this word is: / here, ? in the other window"
+
+[[message]]
+# 常用幫助：按詞移動
+key = "help.common.word-motions"
+zht = "下一詞首、上一詞首、詞尾；漢字中 b 和 e 按小句走"
+zhs = "下一词首、上一词首、词尾；汉字中 b 和 e 按小句走"
+en = "next word / back to a word start / on to a word end (in 漢字 text, b and e go by clause)"
+
+[[message]]
+# 常用幫助：複製/貼上
+key = "help.common.yank-put"
+zht = "複製/粘貼"
+zhs = "复制/粘贴"
+en = "yank / put"
+
+[[message]]
+# :help 給了不認得的節名
+key = "help.no-such-section"
+zht = "没有「{0}」這一節——:help 有 chinese、vertical、table、commands"
+zhs = "没有「{0}」这一节——:help 有 chinese、vertical、table、commands"
+en = "there is no section 「{0}」 — :help has chinese, vertical, table, commands"
+
+[[message]]
+# 幫助頁開頭那句：每一節都是編輯器自己報的
+key = "help.self-reported"
+zht = "每一節都是這個編輯器自己報上來的，不是抄的。"
+zhs = "每一节都是这个编辑器自己报上来的，不是抄的。"
+en = "every section here is reported by the editor itself, not copied out of a manual."
+
+[[message]]
+# 表格幫助：加一行/删一行
+key = "help.table.add-or-drop-row"
+zht = "加一行/删一行；t j t k 上下移"
+zhs = "加一行/删一行；t j t k 上下移"
+en = "add a row / drop this row; ␣t j and ␣t k move it"
+
+[[message]]
+# 表格幫助：邊欄與摺格子
+key = "help.table.detail-and-folds"
+zht = "這一行攤開來讀/過寬的格子收起尾巴"
+zhs = "这一行摊开来读/过宽的格子收起尾巴"
+en = "read this row laid out / fold the tails of over-wide cells"
+
+[[message]]
+# 表格幫助：把檔案當表格讀
+key = "help.table.enter-table"
+zht = "把這個文件當表格讀；:table-render off 退出"
+zhs = "把这个文件当表格读；:table-render off 退出"
+en = "an empty table on this blank line, the first row its headings; :table-render off leaves a table"
+
+[[message]]
+# 表格幫助：四種看法
+key = "help.table.four-surfaces"
+zht = "源碼/表格操作/畫成表格/全窗表格；t q 把窗口交回去"
+zhs = "源码/表格操作/画成表格/全窗表格；t q 把窗口交回去"
+en = "source / basic view / the whole window / give the window back"
+
+[[message]]
+# 表格幫助：格子裏下一格/上一格
+key = "help.table.next-previous-cell"
+zht = "格子裏：下一格/上一格"
+zhs = "格子里：下一格/上一格"
+en = "inside a cell: next cell / previous cell"
+
+[[message]]
+# 表格幫助：關掉欄線
+key = "help.table.no-column-rules"
+zht = "關掉欄之間的分隔線"
+zhs = "关掉栏之间的分隔线"
+en = "turn off the rules between columns"
+
+[[message]]
+# 表格那一節的小標題
+key = "help.table.section-summary"
+zht = "表格與拆分表"
+zhs = "表格与拆分表"
+en = "grids, and the 拆分表"
+
+[[message]]
+# 表格幫助：照這一欄順排/倒排
+key = "help.table.sort-by-column"
+zht = "照這一欄順排/倒排；t1a2d8as 一次排幾欄"
+zhs = "照这一栏顺排/倒排；t1a2d8as 一次排几栏"
+en = "sort by this column, ascending / descending; ␣t1a2d8as sorts by several"
+
+[[message]]
+# 表格幫助：按格走
+key = "help.table.step-by-cell"
+zht = "按格走；Tab 換成按字走"
+zhs = "按格走；Tab 换成按字走"
+en = "step by cell in window view (Enter goes into a cell, where they step by character)"
+
+[[message]]
+# 表格幫助：進格子打字/清掉這一格
+key = "help.table.type-in-cell"
+zht = "進格子打字/清掉這一格"
+zhs = "进格子打字/清掉这一格"
+en = "type in the cell / empty it"
+
+[[message]]
+# 表格幫助：誰用了它
+key = "help.table.who-uses-this"
+zht = "誰用了它——一欄一欄地找：這邊找/那邊看"
+zhs = "谁用了它——一栏一栏地找：这边找/那边看"
+en = "who uses this — down the columns: / here, ? in the other window"
+
+[[message]]
+# 表格幫助：取這一欄/貼一欄
+key = "help.table.yank-or-put-column"
+zht = "取這一欄/貼一欄"
+zhs = "取这一栏/贴一栏"
+en = "yank this column / put one"
+
+[[message]]
+# :help 開出來的那一頁的標題
+key = "help.title"
+zht = "{0}(:q 關掉；/ 可以搜)"
+zhs = "{0}(:q 关掉；/ 可以搜)"
+en = "{0} (:q closes it; / searches)"
+
+
+[[message]]
+# 竪排幫助：一縱多少字
+key = "help.vertical.column-length"
+zht = "一縱多少字；:view-wrap 0 跟着窗高走"
+zhs = "一纵多少字；:view-wrap 0 跟着窗高走"
+en = "how many characters a column holds; :view-wrap-vertical 0 follows the window"
+
+[[message]]
+# 竪排幫助：沿着這一縱往下/往上
+key = "help.vertical.down-up-column"
+zht = "沿着這一縱往下/往上"
+zhs = "沿着这一纵往下/往上"
+en = "down / up this column"
+
+[[message]]
+# 竪排幫助：段首空兩格
+key = "help.vertical.first-line-indent"
+zht = "段首空兩格"
+zhs = "段首空两格"
+en = "a paragraph opens two squares in"
+
+[[message]]
+# 竪排幫助：標點旁置
+key = "help.vertical.hung-punctuation"
+zht = "標點旁置：句讀掛到字旁邊"
+zhs = "标点旁置：句读挂到字旁边"
+en = "hanging punctuation: 句讀 sit beside the character"
+
+[[message]]
+# 竪排幫助：邊欄
+key = "help.vertical.margin"
+zht = "邊欄：每一縱旁邊都留一格"
+zhs = "边栏：每一纵旁边都留一格"
+en = "margin: a lane beside every column"
+
+[[message]]
+# 竪排幫助：分幾段
+key = "help.vertical.pages"
+zht = "分幾段：一頁上下兩段，像報紙"
+zhs = "分几段：一页上下两段，像报纸"
+en = "bands: two per page, one above the other, as a newspaper sets them"
+
+[[message]]
+# 竪排幫助：上一縱/下一縱
+key = "help.vertical.previous-next-column"
+zht = "上一縱/下一縱——縱是往左疊的"
+zhs = "上一纵/下一纵——纵是往左叠的"
+en = "next / previous column — columns stack leftwards"
+
+[[message]]
+# 竪排幫助：一句一縱
+key = "help.vertical.sentence"
+zht = "一句一縱地讀一遍——只是看法，文件没動"
+zhs = "一句一纵地读一遍——只是看法，文件没动"
+en = "read it back one sentence to a column — a view, not an edit"
+
+[[message]]
+# 幫助分節：竪排
+key = "help.vertical.title"
+zht = "竪排"
+zhs = "竖排"
+en = "vertical writing"
+
+[[message]]
+# 竪排幫助：轉成竪排
+key = "help.vertical.turn-vertical"
+zht = "轉成竪排；:horizontal 轉回來"
+zhs = "转成竖排；:horizontal 转回来"
+en = "turn the page vertical; :horizontal turns it back"
+
+[[message]]
+# 竪排幫助：所見即所得
+key = "help.vertical.wysiwyg"
+zht = "所見即所得：注音排出來，標記收起來"
+zhs = "所见即所得：注音排出来，标记收起来"
+en = "WYSIWYG: readings laid out, markup off the page"
+
+
+# ── hint ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 開場屏：空格 ? 做什麼
+key = "intro.all-commands"
+zht = "顯示命令列表"
+zhs = "显示命令列表"
+en = "the list of commands"
+
+[[message]]
+# 開場屏：那一欄裏的名字。繁簡兩種寫法，英文用拼音。
+key = "intro.author"
+zht = "朱宇浩"
+zhs = "朱宇浩"
+en = "Yuhao Zhu"
+
+[[message]]
+# 開場屏：署名那一行的標籤
+key = "intro.by"
+zht = "作者"
+zhs = "作者"
+en = "by"
+
+[[message]]
+# 開場屏：:help 那一行
+key = "intro.help"
+zht = "顯示幫助信息"
+zhs = "显示帮助信息"
+en = "the help pages"
+
+[[message]]
+# 開場屏：:keymap 那一行
+key = "intro.keymap"
+zht = "修改鍵位 (vim / helix)"
+zhs = "修改键位 (vim / helix)"
+en = "change the keymap (vim / helix)"
+
+[[message]]
+# 開場屏：:lang 那一行
+key = "intro.lang"
+zht = "修改顯示語言"
+zhs = "修改显示语言"
+en = "change the display language"
+
+[[message]]
+# 開場屏：走一遍教程
+key = "intro.learn"
+zht = "打開基本教程"
+zhs = "打开基本教程"
+en = "the basic tutorial"
+
+[[message]]
+# 開場屏：:q 做什麼
+key = "intro.leave"
+zht = "退出編輯器"
+zhs = "退出编辑器"
+en = "leave the editor"
+
+[[message]]
+# 開場屏：空格 f 做什麼
+key = "intro.open-a-file"
+zht = "打開文件挑選器"
+zhs = "打开文件挑选器"
+en = "the file picker"
+
+[[message]]
+# 開場屏：那個鍵怎麼寫(空格 f)
+key = "intro.space-f-key"
+zht = "空格 f"
+zhs = "空格 f"
+en = "Space f"
+
+[[message]]
+# 開場屏：那個鍵怎麼寫(空格 ?)
+key = "intro.space-question-key"
+zht = "空格 ?"
+zhs = "空格 ?"
+en = "Space ?"
+
+[[message]]
+# 空手打開 ye 時那一屏的頭一行
+key = "intro.title"
+zht = "YUMETE － 宇夢編輯器"
+zhs = "YUMETE － 宇梦编辑器"
+en = "YUMETE — the YUME text editor"
+
+[[message]]
+# 開場屏：版本那一行的標籤
+key = "intro.version"
+zht = "版本"
+zhs = "版本"
+en = "version"
+
+[[message]]
+# 開場屏：:yuhao 那一行
+key = "intro.yuhao"
+zht = "打開宇浩輸入法官網"
+zhs = "打开宇浩输入法官网"
+en = "the Yuhao input method website"
+
+[[message]]
+# 一條要邊欄的命令(`:view-hanging`、`:view-meter`)在 `never` 下被攔住時，數出來的那一項
+key = "need.margin"
+zht = "邊欄不是 never"
+zhs = "边栏不是 never"
+en = "a margin (not never)"
+
+[[message]]
+# 一條要先有碼表的命令被攔住時，數出來的那一項
+key = "need.scheme"
+zht = "載入碼表"
+zhs = "载入码表"
+en = "a loaded 碼表"
+
+[[message]]
+# 一條只在表格模式下作數的命令被攔住時，數出來的那一項
+key = "need.table"
+zht = "表格模式"
+zhs = "表格模式"
+en = "table mode"
+
+[[message]]
+# 一條只在竪排下作數的命令，在橫排下被攔住時，數出來的那一項
+key = "need.vertical"
+zht = "竪排"
+zhs = "竖排"
+en = "vertical layout"
+
+
+# ── note ──────────────────────────────────────────────────────────────
+
+[[message]]
+# `:shot!` 而後面是 screen：剪貼簿没有東西可以蓋
+key = "shot.the-bang-is-for-a-file"
+zht = "`!` 是給存成文件的那幾種的——剪貼板没有東西要蓋掉"
+zhs = "`!` 是给存成文件的那几种的——剪贴板没有东西要盖掉"
+en = "`!` is for the forms that write a file — nothing on the clipboard to overwrite"
+
+
+# ── show ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 第一次打開、没看見 vim 的痕跡
+key = "start.now-helix"
+zht = "已使用 helix 鍵位。可通過 :keymap vim 切換 vim 鍵位。"
+zhs = "已使用 helix 键位。可通过 :keymap vim 切换 vim 键位。"
+en = "using the helix keys; :keymap vim switches to vim's"
+
+[[message]]
+# 第一次打開、機器上有 vim 的痕跡：已經替他換好了
+key = "start.now-vim"
+zht = "已自動使用 vim 鍵位。可通過 :keymap helix 切換 helix 鍵位。"
+zhs = "已自动使用 vim 键位。可通过 :keymap helix 切换 helix 键位。"
+en = "using the vim keys, as chosen; :keymap helix switches to helix's"
+
+[[message]]
+# 打不開課文
+key = "tutor.cannot-open"
+zht = "打不開課文：{0}"
+zhs = "打不开课文：{0}"
+en = "could not open the lesson: {0}"
+
+[[message]]
+# 寫不下課文
+key = "tutor.cannot-write"
+zht = "寫不下課文：{0}"
+zhs = "写不下课文：{0}"
+en = "could not write the lesson: {0}"
+
+[[message]]
+# 課文的檔名都用光了
+key = "tutor.no-name-left"
+zht = "課文的文件名都用光了——删掉幾份 tutor*.md"
+zhs = "课文的文件名都用光了——删掉几份 tutor*.md"
+en = "every lesson name is taken — delete a few tutor*.md"
+
+[[message]]
+# 課文開好了，但没有資料目錄
+key = "tutor.open-unsaved"
+zht = "課文開好了(没有數據目錄，存不下來)"
+zhs = "课文开好了(没有数据目录，存不下来)"
+en = "the lesson is open (no data directory, so it cannot be saved)"
+
+[[message]]
+# 課文開好了，這是你自己的一份
+key = "tutor.this-copy-is-yours"
+zht = "這是你自己的一份，隨便改(:q 退出)"
+zhs = "这是你自己的一份，随便改(:q 退出)"
+en = "this copy is yours — break it as you like (:q leaves)"
+
+
+# ── ui ────────────────────────────────────────────────────────────────
+
+[[message]]
+# :version：全局配置在哪
+key = "version.config-global"
+zht = "全局配置"
+zhs = "全局配置"
+en = "config"
+
+[[message]]
+# :version：這個項目自己那一份配置在哪
+key = "version.config-local"
+zht = "項目配置"
+zhs = "项目配置"
+en = "project config"
+
+[[message]]
+# :version：編輯器自己存東西的地方(草稿、會話、碼表)
+key = "version.data"
+zht = "數據目錄"
+zhs = "数据目录"
+en = "data"
+
+[[message]]
+# :version：現在用的是哪一套鍵位
+key = "version.keymap"
+zht = "鍵位"
+zhs = "键位"
+en = "keymap"
+
+[[message]]
+# :version：出錯時寫的那個檔
+key = "version.log"
+zht = "日誌"
+zhs = "日志"
+en = "log"
+
+[[message]]
+# :version：那個檔不在。要緊的是他得知道是不是該自己建一個。
+key = "version.no-such-file"
+zht = "(没有)"
+zhs = "(没有)"
+en = "(none)"
+
+[[message]]
+# :version 那一扇的標題
+key = "version.title"
+zht = "宇夢編輯器"
+zhs = "宇梦编辑器"
+en = "yumete"

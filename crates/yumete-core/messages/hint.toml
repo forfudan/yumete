@@ -1,0 +1,1880 @@
+# prefixes: hint
+#
+# What the editor says, one block per tag; see README.md beside this file.
+
+[[message]]
+# z 那一層：zb
+key = "hint.aim.bottom"
+zht = "底下"
+zhs = "底下"
+en = "bottom"
+
+[[message]]
+# z 那一層：zz
+key = "hint.aim.middle"
+zht = "中間"
+zhs = "中间"
+en = "middle"
+
+[[message]]
+# z 那一層的小表：標題
+key = "hint.aim.title"
+zht = "這一行挪到哪"
+zhs = "这一行挪到哪"
+en = "put this line where"
+
+[[message]]
+# z 那一層：zt
+key = "hint.aim.top"
+zht = "頂上"
+zhs = "顶上"
+en = "top"
+
+[[message]]
+# 提示欄：取消
+key = "hint.cancel"
+zht = "取消"
+zhs = "取消"
+en = "cancel"
+
+[[message]]
+# ` 組：轉小寫
+key = "hint.case.lower"
+zht = "轉小寫"
+zhs = "转小写"
+en = "to lowercase"
+
+[[message]]
+# ` 組：大小寫互換
+key = "hint.case.switch"
+zht = "大小寫互換"
+zhs = "大小写互换"
+en = "switch case"
+
+[[message]]
+# ` 組的標題(Helix 花三個鍵做的事，這裏收成一組)
+key = "hint.case.title"
+zht = "字形"
+zhs = "字形"
+en = "letter case"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-c"
+zht = "簡→大陸繁"
+zhs = "简→大陆繁"
+en = "simplified → mainland 繁"
+
+[[message]]
+# ` 組：轉全角(只動 Unicode 那張對應表上的字)
+key = "hint.case.to-full"
+zht = "轉全角"
+zhs = "转全角"
+en = "to fullwidth"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-g"
+zht = "簡→古籍繁"
+zhs = "简→古籍繁"
+en = "simplified → 古籍 繁"
+
+[[message]]
+# ` 組：轉半角
+key = "hint.case.to-half"
+zht = "轉半角"
+zhs = "转半角"
+en = "to halfwidth"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-hk"
+zht = "簡→香港繁"
+zhs = "简→香港繁"
+en = "simplified → Hong Kong 繁"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-jp"
+zht = "繁→日文新字體"
+zhs = "繁→日文新字体"
+en = "traditional → Japanese shinjitai"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-s"
+zht = "繁→簡"
+zhs = "繁→简"
+en = "traditional → simplified"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-t"
+zht = "簡→繁"
+zhs = "简→繁"
+en = "simplified → traditional"
+
+[[message]]
+# `` 那一組：換一種寫法
+key = "hint.case.to-tw"
+zht = "簡→臺灣繁"
+zhs = "简→台湾繁"
+en = "simplified → Taiwan 繁"
+
+[[message]]
+# ` 組：轉大寫
+key = "hint.case.upper"
+zht = "轉大寫"
+zhs = "转大写"
+en = "to uppercase"
+
+[[message]]
+# 提示：換掉
+key = "hint.change"
+zht = "替換配對符號"
+zhs = "替换配对符号"
+en = "replace the pair"
+
+[[message]]
+# 提示：換成
+key = "hint.change-to"
+zht = "換成"
+zhs = "换成"
+en = "change to"
+
+[[message]]
+# 改動那一格底下那一行鍵
+key = "hint.change.keys"
+zht = "u 還原此處改動 · y 複製先前版本"
+zhs = "u 还原此处改动 · y 复制先前版本"
+en = "u restore this change · y copy what it said"
+
+[[message]]
+# 提示：關
+key = "hint.close"
+zht = "關"
+zhs = "关"
+en = "close"
+
+[[message]]
+# :s 逐處確認的選單：後面的全換，不再問
+key = "hint.confirm.all"
+zht = "後面的全換，不再問"
+zhs = "后面的全换，不再问"
+en = "replace the rest without asking"
+
+[[message]]
+# :s 逐處確認的選單：換這一處然後停
+key = "hint.confirm.last"
+zht = "換這一處然後停"
+zhs = "换这一处然后停"
+en = "replace this one, then stop"
+
+[[message]]
+# :s 逐處確認的選單：跳過這一處
+key = "hint.confirm.no"
+zht = "跳過，不換"
+zhs = "跳过，不换"
+en = "leave it, go on"
+
+[[message]]
+# :s 逐處確認的選單：停手
+key = "hint.confirm.stop"
+zht = "停手，已換的保留"
+zhs = "停手，已换的保留"
+en = "stop; what is done stays"
+
+[[message]]
+# :s 逐處確認時的選單標題
+key = "hint.confirm.title"
+zht = "逐處確認"
+zhs = "逐处确认"
+en = "one match at a time"
+
+[[message]]
+# :s 逐處確認的選單：換這一處
+key = "hint.confirm.yes"
+zht = "換這一處"
+zhs = "换这一处"
+en = "replace this one"
+
+[[message]]
+# 空格 m 的選單：兩方都留
+key = "hint.conflict.both"
+zht = "兩方都留"
+zhs = "两方都留"
+en = "keep both sides"
+
+[[message]]
+# 空格 m 的選單：只留我方(<<<<<<< 那一半)
+key = "hint.conflict.ours"
+zht = "只留我方"
+zhs = "只留我方"
+en = "keep ours"
+
+[[message]]
+# 空格 m 的選單：只留他方(>>>>>>> 那一半)
+key = "hint.conflict.theirs"
+zht = "只留他方"
+zhs = "只留他方"
+en = "keep theirs"
+
+[[message]]
+# 空格 m 的選單標題，也是空格選單上這一項的説明
+key = "hint.conflict.title"
+zht = "合併衝突"
+zhs = "合并冲突"
+en = "merge conflict"
+
+[[message]]
+# count panel: J welds N lines into one
+key = "hint.count.join"
+zht = "{0} 行併成一行"
+zhs = "{0} 行并成一行"
+en = "{0} lines become one"
+
+[[message]]
+# count panel: gg / G go to line N
+key = "hint.count.line"
+zht = "前往第 {0} 行"
+zhs = "前往第 {0} 行"
+en = "go to line {0}"
+
+[[message]]
+# count panel: the Nth occurrence, after f or t
+key = "hint.count.nth-find"
+zht = "第 {0} 個(接 f / t 後)"
+zhs = "第 {0} 个(接 f / t 后)"
+en = "number {0} of them (after f or t)"
+
+[[message]]
+# count panel: the last row — every other key just repeats
+key = "hint.count.otherwise"
+zht = "重複操作 {0} 次"
+zhs = "重复操作 {0} 次"
+en = "do it {0} times"
+
+[[message]]
+# count panel: gt / gc / gb, the Nth row on the screen
+key = "hint.count.screen-row"
+zht = "屏幕頂、中、底數第 {0} 行"
+zhs = "屏幕顶、中、底数第 {0} 行"
+en = "row {0} from the top, middle or bottom of the screen"
+
+[[message]]
+# count panel: the title, N already typed
+key = "hint.count.title"
+zht = "{0}"
+zhs = "{0}"
+en = "{0}"
+
+[[message]]
+# 提示：找
+key = "hint.find"
+zht = "找"
+zhs = "找"
+en = "find"
+
+[[message]]
+# 提示：腳注
+key = "hint.footnote"
+zht = "腳注"
+zhs = "脚注"
+en = "footnote"
+
+[[message]]
+# 提示：看這條註(没有就寫一條)
+key = "hint.footnote.show-or-write"
+zht = "看這條註(没有就寫一條)"
+zhs = "看这条注(没有就写一条)"
+en = "show the note (or write one)"
+
+[[message]]
+# g 選單裏的 j k(橫排)
+key = "hint.goto.by-file-line"
+zht = "下/上一邏輯行"
+zhs = "下/上一逻辑行"
+en = "down / up a logical line (with line number)"
+
+[[message]]
+# 豎排時
+# g 選單裏的 h l(縱書：方向跟 hjkl 一起轉)
+key = "hint.goto.by-file-line-vertical"
+zht = "下/上一邏輯縱(有縱號)"
+zhs = "下/上一逻辑縱(有縱号)"
+en = "next / previous line of the file — leftward is onward"
+
+[[message]]
+# vim 鍵位下 g 選單裏的 u U ~ ——大小寫算子，等一個動作
+key = "hint.goto.case-operators"
+zht = "轉小寫/轉大寫/大小寫互換，等待動作"
+zhs = "转小写/转大写/大小写互换，等待动作"
+en = "to lower, to upper, swap them — each waits for a motion"
+
+[[message]]
+# g 組：檔尾
+key = "hint.goto.end-of-file"
+zht = "文件末尾"
+zhs = "文件末尾"
+en = "end of file"
+
+[[message]]
+# vim 鍵位下 g 選單裏的 q ——按寬度重排，等一個動作
+key = "hint.goto.fill"
+zht = "按寬度重排，等待動作"
+zhs = "按宽度重排，等待动作"
+en = "fill the lines to the width — waits for a motion"
+
+[[message]]
+# g 組：首個非空白
+key = "hint.goto.first-non-blank"
+zht = "首個非空白字符"
+zhs = "首个非空白字符"
+en = "first non-blank character"
+
+[[message]]
+# g 組：跟着連結走
+key = "hint.goto.follow-link"
+zht = "跟着鏈接走"
+zhs = "跟着链接走"
+en = "follow the link"
+
+[[message]]
+# goto group
+# go to the definition
+key = "hint.goto.follow-note"
+zht = "前往定義"
+zhs = "前往定义"
+en = "go to definition"
+
+[[message]]
+# goto group
+# go to the definition (in second window)
+key = "hint.goto.follow-note-elsewhere"
+zht = "前往定義(另一窗口顯示)"
+zhs = "前往定义(另一窗口显示)"
+en = "go to definition in the other window"
+
+[[message]]
+# g 選單裏的 i：vim 的 gi，回到上次插入停下的地方再插入
+key = "hint.goto.insert-again"
+zht = "回到上次插入處繼續插入"
+zhs = "回到上次插入处继续插入"
+en = "insert again where the last Insert stopped"
+
+[[message]]
+# vim 鍵位下 g 選單裏的 J ——併行，一個空格都不補
+key = "hint.goto.join-without-a-space"
+zht = "合併下一行，不補空格"
+zhs = "合并下一行，不补空格"
+en = "join the next line, adding no space at all"
+
+[[message]]
+# g 選單：gw 亮起跳轉標籤
+key = "hint.goto.jump-labels"
+zht = "跳到當前屏幕某位置"
+zhs = "跳到当前屏幕某位置"
+en = "go to a place on this screen"
+
+[[message]]
+# g 選單裏的 . ——回到這一份文件最後改動的地方
+key = "hint.goto.last-change"
+zht = "回到最後改動的地方"
+zhs = "回到最后改动的地方"
+en = "back to the last change"
+
+[[message]]
+# g 選單裏的 a ——切回剛纔看的那一份稿子
+key = "hint.goto.last-file"
+zht = "回到最近打開的緩衝區"
+zhs = "回到最近打开的缓冲区"
+en = "back to the buffer before this one"
+
+[[message]]
+# goto: certain line
+key = "hint.goto.line-n"
+zht = "前往第 N 行"
+zhs = "前往第 N 行"
+en = "go to line N"
+
+[[message]]
+# g 組：行首/行尾
+key = "hint.goto.line-start-or-end"
+zht = "行首/行尾"
+zhs = "行首/行尾"
+en = "line start / end"
+
+[[message]]
+# vim 鍵位下 g 選單裏的 n N ——下一處/上一處匹配(helix 那一端是換稿子)
+key = "hint.goto.next-match"
+zht = "下一處/上一處匹配"
+zhs = "下一处/上一处匹配"
+en = "the next or previous match"
+
+[[message]]
+# goto group: goto next buffer
+key = "hint.goto.next-or-previous-buffer"
+zht = "下/上一個緩衝區"
+zhs = "下/上一个缓冲区"
+en = "the next or previous buffer"
+
+[[message]]
+# g 組：開這個檔
+key = "hint.goto.open-this-file"
+zht = "打開這個文件"
+zhs = "打开这个文件"
+en = "open this file"
+
+[[message]]
+# g 選單裏的 r ——用到這個的每一處（語言服務器）
+key = "hint.goto.references"
+zht = "用到它的每一處"
+zhs = "用到它的每一处"
+en = "every place it is used"
+
+[[message]]
+# g 選單裏的 v(只在 vim 鍵位下)——重選上一次那一段
+key = "hint.goto.reselect"
+zht = "重選上一次那一段"
+zhs = "重选上一次那一段"
+en = "select what was selected last"
+
+[[message]]
+# g 選單裏的 t c b ——光標跳到屏幕的頂/中/底
+key = "hint.goto.screen-top-middle-bottom"
+zht = "光標移至屏幕頂部/中部/底部"
+zhs = "光标移至屏幕顶部/中部/底部"
+en = "the cursor to the top, middle or bottom of the screen"
+
+[[message]]
+# goto: search the selection
+key = "hint.goto.search-word"
+zht = "搜索所選内容"
+zhs = "搜索所选内容"
+en = "search the selection"
+
+[[message]]
+# goto: search the selection, shown in the second window
+key = "hint.goto.search-word-elsewhere"
+zht = "搜索所選内容(另一窗口顯示)"
+zhs = "搜索所选内容(另一窗口显示)"
+en = "search the selection in the other window"
+
+[[message]]
+# `gu`：只問中文，打**讀音**，字母不限兩個
+key = "hint.goto.seek-reading"
+zht = "多字母定位漢字"
+zhs = "多字母定位汉字"
+en = "more letters to locate a char"
+
+[[message]]
+# `go`：只問西文，打目標處**字面**寫的那兩個字母
+key = "hint.goto.seek-written"
+zht = "兩字母定位單詞"
+zhs = "两字母定位单词"
+en = "two letters to locate a word"
+
+[[message]]
+# goto: head of file
+key = "hint.goto.start-of-file"
+zht = "文件開頭"
+zhs = "文件开头"
+en = "start of the file"
+
+[[message]]
+# g 組提示的標題
+key = "hint.goto.title"
+zht = "g 前往"
+zhs = "g 前往"
+en = "g goto"
+
+[[message]]
+# g 選單裏的 ; , (只在 vim 鍵位下)——在改過的地方之間走
+key = "hint.goto.walk-changes"
+zht = "往舊/往新走一處改動"
+zhs = "往旧/往新走一处改动"
+en = "an older / newer change"
+
+[[message]]
+# [空格：在上面加一條空行，光標不動
+key = "hint.hop.blank-above"
+zht = "上面加一條空行"
+zhs = "上面加一条空行"
+en = "a blank line above"
+
+[[message]]
+# ]空格：在下面加一條空行，光標不動
+key = "hint.hop.blank-below"
+zht = "下面加一條空行"
+zhs = "下面加一条空行"
+en = "a blank line below"
+
+[[message]]
+# ]/[ 的選單：下一處/上一處改動(行號旁那條改動條上的)
+key = "hint.hop.change"
+zht = "改動"
+zhs = "改动"
+en = "a change"
+
+[[message]]
+# ]/[ 的選單：下一個/上一個類(只在整份是代碼的檔上)
+key = "hint.hop.class"
+zht = "類"
+zhs = "类"
+en = "a class"
+
+[[message]]
+# ]/[ 的選單：下一段/上一段註釋(只在代碼檔上)
+key = "hint.hop.comment"
+zht = "註釋"
+zhs = "注释"
+en = "a comment"
+
+[[message]]
+# ]/[ 的選單：下一處/上一處合併衝突
+key = "hint.hop.conflict"
+zht = "合併衝突"
+zhs = "合并冲突"
+en = "merge conflict"
+
+[[message]]
+# ]/[ 的選單：下一個/上一個函數
+key = "hint.hop.function"
+zht = "函數"
+zhs = "函数"
+en = "a function"
+
+[[message]]
+# ] 按下之後的選單標題
+key = "hint.hop.next"
+zht = "下一個"
+zhs = "下一个"
+en = "next…"
+
+[[message]]
+# [ 按下之後的選單標題
+key = "hint.hop.previous"
+zht = "上一個"
+zhs = "上一个"
+en = "previous…"
+
+[[message]]
+# ]/[ 的選單：下一個/上一個診斷(大寫是第一個/最後一個)
+key = "hint.hop.problem"
+zht = "診斷(大寫：第一個/最後一個)"
+zhs = "诊断(大写：第一个/最后一个)"
+en = "a diagnostic (capital: the first / the last)"
+
+[[message]]
+# 提示：收下
+key = "hint.keep-it"
+zht = "收下"
+zhs = "收下"
+en = "keep it"
+
+[[message]]
+# ' 之後那張小表：一個標記記在哪(檔名 第幾行)
+key = "hint.mark.at"
+zht = "{0} 第 {1} 行"
+zhs = "{0} 第 {1} 行"
+en = "{0} line {1}"
+
+[[message]]
+# 記號組的提示：' 回到
+key = "hint.mark.go-back"
+zht = "' 回到"
+zhs = "' 回到"
+en = "' go back to"
+
+[[message]]
+# ' 之後那張小表：標記指着的那個稿子已經關了
+key = "hint.mark.gone"
+zht = "(那個文件關了)"
+zhs = "(那个文件关了)"
+en = "(that buffer is closed)"
+
+[[message]]
+# 記號組：叫什麼名字
+key = "hint.mark.name-it"
+zht = "叫什麼名字"
+zhs = "叫什么名字"
+en = "name it"
+
+[[message]]
+# ' 之後那張小表：一個位置都還没記過
+key = "hint.mark.none-yet"
+zht = "(無位置記錄)"
+zhs = "(无位置记录)"
+en = "(nothing marked yet)"
+
+[[message]]
+# 記號組的提示：M 記住這裏
+key = "hint.mark.set-here"
+zht = "M 記住這裏"
+zhs = "M 记住这里"
+en = "M mark this place"
+
+[[message]]
+# m 組：連同
+key = "hint.match.around"
+zht = "選擇配對符號和内部字符"
+zhs = "选择配对符号和内部字符"
+en = "select the pair and what is inside"
+
+[[message]]
+# m 組：之內
+key = "hint.match.inside"
+zht = "選擇配對符號内部字符"
+zhs = "选择配对符号内部字符"
+en = "select what is inside the pair"
+
+[[message]]
+# m 組：配對
+key = "hint.match.pair"
+zht = "前往配對符號的另一個"
+zhs = "前往配对符号的另一个"
+en = "go to the other half of the pair"
+
+[[message]]
+# m 組：包起來
+key = "hint.match.surround"
+zht = "使用配對符號包住選區"
+zhs = "使用配对符号包住选区"
+en = "wrap the selection in a pair"
+
+[[message]]
+# m 組：去掉
+key = "hint.match.take-off"
+zht = "移除配對符號"
+zhs = "移除配对符号"
+en = "remove the pair"
+
+[[message]]
+# m 組提示的標題
+key = "hint.match.title"
+zht = "m"
+zhs = "m"
+en = "m"
+
+[[message]]
+# mi/ma 菜單：大詞
+key = "hint.obj.big-word"
+zht = "大詞(到空格爲止)"
+zhs = "大词(到空格为止)"
+en = "WORD (up to a space)"
+
+[[message]]
+# mi/ma 菜單：l，光標所在的那一格(表格)
+key = "hint.obj.cell"
+zht = "單元格(表格)"
+zhs = "单元格(表格)"
+en = "cell (table)"
+
+[[message]]
+# mi/ma 菜單：g，git 標出來的那一處改動(helix 的 Change)
+key = "hint.obj.change"
+zht = "這一處改動(git)"
+zhs = "这一处改动(git)"
+en = "the change here (git)"
+
+[[message]]
+# mi/ma 菜單：u，短句(到任何標點爲止)
+key = "hint.obj.clause"
+zht = "短句"
+zhs = "短句"
+en = "clause (up to any punctuation)"
+
+[[message]]
+# mi/ma 菜單：c，代碼裏的註釋
+key = "hint.obj.comment"
+zht = "註釋(代碼)"
+zhs = "注释(代码)"
+en = "comment (code)"
+
+[[message]]
+# mi/ma 菜單：x，HTML 元素
+key = "hint.obj.element"
+zht = "HTML 元素(代碼)"
+zhs = "HTML 元素(代码)"
+en = "HTML element (code)"
+
+[[message]]
+# mi/ma 菜單：e，鍵值對
+key = "hint.obj.entry"
+zht = "鍵值對(代碼)"
+zhs = "键值对(代码)"
+en = "key and value (code)"
+
+[[message]]
+# mi/ma 菜單：函數
+key = "hint.obj.function"
+zht = "函數(代碼)"
+zhs = "函数(代码)"
+en = "function (code)"
+
+[[message]]
+# mi/ma/md 菜單：k，Markdown 標記
+key = "hint.obj.markup"
+zht = "Markdown 標記"
+zhs = "Markdown 标记"
+en = "Markdown marks"
+
+[[message]]
+# mi/ma/md/mr 菜單：m，最近的一對
+key = "hint.obj.nearest-pair"
+zht = "最近的一對"
+zhs = "最近的一对"
+en = "nearest pair"
+
+[[message]]
+# mi/ma 菜單：段
+key = "hint.obj.paragraph"
+zht = "段"
+zhs = "段"
+en = "paragraph"
+
+[[message]]
+# mi/ma 菜單：參數
+key = "hint.obj.parameter"
+zht = "參數(代碼)"
+zhs = "参数(代码)"
+en = "parameter (code)"
+
+[[message]]
+# mi/ma 菜單：句
+key = "hint.obj.sentence"
+zht = "句"
+zhs = "句"
+en = "sentence"
+
+[[message]]
+# mi/ma 菜單：T，測試函數
+key = "hint.obj.test"
+zht = "測試函數(代碼)"
+zhs = "测试函数(代码)"
+en = "test function (code)"
+
+[[message]]
+# mi/ma 菜單：類型定義
+key = "hint.obj.type"
+zht = "類型定義(代碼)"
+zhs = "类型定义(代码)"
+en = "type definition (code)"
+
+[[message]]
+# mi/ma 菜單：詞
+key = "hint.obj.word"
+zht = "詞"
+zhs = "词"
+en = "word"
+
+[[message]]
+# ␣o 開上次的那一組
+key = "hint.open.recent-files"
+zht = "最近開過的檔"
+zhs = "最近开过的档"
+en = "recent files"
+
+[[message]]
+# ␣o 開上次的那一組
+key = "hint.open.recent-files-global"
+zht = "最近開過的檔(全部項目)"
+zhs = "最近开过的档(全部项目)"
+en = "recent files, everywhere"
+
+[[message]]
+# ␣o 開上次的那一組
+key = "hint.open.recent-projects"
+zht = "最近開過的項目"
+zhs = "最近开过的项目"
+en = "recent projects"
+
+[[message]]
+# ␣o 開上次的那一組
+key = "hint.open.resume"
+zht = "接着上次"
+zhs = "接着上次"
+en = "take up the last session"
+
+[[message]]
+# ␣o 開上次的那一組
+key = "hint.open.title"
+zht = "開上次的"
+zhs = "开上次的"
+en = "open something recent"
+
+[[message]]
+# 提示：蓋掉
+key = "hint.overwrite"
+zht = "蓋掉"
+zhs = "盖掉"
+en = "write over"
+
+[[message]]
+# m 組菜單最後一行：別的符號也當成一對(helix 的 "... or any character")
+key = "hint.pair.any"
+zht = "……或任何成對符號"
+zhs = "……或任何成对符号"
+en = "… or any paired symbol"
+
+[[message]]
+# ms 菜單：Enter 在選區前後各寫一個換行符
+key = "hint.pair.lines"
+zht = "前後換行符"
+zhs = "前后换行符"
+en = "a line break on each side"
+
+[[message]]
+# 提示：挑選器——Enter 打開選中的那一條
+key = "hint.picker.open"
+zht = "打開"
+zhs = "打开"
+en = "open"
+
+[[message]]
+# 提示：挑選器 A-h 轉到第四格——隱藏與忽略的都搜
+key = "hint.picker.search-everything"
+zht = "全部搜索"
+zhs = "全部搜索"
+en = "search everything"
+
+[[message]]
+# 提示：挑選器 A-h 的第二格——不搜隱藏文件，忽略的搜
+key = "hint.picker.skip-hidden"
+zht = "不搜隱藏"
+zhs = "不搜隐藏"
+en = "skip hidden"
+
+[[message]]
+# 提示：挑選器 A-h 的出廠那一格——隱藏和忽略的都不搜
+key = "hint.picker.skip-hidden-and-ignored"
+zht = "不搜隱藏＋忽略"
+zhs = "不搜隐藏+忽略"
+en = "skip hidden + ignored"
+
+[[message]]
+# 提示：挑選器 A-h 的第三格——不搜 .gitignore 擋掉的，隱藏的搜
+key = "hint.picker.skip-ignored"
+zht = "不搜忽略"
+zhs = "不搜忽略"
+en = "skip ignored"
+
+[[message]]
+# 提示：注音
+key = "hint.reading"
+zht = "注音"
+zhs = "注音"
+en = "reading"
+
+[[message]]
+# 提示：Insert 模式打了 `[^` 或 `](#`，補全面板開着，等 Tab
+key = "hint.reference"
+zht = "引用"
+zhs = "引用"
+en = "reference"
+
+[[message]]
+# 提示：Tab 在補全面板上換下一條(Shift-Tab 往回)
+key = "hint.reference.pick"
+zht = "換一條(Shift-Tab 往回)"
+zhs = "换一条(Shift-Tab 往回)"
+en = "next one (Shift-Tab goes back)"
+
+[[message]]
+# C-w q：關掉這一區
+key = "hint.region.close"
+zht = "關掉這一區"
+zhs = "关掉这一区"
+en = "close this one"
+
+[[message]]
+# C-w h/j/k/l：按方向走到那一區
+key = "hint.region.go"
+zht = "按方向走"
+zhs = "按方向走"
+en = "go that way"
+
+[[message]]
+# C-w E / C-w I：開出來並且走進去
+key = "hint.region.into-bar"
+zht = "進左右欄"
+zhs = "进左右栏"
+en = "go into the left / right sidebar"
+
+[[message]]
+# C-w 提示：n 開一個空白窗口（helix 那裏是一組，後面跟 s 或 v）
+key = "hint.region.new"
+zht = "開一個空白窗口"
+zhs = "开一个空白窗口"
+en = "a blank window"
+
+[[message]]
+# C-w n 提示：s 在下面開空白窗口
+key = "hint.region.new-below"
+zht = "下面開一個空白窗口"
+zhs = "下面开一个空白窗口"
+en = "a blank window below"
+
+[[message]]
+# C-w n 提示：v 在旁邊開空白窗口
+key = "hint.region.new-beside"
+zht = "旁邊開一個空白窗口"
+zhs = "旁边开一个空白窗口"
+en = "a blank window beside"
+
+[[message]]
+# C-w w：走到下一個區域
+key = "hint.region.next"
+zht = "下一個"
+zhs = "下一个"
+en = "next"
+
+[[message]]
+# C-w o：只留這一區
+key = "hint.region.only"
+zht = "只留這一區"
+zhs = "只留这一区"
+en = "keep only this one"
+
+[[message]]
+# C-w s：切一刀，分成上下兩個編輯區
+key = "hint.region.split"
+zht = "下面開一個窗口"
+zhs = "下面开一个窗口"
+en = "a window below"
+
+[[message]]
+# C-w 提示：v 在旁邊開一個窗口
+key = "hint.region.split-beside"
+zht = "旁邊開一個窗口"
+zhs = "旁边开一个窗口"
+en = "a window beside"
+
+[[message]]
+# C-w/空格 w 那一組的標題
+key = "hint.region.title"
+zht = "工作區域操作"
+zhs = "工作区域操作"
+en = "region"
+
+[[message]]
+# C-w e / C-w i：開關左右邊欄，鍵不過去
+key = "hint.region.toggle-bar"
+zht = "開關左右欄"
+zhs = "开关左右栏"
+en = "toggle the left / right bar"
+
+[[message]]
+# " 之後那張小表：# 那一行(選區序號，#405 Phase 3)
+key = "hint.register.hash"
+zht = "(該選區之序號)"
+zhs = "(该选区之序号)"
+en = "(this selection's number)"
+
+[[message]]
+# " 之後那張小表的標題
+key = "hint.register.title"
+zht = "寄存器·剪貼板"
+zhs = "寄存器·剪贴板"
+en = "registers"
+
+
+[[message]]
+# 跨檔替換進行中那一扇窗，底下那一行
+key = "hint.replacing.stop"
+zht = "Esc 終止替換"
+zhs = "Esc 终止替换"
+en = "Esc to stop replacing"
+
+[[message]]
+# 提示：鍵已經交回正文，而結果名單還開着——回名單
+key = "hint.search.back-to-the-list"
+zht = "回名單"
+zhs = "回名单"
+en = "back to the results"
+
+[[message]]
+# 提示：搜索框裏——d 删光標底下那一個字，D 删到末尾
+key = "hint.search.box-append"
+zht = "追加"
+zhs = "追加"
+en = "append"
+
+[[message]]
+# 提示：搜索框裏——c 删光標底下那一個字並接着打，C 删到末尾並接着打
+key = "hint.search.box-change"
+zht = "修改"
+zhs = "修改"
+en = "change"
+
+[[message]]
+# 提示：搜索框裏——d 删光標底下那一個字，D 删到末尾
+key = "hint.search.box-delete"
+zht = "删除"
+zhs = "删除"
+en = "delete"
+
+[[message]]
+# 提示：搜索框裏——i 就地打字，I 跳到框首再打
+key = "hint.search.box-insert"
+zht = "插入"
+zhs = "插入"
+en = "insert"
+
+[[message]]
+# 提示：搜索面板——Enter 去看結果(兩種範圍同一句，2026-09-25 統一)
+key = "hint.search.go-look"
+zht = "搜索"
+zhs = "搜索"
+en = "search"
+
+[[message]]
+# 提示：搜索面板——`/` 把鍵挪回搜索行(不進 insert，再按 aci 纔打字)
+key = "hint.search.new-word"
+zht = "回搜索行"
+zhs = "回搜索行"
+en = "back to the pattern row"
+
+[[message]]
+# 提示：搜索面板——下一格
+key = "hint.search.next-cell"
+zht = "上下移動"
+zhs = "上下移动"
+en = "move up and down"
+
+[[message]]
+# 提示：搜索面板——出框
+key = "hint.search.out-of-the-box"
+zht = "返回面板"
+zhs = "返回面板"
+en = "back to the panel"
+
+[[message]]
+# 搜索面板的鍵位行：全部換
+key = "hint.search.replace-all"
+zht = "替換所有文件"
+zhs = "替换所有文件"
+en = "replace in every file"
+
+[[message]]
+# 搜索面板的鍵位行：站在檔名那一行上，r 換整個檔
+key = "hint.search.replace-file"
+zht = "替換整個文件"
+zhs = "替换整个文件"
+en = "replace the whole file"
+
+[[message]]
+# 提示：搜索面板——換這一處/全部換
+key = "hint.search.replace-here"
+zht = "替換此處"
+zhs = "替换此处"
+en = "replace this one"
+
+[[message]]
+# 提示：搜索面板——五個開關按編號開關
+key = "hint.search.switches"
+zht = "開關"
+zhs = "开关"
+en = "switches"
+
+[[message]]
+# 提示：搜索面板——這一格做什麼
+key = "hint.search.use-it"
+zht = "搜索/跳轉"
+zhs = "搜索/跳转"
+en = "search / go there"
+
+[[message]]
+# 提示：鍵已經交回正文，而結果名單還開着——走下一處/上一處命中
+key = "hint.search.walk-the-hits"
+zht = "下一處/上一處"
+zhs = "下一处/上一处"
+en = "next hit / previous"
+
+[[message]]
+# 提示欄：邊欄
+key = "hint.sidebar"
+zht = "邊欄"
+zhs = "边栏"
+en = "sidebar"
+
+[[message]]
+# 邊欄提示：回正文
+key = "hint.sidebar.back-to-text"
+zht = "切換區域"
+zhs = "切换区域"
+en = "switch region"
+
+[[message]]
+# 邊欄底下那一行按鍵説明
+key = "hint.sidebar.keys"
+zht = "j k 移動 · J K 翻頁 · g G 兩端 · l 進入 · h 收起 · Tab 換視圖 · w 寬窄 · R 重讀 · C-w 去下一區 · q 回編輯區"
+zhs = "j k 移动 · J K 翻页 · g G 两端 · l 进入 · h 收起 · Tab 换视图 · w 宽窄 · R 重读 · C-w 去下一区 · q 回编辑区"
+en = "j k move · J K page · g G ends · l enter · h collapse · Tab view · w width · R reread · C-w next region · q back to text"
+
+[[message]]
+# 邊欄底下那一行按鍵説明：百科那一頁是一段文章，没有行可以進、可以收
+key = "hint.sidebar.keys-wiki"
+zht = "j k 滾動 · J K 半頁 · g G 兩端 · Tab 換視圖 · w 寬窄 · C-w 去下一區 · q 回編輯區"
+zhs = "j k 滚动 · J K 半页 · g G 两端 · Tab 换视图 · w 宽窄 · C-w 去下一区 · q 回编辑区"
+en = "j k scroll · J K half a page · g G ends · Tab view · w width · C-w next region · q back to text"
+
+[[message]]
+# 雙鏈面板的提示行：v 這個鍵
+key = "hint.sidebar.links-look"
+zht = "列表/圖"
+zhs = "列表/图"
+en = "list/graph"
+
+[[message]]
+# 提示：上下移動
+key = "hint.sidebar.move"
+zht = "上下"
+zhs = "上下"
+en = "move"
+
+[[message]]
+# 邊欄提示：換視圖
+key = "hint.sidebar.other-view"
+zht = "換視圖"
+zhs = "换视图"
+en = "other view"
+
+[[message]]
+# 百科那一頁是文章不是單子：j/k 滾動
+key = "hint.sidebar.scroll"
+zht = "滾動"
+zhs = "滚动"
+en = "scroll"
+
+[[message]]
+# 邊欄提示：寬窄
+key = "hint.sidebar.width"
+zht = "寬窄"
+zhs = "宽窄"
+en = "wide / narrow"
+
+[[message]]
+# 空格組：這裏能做什麼（語言服務器）
+key = "hint.space.actions"
+zht = "代碼動作"
+zhs = "代码动作"
+en = "code actions"
+
+[[message]]
+# g 組：全項目搜索
+key = "hint.space.advanced-search"
+zht = "搜索面板"
+zhs = "搜索面板"
+en = "the search panel"
+
+[[message]]
+# g 組：命令一覽
+key = "hint.space.all-commands"
+zht = "命令一覽"
+zhs = "命令一览"
+en = "every command"
+
+[[message]]
+# 空格組：這一塊改之前寫的是什麼(浮窗)
+key = "hint.space.change"
+zht = "顯示改動(浮窗)"
+zhs = "显示改动(浮窗)"
+en = "show the change (float)"
+
+[[message]]
+# 空格組：同上，進邊欄
+key = "hint.space.change-panel"
+zht = "顯示改動(邊欄)"
+zhs = "显示改动(边栏)"
+en = "show the change (sidebar)"
+
+[[message]]
+# 空格菜單：g 開「存在改動文件」挑選器
+key = "hint.space.changed-files"
+zht = "存在改動文件"
+zhs = "存在改动文件"
+en = "changed files"
+
+[[message]]
+# 空格 C：塊注釋(没有塊注釋的格式退到行注釋)
+key = "hint.space.comment-block"
+zht = "塊注釋"
+zhs = "块注释"
+en = "comment out, in a block"
+
+[[message]]
+# 空格 c：行注釋(没有行注釋的格式退到塊注釋)
+key = "hint.space.comment-line"
+zht = "行注釋"
+zhs = "行注释"
+en = "comment out, by the line"
+
+[[message]]
+# g 組：複製到系統剪貼簿
+key = "hint.space.copy-to-clipboard"
+zht = "複製到系統剪貼板"
+zhs = "复制到系统剪贴板"
+en = "copy to the system clipboard"
+
+[[message]]
+# 空格菜單：這個文件的診斷（helix 的同一個鍵）
+key = "hint.space.diagnostics"
+zht = "診斷挑選器"
+zhs = "诊断挑选器"
+en = "diagnostics picker"
+
+[[message]]
+# 空格組：字典
+key = "hint.space.dictionary"
+zht = "顯示漢字信息(浮窗)"
+zhs = "显示汉字信息(浮窗)"
+en = "character info (floating)"
+
+[[message]]
+# 空格選單裏那一行：把漢字信息開進邊欄(浮窗是小寫的 d)
+key = "hint.space.dictionary-panel"
+zht = "顯示漢字信息(邊欄)"
+zhs = "显示汉字信息(边栏)"
+en = "character info (sidebar)"
+
+[[message]]
+# space e：瀏覽文件，一次一個目錄(挑選器式，不是邊欄那棵樹)
+key = "hint.space.explorer"
+zht = "瀏覽文件(項目路徑)"
+zhs = "浏览文件(项目路径)"
+en = "browse files (project dir)"
+
+[[message]]
+# space E：同上，從這個檔所在的目錄開始
+key = "hint.space.explorer-here"
+zht = "瀏覽文件(本文件路徑)"
+zhs = "浏览文件(本文件路径)"
+en = "browse files (this file's dir)"
+
+[[message]]
+# space f：open a file
+# 開啟文件
+key = "hint.space.open-file"
+zht = "文件挑選器(項目路徑)"
+zhs = "文件挑选器(项目路径)"
+en = "open file picker (project dir)"
+
+[[message]]
+# space F
+# 選擇器開在工作路徑上
+key = "hint.space.open-file-here"
+zht = "文件挑選器(工作路徑)"
+zhs = "文件挑选器(工作路径)"
+en = "open file picker (working dir)"
+
+[[message]]
+# ␣o 開上次的那一組
+key = "hint.space.open-recent"
+zht = "開上次的"
+zhs = "开上次的"
+en = "open something recent"
+
+[[message]]
+# 空格選單：空格再按一下，往下一頁
+key = "hint.space.page-down"
+zht = "下一頁"
+zhs = "下一页"
+en = "page down"
+
+[[message]]
+# 空格選單：退格，往上一頁
+key = "hint.space.page-up"
+zht = "上一頁"
+zhs = "上一页"
+en = "page up"
+
+[[message]]
+# space P: 從系統剪貼簿貼在前面
+key = "hint.space.paste-before"
+zht = "從系統剪貼板粘貼在前"
+zhs = "从系统剪贴板粘贴在前"
+en = "paste before, from the system clipboard"
+
+[[message]]
+# space p:
+# 從系統剪貼簿貼上
+key = "hint.space.paste-from-clipboard"
+zht = "從系統剪貼板粘貼"
+zhs = "从系统剪贴板粘贴"
+en = "paste from the system clipboard"
+
+[[message]]
+# 空格選單：這一行的診斷，浮窗
+key = "hint.space.problems"
+zht = "顯示診斷信息(浮窗)"
+zhs = "显示诊断信息(浮窗)"
+en = "show diagnostics (float)"
+
+[[message]]
+# 空格選單：這一行的診斷，邊欄
+key = "hint.space.problems-panel"
+zht = "顯示診斷信息(邊欄)"
+zhs = "显示诊断信息(边栏)"
+en = "show diagnostics (sidebar)"
+
+[[message]]
+# 空格菜單：項目裏每個文件的診斷（helix 的同一個鍵）
+key = "hint.space.project-diagnostics"
+zht = "項目診斷挑選器"
+zhs = "项目诊断挑选器"
+en = "project diagnostics picker"
+
+[[message]]
+# 空格菜單：項目裏的符號：隨查詢問語言服務器，沒有服務器時是各文件的標題（helix 的同一個鍵）
+key = "hint.space.project-symbols"
+zht = "項目符號挑選器"
+zhs = "项目符号挑选器"
+en = "project symbol picker"
+
+[[message]]
+# 空格選單：這一行攤開，浮窗
+key = "hint.space.record"
+zht = "顯示表格行記錄(浮窗)"
+zhs = "显示表格行记录(浮窗)"
+en = "this row's record (floating)"
+
+[[message]]
+# 空格選單：這一行攤開，邊欄
+key = "hint.space.record-panel"
+zht = "顯示表格行記錄(邊欄)"
+zhs = "显示表格行记录(边栏)"
+en = "this row's record (sidebar)"
+
+[[message]]
+# 空格組：改名（語言服務器）
+key = "hint.space.rename"
+zht = "改名（各處一起改）"
+zhs = "改名（各处一起改）"
+en = "rename it everywhere"
+
+[[message]]
+# 空格菜單：R 用系統剪貼板替換選區（helix 的同一個鍵）
+key = "hint.space.replace-from-clipboard"
+zht = "用系統剪貼板替換選區"
+zhs = "用系统剪贴板替换选区"
+en = "replace the selection with the system clipboard"
+
+[[message]]
+# space b: 
+# Open buffer picker
+key = "hint.space.switch-buffer"
+zht = "緩衝區挑選器"
+zhs = "缓冲区挑选器"
+en = "open buffer picker"
+
+[[message]]
+# 空格菜單：這個文件的符號：語言服務器說的，沒有服務器時是大綱（helix 的同一個鍵）
+key = "hint.space.symbols"
+zht = "符號挑選器"
+zhs = "符号挑选器"
+en = "symbol picker"
+
+[[message]]
+# 空格 t：表格那一組
+key = "hint.space.table"
+zht = "表格操作"
+zhs = "表格操作"
+en = "table operations"
+
+[[message]]
+# 空格組提示的標題
+key = "hint.space.title"
+zht = "空格"
+zhs = "空格"
+en = "Space"
+
+[[message]]
+# 空格選單裏那一行：問語言服務器這是什麽
+key = "hint.space.what-is-this"
+zht = "顯示定義文檔(浮窗)"
+zhs = "显示定义文档(浮窗)"
+en = "documentation (floating)"
+
+[[message]]
+# 空格選單：把服務器那段話開進邊欄(浮窗是小寫的 k)
+key = "hint.space.what-is-this-panel"
+zht = "顯示定義文檔(邊欄)"
+zhs = "显示定义文档(边栏)"
+en = "documentation (sidebar)"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.space.yume"
+zht = "輸入法"
+zhs = "输入法"
+en = "the input method"
+
+[[message]]
+# 表格提示：加一欄
+key = "hint.table.add-column"
+zht = "加一欄(右/左)"
+zhs = "加一栏(右/左)"
+en = "add a column (right / left)"
+
+[[message]]
+# 表格提示：加一行
+key = "hint.table.add-row"
+zht = "插入新行(下/上)"
+zhs = "插入新行(下/上)"
+en = "insert a new row (below / above)"
+
+[[message]]
+# 空格 t 之後認得哪些鍵——單子是從 keys.rs 那幾張真表生出來的
+key = "hint.table.after-t"
+zht = "␣t 後面：{0}"
+zhs = "␣t 后面：{0}"
+en = "after Space t: {0}"
+
+[[message]]
+# 表格提示：這欄靠左/居中/靠右
+key = "hint.table.align-column"
+zht = "這欄靠左/居中/靠右"
+zhs = "这栏靠左/居中/靠右"
+en = "this column left / centre / right"
+
+[[message]]
+# t 選單：t q 這一行
+key = "hint.table.back-to-prose"
+zht = "源碼視圖(顯示源碼)"
+zhs = "源码视图(显示源码)"
+en = "source view: the file as written"
+
+[[message]]
+# 空格 t 那張表上 x 那一行
+key = "hint.table.convert"
+zht = "轉換表格格式(分隔符)"
+zhs = "转换表格格式(分隔符)"
+en = "convert the table's format (delimiter)"
+
+[[message]]
+# 空格 t x 底下：轉成逗號分隔
+key = "hint.table.convert-csv"
+zht = "csv(轉換/貼上)"
+zhs = "csv(转换/粘贴)"
+en = "csv (convert / paste)"
+
+[[message]]
+# 空格 t x 底下：轉成 | 表格
+key = "hint.table.convert-pipe"
+zht = "pipe(轉換/貼上)"
+zhs = "pipe(转换/粘贴)"
+en = "pipe (convert / paste)"
+
+[[message]]
+# 空格 t x 底下：轉成跳格分隔
+key = "hint.table.convert-tsv"
+zht = "tsv(轉換/貼上)"
+zhs = "tsv(转换/粘贴)"
+en = "tsv (convert / paste)"
+
+[[message]]
+# 表格提示：删這一行
+key = "hint.table.delete-row"
+zht = "删除這一行"
+zhs = "删除这一行"
+en = "delete this row"
+
+[[message]]
+# 表格提示：删這行/這欄
+key = "hint.table.delete-row-or-column"
+zht = "删這行/這欄"
+zhs = "删这行/这栏"
+en = "delete this row / column"
+
+[[message]]
+# t 組：數據那一格(從前是 空格 d，2026-09-30 從「詳情欄」改名)
+key = "hint.table.detail-panel"
+zht = "該行記錄"
+zhs = "该行记录"
+en = "this row's record"
+
+[[message]]
+# 表格提示：第一行當欄名/當資料
+key = "hint.table.first-row-is-data"
+zht = "表格第一行是否為標題"
+zhs = "表格第一行是否为标题"
+en = "whether the table's first row is a heading row"
+
+[[message]]
+# t 選單：t w 這一行
+key = "hint.table.fold-wide-cells"
+zht = "長單元格:換行/摺疊/全文"
+zhs = "长单元格:换行/折叠/全文"
+en = "long cells: wrap / fold / whole"
+
+[[message]]
+# 表格提示：去某一格
+key = "hint.table.go-to-cell"
+zht = "去某一格(␣t 20,20g)"
+zhs = "去某一格(␣t 20,20g)"
+en = "go to a cell (␣t20,20g)"
+
+[[message]]
+# 表格提示：格內
+key = "hint.table.in-a-cell"
+zht = "格內"
+zhs = "格内"
+en = "in a cell"
+
+[[message]]
+# 表格提示：Enter 下到格內
+key = "hint.table.into-the-cell"
+zht = "進單元格"
+zhs = "进单元格"
+en = "into the cell"
+
+[[message]]
+# Table record
+key = "hint.table.into-the-sidebar"
+zht = "在邊欄顯示行記錄"
+zhs = "在边栏显示行记录"
+en = "show record in sidebar"
+
+[[message]]
+# t 選單：t q 這一行(只在全窗表格模式下有用)
+key = "hint.table.leave-the-window"
+zht = "退出全窗視圖"
+zhs = "退出全窗视图"
+en = "leave window view"
+
+[[message]]
+# 表格提示：重排對齊
+key = "hint.table.line-it-up"
+zht = "重排對齊"
+zhs = "重排对齐"
+en = "line it up again"
+
+[[message]]
+# 表格提示：按 t 開的那張選單(其餘的表格鍵都在裏面)
+key = "hint.table.menu"
+zht = "表格選單"
+zhs = "表格菜单"
+en = "table menu"
+
+[[message]]
+# 表格提示：這欄左移/右移
+key = "hint.table.move-column"
+zht = "這欄左移/右移"
+zhs = "这栏左移/右移"
+en = "move this column left / right"
+
+[[message]]
+# 表格提示：這行下移/上移
+key = "hint.table.move-row"
+zht = "這行下移/上移"
+zhs = "这行下移/上移"
+en = "move this row down / up"
+
+[[message]]
+# 表格提示：下一格
+key = "hint.table.next-cell"
+zht = "下一格"
+zhs = "下一格"
+en = "next cell"
+
+[[message]]
+# 表格提示：下一張表/上一張表
+key = "hint.table.next-or-previous"
+zht = "下一張表/上一張表"
+zhs = "下一张表/上一张表"
+en = "the next table / the one before"
+
+[[message]]
+# 表格提示：光標不在任何一張表裏，底下那些鍵没有東西可動
+key = "hint.table.not-in-a-table"
+zht = "光標不在表格裏 —— ␣t ] 走到下一張"
+zhs = "光标不在表格里 —— ␣t ] 走到下一张"
+en = "the cursor is not in a table — Space t ] walks to the next one"
+
+[[message]]
+# t 選單：t b 這一行
+key = "hint.table.operate-it"
+zht = "基本視圖(表格按列對齊)"
+zhs = "基本视图(表格按列对齐)"
+en = "basic view: the columns lined up"
+
+[[message]]
+# 表格提示：Esc 回到整格
+key = "hint.table.out-of-the-cell"
+zht = "出單元格"
+zhs = "出单元格"
+en = "out of the cell"
+
+[[message]]
+# 表格提示：上一格
+key = "hint.table.previous-cell"
+zht = "上一格"
+zhs = "上一格"
+en = "previous cell"
+
+[[message]]
+# 空格 t 菜單：v，把複製的欄蓋到這一欄上
+key = "hint.table.replace-column"
+zht = "用複製的欄蓋掉該欄"
+zhs = "用复制的栏盖掉该栏"
+en = "write the yanked column over this one"
+
+[[message]]
+# 表格提示：一欄一欄找
+key = "hint.table.search-columns"
+zht = "按列搜索(可指定列範圍)"
+zhs = "按列搜索(可指定列范围)"
+en = "search down the columns (a column range can be given)"
+
+[[message]]
+# 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域
+key = "hint.table.search-columns-elsewhere"
+zht = "按列搜索(另一窗口顯示)"
+zhs = "按列搜索(另一窗口显示)"
+en = "search down the columns in the other window"
+
+[[message]]
+# 表格提示：照這欄順排/倒排
+key = "hint.table.sort-by-column"
+zht = "按列升序/降序排列(␣t1s; 1a2d8as 多列排序)"
+zhs = "按列升序/降序排列(␣t1s; 1a2d8as 多列排序)"
+en = "sort by column, ascending / descending (␣t1s; ␣t1a2d8as for several)"
+
+[[message]]
+# t 組提示的標題
+key = "hint.table.title"
+zht = "␣t 表格"
+zhs = "␣t 表格"
+en = "t table"
+
+[[message]]
+# t 選單：t t 這一行
+key = "hint.table.whole-window"
+zht = "全窗視圖(表格獨佔窗口)"
+zhs = "全窗视图(表格独占窗口)"
+en = "window view: the table takes the window"
+
+[[message]]
+# 表格提示：取這欄/貼一欄
+key = "hint.table.yank-or-paste-column"
+zht = "複製該欄/貼到右邊/貼到左邊"
+zhs = "复制该栏/贴到右边/贴到左边"
+en = "yank this column / paste it to the right / to the left"
+
+[[message]]
+# 空格 t 菜單（文中的區塊）：y 複製、v 蓋掉——區塊不改結構，所以没有插入
+key = "hint.table.yank-or-replace-column"
+zht = "複製該欄/用複製的欄蓋掉該欄"
+zhs = "复制该栏/用复制的栏盖掉该栏"
+en = "yank this column / write the yanked column over it"
+
+[[message]]
+# 面板底下那一行：q 把鍵還給正文，面板留着(關那一格是 C-w q)
+key = "hint.to-the-text"
+zht = "回編輯區"
+zhs = "回编辑区"
+en = "back to text"
+
+[[message]]
+# 提示：打一個字
+key = "hint.type-a-character"
+zht = "打一個字"
+zhs = "打一个字"
+en = "type a character"
+
+[[message]]
+# hint: type a char to replace the selection
+key = "hint.type-a-character-to-overwrite"
+zht = "打一個字替換選區"
+zhs = "打一个字替换选区"
+en = "type a character to write over it"
+
+[[message]]
+# ` 組的末行(vi 的 ` 是記號鍵，這裏是 M 和 ')
+key = "hint.vi.backtick"
+zht = "vi 的記號：M 記、' 回去"
+zhs = "vi 的记号：M 记、' 回去"
+en = "vi's marks: M sets, ' returns"
+
+[[message]]
+# vim 預設：按下 d/c/y 之後，狀態行説它在等什麽
+key = "hint.vim-operator"
+zht = "{0} 等一個動作：{1}，或者再按一次 {0} 取整行"
+zhs = "{0} 等一个动作：{1}，或者再按一次 {0} 取整行"
+en = "{0} is waiting for a motion: {1} — or {0} again for the line"
+
+[[message]]
+# vim 預設：動作按了一半(gg 的 g、f 的那個字)
+key = "hint.vim-operator-more"
+zht = "{0}{1} 還没説完"
+zhs = "{0}{1} 还没説完"
+en = "{0}{1} is not finished"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.after-z"
+zht = "␣z 後面：{0}"
+zhs = "␣z 后面：{0}"
+en = "after Space z: {0}"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.chaifen"
+zht = "候選旁的拆分注解"
+zhs = "候选旁的拆分注解"
+en = "the 拆分 beside a candidate"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.commit"
+zht = "上屏方式"
+zhs = "上屏方式"
+en = "when a word commits"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.commit-default"
+zht = "預設——方案自己說了算"
+zhs = "预设——方案自己说了算"
+en = "default — the scheme decides"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.commit-delayed"
+zht = "頂字"
+zhs = "顶字"
+en = "delayed"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.commit-fluency"
+zht = "整句"
+zhs = "整句"
+en = "whole-sentence (fluency)"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.commit-unique"
+zht = "唯一"
+zhs = "唯一"
+en = "unique"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.menu-size"
+zht = "一頁幾條"
+zhs = "一页几条"
+en = "candidates on a page"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.next-scheme"
+zht = "下一個方案"
+zhs = "下一个方案"
+en = "the next scheme"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.panel"
+zht = "候選欄畫在哪"
+zhs = "候选栏画在哪"
+en = "where the candidates are drawn"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.panel-bottom"
+zht = "bottom——窗口最下面那一行"
+zhs = "bottom——窗口最下面那一行"
+en = "bottom — the bottom line of the window"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.panel-box"
+zht = "box——光標旁的框"
+zhs = "box——光标旁的框"
+en = "box — beside the caret"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.panel-inline"
+zht = "inline——光標的下一行"
+zhs = "inline——光标的下一行"
+en = "inline — the line under the caret"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.predict"
+zht = "輸入預測 開/關"
+zhs = "输入预测 开/关"
+en = "prediction (autocompletion) on or off"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.preedit"
+zht = "正在打的那一段寫在哪"
+zhs = "正在打的那一段写在哪"
+en = "where what you are typing is written"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.preedit-composition"
+zht = "composition——正文裏寫編碼"
+zhs = "composition——正文里写编码"
+en = "composition — the code, in the text"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.preedit-off"
+zht = "off——寫在候選欄裏"
+zhs = "off——写在候选栏里"
+en = "off — in the candidate bar"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.preedit-preview"
+zht = "preview——正文裏寫首選"
+zhs = "preview——正文里写首选"
+en = "preview — the first candidate, in the text"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.scheme"
+zht = "選方案"
+zhs = "选方案"
+en = "pick a scheme"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.table"
+zht = "改用安裝版碼表"
+zhs = "改用安装版码表"
+en = "switch to the installed 碼表"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.title"
+zht = "輸入法"
+zhs = "输入法"
+en = "the input method"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.toggle"
+zht = "輸入法開/關"
+zhs = "输入法开/关"
+en = "input method on / off (on is Chinese)"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.where"
+zht = "查看數據位置"
+zhs = "查看数据位置"
+en = "where the data is"
+
+[[message]]
+# ␣z 輸入法那一組
+key = "hint.yume.which"
+zht = "查看碼表源"
+zhs = "查看码表源"
+en = "where the 碼表 came from"

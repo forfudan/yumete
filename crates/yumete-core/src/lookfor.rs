@@ -3,7 +3,7 @@
 //! 「你不可能打出一個你忘了名字的命令」，and every name in this editor is an
 //! English word while the reader is thinking 「竖排模式」. `::` therefore
 //! searches the **descriptions**, which already exist in three languages: the
-//! `help` tag of every command and every word it takes is a `messages.toml`
+//! `help` tag of every command and every word it takes is a `messages/*.toml`
 //! entry with `zht` / `zhs` / `en`.
 //!
 //! ## Why two kinds of scoring rather than one distance

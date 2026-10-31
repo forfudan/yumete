@@ -62,9 +62,9 @@ pub struct LayerName {
 
 /// 三層，出廠在最底下。
 pub const LAYERS: &[LayerName] = &[
-    LayerName { layer: Layer::Factory, label: "set.layer.factory" },
-    LayerName { layer: Layer::Global, label: "set.layer.global" },
-    LayerName { layer: Layer::Local, label: "set.layer.local" },
+    LayerName { layer: Layer::Factory, label: "settings.layer.factory" },
+    LayerName { layer: Layer::Global, label: "settings.layer.global" },
+    LayerName { layer: Layer::Local, label: "settings.layer.local" },
 ];
 
 impl Layer {
@@ -74,7 +74,7 @@ impl Layer {
             .iter()
             .find(|n| n.layer == self)
             .map(|n| n.label)
-            .unwrap_or("set.layer.factory")
+            .unwrap_or("settings.layer.factory")
     }
 }
 

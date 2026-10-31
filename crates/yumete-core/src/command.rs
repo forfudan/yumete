@@ -2392,9 +2392,9 @@ const TAB_INSERTS: &[Word] = &[
 ];
 
 const AUTO_PAIRS: &[Word] = &[
-    Word { name: "off", help: "set.pick.auto-pairs.off", needs: &[] },
-    Word { name: "basic", help: "set.pick.auto-pairs.basic", needs: &[] },
-    Word { name: "full", help: "set.pick.auto-pairs.full", needs: &[] },
+    Word { name: "off", help: "settings.pick.auto-pairs.off", needs: &[] },
+    Word { name: "basic", help: "settings.pick.auto-pairs.basic", needs: &[] },
+    Word { name: "full", help: "settings.pick.auto-pairs.full", needs: &[] },
 ];
 
 const HINTS: &[Word] = &[
@@ -4054,7 +4054,7 @@ pub const COMMANDS: &[Entry] = &[
         // 說明借設置那一條的（同一句話，没有第二種說法）。
         name: "which-wrap",
         aliases: &[],
-        help: "set.editor.which-wrap.hint",
+        help: "settings.editor.which-wrap.hint",
         needs: &[],
         params: &[Param::Free("<字母>")],
         build: Some(|p| Ok(Command::WhichWrap(p.arg(0).map(str::to_string)))),
