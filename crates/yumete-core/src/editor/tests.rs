@@ -21059,6 +21059,27 @@ fn write_quit_all_on_the_settings_panel_closes_the_panel() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// An old `.yumete/tables` schema beside a `.csv` is said and stops nothing
+/// (2026-10-31): it was reported as a broken schema, so the file opened as
+/// plain text and `␣tt` refused it.
+#[test]
+fn an_old_table_schema_is_said_and_the_csv_is_still_a_grid() {
+    let dir = tmp().join(format!("yumete-old-schema-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(".yumete").join("tables")).unwrap();
+    let csv = dir.join("chars.csv");
+    std::fs::write(&csv, "char,code\n一,a\n二,b\n").unwrap();
+    std::fs::write(dir.join(".yumete").join("tables").join("chars.toml"), "[table]\nfile = 'chars.csv'\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&csv).unwrap();
+    assert!(ed.table().is_some_and(|t| t.pane), "opened as a grid: {}", ed.status());
+    assert!(ed.status().contains("no longer read"), "and told why the TOML is ignored: {}", ed.status());
+    ed.leave_table_quietly();
+    assert!(ed.table().is_none());
+    assert!(ed.enter_table(), "`␣tt` goes back into it: {}", ed.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// What is typed on the settings panel stays out of the command history
 /// (2026-10-31): its `:w` and `:q` are the panel's, and `Up` on the editor's
 /// command line walked back into them.
