@@ -386,6 +386,71 @@ mod when {
     }
 }
 
+/// **Select mode: the keys that extend instead of move** (2026-10-31,
+/// step 4 of the keymap plan; helix's `select` keymap is its `normal` one
+/// with these keys changed, `keymap/default.rs`). Looked up while a
+/// selection is being extended, after the vim preset's own keys and before
+/// helix's; the `g` group's select keys are its own rows (`groups.rs`).
+///
+/// A `move_*` command follows the mode (it extends in select mode, as it
+/// always has here, and as helix's `goto_line_start` does); an `extend_*`
+/// command extends in either mode, so a binding can say which it means.
+pub(super) const SELECT_NORMAL: &[(Key, &str)] = &[
+    (Key::Char('h'), "extend_char_left"),
+    (Key::Left, "extend_char_left"),
+    (Key::Char('j'), "extend_visual_line_down"),
+    (Key::Down, "extend_visual_line_down"),
+    (Key::Char('k'), "extend_visual_line_up"),
+    (Key::Up, "extend_visual_line_up"),
+    (Key::Char('l'), "extend_char_right"),
+    (Key::Right, "extend_char_right"),
+    (Key::Char('w'), "extend_next_word_start"),
+    (Key::Char('b'), "extend_prev_word_start"),
+    (Key::Char('e'), "extend_next_word_end"),
+    (Key::Char('W'), "extend_next_long_word_start"),
+    (Key::Char('B'), "extend_prev_long_word_start"),
+    (Key::Char('E'), "extend_next_long_word_end"),
+    (Key::Char('n'), "extend_search_next"),
+    (Key::Char('N'), "extend_search_prev"),
+    (Key::Char('t'), "extend_till_char"),
+    (Key::Char('f'), "extend_next_char"),
+    (Key::Char('T'), "extend_till_prev_char"),
+    (Key::Char('F'), "extend_prev_char"),
+    (Key::Home, "extend_to_line_start"),
+    (Key::End, "extend_to_line_end"),
+];
+
+/// **The `extend_*` commands**: each is the `move_*` (or `goto_*`) command
+/// beside it, run extending the selection. The key is the one its twin
+/// answers to.
+pub(super) const EXTEND_COMMANDS: &[NormalCommand] = &[
+    ("extend_char_left", |e, cx| e.extending(cx, "move_char_left"), Key::Char('h')),
+    ("extend_char_right", |e, cx| e.extending(cx, "move_char_right"), Key::Char('l')),
+    ("extend_visual_line_up", |e, cx| e.extending(cx, "move_visual_line_up"), Key::Char('k')),
+    ("extend_visual_line_down", |e, cx| e.extending(cx, "move_visual_line_down"), Key::Char('j')),
+    ("extend_line_up", |e, cx| e.extending(cx, "move_line_up"), Key::Char('k')),
+    ("extend_line_down", |e, cx| e.extending(cx, "move_line_down"), Key::Char('j')),
+    ("extend_next_word_start", |e, cx| e.extending(cx, "move_next_word_start"), Key::Char('w')),
+    ("extend_prev_word_start", |e, cx| e.extending(cx, "move_prev_word_start"), Key::Char('b')),
+    ("extend_next_word_end", |e, cx| e.extending(cx, "move_next_word_end"), Key::Char('e')),
+    ("extend_next_long_word_start", |e, cx| e.extending(cx, "move_next_long_word_start"), Key::Char('W')),
+    ("extend_prev_long_word_start", |e, cx| e.extending(cx, "move_prev_long_word_start"), Key::Char('B')),
+    ("extend_next_long_word_end", |e, cx| e.extending(cx, "move_next_long_word_end"), Key::Char('E')),
+    // helix's: with a selection being extended, the next match is added as
+    // a selection of its own.
+    ("extend_search_next", |e, cx| e.extending(cx, "search_next"), Key::Char('n')),
+    ("extend_search_prev", |e, cx| e.extending(cx, "search_prev"), Key::Char('N')),
+    ("extend_till_char", |e, cx| e.extending(cx, "find_till_char"), Key::Char('t')),
+    ("extend_next_char", |e, cx| e.extending(cx, "find_next_char"), Key::Char('f')),
+    ("extend_till_prev_char", |e, cx| e.extending(cx, "till_prev_char"), Key::Char('T')),
+    ("extend_prev_char", |e, cx| e.extending(cx, "find_prev_char"), Key::Char('F')),
+    ("extend_to_line_start", |e, cx| e.extending(cx, "goto_line_start"), Key::Home),
+    ("extend_to_line_end", |e, cx| e.extending(cx, "goto_line_end"), Key::End),
+    ("extend_to_file_start", |e, cx| e.extending(cx, "goto_file_start"), Key::Char('g')),
+    ("extend_to_file_end", |e, cx| e.extending(cx, "goto_file_end"), Key::Char('e')),
+    ("extend_to_word", |e, cx| e.extending(cx, "goto_word"), Key::Char('w')),
+];
+
 /// **Names a config may still use**, and the command each is: names
 /// written before the command list that helix spells differently. They stay,
 /// so no config breaks.
@@ -401,6 +466,7 @@ pub(super) fn normal_command(name: &str) -> Option<&'static NormalCommand> {
     NORMAL_COMMANDS
         .iter()
         .chain(super::group_commands::GROUP_COMMANDS)
+        .chain(EXTEND_COMMANDS)
         .find(|(n, _, _)| *n == name)
 }
 
@@ -421,11 +487,19 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
     if let Some((key, _)) = HELIX_NORMAL.iter().find(|(key, n)| *n == name && !taken(key)) {
         return Some((Pending::None, *key));
     }
-    super::groups::GROUPS.iter().find_map(|group| {
-        group
-            .binds()
-            .find(|bind| bind.run == name && at.holds(bind.when) && !bind.says.is_empty())
-            .map(|bind| (group.pending, bind.key))
+    if let Some((key, _)) = SELECT_NORMAL.iter().find(|(key, n)| *n == name && !taken(key)) {
+        return Some((Pending::None, *key));
+    }
+    // A group's select-mode rows hold only while extending; their command
+    // is there to be found either way.
+    let selecting = super::groups::Context { extend: true, ..*at };
+    [*at, selecting].iter().find_map(|at| {
+        super::groups::GROUPS.iter().find_map(|group| {
+            group
+                .binds()
+                .find(|bind| bind.run == name && at.holds(bind.when) && !bind.says.is_empty())
+                .map(|bind| (group.pending, bind.key))
+        })
     })
 }
 
@@ -476,7 +550,40 @@ impl Editor {
                 return Some(name);
             }
         }
+        if self.extend {
+            if let Some((_, name)) = SELECT_NORMAL.iter().find(|(key, _)| *key == cx.key) {
+                return Some(name);
+            }
+        }
         HELIX_NORMAL.iter().find(|(key, _)| *key == cx.key).map(|(_, name)| *name)
+    }
+
+    /// **Run a command extending the selection**, in either mode: what an
+    /// `extend_*` command is. A command that waits for a character or a
+    /// label (`f`, `g w`) extends when it arrives.
+    pub(super) fn extending(&mut self, cx: Cx, name: &str) {
+        let Some(&(_, run, _)) = normal_command(name) else { return };
+        let was = self.extend;
+        self.extend = true;
+        run(self, cx);
+        if self.pending != Pending::None || self.jumping() {
+            self.motion_extend = Some(true);
+        }
+        if self.extend {
+            self.extend = was;
+        }
+    }
+
+    /// Run the motion a wait was for, extending or not as the command that
+    /// began the wait asked ([`Self::extending`]).
+    pub(super) fn as_asked(&mut self, motion: impl FnOnce(&mut Self)) {
+        let Some(asked) = self.motion_extend.take() else { return motion(self) };
+        let was = self.extend;
+        self.extend = asked;
+        motion(self);
+        if self.extend == asked {
+            self.extend = was;
+        }
     }
 
     // **Across the break.** A line is not a wall: `l` off the end of one

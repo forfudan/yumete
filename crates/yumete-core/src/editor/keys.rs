@@ -1716,6 +1716,10 @@ impl Editor {
         // A pending multi-key operator consumes this key.
         // 按過的那一串，趁各層還没把自己關掉（見 `no_such_combination`）。
         let typed_before = self.typed_so_far();
+        // An `extend_*` wait that was let go of is not asked any more.
+        if self.pending == Pending::None && !self.jumping() {
+            self.motion_extend = None;
+        }
         // **A group's key**: the group's own rows say what it runs (step 3
         // of the keymap plan; `groups.rs`).
         if let Some(group) = self.pending.group() {
@@ -2210,7 +2214,7 @@ impl Editor {
                 // Warning: **一次問完，不是叫 n 遍**（2026-10-02）。從前走 `repeat`，
                 // 理由是它的早退（`10000fZ` 只看一眼）——而那個早退現在是
                 // `find_char` 自己的事：找不到第 n 個就 `Missed`，一格不動。
-                self.find_nth_char(kind, c, count, false);
+                self.as_asked(|e| e.find_nth_char(kind, c, count, false));
             }
             Pending::Replace => self.replace_by_key(c),
             Pending::MatchPair { around } => self.select_pair(c, around, self.pair_count()),

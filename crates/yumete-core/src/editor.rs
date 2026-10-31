@@ -2474,6 +2474,10 @@ pub struct Editor {
     /// what stopping it keeps, so the keys that asked to stop are not part
     /// of the macro, whichever they are.
     recording_from: usize,
+    /// **A wait asked to extend**: `extend_next_char` from a binding in
+    /// Normal mode extends when its character arrives, after the command
+    /// itself has finished (and `g w`'s label likewise).
+    motion_extend: Option<bool>,
     /// The last macro recorded, replayed by `Q`.
     macro_keys: Vec<Key>,
     /// Whether a macro is being replayed, so it cannot record or replay itself.
@@ -4060,6 +4064,7 @@ impl Editor {
             storing_a_yank: false,
             recording: None,
             recording_from: 0,
+            motion_extend: None,
             macro_keys: Vec::new(),
             replaying: false,
             keymap_flavor: false,

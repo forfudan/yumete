@@ -229,6 +229,34 @@ zhs = "让每个选区都朝前"
 en = "make every selection face forward"
 
 [[message]]
+# 命令說明：extend_char_left（草稿）
+key = "action.extend-char-left"
+zht = "選區向左撑一個字"
+zhs = "选区向左撑一个字"
+en = "extend the selection one character left"
+
+[[message]]
+# 命令說明：extend_char_right（草稿）
+key = "action.extend-char-right"
+zht = "選區向右撑一個字"
+zhs = "选区向右撑一个字"
+en = "extend the selection one character right"
+
+[[message]]
+# 命令說明：extend_line_down（草稿）
+key = "action.extend-line-down"
+zht = "選區撑到下一行(文件裏的)"
+zhs = "选区撑到下一行(文件里的)"
+en = "extend the selection one line down, in the file"
+
+[[message]]
+# 命令說明：extend_line_up（草稿）
+key = "action.extend-line-up"
+zht = "選區撑到上一行(文件裏的)"
+zhs = "选区撑到上一行(文件里的)"
+en = "extend the selection one line up, in the file"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.extend-mode"
 zht = "延伸模式：移動把選區撑大"
@@ -237,12 +265,145 @@ en = "Select mode: moving grows the selection"
 find = "延伸 選擇 选择 擴大 扩大 選區 选区 extend select visual"
 
 [[message]]
+# 命令說明：extend_next_char（草稿）
+key = "action.extend-next-char"
+zht = "選區往後撑到某個字"
+zhs = "选区往后撑到某个字"
+en = "extend the selection forward to a character"
+
+[[message]]
+# 命令說明：extend_next_long_word_end（草稿）
+key = "action.extend-next-long-word-end"
+zht = "選區撑到下一個大詞尾"
+zhs = "选区撑到下一个大词尾"
+en = "extend the selection to the next long word's end"
+
+[[message]]
+# 命令說明：extend_next_long_word_start（草稿）
+key = "action.extend-next-long-word-start"
+zht = "選區撑到下一個大詞首"
+zhs = "选区撑到下一个大词首"
+en = "extend the selection to the next long word's start"
+
+[[message]]
+# 命令說明：extend_next_word_end（草稿）
+key = "action.extend-next-word-end"
+zht = "選區撑到下一個詞尾"
+zhs = "选区撑到下一个词尾"
+en = "extend the selection to the next word's end"
+
+[[message]]
+# 命令說明：extend_next_word_start（草稿）
+key = "action.extend-next-word-start"
+zht = "選區撑到下一個詞首"
+zhs = "选区撑到下一个词首"
+en = "extend the selection to the next word's start"
+
+[[message]]
+# 命令說明：extend_prev_char（草稿）
+key = "action.extend-prev-char"
+zht = "選區往前撑到某個字"
+zhs = "选区往前撑到某个字"
+en = "extend the selection backward to a character"
+
+[[message]]
+# 命令說明：extend_prev_long_word_start（草稿）
+key = "action.extend-prev-long-word-start"
+zht = "選區撑到上一個大詞首"
+zhs = "选区撑到上一个大词首"
+en = "extend the selection to the previous long word's start"
+
+[[message]]
+# 命令說明：extend_prev_word_start（草稿）
+key = "action.extend-prev-word-start"
+zht = "選區撑到上一個詞首"
+zhs = "选区撑到上一个词首"
+en = "extend the selection to the previous word's start"
+
+[[message]]
+# 命令說明：extend_search_next（草稿）
+key = "action.extend-search-next"
+zht = "下一處也選上(多一個選區)"
+zhs = "下一处也选上(多一个选区)"
+en = "add the next match as a selection"
+
+[[message]]
+# 命令說明：extend_search_prev（草稿）
+key = "action.extend-search-prev"
+zht = "上一處也選上(多一個選區)"
+zhs = "上一处也选上(多一个选区)"
+en = "add the previous match as a selection"
+
+[[message]]
+# 命令說明：extend_till_char（草稿）
+key = "action.extend-till-char"
+zht = "選區往後撑到某個字前面"
+zhs = "选区往后撑到某个字前面"
+en = "extend the selection forward to just before a character"
+
+[[message]]
+# 命令說明：extend_till_prev_char（草稿）
+key = "action.extend-till-prev-char"
+zht = "選區往前撑到某個字後面"
+zhs = "选区往前撑到某个字后面"
+en = "extend the selection backward to just after a character"
+
+[[message]]
+# 命令說明：extend_to_file_end（草稿）
+key = "action.extend-to-file-end"
+zht = "選區撑到文件末尾"
+zhs = "选区撑到文件末尾"
+en = "extend the selection to the end of the file"
+
+[[message]]
+# 命令說明：extend_to_file_start（草稿）
+key = "action.extend-to-file-start"
+zht = "選區撑到文件開頭"
+zhs = "选区撑到文件开头"
+en = "extend the selection to the start of the file"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.extend-to-line-bounds"
 zht = "把選區撑到整行邊界"
 zhs = "把选区撑到整行边界"
 en = "grow the selection to whole lines"
 find = "整行 行邊界 行边界 撑 extend line"
+
+[[message]]
+# 命令說明：extend_to_line_end（草稿）
+key = "action.extend-to-line-end"
+zht = "選區撑到行尾"
+zhs = "选区撑到行尾"
+en = "extend the selection to the line's end"
+
+[[message]]
+# 命令說明：extend_to_line_start（草稿）
+key = "action.extend-to-line-start"
+zht = "選區撑到行首"
+zhs = "选区撑到行首"
+en = "extend the selection to the line's start"
+
+[[message]]
+# 命令說明：extend_to_word（草稿）
+key = "action.extend-to-word"
+zht = "選區撑到屏幕上某個位置(標籤)"
+zhs = "选区撑到屏幕上某个位置(标签)"
+en = "extend the selection to a place on screen, by its label"
+
+[[message]]
+# 命令說明：extend_visual_line_down（草稿）
+key = "action.extend-visual-line-down"
+zht = "選區撑到下一行(屏幕上的)"
+zhs = "选区撑到下一行(屏幕上的)"
+en = "extend the selection one line down, on screen"
+
+[[message]]
+# 命令說明：extend_visual_line_up（草稿）
+key = "action.extend-visual-line-up"
+zht = "選區撑到上一行(屏幕上的)"
+zhs = "选区撑到上一行(屏幕上的)"
+en = "extend the selection one line up, on screen"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽

@@ -265,7 +265,7 @@ impl Editor {
                 // （2026-10-04 修）。居中是給「跳到看不見的地方」的；這裏那個地方
                 // 本來就在屏幕上、你正盯着它，挪走它等於這一跳白跳。helix 也不挪。
                 self.note_where_we_came_from();
-                self.move_head(at);
+                self.as_asked(|e| e.move_head(at));
             }
             // 還有標籤以它開頭：留着，等下一個字母。
             None if self.labels.iter().any(|j| j.label.starts_with(&typed)) => {

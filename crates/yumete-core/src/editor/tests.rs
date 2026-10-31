@@ -33466,3 +33466,36 @@ fn a_macro_stopped_by_a_binding_does_not_hold_the_binding() {
     ed.on_key(Key::Char('Q'));
     assert_eq!(ed.macro_keys, vec![Key::Char('f'), Key::Char('Q')]);
 }
+
+/// **Select mode's keys are `extend_*` commands, which extend in either
+/// mode** (2026-10-31, step 4 of the keymap plan; helix's select keymap).
+/// Bound in Normal mode they extend the selection without entering select
+/// mode, and one that waits for a character extends when it arrives.
+#[test]
+fn an_extend_command_extends_from_normal_mode() {
+    let bind = |ed: &mut Editor, pairs: &[(&str, &str)]| {
+        let aliases = pairs.iter().map(|(l, r)| (l.to_string(), r.to_string())).collect();
+        ed.set_key_aliases(aliases);
+    };
+    let mut ed = typed("one two three\n");
+    press(&mut ed, "gg");
+    bind(&mut ed, &[("Q", "extend_char_right"), ("R", "extend_next_char")]);
+    ed.on_key(Key::Char('Q'));
+    ed.on_key(Key::Char('Q'));
+    assert_eq!(ed.selection(), (0, 3), "three characters, the first and two more");
+    assert!(!ed.extend, "and not in select mode");
+    ed.on_key(Key::Char('R'));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.selection(), (0, 10), "on to the h of three");
+    assert!(!ed.extend);
+    // The same keys in select mode do what they always did.
+    let mut a = typed("one two three\n");
+    let mut b = typed("one two three\n");
+    press(&mut a, "ggvlwfh");
+    bind(&mut b, &[("Q", "extend_char_right"), ("R", "extend_next_word_start"), ("S", "extend_next_char")]);
+    press(&mut b, "gg");
+    for k in ['Q', 'R', 'S', 'h'] {
+        b.on_key(Key::Char(k));
+    }
+    assert_eq!(a.selection(), b.selection());
+}

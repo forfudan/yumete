@@ -39,6 +39,8 @@ pub(super) enum Only {
     Flat,
     /// The file is code (functions, classes, comments to walk to).
     Code,
+    /// A selection is being extended (select mode, or vim's visual).
+    Selecting,
     /// A table has the window.
     Pane,
     /// The cursor is in a fenced block's table, a Markdown table, or a
@@ -261,6 +263,8 @@ pub(super) struct Context {
     /// A binding is playing keys (`g h` is pressable then under vim too).
     pub alias: bool,
     pub code: bool,
+    /// Select mode.
+    pub extend: bool,
     pub pane: bool,
     pub table: Option<Bounds>,
 }
@@ -276,6 +280,7 @@ impl Context {
             Only::FlatVim => self.vim && !self.vertical,
             Only::Flat => !self.vertical,
             Only::Code => self.code,
+            Only::Selecting => self.extend,
             Only::Pane => self.pane,
             Only::Block => self.table == Some(Bounds::Block),
             Only::Md => self.table == Some(Bounds::Md),
@@ -357,6 +362,7 @@ impl Editor {
             vertical: self.layout() == crate::zong::Layout::Vertical,
             alias: self.expanding_alias,
             code: self.writes_code(),
+            extend: self.extend,
             pane: self.the_pane_is_on(),
             table,
         }
@@ -521,10 +527,14 @@ pub(super) static GOTO: Group = Group {
     title: "hint.goto.title",
     path: "g",
     rows: &[
+        // Select mode's own (helix's select keymap): the same places,
+        // reached by extending.
+        ch('g', "extend_to_file_start", "hint.goto.start-of-file").when(Only::Selecting),
         ch('g', "goto_file_start", "hint.goto.start-of-file"),
         note("<N>g", "hint.goto.line-n"),
         ch('e', "jump_prev_word_end", "action.jump-prev-word-end").when(Only::Vim),
         ch('E', "jump_prev_long_word_end", "action.jump-prev-long-word-end").when(Only::Vim),
+        ch('e', "extend_to_file_end", "hint.goto.end-of-file").when(Only::Selecting),
         ch('e', "goto_file_end", "hint.goto.end-of-file"),
         ch('h', "goto_line_start", "hint.goto.line-start-or-end").when(Only::GLetter),
         ch('l', "goto_line_end", "hint.goto.line-start-or-end").when(Only::GLetter),
@@ -533,6 +543,7 @@ pub(super) static GOTO: Group = Group {
         ch('s', "goto_first_nonwhitespace", "hint.goto.first-non-blank"),
         ch('f', "open_here", "hint.goto.open-this-file"),
         ch('L', "follow_link", "hint.goto.follow-link"),
+        ch('w', "extend_to_word", "hint.goto.jump-labels").when(Only::Selecting),
         ch('w', "goto_word", "hint.goto.jump-labels"),
         ch('x', "goto_word_by_letters", "hint.goto.seek-written"),
         ch('z', "goto_char_by_pinyin", "hint.goto.seek-reading"),
@@ -552,6 +563,8 @@ pub(super) static GOTO: Group = Group {
         ch('k', "move_visual_line_up", "action.move-visual-line-up").when(Only::Vim),
         ch('j', "move_line_down", "hint.goto.by-file-line-vertical").when(Only::HelixVertical),
         ch('k', "move_line_up", "hint.goto.by-file-line-vertical").when(Only::HelixVertical),
+        ch('j', "extend_line_down", "hint.goto.by-file-line").when(Only::Selecting),
+        ch('k', "extend_line_up", "hint.goto.by-file-line").when(Only::Selecting),
         ch('j', "move_line_down", "hint.goto.by-file-line"),
         ch('k', "move_line_up", "hint.goto.by-file-line"),
         quiet(Key::Down, "move_visual_line_down").when(Only::FlatVim),
