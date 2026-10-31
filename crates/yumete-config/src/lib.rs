@@ -2561,7 +2561,24 @@ pub struct KeyConfig {
     /// them have.
     ///
     /// **The left may be a sequence too** (#428): `"dd" = "xd"`.
-    pub normal: HashMap<String, String>,
+    ///
+    /// **The right is a list** (2026-10-31, helix's shape): one command, or
+    /// several run in order (`["select_all", ":write"]`). A group's keys,
+    /// written as helix writes them (`[keys.normal.space]` then `q = …`), are
+    /// here as runs (`"<space>q"`).
+    pub normal: HashMap<String, Vec<String>>,
+    /// Select mode's own lines (`[keys.select]`), laid over `normal`'s: select
+    /// mode takes every Normal-mode line too (helix does not, and its users
+    /// have asked for it since 2022, helix #2125).
+    pub select: HashMap<String, Vec<String>>,
+    /// Insert mode's lines (`[keys.insert]`).
+    pub insert: HashMap<String, Vec<String>>,
+    /// **The names of a reader's own groups**, by the keys that open them
+    /// (`label = "My tools"` in `[keys.normal.space.x]` → `"<space>x"`):
+    /// the title of that group's menu. helix cannot name one.
+    pub labels: HashMap<String, String>,
+    /// The same for Insert mode's groups.
+    pub insert_labels: HashMap<String, String>,
     /// A whole table of such lines, shipped: `[keys] preset = "vim"`.
     pub preset: KeyPreset,
     /// **The yumete flavour** — a small set of departures laid over whichever
@@ -3129,8 +3146,13 @@ impl Config {
                             // 2026-09-24 定「鍵位表只認全局」：鍵位是**個人
                             // 習慣**，不是項目屬性——`[lsp.*]` 與 `[language.*]`
                             // 照舊寫得動（那兩樣真的是項目屬性，同 rust-toolchain）。
-                            if !parsed.keys.normal.is_empty() {
+                            let bound = !parsed.keys.normal.is_empty()
+                                || !parsed.keys.select.is_empty()
+                                || !parsed.keys.insert.is_empty();
+                            if bound {
                                 parsed.keys.normal.clear();
+                                parsed.keys.select.clear();
+                                parsed.keys.insert.clear();
                                 problems.push(said(
                                     format!(
                                         "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
@@ -4107,13 +4129,23 @@ struct RawTheme {
     fill: Option<bool>,
 }
 
+/// `[keys]`: a table per mode, each read line by line (step 5 of the
+/// keymap plan), so one bad line or one unknown mode is skipped and said,
+/// never the whole file.
 #[derive(Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 struct RawKeys {
     #[serde(default)]
-    normal: HashMap<String, String>,
+    normal: toml::Table,
+    #[serde(default)]
+    select: toml::Table,
+    #[serde(default)]
+    insert: toml::Table,
     preset: Option<String>,
     flavor: Option<bool>,
+    /// What else is under `[keys]`: a mode that does not exist
+    /// (`[keys.visual]`), kept to be reported.
+    #[serde(flatten)]
+    strays: toml::Table,
 }
 
 impl RawConfig {
@@ -4380,9 +4412,12 @@ impl RawConfig {
         if other.theme.fill.is_some() {
             self.theme.fill = other.theme.fill;
         }
-        for (k, v) in other.keys.normal {
-            self.keys.normal.insert(k, v);
-        }
+        // Deep, as helix merges: a project's `[keys.normal.space]` adds to
+        // the global one's rather than replacing it.
+        merge_key_tables(&mut self.keys.normal, other.keys.normal);
+        merge_key_tables(&mut self.keys.select, other.keys.select);
+        merge_key_tables(&mut self.keys.insert, other.keys.insert);
+        self.keys.strays.extend(other.keys.strays);
         if other.keys.preset.is_some() {
             self.keys.preset = other.keys.preset;
         }
@@ -4892,33 +4927,27 @@ impl RawConfig {
         if let Some(page) = self.export.page.as_deref().and_then(parse_page) {
             config.export.page = page;
         }
-        for (k, v) in self.keys.normal {
-            // Warning: **Named and dropped in one place.** A right-hand side that is
-            // none of the three kinds is left out — keys used to be the
-            // *fallback*, and the keys a misspelt name spells are its own
-            // letters going into the manuscript. Saying so was not enough on
-            // its own either: the warning scrolled past on the status line
-            // while the binding went in, and the key still typed
-            // `delete_slection` into a chapter one letter at a time
-            // (2026-09-19, caught in review). The complaint used to live in
-            // `load`'s own walk of the raw table, two thousand lines from the
-            // line that drops it, with a comment on each asking the reader to
-            // keep them agreeing; 2026-10-19 they became one.
-            if k.is_empty() || v.is_empty() {
-            } else if yumete_cjk::actions::bound(&v).is_some() {
-                config.keys.normal.insert(k, v);
-            } else {
-                problems.push(said(
-                    format!(
-                        "[keys.normal] {k} = \"{v}\" 不是動作名，這一條没裝上——\
-                         動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{v}\""
-                    ),
-                    format!(
-                        "[keys.normal] {k} = \"{v}\" is not an action, so it was not bound; \
-                         :keymap-actions lists them, and a string of keys is written \"@{v}\""
-                    ),
-                ));
-            }
+        // Warning: **Named and dropped in one place.** A right-hand side that is
+        // none of the three kinds is left out — keys used to be the
+        // *fallback*, and the keys a misspelt name spells are its own letters
+        // going into the manuscript. Saying so was not enough on its own
+        // either: the warning scrolled past on the status line while the
+        // binding went in, and the key still typed `delete_slection` into a
+        // chapter one letter at a time (2026-09-19, caught in review).
+        let mut keys = KeyBindings::default();
+        read_key_table("normal", &self.keys.normal, &mut keys.normal, &mut keys.labels, problems);
+        read_key_table("select", &self.keys.select, &mut keys.select, &mut keys.labels, problems);
+        read_key_table("insert", &self.keys.insert, &mut keys.insert, &mut keys.insert_labels, problems);
+        config.keys.normal = keys.normal;
+        config.keys.select = keys.select;
+        config.keys.insert = keys.insert;
+        config.keys.labels = keys.labels;
+        config.keys.insert_labels = keys.insert_labels;
+        for (name, _) in &self.keys.strays {
+            problems.push(said(
+                format!("[keys.{name}]：沒有這個模式，這張表跳過了。模式有 normal、select、insert"),
+                format!("[keys.{name}] is not a mode, so it was skipped; the modes are normal, select and insert"),
+            ));
         }
         if let Some(on) = self.keys.flavor {
             config.keys.flavor = on;
@@ -4928,6 +4957,129 @@ impl RawConfig {
         }
         config
     }
+}
+
+/// What `[keys.*]` reads into, before it goes into [`KeyConfig`].
+#[derive(Default)]
+struct KeyBindings {
+    normal: HashMap<String, Vec<String>>,
+    select: HashMap<String, Vec<String>>,
+    insert: HashMap<String, Vec<String>>,
+    labels: HashMap<String, String>,
+    insert_labels: HashMap<String, String>,
+}
+
+/// One table over another, a nested table into the one it meets (helix's
+/// `KeyTrieNode::merge`).
+fn merge_key_tables(into: &mut toml::Table, from: toml::Table) {
+    for (key, value) in from {
+        match (into.get_mut(&key), value) {
+            (Some(toml::Value::Table(mine)), toml::Value::Table(theirs)) => merge_key_tables(mine, theirs),
+            (_, value) => {
+                into.insert(key, value);
+            }
+        }
+    }
+}
+
+/// **A key as helix writes it in a table** (`space`, `ret`, `minus`), in
+/// this editor's spelling (`<space>`, `<enter>`, `-`). Anything else is
+/// already this editor's (`x`, `C-s`, `<tab>`, a run such as `dj`).
+fn helix_key(key: &str) -> String {
+    let named = |name: &str| format!("<{name}>");
+    match key {
+        "ret" => named("enter"),
+        "del" => named("delete"),
+        "minus" => "-".to_string(),
+        "A-minus" => "A--".to_string(),
+        "C-minus" => "C--".to_string(),
+        other if yumete_cjk::actions::named_key(other).is_some() => named(other),
+        other => other.to_string(),
+    }
+}
+
+/// **One `[keys.<mode>]` table, line by line**: each binding goes in as a
+/// run of keys and a list of commands, each line that cannot is said and
+/// left out, and a nested table is a group whose keys follow the keys that
+/// open it (`[keys.normal.space]` then `q` is `<space>q`), with `label` its
+/// name.
+fn read_key_table(
+    mode: &str,
+    table: &toml::Table,
+    out: &mut HashMap<String, Vec<String>>,
+    labels: &mut HashMap<String, String>,
+    problems: &mut Vec<String>,
+) {
+    fn walk(
+        header: &str,
+        path: &str,
+        table: &toml::Table,
+        out: &mut HashMap<String, Vec<String>>,
+        labels: &mut HashMap<String, String>,
+        problems: &mut Vec<String>,
+    ) {
+        for (key, value) in table {
+            let wrong = |problems: &mut Vec<String>| {
+                problems.push(said(
+                    format!("[keys.{header}] {key} 這一行寫法不對，跳過了——右邊寫命令、命令列表或鍵表"),
+                    format!(
+                        "[keys.{header}] {key}: the right side must be a command, a list of commands, or a table of keys, so it was skipped"
+                    ),
+                ));
+            };
+            // A group's name, in the group's own table.
+            if key == "label" && !path.is_empty() {
+                match value {
+                    toml::Value::String(name) => {
+                        labels.insert(path.to_string(), name.clone());
+                    }
+                    _ => wrong(problems),
+                }
+                continue;
+            }
+            let run = format!("{path}{}", helix_key(key));
+            let commands: Vec<String> = match value {
+                toml::Value::Table(inner) => {
+                    walk(&format!("{header}.{key}"), &run, inner, out, labels, problems);
+                    continue;
+                }
+                toml::Value::String(one) => vec![one.clone()],
+                toml::Value::Array(many) => {
+                    let strings: Option<Vec<String>> = many.iter().map(|v| v.as_str().map(str::to_string)).collect();
+                    match strings.filter(|s| !s.is_empty()) {
+                        Some(strings) => strings,
+                        None => {
+                            wrong(problems);
+                            continue;
+                        }
+                    }
+                }
+                _ => {
+                    wrong(problems);
+                    continue;
+                }
+            };
+            if key.is_empty() {
+                continue;
+            }
+            match commands.iter().find(|one| yumete_cjk::actions::bound(one).is_none()) {
+                None => {
+                    out.insert(run, commands);
+                }
+                Some(bad) => problems.push(said(
+                    format!(
+                        "[keys.{header}] {key} = \"{bad}\" 不是動作名，這一條没裝上——\
+                         動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{bad}\""
+                    ),
+                    format!(
+                        "[keys.{header}] {key} = \"{bad}\" is not an action, so it was not bound; \
+                         :keymap-actions lists them, and a string of keys is written \"@{bad}\""
+                    ),
+                )),
+            }
+        }
+    }
+    walk(mode, "", table, out, labels, problems);
 }
 
 fn parse_line_numbers(value: &str) -> LineNumbers {
@@ -5254,12 +5406,12 @@ mod tests {
             "toolong" = "@x"
             "#,
         );
-        assert_eq!(c.keys.normal.get("j").map(String::as_str), Some("@h"));
+        assert_eq!(c.keys.normal.get("j").map(|v| v[0].as_str()), Some("@h"));
         // The right-hand side may be a whole sequence: one config line puts
         // vi's join back on `J` without the editor keeping two spellings.
-        assert_eq!(c.keys.normal.get("J").map(String::as_str), Some("@kJ"));
+        assert_eq!(c.keys.normal.get("J").map(|v| v[0].as_str()), Some("@kJ"));
         // …and so may the left (#428).
-        assert_eq!(c.keys.normal.get("toolong").map(String::as_str), Some("@x"));
+        assert_eq!(c.keys.normal.get("toolong").map(|v| v[0].as_str()), Some("@x"));
     }
 
     /// **A right-hand side that is none of the three kinds is left out**, not
@@ -5287,10 +5439,10 @@ mod tests {
             "#,
         );
         assert_eq!(c.keys.normal.get("x"), None, "the typo was installed anyway");
-        assert_eq!(c.keys.normal.get("y").map(String::as_str), Some("delete_selection"));
-        assert_eq!(c.keys.normal.get("z").map(String::as_str), Some("@kJ"));
+        assert_eq!(c.keys.normal.get("y").map(|v| v[0].as_str()), Some("delete_selection"));
+        assert_eq!(c.keys.normal.get("z").map(|v| v[0].as_str()), Some("@kJ"));
         // A `:command` is not a name, so an underscore in one is not a typo.
-        assert_eq!(c.keys.normal.get("Z").map(String::as_str), Some(":write_all"));
+        assert_eq!(c.keys.normal.get("Z").map(|v| v[0].as_str()), Some(":write_all"));
         // The two that the underscore test could not tell apart: a typo with no
         // underscore, and keys that forgot to say they were keys.
         assert_eq!(c.keys.normal.get("w"), None, "`save` is not a name, and not keys either");
@@ -5541,8 +5693,8 @@ mod tests {
         // ...but keeps the global line_numbers it didn't touch...
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
         // ...and the keymaps are merged.
-        assert_eq!(c.keys.normal.get("a").map(String::as_str), Some("@b"));
-        assert_eq!(c.keys.normal.get("c").map(String::as_str), Some("@d"));
+        assert_eq!(c.keys.normal.get("a").map(|v| v[0].as_str()), Some("@b"));
+        assert_eq!(c.keys.normal.get("c").map(|v| v[0].as_str()), Some("@d"));
     }
 
     #[test]
@@ -5911,5 +6063,72 @@ mod complaint_names {
             crate::faults::faults_in(text).into_iter().map(|f| f.said).collect()
         };
         assert_eq!(said("[editor]\ntabs = \"maybe\"\n"), ["[editor] tabs = \"maybe\" 只能是 auto、always、never"]);
+    }
+}
+
+#[cfg(test)]
+mod key_tables {
+    use super::*;
+
+    /// **A helix keys file loads** (2026-10-31, step 5 of the keymap plan):
+    /// a group as a nested table or an inline one, a list of commands, the
+    /// key names helix writes (`ret`, `space`), `no_op`, and a group's name.
+    /// One bad line, or a mode that does not exist, is said and skipped; the
+    /// rest of the file stays.
+    #[test]
+    fn a_helix_keys_file_loads_and_a_bad_line_is_skipped() {
+        let (c, problems) = Config::from_toml_saying(
+            r#"
+            [editor]
+            tab_width = 3
+
+            [keys.normal]
+            "C-s" = ":write"
+            ret = ["open_below", "normal_mode"]
+            g = { a = "code_action" }
+
+            [keys.normal.space]
+            q = ":quit"
+            f = "no_op"
+
+            [keys.normal.space.x]
+            label = "My tools"
+            a = ":write"
+
+            [keys.normal.z]
+            q = 3
+
+            [keys.select]
+            "C-s" = ":write-all"
+
+            [keys.visual]
+            x = "extend_char_right"
+            "#,
+        );
+        let get = |table: &HashMap<String, Vec<String>>, k: &str| table.get(k).cloned().unwrap_or_default();
+        assert_eq!(c.editor.tab_width, 3, "the rest of the file is read");
+        assert_eq!(get(&c.keys.normal, "C-s"), [":write"]);
+        assert_eq!(get(&c.keys.normal, "<enter>"), ["open_below", "normal_mode"]);
+        assert_eq!(get(&c.keys.normal, "ga"), ["code_action"]);
+        assert_eq!(get(&c.keys.normal, "<space>q"), [":quit"]);
+        assert_eq!(get(&c.keys.normal, "<space>f"), ["no_op"]);
+        assert_eq!(get(&c.keys.normal, "<space>xa"), [":write"]);
+        assert_eq!(c.keys.labels.get("<space>x").map(String::as_str), Some("My tools"));
+        assert_eq!(get(&c.keys.select, "C-s"), [":write-all"]);
+        assert!(!c.keys.normal.contains_key("zq"));
+        assert!(problems.iter().any(|p| p.contains("[keys.normal.z] q")), "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("[keys.visual]")), "{problems:?}");
+        assert_eq!(problems.len(), 2, "{problems:?}");
+    }
+
+    /// A project's `[keys.normal.space]` adds to the global one's, as
+    /// helix merges, rather than replacing the table.
+    #[test]
+    fn nested_tables_merge_key_by_key() {
+        let mut a: toml::Table = toml::from_str("[space]\nq = \":quit\"\n").unwrap();
+        let b: toml::Table = toml::from_str("[space]\nw = \":write\"\n").unwrap();
+        merge_key_tables(&mut a, b);
+        let space = a["space"].as_table().unwrap();
+        assert!(space.contains_key("q") && space.contains_key("w"));
     }
 }

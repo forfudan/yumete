@@ -1119,6 +1119,13 @@ en = "the next region"
 find = "區域 区域 分屏 窗口 next region window"
 
 [[message]]
+# 命令說明：no_op（草稿）
+key = "action.no-op"
+zht = "什麽都不做(綁上它就是解綁那個鍵)"
+zhs = "什么都不做(绑上它就是解绑那个键)"
+en = "nothing (bound to a key, it unbinds it)"
+
+[[message]]
 # 命令說明：normal_mode（草稿）
 key = "action.normal-mode"
 zht = "退出延伸模式，收起臨時顯示的東西"

@@ -375,7 +375,7 @@ impl Editor {
     /// This is the row's most valuable use: a reader who has pressed `m` and
     /// does not remember what follows it currently has nowhere to look but the
     /// manual, and the editor is sitting there knowing the answer.
-    fn pending_keys(&self) -> Option<Hint> {
+    pub(super) fn pending_keys(&self) -> Option<Hint> {
         // **`go`/`gu` 還在等字母，命令行說一句**（2026-10-04 定）。
         //
         // Warning: **按下 `o`/`u` 的那一刻 `pending` 就回到了 `None`**，於是 HUD
@@ -404,6 +404,11 @@ impl Editor {
         // **A group's menu is its own rows** (step 3 of the keymap plan,
         // `groups.rs`): what a key there does and the line it shows are
         // written once, side by side.
+        if self.pending == Pending::None {
+            if let Some((title, rows)) = self.held_menu() {
+                return Some(Hint::Keys(title, rows));
+            }
+        }
         if let Some(group) = self.pending.group() {
             let (title, rows) = self.group_menu(group);
             return Some(Hint::Keys(title, rows));

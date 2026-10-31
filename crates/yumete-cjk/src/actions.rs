@@ -629,6 +629,7 @@ pub const ALL: &[Action] = &[
     normal("paste_table_as_csv", "action.paste-table-as-csv"),
     normal("convert_table_to_tsv", "action.convert-table-to-tsv"),
     normal("paste_table_as_tsv", "action.paste-table-as-tsv"),
+    normal("no_op", "action.no-op"),
     // ---- Select mode (2026-10-31): each a motion, extending the selection ----
     normal("extend_char_left", "action.extend-char-left"),
     normal("extend_char_right", "action.extend-char-right"),

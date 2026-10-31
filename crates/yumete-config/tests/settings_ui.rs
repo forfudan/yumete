@@ -16,10 +16,16 @@ fn fields_of(source: &str, what: &str) -> Vec<String> {
         None => panic!("找不到 struct {what}"),
     };
     let end = source[start..].find("\n}").map(|n| start + n).unwrap_or(source.len());
+    // A `#[serde(flatten)]` field is not a key of its own: it holds the
+    // keys no other field names (`[keys]`'s modes that do not exist).
+    let mut flattened = false;
     source[start..end]
         .lines()
         .filter_map(|line| {
             let line = line.trim_end();
+            if std::mem::replace(&mut flattened, line.trim() == "#[serde(flatten)]") {
+                return None;
+            }
             let name = line.strip_prefix("    ")?;
             // `    名字: 類型,` —— 屬性、註釋、嵌套都不是這個形狀。
             let (name, _) = name.split_once(':')?;

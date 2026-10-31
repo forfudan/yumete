@@ -89,6 +89,7 @@ pub fn line_for(text: &str, said: &str) -> usize {
     // this table」 beats 「the top of the file」.
     let at = item
         .as_table()
+        .filter(|_| !key.is_empty())
         .and_then(|t| t.get_key_value(&key))
         .and_then(|(k, _)| k.span())
         .or_else(|| item.span());
@@ -111,7 +112,9 @@ fn addressed(said: &str) -> Option<(String, String)> {
         .chars()
         .take_while(|c| !c.is_whitespace() && *c != '=' && *c != '：' && *c != ':')
         .collect();
-    (!key.is_empty() && !table.is_empty()).then_some((table.to_string(), key))
+    // A message about a whole table (`[keys.visual]：…`) names no key; it
+    // points at the table.
+    (!table.is_empty()).then_some((table.to_string(), key))
 }
 
 /// Which line a byte offset is on, 0 起算.

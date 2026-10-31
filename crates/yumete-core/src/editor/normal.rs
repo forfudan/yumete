@@ -179,6 +179,8 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("vim_repeat_last_change", Editor::cmd_vim_repeat_last_change, Key::Char('.')),
     ("repeat_last_change", Editor::cmd_repeat_last_change, Key::Char('.')),
     ("repeat_last_motion", Editor::cmd_repeat_last_motion, Key::Alt('.')),
+    // helix's: bound to a key, it unbinds it, and the key leaves its menu.
+    ("no_op", |_, _| {}, Key::Esc),
 ];
 
 /// A condition a vim entry needs besides the preset; when it does not hold,

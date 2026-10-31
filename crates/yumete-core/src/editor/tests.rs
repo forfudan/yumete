@@ -33499,3 +33499,69 @@ fn an_extend_command_extends_from_normal_mode() {
     }
     assert_eq!(a.selection(), b.selection());
 }
+
+/// **A key added to a group keeps the group** (2026-10-31, step 5 of the
+/// keymap plan): with `[keys.normal.space] q = …`, `Space` still opens its
+/// menu (now with `q` in it), its own keys still work, a `no_op` takes a
+/// key out of it, and a group of the reader's own is titled with its label.
+#[test]
+fn a_key_added_to_a_group_keeps_the_group() {
+    let mut ed = typed("one\n");
+    let aliases: std::collections::HashMap<String, Vec<String>> = [
+        ("<space>q", vec![":quit".to_string()]),
+        ("<space>f", vec!["no_op".to_string()]),
+        ("<space>xa", vec!["select_all".to_string()]),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect();
+    ed.set_key_aliases(aliases);
+    ed.set_key_labels([("<space>x".to_string(), "My tools".to_string())].into_iter().collect());
+    ed.on_key(Key::Char(' '));
+    let Some(Hint::Keys(title, rows)) = ed.pending_keys() else { panic!("no menu") };
+    let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_ref()).collect();
+    assert_eq!(title, say!("hint.space.title"));
+    assert!(keys.contains(&"q") && keys.contains(&"x") && keys.contains(&"b"), "{keys:?}");
+    assert!(!keys.contains(&"f"), "no_op takes f out: {keys:?}");
+    // A key of the group's own still does what it did.
+    ed.on_key(Key::Char('w'));
+    assert!(ed.pending == Pending::Region);
+    ed.on_key(Key::Esc);
+    // The reader's own group, by its name.
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('x'));
+    let Some(Hint::Keys(title, _)) = ed.pending_keys() else { panic!("no menu") };
+    assert_eq!(title, "My tools");
+    ed.on_key(Key::Char('a'));
+    assert_eq!(ed.selection(), (0, 4), "select_all ran");
+    // And `Space q` quits.
+    let mut ed = Editor::new();
+    ed.set_key_aliases([("<space>q".to_string(), ":quit".to_string())].into_iter().collect());
+    ed.on_key(Key::Char(' '));
+    assert_eq!(ed.on_key(Key::Char('q')), KeyOutcome::Quit);
+}
+
+/// **A list runs in order, and select mode reads `[keys.select]` over
+/// `[keys.normal]`** (2026-10-31).
+#[test]
+fn a_list_runs_in_order_and_select_mode_has_its_own_lines() {
+    let mut ed = typed("one two\n");
+    let normal: std::collections::HashMap<String, Vec<String>> = [
+        ("Q".to_string(), vec!["select_all".to_string(), "delete_selection".to_string()]),
+        ("R".to_string(), vec!["move_char_right".to_string()]),
+    ]
+    .into_iter()
+    .collect();
+    ed.set_key_aliases(normal);
+    ed.set_select_aliases([("R".to_string(), "extend_char_left".to_string())].into_iter().collect());
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('R'));
+    assert_eq!(ed.cursor(), 1, "Normal mode's R");
+    press(&mut ed, "v");
+    ed.on_key(Key::Char('R'));
+    assert_eq!(ed.cursor(), 0, "select mode's R");
+    press(&mut ed, ";");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Char('Q'));
+    assert_eq!(ed.current_buffer().text(), "", "select_all, then delete");
+}

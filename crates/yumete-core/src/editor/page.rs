@@ -600,9 +600,23 @@ impl Editor {
     }
 
     /// Install the reader's own Normal-mode aliases (`[keys.normal]`).
-    pub fn set_key_aliases(&mut self, aliases: HashMap<String, String>) {
-        self.user_aliases = aliases;
+    pub fn set_key_aliases<C: crate::editor::BindingCommands>(&mut self, aliases: HashMap<String, C>) {
+        self.user_aliases = aliases.into_iter().map(|(k, v)| (k, v.into_commands())).collect();
         self.lay_aliases();
+    }
+
+    /// Install select mode's own lines (`[keys.select]`), laid over the
+    /// Normal-mode ones while a selection is being extended.
+    pub fn set_select_aliases<C: crate::editor::BindingCommands>(&mut self, aliases: HashMap<String, C>) {
+        self.user_select = aliases.into_iter().map(|(k, v)| (k, v.into_commands())).collect();
+        self.lay_aliases();
+    }
+
+    /// The names of the reader's own groups (`label` in `[keys.normal.…]`),
+    /// by the keys that open them as written in the config.
+    pub fn set_key_labels(&mut self, labels: HashMap<String, String>) {
+        self.key_labels =
+            labels.into_iter().map(|(k, v)| (yumete_cjk::actions::written(&k), v)).collect();
     }
 
     /// Lay a shipped keymap under the reader's aliases (`:keymap`, #428).
@@ -643,19 +657,35 @@ impl Editor {
     /// 配置裏寫 `"A-d" = …` 綁的是 `A`、`-`、`d` 三個鍵連按——那個鍵永遠按不出來，
     /// 而配置照收、一聲不吭。一處翻，兩層（預設表和使用者那一層）都算。
     fn lay_aliases(&mut self) {
-        let mut all: HashMap<String, String> = self
+        let mut all: HashMap<String, Vec<String>> = self
             .key_preset
             .table()
             .iter()
-            .map(|(k, v)| (yumete_cjk::actions::written(k), v.to_string()))
+            .map(|(k, v)| (yumete_cjk::actions::written(k), vec![v.to_string()]))
             .collect();
         all.extend(
             self.user_aliases
                 .iter()
                 .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
         );
+        let mut select = all.clone();
+        select.extend(
+            self.user_select
+                .iter()
+                .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
+        );
         self.key_aliases = all;
+        self.select_aliases = select;
         self.alias_held.clear();
+    }
+
+    /// **The bindings in force now**: select mode's while a selection is
+    /// being extended, Normal mode's otherwise.
+    pub(super) fn aliases(&self) -> &HashMap<String, Vec<String>> {
+        match self.extend {
+            true => &self.select_aliases,
+            false => &self.key_aliases,
+        }
     }
 
     /// Take a pending `:scheme` request, if one is waiting for the IME.

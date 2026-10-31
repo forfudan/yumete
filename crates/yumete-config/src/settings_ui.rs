@@ -1023,4 +1023,7 @@ pub const NOT_IN_THE_PANEL: &[&str] = &[
     // **一張表，面板畫不出來**：勾和數字說不完「哪個鍵配哪個動作」。
     // 2026-10-18 定：不進面板的只有它，風味那一格進（它只是一個勾）。
     "keys.normal",
+    // The same, for select and Insert mode (2026-10-31).
+    "keys.select",
+    "keys.insert",
 ];

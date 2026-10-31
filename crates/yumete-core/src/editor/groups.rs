@@ -162,11 +162,17 @@ impl Group {
     /// here and offers here, notes in their places, neighbours that say the
     /// same thing on one row.
     pub(super) fn menu(&'static self, at: &Context) -> Vec<(String, &'static str)> {
+        self.menu_without(at, |_| false)
+    }
+
+    /// The menu, leaving out the keys `taken` says the reader has bound
+    /// to something else.
+    pub(super) fn menu_without(&'static self, at: &Context, taken: impl Fn(Key) -> bool) -> Vec<(String, &'static str)> {
         let mut out: Vec<(Vec<String>, &'static str, bool)> = Vec::new();
         for (nth, row) in self.rows.iter().enumerate() {
             match row {
                 Row::Bind(bind) => {
-                    if bind.says.is_empty() || !at.holds(bind.when) || !at.holds(bind.listed) {
+                    if bind.says.is_empty() || !at.holds(bind.when) || !at.holds(bind.listed) || taken(bind.key) {
                         continue;
                     }
                     // Only a row the key reaches, once: a key with a vim row
@@ -219,6 +225,35 @@ impl Group {
             }
         }
         out
+    }
+}
+
+/// **What a binding does, in a menu line**: a named command's description,
+/// a command line or a run of keys as written, a list's parts in order.
+/// `None` for `no_op`, which leaves the menu.
+fn describe(commands: &[String]) -> Option<String> {
+    if commands.iter().all(|one| one == "no_op") {
+        return None;
+    }
+    let parts: Vec<String> = commands
+        .iter()
+        .map(|one| match yumete_cjk::actions::bound(one) {
+            Some(yumete_cjk::actions::Bound::Named(action)) => crate::messages::say(action.help, &[]),
+            Some(yumete_cjk::actions::Bound::Command(line)) => format!(":{line}"),
+            Some(yumete_cjk::actions::Bound::Keys(keys)) => format!("@{keys}"),
+            None => one.clone(),
+        })
+        .collect();
+    Some(parts.join(", "))
+}
+
+/// One key in the internal spelling (`d`, Alt and a letter), as a [`Key`].
+fn key_of(next: &str) -> Key {
+    let mut chars = next.chars();
+    match (chars.next(), chars.next()) {
+        (Some(yumete_cjk::actions::ALT), Some(c)) => Key::Alt(c),
+        (Some(c), _) => super::keys::pressed(c),
+        _ => Key::Esc,
     }
 }
 
@@ -411,6 +446,79 @@ impl Editor {
         if let Some(after) = group.after {
             after(self);
         }
+    }
+
+    /// **The menu of a run of keys the reader's bindings are holding**
+    /// (2026-10-31, step 5 of the keymap plan): their own keys that may come
+    /// next, and when the run is the way into one of the groups (`Space`, once
+    /// `[keys.normal.space]` adds a key to it), that group's keys besides.
+    /// Titled with the name the reader gave it (`label`), the group's, or the
+    /// keys themselves. `None` when the run is the vim preset's own (`Z` of
+    /// `ZZ`), which never had a menu.
+    pub(super) fn held_menu(&self) -> Option<(String, KeyRows)> {
+        let held = self.alias_held.as_str();
+        if held.is_empty() || self.mode != Mode::Normal {
+            return None;
+        }
+        let written = |k: &String| yumete_cjk::actions::written(k);
+        let mut mine: Vec<(String, &Vec<String>)> = self.user_aliases.iter().map(|(k, v)| (written(k), v)).collect();
+        if self.extend {
+            for (k, v) in &self.user_select {
+                let k = written(k);
+                mine.retain(|(m, _)| *m != k);
+                mine.push((k, v));
+            }
+        }
+        let group = GROUPS.iter().find(|g| g.path == held).copied();
+        let at = self.group_context();
+        // The reader's keys after the run: each the command it runs, or the
+        // name of the group it opens.
+        let mut next_keys: Vec<(String, Option<String>)> = Vec::new();
+        for (left, commands) in &mine {
+            let Some(rest) = left.strip_prefix(held).filter(|r| !r.is_empty()) else { continue };
+            let next: String = match rest.starts_with(yumete_cjk::actions::ALT) {
+                true => rest.chars().take(2).collect(),
+                false => rest.chars().take(1).collect(),
+            };
+            let exact = rest.len() == next.len();
+            let opens = format!("{held}{next}");
+            let said = match exact {
+                true => describe(commands),
+                false => match self.key_labels.get(&opens) {
+                    Some(label) => Some(label.clone()),
+                    // A default group's key with the reader's keys under it
+                    // keeps its own line.
+                    None if group.is_some_and(|g| g.binds().any(|b| super::keys::key_internal(b.key) == next)) => continue,
+                    None => Some("…".to_string()),
+                },
+            };
+            match next_keys.iter_mut().find(|(n, _)| *n == next) {
+                Some(row) if exact => row.1 = said,
+                Some(_) => {}
+                None => next_keys.push((next, said)),
+            }
+        }
+        next_keys.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut rows: KeyRows = Vec::new();
+        if let Some(group) = group {
+            let taken = |key: Key| next_keys.iter().any(|(n, _)| *n == super::keys::key_internal(key));
+            for (keys, says) in group.menu_without(&at, taken) {
+                rows.push((keys.into(), crate::messages::say(says, &[])));
+            }
+        }
+        for (next, said) in next_keys {
+            let Some(said) = said else { continue };
+            rows.push((key_label(key_of(&next)).into(), said));
+        }
+        if rows.is_empty() {
+            return None;
+        }
+        let title = match (self.key_labels.get(held), group) {
+            (Some(label), _) => label.clone(),
+            (None, Some(group)) => crate::messages::say(group.title, &[]),
+            (None, None) => yumete_cjk::actions::spell(held),
+        };
+        Some((title, rows))
     }
 
     /// **The which-key menu of the group this is waiting in.**

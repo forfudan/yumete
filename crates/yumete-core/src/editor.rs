@@ -649,6 +649,24 @@ pub enum Hint {
 /// One menu's worth of rows: the key to press, and what it does or holds.
 pub type KeyRows = Vec<(std::borrow::Cow<'static, str>, String)>;
 
+/// **What a binding's right side is handed in as**: one command (`String`),
+/// or several run in order (`Vec<String>`, helix's list).
+pub trait BindingCommands {
+    fn into_commands(self) -> Vec<String>;
+}
+
+impl BindingCommands for String {
+    fn into_commands(self) -> Vec<String> {
+        vec![self]
+    }
+}
+
+impl BindingCommands for Vec<String> {
+    fn into_commands(self) -> Vec<String> {
+        self
+    }
+}
+
 /// A command line to run, and how the writer expects to watch it.
 ///
 /// Two verbs because there are two situations, and each has a right answer.
@@ -2510,10 +2528,18 @@ pub struct Editor {
     /// The last search pattern and direction (Feature #14).
     last_search: String,
     search_forward: bool,
-    /// Normal-mode single-key aliases from the config (Feature #23).
-    key_aliases: HashMap<String, String>,
-    /// The two layers `key_aliases` is laid from (#428).
-    user_aliases: HashMap<String, String>,
+    /// Normal-mode bindings from the config (Feature #23): a run of keys,
+    /// in the internal spelling, and the commands it runs.
+    key_aliases: HashMap<String, Vec<String>>,
+    /// The same with `[keys.select]` laid over it, read in select mode.
+    select_aliases: HashMap<String, Vec<String>>,
+    /// The layers `key_aliases` is laid from (#428): the reader's own lines
+    /// (the preset's are under them), and select mode's.
+    user_aliases: HashMap<String, Vec<String>>,
+    user_select: HashMap<String, Vec<String>>,
+    /// The names the reader gave their own groups, by the keys that open
+    /// them (`label` in a `[keys.normal.…]` table), internal spelling.
+    key_labels: HashMap<String, String>,
     key_preset: yumete_cjk::KeyPreset,
     /// vim 的 `whichwrap`：哪些鍵走得出一行的兩頭。見
     /// [`yumete_config::Editor::which_wrap`]；helix 鍵位下讀都不讀。
@@ -4075,7 +4101,10 @@ impl Editor {
             last_search: String::new(),
             search_forward: true,
             key_aliases: HashMap::new(),
+            select_aliases: HashMap::new(),
             user_aliases: HashMap::new(),
+            user_select: HashMap::new(),
+            key_labels: HashMap::new(),
             key_preset: yumete_cjk::KeyPreset::Helix,
             which_wrap: String::new(),
             alias_held: String::new(),

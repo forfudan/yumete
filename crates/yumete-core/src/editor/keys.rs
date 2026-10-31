@@ -1566,7 +1566,7 @@ impl Editor {
         if self.pending != Pending::None
             || self.expanding_alias
             || !self.alias_held.is_empty()
-            || self.key_aliases.is_empty()
+            || self.aliases().is_empty()
         {
             return None;
         }
@@ -1576,10 +1576,12 @@ impl Editor {
             Key::Alt(c) => format!("{}{c}", yumete_cjk::actions::ALT),
             key => typed_as(key)?.to_string(),
         };
-        if self.key_aliases.keys().any(|k| k.len() > typed.len() && k.starts_with(typed.as_str())) {
+        if self.aliases().keys().any(|k| k.len() > typed.len() && k.starts_with(typed.as_str())) {
             return None;
         }
-        match yumete_cjk::actions::bound(self.key_aliases.get(&typed)?)? {
+        let commands = self.aliases().get(&typed)?;
+        let [one] = commands.as_slice() else { return None };
+        match yumete_cjk::actions::bound(one)? {
             // A named command acts on the cursors its own key does.
             // A named command acts on the cursors its own key does, in its
             // own group (`"C-h" = "goto_line_start"` moves every cursor, as
@@ -1615,7 +1617,17 @@ impl Editor {
     /// therefore typed its own letters into the chapter. The config refuses such
     /// a line and never installs it, so nothing should reach here — and if
     /// something ever does, the manuscript is not where it gets to say so.
-    fn run_binding(&mut self, bound: &str) {
+    fn run_binding(&mut self, commands: &[String]) {
+        // **A list runs in order** (helix's), and stops at a quit.
+        for one in commands {
+            self.run_one_binding(one);
+            if self.quit_from_binding {
+                break;
+            }
+        }
+    }
+
+    fn run_one_binding(&mut self, bound: &str) {
         match yumete_cjk::actions::bound(bound) {
             Some(yumete_cjk::actions::Bound::Command(line)) => self.run_bound_command(line),
             // `A-d`、`C-o` 這種寫法在這裏纔翻成內部拼法。
@@ -1917,7 +1929,7 @@ impl Editor {
         // the next key decides: it completes one (played), or it does not, and
         // then what was held is pressed for real and the new key goes through
         // as itself. `Esc` lets go of what was held without pressing it.
-        let key = if self.expanding_alias || self.key_aliases.is_empty() {
+        let key = if self.expanding_alias || self.aliases().is_empty() {
             key
         } else {
             let typed = match key {
@@ -1967,7 +1979,7 @@ impl Editor {
                 let named = |held: &str, c: char| {
                     let mut longer = held.to_string();
                     longer.push(c);
-                    self.key_aliases.keys().any(|k| k.starts_with(&longer))
+                    self.aliases().keys().any(|k| k.starts_with(&longer))
                 };
                 if alone
                     && !held.is_empty()
@@ -1986,18 +1998,21 @@ impl Editor {
                 }
                 held.push_str(&typed);
                 let longer = self
-                    .key_aliases
+                    .aliases()
                     .keys()
                     .any(|k| k.len() > held.len() && k.starts_with(held.as_str()));
                 if longer {
                     self.alias_held = held;
                     return;
                 }
-                let found = self.key_aliases.get(&held).cloned();
+                let found = self.aliases().get(&held).cloned();
                 // **一個鍵換一個鍵走正路**：換出來的那一下當作人按的接着處理，所以
                 // 數字前綴、模式、計數都還在它身上。`@` 底下那一串纔是鍵，所以剝掉
                 // 它再數（2026-10-19：從前右邊光着寫就是鍵，現在要說出來）。
-                let one_key = found.as_deref().and_then(|b| match yumete_cjk::actions::bound(b) {
+                let one_key = found.as_deref().and_then(|b| match b {
+                    [one] => Some(one.as_str()),
+                    _ => None,
+                }).and_then(|b| match yumete_cjk::actions::bound(b) {
                     Some(yumete_cjk::actions::Bound::Keys(k)) => {
                         let mut cs = k.chars();
                         match (cs.next(), cs.next()) {

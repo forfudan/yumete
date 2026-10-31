@@ -89,3 +89,15 @@ fn a_key_that_is_not_in_the_file_falls_back_rather_than_lying() {
     // beats the top of the file.
     assert_eq!(line_for(BAD, "[panel] rounded = 1 …"), 10);
 }
+
+/// **A bad key line, and a mode that does not exist, are marked on their
+/// own lines** (2026-10-31), and the rest of the file is not at fault.
+#[test]
+fn a_bad_key_line_is_marked_where_it_is() {
+    let text = "[keys.normal]\nx = \"delete_selection\"\n\n[keys.normal.z]\nq = 3\n\n[keys.visual]\nx = \"y\"\n";
+    let faults = yumete_config::faults::faults_in(text);
+    let lines: Vec<usize> = faults.iter().map(|f| f.line).collect();
+    assert!(lines.contains(&4), "q = 3 is line 5 (0-based 4): {lines:?}");
+    assert!(lines.contains(&6), "[keys.visual] is line 7 (0-based 6): {lines:?}");
+    assert!(faults.iter().all(|f| !f.fatal), "nothing voids the file");
+}
