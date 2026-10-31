@@ -5565,6 +5565,7 @@ mod matching;
 mod memo;
 mod modes;
 mod multi;
+mod normal;
 mod page;
 mod pairing;
 pub use pairing::AutoPairs;

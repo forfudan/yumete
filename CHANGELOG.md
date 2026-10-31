@@ -25,6 +25,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`move_line_up` and `move_line_down` are now `move_visual_line_up` and `move_visual_line_down`**, helix's names for what `k` and `j` do (one row on screen); in helix the shorter names are `gk` and `gj`, a whole line of the file. A config that names the old ones gets a notice and that line is skipped.
 - **Keys moved for helix's pickers**: the problem at the cursor is now `Space l` (float) and `Space L` (sidebar), where `d` and `D` were; the outline sidebar has no key and opens with `:sidebar outline` or `:toc`.
 - **The settings panel**: typing a value shows a bar cursor, and the key row then lists only Enter, Esc and Backspace. `c` types a value from empty, where `i` adds to the one there. Messages and the `:` line have their own row under the key hints instead of covering them, and `:w` and `:q` typed on the panel stay out of the command history.
 - **Closing a window hands the keys back to the window you were in before it**, as VS Code and tmux do, instead of to the first window on screen. If that one is gone too, they go to the window that takes the room, as in vim.
@@ -32,6 +33,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- The `goto_last_line` action did nothing (a bare `G` does nothing under the helix keymap); it goes to the start of the last line, as helix's does. The `outline` action opened the symbol picker since `Space s` became one; it opens the outline sidebar.
 - A key bound to a command line ran it but ignored the result: `"C-q" = ":quit"` never quit, and a failing command said nothing. A run of keys that types `:quit` lost it the same way. Both are heard now.
 - `goto_next_paragraph` and `goto_prev_paragraph` moved one line; they now go a paragraph, as `]p` and `[p` do.
 - Under the vim keymap, named actions did the vim key's thing: `delete_selection` waited for a motion like vim's `d`. An action now does the same under either keymap.
