@@ -2446,6 +2446,12 @@ impl Editor {
         self.clipboard_read = Some(crate::editor::Pasting::AsIs { after });
     }
 
+    /// Ask for the system clipboard, to replace the selection with once the
+    /// front end has fetched it (`空格 R`, helix's).
+    pub(super) fn clipboard_replace(&mut self) {
+        self.clipboard_read = Some(crate::editor::Pasting::Replace);
+    }
+
     /// `:paste-table <格式>` — 剪貼板裏那張表，轉成這一種再貼（2026-10-02 定）。
     pub(super) fn paste_table(
         &mut self,

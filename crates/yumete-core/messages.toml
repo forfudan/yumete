@@ -6569,6 +6569,12 @@ zhs = "改名（各处一起改）"
 en = "rename it everywhere"
 
 [[message]]
+# 空格菜單：R 用系統剪貼板替換選區（helix 的同一個鍵）
+key = "hint.space.replace-from-clipboard"
+zht = "用系統剪貼板替換選區"
+zhs = "用系统剪贴板替换选区"
+en = "replace the selection with the system clipboard"
+[[message]]
 # space b: 
 # Open buffer picker
 key = "hint.space.switch-buffer"
@@ -13911,6 +13917,7 @@ key = "yume.where.opened"
 zht = "開在一個新緩衝區裏了"
 zhs = "开在一个新缓冲区里了"
 en = "opened in a buffer of its own"
+
 
 
 

@@ -32308,6 +32308,16 @@ fn the_black_hole_and_clipboard_registers_mean_what_they_mean_elsewhere() {
     assert!(matches!(ed.take_clipboard_read(), Some(Pasting::AsIs { after: true })));
     press(&mut ed, "\"*R");
     assert!(matches!(ed.take_clipboard_read(), Some(Pasting::Replace)));
+
+    // helix's `空格 R` (2026-10-31): the same, without naming a register; the
+    // clipboard's text takes the selection's place.
+    let mut ed = typed("alpha bravo\n");
+    press(&mut ed, "ggw");
+    press(&mut ed, " R");
+    let how = ed.take_clipboard_read().expect("asked for the clipboard");
+    assert!(matches!(how, Pasting::Replace));
+    ed.provide_clipboard("charlie ", how);
+    assert_eq!(ed.current_buffer().rope().to_string(), "charlie bravo\n");
 }
 
 /// **`d%`, `d+`, `d-` and `d<Enter>` under the vim keymap** (2026-10-30),
