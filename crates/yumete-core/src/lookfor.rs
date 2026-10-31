@@ -417,6 +417,9 @@ impl Hit {
             What::Keys(a) => match a.how {
                 yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
                 yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+                yumete_cjk::actions::How::Normal => {
+                    crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())
+                }
             },
         }
     }
@@ -503,6 +506,9 @@ pub fn look_above(query: &str, floor: f32) -> Vec<Hit> {
         .chain(actions.iter().map(|a| match a.how {
             yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
             yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+            yumete_cjk::actions::How::Normal => {
+                crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())
+            }
         }))
         .collect();
     let tags: Vec<&'static str> =
@@ -723,6 +729,9 @@ mod how_well_does_it_find {
             let name = match a.how {
                 yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
                 yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+                yumete_cjk::actions::How::Normal => {
+                    crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())
+                }
             };
             rows.push((name, a.help));
         }
@@ -776,6 +785,9 @@ mod how_well_does_it_find {
             let name = match a.how {
                 yumete_cjk::actions::How::Keys(k) => yumete_cjk::actions::spell(k),
                 yumete_cjk::actions::How::Command(c) => format!(":{c}"),
+                yumete_cjk::actions::How::Normal => {
+                    crate::editor::default_key_written(a.name).unwrap_or_else(|| a.name.to_string())
+                }
             };
             for word in e.find.split_whitespace() {
                 if e.zht.contains(word) || word.chars().count() < 2 {

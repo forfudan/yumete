@@ -5566,6 +5566,7 @@ mod memo;
 mod modes;
 mod multi;
 mod normal;
+pub(crate) use normal::default_key_written;
 mod page;
 mod pairing;
 pub use pairing::AutoPairs;

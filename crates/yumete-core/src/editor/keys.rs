@@ -1572,6 +1572,10 @@ impl Editor {
             return None;
         }
         match yumete_cjk::actions::bound(self.key_aliases.get(&typed)?)? {
+            // A named command acts on the cursors its own key does.
+            yumete_cjk::actions::Bound::Named(action) if action.how == yumete_cjk::actions::How::Normal => {
+                super::normal::normal_command(action.name).map(|&(_, _, key)| key)
+            }
             yumete_cjk::actions::Bound::Keys(k) => {
                 let mut cs = k.chars();
                 match (cs.next(), cs.next()) {
@@ -1619,6 +1623,9 @@ impl Editor {
                     self.key_preset = preset;
                 }
                 yumete_cjk::actions::How::Command(line) => self.run_bound_command(line),
+                yumete_cjk::actions::How::Normal => {
+                    self.run_normal(action.name);
+                }
             },
             None => {}
         }
@@ -2410,143 +2417,15 @@ impl Editor {
             }
         }
 
-        // Every key below is a named command (`normal.rs`); this says which
-        // key calls which, the vim preset's own first where it has one.
+        // **Every key is a named command** (`normal.rs`), looked up in the
+        // default keymap: the vim preset's own entries first, helix's after.
         let cx = super::normal::Cx { key, count, operator_count, continuing_zong };
-        match key {
-            Key::Char('h') | Key::Left => self.cmd_move_char_left(cx),
-            Key::Char('l') | Key::Right => self.cmd_move_char_right(cx),
-            Key::Backspace if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_move_char_left(cx),
-            Key::Char('k') | Key::Up if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_move_line_up(cx),
-            Key::Char('k') | Key::Up => self.cmd_move_visual_line_up(cx),
-            Key::Char('j') | Key::Down if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_move_line_down(cx),
-            Key::Char('j') | Key::Down => self.cmd_move_visual_line_down(cx),
-            Key::Home => self.cmd_goto_line_start(cx),
-            Key::End => self.cmd_goto_line_end(cx),
-            Key::Enter if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_goto_next_line_nonwhitespace(cx),
-            Key::Char(c @ ('w' | 'W' | 'b' | 'B' | 'e' | 'E' | '{' | '}')) if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.expanding_alias && crate::vim::step_for(&c.to_string(), self.word_grain(), None).is_some() => self.cmd_jump_by_word(cx),
-            Key::Char('w') => self.cmd_move_next_word_start(cx),
-            Key::Char('e') => self.cmd_move_next_word_end(cx),
-            Key::Char('b') => self.cmd_move_prev_word_start(cx),
-            Key::Char('}') => self.cmd_move_next_paragraph(cx),
-            Key::Char('{') => self.cmd_move_prev_paragraph(cx),
-            Key::Char('H' | 'M' | 'L') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_goto_window(cx),
-            Key::Char('(' | ')') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_jump_by_sentence(cx),
-            Key::Char('L') => self.cmd_goto_next_sentence(cx),
-            Key::Char('H') => self.cmd_goto_prev_sentence(cx),
-            Key::Char('m') if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.expanding_alias => self.cmd_add_mark(cx),
-            Key::Char('M') => self.cmd_add_mark(cx),
-            Key::Char('\'') => self.cmd_goto_mark(cx),
-            Key::Char('z') => self.cmd_view_mode(cx),
-            Key::Char('Z') => self.cmd_sticky_view_mode(cx),
-            Key::Char(']') | Key::Char('[') => self.cmd_bracket_mode(cx),
-            Key::Char('W') => self.cmd_move_next_long_word_start(cx),
-            Key::Char('E') => self.cmd_move_next_long_word_end(cx),
-            Key::Char('B') => self.cmd_move_prev_long_word_start(cx),
-            Key::Char('g') => self.cmd_goto_mode(cx),
-            Key::Char(' ') => self.cmd_space_mode(cx),
-            Key::Char('f') | Key::Char('F') | Key::Char('t') | Key::Char('T') => self.cmd_find_char(cx),
-            Key::Char('V') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_select_line_mode(cx),
-            Key::Char('v') => self.cmd_select_mode(cx),
-            Key::Esc => self.cmd_normal_mode(cx),
-            Key::Char(';' | ',') if self.key_preset == yumete_cjk::KeyPreset::Vim && self.last_find.is_some() && !self.expanding_alias => self.cmd_repeat_find(cx),
-            Key::Char(';') => self.cmd_collapse_selection(cx),
-            Key::Char('C') => self.cmd_copy_selection_on_next_line(cx),
-            Key::Alt('C') => self.cmd_copy_selection_on_prev_line(cx),
-            Key::Char(',') => self.cmd_keep_primary_selection(cx),
-            Key::Alt(',') => self.cmd_remove_primary_selection(cx),
-            Key::Alt('-') => self.cmd_merge_selections(cx),
-            Key::Alt('_') => self.cmd_merge_consecutive_selections(cx),
-            Key::Alt(':') => self.cmd_ensure_selections_forward(cx),
-            Key::Alt('x') => self.cmd_shrink_to_line_bounds(cx),
-            Key::Alt('s') => self.cmd_split_selection_on_newline(cx),
-            Key::Char(')') => self.cmd_rotate_selections_forward(cx),
-            Key::Char('(') => self.cmd_rotate_selections_backward(cx),
-            Key::Char('_') => self.cmd_trim_selections(cx),
-            Key::Char('&') => self.cmd_align_selections(cx),
-            Key::Alt(')') => self.cmd_rotate_selection_contents_forward(cx),
-            Key::Alt('(') => self.cmd_rotate_selection_contents_backward(cx),
-            Key::Char('s') => self.cmd_select_regex(cx),
-            Key::Char('S') => self.cmd_split_selection(cx),
-            Key::Alt('k') => self.cmd_keep_selections(cx),
-            Key::Alt('K') => self.cmd_remove_selections(cx),
-            Key::Char('x') => self.cmd_extend_line_below(cx),
-            Key::Char('d' | 'c' | 'y' | '>' | '<') if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend => self.cmd_vim_operator(cx),
-            Key::Char('d') | Key::Char('c') | Key::Alt('d') | Key::Alt('c') | Key::Char('D') if !matches!(key, Key::Char('D')) || self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_delete_or_change(cx),
-            Key::Char('y') => self.cmd_yank(cx),
-            Key::Char('p' | 'P') => self.cmd_paste(cx),
-            Key::Char('i' | 'a') if self.extend && self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_select_object(cx),
-            Key::Char('i') => self.cmd_insert_mode(cx),
-            Key::Char('a') => self.cmd_append_mode(cx),
-            Key::Char('I') => self.cmd_insert_at_line_start(cx),
-            Key::Char('A') => self.cmd_insert_at_line_end(cx),
-            Key::Char('o') => self.cmd_open_below(cx),
-            Key::Char('O') => self.cmd_open_above(cx),
-            Key::Char('u') => self.cmd_undo(cx),
-            Key::Char('U') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_undo_line(cx),
-            Key::Char('U') => self.cmd_redo(cx),
-            Key::Alt('u') => self.cmd_earlier(cx),
-            Key::Alt('U') => self.cmd_later(cx),
-            Key::Char('|') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_goto_column(cx),
-            Key::Char('|') => self.cmd_shell_pipe(cx),
-            Key::Char('!') => self.cmd_shell_insert_output(cx),
-            Key::Alt('!') => self.cmd_shell_append_output(cx),
-            Key::Alt('|') => self.cmd_shell_pipe_to(cx),
-            Key::Char('/') => self.cmd_search(cx),
-            Key::Char('?') => self.cmd_rsearch(cx),
-            Key::Char('n') => self.cmd_search_next(cx),
-            Key::Char('N') => self.cmd_search_prev(cx),
-            Key::Char(':') => self.cmd_command_mode(cx),
-            Key::Char('m') => self.cmd_match_mode(cx),
-            Key::Char('r') => self.cmd_replace(cx),
-            Key::Char('"') => self.cmd_select_register(cx),
-            Key::Char('Q') => self.cmd_record_macro(cx),
-            Key::Char('q') => self.cmd_replay_macro(cx),
-            Key::Ctrl('w') => self.cmd_window_mode(cx),
-            Key::Ctrl('f') | Key::PageDown => self.cmd_page_down(cx),
-            Key::Ctrl('b') | Key::PageUp => self.cmd_page_up(cx),
-            Key::Alt('J') => self.cmd_join_selections_space(cx),
-            Key::Ctrl('s') => self.cmd_save_selection(cx),
-            Key::Ctrl('o') => self.cmd_jump_backward(cx),
-            Key::Ctrl('i') | Key::Tab => self.cmd_jump_forward(cx),
-            Key::Ctrl('d') => self.cmd_half_page_down(cx),
-            Key::Ctrl('u') => self.cmd_half_page_up(cx),
-            Key::Ctrl('n') => self.cmd_two_thirds_page_down(cx),
-            Key::Ctrl('p') => self.cmd_two_thirds_page_up(cx),
-            Key::Char('J') => self.cmd_join_selections(cx),
-            Key::Char('K') => self.cmd_keep_selections(cx),
-            Key::Alt(';') => self.cmd_flip_selections(cx),
-            Key::Char('%') => self.cmd_select_all(cx),
-            Key::Ctrl('r') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_vim_redo(cx),
-            Key::Char('X') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_delete_char_backward(cx),
-            Key::Char('X') => self.cmd_extend_to_line_bounds(cx),
-            Key::Char('`') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_goto_mark(cx),
-            Key::Char('`') => self.cmd_case_mode(cx),
-            Key::Char('~') => self.cmd_switch_case(cx),
-            Key::Char('*') => self.cmd_search_selection_detect_word_boundaries(cx),
-            Key::Alt('*') => self.cmd_search_selection_exact(cx),
-            Key::Char('#') if self.key_preset == yumete_cjk::KeyPreset::Vim => self.cmd_search_word_backward(cx),
-            Key::Char('R') if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend => self.cmd_replace_mode(cx),
-            Key::Char('R') => self.cmd_replace_with_yanked(cx),
-            Key::Char('G') => self.cmd_goto_line(cx),
-            Key::Char('>' | '<') => self.cmd_indent_or_unindent(cx),
-            Key::Ctrl('a') => self.cmd_increment(cx),
-            Key::Ctrl('x') => self.cmd_decrement(cx),
-            Key::Char('.') if self.key_preset == yumete_cjk::KeyPreset::Vim && operator_count.is_some() => self.cmd_vim_repeat_last_change(cx),
-            Key::Char('.') => self.cmd_repeat_last_change(cx),
-            Key::Alt('.') => self.cmd_repeat_last_motion(cx),
-            // Warning: **没綁的鍵就是没反應**（2026-10-08 定）。這裏從前站着一本
-            // 「別的編輯器那個鍵在我們這兒叫什麼」的對照簿（`phrasebook`）：按
-            // `$` 答「行尾是 gl」、按 `D` 答「刪了不動寄存器是 A-d」。原話——
-            //
-            // > 這一類提示是多餘的。比如按了 D 之後提示應該按 alt-d。這個提示
-            // > 假設用户的意圖，這是不對的。
-            //
-            // 整本連那十一條文案一起刪了。**留着的不是這一類**：自己打開的選單
-            // （`空格`、`` ` `` 那幾張）是問出來的，不是猜出來的；「`ze` 爲無效
-            // 按鍵組合」報的是手指真按出來的那一串，也不猜意圖。
-            _ => {}
+        if let Some(run) = self.normal_command_for(&cx).and_then(super::normal::normal_command) {
+            (run.1)(self, cx);
         }
+        // Warning: **An unbound key does nothing** (2026-10-08 定). A phrasebook here
+        // once answered 「`$` is `gl` here」; that guesses what the person meant,
+        // and was removed with its eleven lines of copy.
     }
 
     /// Hand a half-finished key the character it was waiting for (#414).
@@ -3948,6 +3827,19 @@ fn hold_in_line(rope: &crate::Rope, at: usize, floor: usize) -> usize {
 /// the editor as nothing at all — which is why four named actions
 /// (`jump_backward`, `collapse_selection`, `increment`, `decrement`) were
 /// listed by `:keymap-actions`, bindable, and **dead** until 2026-09-19.
+/// A key in the internal spelling a binding's string uses (`A-d` is
+/// [`yumete_cjk::actions::ALT`] then `d`, `C-o` its control byte): the
+/// inverse of [`pressed`], for [`yumete_cjk::actions::spell`] to write.
+pub(crate) fn key_internal(key: Key) -> String {
+    match key {
+        Key::Char(c) => c.to_string(),
+        Key::Alt(c) => format!("{}{c}", yumete_cjk::actions::ALT),
+        Key::Ctrl(c) if c.is_ascii_alphabetic() => ((c.to_ascii_lowercase() as u8 - b'a' + 1) as char).to_string(),
+        Key::Esc => "\u{1b}".to_string(),
+        key => typed_as(key).map(String::from).unwrap_or_default(),
+    }
+}
+
 pub(super) fn pressed(c: char) -> Key {
     if let Some(key) = named_key(c) {
         return key;

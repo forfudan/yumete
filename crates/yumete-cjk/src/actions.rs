@@ -28,6 +28,10 @@ pub enum How {
     Keys(&'static str),
     /// Run this command line, without the `:`.
     Command(&'static str),
+    /// **A Normal command, by this action's own name** (2026-10-31): the
+    /// editor's command list (`yumete-core`'s `editor/normal.rs`) holds the
+    /// code, and the key it is on is the keymap's to say.
+    Normal,
 }
 
 /// One bindable action: its name, what it does in one line, and how.
@@ -236,6 +240,10 @@ const fn keys(name: &'static str, help: &'static str, k: &'static str) -> Action
     Action { name, help, how: How::Keys(k) }
 }
 
+const fn normal(name: &'static str, help: &'static str) -> Action {
+    Action { name, help, how: How::Normal }
+}
+
 const fn command(name: &'static str, help: &'static str, c: &'static str) -> Action {
     Action { name, help, how: How::Command(c) }
 }
@@ -248,19 +256,19 @@ const fn command(name: &'static str, help: &'static str, c: &'static str) -> Act
 /// until the group itself is a named thing.
 pub const ALL: &[Action] = &[
     // ---- Moving ---------------------------------------------------------
-    keys("move_char_left", "action.move-char-left", "h"),
-    keys("move_char_right", "action.move-char-right", "l"),
+    normal("move_char_left", "action.move-char-left"),
+    normal("move_char_right", "action.move-char-right"),
     // **helix's names for what `k`/`j` do** (2026-10-31): these were called
     // `move_line_up`/`move_line_down`, which in helix are `gk`/`gj`, a whole
     // line of the file. The behaviour is the one they always had, on screen.
-    keys("move_visual_line_up", "action.move-line-up", "k"),
-    keys("move_visual_line_down", "action.move-line-down", "j"),
-    keys("move_next_word_start", "action.move-next-word-start", "w"),
-    keys("move_prev_word_start", "action.move-prev-word-start", "b"),
-    keys("move_next_word_end", "action.move-next-word-end", "e"),
-    keys("move_next_long_word_start", "action.move-next-long-word-start", "W"),
-    keys("move_prev_long_word_start", "action.move-prev-long-word-start", "B"),
-    keys("move_next_long_word_end", "action.move-next-long-word-end", "E"),
+    normal("move_visual_line_up", "action.move-line-up"),
+    normal("move_visual_line_down", "action.move-line-down"),
+    normal("move_next_word_start", "action.move-next-word-start"),
+    normal("move_prev_word_start", "action.move-prev-word-start"),
+    normal("move_next_word_end", "action.move-next-word-end"),
+    normal("move_next_long_word_start", "action.move-next-long-word-start"),
+    normal("move_prev_long_word_start", "action.move-prev-long-word-start"),
+    normal("move_next_long_word_end", "action.move-next-long-word-end"),
     keys("goto_line_start", "action.goto-line-start", "gh"),
     keys("goto_line_end", "action.goto-line-end", "gl"),
     keys("goto_first_nonwhitespace", "action.goto-first-nonwhitespace", "gs"),
@@ -271,23 +279,23 @@ pub const ALL: &[Action] = &[
     // nothing at all. `ge` then `gh` is helix's `goto_last_line`: the last
     // line, at its start.
     keys("goto_last_line", "action.goto-last-line", "gegh"),
-    keys("goto_prev_sentence", "action.goto-prev-sentence", "H"),
-    keys("goto_next_sentence", "action.goto-next-sentence", "L"),
+    normal("goto_prev_sentence", "action.goto-prev-sentence"),
+    normal("goto_next_sentence", "action.goto-next-sentence"),
     // helix's `[p`/`]p` (2026-10-31): these pressed `gk`/`gj`, one file line.
     keys("goto_prev_paragraph", "action.goto-prev-paragraph", "[p"),
     keys("goto_next_paragraph", "action.goto-next-paragraph", "]p"),
-    keys("half_page_down", "action.half-page-down", "\u{4}"),
-    keys("half_page_up", "action.half-page-up", "\u{15}"),
-    keys("jump_backward", "action.jump-backward", "\u{f}"),
+    normal("half_page_down", "action.half-page-down"),
+    normal("half_page_up", "action.half-page-up"),
+    normal("jump_backward", "action.jump-backward"),
     // ---- Selecting ------------------------------------------------------
-    keys("extend_mode", "action.extend-mode", "v"),
-    keys("select_line", "action.select-line", "x"),
-    keys("extend_to_line_bounds", "action.extend-to-line-bounds", "X"),
-    keys("select_all", "action.select-all", "%"),
+    normal("extend_mode", "action.extend-mode"),
+    normal("select_line", "action.select-line"),
+    normal("extend_to_line_bounds", "action.extend-to-line-bounds"),
+    normal("select_all", "action.select-all"),
     // Warning: **`;`, not Esc** (2026-10-06). Esc used to collapse the selection as
     // well as leave 延伸 mode; it leaves the selection alone now, the way
     // helix's does, and `;` is the key whose whole job is collapsing.
-    keys("collapse_selection", "action.collapse-selection", ";"),
+    normal("collapse_selection", "action.collapse-selection"),
     // ---- Changing -------------------------------------------------------
     // Warning: **這四個 2026-10-08 改了名，也改了指向的鍵。**
     //
@@ -299,34 +307,34 @@ pub const ALL: &[Action] = &[
     // 名字改成 helix 的（這個模組開頭那條規矩：helix 有同一個動作就用它的名字）。
     // 從前我們同名而意思相反——一個 helix 使用者寫 `d = "delete_selection"` 會得
     // 到和他家裏相反的行為，這是最壞的一種。
-    keys("delete_selection", "action.delete-selection", "d"),
-    keys("delete_selection_noyank", "action.delete-selection-noyank", "\u{e000}d"),
-    keys("change_selection", "action.change-selection", "c"),
-    keys("change_selection_noyank", "action.change-selection-noyank", "\u{e000}c"),
-    keys("insert_mode", "action.insert-mode", "i"),
-    keys("append_mode", "action.append-mode", "a"),
-    keys("insert_at_line_start", "action.insert-at-line-start", "I"),
-    keys("insert_at_line_end", "action.insert-at-line-end", "A"),
-    keys("open_below", "action.open-below", "o"),
-    keys("open_above", "action.open-above", "O"),
-    keys("yank", "action.yank", "y"),
-    keys("paste_after", "action.paste-after", "p"),
-    keys("paste_before", "action.paste-before", "P"),
-    keys("replace_with_yanked", "action.replace-with-yanked", "R"),
-    keys("join_lines", "action.join-lines", "J"),
-    keys("indent", "action.indent", ">"),
-    keys("unindent", "action.unindent", "<"),
-    keys("increment", "action.increment", "\u{1}"),
-    keys("decrement", "action.decrement", "\u{18}"),
-    keys("switch_case", "action.switch-case", "~"),
-    keys("undo", "action.undo", "u"),
-    keys("redo", "action.redo", "U"),
-    keys("repeat_last_change", "action.repeat-last-change", "."),
+    normal("delete_selection", "action.delete-selection"),
+    normal("delete_selection_noyank", "action.delete-selection-noyank"),
+    normal("change_selection", "action.change-selection"),
+    normal("change_selection_noyank", "action.change-selection-noyank"),
+    normal("insert_mode", "action.insert-mode"),
+    normal("append_mode", "action.append-mode"),
+    normal("insert_at_line_start", "action.insert-at-line-start"),
+    normal("insert_at_line_end", "action.insert-at-line-end"),
+    normal("open_below", "action.open-below"),
+    normal("open_above", "action.open-above"),
+    normal("yank", "action.yank"),
+    normal("paste_after", "action.paste-after"),
+    normal("paste_before", "action.paste-before"),
+    normal("replace_with_yanked", "action.replace-with-yanked"),
+    normal("join_lines", "action.join-lines"),
+    normal("indent", "action.indent"),
+    normal("unindent", "action.unindent"),
+    normal("increment", "action.increment"),
+    normal("decrement", "action.decrement"),
+    normal("switch_case", "action.switch-case"),
+    normal("undo", "action.undo"),
+    normal("redo", "action.redo"),
+    normal("repeat_last_change", "action.repeat-last-change"),
     // ---- Looking for something ------------------------------------------
-    keys("search", "action.search", "/"),
-    keys("rsearch", "action.rsearch", "?"),
-    keys("search_next", "action.search-next", "n"),
-    keys("search_prev", "action.search-prev", "N"),
+    normal("search", "action.search"),
+    normal("rsearch", "action.rsearch"),
+    normal("search_next", "action.search-next"),
+    normal("search_prev", "action.search-prev"),
     keys("search_selection", "action.search-selection", "g/"),
     keys("goto_definition", "action.goto-definition", "gd"),
     keys("open_here", "action.open-here", "gf"),
