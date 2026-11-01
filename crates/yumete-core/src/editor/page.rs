@@ -679,6 +679,12 @@ impl Editor {
                 .iter()
                 .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
         );
+        let table: Vec<(String, Vec<String>)> =
+            self.user_table.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())).collect();
+        self.table_aliases = all.clone();
+        self.table_aliases.extend(table.iter().cloned());
+        self.table_select_aliases = select.clone();
+        self.table_select_aliases.extend(table);
         self.key_aliases = all;
         self.select_aliases = select;
         self.alias_held.clear();
@@ -687,10 +693,21 @@ impl Editor {
     /// **The bindings in force now**: select mode's while a selection is
     /// being extended, Normal mode's otherwise.
     pub(super) fn aliases(&self) -> &HashMap<String, Vec<String>> {
-        match self.extend {
-            true => &self.select_aliases,
-            false => &self.key_aliases,
+        // A table's grid lays `[keys.table]` over either (2026-11-01); asked
+        // only when the reader wrote some, `table_here` being a lookup.
+        let grid = !self.user_table.is_empty() && self.table_here();
+        match (self.extend, grid) {
+            (true, false) => &self.select_aliases,
+            (false, false) => &self.key_aliases,
+            (true, true) => &self.table_select_aliases,
+            (false, true) => &self.table_aliases,
         }
+    }
+
+    /// Install a table grid's own lines (`[keys.table]`).
+    pub fn set_table_aliases<C: crate::editor::BindingCommands>(&mut self, aliases: HashMap<String, C>) {
+        self.user_table = aliases.into_iter().map(|(k, v)| (k, v.into_commands())).collect();
+        self.lay_aliases();
     }
 
     /// Take a pending `:scheme` request, if one is waiting for the IME.

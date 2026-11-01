@@ -33903,3 +33903,56 @@ fn the_search_panel_takes_the_sidebar_and_field_tables() {
     ed.on_key(Key::Char('n'));
     assert_eq!(ed.search().field, Field::Query, "[keys.sidebar] reaches the search panel");
 }
+
+/// **A name means its table action however it is reached** (2026-11-01):
+/// in the `␣tt` grid `l` steps a cell, and so does a key bound to
+/// `move_char_right`, which moved one character there before. A
+/// `[keys.table]` line holds only in a table, and `table_next_cell` is the
+/// step `Tab` takes while typing in a cell.
+#[test]
+fn a_bound_name_does_its_table_action_in_the_grid() {
+    let grid = || {
+        let mut ed = typed("| 甲甲 | 乙 |\n| --- | --- |\n| 木木 | 水 |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, " tt");
+        assert!(ed.layers_here());
+        ed
+    };
+    let mut ed = grid();
+    ed.on_key(Key::Char('l'));
+    let by_l = ed.cell_position();
+    let mut ed = grid();
+    let mut normal = HashMap::new();
+    normal.insert("n".to_string(), "move_char_right".to_string());
+    ed.set_key_aliases(normal);
+    ed.on_key(Key::Char('n'));
+    assert_eq!(ed.cell_position(), by_l, "a bound name steps a cell, as l does");
+    // A group's key too: `g h` is the record's first cell, as `Home` is.
+    let mut home = grid();
+    home.on_key(Key::Home);
+    press(&mut ed, "gh");
+    assert_eq!(ed.cell_position(), home.cell_position(), "g h is the record's start in the grid");
+
+    let mut ed = grid();
+    let mut table = HashMap::new();
+    table.insert("w".to_string(), "move_char_right".to_string());
+    ed.set_table_aliases(table);
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.cell_position(), by_l, "[keys.table] holds in the grid");
+    let mut prose = typed("one two\n");
+    let mut table = HashMap::new();
+    table.insert("w".to_string(), "no_op".to_string());
+    prose.set_table_aliases(table);
+    prose.on_key(Key::Char('w'));
+    assert_ne!(prose.sel.head(), 0, "and not outside a table");
+
+    let mut ed = grid();
+    let mut insert = HashMap::new();
+    insert.insert("C-l".to_string(), "table_next_cell".to_string());
+    ed.set_insert_aliases(insert);
+    let before = ed.cell_position();
+    press(&mut ed, "i");
+    ed.on_key(Key::Ctrl('l'));
+    assert_ne!(ed.cell_position(), before, "table_next_cell steps while typing");
+}

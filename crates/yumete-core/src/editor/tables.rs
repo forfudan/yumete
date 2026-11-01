@@ -11,6 +11,62 @@
 //! file the reader opens and nothing else.
 
 use super::*;
+use yumete_cjk::actions::NormalCmd;
+
+/// **Each command a table's grid gives a meaning of its own, and the key
+/// that means it there** (2026-11-01): the default keymap of the grid, read
+/// as commands. Most are a Normal command done to a cell (`move_char_right`
+/// is one cell right, `yank` takes the cell); four are the grid's own
+/// (`table_enter_cell`, `table_leave_cell`, `table_next_cell`,
+/// `table_prev_cell`). A twin pair names one key.
+pub(super) const TABLE_KEYS: &[(Key, NormalCmd)] = &[
+    (Key::Char('h'), NormalCmd::MoveCharLeft),
+    (Key::Char('l'), NormalCmd::MoveCharRight),
+    (Key::Char('j'), NormalCmd::MoveVisualLineDown),
+    (Key::Char('j'), NormalCmd::MoveLineDown),
+    (Key::Char('k'), NormalCmd::MoveVisualLineUp),
+    (Key::Char('k'), NormalCmd::MoveLineUp),
+    (Key::Home, NormalCmd::GotoLineStart),
+    (Key::End, NormalCmd::GotoLineEnd),
+    (Key::End, NormalCmd::VimGotoLineEnd),
+    (Key::Char('x'), NormalCmd::ExtendLineBelow),
+    (Key::Char('%'), NormalCmd::SelectAll),
+    (Key::Enter, NormalCmd::TableEnterCell),
+    (Key::Esc, NormalCmd::TableLeaveCell),
+    (Key::Tab, NormalCmd::TableNextCell),
+    (Key::BackTab, NormalCmd::TablePrevCell),
+    (Key::Ctrl('n'), NormalCmd::TwoThirdsPageDown),
+    (Key::Ctrl('p'), NormalCmd::TwoThirdsPageUp),
+    (Key::Ctrl('d'), NormalCmd::HalfPageDown),
+    (Key::Ctrl('u'), NormalCmd::HalfPageUp),
+    (Key::PageDown, NormalCmd::PageDown),
+    (Key::PageUp, NormalCmd::PageUp),
+    (Key::Char('y'), NormalCmd::Yank),
+    (Key::Char('y'), NormalCmd::OperatorYank),
+    (Key::Char('d'), NormalCmd::DeleteSelection),
+    (Key::Char('d'), NormalCmd::OperatorDelete),
+    (Key::Alt('d'), NormalCmd::DeleteSelectionNoyank),
+    (Key::Char('c'), NormalCmd::ChangeSelection),
+    (Key::Char('c'), NormalCmd::OperatorChange),
+    (Key::Alt('c'), NormalCmd::ChangeSelectionNoyank),
+    (Key::Char('p'), NormalCmd::PasteAfter),
+    (Key::Char('p'), NormalCmd::VimPasteAfter),
+    (Key::Char('P'), NormalCmd::PasteBefore),
+    (Key::Char('P'), NormalCmd::VimPasteBefore),
+    (Key::Char('R'), NormalCmd::ReplaceWithYanked),
+    (Key::Char('i'), NormalCmd::InsertMode),
+    (Key::Char('i'), NormalCmd::VimInsertMode),
+    (Key::Char('a'), NormalCmd::AppendMode),
+    (Key::Char('a'), NormalCmd::VimAppendMode),
+    (Key::Char('I'), NormalCmd::InsertAtLineStart),
+    (Key::Char('I'), NormalCmd::VimInsertAtLineStart),
+    (Key::Char('A'), NormalCmd::InsertAtLineEnd),
+    (Key::Char('A'), NormalCmd::VimInsertAtLineEnd),
+    (Key::Char('o'), NormalCmd::OpenBelow),
+    (Key::Char('o'), NormalCmd::VimOpenBelow),
+    (Key::Char('O'), NormalCmd::OpenAbove),
+    (Key::Char('O'), NormalCmd::VimOpenAbove),
+];
 
 impl Editor {
     // ---- Table mode (Feature #118) ----------------------------------------
@@ -4823,7 +4879,7 @@ impl Editor {
             // vim's own: a bare `d` no longer empties the cell, `dd` does.
             // `A-d` / `A-c` stay one stroke, and the helix preset is untouched.
             Key::Char(op @ ('d' | 'c' | 'y'))
-                if self.vim_keymap()
+                if self.as_vim()
                     && !self.extend
                     && self.sel.anchor() == self.sel.head() =>
             {
@@ -4938,6 +4994,52 @@ impl Editor {
             _ => return false,
         }
         true
+    }
+
+    /// **A command's meaning in a table's grid, when a binding or a group
+    /// runs it by name** (2026-11-01). A key pressed in the grid is read
+    /// by [`Self::table_motion`] as it always was; a command reached any
+    /// other way (`"n" = "move_char_right"`, `g h`, the palette) used to
+    /// skip it and move by a character where no caret is drawn. It goes
+    /// through the key [`TABLE_KEYS`] gives it now, so a name means the
+    /// same thing in the grid whichever way it is reached: the same action,
+    /// done to a cell. `true` when the grid took it.
+    ///
+    /// Not while keys are being played: those keys arrive at
+    /// `table_motion` themselves.
+    pub(super) fn table_takes(&mut self, cmd: NormalCmd, count: usize) -> bool {
+        if self.mode != Mode::Normal || self.expanding_alias || !self.table_here() {
+            return false;
+        }
+        let Some(&(key, _)) = TABLE_KEYS.iter().find(|(_, one)| *one == cmd) else { return false };
+        // A name is one twin or the other, whichever keymap is in use.
+        let vim = cmd.name().starts_with("vim_") || cmd.name().starts_with("operator_");
+        let mut took = false;
+        self.acting(vim, |e| took = e.table_motion(key, count));
+        took
+    }
+
+    /// **A table grid's keys, for the site** (`ye --docgen`): each key, in
+    /// the internal spelling, and the commands it means there.
+    pub fn table_keys_for_docs() -> Vec<(String, Vec<&'static str>)> {
+        let mut out: Vec<(String, Vec<&'static str>)> = Vec::new();
+        for (key, cmd) in TABLE_KEYS {
+            let key = super::keys::key_internal(*key);
+            match out.iter_mut().find(|(k, _)| *k == key) {
+                Some((_, names)) => names.push(cmd.name()),
+                None => out.push((key, vec![cmd.name()])),
+            }
+        }
+        out
+    }
+
+    /// `table_next_cell` / `table_prev_cell` while typing in a cell: the
+    /// step `Tab` takes there, the row lined up on the way.
+    pub(super) fn table_tab(&mut self, forward: bool) {
+        if self.mode == Mode::Insert && self.insert_bounds().is_some() {
+            self.format_md_table();
+            self.step_cell(forward, true);
+        }
     }
 
     /// Take a whole record, or the whole table — the two selection keys a

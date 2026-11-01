@@ -430,7 +430,10 @@ impl Editor {
                 if let Some(&(_, run, _)) = super::normal::normal_cmd(bind.run) {
                     let operator_count = self.operator_count;
                     let count = operator_count.unwrap_or(1).max(1);
-                    run(self, Cx { key, count, operator_count, continuing_zong });
+                    // `g h` in a table's grid is the record's first cell.
+                    if !self.table_takes(bind.run, count) {
+                        run(self, Cx { key, count, operator_count, continuing_zong });
+                    }
                 }
             }
             None if key == Key::Esc => {}

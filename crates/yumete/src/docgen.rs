@@ -167,6 +167,12 @@ fn actions() -> String {
     for (key, run) in yumete_core::editor::Editor::vim_runs_for_docs() {
         let _ = writeln!(out, "| {} | {} |", code(&cell(&keys_written(&[key]))), code(&cell(&run)));
     }
+    // A table's grid: what each key means there, by command (`[keys.table]`).
+    out.push_str("\n### In a table's grid (`[keys.table]`)\n\n| Key | Command |\n| --- | --- |\n");
+    for (key, names) in yumete_core::editor::Editor::table_keys_for_docs() {
+        let names: Vec<String> = names.iter().map(|n| format!("`{n}`")).collect();
+        let _ = writeln!(out, "| {} | {} |", code(&cell(&keys_written(&[key]))), names.join(" "));
+    }
     // A prompt's, a picker's and a sidebar's (step 9), each under its table.
     for (place, rows) in yumete_core::editor::Editor::place_commands_for_docs() {
         let _ = writeln!(out, "\n### `[keys.{}]`\n\n| Command | What it does | Keys |\n| --- | --- | --- |", place.name());

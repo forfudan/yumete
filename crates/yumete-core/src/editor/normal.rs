@@ -582,9 +582,13 @@ impl Editor {
     /// the command answers to by default (commands sharing one body tell
     /// their names apart by it). `false` when no command has the name.
     pub(super) fn run_normal(&mut self, name: &str) -> bool {
-        let Some(&(_, run, key)) = normal_command(name) else { return false };
+        let Some(&(cmd, run, key)) = normal_command(name) else { return false };
         let operator_count = self.count;
         let count = self.take_count();
+        // In a table's grid a name means its action done to a cell.
+        if self.table_takes(cmd, count) {
+            return true;
+        }
         run(self, Cx { key, count, operator_count, continuing_zong: false });
         true
     }
@@ -643,7 +647,9 @@ impl Editor {
         let Some(&(_, run, _)) = normal_cmd(cmd) else { return };
         let was = self.extend;
         self.extend = true;
-        run(self, cx);
+        if !self.table_takes(cmd, cx.count) {
+            run(self, cx);
+        }
         if self.pending != Pending::None || self.jumping() {
             self.motion_extend = Some(true);
         }

@@ -2013,6 +2013,20 @@ zhs = "删除这一栏"
 en = "delete this column"
 
 [[message]]
+# 命令說明：table_enter_cell（草稿）
+key = "action.table-enter-cell"
+zht = "進格子裏(按字走)"
+zhs = "进格子里(按字走)"
+en = "into the cell, to move by character"
+
+[[message]]
+# 命令說明：table_leave_cell（草稿）
+key = "action.table-leave-cell"
+zht = "出格子(回到按格走)"
+zhs = "出格子(回到按格走)"
+en = "out of the cell, to move by cell again"
+
+[[message]]
 # 命令說明：table_move_column_left（草稿）
 key = "action.table-move-column-left"
 zht = "這欄左移"
@@ -2041,6 +2055,13 @@ zhs = "这行上移"
 en = "move this row up"
 
 [[message]]
+# 命令說明：table_next_cell（草稿）
+key = "action.table-next-cell"
+zht = "下一格，行尾接下一行"
+zhs = "下一格，行尾接下一行"
+en = "the next cell, on to the next record at the end of this one"
+
+[[message]]
 # 命令說明：table_paste_column_left（草稿）
 key = "action.table-paste-column-left"
 zht = "把複製的欄貼到左邊"
@@ -2053,6 +2074,13 @@ key = "action.table-paste-column-right"
 zht = "把複製的欄貼到右邊"
 zhs = "把复制的栏贴到右边"
 en = "paste the yanked column to the right"
+
+[[message]]
+# 命令說明：table_prev_cell（草稿）
+key = "action.table-prev-cell"
+zht = "上一格"
+zhs = "上一格"
+en = "the previous cell"
 
 [[message]]
 # 命令說明：table_sort_ascending（草稿）

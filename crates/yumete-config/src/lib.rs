@@ -2573,6 +2573,10 @@ pub struct KeyConfig {
     pub select: HashMap<String, Vec<String>>,
     /// Insert mode's lines (`[keys.insert]`).
     pub insert: HashMap<String, Vec<String>>,
+    /// **A table grid's own lines** (`[keys.table]`, 2026-11-01), laid over
+    /// `normal`'s as `select` is: a table's grid takes every Normal-mode
+    /// line too.
+    pub table: HashMap<String, Vec<String>>,
     /// **A prompt's, a picker's and a sidebar's lines** (`[keys.prompt]`,
     /// `[keys.picker]`, `[keys.sidebar]`; 2026-11-01): one key a line, its
     /// commands from that place's own list (`yumete_cjk::actions::Place`).
@@ -2617,6 +2621,7 @@ impl Default for KeyConfig {
             normal: HashMap::new(),
             select: HashMap::new(),
             insert: HashMap::new(),
+            table: HashMap::new(),
             prompt: HashMap::new(),
             picker: HashMap::new(),
             sidebar: HashMap::new(),
@@ -3182,6 +3187,7 @@ impl Config {
                             let bound = !parsed.keys.normal.is_empty()
                                 || !parsed.keys.select.is_empty()
                                 || !parsed.keys.insert.is_empty()
+                                || !parsed.keys.table.is_empty()
                                 || !parsed.keys.prompt.is_empty()
                                 || !parsed.keys.picker.is_empty()
                                 || !parsed.keys.sidebar.is_empty()
@@ -3190,6 +3196,7 @@ impl Config {
                                 parsed.keys.normal.clear();
                                 parsed.keys.select.clear();
                                 parsed.keys.insert.clear();
+                                parsed.keys.table.clear();
                                 // A prompt's `Enter` runs a command line too.
                                 parsed.keys.prompt.clear();
                                 parsed.keys.picker.clear();
@@ -4183,6 +4190,8 @@ struct RawKeys {
     #[serde(default)]
     insert: toml::Table,
     #[serde(default)]
+    table: toml::Table,
+    #[serde(default)]
     prompt: toml::Table,
     #[serde(default)]
     picker: toml::Table,
@@ -4468,6 +4477,7 @@ impl RawConfig {
         merge_key_tables(&mut self.keys.normal, other.keys.normal);
         merge_key_tables(&mut self.keys.select, other.keys.select);
         merge_key_tables(&mut self.keys.insert, other.keys.insert);
+        merge_key_tables(&mut self.keys.table, other.keys.table);
         merge_key_tables(&mut self.keys.prompt, other.keys.prompt);
         merge_key_tables(&mut self.keys.picker, other.keys.picker);
         merge_key_tables(&mut self.keys.sidebar, other.keys.sidebar);
@@ -4996,9 +5006,11 @@ impl RawConfig {
         read_key_table("normal", &self.keys.normal, &mut keys.normal, &mut keys.labels, problems);
         read_key_table("select", &self.keys.select, &mut keys.select, &mut keys.labels, problems);
         read_key_table("insert", &self.keys.insert, &mut keys.insert, &mut keys.insert_labels, problems);
+        read_key_table("table", &self.keys.table, &mut keys.table, &mut keys.labels, problems);
         config.keys.normal = keys.normal;
         config.keys.select = keys.select;
         config.keys.insert = keys.insert;
+        config.keys.table = keys.table;
         config.keys.labels = keys.labels;
         config.keys.insert_labels = keys.insert_labels;
         use yumete_cjk::actions::Place;
@@ -5008,10 +5020,10 @@ impl RawConfig {
         config.keys.field = read_place_table(Place::Field, &self.keys.field, problems);
         for (name, _) in &self.keys.strays {
             problems.push(said(
-                format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、prompt、picker、sidebar、field"),
+                format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、table、prompt、picker、sidebar、field"),
                 format!(
                     "[keys.{name}] is not a table yumete reads, so it was skipped; \
-                     the tables are normal, select, insert, prompt, picker, sidebar and field"
+                     the tables are normal, select, insert, table, prompt, picker, sidebar and field"
                 ),
             ));
         }
@@ -5034,6 +5046,7 @@ struct KeyBindings {
     normal: HashMap<String, Vec<String>>,
     select: HashMap<String, Vec<String>>,
     insert: HashMap<String, Vec<String>>,
+    table: HashMap<String, Vec<String>>,
     labels: HashMap<String, String>,
     insert_labels: HashMap<String, String>,
 }

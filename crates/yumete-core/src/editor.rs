@@ -2541,6 +2541,11 @@ pub struct Editor {
     /// (the preset's are under them), and select mode's.
     user_aliases: HashMap<String, Vec<String>>,
     user_select: HashMap<String, Vec<String>>,
+    /// A table grid's own lines (`[keys.table]`), and the two maps they are
+    /// laid into (Normal's and select mode's, with them on top).
+    user_table: HashMap<String, Vec<String>>,
+    table_aliases: HashMap<String, Vec<String>>,
+    table_select_aliases: HashMap<String, Vec<String>>,
     /// The names the reader gave their own groups, by the keys that open
     /// them (`label` in a `[keys.normal.…]` table), internal spelling.
     key_labels: HashMap<String, String>,
@@ -4119,6 +4124,9 @@ impl Editor {
             select_aliases: HashMap::new(),
             user_aliases: HashMap::new(),
             user_select: HashMap::new(),
+            user_table: HashMap::new(),
+            table_aliases: HashMap::new(),
+            table_select_aliases: HashMap::new(),
             key_labels: HashMap::new(),
             insert_aliases: HashMap::new(),
             insert_held: String::new(),

@@ -597,6 +597,10 @@ normal_commands! {
     TableSearchColumns = "table_search_columns",
     TableSearchColumnsOtherWindow = "table_search_columns_other_window",
     TableGotoCell = "table_goto_cell",
+    TableEnterCell = "table_enter_cell",
+    TableLeaveCell = "table_leave_cell",
+    TableNextCell = "table_next_cell",
+    TablePrevCell = "table_prev_cell",
     TableYankColumn = "table_yank_column",
     TableReplaceColumn = "table_replace_column",
     TablePasteColumnRight = "table_paste_column_right",
@@ -1051,6 +1055,12 @@ pub const ALL: &[Action] = &[
     normal("hint.table.search-columns", NormalCmd::TableSearchColumns),
     normal("hint.table.search-columns-elsewhere", NormalCmd::TableSearchColumnsOtherWindow),
     normal("hint.table.go-to-cell", NormalCmd::TableGotoCell),
+    // ---- A table's grid (2026-11-01): the four keys whose table meaning is
+    // its own; every other key there is its Normal command, done to a cell.
+    normal("action.table-enter-cell", NormalCmd::TableEnterCell),
+    normal("action.table-leave-cell", NormalCmd::TableLeaveCell),
+    normal("action.table-next-cell", NormalCmd::TableNextCell),
+    normal("action.table-prev-cell", NormalCmd::TablePrevCell),
     normal("action.table-yank-column", NormalCmd::TableYankColumn),
     normal("hint.table.replace-column", NormalCmd::TableReplaceColumn),
     normal("action.table-paste-column-right", NormalCmd::TablePasteColumnRight),

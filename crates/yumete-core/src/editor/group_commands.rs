@@ -318,6 +318,14 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::TableSearchColumns, |e, _| e.table_structure(Key::Char('/')), Key::Char('/')),
     (NormalCmd::TableSearchColumnsOtherWindow, |e, _| e.table_structure(Key::Char('?')), Key::Char('?')),
     (NormalCmd::TableGotoCell, |e, _| e.table_structure(Key::Char('g')), Key::Char('g')),
+    // **The grid's own four** (2026-11-01). In a table's grid they are
+    // reached through `table_takes`, as its `Enter`, `Esc`, `Tab` and
+    // `S-Tab`; outside one only the cell steps do anything, in a cell while
+    // typing (where `Tab` is the same step).
+    (NormalCmd::TableEnterCell, |_, _| {}, Key::Enter),
+    (NormalCmd::TableLeaveCell, |_, _| {}, Key::Esc),
+    (NormalCmd::TableNextCell, |e, _| e.table_tab(true), Key::Tab),
+    (NormalCmd::TablePrevCell, |e, _| e.table_tab(false), Key::BackTab),
     (NormalCmd::TableYankColumn, |e, _| e.table_structure(Key::Char('y')), Key::Char('y')),
     (NormalCmd::TableReplaceColumn, |e, _| e.table_structure(Key::Char('v')), Key::Char('v')),
     (NormalCmd::TablePasteColumnRight, |e, _| e.table_structure(Key::Char('p')), Key::Char('p')),

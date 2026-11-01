@@ -1035,6 +1035,7 @@ pub const NOT_IN_THE_PANEL: &[&str] = &[
     // The same, for select and Insert mode (2026-10-31).
     "keys.select",
     "keys.insert",
+    "keys.table",
     // And for a prompt, a picker and a sidebar (2026-11-01).
     "keys.prompt",
     "keys.picker",
