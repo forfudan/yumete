@@ -692,6 +692,11 @@ pub const ALL: &[Action] = &[
     normal("vim_match_brackets", "action.vim-match-brackets"),
     normal("vim_kill_to_line_start", "action.vim-kill-to-line-start"),
     normal("vim_kill_to_line_end", "action.vim-kill-to-line-end"),
+    normal("vim_flip_selections", "action.vim-flip-selections"),
+    normal("vim_switch_to_lowercase", "action.vim-switch-to-lowercase"),
+    normal("vim_switch_to_uppercase", "action.vim-switch-to-uppercase"),
+    normal("vim_yank", "action.vim-yank"),
+    normal("vim_visual_block_mode", "action.vim-visual-block-mode"),
 ];
 
 #[cfg(test)]

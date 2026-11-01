@@ -546,7 +546,7 @@ impl Editor {
         // `ab (cd) ef` selects nothing; vim 9.1 and nvim 0.12.5 take `(cd)`).
         // So the step ahead below is vim's alone, and so is a quote found
         // ahead on the line by `quoted`'s vim rule.
-        let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
+        let vim = self.vim_keymap();
         let enclosing = family
             .iter()
             .filter_map(|&(open, close)| match open == close {
@@ -1301,7 +1301,7 @@ impl Editor {
         }?;
         if count > 1 && rope.char(found.0) == rope.char(found.1) {
             // helix's `2md"`: the second quote out on each side.
-            return match self.key_preset == yumete_cjk::KeyPreset::Vim {
+            return match self.vim_keymap() {
                 true => None,
                 false => super::nth_quotes_out(rope, here, rope.char(found.0), count),
             };
@@ -1702,7 +1702,7 @@ impl Editor {
     /// 左是上一行的最後一個字，兩個都不是換行符本身）。
     /// helix 鍵位照舊：那一邊「走一頁」是有意的，記在上面 `h`/`l` 那一條。
     fn on_this_line_under_vim(&self, pos: usize, flag: Option<char>) -> usize {
-        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+        if !self.vim_keymap() {
             return pos;
         }
         // Warning: **是「跨」不是「不攔」。** 直接放行會讓光標停在換行符上，而
@@ -2364,7 +2364,7 @@ impl Editor {
         // break and it takes a third `l` to reach `c`. vim's caret has nowhere
         // to be there ([`Self::keep_off_the_newline`]), so there one press
         // takes the whole step.
-        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+        if !self.vim_keymap() {
             return Some(pos);
         }
         let at = match forward {
@@ -2450,7 +2450,7 @@ impl Editor {
             // has no soft wrap and breaks on empty lines. `d}` was 184/184
             // against nvim before this.
             motion::Motion::Paragraph { forward } if caret => {
-                match (forward, self.key_preset == yumete_cjk::KeyPreset::Vim) {
+                match (forward, self.vim_keymap()) {
                     (true, true) => at(motion::vim_next_paragraph(rope, self.sel.head())),
                     (false, true) => at(motion::vim_prev_paragraph(rope, self.sel.head())),
                     (true, false) => at(motion::next_paragraph(rope, self.sel.head())),
@@ -2462,7 +2462,7 @@ impl Editor {
             // （`keys.rs` 那三支的次序寫明了），所以問一句預設就把兩套分開了，
             // 不必動 #404 那個句子對象。
             motion::Motion::Sentence { forward } if caret => {
-                let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
+                let vim = self.vim_keymap();
                 match (forward, vim) {
                     (true, true) => at(motion::vim_next_sentence(rope, self.sel.head())),
                     (false, true) => at(motion::vim_prev_sentence(rope, self.sel.head())),
@@ -2472,21 +2472,21 @@ impl Editor {
             }
             motion::Motion::WordForward(grain) => {
                 let span = motion::word_forward(rope, self.sel.head(), grain, seg);
-                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                match self.vim_keymap() {
                     true => span,
                     false => motion::past_the_breaks(rope, self.sel.head(), span, grain, seg),
                 }
             }
             motion::Motion::WordEnd(grain) => {
                 let span = motion::word_end(rope, self.sel.head(), grain, seg);
-                match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                match self.vim_keymap() {
                     true => span,
                     false => motion::past_the_breaks(rope, self.sel.head(), span, grain, seg),
                 }
             }
             motion::Motion::WordBack(grain) => motion::word_back(rope, self.sel.head(), grain, seg),
             motion::Motion::Find { forward, target, till } => {
-                let across = self.key_preset != yumete_cjk::KeyPreset::Vim;
+                let across = !self.vim_keymap();
                 motion::find_char(rope, self.sel.head(), forward, target, till, nth, across)
             }
             // **The gotos collapse**, so they say so in the span: both ends at
@@ -2509,7 +2509,7 @@ impl Editor {
             // **Paragraphs and sentences keep the same forward rule as words**
             // (B1): it was written three times before this, once per unit.
             motion::Motion::Paragraph { forward } => {
-                let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
+                let vim = self.vim_keymap();
                 match (forward, vim) {
                     (true, true) => {
                         motion::unit_forward(rope, self.sel.head(), motion::vim_next_paragraph)

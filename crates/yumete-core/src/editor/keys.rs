@@ -216,27 +216,6 @@ impl Editor {
             }
             Mode::Normal => {
                 self.back_from_the_pair_shown();
-                let vim_quiet = self.key_preset == yumete_cjk::KeyPreset::Vim
-                    && self.pending == Pending::None
-                    && self.alias_held.is_empty();
-                // **`C-v` opens a block** (2026-10-27), vim's blockwise visual.
-                if vim_quiet && key == Key::Ctrl('v') {
-                    self.toggle_block();
-                    return KeyOutcome::Continue;
-                }
-                // **…and `p` puts a block back as one** (`:h v_b_p`'s
-                // other half: a block taken is a block pasted).
-                if vim_quiet
-                    && self.register_block
-                    && self.pending_register.is_none()
-                    && matches!(key, Key::Char('p' | 'P'))
-                {
-                    self.paste_block(key == Key::Char('p'));
-                    if watching {
-                        self.finish_watching();
-                    }
-                    return KeyOutcome::Continue;
-                }
                 // **Judged by the key it becomes** (2026-10-31): a one-key
                 // binding (`"C-q" = "@w"`) is swapped inside
                 // `on_normal_key`, after this choice, so `w` there moved
@@ -293,7 +272,7 @@ impl Editor {
                 // Normal mode, where an end is the character itself. `a`'s is
                 // stored as it stands, head past the end, because helix stores
                 // it so: `w` `a` `X` `Esc` `u` gives back `foo b` there, measured.
-                if self.mode == Mode::Insert && self.key_preset != yumete_cjk::KeyPreset::Vim {
+                if self.mode == Mode::Insert && !self.vim_keymap() {
                     let rope = self.current_buffer().rope().clone();
                     let mut every = self.sel.clone();
                     every.map(|one| match one.anchor > one.head {
@@ -452,7 +431,7 @@ impl Editor {
     /// 最後那個換行符後面的空行，`j` 下得去而 nvim 眼裏没有它：掃神諭 2256 格裏
     /// 34 格不同，**25 格全是它**（`jjhhhhhhhhhhx` 那一式）。
     fn keep_off_the_newline(&mut self) {
-        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+        if !self.vim_keymap() {
             return;
         }
         // Warning: **`vim_lines && extend`，不是光看 `vim_lines`**（2026-10-06 寫這一支
@@ -482,7 +461,7 @@ impl Editor {
     /// 不去（`~` 表示这里有个结尾换行符而已），helix keymap 進得去。」前一半是
     /// 畫法：那一格照畫，`~` 當行號，同 helix。
     pub(super) fn vim_cannot_reach(&self, rope: &crate::Rope, pos: usize) -> bool {
-        self.key_preset == yumete_cjk::KeyPreset::Vim
+        self.vim_keymap()
             && self.mode == Mode::Normal
             && !(self.vim_lines && self.extend)
             && rope.char_to_line(pos) > self.last_real_line(rope)
@@ -748,36 +727,6 @@ impl Editor {
         self.last_edit_keys = std::mem::take(&mut self.edit_keys);
     }
 
-    /// Press `keys` as though they had been typed, **without** reading them
-    /// as aliases again — an alias whose expansion uses its own key would
-    /// otherwise call itself forever — and without recording them twice.
-    ///
-    /// A count typed before the alias goes to the first key that acts, not to
-    /// a leading `;`: `2x` is `;` then `2D`, and `3dd` is `3x` then `d`.
-    /// **One key of a vim operator's motion** (#429, 2026-09-18).
-    ///
-    /// `d`, `c` and `y` in vim are operators: they wait, and what they wait
-    /// for is a motion. This editor has no operators — a motion here *is* a
-    /// selection, so `d` acts on what is already selected — which is why the
-    /// translation table could offer `dw` and `dd` and nothing else. The wait
-    /// is what this adds, and once there is a wait every motion the editor
-    /// already has comes with it: `d$`, `de`, `dG`, `df,`, `di(`.
-    ///
-    /// **How it is carried out**: 延伸模式, the motion, and then the action —
-    /// `v` `w` `D` for `dw`. `v` is what makes the steps add up, so a count
-    /// works; `X` is added for the line-wise ones (`dj` takes both lines
-    /// whole, as vim does); a text object needs neither, because `mi(` *is*
-    /// the selection.
-    ///
-    /// Warning: **The action is the cutting one.** vim's `d` fills the unnamed
-    /// register — `dd` then `p` puts the line back — so it is this editor's
-    /// `D` (剪切), not its `d` (刪除，不動寄存器).
-    /// Whether the reader's own `[keys.normal]` claims a key — the preset's
-    /// own lines do not count (2026-10-06).
-    fn user_bound(&self, c: char) -> bool {
-        let one = c.to_string();
-        self.user_aliases.keys().any(|k| k.starts_with(&one))
-    }
 
     /// **vim 的可視模式那八個鍵**，表在呼叫處（2026-10-06）。
     ///
@@ -828,6 +777,67 @@ impl Editor {
         (start + column).min(motion::line_last(rope, start)).max(start)
     }
 
+    // **vim's Visual mode acts on the whole selection** (2026-10-06): `o`
+    // to its other end, `x` `s` delete and change it, `u` `U` `~` change its
+    // case, `p` writes the register over it, `y` yanks it, and each leaves
+    // Visual mode. They were taken ahead of the keymap; since 2026-11-01 they
+    // are rows of the vim keymap's table (`typed_extending`), so a reader's
+    // own binding of one of these keys still wins, and vim's `x`/`s` aliases
+    // (`;{n}D`, written for Normal mode) are left out of select mode.
+    /// **`J`, `>` and `<` in vim's Visual mode** (`:h v_J`, `:h v_>`): act on
+    /// the lines and leave Visual mode, the cursor on the seam for `J` and
+    /// back in its column for the others; `.` repeats them as the
+    /// Normal-mode command they were. Run by `vim_join_selections`,
+    /// `vim_indent` and `vim_unindent` while extending.
+    pub(super) fn vim_visual_lines(&mut self, key: Key, c: char) {
+        // The cursor's own column, read before a linewise
+        // selection is widened to whole lines (nvim keeps it).
+        // Under `V` the selection already reaches the line's end, so
+        // the column is the one `V` was pressed in. (Not yet followed
+        // through `h`/`l` inside `V`, which vim does.)
+        let column = match self.vim_lines {
+            true => self.vim_line_column,
+            false => {
+                let rope = self.current_buffer().rope();
+                let head = self.sel.head().min(rope.len_chars());
+                head - rope.line_to_char(rope.char_to_line(head))
+            }
+        };
+        if self.vim_lines {
+            self.extend_to_line_bounds();
+            self.vim_lines = false;
+        }
+        let (line, lines) = {
+            let rope = self.current_buffer().rope();
+            let (start, end) = self.selection();
+            let line = rope.char_to_line(start);
+            let last = rope.char_to_line(end.saturating_sub(1).max(start));
+            (line, last - line + 1)
+        };
+        let was = std::mem::replace(&mut self.expanding_alias, true);
+        self.on_normal_key(key);
+        self.expanding_alias = was;
+        // **`.` repeats it as the Normal-mode command it was**
+        // (2026-10-30): `3>>` for three lines indented, `3J` for
+        // three joined. Recorded as the bare `>` it was a waiting
+        // operator that ate the next keys.
+        let mut again: Vec<Key> = lines.to_string().chars().map(Key::Char).collect();
+        match c {
+            'J' => again.push(Key::Char('J')),
+            _ => again.extend([Key::Char(c), Key::Char(c)]),
+        }
+        self.block_repeat = Some(again);
+        self.extend = false;
+        let to = match c {
+            'J' => self.sel.head(),
+            _ => self.column_on_line(line, column),
+        };
+        self.sel.set_anchor(to);
+        self.sel.set_head(to);
+        self.refresh_goal_column();
+        self.clamp_cursor();
+    }
+
     pub(super) fn vim_visual_key(&mut self, c: char) {
         // `x`/`s` 原樣轉交：`d`/`c` 那兩個 arm 自己管整行與計數。
         if matches!(c, 'x' | 's') {
@@ -873,6 +883,24 @@ impl Editor {
         self.clamp_cursor();
     }
 
+    /// **One key of a vim operator's motion** (#429, 2026-09-18).
+    ///
+    /// `d`, `c` and `y` in vim are operators: they wait, and what they wait
+    /// for is a motion. This editor has no operators — a motion here *is* a
+    /// selection, so `d` acts on what is already selected — which is why the
+    /// translation table could offer `dw` and `dd` and nothing else. The wait
+    /// is what this adds, and once there is a wait every motion the editor
+    /// already has comes with it: `d$`, `de`, `dG`, `df,`, `di(`.
+    ///
+    /// **How it is carried out**: 延伸模式, the motion, and then the action —
+    /// `v` `w` `D` for `dw`. `v` is what makes the steps add up, so a count
+    /// works; `X` is added for the line-wise ones (`dj` takes both lines
+    /// whole, as vim does); a text object needs neither, because `mi(` *is*
+    /// the selection.
+    ///
+    /// Warning: **The action is the cutting one.** vim's `d` fills the unnamed
+    /// register — `dd` then `p` puts the line back — so it is this editor's
+    /// `D` (剪切), not its `d` (刪除，不動寄存器).
     fn vim_operator_key(&mut self, op: char, first: Option<char>, key: Key) {
         // Warning: **Let go of the wait before doing anything** (2026-09-18): what
         // runs below reads `pending`, and an operator still holding the wait
@@ -1664,6 +1692,12 @@ impl Editor {
         }
     }
 
+    /// Press `keys` as though they had been typed, **without** reading them
+    /// as aliases again — an alias whose expansion uses its own key would
+    /// otherwise call itself forever — and without recording them twice.
+    ///
+    /// A count typed before the alias goes to the first key that acts, not to
+    /// a leading `;`: `2x` is `;` then `2D`, and `3dd` is `3x` then `d`.
     fn play_keys(&mut self, keys: &str) {
         // Warning: **Saved and restored, not set and cleared** (2026-09-19). An
         // operator inside an expansion replays its motion through this same
@@ -1840,88 +1874,6 @@ impl Editor {
             _ => {}
         }
 
-        // **vim 的可視模式，那五個按下去會改錯字的鍵**（2026-10-06）。
-        //
-        // 這一段要寫在別名層**前面**：`x`/`s` 在 vim 鍵位表上是 `;{n}D`/`;{n}Di`，
-        // 而那個 `;` 是「收成一點」——它是為 Normal 寫的，可視模式下照收，於是
-        // `vjx` 只刪一個字符。vim 的可視模式下這五個都是對**整個選區**動手：
-        //
-        // | 鍵 | vim | 這裏從前 |
-        // | --- | --- | --- |
-        // | `o` | 換到選區的另一頭 | 開一行並進插入（`vjo` 在稿子裏留下一行） |
-        // | `x` `s` | 刪/改選區 | 先收成一點，只動一個字 |
-        // | `u` `U` | 轉小寫/大寫 | 撤銷/重做（`dwvju` 把 `dw` 撤了） |
-        // | `p` | 用寄存器換掉選區 | 粘貼在後面 |
-        // | `~` | 選區大小寫互換 | 只換一個字 |
-        //
-        // Warning: **只在 vim 鍵位下**。helix 的 select mode 裏這幾個鍵就是 Normal
-        // 那幾件事（它靠 `A-;` 換頭、`` ` `` 轉大小寫），兩邊各跟各的。
-        //
-        // Warning: **使用者自己綁過的鍵不搶**（2026-10-06 夜審報的）。這一段在別名層
-        // 前面，搶的本來連 `[keys.normal]` 一起搶了——而手冊寫着「你自己寫的，蓋
-        // 過預設裏同一個鍵」。`user_aliases` 是没摻預設的那一層，問它就分得開。
-        if self.key_preset == yumete_cjk::KeyPreset::Vim && self.extend && !self.expanding_alias {
-            if let Key::Char(c) = key {
-                if matches!(c, 'o' | 'u' | 'U' | '~' | 'p' | 'x' | 's' | 'y') && !self.user_bound(c) {
-                    return self.vim_visual_key(c);
-                }
-                // **`J`, `>` and `<` end Visual mode** (`:h v_J`, `:h v_>`,
-                // 2026-10-30, measured against nvim): they act on the lines and
-                // leave Normal mode behind them, the cursor on the seam for `J`
-                // and, for the indents, in the column it was in (nvim's
-                // `nostartofline`). They used to leave SEL on, so the next `i`
-                // began a text object.
-                if matches!(c, 'J' | '>' | '<') && !self.user_bound(c) {
-                    // The cursor's own column, read before a linewise
-                    // selection is widened to whole lines (nvim keeps it).
-                    // Under `V` the selection already reaches the line's end, so
-                    // the column is the one `V` was pressed in. (Not yet followed
-                    // through `h`/`l` inside `V`, which vim does.)
-                    let column = match self.vim_lines {
-                        true => self.vim_line_column,
-                        false => {
-                            let rope = self.current_buffer().rope();
-                            let head = self.sel.head().min(rope.len_chars());
-                            head - rope.line_to_char(rope.char_to_line(head))
-                        }
-                    };
-                    if self.vim_lines {
-                        self.extend_to_line_bounds();
-                        self.vim_lines = false;
-                    }
-                    let (line, lines) = {
-                        let rope = self.current_buffer().rope();
-                        let (start, end) = self.selection();
-                        let line = rope.char_to_line(start);
-                        let last = rope.char_to_line(end.saturating_sub(1).max(start));
-                        (line, last - line + 1)
-                    };
-                    let was = std::mem::replace(&mut self.expanding_alias, true);
-                    self.on_normal_key(key);
-                    self.expanding_alias = was;
-                    // **`.` repeats it as the Normal-mode command it was**
-                    // (2026-10-30): `3>>` for three lines indented, `3J` for
-                    // three joined. Recorded as the bare `>` it was a waiting
-                    // operator that ate the next keys.
-                    let mut again: Vec<Key> = lines.to_string().chars().map(Key::Char).collect();
-                    match c {
-                        'J' => again.push(Key::Char('J')),
-                        _ => again.extend([Key::Char(c), Key::Char(c)]),
-                    }
-                    self.block_repeat = Some(again);
-                    self.extend = false;
-                    let to = match c {
-                        'J' => self.sel.head(),
-                        _ => self.column_on_line(line, column),
-                    };
-                    self.sel.set_anchor(to);
-                    self.sel.set_head(to);
-                    self.refresh_goal_column();
-                    self.clamp_cursor();
-                    return;
-                }
-            }
-        }
 
         // Apply user key aliases (config `[keys.normal]`) to command keys only;
         // pending operator targets above are taken literally.
@@ -2135,7 +2087,7 @@ impl Editor {
         // 正是一縱——所以轉進去是對的，這一條只分 vim 出來。底下那幾臂
         // （`move_textual_line`／`step_sideways`）本來就是 vim 那一套行文的意思，
         // 交還給它們就是答案，竪排不必再寫一份。
-        let vim_has_its_own = follow_the_text && self.key_preset == yumete_cjk::KeyPreset::Vim;
+        let vim_has_its_own = follow_the_text && self.vim_keymap();
         let key = match follow_the_text && !vim_has_its_own {
             false => key,
             true => match key {

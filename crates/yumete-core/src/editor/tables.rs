@@ -4823,7 +4823,7 @@ impl Editor {
             // vim's own: a bare `d` no longer empties the cell, `dd` does.
             // `A-d` / `A-c` stay one stroke, and the helix preset is untouched.
             Key::Char(op @ ('d' | 'c' | 'y'))
-                if self.key_preset == yumete_cjk::KeyPreset::Vim
+                if self.vim_keymap()
                     && !self.extend
                     && self.sel.anchor() == self.sel.head() =>
             {

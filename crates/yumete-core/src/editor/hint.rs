@@ -432,7 +432,7 @@ impl Editor {
                 // written. Typing `10` put a `10` in the HUD and said nothing
                 // else.
                 let n = self.count?;
-                let rows = match self.key_preset == yumete_cjk::KeyPreset::Vim {
+                let rows = match self.vim_keymap() {
                     true => Self::COUNT_KEYS_VIM,
                     false => Self::COUNT_KEYS,
                 };

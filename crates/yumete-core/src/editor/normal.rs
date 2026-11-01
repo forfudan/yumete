@@ -196,6 +196,13 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("decrement", |e, cx| e.acting(false, |e| e.cmd_decrement(cx)), Key::Ctrl('x')),
     ("vim_decrement", |e, cx| e.acting(true, |e| e.cmd_decrement(cx)), Key::Ctrl('x')),
     ("vim_repeat_last_change", |e, cx| e.acting(true, |e| e.cmd_vim_repeat_last_change(cx)), Key::Char('.')),
+    // vim's Visual mode's own (`:h v_o`, `:h v_u`, `:h v_y`), and its
+    // blockwise one (`C-v`).
+    ("vim_flip_selections", |e, _| e.vim_visual_key('o'), Key::Char('o')),
+    ("vim_switch_to_lowercase", |e, _| e.vim_visual_key('u'), Key::Char('u')),
+    ("vim_switch_to_uppercase", |e, _| e.vim_visual_key('U'), Key::Char('U')),
+    ("vim_yank", |e, _| e.vim_visual_key('y'), Key::Char('y')),
+    ("vim_visual_block_mode", |e, _| e.toggle_block(), Key::Ctrl('v')),
     ("repeat_last_change", |e, cx| e.acting(false, |e| e.cmd_repeat_last_change(cx)), Key::Char('.')),
     ("repeat_last_motion", Editor::cmd_repeat_last_motion, Key::Alt('.')),
     // helix's: bound to a key, it unbinds it, and the key leaves its menu.
@@ -367,6 +374,14 @@ pub(super) const VIM_NORMAL: &[(Key, &str, Option<When>)] = &[
     // **vim's own versions of helix's commands** (2026-11-01, step 8 of the
     // keymap plan): the same keys, the `vim_` twin of each command, so
     // `insert_mode` means helix's `i` under either keymap.
+    // vim's Visual mode: these act on the whole selection and leave it.
+    (Key::Char('o'), "vim_flip_selections", Some(when::typed_extending)),
+    (Key::Char('u'), "vim_switch_to_lowercase", Some(when::typed_extending)),
+    (Key::Char('U'), "vim_switch_to_uppercase", Some(when::typed_extending)),
+    (Key::Char('y'), "vim_yank", Some(when::typed_extending)),
+    (Key::Char('x'), "delete_selection", Some(when::typed_extending)),
+    (Key::Char('s'), "change_selection", Some(when::typed_extending)),
+    (Key::Ctrl('v'), "vim_visual_block_mode", Some(when::typed)),
     (Key::Char('i'), "vim_insert_mode", None),
     (Key::Char('a'), "vim_append_mode", None),
     (Key::Char('I'), "vim_insert_at_line_start", None),
@@ -421,6 +436,11 @@ mod when {
 
     pub(super) fn extending(e: &Editor, _: &Cx) -> bool {
         e.extend
+    }
+
+    /// Extending, by a key typed rather than played by a binding.
+    pub(super) fn typed_extending(e: &Editor, _: &Cx) -> bool {
+        e.extend && !e.expanding_alias
     }
 
 }
@@ -572,7 +592,7 @@ impl Editor {
     /// the vim preset's own entry when it has one whose condition holds,
     /// helix's otherwise.
     pub(super) fn normal_command_for(&self, cx: &Cx) -> Option<&'static str> {
-        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+        if self.vim_keymap() {
             let vim = VIM_NORMAL
                 .iter()
                 .find(|(key, _, when)| *key == cx.key && when.is_none_or(|holds| holds(self, cx)));
@@ -1378,7 +1398,7 @@ impl Editor {
         // 攔下來的）。vim 的可視模式裏 `x` 刪的是**整段選區**，跨幾行就跨幾行；
         // 那一支把 `x` 當成 `d` 轉進來（`vim_visual_key`），`extend` 還掛着，
         // 問它就分得開。不夾的只是這一種：Normal 的 `x` 從來没有真選區。
-        let (anchor, head) = match self.key_preset == yumete_cjk::KeyPreset::Vim
+        let (anchor, head) = match self.vim_keymap()
             && !whole_lines
             && !self.extend
         {
@@ -1420,6 +1440,14 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_paste(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // vim's: a block taken is a block pasted (`:h v_b_p`), and Visual
+        // `p` writes the register over the selection.
+        if self.as_vim() && self.register_block && self.pending_register.is_none() {
+            return self.paste_block(key == Key::Char('p'));
+        }
+        if self.as_vim() && self.extend && !self.expanding_alias && key == Key::Char('p') {
+            return self.vim_visual_key('p');
+        }
         let Key::Char(c) = key else { return };
         self.paste_copies = count.clamp(1, Self::WRITING_MAX);
         self.paste(c == 'p');
@@ -1901,6 +1929,9 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_join_selections(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        if self.as_vim() && self.extend && !self.expanding_alias {
+            return self.vim_visual_lines(key, 'J');
+        }
         if self.joining_welds_a_grid() {
             self.status = say!("table.join-would-change-columns");
         } else {
@@ -1991,6 +2022,10 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_switch_case(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // vim's Visual `~`: the whole selection, then Normal mode.
+        if self.as_vim() && self.extend && !self.expanding_alias {
+            return self.vim_visual_key('~');
+        }
         // vim's `3~` switches three characters (`:h ~`).
         if self.as_vim() && !self.extend && count > 1 {
             let rope = self.current_buffer().rope();
@@ -2142,6 +2177,11 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_indent_or_unindent(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        if let Key::Char(c @ ('>' | '<')) = key {
+            if self.as_vim() && self.extend && !self.expanding_alias {
+                return self.vim_visual_lines(key, c);
+            }
+        }
         let Key::Char(c) = key else { return };
         // vim's `>>` keeps the cursor's column (nvim, `nostartofline`);
         // helix's `>` keeps the selection on its text.

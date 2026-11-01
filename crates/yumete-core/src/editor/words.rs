@@ -932,7 +932,7 @@ impl Editor {
             // The count goes into what `.` replays, so `3r好` then `.` writes
             // three again, as `3rx` then `.` does.
             let mut replay: Vec<Key> = match self.operator_count {
-                Some(n) if n > 1 && self.key_preset == yumete_cjk::KeyPreset::Vim => {
+                Some(n) if n > 1 && self.vim_keymap() => {
                     n.to_string().chars().map(Key::Char).collect()
                 }
                 _ => Vec::new(),
@@ -941,7 +941,7 @@ impl Editor {
             self.edit_each(move |e| {
                 e.pending = Pending::None;
                 match single {
-                    Some(c) if e.key_preset == yumete_cjk::KeyPreset::Vim => e.replace_by_key(c),
+                    Some(c) if e.vim_keymap() => e.replace_by_key(c),
                     _ => e.replace_str(&each),
                 }
             });

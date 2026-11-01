@@ -137,7 +137,7 @@ impl Editor {
     /// 25.07.1: on `b` of `abc` it gives `ab` + the file + `c`).
     pub(super) fn read_in(&mut self, text: &str) {
         self.snapshot();
-        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+        if self.vim_keymap() {
             let rope = self.current_buffer().rope();
             let next = self.cursor_line() + 1;
             let len = rope.len_chars();
@@ -1371,7 +1371,7 @@ impl Editor {
                 // **vim's `"1`–`"9`: the last nine deletes of a line or more**
                 // (`:h quote1`, 2026-10-30), each pushing the older ones down.
                 let numbered = fresh
-                    && self.key_preset == yumete_cjk::KeyPreset::Vim
+                    && self.vim_keymap()
                     && !self.storing_a_yank
                     && text.contains('\n');
                 if fresh {
@@ -1540,7 +1540,7 @@ impl Editor {
         self.storing_a_yank = false;
         // **vim's `"0` is the last yank** (`:h quote0`, 2026-10-30): a delete
         // fills the unnamed register, and `"0p` still has what was yanked.
-        if named.is_none() && self.key_preset == yumete_cjk::KeyPreset::Vim {
+        if named.is_none() && self.vim_keymap() {
             self.registers.insert('0', self.register_parts.clone());
         }
         self.status = say!("edit.yanked-characters", end - start);

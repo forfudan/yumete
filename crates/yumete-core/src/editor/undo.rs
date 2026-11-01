@@ -92,7 +92,7 @@ impl Editor {
             // (2026-10-29, review: only the primary was put back and the others
             // stayed at their post-edit places). vim has one cursor and its
             // rule for where it lands stays for one; several are yumete's own.
-            Some(every) if self.key_preset != yumete_cjk::KeyPreset::Vim || every.is_plural() => {
+            Some(every) if !self.vim_keymap() || every.is_plural() => {
                 let len = self.current_buffer().rope().len_chars();
                 self.sel = every;
                 self.sel.map(|one| crate::selection::Range {

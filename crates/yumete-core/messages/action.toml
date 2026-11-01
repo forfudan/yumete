@@ -1959,6 +1959,13 @@ zhs = "光标处或其后的数字减一(vim 的 C-x)"
 en = "the number at or after the cursor, minus one (vim's C-x)"
 
 [[message]]
+# 命令說明：vim_flip_selections（草稿）
+key = "action.vim-flip-selections"
+zht = "換到選區的另一頭(vim 可視模式的 o)"
+zhs = "换到选区的另一头(vim 可视模式的 o)"
+en = "to the other end of the selection (vim's Visual o)"
+
+[[message]]
 # 命令說明：vim_goto_line（草稿）
 key = "action.vim-goto-line"
 zht = "到第幾行，不帶計數到最後一行(vim 的 G)"
@@ -2106,11 +2113,39 @@ zhs = "大小写互换并往后走(vim 的 ~)"
 en = "switch case and move on (vim's ~)"
 
 [[message]]
+# 命令說明：vim_switch_to_lowercase（草稿）
+key = "action.vim-switch-to-lowercase"
+zht = "選區轉小寫並退出可視模式(vim 的 u)"
+zhs = "选区转小写并退出可视模式(vim 的 u)"
+en = "the selection to lowercase, leaving Visual mode (vim's u)"
+
+[[message]]
+# 命令說明：vim_switch_to_uppercase（草稿）
+key = "action.vim-switch-to-uppercase"
+zht = "選區轉大寫並退出可視模式(vim 的 U)"
+zhs = "选区转大写并退出可视模式(vim 的 U)"
+en = "the selection to uppercase, leaving Visual mode (vim's U)"
+
+[[message]]
 # 命令說明：vim_unindent（草稿）
 key = "action.vim-unindent"
 zht = "減少縮進，光標留在原列(vim)"
 zhs = "减少缩进，光标留在原列(vim)"
 en = "unindent, the cursor keeping its column (vim)"
+
+[[message]]
+# 命令說明：vim_visual_block_mode（草稿）
+key = "action.vim-visual-block-mode"
+zht = "塊選擇(vim 的 C-v)"
+zhs = "块选择(vim 的 C-v)"
+en = "select a block (vim's C-v)"
+
+[[message]]
+# 命令說明：vim_yank（草稿）
+key = "action.vim-yank"
+zht = "複製選區並退出可視模式(vim 的 y)"
+zhs = "复制选区并退出可视模式(vim 的 y)"
+en = "yank the selection, leaving Visual mode (vim's y)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽

@@ -668,7 +668,12 @@ impl Editor {
                 .iter()
                 .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
         );
+        // vim's `x` and `s` are written for Normal mode (`;{n}D`); in Visual
+        // mode they are its own delete and change (`vim_*` in the table).
         let mut select = all.clone();
+        for key in self.key_preset.normal_only() {
+            select.remove(&yumete_cjk::actions::written(key));
+        }
         select.extend(
             self.user_select
                 .iter()

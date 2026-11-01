@@ -393,7 +393,7 @@ impl Editor {
             _ => None,
         };
         Context {
-            vim: self.key_preset == yumete_cjk::KeyPreset::Vim,
+            vim: self.vim_keymap(),
             vertical: self.layout() == crate::zong::Layout::Vertical,
             alias: self.expanding_alias,
             code: self.writes_code(),

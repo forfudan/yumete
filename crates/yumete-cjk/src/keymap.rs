@@ -45,6 +45,15 @@ impl KeyPreset {
     /// spell them — `("D", "@d$")` is keys, `("ZZ", ":x")` is a command line.
     /// Exempting the table would mean the dispatcher had to guess again for one
     /// of its two callers, which is the whole thing being removed.
+    /// The lines of [`Self::table`] that are for Normal mode only: in
+    /// select mode (vim's Visual) the keymap answers those keys itself.
+    pub fn normal_only(self) -> &'static [&'static str] {
+        match self {
+            KeyPreset::Helix => &[],
+            KeyPreset::Vim => &["x", "s"],
+        }
+    }
+
     pub fn table(self) -> &'static [(&'static str, &'static str)] {
         match self {
             KeyPreset::Helix => &[],
