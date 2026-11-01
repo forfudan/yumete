@@ -1901,6 +1901,18 @@ impl Editor {
                 }
                 return;
             }
+            // vim's `q{a-z}` and `@{a-z}`: the letter names a register, and
+            // there is one macro. Any other key lets the wait go.
+            Pending::MacroRegister { record, count } => {
+                self.pending = Pending::None;
+                if matches!(key, Key::Char(c) if c.is_ascii_alphanumeric() || c == '"' || c == '@') {
+                    match record {
+                        true => self.toggle_recording(),
+                        false => self.replay_macro(count),
+                    }
+                }
+                return;
+            }
             // **The pending nobody typed.** `:s …c` opens it and it stays open
             // across many keys — one answer per match — instead of one key
             // finishing it the way every other pending here works.

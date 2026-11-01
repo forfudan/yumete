@@ -447,6 +447,13 @@ zhs = "选区撑到文件开头"
 en = "extend the selection to the start of the file"
 
 [[message]]
+# 命令說明：extend_to_last_line（草稿）
+key = "action.extend-to-last-line"
+zht = "選到最後一行"
+zhs = "选到最后一行"
+en = "extend to the last line"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.extend-to-line-bounds"
 zht = "把選區撑到整行邊界"
@@ -2211,6 +2218,13 @@ zhs = "换到选区的另一头(vim 可视模式的 o)"
 en = "to the other end of the selection (vim's Visual o)"
 
 [[message]]
+# 命令說明：vim_goto_first_nonwhitespace（草稿）
+key = "action.vim-goto-first-nonwhitespace"
+zht = "行首第一個非空字(帶數字時往下數行)"
+zhs = "行首第一个非空字(带数字时往下数行)"
+en = "the first non-blank character, a count of lines down"
+
+[[message]]
 # 命令說明：vim_goto_line（草稿）
 key = "action.vim-goto-line"
 zht = "到第幾行，不帶計數到最後一行(vim 的 G)"
@@ -2323,6 +2337,13 @@ zhs = "向前粘贴(vim 的 P)"
 en = "paste before (vim's P)"
 
 [[message]]
+# 命令說明：vim_record_macro（草稿）
+key = "action.vim-record-macro"
+zht = "錄宏(再按一個字母)"
+zhs = "录宏(再按一个字母)"
+en = "record a macro (then a letter)"
+
+[[message]]
 # 命令說明：vim_redo（草稿）
 key = "action.vim-redo"
 zht = "重做(vim 的 C-r)"
@@ -2335,6 +2356,13 @@ key = "action.vim-repeat-last-change"
 zht = "用新的計數再做一次剛纔的改動"
 zhs = "用新的计数再做一次刚才的改动"
 en = "repeat the last change with a new count"
+
+[[message]]
+# 命令說明：vim_replay_macro（草稿）
+key = "action.vim-replay-macro"
+zht = "回放宏(再按一個字母)"
+zhs = "回放宏(再按一个字母)"
+en = "replay the macro (then a letter)"
 
 [[message]]
 # 命令說明：vim_search_next（草稿）

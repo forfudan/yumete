@@ -23182,11 +23182,15 @@ fn vim_keys_record_with_q_and_the_tilde_walks_on() {
     press(&mut ed, "gg~~~~");
     assert_eq!(ed.current_buffer().text(), "AB\ncd\n", "不跨行");
 
-    // `q` 開始錄，再按一下停——vim 的拼法。
+    // `q` 等一個寄存器字母再開始錄，再按一下 `q` 停——vim 的拼法
+    // （2026-11-01：從前 `q` 當場就錄，`qa` 的 `a` 接着進了插入模式）。
     let mut ed = typed("甲\n");
     ed.execute(":keymap vim").unwrap();
     press(&mut ed, "ggq");
-    assert!(ed.recording.is_some(), "q 開始錄");
+    assert!(ed.recording.is_none(), "q 先等一個字母");
+    press(&mut ed, "a");
+    assert!(ed.recording.is_some(), "qa 開始錄");
+    assert_eq!(ed.mode(), Mode::Normal, "a 是寄存器，不是插入");
     press(&mut ed, "q");
     assert!(ed.recording.is_none(), "再按一下停");
 }
@@ -34022,4 +34026,83 @@ fn a_bound_name_walks_a_vertical_page_as_its_key_does() {
             assert_eq!(at(true), at(false), "{name} as {key}, letters following the text: {logical}");
         }
     }
+}
+
+/// **Step 1 of the flavour plan: keys that did not match their editor**
+/// (2026-11-01). helix's `ge` is the start of the last line; under vim,
+/// `]p` pastes, `C-n`/`C-p` move a line, `_` is the first non-blank a count
+/// of lines down, `&` does nothing, `q`/`@` take their register letter, and
+/// the fold keys `zn` and the `gt`/`gs` pair are not helix's motions.
+#[test]
+fn keys_that_did_not_match_their_editor_now_do() {
+    let line_col = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    // helix `ge`.
+    let mut ed = typed("one\ntwo\nthree\n");
+    press(&mut ed, "ggll");
+    press(&mut ed, "ge");
+    assert_eq!(line_col(&ed), (2, 0), "the start of the last line, not the file's end");
+
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    // `]p` pastes after.
+    let mut ed = vim("ab\n");
+    press(&mut ed, "yl]p");
+    assert_eq!(ed.current_buffer().text(), "aab\n", "]p pastes");
+    // `C-n` / `C-p` are lines.
+    let mut ed = vim("one\ntwo\nthree\n");
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(line_col(&ed).0, 1);
+    ed.on_key(Key::Ctrl('p'));
+    assert_eq!(line_col(&ed).0, 0);
+    // `_` with a count: the first non-blank, count − 1 lines down.
+    let mut ed = vim("a\n  b\n");
+    press(&mut ed, "2_");
+    assert_eq!(line_col(&ed), (1, 2));
+    // `&` does nothing (helix's align used to run).
+    let mut ed = vim("a b\n");
+    press(&mut ed, "&");
+    assert_eq!(ed.current_buffer().text(), "a b\n");
+    // `zn` is a fold key under vim, not helix's search-next.
+    let mut ed = vim("x y x\n");
+    press(&mut ed, "*");
+    let at = ed.cursor();
+    press(&mut ed, "zn");
+    assert_eq!(ed.cursor(), at, "zn does not search");
+    // `qa` records, `@a` replays.
+    let mut ed = vim("a\nb\nc\n");
+    press(&mut ed, "qaA!");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jq");
+    press(&mut ed, "@a");
+    assert_eq!(ed.current_buffer().text(), "a!\nb!\nc\n", "@a replays the one macro");
+}
+
+/// **vim's Normal `C-^` is the previous file** (2026-11-01). While typing
+/// it switches 中/英 (vim's own `i_CTRL-^`), which the front end handles;
+/// in Normal mode it reaches the keymap. A terminal sends it as `C-^` or
+/// as `C-6`.
+#[test]
+fn vims_normal_ctrl_caret_is_the_previous_file() {
+    let dir = tmp().join(format!("yumete-ctrl-caret-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("one.md"), "one\n").unwrap();
+    std::fs::write(dir.join("two.md"), "two\n").unwrap();
+    for key in [Key::Ctrl('^'), Key::Ctrl('6')] {
+        let mut ed = Editor::new();
+        ed.execute(":keymap vim").unwrap();
+        ed.open_file(dir.join("one.md")).unwrap();
+        ed.open_file(dir.join("two.md")).unwrap();
+        ed.on_key(key);
+        assert_eq!(ed.current_buffer().text(), "one\n", "{key:?} goes back");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
 }

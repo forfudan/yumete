@@ -172,6 +172,21 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::SelectRegister, Editor::cmd_select_register, Key::Char('"')),
     (NormalCmd::RecordMacro, Editor::cmd_record_macro, Key::Char('Q')),
     (NormalCmd::ReplayMacro, Editor::cmd_replay_macro, Key::Char('q')),
+    // vim's `q{a-z}` and `@{a-z}` (2026-11-01): the letter is waited for and
+    // read; there is one macro. `q` while recording stops, as in vim.
+    (NormalCmd::VimRecordMacro, |e, cx| match e.recording.is_some() {
+        true => e.toggle_recording(),
+        false => e.pending = Pending::MacroRegister { record: true, count: cx.count },
+    }, Key::Char('q')),
+    (NormalCmd::VimReplayMacro, |e, cx| e.pending = Pending::MacroRegister { record: false, count: cx.count }, Key::Char('@')),
+    // vim's `_`: the first non-blank character, count \u{2212} 1 lines down.
+    (NormalCmd::VimGotoFirstNonwhitespace, |e, cx| {
+        let rope = e.current_buffer().rope();
+        let last = rope.len_lines().saturating_sub(1);
+        let line = (rope.char_to_line(e.sel.head().min(rope.len_chars())) + cx.count.max(1) - 1).min(last);
+        e.goto_line(line + 1);
+        e.goto_motion(motion::Motion::LineFirstNonBlank);
+    }, Key::Char('_')),
     (NormalCmd::WindowMode, Editor::cmd_window_mode, Key::Ctrl('w')),
     (NormalCmd::PageDown, Editor::cmd_page_down, Key::Ctrl('f')),
     (NormalCmd::PageUp, Editor::cmd_page_up, Key::Ctrl('b')),
@@ -351,6 +366,22 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
 /// **The vim preset's own keys**, before helix's: the commands that do
 /// something else under vim, each with the condition it needs, if any.
 pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
+    // **vim's own meanings where helix's table used to answer** (2026-11-01):
+    // a key this table did not name fell through to helix's, so vim's `C-n`
+    // turned two-thirds of a page and `_` trimmed the selection. Keys whose
+    // vim meaning yumete has no feature for do nothing (`&`, `!`).
+    (Key::Ctrl('n'), NormalCmd::MoveLineDown, None),
+    (Key::Ctrl('p'), NormalCmd::MoveLineUp, None),
+    (Key::Char('_'), NormalCmd::VimGotoFirstNonwhitespace, None),
+    (Key::Char('&'), NormalCmd::NoOp, None),
+    (Key::Char('!'), NormalCmd::NoOp, None),
+    (Key::Char('q'), NormalCmd::VimRecordMacro, None),
+    (Key::Char('@'), NormalCmd::VimReplayMacro, None),
+    // `C-^` is the previous file in Normal mode; while typing it switches
+    // 中/英, vim's own Insert meaning (`i_CTRL-^`), and the front end takes it
+    // there. A terminal sends it as `C-^` or as `C-6`.
+    (Key::Ctrl('^'), NormalCmd::GotoLastAccessedFile, None),
+    (Key::Ctrl('6'), NormalCmd::GotoLastAccessedFile, None),
     (Key::Backspace, NormalCmd::MoveCharLeft, None),
     (Key::Char('k'), NormalCmd::MoveLineUp, None),
     (Key::Up, NormalCmd::MoveLineUp, None),
@@ -520,6 +551,7 @@ pub(super) const EXTEND_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ExtendToLineEnd, |e, cx| e.extending(cx, NormalCmd::GotoLineEnd), Key::End),
     (NormalCmd::ExtendToFileStart, |e, cx| e.extending(cx, NormalCmd::GotoFileStart), Key::Char('g')),
     (NormalCmd::ExtendToFileEnd, |e, cx| e.extending(cx, NormalCmd::GotoFileEnd), Key::Char('e')),
+    (NormalCmd::ExtendToLastLine, |e, cx| e.extending(cx, NormalCmd::GotoLastLine), Key::Char('e')),
     (NormalCmd::ExtendToWord, |e, cx| e.extending(cx, NormalCmd::GotoWord), Key::Char('w')),
 ];
 

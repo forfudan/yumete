@@ -403,6 +403,8 @@ impl Editor {
             Pending::Find(FindKind::TillBack) => "T",
             Pending::Replace => "r",
             Pending::Register => "\"",
+            Pending::MacroRegister { record: true, .. } => "q",
+            Pending::MacroRegister { record: false, .. } => "@",
             Pending::Match => "m",
             Pending::Aim => "z",
             Pending::AimStuck => "Z",

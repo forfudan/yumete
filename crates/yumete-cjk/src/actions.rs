@@ -653,6 +653,7 @@ normal_commands! {
     ExtendToFileStart = "extend_to_file_start",
     ExtendToFileEnd = "extend_to_file_end",
     ExtendToWord = "extend_to_word",
+    ExtendToLastLine = "extend_to_last_line",
     InsertNewline = "insert_newline",
     DeleteCharForward = "delete_char_forward",
     DeleteWordForward = "delete_word_forward",
@@ -692,6 +693,9 @@ normal_commands! {
     VimSwitchToUppercase = "vim_switch_to_uppercase",
     VimYank = "vim_yank",
     VimVisualBlockMode = "vim_visual_block_mode",
+    VimRecordMacro = "vim_record_macro",
+    VimReplayMacro = "vim_replay_macro",
+    VimGotoFirstNonwhitespace = "vim_goto_first_nonwhitespace",
 }
 
 const fn command(name: &'static str, help: &'static str, c: &'static str) -> Action {
@@ -1113,6 +1117,7 @@ pub const ALL: &[Action] = &[
     normal("action.extend-to-line-end", NormalCmd::ExtendToLineEnd),
     normal("action.extend-to-file-start", NormalCmd::ExtendToFileStart),
     normal("action.extend-to-file-end", NormalCmd::ExtendToFileEnd),
+    normal("action.extend-to-last-line", NormalCmd::ExtendToLastLine),
     normal("action.extend-to-word", NormalCmd::ExtendToWord),
     // ---- Insert mode (2026-10-31): each key a command by name ----
     normal("action.insert-newline", NormalCmd::InsertNewline),
@@ -1155,6 +1160,9 @@ pub const ALL: &[Action] = &[
     normal("action.vim-switch-to-uppercase", NormalCmd::VimSwitchToUppercase),
     normal("action.vim-yank", NormalCmd::VimYank),
     normal("action.vim-visual-block-mode", NormalCmd::VimVisualBlockMode),
+    normal("action.vim-record-macro", NormalCmd::VimRecordMacro),
+    normal("action.vim-replay-macro", NormalCmd::VimReplayMacro),
+    normal("action.vim-goto-first-nonwhitespace", NormalCmd::VimGotoFirstNonwhitespace),
 ];
 
 /// **The three places that take keys and are not modes of the text**

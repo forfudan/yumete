@@ -205,8 +205,9 @@ impl KeyPreset {
                 // 段），那句話正是說這個。
                 //
                 // Warning: **展開出來的鍵不再過別名層**，所以這兩行不會互相咬。
-                ("q", "@Q"),
-                ("Q", "@q"),
+                // `q{a-z}` waits for its letter (`vim_record_macro`, a row of
+                // the vim table, 2026-11-01); `Q` replays, as Neovim's does.
+                ("Q", "replay_macro"),
                 ("K", "@ k"),
                 ("%", "vim_match_brackets"),
                 // **`(`/`)` 是句子**（2026-10-06）。這裏它們本來是「換主選區」，

@@ -326,13 +326,6 @@ zhs = "转小写/转大写/大小写互换，等待动作"
 en = "to lower, to upper, swap them — each waits for a motion"
 
 [[message]]
-# g 組：檔尾
-key = "hint.goto.end-of-file"
-zht = "文件末尾"
-zhs = "文件末尾"
-en = "end of file"
-
-[[message]]
 # vim 鍵位下 g 選單裏的 q ——按寬度重排，等一個動作
 key = "hint.goto.fill"
 zht = "按寬度重排，等待動作"

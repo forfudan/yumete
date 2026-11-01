@@ -217,6 +217,11 @@ enum Pending {
     Replace,
     /// `"` awaiting the letter naming a register.
     Register,
+    /// vim's `q` and `@`, waiting for the register letter (2026-11-01).
+    /// There is one macro, so the letter is read and the one macro is
+    /// recorded or played; before this the letter ran as a command of its
+    /// own (`qa` started recording and then Append).
+    MacroRegister { record: bool, count: usize },
     /// **`C-g` 剛按下，撤銷已經斷了**——等着把跟在後面那個 `u` 吞掉（2026-09-23）。
     ///
     /// vim 的正統拼法是 `C-g u`（`:h i_CTRL-G_u`，字面意思「斷開 undo 序列」），
@@ -354,6 +359,7 @@ impl Pending {
             | Pending::Open
             | Pending::Space
             | Pending::Register
+            | Pending::MacroRegister { .. }
             | Pending::Case
             | Pending::Match
             | Pending::Table

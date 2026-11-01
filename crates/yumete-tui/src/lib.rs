@@ -1429,8 +1429,17 @@ pub fn run(
                 // It asks yume the same question the tap does, so a rebound
                 // Shift is rebound here too; outside a place that composes
                 // there is nothing to commit, so it is only the switch.
+                // Warning: **not in vim's Normal mode** (2026-11-01): there `C-^` is
+                // vim's previous file, and the key goes to the keymap. While
+                // typing it is vim's own `i_CTRL-^`, the language switch.
+                let vims_own = !composes_here(editor)
+                    && editor.mode() == Mode::Normal
+                    && editor.key_preset() == yumete_core::KeyPreset::Vim
+                    && mods.contains(KeyModifiers::CONTROL)
+                    && matches!(code, KeyCode::Char('^' | '6'));
                 if ime.available()
                     && ime.engaged()
+                    && !vims_own
                     && language_key(config).is_some_and(|k| is_language_key(k, code, mods))
                 {
                     borrowed.answered_in(editor.mode());

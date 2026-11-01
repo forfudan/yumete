@@ -29,8 +29,11 @@ use crate::input::Key;
 pub(super) enum Only {
     Always,
     Vim,
-    /// `g h` / `g l`: helix's keys, which the vim preset reaches only from a
-    /// binding (`0` and `$` are its own).
+    /// helix's keymap only: a key whose vim meaning yumete does not have.
+    Helix,
+    /// `g h` / `g l` / `g s` / `g t`: helix's keys, which the vim preset
+    /// reaches only when a binding or the preset plays them (`0`, `$` and
+    /// `^` are its own; vim's `gs` sleeps and its `gt` is the next tab).
     GLetter,
     /// A vertical page under the vim preset, or under helix's.
     VimVertical,
@@ -310,6 +313,7 @@ impl Context {
         match only {
             Only::Always => true,
             Only::Vim => self.vim,
+            Only::Helix => !self.vim,
             Only::GLetter => !self.vim || self.alias,
             Only::VimVertical => self.vim && self.vertical,
             Only::HelixVertical => !self.vim && self.vertical,
@@ -620,7 +624,7 @@ impl Only {
     fn under(self, vim: bool) -> bool {
         match self {
             Only::Vim | Only::VimVertical | Only::FlatVim => vim,
-            Only::GLetter | Only::HelixVertical => !vim,
+            Only::GLetter | Only::HelixVertical | Only::Helix => !vim,
             _ => true,
         }
     }
@@ -755,13 +759,17 @@ pub(super) static GOTO: Group = Group {
         note("<N>g", "hint.goto.line-n"),
         ch('e', NormalCmd::JumpPrevWordEnd, "action.jump-prev-word-end").when(Only::Vim),
         ch('E', NormalCmd::JumpPrevLongWordEnd, "action.jump-prev-long-word-end").when(Only::Vim),
-        ch('e', NormalCmd::ExtendToFileEnd, "hint.goto.end-of-file").when(Only::Selecting),
-        ch('e', NormalCmd::GotoFileEnd, "hint.goto.end-of-file"),
+        // helix's `ge` is the start of the last line (2026-11-01; it went to
+        // the end of the file).
+        ch('e', NormalCmd::ExtendToLastLine, "action.goto-last-line").when(Only::Selecting),
+        ch('e', NormalCmd::GotoLastLine, "action.goto-last-line"),
         ch('h', NormalCmd::GotoLineStart, "hint.goto.line-start-or-end").when(Only::GLetter),
         ch('l', NormalCmd::GotoLineEnd, "hint.goto.line-start-or-end").when(Only::GLetter),
         quiet(Key::Up, NormalCmd::GotoLineStart).when(Only::HelixVertical),
         quiet(Key::Down, NormalCmd::GotoLineEnd).when(Only::HelixVertical),
-        ch('s', NormalCmd::GotoFirstNonwhitespace, "hint.goto.first-non-blank"),
+        // vim's `gs` sleeps and its `gt` is the next tab: under vim these are
+        // reached only when the preset plays them (`^` is `gs` there).
+        ch('s', NormalCmd::GotoFirstNonwhitespace, "hint.goto.first-non-blank").when(Only::GLetter),
         ch('f', NormalCmd::OpenHere, "hint.goto.open-this-file"),
         ch('L', NormalCmd::FollowLink, "hint.goto.follow-link"),
         ch('w', NormalCmd::ExtendToWord, "hint.goto.jump-labels").when(Only::Selecting),
@@ -793,7 +801,7 @@ pub(super) static GOTO: Group = Group {
         quiet(Key::Down, NormalCmd::MoveLineDown).when(Only::Flat),
         quiet(Key::Up, NormalCmd::MoveLineUp).when(Only::Flat),
         ch('.', NormalCmd::GotoLastModification, "hint.goto.last-change"),
-        ch('t', NormalCmd::GotoWindowTop, "hint.goto.screen-top-middle-bottom"),
+        ch('t', NormalCmd::GotoWindowTop, "hint.goto.screen-top-middle-bottom").when(Only::GLetter),
         ch('c', NormalCmd::GotoWindowCenter, "hint.goto.screen-top-middle-bottom"),
         ch('b', NormalCmd::GotoWindowBottom, "hint.goto.screen-top-middle-bottom"),
         // vim's own: none of these is a helix command.
@@ -900,6 +908,8 @@ pub(super) static RIGHT_BRACKET: Group = Group {
         ch('c', NormalCmd::GotoNextComment, "hint.hop.comment").listed(Only::Code),
         // Warning: **段落那一行借的是 `:keymap-actions` 的名字**：同一件事在兩張
         // 表上，寫成兩句話只會讓它們慢慢說岔。
+        // vim's `]p` pastes (with the indent adjusted, which is not done yet).
+        ch('p', NormalCmd::VimPasteAfter, "action.vim-paste-after").when(Only::Vim),
         ch('p', NormalCmd::GotoNextParagraph, "action.goto-next-paragraph"),
         ch(' ', NormalCmd::AddNewlineBelow, "hint.hop.blank-below"),
     ],
@@ -923,6 +933,7 @@ pub(super) static LEFT_BRACKET: Group = Group {
         ch('f', NormalCmd::GotoPrevFunction, "hint.hop.function").listed(Only::Code),
         ch('t', NormalCmd::GotoPrevClass, "hint.hop.class").listed(Only::Code),
         ch('c', NormalCmd::GotoPrevComment, "hint.hop.comment").listed(Only::Code),
+        ch('p', NormalCmd::VimPasteBefore, "action.vim-paste-before").when(Only::Vim),
         ch('p', NormalCmd::GotoPrevParagraph, "action.goto-prev-paragraph"),
         ch(' ', NormalCmd::AddNewlineAbove, "hint.hop.blank-above"),
     ],
@@ -938,12 +949,14 @@ pub(super) static LEFT_BRACKET: Group = Group {
 /// paging keys are helix's (`z j`, `z C-d`…) and answer without a line.
 const VIEW_ROWS: &[Row] = &[
     ch('z', NormalCmd::AlignViewCenter, "hint.aim.middle"),
-    quiet(Key::Char('c'), NormalCmd::AlignViewCenter),
+    // `zc` `zj` `zk` `zn` `zN` are vim's folds, which yumete does not have:
+    // helix's view keys only (2026-11-01).
+    quiet(Key::Char('c'), NormalCmd::AlignViewCenter).when(Only::Helix),
     ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
     ch('b', NormalCmd::AlignViewBottom, "hint.aim.bottom"),
-    quiet(Key::Char('j'), NormalCmd::ScrollDown),
+    quiet(Key::Char('j'), NormalCmd::ScrollDown).when(Only::Helix),
     quiet(Key::Down, NormalCmd::ScrollDown),
-    quiet(Key::Char('k'), NormalCmd::ScrollUp),
+    quiet(Key::Char('k'), NormalCmd::ScrollUp).when(Only::Helix),
     quiet(Key::Up, NormalCmd::ScrollUp),
     quiet(Key::Ctrl('d'), NormalCmd::HalfPageDown),
     quiet(Key::Char(' '), NormalCmd::HalfPageDown),
@@ -955,8 +968,8 @@ const VIEW_ROWS: &[Row] = &[
     quiet(Key::PageUp, NormalCmd::PageUp),
     quiet(Key::Char('/'), NormalCmd::Search),
     quiet(Key::Char('?'), NormalCmd::Rsearch),
-    quiet(Key::Char('n'), NormalCmd::SearchNext),
-    quiet(Key::Char('N'), NormalCmd::SearchPrev),
+    quiet(Key::Char('n'), NormalCmd::SearchNext).when(Only::Helix),
+    quiet(Key::Char('N'), NormalCmd::SearchPrev).when(Only::Helix),
 ];
 
 pub(super) static VIEW: Group = Group {
