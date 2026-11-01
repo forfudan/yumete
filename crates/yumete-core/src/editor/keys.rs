@@ -293,7 +293,10 @@ impl Editor {
                 }
                 KeyOutcome::Continue
             }
-            Mode::Command => self.on_command_key(key),
+            Mode::Command => {
+                self.on_command_key(key);
+                KeyOutcome::Continue
+            }
             Mode::Lookfor => {
                 self.on_lookfor_key(key);
                 KeyOutcome::Continue
@@ -1703,7 +1706,7 @@ impl Editor {
     /// says heard (2026-10-31). It used to be `let _ = self.execute(…)`, so a
     /// bound `:quit` never left and a failing command said nothing; reported
     /// with `"C-q" = ":quit"`.
-    fn run_bound_command(&mut self, line: &str) {
+    pub(super) fn run_bound_command(&mut self, line: &str) {
         match self.execute(&format!(":{line}")) {
             Ok(crate::editor::CommandOutcome::Quit) => self.quit_from_binding = true,
             Ok(crate::editor::CommandOutcome::Continue) => {}

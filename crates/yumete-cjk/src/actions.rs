@@ -699,6 +699,126 @@ pub const ALL: &[Action] = &[
     normal("vim_visual_block_mode", "action.vim-visual-block-mode"),
 ];
 
+/// **The three places that take keys and are not modes of the text**
+/// (2026-11-01, step 9 of the keymap plan): a prompt (`:`, `/`, `::`, a
+/// reading, and a picker's query), a picker's list (and the `::` palette's),
+/// and a sidebar. helix hard-codes these keys; here each place has a table
+/// in the config (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`) and
+/// commands of its own.
+///
+/// A name the text's keymap has too (`move_char_left`, `page_down`) is
+/// reused where it means the same thing in that place, so one name is one
+/// thing to do wherever it is run. A picker takes the prompt's keys as well,
+/// its own winning where both name a key (helix's rule). Nothing comes over
+/// from `[keys.normal]` or `[keys.insert]`: a sidebar's `J` pages and its `g`
+/// goes to the top at once, so the two keymaps already differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Place {
+    Prompt,
+    Picker,
+    Sidebar,
+}
+
+impl Place {
+    pub const ALL: [Place; 3] = [Place::Prompt, Place::Picker, Place::Sidebar];
+
+    /// The table's name in the config: `[keys.prompt]`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Place::Prompt => "prompt",
+            Place::Picker => "picker",
+            Place::Sidebar => "sidebar",
+        }
+    }
+
+    /// The place a `[keys.…]` table is for.
+    pub fn of(table: &str) -> Option<Place> {
+        Place::ALL.into_iter().find(|place| place.name() == table)
+    }
+
+    /// The commands a key in this place may be bound to.
+    pub fn actions(self) -> &'static [Action] {
+        match self {
+            Place::Prompt => PROMPT,
+            Place::Picker => PICKER,
+            Place::Sidebar => SIDEBAR,
+        }
+    }
+
+    /// One of them by name. `no_op` is in every place, and a picker runs a
+    /// prompt's commands too, on its query.
+    pub fn action(self, name: &str) -> Option<&'static Action> {
+        let mine = |place: Place| place.actions().iter().find(|a| a.name == name);
+        mine(self)
+            .or_else(|| (self == Place::Picker).then(|| mine(Place::Prompt)).flatten())
+            .or_else(|| action(name).filter(|a| a.name == "no_op"))
+    }
+
+    /// Read a right-hand side in this place: a command line and keys as
+    /// anywhere ([`bound`]), a name only from this place's list.
+    pub fn bound(self, rhs: &str) -> Option<Bound<'_>> {
+        match rhs.starts_with([':', '@']) {
+            true => bound(rhs),
+            false => self.action(rhs).map(Bound::Named),
+        }
+    }
+}
+
+/// A prompt's commands: `:`, `/`, `::`, a reading, and a picker's query.
+pub const PROMPT: &[Action] = &[
+    normal("normal_mode", "action.close-prompt"),
+    normal("confirm", "action.confirm"),
+    normal("completion_next", "action.completion-next"),
+    normal("completion_prev", "action.completion-prev"),
+    normal("history_prev", "action.history-prev"),
+    normal("history_next", "action.history-next"),
+    normal("move_char_left", "action.move-char-left"),
+    normal("move_char_right", "action.move-char-right"),
+    normal("goto_line_start", "action.goto-line-start"),
+    normal("goto_line_end", "action.goto-line-end"),
+    normal("delete_char_backward", "action.delete-char-backward"),
+    normal("delete_char_forward", "action.delete-char-forward"),
+    normal("delete_word_backward", "action.delete-word-backward"),
+    normal("kill_to_line_start", "action.kill-to-line-start"),
+    normal("toggle_wide_search", "action.toggle-wide-search"),
+];
+
+/// A picker's list, and the `::` palette's.
+pub const PICKER: &[Action] = &[
+    normal("next_entry", "action.next-entry"),
+    normal("prev_entry", "action.prev-entry"),
+    normal("page_down", "action.page-down"),
+    normal("page_up", "action.page-up"),
+    normal("first_entry", "action.first-entry"),
+    normal("last_entry", "action.last-entry"),
+    normal("cycle_hidden_files", "action.cycle-hidden-files"),
+];
+
+/// A sidebar's: its lists, its article, and what every panel has.
+pub const SIDEBAR: &[Action] = &[
+    normal("move_line_down", "action.next-row"),
+    normal("move_line_up", "action.prev-row"),
+    normal("page_down", "action.page-down"),
+    normal("page_up", "action.page-up"),
+    normal("goto_file_start", "action.first-row"),
+    normal("goto_last_line", "action.last-row"),
+    normal("collapse_entry", "action.collapse-entry"),
+    normal("expand_entry", "action.expand-entry"),
+    normal("open_entry", "action.open-entry"),
+    normal("toggle_links_graph", "action.toggle-links-graph"),
+    normal("restore_change", "action.restore-change"),
+    normal("yank_old_text", "action.yank-old-text"),
+    normal("refresh_sidebar", "action.refresh-sidebar"),
+    normal("cycle_sidebar_width", "action.cycle-sidebar-width"),
+    normal("next_sidebar_view", "action.next-sidebar-view"),
+    normal("prev_sidebar_view", "action.prev-sidebar-view"),
+    normal("normal_mode", "action.sidebar-normal-mode"),
+    normal("leave_sidebar", "action.leave-sidebar"),
+    normal("command_mode", "action.command-mode"),
+    normal("space_mode", "action.space-mode"),
+    normal("window_mode", "action.window-mode"),
+];
+
 #[cfg(test)]
 mod no_two_alike {
     use super::*;
@@ -716,5 +836,20 @@ mod no_two_alike {
                 assert!(lines.insert(line), "`{}` runs `{line}`, as another action does", action.name);
             }
         }
+    }
+
+    /// The same in each of the three places, and a place reads only its
+    /// own names (2026-11-01).
+    #[test]
+    fn every_place_action_is_its_own() {
+        for place in Place::ALL {
+            let mut names = std::collections::HashSet::new();
+            for one in place.actions() {
+                assert!(names.insert(one.name), "`{}` twice in {}", one.name, place.name());
+            }
+        }
+        assert_eq!(Place::Picker.bound("save_file"), None, "a Normal command is not a picker's");
+        assert!(Place::Sidebar.bound("no_op").is_some());
+        assert!(Place::Prompt.bound(":write").is_some());
     }
 }

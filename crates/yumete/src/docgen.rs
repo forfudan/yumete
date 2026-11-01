@@ -167,6 +167,14 @@ fn actions() -> String {
     for (key, run) in yumete_core::editor::Editor::vim_runs_for_docs() {
         let _ = writeln!(out, "| {} | {} |", code(&cell(&keys_written(&[key]))), code(&cell(&run)));
     }
+    // A prompt's, a picker's and a sidebar's (step 9), each under its table.
+    for (place, rows) in yumete_core::editor::Editor::place_commands_for_docs() {
+        let _ = writeln!(out, "\n### `[keys.{}]`\n\n| Command | What it does | Keys |\n| --- | --- | --- |", place.name());
+        for (name, help, keys) in rows {
+            let keys: Vec<Vec<String>> = keys.into_iter().map(|k| vec![k]).collect();
+            let _ = writeln!(out, "| `{name}` | {} | {} |", cell(&say(help, &[])), column(&keys));
+        }
+    }
     out
 }
 

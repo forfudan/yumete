@@ -2573,6 +2573,12 @@ pub struct KeyConfig {
     pub select: HashMap<String, Vec<String>>,
     /// Insert mode's lines (`[keys.insert]`).
     pub insert: HashMap<String, Vec<String>>,
+    /// **A prompt's, a picker's and a sidebar's lines** (`[keys.prompt]`,
+    /// `[keys.picker]`, `[keys.sidebar]`; 2026-11-01): one key a line, its
+    /// commands from that place's own list (`yumete_cjk::actions::Place`).
+    pub prompt: HashMap<String, Vec<String>>,
+    pub picker: HashMap<String, Vec<String>>,
+    pub sidebar: HashMap<String, Vec<String>>,
     /// **The names of a reader's own groups**, by the keys that open them
     /// (`label = "My tools"` in `[keys.normal.space.x]` → `"<space>x"`):
     /// the title of that group's menu. helix cannot name one.
@@ -3148,11 +3154,18 @@ impl Config {
                             // 照舊寫得動（那兩樣真的是項目屬性，同 rust-toolchain）。
                             let bound = !parsed.keys.normal.is_empty()
                                 || !parsed.keys.select.is_empty()
-                                || !parsed.keys.insert.is_empty();
+                                || !parsed.keys.insert.is_empty()
+                                || !parsed.keys.prompt.is_empty()
+                                || !parsed.keys.picker.is_empty()
+                                || !parsed.keys.sidebar.is_empty();
                             if bound {
                                 parsed.keys.normal.clear();
                                 parsed.keys.select.clear();
                                 parsed.keys.insert.clear();
+                                // A prompt's `Enter` runs a command line too.
+                                parsed.keys.prompt.clear();
+                                parsed.keys.picker.clear();
+                                parsed.keys.sidebar.clear();
                                 problems.push(said(
                                     format!(
                                         "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
@@ -4140,6 +4153,12 @@ struct RawKeys {
     select: toml::Table,
     #[serde(default)]
     insert: toml::Table,
+    #[serde(default)]
+    prompt: toml::Table,
+    #[serde(default)]
+    picker: toml::Table,
+    #[serde(default)]
+    sidebar: toml::Table,
     preset: Option<String>,
     flavor: Option<bool>,
     /// What else is under `[keys]`: a mode that does not exist
@@ -4417,6 +4436,9 @@ impl RawConfig {
         merge_key_tables(&mut self.keys.normal, other.keys.normal);
         merge_key_tables(&mut self.keys.select, other.keys.select);
         merge_key_tables(&mut self.keys.insert, other.keys.insert);
+        merge_key_tables(&mut self.keys.prompt, other.keys.prompt);
+        merge_key_tables(&mut self.keys.picker, other.keys.picker);
+        merge_key_tables(&mut self.keys.sidebar, other.keys.sidebar);
         self.keys.strays.extend(other.keys.strays);
         if other.keys.preset.is_some() {
             self.keys.preset = other.keys.preset;
@@ -4943,10 +4965,17 @@ impl RawConfig {
         config.keys.insert = keys.insert;
         config.keys.labels = keys.labels;
         config.keys.insert_labels = keys.insert_labels;
+        use yumete_cjk::actions::Place;
+        config.keys.prompt = read_place_table(Place::Prompt, &self.keys.prompt, problems);
+        config.keys.picker = read_place_table(Place::Picker, &self.keys.picker, problems);
+        config.keys.sidebar = read_place_table(Place::Sidebar, &self.keys.sidebar, problems);
         for (name, _) in &self.keys.strays {
             problems.push(said(
-                format!("[keys.{name}]：沒有這個模式，這張表跳過了。模式有 normal、select、insert"),
-                format!("[keys.{name}] is not a mode, so it was skipped; the modes are normal, select and insert"),
+                format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、prompt、picker、sidebar"),
+                format!(
+                    "[keys.{name}] is not a table yumete reads, so it was skipped; \
+                     the tables are normal, select, insert, prompt, picker and sidebar"
+                ),
             ));
         }
         if let Some(on) = self.keys.flavor {
@@ -5080,6 +5109,65 @@ fn read_key_table(
         }
     }
     walk(mode, "", table, out, labels, problems);
+}
+
+/// **`[keys.prompt]`, `[keys.picker]` or `[keys.sidebar]`, line by line**
+/// (2026-11-01): one key a line, and a name only from that place's list.
+/// Each line that cannot go in is said and left out, as in the modes'
+/// tables ([`read_key_table`]).
+fn read_place_table(
+    place: yumete_cjk::actions::Place,
+    table: &toml::Table,
+    problems: &mut Vec<String>,
+) -> HashMap<String, Vec<String>> {
+    let header = place.name();
+    let mut out = HashMap::new();
+    for (key, value) in table {
+        let run = helix_key(key);
+        // A run (`gg`) or a nested table: these places have no groups.
+        let one_key = yumete_cjk::actions::written(&run).chars().filter(|&c| c != yumete_cjk::actions::ALT).count() == 1;
+        if !one_key || value.is_table() {
+            problems.push(said(
+                format!("[keys.{header}] {key}：這張表一行只綁一個鍵，跳過了"),
+                format!("[keys.{header}] {key}: this table binds one key a line, so it was skipped"),
+            ));
+            continue;
+        }
+        let commands: Option<Vec<String>> = match value {
+            toml::Value::String(one) => Some(vec![one.clone()]),
+            toml::Value::Array(many) => many
+                .iter()
+                .map(|v| v.as_str().map(str::to_string))
+                .collect::<Option<Vec<String>>>()
+                .filter(|s| !s.is_empty()),
+            _ => None,
+        };
+        let Some(commands) = commands else {
+            problems.push(said(
+                format!("[keys.{header}] {key} 這一行寫法不對，跳過了——右邊寫命令、命令列表或鍵表"),
+                format!(
+                    "[keys.{header}] {key}: the right side must be a command, a list of commands, or a table of keys, so it was skipped"
+                ),
+            ));
+            continue;
+        };
+        match commands.iter().find(|one| place.bound(one).is_none()) {
+            None => {
+                out.insert(run, commands);
+            }
+            Some(bad) => problems.push(said(
+                format!(
+                    "[keys.{header}] {key} = \"{bad}\" 不是動作名，這一條没裝上——\
+                     動作名看 `:keymap-actions`，一串按鍵要寫成 \"@{bad}\""
+                ),
+                format!(
+                    "[keys.{header}] {key} = \"{bad}\" is not an action, so it was not bound; \
+                     :keymap-actions lists them, and a string of keys is written \"@{bad}\""
+                ),
+            )),
+        }
+    }
+    out
 }
 
 fn parse_line_numbers(value: &str) -> LineNumbers {
@@ -6119,6 +6207,45 @@ mod key_tables {
         assert!(problems.iter().any(|p| p.contains("[keys.normal.z] q")), "{problems:?}");
         assert!(problems.iter().any(|p| p.contains("[keys.visual]")), "{problems:?}");
         assert_eq!(problems.len(), 2, "{problems:?}");
+    }
+
+    /// **A prompt's, a picker's and a sidebar's tables** (2026-11-01, step 9
+    /// of the keymap plan): one key a line, a name from that place's own
+    /// list, a command line or keys as anywhere. A run, a nested table and
+    /// another place's name are each said and skipped.
+    #[test]
+    fn the_three_places_read_their_own_tables() {
+        let (c, problems) = Config::from_toml_saying(
+            r#"
+            [keys.prompt]
+            "C-b" = "move_char_left"
+            "C-y" = "@hello"
+
+            [keys.picker]
+            "C-j" = "next_entry"
+            "C-k" = ["prev_entry", "prev_entry"]
+            "C-s" = "save_file"
+
+            [keys.sidebar]
+            n = "move_line_down"
+            "C-s" = ":write"
+            gg = "goto_file_start"
+            z = { z = "no_op" }
+            "#,
+        );
+        let get = |table: &HashMap<String, Vec<String>>, k: &str| table.get(k).cloned().unwrap_or_default();
+        assert_eq!(get(&c.keys.prompt, "C-b"), ["move_char_left"]);
+        assert_eq!(get(&c.keys.prompt, "C-y"), ["@hello"]);
+        assert_eq!(get(&c.keys.picker, "C-j"), ["next_entry"]);
+        assert_eq!(get(&c.keys.picker, "C-k"), ["prev_entry", "prev_entry"]);
+        assert_eq!(get(&c.keys.sidebar, "n"), ["move_line_down"]);
+        assert_eq!(get(&c.keys.sidebar, "C-s"), [":write"]);
+        assert!(!c.keys.picker.contains_key("C-s"), "a Normal command is not a picker's");
+        assert!(c.keys.normal.is_empty(), "nothing goes to the modes' tables");
+        assert!(problems.iter().any(|p| p.contains("save_file")), "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("[keys.sidebar] gg")), "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("[keys.sidebar] z")), "{problems:?}");
+        assert_eq!(problems.len(), 3, "{problems:?}");
     }
 
     /// A project's `[keys.normal.space]` adds to the global one's, as

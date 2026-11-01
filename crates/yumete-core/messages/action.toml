@@ -77,6 +77,20 @@ en = "change the selection, leaving the register"
 find = "改 改寫 改写 換 换 替換 替换 change"
 
 [[message]]
+# 命令說明：normal_mode（草稿）
+key = "action.close-prompt"
+zht = "關掉這一行(命令行、搜索、挑選器)"
+zhs = "关掉这一行(命令行、搜索、挑选器)"
+en = "close the prompt, the search or the picker"
+
+[[message]]
+# 命令說明：collapse_entry（草稿）
+key = "action.collapse-entry"
+zht = "收起"
+zhs = "收起"
+en = "fold the entry, or go out of it"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.collapse-selection"
 zht = "選區收回光標"
@@ -121,6 +135,27 @@ key = "action.commit-undo-checkpoint"
 zht = "在這裏斷開撤銷"
 zhs = "在这里断开撤销"
 en = "break the undo here"
+
+[[message]]
+# 命令說明：completion_next（草稿）
+key = "action.completion-next"
+zht = "補全：下一個"
+zhs = "补全：下一个"
+en = "the next completion"
+
+[[message]]
+# 命令說明：completion_prev（草稿）
+key = "action.completion-prev"
+zht = "補全：上一個"
+zhs = "补全：上一个"
+en = "the previous completion"
+
+[[message]]
+# 命令說明：confirm（草稿）
+key = "action.confirm"
+zht = "執行這一行；挑選器裏打開選中的那一項"
+zhs = "执行这一行；挑选器里打开选中的那一项"
+en = "run the line; in a picker, open the highlighted entry"
 
 [[message]]
 # 命令說明：convert_table_to_csv（草稿）
@@ -172,6 +207,20 @@ zht = "寫作進度"
 zhs = "写作进度"
 en = "writing progress"
 find = "字數 字数 進度 进度 今天 寫了多少 写了多少 count progress"
+
+[[message]]
+# 命令說明：cycle_hidden_files（草稿）
+key = "action.cycle-hidden-files"
+zht = "換一種：跳過哪些文件(隱藏的、忽略的)"
+zhs = "换一种：跳过哪些文件(隐藏的、忽略的)"
+en = "cycle which files are skipped: hidden, ignored"
+
+[[message]]
+# 命令說明：cycle_sidebar_width（草稿）
+key = "action.cycle-sidebar-width"
+zht = "寬窄"
+zhs = "宽窄"
+en = "the next width: narrow, middle, wide"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -255,6 +304,13 @@ key = "action.ensure-selections-forward"
 zht = "讓每個選區都朝前"
 zhs = "让每个选区都朝前"
 en = "make every selection face forward"
+
+[[message]]
+# 命令說明：expand_entry（草稿）
+key = "action.expand-entry"
+zht = "展開；展開不了就進入"
+zhs = "展开；展开不了就进入"
+en = "unfold the entry, or go into it"
 
 [[message]]
 # 命令說明：extend_char_left（草稿）
@@ -461,6 +517,20 @@ key = "action.find-till-char"
 zht = "往後找一個字，選到它前面"
 zhs = "往后找一个字，选到它前面"
 en = "find a character forward, selecting up to just before it"
+
+[[message]]
+# 命令說明：first_entry（草稿）
+key = "action.first-entry"
+zht = "第一項"
+zhs = "第一项"
+en = "the first entry"
+
+[[message]]
+# 命令說明：goto_file_start（草稿）
+key = "action.first-row"
+zht = "第一行"
+zhs = "第一行"
+en = "the first row"
 
 [[message]]
 # 命令說明：flip_selections（草稿）
@@ -785,6 +855,20 @@ en = "half a page up"
 find = "半頁 半页 往上 翻頁 翻页 up half page"
 
 [[message]]
+# 命令說明：history_next（草稿）
+key = "action.history-next"
+zht = "歷史：下一條"
+zhs = "历史：下一条"
+en = "the next line in the history"
+
+[[message]]
+# 命令說明：history_prev（草稿）
+key = "action.history-prev"
+zht = "歷史：上一條"
+zhs = "历史：上一条"
+en = "the previous line in the history"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.increment"
 zht = "光標處的數字加一"
@@ -1023,11 +1107,32 @@ zhs = "删到行首"
 en = "delete to the start of the line"
 
 [[message]]
+# 命令說明：last_entry（草稿）
+key = "action.last-entry"
+zht = "最後一項"
+zhs = "最后一项"
+en = "the last entry"
+
+[[message]]
+# 命令說明：goto_last_line（草稿）
+key = "action.last-row"
+zht = "最後一行"
+zhs = "最后一行"
+en = "the last row"
+
+[[message]]
 # 命令說明：later（草稿）
 key = "action.later"
 zht = "重做(和 U 一樣)"
 zhs = "重做(和 U 一样)"
 en = "redo, as U does"
+
+[[message]]
+# 命令說明：leave_sidebar（草稿）
+key = "action.leave-sidebar"
+zht = "回編輯區，面板留着"
+zhs = "回编辑区，面板留着"
+en = "back to the text, the panel stays"
 
 [[message]]
 # 命令說明：left_bracket_mode（草稿）
@@ -1188,12 +1293,33 @@ en = "the next buffer"
 find = "緩衝 缓冲 下一份 切換 切换 next buffer"
 
 [[message]]
+# 命令說明：next_entry（草稿）
+key = "action.next-entry"
+zht = "下一項"
+zhs = "下一项"
+en = "the next entry"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.next-region"
 zht = "下一個區域"
 zhs = "下一个区域"
 en = "the next region"
 find = "區域 区域 分屏 窗口 next region window"
+
+[[message]]
+# 命令說明：move_line_down（草稿）
+key = "action.next-row"
+zht = "下一行"
+zhs = "下一行"
+en = "one row down"
+
+[[message]]
+# 命令說明：next_sidebar_view（草稿）
+key = "action.next-sidebar-view"
+zht = "換視圖"
+zhs = "换视图"
+en = "the next view in this slot"
 
 [[message]]
 # 命令說明：no_op（草稿）
@@ -1224,6 +1350,13 @@ zht = "在下方開新行"
 zhs = "在下方开新行"
 en = "open a line below"
 find = "新行 下面 開行 开行 open below"
+
+[[message]]
+# 命令說明：open_entry（草稿）
+key = "action.open-entry"
+zht = "進入：打開文件、跳到那一行"
+zhs = "进入：打开文件、跳到那一行"
+en = "go to the entry: open the file, or jump to the line"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1373,6 +1506,27 @@ en = "the previous buffer"
 find = "緩衝 缓冲 上一份 切換 切换 previous buffer"
 
 [[message]]
+# 命令說明：prev_entry（草稿）
+key = "action.prev-entry"
+zht = "上一項"
+zhs = "上一项"
+en = "the previous entry"
+
+[[message]]
+# 命令說明：move_line_up（草稿）
+key = "action.prev-row"
+zht = "上一行"
+zhs = "上一行"
+en = "one row up"
+
+[[message]]
+# 命令說明：prev_sidebar_view（草稿）
+key = "action.prev-sidebar-view"
+zht = "換視圖(往回)"
+zhs = "换视图(往回)"
+en = "the previous view in this slot"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.quit"
 zht = "關掉這一個"
@@ -1394,6 +1548,13 @@ zht = "重做"
 zhs = "重做"
 en = "redo"
 find = "重做 恢復 恢复 redo"
+
+[[message]]
+# 命令說明：refresh_sidebar（草稿）
+key = "action.refresh-sidebar"
+zht = "重讀"
+zhs = "重读"
+en = "read it again"
 
 [[message]]
 # 命令說明：remove_primary_selection（草稿）
@@ -1466,6 +1627,13 @@ key = "action.replay-macro"
 zht = "回放宏"
 zhs = "回放宏"
 en = "replay the macro"
+
+[[message]]
+# 命令說明：restore_change（草稿）
+key = "action.restore-change"
+zht = "還原此處改動"
+zhs = "还原此处改动"
+en = "restore this change"
 
 [[message]]
 # 命令說明：right_bracket_mode（草稿）
@@ -1718,6 +1886,13 @@ en = "the left sidebar"
 find = "邊欄 边栏 側欄 侧栏 左邊 左边 sidebar"
 
 [[message]]
+# 命令說明：normal_mode（草稿）
+key = "action.sidebar-normal-mode"
+zht = "讓輸入法再掛起一次"
+zhs = "让输入法再挂起一次"
+en = "suspend the input method again"
+
+[[message]]
 # 命令說明：space_mode（草稿）
 key = "action.space-mode"
 zht = "空格菜單"
@@ -1887,11 +2062,25 @@ zhs = "开关左栏"
 en = "open or close the left sidebar"
 
 [[message]]
+# 命令說明：toggle_links_graph（草稿）
+key = "action.toggle-links-graph"
+zht = "鏈接面板：列表/圖"
+zhs = "链接面板：列表/图"
+en = "the links panel as a list or a graph"
+
+[[message]]
 # 命令說明：toggle_right_sidebar（草稿）
 key = "action.toggle-right-sidebar"
 zht = "開關右欄"
 zhs = "开关右栏"
 en = "open or close the right sidebar"
+
+[[message]]
+# 命令說明：toggle_wide_search（草稿）
+key = "action.toggle-wide-search"
+zht = "繁簡拼音通配開關"
+zhs = "繁简拼音通配开关"
+en = "match across glyph variants and pinyin, on or off"
 
 [[message]]
 # 命令說明：trim_selections（草稿）
@@ -2176,6 +2365,13 @@ zht = "複製"
 zhs = "复制"
 en = "yank"
 find = "複製 复制 拷貝 拷贝 copy yank"
+
+[[message]]
+# 命令說明：yank_old_text（草稿）
+key = "action.yank-old-text"
+zht = "複製先前版本"
+zhs = "复制先前版本"
+en = "copy what was there before the change"
 
 [[message]]
 # 命令說明：yume_menu_size_3（草稿）

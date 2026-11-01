@@ -94,7 +94,7 @@ impl Editor {
                         ("j k J K g G".into(), walk),
                         // Warning: **`w` 也要寫上**（2026-09-29 報的：「不仅没有提示
                         // 而且 w 无效」）。兩件事一起壞的：這一行没說它，而它
-                        // 本來也真的不管用（見 `on_info_key`）。
+                        // 本來也真的不管用（見 `info_command`）。
                         ("w".into(), say!("hint.sidebar.width")),
                         ("q".into(), say!("hint.to-the-text")),
                         (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),

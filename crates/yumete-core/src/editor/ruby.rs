@@ -273,8 +273,21 @@ impl Editor {
     }
 
     pub(super) fn on_ruby_key(&mut self, key: Key) {
-        match key {
-            Key::Esc => {
+        let place = yumete_cjk::actions::Place::Prompt;
+        match self.commands_in(place, key) {
+            Some(commands) => self.run_in_place(place, &commands, |e, name| e.reading_command(name)),
+            None => {
+                if let Key::Char(c) = key {
+                    self.type_into_prompt(c);
+                }
+            }
+        }
+    }
+
+    /// One of a prompt's commands, on the line a reading is typed into.
+    fn reading_command(&mut self, name: &str) {
+        match name {
+            "normal_mode" => {
                 self.command_line.clear();
                 self.command_caret = self.command_line.chars().count();
                 self.ruby_target = None;
@@ -283,8 +296,8 @@ impl Editor {
             // Backspacing to empty does *not* leave: an empty reading is a
             // meaningful thing to submit here — it is how an annotation is
             // taken off — so it has to be reachable. Esc is the way out.
-            Key::Backspace if self.command_line.is_empty() => {}
-            Key::Enter => {
+            "delete_char_backward" if self.command_line.is_empty() => {}
+            "confirm" => {
                 let reading = std::mem::take(&mut self.command_line);
                 let target = self.ruby_target.take();
                 self.mode = Mode::Normal;

@@ -2548,6 +2548,9 @@ pub struct Editor {
     /// keys of one held while the next key decides (`j` of `jk`).
     insert_aliases: HashMap<String, Vec<String>>,
     insert_held: String,
+    /// A prompt's, a picker's and a sidebar's bindings (`[keys.prompt]`…),
+    /// by `yumete_cjk::actions::Place`, internal spelling.
+    place_bindings: [HashMap<String, Vec<String>>; 3],
     key_preset: yumete_cjk::KeyPreset,
     /// vim 的 `whichwrap`：哪些鍵走得出一行的兩頭。見
     /// [`yumete_config::Editor::which_wrap`]；helix 鍵位下讀都不讀。
@@ -4116,6 +4119,7 @@ impl Editor {
             key_labels: HashMap::new(),
             insert_aliases: HashMap::new(),
             insert_held: String::new(),
+            place_bindings: Default::default(),
             key_preset: yumete_cjk::KeyPreset::Helix,
             which_wrap: String::new(),
             alias_held: String::new(),
@@ -5623,8 +5627,10 @@ mod normal;
 pub(crate) use normal::default_key_written;
 mod page;
 mod pairing;
+mod places;
 pub use pairing::AutoPairs;
 mod prompt;
+pub(crate) use prompt::word_cut;
 mod render;
 mod ruby;
 mod search;

@@ -419,7 +419,9 @@ impl Editor {
         self.insert_str(&text);
     }
 
-    pub(super) fn on_command_key(&mut self, key: Key) -> KeyOutcome {
+    pub(super) fn on_command_key(&mut self, key: Key) {
+        let commands = self.commands_in(yumete_cjk::actions::Place::Prompt, key);
+        let runs = |name: &str| commands.as_ref().is_some_and(|c| c.iter().any(|one| one.starts_with(name)));
         // Anything but ⇥ abandons the completion in progress, so the next one
         // starts from what is actually on the line.
         //
@@ -427,23 +429,39 @@ impl Editor {
         // walked the completion from 2026-10-10 to then; they walk the history
         // now, and a key that walks the history is a key that abandons the
         // completion like any other.
-        if !matches!(key, Key::Tab | Key::BackTab) {
+        if !runs("completion_") {
             self.completion = None;
         }
         // Anything but the four history keys leaves the history where it was:
         // walking back to a line and then editing it is editing *that line*,
         // not browsing.
-        if !matches!(key, Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n')) {
+        if !runs("history_") {
             self.history_at = None;
         }
-        match key {
-            // A second `:` on an **empty** line opens the search over what the
-            // commands do (#224). Only on an empty one: `:s/:/：/` is a
-            // substitution with two colons in it.
-            Key::Char(':') if self.command_line.is_empty() => {
-                self.mode = Mode::Lookfor;
-                self.lookfor_focus = 0;
+        let Some(commands) = commands else {
+            match key {
+                // A second `:` on an **empty** line opens the search over what
+                // the commands do (#224). Only on an empty one: `:s/:/：/` is a
+                // substitution with two colons in it.
+                Key::Char(':') if self.command_line.is_empty() => {
+                    self.mode = Mode::Lookfor;
+                    self.lookfor_focus = 0;
+                }
+                Key::Char(c) => {
+                    self.type_into_prompt(c);
+                    // 行變了：照新的樣子先畫出來（`PromptEvent::Update`）。
+                    self.ask_for_a_trial();
+                }
+                _ => {}
             }
+            return;
+        };
+        self.run_in_place(yumete_cjk::actions::Place::Prompt, &commands, |e, name| e.command_line_command(name));
+    }
+
+    /// One of a prompt's commands, on the `:` line.
+    fn command_line_command(&mut self, name: &str) {
+        match name {
             // Warning: **⇥ 也要預覽**（2026-10-07 報的：「命令面板 tab 到主題的時候會暫時
             // preview 這個主題，但是我發現没有效果」）。這兩個鍵自己一支，走不到
             // 下面那個 `other` 分支——而那裏纔是喊預覽的地方。於是手打
@@ -462,34 +480,34 @@ impl Editor {
             // arm** 裏走歷史，`Tab`/`S-Tab` 走補全。所以兩對鍵各管一樣東西，
             // 和命令行上打了什麼無關——「看得見的那張」始終是 ⇥ 走的那張。
             // A shell line's ghost is the last shell command; Tab takes it.
-            Key::Tab if self.completion.is_none() && self.shell_ghost().is_some() => {
+            "completion_next" if self.completion.is_none() && self.shell_ghost().is_some() => {
                 let rest = self.shell_ghost().unwrap_or_default();
                 self.command_line.push_str(&rest);
                 self.command_caret = self.command_line.chars().count();
             }
             // Otherwise it walks the programs or files the word can become.
-            Key::Tab | Key::BackTab if command::shell_start(&self.command_line).is_some() => {
-                self.cycle_shell(if key == Key::Tab { 1 } else { -1 });
+            "completion_next" | "completion_prev" if command::shell_start(&self.command_line).is_some() => {
+                self.cycle_shell(if name == "completion_next" { 1 } else { -1 });
             }
-            Key::Tab => {
+            "completion_next" => {
                 self.cycle_completion(1);
                 self.ask_for_a_trial();
             }
-            Key::BackTab => {
+            "completion_prev" => {
                 self.cycle_completion(-1);
                 self.ask_for_a_trial();
             }
-            Key::Esc => {
+            "normal_mode" => {
                 // 退出去：把預覽放回原樣（helix 的 `PromptEvent::Abort`）。
                 self.end_a_trial(crate::editor::Trial::Undo);
                 self.close_prompt();
             }
-            Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n') => {
-                self.walk_history(matches!(key, Key::Up | Key::Ctrl('p')), false);
+            "history_prev" | "history_next" => {
+                self.walk_history(name == "history_prev", false);
                 // 翻出來的那一行也是一行：`:theme 墨香` 從歷史裏翻上來，照樣先畫。
                 self.ask_for_a_trial();
             }
-            Key::Enter => {
+            "confirm" => {
                 // 按下了：預覽成真，記下的舊樣子不必再留（`PromptEvent::Validate`）。
                 self.end_a_trial(crate::editor::Trial::Keep);
                 let line = std::mem::take(&mut self.command_line);
@@ -502,7 +520,7 @@ impl Editor {
                     remember_line(&mut self.command_history, &line);
                 }
                 match self.execute(&line) {
-                    Ok(CommandOutcome::Quit) => return KeyOutcome::Quit,
+                    Ok(CommandOutcome::Quit) => self.quit_from_binding = true,
                     Ok(CommandOutcome::Continue) => {}
                     Err(err) => self.status = err.to_string(),
                 }
@@ -513,7 +531,6 @@ impl Editor {
                 self.ask_for_a_trial();
             }
         }
-        KeyOutcome::Continue
     }
 
     /// **命令行打到一半，照它先畫一次**（2026-10-07 定，照 helix 的三個事件）。
@@ -550,11 +567,26 @@ impl Editor {
     /// always the line the reader can see. `:q!` is not undoable, and a mode
     /// that guessed which command was meant would eventually guess that one.
     pub(super) fn on_lookfor_key(&mut self, key: Key) {
-        match key {
-            Key::Esc => self.close_prompt(),
+        // A picker over the commands: the picker's keys, then the prompt's.
+        let place = yumete_cjk::actions::Place::Picker;
+        match self.commands_in(place, key) {
+            Some(commands) => self.run_in_place(place, &commands, |e, name| e.lookfor_command(name)),
+            None => {
+                if let Key::Char(c) = key {
+                    self.type_into_prompt(c);
+                }
+                self.lookfor_focus = 0;
+            }
+        }
+    }
+
+    /// One of a picker's or a prompt's commands, on the `::` line.
+    fn lookfor_command(&mut self, name: &str) {
+        match name {
+            "normal_mode" => self.close_prompt(),
             // Backspacing `::` empty goes back to `:`, not out to the page:
             // the second colon is the last thing there was to take back.
-            Key::Backspace if self.command_line.is_empty() => {
+            "delete_char_backward" if self.command_line.is_empty() => {
                 self.mode = Mode::Command;
                 self.lookfor_focus = 0;
             }
@@ -568,9 +600,15 @@ impl Editor {
             // 一改也把相鄰兩行上同一個鍵的兩種意思合回了一種。
             //
             // **走到頭繞回來**：這是一張排過序的短名單，不是一份目錄。
-            Key::Tab | Key::Down | Key::Ctrl('n') => self.walk_lookfor(1),
-            Key::BackTab | Key::Up | Key::Ctrl('p') => self.walk_lookfor(-1),
-            Key::Enter => self.adopt_lookfor(),
+            "next_entry" => self.walk_lookfor(1),
+            "prev_entry" => self.walk_lookfor(-1),
+            "first_entry" => self.lookfor_focus = 0,
+            "last_entry" => self.lookfor_focus = lookfor::look(&self.command_line).len().saturating_sub(1),
+            "confirm" => self.adopt_lookfor(),
+            // Its list is short and has no page; the history and the
+            // completion are the `:` line's.
+            "page_down" | "page_up" | "cycle_hidden_files" | "history_prev" | "history_next" | "completion_next"
+            | "completion_prev" | "toggle_wide_search" => {}
             other => {
                 self.edit_prompt(other);
                 self.lookfor_focus = 0;
@@ -643,11 +681,11 @@ impl Editor {
         self.mode = Mode::Normal;
     }
 
-    /// The keys that edit a prompt rather than submit or cancel it.
+    /// The commands that edit a prompt rather than submit or cancel it.
     ///
     /// One set for `:` and `/` both: a search pattern is as long and as easy to
     /// mistype as a command, and the same fingers type them.
-    pub(super) fn edit_prompt(&mut self, key: Key) {
+    pub(super) fn edit_prompt(&mut self, name: &str) {
         let len = self.command_line.chars().count();
         // **The caret stays after the `!` that `Shell:` stands for**
         // (2026-10-29, review): it could go before it, unseen, and a letter
@@ -657,22 +695,17 @@ impl Editor {
         let byte = |line: &str, at: usize| -> usize {
             line.char_indices().nth(at).map(|(i, _)| i).unwrap_or(line.len())
         };
-        match key {
-            Key::Char(c) => {
-                let at = byte(&self.command_line, self.command_caret);
-                self.command_line.insert(at, c);
-                self.command_caret += 1;
-            }
+        match name {
             // Forward delete on the prompt: the character *under* the caret,
             // and the caret stays where it is.
-            Key::Delete => {
+            "delete_char_forward" => {
                 if self.command_caret < len {
                     let from = byte(&self.command_line, self.command_caret);
                     let to = byte(&self.command_line, self.command_caret + 1);
                     self.command_line.replace_range(from..to, "");
                 }
             }
-            Key::Backspace => {
+            "delete_char_backward" => {
                 if self.command_caret == 0 {
                     // Backspacing past the start leaves the prompt: the line is
                     // the only thing there was to go back over.
@@ -686,29 +719,20 @@ impl Editor {
                 self.command_line.replace_range(from..to, "");
                 self.command_caret -= 1;
             }
-            Key::Left => self.command_caret = self.command_caret.saturating_sub(1).max(floor),
-            Key::Right => self.command_caret = (self.command_caret + 1).min(len),
-            Key::Home | Key::Ctrl('a') => self.command_caret = floor,
-            Key::End | Key::Ctrl('e') => self.command_caret = len,
+            "move_char_left" => self.command_caret = self.command_caret.saturating_sub(1).max(floor),
+            "move_char_right" => self.command_caret = (self.command_caret + 1).min(len),
+            "goto_line_start" => self.command_caret = floor,
+            "goto_line_end" => self.command_caret = len,
             // The same two keys Insert has, and every terminal prompt.
-            Key::Ctrl('w') => {
+            "delete_word_backward" => {
                 let head: String = self.command_line.chars().take(self.command_caret).collect();
-                let kept = head.trim_end();
-                // Counted in **characters**, not bytes: a full-width space —
-                // which a Chinese writer types without thinking about it — is
-                // three bytes, and `byte index + 1` lands inside it.
-                let cut = kept
-                    .char_indices()
-                    .rev()
-                    .find(|(_, c)| c.is_whitespace())
-                    .map_or(0, |(i, c)| kept[..i + c.len_utf8()].chars().count())
-                    .max(floor);
+                let cut = word_cut(&head).max(floor);
                 let keep: String = head.chars().take(cut).collect();
                 let tail: String = self.command_line.chars().skip(self.command_caret).collect();
                 self.command_caret = keep.chars().count();
                 self.command_line = format!("{keep}{tail}");
             }
-            Key::Ctrl('u') => {
+            "kill_to_line_start" => {
                 let head = self.command_line.chars().take(floor);
                 let tail = self.command_line.chars().skip(self.command_caret);
                 self.command_line = head.chain(tail).collect();
@@ -716,6 +740,16 @@ impl Editor {
             }
             _ => {}
         }
+    }
+
+    /// A character typed into a prompt, at the caret.
+    pub(super) fn type_into_prompt(&mut self, c: char) {
+        let len = self.command_line.chars().count();
+        let floor = self.prompt_hidden().min(len);
+        self.command_caret = self.command_caret.clamp(floor, len);
+        let at = self.command_line.char_indices().nth(self.command_caret).map_or(self.command_line.len(), |(i, _)| i);
+        self.command_line.insert(at, c);
+        self.command_caret += 1;
     }
 
     /// Walk through what has been typed at this prompt before, **in either
@@ -783,29 +817,41 @@ impl Editor {
     }
 
     pub(super) fn on_search_key(&mut self, key: Key) {
-        if !matches!(key, Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n')) {
+        let place = yumete_cjk::actions::Place::Prompt;
+        let commands = self.commands_in(place, key);
+        if !commands.as_ref().is_some_and(|c| c.iter().any(|one| one.starts_with("history_"))) {
             self.history_at = None;
         }
-        match key {
+        match commands {
+            Some(commands) => self.run_in_place(place, &commands, |e, name| e.search_line_command(name)),
+            None => {
+                if let Key::Char(c) = key {
+                    self.type_into_prompt(c);
+                }
+            }
+        }
+    }
+
+    /// One of a prompt's commands, on the `/` line.
+    fn search_line_command(&mut self, name: &str) {
+        match name {
             // Warning: 退出去的時候也要把那一格放掉，不然下一次按 `/` 會做上一次那件事。
-            Key::Esc => {
+            "normal_mode" => {
                 self.sift = None;
                 self.close_prompt();
             }
             // Tab takes the rest of the last pattern, so searching for the same
             // thing again is a keystroke rather than retyping it.
-            Key::Tab => self.adopt_ghost(),
+            "completion_next" => self.adopt_ghost(),
             // **`A-j`：繁簡拼音通配**（2026-10-12 定）。`/` 收不了旗標（`:s` 的
             // `y`／`j` 是那一頭的辦法），所以這一行用一個鍵。兩樣一起翻：這一行
             // 分不開也不必分，要分得開就開那扇面板。
-            Key::Alt('j') => self.search.wild = !self.search.wild,
+            "toggle_wide_search" => self.search.wild = !self.search.wild,
             // **`C-p`/`C-n` 也走歷史**，同命令行那一扇（2026-10-13）。helix 的
             // `/` 和 `:` 共用一支 prompt，所以那一對在兩扇裏是同一件事；這裏兩
             // 扇各一支，所以兩處都要寫——少一處就是「一扇認一扇不認」。
-            Key::Up | Key::Down | Key::Ctrl('p') | Key::Ctrl('n') => {
-                self.walk_history(matches!(key, Key::Up | Key::Ctrl('p')), true)
-            }
-            Key::Enter => {
+            "history_prev" | "history_next" => self.walk_history(name == "history_prev", true),
+            "confirm" => {
                 let pattern = std::mem::take(&mut self.command_line);
                 self.command_caret = 0;
                 self.mode = Mode::Normal;
@@ -827,4 +873,18 @@ impl Editor {
             other => self.edit_prompt(other),
         }
     }
+}
+
+/// **Where `C-w` cuts back to** in `head`, the text before the caret: the
+/// last word and the spaces after it, counted in characters.
+///
+/// Counted in **characters**, not bytes: a full-width space — which a Chinese
+/// writer types without thinking about it — is three bytes, and `byte index
+/// + 1` lands inside it.
+pub(crate) fn word_cut(head: &str) -> usize {
+    let kept = head.trim_end();
+    kept.char_indices()
+        .rev()
+        .find(|(_, c)| c.is_whitespace())
+        .map_or(0, |(i, c)| kept[..i + c.len_utf8()].chars().count())
 }

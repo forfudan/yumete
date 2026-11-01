@@ -463,15 +463,16 @@ impl Editor {
         self.links_row_keys.get(panel.selected())?.clone()
     }
 
-    /// Keys the links panel answers before the list does: `v` flips the
-    /// look, `h`/`l` fold and open a section or a neighbour. `true` when
-    /// taken.
-    pub(super) fn on_links_key(&mut self, key: Key) -> bool {
+    /// Commands the links panel answers before the list does:
+    /// `toggle_links_graph` (`v`) flips the look, `collapse_entry` and
+    /// `expand_entry` (`h`/`l`) fold and open a section or a neighbour.
+    /// `true` when taken.
+    pub(super) fn links_panel_command(&mut self, name: &str) -> bool {
         if self.showing(crate::sidebar::View::Links).is_none() {
             return false;
         }
-        match key {
-            Key::Char('v') => {
+        match name {
+            "toggle_links_graph" => {
                 self.links_look = match self.links_look {
                     Look::List => Look::Graph,
                     Look::Graph => Look::List,
@@ -479,7 +480,7 @@ impl Editor {
                 self.refresh_sidebar();
                 true
             }
-            Key::Char('h') | Key::Left => {
+            "collapse_entry" => {
                 let Some(fold) = self.links_row_key() else { return true };
                 match fold.starts_with("node:") {
                     true => self.links_shut.remove(&fold),
@@ -488,7 +489,7 @@ impl Editor {
                 self.refresh_sidebar();
                 true
             }
-            Key::Char('l') | Key::Right => {
+            "expand_entry" => {
                 let Some(fold) = self.links_row_key() else { return false };
                 let opened = match fold.starts_with("node:") {
                     true => self.links_shut.insert(fold),

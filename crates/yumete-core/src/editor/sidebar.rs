@@ -313,53 +313,6 @@ impl Editor {
     }
 
 
-    /// **The keys every panel answers, wherever it sits.**
-    ///
-    /// Warning: 左欄、右欄、光標放上去的那幾種是**同一個組件擺在不同位置**，所以這一組鍵
-    /// 必須是同一份。分成三份各自維護的代價已經付過一次：常駐面板和搜索面板都
-    /// 有 `q`，臨時層漏了，於是 `空格 d` 打開的字典**關不掉**——`q`、`Esc`、`j`
-    /// 全被那一句 `_ => {}` 吃掉，唯一的出路是 `C-w` 再移動光標，兩步，而且提示
-    /// 行一個字都没說。
-    ///
-    /// Tried **last**, so a panel's own meaning for a key still wins: the
-    /// search panel spends `Space` on a switch when the keys are on one.
-    /// Answers whether it took the key.
-    ///
-    /// `Esc` is deliberately **not** here — see `on_sidebar_key`: a panel with
-    /// a field in it spends `Esc` on leaving Insert, and one press too many
-    /// would then take the keys off it. `q` is the way out, and the hint row
-    /// says so in every panel.
-    pub(super) fn panel_key_in_common(&mut self, key: Key) -> bool {
-        match key {
-            // **邊欄裏 `C-w` 也是那一組的門**（2026-09-30）。從前它在這裏直接
-            // 走下一區，而在正文裏是前綴——同一個和弦兩個意思，正是這一輪在
-            // 拆的毛病。走下一區照舊是 `C-w w`，兩處一樣。
-            Key::Ctrl('w') => self.pending = Pending::Region,
-            // **`q` 把鍵還給正文，面板留着**（2026-10-10 定）。
-            //
-            // 從前它是「關掉」，而關掉已經有 `C-w q` 了——同一件事兩個鍵，而「讀完
-            // 了，手回去寫字」這件每天做幾十次的事反倒没有鍵：`空格 w` 是「換一個
-            // 區域」，不是「回正文」。原話：「q 就重复了。建议 q 改成返回编辑区但
-            // 不关闭搜索面板」。
-            Key::Char('q') => self.panel_focus = None,
-            // **`:` opens the command line from in here too.** It used to be
-            // swallowed, so a reader with the keys in a panel had no way to
-            // run a command at all — and `:panel-left` is a command
-            // *about* the panel you are standing in, which nobody could have
-            // reached. The focus stays where it is while the line is typed, so
-            // 「this one」 still means this one.
-            Key::Char(':') => {
-                self.mode = Mode::Command;
-                self.command_line.clear();
-                self.command_caret = 0;
-            }
-            // Space still opens the menu, so the key that opened the sidebar
-            // closes it again from inside it.
-            Key::Char(' ') => self.pending = Pending::Space,
-            _ => return false,
-        }
-        true
-    }
 
     /// **`q` 在信息那一格上：把它收起來**（#426）。
     ///
@@ -401,41 +354,34 @@ impl Editor {
     /// No `l`/`Enter` — a reading is not a place to go. What is left is moving
     /// the eye down a long answer, spelled the way the text and the lists
     /// already spell it, and `q` to put it away.
-    fn on_info_key(&mut self, key: Key, side: crate::sidebar::Side) {
+    fn info_command(&mut self, name: &str, side: crate::sidebar::Side) {
         let last = self.info_len(side).saturating_sub(1);
         let step = |at: usize, by: usize, down: bool| match down {
             true => at.saturating_add(by).min(last),
             false => at.saturating_sub(by),
         };
-        match key {
-            Key::Char('j') | Key::Down => self.panel_scroll = step(self.panel_scroll, 1, true),
-            Key::Char('k') | Key::Up => self.panel_scroll = step(self.panel_scroll, 1, false),
-            Key::Char('J') | Key::PageDown => {
-                self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, true)
-            }
-            Key::Char('K') | Key::PageUp => {
-                self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false)
-            }
-            Key::Char('g') | Key::Home => self.panel_scroll = 0,
-            Key::Char('G') | Key::End => self.panel_scroll = last,
+        let change = self.info_in_this_sidebar(side) == Some(crate::sidebar::Info::Change);
+        match name {
+            "move_line_down" => self.panel_scroll = step(self.panel_scroll, 1, true),
+            "move_line_up" => self.panel_scroll = step(self.panel_scroll, 1, false),
+            "page_down" => self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, true),
+            "page_up" => self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false),
+            "goto_file_start" => self.panel_scroll = 0,
+            "goto_last_line" => self.panel_scroll = last,
             // **改動那一格自己的兩個鍵**（2026-10-11，照 gitsigns／gitgutter／
             // signify 三家）：`u` 把這一塊還原成 `HEAD` 那一份，`y` 複製它改之前
-            // 寫的那幾行。只有那一格有，別的四格照舊落到下面那一支。
-            Key::Char('u') if self.info_in_this_sidebar(side) == Some(crate::sidebar::Info::Change) => {
+            // 寫的那幾行。只有那一格有。
+            "restore_change" if change => {
                 if self.restore_the_change_here() {
                     self.refresh_sidebar();
                 }
             }
-            Key::Char('y') if self.info_in_this_sidebar(side) == Some(crate::sidebar::Info::Change) => {
+            "yank_old_text" if change => {
                 let Some(run) = self.change_here() else { return };
                 let text = run.was.join("\n");
                 self.clipboard_request = Some(text);
             }
-            // Warning: **落到 `on_sidebar_key_after_the_list`，不是直接落到
-            // `panel_key_in_common`**（2026-09-30 修）。那一支纔認 `w`（寬窄）、
-            // `R`（重讀）、`Tab`、`Esc`——只落到後者的話，信息那一格裏 `w` 又
-            // 一次悄悄失效，而那正是 2026-09-29 報的那一條。
-            other => self.on_sidebar_key_after_the_list(other),
+            _ => {}
         }
     }
 
@@ -747,21 +693,21 @@ impl Editor {
     /// **百科那一頁的滾動**（2026-09-22）。
     ///
     /// 與別的視圖同一套鍵：`j`/`k` 一行，`J`/`K` 半頁，`g`/`G` 兩頭；`q` 與
-    /// `C-w` 照舊由 [`Self::panel_key_in_common`] 接。
-    fn scroll_wiki(&mut self, key: Key) {
+    /// `C-w` 照舊由 [`Self::panel_command_in_common`] 接。
+    fn scroll_wiki(&mut self, name: &str) {
         let page = Self::PAGE_IN_A_LIST;
         let (at, _) = self.wiki_scroll_now();
-        let moved = match key {
-            Key::Char('j') | Key::Down => at.saturating_add(1),
-            Key::Char('k') | Key::Up => at.saturating_sub(1),
-            Key::Char('J') | Key::PageDown => at.saturating_add(page),
-            Key::Char('K') | Key::PageUp => at.saturating_sub(page),
-            Key::Char('g') | Key::Home => 0,
+        let moved = match name {
+            "move_line_down" => at.saturating_add(1),
+            "move_line_up" => at.saturating_sub(1),
+            "page_down" => at.saturating_add(page),
+            "page_up" => at.saturating_sub(page),
+            "goto_file_start" => 0,
             // Warning: **`G` 不在這裏算底在哪**——這一頭數不出來（見
             // [`Editor::wiki_scroll`]）。存一個到不了的數，畫的那一趟走到底、
             // 算出總數、把真正的那個數夾回來。
-            Key::Char('G') | Key::End => usize::MAX,
-            other => return self.on_sidebar_key_after_the_list(other),
+            "goto_last_line" => usize::MAX,
+            _ => return,
         };
         self.wiki_scroll.set((moved, self.sel.head()));
     }
@@ -783,15 +729,23 @@ impl Editor {
     /// **不管這一頁是單子還是文章，這幾個鍵都算數**（2026-09-23 審出來的：提示
     /// 行在百科那一頁上照樣寫着 `Tab 換視圖`/`w 寬窄`，而那兩個鍵在那裏什麽都
     /// 不做——「拿走鍵的那一半有義務」）。
-    pub(super) fn on_sidebar_key_after_the_list(&mut self, key: Key) {
-        let Some(side) = self.panel_focus() else { return };
-        match key {
-            Key::Char('R') => self.refresh_sidebar(),
+    /// **What every panel answers, wherever it sits and whatever it holds**
+    /// — `R`, `w`, `Tab`/`S-Tab`, `Esc`, then `q`/`C-w`/`:`/空格. Answers
+    /// whether it took the command.
+    ///
+    /// `Esc` does nothing to the panel (#293). It is everyone's 「get me out」
+    /// key, so it is tempting — but a panel with a field in it spends `Esc` on
+    /// leaving Insert, and one press too many would then put the panel away.
+    /// Two doors instead, and both say so in the hint row: `q` closes this
+    /// slot, `C-w` walks on to the next region and leaves it up.
+    fn panel_command_in_common(&mut self, name: &str, side: crate::sidebar::Side) -> bool {
+        match name {
+            "refresh_sidebar" => self.refresh_sidebar(),
             // **`w` 走一格：窄 → 中 → 寬 → 窄**（2026-09-26 定的）。
             //
             // Warning: **不問這一格裏裝的是什麼**：寬度歸側欄，面板只是借它。所以字典、
             // 懸停、表格詳情按 `w` 一樣管用——從前它們根本不認這個鍵。
-            Key::Char('w') => {
+            "cycle_sidebar_width" => {
                 let step = self.width[side as usize].next();
                 self.width[side as usize] = step;
                 let (num, den) = step.fraction();
@@ -799,12 +753,12 @@ impl Editor {
                 // 而這一行底下正是按鍵提示的位子（2026-09-27）。
                 self.murmur(say!("sidebar.width", num, den));
             }
-            Key::Tab => {
-                self.cycle_view(side, false);
-            }
-            Key::BackTab => {
-                self.cycle_view(side, true);
-            }
+            // **Tab walks the views that live in *this* slot.** Which ones
+            // those are is a setting, so the question belongs to the editor
+            // rather than to the panel — with the outline moved across, this
+            // slot walks two and the other one walks one (#293).
+            "next_sidebar_view" => self.cycle_view(side, false),
+            "prev_sidebar_view" => self.cycle_view(side, true),
             // **`Esc` 在邊欄裏也是「把輸入法的挂起再說一遍」**（2026-09-27 報的：
             // 「光标在侧栏中的时候，我在别的 app 中使用了系统的宇夢，回到
             // terminal，无法通过 esc 把它挂起。它会在工作区的光标处形成一个输入
@@ -813,12 +767,35 @@ impl Editor {
             // 正文那一頭 2026-09-22 就有這條退路（`keys.rs` 的 `say_it_again`）：
             // 「已經挂起了」是一個**信念**，而輸入法在別的程序裏自己恢復之後，這
             // 一頭還記着舊的，於是再也不發第二次信號。抹掉信念，下一輪自己重發。
-            // 邊欄這一支從前根本收不到那一下 `Esc`——它在這裏什麼都不做。
-            Key::Esc => self.say_it_again = true,
-            other => {
-                self.panel_key_in_common(other);
+            "normal_mode" => self.say_it_again = true,
+            // **邊欄裏 `C-w` 也是那一組的門**（2026-09-30）。從前它在這裏直接
+            // 走下一區，而在正文裏是前綴——同一個和弦兩個意思，正是這一輪在
+            // 拆的毛病。走下一區照舊是 `C-w w`，兩處一樣。
+            "window_mode" => self.pending = Pending::Region,
+            // **`q` 把鍵還給正文，面板留着**（2026-10-10 定）。
+            //
+            // 從前它是「關掉」，而關掉已經有 `C-w q` 了——同一件事兩個鍵，而「讀完
+            // 了，手回去寫字」這件每天做幾十次的事反倒没有鍵：`空格 w` 是「換一個
+            // 區域」，不是「回正文」。原話：「q 就重复了。建议 q 改成返回编辑区但
+            // 不关闭搜索面板」。
+            "leave_sidebar" => self.panel_focus = None,
+            // **`:` opens the command line from in here too.** It used to be
+            // swallowed, so a reader with the keys in a panel had no way to
+            // run a command at all — and `:panel-left` is a command
+            // *about* the panel you are standing in, which nobody could have
+            // reached. The focus stays where it is while the line is typed, so
+            // 「this one」 still means this one.
+            "command_mode" => {
+                self.mode = Mode::Command;
+                self.command_line.clear();
+                self.command_caret = 0;
             }
+            // Space still opens the menu, so the key that opened the sidebar
+            // closes it again from inside it.
+            "space_mode" => self.pending = Pending::Space,
+            _ => return false,
         }
+        true
     }
 
     /// The 大綱's headings, whichever way this document spells them.
@@ -1319,122 +1296,135 @@ impl Editor {
     /// `l` into, `h` out of — so there is nothing new to learn; only what they
     /// move through is different.
     pub(super) fn on_sidebar_key(&mut self, key: Key) {
-        // The 大綱's fold keys are answered before the borrow below, because
-        // they need the whole editor: only it knows how deep each heading sits
-        // (#37). `outline_row_key` is `Some` only in that view, with a row
-        // under the highlight.
-        if self.outline_row_key().is_some() {
-            match key {
+        let Some(side) = self.panel_focus() else {
+            self.panel_focus = None;
+            return;
+        };
+        // The search panel's own keys come first: a form and a list of hits,
+        // not rows of a tree (#419). What it does not take comes back to the
+        // table, in `on_search_panel_key`.
+        if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
+            return self.on_search_panel_key(key, side);
+        }
+        self.on_sidebar_table_key(key);
+    }
+
+    /// **A sidebar's key, by its table** (2026-11-01, step 9 of the keymap
+    /// plan): the reader's `[keys.sidebar]`, then the default.
+    pub(super) fn on_sidebar_table_key(&mut self, key: Key) {
+        let place = yumete_cjk::actions::Place::Sidebar;
+        if let Some(commands) = self.commands_in(place, key) {
+            self.run_in_place(place, &commands, |e, name| e.sidebar_command(name));
+        }
+    }
+
+    /// **One of a sidebar's commands**, in whichever view the slot shows:
+    /// what every panel answers first, then the view's own.
+    fn sidebar_command(&mut self, name: &str) {
+        let Some(side) = self.panel_focus() else { return };
+        if self.panel_command_in_common(name, side) {
+            return;
+        }
+        use crate::sidebar::View;
+        match self.panel(side).map(|p| p.view()) {
+            // Its list is its own, answered before the table.
+            Some(View::Search) | None => {}
+            // **百科是一段文章，要滾不要走**（2026-09-22）：它軟折行，只有畫的
+            // 那一頭數得出屏幕行，所以它的捲軸自己存一份（`wiki_scroll`）。
+            Some(View::Info) => match self.info_now() {
+                Some(crate::sidebar::Info::Wiki) => self.scroll_wiki(name),
+                _ => self.info_command(name, side),
+            },
+            // 雙鏈: `v` flips the look, `h`/`l` fold — before the list's own.
+            Some(View::Links) if self.links_panel_command(name) => {}
+            Some(view) => self.list_command(name, side, view),
+        }
+    }
+
+    /// One of a list's commands: the tree, the buffers, the outline, the
+    /// links.
+    fn list_command(&mut self, name: &str, side: crate::sidebar::Side, view: crate::sidebar::View) {
+        // The 大綱's fold commands are answered before the borrow below,
+        // because they need the whole editor: only it knows how deep each
+        // heading sits (#37).
+        if view == crate::sidebar::View::Outline && self.outline_row_key().is_some() {
+            match name {
                 // Out of a branch, as `h` is in the tree.
-                Key::Char('h') | Key::Left => return self.fold_outline(),
+                "collapse_entry" => return self.fold_outline(),
                 // Into one. On a folded heading `l` opens it rather than
                 // jumping — 「more of this」 is what it already means in the
                 // tree. It falls through on any other row, and `Enter` never
                 // folds at all: that is the key that goes, and a heading is a
                 // place whether or not it is holding others.
-                Key::Char('l') | Key::Right if self.unfold_outline() => return,
+                "expand_entry" if self.unfold_outline() => return,
                 _ => {}
             }
-        }
-        let Some(side) = self.panel_focus() else {
-            self.panel_focus = None;
-            return;
-        };
-        // 雙鏈: `v` flips the look, `h`/`l` fold — before the list's own keys.
-        if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Links)
-            && self.on_links_key(key)
-        {
-            return;
-        }
-        // 光標放上去的那一個在眼前，鍵就歸它——常駐那一個在底下等着，不收鍵。
-        if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Info) {
-            // **百科是一段文章，要滾不要走**（2026-09-22）：它軟折行，只有畫的
-            // 那一頭數得出屏幕行，所以它的捲軸自己存一份（`wiki_scroll`）。
-            return match self.info_now() {
-                Some(crate::sidebar::Info::Wiki) => self.scroll_wiki(key),
-                _ => self.on_info_key(key, side),
-            };
-        }
-        if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
-            return self.on_search_panel_key(key, side);
         }
         let Some(sidebar) = self.panel_mut(side) else {
             return;
         };
-        match key {
-            Key::Char('j') | Key::Down => sidebar.step(true),
-            Key::Char('k') | Key::Up => sidebar.step(false),
+        match name {
+            "move_line_down" => sidebar.step(true),
+            "move_line_up" => sidebar.step(false),
             // **A list pages by the same keys the page does.** `J`/`K` are
             // half a page in the text; a 700-chapter outline is the one list
             // where walking it by `j` is not walking, and `PageDown` is not on
             // every keyboard a novelist owns.
-            Key::Char('J') | Key::PageDown => {
+            "page_down" => {
                 for _ in 0..Self::PAGE_IN_A_LIST {
                     sidebar.step(true);
                 }
             }
-            Key::Char('K') | Key::PageUp => {
+            "page_up" => {
                 for _ in 0..Self::PAGE_IN_A_LIST {
                     sidebar.step(false);
                 }
             }
             // …and the ends, spelled as they are in the text.
-            Key::Char('g') | Key::Home => sidebar.go_to_end(false),
-            Key::Char('G') | Key::End => sidebar.go_to_end(true),
-            Key::Char('h') | Key::Left => sidebar.collapse(),
-            Key::Char('l') | Key::Right | Key::Enter => {
-                let chosen = sidebar.activate();
-                match chosen {
-                    Some(crate::sidebar::Chosen::File(path)) => {
-                        if let Err(err) = self.open_file(&path) {
-                            self.status = say!("buffer.cannot-open", path.display(), err);
-                        }
-                        // Entering a file means going to write in it.
-                        self.panel_focus = None;
-                        self.refresh_sidebar();
-                    }
-                    Some(crate::sidebar::Chosen::Buffer(i)) => {
-                        self.show_buffer(i);
-                        self.panel_focus = None;
-                        self.refresh_sidebar();
-                    }
-                    Some(crate::sidebar::Chosen::Line(line)) => {
-                        self.goto_line(line + 1);
-                        self.panel_focus = None;
-                    }
-                    Some(crate::sidebar::Chosen::FileLine(path, line)) => {
-                        match self.open_included_file(&path) {
-                            Ok(()) => self.goto_line(line + 1),
-                            Err(err) => {
-                                self.status = say!("buffer.cannot-open", path.display(), err)
-                            }
-                        }
-                        self.panel_focus = None;
-                        self.refresh_sidebar();
-                    }
-                    None => {}
+            "goto_file_start" => sidebar.go_to_end(false),
+            "goto_last_line" => sidebar.go_to_end(true),
+            "collapse_entry" => sidebar.collapse(),
+            "expand_entry" | "open_entry" => self.open_the_entry(side),
+            _ => {}
+        }
+    }
+
+    /// The row under the highlight, gone into: a file opened, a buffer
+    /// shown, a heading or a line gone to.
+    fn open_the_entry(&mut self, side: crate::sidebar::Side) {
+        let Some(sidebar) = self.panel_mut(side) else {
+            return;
+        };
+        let chosen = sidebar.activate();
+        match chosen {
+            Some(crate::sidebar::Chosen::File(path)) => {
+                if let Err(err) = self.open_file(&path) {
+                    self.status = say!("buffer.cannot-open", path.display(), err);
                 }
+                // Entering a file means going to write in it.
+                self.panel_focus = None;
+                self.refresh_sidebar();
             }
-            // **`Esc` does nothing here** (#293). It is everyone's 「get me
-            // out」 key, so it is tempting — but a panel with a field in it
-            // spends `Esc` on leaving Insert, and one press too many would
-            // then put the panel away. Two doors instead, and both say so in
-            // the hint row: `q` closes this slot, `C-w` walks on to the next
-            // region and leaves it up. Both live in `panel_key_in_common`,
-            // with `:` and `Space`, because every panel owes the reader the
-            // same ones.
-            // …and everything that is the same whether this page is a list or
-            // an article: `R`, `w`, `Tab`/`S-Tab`, then `q`/`C-w`/`:`/空格.
-            // **Tab walks the views that live in *this* slot.** Which ones
-            // those are is a setting, so the question belongs to the editor
-            // rather than to the panel — with the outline moved across, this
-            // slot walks two and the other one walks one (#293). A chapter's
-            // whole name does not fit in a column narrow enough to be worth
-            // keeping open, so `w` trades the columns for the name and back;
-            // the views are built when they are opened, not on every key, so
-            // `R` is how a writer who has just added a chapter says to look
-            // again.
-            other => self.on_sidebar_key_after_the_list(other),
+            Some(crate::sidebar::Chosen::Buffer(i)) => {
+                self.show_buffer(i);
+                self.panel_focus = None;
+                self.refresh_sidebar();
+            }
+            Some(crate::sidebar::Chosen::Line(line)) => {
+                self.goto_line(line + 1);
+                self.panel_focus = None;
+            }
+            Some(crate::sidebar::Chosen::FileLine(path, line)) => {
+                match self.open_included_file(&path) {
+                    Ok(()) => self.goto_line(line + 1),
+                    Err(err) => {
+                        self.status = say!("buffer.cannot-open", path.display(), err)
+                    }
+                }
+                self.panel_focus = None;
+                self.refresh_sidebar();
+            }
+            None => {}
         }
     }
 
@@ -2150,31 +2140,47 @@ impl Editor {
     }
 
     fn picker_key(&mut self, key: Key) {
+        let place = yumete_cjk::actions::Place::Picker;
+        match self.commands_in(place, key) {
+            Some(commands) => self.run_in_place(place, &commands, |e, name| e.picker_command(name)),
+            None => {
+                if let (Key::Char(c), Some(picker)) = (key, self.picker.as_mut()) {
+                    picker.push(c);
+                }
+            }
+        }
+    }
+
+    /// One of a picker's commands, or a prompt's on its query.
+    fn picker_command(&mut self, name: &str) {
         let Some(picker) = self.picker.as_mut() else { return };
-        match key {
+        use crate::picker::Caret;
+        match name {
             // **一下就關。** 没有層可退回去了。
-            Key::Esc => self.close_picker(),
+            "normal_mode" => self.close_picker(),
             // Warning: **框空着的時候退格什麼都不做**。從前它換層（`i` 是怎麼進來的，
             // 退到頭就該退回去）；只剩一層之後那個去處不存在，而「退格到頭就關
             // 窗」是另一回事——打空了接着打纔是人要的。
-            Key::Backspace => picker.backspace(),
+            "delete_char_backward" => picker.backspace(),
             // **往前三個鍵，往後三個鍵**，照 helix 那一行。`Tab`/`S-Tab` 先說，
             // 原話：「这两个其实更加顺手」。
-            Key::Tab | Key::Ctrl('n') | Key::Down => picker.step(true),
-            Key::BackTab | Key::Ctrl('p') | Key::Up => picker.step(false),
-            Key::PageDown => picker.page(true),
-            Key::PageUp => picker.page(false),
-            Key::Enter => self.choose_from_picker(),
+            "next_entry" => picker.step(true),
+            "prev_entry" => picker.step(false),
+            "page_down" => picker.page(true),
+            "page_up" => picker.page(false),
+            "first_entry" => picker.go_to_end(false),
+            "last_entry" => picker.go_to_end(true),
+            "confirm" => self.choose_from_picker(),
             // 跳過哪些，轉一格——見 [`Editor::cycle_what_the_picker_skips`]。
-            Key::Alt('h') => self.cycle_what_the_picker_skips(),
-            Key::Char(c) => picker.push(c),
+            "cycle_hidden_files" => self.cycle_what_the_picker_skips(),
             // A query is typed text, and typed text is edited in the middle.
-            Key::Delete => picker.delete(),
-            Key::Left => picker.move_caret(crate::picker::Caret::Left),
-            Key::Right => picker.move_caret(crate::picker::Caret::Right),
-            Key::Home | Key::Ctrl('a') => picker.move_caret(crate::picker::Caret::Start),
-            Key::End | Key::Ctrl('e') => picker.move_caret(crate::picker::Caret::End),
-            Key::Ctrl('u') => picker.clear_before_caret(),
+            "delete_char_forward" => picker.delete(),
+            "move_char_left" => picker.move_caret(Caret::Left),
+            "move_char_right" => picker.move_caret(Caret::Right),
+            "goto_line_start" => picker.move_caret(Caret::Start),
+            "goto_line_end" => picker.move_caret(Caret::End),
+            "kill_to_line_start" => picker.clear_before_caret(),
+            "delete_word_backward" => picker.delete_word_before_caret(),
             _ => {}
         }
     }

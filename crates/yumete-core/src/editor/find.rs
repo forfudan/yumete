@@ -1206,18 +1206,14 @@ impl Editor {
                 self.search.selected = self.search.rows().len().saturating_sub(1)
             }
             // `C-w` `q` `:` 和光禿禿的 `Space` 是每一扇面板都有的，不是這一扇
-            // 的——見 `panel_key_in_common`。最後纔試，所以這一扇自己的鍵先贏。
+            // 的——見 `panel_command_in_common`。最後纔試，所以這一扇自己的鍵先贏。
             //
             // Warning: **接不住就往邊欄那一層再遞一手**（2026-09-26 報的：「搜索侧栏按
             // w 变宽后，再按就没办法变窄了」）。從前這裏把回報值丟掉，於是 `w`
             // 「寬窄」和 `R`「重讀」在這一扇裏是**啞的**——而狀態欄那一行照樣寫着
             // 「`w` 寬窄」。一個寫在屏幕上、按下去没反應的鍵，讀者只會以為自己記
             // 錯了（同 §5.12.39 那一族）。
-            other => {
-                if !self.panel_key_in_common(other) {
-                    self.on_sidebar_key_after_the_list(other);
-                }
-            }
+            other => self.on_sidebar_table_key(other),
         }
     }
 

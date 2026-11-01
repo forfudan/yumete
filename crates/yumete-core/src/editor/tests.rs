@@ -33636,3 +33636,85 @@ fn an_operator_takes_a_bound_motion() {
     ed.on_key(Key::Char('Q'));
     assert_eq!(ed.current_buffer().text(), " two\n", "de, not a d of nothing");
 }
+
+/// **A picker's, a prompt's and a sidebar's keys are bound by name**
+/// (2026-11-01, step 9 of the keymap plan): `[keys.picker]`, `[keys.prompt]`
+/// and `[keys.sidebar]` are read before the defaults, which stay.
+#[test]
+fn the_three_places_take_their_own_bindings() {
+    use crate::sidebar::Side;
+    use yumete_cjk::actions::Place;
+    let lines = |pairs: &[(&str, &str)]| -> HashMap<String, String> {
+        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    };
+
+    // A picker: `C-j` walks down, and the default `Tab` still does.
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().insert(0, "第一篇").expect("the fixture buffer is writable");
+    ed.execute(":new").unwrap();
+    ed.current_buffer_mut().insert(0, "第二篇").expect("the fixture buffer is writable");
+    ed.set_place_bindings(Place::Picker, lines(&[("C-j", "next_entry"), ("C-k", "prev_entry")]));
+    type_keys(&mut ed, " b");
+    assert_eq!(ed.mode(), Mode::Picker);
+    let at = |ed: &Editor| ed.picker().map(|p| p.selected());
+    assert_eq!(at(&ed), Some(0));
+    ed.on_key(Key::Ctrl('j'));
+    assert_eq!(at(&ed), Some(1), "C-j is the next entry");
+    ed.on_key(Key::Ctrl('k'));
+    assert_eq!(at(&ed), Some(0));
+    ed.on_key(Key::Tab);
+    assert_eq!(at(&ed), Some(1), "the default key stays");
+
+    // A prompt's binding works on the `:` line and on a picker's query, which
+    // borrows the prompt's keys; `C-w` takes a word there too.
+    ed.set_place_bindings(Place::Prompt, lines(&[("C-b", "move_char_left"), ("C-y", "@hello")]));
+    type_keys(&mut ed, "ab cd");
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.picker().map(|p| p.query().to_string()).as_deref(), Some("ab "));
+    ed.on_key(Key::Ctrl('b'));
+    assert_eq!(ed.picker().map(|p| p.caret()), Some(2));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.mode(), Mode::Normal);
+    ed.on_key(Key::Char(':'));
+    ed.on_key(Key::Ctrl('y'));
+    assert_eq!(ed.prompt(), Some((":", "hello")), "keys a binding plays are typed");
+    ed.on_key(Key::Ctrl('b'));
+    ed.on_key(Key::Char('X'));
+    assert_eq!(ed.prompt(), Some((":", "hellXo")));
+    ed.on_key(Key::Esc);
+
+    // A sidebar: `n` walks down, and `j` bound to `no_op` does nothing.
+    let mut ed = typed("# 一\n\n# 二\n\n# 三\n");
+    ed.execute(":sidebar outline").unwrap();
+    ed.focus_slot(Side::Left);
+    ed.set_place_bindings(Place::Sidebar, lines(&[("n", "move_line_down"), ("j", "no_op")]));
+    let at = |ed: &Editor| ed.panel(Side::Left).map(|p| p.selected());
+    assert_eq!(at(&ed), Some(0));
+    ed.on_key(Key::Char('n'));
+    assert_eq!(at(&ed), Some(1), "n is the next row");
+    ed.on_key(Key::Char('j'));
+    assert_eq!(at(&ed), Some(1), "j is unbound");
+    ed.on_key(Key::Char('G'));
+    assert_eq!(at(&ed), Some(2), "the other defaults stay");
+}
+
+/// **The outline's fold keys belong to the outline's own panel** (2026-11-01).
+/// With the outline on the left and the keys in the right sidebar, `h` there
+/// used to fold the heading highlighted on the left.
+#[test]
+fn h_in_the_other_sidebar_leaves_the_outline_alone() {
+    use crate::sidebar::Side;
+    let mut ed = typed("# 一\n\n## 甲\n\n# 二\n");
+    ed.execute(":sidebar outline").unwrap();
+    let rows = |ed: &Editor| ed.panel(Side::Left).map(|p| p.rows().len());
+    assert_eq!(rows(&ed), Some(3));
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('N'));
+    ed.focus_slot(Side::Right);
+    assert_eq!(ed.panel_focus(), Some(Side::Right));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(rows(&ed), Some(3), "the outline on the left is not folded");
+    ed.focus_slot(Side::Left);
+    ed.on_key(Key::Char('h'));
+    assert_eq!(rows(&ed), Some(2), "in its own panel `h` folds it");
+}

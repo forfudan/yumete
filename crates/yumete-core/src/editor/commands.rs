@@ -814,6 +814,27 @@ impl Editor {
                         crate::messages::say(action.help, &[]),
                     ));
                 }
+                // A prompt's, a picker's and a sidebar's (2026-11-01), each
+                // under the name of its table.
+                for place in yumete_cjk::actions::Place::ALL {
+                    listing.push_str(&format!(
+                        "\n### [keys.{}]\n\n| 名字 | 做什麽 | 現在是哪個鍵 |\n| --- | --- | --- |\n",
+                        place.name()
+                    ));
+                    for action in place.actions() {
+                        let now: Vec<String> = self
+                            .keys_in_place(place, action.name)
+                            .iter()
+                            .map(|keys| format!("`{}`", yumete_cjk::actions::spell(keys)))
+                            .collect();
+                        listing.push_str(&format!(
+                            "| `{}` | {} | {} |\n",
+                            action.name,
+                            crate::messages::say(action.help, &[]),
+                            now.join(" "),
+                        ));
+                    }
+                }
                 self.show_listing(listing, say!("keys.actions-title"));
                 Ok(CommandOutcome::Continue)
             }

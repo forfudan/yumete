@@ -1,0 +1,251 @@
+//! **A prompt's, a picker's and a sidebar's keys, each a named command**
+//! (2026-11-01, step 9 of the keymap plan). helix hard-codes these keys and
+//! nobody can rebind them; here each place has a default table, and the
+//! reader's own (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`) is read
+//! before it.
+//!
+//! A picker takes the prompt's keys too, for its query, and its own win
+//! where both name a key: helix's rule ("Prompt keybinds also work in
+//! pickers, except where they conflict with picker keybinds"). The `::`
+//! palette is a picker over the commands, so it reads both tables the same
+//! way.
+//!
+//! The names are listed in `yumete_cjk::actions::Place`; what each does is
+//! said where the place's keys are answered (`prompt.rs`, `sidebar.rs`).
+
+use super::*;
+use crate::input::Key;
+use yumete_cjk::actions::Place;
+
+/// A prompt's default keys: `:`, `/`, `::`, a reading, a picker's query.
+pub(super) const PROMPT_KEYS: &[(Key, &str)] = &[
+    (Key::Esc, "normal_mode"),
+    (Key::Enter, "confirm"),
+    (Key::Tab, "completion_next"),
+    (Key::BackTab, "completion_prev"),
+    (Key::Up, "history_prev"),
+    (Key::Ctrl('p'), "history_prev"),
+    (Key::Down, "history_next"),
+    (Key::Ctrl('n'), "history_next"),
+    (Key::Left, "move_char_left"),
+    (Key::Right, "move_char_right"),
+    (Key::Home, "goto_line_start"),
+    (Key::Ctrl('a'), "goto_line_start"),
+    (Key::End, "goto_line_end"),
+    (Key::Ctrl('e'), "goto_line_end"),
+    (Key::Backspace, "delete_char_backward"),
+    (Key::Delete, "delete_char_forward"),
+    (Key::Ctrl('w'), "delete_word_backward"),
+    (Key::Ctrl('u'), "kill_to_line_start"),
+    (Key::Alt('j'), "toggle_wide_search"),
+];
+
+/// A picker's default keys, read before the prompt's (helix's `Tab`, `C-n`
+/// and `Down` for the next entry).
+pub(super) const PICKER_KEYS: &[(Key, &str)] = &[
+    (Key::Tab, "next_entry"),
+    (Key::Ctrl('n'), "next_entry"),
+    (Key::Down, "next_entry"),
+    (Key::BackTab, "prev_entry"),
+    (Key::Ctrl('p'), "prev_entry"),
+    (Key::Up, "prev_entry"),
+    (Key::PageDown, "page_down"),
+    (Key::PageUp, "page_up"),
+    (Key::Alt('h'), "cycle_hidden_files"),
+];
+
+/// A sidebar's default keys: the text's letters for moving, and what every
+/// panel answers.
+pub(super) const SIDEBAR_KEYS: &[(Key, &str)] = &[
+    (Key::Char('j'), "move_line_down"),
+    (Key::Down, "move_line_down"),
+    (Key::Char('k'), "move_line_up"),
+    (Key::Up, "move_line_up"),
+    (Key::Char('J'), "page_down"),
+    (Key::PageDown, "page_down"),
+    (Key::Char('K'), "page_up"),
+    (Key::PageUp, "page_up"),
+    (Key::Char('g'), "goto_file_start"),
+    (Key::Home, "goto_file_start"),
+    (Key::Char('G'), "goto_last_line"),
+    (Key::End, "goto_last_line"),
+    (Key::Char('h'), "collapse_entry"),
+    (Key::Left, "collapse_entry"),
+    (Key::Char('l'), "expand_entry"),
+    (Key::Right, "expand_entry"),
+    (Key::Enter, "open_entry"),
+    (Key::Char('v'), "toggle_links_graph"),
+    (Key::Char('u'), "restore_change"),
+    (Key::Char('y'), "yank_old_text"),
+    (Key::Char('R'), "refresh_sidebar"),
+    (Key::Char('w'), "cycle_sidebar_width"),
+    (Key::Tab, "next_sidebar_view"),
+    (Key::BackTab, "prev_sidebar_view"),
+    (Key::Esc, "normal_mode"),
+    (Key::Char('q'), "leave_sidebar"),
+    (Key::Char(':'), "command_mode"),
+    (Key::Char(' '), "space_mode"),
+    (Key::Ctrl('w'), "window_mode"),
+];
+
+/// The default table of a place.
+pub(super) fn place_keys(place: Place) -> &'static [(Key, &'static str)] {
+    match place {
+        Place::Prompt => PROMPT_KEYS,
+        Place::Picker => PICKER_KEYS,
+        Place::Sidebar => SIDEBAR_KEYS,
+    }
+}
+
+/// A place's command for the docs: its name, its help, and its keys.
+pub type PlaceRow = (&'static str, &'static str, Vec<String>);
+
+impl Editor {
+    /// **What `key` runs in `place`**: the reader's line for it, else the
+    /// default; in a picker, its own two tables before the prompt's two.
+    /// `None` when nothing names the key, which in a prompt types it.
+    ///
+    /// Keys a binding plays (`"@hello"`) are not read again, so a binding
+    /// that names its own key cannot call itself.
+    pub(super) fn commands_in(&self, place: Place, key: Key) -> Option<Vec<String>> {
+        let order: &[Place] = match place {
+            Place::Picker => &[Place::Picker, Place::Prompt],
+            Place::Prompt => &[Place::Prompt],
+            Place::Sidebar => &[Place::Sidebar],
+        };
+        let typed = super::keys::key_internal(key);
+        order.iter().find_map(|&one| {
+            let mine = self.place_bindings[one as usize].get(&typed).filter(|_| !self.expanding_alias && !typed.is_empty());
+            let default = || place_keys(one).iter().find(|(k, _)| *k == key).map(|(_, name)| vec![name.to_string()]);
+            mine.cloned().or_else(default)
+        })
+    }
+
+    /// **Run what a place's key names**, in order: a command line, keys
+    /// played back into the same place, or one of the place's commands,
+    /// which `run` carries out.
+    pub(super) fn run_in_place(&mut self, place: Place, commands: &[String], mut run: impl FnMut(&mut Editor, &str)) {
+        for one in commands {
+            match place.bound(one) {
+                Some(yumete_cjk::actions::Bound::Command(line)) => self.run_bound_command(line),
+                Some(yumete_cjk::actions::Bound::Keys(keys)) => self.play_in_place(&yumete_cjk::actions::written(keys)),
+                Some(yumete_cjk::actions::Bound::Named(action)) => run(self, action.name),
+                None => {}
+            }
+            if self.quit_from_binding {
+                break;
+            }
+        }
+    }
+
+    /// Keys a place's binding plays, each answered by wherever the keys are
+    /// when it arrives (an `Enter` that closes the prompt hands the rest to
+    /// the text), and none read against the reader's own tables again.
+    fn play_in_place(&mut self, keys: &str) {
+        let outer = self.expanding_alias;
+        self.expanding_alias = true;
+        let mut chars = keys.chars();
+        while let Some(c) = chars.next() {
+            let key = match c {
+                yumete_cjk::actions::ALT => match chars.next() {
+                    Some(next) => Key::Alt(next),
+                    None => break,
+                },
+                c => super::keys::pressed(c),
+            };
+            match self.mode {
+                Mode::Command => self.on_command_key(key),
+                Mode::Lookfor => self.on_lookfor_key(key),
+                Mode::Search => self.on_search_key(key),
+                Mode::Ruby => self.on_ruby_key(key),
+                Mode::Picker => self.on_picker_key(key),
+                Mode::Normal if self.sidebar_focused() => self.on_sidebar_key(key),
+                Mode::Normal => self.on_normal_key(key),
+                Mode::Insert => self.insert_typed(key),
+                Mode::Field => self.on_field_key(key),
+            }
+        }
+        self.expanding_alias = outer;
+    }
+
+    /// Install a place's lines (`[keys.prompt]`, `[keys.picker]`,
+    /// `[keys.sidebar]`).
+    pub fn set_place_bindings<C: crate::editor::BindingCommands>(&mut self, place: Place, lines: HashMap<String, C>) {
+        self.place_bindings[place as usize] = lines
+            .into_iter()
+            .map(|(k, v)| (yumete_cjk::actions::written(&k), v.into_commands()))
+            .collect();
+    }
+
+    /// **The keys that run `name` in `place` now**, internal spelling: the
+    /// reader's lines that name it alone, and the defaults they left alone.
+    pub(super) fn keys_in_place(&self, place: Place, name: &str) -> Vec<String> {
+        let mine = &self.place_bindings[place as usize];
+        let mut keys: Vec<String> = place_keys(place)
+            .iter()
+            .filter(|(_, one)| *one == name)
+            .map(|(key, _)| super::keys::key_internal(*key))
+            .filter(|key| !mine.contains_key(key))
+            .collect();
+        let mut theirs: Vec<String> =
+            mine.iter().filter(|(_, run)| run.len() == 1 && run[0] == name).map(|(key, _)| key.clone()).collect();
+        theirs.sort();
+        keys.extend(theirs);
+        keys
+    }
+
+    /// **Each place's commands with their default keys**, for the site
+    /// (`ye --docgen`): the place, then its commands in the order its list
+    /// gives, each with its help and the keys that run it.
+    pub fn place_commands_for_docs() -> Vec<(Place, Vec<PlaceRow>)> {
+        Place::ALL
+            .into_iter()
+            .map(|place| {
+                let rows = place
+                    .actions()
+                    .iter()
+                    .map(|action| {
+                        let keys = place_keys(place)
+                            .iter()
+                            .filter(|(_, name)| *name == action.name)
+                            .map(|(key, _)| super::keys::key_internal(*key))
+                            .collect();
+                        (action.name, action.help, keys)
+                    })
+                    .collect();
+                (place, rows)
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **Every name in a place's default table is one of its commands**, so
+    /// the table and the list the config reads cannot drift apart.
+    #[test]
+    fn every_default_key_runs_a_command_of_its_place() {
+        for place in Place::ALL {
+            for (key, name) in place_keys(place) {
+                assert!(place.action(name).is_some(), "{key:?} runs `{name}`, which {} does not have", place.name());
+            }
+        }
+    }
+
+    /// And every command a place lists has a default key or is one the
+    /// reader binds (helix's `first_entry`/`last_entry`, which `Home`/`End`
+    /// are not, since here they move the caret).
+    #[test]
+    fn a_place_command_without_a_key_is_named_here() {
+        let unbound = ["first_entry", "last_entry"];
+        for place in Place::ALL {
+            for action in place.actions() {
+                let keyed = place_keys(place).iter().any(|(_, name)| *name == action.name)
+                    || (place == Place::Picker && place_keys(Place::Prompt).iter().any(|(_, n)| *n == action.name));
+                assert!(keyed || unbound.contains(&action.name), "`{}` has no key in {}", action.name, place.name());
+            }
+        }
+    }
+}

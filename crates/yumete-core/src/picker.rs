@@ -467,6 +467,26 @@ impl Picker {
         self.selected = 0;
     }
 
+    /// The word before the caret and the spaces after it, gone (`C-w`), as
+    /// on the `:` line.
+    pub fn delete_word_before_caret(&mut self) {
+        let caret = self.caret();
+        let head: String = self.query.chars().take(caret).collect();
+        let cut = crate::editor::word_cut(&head);
+        let (from, to) = (self.byte(cut), self.byte(caret));
+        self.query.replace_range(from..to, "");
+        self.caret = cut;
+        self.selected = 0;
+    }
+
+    /// The highlight to the first match, or the last.
+    pub fn go_to_end(&mut self, last: bool) {
+        self.selected = match last {
+            true => self.matches().len().saturating_sub(1),
+            false => 0,
+        };
+    }
+
     /// Where the `at`-th character begins, in bytes.
     fn byte(&self, at: usize) -> usize {
         self.query
