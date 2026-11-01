@@ -2513,20 +2513,20 @@ pub struct Editor {
     /// How much of the buffer is on screen: lines, and 縱 across. Set by the
     /// renderer, which is the only part that knows, so `C-d` can mean "half of
     /// what you can see" rather than a fixed number.
-    /// **yumete 風味**：鋪在當前鍵位之上的一小組departures
-    /// （`:keymap-yumete-flavor`，2026-10-18）。出廠關着。
+    /// **The yumete flavour** (`:keymap-yumete-flavor`, `[keys] flavor`): a
+    /// level and the items switched apart from it, laid over whichever keymap
+    /// is in force (2026-11-01; a single switch from 2026-10-18). Each item
+    /// is asked through [`Editor::flavor_on`], which knows the keymaps it
+    /// belongs to.
     ///
-    /// 今天集合裏只有一項：`d`/`c` 刪而不進寄存器，`A-d`/`A-c` 變成剪的那一對
-    /// ——正文和格子都照這一條（格子裏那四個鍵 2026-10-08 剛對齊過，不許再分家）。
+    /// Warning: **it is not a third keymap.** A keymap is a whole table that
+    /// follows its upstream; this is a list of differences (2026-10-18: 「we
+    /// only modify limited cases. This keeps the majority of helix/vim keymap
+    /// and is easy to maintain」).
     ///
-    /// Warning: **它不是第三套鍵位。** 一套預設是整張表，要一直跟着 helix 上游走；
-    /// 這是一張差異清單。2026-10-18 定（原話：「we only modify limited cases.
-    /// This keeps the majority of helix/vim keymap and is easy to maintain」），
-    /// 把 10-08 那個 `:yank-on-delete` 併了進來。
-    ///
-    /// Warning: **它不是鍵位表，`[keys.normal]` 照樣蓋得過它。** 那一層在前面就把鍵
-    /// 換掉了，所以寫了那四行的人自然蓋過這一格——命令報狀態時要把這件事說出來。
-    keymap_flavor: bool,
+    /// Warning: **`[keys.normal]` still wins.** That layer rewrites a key before
+    /// any of this is read, and the command's report says so.
+    flavor: yumete_cjk::Flavor,
     page_lines: usize,
     /// Which line the page starts at — see [`Editor::set_page_top`].
     page_top: usize,
@@ -4119,7 +4119,7 @@ impl Editor {
             acting_as_vim: None,
             macro_keys: Vec::new(),
             replaying: false,
-            keymap_flavor: false,
+            flavor: yumete_cjk::Flavor::default(),
             page_lines: 20,
             page_top: 0,
             select_the_seam: false,

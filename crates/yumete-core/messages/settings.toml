@@ -894,11 +894,11 @@ zhs = "Yumete 键位风味"
 en = "Yumete keymap flavour"
 
 [[message]]
-# 設置：Yumete 鍵位風味——一句話
+# 設置：Yumete 鍵位風味——一句話（草稿）
 key = "settings.keys.flavor.hint"
-zht = "開了之後 `d` `c` 只删不剪，要剪按 `A-d` `A-c`。剛複製好的那一段不再被一次隨手删除吃掉。`[keys.normal]` 蓋得過它"
-zhs = "开了之后 `d` `c` 只删不剪，要剪按 `A-d` `A-c`。刚复制好的那一段不再被一次随手删除吃掉。`[keys.normal]` 盖得过它"
-en = "with this on, `d` and `c` only delete and `A-d`/`A-c` are the ones that cut, so a tidy-up between a copy and a paste cannot eat the copy. `[keys.normal]` still wins"
+zht = "在 helix/vim 鍵位之上的改動。基本：看得見的改動，如菜單、新鍵；完整：再加改了熟悉鍵行爲的幾項，如 `d` `c` 只刪不剪、要剪按 `A-d` `A-c`。`[keys.normal]` 蓋得過它"
+zhs = "在 helix/vim 键位之上的改动。基本：看得见的改动，如菜单、新键；完整：再加改了熟悉键行为的几项，如 `d` `c` 只删不剪、要剪按 `A-d` `A-c`。`[keys.normal]` 盖得过它"
+en = "what yumete changes over helix or vim. basic: the changes you can see, such as menus and new keys; full: also the items that change what a familiar key does, such as `d` and `c` deleting without cutting (`A-d` and `A-c` cut). `[keys.normal]` still wins"
 
 [[message]]
 # 設置面板：鍵位那一組裏 [keys] inherit 那一格

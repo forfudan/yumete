@@ -283,9 +283,10 @@ pub enum Command {
     /// 和 [`Command::YumeWhere`] 同一條路：答案是**一頁**，而且有一行只有前端答
     /// 得出來（哪幾個語言服務器在看着它）。
     FileInfo,
-    /// `:keymap-yumete-flavor [on|off]` —— Yumete 鍵位風味，鋪在當前鍵位之上的
-    /// 一小組改動（2026-10-18）。不帶參數就報它開着没有、裏頭有哪幾項。
-    KeymapYumeteFlavor(Switch),
+    /// `:keymap-yumete-flavor [off|basic|full]` — the yumete flavour's level
+    /// (three levels since 2026-11-01, a switch before). Bare, it reports
+    /// the level and each item.
+    KeymapYumeteFlavor(Option<yumete_cjk::FlavorLevel>),
     /// `:vertical` / `:horizontal` — 把這一頁轉過去（Feature #61）。
     ///
     /// **一件事一種說法**（2026-10-12 定）：從前是 `:layout` 的兩個參數，加上一
@@ -2385,6 +2386,13 @@ const KEYMAPS: &[Word] = &[
     Word { name: "vim", help: "cmd.keymaps.vim", needs: &[] },
 ];
 
+/// The yumete flavour's levels, as `yumete_cjk::FlavorLevel::NAMES` spells them.
+const FLAVOR_LEVELS: &[Word] = &[
+    Word { name: "off", help: "cmd.flavor.off", needs: &[] },
+    Word { name: "basic", help: "cmd.flavor.basic", needs: &[] },
+    Word { name: "full", help: "cmd.flavor.full", needs: &[] },
+];
+
 /// What Tab types in Insert mode.
 const TAB_INSERTS: &[Word] = &[
     Word { name: "spaces", help: "cmd.tabs.spaces", needs: &[] },
@@ -3415,9 +3423,9 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.keymap-yumete-flavor",
         needs: &[],
-        params: &[Param::Words { of: SWITCH, default: None }],
+        params: &[Param::Words { of: FLAVOR_LEVELS, default: None }],
         build: Some(|p| {
-            Ok(Command::KeymapYumeteFlavor(switched(p)))
+            Ok(Command::KeymapYumeteFlavor(p.arg(0).and_then(yumete_cjk::FlavorLevel::parse)))
         }),
     },
     Entry {

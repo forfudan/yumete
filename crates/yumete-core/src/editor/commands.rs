@@ -477,9 +477,9 @@ impl Editor {
             Command::Word(what) => self.word_command(what),
             Command::Wiki(what) => self.wiki_command(what),
             Command::Links(what) => self.links_command(what),
-            Command::KeymapYumeteFlavor(how) => {
-                if !how.is_a_question() {
-                    self.set_keymap_flavor(how.over(self.keymap_flavor()));
+            Command::KeymapYumeteFlavor(level) => {
+                if let Some(level) = level {
+                    self.set_flavor_level(level);
                 }
                 self.status = self.flavor_report();
                 Ok(CommandOutcome::Continue)
@@ -772,10 +772,13 @@ impl Editor {
                 if let Some(preset) = want {
                     self.set_key_preset(preset);
                 }
-                self.status = match self.key_preset {
+                // The flavour rides along: what the keys do is the keymap
+                // and what yumete lays over it, and one line names both.
+                let keymap = match self.key_preset {
                     yumete_cjk::KeyPreset::Helix => say!("keys.preset-helix"),
                     yumete_cjk::KeyPreset::Vim => say!("keys.preset-vim"),
                 };
+                self.status = format!("{keymap} · {}", self.flavor_report());
                 Ok(CommandOutcome::Continue)
             }
             // **What a key may be bound to** (#429): the name to write, what

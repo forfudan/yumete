@@ -35,6 +35,7 @@
 
 pub mod actions;
 pub mod blocks;
+pub mod flavor;
 pub mod grapheme;
 pub mod keymap;
 pub mod reading;
@@ -63,6 +64,7 @@ pub use grapheme::{
     cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, show_orphan_marks,
     prev_grapheme_boundary,
 };
+pub use flavor::{Flavor, FlavorItem, FlavorLevel, ItemInfo};
 pub use keymap::{read_which_wrap, KeyPreset, Rules, WHICH_WRAP};
 pub use reading::{split_charset, NoReader, Reader, CHARSET_TAGS};
 pub use segment::{

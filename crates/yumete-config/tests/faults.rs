@@ -30,6 +30,12 @@ display = \"somewhere\"
 
 [keys.normal]
 Q = \"nonsense\"
+
+[keys]
+flavor = true
+
+[keys.flavor_items]
+no_such_item = true
 ";
 
 #[test]
@@ -44,6 +50,8 @@ fn every_complaint_names_the_line_its_key_is_on() {
         ("mode", 8),
         ("display", 11),
         ("Q", 14),
+        ("flavor = true", 17),
+        ("no_such_item", 20),
     ];
     for (key, line) in want {
         let found = said.iter().find(|f| f.said.contains(key));
@@ -100,4 +108,23 @@ fn a_bad_key_line_is_marked_where_it_is() {
     assert!(lines.contains(&4), "q = 3 is line 5 (0-based 4): {lines:?}");
     assert!(lines.contains(&6), "[keys.visual] is line 7 (0-based 6): {lines:?}");
     assert!(faults.iter().all(|f| !f.fatal), "nothing voids the file");
+}
+
+/// **The flavour is a level** (2026-11-01): `flavor = true`, the switch it
+/// was, is said with the word that does what it did, and an item written by
+/// name is read apart from the level.
+#[test]
+fn the_flavor_reads_a_level_and_items_by_name() {
+    let text = "[keys]\nflavor = true\n";
+    let config = yumete_config::Config::from_toml(text);
+    assert_eq!(config.keys.flavor.level, yumete_config::FlavorLevel::Basic, "a bool is not read");
+    let said = faults_in(text);
+    assert!(said.iter().any(|f| f.said.contains("\"full\"")), "{said:?}");
+
+    let text = "[keys]\nflavor = \"off\"\n\n[keys.flavor_items]\ndelete_keeps_register = true\n";
+    assert!(faults_in(text).is_empty(), "{:?}", faults_in(text));
+    let config = yumete_config::Config::from_toml(text);
+    assert_eq!(config.keys.flavor.level, yumete_config::FlavorLevel::Off);
+    let item = yumete_config::FlavorItem::DeleteKeepsRegister;
+    assert!(config.keys.flavor.on(item, yumete_config::KeyPreset::Helix));
 }

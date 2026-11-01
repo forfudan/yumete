@@ -28755,18 +28755,19 @@ fn the_factory_keys_still_follow_helix() {
 }
 
 /// **一條命令撥得動那件事**（2026-10-08 定，原話：「我覺得他很好用欸」；
-/// 2026-10-18 併進 Yumete 鍵位風味，命令換成 `:keymap-yumete-flavor`）。
+/// 2026-10-18 併進 Yumete 鍵位風味，2026-11-01 風味分成三檔）。
 ///
-/// 風味開着就把 `d`/`c` 和 `A-d`/`A-c` 對調——正文和格子一起管，而
-/// `[keys.normal]` 那四行照舊蓋過它（別名那一層在前面就把鍵換掉了）。
+/// `delete_keeps_register` 是 `full` 那一檔的：開着就把 `d`/`c` 和 `A-d`/`A-c`
+/// 對調——正文和格子一起管，而 `[keys.normal]` 那四行照舊蓋過它。
 #[test]
 fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
-    // 出廠：`d` 剪。
+    // 出廠 `basic`：`d` 剪。
     let mut ed = typed("甲乙丙");
+    assert_eq!(ed.flavor().level, yumete_cjk::FlavorLevel::Basic);
     assert!(ed.yank_on_delete(), "出廠進寄存器，同 helix 同 vi");
-    ed.execute(":keymap-yumete-flavor on").unwrap();
+    ed.execute(":keymap-yumete-flavor full").unwrap();
     assert!(!ed.yank_on_delete());
-    assert!(ed.status().contains(&say!("keys.flavor.on")), "{}", ed.status());
+    assert!(ed.status().contains(&say!("keys.flavor.full")), "{}", ed.status());
 
     // `d` 只刪，寄存器裏還是剛複製的「甲」。
     press(&mut ed, "ggy");
@@ -28778,33 +28779,62 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
 
     // 而 `A-d` 變成剪的那一個。
     let mut ed = typed("甲乙丙");
-    ed.execute(":keymap-yumete-flavor on").unwrap();
+    ed.execute(":keymap-yumete-flavor full").unwrap();
     press(&mut ed, "ggy");
     press(&mut ed, "l");
     ed.on_key(Key::Alt('d'));
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "甲丙乙", "`A-d` 剪");
 
-    // 不帶參數就報：開關 ＋ 集合裏有什麼，而且不許改它。
+    // 不帶參數就報：那一檔 ＋ 每一項的狀態，而且不許改它。
     let mut ed = typed("甲");
     ed.execute(":keymap-yumete-flavor").unwrap();
+    let item = say!("keys.flavor.item.delete-keeps-register");
     assert!(
-        ed.status().contains(&say!("keys.flavor.no-yank", say!("keys.flavor.off"))),
-        "出廠關着，而狀態寫在那一項後面：{}",
+        ed.status().contains(&say!("keys.flavor.basic"))
+            && ed.status().contains(&say!("keys.flavor.item-is", item, say!("keys.flavor.off"))),
+        "出廠那一檔，而這一項關着：{}",
         ed.status()
     );
     assert!(ed.yank_on_delete(), "問一句不許改它");
 
-    // **被 `[keys.normal]` 蓋過就要說出來**（2026-10-18）。一行寫着「`d` 不進寄
-    // 存器」而 `d` 做着別的事，是今天早上那個三層毛病的翻版。
+    // **被 `[keys.normal]` 蓋過就要說出來**（2026-10-18）。
     let mut ed = typed("甲");
     ed.set_key_aliases(std::collections::HashMap::from([("d".to_string(), "@x".to_string())]));
-    ed.execute(":keymap-yumete-flavor on").unwrap();
+    ed.execute(":keymap-yumete-flavor full").unwrap();
     assert!(
-        ed.status().contains(&say!("keys.flavor.no-yank-taken", say!("keys.flavor.on"), "d")),
+        ed.status().contains(&say!("keys.flavor.item-taken", item, say!("keys.flavor.on"), "d")),
         "配置綁了 d，報告要說它說了算：{}",
         ed.status()
     );
+}
+
+/// **一項按名字寫的開關蓋過那一檔，而那一項只屬於 helix**（2026-11-01）：vim 的
+/// 手有 `"_d`，這一項在 vim 鍵位下不生效，報告裏也不列它。
+#[test]
+fn an_item_by_name_beats_the_level_and_stays_off_under_vim() {
+    let item = yumete_cjk::FlavorItem::DeleteKeepsRegister;
+    let mut ed = typed("甲");
+    ed.set_flavor(yumete_cjk::Flavor {
+        level: yumete_cjk::FlavorLevel::Off,
+        items: std::collections::BTreeMap::from([(item, true)]),
+    });
+    assert!(!ed.yank_on_delete(), "按名字開的那一項，`off` 也關不掉它");
+    ed.execute(":keymap-yumete-flavor basic").unwrap();
+    assert!(!ed.yank_on_delete(), "換一檔不抹按名字寫的那一項");
+
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    assert!(ed.yank_on_delete(), "vim 鍵位下這一項不生效");
+    ed.execute(":keymap-yumete-flavor").unwrap();
+    assert!(
+        !ed.status().contains(&say!("keys.flavor.item.delete-keeps-register")),
+        "vim 鍵位下不列它：{}",
+        ed.status()
+    );
+
+    // `:keymap` 一行說出鍵位和風味。
+    ed.execute(":keymap").unwrap();
+    assert!(ed.status().contains(&say!("keys.flavor.basic")), "{}", ed.status());
 }
 
 /// 格子裏那兩個鍵跟着同一個開關走——2026-10-08 剛把格子和正文對齊，不許再分家。
@@ -28813,7 +28843,10 @@ fn yank_on_delete_reaches_the_grid_too() {
     let table = "| 姓名 | 年紀 |\n| --- | --- |\n| 甲 | 三十 |\n";
     let cell_cleared_with = |key: Key, on: bool| -> Editor {
         let mut ed = typed(table);
-        ed.set_keymap_flavor(!on);
+        ed.set_flavor_level(match on {
+            true => yumete_cjk::FlavorLevel::Basic,
+            false => yumete_cjk::FlavorLevel::Full,
+        });
         ed.goto_line(3);
         // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏 `y`／`d` 是
         // 頁面的鍵，不是「這一格」。

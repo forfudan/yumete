@@ -293,6 +293,12 @@ const KEYS_PRESET_WAYS: &[Choice] = &[
     Choice { word: "vim", label: "settings.pick.preset.vim" },
 ];
 
+const KEYS_FLAVOR_WAYS: &[Choice] = &[
+    Choice { word: "off", label: "keys.flavor.off" },
+    Choice { word: "basic", label: "keys.flavor.basic" },
+    Choice { word: "full", label: "keys.flavor.full" },
+];
+
 const IME_SYSTEM_WAYS: &[Choice] = &[
     Choice { word: "auto", label: "settings.pick.system.auto" },
     Choice { word: "keep", label: "settings.pick.system.keep" },
@@ -942,10 +948,10 @@ pub const SETTINGS: &[Setting] = &[
         table: "keys",
         key: "flavor",
         group: Group::Keys,
-        kind: Kind::Tick,
+        kind: Kind::Pick(KEYS_FLAVOR_WAYS),
         label: "settings.keys.flavor",
         hint: "settings.keys.flavor.hint",
-        factory: "false",
+        factory: r#""basic""#,
     },
     Setting {
         table: "keys",
@@ -972,6 +978,9 @@ pub const SETTINGS: &[Setting] = &[
 /// 一組一組填，這張表跟着縮短。Warning: **它不是「不做」的名單**——那一張是
 /// [`NOT_IN_THE_PANEL`]，兩者的區別是「還没輪到」與「有理由不進去」。
 pub const LATER: &[&str] = &[
+    // One switch per flavour item, in a sub-panel of its own (step 4 of
+    // the flavour plan, 2026-11-01).
+    "keys.flavor_items",
     "editor.usage_groups",
     "editor.syntax",
     // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**

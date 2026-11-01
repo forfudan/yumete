@@ -449,7 +449,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_which_wrap(config.editor.which_wrap.clone());
     // **`d`/`c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。和上面兩句同一族：
     // 鍵位那一層的事，所以擺在一起。
-    editor.set_keymap_flavor(config.keys.flavor);
+    editor.set_flavor(config.keys.flavor.clone());
     editor.set_layout(layout.unwrap_or(config.editor.layout));
     // Warning: **這四個是「寫了纔算」**，不是「寫了零就當零」：出廠值在 `Editor` 那一
     // 頭，而配置裏的 0 是「沒說」。照抄啓動時的判準，一個字都不改。
@@ -636,20 +636,30 @@ mod config_watch_tests {
         ed.execute(":check-config").unwrap();
         super::answer_config_check(&mut ed);
         let page = ed.current_buffer().text();
+        // The global config of the machine running this is listed too, and
+        // what it says is not this test's business: only the project's lines
+        // are counted, and a clean project opens nothing only when the global
+        // one is clean as well.
+        let project = dir.file_name().unwrap().to_string_lossy().to_string();
+        let global = page.lines().filter(|line| !line.contains(&project)).count();
         // One line per fault, each `path:line: what`, **down the file**.
-        let lines: Vec<&str> = page.lines().collect();
+        let lines: Vec<&str> = page.lines().filter(|line| line.contains(&project)).collect();
         assert_eq!(lines.len(), 2, "{page}");
         assert!(lines[0].contains(":2: ") && lines[0].contains("indent"), "{}", lines[0]);
         // The one whose rule is `yumete-core`'s, located the same way.
         assert!(lines[1].contains(":3: ") && lines[1].contains("syntax"), "{}", lines[1]);
-        assert!(ed.status().contains('2'), "{}", ed.status());
+        assert!(ed.status().contains(&(2 + global).to_string()), "{}", ed.status());
 
         // **A clean config says so and opens nothing.**
         std::fs::write(dir.join(".yumete").join("config.toml"), "[editor]\nindent = 4\n").unwrap();
         let before = ed.current_buffer().id();
         ed.execute(":check-config").unwrap();
         super::answer_config_check(&mut ed);
-        assert_eq!(ed.current_buffer().id(), before, "no second page: {}", ed.status());
+        if global == 0 {
+            assert_eq!(ed.current_buffer().id(), before, "no second page: {}", ed.status());
+        } else {
+            assert!(!ed.current_buffer().text().contains(&project), "{}", ed.current_buffer().text());
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
     }

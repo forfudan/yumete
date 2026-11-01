@@ -29,7 +29,7 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 
 pub use yumete_cjk::{
-    KeyPreset, Layout, Margin, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, TATECHUYOKO_CLASSIC,
+    Flavor, FlavorItem, FlavorLevel, KeyPreset, Layout, Margin, DEFAULT_ZONG_GAP, DEFAULT_ZONG_LENGTH, TATECHUYOKO_CLASSIC,
     TATECHUYOKO_MAX,
 };
 
@@ -2593,20 +2593,15 @@ pub struct KeyConfig {
     pub insert_labels: HashMap<String, String>,
     /// A whole table of such lines, shipped: `[keys] preset = "vim"`.
     pub preset: KeyPreset,
-    /// **The yumete flavour** — a small set of departures laid over whichever
-    /// preset is in use (`:keymap-yumete-flavor`, 2026-10-18). Factory off,
-    /// so both presets are their own upstream until somebody asks otherwise.
-    ///
-    /// A set rather than a third preset, because a preset is a whole table to
-    /// keep level with helix's own, while this is a short list of differences
-    /// — and because the majority of either keymap is not what is in dispute.
-    /// What is in it today: `d`/`c` do not fill the register, and `A-d`/`A-c`
-    /// become the cutting pair.
+    /// **The yumete flavour** — what yumete adds over whichever preset is in
+    /// use (`[keys] flavor = "off" | "basic" | "full"`, factory `basic`, and
+    /// `[keys.flavor_items]` for one item apart from the level; 2026-11-01).
+    /// The items are listed in `yumete_cjk::FlavorItem`.
     ///
     /// Warning: **`[keys.normal]` still wins.** The alias layer rewrites a key
     /// before anything here is read, which is why the command's report says so
     /// of every item it lists.
-    pub flavor: bool,
+    pub flavor: Flavor,
     /// **The reader's own keys follow them into the places** (`[keys]
     /// inherit`, 2026-11-01, on at the factory): a `[keys.normal]` line of
     /// one key naming one command a sidebar has works in the sidebar, and a
@@ -2629,7 +2624,7 @@ impl Default for KeyConfig {
             labels: HashMap::new(),
             insert_labels: HashMap::new(),
             preset: KeyPreset::default(),
-            flavor: false,
+            flavor: Flavor::default(),
             inherit: true,
         }
     }
@@ -3453,6 +3448,39 @@ impl Config {
             problems.push(one_of("[keys] preset", word, KeyPreset::NAMES));
         }
     }
+    // The flavour was a switch until 2026-11-01. No alias for the old
+    // spelling: it is said, with the word that does what it did.
+    match &raw.keys.flavor {
+        Some(toml::Value::Boolean(on)) => {
+            let word = match on {
+                true => "full",
+                false => "off",
+            };
+            problems.push(said(
+                format!("[keys] flavor = {on}：風味現在分三檔，改寫成 flavor = \"{word}\""),
+                format!("[keys] flavor = {on}: the flavour has three levels now; write flavor = \"{word}\""),
+            ));
+        }
+        Some(toml::Value::String(word)) if FlavorLevel::parse(word).is_none() => {
+            problems.push(one_of("[keys] flavor", word, FlavorLevel::NAMES));
+        }
+        Some(toml::Value::String(_)) | None => {}
+        Some(other) => problems.push(one_of("[keys] flavor", &other.to_string(), FlavorLevel::NAMES)),
+    }
+    for (id, on) in &raw.keys.flavor_items {
+        if FlavorItem::parse(id).is_none() {
+            let ids = FlavorItem::ids();
+            problems.push(said(
+                format!("[keys.flavor_items] {id}：没有這一項，只能是 {}", ids.join("、")),
+                format!("[keys.flavor_items] {id}: no such item; only {}", ids.join(", ")),
+            ));
+        } else if !on.is_bool() {
+            problems.push(said(
+                format!("[keys.flavor_items] {id} = {on}：只能是 true 或 false"),
+                format!("[keys.flavor_items] {id} = {on}: only true or false"),
+            ));
+        }
+    }
 
     if let Some(word) = raw.editor.tab_inserts.as_deref() {
         if !matches!(word, "spaces" | "tab") {
@@ -4200,7 +4228,13 @@ struct RawKeys {
     #[serde(default)]
     field: toml::Table,
     preset: Option<String>,
-    flavor: Option<bool>,
+    /// A level word. Read as a value, not a string, so the switch it was
+    /// until 2026-11-01 (`flavor = true`) is reported rather than failing
+    /// the whole `[keys]` table.
+    flavor: Option<toml::Value>,
+    /// `[keys.flavor_items]`: one item on or off apart from the level.
+    #[serde(default)]
+    flavor_items: toml::Table,
     inherit: Option<bool>,
     /// What else is under `[keys]`: a mode that does not exist
     /// (`[keys.visual]`), kept to be reported.
@@ -4492,6 +4526,7 @@ impl RawConfig {
         if other.keys.flavor.is_some() {
             self.keys.flavor = other.keys.flavor;
         }
+        self.keys.flavor_items.extend(other.keys.flavor_items);
     }
 
     fn into_config(self) -> Config {
@@ -5027,8 +5062,13 @@ impl RawConfig {
                 ),
             ));
         }
-        if let Some(on) = self.keys.flavor {
-            config.keys.flavor = on;
+        if let Some(level) = self.keys.flavor.as_ref().and_then(|v| v.as_str()).and_then(FlavorLevel::parse) {
+            config.keys.flavor.level = level;
+        }
+        for (id, on) in &self.keys.flavor_items {
+            if let (Some(item), Some(on)) = (FlavorItem::parse(id), on.as_bool()) {
+                config.keys.flavor.items.insert(item, on);
+            }
         }
         if let Some(on) = self.keys.inherit {
             config.keys.inherit = on;
@@ -6033,14 +6073,17 @@ mod a_typo_is_said_out_loud {
                 "{text:?} 該報 {want}，報的是 {problems:?}"
             );
         }
-        // …and a spelling that is right says nothing at all.
+        // …and a spelling that is right says nothing at all. Nothing *more*
+        // than an empty project: the global config on the machine running the
+        // test is read too, and what it says is not this test's business.
+        let baseline = said("");
         for text in [
             "[theme]\nname = \"黑白\"\nmode = \"dark\"\n",
             "[editor]\nline_numbers = \"relative\"\nambiguous_width = \"wide\"\nlanguage = \"en\"\n",
             // The factory value, written out by the settings panel.
             "[editor]\nlanguage = \"auto\"\n",
         ] {
-            assert!(said(text).is_empty(), "{text:?} 是對的，不該報：{:?}", said(text));
+            assert_eq!(said(text), baseline, "{text:?} 是對的，不該報");
         }
     }
 

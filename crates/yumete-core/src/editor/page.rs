@@ -550,53 +550,73 @@ impl Editor {
 
 }
 
-/// 「`d`/`c` 不進寄存器」那一項管的四個鍵——報告拿它問 `[keys.normal]`。
-const NO_YANK_KEYS: [&str; 4] = ["d", "c", "A-d", "A-c"];
+/// A flavour level as the report and `:keymap` say it.
+pub(crate) fn flavor_level_word(level: yumete_cjk::FlavorLevel) -> String {
+    match level {
+        yumete_cjk::FlavorLevel::Off => say!("keys.flavor.off"),
+        yumete_cjk::FlavorLevel::Basic => say!("keys.flavor.basic"),
+        yumete_cjk::FlavorLevel::Full => say!("keys.flavor.full"),
+    }
+}
 
 impl Editor {
-    /// **yumete 風味開着嗎**（`:keymap-yumete-flavor`）。
-    pub fn keymap_flavor(&self) -> bool {
-        self.keymap_flavor
+    /// The yumete flavour in force (`:keymap-yumete-flavor`, `[keys] flavor`).
+    pub fn flavor(&self) -> &yumete_cjk::Flavor {
+        &self.flavor
     }
 
-    /// 撥它。
-    pub fn set_keymap_flavor(&mut self, on: bool) {
-        self.keymap_flavor = on;
+    /// Lay a flavour: the config's level and its items.
+    pub fn set_flavor(&mut self, flavor: yumete_cjk::Flavor) {
+        self.flavor = flavor;
     }
 
-    /// **`d`/`c` 進不進寄存器** —— 風味集合裏的一項，這是它問出來的樣子。
-    ///
-    /// 一項一支，而不是讓呼叫處直接讀那一格：集合往後會長，而每一項該在哪幾個
-    /// 鍵上生效是這一層的事，不是按鍵處理那一層的事。
+    /// Move the level and keep the items written by name.
+    pub fn set_flavor_level(&mut self, level: yumete_cjk::FlavorLevel) {
+        self.flavor.level = level;
+    }
+
+    /// **Whether one item of the flavour is on** under the keymap in force.
+    /// Every place an item changes asks this, never the level: which levels
+    /// and keymaps an item belongs to is the item's own data.
+    pub fn flavor_on(&self, item: yumete_cjk::FlavorItem) -> bool {
+        self.flavor.on(item, self.key_preset)
+    }
+
+    /// **`d`/`c` 進不進寄存器** —— 風味裏 `delete_keeps_register` 那一項問出來的
+    /// 樣子，正文和格子一起問它。
     pub fn yank_on_delete(&self) -> bool {
-        !self.keymap_flavor
+        !self.flavor_on(yumete_cjk::FlavorItem::DeleteKeepsRegister)
     }
 
-    /// **風味現在是什麼樣子** —— 開着没有，裏頭有哪幾項，哪一項被配置蓋過了。
+    /// **What the flavour is now** — the level, then each item the keymap in
+    /// force has, on or off, and which of them `[keys.normal]` has taken.
     ///
-    /// Warning: **逐項不報開關**（2026-10-18 問出來的）：一個開關管整個集合，每一項
-    /// 的狀態就是風味自己的狀態，逐項再寫一遍是同一句話說 N 遍。報的是集合裏有
-    /// 什麼，以及**哪一項此刻說了不算**。
+    /// Each item says its own state since 2026-11-01: a level no longer
+    /// decides every item, because an item can be written by name.
     ///
-    /// Warning: **被蓋過要說出來**，否則這一行就是今天早上那個毛病的翻版：引擎自報
-    /// 「頂字」而實際跑的是上面一層留下的整句。`[keys.normal]` 在別名那一層就把鍵
-    /// 換掉了，所以一行寫着「`d`/`c` 不進寄存器」而 `d` 做着別的事，是做得到的。
+    /// Warning: **a taken item has to say so**, or the line reads 「`d`/`c` do
+    /// not fill the register」 while `d` does something else — the alias
+    /// layer rewrites the key before the flavour is read.
     pub(super) fn flavor_report(&self) -> String {
-        let state = match self.keymap_flavor {
-            true => say!("keys.flavor.on"),
-            false => say!("keys.flavor.off"),
-        };
-        // 一項一組鍵。集合長了就在這裏加一行，報告那一頭不用改。
-        let taken: Vec<&str> = NO_YANK_KEYS
-            .iter()
-            .copied()
-            .filter(|key| self.user_aliases.contains_key(*key))
-            .collect();
-        let item = match taken.is_empty() {
-            true => say!("keys.flavor.no-yank", state),
-            false => say!("keys.flavor.no-yank-taken", state, taken.join(" ")),
-        };
-        say!("keys.flavor-is", item)
+        let mut parts = vec![flavor_level_word(self.flavor.level)];
+        for &item in yumete_cjk::FlavorItem::ALL {
+            let info = item.info();
+            if !info.keymaps.contains(&self.key_preset) {
+                continue;
+            }
+            let state = match self.flavor_on(item) {
+                true => say!("keys.flavor.on"),
+                false => say!("keys.flavor.off"),
+            };
+            let taken: Vec<&str> =
+                info.keys.iter().copied().filter(|key| self.user_aliases.contains_key(*key)).collect();
+            let label = crate::messages::say(info.label, &[]);
+            parts.push(match taken.is_empty() {
+                true => say!("keys.flavor.item-is", label, state),
+                false => say!("keys.flavor.item-taken", label, state, taken.join(" ")),
+            });
+        }
+        say!("keys.flavor-is", parts.join(" · "))
     }
 
     /// Install the reader's own Normal-mode aliases (`[keys.normal]`).

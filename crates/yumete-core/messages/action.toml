@@ -2528,18 +2528,39 @@ zhs = "Yumete 键位风味 · {0}"
 en = "Yumete keymap flavour · {0}"
 
 [[message]]
-# 風味集合裏的一項：`d`/`c` 不進寄存器
-key = "keys.flavor.no-yank"
-zht = "`d` `c` 不進寄存器: {0}"
-zhs = "`d` `c` 不进寄存器: {0}"
-en = "`d` and `c` do not fill the register: {0}"
+# 風味的一檔：看得見的改動（菜單、新鍵）（草稿）
+key = "keys.flavor.basic"
+zht = "基本"
+zhs = "基本"
+en = "basic"
+
+[[message]]
+# 風味的一檔：再加改了熟悉鍵行為的幾項（草稿）
+key = "keys.flavor.full"
+zht = "完整"
+zhs = "完整"
+en = "full"
+
+[[message]]
+# 風味裏的一項與它的狀態（`:keymap-yumete-flavor`）
+key = "keys.flavor.item-is"
+zht = "{0}: {1}"
+zhs = "{0}: {1}"
+en = "{0}: {1}"
 
 [[message]]
 # 同上，但配置檔的 [keys.normal] 已經綁了它管的鍵——那一層在前面，說了算的是它
-key = "keys.flavor.no-yank-taken"
-zht = "`d` `c` 不進寄存器: {0}(`[keys.normal]` 綁了 {1}，此刻說了算的是它)"
-zhs = "`d` `c` 不进寄存器: {0}(`[keys.normal]` 绑了 {1}，此刻说了算的是它)"
-en = "`d` and `c` do not fill the register: {0} (`[keys.normal]` binds {1}, which wins)"
+key = "keys.flavor.item-taken"
+zht = "{0}: {1}(`[keys.normal]` 綁了 {2}，此刻說了算的是它)"
+zhs = "{0}: {1}(`[keys.normal]` 绑了 {2}，此刻说了算的是它)"
+en = "{0}: {1} (`[keys.normal]` binds {2}, which wins)"
+
+[[message]]
+# 風味的一項：`d`/`c` 不進寄存器，`A-d`/`A-c` 剪
+key = "keys.flavor.item.delete-keeps-register"
+zht = "`d` `c` 不進寄存器"
+zhs = "`d` `c` 不进寄存器"
+en = "`d` and `c` do not fill the register"
 
 [[message]]
 # 同上，關着那一頭

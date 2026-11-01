@@ -975,6 +975,27 @@ zhs = "Typst 源码，横排，拿去排版印书"
 en = "Typst source, horizontal, for setting in print"
 
 [[message]]
+# :keymap-yumete-flavor basic（草稿）
+key = "cmd.flavor.basic"
+zht = "看得見的改動：菜單、新鍵(出廠)"
+zhs = "看得见的改动：菜单、新键(出厂)"
+en = "basic: the changes you can see, such as menus and new keys (default)"
+
+[[message]]
+# :keymap-yumete-flavor full（草稿）
+key = "cmd.flavor.full"
+zht = "再加改了熟悉鍵行爲的幾項，如 `d` `c` 不進寄存器"
+zhs = "再加改了熟悉键行为的几项，如 `d` `c` 不进寄存器"
+en = "full: also the items that change what a familiar key does, such as `d` and `c` not filling the register"
+
+[[message]]
+# :keymap-yumete-flavor off（草稿）
+key = "cmd.flavor.off"
+zht = "關掉：helix/vim 原樣"
+zhs = "关掉：helix/vim 原样"
+en = "off: helix or vim as upstream has it"
+
+[[message]]
 # : 命令選單裏 inline 那一項的説明(footnote-kinds 組)
 key = "cmd.footnote-kinds.inline"
 zht = "行內註 ^[…]，不去文末"
