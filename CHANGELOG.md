@@ -51,6 +51,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **The count panel under the vim keymap named `gt gc gb` for the screen rows**, while that keymap binds them to vim's `H M L`; it reads the keys the commands are on now, yours included, and so does the `n N` line under a search list.
 - **The line under a floating problem or change named the wrong key** for sending it to the sidebar: `␣D` (now the project diagnostics picker) for a problem and `␣I` (the record panel) for a change. It asks the command for its key now, so it reads `␣L` and `␣X`.
 - **A binding's command reaches every cursor its own key reaches.** With several cursors, `"zx" = "delete_selection"` deleted at the first and moved the others as a plain `x` would, and a list of commands ran at the first cursor alone.
 - The changes panel's key row named `u y` twice.

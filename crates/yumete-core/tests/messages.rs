@@ -170,8 +170,10 @@ fn literals(text: &str, opener: &str) -> BTreeSet<String> {
 fn after_a_variant(text: &str, prefix: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for piece in text.split(prefix).skip(1) {
+        // …or after the last variant of a list (`&[NormalCmd::Foo]], "…"`).
         let rest = piece.trim_start_matches(|c: char| c.is_ascii_alphanumeric());
-        let Some(rest) = rest.trim_start().strip_prefix(',') else { continue };
+        let rest = rest.trim_start_matches(|c: char| c == ']' || c.is_whitespace());
+        let Some(rest) = rest.strip_prefix(',') else { continue };
         let Some(rest) = rest.trim_start().strip_prefix('"') else { continue };
         if let Some(end) = rest.find('"') {
             out.insert(rest[..end].to_string());

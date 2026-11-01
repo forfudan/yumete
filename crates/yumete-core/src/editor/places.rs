@@ -326,6 +326,24 @@ impl Editor {
     }
 }
 
+/// **A run of keys as the hint row writes it**, internal spelling in:
+/// `gg`, `␣L`, `A-.`.
+pub(super) fn hint_run(run: &str) -> String {
+    let mut out = String::new();
+    let mut chars = run.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            yumete_cjk::actions::ALT => {
+                if let Some(next) = chars.next() {
+                    out.push_str(&hint_key(Key::Alt(next)));
+                }
+            }
+            c => out.push_str(&hint_key(super::keys::pressed(c))),
+        }
+    }
+    out
+}
+
 /// **A key as the hint row writes it**: `↑`, `S-Tab`, `␣`, `C-w`.
 pub(super) fn hint_key(key: Key) -> String {
     match key {

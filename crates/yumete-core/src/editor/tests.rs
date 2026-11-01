@@ -17659,14 +17659,18 @@ fn a_bare_count_lists_the_keys_where_the_number_is_not_a_repeat() {
     let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_ref()).collect();
     assert_eq!(keys, ["J", "gg", "G", "A-.", "gt gc gb", "…"], "helix spelling");
 
-    // Warning: **The vim keymap differs by one row**: repeating an `f`/`t` is `;`
-    // there, and under helix `;` collapses the selection instead.
+    // Warning: **The vim keymap differs by two rows**: repeating an `f`/`t` is
+    // `;` there, and under helix `;` collapses the selection instead; and the
+    // screen rows are vim's own `H M L`, which that keymap has bound since
+    // 2026-10-06 (`gt gc gb` work there too). The rows name the keys the
+    // commands are on now (2026-11-01); they were a table per keymap, and
+    // this one still said `gt gc gb` because `H`/`L` had been sentences.
     let mut ed = Editor::new();
     ed.execute(":keymap vim").unwrap();
     press(&mut ed, "10");
     let (_, rows) = ed.pending_menu().expect("the same panel, vim's spelling");
     let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_ref()).collect();
-    assert_eq!(keys, ["J", "gg", "G", ";", "gt gc gb", "…"]);
+    assert_eq!(keys, ["J", "gg", "G", ";", "H M L", "…"]);
 
     // It goes the moment the count is spent.
     let mut ed = Editor::new();
@@ -33955,4 +33959,31 @@ fn a_bound_name_does_its_table_action_in_the_grid() {
     press(&mut ed, "i");
     ed.on_key(Key::Ctrl('l'));
     assert_ne!(ed.cell_position(), before, "table_next_cell steps while typing");
+}
+
+/// **The count panel and the way back to the hits name the keys in
+/// force** (2026-11-01): one table of commands for both keymaps, where it
+/// was a hand-written table per keymap.
+#[test]
+fn the_count_panel_names_the_keys_of_the_keymap_in_use() {
+    let rows = |ed: &Editor| match ed.hint() {
+        Hint::Keys(_, rows) => rows.iter().map(|(k, _)| k.to_string()).collect::<Vec<_>>(),
+        other => panic!("{other:?}"),
+    };
+    let mut ed = typed("one\n");
+    ed.on_key(Key::Char('3'));
+    assert_eq!(rows(&ed), ["J", "gg", "G", "A-.", "gt gc gb", "…"]);
+    let mut ed = typed("one\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.on_key(Key::Char('3'));
+    // vim's own `H M L` are its screen rows (the hand-written table said
+    // `gt gc gb`, which had stopped being what the vim keymap binds).
+    assert_eq!(rows(&ed), ["J", "gg", "G", ";", "H M L", "…"]);
+    let mut ed = typed("one\n");
+    let mut lines = HashMap::new();
+    lines.insert("Q".to_string(), "join_selections".to_string());
+    lines.insert("J".to_string(), "no_op".to_string());
+    ed.set_key_aliases(lines);
+    ed.on_key(Key::Char('3'));
+    assert_eq!(rows(&ed)[0], "Q", "the reader's own key");
 }

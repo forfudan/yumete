@@ -2335,30 +2335,27 @@ impl Editor {
     ///
     /// Every description takes the count as `{0}`, which is why these rows are
     /// built with [`crate::messages::say`] and not [`Self::said`].
-    pub(super) const COUNT_KEYS: &'static [(&'static str, &'static str)] = &[
-        ("J", "hint.count.join"),
-        ("gg", "hint.count.line"),
-        ("G", "hint.count.line"),
-        ("A-.", "hint.count.nth-find"),
-        ("gt gc gb", "hint.count.screen-row"),
-        ("…", "hint.count.otherwise"),
+    ///
+    /// **Commands, not keys** (2026-11-01): each row names the key its
+    /// command is on now, under either keymap and with the reader's own
+    /// bindings, so the vim keymap's `;` and helix's `A-.` are one row. It
+    /// was two hand-written tables, one a keymap.
+    pub(super) const COUNT_KEYS: &'static [(&'static [&'static [NormalCmd]], &'static str)] = &[
+        (&[&[NormalCmd::VimJoinSelections, NormalCmd::JoinSelections]], "hint.count.join"),
+        (&[&[NormalCmd::GotoFileStart]], "hint.count.line"),
+        (&[&[NormalCmd::VimGotoLine, NormalCmd::GotoLine]], "hint.count.line"),
+        (&[&[NormalCmd::RepeatFindChar, NormalCmd::RepeatLastMotion]], "hint.count.nth-find"),
+        (
+            &[&[NormalCmd::GotoWindowTop], &[NormalCmd::GotoWindowCenter], &[NormalCmd::GotoWindowBottom]],
+            "hint.count.screen-row",
+        ),
     ];
 
-    /// The same table in the vim keymap's spelling.
-    ///
-    /// One row differs: repeating an `f`/`t` is `;` there and `A-.` under helix
-    /// (measured 2026-10-14 — under helix `;` collapses the selection instead,
-    /// so `3;` goes nowhere). `H`/`M`/`L` are **not** the other spelling of
-    /// `gt`/`gc`/`gb` here: `H`/`L` are sentence motions in both keymaps and
-    /// `M` is the mark prefix, so screen rows are `gt`/`gc`/`gb` either way.
-    pub(super) const COUNT_KEYS_VIM: &'static [(&'static str, &'static str)] = &[
-        ("J", "hint.count.join"),
-        ("gg", "hint.count.line"),
-        ("G", "hint.count.line"),
-        (";", "hint.count.nth-find"),
-        ("gt gc gb", "hint.count.screen-row"),
-        ("…", "hint.count.otherwise"),
-    ];
+    // Under the vim keymap repeating an `f`/`t` is `;`, under helix `A-.`
+    // (measured 2026-10-14 — under helix `;` collapses the selection
+    // instead, so `3;` goes nowhere): the row asks vim's command first.
+    // The screen rows are `H M L` under the vim keymap, which binds them as
+    // vim does, and `gt gc gb` under helix's.
 
     /// The objects `mi` / `ma` take; [`Self::object_rows`] adds the pairs.
     const OBJECT_KEYS: &'static [(&'static str, &'static str)] = &[

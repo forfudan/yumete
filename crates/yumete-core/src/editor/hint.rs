@@ -3,7 +3,7 @@
 //! What the keys mean from where the cursor is standing, one line of it.
 
 use super::*;
-use yumete_cjk::actions::PlaceCmd;
+use yumete_cjk::actions::{NormalCmd, PlaceCmd};
 use crate::input::Key;
 use yumete_cjk::actions::Place;
 
@@ -420,10 +420,16 @@ impl Editor {
             true => say!("label.panel.replace"),
             false => say!("label.panel.search"),
         };
-        Hint::Keys(title, vec![
-            ("n N".into(), say!("hint.search.walk-the-hits")),
-            (back_to_text_key().into(), say!("hint.search.back-to-the-list")),
-        ])
+        // `n N` are the search's next and previous, as bound now.
+        let walk = self.normal_hint(&[
+            &[NormalCmd::VimSearchNext, NormalCmd::SearchNext],
+            &[NormalCmd::VimSearchPrev, NormalCmd::SearchPrev],
+        ]);
+        let rows = [
+            walk.map(|keys| (keys.into(), say!("hint.search.walk-the-hits"))),
+            Some((back_to_text_key().into(), say!("hint.search.back-to-the-list"))),
+        ];
+        Hint::Keys(title, rows.into_iter().flatten().collect())
     }
 
     /// The keys that would finish the sequence already begun.
@@ -488,19 +494,17 @@ impl Editor {
                 // written. Typing `10` put a `10` in the HUD and said nothing
                 // else.
                 let n = self.count?;
-                let rows = match self.vim_keymap() {
-                    true => Self::COUNT_KEYS_VIM,
-                    false => Self::COUNT_KEYS,
-                };
                 let count = n.to_string();
-                return Some(Hint::Keys(
-                    say!("hint.count.title", n),
-                    rows.iter()
-                        .map(|(key, what)| {
-                            ((*key).into(), crate::messages::say(what, &[&count]))
-                        })
-                        .collect(),
-                ));
+                let mut rows: KeyRows = Self::COUNT_KEYS
+                    .iter()
+                    .filter_map(|(slots, what)| {
+                        let keys = self.normal_hint(slots)?;
+                        Some((keys.into(), crate::messages::say(what, &[&count])))
+                    })
+                    .collect();
+                // Everything else a count goes in front of.
+                rows.push(("…".into(), say!("hint.count.otherwise", count)));
+                return Some(Hint::Keys(say!("hint.count.title", n), rows));
             }
             // **A vim operator is waiting** (#429): one line rather than a
             // panel, because what it is waiting for is the whole vocabulary of

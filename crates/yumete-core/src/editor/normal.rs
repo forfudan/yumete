@@ -605,10 +605,15 @@ impl Editor {
     /// key for the command. They used to show helix's key under vim's
     /// keymap, and the default even where the reader had moved it.
     pub fn keys_now(&self, name: &str) -> Option<String> {
+        self.run_now(name).map(|run| yumete_cjk::actions::spell(&run))
+    }
+
+    /// [`Self::keys_now`] in the internal spelling.
+    pub(super) fn run_now(&self, name: &str) -> Option<String> {
         let written = |k: &String| yumete_cjk::actions::written(k);
         let taken = |run: &str| self.user_aliases.keys().any(|k| written(k) == run);
         if let Some(run) = self.normal_keys_for(name).filter(|run| !taken(run)) {
-            return Some(yumete_cjk::actions::spell(&run));
+            return Some(run);
         }
         let mut mine: Vec<String> = self
             .user_aliases
@@ -617,7 +622,24 @@ impl Editor {
             .map(|(k, _)| written(k))
             .collect();
         mine.sort();
-        mine.first().map(|run| yumete_cjk::actions::spell(run))
+        mine.into_iter().next()
+    }
+
+    /// **A hint row's keys for Normal commands, as they are bound now**
+    /// (2026-11-01): each slot is one or more commands, alternatives in the
+    /// order to try (a vim twin before its helix one), and names the first
+    /// that has a key; slots without one are left out, and the row is
+    /// `None` when none has.
+    pub(super) fn normal_hint(&self, slots: &[&[NormalCmd]]) -> Option<String> {
+        let mut shown: Vec<String> = Vec::new();
+        for slot in slots {
+            let Some(run) = slot.iter().find_map(|cmd| self.run_now(cmd.name())) else { continue };
+            let one = super::places::hint_run(&run);
+            if !shown.contains(&one) {
+                shown.push(one);
+            }
+        }
+        (!shown.is_empty()).then(|| shown.join(" "))
     }
 
     /// **The command `cx.key` runs in Normal mode**, by the default keymap:
