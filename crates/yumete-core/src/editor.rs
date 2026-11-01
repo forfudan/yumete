@@ -2551,6 +2551,9 @@ pub struct Editor {
     /// A prompt's, a picker's and a sidebar's bindings (`[keys.prompt]`…),
     /// by `yumete_cjk::actions::Place`, internal spelling.
     place_bindings: [HashMap<String, Vec<String>>; 3],
+    /// `[keys] inherit`: the reader's Normal and Insert lines follow them
+    /// into the sidebar and the prompts (see `places.rs`).
+    place_inherits: bool,
     key_preset: yumete_cjk::KeyPreset,
     /// vim 的 `whichwrap`：哪些鍵走得出一行的兩頭。見
     /// [`yumete_config::Editor::which_wrap`]；helix 鍵位下讀都不讀。
@@ -4120,6 +4123,7 @@ impl Editor {
             insert_aliases: HashMap::new(),
             insert_held: String::new(),
             place_bindings: Default::default(),
+            place_inherits: true,
             key_preset: yumete_cjk::KeyPreset::Helix,
             which_wrap: String::new(),
             alias_held: String::new(),

@@ -949,6 +949,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "keys",
+        key: "inherit",
+        group: Group::Keys,
+        kind: Kind::Tick,
+        label: "settings.keys.inherit",
+        hint: "settings.keys.inherit.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "keys",
         key: "preset",
         group: Group::Keys,
         kind: Kind::Pick(KEYS_PRESET_WAYS),

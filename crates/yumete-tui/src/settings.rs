@@ -442,6 +442,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_place_bindings(Place::Prompt, config.keys.prompt.clone());
     editor.set_place_bindings(Place::Picker, config.keys.picker.clone());
     editor.set_place_bindings(Place::Sidebar, config.keys.sidebar.clone());
+    editor.set_place_inheritance(config.keys.inherit);
     editor.set_key_preset(config.keys.preset);
     editor.set_which_wrap(config.editor.which_wrap.clone());
     // **`d`/`c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。和上面兩句同一族：

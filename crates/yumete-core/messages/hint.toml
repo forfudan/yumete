@@ -150,6 +150,20 @@ zhs = "u 还原此处改动 · y 复制先前版本"
 en = "u restore this change · y copy what it said"
 
 [[message]]
+# 改動那一格底下那一行：`u` 那一項(`hint.change.keys` 的前一半)
+key = "hint.change.restore"
+zht = "還原此處改動"
+zhs = "还原此处改动"
+en = "restore this change"
+
+[[message]]
+# 改動那一格底下那一行：`y` 那一項(`hint.change.keys` 的後一半)
+key = "hint.change.yank"
+zht = "複製先前版本"
+zhs = "复制先前版本"
+en = "copy what it said"
+
+[[message]]
 # 提示：關
 key = "hint.close"
 zht = "關"

@@ -2544,7 +2544,7 @@ impl SyntaxConfig {
 }
 
 /// Keymap overrides.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyConfig {
     /// Normal-mode aliases: pressing the key on the left behaves as pressing
     /// **the keys** on the right.
@@ -2601,6 +2601,30 @@ pub struct KeyConfig {
     /// before anything here is read, which is why the command's report says so
     /// of every item it lists.
     pub flavor: bool,
+    /// **The reader's own keys follow them into the places** (`[keys]
+    /// inherit`, 2026-11-01, on at the factory): a `[keys.normal]` line of
+    /// one key naming one command a sidebar has works in the sidebar, and a
+    /// `[keys.insert]` one in a prompt and a picker. The place's own table
+    /// wins, and the defaults never come over (Emacs's remap by command).
+    pub inherit: bool,
+}
+
+impl Default for KeyConfig {
+    fn default() -> Self {
+        KeyConfig {
+            normal: HashMap::new(),
+            select: HashMap::new(),
+            insert: HashMap::new(),
+            prompt: HashMap::new(),
+            picker: HashMap::new(),
+            sidebar: HashMap::new(),
+            labels: HashMap::new(),
+            insert_labels: HashMap::new(),
+            preset: KeyPreset::default(),
+            flavor: false,
+            inherit: true,
+        }
+    }
 }
 
 /// **What a language can be told to run** (Feature #197).
@@ -4161,6 +4185,7 @@ struct RawKeys {
     sidebar: toml::Table,
     preset: Option<String>,
     flavor: Option<bool>,
+    inherit: Option<bool>,
     /// What else is under `[keys]`: a mode that does not exist
     /// (`[keys.visual]`), kept to be reported.
     #[serde(flatten)]
@@ -4442,6 +4467,9 @@ impl RawConfig {
         self.keys.strays.extend(other.keys.strays);
         if other.keys.preset.is_some() {
             self.keys.preset = other.keys.preset;
+        }
+        if other.keys.inherit.is_some() {
+            self.keys.inherit = other.keys.inherit;
         }
         if other.keys.flavor.is_some() {
             self.keys.flavor = other.keys.flavor;
@@ -4980,6 +5008,9 @@ impl RawConfig {
         }
         if let Some(on) = self.keys.flavor {
             config.keys.flavor = on;
+        }
+        if let Some(on) = self.keys.inherit {
+            config.keys.inherit = on;
         }
         if let Some(preset) = self.keys.preset.as_deref().and_then(KeyPreset::parse) {
             config.keys.preset = preset;
@@ -6240,6 +6271,8 @@ mod key_tables {
         assert_eq!(get(&c.keys.picker, "C-k"), ["prev_entry", "prev_entry"]);
         assert_eq!(get(&c.keys.sidebar, "n"), ["move_line_down"]);
         assert_eq!(get(&c.keys.sidebar, "C-s"), [":write"]);
+        assert!(c.keys.inherit, "the reader's keys follow them in at the factory");
+        assert!(!Config::from_toml_saying("[keys]\ninherit = false\n").0.keys.inherit);
         assert!(!c.keys.picker.contains_key("C-s"), "a Normal command is not a picker's");
         assert!(c.keys.normal.is_empty(), "nothing goes to the modes' tables");
         assert!(problems.iter().any(|p| p.contains("save_file")), "{problems:?}");

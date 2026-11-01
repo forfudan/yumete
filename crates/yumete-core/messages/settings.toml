@@ -901,6 +901,20 @@ zhs = "开了之后 `d` `c` 只删不剪，要剪按 `A-d` `A-c`。刚复制好�
 en = "with this on, `d` and `c` only delete and `A-d`/`A-c` are the ones that cut, so a tidy-up between a copy and a paste cannot eat the copy. `[keys.normal]` still wins"
 
 [[message]]
+# 設置面板：鍵位那一組裏 [keys] inherit 那一格
+key = "settings.keys.inherit"
+zht = "側欄與命令行沿用我的改鍵"
+zhs = "侧栏与命令行沿用我的改键"
+en = "Sidebars and prompts take my keys"
+
+[[message]]
+# 同上，那一格的說明
+key = "settings.keys.inherit.hint"
+zht = "[keys.normal] 裏單鍵綁的命令，側欄也有就在側欄生效；[keys.insert] 的同理進命令行與挑選器。[keys.sidebar] 與 [keys.prompt] 蓋得過它"
+zhs = "[keys.normal] 里单键绑的命令，侧栏也有就在侧栏生效；[keys.insert] 的同理进命令行与挑选器。[keys.sidebar] 与 [keys.prompt] 盖得过它"
+en = "a `[keys.normal]` line of one key whose command a sidebar has works in the sidebar, and a `[keys.insert]` one in the command line and the pickers. `[keys.sidebar]` and `[keys.prompt]` still win"
+
+[[message]]
 # 設置：鍵位那一套
 key = "settings.keys.preset"
 zht = "鍵位那一套"

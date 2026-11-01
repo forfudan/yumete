@@ -114,11 +114,51 @@ impl Editor {
             Place::Sidebar => &[Place::Sidebar],
         };
         let typed = super::keys::key_internal(key);
+        let read = !self.expanding_alias && !typed.is_empty();
         order.iter().find_map(|&one| {
-            let mine = self.place_bindings[one as usize].get(&typed).filter(|_| !self.expanding_alias && !typed.is_empty());
+            let mine = || self.place_bindings[one as usize].get(&typed).cloned();
+            let inherited = || self.inherited(one, &typed).map(|name| vec![name]);
             let default = || place_keys(one).iter().find(|(k, _)| *k == key).map(|(_, name)| vec![name.to_string()]);
-            mine.cloned().or_else(default)
+            read.then(mine).flatten().or_else(|| read.then(inherited).flatten()).or_else(default)
         })
+    }
+
+    /// **A line of the reader's own that follows them into `place`**
+    /// (`[keys] inherit`, 2026-11-01): a `[keys.normal]` line into a
+    /// sidebar, a `[keys.insert]` one into a prompt, when it is one key
+    /// naming one command the place has. Read after the place's own table
+    /// and before its defaults, so a Colemak reader's `n =
+    /// "move_line_down"` walks a sidebar too; the defaults of Normal mode
+    /// never come over (its `J` joins, a sidebar's pages). `no_op` stays
+    /// where it was written: unbinding a key in the text leaves the
+    /// sidebar's alone.
+    fn inherited(&self, place: Place, typed: &str) -> Option<String> {
+        self.lines_that_follow(place).into_iter().find(|(key, _)| key == typed).map(|(_, name)| name)
+    }
+
+    /// Every line of the reader's that follows them into `place`: its key,
+    /// internal spelling, and the command.
+    fn lines_that_follow(&self, place: Place) -> Vec<(String, String)> {
+        // `[keys.normal]` is kept as written; `[keys.insert]` in the
+        // internal spelling already.
+        let from: Vec<(String, &Vec<String>)> = match place {
+            _ if !self.place_inherits => return Vec::new(),
+            Place::Sidebar => self.user_aliases.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v)).collect(),
+            Place::Prompt => self.insert_aliases.iter().map(|(k, v)| (k.clone(), v)).collect(),
+            Place::Picker => return Vec::new(),
+        };
+        from.into_iter()
+            .filter(|(key, _)| key.chars().filter(|&c| c != yumete_cjk::actions::ALT).count() == 1)
+            .filter_map(|(key, run)| match run.as_slice() {
+                [one] if one != "no_op" && place.actions().iter().any(|a| a.name == one) => Some((key, one.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `[keys] inherit`.
+    pub fn set_place_inheritance(&mut self, on: bool) {
+        self.place_inherits = on;
     }
 
     /// **Run what a place's key names**, in order: a command line, keys
@@ -178,17 +218,28 @@ impl Editor {
     }
 
     /// **The keys that run `name` in `place` now**, internal spelling: the
-    /// reader's lines that name it alone, and the defaults they left alone.
+    /// defaults nothing took over, then the reader's own lines and the ones
+    /// that followed them in, as [`Self::commands_in`] reads them.
     pub(super) fn keys_in_place(&self, place: Place, name: &str) -> Vec<String> {
         let mine = &self.place_bindings[place as usize];
+        let taken = |key: &String| mine.contains_key(key) || self.inherited(place, key).is_some();
         let mut keys: Vec<String> = place_keys(place)
             .iter()
             .filter(|(_, one)| *one == name)
             .map(|(key, _)| super::keys::key_internal(*key))
-            .filter(|key| !mine.contains_key(key))
+            .filter(|key| !taken(key))
             .collect();
-        let mut theirs: Vec<String> =
-            mine.iter().filter(|(_, run)| run.len() == 1 && run[0] == name).map(|(key, _)| key.clone()).collect();
+        let mut theirs: Vec<String> = mine
+            .iter()
+            .filter(|(_, run)| run.len() == 1 && run[0] == name)
+            .map(|(key, _)| key.clone())
+            .chain(
+                self.lines_that_follow(place)
+                    .into_iter()
+                    .filter(|(key, one)| one == name && !mine.contains_key(key))
+                    .map(|(key, _)| key),
+            )
+            .collect();
         theirs.sort();
         keys.extend(theirs);
         keys

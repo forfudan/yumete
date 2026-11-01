@@ -33718,3 +33718,75 @@ fn h_in_the_other_sidebar_leaves_the_outline_alone() {
     ed.on_key(Key::Char('h'));
     assert_eq!(rows(&ed), Some(2), "in its own panel `h` folds it");
 }
+
+/// **A binding's command reaches the cursors its own key reaches**
+/// (2026-11-01, found in review): with two cursors, `"zx" =
+/// "delete_selection"` deleted at the first and sent a plain `x` to the
+/// other, because `x` alone moves every cursor. A list does the same, each
+/// command in turn.
+#[test]
+fn a_two_key_binding_reaches_every_cursor() {
+    let two_cursors = |bound: &str, to: &[&str]| {
+        let mut ed = typed("ab ab\n");
+        press(&mut ed, "gg");
+        type_keys(&mut ed, "xsa\n");
+        assert_eq!(ed.sel.len(), 2);
+        let mut aliases = HashMap::new();
+        aliases.insert(bound.to_string(), to.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        ed.set_key_aliases(aliases);
+        ed
+    };
+    let mut ed = two_cursors("zx", &["delete_selection"]);
+    type_keys(&mut ed, "zx");
+    assert_eq!(ed.current_buffer().text(), "b b\n", "both a's deleted");
+    assert_eq!(ed.sel.len(), 2, "and both cursors kept");
+    let mut ed = two_cursors("Q", &["delete_selection", "move_char_right"]);
+    ed.on_key(Key::Char('Q'));
+    assert_eq!(ed.current_buffer().text(), "b b\n", "a list's command too");
+    assert_eq!(ed.sel.len(), 2);
+}
+
+/// **The reader's own keys follow them into the places** (`[keys]
+/// inherit`, 2026-11-01): a `[keys.normal]` line of one key naming a
+/// command the sidebar has walks the sidebar too, a `[keys.insert]` one
+/// edits a prompt, and the place's own table still wins. Off, nothing
+/// follows.
+#[test]
+fn the_readers_own_keys_follow_them_into_the_places() {
+    use crate::sidebar::Side;
+    use yumete_cjk::actions::Place;
+    let mut ed = typed("# 一\n\n# 二\n\n# 三\n");
+    let mut normal = HashMap::new();
+    normal.insert("n".to_string(), "move_line_down".to_string());
+    normal.insert("e".to_string(), "move_line_up".to_string());
+    normal.insert("J".to_string(), "no_op".to_string());
+    ed.set_key_aliases(normal);
+    ed.execute(":sidebar outline").unwrap();
+    ed.focus_slot(Side::Left);
+    let at = |ed: &Editor| ed.panel(Side::Left).map(|p| p.selected());
+    ed.on_key(Key::Char('n'));
+    assert_eq!(at(&ed), Some(1), "n walks the sidebar as it walks the text");
+    ed.on_key(Key::Char('e'));
+    assert_eq!(at(&ed), Some(0));
+    ed.on_key(Key::Char('J'));
+    assert_eq!(at(&ed), Some(2), "a key unbound in the text still pages here");
+    let mut own = HashMap::new();
+    own.insert("n".to_string(), "goto_file_start".to_string());
+    ed.set_place_bindings(Place::Sidebar, own);
+    ed.on_key(Key::Char('n'));
+    assert_eq!(at(&ed), Some(0), "[keys.sidebar] wins");
+    ed.set_place_bindings(Place::Sidebar, HashMap::<String, String>::new());
+    ed.set_place_inheritance(false);
+    ed.on_key(Key::Char('n'));
+    assert_eq!(at(&ed), Some(0), "off, n is not the sidebar's");
+
+    let mut ed = Editor::new();
+    let mut insert = HashMap::new();
+    insert.insert("C-b".to_string(), "move_char_left".to_string());
+    ed.set_insert_aliases(insert);
+    ed.on_key(Key::Char(':'));
+    type_keys(&mut ed, "ab");
+    ed.on_key(Key::Ctrl('b'));
+    ed.on_key(Key::Char('X'));
+    assert_eq!(ed.prompt(), Some((":", "aXb")), "an Insert line edits the prompt");
+}

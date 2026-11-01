@@ -104,7 +104,10 @@ impl Editor {
                     // 格是為它們開的，而通用那幾個每一扇都有。
                     .chain(match self.info_in_this_sidebar(side) {
                         Some(crate::sidebar::Info::Change) => {
-                            vec![("u y".into(), say!("hint.change.keys"))]
+                            vec![
+                                ("u".into(), say!("hint.change.restore")),
+                                ("y".into(), say!("hint.change.yank")),
+                            ]
                         }
                         _ => Vec::new(),
                     })

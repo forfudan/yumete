@@ -21,6 +21,14 @@ enum Shape {
     Chars,
 }
 
+/// How a Normal key reaches the cursors (see `Editor::binding_fan`).
+enum Fan {
+    /// As this key would, with this pending.
+    Key(Pending, Key),
+    /// Once; a binding's commands reach the cursors themselves.
+    Once,
+}
+
 impl Editor {
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
@@ -216,52 +224,22 @@ impl Editor {
             }
             Mode::Normal => {
                 self.back_from_the_pair_shown();
-                // **Judged by the key it becomes** (2026-10-31): a one-key
-                // binding (`"C-q" = "@w"`) is swapped inside
-                // `on_normal_key`, after this choice, so `w` there moved
-                // only the first cursor. The key itself still goes in as
-                // pressed; the binding swaps it there as before.
-                let (waiting, acting) = self.one_key_binding(key).unwrap_or((self.pending, key));
-                if multi::each_selection_key(&waiting, acting)
-                    || (waiting == self.pending && self.copies_every_selection(acting))
-                {
-                    self.each_selection(|e| e.on_normal_key(key));
-                } else if multi::edits_every_selection(&waiting, acting) {
-                    if let Key::Char(c) = acting {
-                        if !self.every_selection_has_its_own_pair(waiting, c) {
-                            self.pending = Pending::None;
-                            return KeyOutcome::Continue;
-                        }
+                // **Judged by what the key becomes** (2026-10-31, 2026-11-01).
+                // A one-key binding to one key (`"C-q" = "@w"`) is swapped
+                // inside `on_normal_key`, after this choice, so the swap is
+                // looked ahead here: `w` moves every cursor. A key that
+                // begins or finishes any other binding goes in once, and the
+                // binding's commands each reach the cursors their own keys
+                // reach (`run_one_binding`): `"zx" = "delete_selection"` used
+                // to run at the first cursor and send a plain `x` to the
+                // rest, because `x` alone moves every cursor.
+                match self.binding_fan(key) {
+                    Fan::Key(waiting, acting) => self.fan_out(waiting, acting, true, &|e| e.on_normal_key(key)),
+                    Fan::Once => {
+                        let before = self.before_a_primary_edit();
+                        self.on_normal_key(key);
+                        self.after_a_primary_edit(before);
                     }
-                    // **`J` joins a line once however many cursors are on it**
-                    // (2026-10-29, review: two on one line joined it twice;
-                    // helix sorts the joins and drops the repeats). The first
-                    // cursor on each line joins; the others ride along.
-                    let joins = matches!(acting, Key::Char('J') | Key::Alt('J'));
-                    // Likewise `C-a`/`C-x`: two cursors that reach the same
-                    // number bump it once.
-                    let bumps = matches!(acting, Key::Ctrl('a') | Key::Ctrl('x'));
-                    let owners = ((joins || bumps) && self.sel.is_plural()).then(|| match joins {
-                        true => self.first_cursor_on_each_line(),
-                        false => self.first_cursor_on_each_number(),
-                    });
-                    self.edit_each(|e| {
-                        if let Some(owners) = &owners {
-                            let rope = e.current_buffer().rope();
-                            let here = match joins {
-                                true => Some(rope.char_to_line(e.selection().0.min(rope.len_chars()))),
-                                false => e.number_to_bump(e.sel.anchor(), e.sel.head()).map(|(from, _)| from),
-                            };
-                            if here.and_then(|at| owners.get(&at)) != e.edit_nth.as_ref() {
-                                return;
-                            }
-                        }
-                        e.on_normal_key(key)
-                    });
-                } else {
-                    let before = self.before_a_primary_edit();
-                    self.on_normal_key(key);
-                    self.after_a_primary_edit(before);
                 }
                 // **An undo point is where the typing begins** (2026-10-27,
                 // helix's): `A` announces it and then goes to the line's end,
@@ -1617,44 +1595,106 @@ impl Editor {
         }
     }
 
-    /// The key a one-key binding turns `key` into (`"C-q" = "@w"` → `w`),
-    /// when nothing is pending or held, as the binding layer in
-    /// [`Self::on_normal_key`] would swap it. `None` for anything else.
-    fn one_key_binding(&self, key: Key) -> Option<(Pending, Key)> {
-        if self.pending != Pending::None
-            || self.expanding_alias
-            || !self.alias_held.is_empty()
-            || self.aliases().is_empty()
-        {
-            return None;
+    /// **Which cursors a Normal key reaches, when a binding is in it**: as
+    /// the key a one-key binding to one key becomes (`"C-q" = "@w"` → `w`),
+    /// once for any other key that begins or finishes a binding (its
+    /// commands then reach the cursors themselves, see `run_one_binding`),
+    /// and as itself otherwise.
+    fn binding_fan(&self, key: Key) -> Fan {
+        let raw = Fan::Key(self.pending, key);
+        if self.pending != Pending::None || self.expanding_alias || self.aliases().is_empty() {
+            return raw;
+        }
+        if !self.alias_held.is_empty() {
+            return Fan::Once;
         }
         let typed = match key {
             Key::Char(c) if !(c.is_ascii_digit() && self.count.is_some()) => c.to_string(),
-            Key::Char(_) => return None,
+            Key::Char(_) => return raw,
             Key::Alt(c) => format!("{}{c}", yumete_cjk::actions::ALT),
-            key => typed_as(key)?.to_string(),
+            key => match typed_as(key) {
+                Some(c) => c.to_string(),
+                None => return raw,
+            },
         };
         if self.aliases().keys().any(|k| k.len() > typed.len() && k.starts_with(typed.as_str())) {
-            return None;
+            return Fan::Once;
         }
-        let commands = self.aliases().get(&typed)?;
-        let [one] = commands.as_slice() else { return None };
-        match yumete_cjk::actions::bound(one)? {
-            // A named command acts on the cursors its own key does.
-            // A named command acts on the cursors its own key does, in its
-            // own group (`"C-h" = "goto_line_start"` moves every cursor, as
-            // `gh` does).
-            yumete_cjk::actions::Bound::Named(action) if action.how == yumete_cjk::actions::How::Normal => {
-                super::normal::place_of(action.name, &self.group_context())
-            }
-            yumete_cjk::actions::Bound::Keys(k) => {
+        let Some(commands) = self.aliases().get(&typed) else { return raw };
+        if let [one] = commands.as_slice() {
+            if let Some(yumete_cjk::actions::Bound::Keys(k)) = yumete_cjk::actions::bound(one) {
                 let mut cs = k.chars();
-                match (cs.next(), cs.next()) {
-                    (Some(c), None) => Some((Pending::None, Key::Char(c))),
-                    _ => None,
+                if let (Some(c), None) = (cs.next(), cs.next()) {
+                    return Fan::Key(Pending::None, Key::Char(c));
                 }
             }
-            _ => None,
+        }
+        Fan::Once
+    }
+
+    /// **Run `run` at the cursors a key reaches**: every selection for a
+    /// motion, each in turn for an edit, the primary alone otherwise (then,
+    /// when `primary`, the others follow the edit made there).
+    pub(super) fn fan_out(&mut self, waiting: Pending, acting: Key, primary: bool, run: &dyn Fn(&mut Editor)) {
+        if multi::each_selection_key(&waiting, acting)
+            || (waiting == self.pending && self.copies_every_selection(acting))
+        {
+            self.each_selection(run);
+        } else if multi::edits_every_selection(&waiting, acting) {
+            if let Key::Char(c) = acting {
+                if !self.every_selection_has_its_own_pair(waiting, c) {
+                    self.pending = Pending::None;
+                    return;
+                }
+            }
+            // **`J` joins a line once however many cursors are on it**
+            // (2026-10-29, review: two on one line joined it twice;
+            // helix sorts the joins and drops the repeats). The first
+            // cursor on each line joins; the others ride along.
+            let joins = matches!(acting, Key::Char('J') | Key::Alt('J'));
+            // Likewise `C-a`/`C-x`: two cursors that reach the same
+            // number bump it once.
+            let bumps = matches!(acting, Key::Ctrl('a') | Key::Ctrl('x'));
+            let owners = ((joins || bumps) && self.sel.is_plural()).then(|| match joins {
+                true => self.first_cursor_on_each_line(),
+                false => self.first_cursor_on_each_number(),
+            });
+            self.edit_each(|e| {
+                if let Some(owners) = &owners {
+                    let rope = e.current_buffer().rope();
+                    let here = match joins {
+                        true => Some(rope.char_to_line(e.selection().0.min(rope.len_chars()))),
+                        false => e.number_to_bump(e.sel.anchor(), e.sel.head()).map(|(from, _)| from),
+                    };
+                    if here.and_then(|at| owners.get(&at)) != e.edit_nth.as_ref() {
+                        return;
+                    }
+                }
+                run(e)
+            });
+        } else if primary {
+            let before = self.before_a_primary_edit();
+            run(self);
+            self.after_a_primary_edit(before);
+        } else {
+            run(self);
+        }
+    }
+
+    /// A Normal command a binding names, at the cursors its own key reaches
+    /// (2026-11-01): `"zx" = "delete_selection"` deletes at every cursor, as
+    /// `d` does, and so does each command of a list.
+    fn run_normal_at_every_cursor(&mut self, name: &str) {
+        let place = (self.mode == Mode::Normal && self.sel.is_plural())
+            .then(|| super::normal::place_of(name, &self.group_context()))
+            .flatten();
+        match place {
+            Some((waiting, acting)) => self.fan_out(waiting, acting, false, &|e| {
+                e.run_normal(name);
+            }),
+            None => {
+                self.run_normal(name);
+            }
         }
     }
 
@@ -1694,9 +1734,7 @@ impl Editor {
             }
             Some(yumete_cjk::actions::Bound::Named(action)) => match action.how {
                 yumete_cjk::actions::How::Command(line) => self.run_bound_command(line),
-                yumete_cjk::actions::How::Normal => {
-                    self.run_normal(action.name);
-                }
+                yumete_cjk::actions::How::Normal => self.run_normal_at_every_cursor(action.name),
             },
             None => {}
         }
@@ -2028,7 +2066,10 @@ impl Editor {
                             key
                         } else {
                             self.play_keys(&held);
-                            return self.on_normal_key(key);
+                            // The key that did not finish one reaches the
+                            // cursors it reaches alone (it came in once).
+                            let waiting = self.pending;
+                            return self.fan_out(waiting, key, false, &|e| e.on_normal_key(key));
                         }
                     }
                 }
