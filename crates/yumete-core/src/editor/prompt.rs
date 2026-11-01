@@ -253,218 +253,170 @@ impl Editor {
         }) {
             return;
         }
-        match key {
-            Key::Esc => {
-                // **`5ix` spends its count here** (2026-10-06): what repeats is
-                // the whole typing session, and nobody knows what that is until
-                // now.
-                let again = std::mem::take(&mut self.insert_again);
-                let typed = std::mem::take(&mut self.insert_recording);
-                if again > 0 && !typed.is_empty() {
-                    // At every cursor (2026-10-29, review: `3iX` with two
-                    // cursors repeated at the primary alone).
-                    let opened = self.insert_opened;
-                    self.edit_each_from(false, |e| {
-                        e.insert_opened = opened;
-                        e.spend_the_insert_count(again, &typed);
-                    });
-                }
-                // The session just ended is what `.` replays.
-                self.insert_recording.clear();
-                let stop = self.sel.head();
-                self.current_buffer_mut().set_insert_stop(stop);
-                self.mode = Mode::Normal;
-                let caret = self.sel.head();
-                self.step_back_out_of_insert();
-                // A block's `I`, `A` or `c`: copy it down now.
-                self.finish_block_insert(caret);
-                // 那一則簽名是打字當口的東西，出了插入態就不是答案了。
-                self.signature = None;
-                self.signature_query = None;
-                self.signature_due = None;
-                self.signature_on = None;
-                // A completion question out is about the typing just ended.
-                self.completion_at = None;
-                self.completion_query = None;
-                self.completion_sent = None;
-                // **The quotes are the editor's, on the way out too**
-                // (2026-10-21): a cell typed into leaves the file written the
-                // way `quote_for` would have written it, so a pair that is no
-                // longer earning its place goes away with the line break or
-                // the comma that asked for it.
-                self.tidy_the_cell();
-                self.rescan_records();
-                // **And the caret back onto a character of the cell**
-                // (2026-10-22 報的). `step_back_out_of_insert` pulls it one
-                // grapheme the way vi does, which off the end of a cell lands
-                // on the cell's last character — but `a` at the end of a cell
-                // leaves it *on the delimiter*, and the status line read that
-                // out as 「this cell holds `,`」. The grid's walls are the
-                // cell's, so coming to rest is clamped by them.
-                self.put_the_caret_in_the_cell();
-                // A cell that grew while it was being typed in made its column
-                // too narrow for it. Laying the table out again on the way out
-                // is what keeps "aligned" a property of the file rather than a
-                // command somebody has to remember.
-                self.format_md_table();
+        // **Insert mode's keys are a table too** (2026-10-31, step 6 of the
+        // keymap plan): `INSERT_KEYS` says which command each key runs, and
+        // the reader's `[keys.insert]` is asked before any of this (`on_key`).
+        // A key no command answers types itself.
+        if let Some(name) = self.insert_command_for(key) {
+            if let Some(&(_, run, _)) = super::normal::normal_command(name) {
+                run(self, super::normal::Cx { key, count: 1, operator_count: None, continuing_zong });
             }
-            Key::Enter | Key::Ctrl('j') => {
-                // A list carries itself down, and an empty item ends (#418).
-                if self.continue_the_list() {
-                    return;
-                }
-                // The file's own line ending, so that one keystroke does not
-                // leave a CRLF manuscript with two kinds of line in it (#309).
-                let ending = self.current_buffer().ending().to_string();
-                let (line, column) = self.caret_in_line();
-                let base = self.indent_of_line(line, Some(column));
-                if let Some(typed) = self.open_the_pair(&ending, &base) {
-                    self.insert_recording.push_str(&typed);
-                    return;
-                }
-                // **縮進跟着下來**（2026-10-08 報的：「In `go file`, pressing enter
-                // in a code block won't auto indent」）。vim 的 `autoindent`、helix
-                // 的 `insert_newline` 都做這件事，而這一頭一件都不做——代碼檔裏每
-                // 按一次 Enter 光標就回到第 0 列。
-                //
-                // 規矩與代價都在 [`Editor::indent_of_line`] 上：只帶光標前面那一截
-                // 空白，所以一個字符都不是憑空長出來的；行首按下去什麼都不帶。
-                let indent = self.indent_to_carry();
-                // 重放（`3i…`、`.`）是把記下來的字串原樣插進去的，所以縮進要記在
-                // 裏面——不記，`.` 重放出來的那幾行就貼着左邊。
-                self.insert_recording.push_str(&ending);
-                self.insert_recording.push_str(&indent);
-                self.insert_str(&format!("{ending}{indent}"));
-            }
-            // **`C-h` is Backspace** and **`C-j` is Enter** — the two the
-            // terminal has sent as those control codes since before vi, and
-            // helix binds them in Insert as well (`default.rs`:
-            // `C-h` delete_char_backward, `C-j` insert_newline). Here they
-            // used to fall off the end into 「chords are not text」 and do
-            // nothing at all (2026-10-06).
-            Key::Backspace | Key::Ctrl('h') => {
-                self.insert_recording.pop();
-                // **覆寫模式的退格是「還回去」**，同 vim：往回走一格，把那個位置
-                // 上原來的字放回來。蓋到行尾外面去的那幾個没有原文，就只是刪掉。
-                if self.overwriting {
-                    if let Some(was) = self.overwritten.pop() {
-                        return self.put_back_what_was_overwritten(was);
-                    }
-                }
-                let before = self.sel.head();
-                if self.delete_an_empty_pair() {
-                    return;
-                }
-                self.delete_before_cursor();
-                // The server's list widens again, as helix's does (2026-10-28).
-                if self.sel.head() < before && self.narrow_the_server_list(before) == Some(true) {
-                    self.ask_what_comes_next(false);
-                }
-            }
-            // Forward delete. It did nothing at all before — the key never
-            // reached the editor, in any mode. `C-d` is helix's spelling of
-            // the same thing in Insert (2026-10-06).
-            Key::Delete | Key::Ctrl('d') => self.delete_at_cursor(),
-            // **`A-d` takes the word ahead**, the other half of `C-w`
-            // (helix's `delete_word_forward`, and readline's). 2026-10-06.
-            Key::Alt('d') => self.delete_word_after_cursor(),
-            // `C-w` and `C-u` are in vi, in Helix, in readline and in every
-            // terminal prompt a person has ever typed at, and Insert mode ate
-            // both. Through an IME that mattered more than it looks: taking
-            // back a 詞 the candidate list got wrong meant holding Backspace down.
-            Key::Ctrl('w') => self.delete_word_before_cursor(),
-            Key::Ctrl('u') => self.delete_to_line_start(),
-            // readline 的另一半（2026-09-28）。`C-u` 早就有了，一個只做了一半的對子
-            // 比兩個都没有更難記。
-            Key::Ctrl('k') => self.delete_to_line_end(),
-            // **`C-r` 把一個寄存器插進來**，vi 的拼法。Warning: 它在等一個字符——`"` 是無名
-            // 的那一個（同 vi），別的字母是具名的。
-            Key::Ctrl('r') => self.pending = Pending::Register,
-            // **`C-o`：做一個 Normal 命令就回來**（vim 的 `i_CTRL-O`，2026-10-06）。
-            // 寫稿子寫到一半要 `gg` 看一眼開頭、要 `p` 貼一段、要 `x` 刪一個字，
-            // 而出插入態再進來會斷掉一次撤銷、也丟了 `A` 那個位置。
-            //
-            // Warning: **只在 vim 鍵位下。** helix 没有這個鍵，它那邊插入態的 `C-o`
-            // 什麼都不是；兩邊各跟各的。
-            Key::Ctrl('o') if self.key_preset == yumete_cjk::KeyPreset::Vim => {
-                self.one_normal_key = Some(Mode::Insert);
-                self.mode = Mode::Normal;
-            }
-            // Across the break, as in 常模 — outside a cell, where the two
-            // arms above hold the arrows to the cell they are writing in.
-            Key::Left => self.move_horizontal(motion::prev_grapheme),
-            Key::Right => self.move_horizontal(motion::next_grapheme),
-            Key::Up => self.move_vertical(true),
-            Key::Down => self.move_vertical(false),
-            // A page at a time, while typing: the same motion Normal makes,
-            // because a page is a page whichever mode you are in.
-            Key::PageUp => self.move_page(1, true, 1.0),
-            Key::PageDown => self.move_page(1, false, 1.0),
-            // `C-a`/`C-e` are the same two places, and are what a hand that
-            // has ever used a terminal prompt reaches for — the `:` line has
-            // taken them all along, and Insert swallowed them.
-            Key::Home | Key::Ctrl('a') => {
-                let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
-                self.set_cursor(pos);
-            }
-            Key::End | Key::Ctrl('e') => {
-                let pos = motion::line_end(self.current_buffer().rope(), self.sel.head());
-                self.set_cursor(pos);
-            }
-            // **`C-g`（vim 的 `C-g u`）：從這裏起算一次新的撤銷**（2026-09-23）。
-            //
-            // 「一次插入是一次撤銷」是 2026-09-21 定的（見 §5.12.3），而它欠一個
-            // 逃生口：一段寫得很長的時候，想主動切一刀。這就是那一刀。
-            Key::Ctrl('g') => {
-                self.snapshot();
-                self.pending = Pending::UndoBreak;
-                self.set_status(say!("edit.undo-break"));
-            }
-            Key::Char(c) => {
-                self.insert_recording.push(c);
-                let mut buf = [0u8; 4];
-                let one = c.encode_utf8(&mut buf).to_string();
-                if !self.type_paired(c) {
-                    self.insert_str(&one);
-                }
-                self.maybe_ask_what_comes_next(&one);
-                self.maybe_ask_for_a_signature(&one);
-            }
-            // **Tab types what the editor was told to, and Shift-Tab the
-            // other one** — spaces out of the box, as VS Code and Zed do, so a
-            // snippet pasted into a Markdown fence lines up wherever it is
-            // read; a TAB is still one chord away.
-            Key::Tab | Key::BackTab => {
-                let spaces = (key == Key::Tab) == self.tab_spaces;
-                let text = match spaces {
-                    // To the next multiple of the indent, not a fixed run: a
-                    // Tab after `ab` lands on the same column a Tab after
-                    // nothing would, which is what makes a column line up.
-                    true => {
-                        let rope = self.current_buffer().rope();
-                        let start = rope.line_to_char(rope.char_to_line(self.sel.head()));
-                        // A TAB already on the line lands on its own stop.
-                        // Warning: **字簇，不是 `char`**（#422）：`Warning: ` 是兩個 `char`，逐字
-                        // 加算一格而終端給兩格，於是對齊到這一欄的縮進會少一格。Tab
-                        // 要單獨認，它的寬度是「到下一個制表位」，不是字形的寬度。
-                        let ahead: String = rope.slice(start..self.sel.head()).chars().collect();
-                        let column = yumete_cjk::graphemes(&ahead).fold(0, |col, g| {
-                            match g {
-                                "\t" => col + self.tab_stop - col % self.tab_stop,
-                                g => col + yumete_cjk::grapheme_width(g),
-                            }
-                        });
-                        let width = self.indent_width;
-                        " ".repeat(width - column % width)
-                    }
-                    false => "\t".to_string(),
-                };
-                self.insert_recording.push_str(&text);
-                self.insert_str(&text);
-            }
-            // Chords are not text; ignore them rather than inserting a literal.
-            Key::Ctrl(_) | Key::Alt(_) => {}
+            return;
         }
+        if let Key::Char(c) = key {
+            self.insert_recording.push(c);
+            let mut buf = [0u8; 4];
+            let one = c.encode_utf8(&mut buf).to_string();
+            if !self.type_paired(c) {
+                self.insert_str(&one);
+            }
+            self.maybe_ask_what_comes_next(&one);
+            self.maybe_ask_for_a_signature(&one);
+        }
+    }
+
+    /// **Leave Insert mode** (`Esc`, and `normal_mode` from a binding such as
+    /// `jk`).
+    pub(super) fn leave_insert(&mut self) {
+        // **`5ix` spends its count here** (2026-10-06): what repeats is
+        // the whole typing session, and nobody knows what that is until
+        // now.
+        let again = std::mem::take(&mut self.insert_again);
+        let typed = std::mem::take(&mut self.insert_recording);
+        if again > 0 && !typed.is_empty() {
+            // At every cursor (2026-10-29, review: `3iX` with two
+            // cursors repeated at the primary alone).
+            let opened = self.insert_opened;
+            self.edit_each_from(false, |e| {
+                e.insert_opened = opened;
+                e.spend_the_insert_count(again, &typed);
+            });
+        }
+        // The session just ended is what `.` replays.
+        self.insert_recording.clear();
+        let stop = self.sel.head();
+        self.current_buffer_mut().set_insert_stop(stop);
+        self.mode = Mode::Normal;
+        let caret = self.sel.head();
+        self.step_back_out_of_insert();
+        // A block's `I`, `A` or `c`: copy it down now.
+        self.finish_block_insert(caret);
+        // 那一則簽名是打字當口的東西，出了插入態就不是答案了。
+        self.signature = None;
+        self.signature_query = None;
+        self.signature_due = None;
+        self.signature_on = None;
+        // A completion question out is about the typing just ended.
+        self.completion_at = None;
+        self.completion_query = None;
+        self.completion_sent = None;
+        // **The quotes are the editor's, on the way out too**
+        // (2026-10-21): a cell typed into leaves the file written the
+        // way `quote_for` would have written it, so a pair that is no
+        // longer earning its place goes away with the line break or
+        // the comma that asked for it.
+        self.tidy_the_cell();
+        self.rescan_records();
+        // **And the caret back onto a character of the cell**
+        // (2026-10-22 報的). `step_back_out_of_insert` pulls it one
+        // grapheme the way vi does, which off the end of a cell lands
+        // on the cell's last character — but `a` at the end of a cell
+        // leaves it *on the delimiter*, and the status line read that
+        // out as 「this cell holds `,`」. The grid's walls are the
+        // cell's, so coming to rest is clamped by them.
+        self.put_the_caret_in_the_cell();
+        // A cell that grew while it was being typed in made its column
+        // too narrow for it. Laying the table out again on the way out
+        // is what keeps "aligned" a property of the file rather than a
+        // command somebody has to remember.
+        self.format_md_table();
+    }
+
+    /// A line break, carrying the indent, a list's marker or a pair's inside.
+    pub(super) fn insert_newline(&mut self) {
+        // A list carries itself down, and an empty item ends (#418).
+        if self.continue_the_list() {
+            return;
+        }
+        // The file's own line ending, so that one keystroke does not
+        // leave a CRLF manuscript with two kinds of line in it (#309).
+        let ending = self.current_buffer().ending().to_string();
+        let (line, column) = self.caret_in_line();
+        let base = self.indent_of_line(line, Some(column));
+        if let Some(typed) = self.open_the_pair(&ending, &base) {
+            self.insert_recording.push_str(&typed);
+            return;
+        }
+        // **縮進跟着下來**（2026-10-08 報的：「In `go file`, pressing enter
+        // in a code block won't auto indent」）。vim 的 `autoindent`、helix
+        // 的 `insert_newline` 都做這件事，而這一頭一件都不做——代碼檔裏每
+        // 按一次 Enter 光標就回到第 0 列。
+        //
+        // 規矩與代價都在 [`Editor::indent_of_line`] 上：只帶光標前面那一截
+        // 空白，所以一個字符都不是憑空長出來的；行首按下去什麼都不帶。
+        let indent = self.indent_to_carry();
+        // 重放（`3i…`、`.`）是把記下來的字串原樣插進去的，所以縮進要記在
+        // 裏面——不記，`.` 重放出來的那幾行就貼着左邊。
+        self.insert_recording.push_str(&ending);
+        self.insert_recording.push_str(&indent);
+        self.insert_str(&format!("{ending}{indent}"));
+    }
+
+        // **`C-h` is Backspace** and **`C-j` is Enter** — the two the
+        // terminal has sent as those control codes since before vi, and
+        // helix binds them in Insert as well (`default.rs`:
+        // `C-h` delete_char_backward, `C-j` insert_newline). Here they
+        // used to fall off the end into 「chords are not text」 and do
+        // nothing at all (2026-10-06).
+    pub(super) fn insert_backspace(&mut self) {
+        self.insert_recording.pop();
+        // **覆寫模式的退格是「還回去」**，同 vim：往回走一格，把那個位置
+        // 上原來的字放回來。蓋到行尾外面去的那幾個没有原文，就只是刪掉。
+        if self.overwriting {
+            if let Some(was) = self.overwritten.pop() {
+                return self.put_back_what_was_overwritten(was);
+            }
+        }
+        let before = self.sel.head();
+        if self.delete_an_empty_pair() {
+            return;
+        }
+        self.delete_before_cursor();
+        // The server's list widens again, as helix's does (2026-10-28).
+        if self.sel.head() < before && self.narrow_the_server_list(before) == Some(true) {
+            self.ask_what_comes_next(false);
+        }
+    }
+
+    /// Indentation: `Tab` the kind the file indents with (`tab_spaces`),
+    /// `Shift-Tab` the other kind.
+    pub(super) fn insert_indent(&mut self, the_files: bool) {
+        let spaces = the_files == self.tab_spaces;
+        let text = match spaces {
+            // To the next multiple of the indent, not a fixed run: a
+            // Tab after `ab` lands on the same column a Tab after
+            // nothing would, which is what makes a column line up.
+            true => {
+                let rope = self.current_buffer().rope();
+                let start = rope.line_to_char(rope.char_to_line(self.sel.head()));
+                // A TAB already on the line lands on its own stop.
+                // Warning: **字簇，不是 `char`**（#422）：`Warning: ` 是兩個 `char`，逐字
+                // 加算一格而終端給兩格，於是對齊到這一欄的縮進會少一格。Tab
+                // 要單獨認，它的寬度是「到下一個制表位」，不是字形的寬度。
+                let ahead: String = rope.slice(start..self.sel.head()).chars().collect();
+                let column = yumete_cjk::graphemes(&ahead).fold(0, |col, g| {
+                    match g {
+                        "\t" => col + self.tab_stop - col % self.tab_stop,
+                        g => col + yumete_cjk::grapheme_width(g),
+                    }
+                });
+                let width = self.indent_width;
+                " ".repeat(width - column % width)
+            }
+            false => "\t".to_string(),
+        };
+        self.insert_recording.push_str(&text);
+        self.insert_str(&text);
     }
 
     pub(super) fn on_command_key(&mut self, key: Key) -> KeyOutcome {

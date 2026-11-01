@@ -654,6 +654,19 @@ pub const ALL: &[Action] = &[
     normal("extend_to_file_start", "action.extend-to-file-start"),
     normal("extend_to_file_end", "action.extend-to-file-end"),
     normal("extend_to_word", "action.extend-to-word"),
+    // ---- Insert mode (2026-10-31): each key a command by name ----
+    normal("insert_newline", "action.insert-newline"),
+    normal("delete_char_forward", "action.delete-char-forward"),
+    normal("delete_word_forward", "action.delete-word-forward"),
+    normal("delete_word_backward", "action.delete-word-backward"),
+    normal("kill_to_line_start", "action.kill-to-line-start"),
+    normal("kill_to_line_end", "action.kill-to-line-end"),
+    normal("insert_register", "action.insert-register"),
+    normal("run_one_normal_command", "action.run-one-normal-command"),
+    normal("goto_line_end_newline", "action.goto-line-end-newline"),
+    normal("commit_undo_checkpoint", "action.commit-undo-checkpoint"),
+    normal("insert_tab", "action.insert-tab"),
+    normal("insert_other_tab", "action.insert-other-tab"),
 ];
 
 #[cfg(test)]

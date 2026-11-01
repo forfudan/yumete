@@ -469,6 +469,7 @@ pub(super) fn normal_command(name: &str) -> Option<&'static NormalCommand> {
         .iter()
         .chain(super::group_commands::GROUP_COMMANDS)
         .chain(EXTEND_COMMANDS)
+        .chain(super::insert::INSERT_COMMANDS)
         .find(|(n, _, _)| *n == name)
 }
 
@@ -598,6 +599,9 @@ impl Editor {
     // **普通模式的退格是「左一格」**（`:h <BS>`；2026-10-10 補的）：`whichwrap` 的
     // `b` 管的就是它。helix 不綁它，所以只在 vim 鍵位下。
     pub(super) fn cmd_move_char_left(&mut self, cx: Cx) {
+        if self.mode == Mode::Insert {
+            return self.move_horizontal(motion::prev_grapheme);
+        }
         let wrap = match cx.key {
             Key::Left => '<',
             Key::Backspace => 'b',
@@ -607,6 +611,9 @@ impl Editor {
     }
 
     pub(super) fn cmd_move_char_right(&mut self, cx: Cx) {
+        if self.mode == Mode::Insert {
+            return self.move_horizontal(motion::next_grapheme);
+        }
         let wrap = match cx.key {
             Key::Right => '>',
             _ => 'l',
@@ -640,6 +647,10 @@ impl Editor {
     // (2026-10-31). In a table these are the cell's two ends, and where the
     // cell is the unit, the record's (`goto_motion`).
     pub(super) fn cmd_goto_line_start(&mut self, _: Cx) {
+        if self.mode == Mode::Insert {
+            let pos = motion::line_start(self.current_buffer().rope(), self.sel.head());
+            return self.set_cursor(pos);
+        }
         self.goto_motion(motion::Motion::LineStart);
     }
 
@@ -984,6 +995,10 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_normal_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // In Insert mode it is `Esc` there (a binding's `jk`, as helix's).
+        if self.mode == Mode::Insert {
+            return self.leave_insert();
+        }
         // **浮窗先收**（2026-10-01 提的）。它是屏幕上最臨時的那一樣，
         // 而 `Esc` 是人對着臨時的東西按的那一鍵。收的只是「這會兒別擋
         // 着」——挪開光標它又回來，邊欄一動不動。
@@ -1895,6 +1910,10 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_delete_char_backward(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // Insert mode's Backspace (pairs, overwrite, the server's list).
+        if self.mode == Mode::Insert {
+            return self.insert_backspace();
+        }
         self.snapshot();
         self.cut_before_cursor(count);
     }

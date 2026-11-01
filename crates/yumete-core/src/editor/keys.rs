@@ -309,25 +309,8 @@ impl Editor {
                 KeyOutcome::Continue
             }
             Mode::Insert => {
-                // Warning: **補全單子開着的時候一次就夠**：那是一張浮在上面的單子，`Tab` 與
-                // `C-n` 歸它，不是往 N 處各寫一次。
-                let (was_len, was_head) = (self.current_buffer().rope().len_chars(), self.sel.head());
-                self.stepped_over = false;
-                match multi::types_at_every_selection(key) && self.offers_here().is_none() {
-                    true => self.edit_each_from(false, |e| e.insert_key_carrying_the_tail(key)),
-                    false => self.insert_key_carrying_the_tail(key),
-                }
-                // **A move ends the selection `i` or `a` kept** (2026-10-27,
-                // measured: helix's `i` `→` `X` leaves a one-character cursor).
-                // From here on typing is plain typing, at every cursor. A closer
-                // stepped over is typing (2026-10-29, review).
-                if self.mode == Mode::Insert
-                    && !std::mem::take(&mut self.stepped_over)
-                    && self.current_buffer().rope().len_chars() == was_len
-                    && self.sel.head() != was_head
-                {
-                    self.insert_keeps_tail = false;
-                    self.keep_anchor_while_inserting = false;
+                if !self.insert_binding(key) {
+                    self.insert_typed(key);
                 }
                 KeyOutcome::Continue
             }
@@ -1559,6 +1542,31 @@ impl Editor {
         self.yank_whole_lines = false;
     }
 
+    /// **A key typed in Insert mode**, at every cursor when it types (one
+    /// list of completions is one list, not one per cursor).
+    pub(super) fn insert_typed(&mut self, key: Key) {
+        // Warning: **補全單子開着的時候一次就夠**：那是一張浮在上面的單子，`Tab` 與
+        // `C-n` 歸它，不是往 N 處各寫一次。
+        let (was_len, was_head) = (self.current_buffer().rope().len_chars(), self.sel.head());
+        self.stepped_over = false;
+        match multi::types_at_every_selection(key) && self.offers_here().is_none() {
+            true => self.edit_each_from(false, |e| e.insert_key_carrying_the_tail(key)),
+            false => self.insert_key_carrying_the_tail(key),
+        }
+        // **A move ends the selection `i` or `a` kept** (2026-10-27,
+        // measured: helix's `i` `→` `X` leaves a one-character cursor).
+        // From here on typing is plain typing, at every cursor. A closer
+        // stepped over is typing (2026-10-29, review).
+        if self.mode == Mode::Insert
+            && !std::mem::take(&mut self.stepped_over)
+            && self.current_buffer().rope().len_chars() == was_len
+            && self.sel.head() != was_head
+        {
+            self.insert_keeps_tail = false;
+            self.keep_anchor_while_inserting = false;
+        }
+    }
+
     /// The key a one-key binding turns `key` into (`"C-q" = "@w"` → `w`),
     /// when nothing is pending or held, as the binding layer in
     /// [`Self::on_normal_key`] would swap it. `None` for anything else.
@@ -1617,7 +1625,7 @@ impl Editor {
     /// therefore typed its own letters into the chapter. The config refuses such
     /// a line and never installs it, so nothing should reach here — and if
     /// something ever does, the manuscript is not where it gets to say so.
-    fn run_binding(&mut self, commands: &[String]) {
+    pub(super) fn run_binding(&mut self, commands: &[String]) {
         // **A list runs in order** (helix's), and stops at a quit.
         for one in commands {
             self.run_one_binding(one);
@@ -2531,7 +2539,7 @@ fn named_key(c: char) -> Option<Key> {
 ///
 /// `None` ＝ 這個鍵綁不了。今天只有 `Esc` 落在這裏，有意的：按鍵序列按了一半要
 /// 靠它鬆手（見 `alias_held`），綁掉就没有退路。
-fn typed_as(key: Key) -> Option<char> {
+pub(super) fn typed_as(key: Key) -> Option<char> {
     use yumete_cjk::actions::named_key as of;
     let named = |name: &str| of(name);
     match key {

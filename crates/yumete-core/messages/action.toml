@@ -116,6 +116,13 @@ en = "comment this line"
 find = "註釋 注释 一行 comment line"
 
 [[message]]
+# 命令說明：commit_undo_checkpoint（草稿）
+key = "action.commit-undo-checkpoint"
+zht = "在這裏斷開撤銷"
+zhs = "在这里断开撤销"
+en = "break the undo here"
+
+[[message]]
 # 命令說明：convert_table_to_csv（草稿）
 key = "action.convert-table-to-csv"
 zht = "表格轉成 csv"
@@ -182,6 +189,13 @@ zhs = "删除光标前的一个字"
 en = "delete the character before the cursor"
 
 [[message]]
+# 命令說明：delete_char_forward（草稿）
+key = "action.delete-char-forward"
+zht = "刪除光標後的一個字"
+zhs = "删除光标后的一个字"
+en = "delete the character after the cursor"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 # Warning: **2026-10-08 這四句換了主人，一個字都没改。** 從前 `delete_selection`
 # 掛的是「不動寄存器」那一句，而它真按的是 `d`——`d` 自 2026-09-28 起進寄存器。
@@ -205,6 +219,20 @@ key = "action.delete-to-line-end"
 zht = "刪到行尾"
 zhs = "删到行尾"
 en = "delete to the end of the line"
+
+[[message]]
+# 命令說明：delete_word_backward（草稿）
+key = "action.delete-word-backward"
+zht = "刪除光標前的一個詞"
+zhs = "删除光标前的一个词"
+en = "delete the word before the cursor"
+
+[[message]]
+# 命令說明：delete_word_forward（草稿）
+key = "action.delete-word-forward"
+zht = "刪除光標後的一個詞"
+zhs = "删除光标后的一个词"
+en = "delete the word after the cursor"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -533,6 +561,13 @@ en = "the end of the line"
 find = "行尾 末尾 end"
 
 [[message]]
+# 命令說明：goto_line_end_newline（草稿）
+key = "action.goto-line-end-newline"
+zht = "到行尾(最後一個字後面)"
+zhs = "到行尾(最后一个字后面)"
+en = "to the end of the line, after its last character"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-line-start"
 zht = "行首"
@@ -790,6 +825,34 @@ en = "insert before the selection"
 find = "插入 打字 輸入 输入 insert"
 
 [[message]]
+# 命令說明：insert_newline（草稿）
+key = "action.insert-newline"
+zht = "換行(帶上縮進、列表記號)"
+zhs = "换行(带上缩进、列表记号)"
+en = "a line break, carrying the indent and a list's marker"
+
+[[message]]
+# 命令說明：insert_other_tab（草稿）
+key = "action.insert-other-tab"
+zht = "插入另一種縮進(Tab 或空格)"
+zhs = "插入另一种缩进(Tab 或空格)"
+en = "insert the other kind of indent, a tab or spaces"
+
+[[message]]
+# 命令說明：insert_register（草稿）
+key = "action.insert-register"
+zht = "插入寄存器的內容(再按一個字母)"
+zhs = "插入寄存器的内容(再按一个字母)"
+en = "insert a register (then its letter)"
+
+[[message]]
+# 命令說明：insert_tab（草稿）
+key = "action.insert-tab"
+zht = "插入縮進(文件用的那一種)"
+zhs = "插入缩进(文件用的那一种)"
+en = "insert an indent, the kind the file uses"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.join-lines"
 zht = "與下一行合併"
@@ -944,6 +1007,20 @@ key = "action.keep-selections"
 zht = "只留配得上正則的選區"
 zhs = "只留配得上正则的选区"
 en = "keep the selections that match a pattern"
+
+[[message]]
+# 命令說明：kill_to_line_end（草稿）
+key = "action.kill-to-line-end"
+zht = "刪到行尾(插入模式)"
+zhs = "删到行尾(插入模式)"
+en = "delete to the end of the line, in Insert mode"
+
+[[message]]
+# 命令說明：kill_to_line_start（草稿）
+key = "action.kill-to-line-start"
+zht = "刪到行首"
+zhs = "删到行首"
+en = "delete to the start of the line"
 
 [[message]]
 # 命令說明：later（草稿）
@@ -1440,6 +1517,13 @@ zht = "注音/旁註"
 zhs = "注音/旁注"
 en = "ruby"
 find = "注音 旁註 旁注 拼音 讀音 读音 ruby"
+
+[[message]]
+# 命令說明：run_one_normal_command（草稿）
+key = "action.run-one-normal-command"
+zht = "臨時回普通模式做一件事(vim 的 C-o)"
+zhs = "临时回普通模式做一件事(vim 的 C-o)"
+en = "one Normal-mode command, then back to Insert mode (vim's C-o)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽

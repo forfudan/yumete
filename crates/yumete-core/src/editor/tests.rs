@@ -33565,3 +33565,30 @@ fn a_list_runs_in_order_and_select_mode_has_its_own_lines() {
     ed.on_key(Key::Char('Q'));
     assert_eq!(ed.current_buffer().text(), "", "select_all, then delete");
 }
+
+/// **Insert mode's keys are commands, and `[keys.insert]` binds them**
+/// (2026-10-31, step 6 of the keymap plan): helix's `jk` to leave, a key of
+/// one's own for a line break, and a `j` not followed by `k` typed after all.
+#[test]
+fn insert_mode_keys_can_be_bound() {
+    let mut ed = typed("\n");
+    ed.set_insert_aliases(
+        [
+            ("jk".to_string(), "normal_mode".to_string()),
+            ("C-l".to_string(), "insert_newline".to_string()),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('i'));
+    for k in ['a', 'j', 'x'] {
+        ed.on_key(Key::Char(k));
+    }
+    ed.on_key(Key::Ctrl('l'));
+    ed.on_key(Key::Char('b'));
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Char('k'));
+    assert_eq!(ed.mode, Mode::Normal, "jk left Insert mode");
+    assert_eq!(ed.current_buffer().text(), "ajx\nb\n", "j without k was typed; C-l broke the line");
+}

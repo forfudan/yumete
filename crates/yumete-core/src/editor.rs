@@ -2540,6 +2540,10 @@ pub struct Editor {
     /// The names the reader gave their own groups, by the keys that open
     /// them (`label` in a `[keys.normal.…]` table), internal spelling.
     key_labels: HashMap<String, String>,
+    /// Insert mode's bindings (`[keys.insert]`), internal spelling, and the
+    /// keys of one held while the next key decides (`j` of `jk`).
+    insert_aliases: HashMap<String, Vec<String>>,
+    insert_held: String,
     key_preset: yumete_cjk::KeyPreset,
     /// vim 的 `whichwrap`：哪些鍵走得出一行的兩頭。見
     /// [`yumete_config::Editor::which_wrap`]；helix 鍵位下讀都不讀。
@@ -4105,6 +4109,8 @@ impl Editor {
             user_aliases: HashMap::new(),
             user_select: HashMap::new(),
             key_labels: HashMap::new(),
+            insert_aliases: HashMap::new(),
+            insert_held: String::new(),
             key_preset: yumete_cjk::KeyPreset::Helix,
             which_wrap: String::new(),
             alias_held: String::new(),
@@ -5592,6 +5598,7 @@ mod fences;
 mod files;
 mod group_commands;
 mod groups;
+mod insert;
 mod help;
 pub use help::{COMMON_EDITING, COMMON_MOTION};
 pub(crate) mod find;
