@@ -1052,14 +1052,24 @@ impl Editor {
             typed.push(f);
         }
         typed.push(c);
+        // **A key bound to a motion is that motion here too** (2026-11-01,
+        // step 8 of the keymap plan, as Zed's operators read the motion
+        // keys): `"Q" = "jump_next_word_end"` makes `dQ` delete to the word's
+        // end. A key bound to anything else is read as vim spells it.
+        if first.is_none() {
+            if let Some(spelled) = self.motion_bound_to(c) {
+                typed = spelled.to_string();
+            }
+        }
+        let owed = typed.chars().next_back().unwrap_or(c);
         match crate::vim::step_for(&typed, grain, None) {
             // `f` and `i` are not finished: they are owed a character.
             Some(step) if step.asks => {
-                self.pending = Pending::VimOperator { op, first: Some(c) };
+                self.pending = Pending::VimOperator { op, first: Some(owed) };
             }
             Some(step) => self.run_vim_step(op, step),
             None if crate::vim::more_ahead(&typed) => {
-                self.pending = Pending::VimOperator { op, first: Some(c) };
+                self.pending = Pending::VimOperator { op, first: Some(owed) };
             }
             // Not a motion at all. vim beeps; this says which key was not one,
             // because a key that does nothing and says nothing is the thing
@@ -1074,6 +1084,15 @@ impl Editor {
 
     /// **`dd`, `cc`, `yy`** — the operator doubled, which in vim is 「this
     /// line」 and with a count 「this line and the next n−1」.
+    /// **The motion a binding puts on `c`**, as vim spells it after an
+    /// operator: the key's binding names one command, and that command is a
+    /// motion ([`MOTION_STEPS`]).
+    fn motion_bound_to(&self, c: char) -> Option<&'static str> {
+        let commands = self.aliases().get(&c.to_string())?;
+        let [one] = commands.as_slice() else { return None };
+        MOTION_STEPS.iter().find(|(name, _)| name == one).map(|(_, spelled)| *spelled)
+    }
+
     fn run_vim_line(&mut self, op: char) {
         self.settle_alias_count();
         let n = self.count.take().unwrap_or(1).max(1);
@@ -2408,6 +2427,53 @@ impl Editor {
     }
 
 }
+
+/// **The motions an operator can take, by command**: each motion
+/// command's name and how vim spells it after `d` (the table in
+/// [`crate::vim::step_for`] is vim's operator-pending keymap). Helix's names
+/// for the same motions take them too.
+const MOTION_STEPS: &[(&str, &str)] = &[
+    ("jump_next_word_start", "w"),
+    ("move_next_word_start", "w"),
+    ("jump_next_long_word_start", "W"),
+    ("move_next_long_word_start", "W"),
+    ("jump_prev_word_start", "b"),
+    ("move_prev_word_start", "b"),
+    ("jump_prev_long_word_start", "B"),
+    ("move_prev_long_word_start", "B"),
+    ("jump_next_word_end", "e"),
+    ("move_next_word_end", "e"),
+    ("jump_next_long_word_end", "E"),
+    ("move_next_long_word_end", "E"),
+    ("jump_prev_word_end", "ge"),
+    ("jump_prev_long_word_end", "gE"),
+    ("vim_goto_line_end", "$"),
+    ("goto_line_end", "$"),
+    ("goto_line_start", "0"),
+    ("goto_first_nonwhitespace", "^"),
+    ("move_char_right", "l"),
+    ("move_char_left", "h"),
+    ("move_line_down", "j"),
+    ("move_visual_line_down", "j"),
+    ("move_line_up", "k"),
+    ("move_visual_line_up", "k"),
+    ("goto_next_line_nonwhitespace", "+"),
+    ("vim_goto_line", "G"),
+    ("goto_file_start", "gg"),
+    ("jump_next_paragraph", "}"),
+    ("jump_prev_paragraph", "{"),
+    ("goto_window_top", "H"),
+    ("goto_window_center", "M"),
+    ("goto_window_bottom", "L"),
+    ("jump_prev_sentence", "("),
+    ("jump_next_sentence", ")"),
+    ("find_next_char", "f"),
+    ("find_prev_char", "F"),
+    ("find_till_char", "t"),
+    ("till_prev_char", "T"),
+    ("select_inner_object", "i"),
+    ("select_around_object", "a"),
+];
 
 /// **The key a played character stands for** — the other half of
 /// [`yumete_cjk::actions::spell`], which prints these for `:keymap`.

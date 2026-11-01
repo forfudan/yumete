@@ -33622,3 +33622,17 @@ fn a_helix_name_is_helix_under_the_vim_keymap() {
     assert_eq!(run(false), "   z\nx\n", "vim's I");
     assert_eq!(run(true), "z   \nx\n", "helix's insert_at_line_start");
 }
+
+/// **A key bound to a motion is that motion after an operator** (2026-11-01,
+/// step 8 of the keymap plan, Zed's way): under the vim keymap, with
+/// `Q` bound to `jump_next_word_end`, `dQ` deletes to the word's end.
+#[test]
+fn an_operator_takes_a_bound_motion() {
+    let mut ed = typed("one two\n");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.set_key_aliases([("Q".to_string(), "jump_next_word_end".to_string())].into_iter().collect());
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('d'));
+    ed.on_key(Key::Char('Q'));
+    assert_eq!(ed.current_buffer().text(), " two\n", "de, not a d of nothing");
+}
