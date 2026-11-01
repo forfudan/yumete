@@ -1,6 +1,7 @@
 //! Ruby mode — 注音/拼音 above the line (#65).
 
 use super::*;
+use yumete_cjk::actions::PlaceCmd;
 
 impl Editor {
     // ---- Ruby mode (Feature #65) ------------------------------------------
@@ -285,9 +286,9 @@ impl Editor {
     }
 
     /// One of a prompt's commands, on the line a reading is typed into.
-    fn reading_command(&mut self, name: &str) {
+    fn reading_command(&mut self, name: PlaceCmd) {
         match name {
-            "normal_mode" => {
+            PlaceCmd::NormalMode => {
                 self.command_line.clear();
                 self.command_caret = self.command_line.chars().count();
                 self.ruby_target = None;
@@ -296,8 +297,8 @@ impl Editor {
             // Backspacing to empty does *not* leave: an empty reading is a
             // meaningful thing to submit here — it is how an annotation is
             // taken off — so it has to be reachable. Esc is the way out.
-            "delete_char_backward" if self.command_line.is_empty() => {}
-            "confirm" => {
+            PlaceCmd::DeleteCharBackward if self.command_line.is_empty() => {}
+            PlaceCmd::Confirm => {
                 let reading = std::mem::take(&mut self.command_line);
                 let target = self.ruby_target.take();
                 self.mode = Mode::Normal;

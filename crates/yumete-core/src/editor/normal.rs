@@ -2319,4 +2319,42 @@ mod tests {
             assert!(normal_command(name).is_some(), "{key:?} names {name}, which is no command");
         }
     }
+
+    /// **Every name written anywhere a command is looked up is a command**
+    /// (2026-11-01, the review's guard rails): a misspelt name in these
+    /// tables compiled and then did nothing, because each lookup ends in an
+    /// `if let` or a `_ => {}`.
+    #[test]
+    fn every_name_a_table_holds_is_a_command() {
+        for (key, name) in SELECT_NORMAL {
+            assert!(normal_command(name).is_some(), "select mode's {key:?} names {name}, which is no command");
+        }
+        for (key, name, _) in super::super::insert::INSERT_KEYS {
+            assert!(normal_command(name).is_some(), "Insert's {key:?} names {name}, which is no command");
+        }
+        for (name, _) in super::super::keys::MOTION_STEPS {
+            assert!(normal_command(name).is_some(), "MOTION_STEPS names {name}, which is no command");
+        }
+        // The commands an `extend_*` runs are named inside closures, so they
+        // are read off this file.
+        let source = include_str!("normal.rs");
+        let mut targets = 0;
+        for piece in source.split("e.extending(cx, \"").skip(1) {
+            let name = piece.split('"').next().unwrap_or_default();
+            assert!(normal_command(name).is_some(), "an extend_ command runs {name}, which is no command");
+            targets += 1;
+        }
+        assert!(targets >= 20, "the extend_ commands were found ({targets})");
+    }
+
+    /// **Every command is a bindable name**, so the config, the palette and
+    /// the generated docs know it (the other half of
+    /// `the_bindable_names_and_the_commands_agree`).
+    #[test]
+    fn every_command_is_a_bindable_name() {
+        let tables = [NORMAL_COMMANDS, super::super::group_commands::GROUP_COMMANDS, EXTEND_COMMANDS, super::super::insert::INSERT_COMMANDS];
+        for (name, _, _) in tables.iter().flat_map(|t| t.iter()) {
+            assert!(yumete_cjk::actions::action(name).is_some(), "the command {name} cannot be bound");
+        }
+    }
 }

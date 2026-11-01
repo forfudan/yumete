@@ -6,6 +6,7 @@
 //! clipboard by itself.
 
 use super::*;
+use yumete_cjk::actions::PlaceCmd;
 
 /// One of the screen's regions: an editing window, or a sidebar. The word
 /// for either, because one key (`C-w w`) walks both kinds (2026-10-30).
@@ -354,7 +355,7 @@ impl Editor {
     /// No `l`/`Enter` — a reading is not a place to go. What is left is moving
     /// the eye down a long answer, spelled the way the text and the lists
     /// already spell it, and `q` to put it away.
-    fn info_command(&mut self, name: &str, side: crate::sidebar::Side) {
+    fn info_command(&mut self, name: PlaceCmd, side: crate::sidebar::Side) {
         let last = self.info_len(side).saturating_sub(1);
         let step = |at: usize, by: usize, down: bool| match down {
             true => at.saturating_add(by).min(last),
@@ -362,21 +363,21 @@ impl Editor {
         };
         let change = self.info_in_this_sidebar(side) == Some(crate::sidebar::Info::Change);
         match name {
-            "move_line_down" => self.panel_scroll = step(self.panel_scroll, 1, true),
-            "move_line_up" => self.panel_scroll = step(self.panel_scroll, 1, false),
-            "page_down" => self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, true),
-            "page_up" => self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false),
-            "goto_file_start" => self.panel_scroll = 0,
-            "goto_last_line" => self.panel_scroll = last,
+            PlaceCmd::MoveLineDown => self.panel_scroll = step(self.panel_scroll, 1, true),
+            PlaceCmd::MoveLineUp => self.panel_scroll = step(self.panel_scroll, 1, false),
+            PlaceCmd::PageDown => self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, true),
+            PlaceCmd::PageUp => self.panel_scroll = step(self.panel_scroll, Self::PAGE_IN_A_LIST, false),
+            PlaceCmd::GotoFileStart => self.panel_scroll = 0,
+            PlaceCmd::GotoLastLine => self.panel_scroll = last,
             // **改動那一格自己的兩個鍵**（2026-10-11，照 gitsigns／gitgutter／
             // signify 三家）：`u` 把這一塊還原成 `HEAD` 那一份，`y` 複製它改之前
             // 寫的那幾行。只有那一格有。
-            "restore_change" if change => {
+            PlaceCmd::RestoreChange if change => {
                 if self.restore_the_change_here() {
                     self.refresh_sidebar();
                 }
             }
-            "yank_old_text" if change => {
+            PlaceCmd::YankOldText if change => {
                 let Some(run) = self.change_here() else { return };
                 let text = run.was.join("\n");
                 self.clipboard_request = Some(text);
@@ -694,19 +695,19 @@ impl Editor {
     ///
     /// 與別的視圖同一套鍵：`j`/`k` 一行，`J`/`K` 半頁，`g`/`G` 兩頭；`q` 與
     /// `C-w` 照舊由 [`Self::panel_command_in_common`] 接。
-    fn scroll_wiki(&mut self, name: &str) {
+    fn scroll_wiki(&mut self, name: PlaceCmd) {
         let page = Self::PAGE_IN_A_LIST;
         let (at, _) = self.wiki_scroll_now();
         let moved = match name {
-            "move_line_down" => at.saturating_add(1),
-            "move_line_up" => at.saturating_sub(1),
-            "page_down" => at.saturating_add(page),
-            "page_up" => at.saturating_sub(page),
-            "goto_file_start" => 0,
+            PlaceCmd::MoveLineDown => at.saturating_add(1),
+            PlaceCmd::MoveLineUp => at.saturating_sub(1),
+            PlaceCmd::PageDown => at.saturating_add(page),
+            PlaceCmd::PageUp => at.saturating_sub(page),
+            PlaceCmd::GotoFileStart => 0,
             // Warning: **`G` 不在這裏算底在哪**——這一頭數不出來（見
             // [`Editor::wiki_scroll`]）。存一個到不了的數，畫的那一趟走到底、
             // 算出總數、把真正的那個數夾回來。
-            "goto_last_line" => usize::MAX,
+            PlaceCmd::GotoLastLine => usize::MAX,
             _ => return,
         };
         self.wiki_scroll.set((moved, self.sel.head()));
@@ -738,14 +739,14 @@ impl Editor {
     /// leaving Insert, and one press too many would then put the panel away.
     /// Two doors instead, and both say so in the hint row: `q` closes this
     /// slot, `C-w` walks on to the next region and leaves it up.
-    fn panel_command_in_common(&mut self, name: &str, side: crate::sidebar::Side) -> bool {
+    fn panel_command_in_common(&mut self, name: PlaceCmd, side: crate::sidebar::Side) -> bool {
         match name {
-            "refresh_sidebar" => self.refresh_sidebar(),
+            PlaceCmd::RefreshSidebar => self.refresh_sidebar(),
             // **`w` 走一格：窄 → 中 → 寬 → 窄**（2026-09-26 定的）。
             //
             // Warning: **不問這一格裏裝的是什麼**：寬度歸側欄，面板只是借它。所以字典、
             // 懸停、表格詳情按 `w` 一樣管用——從前它們根本不認這個鍵。
-            "cycle_sidebar_width" => {
+            PlaceCmd::CycleSidebarWidth => {
                 let step = self.width[side as usize].next();
                 self.width[side as usize] = step;
                 let (num, den) = step.fraction();
@@ -757,8 +758,8 @@ impl Editor {
             // those are is a setting, so the question belongs to the editor
             // rather than to the panel — with the outline moved across, this
             // slot walks two and the other one walks one (#293).
-            "next_sidebar_view" => self.cycle_view(side, false),
-            "prev_sidebar_view" => self.cycle_view(side, true),
+            PlaceCmd::NextSidebarView => self.cycle_view(side, false),
+            PlaceCmd::PrevSidebarView => self.cycle_view(side, true),
             // **`Esc` 在邊欄裏也是「把輸入法的挂起再說一遍」**（2026-09-27 報的：
             // 「光标在侧栏中的时候，我在别的 app 中使用了系统的宇夢，回到
             // terminal，无法通过 esc 把它挂起。它会在工作区的光标处形成一个输入
@@ -767,32 +768,32 @@ impl Editor {
             // 正文那一頭 2026-09-22 就有這條退路（`keys.rs` 的 `say_it_again`）：
             // 「已經挂起了」是一個**信念**，而輸入法在別的程序裏自己恢復之後，這
             // 一頭還記着舊的，於是再也不發第二次信號。抹掉信念，下一輪自己重發。
-            "normal_mode" => self.say_it_again = true,
+            PlaceCmd::NormalMode => self.say_it_again = true,
             // **邊欄裏 `C-w` 也是那一組的門**（2026-09-30）。從前它在這裏直接
             // 走下一區，而在正文裏是前綴——同一個和弦兩個意思，正是這一輪在
             // 拆的毛病。走下一區照舊是 `C-w w`，兩處一樣。
-            "window_mode" => self.pending = Pending::Region,
+            PlaceCmd::WindowMode => self.pending = Pending::Region,
             // **`q` 把鍵還給正文，面板留着**（2026-10-10 定）。
             //
             // 從前它是「關掉」，而關掉已經有 `C-w q` 了——同一件事兩個鍵，而「讀完
             // 了，手回去寫字」這件每天做幾十次的事反倒没有鍵：`空格 w` 是「換一個
             // 區域」，不是「回正文」。原話：「q 就重复了。建议 q 改成返回编辑区但
             // 不关闭搜索面板」。
-            "leave_sidebar" => self.panel_focus = None,
+            PlaceCmd::LeaveSidebar => self.panel_focus = None,
             // **`:` opens the command line from in here too.** It used to be
             // swallowed, so a reader with the keys in a panel had no way to
             // run a command at all — and `:panel-left` is a command
             // *about* the panel you are standing in, which nobody could have
             // reached. The focus stays where it is while the line is typed, so
             // 「this one」 still means this one.
-            "command_mode" => {
+            PlaceCmd::CommandMode => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
                 self.command_caret = 0;
             }
             // Space still opens the menu, so the key that opened the sidebar
             // closes it again from inside it.
-            "space_mode" => self.pending = Pending::Space,
+            PlaceCmd::SpaceMode => self.pending = Pending::Space,
             _ => return false,
         }
         true
@@ -1286,22 +1287,22 @@ impl Editor {
             true => (say!("hint.sidebar.scroll"), say!("hint.sidebar.word.half-page")),
             false => (say!("hint.sidebar.word.move"), say!("hint.sidebar.word.page")),
         };
-        let mut parts: Vec<(&[(Key, &str)], String)> = vec![
-            (&[(Key::Char('j'), "move_line_down"), (Key::Char('k'), "move_line_up")], walk),
-            (&[(Key::Char('J'), "page_down"), (Key::Char('K'), "page_up")], page),
-            (&[(Key::Char('g'), "goto_file_start"), (Key::Char('G'), "goto_last_line")], say!("hint.sidebar.word.ends")),
+        let mut parts: Vec<(&[(Key, PlaceCmd)], String)> = vec![
+            (&[(Key::Char('j'), PlaceCmd::MoveLineDown), (Key::Char('k'), PlaceCmd::MoveLineUp)], walk),
+            (&[(Key::Char('J'), PlaceCmd::PageDown), (Key::Char('K'), PlaceCmd::PageUp)], page),
+            (&[(Key::Char('g'), PlaceCmd::GotoFileStart), (Key::Char('G'), PlaceCmd::GotoLastLine)], say!("hint.sidebar.word.ends")),
         ];
         if !article {
-            parts.push((&[(Key::Char('l'), "expand_entry")], say!("hint.sidebar.word.enter")));
-            parts.push((&[(Key::Char('h'), "collapse_entry")], say!("hint.sidebar.word.collapse")));
+            parts.push((&[(Key::Char('l'), PlaceCmd::ExpandEntry)], say!("hint.sidebar.word.enter")));
+            parts.push((&[(Key::Char('h'), PlaceCmd::CollapseEntry)], say!("hint.sidebar.word.collapse")));
         }
-        parts.push((&[(Key::Tab, "next_sidebar_view")], say!("hint.sidebar.other-view")));
-        parts.push((&[(Key::Char('w'), "cycle_sidebar_width")], say!("hint.sidebar.width")));
+        parts.push((&[(Key::Tab, PlaceCmd::NextSidebarView)], say!("hint.sidebar.other-view")));
+        parts.push((&[(Key::Char('w'), PlaceCmd::CycleSidebarWidth)], say!("hint.sidebar.width")));
         if !article {
-            parts.push((&[(Key::Char('R'), "refresh_sidebar")], say!("hint.sidebar.word.reread")));
+            parts.push((&[(Key::Char('R'), PlaceCmd::RefreshSidebar)], say!("hint.sidebar.word.reread")));
         }
-        parts.push((&[(Key::Ctrl('w'), "window_mode")], say!("hint.sidebar.word.next-region")));
-        parts.push((&[(Key::Char('q'), "leave_sidebar")], say!("hint.to-the-text")));
+        parts.push((&[(Key::Ctrl('w'), PlaceCmd::WindowMode)], say!("hint.sidebar.word.next-region")));
+        parts.push((&[(Key::Char('q'), PlaceCmd::LeaveSidebar)], say!("hint.to-the-text")));
         parts
             .into_iter()
             .filter_map(|(spec, words)| {
@@ -1348,7 +1349,7 @@ impl Editor {
 
     /// **One of a sidebar's commands**, in whichever view the slot shows:
     /// what every panel answers first, then the view's own.
-    fn sidebar_command(&mut self, name: &str) {
+    fn sidebar_command(&mut self, name: PlaceCmd) {
         let Some(side) = self.panel_focus() else { return };
         if self.panel_command_in_common(name, side) {
             return;
@@ -1373,20 +1374,20 @@ impl Editor {
 
     /// One of a list's commands: the tree, the buffers, the outline, the
     /// links.
-    fn list_command(&mut self, name: &str, side: crate::sidebar::Side, view: crate::sidebar::View) {
+    fn list_command(&mut self, name: PlaceCmd, side: crate::sidebar::Side, view: crate::sidebar::View) {
         // The 大綱's fold commands are answered before the borrow below,
         // because they need the whole editor: only it knows how deep each
         // heading sits (#37).
         if view == crate::sidebar::View::Outline && self.outline_row_key().is_some() {
             match name {
                 // Out of a branch, as `h` is in the tree.
-                "collapse_entry" => return self.fold_outline(),
+                PlaceCmd::CollapseEntry => return self.fold_outline(),
                 // Into one. On a folded heading `l` opens it rather than
                 // jumping — 「more of this」 is what it already means in the
                 // tree. It falls through on any other row, and `Enter` never
                 // folds at all: that is the key that goes, and a heading is a
                 // place whether or not it is holding others.
-                "expand_entry" if self.unfold_outline() => return,
+                PlaceCmd::ExpandEntry if self.unfold_outline() => return,
                 _ => {}
             }
         }
@@ -1394,27 +1395,27 @@ impl Editor {
             return;
         };
         match name {
-            "move_line_down" => sidebar.step(true),
-            "move_line_up" => sidebar.step(false),
+            PlaceCmd::MoveLineDown => sidebar.step(true),
+            PlaceCmd::MoveLineUp => sidebar.step(false),
             // **A list pages by the same keys the page does.** `J`/`K` are
             // half a page in the text; a 700-chapter outline is the one list
             // where walking it by `j` is not walking, and `PageDown` is not on
             // every keyboard a novelist owns.
-            "page_down" => {
+            PlaceCmd::PageDown => {
                 for _ in 0..Self::PAGE_IN_A_LIST {
                     sidebar.step(true);
                 }
             }
-            "page_up" => {
+            PlaceCmd::PageUp => {
                 for _ in 0..Self::PAGE_IN_A_LIST {
                     sidebar.step(false);
                 }
             }
             // …and the ends, spelled as they are in the text.
-            "goto_file_start" => sidebar.go_to_end(false),
-            "goto_last_line" => sidebar.go_to_end(true),
-            "collapse_entry" => sidebar.collapse(),
-            "expand_entry" | "open_entry" => self.open_the_entry(side),
+            PlaceCmd::GotoFileStart => sidebar.go_to_end(false),
+            PlaceCmd::GotoLastLine => sidebar.go_to_end(true),
+            PlaceCmd::CollapseEntry => sidebar.collapse(),
+            PlaceCmd::ExpandEntry | PlaceCmd::OpenEntry => self.open_the_entry(side),
             _ => {}
         }
     }
@@ -2182,35 +2183,35 @@ impl Editor {
     }
 
     /// One of a picker's commands, or a prompt's on its query.
-    fn picker_command(&mut self, name: &str) {
+    fn picker_command(&mut self, name: PlaceCmd) {
         let Some(picker) = self.picker.as_mut() else { return };
         use crate::picker::Caret;
         match name {
             // **一下就關。** 没有層可退回去了。
-            "normal_mode" => self.close_picker(),
+            PlaceCmd::NormalMode => self.close_picker(),
             // Warning: **框空着的時候退格什麼都不做**。從前它換層（`i` 是怎麼進來的，
             // 退到頭就該退回去）；只剩一層之後那個去處不存在，而「退格到頭就關
             // 窗」是另一回事——打空了接着打纔是人要的。
-            "delete_char_backward" => picker.backspace(),
+            PlaceCmd::DeleteCharBackward => picker.backspace(),
             // **往前三個鍵，往後三個鍵**，照 helix 那一行。`Tab`/`S-Tab` 先說，
             // 原話：「这两个其实更加顺手」。
-            "next_entry" => picker.step(true),
-            "prev_entry" => picker.step(false),
-            "page_down" => picker.page(true),
-            "page_up" => picker.page(false),
-            "first_entry" => picker.go_to_end(false),
-            "last_entry" => picker.go_to_end(true),
-            "confirm" => self.choose_from_picker(),
+            PlaceCmd::NextEntry => picker.step(true),
+            PlaceCmd::PrevEntry => picker.step(false),
+            PlaceCmd::PageDown => picker.page(true),
+            PlaceCmd::PageUp => picker.page(false),
+            PlaceCmd::FirstEntry => picker.go_to_end(false),
+            PlaceCmd::LastEntry => picker.go_to_end(true),
+            PlaceCmd::Confirm => self.choose_from_picker(),
             // 跳過哪些，轉一格——見 [`Editor::cycle_what_the_picker_skips`]。
-            "cycle_hidden_files" => self.cycle_what_the_picker_skips(),
+            PlaceCmd::CycleHiddenFiles => self.cycle_what_the_picker_skips(),
             // A query is typed text, and typed text is edited in the middle.
-            "delete_char_forward" => picker.delete(),
-            "move_char_left" => picker.move_caret(Caret::Left),
-            "move_char_right" => picker.move_caret(Caret::Right),
-            "goto_line_start" => picker.move_caret(Caret::Start),
-            "goto_line_end" => picker.move_caret(Caret::End),
-            "kill_to_line_start" => picker.clear_before_caret(),
-            "delete_word_backward" => picker.delete_word_before_caret(),
+            PlaceCmd::DeleteCharForward => picker.delete(),
+            PlaceCmd::MoveCharLeft => picker.move_caret(Caret::Left),
+            PlaceCmd::MoveCharRight => picker.move_caret(Caret::Right),
+            PlaceCmd::GotoLineStart => picker.move_caret(Caret::Start),
+            PlaceCmd::GotoLineEnd => picker.move_caret(Caret::End),
+            PlaceCmd::KillToLineStart => picker.clear_before_caret(),
+            PlaceCmd::DeleteWordBackward => picker.delete_word_before_caret(),
             _ => {}
         }
     }

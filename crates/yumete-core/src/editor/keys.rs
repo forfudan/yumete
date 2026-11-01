@@ -2476,7 +2476,7 @@ impl Editor {
 /// command's name and how vim spells it after `d` (the table in
 /// [`crate::vim::step_for`] is vim's operator-pending keymap). Helix's names
 /// for the same motions take them too.
-const MOTION_STEPS: &[(&str, &str)] = &[
+pub(super) const MOTION_STEPS: &[(&str, &str)] = &[
     ("jump_next_word_start", "w"),
     ("move_next_word_start", "w"),
     ("jump_next_long_word_start", "W"),

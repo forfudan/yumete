@@ -780,67 +780,147 @@ impl Place {
     }
 }
 
+/// **Every command of the four places, named once** (2026-11-01, the
+/// review's decoupling): the config and the docs read the names, the
+/// editor matches on the variants, so a misspelt name in a handler no
+/// longer compiles into an arm that never runs.
+macro_rules! place_commands {
+    ($($variant:ident = $name:literal,)*) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum PlaceCmd {
+            $($variant,)*
+        }
+
+        impl PlaceCmd {
+            pub const ALL: &'static [PlaceCmd] = &[$(PlaceCmd::$variant,)*];
+
+            /// What the config writes.
+            pub const fn name(self) -> &'static str {
+                match self {
+                    $(PlaceCmd::$variant => $name,)*
+                }
+            }
+
+            /// The command a config line names, if a place has it.
+            pub fn from_name(name: &str) -> Option<PlaceCmd> {
+                PlaceCmd::ALL.iter().copied().find(|one| one.name() == name)
+            }
+        }
+    };
+}
+
+place_commands! {
+    NormalMode = "normal_mode",
+    Confirm = "confirm",
+    CompletionNext = "completion_next",
+    CompletionPrev = "completion_prev",
+    HistoryPrev = "history_prev",
+    HistoryNext = "history_next",
+    MoveCharLeft = "move_char_left",
+    MoveCharRight = "move_char_right",
+    GotoLineStart = "goto_line_start",
+    GotoLineEnd = "goto_line_end",
+    DeleteCharBackward = "delete_char_backward",
+    DeleteCharForward = "delete_char_forward",
+    DeleteWordBackward = "delete_word_backward",
+    KillToLineStart = "kill_to_line_start",
+    ToggleWideSearch = "toggle_wide_search",
+    NextEntry = "next_entry",
+    PrevEntry = "prev_entry",
+    PageDown = "page_down",
+    PageUp = "page_up",
+    FirstEntry = "first_entry",
+    LastEntry = "last_entry",
+    CycleHiddenFiles = "cycle_hidden_files",
+    MoveLineDown = "move_line_down",
+    MoveLineUp = "move_line_up",
+    GotoFileStart = "goto_file_start",
+    GotoLastLine = "goto_last_line",
+    CollapseEntry = "collapse_entry",
+    ExpandEntry = "expand_entry",
+    OpenEntry = "open_entry",
+    ToggleLinksGraph = "toggle_links_graph",
+    RestoreChange = "restore_change",
+    YankOldText = "yank_old_text",
+    RefreshSidebar = "refresh_sidebar",
+    CycleSidebarWidth = "cycle_sidebar_width",
+    NextSidebarView = "next_sidebar_view",
+    PrevSidebarView = "prev_sidebar_view",
+    LeaveSidebar = "leave_sidebar",
+    CommandMode = "command_mode",
+    SpaceMode = "space_mode",
+    WindowMode = "window_mode",
+    NextField = "next_field",
+    PrevField = "prev_field",
+}
+
+/// A place's command and what it does there (help first, so the messages
+/// test finds the tag right after `place(`).
+const fn place(help: &'static str, cmd: PlaceCmd) -> Action {
+    Action { name: cmd.name(), help, how: How::Normal }
+}
+
 /// A prompt's commands: `:`, `/`, `::`, a reading, and a picker's query.
 pub const PROMPT: &[Action] = &[
-    normal("normal_mode", "action.close-prompt"),
-    normal("confirm", "action.confirm"),
-    normal("completion_next", "action.completion-next"),
-    normal("completion_prev", "action.completion-prev"),
-    normal("history_prev", "action.history-prev"),
-    normal("history_next", "action.history-next"),
-    normal("move_char_left", "action.move-char-left"),
-    normal("move_char_right", "action.move-char-right"),
-    normal("goto_line_start", "action.goto-line-start"),
-    normal("goto_line_end", "action.goto-line-end"),
-    normal("delete_char_backward", "action.delete-char-backward"),
-    normal("delete_char_forward", "action.delete-char-forward"),
-    normal("delete_word_backward", "action.delete-word-backward"),
-    normal("kill_to_line_start", "action.kill-to-line-start"),
-    normal("toggle_wide_search", "action.toggle-wide-search"),
+    place("action.close-prompt", PlaceCmd::NormalMode),
+    place("action.confirm", PlaceCmd::Confirm),
+    place("action.completion-next", PlaceCmd::CompletionNext),
+    place("action.completion-prev", PlaceCmd::CompletionPrev),
+    place("action.history-prev", PlaceCmd::HistoryPrev),
+    place("action.history-next", PlaceCmd::HistoryNext),
+    place("action.move-char-left", PlaceCmd::MoveCharLeft),
+    place("action.move-char-right", PlaceCmd::MoveCharRight),
+    place("action.goto-line-start", PlaceCmd::GotoLineStart),
+    place("action.goto-line-end", PlaceCmd::GotoLineEnd),
+    place("action.delete-char-backward", PlaceCmd::DeleteCharBackward),
+    place("action.delete-char-forward", PlaceCmd::DeleteCharForward),
+    place("action.delete-word-backward", PlaceCmd::DeleteWordBackward),
+    place("action.kill-to-line-start", PlaceCmd::KillToLineStart),
+    place("action.toggle-wide-search", PlaceCmd::ToggleWideSearch),
 ];
 
 /// A picker's list, and the `::` palette's.
 pub const PICKER: &[Action] = &[
-    normal("next_entry", "action.next-entry"),
-    normal("prev_entry", "action.prev-entry"),
-    normal("page_down", "action.page-down"),
-    normal("page_up", "action.page-up"),
-    normal("first_entry", "action.first-entry"),
-    normal("last_entry", "action.last-entry"),
-    normal("cycle_hidden_files", "action.cycle-hidden-files"),
+    place("action.next-entry", PlaceCmd::NextEntry),
+    place("action.prev-entry", PlaceCmd::PrevEntry),
+    place("action.page-down", PlaceCmd::PageDown),
+    place("action.page-up", PlaceCmd::PageUp),
+    place("action.first-entry", PlaceCmd::FirstEntry),
+    place("action.last-entry", PlaceCmd::LastEntry),
+    place("action.cycle-hidden-files", PlaceCmd::CycleHiddenFiles),
 ];
 
 /// A panel's box: the next and the previous box of its form.
 pub const FIELD: &[Action] = &[
-    normal("next_field", "action.next-field"),
-    normal("prev_field", "action.prev-field"),
-    normal("move_line_down", "action.field-below"),
-    normal("move_line_up", "action.field-above"),
+    place("action.next-field", PlaceCmd::NextField),
+    place("action.prev-field", PlaceCmd::PrevField),
+    place("action.field-below", PlaceCmd::MoveLineDown),
+    place("action.field-above", PlaceCmd::MoveLineUp),
 ];
 
 /// A sidebar's: its lists, its article, and what every panel has.
 pub const SIDEBAR: &[Action] = &[
-    normal("move_line_down", "action.next-row"),
-    normal("move_line_up", "action.prev-row"),
-    normal("page_down", "action.page-down"),
-    normal("page_up", "action.page-up"),
-    normal("goto_file_start", "action.first-row"),
-    normal("goto_last_line", "action.last-row"),
-    normal("collapse_entry", "action.collapse-entry"),
-    normal("expand_entry", "action.expand-entry"),
-    normal("open_entry", "action.open-entry"),
-    normal("toggle_links_graph", "action.toggle-links-graph"),
-    normal("restore_change", "action.restore-change"),
-    normal("yank_old_text", "action.yank-old-text"),
-    normal("refresh_sidebar", "action.refresh-sidebar"),
-    normal("cycle_sidebar_width", "action.cycle-sidebar-width"),
-    normal("next_sidebar_view", "action.next-sidebar-view"),
-    normal("prev_sidebar_view", "action.prev-sidebar-view"),
-    normal("normal_mode", "action.sidebar-normal-mode"),
-    normal("leave_sidebar", "action.leave-sidebar"),
-    normal("command_mode", "action.command-mode"),
-    normal("space_mode", "action.space-mode"),
-    normal("window_mode", "action.window-mode"),
+    place("action.next-row", PlaceCmd::MoveLineDown),
+    place("action.prev-row", PlaceCmd::MoveLineUp),
+    place("action.page-down", PlaceCmd::PageDown),
+    place("action.page-up", PlaceCmd::PageUp),
+    place("action.first-row", PlaceCmd::GotoFileStart),
+    place("action.last-row", PlaceCmd::GotoLastLine),
+    place("action.collapse-entry", PlaceCmd::CollapseEntry),
+    place("action.expand-entry", PlaceCmd::ExpandEntry),
+    place("action.open-entry", PlaceCmd::OpenEntry),
+    place("action.toggle-links-graph", PlaceCmd::ToggleLinksGraph),
+    place("action.restore-change", PlaceCmd::RestoreChange),
+    place("action.yank-old-text", PlaceCmd::YankOldText),
+    place("action.refresh-sidebar", PlaceCmd::RefreshSidebar),
+    place("action.cycle-sidebar-width", PlaceCmd::CycleSidebarWidth),
+    place("action.next-sidebar-view", PlaceCmd::NextSidebarView),
+    place("action.prev-sidebar-view", PlaceCmd::PrevSidebarView),
+    place("action.sidebar-normal-mode", PlaceCmd::NormalMode),
+    place("action.leave-sidebar", PlaceCmd::LeaveSidebar),
+    place("action.command-mode", PlaceCmd::CommandMode),
+    place("action.space-mode", PlaceCmd::SpaceMode),
+    place("action.window-mode", PlaceCmd::WindowMode),
 ];
 
 #[cfg(test)]
@@ -873,6 +953,11 @@ mod no_two_alike {
             }
         }
         assert_eq!(Place::Picker.bound("save_file"), None, "a Normal command is not a picker's");
+        // Every command the enum declares is some place's, so none is dead.
+        for cmd in PlaceCmd::ALL {
+            let used = Place::ALL.iter().any(|p| p.actions().iter().any(|a| a.name == cmd.name()));
+            assert!(used, "{cmd:?} is in no place");
+        }
         assert!(Place::Sidebar.bound("no_op").is_some());
         assert!(Place::Prompt.bound(":write").is_some());
     }

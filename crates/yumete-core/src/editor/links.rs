@@ -3,6 +3,7 @@
 //! resolver `[[name]]` goes through everywhere.
 
 use super::*;
+use yumete_cjk::actions::PlaceCmd;
 use crate::command::LinksCommand;
 use crate::links::{Index, Look};
 use std::collections::BTreeSet;
@@ -467,12 +468,12 @@ impl Editor {
     /// `toggle_links_graph` (`v`) flips the look, `collapse_entry` and
     /// `expand_entry` (`h`/`l`) fold and open a section or a neighbour.
     /// `true` when taken.
-    pub(super) fn links_panel_command(&mut self, name: &str) -> bool {
+    pub(super) fn links_panel_command(&mut self, name: PlaceCmd) -> bool {
         if self.showing(crate::sidebar::View::Links).is_none() {
             return false;
         }
         match name {
-            "toggle_links_graph" => {
+            PlaceCmd::ToggleLinksGraph => {
                 self.links_look = match self.links_look {
                     Look::List => Look::Graph,
                     Look::Graph => Look::List,
@@ -480,7 +481,7 @@ impl Editor {
                 self.refresh_sidebar();
                 true
             }
-            "collapse_entry" => {
+            PlaceCmd::CollapseEntry => {
                 let Some(fold) = self.links_row_key() else { return true };
                 match fold.starts_with("node:") {
                     true => self.links_shut.remove(&fold),
@@ -489,7 +490,7 @@ impl Editor {
                 self.refresh_sidebar();
                 true
             }
-            "expand_entry" => {
+            PlaceCmd::ExpandEntry => {
                 let Some(fold) = self.links_row_key() else { return false };
                 let opened = match fold.starts_with("node:") {
                     true => self.links_shut.insert(fold),

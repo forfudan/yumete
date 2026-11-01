@@ -3,18 +3,19 @@
 //! What the keys mean from where the cursor is standing, one line of it.
 
 use super::*;
+use yumete_cjk::actions::PlaceCmd;
 use crate::input::Key;
 use yumete_cjk::actions::Place;
 
 /// **The six keys a sidebar walks by**, as its hint row writes them: a row,
 /// a page, the two ends.
-const WALKING: &[(Key, &str)] = &[
-    (Key::Char('j'), "move_line_down"),
-    (Key::Char('k'), "move_line_up"),
-    (Key::Char('J'), "page_down"),
-    (Key::Char('K'), "page_up"),
-    (Key::Char('g'), "goto_file_start"),
-    (Key::Char('G'), "goto_last_line"),
+const WALKING: &[(Key, PlaceCmd)] = &[
+    (Key::Char('j'), PlaceCmd::MoveLineDown),
+    (Key::Char('k'), PlaceCmd::MoveLineUp),
+    (Key::Char('J'), PlaceCmd::PageDown),
+    (Key::Char('K'), PlaceCmd::PageUp),
+    (Key::Char('g'), PlaceCmd::GotoFileStart),
+    (Key::Char('G'), PlaceCmd::GotoLastLine),
 ];
 
 /// **走到下一區那個鍵的名字**：`\u{2423}w`。
@@ -100,7 +101,7 @@ impl Editor {
                     Some(crate::sidebar::Info::Wiki) => say!("hint.sidebar.scroll"),
                     _ => say!("hint.sidebar.move"),
                 };
-                let sidebar = |spec: &[(Key, &str)], says: String| {
+                let sidebar = |spec: &[(Key, PlaceCmd)], says: String| {
                     self.place_hint(Place::Sidebar, spec).map(|keys| (keys.into(), says))
                 };
                 return Hint::Keys(what, [
@@ -111,8 +112,8 @@ impl Editor {
                         // Warning: **`w` 也要寫上**（2026-09-29 報的：「不仅没有提示
                         // 而且 w 无效」）。兩件事一起壞的：這一行没說它，而它
                         // 本來也真的不管用（見 `info_command`）。
-                        sidebar(&[(Key::Char('w'), "cycle_sidebar_width")], say!("hint.sidebar.width")),
-                        sidebar(&[(Key::Char('q'), "leave_sidebar")], say!("hint.to-the-text")),
+                        sidebar(&[(Key::Char('w'), PlaceCmd::CycleSidebarWidth)], say!("hint.sidebar.width")),
+                        sidebar(&[(Key::Char('q'), PlaceCmd::LeaveSidebar)], say!("hint.to-the-text")),
                         Some((back_to_text_key().into(), say!("hint.sidebar.back-to-text"))),
                     ]
                     .into_iter()
@@ -122,8 +123,8 @@ impl Editor {
                     .chain(match self.info_in_this_sidebar(side) {
                         Some(crate::sidebar::Info::Change) => {
                             [
-                                sidebar(&[(Key::Char('u'), "restore_change")], say!("hint.change.restore")),
-                                sidebar(&[(Key::Char('y'), "yank_old_text")], say!("hint.change.yank")),
+                                sidebar(&[(Key::Char('u'), PlaceCmd::RestoreChange)], say!("hint.change.restore")),
+                                sidebar(&[(Key::Char('y'), PlaceCmd::YankOldText)], say!("hint.change.yank")),
                             ]
                             .into_iter()
                             .flatten()
@@ -155,17 +156,17 @@ impl Editor {
         // 更加顺手」。
         if let Some(picker) = self.picker() {
             let title = picker.title.clone();
-            let picker_keys = |spec: &[(Key, &str)], says: String| {
+            let picker_keys = |spec: &[(Key, PlaceCmd)], says: String| {
                 self.place_hint(Place::Picker, spec).map(|keys| (keys.into(), says))
             };
             let mut keys: KeyRows = [
-                picker_keys(&[(Key::Enter, "confirm")], say!("hint.picker.open")),
+                picker_keys(&[(Key::Enter, PlaceCmd::Confirm)], say!("hint.picker.open")),
                 picker_keys(
                     &[
-                        (Key::Tab, "next_entry"),
-                        (Key::BackTab, "prev_entry"),
-                        (Key::Up, "prev_entry"),
-                        (Key::Down, "next_entry"),
+                        (Key::Tab, PlaceCmd::NextEntry),
+                        (Key::BackTab, PlaceCmd::PrevEntry),
+                        (Key::Up, PlaceCmd::PrevEntry),
+                        (Key::Down, PlaceCmd::NextEntry),
                     ],
                     say!("hint.sidebar.move"),
                 ),
@@ -182,9 +183,9 @@ impl Editor {
                     (true, false) => say!("hint.picker.skip-ignored"),
                     (true, true) => say!("hint.picker.search-everything"),
                 };
-                keys.extend(picker_keys(&[(Key::Alt('h'), "cycle_hidden_files")], skipping));
+                keys.extend(picker_keys(&[(Key::Alt('h'), PlaceCmd::CycleHiddenFiles)], skipping));
             }
-            keys.extend(picker_keys(&[(Key::Esc, "normal_mode")], say!("hint.close")));
+            keys.extend(picker_keys(&[(Key::Esc, PlaceCmd::NormalMode)], say!("hint.close")));
             return Hint::Keys(title, keys);
         }
         if self.mode == Mode::Field {
@@ -192,13 +193,13 @@ impl Editor {
             // 報的：「替换模式下如何替换？快捷鍵是什麼？如何全部替换？」）。
             // 從前 `r R` 只在鍵已經回到面板之後纔出現在提示行上，而人還在框裏
             // 打「換成什麼」的時候，正是他要問這句話的時候。
-            let field = |spec: &[(Key, &str)], says: String| {
+            let field = |spec: &[(Key, PlaceCmd)], says: String| {
                 self.place_hint(Place::Field, spec).map(|keys| (keys.into(), says))
             };
             let keys = [
-                field(&[(Key::Enter, "confirm")], say!("hint.search.go-look")),
-                field(&[(Key::Up, "move_line_up"), (Key::Down, "move_line_down")], say!("hint.search.next-cell")),
-                field(&[(Key::Esc, "normal_mode")], say!("hint.search.out-of-the-box")),
+                field(&[(Key::Enter, PlaceCmd::Confirm)], say!("hint.search.go-look")),
+                field(&[(Key::Up, PlaceCmd::MoveLineUp), (Key::Down, PlaceCmd::MoveLineDown)], say!("hint.search.next-cell")),
+                field(&[(Key::Esc, PlaceCmd::NormalMode)], say!("hint.search.out-of-the-box")),
             ];
             return Hint::Keys(say!("label.panel.search"), keys.into_iter().flatten().collect());
         }
@@ -290,19 +291,19 @@ impl Editor {
             };
             // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，
             // 另外四個管用卻没人知道（2026-09-23 審出來的）。
-            let sidebar = |spec: &[(Key, &str)], says: String| {
+            let sidebar = |spec: &[(Key, PlaceCmd)], says: String| {
                 self.place_hint(Place::Sidebar, spec).map(|keys| (keys.into(), says))
             };
             let mut keys: KeyRows = sidebar(WALKING, walking).into_iter().collect();
             if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Links) {
-                keys.extend(sidebar(&[(Key::Char('v'), "toggle_links_graph")], say!("hint.sidebar.links-look")));
+                keys.extend(sidebar(&[(Key::Char('v'), PlaceCmd::ToggleLinksGraph)], say!("hint.sidebar.links-look")));
             }
             keys.extend(
                 [
-                    sidebar(&[(Key::Tab, "next_sidebar_view")], say!("hint.sidebar.other-view")),
-                    sidebar(&[(Key::Char('w'), "cycle_sidebar_width")], say!("hint.sidebar.width")),
+                    sidebar(&[(Key::Tab, PlaceCmd::NextSidebarView)], say!("hint.sidebar.other-view")),
+                    sidebar(&[(Key::Char('w'), PlaceCmd::CycleSidebarWidth)], say!("hint.sidebar.width")),
                     Some((back_to_text_key().into(), say!("hint.sidebar.back-to-text"))),
-                    sidebar(&[(Key::Char('q'), "leave_sidebar")], say!("hint.to-the-text")),
+                    sidebar(&[(Key::Char('q'), PlaceCmd::LeaveSidebar)], say!("hint.to-the-text")),
                 ]
                 .into_iter()
                 .flatten(),
@@ -327,12 +328,12 @@ impl Editor {
         }
         match self.mode {
             Mode::Ruby if self.ruby_target.is_some() => {
-                let prompt = |spec: &[(Key, &str)], says: String| {
+                let prompt = |spec: &[(Key, PlaceCmd)], says: String| {
                     self.place_hint(Place::Prompt, spec).map(|keys| (keys.into(), says))
                 };
                 let keys = [
-                    prompt(&[(Key::Enter, "confirm")], say!("hint.keep-it")),
-                    prompt(&[(Key::Esc, "normal_mode")], say!("hint.cancel")),
+                    prompt(&[(Key::Enter, PlaceCmd::Confirm)], say!("hint.keep-it")),
+                    prompt(&[(Key::Esc, PlaceCmd::NormalMode)], say!("hint.cancel")),
                 ];
                 Hint::Keys(say!("hint.reading"), keys.into_iter().flatten().collect())
             }

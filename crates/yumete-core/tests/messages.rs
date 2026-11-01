@@ -211,6 +211,9 @@ fn said() -> BTreeMap<String, String> {
         // `Described { word: Some("cmd.substitute.flags") }` —— 命令的說明之外那一行
         // （2026-10-09）。同上一條，開口寫足 `word: Some(` 而不是光一個 `Some(`。
         tags.extend(literals(&text, "word: Some("));
+        // A place's command and its description (`place("action.confirm",
+        // PlaceCmd::Confirm)` in `yumete-cjk/src/actions.rs`, 2026-11-01).
+        tags.extend(literals(&text, "place("));
         tags.extend(literals(&text, "', "));
         tags.extend(literals(&text, "\", "));
         // `Err("table.no-further")` —— a pure function hands back the tag,

@@ -7681,7 +7681,7 @@ fn draw_search_hint(
     }
     let ink = crate::theme::Palette::of(config);
     // `A-j` is the prompt's `toggle_wide_search`, named as it is bound now.
-    let wide = editor.place_keys_written(yumete_core::actions::Place::Prompt, "toggle_wide_search");
+    let wide = editor.place_keys_written(yumete_core::actions::Place::Prompt, yumete_core::actions::PlaceCmd::ToggleWideSearch);
     let about: Vec<String> = [Some(say!("ui.search-is-a-regex")), Some(say!("ui.search-smart-case")), wide.map(|k| say!("ui.search-wild", k))]
         .into_iter()
         .flatten()
