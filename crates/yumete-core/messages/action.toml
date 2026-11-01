@@ -1945,6 +1945,132 @@ zhs = "视图组：把光标行放到屏幕顶、中、底"
 en = "the view group: put the cursor line at the top, middle or bottom"
 
 [[message]]
+# 命令說明：vim_append_mode（草稿）
+key = "action.vim-append-mode"
+zht = "在光標後插入(vim 的 a)"
+zhs = "在光标后插入(vim 的 a)"
+en = "insert after the cursor (vim's a)"
+
+[[message]]
+# 命令說明：vim_decrement（草稿）
+key = "action.vim-decrement"
+zht = "光標處或其後的數字減一(vim 的 C-x)"
+zhs = "光标处或其后的数字减一(vim 的 C-x)"
+en = "the number at or after the cursor, minus one (vim's C-x)"
+
+[[message]]
+# 命令說明：vim_goto_line（草稿）
+key = "action.vim-goto-line"
+zht = "到第幾行，不帶計數到最後一行(vim 的 G)"
+zhs = "到第几行，不带计数到最后一行(vim 的 G)"
+en = "to line N, or to the last line without a count (vim's G)"
+
+[[message]]
+# 命令說明：vim_goto_line_end（草稿）
+key = "action.vim-goto-line-end"
+zht = "行尾(vim 的 $：往下走也留在行尾)"
+zhs = "行尾(vim 的 $：往下走也留在行尾)"
+en = "the end of the line (vim's $: moving down keeps to line ends)"
+
+[[message]]
+# 命令說明：vim_increment（草稿）
+key = "action.vim-increment"
+zht = "光標處或其後的數字加一(vim 的 C-a)"
+zhs = "光标处或其后的数字加一(vim 的 C-a)"
+en = "the number at or after the cursor, plus one (vim's C-a)"
+
+[[message]]
+# 命令說明：vim_indent（草稿）
+key = "action.vim-indent"
+zht = "增加縮進，光標留在原列(vim)"
+zhs = "增加缩进，光标留在原列(vim)"
+en = "indent, the cursor keeping its column (vim)"
+
+[[message]]
+# 命令說明：vim_insert_at_line_end（草稿）
+key = "action.vim-insert-at-line-end"
+zht = "在行尾插入(vim 的 A)"
+zhs = "在行尾插入(vim 的 A)"
+en = "insert at the end of the line (vim's A)"
+
+[[message]]
+# 命令說明：vim_insert_at_line_start（草稿）
+key = "action.vim-insert-at-line-start"
+zht = "在第一個非空白字符前插入(vim 的 I)"
+zhs = "在第一个非空白字符前插入(vim 的 I)"
+en = "insert before the first non-blank (vim's I)"
+
+[[message]]
+# 命令說明：vim_insert_mode（草稿）
+key = "action.vim-insert-mode"
+zht = "在光標前插入(vim 的 i)"
+zhs = "在光标前插入(vim 的 i)"
+en = "insert before the cursor (vim's i)"
+
+[[message]]
+# 命令說明：vim_join_selections（草稿）
+key = "action.vim-join-selections"
+zht = "與下一行合併(vim 的 J)"
+zhs = "与下一行合并(vim 的 J)"
+en = "join with the next line (vim's J)"
+
+[[message]]
+# 命令說明：vim_kill_to_line_end（草稿）
+key = "action.vim-kill-to-line-end"
+zht = "刪到行尾，不刪換行(vim)"
+zhs = "删到行尾，不删换行(vim)"
+en = "delete to the end of the line, never the line break (vim)"
+
+[[message]]
+# 命令說明：vim_kill_to_line_start（草稿）
+key = "action.vim-kill-to-line-start"
+zht = "刪到這次插入開始的地方(vim 的 C-u)"
+zhs = "删到这次插入开始的地方(vim 的 C-u)"
+en = "delete back to where this Insert began (vim's C-u)"
+
+[[message]]
+# 命令說明：vim_match_brackets（草稿）
+key = "action.vim-match-brackets"
+zht = "配對的括號，不在括號上就找本行的下一個(vim 的 %)"
+zhs = "配对的括号，不在括号上就找本行的下一个(vim 的 %)"
+en = "the matching bracket, or the next one on the line (vim's %)"
+
+[[message]]
+# 命令說明：vim_normal_mode（草稿）
+key = "action.vim-normal-mode"
+zht = "回普通模式(vim：退出可視模式時選區收成一點)"
+zhs = "回普通模式(vim：退出可视模式时选区收成一点)"
+en = "back to Normal mode (vim: leaving Visual mode collapses the selection)"
+
+[[message]]
+# 命令說明：vim_open_above（草稿）
+key = "action.vim-open-above"
+zht = "在上方開新行(vim 的 O，計數重複)"
+zhs = "在上方开新行(vim 的 O，计数重复)"
+en = "open a line above (vim's O; a count repeats it)"
+
+[[message]]
+# 命令說明：vim_open_below（草稿）
+key = "action.vim-open-below"
+zht = "在下方開新行(vim 的 o，計數重複)"
+zhs = "在下方开新行(vim 的 o，计数重复)"
+en = "open a line below (vim's o; a count repeats it)"
+
+[[message]]
+# 命令說明：vim_paste_after（草稿）
+key = "action.vim-paste-after"
+zht = "向後粘貼(vim 的 p)"
+zhs = "向后粘贴(vim 的 p)"
+en = "paste after (vim's p)"
+
+[[message]]
+# 命令說明：vim_paste_before（草稿）
+key = "action.vim-paste-before"
+zht = "向前粘貼(vim 的 P)"
+zhs = "向前粘贴(vim 的 P)"
+en = "paste before (vim's P)"
+
+[[message]]
 # 命令說明：vim_redo（草稿）
 key = "action.vim-redo"
 zht = "重做(vim 的 C-r)"
@@ -1957,6 +2083,34 @@ key = "action.vim-repeat-last-change"
 zht = "用新的計數再做一次剛纔的改動"
 zhs = "用新的计数再做一次刚才的改动"
 en = "repeat the last change with a new count"
+
+[[message]]
+# 命令說明：vim_search_next（草稿）
+key = "action.vim-search-next"
+zht = "下一處(vim 的 n)"
+zhs = "下一处(vim 的 n)"
+en = "the next match (vim's n)"
+
+[[message]]
+# 命令說明：vim_search_prev（草稿）
+key = "action.vim-search-prev"
+zht = "上一處(vim 的 N)"
+zhs = "上一处(vim 的 N)"
+en = "the previous match (vim's N)"
+
+[[message]]
+# 命令說明：vim_switch_case（草稿）
+key = "action.vim-switch-case"
+zht = "大小寫互換並往後走(vim 的 ~)"
+zhs = "大小写互换并往后走(vim 的 ~)"
+en = "switch case and move on (vim's ~)"
+
+[[message]]
+# 命令說明：vim_unindent（草稿）
+key = "action.vim-unindent"
+zht = "減少縮進，光標留在原列(vim)"
+zhs = "减少缩进，光标留在原列(vim)"
+en = "unindent, the cursor keeping its column (vim)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽

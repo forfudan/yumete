@@ -75,7 +75,7 @@ impl KeyPreset {
                 ("+", "@jgs"),
                 ("-", "@kgs"),
                 ("^", "@gs"),
-                ("$", "@gl"),
+                ("$", "vim_goto_line_end"),
                 ("0", "@gh"),
                 // 「this word, elsewhere」 — `g/` here, and the one vim key a
                 // hand reaches for without thinking.
@@ -106,7 +106,7 @@ impl KeyPreset {
                 ("q", "@Q"),
                 ("Q", "@q"),
                 ("K", "@ k"),
-                ("%", "@mm"),
+                ("%", "vim_match_brackets"),
                 // **`(`/`)` 是句子**（2026-10-06）。這裏它們本來是「換主選區」，
                 // 而 vim 的手按的是上一句/下一句——這個編輯器把句子放在 `H`/
                 // `L` 上（#404）。換主選區在 vim 鍵位下没有鍵，多選區那一族本來

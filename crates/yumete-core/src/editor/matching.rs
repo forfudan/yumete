@@ -82,7 +82,7 @@ impl Editor {
     pub(super) fn goto_matching_bracket(&mut self) {
         // Under the vim keymap `%` (which arrives here) looks along the line
         // when the cursor is not on a bracket; helix's `mm` does not move.
-        if self.key_preset == yumete_cjk::KeyPreset::Vim && self.matching_bracket().is_none() {
+        if self.as_vim() && self.matching_bracket().is_none() {
             if let Some((_, other)) = self.vim_percent_target() {
                 self.remember_jump();
                 self.move_head(other);

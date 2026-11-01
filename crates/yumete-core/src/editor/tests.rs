@@ -33602,3 +33602,23 @@ fn space_question_mark_opens_the_palette() {
     press(&mut ed, " ?");
     assert_eq!(ed.mode(), Mode::Lookfor);
 }
+
+/// **A name means one command under either keymap** (2026-11-01, step 8 of
+/// the keymap plan): under the vim keymap `I` runs `vim_insert_at_line_start`
+/// (on a blank line, after its spaces), while a key bound to
+/// `insert_at_line_start` does helix's (the line's start).
+#[test]
+fn a_helix_name_is_helix_under_the_vim_keymap() {
+    let run = |bound: bool| {
+        let mut ed = typed("   \nx\n");
+        ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+        ed.set_key_aliases([("Q".to_string(), "insert_at_line_start".to_string())].into_iter().collect());
+        press(&mut ed, "gg");
+        ed.on_key(Key::Char(if bound { 'Q' } else { 'I' }));
+        ed.on_key(Key::Char('z'));
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text()
+    };
+    assert_eq!(run(false), "   z\nx\n", "vim's I");
+    assert_eq!(run(true), "z   \nx\n", "helix's insert_at_line_start");
+}

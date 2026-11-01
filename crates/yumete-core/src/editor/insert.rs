@@ -31,10 +31,12 @@ pub(super) const INSERT_KEYS: &[(Key, &str, InsertWhen)] = &[
     (Key::Ctrl('d'), "delete_char_forward", None),
     (Key::Alt('d'), "delete_word_forward", None),
     (Key::Ctrl('w'), "delete_word_backward", None),
+    (Key::Ctrl('u'), "vim_kill_to_line_start", Some(|e| e.vim_keymap())),
+    (Key::Ctrl('k'), "vim_kill_to_line_end", Some(|e| e.vim_keymap())),
     (Key::Ctrl('u'), "kill_to_line_start", None),
     (Key::Ctrl('k'), "kill_to_line_end", None),
     (Key::Ctrl('r'), "insert_register", None),
-    (Key::Ctrl('o'), "run_one_normal_command", Some(|e| e.key_preset == yumete_cjk::KeyPreset::Vim)),
+    (Key::Ctrl('o'), "run_one_normal_command", Some(|e| e.vim_keymap())),
     (Key::Left, "move_char_left", None),
     (Key::Right, "move_char_right", None),
     (Key::Up, "move_visual_line_up", None),
@@ -58,8 +60,11 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
     ("delete_char_forward", |e, _| e.delete_at_cursor(), Key::Delete),
     ("delete_word_forward", |e, _| e.delete_word_after_cursor(), Key::Alt('d')),
     ("delete_word_backward", |e, _| e.delete_word_before_cursor(), Key::Ctrl('w')),
-    ("kill_to_line_start", |e, _| e.delete_to_line_start(), Key::Ctrl('u')),
-    ("kill_to_line_end", |e, _| e.delete_to_line_end(), Key::Ctrl('k')),
+    ("kill_to_line_start", |e, _| e.acting(false, |e| e.delete_to_line_start()), Key::Ctrl('u')),
+    ("kill_to_line_end", |e, _| e.acting(false, |e| e.delete_to_line_end()), Key::Ctrl('k')),
+    // vim's: `C-u` back to where this Insert began, `C-k` never the break.
+    ("vim_kill_to_line_start", |e, _| e.acting(true, |e| e.delete_to_line_start()), Key::Ctrl('u')),
+    ("vim_kill_to_line_end", |e, _| e.acting(true, |e| e.delete_to_line_end()), Key::Ctrl('k')),
     ("insert_register", |e, _| e.pending = Pending::Register, Key::Ctrl('r')),
     // vim's `i_CTRL-O`: one Normal-mode command, then back.
     ("run_one_normal_command", |e, _| {

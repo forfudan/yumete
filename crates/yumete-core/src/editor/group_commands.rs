@@ -200,7 +200,9 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     ("scroll_down", |e, cx| e.scroll_the_page(true, cx.count), Key::Char('j')),
     ("scroll_up", |e, cx| e.scroll_the_page(false, cx.count), Key::Char('k')),
     // ── m ──────────────────────────────────────────────────────────────
-    ("match_brackets", |e, _| e.goto_matching_bracket(), Key::Char('m')),
+    ("match_brackets", |e, _| e.acting(false, |e| e.goto_matching_bracket()), Key::Char('m')),
+    // vim's `%`: off a bracket, the next one along the line.
+    ("vim_match_brackets", |e, _| e.acting(true, |e| e.goto_matching_bracket()), Key::Char('m')),
     // These four wait for a pair or an object, and keep the count for it
     // (`2mi(` is the second pair out).
     ("select_textobject_inner", |e, cx| {

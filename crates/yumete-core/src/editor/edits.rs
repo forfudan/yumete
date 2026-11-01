@@ -659,7 +659,7 @@ impl Editor {
     ///
     /// Warning: **vim only.** helix's `i` ignores a count.
     pub(super) fn type_it_again(&mut self, count: usize, opened: Option<bool>) {
-        self.insert_again = match self.key_preset == yumete_cjk::KeyPreset::Vim {
+        self.insert_again = match self.as_vim() {
             true => count.saturating_sub(1),
             false => 0,
         };
@@ -840,7 +840,7 @@ impl Editor {
         // that」). Not in a cell, whose walls a join would break, and not
         // under vim, whose `C-k` is a digraph.
         if to <= at
-            && self.key_preset != yumete_cjk::KeyPreset::Vim
+            && !self.as_vim()
             && self.insert_bounds().is_none()
             && line < motion::last_line(rope)
         {
@@ -883,7 +883,7 @@ impl Editor {
         // And inside what Insert may touch: in a table, the Insert may have
         // begun in another cell of this line (2026-10-30: `Tab` then `C-u`
         // did nothing, the span crossing the cell's wall).
-        (self.key_preset == yumete_cjk::KeyPreset::Vim
+        (self.as_vim()
             && began < at
             && began <= rope.len_chars()
             && began >= self.insert_floor()
@@ -911,7 +911,7 @@ impl Editor {
         // first non-blank when the cursor is past it, so the indent stays; at
         // the very start of a line, back over the break into the line above.
         // Not in a cell (its wall is the floor), and not under vim.
-        let from = match self.key_preset != yumete_cjk::KeyPreset::Vim && self.insert_bounds().is_none() {
+        let from = match !self.as_vim() && self.insert_bounds().is_none() {
             true => {
                 let rope = self.current_buffer().rope();
                 let line = rope.char_to_line(at);
@@ -1639,7 +1639,7 @@ impl Editor {
         // on its last character, a linewise one on the first non-blank of its
         // first line. Leaving the pasted text selected made the next `i` type
         // at its start.
-        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+        if self.as_vim() {
             let to = match line_wise {
                 true => {
                     let first = match at_the_unterminated_end {

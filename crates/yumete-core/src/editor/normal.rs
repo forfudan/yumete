@@ -43,7 +43,8 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("move_line_up", Editor::cmd_move_line_up, Key::Char('k')),
     ("move_line_down", Editor::cmd_move_line_down, Key::Char('j')),
     ("goto_line_start", Editor::cmd_goto_line_start, Key::Home),
-    ("goto_line_end", Editor::cmd_goto_line_end, Key::End),
+    ("goto_line_end", |e, cx| e.acting(false, |e| e.cmd_goto_line_end(cx)), Key::End),
+    ("vim_goto_line_end", |e, cx| e.acting(true, |e| e.cmd_goto_line_end(cx)), Key::End),
     ("goto_next_line_nonwhitespace", Editor::cmd_goto_next_line_nonwhitespace, Key::Enter),
     ("jump_next_word_start", Editor::cmd_jump_by_word, Key::Char('w')),
     ("jump_next_long_word_start", Editor::cmd_jump_by_word, Key::Char('W')),
@@ -82,7 +83,8 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("till_prev_char", Editor::cmd_find_char, Key::Char('T')),
     ("select_line_mode", Editor::cmd_select_line_mode, Key::Char('V')),
     ("select_mode", Editor::cmd_select_mode, Key::Char('v')),
-    ("normal_mode", Editor::cmd_normal_mode, Key::Esc),
+    ("normal_mode", |e, cx| e.acting(false, |e| e.cmd_normal_mode(cx)), Key::Esc),
+    ("vim_normal_mode", |e, cx| e.acting(true, |e| e.cmd_normal_mode(cx)), Key::Esc),
     ("repeat_find_char", Editor::cmd_repeat_find, Key::Char(';')),
     ("repeat_find_char_reverse", Editor::cmd_repeat_find, Key::Char(',')),
     ("collapse_selection", Editor::cmd_collapse_selection, Key::Char(';')),
@@ -117,16 +119,24 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("change_selection_noyank", Editor::cmd_delete_or_change, Key::Alt('c')),
     ("delete_to_line_end", Editor::cmd_delete_or_change, Key::Char('D')),
     ("yank", Editor::cmd_yank, Key::Char('y')),
-    ("paste_after", Editor::cmd_paste, Key::Char('p')),
-    ("paste_before", Editor::cmd_paste, Key::Char('P')),
+    ("paste_after", |e, cx| e.acting(false, |e| e.cmd_paste(cx)), Key::Char('p')),
+    ("vim_paste_after", |e, cx| e.acting(true, |e| e.cmd_paste(cx)), Key::Char('p')),
+    ("paste_before", |e, cx| e.acting(false, |e| e.cmd_paste(cx)), Key::Char('P')),
+    ("vim_paste_before", |e, cx| e.acting(true, |e| e.cmd_paste(cx)), Key::Char('P')),
     ("select_inner_object", Editor::cmd_select_object, Key::Char('i')),
     ("select_around_object", Editor::cmd_select_object, Key::Char('a')),
-    ("insert_mode", Editor::cmd_insert_mode, Key::Char('i')),
-    ("append_mode", Editor::cmd_append_mode, Key::Char('a')),
-    ("insert_at_line_start", Editor::cmd_insert_at_line_start, Key::Char('I')),
-    ("insert_at_line_end", Editor::cmd_insert_at_line_end, Key::Char('A')),
-    ("open_below", Editor::cmd_open_below, Key::Char('o')),
-    ("open_above", Editor::cmd_open_above, Key::Char('O')),
+    ("insert_mode", |e, cx| e.acting(false, |e| e.cmd_insert_mode(cx)), Key::Char('i')),
+    ("vim_insert_mode", |e, cx| e.acting(true, |e| e.cmd_insert_mode(cx)), Key::Char('i')),
+    ("append_mode", |e, cx| e.acting(false, |e| e.cmd_append_mode(cx)), Key::Char('a')),
+    ("vim_append_mode", |e, cx| e.acting(true, |e| e.cmd_append_mode(cx)), Key::Char('a')),
+    ("insert_at_line_start", |e, cx| e.acting(false, |e| e.cmd_insert_at_line_start(cx)), Key::Char('I')),
+    ("vim_insert_at_line_start", |e, cx| e.acting(true, |e| e.cmd_insert_at_line_start(cx)), Key::Char('I')),
+    ("insert_at_line_end", |e, cx| e.acting(false, |e| e.cmd_insert_at_line_end(cx)), Key::Char('A')),
+    ("vim_insert_at_line_end", |e, cx| e.acting(true, |e| e.cmd_insert_at_line_end(cx)), Key::Char('A')),
+    ("open_below", |e, cx| e.acting(false, |e| e.cmd_open_below(cx)), Key::Char('o')),
+    ("vim_open_below", |e, cx| e.acting(true, |e| e.cmd_open_below(cx)), Key::Char('o')),
+    ("open_above", |e, cx| e.acting(false, |e| e.cmd_open_above(cx)), Key::Char('O')),
+    ("vim_open_above", |e, cx| e.acting(true, |e| e.cmd_open_above(cx)), Key::Char('O')),
     ("undo", Editor::cmd_undo, Key::Char('u')),
     ("undo_line", Editor::cmd_undo_line, Key::Char('U')),
     ("redo", Editor::cmd_redo, Key::Char('U')),
@@ -139,8 +149,10 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("shell_pipe_to", Editor::cmd_shell_pipe_to, Key::Alt('|')),
     ("search", Editor::cmd_search, Key::Char('/')),
     ("rsearch", Editor::cmd_rsearch, Key::Char('?')),
-    ("search_next", Editor::cmd_search_next, Key::Char('n')),
-    ("search_prev", Editor::cmd_search_prev, Key::Char('N')),
+    ("search_next", |e, cx| e.acting(false, |e| e.cmd_search_next(cx)), Key::Char('n')),
+    ("vim_search_next", |e, cx| e.acting(true, |e| e.cmd_search_next(cx)), Key::Char('n')),
+    ("search_prev", |e, cx| e.acting(false, |e| e.cmd_search_prev(cx)), Key::Char('N')),
+    ("vim_search_prev", |e, cx| e.acting(true, |e| e.cmd_search_prev(cx)), Key::Char('N')),
     ("command_mode", Editor::cmd_command_mode, Key::Char(':')),
     ("match_mode", Editor::cmd_match_mode, Key::Char('m')),
     ("replace", Editor::cmd_replace, Key::Char('r')),
@@ -158,26 +170,33 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     ("half_page_up", Editor::cmd_half_page_up, Key::Ctrl('u')),
     ("two_thirds_page_down", Editor::cmd_two_thirds_page_down, Key::Ctrl('n')),
     ("two_thirds_page_up", Editor::cmd_two_thirds_page_up, Key::Ctrl('p')),
-    ("join_selections", Editor::cmd_join_selections, Key::Char('J')),
+    ("join_selections", |e, cx| e.acting(false, |e| e.cmd_join_selections(cx)), Key::Char('J')),
+    ("vim_join_selections", |e, cx| e.acting(true, |e| e.cmd_join_selections(cx)), Key::Char('J')),
     ("flip_selections", Editor::cmd_flip_selections, Key::Alt(';')),
     ("select_all", Editor::cmd_select_all, Key::Char('%')),
     ("vim_redo", Editor::cmd_vim_redo, Key::Ctrl('r')),
     ("delete_char_backward", Editor::cmd_delete_char_backward, Key::Char('X')),
     ("extend_to_line_bounds", Editor::cmd_extend_to_line_bounds, Key::Char('X')),
     ("case_mode", Editor::cmd_case_mode, Key::Char('`')),
-    ("switch_case", Editor::cmd_switch_case, Key::Char('~')),
+    ("switch_case", |e, cx| e.acting(false, |e| e.cmd_switch_case(cx)), Key::Char('~')),
+    ("vim_switch_case", |e, cx| e.acting(true, |e| e.cmd_switch_case(cx)), Key::Char('~')),
     ("search_selection_detect_word_boundaries", Editor::cmd_search_selection_detect_word_boundaries, Key::Char('*')),
     ("search_selection_exact", Editor::cmd_search_selection_exact, Key::Alt('*')),
     ("search_word_backward", Editor::cmd_search_word_backward, Key::Char('#')),
     ("replace_mode", Editor::cmd_replace_mode, Key::Char('R')),
     ("replace_with_yanked", Editor::cmd_replace_with_yanked, Key::Char('R')),
-    ("goto_line", Editor::cmd_goto_line, Key::Char('G')),
-    ("indent", Editor::cmd_indent_or_unindent, Key::Char('>')),
-    ("unindent", Editor::cmd_indent_or_unindent, Key::Char('<')),
-    ("increment", Editor::cmd_increment, Key::Ctrl('a')),
-    ("decrement", Editor::cmd_decrement, Key::Ctrl('x')),
-    ("vim_repeat_last_change", Editor::cmd_vim_repeat_last_change, Key::Char('.')),
-    ("repeat_last_change", Editor::cmd_repeat_last_change, Key::Char('.')),
+    ("goto_line", |e, cx| e.acting(false, |e| e.cmd_goto_line(cx)), Key::Char('G')),
+    ("vim_goto_line", |e, cx| e.acting(true, |e| e.cmd_goto_line(cx)), Key::Char('G')),
+    ("indent", |e, cx| e.acting(false, |e| e.cmd_indent_or_unindent(cx)), Key::Char('>')),
+    ("vim_indent", |e, cx| e.acting(true, |e| e.cmd_indent_or_unindent(cx)), Key::Char('>')),
+    ("unindent", |e, cx| e.acting(false, |e| e.cmd_indent_or_unindent(cx)), Key::Char('<')),
+    ("vim_unindent", |e, cx| e.acting(true, |e| e.cmd_indent_or_unindent(cx)), Key::Char('<')),
+    ("increment", |e, cx| e.acting(false, |e| e.cmd_increment(cx)), Key::Ctrl('a')),
+    ("vim_increment", |e, cx| e.acting(true, |e| e.cmd_increment(cx)), Key::Ctrl('a')),
+    ("decrement", |e, cx| e.acting(false, |e| e.cmd_decrement(cx)), Key::Ctrl('x')),
+    ("vim_decrement", |e, cx| e.acting(true, |e| e.cmd_decrement(cx)), Key::Ctrl('x')),
+    ("vim_repeat_last_change", |e, cx| e.acting(true, |e| e.cmd_vim_repeat_last_change(cx)), Key::Char('.')),
+    ("repeat_last_change", |e, cx| e.acting(false, |e| e.cmd_repeat_last_change(cx)), Key::Char('.')),
     ("repeat_last_motion", Editor::cmd_repeat_last_motion, Key::Alt('.')),
     // helix's: bound to a key, it unbinds it, and the key leaves its menu.
     ("no_op", |_, _| {}, Key::Esc),
@@ -340,9 +359,31 @@ pub(super) const VIM_NORMAL: &[(Key, &str, Option<When>)] = &[
     (Key::Char('y'), "operator_yank", Some(when::not_extending)),
     (Key::Char('>'), "operator_indent", Some(when::not_extending)),
     (Key::Char('<'), "operator_unindent", Some(when::not_extending)),
+    (Key::Char('>'), "vim_indent", None),
+    (Key::Char('<'), "vim_unindent", None),
     (Key::Char('D'), "delete_to_line_end", None),
     (Key::Char('i'), "select_inner_object", Some(when::extending)),
     (Key::Char('a'), "select_around_object", Some(when::extending)),
+    // **vim's own versions of helix's commands** (2026-11-01, step 8 of the
+    // keymap plan): the same keys, the `vim_` twin of each command, so
+    // `insert_mode` means helix's `i` under either keymap.
+    (Key::Char('i'), "vim_insert_mode", None),
+    (Key::Char('a'), "vim_append_mode", None),
+    (Key::Char('I'), "vim_insert_at_line_start", None),
+    (Key::Char('A'), "vim_insert_at_line_end", None),
+    (Key::Char('o'), "vim_open_below", None),
+    (Key::Char('O'), "vim_open_above", None),
+    (Key::Esc, "vim_normal_mode", None),
+    (Key::End, "vim_goto_line_end", None),
+    (Key::Char('J'), "vim_join_selections", None),
+    (Key::Char('~'), "vim_switch_case", None),
+    (Key::Char('G'), "vim_goto_line", None),
+    (Key::Char('p'), "vim_paste_after", None),
+    (Key::Char('P'), "vim_paste_before", None),
+    (Key::Ctrl('a'), "vim_increment", None),
+    (Key::Ctrl('x'), "vim_decrement", None),
+    (Key::Char('n'), "vim_search_next", None),
+    (Key::Char('N'), "vim_search_prev", None),
     (Key::Char('U'), "undo_line", None),
     (Key::Char('|'), "goto_column", None),
     (Key::Ctrl('r'), "vim_redo", None),
@@ -350,7 +391,7 @@ pub(super) const VIM_NORMAL: &[(Key, &str, Option<When>)] = &[
     (Key::Char('`'), "goto_mark", None),
     (Key::Char('#'), "search_word_backward", None),
     (Key::Char('R'), "replace_mode", Some(when::not_extending)),
-    (Key::Char('.'), "vim_repeat_last_change", Some(when::counted)),
+    (Key::Char('.'), "vim_repeat_last_change", None),
 ];
 
 /// The conditions [`VIM_NORMAL`] names.
@@ -382,10 +423,6 @@ mod when {
         e.extend
     }
 
-    /// A count was typed before the key.
-    pub(super) fn counted(_: &Editor, cx: &Cx) -> bool {
-        cx.operator_count.is_some()
-    }
 }
 
 /// **Select mode: the keys that extend instead of move** (2026-10-31,
@@ -567,6 +604,26 @@ impl Editor {
         }
     }
 
+    /// **The vim keymap is in use**: what vim's rules of the cursor and the
+    /// registers ask (the cursor never sits on a line break, `f` stays on
+    /// its line, `"1`–`"9` keep the deletes). The one place a rule asks.
+    pub(super) fn vim_keymap(&self) -> bool {
+        self.key_preset == yumete_cjk::KeyPreset::Vim
+    }
+
+    /// **Whether the command running is a `vim_` twin**, its helix twin, or
+    /// (outside both, as in the paste menu) the keymap in use.
+    pub(super) fn as_vim(&self) -> bool {
+        self.acting_as_vim.unwrap_or_else(|| self.vim_keymap())
+    }
+
+    /// Run a command as one twin or the other ([`Self::as_vim`]).
+    pub(super) fn acting(&mut self, vim: bool, run: impl FnOnce(&mut Self)) {
+        let was = self.acting_as_vim.replace(vim);
+        run(self);
+        self.acting_as_vim = was;
+    }
+
     /// Run the motion a wait was for, extending or not as the command that
     /// began the wait asked ([`Self::extending`]).
     pub(super) fn as_asked(&mut self, motion: impl FnOnce(&mut Self)) {
@@ -648,7 +705,7 @@ impl Editor {
     // ends; under the vim preset this does too.
     pub(super) fn cmd_goto_line_end(&mut self, _: Cx) {
         self.goto_motion(motion::Motion::LineEnd);
-        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+        if self.as_vim() {
             self.sel.set_goal(Some(super::keys::LINE_END_GOAL));
         }
     }
@@ -1026,7 +1083,7 @@ impl Editor {
         // **vim's Esc leaves Visual with nothing selected and the
         // cursor where it stood** (2026-10-30, as decided; `:h v_<Esc>`).
         // After `V` the cursor goes back to the column it was in.
-        if self.key_preset == yumete_cjk::KeyPreset::Vim && self.extend {
+        if self.as_vim() && self.extend {
             let at = match self.vim_lines {
                 true => {
                     let rope = self.current_buffer().rope();
@@ -1406,7 +1463,7 @@ impl Editor {
         // here (`has_selection`), and keeping it would paint the
         // character after the caret as selected all through the typing;
         // `Esc` lands on that character either way, as in helix.
-        if self.key_preset != yumete_cjk::KeyPreset::Vim && ranged && end > pos {
+        if !self.as_vim() && ranged && end > pos {
             self.sel.set_anchor(end);
             self.insert_keeps_tail = true;
             self.keep_anchor_while_inserting = true;
@@ -1425,7 +1482,7 @@ impl Editor {
         // vim's `a` on an empty line types on that line (`:h a`,
         // measured: `aZ` on an empty first line gives `Z`); helix's
         // appends after the line break, on the next line.
-        let pos = match self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend {
+        let pos = match self.as_vim() && !self.extend {
             true => {
                 let rope = self.current_buffer().rope();
                 let head = self.sel.head();
@@ -1444,7 +1501,7 @@ impl Editor {
         // Warning: **只有 helix 鍵位。** vim 的 `a` 打完 `Esc` 只剩一個字的
         // 光標；兩套在這一條上真的不一樣，而 vim 那邊 `x` ＝ `;D`，`;`
         // 先把選區塌掉——所以「看起來對」掩得住這個錯，要問選區纔問得出來。
-        if self.key_preset != yumete_cjk::KeyPreset::Vim {
+        if !self.as_vim() {
             self.sel.set_anchor(from);
             self.keep_anchor_while_inserting = true;
         }
@@ -1470,7 +1527,7 @@ impl Editor {
             let (start, end) = (motion::line_start(rope, head), motion::line_end(rope, head));
             let first = motion::line_first_non_blank(rope, head);
             let written = first < end && !rope.char(first).is_whitespace();
-            match (written, self.key_preset == yumete_cjk::KeyPreset::Vim) {
+            match (written, self.as_vim()) {
                 (true, _) => first,
                 (false, true) => end,
                 (false, false) => start,
@@ -1856,7 +1913,7 @@ impl Editor {
             // `join_selections` only maps it through the change; measured:
             // `J` on `ab` left the cursor on `a` there and on the seam here).
             // vim's `J` puts the cursor on the seam, and keeps doing so.
-            if self.key_preset != yumete_cjk::KeyPreset::Vim {
+            if !self.as_vim() {
                 let now = self.current_buffer().rope().len_chars();
                 let moved = |p: usize| match p <= seam {
                     true => p,
@@ -1935,7 +1992,7 @@ impl Editor {
     pub(super) fn cmd_switch_case(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         // vim's `3~` switches three characters (`:h ~`).
-        if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend && count > 1 {
+        if self.as_vim() && !self.extend && count > 1 {
             let rope = self.current_buffer().rope();
             let last = motion::line_last(rope, self.sel.head());
             let mut head = self.sel.head();
@@ -1955,7 +2012,7 @@ impl Editor {
         // **vim 的 `~` 按完往前走一格**（`:h ~`），所以 `~~~` 在 `alpha`
         // 上給 `ALPha`；從前這裏三下都換同一個字，給的是 `Alpha`。
         // helix 的 `~` 不走（它作用在整個選區上），兩邊各跟各的。
-        if self.key_preset == yumete_cjk::KeyPreset::Vim && !self.extend {
+        if self.as_vim() && !self.extend {
             let rope = self.current_buffer().rope();
             let at = self.selection().1.min(motion::line_end(rope, self.sel.head()));
             self.sel.set_head(at);
@@ -2054,7 +2111,7 @@ impl Editor {
                 // 全窗裏數的是表格的行，見 `goto_row`。
                 self.goto_grid_row(count);
             }
-            false if self.key_preset == yumete_cjk::KeyPreset::Vim => {
+            false if self.as_vim() => {
                 self.remember_jump();
                 // **Inside a cell the cell is the document**, so its
                 // far end is what this means there (設計 §03 的「格尾」,
@@ -2088,7 +2145,7 @@ impl Editor {
         let Key::Char(c) = key else { return };
         // vim's `>>` keeps the cursor's column (nvim, `nostartofline`);
         // helix's `>` keeps the selection on its text.
-        let kept = (self.key_preset == yumete_cjk::KeyPreset::Vim).then(|| {
+        let kept = (self.as_vim()).then(|| {
             let rope = self.current_buffer().rope();
             let head = self.sel.head();
             let line = rope.char_to_line(head);
@@ -2127,6 +2184,10 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_vim_repeat_last_change(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // vim's `.`: a count replaces the one the change was made with.
+        if operator_count.is_none() {
+            return self.repeat_writing(count, |e| e.repeat_edit());
+        }
         self.recount_the_last_edit(count.min(Self::WRITING_MAX));
         self.repeat_edit();
     }

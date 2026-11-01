@@ -178,7 +178,7 @@ impl Editor {
                 // `Movement::Extend` *pushes* the match and makes it primary;
                 // the selections already made stay. vim's visual `n` grows the
                 // one selection, and the vim keymap keeps that.
-                let vim = self.key_preset == yumete_cjk::KeyPreset::Vim;
+                let vim = self.as_vim();
                 match (self.extend, vim) {
                     (true, false) => {
                         let mut found = crate::selection::Range::new(pos, head);

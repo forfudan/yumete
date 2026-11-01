@@ -894,7 +894,7 @@ impl Editor {
     /// `12 ` with its space changes nothing). A selection that is a date or a
     /// time is one too ([`crate::dates`]).
     pub(super) fn number_to_bump(&self, anchor: usize, head: usize) -> Option<(usize, usize)> {
-        if self.key_preset == yumete_cjk::KeyPreset::Vim {
+        if self.as_vim() {
             return self.number_from(head);
         }
         let rope = self.current_buffer().rope();
@@ -923,7 +923,7 @@ impl Editor {
         let line_start = rope.line_to_char(rope.char_to_line(from));
         let (start, end) = (from - line_start, to - line_start);
         let digits: String = rope.slice(from..to).to_string();
-        if let Some(text) = crate::dates::stepped(&digits, delta).filter(|_| self.key_preset != yumete_cjk::KeyPreset::Vim) {
+        if let Some(text) = crate::dates::stepped(&digits, delta).filter(|_| !self.as_vim()) {
             self.put_the_bumped(from, to, &text);
             return;
         }
@@ -967,7 +967,7 @@ impl Editor {
             return;
         }
         self.sel.set_anchor(from);
-        match self.key_preset == yumete_cjk::KeyPreset::Vim {
+        match self.as_vim() {
             true => self.sel.set_head(from),
             false => self.sel.set_head(from + text.chars().count() - 1),
         }

@@ -2496,6 +2496,10 @@ pub struct Editor {
     /// Normal mode extends when its character arrives, after the command
     /// itself has finished (and `g w`'s label likewise).
     motion_extend: Option<bool>,
+    /// **Which twin is running**: `Some(true)` while a `vim_` command runs
+    /// (`vim_paste_after`), `Some(false)` while its helix twin does, `None`
+    /// outside both, where the keymap in use answers ([`Editor::as_vim`]).
+    acting_as_vim: Option<bool>,
     /// The last macro recorded, replayed by `Q`.
     macro_keys: Vec<Key>,
     /// Whether a macro is being replayed, so it cannot record or replay itself.
@@ -4095,6 +4099,7 @@ impl Editor {
             recording: None,
             recording_from: 0,
             motion_extend: None,
+            acting_as_vim: None,
             macro_keys: Vec::new(),
             replaying: false,
             keymap_flavor: false,

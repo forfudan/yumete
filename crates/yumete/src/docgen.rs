@@ -17,9 +17,15 @@ fn cell(text: &str) -> String {
 
 /// Inline code that survives a backtick inside it (the case group is `` ` ``).
 fn code(text: &str) -> String {
-    match text.contains('`') {
-        true => format!("`` {text} ``"),
-        false => format!("`{text}`"),
+    // The fence is one backtick longer than the longest run inside, so
+    // `` `` `` (two backticks, the case group's key pressed twice) holds.
+    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    match longest {
+        0 => format!("`{text}`"),
+        n => {
+            let fence = "`".repeat(n + 1);
+            format!("{fence} {text} {fence}")
+        }
     }
 }
 

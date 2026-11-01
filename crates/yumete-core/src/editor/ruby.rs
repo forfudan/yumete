@@ -386,9 +386,9 @@ impl Editor {
     /// the selection acting first a stray `.` deleted whatever was selected
     /// now (#413, proposed 2026-09-12).
     pub(super) fn repeat_edit(&mut self) {
-        let keys = match self.key_preset {
-            yumete_cjk::KeyPreset::Helix => &self.last_insert_keys,
-            yumete_cjk::KeyPreset::Vim => &self.last_edit_keys,
+        let keys = match self.as_vim() {
+            false => &self.last_insert_keys,
+            true => &self.last_edit_keys,
         };
         if keys.is_empty() {
             self.status = say!("edit.nothing-to-repeat");
@@ -414,7 +414,7 @@ impl Editor {
             // One character takes the count back, as a typed one does.
             let mut chars = text.chars();
             match (chars.next(), chars.next()) {
-                (Some(c), None) if self.key_preset == yumete_cjk::KeyPreset::Vim => self.replace_by_key(c),
+                (Some(c), None) if self.as_vim() => self.replace_by_key(c),
                 _ => self.replace_str(&text),
             }
         }
