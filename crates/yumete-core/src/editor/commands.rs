@@ -803,10 +803,7 @@ impl Editor {
                     let now = match action.how {
                         yumete_cjk::actions::How::Command(line) => format!(":{line}"),
                         // The key it is on under the preset in use.
-                        yumete_cjk::actions::How::Normal => self
-                            .normal_keys_for(action.name)
-                            .map(|keys| yumete_cjk::actions::spell(&keys))
-                            .unwrap_or_default(),
+                        yumete_cjk::actions::How::Normal => self.keys_now(action.name).unwrap_or_default(),
                     };
                     listing.push_str(&format!(
                         "| `{}` | {} | `{now}` |\n",

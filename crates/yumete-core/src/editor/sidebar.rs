@@ -1278,10 +1278,38 @@ impl Editor {
                 .panel_focus()
                 .and_then(|side| self.panel(side))
                 .is_some_and(|p| p.view() == crate::sidebar::View::Info);
-        match article {
-            true => say!("hint.sidebar.keys-wiki"),
-            false => say!("hint.sidebar.keys"),
+        // **The keys from the table, the words from the message files**
+        // (2026-11-01): each part is dropped when its keys are bound to
+        // something else, and the reader's own keys join it.
+        use crate::input::Key;
+        let (walk, page) = match article {
+            true => (say!("hint.sidebar.scroll"), say!("hint.sidebar.word.half-page")),
+            false => (say!("hint.sidebar.word.move"), say!("hint.sidebar.word.page")),
+        };
+        let mut parts: Vec<(&[(Key, &str)], String)> = vec![
+            (&[(Key::Char('j'), "move_line_down"), (Key::Char('k'), "move_line_up")], walk),
+            (&[(Key::Char('J'), "page_down"), (Key::Char('K'), "page_up")], page),
+            (&[(Key::Char('g'), "goto_file_start"), (Key::Char('G'), "goto_last_line")], say!("hint.sidebar.word.ends")),
+        ];
+        if !article {
+            parts.push((&[(Key::Char('l'), "expand_entry")], say!("hint.sidebar.word.enter")));
+            parts.push((&[(Key::Char('h'), "collapse_entry")], say!("hint.sidebar.word.collapse")));
         }
+        parts.push((&[(Key::Tab, "next_sidebar_view")], say!("hint.sidebar.other-view")));
+        parts.push((&[(Key::Char('w'), "cycle_sidebar_width")], say!("hint.sidebar.width")));
+        if !article {
+            parts.push((&[(Key::Char('R'), "refresh_sidebar")], say!("hint.sidebar.word.reread")));
+        }
+        parts.push((&[(Key::Ctrl('w'), "window_mode")], say!("hint.sidebar.word.next-region")));
+        parts.push((&[(Key::Char('q'), "leave_sidebar")], say!("hint.to-the-text")));
+        parts
+            .into_iter()
+            .filter_map(|(spec, words)| {
+                let keys = self.place_hint(yumete_cjk::actions::Place::Sidebar, spec)?;
+                Some(format!("{keys} {words}"))
+            })
+            .collect::<Vec<_>>()
+            .join(" · ")
     }
 
     /// How many rows `J`/`K` move in a list — a screenful of a sidebar, near

@@ -410,6 +410,19 @@ impl Hit {
         }
     }
 
+    /// The name as the palette draws it, with the key a command is on now
+    /// (`keys`, from the editor: the keymap in use and the reader's own
+    /// lines) rather than helix's default; the command's name when it has
+    /// no key.
+    pub fn written_with(&self, keys: impl Fn(&str) -> Option<String>) -> String {
+        match &self.what {
+            What::Keys(a) if a.how == yumete_cjk::actions::How::Normal => {
+                keys(a.name).unwrap_or_else(|| a.name.to_string())
+            }
+            _ => self.written(),
+        }
+    }
+
     /// The name as the reader will see it: `vertical`, or `空格 f`.
     pub fn written(&self) -> String {
         match &self.what {

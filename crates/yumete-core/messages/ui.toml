@@ -928,11 +928,11 @@ zhs = "全小写不分大小写；带一个大写就分"
 en = "all lower case ignores case; one capital makes it matter"
 
 [[message]]
-# `/` 與 `?` 那一扇面板的第三行——那一行上 `A-j` 做什麼
+# `/` 與 `?` 那一扇面板的第三行——那一行上 `A-j` 做什麼。{0} 是那個鍵(`[keys.prompt]` 改得動)
 key = "ui.search-wild"
-zht = "A-j 繁簡拼音通配開關"
-zhs = "A-j 繁简拼音通配开关"
-en = "A-j matches across glyph variants and pinyin"
+zht = "{0} 繁簡拼音通配開關"
+zhs = "{0} 繁简拼音通配开关"
+en = "{0} matches across glyph variants and pinyin"
 
 [[message]]
 # `:shot` 把這一幀畫成檔案了

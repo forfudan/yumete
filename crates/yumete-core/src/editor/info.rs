@@ -342,17 +342,20 @@ impl Editor {
         // 五種**各有**自己的大寫鍵（2026-09-30 對齊 helix 之後），所以這裏一律
         // 是那一個。
         //
-        // Warning: **這張表 2026-09-30 換過鍵，而這一句没跟上**（2026-10-01 審出
-        // 來的）：字典從 `D` 搬到了 `N`，診斷從 `I` 搬到了 `D`，記錄拿到了
-        // `I`——於是命令行說的那個鍵按下去是**另一扇面板**。它跟的是
-        // 空格那一組的行（`groups.rs` 的 `SPACE`），改鍵的時候兩處要一起改。
-        let key = match self.info_now() {
-            Some(Info::Dictionary) => "N",
-            Some(Info::Wiki | Info::Docs) => "K",
-            Some(Info::Problems) => "D",
-            _ => "I",
-        }
-        .to_string();
-        format!("\u{2423}{key}")
+        // Warning: **問命令，不抄鍵**（2026-11-01）。這裏從前是一張手抄的表，跟着
+        // 空格那一組（`groups.rs` 的 `SPACE`）走，而它兩次没跟上：2026-10-01
+        // 字典搬了鍵；後來問題那一格從 `D` 搬到了 `L`（`D` 成了項目診斷挑選
+        // 器），改動那一格又落在記錄的 `I` 上——命令行說的那個鍵按下去是**另
+        // 一扇**。現在問那一則的命令此刻在哪個鍵上，連使用者自己改過的也算。
+        let name = match self.info_now() {
+            Some(Info::Dictionary) => "dictionary_panel",
+            Some(Info::Wiki | Info::Docs) => "hover_panel",
+            Some(Info::Problems) => "show_diagnostic_panel",
+            Some(Info::Change) => "show_change_panel",
+            _ => "show_record_panel",
+        };
+        self.normal_keys_for(name)
+            .map(|run| run.chars().map(|c| super::places::hint_key(super::keys::pressed(c))).collect())
+            .unwrap_or_default()
     }
 }

@@ -245,6 +245,54 @@ impl Editor {
         keys
     }
 
+    /// **The keys a hint row names for some commands of `place`, as they
+    /// are now** (2026-11-01): each key of `spec` that still runs its
+    /// command, in the order the row has always written them, then the
+    /// reader's own keys for those commands. `None` when no key is left,
+    /// and the row is not drawn: a key that is not bound is not named.
+    pub(super) fn place_hint(&self, place: Place, spec: &[(Key, &str)]) -> Option<String> {
+        let runs = |key: Key, name: &str| self.commands_in(place, key).is_some_and(|c| c.len() == 1 && c[0] == name);
+        let mut shown: Vec<String> = spec.iter().filter(|(k, n)| runs(*k, n)).map(|(k, _)| hint_key(*k)).collect();
+        let mut names: Vec<&str> = spec.iter().map(|(_, n)| *n).collect();
+        names.dedup();
+        // A picker's keys are its own and the prompt's.
+        let chain: &[Place] = match place {
+            Place::Picker => &[Place::Picker, Place::Prompt],
+            Place::Prompt => &[Place::Prompt],
+            Place::Sidebar => &[Place::Sidebar],
+        };
+        let default = |key: &Key| chain.iter().any(|&p| place_keys(p).iter().any(|(d, _)| d == key));
+        for &from in chain {
+            for &name in &names {
+                for typed in self.keys_in_place(from, name) {
+                    let Some(key) = super::keys::pressed_key(&typed).filter(|k| !default(k)) else { continue };
+                    let one = hint_key(key);
+                    if runs(key, name) && !shown.contains(&one) {
+                        shown.push(one);
+                    }
+                }
+            }
+        }
+        (!shown.is_empty()).then(|| shown.join(" "))
+    }
+
+    /// The keys that run `name` in `place` now, as a hint writes them:
+    /// its default keys still bound to it, then the reader's own.
+    pub fn place_keys_written(&self, place: Place, name: &str) -> Option<String> {
+        let spec: Vec<(Key, &str)> =
+            place_keys(place).iter().filter(|(_, one)| *one == name).map(|(k, one)| (*k, *one)).collect();
+        if !spec.is_empty() {
+            return self.place_hint(place, &spec);
+        }
+        let keys: Vec<String> = self
+            .keys_in_place(place, name)
+            .iter()
+            .filter_map(|typed| super::keys::pressed_key(typed))
+            .map(hint_key)
+            .collect();
+        (!keys.is_empty()).then(|| keys.join(" "))
+    }
+
     /// **Each place's commands with their default keys**, for the site
     /// (`ye --docgen`): the place, then its commands in the order its list
     /// gives, each with its help and the keys that run it.
@@ -267,6 +315,30 @@ impl Editor {
                 (place, rows)
             })
             .collect()
+    }
+}
+
+/// **A key as the hint row writes it**: `↑`, `S-Tab`, `␣`, `C-w`.
+pub(super) fn hint_key(key: Key) -> String {
+    match key {
+        Key::Char(' ') => "\u{2423}".to_string(),
+        Key::Char(c) => c.to_string(),
+        Key::Up => "↑".to_string(),
+        Key::Down => "↓".to_string(),
+        Key::Left => "←".to_string(),
+        Key::Right => "→".to_string(),
+        Key::Tab => "Tab".to_string(),
+        Key::BackTab => "S-Tab".to_string(),
+        Key::Enter => "Enter".to_string(),
+        Key::Esc => "Esc".to_string(),
+        Key::Backspace => "⌫".to_string(),
+        Key::Delete => "Del".to_string(),
+        Key::Home => "Home".to_string(),
+        Key::End => "End".to_string(),
+        Key::PageUp => "PgUp".to_string(),
+        Key::PageDown => "PgDn".to_string(),
+        Key::Ctrl(c) => format!("C-{c}"),
+        Key::Alt(c) => format!("A-{c}"),
     }
 }
 

@@ -3,6 +3,19 @@
 //! What the keys mean from where the cursor is standing, one line of it.
 
 use super::*;
+use crate::input::Key;
+use yumete_cjk::actions::Place;
+
+/// **The six keys a sidebar walks by**, as its hint row writes them: a row,
+/// a page, the two ends.
+const WALKING: &[(Key, &str)] = &[
+    (Key::Char('j'), "move_line_down"),
+    (Key::Char('k'), "move_line_up"),
+    (Key::Char('J'), "page_down"),
+    (Key::Char('K'), "page_up"),
+    (Key::Char('g'), "goto_file_start"),
+    (Key::Char('G'), "goto_last_line"),
+];
 
 /// **走到下一區那個鍵的名字**：`\u{2423}w`。
 ///
@@ -87,27 +100,34 @@ impl Editor {
                     Some(crate::sidebar::Info::Wiki) => say!("hint.sidebar.scroll"),
                     _ => say!("hint.sidebar.move"),
                 };
-                return Hint::Keys(what, vec![
+                let sidebar = |spec: &[(Key, &str)], says: String| {
+                    self.place_hint(Place::Sidebar, spec).map(|keys| (keys.into(), says))
+                };
+                return Hint::Keys(what, [
                         // Warning: **`J K g G` 也寫上**（2026-09-30 審出來的）。
                         // 它們在這一格上真的管用，而通用那一行一格就寫得下
                         // `j k J K g G`——只寫 `j k` 是漏報。
-                        ("j k J K g G".into(), walk),
+                        sidebar(WALKING, walk),
                         // Warning: **`w` 也要寫上**（2026-09-29 報的：「不仅没有提示
                         // 而且 w 无效」）。兩件事一起壞的：這一行没說它，而它
                         // 本來也真的不管用（見 `info_command`）。
-                        ("w".into(), say!("hint.sidebar.width")),
-                        ("q".into(), say!("hint.to-the-text")),
-                        (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
+                        sidebar(&[(Key::Char('w'), "cycle_sidebar_width")], say!("hint.sidebar.width")),
+                        sidebar(&[(Key::Char('q'), "leave_sidebar")], say!("hint.to-the-text")),
+                        Some((back_to_text_key().into(), say!("hint.sidebar.back-to-text"))),
                     ]
                     .into_iter()
+                    .flatten()
                     // **改動那一格多兩個自己的鍵**（2026-10-11）。擺在最前面：這一
                     // 格是為它們開的，而通用那幾個每一扇都有。
                     .chain(match self.info_in_this_sidebar(side) {
                         Some(crate::sidebar::Info::Change) => {
-                            vec![
-                                ("u".into(), say!("hint.change.restore")),
-                                ("y".into(), say!("hint.change.yank")),
+                            [
+                                sidebar(&[(Key::Char('u'), "restore_change")], say!("hint.change.restore")),
+                                sidebar(&[(Key::Char('y'), "yank_old_text")], say!("hint.change.yank")),
                             ]
+                            .into_iter()
+                            .flatten()
+                            .collect()
                         }
                         _ => Vec::new(),
                     })
@@ -135,10 +155,24 @@ impl Editor {
         // 更加顺手」。
         if let Some(picker) = self.picker() {
             let title = picker.title.clone();
-            let mut keys = vec![
-                ("Enter".into(), say!("hint.picker.open")),
-                ("Tab S-Tab ↑ ↓".into(), say!("hint.sidebar.move")),
-            ];
+            let picker_keys = |spec: &[(Key, &str)], says: String| {
+                self.place_hint(Place::Picker, spec).map(|keys| (keys.into(), says))
+            };
+            let mut keys: KeyRows = [
+                picker_keys(&[(Key::Enter, "confirm")], say!("hint.picker.open")),
+                picker_keys(
+                    &[
+                        (Key::Tab, "next_entry"),
+                        (Key::BackTab, "prev_entry"),
+                        (Key::Up, "prev_entry"),
+                        (Key::Down, "next_entry"),
+                    ],
+                    say!("hint.sidebar.move"),
+                ),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
             // **跳過哪些，只在走磁碟那幾扇寫**。緩衝區、百科、粘貼那幾扇没有篩子，
             // `A-h` 在那裏什麼都不做——没綁的鍵不許寫進提示行。
             if let Some(sieve) = picker.sieve.as_ref() {
@@ -148,9 +182,9 @@ impl Editor {
                     (true, false) => say!("hint.picker.skip-ignored"),
                     (true, true) => say!("hint.picker.search-everything"),
                 };
-                keys.push(("A-h".into(), skipping));
+                keys.extend(picker_keys(&[(Key::Alt('h'), "cycle_hidden_files")], skipping));
             }
-            keys.push(("Esc".into(), say!("hint.close")));
+            keys.extend(picker_keys(&[(Key::Esc, "normal_mode")], say!("hint.close")));
             return Hint::Keys(title, keys);
         }
         if self.mode == Mode::Field {
@@ -252,16 +286,23 @@ impl Editor {
             };
             // 六個鍵一格：`j k` 一行、`J K` 半頁、`g G` 兩頭。從前只寫 `j k`，
             // 另外四個管用卻没人知道（2026-09-23 審出來的）。
-            let mut keys = vec![("j k J K g G".into(), walking)];
+            let sidebar = |spec: &[(Key, &str)], says: String| {
+                self.place_hint(Place::Sidebar, spec).map(|keys| (keys.into(), says))
+            };
+            let mut keys: KeyRows = sidebar(WALKING, walking).into_iter().collect();
             if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Links) {
-                keys.push(("v".into(), say!("hint.sidebar.links-look")));
+                keys.extend(sidebar(&[(Key::Char('v'), "toggle_links_graph")], say!("hint.sidebar.links-look")));
             }
-            keys.extend([
-                    ("Tab".into(), say!("hint.sidebar.other-view")),
-                    ("w".into(), say!("hint.sidebar.width")),
-                    (back_to_text_key().into(), say!("hint.sidebar.back-to-text")),
-                    ("q".into(), say!("hint.to-the-text")),
-                ]);
+            keys.extend(
+                [
+                    sidebar(&[(Key::Tab, "next_sidebar_view")], say!("hint.sidebar.other-view")),
+                    sidebar(&[(Key::Char('w'), "cycle_sidebar_width")], say!("hint.sidebar.width")),
+                    Some((back_to_text_key().into(), say!("hint.sidebar.back-to-text"))),
+                    sidebar(&[(Key::Char('q'), "leave_sidebar")], say!("hint.to-the-text")),
+                ]
+                .into_iter()
+                .flatten(),
+            );
             return Hint::Keys(say!("hint.sidebar"), keys);
         }
         // A reference standing half-typed, with the panel already open under
@@ -282,7 +323,14 @@ impl Editor {
         }
         match self.mode {
             Mode::Ruby if self.ruby_target.is_some() => {
-                Hint::Keys(say!("hint.reading"), vec![("Enter".into(), say!("hint.keep-it")), ("Esc".into(), say!("hint.cancel"))])
+                let prompt = |spec: &[(Key, &str)], says: String| {
+                    self.place_hint(Place::Prompt, spec).map(|keys| (keys.into(), says))
+                };
+                let keys = [
+                    prompt(&[(Key::Enter, "confirm")], say!("hint.keep-it")),
+                    prompt(&[(Key::Esc, "normal_mode")], say!("hint.cancel")),
+                ];
+                Hint::Keys(say!("hint.reading"), keys.into_iter().flatten().collect())
             }
             // The one key worth saying inside a cell — without it a person
             // types a value, presses Esc, walks right and types the next.

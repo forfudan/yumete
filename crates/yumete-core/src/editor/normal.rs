@@ -588,6 +588,27 @@ impl Editor {
         place_of(name, &self.group_context()).map(keys_of)
     }
 
+    /// **The key that runs `name` now, as the palette and `:keymap-actions`
+    /// write it** (2026-11-01): the keymap in use's own key while the
+    /// reader has not bound it to something else, else the reader's own
+    /// key for the command. They used to show helix's key under vim's
+    /// keymap, and the default even where the reader had moved it.
+    pub fn keys_now(&self, name: &str) -> Option<String> {
+        let written = |k: &String| yumete_cjk::actions::written(k);
+        let taken = |run: &str| self.user_aliases.keys().any(|k| written(k) == run);
+        if let Some(run) = self.normal_keys_for(name).filter(|run| !taken(run)) {
+            return Some(yumete_cjk::actions::spell(&run));
+        }
+        let mut mine: Vec<String> = self
+            .user_aliases
+            .iter()
+            .filter(|(_, run)| run.len() == 1 && run[0] == name)
+            .map(|(k, _)| written(k))
+            .collect();
+        mine.sort();
+        mine.first().map(|run| yumete_cjk::actions::spell(run))
+    }
+
     /// **The command `cx.key` runs in Normal mode**, by the default keymap:
     /// the vim preset's own entry when it has one whose condition holds,
     /// helix's otherwise.

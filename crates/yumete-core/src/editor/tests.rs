@@ -33790,3 +33790,82 @@ fn the_readers_own_keys_follow_them_into_the_places() {
     ed.on_key(Key::Char('X'));
     assert_eq!(ed.prompt(), Some((":", "aXb")), "an Insert line edits the prompt");
 }
+
+/// **A hint row names the keys as they are bound now** (2026-11-01): a
+/// default key taken for something else leaves the row, and the reader's
+/// own key for the command joins it; with the defaults the row is as it
+/// always was.
+#[test]
+fn the_hint_row_follows_the_bindings() {
+    use crate::sidebar::Side;
+    use yumete_cjk::actions::Place;
+    let row = |ed: &Editor| match ed.hint() {
+        Hint::Keys(_, rows) => rows.iter().map(|(k, _)| k.to_string()).collect::<Vec<_>>(),
+        other => panic!("{other:?}"),
+    };
+    let mut ed = typed("# 一\n\n# 二\n");
+    ed.execute(":sidebar outline").unwrap();
+    ed.focus_slot(Side::Left);
+    assert_eq!(row(&ed)[0], "j k J K g G");
+    assert!(row(&ed).contains(&"w".to_string()));
+    let mut lines = HashMap::new();
+    lines.insert("j".to_string(), "no_op".to_string());
+    lines.insert("n".to_string(), "move_line_down".to_string());
+    lines.insert("w".to_string(), "no_op".to_string());
+    ed.set_place_bindings(Place::Sidebar, lines);
+    assert_eq!(row(&ed)[0], "k J K g G n", "j is gone and n is there");
+    assert!(!row(&ed).contains(&"w".to_string()), "a key bound to nothing is not named");
+
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().insert(0, "一").expect("the fixture buffer is writable");
+    type_keys(&mut ed, " b");
+    assert_eq!(row(&ed)[1], "Tab S-Tab ↑ ↓");
+    let mut lines = HashMap::new();
+    // Not `C-j`: a terminal sends it as `Enter`.
+    lines.insert("C-y".to_string(), "next_entry".to_string());
+    ed.set_place_bindings(Place::Picker, lines);
+    assert_eq!(row(&ed)[1], "Tab S-Tab ↑ ↓ C-y");
+}
+
+/// **The palette and `:keymap-actions` show the key a command is on now**
+/// (2026-11-01): vim's under the vim keymap, the reader's own where they
+/// moved it. Both showed helix's default before.
+#[test]
+fn the_palette_shows_the_key_in_force() {
+    let mut ed = Editor::new();
+    assert_eq!(ed.keys_now("move_next_word_start").as_deref(), Some("w"));
+    assert_eq!(ed.keys_now("vim_insert_mode"), None, "helix's keymap has no key for it");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    assert_eq!(ed.keys_now("vim_insert_mode").as_deref(), Some("i"), "vim's key under vim");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Helix);
+    let mut lines = HashMap::new();
+    lines.insert("w".to_string(), "no_op".to_string());
+    lines.insert("n".to_string(), "move_next_word_start".to_string());
+    ed.set_key_aliases(lines);
+    assert_eq!(ed.keys_now("move_next_word_start").as_deref(), Some("n"), "the reader's own key");
+}
+
+/// **The sidebar's keys on the status line, when the hint row is off, are
+/// the sentence they always were** (2026-11-01: the keys now come from the
+/// table, the words from the message files).
+#[test]
+fn the_sidebar_sentence_reads_as_before() {
+    use crate::sidebar::Side;
+    let mut ed = typed("# 一\n\n# 二\n");
+    ed.execute(":sidebar outline").unwrap();
+    ed.focus_slot(Side::Left);
+    let want = format!(
+        "j k {} · J K {} · g G {} · l {} · h {} · Tab {} · w {} · R {} · C-w {} · q {}",
+        say!("hint.sidebar.word.move"),
+        say!("hint.sidebar.word.page"),
+        say!("hint.sidebar.word.ends"),
+        say!("hint.sidebar.word.enter"),
+        say!("hint.sidebar.word.collapse"),
+        say!("hint.sidebar.other-view"),
+        say!("hint.sidebar.width"),
+        say!("hint.sidebar.word.reread"),
+        say!("hint.sidebar.word.next-region"),
+        say!("hint.to-the-text"),
+    );
+    assert_eq!(ed.sidebar_keys(), want);
+}

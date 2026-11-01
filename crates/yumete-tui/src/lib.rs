@@ -7680,11 +7680,12 @@ fn draw_search_hint(
         return None;
     }
     let ink = crate::theme::Palette::of(config);
-    let about = vec![
-        say!("ui.search-is-a-regex"),
-        say!("ui.search-smart-case"),
-        say!("ui.search-wild"),
-    ];
+    // `A-j` is the prompt's `toggle_wide_search`, named as it is bound now.
+    let wide = editor.place_keys_written(yumete_core::actions::Place::Prompt, "toggle_wide_search");
+    let about: Vec<String> = [Some(say!("ui.search-is-a-regex")), Some(say!("ui.search-smart-case")), wide.map(|k| say!("ui.search-wild", k))]
+        .into_iter()
+        .flatten()
+        .collect();
     // 面板的名字不帶提示行那個冒號：`ui.prompt-search` 是**畫在打的字前面**的那一
     // 截（「搜索:」），而環上那個名字和「命令」並排，不帶標點。
     let label = editor.prompt_label().unwrap_or_else(|| prefix.to_string());
@@ -8050,7 +8051,7 @@ fn draw_lookfor_menu(
     let items: Vec<Row> = found
         .iter()
         .map(|hit| {
-            let name = format!("{}{}", hit.leading(), hit.written());
+            let name = format!("{}{}", hit.leading(), hit.written_with(|n| editor.keys_now(n)));
             let said = yumete_core::messages::say(hit.help(), &[]);
             let left = room.saturating_sub(yumete_cjk::str_width(&name) + NOTE_GAP);
             Row { text: name, note: Some(elide(&said, left)), dim: false }

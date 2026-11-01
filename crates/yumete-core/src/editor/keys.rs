@@ -2555,6 +2555,17 @@ pub(crate) fn key_internal(key: Key) -> String {
     }
 }
 
+/// One key in the internal spelling (`\u{17}`, [`yumete_cjk::actions::ALT`]
+/// and a letter) back to the key; `None` for a run of several.
+pub(super) fn pressed_key(typed: &str) -> Option<Key> {
+    let mut chars = typed.chars();
+    let key = match chars.next()? {
+        yumete_cjk::actions::ALT => Key::Alt(chars.next()?),
+        c => pressed(c),
+    };
+    chars.next().is_none().then_some(key)
+}
+
 pub(super) fn pressed(c: char) -> Key {
     if let Some(key) = named_key(c) {
         return key;
