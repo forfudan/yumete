@@ -75,7 +75,7 @@ impl Editor {
     /// （[`Editor::insert_bounds`]），退到格子的左牆為止——不然 `a` 打完一個格子，
     /// 光標就落進左邊那一格的字裏了。
     pub(super) fn step_back_out_of_insert(&mut self) {
-        let back = self.vim_keymap() || self.restore_caret;
+        let back = self.keymap_rules().step_back_after_insert || self.restore_caret;
         let keeping = std::mem::take(&mut self.keep_anchor_while_inserting);
         self.restore_caret = false;
         // `i`'s selection: the far end goes back from the gap after the last
@@ -605,7 +605,7 @@ impl Editor {
     /// `r`: every character of the selection.
     pub(super) fn replace_by_key(&mut self, c: char) {
         let count = self.operator_count.take().unwrap_or(1).max(1);
-        if !self.vim_keymap() {
+        if !self.keymap_rules().replace_from_caret {
             return self.replace_chars(c);
         }
         // Visual `r` writes over the selection and leaves Visual mode, the

@@ -14,6 +14,89 @@ pub enum KeyPreset {
     Vim,
 }
 
+/// **A keymap's behaviour, one switch each** (2026-11-01). Each was a
+/// `vim_keymap()` check somewhere in the editor; named, a keymap is the
+/// set it picks, and each switch says what it changes where it is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rules {
+    /// The keymap's own Normal and Insert tables are vim's (`VIM_NORMAL`,
+    /// the vim rows of Insert mode and the groups), over helix's.
+    pub vim_tables: bool,
+    /// The caret never stands on a line's break, and `h`/`l` stop at the
+    /// line's ends (vim's `whichwrap` empty).
+    pub caret_off_newline: bool,
+    /// `f`/`t` look on this line only; helix's look through the file.
+    pub find_in_line: bool,
+    /// `t` stands still when it is already against its character; helix's
+    /// steps one past to find the next (「to enable repeated application」).
+    pub till_stands_still: bool,
+    /// `f`/`t` move the caret without selecting what they crossed.
+    pub find_moves_caret: bool,
+    /// Words, sentences and paragraphs move by vim's rules (an empty line
+    /// is a paragraph's end, a word motion is a caret jump).
+    pub vim_text_motions: bool,
+    /// Text objects follow vim's rules: a pair found ahead on the line, no
+    /// second quote outward for a count.
+    pub vim_text_objects: bool,
+    /// `"0` holds the last yank and `"1`–`"9` the last deletes of a line.
+    pub numbered_registers: bool,
+    /// Leaving Insert puts the caret back one.
+    pub step_back_after_insert: bool,
+    /// `r` replaces count characters from the caret, and `.` repeats the
+    /// count; helix's `r` replaces each character of the selection.
+    pub replace_from_caret: bool,
+    /// `:r` puts the file under the cursor's line; helix's at the cursor.
+    pub read_below_the_line: bool,
+    /// `u` puts back every cursor (helix's); vim's one cursor has its own.
+    pub undo_restores_every_cursor: bool,
+    /// An undo point starts where typing began (helix's `A` comes back to
+    /// the line's end).
+    pub undo_at_typing_start: bool,
+    /// `y` with several cursors copies every selection (helix's); vim's `y`
+    /// waits for a motion.
+    pub yank_every_selection: bool,
+    /// A character delete stays on its line (vim's `x`).
+    pub delete_stays_in_line: bool,
+}
+
+impl Rules {
+    pub const HELIX: Rules = Rules {
+        vim_tables: false,
+        caret_off_newline: false,
+        find_in_line: false,
+        till_stands_still: false,
+        find_moves_caret: false,
+        vim_text_motions: false,
+        vim_text_objects: false,
+        numbered_registers: false,
+        step_back_after_insert: false,
+        replace_from_caret: false,
+        read_below_the_line: false,
+        undo_restores_every_cursor: true,
+        undo_at_typing_start: true,
+        yank_every_selection: true,
+        delete_stays_in_line: false,
+    };
+
+    pub const VIM: Rules = Rules {
+        vim_tables: true,
+        caret_off_newline: true,
+        find_in_line: true,
+        till_stands_still: true,
+        find_moves_caret: true,
+        vim_text_motions: true,
+        vim_text_objects: true,
+        numbered_registers: true,
+        step_back_after_insert: true,
+        replace_from_caret: true,
+        read_below_the_line: true,
+        undo_restores_every_cursor: false,
+        undo_at_typing_start: false,
+        yank_every_selection: false,
+        delete_stays_in_line: true,
+    };
+}
+
 impl KeyPreset {
     /// Both, for `:keymap`'s menu.
     pub const ALL: [KeyPreset; 2] = [KeyPreset::Helix, KeyPreset::Vim];
@@ -37,14 +120,6 @@ impl KeyPreset {
         }
     }
 
-    /// The preset's lines, in `[keys.normal]`'s own shape.
-    ///
-    /// Warning: **the keys carry their `@`, like anyone else's** (2026-10-19). These
-    /// go into the same map a reader's own bindings do and are dispatched by the
-    /// same `run_binding`, so they are spelled the way a reader would have to
-    /// spell them — `("D", "@d$")` is keys, `("ZZ", ":x")` is a command line.
-    /// Exempting the table would mean the dispatcher had to guess again for one
-    /// of its two callers, which is the whole thing being removed.
     /// The lines of [`Self::table`] that are for Normal mode only: in
     /// select mode (vim's Visual) the keymap answers those keys itself.
     pub fn normal_only(self) -> &'static [&'static str] {
@@ -54,6 +129,24 @@ impl KeyPreset {
         }
     }
 
+    /// **What the preset's cursor, motions and registers do**, by name
+    /// (2026-11-01, the review's decoupling): the editor asks a rule, never
+    /// 「is this vim?」, so a third keymap is a set of these and a table.
+    pub fn rules(self) -> Rules {
+        match self {
+            KeyPreset::Helix => Rules::HELIX,
+            KeyPreset::Vim => Rules::VIM,
+        }
+    }
+
+    /// The preset's lines, in `[keys.normal]`'s own shape.
+    ///
+    /// Warning: **the keys carry their `@`, like anyone else's** (2026-10-19). These
+    /// go into the same map a reader's own bindings do and are dispatched by the
+    /// same `run_binding`, so they are spelled the way a reader would have to
+    /// spell them — `("D", "@d$")` is keys, `("ZZ", ":x")` is a command line.
+    /// Exempting the table would mean the dispatcher had to guess again for one
+    /// of its two callers, which is the whole thing being removed.
     pub fn table(self) -> &'static [(&'static str, &'static str)] {
         match self {
             KeyPreset::Helix => &[],

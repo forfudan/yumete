@@ -245,7 +245,7 @@ impl super::Editor {
     pub(super) fn copies_every_selection(&self, key: crate::input::Key) -> bool {
         matches!(key, crate::input::Key::Char('y'))
             && matches!(self.pending, Pending::None)
-            && !(self.vim_keymap() && !self.extend)
+            && !(!self.keymap_rules().yank_every_selection && !self.extend)
     }
 
     /// **逐段各編輯一次：從後往前做，只留一個撤銷點**（#405 Phase 1 第五步）。

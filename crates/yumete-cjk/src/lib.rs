@@ -63,7 +63,7 @@ pub use grapheme::{
     cells_per_char, grapheme_count, graphemes, next_grapheme_boundary, nth_grapheme, show_orphan_marks,
     prev_grapheme_boundary,
 };
-pub use keymap::{read_which_wrap, KeyPreset, WHICH_WRAP};
+pub use keymap::{read_which_wrap, KeyPreset, Rules, WHICH_WRAP};
 pub use reading::{split_charset, NoReader, Reader, CHARSET_TAGS};
 pub use segment::{
     best_path, CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo,

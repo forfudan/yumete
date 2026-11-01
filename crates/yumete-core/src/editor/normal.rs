@@ -696,7 +696,14 @@ impl Editor {
     /// registers ask (the cursor never sits on a line break, `f` stays on
     /// its line, `"1`–`"9` keep the deletes). The one place a rule asks.
     pub(super) fn vim_keymap(&self) -> bool {
-        self.key_preset == yumete_cjk::KeyPreset::Vim
+        self.keymap_rules().vim_tables
+    }
+
+    /// **What the keymap in use does**, rule by rule
+    /// ([`yumete_cjk::Rules`]): the cursor, the motions, the registers. Ask
+    /// the rule a behaviour is, not which keymap this is.
+    pub(super) fn keymap_rules(&self) -> yumete_cjk::Rules {
+        self.key_preset.rules()
     }
 
     /// **Whether the command running is a `vim_` twin**, its helix twin, or
@@ -1466,7 +1473,7 @@ impl Editor {
         // 攔下來的）。vim 的可視模式裏 `x` 刪的是**整段選區**，跨幾行就跨幾行；
         // 那一支把 `x` 當成 `d` 轉進來（`vim_visual_key`），`extend` 還掛着，
         // 問它就分得開。不夾的只是這一種：Normal 的 `x` 從來没有真選區。
-        let (anchor, head) = match self.vim_keymap()
+        let (anchor, head) = match self.keymap_rules().delete_stays_in_line
             && !whole_lines
             && !self.extend
         {

@@ -251,7 +251,7 @@ impl Editor {
                 // Normal mode, where an end is the character itself. `a`'s is
                 // stored as it stands, head past the end, because helix stores
                 // it so: `w` `a` `X` `Esc` `u` gives back `foo b` there, measured.
-                if self.mode == Mode::Insert && !self.vim_keymap() {
+                if self.mode == Mode::Insert && self.keymap_rules().undo_at_typing_start {
                     let rope = self.current_buffer().rope().clone();
                     let mut every = self.sel.clone();
                     every.map(|one| match one.anchor > one.head {
@@ -413,7 +413,7 @@ impl Editor {
     /// 最後那個換行符後面的空行，`j` 下得去而 nvim 眼裏没有它：掃神諭 2256 格裏
     /// 34 格不同，**25 格全是它**（`jjhhhhhhhhhhx` 那一式）。
     fn keep_off_the_newline(&mut self) {
-        if !self.vim_keymap() {
+        if !self.keymap_rules().caret_off_newline {
             return;
         }
         // Warning: **`vim_lines && extend`，不是光看 `vim_lines`**（2026-10-06 寫這一支
@@ -443,7 +443,7 @@ impl Editor {
     /// 不去（`~` 表示这里有个结尾换行符而已），helix keymap 進得去。」前一半是
     /// 畫法：那一格照畫，`~` 當行號，同 helix。
     pub(super) fn vim_cannot_reach(&self, rope: &crate::Rope, pos: usize) -> bool {
-        self.vim_keymap()
+        self.keymap_rules().caret_off_newline
             && self.mode == Mode::Normal
             && !(self.vim_lines && self.extend)
             && rope.char_to_line(pos) > self.last_real_line(rope)
@@ -2151,7 +2151,7 @@ impl Editor {
         // 正是一縱——所以轉進去是對的，這一條只分 vim 出來。底下那幾臂
         // （`move_textual_line`／`step_sideways`）本來就是 vim 那一套行文的意思，
         // 交還給它們就是答案，竪排不必再寫一份。
-        let vim_has_its_own = follow_the_text && self.vim_keymap();
+        let vim_has_its_own = follow_the_text && self.keymap_rules().vim_tables;
         let key = match follow_the_text && !vim_has_its_own {
             false => key,
             true => match key {

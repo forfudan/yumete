@@ -242,7 +242,7 @@ impl Editor {
         // Helix's `find_char` starts an exclusive search one past the next
         // character, 「to enable repeated application」. vim's `t` stops
         // where it is, and only its `;` steps off.
-        let steps_off = again || !self.vim_keymap();
+        let steps_off = again || !self.keymap_rules().till_stands_still;
         let from = match steps_off && kind.till() {
             true => match kind.forward() {
                 true => crate::motion::next_grapheme(
@@ -285,7 +285,7 @@ impl Editor {
             // everything ahead or behind; under vim it is still the line — and
             // inside a cell that a line break splits, vim's bound is that line,
             // not the cell, so 「這一格裏没有」 would be untrue there.
-            let across = !self.vim_keymap();
+            let across = !self.keymap_rules().find_in_line;
             let cell = self.cell_the_caret_is_in();
             let rope = self.current_buffer().rope();
             let one_line = |(a, b): (usize, usize)| rope.char_to_line(a) == rope.char_to_line(b);
@@ -315,7 +315,7 @@ impl Editor {
         // `w B e { } H L` 早就走這一條了（`keys.rs` 那個「A standalone motion, read
         // vim's way」），只有 `f F t T` 四個落在 helix 那一支上，於是 vim 手指按
         // `f,` 之後跳過去的那一整段是選中的，再按 `~` 就把那一段全變了大寫。
-        match self.vim_keymap() && !self.expanding_alias {
+        match self.keymap_rules().find_moves_caret && !self.expanding_alias {
             true => self.jump_to(span),
             false => self.take_span(span),
         }
