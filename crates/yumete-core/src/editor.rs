@@ -5601,6 +5601,7 @@ mod groups;
 mod insert;
 mod help;
 pub use help::{COMMON_EDITING, COMMON_MOTION};
+pub use groups::DocCommand;
 pub(crate) mod find;
 mod hint;
 mod info;

@@ -95,6 +95,75 @@ fn keys() -> String {
     out
 }
 
+/// One keypress as the docs write it: `Space`, `C-w`, `A-d`, `Tab`, `h`.
+fn key_part(part: &str) -> String {
+    let spelled = yumete_core::actions::spell(part);
+    let spelled = spelled.trim_end();
+    if spelled == "空格" {
+        return "Space".to_string();
+    }
+    match spelled.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+        Some(name) => {
+            let mut chars = name.chars();
+            chars.next().map(|first| first.to_uppercase().chain(chars).collect()).unwrap_or_default()
+        }
+        None => spelled.to_string(),
+    }
+}
+
+/// A run of keypresses: `gh` and `]d` together, as the keymap writes them;
+/// `Space f` and `C-w s` apart.
+fn keys_written(keys: &[String]) -> String {
+    let mut parts: Vec<String> = keys.iter().map(|k| key_part(k)).collect();
+    let plain = |part: &String, key: &String| part == key && key.chars().count() == 1;
+    // After a one-letter group key the space bar is `␣` (`]␣`), as the
+    // keymap page writes it: `] Space` would read as `]`, then `S`.
+    if parts.first().zip(keys.first()).is_some_and(|(part, key)| plain(part, key)) {
+        for (part, key) in parts.iter_mut().zip(keys).skip(1) {
+            if key == " " {
+                *part = "␣".to_string();
+            }
+        }
+    }
+    let together = parts.iter().zip(keys).all(|(part, key)| plain(part, key) || (part == "␣" && key == " "));
+    match together {
+        true => parts.concat(),
+        false => parts.join(" "),
+    }
+}
+
+/// **Every command a key can be bound to**, with every key that reaches it
+/// under helix's keymap, under vim's, and in Insert mode (step 7 of the
+/// keymap plan): so every key the editor has is on the site.
+fn actions() -> String {
+    let mut out = String::from("| Command | What it does | helix | vim | Insert |\n| --- | --- | --- | --- | --- |\n");
+    let column = |keys: &[Vec<String>]| -> String {
+        // `C-j` and Enter are one byte, and so are `C-i` and Tab: listed once.
+        let mut written: Vec<String> = Vec::new();
+        for one in keys.iter().map(|k| code(&cell(&keys_written(k)))) {
+            if !written.contains(&one) {
+                written.push(one);
+            }
+        }
+        written.join(" ")
+    };
+    for (name, help, helix, vim, insert) in yumete_core::editor::Editor::commands_for_docs() {
+        let _ = writeln!(
+            out,
+            "| `{name}` | {} | {} | {} | {} |",
+            cell(&say(help, &[])),
+            column(&helix),
+            column(&vim),
+            column(&insert),
+        );
+    }
+    out.push_str("\n### vim keys that play other keys\n\n| Key | Plays |\n| --- | --- |\n");
+    for (key, run) in yumete_core::editor::Editor::vim_runs_for_docs() {
+        let _ = writeln!(out, "| {} | {} |", code(&cell(&keys_written(&[key]))), code(&cell(&run)));
+    }
+    out
+}
+
 fn settings() -> String {
     use yumete_config::settings_ui::{Kind, GROUPS, SETTINGS};
     let mut out = String::new();
@@ -148,6 +217,7 @@ pub fn write(dir: &Path) -> std::io::Result<()> {
         let note = "<!-- Written by `ye --docgen`. Do not edit: change the editor and regenerate. -->\n\n";
         std::fs::write(at.join("commands.md"), format!("{note}{}", commands()))?;
         std::fs::write(at.join("keys.md"), format!("{note}{}", keys()))?;
+        std::fs::write(at.join("actions.md"), format!("{note}{}", actions()))?;
         std::fs::write(at.join("settings.md"), format!("{note}{}", settings()))?;
         std::fs::write(at.join("languages.md"), format!("{note}{}", languages()))?;
     }

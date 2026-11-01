@@ -453,18 +453,8 @@ pub(super) const EXTEND_COMMANDS: &[NormalCommand] = &[
     ("extend_to_word", |e, cx| e.extending(cx, "goto_word"), Key::Char('w')),
 ];
 
-/// **Names a config may still use**, and the command each is: names
-/// written before the command list that helix spells differently. They stay,
-/// so no config breaks.
-pub(super) const OLD_NAMES: &[(&str, &str)] = &[
-    ("extend_mode", "select_mode"),
-    ("select_line", "extend_line_below"),
-    ("join_lines", "join_selections"),
-];
-
-/// The method behind a command's name, or one of its [`OLD_NAMES`].
+/// The method behind a command's name.
 pub(super) fn normal_command(name: &str) -> Option<&'static NormalCommand> {
-    let name = OLD_NAMES.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| new);
     NORMAL_COMMANDS
         .iter()
         .chain(super::group_commands::GROUP_COMMANDS)

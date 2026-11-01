@@ -154,7 +154,14 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     ("open_recent_mode", |e, _| e.pending = Pending::Open, Key::Char('o')),
     ("yume_mode", |e, _| e.pending = Pending::Yume, Key::Char('z')),
     ("search_panel", |e, _| e.open_search(), Key::Char('/')),
-    ("command_menu", |e, _| e.open_the_command_line(""), Key::Char('?')),
+    // helix's `command_palette` (2026-11-01): every command and every key's
+    // command, each with its key and what it does, searched by description
+    // (`::`). It used to open an empty `:` line.
+    ("command_menu", |e, _| {
+        e.open_the_command_line("");
+        e.mode = Mode::Lookfor;
+        e.lookfor_focus = 0;
+    }, Key::Char('?')),
     // ── ] and [ ────────────────────────────────────────────────────────
     ("goto_next_conflict", |e, _| e.go_to_conflict(true), Key::Char('m')),
     ("goto_prev_conflict", |e, _| e.go_to_conflict(false), Key::Char('m')),

@@ -33592,3 +33592,13 @@ fn insert_mode_keys_can_be_bound() {
     assert_eq!(ed.mode, Mode::Normal, "jk left Insert mode");
     assert_eq!(ed.current_buffer().text(), "ajx\nb\n", "j without k was typed; C-l broke the line");
 }
+
+/// **`Space ?` is helix's command palette** (2026-11-01, step 7 of the
+/// keymap plan): the list of every command and key's command, searched by
+/// what each does, where it used to be an empty `:` line.
+#[test]
+fn space_question_mark_opens_the_palette() {
+    let mut ed = typed("one\n");
+    press(&mut ed, " ?");
+    assert_eq!(ed.mode(), Mode::Lookfor);
+}

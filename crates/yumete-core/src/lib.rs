@@ -84,4 +84,4 @@ pub use ropey::Rope;
 
 // Re-exported so binaries can install a segmenter without a direct dependency
 // on `yumete-cjk`.
-pub use yumete_cjk::{set_ambiguous_wide, CategorySegmenter, DictionarySegmenter, KeyPreset, Segmenter};
+pub use yumete_cjk::{actions, set_ambiguous_wide, CategorySegmenter, DictionarySegmenter, KeyPreset, Segmenter};

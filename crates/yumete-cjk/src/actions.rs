@@ -284,8 +284,10 @@ pub const ALL: &[Action] = &[
     normal("half_page_up", "action.half-page-up"),
     normal("jump_backward", "action.jump-backward"),
     // ---- Selecting ------------------------------------------------------
-    normal("extend_mode", "action.extend-mode"),
-    normal("select_line", "action.select-line"),
+    // helix's names (2026-11-01): these were `extend_mode`, `select_line`
+    // and `join_lines`, and helix's own names could not be bound.
+    normal("select_mode", "action.extend-mode"),
+    normal("extend_line_below", "action.select-line"),
     normal("extend_to_line_bounds", "action.extend-to-line-bounds"),
     normal("select_all", "action.select-all"),
     // Warning: **`;`, not Esc** (2026-10-06). Esc used to collapse the selection as
@@ -317,7 +319,7 @@ pub const ALL: &[Action] = &[
     normal("paste_after", "action.paste-after"),
     normal("paste_before", "action.paste-before"),
     normal("replace_with_yanked", "action.replace-with-yanked"),
-    normal("join_lines", "action.join-lines"),
+    normal("join_selections", "action.join-lines"),
     normal("indent", "action.indent"),
     normal("unindent", "action.unindent"),
     normal("increment", "action.increment"),

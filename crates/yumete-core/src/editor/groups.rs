@@ -604,6 +604,115 @@ impl Editor {
     }
 }
 
+/// **One command as the generated reference lists it** (`ye --docgen`,
+/// step 7 of the keymap plan): its name, its description's message, and
+/// the keys that reach it under helix's keymap, under vim's, and in Insert
+/// mode. Each key is the run of keypresses, in the internal spelling.
+pub type DocCommand = (&'static str, &'static str, Vec<Vec<String>>, Vec<Vec<String>>, Vec<Vec<String>>);
+
+impl Only {
+    /// Whether a row holds somewhere under a preset (the docs list every
+    /// key a preset has, on any page).
+    fn under(self, vim: bool) -> bool {
+        match self {
+            Only::Vim | Only::VimVertical | Only::FlatVim => vim,
+            Only::GLetter | Only::HelixVertical => !vim,
+            _ => true,
+        }
+    }
+}
+
+/// The keys that open a group under a preset, one per keypress. vim's `m`
+/// sets a mark, so the match group has no key there; its case group is
+/// `` g` ``.
+fn group_opened_by(group: &Group, vim: bool) -> Option<Vec<String>> {
+    match (vim, group.name) {
+        (true, "match") => None,
+        (true, "case") => Some(vec!["g".to_string(), "`".to_string()]),
+        _ => Some(group.path.chars().map(|c| c.to_string()).collect()),
+    }
+}
+
+impl Editor {
+    /// **Every bindable command, with every key that reaches it** under
+    /// each preset and in Insert mode: the generated reference's rows, read
+    /// off the same tables the keys run on, so a key the editor has is a key
+    /// the site lists.
+    pub fn commands_for_docs() -> Vec<DocCommand> {
+        use super::normal::{HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
+        let one = |key: Key| vec![super::keys::key_internal(key)];
+        let mut out = Vec::new();
+        for action in yumete_cjk::actions::ALL {
+            if action.how != yumete_cjk::actions::How::Normal {
+                continue;
+            }
+            let name = action.name;
+            let mut helix: Vec<Vec<String>> = Vec::new();
+            let mut vim: Vec<Vec<String>> = Vec::new();
+            for (key, n) in HELIX_NORMAL.iter().chain(SELECT_NORMAL) {
+                if *n != name {
+                    continue;
+                }
+                helix.push(one(*key));
+                // The vim preset keeps a helix key it has no entry of its own for.
+                if !VIM_NORMAL.iter().any(|(k, _, _)| k == key) {
+                    vim.push(one(*key));
+                }
+            }
+            for (key, n, _) in VIM_NORMAL {
+                if *n == name {
+                    vim.push(one(*key));
+                }
+            }
+            for group in GROUPS {
+                // Keys off the menu too (`z j`, the sort keys a column
+                // number comes before): a key the editor has is listed.
+                for bind in group.binds().filter(|b| b.run == name) {
+                    for (is_vim, keys) in [(false, &mut helix), (true, &mut vim)] {
+                        let Some(mut path) = group_opened_by(group, is_vim).filter(|_| bind.when.under(is_vim)) else {
+                            continue;
+                        };
+                        path.push(super::keys::key_internal(bind.key));
+                        if !keys.contains(&path) {
+                            keys.push(path);
+                        }
+                    }
+                }
+            }
+            // The vim preset's keys that play one of these runs (`$` is `gl`).
+            for (key, run) in yumete_cjk::KeyPreset::Vim.table() {
+                let Some(run) = run.strip_prefix('@') else { continue };
+                let written = yumete_cjk::actions::written(run);
+                if helix.iter().any(|keys| keys.concat() == written) {
+                    vim.push(vec![yumete_cjk::actions::written(key)]);
+                }
+            }
+            let insert: Vec<Vec<String>> = super::insert::INSERT_KEYS
+                .iter()
+                .filter(|(_, n, _)| *n == name)
+                .map(|(key, _, _)| one(*key))
+                .collect();
+            out.push((name, action.help, helix, vim, insert));
+        }
+        out
+    }
+
+    /// The vim preset's keys that play a run of other keys rather than one
+    /// command (`x` is `;` then `D`), as (key, run), internal spelling.
+    pub fn vim_runs_for_docs() -> Vec<(String, String)> {
+        let commands = Self::commands_for_docs();
+        yumete_cjk::KeyPreset::Vim
+            .table()
+            .iter()
+            .filter(|(key, _)| {
+                let key = yumete_cjk::actions::written(key);
+                !commands.iter().any(|(_, _, _, vim, _)| vim.iter().any(|k| k.concat() == key))
+            })
+            .map(|(key, run)| (yumete_cjk::actions::written(key), run.to_string()))
+            .collect()
+    }
+}
+
 /// A group's keys as the docs write them: `Space t x`, `C-w n`.
 fn written_path(path: &str) -> String {
     let mut out: Vec<String> = Vec::new();
