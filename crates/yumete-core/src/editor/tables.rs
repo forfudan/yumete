@@ -55,7 +55,7 @@ impl Editor {
     ///
     /// This is the one door. Everything the layers do asks it: which keys the
     /// grid claims, whether the cell walls a motion, whether the status line
-    /// says `CEL`, and whether the caret is drawn at all.
+    /// says `TBL.NOR`, and whether the caret is drawn at all.
     pub fn layers_here(&self) -> bool {
         self.grid_has_the_pane()
     }

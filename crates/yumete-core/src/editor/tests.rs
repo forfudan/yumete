@@ -8387,7 +8387,7 @@ fn a_grid_opens_on_cells_and_one_key_goes_inside_one() {
     ed.goto_line(2);
     // **開着就是整格**: the whole cell is the unit, and the mode word says so.
     assert_eq!(ed.table_layer(), Layer::Whole);
-    assert_eq!(ed.mode_label().as_deref(), Some("CEL"));
+    assert_eq!(ed.mode_label().as_deref(), Some("TBL.NOR"));
     assert!(!ed.table_layer().caret(Mode::Normal), "no character to stand on");
     // **The status line names the column and stops there** (#496).
     assert_eq!(ed.table_status().as_deref(), Some("char"));

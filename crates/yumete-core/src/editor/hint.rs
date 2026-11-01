@@ -364,7 +364,7 @@ impl Editor {
                         vec![("Esc".into(), say!("hint.table.out-of-the-cell"))]
                     }
                 };
-                // **標題說的是「鍵在哪」**，同 `CEL`／`CEL.NOR` 那一欄：在格子
+                // **標題說的是「鍵在哪」**，同 `TBL.NOR`／`CEL.NOR` 那一欄：在格子
                 // 裏的時候這一行的鍵是格子裏的，寫「表格」就少說了一半。
                 let where_at = match self.table_layer() == crate::table::layer::Layer::Inside
                     && self.layers_here()

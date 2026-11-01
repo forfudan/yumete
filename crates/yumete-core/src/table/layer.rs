@@ -147,9 +147,14 @@ impl Layer {
     ///
     /// The layer prefixes whatever word the editor had already worked out for
     /// the mode, so `REP` and `SEL` come along for free and this file does not
-    /// have to know they exist. The one special case is the top layer at rest,
-    /// which says `CEL` alone: there is no second word to add, because the
-    /// keys there are the layer's own.
+    /// have to know they exist. **The top layer is `TBL`, a cell is `CEL`**
+    /// (2026-11-01): a selection grows by whole cells at the top and by
+    /// characters inside, and one word `CEL.SEL` named both; the hint row
+    /// already called the two 表格 and 格內. The top layer at rest is
+    /// `TBL.NOR`: `hjkl` walk it as they walk the text, a cell at a time
+    /// (2026-11-01; it was a bare `CEL`, read as 「the keys are the layer's
+    /// own」). Typing always happens in a cell, so `INS` and `REP` are `CEL.`
+    /// from either layer.
     ///
     /// The dotted spelling is the one this editor already uses for 「where the
     /// keys are」 — `PIC.INS` in a picker, `PAN.NOR` in a side panel.
@@ -160,8 +165,8 @@ impl Layer {
     /// would cost cells the status line does not have (#394).
     pub fn label(self, mode: &str) -> String {
         match (self, mode) {
-            (Layer::Whole, "NOR") => "CEL".to_string(),
-            _ => format!("CEL.{mode}"),
+            (Layer::Whole, "INS" | "REP") | (Layer::Inside, _) => format!("CEL.{mode}"),
+            (Layer::Whole, _) => format!("TBL.{mode}"),
         }
     }
 
@@ -502,22 +507,24 @@ mod tests {
         );
     }
 
-    /// **The status word is prefixed once**, and the only bare word is the top
-    /// layer at rest.
+    /// **The status word is prefixed once**: `TBL.` at the top layer, `CEL.`
+    /// in a cell.
     #[test]
     fn the_status_word_says_which_layer() {
-        assert_eq!(Layer::Whole.label("NOR"), "CEL");
+        assert_eq!(Layer::Whole.label("NOR"), "TBL.NOR");
         assert_eq!(Layer::Inside.label("NOR"), "CEL.NOR");
         assert_eq!(Layer::Whole.label("INS"), "CEL.INS");
         assert_eq!(Layer::Inside.label("INS"), "CEL.INS");
         // The words the rest of the editor computes come along unchanged.
         assert_eq!(Layer::Inside.label("REP"), "CEL.REP");
-        assert_eq!(Layer::Whole.label("SEL"), "CEL.SEL");
+        // A selection by cells and one by characters read apart.
+        assert_eq!(Layer::Whole.label("SEL"), "TBL.SEL");
+        assert_eq!(Layer::Inside.label("SEL"), "CEL.SEL");
     }
 
-    /// **The word 「NOR」 is pinned**, because the test above matches on it:
-    /// if the mode's own label is ever respelt, the top layer would quietly
-    /// start reading `CEL.NOR` and the bare `CEL` would never appear again.
+    /// **The words 「NOR」 and 「INS」 are pinned**, because `label` matches
+    /// on them: if the mode's own label is ever respelt, typing at the top
+    /// layer would quietly read `TBL.` instead of `CEL.`.
     #[test]
     fn the_resting_word_this_file_matches_on_is_the_editors_own() {
         assert_eq!(Mode::Normal.label(), Some("NOR"));

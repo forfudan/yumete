@@ -28,8 +28,8 @@ impl Editor {
     ///
     /// Three questions in one word, in this order:
     ///
-    /// 1. **Where do the keys go?** `PAN.` when a side panel has them, `CEL`
-    ///    when a grid does. That is asked first because it is the one with
+    /// 1. **Where do the keys go?** `PAN.` when a side panel has them, `TBL`
+    ///    or `CEL` when a grid does. That is asked first because it is the one with
     ///    teeth: `d` in the results list clears the search word, `d` in the
     ///    page deletes a line of the novel, and both read `NORMAL` until
     ///    2026-09-27.
@@ -69,7 +69,7 @@ impl Editor {
         // `REP` and `SEL` come along without this line knowing they exist, and
         // the layer answers 「where are my keys」 the way `PAN.` and `PIC.`
         // already do. [`Layer::label`] owns the spelling, including the one
-        // case that is a bare word: the top layer at rest says `CEL`.
+        // two prefixes: `TBL.` at the top layer, `CEL.` in a cell.
         // …and only where the layers are in force: a table drawn into a page
         // of prose is a document, and a document's mode word is the
         // document's (2026-10-21).
