@@ -164,6 +164,22 @@ fn literals(text: &str, opener: &str) -> BTreeSet<String> {
     out
 }
 
+/// The literal written right after an enum variant and a comma
+/// (`NormalCmd::Foo, "the.tag"`), for a table whose rows name the command
+/// first and the line it says second.
+fn after_a_variant(text: &str, prefix: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for piece in text.split(prefix).skip(1) {
+        let rest = piece.trim_start_matches(|c: char| c.is_ascii_alphanumeric());
+        let Some(rest) = rest.trim_start().strip_prefix(',') else { continue };
+        let Some(rest) = rest.trim_start().strip_prefix('"') else { continue };
+        if let Some(end) = rest.find('"') {
+            out.insert(rest[..end].to_string());
+        }
+    }
+    out
+}
+
 /// Whether a literal is shaped like a tag.
 ///
 /// The openers this scans are not used *only* for messages — `help:` is also a
@@ -214,6 +230,11 @@ fn said() -> BTreeMap<String, String> {
         // A place's command and its description (`place("action.confirm",
         // PlaceCmd::Confirm)` in `yumete-cjk/src/actions.rs`, 2026-11-01).
         tags.extend(literals(&text, "place("));
+        // A Normal command's (`normal("action.move-char-left", NormalCmd::…)`).
+        tags.extend(literals(&text, "normal("));
+        // A group row's line, after the command it runs
+        // (`ch('N', NormalCmd::DictionaryPanel, "hint.space.dictionary-panel")`).
+        tags.extend(after_a_variant(&text, "NormalCmd::"));
         tags.extend(literals(&text, "', "));
         tags.extend(literals(&text, "\", "));
         // `Err("table.no-further")` —— a pure function hands back the tag,

@@ -20,6 +20,7 @@
 
 use super::normal::Cx;
 use super::*;
+use yumete_cjk::actions::NormalCmd;
 use crate::input::Key;
 
 /// **Where a row holds.** `Always` and the presets are the common ones; the
@@ -55,7 +56,7 @@ pub(super) enum Only {
 pub(super) struct Bind {
     pub key: Key,
     /// The command it runs, by name.
-    pub run: &'static str,
+    pub run: NormalCmd,
     /// The menu line; empty for a key that is not on the menu (the arrow
     /// keys beside `hjkl`, the `C-` spellings in the window group).
     pub says: &'static str,
@@ -90,16 +91,16 @@ impl Row {
     }
 }
 
-const fn key(key: Key, run: &'static str, says: &'static str) -> Row {
+const fn key(key: Key, run: NormalCmd, says: &'static str) -> Row {
     Row::Bind(Bind { key, run, says, when: Only::Always, listed: Only::Always })
 }
 
-const fn ch(c: char, run: &'static str, says: &'static str) -> Row {
+const fn ch(c: char, run: NormalCmd, says: &'static str) -> Row {
     key(Key::Char(c), run, says)
 }
 
 /// A key that is not on the menu.
-const fn quiet(key_: Key, run: &'static str) -> Row {
+const fn quiet(key_: Key, run: NormalCmd) -> Row {
     key(key_, run, "")
 }
 
@@ -232,7 +233,7 @@ impl Group {
 /// a command line or a run of keys as written, a list's parts in order.
 /// `None` for `no_op`, which leaves the menu.
 fn describe(commands: &[String]) -> Option<String> {
-    if commands.iter().all(|one| one == "no_op") {
+    if commands.iter().all(|one| one == NormalCmd::NoOp.name()) {
         return None;
     }
     let parts: Vec<String> = commands
@@ -426,7 +427,7 @@ impl Editor {
         let at = self.group_context();
         match group.bind_for(key, &at) {
             Some(bind) => {
-                if let Some(&(_, run, _)) = super::normal::normal_command(bind.run) {
+                if let Some(&(_, run, _)) = super::normal::normal_cmd(bind.run) {
                     let operator_count = self.operator_count;
                     let count = operator_count.unwrap_or(1).max(1);
                     run(self, Cx { key, count, operator_count, continuing_zong });
@@ -650,7 +651,7 @@ impl Editor {
             let mut helix: Vec<Vec<String>> = Vec::new();
             let mut vim: Vec<Vec<String>> = Vec::new();
             for (key, n) in HELIX_NORMAL.iter().chain(SELECT_NORMAL) {
-                if *n != name {
+                if n.name() != name {
                     continue;
                 }
                 helix.push(one(*key));
@@ -660,14 +661,14 @@ impl Editor {
                 }
             }
             for (key, n, _) in VIM_NORMAL {
-                if *n == name {
+                if n.name() == name {
                     vim.push(one(*key));
                 }
             }
             for group in GROUPS {
                 // Keys off the menu too (`z j`, the sort keys a column
                 // number comes before): a key the editor has is listed.
-                for bind in group.binds().filter(|b| b.run == name) {
+                for bind in group.binds().filter(|b| b.run.name() == name) {
                     for (is_vim, keys) in [(false, &mut helix), (true, &mut vim)] {
                         let Some(mut path) = group_opened_by(group, is_vim).filter(|_| bind.when.under(is_vim)) else {
                             continue;
@@ -689,7 +690,7 @@ impl Editor {
             }
             let insert: Vec<Vec<String>> = super::insert::INSERT_KEYS
                 .iter()
-                .filter(|(_, n, _)| *n == name)
+                .filter(|(_, n, _)| n.name() == name)
                 .map(|(key, _, _)| one(*key))
                 .collect();
             out.push((name, action.help, helix, vim, insert));
@@ -746,63 +747,63 @@ pub(super) static GOTO: Group = Group {
     rows: &[
         // Select mode's own (helix's select keymap): the same places,
         // reached by extending.
-        ch('g', "extend_to_file_start", "hint.goto.start-of-file").when(Only::Selecting),
-        ch('g', "goto_file_start", "hint.goto.start-of-file"),
+        ch('g', NormalCmd::ExtendToFileStart, "hint.goto.start-of-file").when(Only::Selecting),
+        ch('g', NormalCmd::GotoFileStart, "hint.goto.start-of-file"),
         note("<N>g", "hint.goto.line-n"),
-        ch('e', "jump_prev_word_end", "action.jump-prev-word-end").when(Only::Vim),
-        ch('E', "jump_prev_long_word_end", "action.jump-prev-long-word-end").when(Only::Vim),
-        ch('e', "extend_to_file_end", "hint.goto.end-of-file").when(Only::Selecting),
-        ch('e', "goto_file_end", "hint.goto.end-of-file"),
-        ch('h', "goto_line_start", "hint.goto.line-start-or-end").when(Only::GLetter),
-        ch('l', "goto_line_end", "hint.goto.line-start-or-end").when(Only::GLetter),
-        quiet(Key::Up, "goto_line_start").when(Only::HelixVertical),
-        quiet(Key::Down, "goto_line_end").when(Only::HelixVertical),
-        ch('s', "goto_first_nonwhitespace", "hint.goto.first-non-blank"),
-        ch('f', "open_here", "hint.goto.open-this-file"),
-        ch('L', "follow_link", "hint.goto.follow-link"),
-        ch('w', "extend_to_word", "hint.goto.jump-labels").when(Only::Selecting),
-        ch('w', "goto_word", "hint.goto.jump-labels"),
-        ch('x', "goto_word_by_letters", "hint.goto.seek-written"),
-        ch('z', "goto_char_by_pinyin", "hint.goto.seek-reading"),
-        ch('a', "goto_last_accessed_file", "hint.goto.last-file"),
-        ch('n', "search_next", "hint.goto.next-match").when(Only::Vim),
-        ch('N', "search_prev", "hint.goto.next-match").when(Only::Vim),
-        ch('n', "next_buffer", "hint.goto.next-or-previous-buffer"),
-        ch('p', "prev_buffer", "hint.goto.next-or-previous-buffer"),
-        ch('d', "goto_definition", "hint.goto.follow-note"),
-        ch('D', "goto_definition_other_window", "hint.goto.follow-note-elsewhere"),
-        ch('r', "goto_reference", "hint.goto.references"),
-        ch('/', "search_selection", "hint.goto.search-word"),
-        ch('?', "search_selection_other_window", "hint.goto.search-word-elsewhere"),
-        ch('j', "move_next_zong", "hint.goto.by-file-line-vertical").when(Only::VimVertical),
-        ch('k', "move_prev_zong", "hint.goto.by-file-line-vertical").when(Only::VimVertical),
-        ch('j', "move_visual_line_down", "action.move-visual-line-down").when(Only::Vim),
-        ch('k', "move_visual_line_up", "action.move-visual-line-up").when(Only::Vim),
-        ch('j', "move_line_down", "hint.goto.by-file-line-vertical").when(Only::HelixVertical),
-        ch('k', "move_line_up", "hint.goto.by-file-line-vertical").when(Only::HelixVertical),
-        ch('j', "extend_line_down", "hint.goto.by-file-line").when(Only::Selecting),
-        ch('k', "extend_line_up", "hint.goto.by-file-line").when(Only::Selecting),
-        ch('j', "move_line_down", "hint.goto.by-file-line"),
-        ch('k', "move_line_up", "hint.goto.by-file-line"),
-        quiet(Key::Down, "move_visual_line_down").when(Only::FlatVim),
-        quiet(Key::Up, "move_visual_line_up").when(Only::FlatVim),
-        quiet(Key::Down, "move_line_down").when(Only::Flat),
-        quiet(Key::Up, "move_line_up").when(Only::Flat),
-        ch('.', "goto_last_modification", "hint.goto.last-change"),
-        ch('t', "goto_window_top", "hint.goto.screen-top-middle-bottom"),
-        ch('c', "goto_window_center", "hint.goto.screen-top-middle-bottom"),
-        ch('b', "goto_window_bottom", "hint.goto.screen-top-middle-bottom"),
+        ch('e', NormalCmd::JumpPrevWordEnd, "action.jump-prev-word-end").when(Only::Vim),
+        ch('E', NormalCmd::JumpPrevLongWordEnd, "action.jump-prev-long-word-end").when(Only::Vim),
+        ch('e', NormalCmd::ExtendToFileEnd, "hint.goto.end-of-file").when(Only::Selecting),
+        ch('e', NormalCmd::GotoFileEnd, "hint.goto.end-of-file"),
+        ch('h', NormalCmd::GotoLineStart, "hint.goto.line-start-or-end").when(Only::GLetter),
+        ch('l', NormalCmd::GotoLineEnd, "hint.goto.line-start-or-end").when(Only::GLetter),
+        quiet(Key::Up, NormalCmd::GotoLineStart).when(Only::HelixVertical),
+        quiet(Key::Down, NormalCmd::GotoLineEnd).when(Only::HelixVertical),
+        ch('s', NormalCmd::GotoFirstNonwhitespace, "hint.goto.first-non-blank"),
+        ch('f', NormalCmd::OpenHere, "hint.goto.open-this-file"),
+        ch('L', NormalCmd::FollowLink, "hint.goto.follow-link"),
+        ch('w', NormalCmd::ExtendToWord, "hint.goto.jump-labels").when(Only::Selecting),
+        ch('w', NormalCmd::GotoWord, "hint.goto.jump-labels"),
+        ch('x', NormalCmd::GotoWordByLetters, "hint.goto.seek-written"),
+        ch('z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading"),
+        ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file"),
+        ch('n', NormalCmd::SearchNext, "hint.goto.next-match").when(Only::Vim),
+        ch('N', NormalCmd::SearchPrev, "hint.goto.next-match").when(Only::Vim),
+        ch('n', NormalCmd::NextBuffer, "hint.goto.next-or-previous-buffer"),
+        ch('p', NormalCmd::PrevBuffer, "hint.goto.next-or-previous-buffer"),
+        ch('d', NormalCmd::GotoDefinition, "hint.goto.follow-note"),
+        ch('D', NormalCmd::GotoDefinitionOtherWindow, "hint.goto.follow-note-elsewhere"),
+        ch('r', NormalCmd::GotoReference, "hint.goto.references"),
+        ch('/', NormalCmd::SearchSelection, "hint.goto.search-word"),
+        ch('?', NormalCmd::SearchSelectionOtherWindow, "hint.goto.search-word-elsewhere"),
+        ch('j', NormalCmd::MoveNextZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
+        ch('k', NormalCmd::MovePrevZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
+        ch('j', NormalCmd::MoveVisualLineDown, "action.move-visual-line-down").when(Only::Vim),
+        ch('k', NormalCmd::MoveVisualLineUp, "action.move-visual-line-up").when(Only::Vim),
+        ch('j', NormalCmd::MoveLineDown, "hint.goto.by-file-line-vertical").when(Only::HelixVertical),
+        ch('k', NormalCmd::MoveLineUp, "hint.goto.by-file-line-vertical").when(Only::HelixVertical),
+        ch('j', NormalCmd::ExtendLineDown, "hint.goto.by-file-line").when(Only::Selecting),
+        ch('k', NormalCmd::ExtendLineUp, "hint.goto.by-file-line").when(Only::Selecting),
+        ch('j', NormalCmd::MoveLineDown, "hint.goto.by-file-line"),
+        ch('k', NormalCmd::MoveLineUp, "hint.goto.by-file-line"),
+        quiet(Key::Down, NormalCmd::MoveVisualLineDown).when(Only::FlatVim),
+        quiet(Key::Up, NormalCmd::MoveVisualLineUp).when(Only::FlatVim),
+        quiet(Key::Down, NormalCmd::MoveLineDown).when(Only::Flat),
+        quiet(Key::Up, NormalCmd::MoveLineUp).when(Only::Flat),
+        ch('.', NormalCmd::GotoLastModification, "hint.goto.last-change"),
+        ch('t', NormalCmd::GotoWindowTop, "hint.goto.screen-top-middle-bottom"),
+        ch('c', NormalCmd::GotoWindowCenter, "hint.goto.screen-top-middle-bottom"),
+        ch('b', NormalCmd::GotoWindowBottom, "hint.goto.screen-top-middle-bottom"),
         // vim's own: none of these is a helix command.
-        ch('v', "reselect_last_selection", "hint.goto.reselect").when(Only::Vim),
-        ch('i', "insert_at_last_insert", "hint.goto.insert-again").when(Only::Vim),
-        ch(';', "goto_older_change", "hint.goto.walk-changes").when(Only::Vim),
-        ch(',', "goto_newer_change", "hint.goto.walk-changes").when(Only::Vim),
-        ch('u', "operator_lowercase", "hint.goto.case-operators").when(Only::Vim),
-        ch('U', "operator_uppercase", "hint.goto.case-operators").when(Only::Vim),
-        ch('~', "operator_switch_case", "hint.goto.case-operators").when(Only::Vim),
-        ch('q', "operator_fill", "hint.goto.fill").when(Only::Vim),
-        ch('J', "join_selections_no_space", "hint.goto.join-without-a-space").when(Only::Vim),
-        ch('`', "case_mode", "action.case-mode").when(Only::Vim),
+        ch('v', NormalCmd::ReselectLastSelection, "hint.goto.reselect").when(Only::Vim),
+        ch('i', NormalCmd::InsertAtLastInsert, "hint.goto.insert-again").when(Only::Vim),
+        ch(';', NormalCmd::GotoOlderChange, "hint.goto.walk-changes").when(Only::Vim),
+        ch(',', NormalCmd::GotoNewerChange, "hint.goto.walk-changes").when(Only::Vim),
+        ch('u', NormalCmd::OperatorLowercase, "hint.goto.case-operators").when(Only::Vim),
+        ch('U', NormalCmd::OperatorUppercase, "hint.goto.case-operators").when(Only::Vim),
+        ch('~', NormalCmd::OperatorSwitchCase, "hint.goto.case-operators").when(Only::Vim),
+        ch('q', NormalCmd::OperatorFill, "hint.goto.fill").when(Only::Vim),
+        ch('J', NormalCmd::JoinSelectionsNoSpace, "hint.goto.join-without-a-space").when(Only::Vim),
+        ch('`', NormalCmd::CaseMode, "action.case-mode").when(Only::Vim),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -828,44 +829,44 @@ pub(super) static SPACE: Group = Group {
     title: "hint.space.title",
     path: " ",
     rows: &[
-        ch('f', "file_picker", "hint.space.open-file"),
-        ch('F', "file_picker_in_current_directory", "hint.space.open-file-here"),
-        ch('e', "file_explorer", "hint.space.explorer"),
-        ch('E', "file_explorer_in_current_buffer_directory", "hint.space.explorer-here"),
-        ch('b', "buffer_picker", "hint.space.switch-buffer"),
-        ch('g', "changed_file_picker", "hint.space.changed-files"),
-        ch('y', "copy_to_clipboard", "hint.space.copy-to-clipboard"),
-        ch('p', "paste_from_clipboard", "hint.space.paste-from-clipboard"),
-        ch('P', "paste_clipboard_before", "hint.space.paste-before"),
-        ch('R', "replace_selections_with_clipboard", "hint.space.replace-from-clipboard"),
-        ch('s', "symbol_picker", "hint.space.symbols"),
-        ch('S', "workspace_symbol_picker", "hint.space.project-symbols"),
-        ch('n', "dictionary", "hint.space.dictionary"),
-        ch('N', "dictionary_panel", "hint.space.dictionary-panel"),
-        ch('k', "hover", "hint.space.what-is-this"),
-        ch('K', "hover_panel", "hint.space.what-is-this-panel"),
-        ch('d', "diagnostics_picker", "hint.space.diagnostics"),
-        ch('D', "workspace_diagnostics_picker", "hint.space.project-diagnostics"),
-        ch('l', "show_diagnostic", "hint.space.problems"),
-        ch('L', "show_diagnostic_panel", "hint.space.problems-panel"),
-        ch('x', "show_change", "hint.space.change"),
-        ch('X', "show_change_panel", "hint.space.change-panel"),
-        ch('r', "rename_symbol", "hint.space.rename"),
-        ch('a', "code_action", "hint.space.actions"),
-        ch('i', "show_record", "hint.space.record"),
-        ch('I', "show_record_panel", "hint.space.record-panel"),
-        ch('w', "window_mode", "hint.region.title"),
-        ch('t', "table_mode", "hint.space.table"),
-        ch('"', "paste_menu", "menu.paste.title"),
-        ch('c', "comment_line", "hint.space.comment-line"),
-        ch('C', "comment_block", "hint.space.comment-block"),
-        ch('m', "conflict_mode", "hint.conflict.title"),
-        ch('o', "open_recent_mode", "hint.space.open-recent"),
-        ch('z', "yume_mode", "hint.space.yume"),
-        ch('/', "search_panel", "hint.space.advanced-search"),
-        ch('?', "command_menu", "hint.space.all-commands"),
-        ch(' ', "page_down", "hint.space.page-down"),
-        key(Key::Backspace, "page_up", "hint.space.page-up"),
+        ch('f', NormalCmd::FilePicker, "hint.space.open-file"),
+        ch('F', NormalCmd::FilePickerInCurrentDirectory, "hint.space.open-file-here"),
+        ch('e', NormalCmd::FileExplorer, "hint.space.explorer"),
+        ch('E', NormalCmd::FileExplorerInCurrentBufferDirectory, "hint.space.explorer-here"),
+        ch('b', NormalCmd::BufferPicker, "hint.space.switch-buffer"),
+        ch('g', NormalCmd::ChangedFilePicker, "hint.space.changed-files"),
+        ch('y', NormalCmd::CopyToClipboard, "hint.space.copy-to-clipboard"),
+        ch('p', NormalCmd::PasteFromClipboard, "hint.space.paste-from-clipboard"),
+        ch('P', NormalCmd::PasteClipboardBefore, "hint.space.paste-before"),
+        ch('R', NormalCmd::ReplaceSelectionsWithClipboard, "hint.space.replace-from-clipboard"),
+        ch('s', NormalCmd::SymbolPicker, "hint.space.symbols"),
+        ch('S', NormalCmd::WorkspaceSymbolPicker, "hint.space.project-symbols"),
+        ch('n', NormalCmd::Dictionary, "hint.space.dictionary"),
+        ch('N', NormalCmd::DictionaryPanel, "hint.space.dictionary-panel"),
+        ch('k', NormalCmd::Hover, "hint.space.what-is-this"),
+        ch('K', NormalCmd::HoverPanel, "hint.space.what-is-this-panel"),
+        ch('d', NormalCmd::DiagnosticsPicker, "hint.space.diagnostics"),
+        ch('D', NormalCmd::WorkspaceDiagnosticsPicker, "hint.space.project-diagnostics"),
+        ch('l', NormalCmd::ShowDiagnostic, "hint.space.problems"),
+        ch('L', NormalCmd::ShowDiagnosticPanel, "hint.space.problems-panel"),
+        ch('x', NormalCmd::ShowChange, "hint.space.change"),
+        ch('X', NormalCmd::ShowChangePanel, "hint.space.change-panel"),
+        ch('r', NormalCmd::RenameSymbol, "hint.space.rename"),
+        ch('a', NormalCmd::CodeAction, "hint.space.actions"),
+        ch('i', NormalCmd::ShowRecord, "hint.space.record"),
+        ch('I', NormalCmd::ShowRecordPanel, "hint.space.record-panel"),
+        ch('w', NormalCmd::WindowMode, "hint.region.title"),
+        ch('t', NormalCmd::TableMode, "hint.space.table"),
+        ch('"', NormalCmd::PasteMenu, "menu.paste.title"),
+        ch('c', NormalCmd::CommentLine, "hint.space.comment-line"),
+        ch('C', NormalCmd::CommentBlock, "hint.space.comment-block"),
+        ch('m', NormalCmd::ConflictMode, "hint.conflict.title"),
+        ch('o', NormalCmd::OpenRecentMode, "hint.space.open-recent"),
+        ch('z', NormalCmd::YumeMode, "hint.space.yume"),
+        ch('/', NormalCmd::SearchPanel, "hint.space.advanced-search"),
+        ch('?', NormalCmd::CommandMenu, "hint.space.all-commands"),
+        ch(' ', NormalCmd::PageDown, "hint.space.page-down"),
+        key(Key::Backspace, NormalCmd::PageUp, "hint.space.page-up"),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -887,17 +888,17 @@ pub(super) static RIGHT_BRACKET: Group = Group {
     title: "hint.hop.next",
     path: "]",
     rows: &[
-        ch('m', "goto_next_conflict", "hint.hop.conflict"),
-        ch('g', "goto_next_change", "hint.hop.change"),
-        ch('d', "goto_next_diag", "hint.hop.problem"),
-        ch('D', "goto_last_diag", "hint.hop.problem"),
-        ch('f', "goto_next_function", "hint.hop.function").listed(Only::Code),
-        ch('t', "goto_next_class", "hint.hop.class").listed(Only::Code),
-        ch('c', "goto_next_comment", "hint.hop.comment").listed(Only::Code),
+        ch('m', NormalCmd::GotoNextConflict, "hint.hop.conflict"),
+        ch('g', NormalCmd::GotoNextChange, "hint.hop.change"),
+        ch('d', NormalCmd::GotoNextDiag, "hint.hop.problem"),
+        ch('D', NormalCmd::GotoLastDiag, "hint.hop.problem"),
+        ch('f', NormalCmd::GotoNextFunction, "hint.hop.function").listed(Only::Code),
+        ch('t', NormalCmd::GotoNextClass, "hint.hop.class").listed(Only::Code),
+        ch('c', NormalCmd::GotoNextComment, "hint.hop.comment").listed(Only::Code),
         // Warning: **段落那一行借的是 `:keymap-actions` 的名字**：同一件事在兩張
         // 表上，寫成兩句話只會讓它們慢慢說岔。
-        ch('p', "goto_next_paragraph", "action.goto-next-paragraph"),
-        ch(' ', "add_newline_below", "hint.hop.blank-below"),
+        ch('p', NormalCmd::GotoNextParagraph, "action.goto-next-paragraph"),
+        ch(' ', NormalCmd::AddNewlineBelow, "hint.hop.blank-below"),
     ],
     unknown: Unknown::NoSuchCombination,
     sticky: false,
@@ -912,15 +913,15 @@ pub(super) static LEFT_BRACKET: Group = Group {
     title: "hint.hop.previous",
     path: "[",
     rows: &[
-        ch('m', "goto_prev_conflict", "hint.hop.conflict"),
-        ch('g', "goto_prev_change", "hint.hop.change"),
-        ch('d', "goto_prev_diag", "hint.hop.problem"),
-        ch('D', "goto_first_diag", "hint.hop.problem"),
-        ch('f', "goto_prev_function", "hint.hop.function").listed(Only::Code),
-        ch('t', "goto_prev_class", "hint.hop.class").listed(Only::Code),
-        ch('c', "goto_prev_comment", "hint.hop.comment").listed(Only::Code),
-        ch('p', "goto_prev_paragraph", "action.goto-prev-paragraph"),
-        ch(' ', "add_newline_above", "hint.hop.blank-above"),
+        ch('m', NormalCmd::GotoPrevConflict, "hint.hop.conflict"),
+        ch('g', NormalCmd::GotoPrevChange, "hint.hop.change"),
+        ch('d', NormalCmd::GotoPrevDiag, "hint.hop.problem"),
+        ch('D', NormalCmd::GotoFirstDiag, "hint.hop.problem"),
+        ch('f', NormalCmd::GotoPrevFunction, "hint.hop.function").listed(Only::Code),
+        ch('t', NormalCmd::GotoPrevClass, "hint.hop.class").listed(Only::Code),
+        ch('c', NormalCmd::GotoPrevComment, "hint.hop.comment").listed(Only::Code),
+        ch('p', NormalCmd::GotoPrevParagraph, "action.goto-prev-paragraph"),
+        ch(' ', NormalCmd::AddNewlineAbove, "hint.hop.blank-above"),
     ],
     unknown: Unknown::NoSuchCombination,
     sticky: false,
@@ -933,26 +934,26 @@ pub(super) static LEFT_BRACKET: Group = Group {
 /// view keys. The menu lists the three this group is for; the scrolling and
 /// paging keys are helix's (`z j`, `z C-d`…) and answer without a line.
 const VIEW_ROWS: &[Row] = &[
-    ch('z', "align_view_center", "hint.aim.middle"),
-    quiet(Key::Char('c'), "align_view_center"),
-    ch('t', "align_view_top", "hint.aim.top"),
-    ch('b', "align_view_bottom", "hint.aim.bottom"),
-    quiet(Key::Char('j'), "scroll_down"),
-    quiet(Key::Down, "scroll_down"),
-    quiet(Key::Char('k'), "scroll_up"),
-    quiet(Key::Up, "scroll_up"),
-    quiet(Key::Ctrl('d'), "half_page_down"),
-    quiet(Key::Char(' '), "half_page_down"),
-    quiet(Key::Ctrl('u'), "half_page_up"),
-    quiet(Key::Backspace, "half_page_up"),
-    quiet(Key::Ctrl('f'), "page_down"),
-    quiet(Key::PageDown, "page_down"),
-    quiet(Key::Ctrl('b'), "page_up"),
-    quiet(Key::PageUp, "page_up"),
-    quiet(Key::Char('/'), "search"),
-    quiet(Key::Char('?'), "rsearch"),
-    quiet(Key::Char('n'), "search_next"),
-    quiet(Key::Char('N'), "search_prev"),
+    ch('z', NormalCmd::AlignViewCenter, "hint.aim.middle"),
+    quiet(Key::Char('c'), NormalCmd::AlignViewCenter),
+    ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
+    ch('b', NormalCmd::AlignViewBottom, "hint.aim.bottom"),
+    quiet(Key::Char('j'), NormalCmd::ScrollDown),
+    quiet(Key::Down, NormalCmd::ScrollDown),
+    quiet(Key::Char('k'), NormalCmd::ScrollUp),
+    quiet(Key::Up, NormalCmd::ScrollUp),
+    quiet(Key::Ctrl('d'), NormalCmd::HalfPageDown),
+    quiet(Key::Char(' '), NormalCmd::HalfPageDown),
+    quiet(Key::Ctrl('u'), NormalCmd::HalfPageUp),
+    quiet(Key::Backspace, NormalCmd::HalfPageUp),
+    quiet(Key::Ctrl('f'), NormalCmd::PageDown),
+    quiet(Key::PageDown, NormalCmd::PageDown),
+    quiet(Key::Ctrl('b'), NormalCmd::PageUp),
+    quiet(Key::PageUp, NormalCmd::PageUp),
+    quiet(Key::Char('/'), NormalCmd::Search),
+    quiet(Key::Char('?'), NormalCmd::Rsearch),
+    quiet(Key::Char('n'), NormalCmd::SearchNext),
+    quiet(Key::Char('N'), NormalCmd::SearchPrev),
 ];
 
 pub(super) static VIEW: Group = Group {
@@ -990,12 +991,12 @@ pub(super) static MATCH: Group = Group {
     title: "hint.match.title",
     path: "m",
     rows: &[
-        ch('m', "match_brackets", "hint.match.pair"),
-        ch('i', "select_textobject_inner", "hint.match.inside"),
-        ch('a', "select_textobject_around", "hint.match.around"),
-        ch('s', "surround_add", "hint.match.surround"),
-        ch('d', "surround_delete", "hint.match.take-off"),
-        ch('r', "surround_replace", "hint.change"),
+        ch('m', NormalCmd::MatchBrackets, "hint.match.pair"),
+        ch('i', NormalCmd::SelectTextobjectInner, "hint.match.inside"),
+        ch('a', NormalCmd::SelectTextobjectAround, "hint.match.around"),
+        ch('s', NormalCmd::SurroundAdd, "hint.match.surround"),
+        ch('d', NormalCmd::SurroundDelete, "hint.match.take-off"),
+        ch('r', NormalCmd::SurroundReplace, "hint.change"),
     ],
     unknown: Unknown::NoSuchCombination,
     sticky: false,
@@ -1016,26 +1017,26 @@ pub(super) static WINDOW: Group = Group {
     title: "hint.region.title",
     path: "\u{17}",
     rows: &[
-        ch('w', "next_region", "hint.region.next"),
-        ch('h', "jump_view_left", "hint.region.go"),
-        ch('j', "jump_view_down", "hint.region.go"),
-        ch('k', "jump_view_up", "hint.region.go"),
-        ch('l', "jump_view_right", "hint.region.go"),
-        quiet(Key::Left, "jump_view_left"),
-        quiet(Key::Down, "jump_view_down"),
-        quiet(Key::Up, "jump_view_up"),
-        quiet(Key::Right, "jump_view_right"),
-        ch('e', "toggle_left_sidebar", "hint.region.toggle-bar"),
-        ch('i', "toggle_right_sidebar", "hint.region.toggle-bar"),
-        ch('E', "goto_left_sidebar", "hint.region.into-bar"),
-        ch('I', "goto_right_sidebar", "hint.region.into-bar"),
-        ch('s', "hsplit", "hint.region.split"),
-        ch('v', "vsplit", "hint.region.split-beside"),
+        ch('w', NormalCmd::NextRegion, "hint.region.next"),
+        ch('h', NormalCmd::JumpViewLeft, "hint.region.go"),
+        ch('j', NormalCmd::JumpViewDown, "hint.region.go"),
+        ch('k', NormalCmd::JumpViewUp, "hint.region.go"),
+        ch('l', NormalCmd::JumpViewRight, "hint.region.go"),
+        quiet(Key::Left, NormalCmd::JumpViewLeft),
+        quiet(Key::Down, NormalCmd::JumpViewDown),
+        quiet(Key::Up, NormalCmd::JumpViewUp),
+        quiet(Key::Right, NormalCmd::JumpViewRight),
+        ch('e', NormalCmd::ToggleLeftSidebar, "hint.region.toggle-bar"),
+        ch('i', NormalCmd::ToggleRightSidebar, "hint.region.toggle-bar"),
+        ch('E', NormalCmd::GotoLeftSidebar, "hint.region.into-bar"),
+        ch('I', NormalCmd::GotoRightSidebar, "hint.region.into-bar"),
+        ch('s', NormalCmd::Hsplit, "hint.region.split"),
+        ch('v', NormalCmd::Vsplit, "hint.region.split-beside"),
         // vim's `C-w n` is the blank window below; helix's is a group.
-        ch('n', "hsplit_new", "hint.region.new").when(Only::Vim),
-        ch('n', "window_new_mode", "hint.region.new"),
-        ch('q', "wclose", "hint.region.close"),
-        ch('o', "wonly", "hint.region.only"),
+        ch('n', NormalCmd::HsplitNew, "hint.region.new").when(Only::Vim),
+        ch('n', NormalCmd::WindowNewMode, "hint.region.new"),
+        ch('q', NormalCmd::Wclose, "hint.region.close"),
+        ch('o', NormalCmd::Wonly, "hint.region.only"),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -1051,8 +1052,8 @@ pub(super) static WINDOW_NEW: Group = Group {
     title: "hint.region.new",
     path: "\u{17}n",
     rows: &[
-        ch('s', "hsplit_new", "hint.region.new-below"),
-        ch('v', "vsplit_new", "hint.region.new-beside"),
+        ch('s', NormalCmd::HsplitNew, "hint.region.new-below"),
+        ch('v', NormalCmd::VsplitNew, "hint.region.new-beside"),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -1073,18 +1074,18 @@ pub(super) static CASE: Group = Group {
     title: "hint.case.title",
     path: "`",
     rows: &[
-        ch('l', "switch_to_lowercase", "hint.case.lower"),
-        ch('u', "switch_to_uppercase", "hint.case.upper"),
-        ch('`', "switch_case", "hint.case.switch"),
-        ch('s', "convert_to_simplified", "hint.case.to-s"),
-        ch('t', "convert_to_traditional", "hint.case.to-t"),
-        ch('w', "convert_to_taiwan_traditional", "hint.case.to-tw"),
-        ch('f', "switch_to_fullwidth", "hint.case.to-full"),
-        ch('h', "switch_to_halfwidth", "hint.case.to-half"),
-        ch('k', "convert_to_hong_kong_traditional", "hint.case.to-hk"),
-        ch('c', "convert_to_mainland_traditional", "hint.case.to-c"),
-        ch('g', "convert_to_classical_traditional", "hint.case.to-g"),
-        ch('j', "convert_to_japanese", "hint.case.to-jp"),
+        ch('l', NormalCmd::SwitchToLowercase, "hint.case.lower"),
+        ch('u', NormalCmd::SwitchToUppercase, "hint.case.upper"),
+        ch('`', NormalCmd::SwitchCase, "hint.case.switch"),
+        ch('s', NormalCmd::ConvertToSimplified, "hint.case.to-s"),
+        ch('t', NormalCmd::ConvertToTraditional, "hint.case.to-t"),
+        ch('w', NormalCmd::ConvertToTaiwanTraditional, "hint.case.to-tw"),
+        ch('f', NormalCmd::SwitchToFullwidth, "hint.case.to-full"),
+        ch('h', NormalCmd::SwitchToHalfwidth, "hint.case.to-half"),
+        ch('k', NormalCmd::ConvertToHongKongTraditional, "hint.case.to-hk"),
+        ch('c', NormalCmd::ConvertToMainlandTraditional, "hint.case.to-c"),
+        ch('g', NormalCmd::ConvertToClassicalTraditional, "hint.case.to-g"),
+        ch('j', NormalCmd::ConvertToJapanese, "hint.case.to-jp"),
         note("", "hint.vi.backtick"),
     ],
     unknown: Unknown::NoSuchCombination,
@@ -1101,9 +1102,9 @@ pub(super) static CONFLICT: Group = Group {
     title: "hint.conflict.title",
     path: " m",
     rows: &[
-        ch('o', "conflict_keep_ours", "hint.conflict.ours"),
-        ch('t', "conflict_keep_theirs", "hint.conflict.theirs"),
-        ch('b', "conflict_keep_both", "hint.conflict.both"),
+        ch('o', NormalCmd::ConflictKeepOurs, "hint.conflict.ours"),
+        ch('t', NormalCmd::ConflictKeepTheirs, "hint.conflict.theirs"),
+        ch('b', NormalCmd::ConflictKeepBoth, "hint.conflict.both"),
     ],
     unknown: Unknown::NoSuchCombination,
     sticky: false,
@@ -1124,10 +1125,10 @@ pub(super) static OPEN: Group = Group {
     title: "hint.open.title",
     path: " o",
     rows: &[
-        ch('f', "recent_file_picker", "hint.open.recent-files"),
-        ch('g', "global_recent_file_picker", "hint.open.recent-files-global"),
-        ch('p', "project_picker", "hint.open.recent-projects"),
-        ch('r', "resume_session", "hint.open.resume"),
+        ch('f', NormalCmd::RecentFilePicker, "hint.open.recent-files"),
+        ch('g', NormalCmd::GlobalRecentFilePicker, "hint.open.recent-files-global"),
+        ch('p', NormalCmd::ProjectPicker, "hint.open.recent-projects"),
+        ch('r', NormalCmd::ResumeSession, "hint.open.resume"),
     ],
     unknown: Unknown::NoSuchCombination,
     sticky: false,
@@ -1154,24 +1155,24 @@ pub(super) static YUME: Group = Group {
     title: "hint.yume.title",
     path: " z",
     rows: &[
-        ch('z', "yume_toggle", "hint.yume.toggle"),
-        ch('m', "yume_commit_mode", "hint.yume.commit"),
-        ch('p', "yume_panel_mode", "hint.yume.panel"),
-        ch('e', "yume_preedit_mode", "hint.yume.preedit"),
-        ch('y', "yume_toggle_prediction", "hint.yume.predict"),
-        ch('i', "yume_pick_scheme", "hint.yume.scheme"),
-        ch('n', "yume_next_scheme", "hint.yume.next-scheme"),
-        ch('3', "yume_menu_size_3", "hint.yume.menu-size"),
-        ch('4', "yume_menu_size_4", "hint.yume.menu-size"),
-        ch('5', "yume_menu_size_5", "hint.yume.menu-size"),
-        ch('6', "yume_menu_size_6", "hint.yume.menu-size"),
-        ch('7', "yume_menu_size_7", "hint.yume.menu-size"),
-        ch('8', "yume_menu_size_8", "hint.yume.menu-size"),
-        ch('9', "yume_menu_size_9", "hint.yume.menu-size"),
-        ch('/', "yume_toggle_chaifen", "hint.yume.chaifen"),
-        ch('t', "yume_installed_table", "hint.yume.table"),
-        ch('w', "yume_table_source", "hint.yume.which"),
-        ch('W', "yume_data_location", "hint.yume.where"),
+        ch('z', NormalCmd::YumeToggle, "hint.yume.toggle"),
+        ch('m', NormalCmd::YumeCommitMode, "hint.yume.commit"),
+        ch('p', NormalCmd::YumePanelMode, "hint.yume.panel"),
+        ch('e', NormalCmd::YumePreeditMode, "hint.yume.preedit"),
+        ch('y', NormalCmd::YumeTogglePrediction, "hint.yume.predict"),
+        ch('i', NormalCmd::YumePickScheme, "hint.yume.scheme"),
+        ch('n', NormalCmd::YumeNextScheme, "hint.yume.next-scheme"),
+        ch('3', NormalCmd::YumeMenuSize3, "hint.yume.menu-size"),
+        ch('4', NormalCmd::YumeMenuSize4, "hint.yume.menu-size"),
+        ch('5', NormalCmd::YumeMenuSize5, "hint.yume.menu-size"),
+        ch('6', NormalCmd::YumeMenuSize6, "hint.yume.menu-size"),
+        ch('7', NormalCmd::YumeMenuSize7, "hint.yume.menu-size"),
+        ch('8', NormalCmd::YumeMenuSize8, "hint.yume.menu-size"),
+        ch('9', NormalCmd::YumeMenuSize9, "hint.yume.menu-size"),
+        ch('/', NormalCmd::YumeToggleChaifen, "hint.yume.chaifen"),
+        ch('t', NormalCmd::YumeInstalledTable, "hint.yume.table"),
+        ch('w', NormalCmd::YumeTableSource, "hint.yume.which"),
+        ch('W', NormalCmd::YumeDataLocation, "hint.yume.where"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
     sticky: false,
@@ -1187,10 +1188,10 @@ pub(super) static YUME_COMMIT: Group = Group {
     title: "hint.yume.title",
     path: " zm",
     rows: &[
-        ch('0', "yume_commit_default", "hint.yume.commit-default"),
-        ch('d', "yume_commit_delayed", "hint.yume.commit-delayed"),
-        ch('u', "yume_commit_unique", "hint.yume.commit-unique"),
-        ch('f', "yume_commit_fluency", "hint.yume.commit-fluency"),
+        ch('0', NormalCmd::YumeCommitDefault, "hint.yume.commit-default"),
+        ch('d', NormalCmd::YumeCommitDelayed, "hint.yume.commit-delayed"),
+        ch('u', NormalCmd::YumeCommitUnique, "hint.yume.commit-unique"),
+        ch('f', NormalCmd::YumeCommitFluency, "hint.yume.commit-fluency"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
     sticky: false,
@@ -1205,9 +1206,9 @@ pub(super) static YUME_PANEL: Group = Group {
     title: "hint.yume.title",
     path: " zp",
     rows: &[
-        ch('b', "yume_panel_box", "hint.yume.panel-box"),
-        ch('m', "yume_panel_bottom", "hint.yume.panel-bottom"),
-        ch('i', "yume_panel_inline", "hint.yume.panel-inline"),
+        ch('b', NormalCmd::YumePanelBox, "hint.yume.panel-box"),
+        ch('m', NormalCmd::YumePanelBottom, "hint.yume.panel-bottom"),
+        ch('i', NormalCmd::YumePanelInline, "hint.yume.panel-inline"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
     sticky: false,
@@ -1222,9 +1223,9 @@ pub(super) static YUME_PREEDIT: Group = Group {
     title: "hint.yume.title",
     path: " ze",
     rows: &[
-        ch('o', "yume_preedit_off", "hint.yume.preedit-off"),
-        ch('c', "yume_preedit_composition", "hint.yume.preedit-composition"),
-        ch('p', "yume_preedit_preview", "hint.yume.preedit-preview"),
+        ch('o', NormalCmd::YumePreeditOff, "hint.yume.preedit-off"),
+        ch('c', NormalCmd::YumePreeditComposition, "hint.yume.preedit-composition"),
+        ch('p', NormalCmd::YumePreeditPreview, "hint.yume.preedit-preview"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
     sticky: false,
@@ -1259,68 +1260,68 @@ pub(super) static TABLE: Group = Group {
     title: "hint.table.title",
     path: " t",
     rows: &[
-        ch('o', "table_source_view", "hint.table.back-to-prose"),
-        ch('b', "table_basic_view", "hint.table.operate-it"),
-        ch('t', "table_window_view", "hint.table.whole-window"),
-        ch('q', "table_leave_window", "hint.table.leave-the-window"),
-        ch(']', "goto_next_table", "hint.table.next-or-previous"),
-        ch('[', "goto_prev_table", "hint.table.next-or-previous"),
+        ch('o', NormalCmd::TableSourceView, "hint.table.back-to-prose"),
+        ch('b', NormalCmd::TableBasicView, "hint.table.operate-it"),
+        ch('t', NormalCmd::TableWindowView, "hint.table.whole-window"),
+        ch('q', NormalCmd::TableLeaveWindow, "hint.table.leave-the-window"),
+        ch(']', NormalCmd::GotoNextTable, "hint.table.next-or-previous"),
+        ch('[', NormalCmd::GotoPrevTable, "hint.table.next-or-previous"),
         // 2026-10-02 定：命令是 `:convert-table`，鍵位摺在這一組底下。
-        ch('x', "table_convert_mode", "hint.table.convert"),
-        ch('w', "table_cell_width", "hint.table.fold-wide-cells").listed(Only::Pane),
+        ch('x', NormalCmd::TableConvertMode, "hint.table.convert"),
+        ch('w', NormalCmd::TableCellWidth, "hint.table.fold-wide-cells").listed(Only::Pane),
         // In a fenced block.
-        ch('/', "table_search_columns", "hint.table.search-columns").listed(Only::Block),
-        ch('?', "table_search_columns_other_window", "hint.table.search-columns-elsewhere").listed(Only::Block),
-        ch('g', "table_goto_cell", "hint.table.go-to-cell").listed(Only::Block),
-        ch('y', "table_yank_column", "hint.table.yank-or-replace-column").listed(Only::Block),
-        ch('v', "table_replace_column", "hint.table.yank-or-replace-column").listed(Only::Block),
+        ch('/', NormalCmd::TableSearchColumns, "hint.table.search-columns").listed(Only::Block),
+        ch('?', NormalCmd::TableSearchColumnsOtherWindow, "hint.table.search-columns-elsewhere").listed(Only::Block),
+        ch('g', NormalCmd::TableGotoCell, "hint.table.go-to-cell").listed(Only::Block),
+        ch('y', NormalCmd::TableYankColumn, "hint.table.yank-or-replace-column").listed(Only::Block),
+        ch('v', NormalCmd::TableReplaceColumn, "hint.table.yank-or-replace-column").listed(Only::Block),
         note("1s 1S", "hint.table.sort-by-column").listed(Only::Block),
         // In a Markdown table.
-        ch('/', "table_search_columns", "hint.table.search-columns").listed(Only::Md),
-        ch('?', "table_search_columns_other_window", "hint.table.search-columns-elsewhere").listed(Only::Md),
-        ch('g', "table_goto_cell", "hint.table.go-to-cell").listed(Only::Md),
-        ch('r', "table_add_row_below", "hint.table.add-row").listed(Only::Md),
-        ch('R', "table_add_row_above", "hint.table.add-row").listed(Only::Md),
-        ch('c', "table_add_column_right", "hint.table.add-column").listed(Only::Md),
-        ch('C', "table_add_column_left", "hint.table.add-column").listed(Only::Md),
-        ch('d', "table_delete_row", "hint.table.delete-row-or-column").listed(Only::Md),
-        ch('D', "table_delete_column", "hint.table.delete-row-or-column").listed(Only::Md),
-        ch('j', "table_move_row_down", "hint.table.move-row").listed(Only::Md),
-        ch('k', "table_move_row_up", "hint.table.move-row").listed(Only::Md),
-        ch('h', "table_move_column_left", "hint.table.move-column").listed(Only::Md),
-        ch('l', "table_move_column_right", "hint.table.move-column").listed(Only::Md),
-        ch('y', "table_yank_column", "hint.table.yank-or-paste-column").listed(Only::Md),
-        ch('p', "table_paste_column_right", "hint.table.yank-or-paste-column").listed(Only::Md),
-        ch('P', "table_paste_column_left", "hint.table.yank-or-paste-column").listed(Only::Md),
-        ch('v', "table_replace_column", "hint.table.replace-column").listed(Only::Md),
+        ch('/', NormalCmd::TableSearchColumns, "hint.table.search-columns").listed(Only::Md),
+        ch('?', NormalCmd::TableSearchColumnsOtherWindow, "hint.table.search-columns-elsewhere").listed(Only::Md),
+        ch('g', NormalCmd::TableGotoCell, "hint.table.go-to-cell").listed(Only::Md),
+        ch('r', NormalCmd::TableAddRowBelow, "hint.table.add-row").listed(Only::Md),
+        ch('R', NormalCmd::TableAddRowAbove, "hint.table.add-row").listed(Only::Md),
+        ch('c', NormalCmd::TableAddColumnRight, "hint.table.add-column").listed(Only::Md),
+        ch('C', NormalCmd::TableAddColumnLeft, "hint.table.add-column").listed(Only::Md),
+        ch('d', NormalCmd::TableDeleteRow, "hint.table.delete-row-or-column").listed(Only::Md),
+        ch('D', NormalCmd::TableDeleteColumn, "hint.table.delete-row-or-column").listed(Only::Md),
+        ch('j', NormalCmd::TableMoveRowDown, "hint.table.move-row").listed(Only::Md),
+        ch('k', NormalCmd::TableMoveRowUp, "hint.table.move-row").listed(Only::Md),
+        ch('h', NormalCmd::TableMoveColumnLeft, "hint.table.move-column").listed(Only::Md),
+        ch('l', NormalCmd::TableMoveColumnRight, "hint.table.move-column").listed(Only::Md),
+        ch('y', NormalCmd::TableYankColumn, "hint.table.yank-or-paste-column").listed(Only::Md),
+        ch('p', NormalCmd::TablePasteColumnRight, "hint.table.yank-or-paste-column").listed(Only::Md),
+        ch('P', NormalCmd::TablePasteColumnLeft, "hint.table.yank-or-paste-column").listed(Only::Md),
+        ch('v', NormalCmd::TableReplaceColumn, "hint.table.replace-column").listed(Only::Md),
         note("1s 1S", "hint.table.sort-by-column").listed(Only::Md),
-        ch('<', "table_align_left", "hint.table.align-column").listed(Only::Md),
-        ch('=', "table_align_center", "hint.table.align-column").listed(Only::Md),
-        ch('>', "table_align_right", "hint.table.align-column").listed(Only::Md),
+        ch('<', NormalCmd::TableAlignLeft, "hint.table.align-column").listed(Only::Md),
+        ch('=', NormalCmd::TableAlignCenter, "hint.table.align-column").listed(Only::Md),
+        ch('>', NormalCmd::TableAlignRight, "hint.table.align-column").listed(Only::Md),
         // `F`, not `f`: the lowercase letter was 完整表格 (#283), and a
         // capital is what a command that rewrites every row should have.
-        ch('F', "table_line_up", "hint.table.line-it-up").listed(Only::Md),
-        ch('i', "table_record_panel", "hint.table.detail-panel").listed(Only::Md),
+        ch('F', NormalCmd::TableLineUp, "hint.table.line-it-up").listed(Only::Md),
+        ch('i', NormalCmd::TableRecordPanel, "hint.table.detail-panel").listed(Only::Md),
         // In a delimited file.
-        ch('/', "table_search_columns", "hint.table.search-columns").listed(Only::File),
-        ch('?', "table_search_columns_other_window", "hint.table.search-columns-elsewhere").listed(Only::File),
-        ch('g', "table_goto_cell", "hint.table.go-to-cell").listed(Only::File),
+        ch('/', NormalCmd::TableSearchColumns, "hint.table.search-columns").listed(Only::File),
+        ch('?', NormalCmd::TableSearchColumnsOtherWindow, "hint.table.search-columns-elsewhere").listed(Only::File),
+        ch('g', NormalCmd::TableGotoCell, "hint.table.go-to-cell").listed(Only::File),
         note("1s 1S", "hint.table.sort-by-column").listed(Only::File),
-        ch('r', "table_add_row_below", "hint.table.add-row").listed(Only::File),
-        ch('R', "table_add_row_above", "hint.table.add-row").listed(Only::File),
-        ch('d', "table_delete_row", "hint.table.delete-row").listed(Only::File),
-        ch('j', "table_move_row_down", "hint.table.move-row").listed(Only::File),
-        ch('k', "table_move_row_up", "hint.table.move-row").listed(Only::File),
-        ch('y', "table_yank_column", "hint.table.yank-or-paste-column").listed(Only::File),
-        ch('p', "table_paste_column_right", "hint.table.yank-or-paste-column").listed(Only::File),
-        ch('P', "table_paste_column_left", "hint.table.yank-or-paste-column").listed(Only::File),
-        ch('v', "table_replace_column", "hint.table.replace-column").listed(Only::File),
-        ch('H', "table_first_row_is_data", "hint.table.first-row-is-data").listed(Only::File),
-        ch('i', "table_record_panel", "hint.table.detail-panel").listed(Only::File),
+        ch('r', NormalCmd::TableAddRowBelow, "hint.table.add-row").listed(Only::File),
+        ch('R', NormalCmd::TableAddRowAbove, "hint.table.add-row").listed(Only::File),
+        ch('d', NormalCmd::TableDeleteRow, "hint.table.delete-row").listed(Only::File),
+        ch('j', NormalCmd::TableMoveRowDown, "hint.table.move-row").listed(Only::File),
+        ch('k', NormalCmd::TableMoveRowUp, "hint.table.move-row").listed(Only::File),
+        ch('y', NormalCmd::TableYankColumn, "hint.table.yank-or-paste-column").listed(Only::File),
+        ch('p', NormalCmd::TablePasteColumnRight, "hint.table.yank-or-paste-column").listed(Only::File),
+        ch('P', NormalCmd::TablePasteColumnLeft, "hint.table.yank-or-paste-column").listed(Only::File),
+        ch('v', NormalCmd::TableReplaceColumn, "hint.table.replace-column").listed(Only::File),
+        ch('H', NormalCmd::TableFirstRowIsData, "hint.table.first-row-is-data").listed(Only::File),
+        ch('i', NormalCmd::TableRecordPanel, "hint.table.detail-panel").listed(Only::File),
         // The sort keys take their columns from the count typed before them
         // (`Space t 1s`), so the menu says them as a note above.
-        quiet(Key::Char('s'), "table_sort_ascending"),
-        quiet(Key::Char('S'), "table_sort_descending"),
+        quiet(Key::Char('s'), NormalCmd::TableSortAscending),
+        quiet(Key::Char('S'), NormalCmd::TableSortDescending),
     ],
     unknown: Unknown::Hand(Editor::table_structure),
     sticky: false,
@@ -1341,12 +1342,12 @@ pub(super) static TABLE_CONVERT: Group = Group {
     title: "hint.table.convert",
     path: " tx",
     rows: &[
-        ch('p', "convert_table_to_pipe", "hint.table.convert-pipe"),
-        ch('P', "paste_table_as_pipe", "hint.table.convert-pipe"),
-        ch('c', "convert_table_to_csv", "hint.table.convert-csv"),
-        ch('C', "paste_table_as_csv", "hint.table.convert-csv"),
-        ch('t', "convert_table_to_tsv", "hint.table.convert-tsv"),
-        ch('T', "paste_table_as_tsv", "hint.table.convert-tsv"),
+        ch('p', NormalCmd::ConvertTableToPipe, "hint.table.convert-pipe"),
+        ch('P', NormalCmd::PasteTableAsPipe, "hint.table.convert-pipe"),
+        ch('c', NormalCmd::ConvertTableToCsv, "hint.table.convert-csv"),
+        ch('C', NormalCmd::PasteTableAsCsv, "hint.table.convert-csv"),
+        ch('t', NormalCmd::ConvertTableToTsv, "hint.table.convert-tsv"),
+        ch('T', NormalCmd::PasteTableAsTsv, "hint.table.convert-tsv"),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -1390,11 +1391,11 @@ mod tests {
         for group in GROUPS {
             for bind in group.binds() {
                 assert!(super::super::normal::normal_command(bind.run).is_some(), "{}: {} is no command", group.name, bind.run);
-                assert!(bindable.contains(&bind.run), "{}: {} is not bindable", group.name, bind.run);
+                assert!(bindable.contains(&bind.run.name()), "{}: {} is not bindable", group.name, bind.run);
             }
         }
         for (name, _, _) in super::super::group_commands::GROUP_COMMANDS {
-            assert!(bindable.contains(name), "{name} is not bindable");
+            assert!(bindable.contains(&name.name()), "{name} is not bindable");
         }
     }
 

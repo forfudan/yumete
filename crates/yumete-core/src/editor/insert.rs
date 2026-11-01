@@ -13,6 +13,7 @@
 
 use super::normal::NormalCommand;
 use super::*;
+use yumete_cjk::actions::NormalCmd;
 use crate::input::Key;
 use crate::motion;
 
@@ -21,67 +22,67 @@ type InsertWhen = Option<fn(&Editor) -> bool>;
 
 /// Insert mode's default keymap: a key, the command it runs, and where it
 /// holds (the vim preset's `C-o`).
-pub(super) const INSERT_KEYS: &[(Key, &str, InsertWhen)] = &[
-    (Key::Esc, "normal_mode", None),
-    (Key::Enter, "insert_newline", None),
-    (Key::Ctrl('j'), "insert_newline", None),
-    (Key::Backspace, "delete_char_backward", None),
-    (Key::Ctrl('h'), "delete_char_backward", None),
-    (Key::Delete, "delete_char_forward", None),
-    (Key::Ctrl('d'), "delete_char_forward", None),
-    (Key::Alt('d'), "delete_word_forward", None),
-    (Key::Ctrl('w'), "delete_word_backward", None),
-    (Key::Ctrl('u'), "vim_kill_to_line_start", Some(|e| e.vim_keymap())),
-    (Key::Ctrl('k'), "vim_kill_to_line_end", Some(|e| e.vim_keymap())),
-    (Key::Ctrl('u'), "kill_to_line_start", None),
-    (Key::Ctrl('k'), "kill_to_line_end", None),
-    (Key::Ctrl('r'), "insert_register", None),
-    (Key::Ctrl('o'), "run_one_normal_command", Some(|e| e.vim_keymap())),
-    (Key::Left, "move_char_left", None),
-    (Key::Right, "move_char_right", None),
-    (Key::Up, "move_visual_line_up", None),
-    (Key::Down, "move_visual_line_down", None),
-    (Key::PageUp, "page_up", None),
-    (Key::PageDown, "page_down", None),
-    (Key::Home, "goto_line_start", None),
-    (Key::Ctrl('a'), "goto_line_start", None),
-    (Key::End, "goto_line_end_newline", None),
-    (Key::Ctrl('e'), "goto_line_end_newline", None),
+pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
+    (Key::Esc, NormalCmd::NormalMode, None),
+    (Key::Enter, NormalCmd::InsertNewline, None),
+    (Key::Ctrl('j'), NormalCmd::InsertNewline, None),
+    (Key::Backspace, NormalCmd::DeleteCharBackward, None),
+    (Key::Ctrl('h'), NormalCmd::DeleteCharBackward, None),
+    (Key::Delete, NormalCmd::DeleteCharForward, None),
+    (Key::Ctrl('d'), NormalCmd::DeleteCharForward, None),
+    (Key::Alt('d'), NormalCmd::DeleteWordForward, None),
+    (Key::Ctrl('w'), NormalCmd::DeleteWordBackward, None),
+    (Key::Ctrl('u'), NormalCmd::VimKillToLineStart, Some(|e| e.vim_keymap())),
+    (Key::Ctrl('k'), NormalCmd::VimKillToLineEnd, Some(|e| e.vim_keymap())),
+    (Key::Ctrl('u'), NormalCmd::KillToLineStart, None),
+    (Key::Ctrl('k'), NormalCmd::KillToLineEnd, None),
+    (Key::Ctrl('r'), NormalCmd::InsertRegister, None),
+    (Key::Ctrl('o'), NormalCmd::RunOneNormalCommand, Some(|e| e.vim_keymap())),
+    (Key::Left, NormalCmd::MoveCharLeft, None),
+    (Key::Right, NormalCmd::MoveCharRight, None),
+    (Key::Up, NormalCmd::MoveVisualLineUp, None),
+    (Key::Down, NormalCmd::MoveVisualLineDown, None),
+    (Key::PageUp, NormalCmd::PageUp, None),
+    (Key::PageDown, NormalCmd::PageDown, None),
+    (Key::Home, NormalCmd::GotoLineStart, None),
+    (Key::Ctrl('a'), NormalCmd::GotoLineStart, None),
+    (Key::End, NormalCmd::GotoLineEndNewline, None),
+    (Key::Ctrl('e'), NormalCmd::GotoLineEndNewline, None),
     // vim's `C-g u` (helix's `C-s`, which a terminal takes for XOFF).
-    (Key::Ctrl('g'), "commit_undo_checkpoint", None),
-    (Key::Tab, "insert_tab", None),
-    (Key::BackTab, "insert_other_tab", None),
+    (Key::Ctrl('g'), NormalCmd::CommitUndoCheckpoint, None),
+    (Key::Tab, NormalCmd::InsertTab, None),
+    (Key::BackTab, NormalCmd::InsertOtherTab, None),
 ];
 
 /// **The commands only Insert mode's keys run.** Bound in Normal mode they
 /// do the same thing there (`insert_newline` writes a line break).
 pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
-    ("insert_newline", |e, _| e.insert_newline(), Key::Enter),
-    ("delete_char_forward", |e, _| e.delete_at_cursor(), Key::Delete),
-    ("delete_word_forward", |e, _| e.delete_word_after_cursor(), Key::Alt('d')),
-    ("delete_word_backward", |e, _| e.delete_word_before_cursor(), Key::Ctrl('w')),
-    ("kill_to_line_start", |e, _| e.acting(false, |e| e.delete_to_line_start()), Key::Ctrl('u')),
-    ("kill_to_line_end", |e, _| e.acting(false, |e| e.delete_to_line_end()), Key::Ctrl('k')),
+    (NormalCmd::InsertNewline, |e, _| e.insert_newline(), Key::Enter),
+    (NormalCmd::DeleteCharForward, |e, _| e.delete_at_cursor(), Key::Delete),
+    (NormalCmd::DeleteWordForward, |e, _| e.delete_word_after_cursor(), Key::Alt('d')),
+    (NormalCmd::DeleteWordBackward, |e, _| e.delete_word_before_cursor(), Key::Ctrl('w')),
+    (NormalCmd::KillToLineStart, |e, _| e.acting(false, |e| e.delete_to_line_start()), Key::Ctrl('u')),
+    (NormalCmd::KillToLineEnd, |e, _| e.acting(false, |e| e.delete_to_line_end()), Key::Ctrl('k')),
     // vim's: `C-u` back to where this Insert began, `C-k` never the break.
-    ("vim_kill_to_line_start", |e, _| e.acting(true, |e| e.delete_to_line_start()), Key::Ctrl('u')),
-    ("vim_kill_to_line_end", |e, _| e.acting(true, |e| e.delete_to_line_end()), Key::Ctrl('k')),
-    ("insert_register", |e, _| e.pending = Pending::Register, Key::Ctrl('r')),
+    (NormalCmd::VimKillToLineStart, |e, _| e.acting(true, |e| e.delete_to_line_start()), Key::Ctrl('u')),
+    (NormalCmd::VimKillToLineEnd, |e, _| e.acting(true, |e| e.delete_to_line_end()), Key::Ctrl('k')),
+    (NormalCmd::InsertRegister, |e, _| e.pending = Pending::Register, Key::Ctrl('r')),
     // vim's `i_CTRL-O`: one Normal-mode command, then back.
-    ("run_one_normal_command", |e, _| {
+    (NormalCmd::RunOneNormalCommand, |e, _| {
         e.one_normal_key = Some(Mode::Insert);
         e.mode = Mode::Normal;
     }, Key::Ctrl('o')),
-    ("goto_line_end_newline", |e, _| {
+    (NormalCmd::GotoLineEndNewline, |e, _| {
         let pos = motion::line_end(e.current_buffer().rope(), e.sel.head());
         e.set_cursor(pos);
     }, Key::End),
-    ("commit_undo_checkpoint", |e, _| {
+    (NormalCmd::CommitUndoCheckpoint, |e, _| {
         e.snapshot();
         e.pending = Pending::UndoBreak;
         e.set_status(say!("edit.undo-break"));
     }, Key::Ctrl('g')),
-    ("insert_tab", |e, _| e.insert_indent(true), Key::Tab),
-    ("insert_other_tab", |e, _| e.insert_indent(false), Key::BackTab),
+    (NormalCmd::InsertTab, |e, _| e.insert_indent(true), Key::Tab),
+    (NormalCmd::InsertOtherTab, |e, _| e.insert_indent(false), Key::BackTab),
 ];
 
 impl Editor {
@@ -90,7 +91,7 @@ impl Editor {
         INSERT_KEYS
             .iter()
             .find(|(k, _, when)| *k == key && when.is_none_or(|holds| holds(self)))
-            .map(|(_, name, _)| *name)
+            .map(|(_, name, _)| name.name())
     }
 
     /// **The reader's `[keys.insert]`, asked first** (2026-10-31): `true`

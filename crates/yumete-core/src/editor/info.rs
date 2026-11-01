@@ -24,6 +24,7 @@
 //! | 有没有東西可畫 | [`Editor::info_has_body`] | 不存 |
 
 use super::*;
+use yumete_cjk::actions::NormalCmd;
 use crate::sidebar::{Info, Side, View};
 
 impl Editor {
@@ -348,13 +349,13 @@ impl Editor {
         // 器），改動那一格又落在記錄的 `I` 上——命令行說的那個鍵按下去是**另
         // 一扇**。現在問那一則的命令此刻在哪個鍵上，連使用者自己改過的也算。
         let name = match self.info_now() {
-            Some(Info::Dictionary) => "dictionary_panel",
-            Some(Info::Wiki | Info::Docs) => "hover_panel",
-            Some(Info::Problems) => "show_diagnostic_panel",
-            Some(Info::Change) => "show_change_panel",
-            _ => "show_record_panel",
+            Some(Info::Dictionary) => NormalCmd::DictionaryPanel,
+            Some(Info::Wiki | Info::Docs) => NormalCmd::HoverPanel,
+            Some(Info::Problems) => NormalCmd::ShowDiagnosticPanel,
+            Some(Info::Change) => NormalCmd::ShowChangePanel,
+            _ => NormalCmd::ShowRecordPanel,
         };
-        self.normal_keys_for(name)
+        self.normal_keys_for(name.name())
             .map(|run| run.chars().map(|c| super::places::hint_key(super::keys::pressed(c))).collect())
             .unwrap_or_default()
     }

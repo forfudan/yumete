@@ -6,6 +6,7 @@
 //! written in.
 
 use super::*;
+use yumete_cjk::actions::NormalCmd;
 
 /// The goal column vim's `$` leaves: past any line's end. Compared with,
 /// never added to, so it cannot overflow.
@@ -1071,7 +1072,7 @@ impl Editor {
     fn motion_bound_to(&self, c: char) -> Option<&'static str> {
         let commands = self.aliases().get(&c.to_string())?;
         let [one] = commands.as_slice() else { return None };
-        MOTION_STEPS.iter().find(|(name, _)| name == one).map(|(_, spelled)| *spelled)
+        MOTION_STEPS.iter().find(|(name, _)| name.name() == one).map(|(_, spelled)| *spelled)
     }
 
     fn run_vim_line(&mut self, op: char) {
@@ -2476,47 +2477,47 @@ impl Editor {
 /// command's name and how vim spells it after `d` (the table in
 /// [`crate::vim::step_for`] is vim's operator-pending keymap). Helix's names
 /// for the same motions take them too.
-pub(super) const MOTION_STEPS: &[(&str, &str)] = &[
-    ("jump_next_word_start", "w"),
-    ("move_next_word_start", "w"),
-    ("jump_next_long_word_start", "W"),
-    ("move_next_long_word_start", "W"),
-    ("jump_prev_word_start", "b"),
-    ("move_prev_word_start", "b"),
-    ("jump_prev_long_word_start", "B"),
-    ("move_prev_long_word_start", "B"),
-    ("jump_next_word_end", "e"),
-    ("move_next_word_end", "e"),
-    ("jump_next_long_word_end", "E"),
-    ("move_next_long_word_end", "E"),
-    ("jump_prev_word_end", "ge"),
-    ("jump_prev_long_word_end", "gE"),
-    ("vim_goto_line_end", "$"),
-    ("goto_line_end", "$"),
-    ("goto_line_start", "0"),
-    ("goto_first_nonwhitespace", "^"),
-    ("move_char_right", "l"),
-    ("move_char_left", "h"),
-    ("move_line_down", "j"),
-    ("move_visual_line_down", "j"),
-    ("move_line_up", "k"),
-    ("move_visual_line_up", "k"),
-    ("goto_next_line_nonwhitespace", "+"),
-    ("vim_goto_line", "G"),
-    ("goto_file_start", "gg"),
-    ("jump_next_paragraph", "}"),
-    ("jump_prev_paragraph", "{"),
-    ("goto_window_top", "H"),
-    ("goto_window_center", "M"),
-    ("goto_window_bottom", "L"),
-    ("jump_prev_sentence", "("),
-    ("jump_next_sentence", ")"),
-    ("find_next_char", "f"),
-    ("find_prev_char", "F"),
-    ("find_till_char", "t"),
-    ("till_prev_char", "T"),
-    ("select_inner_object", "i"),
-    ("select_around_object", "a"),
+pub(super) const MOTION_STEPS: &[(NormalCmd, &str)] = &[
+    (NormalCmd::JumpNextWordStart, "w"),
+    (NormalCmd::MoveNextWordStart, "w"),
+    (NormalCmd::JumpNextLongWordStart, "W"),
+    (NormalCmd::MoveNextLongWordStart, "W"),
+    (NormalCmd::JumpPrevWordStart, "b"),
+    (NormalCmd::MovePrevWordStart, "b"),
+    (NormalCmd::JumpPrevLongWordStart, "B"),
+    (NormalCmd::MovePrevLongWordStart, "B"),
+    (NormalCmd::JumpNextWordEnd, "e"),
+    (NormalCmd::MoveNextWordEnd, "e"),
+    (NormalCmd::JumpNextLongWordEnd, "E"),
+    (NormalCmd::MoveNextLongWordEnd, "E"),
+    (NormalCmd::JumpPrevWordEnd, "ge"),
+    (NormalCmd::JumpPrevLongWordEnd, "gE"),
+    (NormalCmd::VimGotoLineEnd, "$"),
+    (NormalCmd::GotoLineEnd, "$"),
+    (NormalCmd::GotoLineStart, "0"),
+    (NormalCmd::GotoFirstNonwhitespace, "^"),
+    (NormalCmd::MoveCharRight, "l"),
+    (NormalCmd::MoveCharLeft, "h"),
+    (NormalCmd::MoveLineDown, "j"),
+    (NormalCmd::MoveVisualLineDown, "j"),
+    (NormalCmd::MoveLineUp, "k"),
+    (NormalCmd::MoveVisualLineUp, "k"),
+    (NormalCmd::GotoNextLineNonwhitespace, "+"),
+    (NormalCmd::VimGotoLine, "G"),
+    (NormalCmd::GotoFileStart, "gg"),
+    (NormalCmd::JumpNextParagraph, "}"),
+    (NormalCmd::JumpPrevParagraph, "{"),
+    (NormalCmd::GotoWindowTop, "H"),
+    (NormalCmd::GotoWindowCenter, "M"),
+    (NormalCmd::GotoWindowBottom, "L"),
+    (NormalCmd::JumpPrevSentence, "("),
+    (NormalCmd::JumpNextSentence, ")"),
+    (NormalCmd::FindNextChar, "f"),
+    (NormalCmd::FindPrevChar, "F"),
+    (NormalCmd::FindTillChar, "t"),
+    (NormalCmd::TillPrevChar, "T"),
+    (NormalCmd::SelectInnerObject, "i"),
+    (NormalCmd::SelectAroundObject, "a"),
 ];
 
 /// **The key a played character stands for** — the other half of
