@@ -598,7 +598,7 @@ impl Editor {
         let operator_count = self.count;
         let count = self.take_count();
         // In a table's grid a name means its action done to a cell.
-        if self.table_takes(cmd, count) {
+        if self.takes_by_name(cmd, count) {
             return true;
         }
         run(self, Cx { key, count, operator_count, continuing_zong: false });
@@ -681,7 +681,7 @@ impl Editor {
         let Some(&(_, run, _)) = normal_cmd(cmd) else { return };
         let was = self.extend;
         self.extend = true;
-        if !self.table_takes(cmd, cx.count) {
+        if !self.takes_by_name(cmd, cx.count) {
             run(self, cx);
         }
         if self.pending != Pending::None || self.jumping() {

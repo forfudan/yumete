@@ -431,7 +431,7 @@ impl Editor {
                     let operator_count = self.operator_count;
                     let count = operator_count.unwrap_or(1).max(1);
                     // `g h` in a table's grid is the record's first cell.
-                    if !self.table_takes(bind.run, count) {
+                    if !self.takes_by_name(bind.run, count) {
                         run(self, Cx { key, count, operator_count, continuing_zong });
                     }
                 }

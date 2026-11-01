@@ -2169,56 +2169,11 @@ impl Editor {
         // 方向鍵不在這道閘裏：它們永遠按螢幕走，兩套鍵位、兩套方案都一樣。
         let letter_walks_the_screen =
             !(vim_has_its_own && matches!(key, Key::Char('h' | 'j' | 'k' | 'l')));
-        if self.layout() == Layout::Vertical && letter_walks_the_screen {
-            // The count applies here too — `10j` is exactly the key a 縱 of
-            // thirty-two characters is long for. These arms used to return
-            // before `repeat` could see it.
-            match key {
-                // Only the first step of a run may reset the goal slot; the
-                // rest of a `10h` continues from the one it chose.
-                Key::Char('h') | Key::Left => {
-                    let mut first = continuing_zong;
-                    return self.repeat(count, move |e| {
-                        e.move_zong_from(true, first);
-                        first = true;
-                    });
-                }
-                Key::Char('l') | Key::Right => {
-                    let mut first = continuing_zong;
-                    return self.repeat(count, move |e| {
-                        e.move_zong_from(false, first);
-                        first = true;
-                    });
-                }
-                // Warning: **Across the break, the same as `h`/`l` are横排** (#504).
-                // These were `motion::right`/`left`, whose own doc says 「staying
-                // within the current line」 — so `j` walked to the end of a
-                // paragraph and stopped dead, and the next 縱 could not be
-                // reached by the key that walks the text: 「竖排的时候按 JK，无法
-                // 跨行」. 橫排's pair crossed the break years ago (「A line is not
-                // a wall」, below); this is the same rule on the other axis, and
-                // it is the *same* function — 縱書 only swaps which key is which.
-                Key::Char('j') | Key::Down => {
-                    return self.repeat(count, |e| e.move_horizontal(motion::next_grapheme));
-                }
-                Key::Char('k') | Key::Up => {
-                    return self.repeat(count, |e| e.move_horizontal(motion::prev_grapheme));
-                }
-                // Warning: **`H`/`L` are not here any more** (2026-09-12, #404).
-                // They turned the page sideways, and the rule was 「the capital
-                // follows the direction its lowercase does」 — `h` is leftward
-                // and leftward is onward on a 縱書 page, so `H` turned the page
-                // onward. That rule is right, and it is a rule about **screen
-                // quantities**: it still governs `J`/`K`.
-                //
-                // `H`/`L` now take a sentence, which is a **text unit**, and
-                // this editor's text units have never flipped — `w`, `e`, `b`
-                // and their capitals all read onward in both layouts, and
-                // nobody has ever found that strange. So the sentence pair
-                // joins them: `H` is the sentence before, `L` the sentence
-                // after, whichever way the page is set.
-                _ => {}
-            }
+        if self.layout() == Layout::Vertical
+            && letter_walks_the_screen
+            && self.walk_the_vertical_screen(key, count, continuing_zong)
+        {
+            return;
         }
 
         // **Every key is a named command** (`normal.rs`), looked up in the
@@ -2230,6 +2185,91 @@ impl Editor {
         // Warning: **An unbound key does nothing** (2026-10-08 定). A phrasebook here
         // once answered 「`$` is `gl` here」; that guesses what the person meant,
         // and was removed with its eleven lines of copy.
+    }
+
+    /// **A command's meaning where the page rereads its keys, when a binding
+    /// or a group runs it by name** (2026-11-01): a table's grid
+    /// ([`Self::table_takes`]), then a vertical page whose letters walk the
+    /// screen, where `move_char_left` is `h`'s screen step, one 縱 onward,
+    /// as `h` itself is. `true` when one of them took it.
+    pub(super) fn takes_by_name(&mut self, cmd: NormalCmd, count: usize) -> bool {
+        self.table_takes(cmd, count) || self.vertical_takes(cmd, count)
+    }
+
+    fn vertical_takes(&mut self, cmd: NormalCmd, count: usize) -> bool {
+        if self.mode != Mode::Normal
+            || self.expanding_alias
+            || self.layout() != Layout::Vertical
+            || self.vertical_letters_follow_the_text()
+        {
+            return false;
+        }
+        // Only the command a letter itself runs in this keymap: `gj` is
+        // `move_line_down` too, and the `g` keys never turn with the page
+        // (2026-10-13 定: 「gh gj gk gl 的逻辑性更大，所以不需要更改」).
+        let letter = ['h', 'j', 'k', 'l'].into_iter().find(|&c| {
+            let cx = super::normal::Cx { key: Key::Char(c), count, operator_count: None, continuing_zong: false };
+            self.normal_command_for(&cx) == Some(cmd.name())
+        });
+        match letter {
+            Some(c) => self.walk_the_vertical_screen(Key::Char(c), count, false),
+            None => false,
+        }
+    }
+
+    /// **One of the four screen keys on a vertical page** (`h j k l` and the
+    /// arrows in the visual way): `true` when the key was one of them.
+    fn walk_the_vertical_screen(&mut self, key: Key, count: usize, continuing_zong: bool) -> bool {
+        // The count applies here too — `10j` is exactly the key a 縱 of
+        // thirty-two characters is long for. These arms used to return
+        // before `repeat` could see it.
+        match key {
+            // Only the first step of a run may reset the goal slot; the
+            // rest of a `10h` continues from the one it chose.
+            Key::Char('h') | Key::Left => {
+                let mut first = continuing_zong;
+                self.repeat(count, move |e| {
+                    e.move_zong_from(true, first);
+                    first = true;
+                });
+            }
+            Key::Char('l') | Key::Right => {
+                let mut first = continuing_zong;
+                self.repeat(count, move |e| {
+                    e.move_zong_from(false, first);
+                    first = true;
+                });
+            }
+            // Warning: **Across the break, the same as `h`/`l` are横排** (#504).
+            // These were `motion::right`/`left`, whose own doc says 「staying
+            // within the current line」 — so `j` walked to the end of a
+            // paragraph and stopped dead, and the next 縱 could not be
+            // reached by the key that walks the text: 「竖排的时候按 JK，无法
+            // 跨行」. 橫排's pair crossed the break years ago (「A line is not
+            // a wall」, below); this is the same rule on the other axis, and
+            // it is the *same* function — 縱書 only swaps which key is which.
+            Key::Char('j') | Key::Down => {
+                self.repeat(count, |e| e.move_horizontal(motion::next_grapheme));
+            }
+            Key::Char('k') | Key::Up => {
+                self.repeat(count, |e| e.move_horizontal(motion::prev_grapheme));
+            }
+            // Warning: **`H`/`L` are not here any more** (2026-09-12, #404).
+            // They turned the page sideways, and the rule was 「the capital
+            // follows the direction its lowercase does」 — `h` is leftward
+            // and leftward is onward on a 縱書 page, so `H` turned the page
+            // onward. That rule is right, and it is a rule about **screen
+            // quantities**: it still governs `J`/`K`.
+            //
+            // `H`/`L` now take a sentence, which is a **text unit**, and
+            // this editor's text units have never flipped — `w`, `e`, `b`
+            // and their capitals all read onward in both layouts, and
+            // nobody has ever found that strange. So the sentence pair
+            // joins them: `H` is the sentence before, `L` the sentence
+            // after, whichever way the page is set.
+            _ => return false,
+        }
+        true
     }
 
     /// Hand a half-finished key the character it was waiting for (#414).

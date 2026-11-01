@@ -33987,3 +33987,39 @@ fn the_count_panel_names_the_keys_of_the_keymap_in_use() {
     ed.on_key(Key::Char('3'));
     assert_eq!(rows(&ed)[0], "Q", "the reader's own key");
 }
+
+/// **On a vertical page a bound name walks the screen as its key does**
+/// (2026-11-01): with the letters walking the screen (the default), `h`
+/// is one 縱 onward, and a key bound to `move_char_left` moved one
+/// character back instead. Both ways of setting the letters agree now.
+#[test]
+fn a_bound_name_walks_a_vertical_page_as_its_key_does() {
+    for logical in [false, true] {
+        for (key, name) in [
+            ('h', "move_char_left"),
+            ('l', "move_char_right"),
+            ('j', "move_visual_line_down"),
+            ('k', "move_visual_line_up"),
+        ] {
+            let at = |bind: bool| {
+                let mut ed = typed("一二三四五\n六七八九十\n甲乙丙丁戊\n");
+                ed.set_layout(crate::zong::Layout::Vertical);
+                if logical {
+                    ed.set_vertical_keys(yumete_cjk::VerticalKeys::Logical);
+                }
+                ed.goto_line(2);
+                press(&mut ed, "ll");
+                if bind {
+                    let mut aliases = HashMap::new();
+                    aliases.insert("n".to_string(), name.to_string());
+                    ed.set_key_aliases(aliases);
+                    ed.on_key(Key::Char('n'));
+                } else {
+                    ed.on_key(Key::Char(key));
+                }
+                ed.sel.head()
+            };
+            assert_eq!(at(true), at(false), "{name} as {key}, letters following the text: {logical}");
+        }
+    }
+}
