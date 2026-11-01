@@ -54,6 +54,16 @@ pub(super) const PICKER_KEYS: &[(Key, &str)] = &[
     (Key::Alt('h'), "cycle_hidden_files"),
 ];
 
+/// A panel box's default keys, read before the prompt's: the boxes of a
+/// form are walked by `Tab` and the arrows, which on the `:` line complete
+/// and walk the history.
+pub(super) const FIELD_KEYS: &[(Key, &str)] = &[
+    (Key::Tab, "next_field"),
+    (Key::BackTab, "prev_field"),
+    (Key::Down, "move_line_down"),
+    (Key::Up, "move_line_up"),
+];
+
 /// A sidebar's default keys: the text's letters for moving, and what every
 /// panel answers.
 pub(super) const SIDEBAR_KEYS: &[(Key, &str)] = &[
@@ -93,6 +103,7 @@ pub(super) fn place_keys(place: Place) -> &'static [(Key, &'static str)] {
     match place {
         Place::Prompt => PROMPT_KEYS,
         Place::Picker => PICKER_KEYS,
+        Place::Field => FIELD_KEYS,
         Place::Sidebar => SIDEBAR_KEYS,
     }
 }
@@ -108,11 +119,7 @@ impl Editor {
     /// Keys a binding plays (`"@hello"`) are not read again, so a binding
     /// that names its own key cannot call itself.
     pub(super) fn commands_in(&self, place: Place, key: Key) -> Option<Vec<String>> {
-        let order: &[Place] = match place {
-            Place::Picker => &[Place::Picker, Place::Prompt],
-            Place::Prompt => &[Place::Prompt],
-            Place::Sidebar => &[Place::Sidebar],
-        };
+        let order = place.chain();
         let typed = super::keys::key_internal(key);
         let read = !self.expanding_alias && !typed.is_empty();
         order.iter().find_map(|&one| {
@@ -145,7 +152,7 @@ impl Editor {
             _ if !self.place_inherits => return Vec::new(),
             Place::Sidebar => self.user_aliases.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v)).collect(),
             Place::Prompt => self.insert_aliases.iter().map(|(k, v)| (k.clone(), v)).collect(),
-            Place::Picker => return Vec::new(),
+            Place::Picker | Place::Field => return Vec::new(),
         };
         from.into_iter()
             .filter(|(key, _)| key.chars().filter(|&c| c != yumete_cjk::actions::ALT).count() == 1)
@@ -255,12 +262,8 @@ impl Editor {
         let mut shown: Vec<String> = spec.iter().filter(|(k, n)| runs(*k, n)).map(|(k, _)| hint_key(*k)).collect();
         let mut names: Vec<&str> = spec.iter().map(|(_, n)| *n).collect();
         names.dedup();
-        // A picker's keys are its own and the prompt's.
-        let chain: &[Place] = match place {
-            Place::Picker => &[Place::Picker, Place::Prompt],
-            Place::Prompt => &[Place::Prompt],
-            Place::Sidebar => &[Place::Sidebar],
-        };
+        // A picker's and a field's keys are their own and the prompt's.
+        let chain = place.chain();
         let default = |key: &Key| chain.iter().any(|&p| place_keys(p).iter().any(|(d, _)| d == key));
         for &from in chain {
             for &name in &names {
@@ -366,7 +369,7 @@ mod tests {
         for place in Place::ALL {
             for action in place.actions() {
                 let keyed = place_keys(place).iter().any(|(_, name)| *name == action.name)
-                    || (place == Place::Picker && place_keys(Place::Prompt).iter().any(|(_, n)| *n == action.name));
+                    || place.chain()[1..].iter().any(|&p| place_keys(p).iter().any(|(_, n)| *n == action.name));
                 assert!(keyed || unbound.contains(&action.name), "`{}` has no key in {}", action.name, place.name());
             }
         }

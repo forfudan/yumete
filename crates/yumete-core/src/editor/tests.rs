@@ -33869,3 +33869,37 @@ fn the_sidebar_sentence_reads_as_before() {
     );
     assert_eq!(ed.sidebar_keys(), want);
 }
+
+/// **The search panel's boxes and moving keys are bound by name**
+/// (2026-11-01): a box reads `[keys.field]`, then the prompt's table, so
+/// `C-w` and `C-a` work in it as on the `:` line; the panel's moving keys
+/// are the sidebar's, so `[keys.sidebar]` reaches them.
+#[test]
+fn the_search_panel_takes_the_sidebar_and_field_tables() {
+    use crate::search_panel::Field;
+    use crate::sidebar::Side;
+    use yumete_cjk::actions::Place;
+    let mut ed = typed("甲 乙\n甲 丙\n");
+    ed.execute(":search").unwrap();
+    assert_eq!(ed.mode(), Mode::Field, "the query box has the keys");
+    type_keys(&mut ed, "ab cd");
+    ed.on_key(Key::Ctrl('w'));
+    assert_eq!(ed.search().query, "ab ", "C-w takes a word, as on the : line");
+    ed.on_key(Key::Ctrl('a'));
+    ed.on_key(Key::Char('X'));
+    assert_eq!(ed.search().query, "Xab ");
+    ed.on_key(Key::Ctrl('u'));
+    type_keys(&mut ed, "甲");
+    let mut lines = HashMap::new();
+    lines.insert("C-n".to_string(), "move_line_down".to_string());
+    ed.set_place_bindings(Place::Field, lines);
+    ed.on_key(Key::Ctrl('n'));
+    assert_eq!(ed.search().field, Field::Results, "[keys.field] walks to the next box");
+    assert_eq!(ed.mode(), Mode::Normal);
+    assert_eq!(ed.panel_focus(), Some(Side::Left));
+    let mut lines = HashMap::new();
+    lines.insert("n".to_string(), "move_line_up".to_string());
+    ed.set_place_bindings(Place::Sidebar, lines);
+    ed.on_key(Key::Char('n'));
+    assert_eq!(ed.search().field, Field::Query, "[keys.sidebar] reaches the search panel");
+}

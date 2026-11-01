@@ -2550,7 +2550,7 @@ pub struct Editor {
     insert_held: String,
     /// A prompt's, a picker's and a sidebar's bindings (`[keys.prompt]`…),
     /// by `yumete_cjk::actions::Place`, internal spelling.
-    place_bindings: [HashMap<String, Vec<String>>; 3],
+    place_bindings: [HashMap<String, Vec<String>>; 4],
     /// `[keys] inherit`: the reader's Normal and Insert lines follow them
     /// into the sidebar and the prompts (see `places.rs`).
     place_inherits: bool,

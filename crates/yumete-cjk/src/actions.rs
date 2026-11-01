@@ -717,10 +717,13 @@ pub enum Place {
     Prompt,
     Picker,
     Sidebar,
+    /// A box of a panel's form (the search panel's 找什麼, 換成什麼…), which
+    /// takes the prompt's keys too, its own winning.
+    Field,
 }
 
 impl Place {
-    pub const ALL: [Place; 3] = [Place::Prompt, Place::Picker, Place::Sidebar];
+    pub const ALL: [Place; 4] = [Place::Prompt, Place::Picker, Place::Sidebar, Place::Field];
 
     /// The table's name in the config: `[keys.prompt]`.
     pub fn name(self) -> &'static str {
@@ -728,6 +731,7 @@ impl Place {
             Place::Prompt => "prompt",
             Place::Picker => "picker",
             Place::Sidebar => "sidebar",
+            Place::Field => "field",
         }
     }
 
@@ -742,15 +746,27 @@ impl Place {
             Place::Prompt => PROMPT,
             Place::Picker => PICKER,
             Place::Sidebar => SIDEBAR,
+            Place::Field => FIELD,
         }
     }
 
-    /// One of them by name. `no_op` is in every place, and a picker runs a
-    /// prompt's commands too, on its query.
+    /// The places whose keys this one reads, its own first: a picker and a
+    /// field read the prompt's after their own.
+    pub fn chain(self) -> &'static [Place] {
+        match self {
+            Place::Prompt => &[Place::Prompt],
+            Place::Picker => &[Place::Picker, Place::Prompt],
+            Place::Sidebar => &[Place::Sidebar],
+            Place::Field => &[Place::Field, Place::Prompt],
+        }
+    }
+
+    /// One of them by name. `no_op` is in every place, and a picker or a
+    /// field runs a prompt's commands too, on its own text.
     pub fn action(self, name: &str) -> Option<&'static Action> {
-        let mine = |place: Place| place.actions().iter().find(|a| a.name == name);
-        mine(self)
-            .or_else(|| (self == Place::Picker).then(|| mine(Place::Prompt)).flatten())
+        self.chain()
+            .iter()
+            .find_map(|place| place.actions().iter().find(|a| a.name == name))
             .or_else(|| action(name).filter(|a| a.name == "no_op"))
     }
 
@@ -792,6 +808,14 @@ pub const PICKER: &[Action] = &[
     normal("first_entry", "action.first-entry"),
     normal("last_entry", "action.last-entry"),
     normal("cycle_hidden_files", "action.cycle-hidden-files"),
+];
+
+/// A panel's box: the next and the previous box of its form.
+pub const FIELD: &[Action] = &[
+    normal("next_field", "action.next-field"),
+    normal("prev_field", "action.prev-field"),
+    normal("move_line_down", "action.field-below"),
+    normal("move_line_up", "action.field-above"),
 ];
 
 /// A sidebar's: its lists, its article, and what every panel has.

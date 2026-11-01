@@ -1316,7 +1316,7 @@ impl Editor {
     /// enough. The sidebar does not know how tall it is drawn (the front end
     /// does), and a list moves by a *fixed* amount for the same reason `J`
     /// moves by half a page in the text: the eye keeps its place.
-    const PAGE_IN_A_LIST: usize = 12;
+    pub(super) const PAGE_IN_A_LIST: usize = 12;
 
     /// Run one key while the sidebar has the keys.
     ///
@@ -1332,7 +1332,7 @@ impl Editor {
         // not rows of a tree (#419). What it does not take comes back to the
         // table, in `on_search_panel_key`.
         if self.panel(side).map(|p| p.view()) == Some(crate::sidebar::View::Search) {
-            return self.on_search_panel_key(key, side);
+            return self.on_search_panel_key(key);
         }
         self.on_sidebar_table_key(key);
     }
@@ -1355,8 +1355,10 @@ impl Editor {
         }
         use crate::sidebar::View;
         match self.panel(side).map(|p| p.view()) {
-            // Its list is its own, answered before the table.
-            Some(View::Search) | None => {}
+            // Its own verbs were answered before the table; these are its
+            // moving keys.
+            Some(View::Search) => self.search_panel_command(name),
+            None => {}
             // **百科是一段文章，要滾不要走**（2026-09-22）：它軟折行，只有畫的
             // 那一頭數得出屏幕行，所以它的捲軸自己存一份（`wiki_scroll`）。
             Some(View::Info) => match self.info_now() {

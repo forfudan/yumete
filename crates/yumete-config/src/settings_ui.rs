@@ -1039,4 +1039,5 @@ pub const NOT_IN_THE_PANEL: &[&str] = &[
     "keys.prompt",
     "keys.picker",
     "keys.sidebar",
+    "keys.field",
 ];

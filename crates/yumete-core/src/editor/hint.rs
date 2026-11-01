@@ -192,11 +192,15 @@ impl Editor {
             // 報的：「替换模式下如何替换？快捷鍵是什麼？如何全部替换？」）。
             // 從前 `r R` 只在鍵已經回到面板之後纔出現在提示行上，而人還在框裏
             // 打「換成什麼」的時候，正是他要問這句話的時候。
-            return Hint::Keys(say!("label.panel.search"), vec![
-                    ("Enter".into(), say!("hint.search.go-look")),
-                    ("↑ ↓".into(), say!("hint.search.next-cell")),
-                    ("Esc".into(), say!("hint.search.out-of-the-box")),
-                ]);
+            let field = |spec: &[(Key, &str)], says: String| {
+                self.place_hint(Place::Field, spec).map(|keys| (keys.into(), says))
+            };
+            let keys = [
+                field(&[(Key::Enter, "confirm")], say!("hint.search.go-look")),
+                field(&[(Key::Up, "move_line_up"), (Key::Down, "move_line_down")], say!("hint.search.next-cell")),
+                field(&[(Key::Esc, "normal_mode")], say!("hint.search.out-of-the-box")),
+            ];
+            return Hint::Keys(say!("label.panel.search"), keys.into_iter().flatten().collect());
         }
         // Warning: **這一行不再拿來預覽了**（2026-09-27 定，原話：「命令行现在不显示
         // 预览了，所以可以空出来显示按键提示」）。從前站在一處命中上，這一行寫的

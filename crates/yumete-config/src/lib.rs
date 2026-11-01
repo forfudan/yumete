@@ -2579,6 +2579,8 @@ pub struct KeyConfig {
     pub prompt: HashMap<String, Vec<String>>,
     pub picker: HashMap<String, Vec<String>>,
     pub sidebar: HashMap<String, Vec<String>>,
+    /// A panel box's lines (`[keys.field]`), read before `[keys.prompt]`.
+    pub field: HashMap<String, Vec<String>>,
     /// **The names of a reader's own groups**, by the keys that open them
     /// (`label = "My tools"` in `[keys.normal.space.x]` → `"<space>x"`):
     /// the title of that group's menu. helix cannot name one.
@@ -2618,6 +2620,7 @@ impl Default for KeyConfig {
             prompt: HashMap::new(),
             picker: HashMap::new(),
             sidebar: HashMap::new(),
+            field: HashMap::new(),
             labels: HashMap::new(),
             insert_labels: HashMap::new(),
             preset: KeyPreset::default(),
@@ -3181,7 +3184,8 @@ impl Config {
                                 || !parsed.keys.insert.is_empty()
                                 || !parsed.keys.prompt.is_empty()
                                 || !parsed.keys.picker.is_empty()
-                                || !parsed.keys.sidebar.is_empty();
+                                || !parsed.keys.sidebar.is_empty()
+                                || !parsed.keys.field.is_empty();
                             if bound {
                                 parsed.keys.normal.clear();
                                 parsed.keys.select.clear();
@@ -3190,6 +3194,7 @@ impl Config {
                                 parsed.keys.prompt.clear();
                                 parsed.keys.picker.clear();
                                 parsed.keys.sidebar.clear();
+                                parsed.keys.field.clear();
                                 problems.push(said(
                                     format!(
                                         "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
@@ -4183,6 +4188,8 @@ struct RawKeys {
     picker: toml::Table,
     #[serde(default)]
     sidebar: toml::Table,
+    #[serde(default)]
+    field: toml::Table,
     preset: Option<String>,
     flavor: Option<bool>,
     inherit: Option<bool>,
@@ -4464,6 +4471,7 @@ impl RawConfig {
         merge_key_tables(&mut self.keys.prompt, other.keys.prompt);
         merge_key_tables(&mut self.keys.picker, other.keys.picker);
         merge_key_tables(&mut self.keys.sidebar, other.keys.sidebar);
+        merge_key_tables(&mut self.keys.field, other.keys.field);
         self.keys.strays.extend(other.keys.strays);
         if other.keys.preset.is_some() {
             self.keys.preset = other.keys.preset;
@@ -4997,12 +5005,13 @@ impl RawConfig {
         config.keys.prompt = read_place_table(Place::Prompt, &self.keys.prompt, problems);
         config.keys.picker = read_place_table(Place::Picker, &self.keys.picker, problems);
         config.keys.sidebar = read_place_table(Place::Sidebar, &self.keys.sidebar, problems);
+        config.keys.field = read_place_table(Place::Field, &self.keys.field, problems);
         for (name, _) in &self.keys.strays {
             problems.push(said(
-                format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、prompt、picker、sidebar"),
+                format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、prompt、picker、sidebar、field"),
                 format!(
                     "[keys.{name}] is not a table yumete reads, so it was skipped; \
-                     the tables are normal, select, insert, prompt, picker and sidebar"
+                     the tables are normal, select, insert, prompt, picker, sidebar and field"
                 ),
             ));
         }

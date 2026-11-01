@@ -764,9 +764,27 @@ impl Editor {
         self.search.looked_at = Some(self.search_mark());
     }
 
-    /// One key while a field of the search panel has them (`Mode::Field`).
+    /// One key while a field of the search panel has them (`Mode::Field`):
+    /// by `[keys.field]`, then the prompt's table (2026-11-01, step 9's
+    /// field), and a key no table names types itself.
     pub(super) fn on_field_key(&mut self, key: Key) {
-        match key {
+        let place = yumete_cjk::actions::Place::Field;
+        match self.commands_in(place, key) {
+            Some(commands) => self.run_in_place(place, &commands, |e, name| e.field_command(name)),
+            None => {
+                if let Key::Char(ch) = key {
+                    self.search.type_char(ch);
+                    if self.search.field != Field::Scope {
+                        self.run_search();
+                    }
+                }
+            }
+        }
+    }
+
+    /// One of a field's commands, or a prompt's on the box's text.
+    fn field_command(&mut self, name: &str) {
+        match name {
             // **`Enter` 只做一件事：跑一遍搜索**（2026-09-25 定，原話：「按下
             // Enter「只」触发搜索。他不更改光标位置，不更改状态……这样的好处是在
             // 搜的到/搜不到东西的时候，enter的行为都是一样的」）。
@@ -774,7 +792,7 @@ impl Editor {
             // Warning: **它從前還兼着「把鍵交到第一條結果上」**（同一天早些時候定的），
             // 而那讓它在找得到和找不到的時候做兩件不同的事——正是這一條想去掉的
             // 分岔。去結果現在是 `Esc` 然後 `j`，兩個已經學過的鍵。
-            Key::Enter => {
+            "confirm" => {
                 // **空框加一行灰字，`Enter` 就是「再找一次它」**——同 `/`
                 // （`modes.rs`：「`/⏎` 讀作『再找一次這個』」）。
                 self.search.adopt_ghost();
@@ -795,8 +813,8 @@ impl Editor {
             //
             // Warning: **只在框裏。** 出了框 `Tab` 還是走邊欄那幾個視圖，那是它在每
             // 一扇面板裏的老意思。
-            Key::Tab if self.search.adopt_ghost() => self.look_again(),
-            Key::Tab => {
+            "next_field" if self.search.adopt_ghost() => self.look_again(),
+            "next_field" => {
                 let next = self.search.walk(false);
                 self.search.stand_on(next);
                 // 走到名單上就不是打字了，鍵交回面板。
@@ -805,7 +823,7 @@ impl Editor {
                     self.show_hit();
                 }
             }
-            Key::BackTab => {
+            "prev_field" => {
                 let back = self.search.walk(true);
                 self.search.stand_on(back);
                 if self.search.field == Field::Results {
@@ -813,35 +831,39 @@ impl Editor {
                     self.show_hit();
                 }
             }
-            Key::Char(ch) => {
-                self.search.type_char(ch);
-                if self.search.field != Field::Scope {
-                    self.run_search();
-                }
-            }
-            Key::Backspace => {
+            "delete_char_backward" => {
                 self.search.backspace();
                 if self.search.field != Field::Scope {
                     self.run_search();
                 }
             }
-            Key::Left => {
+            "move_char_left" => {
                 let to = self.search.caret.saturating_sub(1);
                 self.search.move_caret(to);
             }
-            Key::Right => {
+            "move_char_right" => {
                 let to = self.search.caret + 1;
                 self.search.move_caret(to);
             }
-            Key::Home => self.search.move_caret(0),
-            Key::End => {
-                let to = self.search.query.chars().count();
+            "goto_line_start" => self.search.move_caret(0),
+            // The end of this box's text (it measured the query's, whichever
+            // box the keys were in).
+            "goto_line_end" => {
+                let to = self.search.typed().chars().count();
                 self.search.move_caret(to);
             }
             // The word and the line, as they are on the `:` line.
-            Key::Ctrl('u') => {
+            "kill_to_line_start" => {
                 self.search.ask(String::new());
                 self.run_search();
+            }
+            "delete_word_backward" => {
+                self.search.delete_word_before_caret();
+                self.after_editing_the_box();
+            }
+            "delete_char_forward" => {
+                self.search.delete_here();
+                self.after_editing_the_box();
             }
             // Warning: **`Tab` is the slot's own key** (2026-09-17): it walks the
             // views that live in this slot, in every panel, and this one had
@@ -849,8 +871,8 @@ impl Editor {
             // tree without closing it. 「到了高級搜索的，tab 變成了『下一個』
             // 項目，再也切不到其他面板了」. The next box is `↓`, which is
             // where a form's next field is anyway.
-            Key::Down => self.leave_field(false),
-            Key::Up => self.leave_field(true),
+            "move_line_down" => self.leave_field(false),
+            "move_line_up" => self.leave_field(true),
             // **`Esc` 出框，打的字留着**（2026-09-25 報的：「按下Esc，输入的东西
             // 就还原了。这个不是「退回到normal」，而是放弃编辑」）。
             //
@@ -862,10 +884,10 @@ impl Editor {
             // in the result list……The universal escape hatch is a no-op」）。
             // vi 用戶最確定的那一個鍵，在這一格從前什麼都不做。退到搜索框上，
             // 再按一次就没有別的可退了，那時它是下面那一支。
-            Key::Esc if self.mode == Mode::Normal && self.search.field == Field::Results => {
+            "normal_mode" if self.mode == Mode::Normal && self.search.field == Field::Results => {
                 self.search.stand_on(Field::Query);
             }
-            Key::Esc => {
+            "normal_mode" => {
                 // 已經在 Normal 了，這一下 `Esc` 没有別的事可做——那就是「把輸入
                 // 法的挂起再說一遍」，同正文與邊欄那兩處（2026-09-27）。
                 if self.mode == Mode::Normal {
@@ -913,14 +935,15 @@ impl Editor {
         }
     }
 
-    /// One key while the search panel has them and the box does not
-    /// (`Mode::Normal`, the keys in the panel).
-    pub(super) fn on_search_panel_key(&mut self, key: Key, side: crate::sidebar::Side) {
-        match key {
+    /// **One of a sidebar's commands in the search panel** (2026-11-01):
+    /// its moving keys are the sidebar's, so `[keys.sidebar]` and the
+    /// reader's own `[keys.normal]` lines reach them, as in every other
+    /// panel. Its own verbs (`r R u / d c a i`, the numbers) are answered
+    /// before, in `on_search_panel_key`.
+    pub(super) fn search_panel_command(&mut self, name: &str) {
+        match name {
             // `Tab` walks the slot's views, as it does in every other panel;
             // the form's own cells are `hjkl` (below) and `↑`/`↓`.
-            Key::Tab => self.cycle_view(side, false),
-            Key::BackTab => self.cycle_view(side, true),
             // **`hl` 橫着走字，`jk` 竪着走格**（2026-09-25 定，原話：「這一個光標
             // 所在的字是反白的……用戶這樣就能用hl在搜索欄中移動光標」）。和正文
             // 一個感覺：框裏站着一個塊光標，`h`/`l` 挪它，`i` 就從它那裏插。
@@ -931,13 +954,13 @@ impl Editor {
             //
             // 結果列表是例外：那裏 `h`/`l` 是摺起/打開一個檔，和文件樹、大綱說的
             // 「少一點/多一點」是同一件事；到頂了 `h` 出去，免得困在列表裏。
-            Key::Char('h') | Key::Left if self.search.field == Field::Results => {
+            "collapse_entry" if self.search.field == Field::Results => {
                 if !self.search.fold(true) {
                     let back = self.search.walk(true);
                     self.stand_on_and_look(back);
                 }
             }
-            Key::Char('l') | Key::Right if self.search.field == Field::Results => {
+            "expand_entry" if self.search.field == Field::Results => {
                 self.search.fold(false);
             }
             // **位置那一格是個四選一，所以 `hl` 在它上面是換檔**（2026-09-27
@@ -946,20 +969,19 @@ impl Editor {
             //
             // Warning: **2026-10-01 起它永遠打不了字**：指定文件夾只能用命令進來，進來
             // 之後面板裏改不了，所以 `takes_text()` 在這一格上恆假。
-            Key::Char('h') | Key::Left | Key::Char('l') | Key::Right
-                if self.search.field == Field::Scope && !self.search.takes_text() =>
+            "collapse_entry" | "expand_entry" if self.search.field == Field::Scope && !self.search.takes_text() =>
             {
                 self.step_the_scope();
             }
-            Key::Char('h') | Key::Left => {
+            "collapse_entry" => {
                 let to = self.search.caret.saturating_sub(1);
                 self.search.move_caret(to);
             }
-            Key::Char('l') | Key::Right => {
+            "expand_entry" => {
                 let to = self.search.caret + 1;
                 self.search.move_caret(to);
             }
-            Key::Char('j') | Key::Down => match self.search.field {
+            "move_line_down" => match self.search.field {
                 // **走一步就看一眼**（2026-09-27）：正文跳到那一處、選區蓋上去，
                 // 而鍵留在這裏。見 [`Self::show_hit`]。
                 Field::Results => {
@@ -971,7 +993,7 @@ impl Editor {
                     self.stand_on_and_look(next);
                 }
             },
-            Key::Char('k') | Key::Up => match self.search.field {
+            "move_line_up" => match self.search.field {
                 // Warning: **到頂了就出去**（2026-09-23 報的：「我一旦將光標移動到了下面
                 // 文件的區域，就没辦法使用 k 向上移動到選項和輸入框了」）。從前
                 // `step(false)` 在第 0 條上飽和，於是列表是個進得去出不來的地
@@ -989,6 +1011,53 @@ impl Editor {
                     self.stand_on_and_look(back);
                 }
             },
+            // **`Enter` 就是「再跑一遍」**（2026-09-25 定，原話：「enter 在非結果
+            // 位置（包括查詢框上）都是觸發重搜。如果 enter 在結果上，那麼在文檔
+            // 更新之後，確實應該先觸發一次重搜再跳」）。
+            //
+            // 起因是「改完正文回到面板按 `Enter`，名單還是舊的」：那時 `Enter` 在
+            // 框上只是「進編輯」，在開關上是「翻一下」，没有一個格子是重跑。
+            //
+            // Warning: **結果那一格上，過期了先跑、不跳**。屏幕上此刻寫着「按 Enter
+            // 重新查找」，那 `Enter` 就照它說的做；而且正文動過之後，那一處的行號
+            // 與位置都已經不準，跳過去多半落在別的字上。跑完名單是新的，再按一次
+            // 纔去。
+            //
+            // Warning: **進編輯不缺入口**：`i` `a` `I` `A` `c` 和 `/` 六個；開關也不缺，
+            // `1`–`7` 一個號碼一行。騰出 `Enter` 没有讓誰没路走。
+            //
+            // Warning: **空格翻不動開關**（2026-10-02 更正）。這句話從前寫着「`1`–`7`
+            // 和空格都翻得動」，而面板裏光禿禿的空格一直是開空格選單——它在
+            // `keys.rs` 那一層就被收走了，根本到不了這裏。
+            "open_entry" if self.search.field == Field::Results && !self.search_is_stale() => {
+                self.go_to_hit();
+            }
+            "open_entry" => self.look_again(),
+            "goto_file_start" if self.search.field == Field::Results => {
+                self.search.selected = 0
+            }
+            // Warning: **數的是行，不是命中**（2026-10-02 查出來的）。`selected` 是
+            // `rows()` 的下標，而跨檔的名單裏夾着檔名那幾行——四處命中分在三個檔
+            // 裏是七行，`G` 卻跳到第 3 行，離底下還差三行。只在本文件那一檔裏湊
+            // 巧對：那時候名單裏没有檔名行，行數正好等於命中數。
+            "goto_last_line" if self.search.field == Field::Results => {
+                self.search.selected = self.search.rows().len().saturating_sub(1)
+            }
+            // A page of results, as a page of any list.
+            "page_down" | "page_up" if self.search.field == Field::Results => {
+                for _ in 0..Self::PAGE_IN_A_LIST {
+                    self.search.step(name == "page_down");
+                }
+                self.show_hit();
+            }
+            _ => {}
+        }
+    }
+
+    /// One key while the search panel has them and the box does not
+    /// (`Mode::Normal`, the keys in the panel).
+    pub(super) fn on_search_panel_key(&mut self, key: Key) {
+        match key {
             // **The five switches are numbered, top to bottom** (2026-09-24,
             // 原話：「中间五行选项，在normal状态下不是移动上去按空格，而是直接
             // 通过一个字母来选择（在这一行后面显示这个字母快捷键）」). The
@@ -1019,28 +1088,6 @@ impl Editor {
                     self.flip_switch(which);
                 }
             }
-            // **`Enter` 就是「再跑一遍」**（2026-09-25 定，原話：「enter 在非結果
-            // 位置（包括查詢框上）都是觸發重搜。如果 enter 在結果上，那麼在文檔
-            // 更新之後，確實應該先觸發一次重搜再跳」）。
-            //
-            // 起因是「改完正文回到面板按 `Enter`，名單還是舊的」：那時 `Enter` 在
-            // 框上只是「進編輯」，在開關上是「翻一下」，没有一個格子是重跑。
-            //
-            // Warning: **結果那一格上，過期了先跑、不跳**。屏幕上此刻寫着「按 Enter
-            // 重新查找」，那 `Enter` 就照它說的做；而且正文動過之後，那一處的行號
-            // 與位置都已經不準，跳過去多半落在別的字上。跑完名單是新的，再按一次
-            // 纔去。
-            //
-            // Warning: **進編輯不缺入口**：`i` `a` `I` `A` `c` 和 `/` 六個；開關也不缺，
-            // `1`–`7` 一個號碼一行。騰出 `Enter` 没有讓誰没路走。
-            //
-            // Warning: **空格翻不動開關**（2026-10-02 更正）。這句話從前寫着「`1`–`7`
-            // 和空格都翻得動」，而面板裏光禿禿的空格一直是開空格選單——它在
-            // `keys.rs` 那一層就被收走了，根本到不了這裏。
-            Key::Enter if self.search.field == Field::Results && !self.search_is_stale() => {
-                self.go_to_hit();
-            }
-            Key::Enter => self.look_again(),
             // **`r` and `R` change things**, and only while the replace row
             // is showing — `:search` is for looking, `:replace` for changing,
             // and the panel says which it is.
@@ -1194,16 +1241,6 @@ impl Editor {
                     self.search.caret = self.search.typed().chars().count();
                 }
                 self.mode = Mode::Field;
-            }
-            Key::Char('g') | Key::Home if self.search.field == Field::Results => {
-                self.search.selected = 0
-            }
-            // Warning: **數的是行，不是命中**（2026-10-02 查出來的）。`selected` 是
-            // `rows()` 的下標，而跨檔的名單裏夾着檔名那幾行——四處命中分在三個檔
-            // 裏是七行，`G` 卻跳到第 3 行，離底下還差三行。只在本文件那一檔裏湊
-            // 巧對：那時候名單裏没有檔名行，行數正好等於命中數。
-            Key::Char('G') | Key::End if self.search.field == Field::Results => {
-                self.search.selected = self.search.rows().len().saturating_sub(1)
             }
             // `C-w` `q` `:` 和光禿禿的 `Space` 是每一扇面板都有的，不是這一扇
             // 的——見 `panel_command_in_common`。最後纔試，所以這一扇自己的鍵先贏。

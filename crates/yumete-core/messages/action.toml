@@ -490,6 +490,20 @@ zhs = "选区撑到上一行(屏幕上的)"
 en = "extend the selection one line up, on screen"
 
 [[message]]
+# 命令說明：move_line_up，面板輸入框裏的（草稿）
+key = "action.field-above"
+zht = "上面那一格"
+zhs = "上面那一格"
+en = "the box above"
+
+[[message]]
+# 命令說明：move_line_down，面板輸入框裏的（草稿）
+key = "action.field-below"
+zht = "下面那一格"
+zhs = "下面那一格"
+en = "the box below"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.file-picker"
 zht = "打開文件挑選器"
@@ -1300,6 +1314,13 @@ zhs = "下一项"
 en = "the next entry"
 
 [[message]]
+# 命令說明：next_field，面板輸入框裏的（草稿）
+key = "action.next-field"
+zht = "下一格；有灰字時先收下灰字"
+zhs = "下一格；有灰字时先收下灰字"
+en = "the next box (and a greyed-out word is taken first)"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.next-region"
 zht = "下一個區域"
@@ -1511,6 +1532,13 @@ key = "action.prev-entry"
 zht = "上一項"
 zhs = "上一项"
 en = "the previous entry"
+
+[[message]]
+# 命令說明：prev_field，面板輸入框裏的（草稿）
+key = "action.prev-field"
+zht = "上一格"
+zhs = "上一格"
+en = "the previous box"
 
 [[message]]
 # 命令說明：move_line_up（草稿）

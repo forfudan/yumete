@@ -813,6 +813,17 @@ impl Search {
         self.box_here().replace_range(from..to, "");
     }
 
+    /// The word before the caret and the spaces after it (`C-w`), as on the
+    /// `:` line.
+    pub fn delete_word_before_caret(&mut self) {
+        let caret = self.caret;
+        let head: String = self.box_here().chars().take(caret).collect();
+        let cut = crate::editor::word_cut(&head);
+        let (from, to) = (self.byte_at(cut), self.byte_at(self.caret));
+        self.box_here().replace_range(from..to, "");
+        self.caret = cut;
+    }
+
     /// **從光標刪到行尾**——框裏的 `D`。
     ///
     /// Warning: **末尾那個空位上照樣刪得掉最後一個字**（2026-10-02 補，同
