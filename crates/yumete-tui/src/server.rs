@@ -849,10 +849,11 @@ impl Servers {
             return;
         }
         let Some((path, line, column)) = editor.definition_query() else { return };
+        let kind = editor.definition_kind();
         self.ask_them_all(
             language,
             |server, id| server.asked_where = Some(id),
-            |id| lsp::definition(id, &path, line, column),
+            |id| lsp::goto(id, kind, &path, line, column),
         );
     }
 

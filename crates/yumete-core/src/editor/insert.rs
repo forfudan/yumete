@@ -51,6 +51,9 @@ pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
     (Key::Home, NormalCmd::GotoLineStart, None),
     (Key::Ctrl('a'), NormalCmd::GotoLineStart, Some(|e| e.flavor_on(FlavorItem::InsertExtras))),
     (Key::End, NormalCmd::GotoLineEndNewline, None),
+    // vim's `C-y` `C-e`: the character above or below the cursor, typed.
+    (Key::Ctrl('y'), NormalCmd::InsertCharAbove, Some(|e| e.vim_keymap())),
+    (Key::Ctrl('e'), NormalCmd::InsertCharBelow, Some(|e| e.vim_keymap())),
     (Key::Ctrl('e'), NormalCmd::GotoLineEndNewline, Some(|e| e.flavor_on(FlavorItem::InsertExtras))),
     // vim's `C-g u` (helix's `C-s`, which a terminal takes for XOFF).
     (Key::Ctrl('g'), NormalCmd::CommitUndoCheckpoint, Some(|e| e.vim_keymap() || e.flavor_on(FlavorItem::InsertExtras))),
@@ -88,11 +91,45 @@ pub(super) const INSERT_COMMANDS: &[NormalCommand] = &[
         e.pending = Pending::UndoBreak;
         e.set_status(say!("edit.undo-break"));
     }, Key::Ctrl('g')),
+    (NormalCmd::InsertCharAbove, |e, _| e.insert_char_from_line(false), Key::Ctrl('y')),
+    (NormalCmd::InsertCharBelow, |e, _| e.insert_char_from_line(true), Key::Ctrl('e')),
     (NormalCmd::InsertTab, |e, _| e.insert_indent(true), Key::Tab),
     (NormalCmd::InsertOtherTab, |e, _| e.insert_indent(false), Key::BackTab),
 ];
 
 impl Editor {
+    /// **vim's Insert `C-y` / `C-e`**: the character in the line above (or
+    /// below) at the cursor's screen column, typed here. A wide character
+    /// covers two columns and is found from either.
+    pub(super) fn insert_char_from_line(&mut self, below: bool) {
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(head);
+        let start = rope.line_to_char(line);
+        let column = yumete_cjk::str_width(&rope.slice(start..head).to_string());
+        let target = match below {
+            true => line + 1,
+            false => match line.checked_sub(1) {
+                Some(l) => l,
+                None => return,
+            },
+        };
+        if target > crate::motion::last_line(rope) {
+            return;
+        }
+        let text: String = rope.line(target).chars().take_while(|c| *c != '\n' && *c != '\r').collect();
+        let mut at = 0usize;
+        let found = text.chars().find(|c| {
+            let w = yumete_cjk::str_width(&c.to_string()).max(1);
+            let hit = column < at + w;
+            at += w;
+            hit
+        });
+        if let Some(c) = found {
+            self.insert_str(&c.to_string());
+        }
+    }
+
     /// **The command `key` runs in Insert mode**, by the default keymap.
     pub(super) fn insert_command_for(&self, key: Key) -> Option<&'static str> {
         INSERT_KEYS

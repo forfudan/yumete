@@ -301,7 +301,7 @@ impl Editor {
             // 三種——腳注、鏈接、百科名——是稿子裏的「定義」，而一份 `.rs` 裏一
             // 個都不會有；`gd` 問的還是同一句話（「這個東西寫在哪」），只是這一
             // 次答得出來的是別人。
-            if self.ask_where_this_is_written() {
+            if self.ask_where_this_is_written(crate::lsp::Goto::Definition) {
                 return;
             }
             // Warning: **And on ordinary writing it does nothing** (#454). It used to

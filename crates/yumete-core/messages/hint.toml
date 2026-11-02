@@ -326,6 +326,13 @@ zhs = "转小写/转大写/大小写互换，等待动作"
 en = "to lower, to upper, swap them — each waits for a motion"
 
 [[message]]
+# g 選單：gD（草稿）
+key = "hint.goto.declaration"
+zht = "跳到聲明"
+zhs = "跳到声明"
+en = "go to the declaration"
+
+[[message]]
 # vim 鍵位下 g 選單裏的 q ——按寬度重排，等一個動作
 key = "hint.goto.fill"
 zht = "按寬度重排，等待動作"
@@ -353,6 +360,13 @@ key = "hint.goto.follow-note"
 zht = "前往定義"
 zhs = "前往定义"
 en = "go to definition"
+
+[[message]]
+# g 選單：gi（草稿）
+key = "hint.goto.implementation"
+zht = "跳到實現"
+zhs = "跳到实现"
+en = "go to the implementation"
 
 [[message]]
 # g 選單裏的 i：vim 的 gi，回到上次插入停下的地方再插入
@@ -388,6 +402,13 @@ key = "hint.goto.last-file"
 zht = "回到最近打開的緩衝區"
 zhs = "回到最近打开的缓冲区"
 en = "back to the buffer before this one"
+
+[[message]]
+# g 選單：gm（草稿）
+key = "hint.goto.last-modified-file"
+zht = "最近改過的文件"
+zhs = "最近改过的文件"
+en = "the file changed last"
 
 [[message]]
 # goto: certain line
@@ -486,6 +507,13 @@ key = "hint.goto.title"
 zht = "g 前往"
 zhs = "g 前往"
 en = "g goto"
+
+[[message]]
+# g 選單：gy（草稿）
+key = "hint.goto.type-definition"
+zht = "跳到類型定義"
+zhs = "跳到类型定义"
+en = "go to the type definition"
 
 [[message]]
 # g 選單裏的 ; , (只在 vim 鍵位下)——在改過的地方之間走

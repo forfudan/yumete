@@ -28,6 +28,22 @@ impl Editor {
 
     /// Go back to the place a letter names (`' a`).
     pub(super) fn go_to_mark(&mut self, name: char) {
+        // `''` and ``` `` ```: where the last jump came from, and pressed
+        // again, back (vim's, 2026-11-02).
+        if matches!(name, '\'' | '`') {
+            let Some((id, pos)) = self.jump_at.checked_sub(1).and_then(|at| self.jumps.get(at)).copied() else {
+                self.status = say!("goto.no-such-mark", name);
+                return;
+            };
+            self.remember_jump();
+            let Some(i) = self.buffer_with(id) else {
+                self.status = say!("goto.mark-buffer-closed", name);
+                return;
+            };
+            self.show_buffer(i);
+            self.set_cursor(pos.min(self.current_buffer().rope().len_chars()));
+            return;
+        }
         let Some(spot) = self.marks.get(&name).cloned() else {
             self.status = say!("goto.no-such-mark", name);
             return;

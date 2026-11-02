@@ -159,8 +159,36 @@ pub fn did_change(path: &Path, version: i64, text: &str) -> String {
 /// wire. [`crate::problem::utf16_column`] turns a character offset into one,
 /// and it needs the line's text to do it.
 pub fn definition(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
+    goto(id, Goto::Definition, path, line, utf16_column)
+}
+
+/// **Which place a `g` key asks for** (2026-11-02, helix's `gd` `gD` `gy`
+/// `gi`): four requests with one shape, question and answer alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Goto {
+    #[default]
+    Definition,
+    Declaration,
+    TypeDefinition,
+    Implementation,
+}
+
+impl Goto {
+    pub fn method(self) -> &'static str {
+        match self {
+            Goto::Definition => "textDocument/definition",
+            Goto::Declaration => "textDocument/declaration",
+            Goto::TypeDefinition => "textDocument/typeDefinition",
+            Goto::Implementation => "textDocument/implementation",
+        }
+    }
+}
+
+/// One of the four `g` questions, at a position.
+pub fn goto(id: i64, kind: Goto, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/definition","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"{method}","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
+        method = kind.method(),
         uri = json_string(&uri_of(path)),
     )
 }

@@ -943,6 +943,20 @@ en = "insert at the start of the line"
 find = "行首 插入 insert start"
 
 [[message]]
+# 命令說明：insert_char_above（草稿）
+key = "action.insert-char-above"
+zht = "打出上一行同一位置的字"
+zhs = "打出上一行同一位置的字"
+en = "type the character above the cursor"
+
+[[message]]
+# 命令說明：insert_char_below（草稿）
+key = "action.insert-char-below"
+zht = "打出下一行同一位置的字"
+zhs = "打出下一行同一位置的字"
+en = "type the character below the cursor"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.insert-mode"
 zht = "在選區前插入"

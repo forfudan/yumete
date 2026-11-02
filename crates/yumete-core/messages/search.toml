@@ -195,6 +195,13 @@ zhs = "没有更晚的位置了"
 en = "no later jump"
 
 [[message]]
+# gm 找不到別的改過的檔（草稿）
+key = "goto.no-modified-file"
+zht = "還沒有改過別的文件"
+zhs = "还没有改过别的文件"
+en = "no other file has been changed"
+
+[[message]]
 # 跳到一個没設過的記號
 key = "goto.no-such-mark"
 zht = "没有記號「{0}」"

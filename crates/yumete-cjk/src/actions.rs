@@ -346,6 +346,12 @@ normal_commands! {
     OpenHere = "open_here",
     FollowLink = "follow_link",
     OpenLink = "open_link",
+    GotoDeclaration = "goto_declaration",
+    GotoTypeDefinition = "goto_type_definition",
+    GotoImplementation = "goto_implementation",
+    GotoLastModifiedFile = "goto_last_modified_file",
+    InsertCharAbove = "insert_char_above",
+    InsertCharBelow = "insert_char_below",
     FilePicker = "file_picker",
     BufferPicker = "buffer_picker",
     NextBuffer = "next_buffer",
@@ -802,6 +808,14 @@ pub const ALL: &[Action] = &[
     normal("action.follow-link", NormalCmd::FollowLink),
     // `gx`, vim's: the link under the cursor, handed to the system.
     normal("action.open-link", NormalCmd::OpenLink),
+    // helix's `gD` `gy` `gi` `gm` (2026-11-02).
+    normal("hint.goto.declaration", NormalCmd::GotoDeclaration),
+    normal("hint.goto.type-definition", NormalCmd::GotoTypeDefinition),
+    normal("hint.goto.implementation", NormalCmd::GotoImplementation),
+    normal("hint.goto.last-modified-file", NormalCmd::GotoLastModifiedFile),
+    // vim's Insert `C-y` `C-e`.
+    normal("action.insert-char-above", NormalCmd::InsertCharAbove),
+    normal("action.insert-char-below", NormalCmd::InsertCharBelow),
     // ---- Files, panels, the session --------------------------------------
     normal("action.file-picker", NormalCmd::FilePicker),
     normal("action.buffer-picker", NormalCmd::BufferPicker),

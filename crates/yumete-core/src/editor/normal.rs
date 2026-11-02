@@ -382,6 +382,7 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Char('>'), NormalCmd::Indent),
     (Key::Char('<'), NormalCmd::Unindent),
     (Key::Ctrl('a'), NormalCmd::Increment),
+    (Key::Ctrl('c'), NormalCmd::CommentLine),
     (Key::Ctrl('x'), NormalCmd::Decrement),
     (Key::Char('.'), NormalCmd::RepeatLastChange),
     (Key::Alt('.'), NormalCmd::RepeatLastMotion),
@@ -469,6 +470,11 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     // free) opens the Space menu: the flavour's `vim_space_menu` puts the
     // menu back on `Space` (2026-11-01).
     (Key::Char(' '), NormalCmd::MoveCharRight, None),
+    // vim's `C-e` `C-y` scroll a line; its `C-c` in Normal mode does
+    // nothing, where helix's comments (2026-11-02).
+    (Key::Ctrl('e'), NormalCmd::ScrollDown, None),
+    (Key::Ctrl('y'), NormalCmd::ScrollUp, None),
+    (Key::Ctrl('c'), NormalCmd::NoOp, None),
     (Key::Char('\\'), NormalCmd::SpaceMode, None),
     (Key::Backspace, NormalCmd::MoveCharLeft, None),
     (Key::Char('k'), NormalCmd::MoveLineUp, None),

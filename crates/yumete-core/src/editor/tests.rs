@@ -417,7 +417,8 @@ fn a_key_with_an_owner_speaks_and_one_without_stays_quiet() {
         assert!(said.contains('一'), "{key}: {said}");
     }
     // 没綁的那幾個：一個字都不說。
-    for key in [Key::Ctrl('r'), Key::Ctrl('c'), Key::Char('0')] {
+    // (`C-c` comments since 2026-11-02, as helix's.)
+    for key in [Key::Ctrl('r'), Key::Char('0')] {
         assert_eq!(ask(key), "", "{key:?}");
     }
     // `0` 在計數裏照舊是數字，這一條没動。
@@ -17481,9 +17482,8 @@ fn an_unbound_key_says_nothing_at_all() {
     }
     // `A-`` is helix's uppercase again (2026-11-02, the case menu moved to
     // the flavour), so it is not here any more.
-    for key in [Key::Ctrl('r'), Key::Ctrl('c')] {
-        quiet(key);
-    }
+    // `C-c` comments now, as helix's (2026-11-02).
+    quiet(Key::Ctrl('r'));
     // `0` 照舊是數字（有計數在走的時候），這一條没動。
     let mut ed = typed("一行字\n");
     press(&mut ed, "gg20l");
@@ -34305,4 +34305,96 @@ fn under_vim_the_keys_are_vims() {
     press(&mut ed, "j");
     ed.on_key(Key::Alt('C'));
     assert!(!ed.sel.is_plural(), "off: vim has no A-C");
+}
+
+/// **The small alignment batch** (2026-11-02): helix's `C-c` comments and
+/// `gm` goes to the file changed last; vim's `C-e` `C-y` scroll, `''` goes
+/// back where the last jump came from and again, and Insert `C-y` `C-e`
+/// type the character above and below.
+#[test]
+fn the_small_alignment_batch() {
+    // helix `C-c`: the line's comment, as `Space c`.
+    let mut ed = typed("let a = 1;\n");
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::parse("rust").expect("rust"));
+    ed.goto_line(1);
+    ed.on_key(Key::Ctrl('c'));
+    assert!(ed.current_buffer().text().starts_with("//"), "{:?}", ed.current_buffer().text());
+
+    // vim `C-e` `C-y` scroll: the page is asked to move, the cursor's
+    // line stays where it was (the renderer moves the page).
+    let mut ed = typed_vim(&"一行\n".repeat(100));
+    ed.set_page(20, 80);
+    ed.goto_line(10);
+    // What the renderer says is on screen: lines 1 to 20.
+    ed.page_span = (0, ed.current_buffer().rope().line_to_char(20));
+    ed.on_key(Key::Ctrl('e'));
+    assert!(matches!(ed.aim, Some(crate::editor::Aim::Row(_))), "C-e scrolls");
+    assert_eq!(ed.cursor_line(), 9);
+    ed.aim = None;
+    ed.on_key(Key::Ctrl('y'));
+    assert!(matches!(ed.aim, Some(crate::editor::Aim::Row(_))), "C-y scrolls");
+
+    // vim `''`: back and forth between two places.
+    let mut ed = typed_vim(&"一行\n".repeat(50));
+    press(&mut ed, "gg");
+    press(&mut ed, "40G");
+    assert_eq!(ed.cursor_line(), 39);
+    press(&mut ed, "''");
+    assert_eq!(ed.cursor_line(), 0, "back where the jump came from");
+    press(&mut ed, "''");
+    assert_eq!(ed.cursor_line(), 39, "and again");
+
+    // vim Insert `C-y` `C-e`, by screen column: 甲 is two columns wide.
+    let mut ed = typed_vim("甲乙丙\nab\nxyz\n");
+    ed.goto_line(2);
+    press(&mut ed, "A");
+    // Column 2: below it `z`; then column 3, the second half of 乙 above.
+    ed.on_key(Key::Ctrl('e'));
+    ed.on_key(Key::Ctrl('y'));
+    assert_eq!(ed.current_buffer().text(), "甲乙丙\nabz乙\nxyz\n");
+    // Past the end of the line below: nothing.
+    ed.on_key(Key::Ctrl('e'));
+    assert_eq!(ed.current_buffer().text(), "甲乙丙\nabz乙\nxyz\n");
+}
+
+/// **`gm`: the file changed last**, other than the one shown.
+#[test]
+fn gm_goes_to_the_file_changed_last() {
+    let mut ed = typed("一\n");
+    let first = ed.current_buffer().id();
+    ed.execute("new").unwrap();
+    press(&mut ed, "gm");
+    assert_eq!(ed.current_buffer().id(), first, "the typed one");
+    ed.execute("new").unwrap();
+    ed.current_buffer_mut().insert(0, "二").expect("writable");
+    press(&mut ed, "gm");
+    assert_eq!(ed.current_buffer().id(), first, "the newest edit is this one, so the one before");
+}
+
+/// **`gD` `gy` `gi` ask the language server** (2026-11-02, helix's keys):
+/// the same question as `gd`, for the declaration, the type and an
+/// implementation; a file no server serves says so.
+#[test]
+fn gd_capital_gy_and_gi_ask_for_their_place() {
+    let dir = tmp().join(format!("yumete-goto-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn main() {}\n").unwrap();
+    for (keys, kind) in [
+        ("gD", crate::lsp::Goto::Declaration),
+        ("gy", crate::lsp::Goto::TypeDefinition),
+        ("gi", crate::lsp::Goto::Implementation),
+    ] {
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        press(&mut ed, keys);
+        assert!(ed.definition_query().is_some(), "{keys} asked");
+        assert_eq!(ed.definition_kind(), kind, "{keys}");
+    }
+    let mut ed = typed("prose\n");
+    press(&mut ed, "gy");
+    assert_eq!(ed.status(), say!("lsp.not-served"));
+    assert!(crate::lsp::goto(1, crate::lsp::Goto::Implementation, &file, 0, 0).contains("textDocument/implementation"));
+    let _ = std::fs::remove_dir_all(&dir);
 }

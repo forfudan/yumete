@@ -845,6 +845,13 @@ pub(super) static GOTO: Group = Group {
         ch('n', NormalCmd::NextBuffer, "hint.goto.next-or-previous-buffer"),
         ch('p', NormalCmd::PrevBuffer, "hint.goto.next-or-previous-buffer").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoDefinition, "hint.goto.follow-note"),
+        // helix's `gD` `gy` `gi` `gm` (2026-11-02). vim's `gD` is its global
+        // declaration, the same question; its `gi` and `gm` are its own
+        // (the vim `gi` row is above), and `gy` is a key vim leaves free.
+        ch('D', NormalCmd::GotoDeclaration, "hint.goto.declaration"),
+        ch('y', NormalCmd::GotoTypeDefinition, "hint.goto.type-definition").flavor(FlavorItem::HelixKeysUnderVim),
+        ch('i', NormalCmd::GotoImplementation, "hint.goto.implementation").when(Only::Helix),
+        ch('m', NormalCmd::GotoLastModifiedFile, "hint.goto.last-modified-file").when(Only::Helix),
         ch('r', NormalCmd::GotoReference, "hint.goto.references").flavor(FlavorItem::HelixKeysUnderVim),
         ch('/', NormalCmd::SearchSelection, "hint.goto.search-word").flavor(FlavorItem::GotoExtras),
         ch('j', NormalCmd::MoveNextZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),

@@ -713,6 +713,19 @@ impl Editor {
         self.show_buffer(index);
     }
 
+    /// **`gm`: the file changed last**, other than this one (helix's
+    /// `goto_last_modified_file`, 2026-11-02).
+    pub fn goto_last_modified_file(&mut self) {
+        let here = self.current;
+        let last = (0..self.buffers.len())
+            .filter(|i| *i != here && self.buffers[*i].edited() > 0)
+            .max_by_key(|i| self.buffers[*i].edited());
+        match last {
+            Some(index) => self.show_buffer(index),
+            None => self.status = say!("goto.no-modified-file"),
+        }
+    }
+
     /// Show the previous buffer, wrapping (Helix `gp`, `:buffer-previous`).
     pub fn prev_buffer(&mut self) {
         if self.only_one_buffer() {

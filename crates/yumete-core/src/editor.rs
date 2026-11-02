@@ -2740,6 +2740,9 @@ pub struct Editor {
     /// 懸停（`hovered`）與補全（`completion_at`）早就各記了一格問這件事，`gd`
     /// 這一支漏了。
     asked_where_from: Option<(u64, usize)>,
+    /// Which place [`Editor::definition_query`] asks for (`gd`, `gD`, `gy`,
+    /// `gi`).
+    definition_kind: crate::lsp::Goto,
     /// **Normal 模式下按過 Esc，要前端把挂起信號再發一遍**（2026-09-22）。
     ///
     /// 在別的窗口用系統輸入法打完字切回來，輸入法還開着、鍵被吞掉——前端那頭記着
@@ -4192,6 +4195,7 @@ impl Editor {
             offered_actions: Vec::new(),
             command_query: None,
             asked_where_from: None,
+            definition_kind: crate::lsp::Goto::Definition,
             say_it_again: false,
             config_reload: false,
             config_back: false,

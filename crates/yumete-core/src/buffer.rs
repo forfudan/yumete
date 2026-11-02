@@ -94,6 +94,13 @@ pub type Edit = Result<(), ReadOnly>;
 /// The text is held in a [`ropey`] rope (behind [`TextStore`]); `path` records
 /// the file the buffer is bound to (if any); `modified` tracks unsaved changes
 /// for the future dirty-check on quit (Feature #3).
+/// The clock [`Buffer::edited`] reads: one tick per edit, in any buffer.
+static EDIT_CLOCK: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn next_edit() -> u64 {
+    EDIT_CLOCK.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
+}
+
 pub struct Buffer {
     /// Which buffer this is, for as long as the session lasts.
     ///
@@ -183,6 +190,9 @@ pub struct Buffer {
     /// What lets an answer *about the whole document* — which line is inside a
     /// code fence, say — be worked out once per edit instead of once per frame.
     revision: u64,
+    /// When the text last changed, on one clock for every buffer (helix's
+    /// `gm` asks which file was changed last, 2026-11-02). `0`: never.
+    edited: u64,
     /// **How many times the text has been written to disk.**
     ///
     /// A language server that runs a real compiler only re-runs it when the
@@ -379,6 +389,7 @@ impl Buffer {
             ending: "\n",
             history: History::default(),
             revision: 0,
+            edited: 0,
             saved_depth: Some(0),
             saves: 0,
             edit: None,
@@ -443,6 +454,7 @@ impl Buffer {
             ending,
             history: History::default(),
             revision: 0,
+            edited: 0,
             saved_depth: Some(0),
             saves: 0,
             edit: None,
@@ -555,6 +567,7 @@ impl Buffer {
             marked,
             history: History::default(),
             revision: 0,
+            edited: 0,
             saved_depth: Some(0),
             saves: 0,
             edit: None,
@@ -749,6 +762,11 @@ impl Buffer {
         self.syntax = syntax;
     }
 
+    /// When the text last changed, against every other buffer (`0`: never).
+    pub fn edited(&self) -> u64 {
+        self.edited
+    }
+
     /// How many times the text has changed — a cache key for anything derived
     /// from the whole document.
     pub fn revision(&self) -> u64 {
@@ -877,6 +895,7 @@ impl Buffer {
         self.earn_snapshot();
         self.rope.insert(char_idx, text);
         self.modified = true;
+        self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((char_idx, text.chars().count() as isize));
         if let Some(journal) = self.journal.as_mut() {
@@ -903,6 +922,7 @@ impl Buffer {
         let at = range.start;
         self.rope.remove(range);
         self.modified = true;
+        self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((at, -(taken as isize)));
         if let Some(journal) = self.journal.as_mut() {
@@ -933,6 +953,7 @@ impl Buffer {
         self.rope.remove(range);
         self.rope.insert(start, text);
         self.modified = true;
+        self.edited = next_edit();
         self.revision += 1;
         self.edit = Some((start, text.chars().count() as isize - taken as isize));
         if let Some(journal) = self.journal.as_mut() {

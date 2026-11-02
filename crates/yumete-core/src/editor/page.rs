@@ -1428,7 +1428,7 @@ impl Editor {
     ///
     /// Warning: **問完不等**。編輯器是一條線程，答案下一趟循環纔回得來——所以這裏只
     /// 把問題放下，光標過一會兒纔跳。helix 也是這樣（它的請求同樣是異步的）。
-    pub(super) fn ask_where_this_is_written(&mut self) -> bool {
+    pub(super) fn ask_where_this_is_written(&mut self, kind: crate::lsp::Goto) -> bool {
         if !matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
             return false;
         }
@@ -1441,6 +1441,7 @@ impl Editor {
         // Warning: 問出去的列是 **UTF-16 碼元**，不是字符數。
         let chars = self.sel.head() - rope.line_to_char(line);
         self.definition_query = Some((path, line, crate::problem::utf16_column(&text, chars)));
+        self.definition_kind = kind;
         self.asked_where_from = Some((self.current_buffer().id(), self.sel.head()));
         self.status = say!("lsp.asking");
         true
@@ -1465,6 +1466,20 @@ impl Editor {
     /// 服務器忙完了自己會再問一次。
     pub fn definition_query(&self) -> Option<(std::path::PathBuf, usize, usize)> {
         self.definition_query.clone()
+    }
+
+    /// Which place that question asks for.
+    pub fn definition_kind(&self) -> crate::lsp::Goto {
+        self.definition_kind
+    }
+
+    /// **`gD` `gy` `gi`: the declaration, the type, an implementation**
+    /// (2026-11-02, helix's keys): asked of the language server as `gd`'s
+    /// definition is. A file no server serves says so.
+    pub(super) fn ask_for_place(&mut self, kind: crate::lsp::Goto) {
+        if !self.ask_where_this_is_written(kind) {
+            self.status = say!("lsp.not-served");
+        }
     }
 
     /// **答案回來了：去那兒**（#53 ②）。
