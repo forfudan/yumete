@@ -840,6 +840,16 @@ impl Editor {
             self.extend_to_line_bounds();
             self.vim_lines = false;
         }
+        // Visual `gc`: the selected lines, commented.
+        if c == '#' {
+            self.extend = false;
+            self.extend_to_line_bounds();
+            let start = self.selection().0;
+            self.toggle_comment(super::edits::CommentKey::Lines);
+            self.sel.set_anchor(start);
+            self.sel.set_head(start);
+            return self.refresh_goal_column();
+        }
         // `gq` leaves the cursor where vim does, on the last line it wrote.
         if c == 'q' {
             self.extend = false;
@@ -931,6 +941,10 @@ impl Editor {
         // **`gqgq`, `gUgU`, `gugu`, `g~g~`** are the `g` operators doubled
         // with their `g` spelled again (`:h gqgq`), the same lines as `gqq`.
         if first == Some('g') && c == op && matches!(op, 'q' | 'w' | 'u' | 'U' | '~') {
+            return self.run_vim_line(op);
+        }
+        // `gcc` is the line, as Neovim's and vim's package spell it.
+        if op == '#' && first.is_none() && c == 'c' {
             return self.run_vim_line(op);
         }
         // **`d%`** (`:h %`, inclusive): from here to the other half of the
@@ -1556,6 +1570,18 @@ impl Editor {
                     self.clamp_cursor();
                     self.refresh_goal_column();
                 }
+            }
+            // **`gc`** — the lines the motion crosses, commented as `Space A-c`
+            // comments them (vim 9.1's comment package, Neovim's `gc`).
+            '#' => {
+                self.take_object(span);
+                self.extend_to_line_bounds();
+                let start = self.selection().0;
+                self.toggle_comment(super::edits::CommentKey::Lines);
+                self.extend = false;
+                self.sel.set_anchor(start);
+                self.sel.set_head(start);
+                self.refresh_goal_column();
             }
             // **`gu`／`gU`／`g~`** — 換字形，選區就是那一段（2026-10-06）。
             'u' | 'U' | '~' => {

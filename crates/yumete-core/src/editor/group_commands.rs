@@ -91,6 +91,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::OperatorLowercase, |e, _| e.g_operator('u'), Key::Char('u')),
     (NormalCmd::OperatorUppercase, |e, _| e.g_operator('U'), Key::Char('U')),
     (NormalCmd::OperatorSwitchCase, |e, _| e.g_operator('~'), Key::Char('~')),
+    // `gc` is `#` inside: the operator's own letter is taken by `c`.
+    (NormalCmd::OperatorComment, |e, _| e.g_operator('#'), Key::Char('c')),
     (NormalCmd::OperatorFill, |e, _| e.g_operator('q'), Key::Char('q')),
     (NormalCmd::OperatorFillKeepCursor, |e, _| e.g_operator('w'), Key::Char('w')),
     (NormalCmd::JoinSelectionsNoSpace, |e, cx| {
@@ -151,8 +153,9 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ShowRecordPanel, |e, _| e.show_the_record_here(false), Key::Char('I')),
     (NormalCmd::TableMode, |e, _| e.pending = Pending::Table, Key::Char('t')),
     (NormalCmd::PasteMenu, |e, _| e.open_paste_picker(), Key::Char('"')),
-    (NormalCmd::ToggleComments, |e, _| e.toggle_comment(crate::comment::Prefer::Line), Key::Char('c')),
-    (NormalCmd::ToggleBlockComments, |e, _| e.toggle_comment(crate::comment::Prefer::Block), Key::Char('C')),
+    (NormalCmd::ToggleComments, |e, _| e.toggle_comment(super::edits::CommentKey::Toggle), Key::Char('c')),
+    (NormalCmd::ToggleLineComments, |e, _| e.toggle_comment(super::edits::CommentKey::Lines), Key::Alt('c')),
+    (NormalCmd::ToggleBlockComments, |e, _| e.toggle_comment(super::edits::CommentKey::Block), Key::Char('C')),
     (NormalCmd::ConflictMode, |e, _| e.pending = Pending::Conflict, Key::Char('m')),
     (NormalCmd::OpenRecentMode, |e, _| e.pending = Pending::Open, Key::Char('o')),
     (NormalCmd::YumeMode, |e, _| e.pending = Pending::Yume, Key::Char('z')),

@@ -515,6 +515,7 @@ impl Editor {
                 // sign read 「qg」 for a half-typed `gqg`).
                 let op = match op {
                     'q' | 'w' | 'u' | 'U' | '~' => format!("g{op}"),
+                    '#' => String::from("gc"),
                     other => other.to_string(),
                 };
                 return Some(Hint::Says(match first {

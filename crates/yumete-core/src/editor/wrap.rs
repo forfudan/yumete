@@ -377,6 +377,7 @@ impl Editor {
             let mut word = match op {
                 's' => String::from("ys"),
                 'u' | 'U' | '~' | 'q' | 'w' => format!("g{op}"),
+                '#' => String::from("gc"),
                 _ => String::from(op),
             };
             if let Some(f) = first {

@@ -1896,87 +1896,214 @@ impl Editor {
     /// a line comment has nowhere else to go. So the selection is widened to
     /// the lines it touches before anything is written, and the selection that
     /// comes back covers the same lines.
-    pub(super) fn toggle_comment(&mut self, prefer: crate::comment::Prefer) {
+    pub(super) fn toggle_comment(&mut self, key: CommentKey) {
         if self.refuse_readonly() {
             return;
         }
-        let Some(form) = crate::comment::form(self.syntax(), prefer) else {
+        // A fenced block in Markdown is commented in its own language.
+        let syntax = match self.fence_language_here() {
+            Some(language) => crate::syntax::Syntax::Code(language),
+            None => self.syntax(),
+        };
+        let crate::comment::Marks { line, block } = crate::comment::marks(syntax);
+        if line.is_none() && block.is_none() {
             // **Said, not silently skipped.** A key that writes nothing and
             // says nothing is the bug this project has fixed most often.
             self.status = say!("comment.none");
             return;
-        };
+        }
         let rope = self.current_buffer().rope().clone();
-        // **Every selection's lines, decided together** (2026-10-29, review:
-        // `Space c` commented the primary's lines alone, as helix does not).
-        // helix's `toggle_comments` gathers the lines of every selection and
-        // decides once whether they are all commented, so three cursors on
-        // three lines toggle three lines the same way. Selections that share
-        // lines share one span.
+        let whole = self.comment_whole_lines(&rope);
+        let each_line = |spans: &[(usize, usize, bool)]| comment_each_line(&rope, spans);
+        let text_of = |spans: &[(usize, usize, bool)]| -> Vec<String> {
+            spans.iter().map(|&(a, b, _)| rope.slice(a..b).to_string()).collect()
+        };
+        let wrapped_all = |spans: &[(usize, usize, bool)], (open, close): (&str, &str)| {
+            let texts = text_of(spans);
+            texts.iter().any(|t| !t.trim().is_empty())
+                && texts.iter().all(|t| t.trim().is_empty() || crate::comment::wrapped(t, open, close).is_some())
+        };
+        match key {
+            CommentKey::Block => {
+                let Some(marks) = block else {
+                    return self.comment_lines(&whole, line.unwrap_or_default());
+                };
+                let spans = self.comment_selections(&rope);
+                if wrapped_all(&spans, marks) {
+                    return self.rewrite_comment_spans(&spans, crate::comment::toggle_spans(&text_of(&spans), marks.0, marks.1), None);
+                }
+                // **Whole lines in prose: one pair on lines of their own**
+                // (the flavour's `block_comment_lines`).
+                let prose = matches!(
+                    syntax,
+                    crate::syntax::Syntax::Markdown | crate::syntax::Syntax::Typst | crate::syntax::Syntax::Code(crate::code::Language::Html)
+                );
+                let lines_only = spans.iter().all(|&(a, b, _)| {
+                    a == rope.line_to_char(rope.char_to_line(a))
+                        && (b == rope.len_chars() || b == rope.line_to_char(rope.char_to_line(b)))
+                });
+                let several = spans.iter().any(|&(a, b, _)| rope.slice(a..b).to_string().trim_end().contains('\n'));
+                if prose && lines_only && several && self.flavor_on(yumete_cjk::FlavorItem::BlockCommentLines) {
+                    let texts = text_of(&whole);
+                    if crate::comment::would_nest(&texts, marks.0, marks.1) {
+                        self.status = say!("comment.would-nest");
+                        return;
+                    }
+                    let ending = self.current_buffer().ending().to_string();
+                    let rebuilt = texts.iter().map(|t| crate::comment::stand_off(t, marks.0, marks.1, &ending)).collect();
+                    return self.rewrite_comment_spans(&whole, rebuilt, None);
+                }
+                let texts = text_of(&spans);
+                if crate::comment::would_nest(&texts, marks.0, marks.1) {
+                    self.status = say!("comment.would-nest");
+                    return;
+                }
+                self.rewrite_comment_spans(&spans, crate::comment::toggle_spans(&texts, marks.0, marks.1), None)
+            }
+            CommentKey::Lines => match (line, block) {
+                (Some(mark), _) => self.comment_lines(&whole, mark),
+                (None, Some(marks)) => self.comment_each_line_in_blocks(&whole, &each_line(&whole), marks),
+                (None, None) => {}
+            },
+            CommentKey::Toggle => {
+                if let Some(marks) = block {
+                    let lines = each_line(&whole);
+                    // A block comment on each line, or round the selection,
+                    // comes off first (helix's `toggle_comments`).
+                    if wrapped_all(&lines, marks) {
+                        return self.comment_each_line_in_blocks(&whole, &lines, marks);
+                    }
+                    let spans = self.comment_selections(&rope);
+                    if wrapped_all(&spans, marks) {
+                        return self.rewrite_comment_spans(&spans, crate::comment::toggle_spans(&text_of(&spans), marks.0, marks.1), None);
+                    }
+                    if line.is_none() {
+                        return self.comment_each_line_in_blocks(&whole, &lines, marks);
+                    }
+                }
+                if let Some(mark) = line {
+                    self.comment_lines(&whole, mark);
+                }
+            }
+        }
+    }
+
+    /// Every selection's whole lines, merged where they share one, each
+    /// marked when it holds the primary.
+    fn comment_whole_lines(&self, rope: &ropey::Rope) -> Vec<(usize, usize, bool)> {
         let primary = self.sel.primary();
         let mut spans: Vec<(usize, usize, bool)> = self
             .sel
             .iter()
             .map(|one| {
                 let (from, to) = self.drawn(*one);
-                let (start, end) = lines_of(&rope, from, to);
+                let (start, end) = lines_of(rope, from, to);
                 (start, end, *one == primary)
             })
             .collect();
-        spans.sort();
-        let mut merged: Vec<(usize, usize, bool)> = Vec::new();
-        for (start, end, main) in spans {
-            match merged.last_mut() {
-                Some(last) if start <= last.1 => {
-                    last.1 = last.1.max(end);
-                    last.2 |= main;
-                }
-                _ => merged.push((start, end, main)),
-            }
+        merge_spans(&mut spans);
+        spans
+    }
+
+    /// The selections themselves, as drawn, merged where they meet.
+    fn comment_selections(&self, _rope: &ropey::Rope) -> Vec<(usize, usize, bool)> {
+        let primary = self.sel.primary();
+        let mut spans: Vec<(usize, usize, bool)> = self
+            .sel
+            .iter()
+            .map(|one| {
+                let (from, to) = self.drawn(*one);
+                (from, to, *one == primary)
+            })
+            .collect();
+        merge_spans(&mut spans);
+        spans
+    }
+
+    /// Line comments on these runs of lines, decided together.
+    fn comment_lines(&mut self, whole: &[(usize, usize, bool)], mark: &str) {
+        if mark.is_empty() {
+            return;
         }
-        let texts: Vec<String> = merged.iter().map(|&(a, b, _)| rope.slice(a..b).to_string()).collect();
-        let rebuilt: Vec<String> = match form {
-            crate::comment::Form::Line(mark) => {
-                // Splitting on `\n` leaves each piece carrying its own `\r`,
-                // so a CRLF file comes back out of this one unchanged.
-                let pieces: Vec<Vec<&str>> = texts.iter().map(|t| t.split('\n').collect()).collect();
-                let every: Vec<&str> = pieces.iter().flatten().copied().collect();
-                let mut toggled = crate::comment::toggle_line(&every, mark).into_iter();
-                pieces
-                    .iter()
-                    .map(|lines| toggled.by_ref().take(lines.len()).collect::<Vec<_>>().join("\n"))
-                    .collect()
-            }
-            crate::comment::Form::Block(open, close) => {
-                let ending = self.current_buffer().ending();
-                texts.iter().map(|t| crate::comment::toggle_block(t, open, close, ending)).collect()
-            }
-        };
+        let rope = self.current_buffer().rope().clone();
+        let texts: Vec<String> = whole.iter().map(|&(a, b, _)| rope.slice(a..b).to_string()).collect();
+        // Splitting on `\n` leaves each piece carrying its own `\r`, so a
+        // CRLF file comes back out of this one unchanged.
+        let pieces: Vec<Vec<&str>> = texts.iter().map(|t| t.split('\n').collect()).collect();
+        let every: Vec<&str> = pieces.iter().flatten().copied().collect();
+        let mut toggled = crate::comment::toggle_line(&every, mark).into_iter();
+        let rebuilt = pieces
+            .iter()
+            .map(|lines| toggled.by_ref().take(lines.len()).collect::<Vec<_>>().join("\n"))
+            .collect();
+        self.rewrite_comment_spans(whole, rebuilt, None);
+    }
+
+    /// A block comment on each line of these runs, or off each (helix's way
+    /// in a format with only a block form); the runs stay selected.
+    fn comment_each_line_in_blocks(
+        &mut self,
+        whole: &[(usize, usize, bool)],
+        lines: &[(usize, usize, bool)],
+        (open, close): (&str, &str),
+    ) {
+        let rope = self.current_buffer().rope().clone();
+        let texts: Vec<String> = lines.iter().map(|&(a, b, _)| rope.slice(a..b).to_string()).collect();
+        let all = texts.iter().all(|t| t.trim().is_empty() || crate::comment::wrapped(t, open, close).is_some());
+        if !all && crate::comment::would_nest(&texts, open, close) {
+            self.status = say!("comment.would-nest");
+            return;
+        }
+        let rebuilt = crate::comment::toggle_spans(&texts, open, close);
+        self.rewrite_comment_spans(lines, rebuilt, Some(whole));
+    }
+
+    /// **Write the rebuilt spans in one undo step**, from the last up so the
+    /// earlier starts still hold, then select what was rewritten: each span,
+    /// or each of `groups` (the runs of lines the spans were cut from), so
+    /// the key pressed twice undoes itself.
+    fn rewrite_comment_spans(
+        &mut self,
+        spans: &[(usize, usize, bool)],
+        rebuilt: Vec<String>,
+        groups: Option<&[(usize, usize, bool)]>,
+    ) {
+        let rope = self.current_buffer().rope().clone();
+        let texts: Vec<String> = spans.iter().map(|&(a, b, _)| rope.slice(a..b).to_string()).collect();
         if rebuilt == texts {
             return;
         }
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
-        // From the last span up, so the earlier spans' starts still hold.
-        for (&(start, end, _), text) in merged.iter().zip(&rebuilt).rev() {
+        for (&(start, end, _), text) in spans.iter().zip(&rebuilt).rev() {
             if !self.overwrite(start, end, text) {
                 self.current_buffer_mut().end_undo_group(grouping);
                 return;
             }
         }
         self.current_buffer_mut().end_undo_group(grouping);
-        // The same lines stay selected, so the key can be pressed twice and
-        // the second press undoes the first — which is what a toggle is.
-        let mut shift: isize = 0;
-        let mut ranges = Vec::with_capacity(merged.len());
+        // Where an old place is now: moved by every span wholly before it
+        // (a start), or by every span that begins before it (an end).
+        let grown: Vec<(usize, usize, isize)> = spans
+            .iter()
+            .zip(&rebuilt)
+            .map(|(&(a, b, _), text)| (a, b, text.chars().count() as isize - (b - a) as isize))
+            .collect();
+        let place = |at: usize, closing: bool| -> usize {
+            let moved: isize = grown
+                .iter()
+                .filter(|&&(a, b, _)| if closing { a < at } else { b <= at })
+                .map(|&(_, _, by)| by)
+                .sum();
+            (at as isize + moved).max(0) as usize
+        };
+        let targets = groups.unwrap_or(spans);
+        let mut ranges = Vec::with_capacity(targets.len());
         let mut which = 0;
-        for (nth, (&(old_start, old_end, main), text)) in merged.iter().zip(&rebuilt).enumerate() {
-            let start = (old_start as isize + shift) as usize;
-            let length = text.chars().count();
-            let last = start + length;
-            shift += length as isize - (old_end - old_start) as isize;
-            let head = crate::motion::prev_grapheme(self.current_buffer().rope(), last).max(start);
-            ranges.push(crate::selection::Range::new(start, head));
+        for (nth, &(start, end, main)) in targets.iter().enumerate() {
+            let (from, to) = (place(start, false), place(end, true));
+            let head = crate::motion::prev_grapheme(self.current_buffer().rope(), to).max(from);
+            ranges.push(crate::selection::Range::new(from, head));
             if main {
                 which = nth;
             }
@@ -1994,6 +2121,51 @@ impl Editor {
 /// line, so `line_end` there reached past the last line's break: the break
 /// went inside the comment (a blank line before the closing mark) and the file
 /// came back with no final newline.
+/// Which comment key was pressed (helix's three).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CommentKey {
+    /// `toggle_comments`: `C-c`, `Space c`.
+    Toggle,
+    /// `toggle_line_comments`: `Space A-c`.
+    Lines,
+    /// `toggle_block_comments`: `Space C`.
+    Block,
+}
+
+/// Spans sorted and merged where they meet, keeping which held the primary.
+fn merge_spans(spans: &mut Vec<(usize, usize, bool)>) {
+    spans.sort();
+    let mut merged: Vec<(usize, usize, bool)> = Vec::new();
+    for &(start, end, main) in spans.iter() {
+        match merged.last_mut() {
+            Some(last) if start <= last.1 => {
+                last.1 = last.1.max(end);
+                last.2 |= main;
+            }
+            _ => merged.push((start, end, main)),
+        }
+    }
+    *spans = merged;
+}
+
+/// Each line of these runs, without its line break.
+fn comment_each_line(rope: &ropey::Rope, runs: &[(usize, usize, bool)]) -> Vec<(usize, usize, bool)> {
+    let mut out = Vec::new();
+    for &(start, end, main) in runs {
+        let (first, last) = (rope.char_to_line(start), rope.char_to_line(end.saturating_sub(1).max(start)));
+        for line in first..=last {
+            let from = rope.line_to_char(line);
+            let text = rope.line(line).to_string();
+            let body = text.trim_end_matches(['\n', '\r']).chars().count();
+            if from >= end {
+                break;
+            }
+            out.push((from, from + body, main));
+        }
+    }
+    out
+}
+
 fn lines_of(rope: &ropey::Rope, from: usize, to: usize) -> (usize, usize) {
     let start = crate::motion::line_start(rope, from.min(rope.len_chars()));
     let to = to.min(rope.len_chars());

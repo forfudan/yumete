@@ -554,6 +554,11 @@ impl Editor {
         Some(TreeHere::new(tree, fence.source, fence.starts))
     }
 
+    /// The language of the fenced block the caret stands in, if it names one.
+    pub(super) fn fence_language_here(&self) -> Option<Language> {
+        self.fence_under_caret().map(|fence| fence.language)
+    }
+
     /// Every fence in the buffer, in order — read once per revision.
     fn fences(&self) -> Rc<Vec<Fence>> {
         let buffer = self.current_buffer();

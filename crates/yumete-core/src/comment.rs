@@ -1,13 +1,15 @@
 //! Commenting out, and taking the comment off again (#409).
 //!
-//! **Two keys, and each one says which form it means.** helix's `空格 c` picks
-//! the form for you — line if the language has one, block otherwise — and the
-//! writer, 2026-09-12：「`space + c`: 強制行注釋，没有纔退到塊注釋；`space + C`:
-//! 強制塊注釋，没有纔退到行注釋。這樣更加有確定性。」 The fallback is not a
-//! guess: it fires only where the format has no such form at all, and there it
-//! is the only thing the key could have meant.
+//! **helix's three commands** (2026-11-02, after a writer's and a code
+//! user's study): `toggle_comments` (`C-c`, `Space c`) writes line comments,
+//! takes off a block comment that wraps each line or the selection, and in a
+//! format with only a block form wraps each line; `toggle_line_comments`
+//! (`Space A-c`) writes line comments only; `toggle_block_comments`
+//! (`Space C`) wraps exactly the selection, half a sentence included. The
+//! 2026-09-12 rule — 「`space + c`: 強制行注釋，没有纔退到塊注釋；`space + C`:
+//! 強制塊注釋，没有纔退到行注釋」 — is helix's too, and stands.
 //!
-//! Everything here is a function of text. The editor decides which lines, and
+//! Everything here is a function of text. The editor decides which spans, and
 //! this decides what they become — which is why the whole of it is testable
 //! without opening a buffer.
 
@@ -75,35 +77,6 @@ pub fn marks(syntax: Syntax) -> Marks {
     }
 }
 
-/// Which form a key asked for, before the format has its say.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Prefer {
-    /// `空格 c`: a line comment, or a block one where there is no line form.
-    Line,
-    /// `空格 C`: a block comment, or a line one where there is no block form.
-    Block,
-}
-
-/// The form this file will actually get, or `None` when it has neither.
-pub fn form(syntax: Syntax, prefer: Prefer) -> Option<Form> {
-    let Marks { line, block } = marks(syntax);
-    let as_line = line.map(Form::Line);
-    let as_block = block.map(|(a, b)| Form::Block(a, b));
-    match prefer {
-        Prefer::Line => as_line.or(as_block),
-        Prefer::Block => as_block.or(as_line),
-    }
-}
-
-/// A comment form, resolved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Form {
-    /// `//`, written at the head of every line.
-    Line(&'static str),
-    /// `<!--` and `-->`, written round the whole run.
-    Block(&'static str, &'static str),
-}
-
 /// The indent a run of lines shares — where a line comment goes in.
 ///
 /// **The shallowest line wins, and blank lines do not vote.** Commenting a
@@ -157,7 +130,10 @@ pub fn toggle_line(lines: &[&str], mark: &str) -> Vec<String> {
                 true => line.to_string(),
                 false => {
                     let (head, rest) = line.split_at(line.len() - line.trim_start().len());
-                    let rest = rest.strip_prefix(mark).unwrap_or(rest);
+                    // The longest mark the line wears comes off (helix's rule):
+                    // `/// doc` is a doc comment, not `//` before `/ doc`.
+                    let worn = longer_marks(mark).iter().copied().find(|m| rest.starts_with(m)).unwrap_or(mark);
+                    let rest = rest.strip_prefix(worn).unwrap_or(rest);
                     // The space this function put in is taken back out; one
                     // the writer typed is theirs and stays.
                     let rest = rest.strip_prefix(' ').unwrap_or(rest);
@@ -175,43 +151,102 @@ pub fn toggle_line(lines: &[&str], mark: &str) -> Vec<String> {
     }
 }
 
-/// Wrap a run in a block comment, or unwrap it.
-///
-/// The text handed in is what the writer selected, whole lines included, and
-/// what comes back replaces it exactly. **The marks go on their own lines when
-/// the run is more than one**, because a `<!--` at the end of a paragraph's
-/// first line and a `-->` in the middle of its last is a thing nobody can read
-/// back; a single line keeps them inline, where they read as one unit.
-pub fn toggle_block(text: &str, open: &str, close: &str, ending: &str) -> String {
-    let trimmed = text.trim();
-    if trimmed.starts_with(open) && trimmed.ends_with(close) && trimmed.len() >= open.len() + close.len() {
-        let inner = &trimmed[open.len()..trimmed.len() - close.len()];
-        // Whatever shape it was put on in, take the same shape off: the
-        // newline-and-indent form and the inline form both come back clean.
-        // **`\r\n` before `\n`**: stripping the `\n` off a CRLF pair leaves the
-        // `\r` standing alone in the middle of a line.
-        fn off_the_front(s: &str) -> &str {
-            s.strip_prefix("\r\n")
-                .or_else(|| s.strip_prefix('\n'))
-                .or_else(|| s.strip_prefix(' '))
-                .unwrap_or(s)
-        }
-        fn off_the_back(s: &str) -> &str {
-            s.strip_suffix("\r\n")
-                .or_else(|| s.strip_suffix('\n'))
-                .or_else(|| s.strip_suffix(' '))
-                .unwrap_or(s)
-        }
-        return off_the_back(off_the_front(inner)).to_string();
+/// The doc-comment forms a line mark has, longest first.
+fn longer_marks(mark: &str) -> &'static [&'static str] {
+    match mark {
+        "//" => &["///", "//!"],
+        "--" => &["---"],
+        _ => &[],
     }
-    // **The two marks stand on lines of their own, ending the way this file's
-    // lines end** (丟字第二輪, 2026-10-07). A literal `\n` here wrote two LF
-    // lines into a CRLF manuscript — `/*` and `*/` — and left the file with
-    // two kinds of line in it, which is the thing #309 exists to prevent.
-    match text.contains('\n') {
-        true => format!("{open}{ending}{text}{ending}{close}"),
-        false => format!("{open} {text} {close}"),
+}
+
+/// **What a block comment wraps**, when `text` is exactly one: the space
+/// before the opening mark, what is inside, and the space after the closing
+/// one. The marks must pair — nothing inside may open or close another — so
+/// `<!-- 甲 -->` then `<!-- 乙 -->` is two comments, not one.
+pub fn wrapped<'a>(text: &'a str, open: &str, close: &str) -> Option<(&'a str, &'a str, &'a str)> {
+    let body = text.trim();
+    if body.len() < open.len() + close.len() || !body.starts_with(open) || !body.ends_with(close) {
+        return None;
     }
+    let inner = &body[open.len()..body.len() - close.len()];
+    if inner.contains(open) || inner.contains(close) {
+        return None;
+    }
+    let lead = &text[..text.len() - text.trim_start().len()];
+    let trail = &text[text.trim_end().len()..];
+    Some((lead, inner, trail))
+}
+
+/// **Wrap each span in a block comment, or take it off** (helix's
+/// `toggle_block_comments`): decided together, so a run that is wholly
+/// wrapped comes back and one that is not gets wrapped. Each mark goes inside
+/// the span's own spaces, so an indent stays an indent; blank spans are left.
+pub fn toggle_spans(texts: &[String], open: &str, close: &str) -> Vec<String> {
+    let solid: Vec<&String> = texts.iter().filter(|t| !t.trim().is_empty()).collect();
+    let all = !solid.is_empty() && solid.iter().all(|t| wrapped(t, open, close).is_some());
+    texts
+        .iter()
+        .map(|text| match (text.trim().is_empty(), all) {
+            (true, _) => text.clone(),
+            (false, true) => match unwrap_stand_off(text, open, close) {
+                Some(back) => back,
+                None => {
+                    let (lead, inner, trail) = wrapped(text, open, close).expect("checked above");
+                    let inner = inner.strip_prefix(' ').unwrap_or(inner);
+                    let inner = inner.strip_suffix(' ').unwrap_or(inner);
+                    format!("{lead}{inner}{trail}")
+                }
+            },
+            (false, false) => {
+                let lead = &text[..text.len() - text.trim_start().len()];
+                let trail = &text[text.trim_end().len()..];
+                format!("{lead}{open} {} {close}{trail}", text.trim())
+            }
+        })
+        .collect()
+}
+
+/// **Whole lines in one comment, its marks on lines of their own** at the
+/// lines' shared indent (yumete's shape, decided 2026-10-07 and kept as a
+/// flavour item 2026-11-02): a `<!--` at the end of a paragraph's first line
+/// and a `-->` in the middle of its last is a thing nobody can read back.
+/// `text` is whole lines; the marks' lines end the way the file's do.
+pub fn stand_off(text: &str, open: &str, close: &str, ending: &str) -> String {
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let width = shared_indent(&lines);
+    let indent = lines.iter().find(|l| !l.trim().is_empty()).map_or("", |l| &l[..width]);
+    match text.ends_with('\n') {
+        true => format!("{indent}{open}{ending}{text}{indent}{close}{ending}"),
+        false => format!("{indent}{open}{ending}{text}{ending}{indent}{close}"),
+    }
+}
+
+/// [`stand_off`] taken back: the lines between a line that is only the
+/// opening mark and a line that is only the closing one.
+pub fn unwrap_stand_off(text: &str, open: &str, close: &str) -> Option<String> {
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let (first, rest) = lines.split_first()?;
+    let (last, middle) = rest.split_last()?;
+    if first.trim() != open || last.trim() != close {
+        return None;
+    }
+    let inner: String = middle.concat();
+    if inner.contains(open) || inner.contains(close) {
+        return None;
+    }
+    // At the end of the file the closing line had no ending, and neither did
+    // the last line before it was wrapped.
+    Some(match text.ends_with('\n') {
+        true => inner,
+        false => inner.trim_end_matches(['\n', '\r']).to_string(),
+    })
+}
+
+/// Whether wrapping these would put a comment inside another, in a format
+/// whose comments do not nest (`<!-- -->`): the first `-->` would end both.
+pub fn would_nest(texts: &[String], open: &str, close: &str) -> bool {
+    open == "<!--" && texts.iter().any(|t| wrapped(t, open, close).is_none() && (t.contains(open) || t.contains(close)))
 }
 
 #[cfg(test)]
@@ -233,22 +268,6 @@ mod tests {
         assert_eq!(marks(Syntax::Markdown).line, None, "no line comment in Markdown");
         assert_eq!(marks(Syntax::Typst).line, Some("//"));
         assert_eq!(marks(Syntax::Text), Marks { line: None, block: None });
-    }
-
-    /// **The fallback is not a guess** — it fires only where the format has no
-    /// such form, and then it is the only thing the key could have meant.
-    #[test]
-    fn a_key_falls_back_only_where_the_format_has_nothing_else() {
-        // Typst is the one place the two keys really differ.
-        assert_eq!(form(Syntax::Typst, Prefer::Line), Some(Form::Line("//")));
-        assert_eq!(form(Syntax::Typst, Prefer::Block), Some(Form::Block("/*", "*/")));
-        // Markdown answers both with the only form it has.
-        let html = Some(Form::Block("<!--", "-->"));
-        assert_eq!(form(Syntax::Markdown, Prefer::Line), html, "no line form to force");
-        assert_eq!(form(Syntax::Markdown, Prefer::Block), html);
-        // And plain text has neither, which the caller must say out loud.
-        assert_eq!(form(Syntax::Text, Prefer::Line), None);
-        assert_eq!(form(Syntax::Text, Prefer::Block), None);
     }
 
     #[test]
@@ -278,38 +297,51 @@ mod tests {
         assert_eq!(toggle_line(&["// 甲", "", "// 乙"], "//"), vec!["甲", "", "乙"]);
     }
 
+    /// helix's block comment wraps exactly the span, inside its spaces, and
+    /// comes off the same way.
     #[test]
-    fn a_block_comment_is_inline_on_one_line_and_stands_off_on_several() {
-        assert_eq!(toggle_block("甲乙", "<!--", "-->", "\n"), "<!-- 甲乙 -->");
-        assert_eq!(toggle_block("甲\n乙", "<!--", "-->", "\n"), "<!--\n甲\n乙\n-->");
+    fn a_block_comment_wraps_the_span_and_comes_off_again() {
+        let texts = vec!["山下起了大雪".to_string(), "  甲  ".to_string(), String::new()];
+        let on = toggle_spans(&texts, "<!--", "-->");
+        assert_eq!(on, ["<!-- 山下起了大雪 -->", "  <!-- 甲 -->  ", ""]);
+        assert_eq!(toggle_spans(&on, "<!--", "-->"), texts);
+        // Written by hand with no spaces, it still comes off.
+        assert_eq!(toggle_spans(&["<!--甲-->".to_string()], "<!--", "-->"), ["甲"]);
     }
 
-    /// **The two marks end their lines the way the file's lines end** (丟字第
-    /// 二輪, 2026-10-07). A literal `\n` wrote `/*` and `*/` as LF lines into a
-    /// CRLF manuscript, so commenting a paragraph left the file with two kinds
-    /// of line in it — and the page looks identical either way, because the
-    /// view strips `\r`.
+    /// **Two comments side by side are two**, not one with garbage inside
+    /// (found 2026-11-02: `<!-- 甲 -->` then `<!-- 乙 -->` came back as
+    /// `甲 -->` then `<!-- 乙`).
     #[test]
-    fn a_block_comment_ends_its_own_two_lines_the_way_the_file_does() {
-        assert_eq!(
-            toggle_block("甲\r\n乙", "<!--", "-->", "\r\n"),
-            "<!--\r\n甲\r\n乙\r\n-->"
-        );
-        // One line is still inline, where no ending is written at all.
-        assert_eq!(toggle_block("甲乙", "<!--", "-->", "\r\n"), "<!-- 甲乙 -->");
+    fn two_comments_side_by_side_are_two() {
+        assert_eq!(wrapped("<!-- 甲 --> <!-- 乙 -->", "<!--", "-->"), None);
+        let lines = vec!["<!-- 甲 -->".to_string(), "<!-- 乙 -->".to_string()];
+        assert_eq!(toggle_spans(&lines, "<!--", "-->"), ["甲", "乙"]);
     }
 
     #[test]
-    fn a_block_comment_comes_off_the_same_shape_it_went_on() {
+    fn whole_lines_stand_off_at_their_indent_and_come_back() {
         for ending in ["\n", "\r\n"] {
-            for text in ["甲乙", "甲\n乙", "  甲  ", "甲\r\n乙"] {
-                let on = toggle_block(text, "<!--", "-->", ending);
-                assert_eq!(
-                    toggle_block(&on, "<!--", "-->", ending),
-                    text,
-                    "round trip: {on:?} with {ending:?}"
-                );
-            }
+            let text = format!("  甲{ending}  乙{ending}");
+            let on = stand_off(&text, "<!--", "-->", ending);
+            assert_eq!(on, format!("  <!--{ending}  甲{ending}  乙{ending}  -->{ending}"));
+            assert_eq!(unwrap_stand_off(&on, "<!--", "-->").as_deref(), Some(text.as_str()));
+            assert_eq!(toggle_spans(&[on], "<!--", "-->"), std::slice::from_ref(&text));
         }
+        // At the end of the file, without a last ending.
+        let on = stand_off("甲\n乙", "<!--", "-->", "\n");
+        assert_eq!(on, "<!--\n甲\n乙\n-->");
+        assert_eq!(unwrap_stand_off(&on, "<!--", "-->").as_deref(), Some("甲\n乙"));
+    }
+
+    #[test]
+    fn a_doc_comment_comes_off_whole() {
+        assert_eq!(toggle_line(&["/// doc", "//! top"], "//"), ["doc", "top"]);
+    }
+
+    #[test]
+    fn a_comment_inside_another_is_refused_where_they_do_not_nest() {
+        assert!(would_nest(&["甲 <!-- 注 --> 乙".to_string()], "<!--", "-->"));
+        assert!(!would_nest(&["甲 /* 注 */ 乙".to_string()], "/*", "*/"));
     }
 }

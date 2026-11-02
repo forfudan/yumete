@@ -340,6 +340,11 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
         if matches!(key, "Up" | "Down" | "Left" | "Right") {
             return None;
         }
+        // `A-c` and `C-x` are one key with a modifier (`Space A-c`,
+        // 2026-11-02), not `A` then `-c`.
+        if key.chars().count() == 3 && (key.starts_with("A-") || key.starts_with("C-")) {
+            return Some((lead, key.to_string()));
+        }
         let mut key = key.chars();
         let first = key.next()?;
         let rest: String = key.collect();

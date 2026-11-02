@@ -856,6 +856,8 @@ pub(super) static GOTO: Group = Group {
         ch('.', NormalCmd::GotoLastModification, "hint.goto.last-change").flavor(FlavorItem::HelixKeysUnderVim),
         ch('t', NormalCmd::GotoWindowTop, "hint.goto.screen-top-middle-bottom").when(Only::GLetter),
         ch('c', NormalCmd::GotoWindowCenter, "hint.goto.screen-top-middle-bottom").when(Only::Helix),
+        // vim 9.1's comment package and Neovim's (the flavour's `vim_comment_keys`).
+        ch('c', NormalCmd::OperatorComment, "action.operator-comment").when(Only::Vim).flavor(FlavorItem::VimCommentKeys),
         ch('b', NormalCmd::GotoWindowBottom, "hint.goto.screen-top-middle-bottom").flavor(FlavorItem::HelixKeysUnderVim),
         // vim's own: none of these is a helix command.
         ch('v', NormalCmd::ReselectLastSelection, "hint.goto.reselect").when(Only::Vim),
@@ -930,6 +932,7 @@ pub(super) static SPACE: Group = Group {
         ch('"', NormalCmd::PasteMenu, "menu.paste.title").flavor(FlavorItem::RegistersMenu),
         ch('c', NormalCmd::ToggleComments, "hint.space.comment-line"),
         ch('C', NormalCmd::ToggleBlockComments, "hint.space.comment-block"),
+        key(Key::Alt('c'), NormalCmd::ToggleLineComments, "hint.space.comment-lines-only"),
         ch('m', NormalCmd::ConflictMode, "hint.conflict.title").flavor(FlavorItem::MergeConflicts),
         ch('o', NormalCmd::OpenRecentMode, "hint.space.open-recent").flavor(FlavorItem::RecentFiles),
         ch('z', NormalCmd::YumeMode, "hint.space.yume").flavor(FlavorItem::InputMethodMenu),

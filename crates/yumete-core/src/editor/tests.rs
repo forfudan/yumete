@@ -16186,6 +16186,110 @@ fn bracket_keys_select_the_next_syntax_object() {
 }
 
 #[test]
+fn comment_keys_follow_helix_and_keep_the_stand_off_shape_in_prose() {
+    // 2026-11-02, after a writer's and a code user's study.
+    let text = |ed: &Editor| ed.current_buffer().text();
+    let code = |src: &str, language| {
+        let mut ed = typed(src);
+        ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Code(language));
+        press(&mut ed, "gg");
+        ed
+    };
+
+    // Markdown `Space c`: each line its own comment, and back.
+    let mut ed = markdown("甲。\n乙。\n");
+    press(&mut ed, "xx");
+    type_keys(&mut ed, " c");
+    assert_eq!(text(&ed), "<!-- 甲。 -->\n<!-- 乙。 -->\n");
+    type_keys(&mut ed, " c");
+    assert_eq!(text(&ed), "甲。\n乙。\n");
+
+    // `Space C` on half a sentence wraps exactly that.
+    let mut ed = markdown("那年冬天，山下起了大雪。\n");
+    press(&mut ed, "f山;vt。");
+    type_keys(&mut ed, " C");
+    assert_eq!(text(&ed), "那年冬天，<!-- 山下起了大雪 -->。\n", "{}", ed.status());
+
+    // `Space C` on whole lines in prose: one pair on lines of their own.
+    let mut ed = markdown("甲。\n乙。\n");
+    press(&mut ed, "xx");
+    type_keys(&mut ed, " C");
+    assert_eq!(text(&ed), "<!--\n甲。\n乙。\n-->\n");
+    type_keys(&mut ed, " C");
+    assert_eq!(text(&ed), "甲。\n乙。\n", "and back");
+    // Off, helix's inline shape.
+    let mut ed = markdown("甲。\n乙。\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    press(&mut ed, "xx");
+    type_keys(&mut ed, " C");
+    assert_eq!(text(&ed), "<!-- 甲。\n乙。 -->\n");
+
+    // Two comments side by side come off as two.
+    let mut ed = markdown("<!-- 甲 -->\n<!-- 乙 -->\n");
+    press(&mut ed, "xx");
+    type_keys(&mut ed, " c");
+    assert_eq!(text(&ed), "甲\n乙\n");
+
+    // A comment would not nest in Markdown: refused, and said.
+    let mut ed = markdown("甲 <!-- 注 --> 乙\n");
+    press(&mut ed, "x");
+    type_keys(&mut ed, " C");
+    assert_eq!(text(&ed), "甲 <!-- 注 --> 乙\n");
+    assert!(!ed.status().is_empty());
+
+    // Code: `Space c` takes a block comment off, keeping the indent; a doc
+    // comment comes off whole; `Space A-c` is line comments only.
+    let mut ed = code("    /* x(); */\n", crate::code::Language::Rust);
+    type_keys(&mut ed, " c");
+    assert_eq!(text(&ed), "    x();\n");
+    let mut ed = code("/// doc\n", crate::code::Language::Rust);
+    type_keys(&mut ed, " c");
+    assert_eq!(text(&ed), "doc\n");
+    let mut ed = code("x();\n", crate::code::Language::Rust);
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Alt('c'));
+    assert_eq!(text(&ed), "// x();\n");
+
+    // A fenced block in Markdown is commented in its own language.
+    let mut ed = markdown("前言。\n\n```rust\nx();\n```\n");
+    press(&mut ed, "jjj");
+    type_keys(&mut ed, " c");
+    assert_eq!(text(&ed), "前言。\n\n```rust\n// x();\n```\n");
+}
+
+#[test]
+fn vim_gc_comments_lines_as_neovim_does() {
+    // The flavour's `vim_comment_keys` (2026-11-02): vim 9.1's package and
+    // Neovim's `gc{motion}`, `gcc`, Visual `gc`.
+    let rust = |src: &str| {
+        let mut ed = typed_vim(src);
+        ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Rust));
+        press(&mut ed, "gg");
+        ed
+    };
+    let mut ed = rust("a();\nb();\nc();\n");
+    press(&mut ed, "gcc");
+    assert_eq!(ed.current_buffer().text(), "// a();\nb();\nc();\n", "{}", ed.status());
+    press(&mut ed, "gcc");
+    assert_eq!(ed.current_buffer().text(), "a();\nb();\nc();\n");
+    press(&mut ed, "gcj");
+    assert_eq!(ed.current_buffer().text(), "// a();\n// b();\nc();\n");
+    let mut ed = rust("a();\nb();\nc();\n");
+    press(&mut ed, "jVjgc");
+    assert_eq!(ed.current_buffer().text(), "a();\n// b();\n// c();\n");
+    // Markdown: each line its own block.
+    let mut ed = typed_vim("甲。\n");
+    ed.execute(":syntax markdown").unwrap();
+    press(&mut ed, "gggcc");
+    assert_eq!(ed.current_buffer().text(), "<!-- 甲。 -->\n");
+    // Off, vim has no `gc`.
+    let mut ed = rust("a();\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    press(&mut ed, "gcc");
+    assert_eq!(ed.current_buffer().text(), "a();\n");
+}
+
+#[test]
 fn the_system_clipboard_goes_both_ways() {
     let mut ed = typed("那年冬天");
     press(&mut ed, "ggvl");
@@ -20985,9 +21089,12 @@ fn the_two_comment_keys_each_force_their_own_form() {
 
 #[test]
 fn a_format_with_one_form_gives_it_to_both_keys() {
-    for key in [" c", " C"] {
+    // The line selected with `x`: `Space C` wraps exactly what is selected,
+    // as helix's does (2026-11-02).
+    for key in ["x c", "x C"] {
         let mut ed = typed("甲乙\n");
         ed.execute(":syntax markdown").unwrap();
+        press(&mut ed, "gg");
         press(&mut ed, key);
         assert_eq!(
             ed.current_buffer().text(),

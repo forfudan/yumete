@@ -27,6 +27,13 @@ zhs = "纯文本没有注释"
 en = "plain text has no comments"
 
 [[message]]
+# 這種注釋不能套另一個注釋：裏面的 --> 會提前結束它（草稿）
+key = "comment.would-nest"
+zht = "選中的地方已經有注釋，HTML 注釋不能套着寫"
+zhs = "选中的地方已经有注释，HTML 注释不能套着写"
+en = "the selection already holds a comment, and <!-- --> comments do not nest"
+
+[[message]]
 # 補全面板裏這一條的説明：這個號碼還没人用，選它就是開一條新註
 key = "complete.a-new-one"
 zht = "新的一條"

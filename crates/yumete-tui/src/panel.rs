@@ -277,6 +277,18 @@ fn table_zong(block: &[&str], tall: usize) -> Vec<String> {
 /// Warning: **「…」 is East Asian *Ambiguous*** — one cell for most readers and **two**
 /// under `ambiguous_width = "wide"`, which is what a CJK reader on a CJK font
 /// sets. Charged as one, every cut ran a cell long. Ask the width table.
+/// The key width most keys have: what a table of keys is planned around.
+fn usual_width(widths: impl Iterator<Item = usize>) -> usize {
+    let mut counts: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+    for width in widths {
+        *counts.entry(width).or_default() += 1;
+    }
+    counts
+        .into_iter()
+        .max_by_key(|&(width, n)| (n, std::cmp::Reverse(width)))
+        .map_or(1, |(width, _)| width.max(1))
+}
+
 pub(crate) fn clip(text: &str, cells: usize) -> String {
     if yumete_cjk::str_width(text) <= cells {
         return text.to_string();
@@ -762,7 +774,11 @@ pub fn draw(
             if keys.is_empty() {
                 return None;
             }
-            let key_w = keys.iter().map(|(k, _)| yumete_cjk::str_width(k)).max().unwrap_or(1);
+            // **The usual key's width plans the columns**, not the widest one
+            // (2026-11-02): one `A-c` among forty one-letter keys pushed the
+            // whole `Space` menu to fewer columns and hid ten of them. A wider
+            // key widens its own column only, where it is drawn.
+            let key_w = usual_width(keys.iter().map(|(k, _)| yumete_cjk::str_width(k)));
             let one = keys
                 .iter()
                 .map(|(k, what)| key_w.max(yumete_cjk::str_width(k)) + 2 + yumete_cjk::str_width(what))
@@ -1090,8 +1106,20 @@ pub fn draw(
         Body::Keys(keys) => {
             // `count` is what fits, which is not always all of them (above).
             let left = keys.len() - count;
+            // Each column as wide as its own widest key.
+            let column_key_w = |column: usize| {
+                keys.iter()
+                    .take(count)
+                    .skip(column * deep)
+                    .take(deep)
+                    .map(|(k, _)| yumete_cjk::str_width(k))
+                    .max()
+                    .unwrap_or(key_w)
+                    .max(key_w)
+            };
             for (i, (key, what)) in keys.iter().take(count).enumerate() {
                 let (column, row) = (i / deep, i % deep);
+                let key_w = column_key_w(column);
                 let x = rect.x + 1 + (column * (one + 2)) as u16;
                 let y = rect.y + 1 + row as u16;
                 // The last cell counts what did not fit rather than letting the

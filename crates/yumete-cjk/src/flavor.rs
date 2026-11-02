@@ -355,6 +355,33 @@ flavor_items! {
         label: "keys.flavor.item.d-to-line-end",
         hint: "keys.flavor.item.d-to-line-end.hint",
     },
+    /// `Space C` over whole lines in Markdown, Typst or HTML puts one pair of
+    /// marks on lines of their own at the lines' indent (yumete's shape of
+    /// 2026-10-07, kept 2026-11-02); off, helix's: the marks inline at the
+    /// first line's start and the last line's end. Code is helix's either way.
+    BlockCommentLines => ItemInfo {
+        id: "block_comment_lines",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
+        keys: &[" C"],
+        vim_keys: None,
+        insert: false,
+        label: "keys.flavor.item.block-comment-lines",
+        hint: "keys.flavor.item.block-comment-lines.hint",
+    },
+    /// vim's `gc{motion}`, `gcc` and Visual `gc`, as vim 9.1's comment package
+    /// and Neovim have them (2026-11-02): the lines, commented as
+    /// `Space A-c` comments them. Off, vim has no comment key but `\c`.
+    VimCommentKeys => ItemInfo {
+        id: "vim_comment_keys",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Vim],
+        keys: &["gc"],
+        vim_keys: None,
+        insert: false,
+        label: "keys.flavor.item.vim-comment-keys",
+        hint: "keys.flavor.item.vim-comment-keys.hint",
+    },
     /// The Space menu under vim, on vim's `Space` (2026-11-01); off, `Space`
     /// moves right as vim's and the menu is on `\`, vim's leader.
     VimSpaceMenu => ItemInfo {

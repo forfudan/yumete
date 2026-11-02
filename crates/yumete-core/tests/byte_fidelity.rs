@@ -208,13 +208,23 @@ fn joining_two_lines_takes_the_whole_break_however_long_it_is() {
 /// **A block comment must not write its two marks in the other kind of line**
 /// (丟字第二輪, 2026-10-07).
 ///
-/// `空格 C` over more than one line puts `/*` and `*/` on lines of their own,
-/// and those two lines were built with a literal `\n`. In a CRLF manuscript
-/// that left the file with two kinds of line in it, invisibly: the page strips
-/// `\r` either way, so nothing on screen said so.
+/// `空格 C` over more than one line of prose puts `<!--` and `-->` on lines
+/// of their own (the flavour's `block_comment_lines`, 2026-11-02), and those
+/// two lines were built with a literal `\n`. In a CRLF manuscript that left
+/// the file with two kinds of line in it, invisibly: the page strips `\r`
+/// either way, so nothing on screen said so. Code is commented inline, as
+/// helix does, and keeps its endings too.
 #[test]
 fn a_block_comment_writes_its_marks_in_this_files_kind_of_line() {
     let (mut ed, path) = open("crlf-comment.rs", b"let a = 1;\r\nlet b = 2;\r\n");
+    for key in ['x', 'x', ' ', 'C'] {
+        ed.on_key(Key::Char(key));
+    }
+    ed.execute("write").unwrap();
+    let out = String::from_utf8(std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(out, "/* let a = 1;\r\nlet b = 2; */\r\n", "code: helix's inline form");
+
+    let (mut ed, path) = open("crlf-comment.md", b"\xe7\x94\xb2\r\n\xe4\xb9\x99\r\n");
     // `x` takes the line, twice to take both.
     ed.on_key(Key::Char('x'));
     ed.on_key(Key::Char('x'));
@@ -222,7 +232,7 @@ fn a_block_comment_writes_its_marks_in_this_files_kind_of_line() {
     ed.on_key(Key::Char('C'));
     ed.execute("write").unwrap();
     let out = String::from_utf8(std::fs::read(&path).unwrap()).unwrap();
-    assert_eq!(out, "/*\r\nlet a = 1;\r\nlet b = 2;\r\n*/\r\n");
+    assert_eq!(out, "<!--\r\n甲\r\n乙\r\n-->\r\n");
     assert!(!out.contains("\n\n"), "no bare LF went in: {out:?}");
 
     // And it comes back off, byte for byte.
@@ -231,7 +241,7 @@ fn a_block_comment_writes_its_marks_in_this_files_kind_of_line() {
     ed.execute("write").unwrap();
     assert_eq!(
         String::from_utf8(std::fs::read(&path).unwrap()).unwrap(),
-        "let a = 1;\r\nlet b = 2;\r\n",
+        "甲\r\n乙\r\n",
         "the round trip"
     );
 }

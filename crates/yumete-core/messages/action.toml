@@ -1577,6 +1577,13 @@ zhs = "改写(再按一个动作)"
 en = "change (then a motion)"
 
 [[message]]
+# 命令說明：operator_comment，vim 的 gc（草稿）
+key = "action.operator-comment"
+zht = "注釋（等一個動作）"
+zhs = "注释（等一个动作）"
+en = "comment out (then a motion)"
+
+[[message]]
 # 命令說明：operator_delete（草稿）
 key = "action.operator-delete"
 zht = "刪除(再按一個動作)"
@@ -2836,6 +2843,20 @@ zhs = "开：不带数字的 G 到末行行首，带数字照旧到那一行。�
 en = "On: G with no count goes to the start of the last line; with a count, to that line. Off: helix's G, which does nothing without a count."
 
 [[message]]
+# 風味項：整行塊注釋的標記各占一行（草稿）
+key = "keys.flavor.item.block-comment-lines"
+zht = "塊注釋標記各占一行"
+zhs = "块注释标记各占一行"
+en = "block comment marks on their own lines"
+
+[[message]]
+# 風味項說明（草稿）
+key = "keys.flavor.item.block-comment-lines.hint"
+zht = "開：在 Markdown、Typst、HTML 裏用 空格 C 注釋多整行時，<!-- 與 --> 各占一行。關：照 helix，標記寫在首行開頭與末行結尾。"
+zhs = "开：在 Markdown、Typst、HTML 里用 空格 C 注释多整行时，<!-- 与 --> 各占一行。关：照 helix，标记写在首行开头与末行结尾。"
+en = "On: Space C over several whole lines in Markdown, Typst or HTML puts <!-- and --> on lines of their own. Off: helix's, the marks at the first line's start and the last line's end."
+
+[[message]]
 # 風味的一項：設置面板上的名字（草稿）
 key = "keys.flavor.item.case-menu"
 zht = "大小寫與繁簡菜單"
@@ -3184,6 +3205,20 @@ key = "keys.flavor.item.two-thirds-page.hint"
 zht = "開：C-n、C-p 往下、往上翻三分之二頁。關：這兩個鍵空着。"
 zhs = "开：C-n、C-p 往下、往上翻三分之二页。关：这两个键空着。"
 en = "On: C-n and C-p turn two-thirds of a page down and up. Off: both are unbound."
+
+[[message]]
+# 風味項：vim 的 gc（草稿）
+key = "keys.flavor.item.vim-comment-keys"
+zht = "vim 的 gc 注釋"
+zhs = "vim 的 gc 注释"
+en = "vim's gc comments"
+
+[[message]]
+# 風味項說明（草稿）
+key = "keys.flavor.item.vim-comment-keys.hint"
+zht = "開：vim 鍵位下 gc 接動作、gcc、可視模式的 gc 注釋所在的行，同 vim 9.1 自帶的包與 Neovim。關：只有空格選單裏的 c。"
+zhs = "开：vim 键位下 gc 接动作、gcc、可视模式的 gc 注释所在的行，同 vim 9.1 自带的包与 Neovim。关：只有空格菜单里的 c。"
+en = "On: under the vim keymap gc with a motion, gcc and Visual gc comment the lines, as vim 9.1's package and Neovim do. Off: only c in the Space menu."
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）

@@ -1343,6 +1343,13 @@ zhs = "行注释"
 en = "comment out, by the line"
 
 [[message]]
+# 空格 A-c：只用行註釋（草稿）
+key = "hint.space.comment-lines-only"
+zht = "只用行注釋"
+zhs = "只用行注释"
+en = "comment out, by the line only"
+
+[[message]]
 # 空格 Y：只把主選區複製到系統剪貼板（草稿）
 key = "hint.space.copy-main-to-clipboard"
 zht = "主選區複製到系統剪貼板"
