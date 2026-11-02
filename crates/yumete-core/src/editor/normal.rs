@@ -67,8 +67,16 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::JumpPrevLongWordStart, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('B'))), Key::Char('B')),
     (NormalCmd::JumpNextWordEnd, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('e'))), Key::Char('e')),
     (NormalCmd::JumpNextLongWordEnd, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('E'))), Key::Char('E')),
-    (NormalCmd::JumpNextParagraph, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('}'))), Key::Char('}')),
-    (NormalCmd::JumpPrevParagraph, |e, cx| e.cmd_jump_by_word(cx.with_key(Key::Char('{'))), Key::Char('{')),
+    // vim's `{` `}` `(` `)` are jumps (`:h jump-motions`), noted without
+    // moving the page, as vim's.
+    (NormalCmd::JumpNextParagraph, |e, cx| {
+        e.note_where_we_came_from();
+        e.cmd_jump_by_word(cx.with_key(Key::Char('}')))
+    }, Key::Char('}')),
+    (NormalCmd::JumpPrevParagraph, |e, cx| {
+        e.note_where_we_came_from();
+        e.cmd_jump_by_word(cx.with_key(Key::Char('{')))
+    }, Key::Char('{')),
     (NormalCmd::MoveNextWordStart, Editor::cmd_move_next_word_start, Key::Char('w')),
     (NormalCmd::MoveNextWordEnd, Editor::cmd_move_next_word_end, Key::Char('e')),
     (NormalCmd::MovePrevWordStart, Editor::cmd_move_prev_word_start, Key::Char('b')),
@@ -77,8 +85,14 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoWindowTop, |e, cx| e.go_to_screen('H', cx.count), Key::Char('H')),
     (NormalCmd::GotoWindowCenter, |e, cx| e.go_to_screen('M', cx.count), Key::Char('M')),
     (NormalCmd::GotoWindowBottom, |e, cx| e.go_to_screen('L', cx.count), Key::Char('L')),
-    (NormalCmd::JumpPrevSentence, |e, cx| e.cmd_jump_by_sentence(cx.with_key(Key::Char('('))), Key::Char('(')),
-    (NormalCmd::JumpNextSentence, |e, cx| e.cmd_jump_by_sentence(cx.with_key(Key::Char(')'))), Key::Char(')')),
+    (NormalCmd::JumpPrevSentence, |e, cx| {
+        e.note_where_we_came_from();
+        e.cmd_jump_by_sentence(cx.with_key(Key::Char('(')))
+    }, Key::Char('(')),
+    (NormalCmd::JumpNextSentence, |e, cx| {
+        e.note_where_we_came_from();
+        e.cmd_jump_by_sentence(cx.with_key(Key::Char(')')))
+    }, Key::Char(')')),
     (NormalCmd::GotoNextSentence, Editor::cmd_goto_next_sentence, Key::Char('L')),
     (NormalCmd::GotoPrevSentence, Editor::cmd_goto_prev_sentence, Key::Char('H')),
     (NormalCmd::AddMark, Editor::cmd_add_mark, Key::Char('M')),
@@ -2050,6 +2064,9 @@ impl Editor {
                 e.walk_table_hits(true);
             });
         } else {
+            if self.vim_keymap() {
+                self.remember_jump();
+            }
             self.repeat(count, |e| e.repeat_search(e.search_forward));
         }
     }
@@ -2062,6 +2079,9 @@ impl Editor {
                 e.walk_table_hits(false);
             });
         } else {
+            if self.vim_keymap() {
+                self.remember_jump();
+            }
             self.repeat(count, |e| e.repeat_search(!e.search_forward));
         }
     }
@@ -2177,7 +2197,7 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_jump_backward(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.walk_jumps(true);
+        self.walk_jumps(true, count);
     }
 
     // Warning: **`Tab` 在 Normal 裏也是這一件事**（2026-10-06，對齊 helix 的
@@ -2187,7 +2207,7 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_jump_forward(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.walk_jumps(false);
+        self.walk_jumps(false, count);
     }
 
     #[allow(unused_variables)]

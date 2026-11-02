@@ -126,8 +126,9 @@ impl Editor {
         let here = self.working_dir();
         let mut seen: Vec<(PathBuf, usize)> = Vec::new();
         let mut items = Vec::new();
-        for &(buffer, at) in self.jumps.iter().rev() {
-            let Some(open) = self.buffers.iter().find(|b| b.id() == buffer) else { continue };
+        for jump in self.jumps.iter().rev() {
+            let Some((index, at)) = self.jump_place(jump) else { continue };
+            let open = &self.buffers[index];
             let Some(path) = open.path().map(|p| here.join(p)) else { continue };
             let rope = open.rope();
             let at = at.min(rope.len_chars());

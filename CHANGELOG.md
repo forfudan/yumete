@@ -30,6 +30,9 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **`C-o` comes back from any file you went to.** Every switch to another file is a jump now, as in helix: `ga`, `gn`, `gp`, `:open`, the pickers, the explorer, `gf`, a link, an outline heading. The place noted is the one you left; a link used to note where you arrived, so `C-o` could not take you back to the chapter you came from.
+- **The jump list follows the text and the windows.** A place moves with what you write before it, so it no longer lands a paragraph off after an edit above it. Each window keeps its own list, copied when a window is split, as in helix and vim. `C-o` takes a count, and `C-s` then `C-o` goes to the place before rather than nowhere. Under the helix keymap the whole selection comes back.
+- **What makes a jump is each keymap's own.** Under helix, `n` `N` and `gt` `gc` `gb` are not jumps (stepping through forty search hits was forty steps of `C-o`). Under vim, `n` `N`, `H` `M` `L` and `{` `}` `(` `)` are, and `ge` is not. A place in a closed file is forgotten under helix and opens the file again under vim; under vim a line is kept once and going back does not drop the places ahead.
 - **Under vim with the Space menu on `\`** (the flavour's `vim_space_menu` off), the menu is titled `\` and the sign by the cursor says `\`, where both said Space. The sign also says `` g` `` for vim's case menu, and `␣t` for the table menu, which said `t` since it moved under Space.
 - **Under pinyin, the status line says the annotation is on or off**, where it named the mode kept for shape schemes, which pinyin does not draw. `:yume ?` and `:yume-annotation` say the same.
 - **A key you bind in `[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]` or `[keys.field]` is on the hints** even when it is another command's default key somewhere in the chain (`C-a` bound to `next_entry` in a picker).

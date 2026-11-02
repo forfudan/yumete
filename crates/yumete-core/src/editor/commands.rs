@@ -457,6 +457,7 @@ impl Editor {
                         // answers, the way `/` does.
                         self.hits = None;
                         let forward = self.search_forward;
+                        self.remember_jump();
                         self.repeat_search(forward);
                     }
                     // A column search is a table's; a document has no columns

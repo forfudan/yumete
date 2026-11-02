@@ -233,6 +233,10 @@ pub struct Buffer {
     /// undo, a redo) sets it to `None`, which says 「the list cannot be
     /// trusted」. See `Editor::edit_each_from`.
     pub(crate) journal: Option<Vec<(usize, usize, usize)>>,
+    /// **The recent edits, each with the revision it made** (2026-11-02):
+    /// `(revision, at, removed, inserted)`, so a place noted at one revision
+    /// can be carried to this one ([`Self::carried`]). Bounded; the oldest go.
+    edit_log: std::collections::VecDeque<(u64, usize, usize, usize)>,
     /// **這一份稿子最後改在哪**（`g.`，2026-09-28）。字符下標，没改過就是 `None`。
     ///
     /// Warning: **不是撤銷歷史裏那個 `cursor`。** 那一格記的是「報撤銷點的那一刻光標在哪」，
@@ -360,6 +364,9 @@ fn next_id() -> u64 {
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
+/// How many edits [`Buffer::carried`] can carry a place through.
+const EDIT_LOG: usize = 4096;
+
 impl Buffer {
     /// Which buffer this is, for as long as the session lasts.
     pub fn id(&self) -> u64 {
@@ -394,6 +401,7 @@ impl Buffer {
             saves: 0,
             edit: None,
             journal: None,
+            edit_log: std::collections::VecDeque::new(),
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
@@ -459,6 +467,7 @@ impl Buffer {
             saves: 0,
             edit: None,
             journal: None,
+            edit_log: std::collections::VecDeque::new(),
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
@@ -572,6 +581,7 @@ impl Buffer {
             saves: 0,
             edit: None,
             journal: None,
+            edit_log: std::collections::VecDeque::new(),
             last_edit: None,
             changes: Vec::new(),
             changes_at: 0,
@@ -901,6 +911,7 @@ impl Buffer {
         if let Some(journal) = self.journal.as_mut() {
             journal.push((char_idx, 0, text.chars().count()));
         }
+        self.log_edit(char_idx, 0, text.chars().count());
         // **最後改動在哪**（`g.`，#405 之外，2026-09-28）。插入記的是**寫完之後的那一
         // 頭**，和 vi 的 `'.` 一樣：剛打完一段話按 `g.` 回來，要回到的是話的末尾。
         self.last_edit = Some(char_idx + text.chars().count());
@@ -928,6 +939,7 @@ impl Buffer {
         if let Some(journal) = self.journal.as_mut() {
             journal.push((at, taken, 0));
         }
+        self.log_edit(at, taken, 0);
         // 刪掉的那一段没有「末尾」可回，回到它原來的起點。
         self.last_edit = Some(at);
         self.note_change(at);
@@ -959,6 +971,7 @@ impl Buffer {
         if let Some(journal) = self.journal.as_mut() {
             journal.push((start, taken, text.chars().count()));
         }
+        self.log_edit(start, taken, text.chars().count());
         self.last_edit = Some(start + text.chars().count());
         self.shift_insert_stop(start, taken, text.chars().count());
         Ok(())
@@ -972,6 +985,35 @@ impl Buffer {
     /// Note where an Insert just stopped (`gi`).
     pub fn set_insert_stop(&mut self, at: usize) {
         self.insert_stop = Some(at);
+    }
+
+    /// Note an edit in [`Self::edit_log`].
+    fn log_edit(&mut self, at: usize, taken: usize, put: usize) {
+        self.edit_log.push_back((self.revision, at, taken, put));
+        if self.edit_log.len() > EDIT_LOG {
+            self.edit_log.pop_front();
+        }
+    }
+
+    /// **A place noted at `revision`, carried to now** (2026-11-02, the jump
+    /// list): each insert, delete or replace since moves it, as helix moves
+    /// its jumps through every change; a place inside what was taken lands
+    /// where the edit began. A re-read, an undo or a redo swaps the whole
+    /// text and moves nothing, so across one of those the place stays as the
+    /// number it was.
+    pub fn carried(&self, revision: u64, at: usize) -> usize {
+        let mut at = at;
+        for &(made, from, taken, put) in &self.edit_log {
+            if made <= revision {
+                continue;
+            }
+            if at >= from + taken {
+                at = at + put - taken;
+            } else if at > from {
+                at = from;
+            }
+        }
+        at.min(self.rope.len_chars())
     }
 
     /// Move the `gi` stop through an edit: `taken` characters at `at` became

@@ -63,6 +63,27 @@ pub struct Pane {
     pub highlight: Option<(usize, usize)>,
     /// One line saying what this pane is showing.
     pub caption: String,
+    /// Its own jump list, and where it stands in it.
+    jumps: Vec<Jump>,
+    jump_at: usize,
+}
+
+/// **One place in a jump list** (2026-11-02).
+///
+/// By the buffer's **id**, not its index: closing a buffer shifts every later
+/// one down, and a list that kept indices would walk into another chapter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Jump {
+    buffer: u64,
+    /// The file, so that vim's way can open it again once it is closed.
+    path: Option<PathBuf>,
+    /// The buffer's revision when noted, to carry the places through what
+    /// was written since ([`crate::buffer::Buffer::carried`]).
+    revision: u64,
+    /// Every selection as `(anchor, head)`, and which was primary: helix
+    /// gives back the whole selection, vim the cursor.
+    ranges: Vec<(usize, usize)>,
+    primary: usize,
 }
 
 impl Pane {
@@ -3375,12 +3396,16 @@ pub struct Editor {
     /// has moved means the answer is gone rather than wrong.
     hits: Option<Hits>,
 
-    /// Where a jump came from: the buffer's **id** and the cursor.
-    ///
-    /// By id, not by index: closing a buffer shifts every later one down, and
-    /// a jump list that kept indices would walk back into a different chapter.
-    jumps: Vec<(u64, usize)>,
+    /// **This window's jump list** (`C-o`/`C-i`): each other window keeps its
+    /// own in its [`Pane`], as helix keeps one per view and vim one per
+    /// window (2026-11-02).
+    jumps: Vec<Jump>,
     jump_at: usize,
+    /// The buffer was switched during this key: the place it opened at is
+    /// not a place anyone jumped from.
+    just_switched: bool,
+    /// `C-o`/`C-i` are switching buffers themselves, and note nothing.
+    walking_jumps: bool,
     /// Which line holds the row with each key, and what the document looked
     /// like when that was worked out.
     ///
@@ -4374,6 +4399,8 @@ impl Editor {
             hits: None,
             jumps: Vec::new(),
             jump_at: 0,
+            just_switched: false,
+            walking_jumps: false,
             key_index: RefCell::new(None),
             ruby_target: None,
             completion: None,

@@ -482,8 +482,12 @@ impl Editor {
 
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
         let Some(line) = self.screen_line(which, nth) else { return };
-        self.remember_jump();
-        self.goto_line(line + 1);
+        // vim's `H` `M` `L` are jumps; helix's `gt` `gc` `gb` are not.
+        match self.vim_keymap() {
+            true => self.remember_jump(),
+            false => self.jumped = true,
+        }
+        self.move_to_line(line + 1);
     }
 
     /// **跳到下一個/上一個函數或類**（`]f`/`[f`/`]c`/`[c`，2026-10-06）。

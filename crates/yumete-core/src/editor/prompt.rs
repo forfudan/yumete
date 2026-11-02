@@ -877,6 +877,7 @@ impl Editor {
                     return;
                 }
                 let forward = self.search_forward;
+                self.remember_jump();
                 self.repeat_search(forward);
             }
             other => self.edit_prompt(other),

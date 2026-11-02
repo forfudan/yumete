@@ -31,10 +31,13 @@ impl Editor {
         // `''` and ``` `` ```: where the last jump came from, and pressed
         // again, back (vim's, 2026-11-02).
         if matches!(name, '\'' | '`') {
-            let Some((id, pos)) = self.jump_at.checked_sub(1).and_then(|at| self.jumps.get(at)).copied() else {
+            let Some((index, pos)) =
+                self.jump_at.checked_sub(1).and_then(|at| self.jumps.get(at)).and_then(|jump| self.jump_place(jump))
+            else {
                 self.status = say!("goto.no-such-mark", name);
                 return;
             };
+            let id = self.buffers[index].id();
             self.remember_jump();
             let Some(i) = self.buffer_with(id) else {
                 self.status = say!("goto.mark-buffer-closed", name);
@@ -125,13 +128,40 @@ impl Editor {
     ///
     /// `C-o` 照樣回得來——那一半兩種跳法都要。
     pub(super) fn note_where_we_came_from(&mut self) {
-        let here = (self.current_buffer().id(), self.sel.head());
-        // Walking away from a place already noted adds nothing.
-        if self.jumps.last() == Some(&here) {
+        // The place a buffer switch just opened at is where the switch put
+        // the cursor, not a place anyone jumped from.
+        if self.just_switched {
             return;
         }
-        // A new jump ends the forward history, as it does everywhere else.
-        self.jumps.truncate(self.jump_at);
+        let here = self.jump_here();
+        let vim = self.vim_keymap();
+        let line_of = |e: &Editor, jump: &Jump| {
+            e.jump_place(jump).map(|(_, at)| e.current_line_of(jump.buffer, at))
+        };
+        match vim {
+            // vim keeps a line once: the older entry for it goes (`:h jumplist`).
+            true => {
+                let line = line_of(self, &here);
+                let mut i = 0;
+                while i < self.jumps.len() {
+                    if self.jumps[i].buffer == here.buffer && line_of(self, &self.jumps[i]) == line {
+                        self.jumps.remove(i);
+                        if self.jump_at > i {
+                            self.jump_at -= 1;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            // helix drops a repeat of the last one, and what was ahead.
+            false => {
+                if self.jumps.last().is_some_and(|last| self.same_place(last, &here)) {
+                    return;
+                }
+                self.jumps.truncate(self.jump_at);
+            }
+        }
         self.jumps.push(here);
         // Bounded: a session of a thousand jumps does not need a thousandth of
         // them, and the oldest is the one nobody comes back to.
@@ -139,6 +169,37 @@ impl Editor {
             self.jumps.remove(0);
         }
         self.jump_at = self.jumps.len();
+    }
+
+    /// This place, as a jump list keeps it.
+    fn jump_here(&self) -> Jump {
+        let buffer = self.current_buffer();
+        Jump {
+            buffer: buffer.id(),
+            path: buffer.path().map(Path::to_path_buf),
+            revision: buffer.revision(),
+            ranges: self.sel.iter().map(|one| (one.anchor, one.head)).collect(),
+            primary: self.sel.primary_index(),
+        }
+    }
+
+    /// Where a jump's buffer is, and its primary head carried to now; `None`
+    /// once the buffer is closed.
+    pub(super) fn jump_place(&self, jump: &Jump) -> Option<(usize, usize)> {
+        let index = self.buffer_with(jump.buffer)?;
+        let head = jump.ranges.get(jump.primary).map_or(0, |r| r.1);
+        Some((index, self.buffers[index].carried(jump.revision, head)))
+    }
+
+    fn current_line_of(&self, buffer: u64, at: usize) -> usize {
+        self.buffer_with(buffer).map_or(0, |i| {
+            let rope = self.buffers[i].rope();
+            rope.char_to_line(at.min(rope.len_chars()))
+        })
+    }
+
+    fn same_place(&self, a: &Jump, b: &Jump) -> bool {
+        a.buffer == b.buffer && self.jump_place(a) == self.jump_place(b)
     }
 
     /// Go back to where a jump came from (`C-o`), or forward again (`C-i`).
@@ -192,42 +253,104 @@ impl Editor {
         self.refresh_goal_column();
     }
 
-    pub(super) fn walk_jumps(&mut self, back: bool) {
-        if back {
-            if self.jump_at == 0 {
-                self.status = say!("goto.no-earlier-jump");
-                return;
-            }
-            // Stepping back for the first time has to note where we are, or
-            // `C-i` would have nowhere to return to.
-            if self.jump_at == self.jumps.len() {
-                let here = (self.current_buffer().id(), self.sel.head());
-                if self.jumps.last() != Some(&here) {
-                    self.jumps.push(here);
+    pub(super) fn walk_jumps(&mut self, back: bool, count: usize) {
+        let count = count.max(1);
+        loop {
+            let target = match back {
+                true => {
+                    // Stepping back from the newest place notes where we are,
+                    // or `C-i` would have nowhere to come back to.
+                    if self.jump_at == self.jumps.len() {
+                        let here = self.jump_here();
+                        if !self.jumps.last().is_some_and(|last| self.same_place(last, &here)) {
+                            self.jumps.push(here);
+                        }
+                        self.jump_at = self.jumps.len();
+                    }
+                    let Some(mut target) = self.jump_at.checked_sub(count) else {
+                        self.status = say!("goto.no-earlier-jump");
+                        return;
+                    };
+                    // Never a step to where we already are (helix's
+                    // `JumpList::backward`): `C-s` then `C-o` goes back.
+                    if self.same_place(&self.jumps[target], &self.jump_here()) {
+                        let Some(earlier) = target.checked_sub(1) else {
+                            self.status = say!("goto.no-earlier-jump");
+                            return;
+                        };
+                        target = earlier;
+                    }
+                    target
+                }
+                false => {
+                    let target = self.jump_at + count;
+                    if target >= self.jumps.len() {
+                        self.status = say!("goto.no-later-jump");
+                        return;
+                    }
+                    target
+                }
+            };
+            let jump = self.jumps[target].clone();
+            if self.buffer_with(jump.buffer).is_none() {
+                // A closed file: vim opens it again by its name; helix forgets
+                // its places. A buffer that never had a file can only be forgotten.
+                match (self.vim_keymap(), jump.path.clone()) {
+                    (true, Some(path)) => {
+                        self.walking_jumps = true;
+                        let opened = self.open_file(&path);
+                        self.walking_jumps = false;
+                        if let Err(err) = opened {
+                            self.status = say!("buffer.cannot-open", path.display(), err);
+                            return;
+                        }
+                        let id = self.current_buffer().id();
+                        let revision = self.current_buffer().revision();
+                        for one in self.jumps.iter_mut().filter(|j| j.path.as_ref() == Some(&path)) {
+                            one.buffer = id;
+                            one.revision = revision;
+                        }
+                    }
+                    _ => {
+                        let gone = jump.buffer;
+                        let behind = self.jumps[..self.jump_at.min(self.jumps.len())].iter().filter(|j| j.buffer == gone).count();
+                        self.jumps.retain(|j| j.buffer != gone);
+                        self.jump_at -= behind;
+                        continue;
+                    }
                 }
             }
-            self.jump_at -= 1;
-        } else {
-            if self.jump_at + 1 >= self.jumps.len() {
-                self.status = say!("goto.no-later-jump");
-                return;
-            }
-            self.jump_at += 1;
+            self.jump_at = target;
+            self.go_to_jump(&self.jumps[target].clone());
+            self.status = say!("goto.jump-list-position", self.jump_at + 1, self.jumps.len());
+            return;
         }
-        let (id, cursor) = self.jumps[self.jump_at];
-        // A buffer that has since been closed leaves its jumps behind rather
-        // than sending you to whichever file took its place in the list.
-        match self.buffer_with(id) {
-            Some(i) if i != self.current => self.show_buffer(i),
-            Some(_) => {}
-            None => {
-                self.status = say!("goto.that-file-is-closed");
-                return;
+    }
+
+    /// Put the selection where a jump says: the whole of it under helix,
+    /// the cursor under vim.
+    fn go_to_jump(&mut self, jump: &Jump) {
+        let Some(index) = self.buffer_with(jump.buffer) else { return };
+        if index != self.current {
+            self.walking_jumps = true;
+            self.show_buffer(index);
+            self.walking_jumps = false;
+        }
+        let buffer = &self.buffers[index];
+        let carry = |at: usize| buffer.carried(jump.revision, at);
+        match self.vim_keymap() {
+            true => {
+                let head = jump.ranges.get(jump.primary).map_or(0, |r| carry(r.1));
+                self.move_head(head);
+            }
+            false => {
+                let ranges: Vec<crate::selection::Range> =
+                    jump.ranges.iter().map(|&(a, h)| crate::selection::Range::new(carry(a), carry(h))).collect();
+                self.sel.rebuild(ranges, jump.primary);
+                self.clamp_cursor();
+                self.refresh_goal_column();
             }
         }
-        let len = self.current_buffer().rope().len_chars();
-        self.move_head(cursor.min(len));
-        self.status = say!("goto.jump-list-position", self.jump_at + 1, self.jumps.len());
     }
 
     /// Find `target` on the current line (`f`/`t`/`F`/`T`), moving the head and

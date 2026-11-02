@@ -222,13 +222,6 @@ zht = "只有 {0} 條標題"
 zhs = "只有 {0} 条标题"
 en = "only {0} heading(s)"
 
-[[message]]
-# 跳轉表裏那一項的檔案已經關了
-key = "goto.that-file-is-closed"
-zht = "那個文件已經關了"
-zhs = "那个文件已经关了"
-en = "that file is closed"
-
 
 # ── help ──────────────────────────────────────────────────────────────
 

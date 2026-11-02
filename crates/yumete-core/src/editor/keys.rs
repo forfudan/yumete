@@ -181,6 +181,7 @@ impl Editor {
         // Normal mode with nothing pending; it ends when it is back there.
         // A key describes one move, and「was that a jump?」is about *this* one.
         self.jumped = false;
+        self.just_switched = false;
         // Warning: **`z` 那一層的覆蓋也是一次性的。** 不清的話 `zt` 之後每一幀都把光標釘在頂
         // 上，`j` 走一行整頁跟着挪一行——那是打字機模式，不是 `zt`。清掉之後視口停在
         // 剛纔擺好的地方，因為下一幀 `page_inset` 回的是「光標舒舒服服在頁面上，別動」。

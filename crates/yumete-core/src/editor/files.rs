@@ -741,6 +741,11 @@ impl Editor {
         if index == self.current || index >= self.buffers.len() {
             return;
         }
+        // **Every switch is a jump** (helix's `Editor::switch`, 2026-11-02):
+        // `C-o` comes back from a file reached by `ga`, a picker or a link.
+        if !self.walking_jumps {
+            self.note_where_we_came_from();
+        }
         let at = self.sel.head();
         self.buffers[self.current].save_cursor(at);
         // **剛纔看的是哪一份**（`ga`，helix 的 `goto_last_accessed_file`，2026-09-28）。
@@ -753,6 +758,7 @@ impl Editor {
         self.ask_about_the_draft();
         let restored = self.current_buffer().saved_cursor();
         self.set_cursor(restored);
+        self.just_switched = true;
         self.extend = false;
         // Everything that was about the *other* document goes — one list, in
         // one place. Whether this file is a grid is asked again there, so a

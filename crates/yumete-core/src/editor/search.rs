@@ -103,9 +103,10 @@ impl Editor {
             self.status = say!("find.nothing-searched-yet");
             return;
         }
-        // Jumping back after a search is the whole reason `C-o` exists: you
-        // look something up, and you want to be back where you were writing.
-        self.remember_jump();
+        // **The caller notes the jump** (2026-11-02): confirming `/` does,
+        // as in helix and vim; `n`/`N` do under vim only — helix's do not,
+        // so forty hits are not forty steps of `C-o`.
+        self.jumped = true;
         let pattern = self.last_search.clone();
         let re = match self.compile(&pattern) {
             Ok(re) => re,

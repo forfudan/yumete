@@ -842,6 +842,8 @@ impl Editor {
             extend: false,
             highlight,
             caption,
+            jumps: self.jumps.clone(),
+            jump_at: self.jump_at,
         };
         match self.other_window() {
             Some(window) => {
@@ -904,6 +906,10 @@ impl Editor {
             extend: self.extend,
             highlight: None,
             caption: self.current_buffer().display_name().to_string(),
+            // A new window starts with the list of the one it was split
+            // from, as vim's does.
+            jumps: self.jumps.clone(),
+            jump_at: self.jump_at,
         };
         let Some(fresh) = self.windows.split(self.live, how) else {
             return false;
@@ -1033,6 +1039,8 @@ impl Editor {
             // 那一半就成了要具名的那一個。從前這裏是空字串，於是 `空格 2` 換過去
             // 之後分隔線上什麼都没有——而它本來是有字的。
             caption: self.current_buffer().display_name().to_string(),
+            jumps: Vec::new(),
+            jump_at: 0,
         };
         // The place is clamped rather than trusted: the other pane may have
         // been edited while this one was not looking — and the file it names
@@ -1064,6 +1072,10 @@ impl Editor {
         self.sel.set_goal(pane.goal_column);
         self.sel.set_goal_slot(pane.goal_slot);
         self.extend = pane.extend;
+        // Each window walks its own jump list.
+        let mut here = here;
+        here.jumps = std::mem::replace(&mut self.jumps, std::mem::take(&mut pane.jumps));
+        here.jump_at = std::mem::replace(&mut self.jump_at, pane.jump_at);
         self.panes.insert(self.live, here);
         let leaving = self.live;
         self.window_history.retain(|&w| w != window && w != leaving && self.windows.has(w));

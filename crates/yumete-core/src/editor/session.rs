@@ -786,6 +786,8 @@ impl Editor {
                         extend: false,
                         highlight: None,
                         caption: buffer.display_name().to_string(),
+                        jumps: Vec::new(),
+                        jump_at: 0,
                     },
                 );
             }

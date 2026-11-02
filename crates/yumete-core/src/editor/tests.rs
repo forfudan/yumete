@@ -16049,6 +16049,111 @@ fn alt_o_in_prose_climbs_the_writing_units() {
 }
 
 #[test]
+fn the_jump_list_follows_edits_files_and_windows() {
+    // 2026-11-02, after a writer's and a helix/vim user's study.
+    let dir = tmp().join(format!("yumete-jumps-fix-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (a, b) = (dir.join("a.md"), dir.join("b.md"));
+    std::fs::write(&a, "一\n二\n三\n").unwrap();
+    std::fs::write(&b, "乙\n").unwrap();
+    let back = |ed: &mut Editor| ed.on_key(Key::Ctrl('o'));
+    let line = |ed: &Editor| ed.cursor_line();
+
+    // A place moves with what is written above it.
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    press(&mut ed, "jjgg");
+    press(&mut ed, "i零");
+    ed.on_key(Key::Enter);
+    ed.on_key(Key::Esc);
+    back(&mut ed);
+    assert_eq!(ed.current_buffer().rope().line(line(&ed)).to_string(), "三\n", "{}", ed.status());
+
+    // A file reached any way at all is a file `C-o` comes back from.
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    press(&mut ed, "j");
+    ed.open_file(&b).unwrap();
+    back(&mut ed);
+    assert_eq!(ed.current_buffer().display_name(), "a.md");
+    assert_eq!(line(&ed), 1, "where it was left");
+    press(&mut ed, "ga");
+    assert_eq!(ed.current_buffer().display_name(), "b.md");
+    back(&mut ed);
+    assert_eq!(ed.current_buffer().display_name(), "a.md", "ga is a jump too");
+
+    // helix's `n` is not a jump: one `C-o` goes back to before the search.
+    let mut ed = typed("甲\n乙\n甲\n乙\n甲\n");
+    press(&mut ed, "gg");
+    type_keys(&mut ed, "/甲\n");
+    press(&mut ed, "n");
+    assert_eq!(line(&ed), 4);
+    back(&mut ed);
+    assert_eq!(line(&ed), 0, "{}", ed.status());
+
+    // `C-s` then `C-o` goes back, not nowhere; a count goes further.
+    let mut ed = typed("一\n二\n三\n四\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "j");
+    ed.on_key(Key::Ctrl('s'));
+    press(&mut ed, "j");
+    ed.on_key(Key::Ctrl('s'));
+    press(&mut ed, "j");
+    ed.on_key(Key::Ctrl('s'));
+    back(&mut ed);
+    assert_eq!(line(&ed), 2, "the place before this one");
+    press(&mut ed, "2");
+    back(&mut ed);
+    assert_eq!(line(&ed), 0, "two further back");
+
+    // Each window walks its own list.
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    press(&mut ed, "ge");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    let before = line(&ed);
+    back(&mut ed);
+    assert_eq!(line(&ed), before, "the other window's jump is not this one's");
+
+    // A closed file: helix forgets it, vim opens it again.
+    for vim in [false, true] {
+        let mut ed = Editor::new();
+        if vim {
+            ed.execute(":keymap vim").unwrap();
+        }
+        ed.open_file(&a).unwrap();
+        ed.open_file(&b).unwrap();
+        let index = ed.buffers.iter().position(|b| b.display_name() == "a.md").unwrap();
+        ed.buffers.remove(index);
+        ed.current = ed.buffers.len() - 1;
+        back(&mut ed);
+        let name = ed.current_buffer().display_name().to_string();
+        assert_eq!(name == "a.md", vim, "vim: {vim}, now in {name}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn vim_counts_its_own_jump_motions() {
+    // `:h jump-motions`: `}` is one, `ge` (back to a word's end) is not.
+    let mut ed = typed_vim("一。\n\n二。\n\n三。\n");
+    press(&mut ed, "}}");
+    let far = ed.cursor_line();
+    ed.on_key(Key::Ctrl('o'));
+    assert!(ed.cursor_line() < far, "{}", ed.status());
+    let mut ed = typed_vim("one two three\n");
+    press(&mut ed, "$");
+    assert_eq!(ed.cursor(), 12);
+    press(&mut ed, "ge");
+    ed.on_key(Key::Ctrl('o'));
+    assert_ne!(ed.cursor(), 12, "`ge` noted no jump, so `C-o` does not land where it started: {}", ed.status());
+}
+
+#[test]
 fn the_system_clipboard_goes_both_ways() {
     let mut ed = typed("那年冬天");
     press(&mut ed, "ggvl");

@@ -1818,6 +1818,13 @@ impl Editor {
         // [`Editor::show_buffer`] 都要記——Warning: 那一支只收「已經開着的」，開新檔走的是
         // 這裏，兩條路都記上 `ga` 纔一直有答案。
         let leaving = self.current_buffer().id();
+        let pristine = replace_pristine
+            && self.buffers.len() == 1
+            && self.buffers[0].path().is_none()
+            && self.buffers[0].char_count() == 0;
+        if !pristine && !self.walking_jumps {
+            self.note_where_we_came_from();
+        }
         if replace_pristine
             && self.buffers.len() == 1
             && self.buffers[0].path().is_none()
@@ -1832,6 +1839,7 @@ impl Editor {
             self.current = self.buffers.len() - 1;
             self.last_file = Some(leaving);
         }
+        self.just_switched = !pristine;
         // What this file held when the session first saw it, so that a day
         // whose row is opened at four in the afternoon counts from the morning
         // (Feature #244). Asked once per path: reopening a file that is already
