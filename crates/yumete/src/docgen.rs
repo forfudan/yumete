@@ -184,6 +184,42 @@ fn actions() -> String {
     out
 }
 
+/// A key run as `[keys.normal]` spells it (`C-we`), one keypress each in
+/// the internal spelling, as [`keys_written`] takes them.
+fn presses(spelled: &str) -> Vec<String> {
+    let internal = yumete_core::actions::written(spelled);
+    let mut out: Vec<String> = Vec::new();
+    let mut chars = internal.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            yumete_core::actions::ALT => out.push(chars.next().map(|n| format!("{c}{n}")).unwrap_or_default()),
+            c => out.push(c.to_string()),
+        }
+    }
+    out
+}
+
+/// **The flavour's items** (2026-11-02): each with its level, the keymaps
+/// it changes and its keys, so `[keys.flavor_items]` can be written from it.
+fn flavor() -> String {
+    let mut out = String::from("| Item | Level | Keymaps | Keys | What it does |\n| --- | --- | --- | --- | --- |\n");
+    for item in yumete_config::FlavorItem::ALL {
+        let info = item.info();
+        let keymaps: Vec<&str> = info.keymaps.iter().map(|k| k.name()).collect();
+        let keys: Vec<String> = info.keys.iter().map(|k| code(&cell(&keys_written(&presses(k))))).collect();
+        let _ = writeln!(
+            out,
+            "| `{}` | `{}` | {} | {} | {} |",
+            info.id,
+            info.level.name(),
+            keymaps.join(", "),
+            keys.join(" "),
+            cell(&say(info.label, &[])),
+        );
+    }
+    out
+}
+
 fn settings() -> String {
     use yumete_config::settings_ui::{Kind, GROUPS, SETTINGS};
     let mut out = String::new();
@@ -239,6 +275,7 @@ pub fn write(dir: &Path) -> std::io::Result<()> {
         std::fs::write(at.join("keys.md"), format!("{note}{}", keys()))?;
         std::fs::write(at.join("actions.md"), format!("{note}{}", actions()))?;
         std::fs::write(at.join("settings.md"), format!("{note}{}", settings()))?;
+        std::fs::write(at.join("flavor.md"), format!("{note}{}", flavor()))?;
         std::fs::write(at.join("languages.md"), format!("{note}{}", languages()))?;
     }
     Ok(())

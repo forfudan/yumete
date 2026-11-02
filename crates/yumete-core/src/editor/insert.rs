@@ -14,6 +14,7 @@
 use super::normal::NormalCommand;
 use super::*;
 use yumete_cjk::actions::NormalCmd;
+use yumete_cjk::FlavorItem;
 use crate::input::Key;
 use crate::motion;
 
@@ -21,7 +22,7 @@ use crate::motion;
 type InsertWhen = Option<fn(&Editor) -> bool>;
 
 /// Insert mode's default keymap: a key, the command it runs, and where it
-/// holds (the vim preset's `C-o`).
+/// holds (the vim preset's `C-o`, a flavour item's keys).
 pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
     (Key::Esc, NormalCmd::NormalMode, None),
     (Key::Enter, NormalCmd::InsertNewline, None),
@@ -45,13 +46,15 @@ pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
     (Key::PageUp, NormalCmd::PageUp, None),
     (Key::PageDown, NormalCmd::PageDown, None),
     (Key::Home, NormalCmd::GotoLineStart, None),
-    (Key::Ctrl('a'), NormalCmd::GotoLineStart, None),
+    (Key::Ctrl('a'), NormalCmd::GotoLineStart, Some(|e| e.flavor_on(FlavorItem::InsertExtras))),
     (Key::End, NormalCmd::GotoLineEndNewline, None),
-    (Key::Ctrl('e'), NormalCmd::GotoLineEndNewline, None),
+    (Key::Ctrl('e'), NormalCmd::GotoLineEndNewline, Some(|e| e.flavor_on(FlavorItem::InsertExtras))),
     // vim's `C-g u` (helix's `C-s`, which a terminal takes for XOFF).
-    (Key::Ctrl('g'), NormalCmd::CommitUndoCheckpoint, None),
+    (Key::Ctrl('g'), NormalCmd::CommitUndoCheckpoint, Some(|e| e.flavor_on(FlavorItem::InsertExtras))),
+    (Key::Ctrl('c'), NormalCmd::NormalMode, Some(|e| e.flavor_on(FlavorItem::InsertCtrlC))),
     (Key::Tab, NormalCmd::InsertTab, None),
-    (Key::BackTab, NormalCmd::InsertOtherTab, None),
+    (Key::BackTab, NormalCmd::InsertOtherTab, Some(|e| e.flavor_on(FlavorItem::ShiftTabOtherIndent))),
+    (Key::BackTab, NormalCmd::InsertTab, None),
 ];
 
 /// **The commands only Insert mode's keys run.** Bound in Normal mode they

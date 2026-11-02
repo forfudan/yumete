@@ -93,7 +93,9 @@ impl Editor {
                 // 問的時候光標在哪）。
                 _ => {}
             }
-        } else if matches!(key, Key::Ctrl('n') | Key::Ctrl('x')) {
+        } else if key == Key::Ctrl('x')
+            || (key == Key::Ctrl('n') && (self.vim_keymap() || self.flavor_on(yumete_cjk::FlavorItem::InsertExtras)))
+        {
             // **叫它出來。** 稿子裏没有服務器可問，那就什麽都不做——`C-n` 在
             // 這個編輯器裏還没有別的意思，無聲勝過一句用不上的抱怨。
             //

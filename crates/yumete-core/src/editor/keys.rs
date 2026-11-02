@@ -153,8 +153,8 @@ impl Editor {
             let by = match key {
                 Key::PageDown | Key::Ctrl('f') => Some(8),
                 Key::PageUp | Key::Ctrl('b') => Some(-8),
-                Key::Ctrl('n') => Some(6),
-                Key::Ctrl('p') => Some(-6),
+                Key::Ctrl('n') if self.flavor_on(yumete_cjk::FlavorItem::TwoThirdsPage) => Some(6),
+                Key::Ctrl('p') if self.flavor_on(yumete_cjk::FlavorItem::TwoThirdsPage) => Some(-6),
                 Key::Ctrl('d') => Some(4),
                 Key::Ctrl('u') => Some(-4),
                 _ => None,
@@ -2395,7 +2395,7 @@ impl Editor {
     pub(super) const COUNT_KEYS: &'static [(&'static [&'static [NormalCmd]], &'static str)] = &[
         (&[&[NormalCmd::VimJoinSelections, NormalCmd::JoinSelections]], "hint.count.join"),
         (&[&[NormalCmd::GotoFileStart]], "hint.count.line"),
-        (&[&[NormalCmd::VimGotoLine, NormalCmd::GotoLine]], "hint.count.line"),
+        (&[&[NormalCmd::VimGotoLine, NormalCmd::GotoLineOrLastLine, NormalCmd::GotoLine]], "hint.count.line"),
         (&[&[NormalCmd::RepeatFindChar, NormalCmd::RepeatLastMotion]], "hint.count.nth-find"),
         (
             &[&[NormalCmd::GotoWindowTop], &[NormalCmd::GotoWindowCenter], &[NormalCmd::GotoWindowBottom]],

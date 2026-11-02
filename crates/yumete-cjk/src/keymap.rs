@@ -155,7 +155,7 @@ impl KeyPreset {
             // word; vim's `x` after `w` cuts the one character under the
             // cursor.
             KeyPreset::Vim => &[
-                ("x", "@;{n}D"),
+                ("x", "vim_delete_char_forward"),
                 // Warning: **`s` 是一筆，不是「剪掉 ＋ 插入」兩筆**（2026-10-13 報
                 // 的：「使用 2s 替換輸入時，會把 redo 動作變成兩步」）。從前它拼成
                 // `;{n}Di`，兩筆編輯就是兩次撤銷；vim 的 `s` 就是 `cl`（`:h s`：

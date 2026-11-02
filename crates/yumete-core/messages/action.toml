@@ -270,6 +270,13 @@ zhs = "删到行尾"
 en = "delete to the end of the line"
 
 [[message]]
+# 命令說明：delete_to_line_end_noyank（草稿）
+key = "action.delete-to-line-end-noyank"
+zht = "刪到行尾，不進寄存器"
+zhs = "删到行尾，不进寄存器"
+en = "delete to the end of the line, leaving the register as it is"
+
+[[message]]
 # 命令說明：delete_word_backward（草稿）
 key = "action.delete-word-backward"
 zht = "刪除光標前的一個詞"
@@ -325,6 +332,13 @@ key = "action.extend-char-right"
 zht = "選區向右撑一個字"
 zhs = "选区向右撑一个字"
 en = "extend the selection one character right"
+
+[[message]]
+# 命令說明：extend_line_above（草稿）
+key = "action.extend-line-above"
+zht = "往上選行"
+zhs = "往上选行"
+en = "select the line above, or one more line upward"
 
 [[message]]
 # 命令說明：extend_line_down（草稿）
@@ -657,6 +671,13 @@ key = "action.goto-line-end-newline"
 zht = "到行尾(最後一個字後面)"
 zhs = "到行尾(最后一个字后面)"
 en = "to the end of the line, after its last character"
+
+[[message]]
+# 命令說明：goto_line_or_last_line（草稿）
+key = "action.goto-line-or-last-line"
+zht = "到第 N 行，不帶數字到末行"
+zhs = "到第 N 行，不带数字到末行"
+en = "go to line N, or with no count to the last line"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1290,6 +1311,20 @@ zhs = "竖排时到上一纵(文件里的)"
 en = "on a vertical page, back to the previous line of the file"
 
 [[message]]
+# 命令說明：move_selected_lines_down（草稿）
+key = "action.move-selected-lines-down"
+zht = "把選中的行往下移"
+zhs = "把选中的行往下移"
+en = "move the selected lines down"
+
+[[message]]
+# 命令說明：move_selected_lines_up（草稿）
+key = "action.move-selected-lines-up"
+zht = "把選中的行往上移"
+zhs = "把选中的行往上移"
+en = "move the selected lines up"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-visual-line-down"
 zht = "下一行(屏幕上的)"
@@ -1362,6 +1397,13 @@ key = "action.normal-mode"
 zht = "退出延伸模式，收起臨時顯示的東西"
 zhs = "退出延伸模式，收起临时显示的东西"
 en = "leave Select mode and put away what was shown for a moment"
+
+[[message]]
+# 命令說明：normal_mode_and_collapse（草稿）
+key = "action.normal-mode-and-collapse"
+zht = "退出選擇，或收成一個光標"
+zhs = "退出选择，或收成一个光标"
+en = "leave select mode, or collapse to one cursor"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -2211,6 +2253,13 @@ zhs = "光标处或其后的数字减一(vim 的 C-x)"
 en = "the number at or after the cursor, minus one (vim's C-x)"
 
 [[message]]
+# 命令說明：vim_delete_char_forward（草稿）
+key = "action.vim-delete-char-forward"
+zht = "刪掉光標下的字，不刪換行(vim 的 x)"
+zhs = "删掉光标下的字，不删换行(vim 的 x)"
+en = "delete the character under the cursor, never the line break (vim's x)"
+
+[[message]]
 # 命令說明：vim_flip_selections（草稿）
 key = "action.vim-flip-selections"
 zht = "換到選區的另一頭(vim 可視模式的 o)"
@@ -2535,6 +2584,13 @@ zhs = "基本"
 en = "basic"
 
 [[message]]
+# 風味報告：開着幾項（草稿）
+key = "keys.flavor.count"
+zht = "開着 {0}/{1} 項"
+zhs = "开着 {0}/{1} 项"
+en = "{0} of {1} items on"
+
+[[message]]
 # 風味的一檔：再加改了熟悉鍵行為的幾項（草稿）
 key = "keys.flavor.full"
 zht = "完整"
@@ -2556,11 +2612,186 @@ zhs = "{0}: {1}(`[keys.normal]` 绑了 {2}，此刻说了算的是它)"
 en = "{0}: {1} (`[keys.normal]` binds {2}, which wins)"
 
 [[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.bare-g-last-line"
+zht = "不帶數字的 `G` 到末行"
+zhs = "不带数字的 `G` 到末行"
+en = "`G` with no count goes to the last line"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.case-menu"
+zht = "`` ` `` 大小寫與繁簡菜單"
+zhs = "`` ` `` 大小写与繁简菜单"
+en = "`` ` `` opens the case and conversion menu"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.d-to-line-end"
+zht = "`D` `A-D` 刪到行尾"
+zhs = "`D` `A-D` 删到行尾"
+en = "`D` and `A-D` delete to the line's end"
+
+[[message]]
 # 風味的一項：`d`/`c` 不進寄存器，`A-d`/`A-c` 剪
 key = "keys.flavor.item.delete-keeps-register"
 zht = "`d` `c` 不進寄存器"
 zhs = "`d` `c` 不进寄存器"
 en = "`d` and `c` do not fill the register"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.dictionary"
+zht = "`空格 n` `空格 N` 詞典"
+zhs = "`空格 n` `空格 N` 词典"
+en = "`Space n` and `Space N`, the dictionary"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.esc-collapses"
+zht = "`Esc` 收成一個光標"
+zhs = "`Esc` 收成一个光标"
+en = "`Esc` collapses to one cursor"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.explorer-here"
+zht = "`空格 E` 從當前文件的目錄瀏覽"
+zhs = "`空格 E` 从当前文件的目录浏览"
+en = "`Space E`, the file explorer from this file's directory"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.goto-extras"
+zht = "`gL gx gz g/ g? gD`：鏈接、跳轉、搜這個詞"
+zhs = "`gL gx gz g/ g? gD`：链接、跳转、搜这个词"
+en = "`gL gx gz g/ g? gD`: links, jumps, searching the word"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.input-method-menu"
+zht = "`空格 z` 輸入法菜單"
+zhs = "`空格 z` 输入法菜单"
+en = "`Space z`, the input method menu"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.insert-ctrl-c"
+zht = "插入態 `C-c` 回普通態"
+zhs = "插入态 `C-c` 回普通态"
+en = "Insert mode's `C-c` leaves Insert"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.insert-extras"
+zht = "插入態 `C-a C-e C-n C-g`"
+zhs = "插入态 `C-a C-e C-n C-g`"
+en = "Insert mode's `C-a C-e C-n C-g`"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.line-end-keys"
+zht = "`0` `^` `$` 行首、首字、行尾"
+zhs = "`0` `^` `$` 行首、首字、行尾"
+en = "`0`, `^` and `$`: line start, first character, line end"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.marks-on-m-quote"
+zht = "`M` `'` 設標記、跳標記"
+zhs = "`M` `'` 设标记、跳标记"
+en = "`M` and `'` set and go to marks"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.merge-conflicts"
+zht = "`空格 m` `]m` `[m` 合併衝突"
+zhs = "`空格 m` `]m` `[m` 合并冲突"
+en = "`Space m`, `]m` and `[m` for merge conflicts"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.move-lines"
+zht = "`A-j` `A-k` 上下移動行"
+zhs = "`A-j` `A-k` 上下移动行"
+en = "`A-j` and `A-k` move lines down and up"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.popup-panel-pairs"
+zht = "`空格 K l L x X i I` 浮窗與側欄"
+zhs = "`空格 K l L x X i I` 浮窗与侧栏"
+en = "`Space K l L x X i I`, popups and their sidebars"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.recent-files"
+zht = "`空格 o` 最近的文件和項目"
+zhs = "`空格 o` 最近的文件和项目"
+en = "`Space o`, recent files and projects"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.registers-menu"
+zht = "`空格` 加雙引號：寄存器菜單"
+zhs = "`空格` 加双引号：寄存器菜单"
+en = "`Space` then the double quote: the registers menu"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.sentences-on-h-l"
+zht = "`H` `L` 按句子走"
+zhs = "`H` `L` 按句子走"
+en = "`H` and `L` walk sentences"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.shift-tab-other-indent"
+zht = "插入態 `S-Tab` 插另一種縮進"
+zhs = "插入态 `S-Tab` 插另一种缩进"
+en = "Insert mode's `S-Tab` types the other kind of indent"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.sidebars"
+zht = "`C-w e i E I` 側欄"
+zhs = "`C-w e i E I` 侧栏"
+en = "`C-w e i E I`, the sidebars"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.space-paging"
+zht = "`空格 空格` `空格 ⌫` 翻頁"
+zhs = "`空格 空格` `空格 ⌫` 翻页"
+en = "`Space Space` and `Space Backspace` turn a page"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.space-quit"
+zht = "`空格 q` 關閉窗口"
+zhs = "`空格 q` 关闭窗口"
+en = "`Space q` closes the window"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.tables"
+zht = "`空格 t` 表格菜單"
+zhs = "`空格 t` 表格菜单"
+en = "`Space t`, the table menu"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.two-thirds-page"
+zht = "`C-n` `C-p` 翻三分之二頁"
+zhs = "`C-n` `C-p` 翻三分之二页"
+en = "`C-n` and `C-p` turn two-thirds of a page"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.x-selects-upward"
+zht = "`X` 往上選行"
+zhs = "`X` 往上选行"
+en = "`X` selects the line above"
 
 [[message]]
 # 同上，關着那一頭

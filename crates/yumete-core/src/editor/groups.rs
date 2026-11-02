@@ -21,6 +21,7 @@
 use super::normal::Cx;
 use super::*;
 use yumete_cjk::actions::NormalCmd;
+use yumete_cjk::FlavorItem;
 use crate::input::Key;
 
 /// **Where a row holds.** `Always` and the presets are the common ones; the
@@ -67,6 +68,9 @@ pub(super) struct Bind {
     pub when: Only,
     /// Where the menu offers it, when the key does it.
     pub listed: Only,
+    /// The flavour item it belongs to, if it is one of yumete's own keys:
+    /// it holds only while that item is on.
+    pub flavor: Option<FlavorItem>,
 }
 
 /// One row of a group: a key, or a line that explains rather than binds
@@ -85,6 +89,14 @@ impl Row {
         self
     }
 
+    /// One of yumete's own keys, there while `item` is on.
+    const fn flavor(mut self, item: FlavorItem) -> Self {
+        if let Row::Bind(bind) = &mut self {
+            bind.flavor = Some(item);
+        }
+        self
+    }
+
     const fn listed(mut self, only: Only) -> Self {
         match &mut self {
             Row::Bind(bind) => bind.listed = only,
@@ -95,7 +107,7 @@ impl Row {
 }
 
 const fn key(key: Key, run: NormalCmd, says: &'static str) -> Row {
-    Row::Bind(Bind { key, run, says, when: Only::Always, listed: Only::Always })
+    Row::Bind(Bind { key, run, says, when: Only::Always, listed: Only::Always, flavor: None })
 }
 
 const fn ch(c: char, run: NormalCmd, says: &'static str) -> Row {
@@ -159,7 +171,7 @@ impl Group {
 
     /// **The bind `key` reaches here**: the first whose `when` holds.
     pub(super) fn bind_for(&self, key: Key, at: &Context) -> Option<&'static Bind> {
-        self.binds().find(|bind| bind.key == key && at.holds(bind.when))
+        self.binds().find(|bind| bind.key == key && at.reaches(bind))
     }
 
     /// **The menu, as (keys, message) rows**: each key the group answers
@@ -176,14 +188,14 @@ impl Group {
         for (nth, row) in self.rows.iter().enumerate() {
             match row {
                 Row::Bind(bind) => {
-                    if bind.says.is_empty() || !at.holds(bind.when) || !at.holds(bind.listed) || taken(bind.key) {
+                    if bind.says.is_empty() || !at.reaches(bind) || !at.holds(bind.listed) || taken(bind.key) {
                         continue;
                     }
                     // Only a row the key reaches, once: a key with a vim row
                     // and a helix row is listed as what it does here, and a
                     // key offered in several kinds of table as that kind's.
                     let hidden = self.rows[..nth].iter().any(|earlier| match earlier {
-                        Row::Bind(b) if b.key == bind.key && at.holds(b.when) => {
+                        Row::Bind(b) if b.key == bind.key && at.reaches(b) => {
                             b.run != bind.run || (!b.says.is_empty() && at.holds(b.listed))
                         }
                         _ => false,
@@ -306,6 +318,8 @@ pub(super) struct Context {
     pub extend: bool,
     pub pane: bool,
     pub table: Option<Bounds>,
+    /// The flavour items on, one bit each (`yumete_cjk::Flavor::mask`).
+    pub flavor: u64,
 }
 
 impl Context {
@@ -328,10 +342,22 @@ impl Context {
         }
     }
 
-    /// The context the generated keymap page is written for: helix's keys,
-    /// a page laid out across, a code file (so every bracket key is listed).
+    /// Whether a flavour item is on (always, for a row that is not one).
+    pub(super) fn has(&self, item: Option<FlavorItem>) -> bool {
+        item.is_none_or(|item| self.flavor & item.bit() != 0)
+    }
+
+    /// Whether a group's row answers here: its condition, and its item.
+    pub(super) fn reaches(&self, bind: &Bind) -> bool {
+        self.holds(bind.when) && self.has(bind.flavor)
+    }
+
+    /// The context the generated keymap page is written for: helix's keys
+    /// under the factory flavour, a page laid out across, a code file (so
+    /// every bracket key is listed).
     pub(super) fn for_docs() -> Self {
-        Context { code: true, ..Context::default() }
+        let flavor = yumete_cjk::Flavor::default().mask(yumete_cjk::KeyPreset::Helix);
+        Context { code: true, flavor, ..Context::default() }
     }
 }
 
@@ -405,6 +431,7 @@ impl Editor {
             extend: self.extend,
             pane: self.the_pane_is_on(),
             table,
+            flavor: self.flavor().mask(self.key_preset()),
         }
     }
 
@@ -647,8 +674,17 @@ impl Editor {
     /// off the same tables the keys run on, so a key the editor has is a key
     /// the site lists.
     pub fn commands_for_docs() -> Vec<DocCommand> {
-        use super::normal::{HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
+        use super::normal::{FLAVOR_NORMAL, HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
         let one = |key: Key| vec![super::keys::key_internal(key)];
+        // The factory flavour's keys are listed as each keymap's own: what a
+        // reader who changed nothing presses. The flavour page lists them all.
+        let factory = |vim: bool| {
+            let keymap = match vim {
+                true => yumete_cjk::KeyPreset::Vim,
+                false => yumete_cjk::KeyPreset::Helix,
+            };
+            Context { vim, flavor: yumete_cjk::Flavor::default().mask(keymap), ..Context::default() }
+        };
         let mut out = Vec::new();
         for action in yumete_cjk::actions::ALL {
             if action.how != yumete_cjk::actions::How::Normal {
@@ -657,13 +693,28 @@ impl Editor {
             let name = action.name;
             let mut helix: Vec<Vec<String>> = Vec::new();
             let mut vim: Vec<Vec<String>> = Vec::new();
-            for (key, n) in HELIX_NORMAL.iter().chain(SELECT_NORMAL) {
+            for (key, n, item, only) in FLAVOR_NORMAL {
                 if n.name() != name {
+                    continue;
+                }
+                for (is_vim, keys) in [(false, &mut helix), (true, &mut vim)] {
+                    if factory(is_vim).has(Some(*item)) && only.under(is_vim) {
+                        keys.push(one(*key));
+                    }
+                }
+            }
+            // A key the factory flavour gives to something else is not the
+            // keymap's own key for this command.
+            let flavor_took = |key: &Key, is_vim: bool| {
+                FLAVOR_NORMAL.iter().any(|(k, _, item, only)| k == key && factory(is_vim).has(Some(*item)) && only.under(is_vim))
+            };
+            for (key, n) in HELIX_NORMAL.iter().chain(SELECT_NORMAL) {
+                if n.name() != name || flavor_took(key, false) {
                     continue;
                 }
                 helix.push(one(*key));
                 // The vim preset keeps a helix key it has no entry of its own for.
-                if !VIM_NORMAL.iter().any(|(k, _, _)| k == key) {
+                if !VIM_NORMAL.iter().any(|(k, _, _)| k == key) && !flavor_took(key, true) {
                     vim.push(one(*key));
                 }
             }
@@ -677,7 +728,9 @@ impl Editor {
                 // number comes before): a key the editor has is listed.
                 for bind in group.binds().filter(|b| b.run.name() == name) {
                     for (is_vim, keys) in [(false, &mut helix), (true, &mut vim)] {
-                        let Some(mut path) = group_opened_by(group, is_vim).filter(|_| bind.when.under(is_vim)) else {
+                        let Some(mut path) = group_opened_by(group, is_vim)
+                            .filter(|_| bind.when.under(is_vim) && factory(is_vim).has(bind.flavor))
+                        else {
                             continue;
                         };
                         path.push(super::keys::key_internal(bind.key));
@@ -771,21 +824,21 @@ pub(super) static GOTO: Group = Group {
         // reached only when the preset plays them (`^` is `gs` there).
         ch('s', NormalCmd::GotoFirstNonwhitespace, "hint.goto.first-non-blank").when(Only::GLetter),
         ch('f', NormalCmd::OpenHere, "hint.goto.open-this-file"),
-        ch('L', NormalCmd::FollowLink, "hint.goto.follow-link"),
+        ch('L', NormalCmd::FollowLink, "hint.goto.follow-link").flavor(FlavorItem::GotoExtras),
         ch('w', NormalCmd::ExtendToWord, "hint.goto.jump-labels").when(Only::Selecting),
         ch('w', NormalCmd::GotoWord, "hint.goto.jump-labels"),
-        ch('x', NormalCmd::GotoWordByLetters, "hint.goto.seek-written"),
-        ch('z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading"),
+        ch('x', NormalCmd::GotoWordByLetters, "hint.goto.seek-written").flavor(FlavorItem::GotoExtras),
+        ch('z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading").flavor(FlavorItem::GotoExtras),
         ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file"),
         ch('n', NormalCmd::SearchNext, "hint.goto.next-match").when(Only::Vim),
         ch('N', NormalCmd::SearchPrev, "hint.goto.next-match").when(Only::Vim),
         ch('n', NormalCmd::NextBuffer, "hint.goto.next-or-previous-buffer"),
         ch('p', NormalCmd::PrevBuffer, "hint.goto.next-or-previous-buffer"),
         ch('d', NormalCmd::GotoDefinition, "hint.goto.follow-note"),
-        ch('D', NormalCmd::GotoDefinitionOtherWindow, "hint.goto.follow-note-elsewhere"),
+        ch('D', NormalCmd::GotoDefinitionOtherWindow, "hint.goto.follow-note-elsewhere").flavor(FlavorItem::GotoExtras),
         ch('r', NormalCmd::GotoReference, "hint.goto.references"),
-        ch('/', NormalCmd::SearchSelection, "hint.goto.search-word"),
-        ch('?', NormalCmd::SearchSelectionOtherWindow, "hint.goto.search-word-elsewhere"),
+        ch('/', NormalCmd::SearchSelection, "hint.goto.search-word").flavor(FlavorItem::GotoExtras),
+        ch('?', NormalCmd::SearchSelectionOtherWindow, "hint.goto.search-word-elsewhere").flavor(FlavorItem::GotoExtras),
         ch('j', NormalCmd::MoveNextZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
         ch('k', NormalCmd::MovePrevZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
         ch('j', NormalCmd::MoveVisualLineDown, "action.move-visual-line-down").when(Only::Vim),
@@ -814,7 +867,7 @@ pub(super) static GOTO: Group = Group {
         ch('~', NormalCmd::OperatorSwitchCase, "hint.goto.case-operators").when(Only::Vim),
         ch('q', NormalCmd::OperatorFill, "hint.goto.fill").when(Only::Vim),
         ch('J', NormalCmd::JoinSelectionsNoSpace, "hint.goto.join-without-a-space").when(Only::Vim),
-        ch('`', NormalCmd::CaseMode, "action.case-mode").when(Only::Vim),
+        ch('`', NormalCmd::CaseMode, "action.case-mode").when(Only::Vim).flavor(FlavorItem::CaseMenu),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -843,7 +896,7 @@ pub(super) static SPACE: Group = Group {
         ch('f', NormalCmd::FilePicker, "hint.space.open-file"),
         ch('F', NormalCmd::FilePickerInCurrentDirectory, "hint.space.open-file-here"),
         ch('e', NormalCmd::FileExplorer, "hint.space.explorer"),
-        ch('E', NormalCmd::FileExplorerInCurrentBufferDirectory, "hint.space.explorer-here"),
+        ch('E', NormalCmd::FileExplorerInCurrentBufferDirectory, "hint.space.explorer-here").flavor(FlavorItem::ExplorerHere),
         ch('b', NormalCmd::BufferPicker, "hint.space.switch-buffer"),
         ch('g', NormalCmd::ChangedFilePicker, "hint.space.changed-files"),
         ch('y', NormalCmd::CopyToClipboard, "hint.space.copy-to-clipboard"),
@@ -852,32 +905,33 @@ pub(super) static SPACE: Group = Group {
         ch('R', NormalCmd::ReplaceSelectionsWithClipboard, "hint.space.replace-from-clipboard"),
         ch('s', NormalCmd::SymbolPicker, "hint.space.symbols"),
         ch('S', NormalCmd::WorkspaceSymbolPicker, "hint.space.project-symbols"),
-        ch('n', NormalCmd::Dictionary, "hint.space.dictionary"),
-        ch('N', NormalCmd::DictionaryPanel, "hint.space.dictionary-panel"),
+        ch('n', NormalCmd::Dictionary, "hint.space.dictionary").flavor(FlavorItem::Dictionary),
+        ch('N', NormalCmd::DictionaryPanel, "hint.space.dictionary-panel").flavor(FlavorItem::Dictionary),
         ch('k', NormalCmd::Hover, "hint.space.what-is-this"),
-        ch('K', NormalCmd::HoverPanel, "hint.space.what-is-this-panel"),
+        ch('K', NormalCmd::HoverPanel, "hint.space.what-is-this-panel").flavor(FlavorItem::PopupPanelPairs),
         ch('d', NormalCmd::DiagnosticsPicker, "hint.space.diagnostics"),
         ch('D', NormalCmd::WorkspaceDiagnosticsPicker, "hint.space.project-diagnostics"),
-        ch('l', NormalCmd::ShowDiagnostic, "hint.space.problems"),
-        ch('L', NormalCmd::ShowDiagnosticPanel, "hint.space.problems-panel"),
-        ch('x', NormalCmd::ShowChange, "hint.space.change"),
-        ch('X', NormalCmd::ShowChangePanel, "hint.space.change-panel"),
+        ch('l', NormalCmd::ShowDiagnostic, "hint.space.problems").flavor(FlavorItem::PopupPanelPairs),
+        ch('L', NormalCmd::ShowDiagnosticPanel, "hint.space.problems-panel").flavor(FlavorItem::PopupPanelPairs),
+        ch('x', NormalCmd::ShowChange, "hint.space.change").flavor(FlavorItem::PopupPanelPairs),
+        ch('X', NormalCmd::ShowChangePanel, "hint.space.change-panel").flavor(FlavorItem::PopupPanelPairs),
         ch('r', NormalCmd::RenameSymbol, "hint.space.rename"),
         ch('a', NormalCmd::CodeAction, "hint.space.actions"),
-        ch('i', NormalCmd::ShowRecord, "hint.space.record"),
-        ch('I', NormalCmd::ShowRecordPanel, "hint.space.record-panel"),
+        ch('i', NormalCmd::ShowRecord, "hint.space.record").flavor(FlavorItem::PopupPanelPairs),
+        ch('I', NormalCmd::ShowRecordPanel, "hint.space.record-panel").flavor(FlavorItem::PopupPanelPairs),
         ch('w', NormalCmd::WindowMode, "hint.region.title"),
-        ch('t', NormalCmd::TableMode, "hint.space.table"),
-        ch('"', NormalCmd::PasteMenu, "menu.paste.title"),
+        ch('t', NormalCmd::TableMode, "hint.space.table").flavor(FlavorItem::Tables),
+        ch('"', NormalCmd::PasteMenu, "menu.paste.title").flavor(FlavorItem::RegistersMenu),
         ch('c', NormalCmd::CommentLine, "hint.space.comment-line"),
         ch('C', NormalCmd::CommentBlock, "hint.space.comment-block"),
-        ch('m', NormalCmd::ConflictMode, "hint.conflict.title"),
-        ch('o', NormalCmd::OpenRecentMode, "hint.space.open-recent"),
-        ch('z', NormalCmd::YumeMode, "hint.space.yume"),
+        ch('m', NormalCmd::ConflictMode, "hint.conflict.title").flavor(FlavorItem::MergeConflicts),
+        ch('o', NormalCmd::OpenRecentMode, "hint.space.open-recent").flavor(FlavorItem::RecentFiles),
+        ch('z', NormalCmd::YumeMode, "hint.space.yume").flavor(FlavorItem::InputMethodMenu),
         ch('/', NormalCmd::SearchPanel, "hint.space.advanced-search"),
         ch('?', NormalCmd::CommandMenu, "hint.space.all-commands"),
-        ch(' ', NormalCmd::PageDown, "hint.space.page-down"),
-        key(Key::Backspace, NormalCmd::PageUp, "hint.space.page-up"),
+        ch(' ', NormalCmd::PageDown, "hint.space.page-down").flavor(FlavorItem::SpacePaging),
+        key(Key::Backspace, NormalCmd::PageUp, "hint.space.page-up").flavor(FlavorItem::SpacePaging),
+        ch('q', NormalCmd::Quit, "hint.space.quit").flavor(FlavorItem::SpaceQuit),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -899,7 +953,7 @@ pub(super) static RIGHT_BRACKET: Group = Group {
     title: "hint.hop.next",
     path: "]",
     rows: &[
-        ch('m', NormalCmd::GotoNextConflict, "hint.hop.conflict"),
+        ch('m', NormalCmd::GotoNextConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts),
         ch('g', NormalCmd::GotoNextChange, "hint.hop.change"),
         ch('d', NormalCmd::GotoNextDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoLastDiag, "hint.hop.problem"),
@@ -926,7 +980,7 @@ pub(super) static LEFT_BRACKET: Group = Group {
     title: "hint.hop.previous",
     path: "[",
     rows: &[
-        ch('m', NormalCmd::GotoPrevConflict, "hint.hop.conflict"),
+        ch('m', NormalCmd::GotoPrevConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts),
         ch('g', NormalCmd::GotoPrevChange, "hint.hop.change"),
         ch('d', NormalCmd::GotoPrevDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoFirstDiag, "hint.hop.problem"),
@@ -1042,10 +1096,10 @@ pub(super) static WINDOW: Group = Group {
         quiet(Key::Down, NormalCmd::JumpViewDown),
         quiet(Key::Up, NormalCmd::JumpViewUp),
         quiet(Key::Right, NormalCmd::JumpViewRight),
-        ch('e', NormalCmd::ToggleLeftSidebar, "hint.region.toggle-bar"),
-        ch('i', NormalCmd::ToggleRightSidebar, "hint.region.toggle-bar"),
-        ch('E', NormalCmd::GotoLeftSidebar, "hint.region.into-bar"),
-        ch('I', NormalCmd::GotoRightSidebar, "hint.region.into-bar"),
+        ch('e', NormalCmd::ToggleLeftSidebar, "hint.region.toggle-bar").flavor(FlavorItem::Sidebars),
+        ch('i', NormalCmd::ToggleRightSidebar, "hint.region.toggle-bar").flavor(FlavorItem::Sidebars),
+        ch('E', NormalCmd::GotoLeftSidebar, "hint.region.into-bar").flavor(FlavorItem::Sidebars),
+        ch('I', NormalCmd::GotoRightSidebar, "hint.region.into-bar").flavor(FlavorItem::Sidebars),
         ch('s', NormalCmd::Hsplit, "hint.region.split"),
         ch('v', NormalCmd::Vsplit, "hint.region.split-beside"),
         // vim's `C-w n` is the blank window below; helix's is a group.

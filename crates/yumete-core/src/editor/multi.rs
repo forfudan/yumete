@@ -984,6 +984,8 @@ fn moves_every_selection(key: crate::input::Key) -> bool {
             | Key::Char('H' | 'L' | '{' | '}')
             | Key::Home
             | Key::End
+            // The flavour's line keys (2026-11-02), as `gh` `gs` `gl`.
+            | Key::Char('0' | '^' | '$')
     )
 }
 
@@ -1068,7 +1070,9 @@ pub(super) fn edits_every_selection(pending: &super::Pending, key: crate::input:
             key,
             Key::Char('i' | 'a' | 'I' | 'A' | 'o' | 'O' | 'c') | Key::Alt('c')
         // `C-a`/`C-x` 給每一段各加各的（#405 Phase 3）。
-        ) || matches!(key, Key::Ctrl('a') | Key::Ctrl('x')),
+        ) || matches!(key, Key::Ctrl('a') | Key::Ctrl('x'))
+            // The flavour's `D` / `A-D` (2026-11-02), as `d` / `A-d`.
+            || matches!(key, Key::Char('D') | Key::Alt('D')),
         _ => false,
     }
 }

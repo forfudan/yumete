@@ -417,6 +417,14 @@ normal_commands! {
     OperatorIndent = "operator_indent",
     OperatorUnindent = "operator_unindent",
     DeleteToLineEnd = "delete_to_line_end",
+    DeleteToLineEndNoyank = "delete_to_line_end_noyank",
+    VimDeleteCharForward = "vim_delete_char_forward",
+    ExtendLineAbove = "extend_line_above",
+    MoveSelectedLinesDown = "move_selected_lines_down",
+    MoveSelectedLinesUp = "move_selected_lines_up",
+    GotoLineOrLastLine = "goto_line_or_last_line",
+    NormalModeAndCollapse = "normal_mode_and_collapse",
+    Quit = "quit",
     SelectInnerObject = "select_inner_object",
     SelectAroundObject = "select_around_object",
     UndoLine = "undo_line",
@@ -815,7 +823,6 @@ pub const ALL: &[Action] = &[
     command("wiki_panel", "action.wiki-panel", "wiki panel"),
     command("save_file", "action.save-file", "write"),
     command("save_and_quit", "action.save-and-quit", "wq"),
-    command("quit", "action.quit", "quit"),
     command("count_progress", "action.count-progress", "count-progress"),
     // ---- Every other Normal key (2026-10-31): each a command by name ----
     normal("action.move-line-up", NormalCmd::MoveLineUp),
@@ -877,6 +884,18 @@ pub const ALL: &[Action] = &[
     normal("action.operator-indent", NormalCmd::OperatorIndent),
     normal("action.operator-unindent", NormalCmd::OperatorUnindent),
     normal("action.delete-to-line-end", NormalCmd::DeleteToLineEnd),
+    normal("action.delete-to-line-end-noyank", NormalCmd::DeleteToLineEndNoyank),
+    // vim's `x`: the character under the cursor, never the line break.
+    normal("action.vim-delete-char-forward", NormalCmd::VimDeleteCharForward),
+    // ---- Flavour commands (2026-11-02): what the flavour's keys run ------
+    normal("action.extend-line-above", NormalCmd::ExtendLineAbove),
+    normal("action.move-selected-lines-down", NormalCmd::MoveSelectedLinesDown),
+    normal("action.move-selected-lines-up", NormalCmd::MoveSelectedLinesUp),
+    normal("action.goto-line-or-last-line", NormalCmd::GotoLineOrLastLine),
+    normal("action.normal-mode-and-collapse", NormalCmd::NormalModeAndCollapse),
+    // `:quit` as a Normal command, so a group's row can run it (the
+    // flavour's `Space q`); it was a command-line action before.
+    normal("action.quit", NormalCmd::Quit),
     normal("action.select-inner-object", NormalCmd::SelectInnerObject),
     normal("action.select-around-object", NormalCmd::SelectAroundObject),
     normal("action.undo-line", NormalCmd::UndoLine),

@@ -16,6 +16,8 @@
 
 use super::*;
 use yumete_cjk::actions::NormalCmd;
+use yumete_cjk::FlavorItem;
+use super::groups::Only;
 
 /// What a Normal command is handed: the key it was reached by (several
 /// commands share one body and tell their keys apart), the count, the count
@@ -130,7 +132,35 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ChangeSelection, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Char('c'))), Key::Char('c')),
     (NormalCmd::DeleteSelectionNoyank, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Alt('d'))), Key::Alt('d')),
     (NormalCmd::ChangeSelectionNoyank, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Alt('c'))), Key::Alt('c')),
-    (NormalCmd::DeleteToLineEnd, |e, cx| e.cmd_delete_or_change(cx.with_key(Key::Char('D'))), Key::Char('D')),
+    // `D` and `A-D` (the flavour's `d_to_line_end`): the rest of the line,
+    // into the register or not as `d` and `A-d` are.
+    (NormalCmd::DeleteToLineEnd, |e, cx| e.delete_to_line_end_as(cx.with_key(Key::Char('d'))), Key::Char('D')),
+    (NormalCmd::DeleteToLineEndNoyank, |e, cx| e.delete_to_line_end_as(cx.with_key(Key::Alt('d'))), Key::Alt('D')),
+    // vim's `x`: what the cursor stands on, `count` characters of it, and
+    // never the line break (`Rules::delete_stays_in_line`).
+    (NormalCmd::VimDeleteCharForward, |e, cx| {
+        e.sel.set_anchor(e.sel.head());
+        e.cmd_delete_or_change(cx.with_key(Key::Char('d')));
+    }, Key::Char('x')),
+    (NormalCmd::ExtendLineAbove, |e, cx| e.repeat(cx.count, |e| e.select_line_above()), Key::Char('X')),
+    (NormalCmd::MoveSelectedLinesDown, |e, cx| e.move_selected_lines(cx.count, true), Key::Alt('j')),
+    (NormalCmd::MoveSelectedLinesUp, |e, cx| e.move_selected_lines(cx.count, false), Key::Alt('k')),
+    // `G`: a count's line, as helix's; none, the last line's start, as `ge`.
+    (NormalCmd::GotoLineOrLastLine, |e, cx| match cx.operator_count.is_some() {
+        true => e.acting(false, |e| e.cmd_goto_line(cx)),
+        false => e.run_normal_cmd(cx, NormalCmd::GotoLastLine),
+    }, Key::Char('G')),
+    // `Esc` (the flavour's `esc_collapses`): helix's, and with no select
+    // mode to leave, down to the primary cursor as well.
+    (NormalCmd::NormalModeAndCollapse, |e, cx| {
+        let idle = e.mode == Mode::Normal && !e.extend;
+        e.acting(false, |e| e.cmd_normal_mode(cx));
+        if idle {
+            e.cmd_keep_primary_selection(cx);
+            e.sel.set_anchor(e.sel.head());
+        }
+    }, Key::Esc),
+    (NormalCmd::Quit, |e, _| e.run_bound_command("quit"), Key::Char('q')),
     (NormalCmd::Yank, Editor::cmd_yank, Key::Char('y')),
     (NormalCmd::PasteAfter, |e, cx| e.acting(false, |e| e.cmd_paste(cx.with_key(Key::Char('p')))), Key::Char('p')),
     (NormalCmd::VimPasteAfter, |e, cx| e.acting(true, |e| e.cmd_paste(cx.with_key(Key::Char('p')))), Key::Char('p')),
@@ -259,10 +289,6 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Char('b'), NormalCmd::MovePrevWordStart),
     (Key::Char('}'), NormalCmd::MoveNextParagraph),
     (Key::Char('{'), NormalCmd::MovePrevParagraph),
-    (Key::Char('L'), NormalCmd::GotoNextSentence),
-    (Key::Char('H'), NormalCmd::GotoPrevSentence),
-    (Key::Char('M'), NormalCmd::AddMark),
-    (Key::Char('\''), NormalCmd::GotoMark),
     (Key::Char('z'), NormalCmd::ViewMode),
     (Key::Char('Z'), NormalCmd::StickyViewMode),
     (Key::Char(']'), NormalCmd::RightBracketMode),
@@ -296,7 +322,6 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Alt('('), NormalCmd::RotateSelectionContentsBackward),
     (Key::Char('s'), NormalCmd::SelectRegex),
     (Key::Char('S'), NormalCmd::SplitSelection),
-    (Key::Alt('k'), NormalCmd::KeepSelections),
     (Key::Alt('K'), NormalCmd::RemoveSelections),
     (Key::Char('x'), NormalCmd::ExtendLineBelow),
     (Key::Char('d'), NormalCmd::DeleteSelection),
@@ -342,14 +367,13 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Tab, NormalCmd::JumpForward),
     (Key::Ctrl('d'), NormalCmd::HalfPageDown),
     (Key::Ctrl('u'), NormalCmd::HalfPageUp),
-    (Key::Ctrl('n'), NormalCmd::TwoThirdsPageDown),
-    (Key::Ctrl('p'), NormalCmd::TwoThirdsPageUp),
     (Key::Char('J'), NormalCmd::JoinSelections),
     (Key::Char('K'), NormalCmd::KeepSelections),
     (Key::Alt(';'), NormalCmd::FlipSelections),
     (Key::Char('%'), NormalCmd::SelectAll),
     (Key::Char('X'), NormalCmd::ExtendToLineBounds),
-    (Key::Char('`'), NormalCmd::CaseMode),
+    (Key::Char('`'), NormalCmd::SwitchToLowercase),
+    (Key::Alt('`'), NormalCmd::SwitchToUppercase),
     (Key::Char('~'), NormalCmd::SwitchCase),
     (Key::Char('*'), NormalCmd::SearchSelectionDetectWordBoundaries),
     (Key::Alt('*'), NormalCmd::SearchSelectionExact),
@@ -361,6 +385,30 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Ctrl('x'), NormalCmd::Decrement),
     (Key::Char('.'), NormalCmd::RepeatLastChange),
     (Key::Alt('.'), NormalCmd::RepeatLastMotion),
+];
+
+/// **The flavour's keys** (2026-11-02): yumete's own keys at the top level,
+/// each held while its item is on (`yumete_cjk::FlavorItem`) and where its
+/// condition holds, before either keymap's. A key whose item belongs to one
+/// keymap only is said by the item, not by the row.
+pub(super) const FLAVOR_NORMAL: &[(Key, NormalCmd, FlavorItem, super::groups::Only)] = &[
+    (Key::Char('`'), NormalCmd::CaseMode, FlavorItem::CaseMenu, Only::Helix),
+    (Key::Char('L'), NormalCmd::GotoNextSentence, FlavorItem::SentencesOnHL, Only::Always),
+    (Key::Char('H'), NormalCmd::GotoPrevSentence, FlavorItem::SentencesOnHL, Only::Always),
+    (Key::Char('M'), NormalCmd::AddMark, FlavorItem::MarksOnMQuote, Only::Always),
+    (Key::Char('\''), NormalCmd::GotoMark, FlavorItem::MarksOnMQuote, Only::Always),
+    (Key::Ctrl('n'), NormalCmd::TwoThirdsPageDown, FlavorItem::TwoThirdsPage, Only::Always),
+    (Key::Ctrl('p'), NormalCmd::TwoThirdsPageUp, FlavorItem::TwoThirdsPage, Only::Always),
+    (Key::Char('X'), NormalCmd::ExtendLineAbove, FlavorItem::XSelectsUpward, Only::Always),
+    (Key::Char('G'), NormalCmd::GotoLineOrLastLine, FlavorItem::BareGLastLine, Only::Always),
+    (Key::Alt('j'), NormalCmd::MoveSelectedLinesDown, FlavorItem::MoveLines, Only::Always),
+    (Key::Alt('k'), NormalCmd::MoveSelectedLinesUp, FlavorItem::MoveLines, Only::Always),
+    (Key::Char('0'), NormalCmd::GotoLineStart, FlavorItem::LineEndKeys, Only::Always),
+    (Key::Char('^'), NormalCmd::GotoFirstNonwhitespace, FlavorItem::LineEndKeys, Only::Always),
+    (Key::Char('$'), NormalCmd::GotoLineEnd, FlavorItem::LineEndKeys, Only::Always),
+    (Key::Char('D'), NormalCmd::DeleteToLineEnd, FlavorItem::DToLineEnd, Only::Always),
+    (Key::Alt('D'), NormalCmd::DeleteToLineEndNoyank, FlavorItem::DToLineEnd, Only::Always),
+    (Key::Esc, NormalCmd::NormalModeAndCollapse, FlavorItem::EscCollapses, Only::Always),
 ];
 
 /// **The vim preset's own keys**, before helix's: the commands that do
@@ -412,7 +460,6 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Char('<'), NormalCmd::OperatorUnindent, Some(when::not_extending)),
     (Key::Char('>'), NormalCmd::VimIndent, None),
     (Key::Char('<'), NormalCmd::VimUnindent, None),
-    (Key::Char('D'), NormalCmd::DeleteToLineEnd, None),
     (Key::Char('i'), NormalCmd::SelectInnerObject, Some(when::extending)),
     (Key::Char('a'), NormalCmd::SelectAroundObject, Some(when::extending)),
     // **vim's own versions of helix's commands** (2026-11-01, step 8 of the
@@ -448,6 +495,9 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Ctrl('r'), NormalCmd::VimRedo, None),
     (Key::Char('X'), NormalCmd::DeleteCharBackward, None),
     (Key::Char('`'), NormalCmd::GotoMark, None),
+    // helix has no `'`; vim's is the mark's line (helix's table held it as
+    // a yumete key until the flavour took that one, 2026-11-02).
+    (Key::Char('\''), NormalCmd::GotoMark, None),
     (Key::Char('#'), NormalCmd::SearchWordBackward, None),
     (Key::Char('R'), NormalCmd::ReplaceMode, Some(when::not_extending)),
     (Key::Char('.'), NormalCmd::VimRepeatLastChange, None),
@@ -577,6 +627,16 @@ pub(super) fn normal_cmd(cmd: NormalCmd) -> Option<&'static NormalCommand> {
 /// groups'. `None` when no key reaches it.
 pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pending, Key)> {
     let name = normal_command(name)?.0;
+    let flavored = FLAVOR_NORMAL
+        .iter()
+        .find(|(_, n, item, only)| *n == name && at.has(Some(*item)) && at.holds(*only));
+    if let Some((key, _, _, _)) = flavored {
+        return Some((Pending::None, *key));
+    }
+    // A key the flavour gives to something else is not this command's.
+    let flavor_took = |key: &Key| {
+        FLAVOR_NORMAL.iter().any(|(k, _, item, only)| k == key && at.has(Some(*item)) && at.holds(*only))
+    };
     if at.vim {
         if let Some((key, _, _)) = VIM_NORMAL.iter().find(|(_, n, _)| *n == name) {
             return Some((Pending::None, *key));
@@ -584,7 +644,9 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
     }
     // A helix key the vim preset gives to something else is not this
     // command's under vim (`j` is `move_line_down` there).
-    let taken = |key: &Key| at.vim && VIM_NORMAL.iter().any(|(k, _, when)| k == key && when.is_none());
+    let taken = |key: &Key| {
+        flavor_took(key) || (at.vim && VIM_NORMAL.iter().any(|(k, _, when)| k == key && when.is_none()))
+    };
     if let Some((key, _)) = HELIX_NORMAL.iter().find(|(key, n)| *n == name && !taken(key)) {
         return Some((Pending::None, *key));
     }
@@ -598,7 +660,7 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
         super::groups::GROUPS.iter().find_map(|group| {
             group
                 .binds()
-                .find(|bind| bind.run == name && at.holds(bind.when) && !bind.says.is_empty())
+                .find(|bind| bind.run == name && at.reaches(bind) && !bind.says.is_empty())
                 .map(|bind| (group.pending, bind.key))
         })
     })
@@ -687,9 +749,16 @@ impl Editor {
     }
 
     /// **The command `cx.key` runs in Normal mode**, by the default keymap:
-    /// the vim preset's own entry when it has one whose condition holds,
-    /// helix's otherwise.
+    /// the flavour's key when its item is on, then the vim preset's own entry
+    /// when it has one whose condition holds, helix's otherwise.
     pub(super) fn normal_command_for(&self, cx: &Cx) -> Option<&'static str> {
+        let at = self.group_context();
+        let flavored = FLAVOR_NORMAL
+            .iter()
+            .find(|(key, _, item, only)| *key == cx.key && at.has(Some(*item)) && at.holds(*only));
+        if let Some((_, name, _, _)) = flavored {
+            return Some(name.name());
+        }
         if self.vim_keymap() {
             let vim = VIM_NORMAL
                 .iter()
@@ -704,6 +773,29 @@ impl Editor {
             }
         }
         HELIX_NORMAL.iter().find(|(key, _)| *key == cx.key).map(|(_, name)| name.name())
+    }
+
+    /// Run one Normal command by its variant, with its own row's key.
+    pub(super) fn run_normal_cmd(&mut self, cx: Cx, cmd: NormalCmd) {
+        if let Some(&(_, run, key)) = normal_cmd(cmd) {
+            run(self, cx.with_key(key));
+        }
+    }
+
+    /// **`D` / `A-D`**: from the cursor to the line's end, its break kept,
+    /// done as `key` (`d` or `A-d`) would do it to a selection.
+    pub(super) fn delete_to_line_end_as(&mut self, cx: Cx) {
+        let rope = self.current_buffer().rope();
+        let at = self.sel.head().min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        let end = rope.line_to_char(line) + crate::zong::line_chars(rope, line).len();
+        if end <= at {
+            return;
+        }
+        let head = motion::prev_grapheme(rope, end).max(at);
+        self.sel.set_anchor(at);
+        self.sel.set_head(head);
+        self.cmd_delete_or_change(Cx { count: 1, ..cx });
     }
 
     /// **Run a command extending the selection**, in either mode: what an
@@ -2366,7 +2458,7 @@ mod tests {
         "jump_next_paragraph", "jump_prev_paragraph", "goto_window_top", "goto_window_center",
         "goto_window_bottom", "jump_prev_sentence", "jump_next_sentence", "select_line_mode",
         "repeat_find_char", "repeat_find_char_reverse", "operator_delete", "operator_change",
-        "operator_yank", "operator_indent", "operator_unindent", "delete_to_line_end",
+        "operator_yank", "operator_indent", "operator_unindent",
         "select_inner_object", "select_around_object", "undo_line", "goto_column", "vim_redo",
         "delete_char_backward", "search_word_backward", "replace_mode", "vim_repeat_last_change",
     ];

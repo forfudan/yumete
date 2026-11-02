@@ -588,28 +588,43 @@ impl Editor {
         !self.flavor_on(yumete_cjk::FlavorItem::DeleteKeepsRegister)
     }
 
-    /// **What the flavour is now** — the level, then each item the keymap in
-    /// force has, on or off, and which of them `[keys.normal]` has taken.
-    ///
-    /// Each item says its own state since 2026-11-01: a level no longer
-    /// decides every item, because an item can be written by name.
+    /// **What the flavour is now** — the level, how many of this keymap's
+    /// items are on, and then only the items worth a word: one written by
+    /// name in `[keys.flavor_items]`, and one whose keys `[keys.normal]` or
+    /// `[keys.insert]` has taken. Every item is on the settings panel and
+    /// in the generated reference; a status line of 26 cannot be read.
     ///
     /// Warning: **a taken item has to say so**, or the line reads 「`d`/`c` do
     /// not fill the register」 while `d` does something else — the alias
     /// layer rewrites the key before the flavour is read.
     pub(super) fn flavor_report(&self) -> String {
-        let mut parts = vec![flavor_level_word(self.flavor.level)];
-        for &item in yumete_cjk::FlavorItem::ALL {
+        let here: Vec<yumete_cjk::FlavorItem> = yumete_cjk::FlavorItem::ALL
+            .iter()
+            .copied()
+            .filter(|item| item.info().keymaps.contains(&self.key_preset))
+            .collect();
+        let on = here.iter().filter(|item| self.flavor_on(**item)).count();
+        let mut parts = vec![flavor_level_word(self.flavor.level), say!("keys.flavor.count", on, here.len())];
+        for item in here {
             let info = item.info();
-            if !info.keymaps.contains(&self.key_preset) {
+            let aliases = match info.insert {
+                true => &self.insert_aliases,
+                false => &self.user_aliases,
+            };
+            let written = |k: &str| yumete_cjk::actions::written(k);
+            let taken: Vec<&str> = info
+                .keys
+                .iter()
+                .copied()
+                .filter(|key| aliases.keys().any(|k| written(k) == written(key)))
+                .collect();
+            if taken.is_empty() && !self.flavor.set_by_name(item) {
                 continue;
             }
             let state = match self.flavor_on(item) {
                 true => say!("keys.flavor.on"),
                 false => say!("keys.flavor.off"),
             };
-            let taken: Vec<&str> =
-                info.keys.iter().copied().filter(|key| self.user_aliases.contains_key(*key)).collect();
             let label = crate::messages::say(info.label, &[]);
             parts.push(match taken.is_empty() {
                 true => say!("keys.flavor.item-is", label, state),

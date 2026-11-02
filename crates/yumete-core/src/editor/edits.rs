@@ -1030,6 +1030,88 @@ impl Editor {
         self.refresh_goal_column();
     }
 
+    /// **The line above, as `x` the line below** (`extend_line_above`,
+    /// helix's): the selection's lines whole, the head at the first one's
+    /// start; already whole, one more line upward.
+    pub(super) fn select_line_above(&mut self) {
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        let last_char = motion::prev_grapheme(rope, end).max(start);
+        let first = rope.char_to_line(start);
+        let last = rope.char_to_line(last_char);
+        let tail = match last + 1 > motion::last_line(rope) {
+            true => rope.len_chars(),
+            false => rope.line_to_char(last + 1),
+        };
+        let tail = motion::prev_grapheme(rope, tail).max(rope.line_to_char(last));
+        let covers_whole_lines = start == rope.line_to_char(first) && last_char == tail && start != last_char;
+        let top = match covers_whole_lines {
+            true => first.saturating_sub(1),
+            false => first,
+        };
+        let head = rope.line_to_char(top);
+        self.sel.set_anchor(tail);
+        self.sel.set_head(head);
+        self.refresh_goal_column();
+    }
+
+    /// **The selected lines, moved `count` lines down or up**
+    /// (`move_selected_lines_down`/`_up`, the flavour's `A-j`/`A-k`): in
+    /// prose a line is a paragraph, so this moves paragraphs. The selection
+    /// goes with them, as it was on their text.
+    pub(super) fn move_selected_lines(&mut self, count: usize, down: bool) {
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        let last_char = motion::prev_grapheme(rope, end).max(start);
+        let first = rope.char_to_line(start);
+        let last = rope.char_to_line(last_char);
+        let bottom = motion::last_line(rope);
+        let by = match down {
+            true => count.max(1).min(bottom.saturating_sub(last)),
+            false => count.max(1).min(first),
+        };
+        if by == 0 {
+            return;
+        }
+        let (lo, hi) = match down {
+            true => (first, last + by),
+            false => (first - by, last),
+        };
+        // Each line without its break; the region's own ending is kept, so
+        // the file's last line keeps having none if it had none.
+        let line = |i: usize| -> String {
+            let text = rope.line(i).to_string();
+            text.trim_end_matches(['\n', '\r']).to_string()
+        };
+        let lines: Vec<String> = (lo..=hi).map(line).collect();
+        let block = last - first + 1;
+        let moved: Vec<String> = match down {
+            true => lines[block..].iter().chain(&lines[..block]).cloned().collect(),
+            false => lines[by..].iter().chain(&lines[..by]).cloned().collect(),
+        };
+        let from = rope.line_to_char(lo);
+        let to = rope.line_to_char(hi) + line(hi).chars().count();
+        let shift = |at: usize| -> usize {
+            // How far the selection's own text travels: past the lines it
+            // crossed, each with its break.
+            let crossed: usize = match down {
+                true => (last + 1..=hi).map(|i| line(i).chars().count() + 1).sum(),
+                false => (lo..first).map(|i| line(i).chars().count() + 1).sum(),
+            };
+            match down {
+                true => at + crossed,
+                false => at - crossed,
+            }
+        };
+        let (anchor, head) = (shift(self.sel.anchor()), shift(self.sel.head()));
+        self.snapshot();
+        if self.overwrite(from, to, &moved.join("\n")) {
+            self.sel.set_anchor(anchor);
+            self.sel.set_head(head);
+            self.refresh_goal_column();
+        }
+    }
+
     /// Grow a collapsed selection rightward by `n` graphemes, so a count in
     /// front of `d` or `c` names how much to take.
     pub(super) fn extend_by_graphemes(&mut self, n: usize) {

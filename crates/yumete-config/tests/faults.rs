@@ -44,7 +44,7 @@ fn every_complaint_names_the_line_its_key_is_on() {
     // 0 起算, so each is one less than the line a reader counts.
     let want = [
         ("zong_length", 2),
-        ("indent", 3),
+        ("] indent", 3),
         ("margin", 4),
         ("ground", 7),
         ("mode", 8),

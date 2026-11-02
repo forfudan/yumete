@@ -2111,6 +2111,8 @@ fn one_g_goes_to_the_first_line() {
     press(&mut ed, "3G");
     assert_eq!(ed.cursor_line(), 2);
     // 不帶數的 `G` 在 helix 鍵位下不動（2026-10-13 對齊 helix）：末行是 `ge`。
+    // The flavour's `bare_g_last_line` (basic) moves it; off, helix's.
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
     press(&mut ed, "G");
     assert_eq!(ed.cursor_line(), 2, "a bare G stands still here");
     press(&mut ed, "ge");
@@ -4283,7 +4285,8 @@ fn the_small_letters_spend_the_register_and_the_alt_pair_does_not() {
     assert_eq!(ed.current_buffer().text(), "丙丁甲乙");
 }
 
-/// helix 的 `A-d`/`A-c` 回來了（2026-09-28，#405），而 `D` 和 helix 一樣不綁。
+/// helix 的 `A-d`/`A-c` 回來了（2026-09-28，#405），而 `D` 和 helix 一樣不綁——
+/// 風味關着的時候（2026-11-02：`d_to_line_end` 是 basic 的一項）。
 #[test]
 fn the_alt_pair_is_back_and_the_capital_d_stays_unbound() {
     let mut ed = typed("甲乙丙");
@@ -4298,10 +4301,36 @@ fn the_alt_pair_is_back_and_the_capital_d_stays_unbound() {
     // 「這一類提示是多餘的……這個提示假設用户的意圖」）。從前它答「刪了不動寄存器
     // 是 A-d」。
     let mut ed = typed("甲乙丙");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
     press(&mut ed, "ggl");
     press(&mut ed, "D");
     assert_eq!(ed.current_buffer().text(), "甲乙丙", "什麼都没動");
     assert_eq!(ed.status(), "", "也什麼都没說");
+}
+
+/// **The flavour's `D` and `A-D`** (2026-11-02, `d_to_line_end`): to the
+/// line's end, the break kept; `D` fills the register and `A-D` does not,
+/// and `delete_keeps_register` swaps them as it swaps `d` and `A-d`.
+#[test]
+fn d_and_alt_d_take_the_rest_of_the_line() {
+    let mut ed = typed("甲乙丙\n丁\n");
+    press(&mut ed, "ggl");
+    press(&mut ed, "D");
+    assert_eq!(ed.current_buffer().text(), "甲\n丁\n");
+    assert_eq!(ed.paste_menu()[0].1, "乙丙", "D cuts");
+
+    let mut ed = typed("甲乙丙\n丁\n");
+    press(&mut ed, "ggy");
+    press(&mut ed, "l");
+    ed.on_key(Key::Alt('D'));
+    assert_eq!(ed.current_buffer().text(), "甲\n丁\n");
+    assert_eq!(ed.paste_menu()[0].1, "甲", "A-D leaves the register");
+
+    let mut ed = typed("甲乙丙\n丁\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Full);
+    press(&mut ed, "ggy");
+    press(&mut ed, "lD");
+    assert_eq!(ed.paste_menu()[0].1, "甲", "full: D deletes only");
 }
 
 #[test]
@@ -17496,8 +17525,10 @@ fn an_action_bound_to_a_chord_is_really_pressed() {
 fn an_unbound_key_says_nothing_at_all() {
     // 一個鍵一個編輯器：`Z` 是 helix 的黏滯視圖前綴，連着按會讀成 `ZD` 那一串，
     // 而「`ZD` 爲無效按鍵組合」報的是手指真按出來的東西，不是猜意圖——留着的。
+    // With the flavour off: `$`, `^` and `D` are flavour keys at the factory.
     let quiet = |key: Key| {
         let mut ed = typed("一行字\n");
+        ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
         ed.goto_line(1);
         ed.on_key(key);
         assert_eq!(ed.status(), "", "{key:?} 不許説話");
@@ -17506,7 +17537,9 @@ fn an_unbound_key_says_nothing_at_all() {
     for c in ['$', '^', '@', '+', '-', '\\', 'D'] {
         quiet(Key::Char(c));
     }
-    for key in [Key::Ctrl('r'), Key::Ctrl('c'), Key::Alt('`')] {
+    // `A-`` is helix's uppercase again (2026-11-02, the case menu moved to
+    // the flavour), so it is not here any more.
+    for key in [Key::Ctrl('r'), Key::Ctrl('c')] {
         quiet(key);
     }
     // `0` 照舊是數字（有計數在走的時候），這一條没動。
@@ -22222,6 +22255,9 @@ fn tab_types_spaces_to_the_next_stop_and_shift_tab_types_a_tab() {
     ed.on_key(Key::Char('a'));
     ed.on_key(Key::Char('b'));
     ed.on_key(Key::Tab);
+    // Shift-Tab's other indent is the flavour's `shift_tab_other_indent`
+    // (full, 2026-11-02); helix's types the file's own.
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Full);
     ed.on_key(Key::BackTab);
     assert_eq!(ed.current_buffer().text(), "    ab  \t");
     ed.on_key(Key::Esc);
@@ -22794,7 +22830,10 @@ fn the_vim_caret_never_rests_on_a_line_break() {
 fn a_bare_g_is_the_last_line_only_under_the_vim_keymap() {
     let line_of = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
     // helix 鍵位：`jG` 停在第二行，和 `j` 一樣。
+    // (The flavour's `bare_g_last_line` takes it to the last line; off,
+    // helix's.)
     let mut ed = typed("a\nb\nc\nd\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
     press(&mut ed, "ggj");
     let after_j = ed.sel.head();
     press(&mut ed, "G");
@@ -26337,11 +26376,12 @@ fn the_regex_family_sifts_the_selections() {
     ed.on_key(Key::Enter);
     assert_eq!(ed.sel.len(), 4, "四個甲：{:?}", ed.status());
 
-    // `A-k` 只留下匹配的那幾段：按行切開之後，帶「甲」的有兩行。
+    // `K` 只留下匹配的那幾段：按行切開之後，帶「甲」的有兩行。（`A-k` 從前是
+    // 它的別名，helix 没有；2026-11-02 讓給了風味的移動行。）
     let mut ed = after("%");
     ed.on_key(Key::Alt('s'));
     assert_eq!(ed.sel.len(), 3, "先切成三行");
-    ed.on_key(Key::Alt('k'));
+    ed.on_key(Key::Char('K'));
     for c in "甲".chars() {
         ed.on_key(Key::Char(c));
     }
@@ -28786,16 +28826,22 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
     press(&mut ed, "glp");
     assert_eq!(ed.current_buffer().text(), "甲丙乙", "`A-d` 剪");
 
-    // 不帶參數就報：那一檔 ＋ 每一項的狀態，而且不許改它。
+    // 不帶參數就報：那一檔、開着幾項，而且不許改它。26 項寫不進一行，所以只有
+    // 按名字寫過的、被配置佔了鍵的纔逐項列（2026-11-02）。
     let mut ed = typed("甲");
     ed.execute(":keymap-yumete-flavor").unwrap();
     let item = say!("keys.flavor.item.delete-keeps-register");
+    let helix = yumete_cjk::FlavorItem::ALL
+        .iter()
+        .filter(|i| i.info().keymaps.contains(&yumete_cjk::KeyPreset::Helix))
+        .count();
+    let on = yumete_cjk::FlavorItem::ALL.iter().filter(|i| ed.flavor_on(**i)).count();
     assert!(
-        ed.status().contains(&say!("keys.flavor.basic"))
-            && ed.status().contains(&say!("keys.flavor.item-is", item, say!("keys.flavor.off"))),
-        "出廠那一檔，而這一項關着：{}",
+        ed.status().contains(&say!("keys.flavor.basic")) && ed.status().contains(&say!("keys.flavor.count", on, helix)),
+        "出廠那一檔和項數：{}",
         ed.status()
     );
+    assert!(!ed.status().contains(&item), "没單獨設過的項不列：{}", ed.status());
     assert!(ed.yank_on_delete(), "問一句不許改它");
 
     // **被 `[keys.normal]` 蓋過就要說出來**（2026-10-18）。
@@ -34138,4 +34184,130 @@ fn vims_normal_ctrl_caret_is_the_previous_file() {
         assert_eq!(ed.current_buffer().text(), "one\n", "{key:?} goes back");
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **The flavour's keys at the factory level, and gone with it off**
+/// (2026-11-02, step 3 of the flavour plan): `X` the line above, a bare `G`
+/// the last line, `0 ^ $` the line's ends, `A-j`/`A-k` move the lines.
+#[test]
+fn the_basic_flavour_keys_and_helix_without_them() {
+    // `X` selects the line above; again, one more.
+    let mut ed = typed("一\n二\n三\n");
+    ed.goto_line(3);
+    press(&mut ed, "X");
+    assert_eq!(ed.selection(), (4, 6), "the third line");
+    press(&mut ed, "X");
+    assert_eq!(ed.selection(), (2, 6), "and the second");
+    // Off: helix's `X`, the line's bounds.
+    let mut ed = typed("一\n二\n三\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    ed.goto_line(3);
+    press(&mut ed, "X");
+    assert_eq!(ed.selection(), (4, 6), "the line, once");
+    press(&mut ed, "X");
+    assert_eq!(ed.selection(), (4, 6), "and no further");
+
+    // A bare `G`: the last line's start.
+    let mut ed = typed("一\n二\n三\n");
+    press(&mut ed, "ggG");
+    assert_eq!(ed.cursor_line(), 2);
+    press(&mut ed, "2G");
+    assert_eq!(ed.cursor_line(), 1, "a count's line, as helix's");
+
+    // `0 ^ $`.
+    let mut ed = typed("  甲乙\n");
+    ed.goto_line(1);
+    press(&mut ed, "$");
+    assert_eq!(ed.sel.head(), 3);
+    press(&mut ed, "0");
+    assert_eq!(ed.sel.head(), 0);
+    press(&mut ed, "^");
+    assert_eq!(ed.sel.head(), 2);
+
+    // `A-j` / `A-k` move the line, and the cursor goes with it; the last
+    // line keeps having no break.
+    let mut ed = typed("一\n二\n三");
+    ed.goto_line(1);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "二\n一\n三");
+    assert_eq!(ed.cursor_line(), 1);
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "二\n三\n一");
+    ed.on_key(Key::Alt('j'));
+    assert_eq!(ed.current_buffer().text(), "二\n三\n一", "nowhere further");
+    ed.on_key(Key::Alt('k'));
+    ed.on_key(Key::Alt('k'));
+    assert_eq!(ed.current_buffer().text(), "一\n二\n三");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "二\n一\n三", "one undo a move");
+}
+
+/// **The Space menu's flavour rows come and go with their items**, and
+/// `Space q` is `:quit`.
+#[test]
+fn the_space_menu_follows_the_flavour() {
+    let listed = |ed: &mut Editor, key: &str| -> bool {
+        press(ed, " ");
+        let (_, rows) = ed.pending_menu().expect("the Space menu");
+        ed.on_key(Key::Esc);
+        rows.iter().any(|(keys, _)| keys.split(' ').any(|k| k == key))
+    };
+    let mut ed = typed("甲\n");
+    assert!(listed(&mut ed, "t") && listed(&mut ed, "z") && listed(&mut ed, "q"));
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    assert!(!listed(&mut ed, "t") && !listed(&mut ed, "z") && !listed(&mut ed, "q"));
+    assert!(listed(&mut ed, "f"), "helix's own rows stay");
+    // One item by name, the rest off.
+    ed.set_flavor(yumete_cjk::Flavor {
+        level: yumete_cjk::FlavorLevel::Off,
+        items: std::collections::BTreeMap::from([(yumete_cjk::FlavorItem::Tables, true)]),
+    });
+    assert!(listed(&mut ed, "t") && !listed(&mut ed, "z"));
+
+    // `Space q` closes the window, as `:quit`.
+    let mut ed = typed("甲\n");
+    ed.execute(":vsplit").unwrap();
+    assert!(ed.other_pane().is_some());
+    press(&mut ed, " q");
+    assert!(ed.other_pane().is_none(), "the window closed");
+}
+
+/// **`Esc` collapses (full), Insert's `C-c` leaves (basic), and helix's
+/// `` ` `` lowercases with the flavour off.**
+#[test]
+fn esc_ctrl_c_and_the_backtick() {
+    let mut ed = typed("ab\ncd\n");
+    press(&mut ed, "ggC");
+    assert!(ed.sel.is_plural());
+    ed.on_key(Key::Esc);
+    assert!(ed.sel.is_plural(), "basic: Esc leaves the cursors, as helix's");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Full);
+    ed.on_key(Key::Esc);
+    assert!(!ed.sel.is_plural(), "full: one cursor");
+
+    let mut ed = typed("ab\n");
+    press(&mut ed, "i");
+    ed.on_key(Key::Ctrl('c'));
+    assert_eq!(ed.mode(), Mode::Normal);
+
+    let mut ed = typed("AB\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    press(&mut ed, "gg%`");
+    assert_eq!(ed.current_buffer().text(), "ab\n", "helix's ` lowercases");
+    press(&mut ed, "%");
+    ed.on_key(Key::Alt('`'));
+    assert_eq!(ed.current_buffer().text(), "AB\n", "and A-` uppercases");
+}
+
+/// **vim's `x` is a command now** (`vim_delete_char_forward`, 2026-11-02),
+/// and a count before it still takes that many characters, never the break.
+#[test]
+fn vim_x_is_a_name_and_takes_its_count() {
+    let mut ed = typed_vim("甲乙丙丁\n");
+    press(&mut ed, "gg2x");
+    assert_eq!(ed.current_buffer().text(), "丙丁\n");
+    press(&mut ed, "9x");
+    assert_eq!(ed.current_buffer().text(), "\n", "not the break");
+    press(&mut ed, "p");
+    assert!(ed.current_buffer().text().contains("丙丁"), "x fills the register");
 }
