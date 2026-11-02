@@ -1442,7 +1442,8 @@ impl Editor {
         let line = rope.char_to_line(self.sel.head());
         let at = self.sel.head() - rope.line_to_char(line);
         let chars: Vec<char> = rope.line(line).chars().collect();
-        let part = |c: char| c.is_alphanumeric() || "@.-+#$%?!,;~&=_/".contains(c);
+        // Windows also writes `\` between folders, as helix reads it there.
+        let part = |c: char| c.is_alphanumeric() || "@.-+#$%?!,;~&=_/".contains(c) || (cfg!(windows) && c == '\\');
         let at = at.min(chars.len());
         // The cursor on the path, or just after it (helix's rule).
         let at = match chars.get(at) {
@@ -1457,6 +1458,22 @@ impl Editor {
         let mut end = at;
         while end < chars.len() && part(chars[end]) {
             end += 1;
+        }
+        // A drive (`C:\…`) is the one colon inside a path, on Windows.
+        if cfg!(windows) {
+            let drive_after = |at: usize| {
+                chars.get(at) == Some(&':') && chars.get(at + 1).is_some_and(|c| matches!(c, '\\' | '/'))
+            };
+            if end == start + 1 && chars[start].is_ascii_alphabetic() && drive_after(end) {
+                end += 1;
+                while end < chars.len() && part(chars[end]) {
+                    end += 1;
+                }
+            } else if start >= 2 && chars[start - 2].is_ascii_alphabetic() && drive_after(start - 1)
+                && (start < 3 || !part(chars[start - 3]))
+            {
+                start -= 2;
+            }
         }
         let word: String = chars[start..end].iter().collect();
         let line_no = chars[end..]

@@ -282,13 +282,19 @@ impl Editor {
         let mut shown: Vec<String> = spec.iter().filter(|(k, n)| runs(*k, *n)).map(|(k, _)| hint_key(*k)).collect();
         let mut names: Vec<PlaceCmd> = spec.iter().map(|(_, n)| *n).collect();
         names.dedup();
-        // A picker's and a field's keys are their own and the prompt's.
+        // A picker's and a field's keys are their own and the prompt's. The
+        // spec says which of a command's default keys to show; any other key
+        // that runs it is the reader's, even one that is a default key of
+        // another command (found in review, 2026-11-02: a sidebar's `j` bound
+        // to go up was left off the hint).
         let chain = place.chain();
-        let default = |key: &Key| chain.iter().any(|&p| place_keys(p).iter().any(|(d, _)| d == key));
+        let default = |key: &Key, name: PlaceCmd| {
+            chain.iter().any(|&p| place_keys(p).iter().any(|(d, n)| d == key && *n == name))
+        };
         for &from in chain {
             for &name in &names {
                 for typed in self.keys_in_place(from, name.name()) {
-                    let Some(key) = super::keys::pressed_key(&typed).filter(|k| !default(k)) else { continue };
+                    let Some(key) = super::keys::pressed_key(&typed).filter(|k| !default(k, name)) else { continue };
                     let one = hint_key(key);
                     if runs(key, name) && !shown.contains(&one) {
                         shown.push(one);

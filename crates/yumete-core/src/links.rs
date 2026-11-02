@@ -38,6 +38,10 @@ pub struct Index {
     pub files: Vec<PathBuf>,
     /// The links each file writes, by the index in `files`.
     pub out: Vec<Vec<Link>>,
+    /// Each file's text as last read or saved, by the index in `files`: the
+    /// unlinked mentions are looked for here, not on the disk again each
+    /// time another file comes up (found in review, 2026-11-02).
+    pub texts: Vec<String>,
     /// Which files answer to a page name — the file's stem, and its path
     /// without the suffix (`人物/安寧`), both relative to the root.
     by_name: HashMap<String, Vec<usize>>,
@@ -64,6 +68,7 @@ impl Index {
             }
             index.files.push(path);
             index.out.push(scan(&text));
+            index.texts.push(text);
         }
         index.name_them();
         index.generation = 1;
@@ -127,11 +132,15 @@ impl Index {
             return;
         }
         match self.index_of(path) {
-            Some(i) => self.out[i] = scan(text),
+            Some(i) => {
+                self.out[i] = scan(text);
+                self.texts[i] = text.to_string();
+            }
             None => {
                 let at = self.files.partition_point(|p| p.as_path() < path);
                 self.files.insert(at, path.to_path_buf());
                 self.out.insert(at, scan(text));
+                self.texts.insert(at, text.to_string());
                 self.name_them();
             }
         }
@@ -143,6 +152,7 @@ impl Index {
         if let Some(i) = self.index_of(path) {
             self.files.remove(i);
             self.out.remove(i);
+            self.texts.remove(i);
             self.name_them();
             self.generation += 1;
         }

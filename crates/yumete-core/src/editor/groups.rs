@@ -563,7 +563,21 @@ impl Editor {
             .into_iter()
             .map(|(keys, says)| (keys.into(), crate::messages::say(says, &[])))
             .collect();
-        (crate::messages::say(group.title, &[]), rows)
+        // The Space menu is titled by its key, and under vim that may be `\`.
+        let title = match (group.name, self.space_sign()) {
+            ("space", "\\") => "\\".to_string(),
+            _ => crate::messages::say(group.title, &[]),
+        };
+        (title, rows)
+    }
+
+    /// **The key that opens the Space menu**, as a sign writes it: `␣`, or
+    /// `\` under vim while the flavour's `vim_space_menu` leaves Space to vim.
+    pub(super) fn space_sign(&self) -> &'static str {
+        match self.vim_keymap() && !self.flavor_on(FlavorItem::VimSpaceMenu) {
+            true => "\\",
+            false => "␣",
+        }
     }
 
     /// The keys `Space t` offers given what the cursor is standing in and

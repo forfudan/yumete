@@ -1395,9 +1395,11 @@ impl ImeSession {
         self.annotation_modes.get(at).map(|m| m.name.as_str())
     }
 
-    /// The engine's own rule for a scheme that keeps its annotation fields
-    /// (`Engine::scheme_owns_comment_fields`, which is private).
-    fn scheme_owns_fields(&self) -> bool {
+    /// **The scheme draws its own fields, whatever the mode** (拼音): the
+    /// engine's own rule (`Engine::scheme_owns_comment_fields`, which is
+    /// private). Its annotation is on or off, and [`Self::annotation`] names
+    /// the mode kept for the scheme that comes after it.
+    pub fn scheme_owns_fields(&self) -> bool {
         self.engine.schema.kind == yume_core::SchemeKind::Yinma && !self.engine.schema.annotation_enabled
     }
 

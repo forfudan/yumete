@@ -1219,19 +1219,20 @@ pub const ALL: &[Action] = &[
     normal("action.vim-goto-first-nonwhitespace", NormalCmd::VimGotoFirstNonwhitespace),
 ];
 
-/// **The three places that take keys and are not modes of the text**
-/// (2026-11-01, step 9 of the keymap plan): a prompt (`:`, `/`, `::`, a
-/// reading, and a picker's query), a picker's list (and the `::` palette's),
-/// and a sidebar. helix hard-codes these keys; here each place has a table
-/// in the config (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`) and
-/// commands of its own.
+/// **The places that take keys and are not modes of the text** (2026-11-01,
+/// step 9 of the keymap plan): a prompt (`:`, `/`, `::`, a reading, and a
+/// picker's query), a picker's list (and the `::` palette's), a sidebar, and
+/// a box of a panel's form. helix hard-codes these keys; here each place has
+/// a table in the config (`[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]`,
+/// `[keys.field]`) and commands of its own.
 ///
 /// A name the text's keymap has too (`move_char_left`, `page_down`) is
 /// reused where it means the same thing in that place, so one name is one
-/// thing to do wherever it is run. A picker takes the prompt's keys as well,
-/// its own winning where both name a key (helix's rule). Nothing comes over
-/// from `[keys.normal]` or `[keys.insert]`: a sidebar's `J` pages and its `g`
-/// goes to the top at once, so the two keymaps already differ.
+/// thing to do wherever it is run. A picker and a field take the prompt's
+/// keys as well ([`Place::chain`]), their own winning where both name a key
+/// (helix's rule). The defaults of `[keys.normal]` and `[keys.insert]` never
+/// come over (a sidebar's `J` pages and its `g` goes to the top at once), but
+/// the reader's own one-key lines do while `[keys] inherit` is on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Place {
     Prompt,

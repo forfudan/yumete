@@ -80,11 +80,25 @@ zhs = "关"
 en = "off"
 
 [[message]]
+# 拼音的注解開着（拼音畫自己的欄目，不分模式）
+key = "annotation.mode.on"
+zht = "開"
+zhs = "开"
+en = "on"
+
+[[message]]
 # 狀態欄：換了注解模式，或 :yume-annotation 問現在是哪一個（草稿）
 key = "annotation.now"
 zht = "注解：{0}"
 zhs = "注解：{0}"
 en = "annotation: {0}"
+
+[[message]]
+# 狀態欄：拼音下注解開或關
+key = "annotation.pinyin-now"
+zht = "拼音模式注解：{0}"
+zhs = "拼音模式注解：{0}"
+en = "pinyin annotation: {0}"
 
 [[message]]
 # 狀態欄：這個方案没有注解可畫（草稿）

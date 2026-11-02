@@ -431,12 +431,25 @@ impl Editor {
             // Answered above, where its own characters are.
             Pending::VimOperator { .. } => "",
         };
+        // **The keys that really opened it** (2026-11-02, from the review
+        // before 0.16.0): under vim with the flavour's `vim_space_menu` off the
+        // Space menu is on `\`, and vim's case menu is `` g` ``. The table
+        // menu is under Space since 2026-09-21, and its sign said `t`.
+        let space = self.space_sign();
+        let word: String = match self.pending {
+            Pending::Space | Pending::Open | Pending::Yume | Pending::YumeValue(_) | Pending::Conflict => {
+                word.replacen('␣', space, 1)
+            }
+            Pending::Table | Pending::TableConvert => format!("{space}{word}"),
+            Pending::Case if self.vim_keymap() => "g`".to_string(),
+            _ => word.to_string(),
+        };
         // **In the order it was typed.** Inside a sequence the number comes
         // *after* the prefix — `g3` is on its way to `g3d` — and outside one it
         // comes before the key it multiplies, which is `3w`.
         let mut out = String::new();
         if self.pending != Pending::None {
-            out.push_str(word);
+            out.push_str(&word);
             // The columns a sort has already been told about, so `t1a2d` reads
             // back as `t1a2d` and not as `t2d` — the whole point of the
             // grammar is that it is typed a column at a time.

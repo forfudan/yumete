@@ -387,7 +387,10 @@ fn gf_opens_a_path_written_in_the_text() {
     std::fs::write(dir.join("注/四.md"), "一\n二\n三\n").unwrap();
     let one = dir.join("一.md");
     let far = dir.join("注/四.md");
-    std::fs::write(&one, format!("見 注/四.md:2 那一行。\n又見 {}。\n那年冬天。\n", far.display())).unwrap();
+    // As a person writes it: Windows' canonical form has a `\\?\` in front.
+    let written = far.display().to_string();
+    let written = written.strip_prefix(r"\\?\").unwrap_or(&written).to_string();
+    std::fs::write(&one, format!("見 注/四.md:2 那一行。\n又見 {written}。\n那年冬天。\n")).unwrap();
 
     let mut ed = Editor::new();
     ed.open_file(&one).unwrap();
@@ -395,9 +398,11 @@ fn gf_opens_a_path_written_in_the_text() {
     assert_eq!(ed.current_buffer().display_name(), "四.md", "{}", ed.status());
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 1, "`:2` is the second line: {}", ed.status());
 
+    // An absolute path as the platform writes it (`C:\…` on Windows).
+    let first = written.chars().next().expect("a path");
     let mut ed = Editor::new();
     ed.open_file(&one).unwrap();
-    press(&mut ed, "jf/gf");
+    press(&mut ed, &format!("jf{first}gf"));
     assert_eq!(ed.current_buffer().display_name(), "四.md", "{}", ed.status());
 
     // A word that names no file is not a file to make.
@@ -2154,6 +2159,27 @@ fn one_g_goes_to_the_first_line() {
     assert_eq!(ed.cursor_line(), 2, "a bare G stands still here");
     press(&mut ed, "ge");
     assert_eq!(ed.cursor_line(), 3, "ge is the last line");
+}
+
+#[test]
+fn the_space_menu_opened_by_backslash_is_signed_with_it() {
+    // Found in the review before 0.16.0: under vim with `vim_space_menu`
+    // off, `\` opens the Space menu, and the sign and the title said `␣`.
+    let mut ed = typed_vim("那年冬天。\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    press(&mut ed, "\\");
+    assert_eq!(ed.typed_so_far(), "\\");
+    let Hint::Keys(title, _) = ed.hint() else { panic!("{:?}", ed.hint()) };
+    assert_eq!(title, "\\");
+    // The flavour puts the menu back on Space, and the sign with it.
+    let mut ed = typed_vim("那年冬天。\n");
+    press(&mut ed, " ");
+    assert_eq!(ed.typed_so_far(), "␣");
+    // vim's case menu is `` g` ``, and the table menu is under Space.
+    press(&mut ed, "\u{1b}g`");
+    assert_eq!(ed.typed_so_far(), "g`");
+    press(&mut ed, "\u{1b} t");
+    assert_eq!(ed.typed_so_far(), "␣t");
 }
 
 #[test]
@@ -7567,7 +7593,7 @@ fn a_sort_names_its_columns_before_it_acts() {
     for key in " t2a3d".chars() {
         ed.on_key(Key::Char(key));
     }
-    assert_eq!(ed.typed_so_far(), "t2a3d", "{}", ed.status());
+    assert_eq!(ed.typed_so_far(), "␣t2a3d", "{}", ed.status());
     assert_eq!(rows(&ed), ["丙,B,2", "甲,A,10", "乙,B,9", "丁,A,1"], "not yet");
 
     // …and now the action. Block ascending, then n descending inside it.
@@ -7605,7 +7631,7 @@ fn a_sort_names_its_columns_before_it_acts() {
     for key in " t3a".chars() {
         ed.on_key(Key::Char(key));
     }
-    assert_eq!(ed.typed_so_far(), "t3a", "only this one");
+    assert_eq!(ed.typed_so_far(), "␣t3a", "only this one");
     ed.on_key(Key::Char('s'));
     // **Numbers as numbers**, and only column three had a say.
     assert_eq!(rows(&ed), ["丁,A,1", "丙,B,2", "乙,B,9"], "{}", ed.status());
@@ -7630,14 +7656,14 @@ fn a_dash_spans_and_a_comma_pairs() {
 
     // What has been typed reads back as what was typed, joint and all.
     press(&mut ed, " t2-3");
-    assert_eq!(ed.typed_so_far(), "t2-3");
+    assert_eq!(ed.typed_so_far(), "␣t2-3");
     ed.on_key(Key::Esc);
     press(&mut ed, " t1,3");
-    assert_eq!(ed.typed_so_far(), "t1,3");
+    assert_eq!(ed.typed_so_far(), "␣t1,3");
     ed.on_key(Key::Esc);
     // A span has exactly two ends; a list goes on as long as commas do.
     press(&mut ed, " t1,3,2");
-    assert_eq!(ed.typed_so_far(), "t1,3,2");
+    assert_eq!(ed.typed_so_far(), "␣t1,3,2");
     ed.on_key(Key::Esc);
     press(&mut ed, " t1-3");
     ed.on_key(Key::Char('-'));
@@ -7645,7 +7671,7 @@ fn a_dash_spans_and_a_comma_pairs() {
     ed.on_key(Key::Esc);
     // The joint alone is not a zero: `t2-` reads back as `t2-`.
     press(&mut ed, " t2-");
-    assert_eq!(ed.typed_so_far(), "t2-");
+    assert_eq!(ed.typed_so_far(), "␣t2-");
     ed.on_key(Key::Esc);
 
     // `t3,2g` — row 3, column 2. Two numbers, two kinds of thing.
@@ -21185,6 +21211,16 @@ fn the_symbol_and_diagnostics_pickers_follow_helix() {
     assert!(rows[0].starts_with("#  後記") && rows[0].ends_with("after.md"), "{rows:?}");
     assert!(rows[2].contains("初雪") && rows[2].contains("第一章") && rows[2].contains("ch1.md"), "{rows:?}");
     ed.on_key(Key::Esc);
+    // An open file is listed as its buffer stands, saved or not (found in
+    // review, 2026-11-02).
+    ed.current_buffer_mut().insert(0, "# 序\n").expect("the buffer is writable");
+    ed.on_key(Key::Char(' '));
+    ed.on_key(Key::Char('S'));
+    let ask = ed.take_symbols_query().expect("asked");
+    ed.symbols_without_a_server(ask);
+    let rows = labels(&ed);
+    assert!(rows.iter().any(|r| r.contains('序')), "{rows:?}");
+    ed.on_key(Key::Esc);
 
     use crate::problem::{Problem, Severity};
     let said = |line, severity, message: &str, code: Option<&str>| Problem {
@@ -33676,6 +33712,19 @@ fn an_operator_takes_a_bound_motion() {
 
 /// **A picker's, a prompt's and a sidebar's keys are bound by name**
 /// (2026-11-01, step 9 of the keymap plan): `[keys.picker]`, `[keys.prompt]`
+#[test]
+fn a_hint_names_a_key_that_is_another_commands_default() {
+    // Found in review, 2026-11-02: a key the reader bound was left off the
+    // hint when the place chain had it as a default of some other command
+    // (`C-a` goes to the line's start on a picker's query).
+    use yumete_cjk::actions::{Place, PlaceCmd};
+    let mut ed = Editor::new();
+    let lines: HashMap<String, String> = [("C-a".to_string(), "next_entry".to_string())].into_iter().collect();
+    ed.set_place_bindings(Place::Picker, lines);
+    let said = ed.place_keys_written(Place::Picker, PlaceCmd::NextEntry).unwrap_or_default();
+    assert!(said.contains("C-a"), "{said}");
+}
+
 /// and `[keys.sidebar]` are read before the defaults, which stay.
 #[test]
 fn the_three_places_take_their_own_bindings() {

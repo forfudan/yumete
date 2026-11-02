@@ -261,6 +261,7 @@ impl Editor {
     fn project_headings(&self) -> Vec<crate::picker::Item> {
         let root = self.project_root();
         let sieve = crate::editor::Sieve { uncapped: true, ..Default::default() };
+        let here = self.working_dir();
         let mut found: Vec<(PathBuf, Vec<Heading>)> = Vec::new();
         crate::editor::walk_prose(&root, &sieve, &mut |path| {
             let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -269,7 +270,13 @@ impl Editor {
                 Some(crate::syntax::Syntax::Typst) => '=',
                 _ => return,
             };
-            if let Ok(text) = std::fs::read_to_string(path) {
+            // An open file's headings are its buffer's, saved or not.
+            let open = self.buffers.iter().find(|b| b.path().is_some_and(|p| here.join(p) == path));
+            let text = match open {
+                Some(buffer) => Some(buffer.rope().to_string()),
+                None => std::fs::read_to_string(path).ok(),
+            };
+            if let Some(text) = text {
                 found.push((path.to_path_buf(), headings_in(&text, mark)));
             }
         });

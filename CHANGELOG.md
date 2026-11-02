@@ -14,6 +14,15 @@ in `docs/development.md` §5.2.
 - **`gf` opens a path written in the text, as helix's does**: `~/notes/a.md`, `/etc/hosts`, or `ch02.md:12` for its twelfth line, wherever the cursor stands on it and the file is there. A Markdown link to `~/…` or to an absolute path is followed too, by `gf`, `gd` and `gL`, where it used to be refused; inside the project or not, a file only ever opens in yumete.
 - **The keymap is three pages on the site.** helix's keys and vim's keys each have a page, with the flavour off, so each is that editor's keymap as yumete has it, the whole of Normal, select (or Visual) and Insert mode and every menu. The Yumete flavour has its own page: each level's items with their keys under both keymaps, then, item by item, every key it changes and what that key does without it. The Keymap page, which mixed helix's keys with the flavour's and did not say which was which, now says how the three layers stack and links the pages.
 
+### Fixed
+
+- **Under vim with the Space menu on `\`** (the flavour's `vim_space_menu` off), the menu is titled `\` and the sign by the cursor says `\`, where both said Space. The sign also says `` g` `` for vim's case menu, and `␣t` for the table menu, which said `t` since it moved under Space.
+- **Under pinyin, the status line says the annotation is on or off**, where it named the mode kept for shape schemes, which pinyin does not draw. `:yume ?` and `:yume-annotation` say the same.
+- **A key you bind in `[keys.prompt]`, `[keys.picker]`, `[keys.sidebar]` or `[keys.field]` is on the hints** even when it is another command's default key somewhere in the chain (`C-a` bound to `next_entry` in a picker).
+- **`Space S` without a language server lists an open file's headings as the buffer has them**, saved or not, where it read the file from the disk.
+- **The links panel's unlinked mentions no longer read every file from the disk** each time another file comes up; the index keeps the texts it read, and a save updates them. `gd` on a `[[link]]` pressed while the index is still being read waits for it rather than reading the project a second time.
+- **`gf` on a Windows path** (`C:\notes\a.md`) takes the drive and the backslashes.
+
 ## 0.16.0 · 2026-11-02
 
 ### Added

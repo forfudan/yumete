@@ -27,6 +27,11 @@ impl Editor {
         if self.links.is_none() {
             self.collect_links_index();
         }
+        // A thread already reading the project is waited for, not raced
+        // with a second reading here (found in review, 2026-11-02).
+        if self.links.is_none() {
+            self.wait_for_links_index(std::time::Duration::from_secs(10));
+        }
         if self.links.is_none() {
             let root = self.root();
             let texts = read_project(&root);
@@ -431,7 +436,7 @@ impl Editor {
                 }
                 let text = match self.buffers.iter().find(|b| b.path() == Some(file.as_path())) {
                     Some(open) => open.rope().to_string(),
-                    None => std::fs::read_to_string(file).unwrap_or_default(),
+                    None => index.texts[i].clone(),
                 };
                 for (n, line) in text.lines().enumerate() {
                     let mut from = 0;

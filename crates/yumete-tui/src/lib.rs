@@ -4216,7 +4216,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 ime.scheme_name(),
                 // 這一支只在 `available()` 爲真的時候走得到，所以一定說得出。
                 ime.table_source().unwrap_or_default(),
-                annotation_label(ime.annotation()),
+                annotation_state(ime),
                 commit_name(ime.commit_strategy()),
             )
         } else if yumete_ime::has_builtin_table() {
@@ -4400,20 +4400,43 @@ fn annotate(ime: &mut ImeSession, word: Option<&str>) -> String {
     if !ime.annotations_available() {
         return say!("annotation.unavailable");
     }
-    let now = match word {
-        None => ime.annotation().map(str::to_string),
-        Some("off") => ime.set_annotation(None).map(str::to_string),
-        Some("next") => ime.cycle_annotation().map(str::to_string),
+    match word {
+        None => {}
+        Some("off") => {
+            ime.set_annotation(None);
+        }
+        Some("next") => {
+            ime.cycle_annotation();
+        }
         Some(name) if ime.annotation_modes().iter().any(|m| m.name == name) => {
-            ime.set_annotation(Some(name)).map(str::to_string)
+            ime.set_annotation(Some(name));
         }
         Some(name) => {
             let names: Vec<String> =
                 ime.annotation_modes().iter().map(|m| m.name.clone()).collect();
             return say!("annotation.unknown", name, names.join(" "));
         }
-    };
-    say!("annotation.now", annotation_label(now.as_deref()))
+    }
+    annotation_said(ime)
+}
+
+/// The annotation in force, as a label: the mode's name, or under 拼音,
+/// which draws its own fields whatever the mode, on or off (2026-11-02).
+fn annotation_state(ime: &ImeSession) -> String {
+    match (ime.scheme_owns_fields(), ime.annotation()) {
+        (true, Some(_)) => say!("annotation.mode.on"),
+        (true, None) => say!("annotation.mode.off"),
+        (false, mode) => annotation_label(mode),
+    }
+}
+
+/// The status line's word on the annotation: 「注解：多重」, or under 拼音
+/// 「拼音模式注解：开」 (the wording chosen 2026-11-02).
+fn annotation_said(ime: &ImeSession) -> String {
+    match ime.scheme_owns_fields() {
+        true => say!("annotation.pinyin-now", annotation_state(ime)),
+        false => say!("annotation.now", annotation_state(ime)),
+    }
 }
 
 /// Route one Insert-mode key press to the IME. Returns `true` when the IME
@@ -4548,7 +4571,7 @@ fn ime_handle(
             // `/` moved the annotation on: say to which, as the status line
             // says every other mode it changes.
             if ime.annotation() != was.as_deref() {
-                editor.set_status(say!("annotation.now", annotation_label(ime.annotation())));
+                editor.set_status(annotation_said(ime));
             }
         }
         // **方向鍵走候選欄**（2026-10-16 定，原話：「users can still use arrow

@@ -2692,8 +2692,6 @@ pub struct KeyConfig {
     /// (`label = "My tools"` in `[keys.normal.space.x]` → `"<space>x"`):
     /// the title of that group's menu. helix cannot name one.
     pub labels: HashMap<String, String>,
-    /// The same for Insert mode's groups.
-    pub insert_labels: HashMap<String, String>,
     /// A whole table of such lines, shipped: `[keys] preset = "vim"`.
     pub preset: KeyPreset,
     /// **The yumete flavour** — what yumete adds over whichever preset is in
@@ -2725,7 +2723,6 @@ impl Default for KeyConfig {
             sidebar: HashMap::new(),
             field: HashMap::new(),
             labels: HashMap::new(),
-            insert_labels: HashMap::new(),
             preset: KeyPreset::default(),
             flavor: Flavor::default(),
             inherit: true,
@@ -5227,14 +5224,16 @@ impl RawConfig {
         let mut keys = KeyBindings::default();
         read_key_table("normal", &self.keys.normal, &mut keys.normal, &mut keys.labels, problems);
         read_key_table("select", &self.keys.select, &mut keys.select, &mut keys.labels, problems);
-        read_key_table("insert", &self.keys.insert, &mut keys.insert, &mut keys.insert_labels, problems);
+        // Insert mode holds a run of keys (`j` of `jk`) without a menu, so a
+        // `label` there names nothing (found in review, 2026-11-02).
+        let mut no_menu = HashMap::new();
+        read_key_table("insert", &self.keys.insert, &mut keys.insert, &mut no_menu, problems);
         read_key_table("table", &self.keys.table, &mut keys.table, &mut keys.labels, problems);
         config.keys.normal = keys.normal;
         config.keys.select = keys.select;
         config.keys.insert = keys.insert;
         config.keys.table = keys.table;
         config.keys.labels = keys.labels;
-        config.keys.insert_labels = keys.insert_labels;
         use yumete_cjk::actions::Place;
         config.keys.prompt = read_place_table(Place::Prompt, &self.keys.prompt, problems);
         config.keys.picker = read_place_table(Place::Picker, &self.keys.picker, problems);
@@ -5275,7 +5274,6 @@ struct KeyBindings {
     insert: HashMap<String, Vec<String>>,
     table: HashMap<String, Vec<String>>,
     labels: HashMap<String, String>,
-    insert_labels: HashMap<String, String>,
 }
 
 /// One table over another, a nested table into the one it meets (helix's
