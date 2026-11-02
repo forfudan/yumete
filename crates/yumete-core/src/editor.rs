@@ -2870,6 +2870,10 @@ pub struct Editor {
     /// tree of ids ([`crate::window::Windows`]). Before this there were two
     /// fixed halves, `other: Option<Pane>` and `live_pane: usize`.
     windows: crate::window::Windows,
+    /// The text area the windows were last laid out in, as the front end
+    /// drew it: what "as many as fit" is measured against. `None` before the
+    /// first frame (and in tests), when a split is not refused.
+    text_area: std::cell::Cell<Option<crate::window::Area>>,
     /// What each window **other than the live one** is showing: its buffer
     /// and its place (Feature #176). The live window's state is the editor's
     /// own (`current`, `sel`, `extend`); its entry here is stale until the
@@ -4225,6 +4229,7 @@ impl Editor {
             offering: None,
             dictionary: None,
             windows: crate::window::Windows::one(),
+            text_area: std::cell::Cell::new(None),
             panes: std::collections::HashMap::new(),
             live: 1,
             window_history: Vec::new(),

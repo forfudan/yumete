@@ -21,8 +21,9 @@
 //!   left as they are. A line ending in two spaces or a `\` is a hard break:
 //!   it ends a unit and keeps its ending byte for byte.
 //! - **Typst**: a paragraph or an item's body; `=` headings, `#` code lines,
-//!   raw blocks, display maths and block comments are left alone; `\` at the
-//!   end of a line is a hard break.
+//!   a line with a `//` comment after its text, raw blocks, display maths
+//!   and block comments are left alone; `\` at the end of a line is a hard
+//!   break.
 //! - **Code**: only comments. A run of lines with the same indent and the same
 //!   marker is one unit, the marker written again on every line; `///`,
 //!   `//!` and `//` are three kinds, never merged. A block comment's rail
@@ -41,8 +42,13 @@
 //! not fit moves down. Joining two lines puts nothing between two wide
 //! characters and a space wherever a letter is on either side — the rule `J`
 //! follows (#326). A continuation line never begins with a token that would
-//! open a block (`-`, `1.`, `#`, `>`, `|`; `=` in Typst). Width `0` joins
-//! each unit to one line.
+//! open a block (`-`, `1.`, `#`, `>`, `|`, a rule or setext underline, a
+//! fence, an HTML tag; `=` in Typst): the word before it comes down too, and
+//! when none can, the line runs past the width. A break never lands inside a
+//! word or a grapheme cluster. Width `0` joins each unit to one line.
+//!
+//! A selection is read in its file: the lines around it say whether it is in
+//! a fence or a list item, and only its own lines change.
 
 use crate::syntax::Syntax;
 use yumete_cjk::{char_width, str_width};
@@ -86,7 +92,22 @@ enum Line {
 /// The lines filled to `width` under the rules of `syntax`; `0` is one line
 /// per unit.
 pub fn hard_wrap(lines: &[String], syntax: Syntax, width: usize) -> Vec<String> {
-    let classified = classify(lines, syntax);
+    hard_wrap_within(lines, syntax, width, 0..lines.len())
+}
+
+/// The lines of `range` filled, **read in the context of the whole file**
+/// (2026-11-02): a selection inside a fence is the fence's code, and a
+/// selection that starts in the middle of a list item is still that item.
+/// Lines outside the range are never touched, so a unit is cut where the
+/// range is.
+pub fn hard_wrap_within(lines: &[String], syntax: Syntax, width: usize, range: std::ops::Range<usize>) -> Vec<String> {
+    let mut classified = classify(lines, syntax);
+    debug_assert_eq!(classified.len(), lines.len(), "one class a line");
+    for (i, class) in classified.iter_mut().enumerate() {
+        if !range.contains(&i) {
+            *class = Line::Keep(lines[i].clone());
+        }
+    }
     let mut out = Vec::new();
     let mut unit: Vec<(Leader, String, Option<String>)> = Vec::new();
     let flush = |unit: &mut Vec<(Leader, String, Option<String>)>, out: &mut Vec<String>| {
@@ -117,6 +138,10 @@ pub fn hard_wrap(lines: &[String], syntax: Syntax, width: usize) -> Vec<String> 
         }
     }
     flush(&mut unit, &mut out);
+    // What stood outside the range comes out as it went in, line for line.
+    let after = lines.len().saturating_sub(range.end);
+    out.drain(..range.start.min(out.len()));
+    out.truncate(out.len().saturating_sub(after));
     out
 }
 
@@ -152,7 +177,9 @@ fn classify(lines: &[String], syntax: Syntax) -> Vec<Line> {
         Syntax::Markdown => classify_markdown(lines),
         Syntax::Typst => classify_typst(lines),
         Syntax::Code(language) => classify_code(lines, language),
-        Syntax::Text | Syntax::Diff => classify_text(lines),
+        Syntax::Text => classify_text(lines),
+        // A diff is lines with a meaning each: nothing in it is a paragraph.
+        Syntax::Diff => lines.iter().map(|l| Line::Keep(l.clone())).collect(),
     }
 }
 
@@ -315,9 +342,14 @@ fn classify_markdown(lines: &[String]) -> Vec<Line> {
             Block::Quote { .. } => {
                 // The run of lines under the same `>` marks, read as Markdown
                 // of their own and put back behind the marks.
+                // Each `>` takes one space after it; more is the body's
+                // own indent (indented code, a nested list).
                 let marks_of = |l: &str| -> (String, String) {
                     let (indent, body) = split_indent(l);
-                    let text = body.trim_start_matches(['>', ' ']);
+                    let mut text = body;
+                    while let Some(rest) = text.strip_prefix('>') {
+                        text = rest.strip_prefix(' ').unwrap_or(rest);
+                    }
                     let marks = body[..body.len() - text.len()].trim_end();
                     (format!("{indent}{marks}"), text.to_string())
                 };
@@ -451,6 +483,14 @@ fn classify_typst(lines: &[String]) -> Vec<Line> {
             out.push(Line::Fill { leader: Leader::again(&format!("{indent}// ")), text: text.to_string(), hard: None, joins: true });
             continue;
         }
+        // A code line (`#let`, `#set`, `#import`…) is left alone, and so is a
+        // line with a comment after its text: joined, the comment would
+        // swallow what came after it.
+        let code_line = body.starts_with('#') && body.chars().nth(1).is_some_and(|c| c.is_alphabetic());
+        if code_line || typst_comment_after(body) {
+            out.push(Line::Keep(line.clone()));
+            continue;
+        }
         match block {
             Block::Prose => {
                 let (text, hard) = typst_break(body);
@@ -467,6 +507,24 @@ fn classify_typst(lines: &[String]) -> Vec<Line> {
         }
     }
     out
+}
+
+/// Whether a `//` comment follows the text: not `://` (a URL), not inside
+/// backticks or a string.
+fn typst_comment_after(body: &str) -> bool {
+    let chars: Vec<char> = body.chars().collect();
+    let (mut raw, mut string) = (false, false);
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '`' if !string => raw = !raw,
+            '"' if !raw => string = !string,
+            '/' if !raw && !string && chars.get(i + 1) == Some(&'/') && (i == 0 || chars[i - 1] != ':') => {
+                return true;
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Typst's hard break: a `\` at the end of the line.
@@ -575,7 +633,9 @@ fn classify_code(lines: &[String], language: crate::code::Language) -> Vec<Line>
                     out.push(Line::Keep(line.clone()));
                     continue;
                 }
-                let text = after.trim_start();
+                // One space is the marker's; more is the body's own indent
+                // (indented code, a nested list), read as Markdown below.
+                let text = after.strip_prefix([' ', '\t']).unwrap_or(after);
                 let lead = format!("{indent}{variant} ");
                 match run.as_mut() {
                     Some((l, bodies)) if *l == lead => bodies.push(text.to_string()),
@@ -704,14 +764,22 @@ fn fill(leader: &Leader, parts: &[(String, Option<String>)], width: usize, synta
             }
             // It goes to the next line — unless it would open a block there,
             // in which case the atom before it comes down with it.
-            if opens_a_block(&atom.text, syntax) && line.trim_end().len() > leader_len(&line, leader, first_line) {
-                let moved = take_last_atom(&mut line, leader, first_line);
-                flush_line(&mut line, &mut out, leader);
-                first_line = false;
-                line.push_str(&moved.text);
-                has_word = true;
-                last_char = moved.text.chars().last();
-                pending = Some(Atom { spaced: moved.spaced, line_start: false, ..atom });
+            if opens_a_block(&atom.text, syntax) {
+                if let Some(moved) = take_last_atom(&mut line, leader, first_line) {
+                    flush_line(&mut line, &mut out, leader);
+                    first_line = false;
+                    line.push_str(&moved.text);
+                    has_word = true;
+                    last_char = moved.text.chars().last();
+                    // The opener goes after it with the spacing it had.
+                    pending = Some(atom);
+                    continue;
+                }
+                // Nothing can come down with it: it stays on this line, past
+                // the width. A long line is better than a new block.
+                line.push_str(gap);
+                line.push_str(&atom.text);
+                last_char = atom.text.chars().last();
                 continue;
             }
             flush_line(&mut line, &mut out, leader);
@@ -748,26 +816,20 @@ fn leader_len(line: &str, leader: &Leader, first: bool) -> usize {
 }
 
 /// Pull the last atom off a line that is being broken before a block
-/// opener. The line keeps its leader; the atom's spacing is kept.
-fn take_last_atom(line: &mut String, leader: &Leader, first: bool) -> Atom {
+/// opener: a whole atom as [`atoms_of`] cuts them, so a word or a cluster
+/// is never split. `None` when it is the line's only atom (the line would
+/// be left empty); the line keeps its leader.
+fn take_last_atom(line: &mut String, leader: &Leader, first: bool) -> Option<Atom> {
     let lead = leader_len(line, leader, first);
-    let body = line[lead..].to_string();
-    let trimmed = body.trim_end();
-    let cut = trimmed.rfind(' ').map(|n| n + 1).unwrap_or_else(|| {
-        // No space: the last wide cluster.
-        let mut chars: Vec<(usize, char)> = trimmed.char_indices().collect();
-        let mut end = chars.len();
-        while end > 0 && closing(chars[end - 1].1) {
-            end -= 1;
-        }
-        let at = end.saturating_sub(1);
-        chars.truncate(at + 1);
-        chars.get(at).map_or(0, |&(b, _)| b)
-    });
-    let spaced = cut > 0 && trimmed[..cut].ends_with(' ');
-    let atom = trimmed[cut..].to_string();
-    line.truncate(lead + cut);
-    Atom { text: atom, spaced, line_start: false }
+    let trimmed = line[lead..].trim_end().to_string();
+    let atoms = atoms_of(&trimmed);
+    if atoms.len() < 2 {
+        return None;
+    }
+    let last = atoms.last()?.clone();
+    let cut = trimmed.len() - last.text.len();
+    line.truncate(lead + trimmed[..cut].trim_end().len());
+    Some(Atom { line_start: false, ..last })
 }
 
 /// A token a continuation line may not begin with, since there it would
@@ -778,7 +840,21 @@ fn opens_a_block(text: &str, syntax: Syntax) -> bool {
     match syntax {
         Syntax::Typst => matches!(bare, "-" | "+" | "/") || bare.starts_with('=') && bare.chars().all(|c| c == '=') || bare.starts_with('#') && bare.chars().nth(1).is_some_and(|c| c.is_alphabetic()),
         Syntax::Code(_) => false,
-        _ => matches!(bare, "-" | "*" | "+" | ">" | "|" | "```" | "~~~") || bare.chars().all(|c| c == '#') && !bare.is_empty() || ordered,
+        _ => {
+            // A rule or a setext underline (`---`, `***`, `___`, `===`), a
+            // quote (`>` and `>=` alike), a fence with its language, an HTML
+            // block.
+            let rule = bare.chars().next().is_some_and(|c| matches!(c, '-' | '*' | '_' | '=') && bare.chars().all(|d| d == c));
+            let html = bare.starts_with('<') && bare.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic() || c == '/');
+            matches!(bare, "+" | "|")
+                || rule
+                || html
+                || bare.starts_with('>')
+                || bare.starts_with("```")
+                || bare.starts_with("~~~")
+                || bare.chars().all(|c| c == '#') && !bare.is_empty()
+                || ordered
+        }
     }
 }
 
@@ -810,26 +886,29 @@ fn atoms_of(text: &str) -> Vec<Atom> {
         }
         let end = match protected_end(&chars, i) {
             Some(end) => end,
-            None if wide(Some(c)) || opening(c) => {
-                // A wide character with any opening marks before it and the
-                // closing marks after it — one cluster, so no line starts
-                // with 。 or ends with 「.
-                let mut end = i + 1;
-                while end < chars.len() && opening(chars[end - 1]) && chars[end] != ' ' {
-                    end += 1;
-                }
-                while end < chars.len() && closing(chars[end]) {
-                    end += 1;
-                }
-                end
-            }
             None => {
-                // A word: up to a space or a wide character; a closing mark
-                // right after it stays with it.
-                let mut end = i + 1;
-                while end < chars.len() && !matches!(chars[end], ' ' | '\t') && !wide(Some(chars[end])) && !opening(chars[end]) {
-                    end += 1;
+                // Opening marks cling to what follows them, so no line ends
+                // with 「 or “ — and what follows is a wide character (one
+                // cluster) or a word (all of it: `“hello”` is one atom).
+                let mut at = i;
+                while at < chars.len() && opening(chars[at]) {
+                    at += 1;
                 }
+                let mut end = match chars.get(at) {
+                    None => at,
+                    Some(' ' | '\t') => at.max(i + 1),
+                    Some(&c) if wide(Some(c)) => cluster_end(&chars, at),
+                    Some(_) => {
+                        // A word: up to a space or a wide character.
+                        let mut end = cluster_end(&chars, at);
+                        while end < chars.len() && !matches!(chars[end], ' ' | '\t') && !wide(Some(chars[end])) && !opening(chars[end]) {
+                            end = cluster_end(&chars, end);
+                        }
+                        end
+                    }
+                };
+                // A closing mark right after stays with it, so no line
+                // starts with 。 or ”.
                 while end < chars.len() && closing(chars[end]) {
                     end += 1;
                 }
@@ -841,6 +920,25 @@ fn atoms_of(text: &str) -> Vec<Atom> {
         i = end;
     }
     out
+}
+
+/// The end of the character at `at` with what joins it: a zero-width joiner
+/// and the character after it, variation selectors, combining marks, skin
+/// tones. A family emoji is one cluster, and a break never lands inside one.
+fn cluster_end(chars: &[char], at: usize) -> usize {
+    let mut end = at + 1;
+    while end < chars.len() {
+        let c = chars[end];
+        let joins = matches!(c as u32, 0xFE00..=0xFE0F | 0xE0100..=0xE01EF | 0x0300..=0x036F | 0x20D0..=0x20FF | 0x1F3FB..=0x1F3FF);
+        if c == '\u{200D}' {
+            end = (end + 2).min(chars.len());
+        } else if joins {
+            end += 1;
+        } else {
+            break;
+        }
+    }
+    end
 }
 
 /// The end of a span that is never broken inside, starting at `at`:
@@ -990,5 +1088,74 @@ mod tests {
         assert_eq!(unit_around(&lines, Syntax::Markdown, 6), Some(5..7));
         assert_eq!(unit_around(&lines, Syntax::Markdown, 0), None);
         assert_eq!(unit_around(&lines, Syntax::Markdown, 8), None);
+    }
+
+    /// Found in the review before 0.16.0 (2026-11-02): each of these changed
+    /// what the text says.
+    #[test]
+    fn an_opening_quote_takes_the_whole_word() {
+        let text = "aaaa bbbb \u{201c}hello\u{201d} there";
+        let out = wrap(text, Syntax::Text, 12);
+        assert!(out.lines().any(|l| l.starts_with("\u{201c}hello\u{201d}")), "{out:?}");
+        let twice = wrap(&wrap(text, Syntax::Text, 12), Syntax::Text, 0);
+        assert_eq!(twice, text, "and joins back as it was");
+    }
+
+    #[test]
+    fn a_continuation_line_never_opens_a_markdown_block() {
+        for (text, width) in [
+            ("aaaa bbbb ===", 9),
+            ("aaaa bbbb ---", 9),
+            ("aaaa bbbb ***", 9),
+            ("the value x >= 5 holds", 11),
+            ("see the ```rust fence", 8),
+        ] {
+            let out = wrap(text, Syntax::Markdown, width);
+            for line in out.lines().skip(1) {
+                let first = line.split(' ').next().unwrap_or("");
+                assert!(!opens_a_block(first, Syntax::Markdown), "{text:?} -> {out:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn typst_code_lines_and_trailing_comments_stay() {
+        let text = "Hello there\n#let x = 1\nValue is #x.";
+        assert_eq!(wrap(text, Syntax::Typst, 60), text);
+        let text = "Some text // a note\nmore text";
+        assert_eq!(wrap(text, Syntax::Typst, 60), text);
+        // A URL is not a comment.
+        assert_eq!(wrap("see https://typst.app\nfor more", Syntax::Typst, 60), "see https://typst.app for more");
+    }
+
+    #[test]
+    fn indented_code_in_a_comment_or_a_quote_stays() {
+        let text = "/// Example:\n///\n///     let x = compute(1, 2);\n///     let y = x + 1;";
+        assert_eq!(wrap(text, Syntax::Code(Language::Rust), 40), text);
+        let text = ">     code in quote\n>     more code";
+        assert_eq!(wrap(text, Syntax::Markdown, 40), text);
+        let text = "/// - item\n///   - nested item";
+        assert_eq!(wrap(text, Syntax::Code(Language::Rust), 40), text);
+    }
+
+    #[test]
+    fn a_range_is_read_in_its_file() {
+        let lines: Vec<String> = ["```", "let a = 1;", "let b = 2;", "```"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(hard_wrap_within(&lines, Syntax::Markdown, 10, 1..3), ["let a = 1;", "let b = 2;"]);
+        let diff: Vec<String> = ["--- a/x", "+++ b/x", "-old", "+new"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(hard_wrap(&diff, Syntax::Diff, 30), diff);
+    }
+
+    #[test]
+    fn a_break_never_lands_inside_a_word_or_a_cluster() {
+        // The word before the opener comes down whole, and the space stays.
+        assert_eq!(wrap("\u{4e2d}English - more", Syntax::Markdown, 10), "\u{4e2d}\nEnglish -\nmore");
+        let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}";
+        let text = format!("aa {family}{family}");
+        for width in 3..12 {
+            let out = wrap(&text, Syntax::Text, width);
+            assert!(!out.contains("\u{200d}\n") && !out.contains("\n\u{200d}"), "{width}: {out:?}");
+            assert_eq!(wrap(&out, Syntax::Text, 0), text, "{width}: joins back");
+        }
     }
 }

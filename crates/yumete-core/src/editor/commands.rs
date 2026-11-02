@@ -608,7 +608,9 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SplitWindow { how, file } => {
-                self.split_window(how);
+                if !self.split_window(how) {
+                    return Ok(CommandOutcome::Continue);
+                }
                 if let Some(file) = file {
                     self.open_file(self.here_path(file.as_ref())).map_err(EditorError::Io)?;
                 }

@@ -155,10 +155,24 @@ impl Editor {
             Place::Prompt => self.insert_aliases.iter().map(|(k, v)| (k.clone(), v)).collect(),
             Place::Picker | Place::Field => return Vec::new(),
         };
+        // helix's names for `j` and `k` are the visual ones; in a list a row
+        // is a row, so they mean the place's own line moves (found in review,
+        // 2026-11-02: a Colemak `n = "move_visual_line_down"` did nothing in
+        // the file tree).
+        fn in_a_list(name: &str) -> &str {
+            match name {
+                "move_visual_line_down" => "move_line_down",
+                "move_visual_line_up" => "move_line_up",
+                other => other,
+            }
+        }
         from.into_iter()
             .filter(|(key, _)| key.chars().filter(|&c| c != yumete_cjk::actions::ALT).count() == 1)
             .filter_map(|(key, run)| match run.as_slice() {
-                [one] if one != "no_op" && place.actions().iter().any(|a| a.name == one) => Some((key, one.clone())),
+                [one] if one != "no_op" => {
+                    let name = in_a_list(one);
+                    place.actions().iter().any(|a| a.name == name).then(|| (key, name.to_string()))
+                }
                 _ => None,
             })
             .collect()

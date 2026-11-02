@@ -1425,7 +1425,9 @@ impl Editor {
         let line = rope.char_to_line(self.sel.head());
         let at = self.sel.head() - rope.line_to_char(line);
         let chars: Vec<char> = rope.line(line).chars().collect();
-        let blank = |c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '(' | '（' | '「' | '『');
+        // `(` is not a stop: `…/wiki/Rust_(language)` keeps its brackets,
+        // and a `)` after a URL in brackets goes below, by counting.
+        let blank = |c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '（' | '「' | '『');
         let mut start = at.min(chars.len());
         while start > 0 && !blank(chars[start - 1]) {
             start -= 1;
@@ -1436,7 +1438,19 @@ impl Editor {
         }
         let word: String = chars[start..end].iter().collect();
         let from = word.find("https://").or_else(|| word.find("http://"))?;
-        let url = word[from..].trim_end_matches(['.', ',', ';', ':', ')', ']', '}', '>', '。', '，', '；', '：', '）', '」', '』', '、']);
+        let mut url = &word[from..];
+        loop {
+            let trimmed = url.trim_end_matches(['.', ',', ';', ':', ']', '}', '>', '。', '，', '；', '：', '）', '」', '』', '、']);
+            // A `)` the URL did not open closes the text around it.
+            let unopened = trimmed.ends_with(')') && trimmed.matches(')').count() > trimmed.matches('(').count();
+            url = match unopened {
+                true => &trimmed[..trimmed.len() - 1],
+                false => trimmed,
+            };
+            if !unopened {
+                break;
+            }
+        }
         (url.len() > "https://".len()).then(|| url.to_string())
     }
 
@@ -1685,11 +1699,13 @@ impl Editor {
         if crate::export::delimiter_of(format).is_some() && self.table().is_none() {
             self.enter_table();
         }
-        let before = self.status.clone();
+        // Cleared first: two files in one run say the same words, and the
+        // second must not read as silence.
+        self.status.clear();
         match self.export(format, target, true) {
             Ok(_) => {
                 let said = self.status.clone();
-                match said != before && !said.is_empty() {
+                match !said.is_empty() {
                     true => Ok(said),
                     false => Err(say!("export.no-such-format", format)),
                 }

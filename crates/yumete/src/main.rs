@@ -1872,6 +1872,13 @@ fn run_export(editor: &mut Editor, format: &str, files: &[String], out: Option<&
         eprintln!("yumete: --out names one file, and {} were given", files.len());
         return ExitCode::from(2);
     }
+    if let Some(out) = out {
+        let path = std::path::PathBuf::from(yumete_config::expand_tilde(out));
+        if out.ends_with(['/', '\\']) || path.is_dir() {
+            eprintln!("yumete: --out names the file to write, and {out} is a folder");
+            return ExitCode::from(2);
+        }
+    }
     if format == "pdf" && !typst_is_installed() {
         eprintln!("yumete: --export pdf needs the `typst` compiler on the PATH");
         eprintln!("get it from https://github.com/typst/typst/releases, or `brew install typst`");
@@ -1892,9 +1899,7 @@ fn run_export(editor: &mut Editor, format: &str, files: &[String], out: Option<&
         }
         let result = match format.as_str() {
             "pdf" => export_pdf(editor, &source, out),
-            _ => editor
-                .export_from_the_command_line(&format, out)
-                .map(|_| written_path(&source, &format, out)),
+            _ => export_one(editor, &source, &format, out),
         };
         match result {
             Ok(path) => println!("{}", path.display()),
@@ -1907,6 +1912,26 @@ fn run_export(editor: &mut Editor, format: &str, files: &[String], out: Option<&
     match failed {
         true => ExitCode::FAILURE,
         false => ExitCode::SUCCESS,
+    }
+}
+
+/// One file through the editor's own export, **judged by the file**: the
+/// status line says written and refused alike, so what counts is whether the
+/// target was written now. A refusal (a source the format cannot take, a
+/// file with no table) is the status line's words and a failure.
+fn export_one(
+    editor: &mut Editor,
+    source: &std::path::Path,
+    format: &str,
+    out: Option<&str>,
+) -> Result<std::path::PathBuf, String> {
+    let target = written_path(source, format, out);
+    let stamp = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| Ok((m.modified()?, m.len()))).ok();
+    let before = stamp(&target);
+    let said = editor.export_from_the_command_line(format, out)?;
+    match stamp(&target) {
+        Some(after) if Some(after) != before => Ok(target),
+        _ => Err(said),
     }
 }
 
@@ -1943,10 +1968,22 @@ fn export_pdf(
     let (input, temporary) = match is_typst {
         true => (source.to_path_buf(), None),
         false => {
+            // Beside the source (its images are relative to it), under a
+            // name nothing there has: the draft is deleted afterwards, and a
+            // file of the reader's own must never be the one deleted.
             let stem = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            let draft = source.with_file_name(format!("{stem}.yumete-export.typ"));
+            let draft = (0..)
+                .map(|n| match n {
+                    0 => source.with_file_name(format!("{stem}.yumete-export.typ")),
+                    n => source.with_file_name(format!("{stem}.yumete-export-{}-{n}.typ", std::process::id())),
+                })
+                .find(|p| !p.exists())
+                .expect("an unused name");
             let draft_text = draft.to_string_lossy().into_owned();
-            editor.export_from_the_command_line("typst", Some(&draft_text))?;
+            if let Err(why) = export_one(editor, source, "typst", Some(&draft_text)) {
+                let _ = std::fs::remove_file(&draft);
+                return Err(why);
+            }
             (draft.clone(), Some(draft))
         }
     };

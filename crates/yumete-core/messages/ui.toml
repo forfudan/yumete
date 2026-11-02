@@ -287,6 +287,13 @@ zhs = "那一半的文件已经关掉了"
 en = "the file that region was showing is closed"
 
 [[message]]
+# 狀態欄：分窗會讓一個窗口小得放不下字，没有分（草稿）
+key = "pane.no-room"
+zht = "没有地方再分一個窗口了"
+zhs = "没有地方再分一个窗口了"
+en = "no room for another window"
+
+[[message]]
 # 候選面板的名字：底行
 key = "panel.name.bottom"
 zht = "底行"

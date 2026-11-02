@@ -181,7 +181,7 @@ impl KeyPreset {
                 ("0", "@gh"),
                 // 「this word, elsewhere」 — `g/` here, and the one vim key a
                 // hand reaches for without thinking.
-                ("*", "@g/"),
+                ("*", "search_selection"),
                 // Warning: **The ones that do something *else* here**, which is
                 // worse than doing nothing: `%` selects the whole file (vim
                 // jumps to the matching bracket), `D` and `C` cut the
@@ -208,7 +208,7 @@ impl KeyPreset {
                 // `q{a-z}` waits for its letter (`vim_record_macro`, a row of
                 // the vim table, 2026-11-01); `Q` replays, as Neovim's does.
                 ("Q", "replay_macro"),
-                ("K", "@ k"),
+                ("K", "hover"),
                 ("%", "vim_match_brackets"),
                 // **`(`/`)` 是句子**（2026-10-06）。這裏它們本來是「換主選區」，
                 // 而 vim 的手按的是上一句/下一句——這個編輯器把句子放在 `H`/

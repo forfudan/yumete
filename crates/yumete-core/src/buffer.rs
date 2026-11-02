@@ -1915,7 +1915,20 @@ pub fn temp_path_for(target: &Path) -> PathBuf {
     };
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    dir.join(format!(".{}.{}-{nanos}{TEMP_ENDING}", name.trim_start_matches('.'), std::process::id()))
+    let tail = format!(".{}-{nanos}{TEMP_ENDING}", std::process::id());
+    // The name is only a reader's clue, and a file name has 255 bytes: a
+    // long one is cut so the temporary still fits, or a file that saved in
+    // 0.15.0 would say "File name too long" (2026-11-02).
+    let mut name = name.trim_start_matches('.').to_string();
+    let room = 255usize.saturating_sub(1 + tail.len());
+    if name.len() > room {
+        let mut cut = room;
+        while !name.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        name.truncate(cut);
+    }
+    dir.join(format!(".{name}{tail}"))
 }
 
 /// The recovery copy's name before 2026-10-31, `chapter.md` →
@@ -3399,4 +3412,23 @@ fn tmp() -> std::path::PathBuf {
         assert!(!owner_still_running(Path::new("scratch-nope-1.yumete")));
     }
 
+
+    /// A file name near the 255-byte limit still saves: the temporary's
+    /// name is cut to fit (found in the review before 0.16.0).
+    #[test]
+    fn a_long_file_name_still_has_a_temporary_that_fits() {
+        for name in ["a".repeat(250) + ".md", "\u{5377}".repeat(80) + ".md"] {
+            let temp = temp_path_for(&std::path::Path::new("/tmp").join(&name));
+            let len = temp.file_name().unwrap().len();
+            assert!(len <= 255, "{len}");
+            assert!(temp.to_string_lossy().ends_with(TEMP_ENDING));
+        }
+        let dir = std::env::temp_dir().join(format!("yumete-long-name-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a".repeat(225) + ".md");
+        write_file_atomically(&path, "x\n").expect("saved");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "x\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

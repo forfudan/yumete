@@ -501,7 +501,7 @@ impl Editor {
         };
         let last = last.min(all.len().saturating_sub(1));
         let lines = &all[first..=last];
-        let filled = crate::hardwrap::hard_wrap(lines, syntax, width);
+        let filled = crate::hardwrap::hard_wrap_within(&all, syntax, width, first..last + 1);
         let from = rope.line_to_char(first);
         let to = motion::line_end(rope, rope.line_to_char(last));
         let text = filled.join(self.current_buffer().ending());

@@ -447,14 +447,21 @@ pub fn fit_fields(fields: &[&str], room: usize, width: impl Fn(&str) -> usize) -
         out = next;
     }
     if out.is_empty() {
-        // Not one whole field fits: the first, as far as it goes.
+        // Not one whole field fits: the first, as far as it goes, never
+        // between a character and a mark or selector that belongs to it.
         let mut cut = String::new();
+        let mut more = String::new();
         for ch in fields.first().copied().unwrap_or("").chars() {
-            let mut more = cut.clone();
-            more.push(ch);
-            if width(&more) + width(ellipsis) > room {
-                break;
+            let joins = matches!(ch as u32, 0x0300..=0x036F | 0x20D0..=0x20FF | 0xFE00..=0xFE0F | 0xE0100..=0xE01EF | 0x200D);
+            if !joins && !more.is_empty() {
+                if width(&more) + width(ellipsis) > room {
+                    break;
+                }
+                cut = more.clone();
             }
+            more.push(ch);
+        }
+        if width(&more) + width(ellipsis) <= room {
             cut = more;
         }
         return format!("{cut}{ellipsis}");
@@ -1036,6 +1043,12 @@ impl ImeSession {
             _ => return false,
         };
         match self.engine.key_action(key) {
+            // A code key of this scheme: it goes on the code (`/` is ㄥ in
+            // a 注音 table), not to the page.
+            KeyAction::Native if self.engine.key_taken_by_scheme(ch) => {
+                self.engine.input(ch);
+                true
+            }
             KeyAction::Native => false,
             KeyAction::Noop => true,
             // yume's `/` while typing (2026-11-02): the next annotation mode.
@@ -1368,9 +1381,24 @@ impl ImeSession {
     }
 
     /// The mode the candidates are annotated in; `None` is off.
+    ///
+    /// A scheme with no 字根 layer (拼音) draws its own fields whatever the
+    /// mode, and the engine's mode is only on or off there; the name is then
+    /// the one asked for, so the round does not rename it.
     pub fn annotation(&self) -> Option<&str> {
         let at = self.engine.comment_mode()?;
+        if self.scheme_owns_fields() {
+            if let Some(wanted) = self.annotation_wanted.as_deref() {
+                return self.annotation_modes.iter().find(|m| m.name == wanted).map(|m| m.name.as_str());
+            }
+        }
         self.annotation_modes.get(at).map(|m| m.name.as_str())
+    }
+
+    /// The engine's own rule for a scheme that keeps its annotation fields
+    /// (`Engine::scheme_owns_comment_fields`, which is private).
+    fn scheme_owns_fields(&self) -> bool {
+        self.engine.schema.kind == yume_core::SchemeKind::Yinma && !self.engine.schema.annotation_enabled
     }
 
     /// Switch to a mode by name, or off with `None`; answers the mode now in
@@ -1387,10 +1415,18 @@ impl ImeSession {
     /// The next mode, as `/` while typing: off, each mode that draws
     /// something, off again.
     pub fn cycle_annotation(&mut self) -> Option<&str> {
-        if self.engine.comments_available() {
-            self.engine.cycle_comment_mode();
+        if !self.engine.comments_available() {
+            return self.annotation();
         }
-        self.annotation_wanted = self.annotation().map(str::to_string);
+        self.engine.cycle_comment_mode();
+        // Under 拼音 the round is on and off: off is off, and on keeps the
+        // mode asked for, for the scheme that comes back after it.
+        let on = self.engine.comment_mode().is_some();
+        match (self.scheme_owns_fields(), on) {
+            (true, true) if self.annotation_wanted.is_some() => {}
+            (true, true) => self.annotation_wanted = self.annotation_modes.first().map(|m| m.name.clone()),
+            _ => self.annotation_wanted = self.annotation().map(str::to_string),
+        }
         self.annotation()
     }
 
@@ -2870,6 +2906,8 @@ mod annotation_modes {
         assert_eq!(fit_fields(&fields, 12, width), "氵气 · …");
         // Not even the first: it is cut, never left out, and `…` follows.
         assert_eq!(fit_fields(&fields, 3, width), "氵…");
+        // Never between a letter and its mark.
+        assert_eq!(fit_fields(&["ae\u{301}b"], 2, width), "a…");
     }
 
     /// `/` while typing steps through the modes, then off, as yume's does;

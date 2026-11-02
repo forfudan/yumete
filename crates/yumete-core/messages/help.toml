@@ -176,9 +176,9 @@ en = "Select mode on-off / collapse to one character; Esc also leaves Select mod
 [[message]]
 # 常用幫助：去/看它指的地方
 key = "help.common.follow-what-it-points-at"
-zht = "去/看它指的地方：腳註的註、拆分的那一行"
-zhs = "去/看它指的地方：脚注的注、拆分的那一行"
-en = "go to / show what this points at: a footnote's note, a component's row"
+zht = "去它指的地方：腳註的註、拆分的那一行"
+zhs = "去它指的地方：脚注的注、拆分的那一行"
+en = "go to what this points at: a footnote's note, a component's row"
 
 [[message]]
 # 常用幫助：去第 30 行
@@ -337,9 +337,9 @@ en = "a window of 80×24 is what this is laid out for; a side panel needs 36 col
 [[message]]
 # 常用幫助：這個詞還在哪裏
 key = "help.common.word-elsewhere"
-zht = "這個詞還在哪裏：這邊找/另一個窗口看"
-zhs = "这个词还在哪里：这边找/另一个窗口看"
-en = "where else this word is: / here, ? in the other window"
+zht = "這個詞還在哪裏"
+zhs = "这个词还在哪里"
+en = "where else this word is"
 
 [[message]]
 # 常用幫助：按詞移動
@@ -442,9 +442,9 @@ en = "type in the cell / empty it"
 [[message]]
 # 表格幫助：誰用了它
 key = "help.table.who-uses-this"
-zht = "誰用了它——一欄一欄地找：這邊找/那邊看"
-zhs = "谁用了它——一栏一栏地找：这边找/那边看"
-en = "who uses this — down the columns: / here, ? in the other window"
+zht = "誰用了它——一欄一欄地找"
+zhs = "谁用了它——一栏一栏地找"
+en = "who uses this — down the columns"
 
 [[message]]
 # 表格幫助：取這一欄/貼一欄

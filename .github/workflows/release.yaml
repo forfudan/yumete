@@ -146,7 +146,9 @@ jobs:
           - os: ubuntu-22.04-arm
             target: linux-aarch64
             ext: tar.gz
-          - os: macos-14          # Apple Silicon (arm64)
+          # macos-14 stopped getting runners on 2026-10-30 (test.yaml moved
+          # the same day); macos-latest is Apple Silicon too.
+          - os: macos-latest      # Apple Silicon (arm64)
             target: darwin-arm64
             ext: tar.gz
           # Warning: **`+crt-static` is not a tuning flag here.** Without it the

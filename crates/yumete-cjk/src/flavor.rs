@@ -155,7 +155,7 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" m", "]m", "[m"],
-        vim_keys: None,
+        vim_keys: Some(&[" m"]),
         insert: false,
         label: "keys.flavor.item.merge-conflicts",
         hint: "keys.flavor.item.merge-conflicts.hint",
@@ -365,15 +365,18 @@ flavor_items! {
         label: "keys.flavor.item.vim-space-menu",
         hint: "keys.flavor.item.vim-space-menu.hint",
     },
-    /// helix's keys under vim, on keys vim leaves free (2026-11-02): the Alt
-    /// keys, `C-s`, `Z`'s sticky view, `ga` `gp` `gc` `gb` `gr` `g.`, `]g`
-    /// `]f` `]t`, Insert `C-k` and `A-d`. Off, vim has only vim's. Under helix
-    /// they are helix's own, so this item is always on there.
+    /// helix's keys under vim, on keys vim and Neovim leave free (2026-11-02,
+    /// measured against `index.txt` and Neovim's default mappings): the Alt
+    /// keys, `C-s`, `Z`'s sticky view, `gb` `gy` `g.`, `]g` `[g`, `;` `,`
+    /// with no `f` to repeat, Insert `C-k` and `A-d`. Off, vim has only
+    /// vim's. Under helix they are helix's own, so this item is always on
+    /// there. `ga` `gp` `gr` `gc` `]f` `]t` are vim's or Neovim's, and stay
+    /// theirs.
     HelixKeysUnderVim => ItemInfo {
         id: "helix_keys_under_vim",
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Vim],
-        keys: &["g.", "A-C", "A-,", "A--", "A-_", "A-:", "A-x", "A-s", "A-(", "A-)", "A-K", "A-d", "A-c", "A-u", "A-U", "A-!", "A-|", "A-J", "A-;", "A-*", "A-.", "A-`", "C-s", "Z", "ga", "gp", "gc", "gb", "gr", "gy", "]g", "]f", "]t", "[g", "[f", "[t"],
+        keys: &["g.", ";", ",", "A-C", "A-,", "A--", "A-_", "A-:", "A-x", "A-s", "A-(", "A-)", "A-K", "A-d", "A-c", "A-u", "A-U", "A-!", "A-|", "A-J", "A-;", "A-*", "A-.", "A-`", "C-s", "Z", "gb", "gy", "]g", "[g"],
         vim_keys: None,
         insert: false,
         label: "keys.flavor.item.helix-keys-under-vim",

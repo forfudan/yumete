@@ -56,6 +56,22 @@ pub struct Action {
 /// 翻，中間那一段纔是這個字。
 pub const ALT: char = '\u{e000}';
 
+/// **`C-j` and `C-i` have code points of their own** (found in review,
+/// 2026-11-02): their control bytes are `\n` and `\t`, which are Enter and
+/// Tab here, so `[keys.picker] "C-j" = "next_entry"` took Enter too. A
+/// terminal sends `C-j` apart from Enter; the table keeps them apart.
+pub const CTRL_J: char = '\u{e00c}';
+pub const CTRL_I: char = '\u{e00d}';
+
+/// The internal spelling of `C-` and a letter.
+pub fn ctrl(letter: char) -> char {
+    match letter.to_ascii_lowercase() {
+        'j' => CTRL_J,
+        'i' => CTRL_I,
+        c => (c as u8 - b'a' + 1) as char,
+    }
+}
+
 /// **有名字的那幾個鍵**：配置裏寫 `<tab>`，表裏存成一個 `char`。
 ///
 /// Warning: **左邊那一串是「一串按鍵」**（`"dj" = …` 是 d 跟 j 兩下），所以鍵名不能
@@ -149,7 +165,7 @@ fn modifiers(spelled: &str) -> String {
                 chars = rest;
             }
             Some(next) if next.is_ascii_alphabetic() => {
-                out.push((next.to_ascii_lowercase() as u8 - b'a' + 1) as char);
+                out.push(ctrl(next));
                 chars = rest;
             }
             _ => out.push(c),
@@ -165,7 +181,12 @@ pub fn spell(keys: &str) -> String {
     let mut chars = keys.chars();
     while let Some(c) = chars.next() {
         match c {
-            ' ' => out.push_str("空格 "),
+            ' ' => out.push_str(match crate::speaks_english() {
+                true => "Space ",
+                false => "空格 ",
+            }),
+            CTRL_J => out.push_str("C-j"),
+            CTRL_I => out.push_str("C-i"),
             '\u{1b}' => out.push_str("Esc"),
             // 有名字的那幾個鍵寫回名字——`\t` 畫出來是一段空白，讀的人看不出
             // 那是 Tab（2026-10-12）。
@@ -1465,5 +1486,20 @@ mod no_two_alike {
         }
         assert!(Place::Sidebar.bound("no_op").is_some());
         assert!(Place::Prompt.bound(":write").is_some());
+    }
+}
+
+#[cfg(test)]
+mod control_keys_of_their_own {
+    use super::*;
+
+    /// `C-j` is not Enter and `C-i` is not Tab in a binding table, and each
+    /// spells back as written (found in review, 2026-11-02).
+    #[test]
+    fn c_j_and_c_i_are_their_own_keys() {
+        assert_ne!(written("C-j"), written("<enter>"));
+        assert_ne!(written("C-i"), written("<tab>"));
+        assert_eq!(spell(&written("C-j")), "C-j");
+        assert_eq!(spell(&written("C-o")), "C-o");
     }
 }

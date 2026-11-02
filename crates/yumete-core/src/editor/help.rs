@@ -179,7 +179,7 @@ impl Editor {
             // Warning: **這一組要寫 `␣t…`**（2026-10-02 更正）。表格那一組 2026-09-21
             // 搬進了空格選單（`t`/`T` 還給 vi 的 till），而這一頁没跟着搬——
             // 上面寫的 `t r`、`t s` 按下去一個都不管用，`t` 當場成了 till。
-            ("␣t/ ␣t?", say!("help.table.who-uses-this")),
+            ("␣t/", say!("help.table.who-uses-this")),
             ("␣to ␣tb ␣tt ␣tq", say!("help.table.four-surfaces")),
             ("␣ti ␣tw", say!("help.table.detail-and-folds")),
             ("␣tr ␣td", say!("help.table.add-or-drop-row")),
@@ -238,8 +238,8 @@ pub const COMMON_MOTION: &[(&str, &str)] = &[
     ("gg ge", "help.common.start-end-of-file"),
     ("gh gl gs", "help.common.line-start-end"),
     ("C-d C-u", "help.common.half-page"),
-    ("gd gD", "help.common.follow-what-it-points-at"),
-    ("g/ g?", "help.common.word-elsewhere"),
+    ("gd", "help.common.follow-what-it-points-at"),
+    ("g/", "help.common.word-elsewhere"),
     ("/ n N", "help.common.search"),
     ("C-o C-i", "help.common.jump-list"),
     ("M a  'a", "help.common.marks"),

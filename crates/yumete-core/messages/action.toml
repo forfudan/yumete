@@ -2633,11 +2633,11 @@ zhs = "{0}: {1}"
 en = "{0}: {1}"
 
 [[message]]
-# 同上，但配置檔的 [keys.normal] 已經綁了它管的鍵——那一層在前面，說了算的是它
+# 同上，但配置檔的 [keys.normal] 或 [keys.insert] 已經綁了它管的鍵——那一層在前面，說了算的是它
 key = "keys.flavor.item-taken"
-zht = "{0}: {1}(`[keys.normal]` 綁了 {2}，此刻說了算的是它)"
-zhs = "{0}: {1}(`[keys.normal]` 绑了 {2}，此刻说了算的是它)"
-en = "{0}: {1} (`[keys.normal]` binds {2}, which wins)"
+zht = "{0}: {1}(`{3}` 綁了 {2}，此刻說了算的是它)"
+zhs = "{0}: {1}(`{3}` 绑了 {2}，此刻说了算的是它)"
+en = "{0}: {1} (`{3}` binds {2}, which wins)"
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）
@@ -2761,9 +2761,9 @@ en = "helix's keys"
 [[message]]
 # 風味的一項：設置面板上的說明（草稿）
 key = "keys.flavor.item.helix-keys-under-vim.hint"
-zht = "開：vim 下借用 helix 的鍵，只用 vim 空着的鍵：Alt 鍵、C-s、Z、ga、gr 等。關：這些鍵什麼都不做，同 vim。"
-zhs = "开：vim 下借用 helix 的键，只用 vim 空着的键：Alt 键、C-s、Z、ga、gr 等。关：这些键什么都不做，同 vim。"
-en = "On: under vim, helix's keys on the keys vim leaves free: the Alt keys, C-s, Z, ga, gr and more. Off: they do nothing, as in vim."
+zht = "開：vim 下借用 helix 的鍵，只用 vim 空着的鍵：Alt 鍵、C-s、Z、gb、gy 等。關：這些鍵什麼都不做，同 vim。"
+zhs = "开：vim 下借用 helix 的键，只用 vim 空着的键：Alt 键、C-s、Z、gb、gy 等。关：这些键什么都不做，同 vim。"
+en = "On: under vim, helix's keys on the keys vim leaves free: the Alt keys, C-s, Z, gb, gy and more. Off: they do nothing, as in vim."
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）
@@ -2845,9 +2845,9 @@ en = "merge conflicts"
 [[message]]
 # 風味的一項：設置面板上的說明（草稿）
 key = "keys.flavor.item.merge-conflicts.hint"
-zht = "開：空格 m 處理合併衝突，]m、[m 跳到下一處、上一處。關：這三個鍵空着。"
-zhs = "开：空格 m 处理合并冲突，]m、[m 跳到下一处、上一处。关：这三个键空着。"
-en = "On: Space m resolves a merge conflict, ]m and [m go to the next and the previous. Off: all three are unbound."
+zht = "開：空格 m 處理合併衝突，helix 下 ]m、[m 跳到下一處、上一處。關：這幾個鍵空着。"
+zhs = "开：空格 m 处理合并冲突，helix 下 ]m、[m 跳到下一处、上一处。关：这几个键空着。"
+en = "On: Space m resolves a merge conflict, and under helix ]m and [m go to the next and the previous. Off: they are unbound."
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）

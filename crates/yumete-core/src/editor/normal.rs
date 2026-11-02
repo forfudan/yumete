@@ -761,20 +761,39 @@ impl Editor {
     }
 
     /// [`Self::keys_now`] in the internal spelling.
+    ///
+    /// A key the preset or the reader binds is not the default's any more
+    /// (vim's `x` `s` `%` `K` `Q`), a key a flavour item has switched off
+    /// does nothing, and with `vim_space_menu` off the Space menu is on `\`
+    /// (found in review, 2026-11-02: all three were shown as they are under
+    /// helix).
     pub(super) fn run_now(&self, name: &str) -> Option<String> {
-        let written = |k: &String| yumete_cjk::actions::written(k);
-        let taken = |run: &str| self.user_aliases.keys().any(|k| written(k) == run);
-        if let Some(run) = self.normal_keys_for(name).filter(|run| !taken(run)) {
-            return Some(run);
+        let aliases = &self.key_aliases;
+        let space_moved = self.vim_keymap() && !self.flavor_on(FlavorItem::VimSpaceMenu);
+        let shown = |run: String| match space_moved && run.starts_with(' ') {
+            true => format!("\\{}", &run[1..]),
+            false => run,
+        };
+        // A key of its own (not a group's) must do something now: a flavour
+        // item switched off leaves it doing nothing. (Not "this command":
+        // vim's `;` repeats an `f` only after one.)
+        let reaches = |run: &str| match super::keys::pressed_key(run) {
+            Some(key) => {
+                let cx = Cx { key, count: 1, operator_count: None, continuing_zong: false };
+                self.normal_command_for(&cx).is_some()
+            }
+            None => true,
+        };
+        if let Some(run) = self.normal_keys_for(name).filter(|run| !aliases.contains_key(run) && reaches(run)) {
+            return Some(shown(run));
         }
-        let mut mine: Vec<String> = self
-            .user_aliases
+        let mut mine: Vec<String> = aliases
             .iter()
             .filter(|(_, run)| run.len() == 1 && run[0] == name)
-            .map(|(k, _)| written(k))
+            .map(|(k, _)| k.clone())
             .collect();
         mine.sort();
-        mine.into_iter().next()
+        mine.into_iter().next().map(shown)
     }
 
     /// **A hint row's keys for Normal commands, as they are bound now**

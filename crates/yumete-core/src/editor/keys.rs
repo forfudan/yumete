@@ -1646,11 +1646,14 @@ impl Editor {
     /// motion, each in turn for an edit, the primary alone otherwise (then,
     /// when `primary`, the others follow the edit made there).
     pub(super) fn fan_out(&mut self, waiting: Pending, acting: Key, primary: bool, run: &dyn Fn(&mut Editor)) {
-        if multi::each_selection_key(&waiting, acting)
-            || (waiting == self.pending && self.copies_every_selection(acting))
+        // vim's `]p` `[p` put, which is an edit; helix's are paragraph moves.
+        let vim_put = self.vim_keymap() && matches!(waiting, Pending::Hop { .. }) && acting == Key::Char('p');
+        if !vim_put
+            && (multi::each_selection_key(&waiting, acting)
+                || (waiting == self.pending && self.copies_every_selection(acting)))
         {
             self.each_selection(run);
-        } else if multi::edits_every_selection(&waiting, acting) {
+        } else if vim_put || multi::edits_every_selection(&waiting, acting) {
             if let Key::Char(c) = acting {
                 if !self.every_selection_has_its_own_pair(waiting, c) {
                     self.pending = Pending::None;
@@ -1695,8 +1698,17 @@ impl Editor {
     /// (2026-11-01): `"zx" = "delete_selection"` deletes at every cursor, as
     /// `d` does, and so does each command of a list.
     fn run_normal_at_every_cursor(&mut self, name: &str) {
+        // In Insert mode a bound name types as its own key would, at every
+        // cursor (found in review, 2026-11-02: `"C-l" = "delete_char_backward"`
+        // reached the primary alone).
+        if self.mode == Mode::Insert && self.sel.is_plural() {
+            if let Some(key) = self.insert_key_for(name).filter(|k| multi::types_at_every_selection(*k)) {
+                self.insert_typed(key);
+                return;
+            }
+        }
         let place = (self.mode == Mode::Normal && self.sel.is_plural())
-            .then(|| super::normal::place_of(name, &self.group_context()))
+            .then(|| super::normal::place_of(name, &self.group_context()).or_else(|| keyless_place(name)))
             .flatten();
         match place {
             Some((waiting, acting)) => self.fan_out(waiting, acting, false, &|e| {
@@ -1706,6 +1718,14 @@ impl Editor {
                 self.run_normal(name);
             }
         }
+    }
+
+    /// The Insert-mode key that runs `name` by the default table.
+    fn insert_key_for(&self, name: &str) -> Option<Key> {
+        super::insert::INSERT_KEYS
+            .iter()
+            .find(|(_, cmd, when)| cmd.name() == name && when.is_none_or(|holds| holds(self)))
+            .map(|(key, _, _)| *key)
     }
 
     /// **What the right-hand side of a binding says to do** (#429).
@@ -2228,14 +2248,32 @@ impl Editor {
         // Only the command a letter itself runs in this keymap: `gj` is
         // `move_line_down` too, and the `g` keys never turn with the page
         // (2026-10-13 定: 「gh gj gk gl 的逻辑性更大，所以不需要更改」).
-        let letter = ['h', 'j', 'k', 'l'].into_iter().find(|&c| {
-            let cx = super::normal::Cx { key: Key::Char(c), count, operator_count: None, continuing_zong: false };
-            self.normal_command_for(&cx) == Some(cmd.name())
-        });
-        match letter {
-            Some(c) => self.walk_the_vertical_screen(Key::Char(c), count, false),
-            None => false,
-        }
+        //
+        // Asked of both tables (found in review, 2026-11-02): `move_char_*`
+        // is the letter's command in Normal mode and `extend_char_*` in select
+        // mode, and a name reaches either from anywhere. An `extend_*` name
+        // extends wherever it is pressed.
+        let was = self.extend;
+        let letter_in = |e: &Self| {
+            ['h', 'j', 'k', 'l'].into_iter().find(|&c| {
+                let cx = super::normal::Cx { key: Key::Char(c), count, operator_count: None, continuing_zong: false };
+                e.normal_command_for(&cx) == Some(cmd.name())
+            })
+        };
+        self.extend = false;
+        let moving = letter_in(self);
+        self.extend = true;
+        let extending = letter_in(self);
+        self.extend = was;
+        let (letter, extend) = match (moving, extending) {
+            (Some(c), _) => (c, was),
+            (None, Some(c)) => (c, true),
+            (None, None) => return false,
+        };
+        self.extend = extend;
+        let took = self.walk_the_vertical_screen(Key::Char(letter), count, false);
+        self.extend = was;
+        took
     }
 
     /// **One of the four screen keys on a vertical page** (`h j k l` and the
@@ -2608,7 +2646,7 @@ pub(crate) fn key_internal(key: Key) -> String {
     match key {
         Key::Char(c) => c.to_string(),
         Key::Alt(c) => format!("{}{c}", yumete_cjk::actions::ALT),
-        Key::Ctrl(c) if c.is_ascii_alphabetic() => ((c.to_ascii_lowercase() as u8 - b'a' + 1) as char).to_string(),
+        Key::Ctrl(c) if c.is_ascii_alphabetic() => yumete_cjk::actions::ctrl(c).to_string(),
         Key::Esc => "\u{1b}".to_string(),
         key => typed_as(key).map(String::from).unwrap_or_default(),
     }
@@ -2631,6 +2669,8 @@ pub(super) fn pressed(c: char) -> Key {
     }
     match c {
         '\u{1b}' => Key::Esc,
+        yumete_cjk::actions::CTRL_J => Key::Ctrl('j'),
+        yumete_cjk::actions::CTRL_I => Key::Ctrl('i'),
         // Warning: **Enter before the control-byte rule**: `\n` is 0x0A, which that
         // rule would read as `C-j`. A keymap that wants Enter writes `\n`, and
         // it means the key a hand presses.
@@ -2681,9 +2721,7 @@ pub(super) fn typed_as(key: Key) -> Option<char> {
         // Warning: **`C-x` 從前綁不了**（2026-10-12 查出來的）：這一支只認
         // `Key::Char` 和 `Key::Alt`，而 `written("C-o")` 交的是那個控制字節，
         // 兩邊永遠對不上。配置照收、一聲不吭，手冊卻寫着它能綁。
-        Key::Ctrl(c) if c.is_ascii_alphabetic() => {
-            Some((c.to_ascii_lowercase() as u8 - b'a' + 1) as char)
-        }
+        Key::Ctrl(c) if c.is_ascii_alphabetic() => Some(yumete_cjk::actions::ctrl(c)),
         Key::Ctrl(_) => None,
         Key::Tab => named("tab"),
         Key::BackTab => named("S-tab"),
@@ -2705,6 +2743,21 @@ pub(super) fn typed_as(key: Key) -> Option<char> {
 /// One key menu for the docs: its title message, the key that opens it, and
 /// its rows as (keys, message).
 pub type DocMenu = (&'static str, String, Vec<(String, &'static str)>);
+
+/// **The cursors a command reaches when no key of the keymap runs it** —
+/// the vim preset's own commands, which its keys reach through the alias
+/// layer (found in review, 2026-11-02: vim's `x` deleted at one cursor of
+/// two). Each is classed by a key that does the same kind of thing: an edit
+/// at each cursor in turn, or a move of every cursor.
+fn keyless_place(name: &str) -> Option<(Pending, Key)> {
+    let like = match name {
+        "vim_delete_char_forward" => Key::Char('d'),
+        "vim_paste_after" | "vim_paste_before" => Key::Char('p'),
+        "vim_match_brackets" | "vim_goto_line_end" | "vim_goto_first_nonwhitespace" => Key::Char('w'),
+        _ => return None,
+    };
+    Some((Pending::None, like))
+}
 
 #[cfg(test)]
 mod key_table_tests {
@@ -2770,3 +2823,4 @@ mod key_table_tests {
         assert_eq!(yumete_cjk::actions::written("a<b"), "a<b");
     }
 }
+

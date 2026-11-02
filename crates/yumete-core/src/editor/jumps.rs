@@ -41,7 +41,20 @@ impl Editor {
                 return;
             };
             self.show_buffer(i);
-            self.set_cursor(pos.min(self.current_buffer().rope().len_chars()));
+            let rope = self.current_buffer().rope();
+            let pos = pos.min(rope.len_chars());
+            // `''` goes to the line's first non-blank, ``` `` ``` to the very
+            // spot (`index.txt`: `''` "cursor to the first CHAR of the line
+            // where the cursor was before the latest jump").
+            let pos = match name {
+                '\'' => {
+                    let start = rope.line_to_char(rope.char_to_line(pos));
+                    let line = crate::motion::line_text(rope, rope.char_to_line(pos));
+                    start + line.chars().take_while(|c| matches!(c, ' ' | '\t' | '\u{3000}')).count()
+                }
+                _ => pos,
+            };
+            self.set_cursor(pos);
             return;
         }
         let Some(spot) = self.marks.get(&name).cloned() else {

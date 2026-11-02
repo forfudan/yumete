@@ -654,17 +654,17 @@ impl Editor {
         self.lookfor_focus = 0;
         self.close_prompt();
         match what {
+            // A command's answer is heard, as a binding's is (found in
+            // review, 2026-11-02): `save_and_quit` quits, a failure says why.
             lookfor::What::Keys(action) => match action.how {
-                yumete_cjk::actions::How::Command(line) => {
-                    let _ = self.execute(line);
-                }
+                yumete_cjk::actions::How::Command(line) => self.run_bound_command(line.trim_start_matches(':')),
                 yumete_cjk::actions::How::Normal => {
                     self.run_normal(action.name);
                 }
             },
             lookfor::What::Command(choice) => {
                 let line = choice.written();
-                let _ = self.execute(&line);
+                self.run_bound_command(line.trim_start_matches(':'));
             }
         }
     }

@@ -613,8 +613,9 @@ impl Editor {
                 false => &self.user_aliases,
             };
             let written = |k: &str| yumete_cjk::actions::written(k);
-            let taken: Vec<&str> = info
-                .keys
+            // The keys under this keymap (`g\`` under vim, not `` ` ``).
+            let taken: Vec<&str> = item
+                .keys_under(self.key_preset)
                 .iter()
                 .copied()
                 .filter(|key| aliases.keys().any(|k| written(k) == written(key)))
@@ -629,7 +630,10 @@ impl Editor {
             let label = crate::messages::say(info.label, &[]);
             parts.push(match taken.is_empty() {
                 true => say!("keys.flavor.item-is", label, state),
-                false => say!("keys.flavor.item-taken", label, state, taken.join(" ")),
+                false => say!("keys.flavor.item-taken", label, state, taken.join(" "), match info.insert {
+                    true => "[keys.insert]",
+                    false => "[keys.normal]",
+                }),
             });
         }
         say!("keys.flavor-is", parts.join(" · "))
@@ -693,23 +697,25 @@ impl Editor {
     /// 配置裏寫 `"A-d" = …` 綁的是 `A`、`-`、`d` 三個鍵連按——那個鍵永遠按不出來，
     /// 而配置照收、一聲不吭。一處翻，兩層（預設表和使用者那一層）都算。
     fn lay_aliases(&mut self) {
-        let mut all: HashMap<String, Vec<String>> = self
+        let preset: HashMap<String, Vec<String>> = self
             .key_preset
             .table()
             .iter()
             .map(|(k, v)| (yumete_cjk::actions::written(k), vec![v.to_string()]))
             .collect();
-        all.extend(
-            self.user_aliases
-                .iter()
-                .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
-        );
+        let user: Vec<(String, Vec<String>)> =
+            self.user_aliases.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())).collect();
+        let mut all = preset.clone();
+        all.extend(user.iter().cloned());
         // vim's `x` and `s` are written for Normal mode (`;{n}D`); in Visual
         // mode they are its own delete and change (`vim_*` in the table).
-        let mut select = all.clone();
+        // The reader's own lines come after, so an `x` of theirs holds in
+        // Visual mode too (found in review, 2026-11-02).
+        let mut select = preset;
         for key in self.key_preset.normal_only() {
             select.remove(&yumete_cjk::actions::written(key));
         }
+        select.extend(user);
         select.extend(
             self.user_select
                 .iter()
@@ -872,6 +878,23 @@ impl Editor {
     /// live one, on the same buffer at the same place, and the keys go to it
     /// (2026-10-30). `false` when the tree would not split.
     pub(super) fn split_window(&mut self, how: crate::window::Split) -> bool {
+        // **As many as fit** (2026-11-02, found in review): a split that
+        // would leave a window under a line of text or a few columns is
+        // refused, so the keys never go into a window that is not drawn.
+        if let Some(area) = self.text_area.get() {
+            let mut tried = self.windows.clone();
+            let room = tried.split(self.live, how).is_some_and(|fresh| {
+                let (placed, _) = tried.place(area, self.splits_right_to_left());
+                placed
+                    .iter()
+                    .filter(|p| p.id == fresh || p.id == self.live)
+                    .all(|p| p.area.height >= Self::WINDOW_MIN_ROWS && p.area.width >= Self::WINDOW_MIN_COLUMNS)
+            });
+            if !room {
+                self.status = say!("pane.no-room");
+                return false;
+            }
+        }
         let here = Pane {
             buffer: self.current_buffer().id(),
             cursor: self.sel.head(),
@@ -888,6 +911,15 @@ impl Editor {
         self.panes.insert(fresh, here);
         self.panel_focus = None;
         self.switch_to(fresh)
+    }
+
+    /// The smallest window a split may make.
+    const WINDOW_MIN_ROWS: u16 = 2;
+    const WINDOW_MIN_COLUMNS: u16 = 8;
+
+    /// The text area the front end laid the windows out in this frame.
+    pub fn note_text_area(&self, area: crate::window::Area) {
+        self.text_area.set(Some(area));
     }
 
     /// A new window holding a new empty buffer, the keys in it: `C-w n`,

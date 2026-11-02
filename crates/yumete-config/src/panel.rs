@@ -188,13 +188,29 @@ fn declared_in(text: &str) -> BTreeMap<String, String> {
 /// took.
 fn declare(out: &mut BTreeMap<String, String>, at: &str, t: &toml_edit::Table) {
     for (key, value) in t.iter() {
-        if let Some(v) = value.as_value() {
-            out.insert(format!("{at}.{key}"), v.to_string().trim().to_string());
-        }
-        if let Some(inner) = value.as_table() {
-            declare(out, &format!("{at}.{key}"), inner);
+        match (value.as_table(), value.as_inline_table()) {
+            (Some(inner), _) => declare(out, &format!("{at}.{key}"), inner),
+            // `flavor_items = { tables = false }` is the same table, written
+            // on one line (found in review, 2026-11-02).
+            (_, Some(inline)) => {
+                let inner = inline.clone().into_table();
+                declare(out, &format!("{at}.{key}"), &inner);
+            }
+            _ => {
+                if let Some(v) = value.as_value() {
+                    out.insert(format!("{at}.{key}"), bare(v));
+                }
+            }
         }
     }
+}
+
+/// A value as written, without the comment after it: `false # off for now`
+/// is `false`.
+fn bare(v: &toml_edit::Value) -> String {
+    let mut v = v.clone();
+    v.decor_mut().clear();
+    v.to_string().trim().to_string()
 }
 
 /// 一個 [`Change`] 寫進 toml 會是什麽樣子。
@@ -951,7 +967,7 @@ impl Panel {
             for path in sheet.declared.keys().chain(sheet.edits.keys()) {
                 let Some(rest) = path.strip_prefix("ime.annotation_modes.") else { continue };
                 if let Some((name, _)) = rest.rsplit_once('.') {
-                    if !names.iter().any(|n| n == name) {
+                    if crate::annotation_name_usable(name) && !names.iter().any(|n| n == name) {
                         more.insert(name.to_string());
                     }
                 }
@@ -1650,5 +1666,25 @@ mod tests {
         assert!(!text.contains("double"), "{text}");
         assert!(text.contains("[ime.annotation_modes.mine]"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Found in review (2026-11-02): an item written in an inline table, or
+    /// with a comment after it, is what the file says, and saving works.
+    #[test]
+    fn an_inline_table_and_a_trailing_comment_are_read_as_written() {
+        use yumete_cjk::FlavorItem;
+        let p = panel("[keys]\nflavor_items = { tables = false }\n", "");
+        assert_eq!(p.item_shown(FlavorItem::Tables), (false, ItemFrom::Layer(Layer::Global)));
+        let p = panel("[keys.flavor_items]\ntables = false # off for now\n", "");
+        assert_eq!(p.item_shown(FlavorItem::Tables), (false, ItemFrom::Layer(Layer::Global)));
+        let (text, _) = rewrite(
+            "[keys]\nflavor_items = { tables = false }\n",
+            &[("keys.flavor_items.move_lines".to_string(), Change::Tick(false))],
+            &|_, _| true,
+        )
+        .expect("an inline table takes a key");
+        let config = crate::Config::from_toml(&text);
+        assert_eq!(config.keys.flavor.items.get(&FlavorItem::Tables), Some(&false), "{text}");
+        assert_eq!(config.keys.flavor.items.get(&FlavorItem::MoveLines), Some(&false), "{text}");
     }
 }

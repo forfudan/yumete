@@ -206,14 +206,25 @@ fn flavor() -> String {
     for item in yumete_config::FlavorItem::ALL {
         let info = item.info();
         let keymaps: Vec<&str> = info.keymaps.iter().map(|k| k.name()).collect();
-        let keys: Vec<String> = info.keys.iter().map(|k| code(&cell(&keys_written(&presses(k))))).collect();
+        let written = |list: &[&str]| -> String {
+            list.iter().map(|k| code(&cell(&keys_written(&presses(k))))).collect::<Vec<_>>().join(" ")
+        };
+        // Where vim's keys are not helix's, both are written (`case_menu`
+        // is `` ` `` under helix and `` g` `` under vim).
+        let keys = match info.vim_keys {
+            Some(vim) if vim != info.keys && info.keymaps.len() > 1 => {
+                format!("helix {}; vim {}", written(info.keys), written(vim))
+            }
+            Some(vim) => written(vim),
+            None => written(info.keys),
+        };
         let _ = writeln!(
             out,
             "| `{}` | `{}` | {} | {} | {} |",
             info.id,
             info.level.name(),
             keymaps.join(", "),
-            keys.join(" "),
+            keys,
             cell(&say(info.label, &[])),
         );
     }

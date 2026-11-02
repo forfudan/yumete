@@ -28763,7 +28763,7 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
     ed.set_key_aliases(std::collections::HashMap::from([("d".to_string(), "@x".to_string())]));
     ed.execute(":keymap-yumete-flavor full").unwrap();
     assert!(
-        ed.status().contains(&say!("keys.flavor.item-taken", item, say!("keys.flavor.on"), "d")),
+        ed.status().contains(&say!("keys.flavor.item-taken", item, say!("keys.flavor.on"), "d", "[keys.normal]")),
         "配置綁了 d，報告要說它說了算：{}",
         ed.status()
     );
@@ -34019,6 +34019,22 @@ fn a_bound_name_walks_a_vertical_page_as_its_key_does() {
             assert_eq!(at(true), at(false), "{name} as {key}, letters following the text: {logical}");
         }
     }
+    // `extend_char_left` by name walks the screen as `v h` does, its head
+    // where `h`'s goes (found in review, 2026-11-02).
+    let head = |bind: bool| {
+        let mut ed = typed("一二三四五\n六七八九十\n甲乙丙丁戊\n");
+        ed.set_layout(crate::zong::Layout::Vertical);
+        ed.goto_line(2);
+        press(&mut ed, "ll");
+        if bind {
+            ed.set_key_aliases([("n".to_string(), "extend_char_left".to_string())].into_iter().collect());
+            press(&mut ed, "n");
+        } else {
+            press(&mut ed, "vh");
+        }
+        ed.sel.head()
+    };
+    assert_eq!(head(true), head(false));
 }
 
 /// **Step 1 of the flavour plan: keys that did not match their editor**
@@ -34338,6 +34354,10 @@ fn the_small_alignment_batch() {
     assert_eq!(ed.cursor_line(), 0, "back where the jump came from");
     press(&mut ed, "''");
     assert_eq!(ed.cursor_line(), 39, "and again");
+    // `''` lands on the first non-blank, ``` `` ``` on the spot itself.
+    let mut ed = typed_vim(&format!("  abc def\n{}", "x\n".repeat(30)));
+    press(&mut ed, "ggwwG''");
+    assert_eq!(ed.cursor(), 2, "the first non-blank");
 
     // vim Insert `C-y` `C-e`, by screen column: 甲 is two columns wide.
     let mut ed = typed_vim("甲乙丙\nab\nxyz\n");
@@ -34392,4 +34412,80 @@ fn gd_capital_gy_and_gi_ask_for_their_place() {
     assert_eq!(ed.status(), say!("lsp.not-served"));
     assert!(crate::lsp::goto(1, crate::lsp::Goto::Implementation, &file, 0, 0).contains("textDocument/implementation"));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **As many windows as fit, and no more** (review before 0.16.0): on a
+/// small screen a split that would leave a window under two rows is refused
+/// and said, and the keys stay in a window that is drawn.
+#[test]
+fn a_split_with_no_room_is_refused() {
+    let mut ed = typed("那年冬天。\n");
+    ed.note_text_area(crate::window::Area::new(0, 0, 40, 7));
+    for _ in 0..4 {
+        ed.on_key(Key::Ctrl('w'));
+        press(&mut ed, "s");
+    }
+    assert_eq!(ed.status(), say!("pane.no-room"));
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 40, 7), false);
+    assert!(placed.iter().all(|p| p.area.height >= 2), "{placed:?}");
+    assert!(placed.iter().any(|p| p.id == ed.live_window()));
+}
+
+/// **Bound and keyless commands reach every cursor** (review before
+/// 0.16.0): vim's `x` and `]p`, and a name bound in `[keys.insert]`.
+#[test]
+fn every_cursor_takes_vim_x_put_and_insert_bindings() {
+    let mut ed = typed_vim("abc\nabc\n");
+    press(&mut ed, "ggj");
+    ed.on_key(Key::Alt('C'));
+    assert!(ed.sel.is_plural(), "two cursors: {}", ed.status());
+    press(&mut ed, "x");
+    assert_eq!(ed.current_buffer().text(), "bc\nbc\n", "{}", ed.status());
+
+    let mut ed = typed_vim("alpha\ngamma\ngamma\n");
+    press(&mut ed, "ggyiwjj");
+    ed.on_key(Key::Alt('C'));
+    assert!(ed.sel.is_plural());
+    press(&mut ed, "]p");
+    let text = ed.current_buffer().text();
+    assert!(text.starts_with("alpha\n"), "{text:?}");
+    assert_eq!(text.matches("alpha").count(), 3, "{text:?}");
+
+    let mut ed = typed("abc\nabc\n");
+    ed.set_insert_aliases([("C-l".to_string(), "delete_char_backward".to_string())].into_iter().collect());
+    press(&mut ed, "ggC");
+    press(&mut ed, "i12");
+    ed.on_key(Key::Ctrl('l'));
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "1abc\n1abc\n", "{}", ed.status());
+}
+
+/// A bare URL keeps the brackets it opened, and drops a `)` the text
+/// around it closed (found in review, 2026-11-02).
+#[test]
+fn a_bare_url_keeps_its_own_brackets() {
+    for (line, want) in [
+        ("see https://en.wikipedia.org/wiki/Rust_(language) now\n", "https://en.wikipedia.org/wiki/Rust_(language)"),
+        ("(see https://example.com/a)\n", "https://example.com/a"),
+        ("(https://en.wikipedia.org/wiki/Rust_(language)).\n", "https://en.wikipedia.org/wiki/Rust_(language)"),
+    ] {
+        let mut ed = typed(line);
+        let at = line.find("https").unwrap() + 10;
+        ed.set_cursor(line[..at].chars().count());
+        assert_eq!(ed.url_under_cursor().as_deref(), Some(want), "{line:?}");
+    }
+}
+
+/// **The palette names the keys that run a command now** (review before
+/// 0.16.0): under vim, `x` is vim's, a helix key the flavour switched off
+/// does nothing, and with `vim_space_menu` off the menu is on `\`.
+#[test]
+fn the_palette_names_the_keys_vim_really_has() {
+    let mut ed = typed_vim("abc\n");
+    assert_eq!(ed.keys_now("vim_delete_char_forward").as_deref(), Some("x"));
+    assert_eq!(ed.keys_now("extend_line_below"), None, "x is vim's");
+    assert_eq!(ed.keys_now("select_all"), None, "% is vim's");
+    ed.execute(":keymap-yumete-flavor off").unwrap();
+    assert_eq!(ed.keys_now("delete_word_forward"), None, "A-d does nothing with the item off");
+    assert!(ed.keys_now("file_picker").is_some_and(|k| k.starts_with('\\')), "{:?}", ed.keys_now("file_picker"));
 }

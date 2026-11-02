@@ -80,9 +80,20 @@ pub struct Said {
 fn table_at<'a>(doc: &'a mut DocumentMut, tables: &[&str]) -> Option<&'a mut toml_edit::Table> {
     let mut t = doc.get_mut(tables.first()?)?.as_table_mut()?;
     for name in &tables[1..] {
+        unfold(t, name);
         t = t.get_mut(name)?.as_table_mut()?;
     }
     Some(t)
+}
+
+/// A table written inline (`flavor_items = { tables = false }`) becomes a
+/// table of its own lines, so a key can be set in it or taken out of it.
+fn unfold(t: &mut toml_edit::Table, name: &str) {
+    if let Some(item) = t.get_mut(name) {
+        if let Some(inline) = item.as_inline_table() {
+            *item = Item::Table(inline.clone().into_table());
+        }
+    }
 }
 
 pub fn rewrite(
@@ -132,6 +143,7 @@ pub fn rewrite(
                     t.set_implicit(true);
                 }
                 for name in &tables[1..] {
+                    unfold(t, name);
                     let inner = t.entry(name).or_insert_with(|| Item::Table(toml_edit::Table::new()));
                     let Some(inner) = inner.as_table_mut() else {
                         return Err(format!("{name} 不是一張表"));

@@ -2447,6 +2447,10 @@ struct Seats {
     /// One per window, in the tree's order (`Windows::leaves`); a window
     /// past the end gets a fresh one on first use (2026-10-30).
     panes: Vec<Viewport>,
+    /// Which window each of [`Self::panes`] belongs to, so a split or a
+    /// close that shifts the order moves the scroll with its window
+    /// ([`Seats::follow`]) rather than handing it to a neighbour.
+    owners: Vec<yumete_core::window::WindowId>,
     /// What an index not drawn yet reads, so a lookup never panics.
     spare: Viewport,
     /// **兩扇邊欄各自捲到了第幾行**（左、右），跨幀記着。
@@ -2484,6 +2488,26 @@ fn window_start(stored: usize, selected: usize, room: usize, rows: usize) -> usi
         first = selected + 1 - room;
     }
     first.min(most)
+}
+
+impl Seats {
+    /// Put the scroll positions in this frame's order of windows: each
+    /// window keeps its own, a new one starts fresh.
+    fn follow(&mut self, leaves: &[yumete_core::window::WindowId]) {
+        if self.owners == leaves {
+            return;
+        }
+        let mut old: Vec<(yumete_core::window::WindowId, Viewport)> =
+            self.owners.iter().copied().zip(std::mem::take(&mut self.panes)).collect();
+        self.panes = leaves
+            .iter()
+            .map(|id| match old.iter().position(|(owner, _)| owner == id) {
+                Some(at) => old.swap_remove(at).1,
+                None => Viewport::default(),
+            })
+            .collect();
+        self.owners = leaves.to_vec();
+    }
 }
 
 impl std::ops::Index<usize> for Seats {
@@ -4231,6 +4255,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         return match ImeSession::from_table_file(&path) {
             Ok(mut table) => {
                 table.set_page_size(ime.page_size());
+                table.carry_annotation_from(ime);
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
                 table.set_inline_preedit(ime.inline_preedit());
@@ -5108,10 +5133,9 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     // slots still, until the viewports follow the tree (stage 2); a 縱書
     // page puts the second half on the left.
     let rtl = editor.splits_right_to_left();
-    let (placed, rules) = editor.windows().place(
-        yumete_core::window::Area::new(text.x, text.y, text.width, text.height),
-        rtl,
-    );
+    let text_area = yumete_core::window::Area::new(text.x, text.y, text.width, text.height);
+    editor.note_text_area(text_area);
+    let (placed, rules) = editor.windows().place(text_area, rtl);
     let rect = |a: yumete_core::window::Area| Rect::new(a.x, a.y, a.width, a.height);
     let mut panes: Vec<Rect> = placed.iter().map(|p| rect(p.area)).collect();
     if panes.is_empty() {
@@ -5144,6 +5168,7 @@ fn draw(
     // 那扇設置面板開着的話，它蓋在正文上（底下兩行留着）。
     settings: Option<&yumete_config::panel::Panel>,
 ) {
+    viewport.follow(&editor.windows().leaves());
     let area = frame.area();
     // **Two rows for a table's columns, and only once its own head has gone**
     // (#379). Asked before the page is divided, because the answer is how tall

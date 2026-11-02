@@ -708,14 +708,30 @@ impl Editor {
             let flavor_took = |key: &Key, is_vim: bool| {
                 FLAVOR_NORMAL.iter().any(|(k, _, item, only)| k == key && factory(is_vim).has(Some(*item)) && only.under(is_vim))
             };
+            // A key the vim preset spells for itself (`x` `s` `%` `K` `Q`…) is
+            // vim's, not the helix command's (found in review, 2026-11-02).
+            let preset_took = |key: &Key| {
+                let written = super::keys::key_internal(*key);
+                yumete_cjk::KeyPreset::Vim.table().iter().any(|(k, _)| yumete_cjk::actions::written(k) == written)
+            };
             for (key, n) in HELIX_NORMAL.iter().chain(SELECT_NORMAL) {
                 if n.name() != name || flavor_took(key, false) {
                     continue;
                 }
                 helix.push(one(*key));
                 // The vim preset keeps a helix key it has no entry of its own for.
-                if !VIM_NORMAL.iter().any(|(k, _, _)| k == key) && !flavor_took(key, true) {
+                if !VIM_NORMAL.iter().any(|(k, _, _)| k == key) && !flavor_took(key, true) && !preset_took(key) {
                     vim.push(one(*key));
+                }
+            }
+            // The preset's keys that name this command (`x` is
+            // `vim_delete_char_forward`, `K` is `hover`).
+            for (key, run) in yumete_cjk::KeyPreset::Vim.table() {
+                if *run == name {
+                    let written = vec![yumete_cjk::actions::written(key)];
+                    if !vim.contains(&written) {
+                        vim.push(written);
+                    }
                 }
             }
             for (key, n, _) in VIM_NORMAL {
@@ -839,11 +855,13 @@ pub(super) static GOTO: Group = Group {
         // easymotion), `gZ` by pinyin (Z for 中). Both free in vim and helix.
         ch('z', NormalCmd::GotoWordByLetters, "hint.goto.seek-written").flavor(FlavorItem::GotoExtras),
         ch('Z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading").flavor(FlavorItem::GotoExtras),
-        ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file").flavor(FlavorItem::HelixKeysUnderVim),
+        // `ga` `gp` `gr` `gc` are vim's or Neovim's own (`index.txt`: ga, gp,
+        // gr; Neovim's defaults: gc, gr*), so helix's are helix's alone.
+        ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file").when(Only::Helix),
         ch('n', NormalCmd::SearchNext, "hint.goto.next-match").when(Only::Vim),
         ch('N', NormalCmd::SearchPrev, "hint.goto.next-match").when(Only::Vim),
         ch('n', NormalCmd::NextBuffer, "hint.goto.next-or-previous-buffer"),
-        ch('p', NormalCmd::PrevBuffer, "hint.goto.next-or-previous-buffer").flavor(FlavorItem::HelixKeysUnderVim),
+        ch('p', NormalCmd::PrevBuffer, "hint.goto.next-or-previous-buffer").when(Only::Helix),
         ch('d', NormalCmd::GotoDefinition, "hint.goto.follow-note"),
         // helix's `gD` `gy` `gi` `gm` (2026-11-02). vim's `gD` is its global
         // declaration, the same question; its `gi` and `gm` are its own
@@ -852,7 +870,7 @@ pub(super) static GOTO: Group = Group {
         ch('y', NormalCmd::GotoTypeDefinition, "hint.goto.type-definition").flavor(FlavorItem::HelixKeysUnderVim),
         ch('i', NormalCmd::GotoImplementation, "hint.goto.implementation").when(Only::Helix),
         ch('m', NormalCmd::GotoLastModifiedFile, "hint.goto.last-modified-file").when(Only::Helix),
-        ch('r', NormalCmd::GotoReference, "hint.goto.references").flavor(FlavorItem::HelixKeysUnderVim),
+        ch('r', NormalCmd::GotoReference, "hint.goto.references").when(Only::Helix),
         ch('/', NormalCmd::SearchSelection, "hint.goto.search-word").flavor(FlavorItem::GotoExtras),
         ch('j', NormalCmd::MoveNextZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
         ch('k', NormalCmd::MovePrevZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
@@ -870,7 +888,7 @@ pub(super) static GOTO: Group = Group {
         quiet(Key::Up, NormalCmd::MoveLineUp).when(Only::Flat),
         ch('.', NormalCmd::GotoLastModification, "hint.goto.last-change").flavor(FlavorItem::HelixKeysUnderVim),
         ch('t', NormalCmd::GotoWindowTop, "hint.goto.screen-top-middle-bottom").when(Only::GLetter),
-        ch('c', NormalCmd::GotoWindowCenter, "hint.goto.screen-top-middle-bottom").flavor(FlavorItem::HelixKeysUnderVim),
+        ch('c', NormalCmd::GotoWindowCenter, "hint.goto.screen-top-middle-bottom").when(Only::Helix),
         ch('b', NormalCmd::GotoWindowBottom, "hint.goto.screen-top-middle-bottom").flavor(FlavorItem::HelixKeysUnderVim),
         // vim's own: none of these is a helix command.
         ch('v', NormalCmd::ReselectLastSelection, "hint.goto.reselect").when(Only::Vim),
@@ -970,12 +988,15 @@ pub(super) static RIGHT_BRACKET: Group = Group {
     title: "hint.hop.next",
     path: "]",
     rows: &[
-        ch('m', NormalCmd::GotoNextConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts),
+        // vim's `]m` `[m` are its member motions: under vim the conflicts
+        // are on `Space m` only.
+        ch('m', NormalCmd::GotoNextConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts).when(Only::Helix),
         ch('g', NormalCmd::GotoNextChange, "hint.hop.change").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoNextDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoLastDiag, "hint.hop.problem"),
-        ch('f', NormalCmd::GotoNextFunction, "hint.hop.function").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
-        ch('t', NormalCmd::GotoNextClass, "hint.hop.class").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        // vim's `]f` is `gf`, Neovim's `]t` a tag: helix's alone.
+        ch('f', NormalCmd::GotoNextFunction, "hint.hop.function").listed(Only::Code).when(Only::Helix),
+        ch('t', NormalCmd::GotoNextClass, "hint.hop.class").listed(Only::Code).when(Only::Helix),
         // vim's `]c` is the next change, which yumete has (helix's `]g`);
         // helix's comment is helix's only.
         ch('c', NormalCmd::GotoNextChange, "hint.hop.change").when(Only::Vim),
@@ -1000,12 +1021,12 @@ pub(super) static LEFT_BRACKET: Group = Group {
     title: "hint.hop.previous",
     path: "[",
     rows: &[
-        ch('m', NormalCmd::GotoPrevConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts),
+        ch('m', NormalCmd::GotoPrevConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts).when(Only::Helix),
         ch('g', NormalCmd::GotoPrevChange, "hint.hop.change").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoPrevDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoFirstDiag, "hint.hop.problem"),
-        ch('f', NormalCmd::GotoPrevFunction, "hint.hop.function").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
-        ch('t', NormalCmd::GotoPrevClass, "hint.hop.class").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        ch('f', NormalCmd::GotoPrevFunction, "hint.hop.function").listed(Only::Code).when(Only::Helix),
+        ch('t', NormalCmd::GotoPrevClass, "hint.hop.class").listed(Only::Code).when(Only::Helix),
         // vim's `]c` is the next change, which yumete has (helix's `]g`);
         // helix's comment is helix's only.
         ch('c', NormalCmd::GotoPrevChange, "hint.hop.change").when(Only::Vim),

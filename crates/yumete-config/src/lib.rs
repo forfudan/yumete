@@ -659,6 +659,12 @@ pub fn factory_annotation_modes() -> Vec<AnnotationMode> {
         .collect()
 }
 
+/// Whether a mode may be called this: not `off` or `next` (`:yume-annotation`
+/// words), and no dot (the settings panel writes `表.鍵` paths).
+pub(crate) fn annotation_name_usable(name: &str) -> bool {
+    !matches!(name, "off" | "next") && !name.contains('.') && !name.trim().is_empty()
+}
+
 /// `off` and the mode names, as `[ime] annotation` takes them.
 pub fn annotation_words(modes: &[AnnotationMode]) -> Vec<String> {
     std::iter::once("off".to_string()).chain(modes.iter().map(|m| m.name.clone())).collect()
@@ -670,6 +676,9 @@ fn annotation_modes_from(table: &toml::Table) -> Vec<AnnotationMode> {
     let mut modes = factory_annotation_modes();
     for (name, ticks) in table {
         let Some(ticks) = ticks.as_table() else { continue };
+        if !annotation_name_usable(name) {
+            continue;
+        }
         let at = match modes.iter().position(|m| &m.name == name) {
             Some(at) => at,
             None => {
@@ -3537,10 +3546,18 @@ impl Config {
         }
     }
 
-    if let Some(word) = raw.keys.preset.as_deref() {
-        if KeyPreset::parse(word).is_none() {
+    match &raw.keys.preset {
+        Some(toml::Value::String(word)) if KeyPreset::parse(word).is_none() => {
             problems.push(one_of("[keys] preset", word, KeyPreset::NAMES));
         }
+        Some(toml::Value::String(_)) | None => {}
+        Some(other) => problems.push(one_of("[keys] preset", &other.to_string(), KeyPreset::NAMES)),
+    }
+    if let Some(other) = raw.keys.inherit.as_ref().filter(|v| !v.is_bool()) {
+        problems.push(said(
+            format!("[keys] inherit = {other}：只能是 true 或 false"),
+            format!("[keys] inherit = {other}: only true or false"),
+        ));
     }
     // The flavour was a switch until 2026-11-01. No alias for the old
     // spelling: it is said, with the word that does what it did.
@@ -3588,12 +3605,17 @@ impl Config {
         }
     }
 
-    // 草稿: the Chinese of the three below.
-    if raw.editor.show_chaifen.is_some() {
-        problems.push(said(
+    // 草稿: the Chinese of the ones below.
+    match raw.editor.show_chaifen.as_ref().and_then(toml::Value::as_bool) {
+        Some(true) => problems.push(said(
             "[editor] show_chaifen 已經没有了，改寫成 [ime] annotation = \"double\"".to_string(),
             "[editor] show_chaifen is gone; write [ime] annotation = \"double\"".to_string(),
-        ));
+        )),
+        _ if raw.editor.show_chaifen.is_some() => problems.push(said(
+            "[editor] show_chaifen 已經没有了，刪掉這一行就是（出廠不顯示注解）".to_string(),
+            "[editor] show_chaifen is gone; delete the line (no annotation is the factory setting)".to_string(),
+        )),
+        _ => {}
     }
     let modes = annotation_modes_from(&raw.ime.annotation_modes);
     if let Some(word) = raw.ime.annotation.as_deref() {
@@ -3611,6 +3633,13 @@ impl Config {
             ));
             continue;
         };
+        if !annotation_name_usable(name) {
+            problems.push(said(
+                format!("[ime.annotation_modes] {name}：這個名字用不了（off、next 和帶點的名字不行），跳過了"),
+                format!("[ime.annotation_modes] {name}: a mode cannot be called that (off, next, or a name with a dot); skipped"),
+            ));
+            continue;
+        }
         for (field, on) in ticks {
             if !ANNOTATION_FIELDS.contains(&field.as_str()) {
                 problems.push(said(
@@ -4364,7 +4393,10 @@ struct RawKeys {
     sidebar: toml::Table,
     #[serde(default)]
     field: toml::Table,
-    preset: Option<String>,
+    /// Read as values, not as a string and a switch, so a wrong type is one
+    /// line said rather than the whole file refused (found in review,
+    /// 2026-11-02), as `flavor` already was.
+    preset: Option<toml::Value>,
     /// A level word. Read as a value, not a string, so the switch it was
     /// until 2026-11-01 (`flavor = true`) is reported rather than failing
     /// the whole `[keys]` table.
@@ -4372,7 +4404,7 @@ struct RawKeys {
     /// `[keys.flavor_items]`: one item on or off apart from the level.
     #[serde(default)]
     flavor_items: toml::Table,
-    inherit: Option<bool>,
+    inherit: Option<toml::Value>,
     /// What else is under `[keys]`: a mode that does not exist
     /// (`[keys.visual]`), kept to be reported.
     #[serde(flatten)]
@@ -4670,10 +4702,10 @@ impl RawConfig {
         merge_key_tables(&mut self.keys.field, other.keys.field);
         self.keys.strays.extend(other.keys.strays);
         if other.keys.preset.is_some() {
-            self.keys.preset = other.keys.preset;
+            self.keys.preset = other.keys.preset.clone();
         }
         if other.keys.inherit.is_some() {
-            self.keys.inherit = other.keys.inherit;
+            self.keys.inherit = other.keys.inherit.clone();
         }
         if other.keys.flavor.is_some() {
             self.keys.flavor = other.keys.flavor;
@@ -5225,10 +5257,10 @@ impl RawConfig {
                 config.keys.flavor.items.insert(item, on);
             }
         }
-        if let Some(on) = self.keys.inherit {
+        if let Some(on) = self.keys.inherit.as_ref().and_then(toml::Value::as_bool) {
             config.keys.inherit = on;
         }
-        if let Some(preset) = self.keys.preset.as_deref().and_then(KeyPreset::parse) {
+        if let Some(preset) = self.keys.preset.as_ref().and_then(toml::Value::as_str).and_then(KeyPreset::parse) {
             config.keys.preset = preset;
         }
         config
@@ -5262,17 +5294,52 @@ fn merge_key_tables(into: &mut toml::Table, from: toml::Table) {
 /// **A key as helix writes it in a table** (`space`, `ret`, `minus`), in
 /// this editor's spelling (`<space>`, `<enter>`, `-`). Anything else is
 /// already this editor's (`x`, `C-s`, `<tab>`, a run such as `dj`).
-fn helix_key(key: &str) -> String {
-    let named = |name: &str| format!("<{name}>");
-    match key {
-        "ret" => named("enter"),
-        "del" => named("delete"),
-        "minus" => "-".to_string(),
-        "A-minus" => "A--".to_string(),
-        "C-minus" => "C--".to_string(),
-        other if yumete_cjk::actions::named_key(other).is_some() => named(other),
-        other => other.to_string(),
+///
+/// `Err` for a helix name this editor cannot bind (`esc`, `ins`, `F1`, or a
+/// modifier on a named key such as `C-space`): said and skipped, never read
+/// as a run of its letters (found in review, 2026-11-02: `esc = …` bound
+/// `e` `s` `c`, and every `e` then waited for the next key).
+fn helix_key(key: &str) -> Result<String, ()> {
+    let mut mods = String::new();
+    let mut base = key;
+    while base.len() > 2 && ["C-", "A-", "S-"].iter().any(|m| base.starts_with(m)) {
+        mods.push_str(&base[..2]);
+        base = &base[2..];
     }
+    // One character, or a run of keys (`dj`): this editor's spelling.
+    let lower = base.to_ascii_lowercase();
+    let named = match lower.as_str() {
+        "ret" | "enter" => Some("enter"),
+        "del" | "delete" => Some("delete"),
+        "space" | "tab" | "backspace" | "up" | "down" | "left" | "right" | "home" | "end" | "pageup" | "pagedown" => {
+            Some(lower.as_str())
+        }
+        _ => None,
+    };
+    let single = match lower.as_str() {
+        "minus" => Some('-'),
+        "lt" => Some('<'),
+        "gt" => Some('>'),
+        _ => None,
+    };
+    let unbindable = matches!(lower.as_str(), "esc" | "ins" | "insert" | "null")
+        || (lower.len() > 1 && lower.starts_with('f') && lower[1..].chars().all(|c| c.is_ascii_digit()));
+    match (named, single) {
+        _ if unbindable => Err(()),
+        (_, Some(c)) => Ok(format!("{mods}{c}")),
+        (Some(name), _) if mods.is_empty() => Ok(format!("<{name}>")),
+        (Some("tab"), _) if mods == "S-" => Ok("<S-tab>".to_string()),
+        (Some(_), _) => Err(()),
+        (None, None) => Ok(key.to_string()),
+    }
+}
+
+/// The line a key [`helix_key`] cannot read says.
+fn unbindable_key(header: &str, key: &str) -> String {
+    said(
+        format!("[keys.{header}] {key}：這個鍵 yumete 綁不了，跳過了"),
+        format!("[keys.{header}] {key}: yumete cannot bind this key, so it was skipped"),
+    )
 }
 
 /// **One `[keys.<mode>]` table, line by line**: each binding goes in as a
@@ -5314,7 +5381,11 @@ fn read_key_table(
                 }
                 continue;
             }
-            let run = format!("{path}{}", helix_key(key));
+            let Ok(key_written) = helix_key(key) else {
+                problems.push(unbindable_key(header, key));
+                continue;
+            };
+            let run = format!("{path}{key_written}");
             let commands: Vec<String> = match value {
                 toml::Value::Table(inner) => {
                     walk(&format!("{header}.{key}"), &run, inner, out, labels, problems);
@@ -5371,7 +5442,10 @@ fn read_place_table(
     let header = place.name();
     let mut out = HashMap::new();
     for (key, value) in table {
-        let run = helix_key(key);
+        let Ok(run) = helix_key(key) else {
+            problems.push(unbindable_key(header, key));
+            continue;
+        };
         // A run (`gg`) or a nested table: these places have no groups.
         let one_key = yumete_cjk::actions::written(&run).chars().filter(|&c| c != yumete_cjk::actions::ALT).count() == 1;
         if !one_key || value.is_table() {
@@ -6550,6 +6624,19 @@ mod annotation_modes {
         assert!(all.contains("readng"), "{all}");
         assert_eq!(config.ime.annotation, "off");
         assert_eq!(config.ime.annotation_modes[1].fields, ["chaifen", "code"]);
+        // `false` is told to delete the line, not to turn annotations on.
+        let raw: RawConfig = toml::from_str("[editor]\nshow_chaifen = false\n").unwrap();
+        let mut said = Vec::new();
+        Config::complain_about(&raw, &mut said);
+        assert!(said.iter().any(|s| s.contains("show_chaifen") && !s.contains("double")), "{said:?}");
+        // Names the command line and the panel cannot tell apart are skipped.
+        let text = "[ime.annotation_modes.next]\ncode = true\n[ime.annotation_modes.\"a.b\"]\ncode = true\n";
+        let names: Vec<String> = Config::from_toml(text).ime.annotation_modes.into_iter().map(|m| m.name).collect();
+        assert_eq!(names, ["multi", "double"]);
+        let raw: RawConfig = toml::from_str(text).unwrap();
+        let mut said = Vec::new();
+        Config::complain_about(&raw, &mut said);
+        assert_eq!(said.len(), 2, "{said:?}");
     }
 
     /// The field words are yume's own.
@@ -6558,5 +6645,47 @@ mod annotation_modes {
         for field in ANNOTATION_FIELDS {
             assert!(annotation_field_label(field).ends_with(&field.replace('_', "-")), "{field}");
         }
+    }
+}
+
+#[cfg(test)]
+mod helix_key_names {
+    use super::*;
+
+    /// helix's names for keys this editor cannot bind are said and skipped,
+    /// never bound as runs of their letters; `lt` `gt` are `<` `>`, as in
+    /// helix (found in review, 2026-11-02).
+    #[test]
+    fn helix_key_names_are_read_or_refused() {
+        assert_eq!(helix_key("esc"), Err(()));
+        assert_eq!(helix_key("C-space"), Err(()));
+        assert_eq!(helix_key("A-ret"), Err(()));
+        assert_eq!(helix_key("F5"), Err(()));
+        assert_eq!(helix_key("lt"), Ok("<".to_string()));
+        assert_eq!(helix_key("A-minus"), Ok("A--".to_string()));
+        assert_eq!(helix_key("ret"), Ok("<enter>".to_string()));
+        assert_eq!(helix_key("S-tab"), Ok("<S-tab>".to_string()));
+        assert_eq!(helix_key("dj"), Ok("dj".to_string()));
+        assert_eq!(helix_key("C-s"), Ok("C-s".to_string()));
+        let (config, said) = {
+            let raw: RawConfig = toml::from_str("[keys.normal]\nesc = \"collapse_selection\"\n").unwrap();
+            let mut said = Vec::new();
+            let config = raw.into_config_saying(&mut said);
+            (config, said)
+        };
+        assert!(said.iter().any(|s| s.contains("esc")), "{said:?}");
+        assert!(config.keys.normal.keys().all(|k| !k.contains('e')), "{:?}", config.keys.normal);
+    }
+
+    /// A wrong type under `[keys]` is one line said, not the file refused.
+    #[test]
+    fn a_wrong_type_under_keys_keeps_the_rest() {
+        let text = "[editor]\nline_numbers = \"relative\"\n\n[keys]\ninherit = \"off\"\npreset = 3\n";
+        let config = Config::from_toml(text);
+        assert_eq!(config.editor.line_numbers, Config::from_toml("[editor]\nline_numbers = \"relative\"\n").editor.line_numbers);
+        let raw: RawConfig = toml::from_str(text).unwrap();
+        let mut said = Vec::new();
+        Config::complain_about(&raw, &mut said);
+        assert!(said.iter().any(|s| s.contains("inherit")) && said.iter().any(|s| s.contains("preset")), "{said:?}");
     }
 }
