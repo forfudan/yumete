@@ -786,6 +786,13 @@ zhs = "下一条诊断"
 en = "the next diagnostic"
 
 [[message]]
+# 命令說明：goto_next_entry（草稿）
+key = "action.goto-next-entry"
+zht = "選中下一個條目"
+zhs = "选中下一个条目"
+en = "select the next entry"
+
+[[message]]
 # 命令說明：goto_next_function（草稿）
 key = "action.goto-next-function"
 zht = "下一個函數"
@@ -808,6 +815,13 @@ en = "the next paragraph"
 find = "下一段 段落 next paragraph"
 
 [[message]]
+# 命令說明：goto_next_parameter（草稿）
+key = "action.goto-next-parameter"
+zht = "選中下一個參數"
+zhs = "选中下一个参数"
+en = "select the next parameter"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-next-sentence"
 zht = "下一句"
@@ -821,6 +835,20 @@ key = "action.goto-next-table"
 zht = "下一張表"
 zhs = "下一张表"
 en = "the next table"
+
+[[message]]
+# 命令說明：goto_next_test（草稿）
+key = "action.goto-next-test"
+zht = "選中下一個測試"
+zhs = "选中下一个测试"
+en = "select the next test"
+
+[[message]]
+# 命令說明：goto_next_xml_element（草稿）
+key = "action.goto-next-xml-element"
+zht = "選中下一個 XML 元素"
+zhs = "选中下一个 XML 元素"
+en = "select the next XML element"
 
 [[message]]
 # 命令說明：goto_older_change（草稿）
@@ -865,6 +893,13 @@ zhs = "上一条诊断"
 en = "the previous diagnostic"
 
 [[message]]
+# 命令說明：goto_prev_entry（草稿）
+key = "action.goto-prev-entry"
+zht = "選中上一個條目"
+zhs = "选中上一个条目"
+en = "select the previous entry"
+
+[[message]]
 # 命令說明：goto_prev_function（草稿）
 key = "action.goto-prev-function"
 zht = "上一個函數"
@@ -880,6 +915,13 @@ en = "the previous paragraph"
 find = "上一段 段落 previous paragraph"
 
 [[message]]
+# 命令說明：goto_prev_parameter（草稿）
+key = "action.goto-prev-parameter"
+zht = "選中上一個參數"
+zhs = "选中上一个参数"
+en = "select the previous parameter"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-prev-sentence"
 zht = "上一句"
@@ -893,6 +935,20 @@ key = "action.goto-prev-table"
 zht = "上一張表"
 zhs = "上一张表"
 en = "the previous table"
+
+[[message]]
+# 命令說明：goto_prev_test（草稿）
+key = "action.goto-prev-test"
+zht = "選中上一個測試"
+zhs = "选中上一个测试"
+en = "select the previous test"
+
+[[message]]
+# 命令說明：goto_prev_xml_element（草稿）
+key = "action.goto-prev-xml-element"
+zht = "選中上一個 XML 元素"
+zhs = "选中上一个 XML 元素"
+en = "select the previous XML element"
 
 [[message]]
 # 命令說明：goto_right_sidebar（草稿）

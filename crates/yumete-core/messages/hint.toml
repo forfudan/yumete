@@ -572,6 +572,20 @@ zhs = "合并冲突"
 en = "merge conflict"
 
 [[message]]
+# ] 與 [ 組：XML 元素（草稿）
+key = "hint.hop.element"
+zht = "XML 元素"
+zhs = "XML 元素"
+en = "an XML element"
+
+[[message]]
+# ] 與 [ 組：鍵值條目（草稿）
+key = "hint.hop.entry"
+zht = "條目"
+zhs = "条目"
+en = "an entry"
+
+[[message]]
 # ]/[ 的選單：下一個/上一個函數
 key = "hint.hop.function"
 zht = "函數"
@@ -586,6 +600,13 @@ zhs = "下一个"
 en = "next…"
 
 [[message]]
+# ] 與 [ 組：參數（草稿）
+key = "hint.hop.parameter"
+zht = "參數"
+zhs = "参数"
+en = "a parameter"
+
+[[message]]
 # [ 按下之後的選單標題
 key = "hint.hop.previous"
 zht = "上一個"
@@ -598,6 +619,13 @@ key = "hint.hop.problem"
 zht = "診斷(大寫：第一個/最後一個)"
 zhs = "诊断(大写：第一个/最后一个)"
 en = "a diagnostic (capital: the first / the last)"
+
+[[message]]
+# ] 與 [ 組：測試（草稿）
+key = "hint.hop.test"
+zht = "測試"
+zhs = "测试"
+en = "a test"
 
 [[message]]
 # 提示：收下

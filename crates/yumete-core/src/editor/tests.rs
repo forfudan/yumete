@@ -16154,6 +16154,38 @@ fn vim_counts_its_own_jump_motions() {
 }
 
 #[test]
+fn bracket_keys_select_the_next_syntax_object() {
+    // helix's `]a` `[a` and its other `]`/`[` tree objects (2026-11-02):
+    // the object is selected, a count goes further, and `]f` does the same.
+    let dir = tmp().join(format!("yumete-bracket-objects-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn a(x: u8, y: u8, z: u8) {}\nfn b() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    press(&mut ed, "]a");
+    assert_eq!(text(&ed), "x: u8", "{}", ed.status());
+    press(&mut ed, "2]a");
+    assert_eq!(text(&ed), "z: u8");
+    press(&mut ed, "[a");
+    assert_eq!(text(&ed), "y: u8");
+    press(&mut ed, "]f");
+    assert_eq!(text(&ed), "fn b() {}");
+    // Not under vim: Neovim's `]a` is the argument list.
+    let mut vim = Editor::new();
+    vim.execute(":keymap vim").unwrap();
+    vim.open_file(&file).unwrap();
+    press(&mut vim, "]a");
+    assert_eq!(vim.selection().1 - vim.selection().0, 1, "{}", vim.status());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_system_clipboard_goes_both_ways() {
     let mut ed = typed("那年冬天");
     press(&mut ed, "ggvl");
@@ -22909,7 +22941,9 @@ fn the_syntax_tree_gives_up_its_functions_and_classes() {
         ed.goto_line(1);
         ed
     };
-    let line = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+    // Where the selection starts: `]f` selects the function (2026-11-02,
+    // helix's), so its start is the line it went to.
+    let line = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.selection().0);
 
     // `]f` 一個一個函數走，到頭繞回去。
     let mut ed = code();

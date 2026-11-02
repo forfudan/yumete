@@ -363,9 +363,9 @@ impl Editor {
 
     /// **跳到下一段/上一段註釋**（`]c`/`[c`，2026-10-06，helix 的
     /// `goto_next_comment`）。到頭繞回去，同 `]g`。
-    pub(super) fn go_to_object_nearby(&mut self, forward: bool, want: crate::code::Object) {
-        let starts: Vec<usize> = self.objects_here(want).into_iter().map(|(from, _)| from).collect();
-        if starts.is_empty() {
+    pub(super) fn go_to_object_nearby(&mut self, forward: bool, want: crate::code::Object, count: usize) {
+        let spans = self.objects_here(want);
+        if spans.is_empty() {
             self.status = match want {
                 crate::code::Object::Parameter => say!("code.no-parameter-here"),
                 crate::code::Object::Comment => say!("code.no-comments"),
@@ -375,13 +375,37 @@ impl Editor {
             };
             return;
         }
-        let here = self.sel.head();
-        let to = match forward {
-            true => starts.iter().copied().find(|&s| s > here).unwrap_or(starts[0]),
-            false => starts.iter().copied().rfind(|&s| s < here).unwrap_or(starts[starts.len() - 1]),
-        };
+        self.go_to_span_nearby(&spans, forward, count);
+    }
+
+    /// **The next or previous of these spans, selected** (helix's
+    /// `goto_ts_object_impl`, 2026-11-02): the `count`-th one past the
+    /// cursor, facing the way it was reached; in select mode the selection
+    /// grows to it. Past the last it goes round to the first, as `]g` does.
+    fn go_to_span_nearby(&mut self, spans: &[(usize, usize)], forward: bool, count: usize) {
+        // From where the selection starts, so a selected object is stepped
+        // past in either direction.
+        let mut here = self.sel.anchor().min(self.sel.head());
+        let mut to = spans[0];
+        for _ in 0..count.max(1) {
+            to = match forward {
+                true => spans.iter().copied().find(|&(s, _)| s > here).unwrap_or(spans[0]),
+                false => spans.iter().copied().rfind(|&(s, _)| s < here).unwrap_or(spans[spans.len() - 1]),
+            };
+            here = to.0;
+        }
         self.remember_jump();
-        self.sel.collapse_to(to);
+        let mut range = self.from_drawn(to.0, to.1.max(to.0 + 1));
+        if !forward {
+            std::mem::swap(&mut range.anchor, &mut range.head);
+        }
+        match self.extend {
+            true => self.sel.set_head(range.head),
+            false => {
+                self.sel.set_anchor(range.anchor);
+                self.sel.set_head(range.head);
+            }
+        }
         self.clamp_cursor();
         self.refresh_goal_column();
     }
@@ -493,34 +517,22 @@ impl Editor {
     /// **跳到下一個/上一個函數或類**（`]f`/`[f`/`]c`/`[c`，2026-10-06）。
     ///
     /// 到頭繞回去，同 `]g`。
-    pub(super) fn go_to_definition_nearby(&mut self, forward: bool, function: bool) {
+    pub(super) fn go_to_definition_nearby(&mut self, forward: bool, function: bool, count: usize) {
         let want = match function {
             true => crate::code::Define::Function,
             false => crate::code::Define::Class,
         };
-        let starts: Vec<usize> = self
+        let spans: Vec<(usize, usize)> = self
             .definitions_here()
             .into_iter()
             .filter(|&(_, _, kind)| kind == want)
-            .map(|(from, _, _)| from)
+            .map(|(from, to, _)| (from, to))
             .collect();
-        if starts.is_empty() {
+        if spans.is_empty() {
             self.status = say!("code.no-definitions");
             return;
         }
-        let here = self.sel.head();
-        let to = match forward {
-            true => starts.iter().copied().find(|&s| s > here).unwrap_or(starts[0]),
-            false => starts
-                .iter()
-                .copied()
-                .rfind(|&s| s < here)
-                .unwrap_or_else(|| starts[starts.len() - 1]),
-        };
-        self.remember_jump();
-        self.sel.collapse_to(to);
-        self.clamp_cursor();
-        self.refresh_goal_column();
+        self.go_to_span_nearby(&spans, forward, count);
     }
 
     /// The span a pair of delimiters encloses, `around` taking the marks too.

@@ -973,6 +973,13 @@ pub(super) static RIGHT_BRACKET: Group = Group {
         // helix's comment is helix's only.
         ch('c', NormalCmd::GotoNextChange, "hint.hop.change").when(Only::Vim),
         ch('c', NormalCmd::GotoNextComment, "hint.hop.comment").listed(Only::Code),
+        // helix's (2026-11-02). Neovim's `]a` is the argument list and its
+        // `]T` the last tag: those two are helix's alone; vim borrows `]e`
+        // `]x` with the rest of helix's free keys.
+        ch('a', NormalCmd::GotoNextParameter, "hint.hop.parameter").listed(Only::Code).when(Only::Helix),
+        ch('e', NormalCmd::GotoNextEntry, "hint.hop.entry").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        ch('T', NormalCmd::GotoNextTest, "hint.hop.test").listed(Only::Code).when(Only::Helix),
+        ch('x', NormalCmd::GotoNextXmlElement, "hint.hop.element").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
         // Warning: **段落那一行借的是 `:keymap-actions` 的名字**：同一件事在兩張
         // 表上，寫成兩句話只會讓它們慢慢說岔。
         // vim's `]p` pastes (with the indent adjusted, which is not done yet).
@@ -1004,6 +1011,10 @@ pub(super) static LEFT_BRACKET: Group = Group {
         // helix's comment is helix's only.
         ch('c', NormalCmd::GotoPrevChange, "hint.hop.change").when(Only::Vim),
         ch('c', NormalCmd::GotoPrevComment, "hint.hop.comment").listed(Only::Code),
+        ch('a', NormalCmd::GotoPrevParameter, "hint.hop.parameter").listed(Only::Code).when(Only::Helix),
+        ch('e', NormalCmd::GotoPrevEntry, "hint.hop.entry").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        ch('T', NormalCmd::GotoPrevTest, "hint.hop.test").listed(Only::Code).when(Only::Helix),
+        ch('x', NormalCmd::GotoPrevXmlElement, "hint.hop.element").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
         ch('p', NormalCmd::VimPasteBefore, "action.vim-paste-before").when(Only::Vim),
         ch('p', NormalCmd::GotoPrevParagraph, "action.goto-prev-paragraph"),
         ch(' ', NormalCmd::AddNewlineAbove, "hint.hop.blank-above"),
