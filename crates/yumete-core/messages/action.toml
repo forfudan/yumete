@@ -2809,17 +2809,17 @@ en = "On: in Insert mode C-a and C-e go to the line's start and end, C-n complet
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）
-key = "keys.flavor.item.line-end-keys"
-zht = "行首、首字、行尾"
-zhs = "行首、首字、行尾"
-en = "line start, first character, line end"
+key = "keys.flavor.item.line-start-keys"
+zht = "行首、首字"
+zhs = "行首、首字"
+en = "line start, first character"
 
 [[message]]
 # 風味的一項：設置面板上的說明（草稿）
-key = "keys.flavor.item.line-end-keys.hint"
-zht = "開：0、^、$ 到行首、行首第一個字、行尾，同 vim。關：這三個鍵空着。"
-zhs = "开：0、^、$ 到行首、行首第一个字、行尾，同 vim。关：这三个键空着。"
-en = "On: 0, ^ and $ go to the line's start, its first character and its end, as in vim. Off: unbound."
+key = "keys.flavor.item.line-start-keys.hint"
+zht = "開：0、^ 到行首、行首第一個字，同 vim；行尾是 gl。關：這兩個鍵空着。"
+zhs = "开：0、^ 到行首、行首第一个字，同 vim；行尾是 gl。关：这两个键空着。"
+en = "On: 0 and ^ go to the line's start and its first character, as in vim; the line's end is gl. Off: unbound."
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）

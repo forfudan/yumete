@@ -12379,7 +12379,7 @@ fn the_character_under_the_caret_is_a_whole_cluster() {
     ed.on_key(Key::Char('l'));
     assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("a"), "l 走過整個字簇");
     // 行末没有字就答前面那一個，同 `char_at_cursor` 的收尾。
-    ed.on_key(Key::Char('$'));
+    press(&mut ed, "gl");
     ed.on_key(Key::Char('l'));
     assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("a"));
 }
@@ -34144,13 +34144,15 @@ fn the_basic_flavour_keys_and_helix_without_them() {
     press(&mut ed, "2G");
     assert_eq!(ed.cursor_line(), 1, "a count's line, as helix's");
 
-    // `0 ^ $`.
+    // `0 ^`; `$` is helix's, and does nothing until its command is built.
     let mut ed = typed("  甲乙\n");
     ed.goto_line(1);
-    press(&mut ed, "$");
+    press(&mut ed, "gl");
     assert_eq!(ed.sel.head(), 3);
     press(&mut ed, "0");
     assert_eq!(ed.sel.head(), 0);
+    press(&mut ed, "$");
+    assert_eq!(ed.sel.head(), 0, "$ is not the line's end under helix");
     press(&mut ed, "^");
     assert_eq!(ed.sel.head(), 2);
 

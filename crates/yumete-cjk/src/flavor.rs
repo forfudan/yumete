@@ -331,16 +331,18 @@ flavor_items! {
         label: "keys.flavor.item.move-lines",
         hint: "keys.flavor.item.move-lines.hint",
     },
-    /// `0` `^` `$`, the line's start, its first character, its end, as vim's.
-    LineEndKeys => ItemInfo {
-        id: "line_end_keys",
+    /// `0` `^`, the line's start and its first character, as vim's; both
+    /// free in helix. `$` is helix's (`shell_keep_pipe`), and the line's end
+    /// is helix's `gl` (2026-11-02).
+    LineStartKeys => ItemInfo {
+        id: "line_start_keys",
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
-        keys: &["0", "^", "$"],
+        keys: &["0", "^"],
         vim_keys: None,
         insert: false,
-        label: "keys.flavor.item.line-end-keys",
-        hint: "keys.flavor.item.line-end-keys.hint",
+        label: "keys.flavor.item.line-start-keys",
+        hint: "keys.flavor.item.line-start-keys.hint",
     },
     /// `D` deletes to the line's end and `A-D` does without filling the register; `delete_keeps_register` swaps them as it does `d` and `A-d`.
     DToLineEnd => ItemInfo {
