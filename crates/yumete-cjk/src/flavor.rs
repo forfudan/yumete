@@ -60,10 +60,16 @@ pub struct ItemInfo {
     /// then `e`): a line there for one of them wins over the item, and the
     /// report says so.
     pub keys: &'static [&'static str],
+    /// The keys under the vim keymap, when they are not [`Self::keys`]
+    /// (the case menu is `` g` `` there, the labels `gW`).
+    pub vim_keys: Option<&'static [&'static str]>,
     /// Its keys are Insert mode's, so `[keys.insert]` is what can take them.
     pub insert: bool,
     /// A message tag: what it does, in a few words.
     pub label: &'static str,
+    /// A message tag: the line the settings panel says about it, with what
+    /// the key does when the item is off.
+    pub hint: &'static str,
 }
 
 macro_rules! flavor_items {
@@ -93,9 +99,11 @@ flavor_items! {
         id: "case_menu",
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
-        keys: &["`", "g`"],
+        keys: &["`"],
+        vim_keys: Some(&["g`"]),
         insert: false,
         label: "keys.flavor.item.case-menu",
+        hint: "keys.flavor.item.case-menu.hint",
     },
     /// `H` and `L` walk sentences, keys helix leaves free.
     SentencesOnHL => ItemInfo {
@@ -103,8 +111,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["H", "L"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.sentences-on-h-l",
+        hint: "keys.flavor.item.sentences-on-h-l.hint",
     },
     /// `M` sets a mark and `'` goes to it, across files.
     MarksOnMQuote => ItemInfo {
@@ -112,8 +122,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["M", "'"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.marks-on-m-quote",
+        hint: "keys.flavor.item.marks-on-m-quote.hint",
     },
     /// `C-n` and `C-p` turn two-thirds of a page.
     TwoThirdsPage => ItemInfo {
@@ -121,8 +133,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["C-n", "C-p"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.two-thirds-page",
+        hint: "keys.flavor.item.two-thirds-page.hint",
     },
     /// `Space t`, the table menu. The grid's own keys are the table feature's, not an item.
     Tables => ItemInfo {
@@ -130,8 +144,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" t"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.tables",
+        hint: "keys.flavor.item.tables.hint",
     },
     /// `Space m` resolves a merge conflict, `]m` and `[m` walk them.
     MergeConflicts => ItemInfo {
@@ -139,8 +155,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" m", "]m", "[m"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.merge-conflicts",
+        hint: "keys.flavor.item.merge-conflicts.hint",
     },
     /// `Space z`, the input method's menu.
     InputMethodMenu => ItemInfo {
@@ -148,8 +166,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" z"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.input-method-menu",
+        hint: "keys.flavor.item.input-method-menu.hint",
     },
     /// `Space o`, recent files and projects.
     RecentFiles => ItemInfo {
@@ -157,8 +177,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" o"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.recent-files",
+        hint: "keys.flavor.item.recent-files.hint",
     },
     /// `Space "`, the registers' menu.
     RegistersMenu => ItemInfo {
@@ -166,8 +188,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" \""],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.registers-menu",
+        hint: "keys.flavor.item.registers-menu.hint",
     },
     /// `Space n` and `Space N`, the dictionary as a popup or in the sidebar.
     Dictionary => ItemInfo {
@@ -175,8 +199,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" n", " N"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.dictionary",
+        hint: "keys.flavor.item.dictionary.hint",
     },
     /// The popup and sidebar pairs: `Space K` puts helix's hover in the sidebar; `Space l` `L` a diagnostic, `Space x` `X` a change, `Space i` `I` a table record.
     PopupPanelPairs => ItemInfo {
@@ -184,8 +210,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" K", " l", " L", " x", " X", " i", " I"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.popup-panel-pairs",
+        hint: "keys.flavor.item.popup-panel-pairs.hint",
     },
     /// `Space E`, the file explorer from this file's directory.
     ExplorerHere => ItemInfo {
@@ -193,8 +221,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" E"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.explorer-here",
+        hint: "keys.flavor.item.explorer-here.hint",
     },
     /// `Space Space` and `Space Backspace` turn a page.
     SpacePaging => ItemInfo {
@@ -202,8 +232,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &["  ", " <backspace>"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.space-paging",
+        hint: "keys.flavor.item.space-paging.hint",
     },
     /// `Space q` closes the window, as `:quit`.
     SpaceQuit => ItemInfo {
@@ -211,8 +243,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &[" q"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.space-quit",
+        hint: "keys.flavor.item.space-quit.hint",
     },
     /// `C-w e` `i` show or hide the sidebars, `C-w E` `I` go into them.
     Sidebars => ItemInfo {
@@ -220,8 +254,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &["C-we", "C-wi", "C-wE", "C-wI"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.sidebars",
+        hint: "keys.flavor.item.sidebars.hint",
     },
     /// The `g` group's jumps (2026-11-02, every key free in vim, Neovim and
     /// helix): `gz` jumps to a word by its first letters (z as in
@@ -234,18 +270,22 @@ flavor_items! {
         id: "goto_extras",
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
-        keys: &["gz", "gZ", "g/", "gL", "gx", "gW"],
+        keys: &["gz", "gZ", "g/", "gL", "gx"],
+        vim_keys: Some(&["gz", "gZ", "g/", "gL", "gW"]),
         insert: false,
         label: "keys.flavor.item.goto-extras",
+        hint: "keys.flavor.item.goto-extras.hint",
     },
     /// Insert mode's `C-a` and `C-e` to the line's ends, `C-n` for completion, `C-g` an undo checkpoint (helix's `C-s`, which a terminal takes).
     InsertExtras => ItemInfo {
         id: "insert_extras",
         level: FlavorLevel::Basic,
-        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
+        keymaps: &[KeyPreset::Helix],
         keys: &["C-a", "C-e", "C-n", "C-g"],
+        vim_keys: None,
         insert: true,
         label: "keys.flavor.item.insert-extras",
+        hint: "keys.flavor.item.insert-extras.hint",
     },
     /// Insert mode's `C-c` leaves Insert, as `Esc` does.
     InsertCtrlC => ItemInfo {
@@ -253,8 +293,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["C-c"],
+        vim_keys: None,
         insert: true,
         label: "keys.flavor.item.insert-ctrl-c",
+        hint: "keys.flavor.item.insert-ctrl-c.hint",
     },
     /// `X` selects the line above, as `x` the line below: Shift reverses, as `f`/`F` do.
     XSelectsUpward => ItemInfo {
@@ -262,8 +304,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["X"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.x-selects-upward",
+        hint: "keys.flavor.item.x-selects-upward.hint",
     },
     /// `G` with no count goes to the last line's start; with one, to that line, as helix's.
     BareGLastLine => ItemInfo {
@@ -271,8 +315,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["G"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.bare-g-last-line",
+        hint: "keys.flavor.item.bare-g-last-line.hint",
     },
     /// `A-j` and `A-k` move the selected lines (a paragraph, in prose) down or up.
     MoveLines => ItemInfo {
@@ -280,8 +326,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &["A-j", "A-k"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.move-lines",
+        hint: "keys.flavor.item.move-lines.hint",
     },
     /// `0` `^` `$`, the line's start, its first character, its end, as vim's.
     LineEndKeys => ItemInfo {
@@ -289,8 +337,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["0", "^", "$"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.line-end-keys",
+        hint: "keys.flavor.item.line-end-keys.hint",
     },
     /// `D` deletes to the line's end and `A-D` does without filling the register; `delete_keeps_register` swaps them as it does `d` and `A-d`.
     DToLineEnd => ItemInfo {
@@ -298,8 +348,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix],
         keys: &["D", "A-D"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.d-to-line-end",
+        hint: "keys.flavor.item.d-to-line-end.hint",
     },
     /// The Space menu under vim, on vim's `Space` (2026-11-01); off, `Space`
     /// moves right as vim's and the menu is on `\`, vim's leader.
@@ -308,8 +360,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Vim],
         keys: &[" "],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.vim-space-menu",
+        hint: "keys.flavor.item.vim-space-menu.hint",
     },
     /// helix's keys under vim, on keys vim leaves free (2026-11-02): the Alt
     /// keys, `C-s`, `Z`'s sticky view, `ga` `gp` `gc` `gb` `gr` `g.`, `]g`
@@ -320,8 +374,10 @@ flavor_items! {
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Vim],
         keys: &["g.", "A-C", "A-,", "A--", "A-_", "A-:", "A-x", "A-s", "A-(", "A-)", "A-K", "A-d", "A-c", "A-u", "A-U", "A-!", "A-|", "A-J", "A-;", "A-*", "A-.", "A-`", "C-s", "Z", "ga", "gp", "gc", "gb", "gr", "]g", "]f", "]t", "[g", "[f", "[t"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.helix-keys-under-vim",
+        hint: "keys.flavor.item.helix-keys-under-vim.hint",
     },
     /// `d` and `c` delete without filling the register, and `A-d`/`A-c` are the pair that cut — in the text and in a table's grid. helix only: vim has `"_d` (2026-11-01, after looking at what vim users write).
     DeleteKeepsRegister => ItemInfo {
@@ -329,8 +385,10 @@ flavor_items! {
         level: FlavorLevel::Full,
         keymaps: &[KeyPreset::Helix],
         keys: &["d", "c", "A-d", "A-c"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.delete-keeps-register",
+        hint: "keys.flavor.item.delete-keeps-register.hint",
     },
     /// `Esc` in Normal mode also collapses the selections to the primary cursor; leaving select mode still keeps the selection.
     EscCollapses => ItemInfo {
@@ -338,8 +396,10 @@ flavor_items! {
         level: FlavorLevel::Full,
         keymaps: &[KeyPreset::Helix],
         keys: &["Esc"],
+        vim_keys: None,
         insert: false,
         label: "keys.flavor.item.esc-collapses",
+        hint: "keys.flavor.item.esc-collapses.hint",
     },
     /// Insert mode's `S-Tab` types the other kind of indent (a tab where the file uses spaces); helix's types the file's own.
     ShiftTabOtherIndent => ItemInfo {
@@ -347,8 +407,10 @@ flavor_items! {
         level: FlavorLevel::Full,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
         keys: &["<S-tab>"],
+        vim_keys: None,
         insert: true,
         label: "keys.flavor.item.shift-tab-other-indent",
+        hint: "keys.flavor.item.shift-tab-other-indent.hint",
     },
 }
 
@@ -364,6 +426,15 @@ impl FlavorItem {
     /// Its bit in a set of items, as a key table asks (see `Flavor::mask`).
     pub fn bit(self) -> u64 {
         1 << (self as u32)
+    }
+
+    /// The keys it changes under `keymap`.
+    pub fn keys_under(self, keymap: KeyPreset) -> &'static [&'static str] {
+        let info = self.info();
+        match (keymap, info.vim_keys) {
+            (KeyPreset::Vim, Some(keys)) => keys,
+            _ => info.keys,
+        }
     }
 
     /// The ids, for a complaint about one that is not.

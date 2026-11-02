@@ -117,6 +117,10 @@ pub enum Kind {
     PickOr(&'static [Choice]),
     /// 一段自己打的字。
     Text,
+    /// **A row that opens a page of its own** (2026-11-02): the flavour's
+    /// items, one tick each, under `[keys.flavor_items]`. `l`, Space, Enter
+    /// and `i` go in; the page is [`crate::panel::Panel::flavor_page`].
+    Page,
 }
 
 /// **一項設定。**
@@ -946,12 +950,30 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "keys",
+        key: "preset",
+        group: Group::Keys,
+        kind: Kind::Pick(KEYS_PRESET_WAYS),
+        label: "settings.keys.preset",
+        hint: "settings.keys.preset.hint",
+        factory: r#""helix""#,
+    },
+    Setting {
+        table: "keys",
         key: "flavor",
         group: Group::Keys,
         kind: Kind::Pick(KEYS_FLAVOR_WAYS),
         label: "settings.keys.flavor",
         hint: "settings.keys.flavor.hint",
         factory: r#""basic""#,
+    },
+    Setting {
+        table: "keys",
+        key: "flavor_items",
+        group: Group::Keys,
+        kind: Kind::Page,
+        label: "settings.keys.flavor-items",
+        hint: "settings.keys.flavor-items.hint",
+        factory: "{}",
     },
     Setting {
         table: "keys",
@@ -962,15 +984,6 @@ pub const SETTINGS: &[Setting] = &[
         hint: "settings.keys.inherit.hint",
         factory: "true",
     },
-    Setting {
-        table: "keys",
-        key: "preset",
-        group: Group::Keys,
-        kind: Kind::Pick(KEYS_PRESET_WAYS),
-        label: "settings.keys.preset",
-        hint: "settings.keys.preset.hint",
-        factory: r#""helix""#,
-    },
 ];
 
 /// **還没填進 [`SETTINGS`] 的那些。**
@@ -978,9 +991,6 @@ pub const SETTINGS: &[Setting] = &[
 /// 一組一組填，這張表跟着縮短。Warning: **它不是「不做」的名單**——那一張是
 /// [`NOT_IN_THE_PANEL`]，兩者的區別是「還没輪到」與「有理由不進去」。
 pub const LATER: &[&str] = &[
-    // One switch per flavour item, in a sub-panel of its own (step 4 of
-    // the flavour plan, 2026-11-01).
-    "keys.flavor_items",
     "editor.usage_groups",
     "editor.syntax",
     // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**

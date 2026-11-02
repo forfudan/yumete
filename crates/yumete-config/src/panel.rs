@@ -32,6 +32,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use crate::settings_ui::{Kind, Setting, GROUPS, LATER, NOT_IN_THE_PANEL, SETTINGS};
+use yumete_cjk::{Flavor, FlavorItem, FlavorLevel, KeyPreset};
 use crate::write_back::{rewrite, Change, Said};
 
 /// 一個值是從哪一層來的。
@@ -179,6 +180,15 @@ fn declared_in(text: &str) -> BTreeMap<String, String> {
             if let Some(v) = value.as_value() {
                 out.insert(format!("{table}.{key}"), v.to_string().trim().to_string());
             }
+            // One table down (2026-11-02): `[keys.flavor_items]` is a page of
+            // the panel, and `[keys.normal]` says which keys a binding took.
+            if let Some(inner) = value.as_table() {
+                for (sub, value) in inner.iter() {
+                    if let Some(v) = value.as_value() {
+                        out.insert(format!("{table}.{key}.{sub}"), v.to_string().trim().to_string());
+                    }
+                }
+            }
         }
     }
     out
@@ -272,6 +282,35 @@ pub struct Panel {
     pub typing: Option<String>,
     /// 上一次存盤說的話（哪幾個鍵被註釋掉了）。
     pub said: Option<Said>,
+    /// **The flavour's page is open**, on this row of [`Panel::flavor_rows`]
+    /// (2026-11-02). `None` is the ordinary list.
+    pub flavor_page: Option<usize>,
+}
+
+/// One row of the flavour's page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlavorRow {
+    /// The level, the same setting as the row in the list (`[keys] flavor`).
+    Level,
+    Item(FlavorItem),
+}
+
+/// The heading a run of item rows sits under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FlavorSection {
+    Basic,
+    Full,
+    /// Items for the other keymap, kept for when you switch.
+    Other(KeyPreset),
+}
+
+/// Where an item's state comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemFrom {
+    /// The level gives it.
+    Level,
+    /// Written by name in this layer.
+    Layer(Layer),
 }
 
 /// **本項目那一份在哪** —— 找得到就是它，找不到就是「要建的話建在這裏」。
@@ -297,6 +336,7 @@ impl Panel {
             row: 0,
             typing: None,
             said: None,
+            flavor_page: None,
         }
     }
 
@@ -506,6 +546,9 @@ impl Panel {
     /// Warning: **一段自己打的字没有「下一個」**，空格對它就是 `i`。
     pub fn press(&mut self) {
         let Some(setting) = self.here() else { return };
+        if setting.kind == Kind::Page {
+            return self.open_flavor_page();
+        }
         let now = self.mine_now(setting);
         let next = match setting.kind {
             Kind::Tick => Change::Tick(now != "true"),
@@ -545,6 +588,8 @@ impl Panel {
                 self.typing = Some(unwritten(now.as_str()));
                 return;
             }
+            // Gone in above.
+            Kind::Page => return,
         };
         self.settle(setting, next);
     }
@@ -560,7 +605,7 @@ impl Panel {
         let Some(setting) = self.here() else { return };
         match setting.kind {
             // 撥得動的：撥一格。
-            Kind::Tick | Kind::Pick(_) => self.press(),
+            Kind::Tick | Kind::Pick(_) | Kind::Page => self.press(),
             // **`PickOr` 走打字那一支**（2026-10-10）。這一種兩條路都有，所以
             // 兩個鍵各守各的本義：空格是「撥一格」，`i` 是「我自己打」——讀者
             // 自己裝的主題或碼表只有這一條路進得來。`Tick` 和 `Pick` 没得打，
@@ -575,7 +620,7 @@ impl Panel {
     pub fn begin_typing(&mut self) {
         let Some(setting) = self.here() else { return };
         // **`PickOr` 不在這裏**：它收得下表外的名字，而 `i` 就是打那個名字用的。
-        if matches!(setting.kind, Kind::Tick | Kind::Pick(_)) {
+        if matches!(setting.kind, Kind::Tick | Kind::Pick(_) | Kind::Page) {
             return;
         }
         // Warning: **`PickOr` 從空的開始**（2026-10-10 報的）。從前這裏一律把現在
@@ -614,13 +659,233 @@ impl Panel {
 
     /// `d` —— 把這一項從**切着的那一份**裏撤掉，回去跟下面那一層。
     pub fn drop_here(&mut self) {
-        let Some(setting) = self.here() else { return };
+        let Some(setting) = self.here().filter(|s| s.kind != Kind::Page) else { return };
         let path = setting.path();
         let sheet = self.sheet_mut();
         // Warning: **問的是「檔裏寫了没有」，不是「這一份此刻說什麽」。** 後者把還没存
         // 的改動也算進去，於是「改了一項，又按 `d` 反悔」會攢下一條刪一個根本不
         // 存在的鍵的指令——面板頂上從此寫着「改了還没存」，而其實什麽都不用存。
         // 2026-09-24 拍圖看出來的。
+        match sheet.declared.contains_key(&path) {
+            true => sheet.edits.insert(path, Change::Drop),
+            false => sheet.edits.remove(&path),
+        };
+    }
+
+    // ---- The flavour's page (2026-11-02) ---------------------------------
+
+    fn setting(path: &str) -> &'static Setting {
+        SETTINGS.iter().find(|s| s.path() == path).expect("a row the panel has")
+    }
+
+    /// The level in force, as the panel shows it (unsaved edits count).
+    pub fn flavor_level(&self) -> FlavorLevel {
+        let shown = self.shown(Self::setting("keys.flavor"));
+        FlavorLevel::parse(&unwritten(&shown.value)).unwrap_or_default()
+    }
+
+    /// The keymap in force, as the panel shows it.
+    pub fn flavor_keymap(&self) -> KeyPreset {
+        let shown = self.shown(Self::setting("keys.preset"));
+        KeyPreset::parse(&unwritten(&shown.value)).unwrap_or_default()
+    }
+
+    /// The keymap an item is shown for: the one in force when it applies
+    /// there, else its own.
+    pub fn item_keymap(&self, item: FlavorItem) -> KeyPreset {
+        let now = self.flavor_keymap();
+        let keymaps = item.info().keymaps;
+        match keymaps.contains(&now) {
+            true => now,
+            false => keymaps.first().copied().unwrap_or(now),
+        }
+    }
+
+    fn item_path(item: FlavorItem) -> String {
+        format!("keys.flavor_items.{}", item.id())
+    }
+
+    /// What the level alone makes of an item.
+    pub fn item_by_level(&self, item: FlavorItem) -> bool {
+        Flavor { level: self.flavor_level(), items: Default::default() }.on(item, self.item_keymap(item))
+    }
+
+    fn said_bool(raw: Option<String>) -> Option<bool> {
+        raw.and_then(|v| v.trim().parse::<bool>().ok())
+    }
+
+    /// The three layers of an item: the level's answer, then each file's.
+    pub fn item_layers(&self, item: FlavorItem) -> [(Layer, Option<bool>); 3] {
+        let path = Self::item_path(item);
+        [
+            (Layer::Factory, Some(self.item_by_level(item))),
+            (Layer::Global, Self::said_bool(self.global.says(&path))),
+            (Layer::Local, Self::said_bool(self.local.says(&path))),
+        ]
+    }
+
+    /// An item as it is now, and where that comes from. A name in either
+    /// file beats the level, wherever the level is set.
+    pub fn item_shown(&self, item: FlavorItem) -> (bool, ItemFrom) {
+        let [(_, level), (_, global), (_, local)] = self.item_layers(item);
+        match (local, global) {
+            (Some(on), _) => (on, ItemFrom::Layer(Layer::Local)),
+            (None, Some(on)) => (on, ItemFrom::Layer(Layer::Global)),
+            (None, None) => (level.unwrap_or(false), ItemFrom::Level),
+        }
+    }
+
+    /// What the item would be without the sheet being edited.
+    fn item_below(&self, item: FlavorItem) -> bool {
+        let path = Self::item_path(item);
+        match self.into {
+            Which::Global => self.item_by_level(item),
+            Which::Local => Self::said_bool(self.global.says(&path)).unwrap_or_else(|| self.item_by_level(item)),
+        }
+    }
+
+    /// **The keys of an item a binding has taken**, in `[keys.normal]` (or
+    /// `[keys.insert]`) of either file: that line wins over the item.
+    pub fn item_taken(&self, item: FlavorItem) -> Vec<&'static str> {
+        let table = match item.info().insert {
+            true => "keys.insert.",
+            false => "keys.normal.",
+        };
+        let written = |k: &str| yumete_cjk::actions::written(k);
+        item.keys_under(self.item_keymap(item))
+            .iter()
+            .copied()
+            .filter(|key| {
+                [&self.global, &self.local].iter().any(|sheet| {
+                    sheet.declared.keys().any(|path| {
+                        path.strip_prefix(table)
+                            .is_some_and(|bound| written(bound.trim_matches('"')) == written(key))
+                    })
+                })
+            })
+            .collect()
+    }
+
+    /// The page's rows, each with the heading that starts at it: the level,
+    /// then this keymap's basic items, its full items, and the other
+    /// keymap's.
+    pub fn flavor_rows(&self) -> Vec<(Option<FlavorSection>, FlavorRow)> {
+        let keymap = self.flavor_keymap();
+        let mut rows = vec![(None, FlavorRow::Level)];
+        let mut push = |section: FlavorSection, items: Vec<FlavorItem>| {
+            for (n, item) in items.into_iter().enumerate() {
+                rows.push(((n == 0).then_some(section), FlavorRow::Item(item)));
+            }
+        };
+        let here = |level: FlavorLevel| -> Vec<FlavorItem> {
+            FlavorItem::ALL
+                .iter()
+                .copied()
+                .filter(|i| i.info().keymaps.contains(&keymap) && i.info().level == level)
+                .collect()
+        };
+        push(FlavorSection::Basic, here(FlavorLevel::Basic));
+        push(FlavorSection::Full, here(FlavorLevel::Full));
+        for other in KeyPreset::ALL.into_iter().filter(|k| *k != keymap) {
+            let items: Vec<FlavorItem> = FlavorItem::ALL
+                .iter()
+                .copied()
+                .filter(|i| !i.info().keymaps.contains(&keymap) && i.info().keymaps.contains(&other))
+                .collect();
+            push(FlavorSection::Other(other), items);
+        }
+        rows
+    }
+
+    /// How many of this keymap's items are on, of how many; and how many
+    /// are written by name in either file.
+    pub fn flavor_counts(&self) -> (usize, usize, usize) {
+        let keymap = self.flavor_keymap();
+        let here: Vec<FlavorItem> =
+            FlavorItem::ALL.iter().copied().filter(|i| i.info().keymaps.contains(&keymap)).collect();
+        let on = here.iter().filter(|i| self.item_shown(**i).0).count();
+        let named = FlavorItem::ALL
+            .iter()
+            .filter(|i| self.item_shown(**i).1 != ItemFrom::Level)
+            .count();
+        (on, here.len(), named)
+    }
+
+    /// The page's row the cursor is on.
+    pub fn flavor_here(&self) -> Option<FlavorRow> {
+        let at = self.flavor_page?;
+        self.flavor_rows().get(at).map(|(_, row)| *row)
+    }
+
+    /// Go in (`l`, Space, Enter, `i` on the entry row).
+    pub fn open_flavor_page(&mut self) {
+        self.typing = None;
+        self.flavor_page = Some(0);
+    }
+
+    /// Come back to the entry row (`h`, Esc).
+    pub fn close_flavor_page(&mut self) {
+        self.flavor_page = None;
+    }
+
+    /// `j` / `k` on the page.
+    pub fn flavor_step(&mut self, down: bool) {
+        let many = self.flavor_rows().len();
+        if let Some(at) = self.flavor_page.as_mut() {
+            *at = match down {
+                true => (*at + 1).min(many.saturating_sub(1)),
+                false => at.saturating_sub(1),
+            };
+        }
+    }
+
+    /// Space, Enter, `i`: the level moves on, an item flips. **Flipped to
+    /// what the layers below give, the line goes from the file**, so the
+    /// item follows the level again and a level change later moves it.
+    pub fn flavor_press(&mut self) {
+        match self.flavor_here() {
+            Some(FlavorRow::Level) => {
+                let level = Self::setting("keys.flavor");
+                let now = unwritten(&self.mine_now(level));
+                let at = FlavorLevel::NAMES.iter().position(|n| *n == now).unwrap_or(0);
+                let next = FlavorLevel::NAMES[(at + 1) % FlavorLevel::NAMES.len()];
+                self.settle(level, Change::Text(next.to_string()));
+            }
+            Some(FlavorRow::Item(item)) => {
+                let path = Self::item_path(item);
+                let now = Self::said_bool(self.sheet().says(&path)).unwrap_or_else(|| self.item_below(item));
+                let want = !now;
+                let below = self.item_below(item);
+                let declared = Self::said_bool(self.sheet().declared.get(&path).cloned());
+                let sheet = self.sheet_mut();
+                match (want == below, declared) {
+                    (true, Some(_)) => {
+                        sheet.edits.insert(path, Change::Drop);
+                    }
+                    (true, None) => {
+                        sheet.edits.remove(&path);
+                    }
+                    (false, Some(was)) if was == want => {
+                        sheet.edits.remove(&path);
+                    }
+                    (false, _) => {
+                        sheet.edits.insert(path, Change::Tick(want));
+                    }
+                }
+            }
+            None => {}
+        }
+    }
+
+    /// `d` on the page: the item follows the level again (the level row,
+    /// as `d` on its own row).
+    pub fn flavor_drop(&mut self) {
+        let path = match self.flavor_here() {
+            Some(FlavorRow::Level) => "keys.flavor".to_string(),
+            Some(FlavorRow::Item(item)) => Self::item_path(item),
+            None => return,
+        };
+        let sheet = self.sheet_mut();
         match sheet.declared.contains_key(&path) {
             true => sheet.edits.insert(path, Change::Drop),
             false => sheet.edits.remove(&path),
@@ -1123,5 +1388,65 @@ mod tests {
         assert!(known("editor", "tab_width"), "還没輪到的");
         assert!(known("editor", "screenshot"), "有理由不進面板的");
         assert!(!known("editor", "nosuchkey"), "真不認得的");
+    }
+
+    /// **The flavour's page** (2026-11-02): a tick written into
+    /// `[keys.flavor_items]`, flipped back to what the level gives and the
+    /// line goes, and a binding of one of its keys is said.
+    #[test]
+    fn the_flavor_page_writes_items_by_name_and_takes_them_back() {
+        use yumete_cjk::FlavorItem;
+        let dir = std::env::temp_dir().join(format!("yumete-set-flavor-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[keys]\npreset = \"helix\"\n\n[keys.normal]\n\"A-j\" = \"page_down\"\n").unwrap();
+
+        let mut p = Panel::open(Some(path.clone()), None);
+        p.pane = Pane::Settings;
+        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Keys).unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "flavor_items").unwrap();
+        p.press();
+        assert_eq!(p.flavor_page, Some(0), "Space on the row goes in");
+        assert_eq!(p.flavor_here(), Some(FlavorRow::Level));
+        let at = |p: &Panel, item: FlavorItem| {
+            p.flavor_rows().iter().position(|(_, r)| *r == FlavorRow::Item(item)).unwrap()
+        };
+
+        // Off by name: a basic item at the basic level.
+        p.flavor_page = Some(at(&p, FlavorItem::Tables));
+        assert_eq!(p.item_shown(FlavorItem::Tables), (true, ItemFrom::Level));
+        p.flavor_press();
+        assert_eq!(p.item_shown(FlavorItem::Tables), (false, ItemFrom::Layer(Layer::Global)));
+        // A binding of `A-j` has taken one of `move_lines`'s keys.
+        assert_eq!(p.item_taken(FlavorItem::MoveLines), vec!["A-j"]);
+        p.save().expect("saved");
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(after.contains("[keys.flavor_items]") && after.contains("tables = false"), "{after}");
+
+        // Flipped back to what the level gives: the line goes, and the
+        // table with it.
+        let mut p = Panel::open(Some(path.clone()), None);
+        p.flavor_page = Some(at(&p, FlavorItem::Tables));
+        p.flavor_press();
+        assert_eq!(p.item_shown(FlavorItem::Tables), (true, ItemFrom::Level));
+        p.save().expect("saved");
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert!(!after.contains("flavor_items"), "{after}");
+        assert!(after.contains("\"A-j\" = \"page_down\""), "the binding stays: {after}");
+
+        // A full item at the basic level: on by name, then the level moves
+        // to full and the line is only the level's own answer; `d` drops it.
+        let mut p = Panel::open(Some(path.clone()), None);
+        p.flavor_page = Some(at(&p, FlavorItem::EscCollapses));
+        p.flavor_press();
+        assert_eq!(p.item_shown(FlavorItem::EscCollapses), (true, ItemFrom::Layer(Layer::Global)));
+        p.flavor_page = Some(0);
+        p.flavor_press();
+        assert_eq!(p.flavor_level(), yumete_cjk::FlavorLevel::Full);
+        p.flavor_page = Some(at(&p, FlavorItem::EscCollapses));
+        p.flavor_drop();
+        assert_eq!(p.item_shown(FlavorItem::EscCollapses), (true, ItemFrom::Level));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

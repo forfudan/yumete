@@ -22,7 +22,7 @@ use ratatui::style::Modifier;
 use ratatui::widgets::Clear;
 use ratatui::Frame;
 
-use yumete_config::panel::{Layer, Pane, Panel};
+use yumete_config::panel::{FlavorRow, FlavorSection, ItemFrom, Layer, Pane, Panel};
 use yumete_config::settings_ui::{Kind, Setting, GROUPS};
 use yumete_config::Config;
 use yumete_core::input::Key;
@@ -59,8 +59,18 @@ fn fold(text: &str, wide: usize) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
     let mut line = String::new();
     let mut at = 0usize;
+    // Punctuation that may not open a line (禁則): it hangs at the end of
+    // the line before instead (2026-11-02, found in review: a hint wrapped
+    // with 「，如」 at a line's start).
+    let closes = |g: &str| matches!(g, "，" | "。" | "、" | "；" | "：" | "！" | "？" | "）" | "」" | "』" | "》" | "〉" | "】" | "," | "." | ";" | ":" | ")");
     for g in yumete_cjk::graphemes(text) {
         let w = yumete_cjk::grapheme_width(g).max(1);
+        if at + w > wide && closes(g) && !line.is_empty() {
+            line.push_str(g);
+            rows.push(std::mem::take(&mut line));
+            at = 0;
+            continue;
+        }
         if at + w > wide {
             match line.rfind(' ').filter(|i| *i * 4 >= wide * 3) {
                 Some(cut) => {
@@ -123,7 +133,7 @@ impl Columns {
         // 名字和值之間至少空兩格，不然長名字和值黏在一起。
         let want_name = widest(&mut rows.iter().map(|s| said(s.label))) + 2;
         let want_value =
-            widest(&mut rows.iter().map(|s| drawn(s, &panel.shown(s).value)));
+            widest(&mut rows.iter().map(|s| row_value(panel, s, &panel.shown(s).value)));
         let name_wide = match want_name + want_value <= room {
             // 兩欄都擺得下：名字就是它要的那麽寬，剩下的全是值的。
             true => want_name,
@@ -168,6 +178,21 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         }
         return true;
     }
+    // **The flavour's page** (2026-11-02): its own rows, the panel's keys.
+    if panel.flavor_page.is_some() {
+        match key {
+            Key::Esc | Key::Char('h') | Key::Left => panel.close_flavor_page(),
+            Key::Char('j') | Key::Down => panel.flavor_step(true),
+            Key::Char('k') | Key::Up => panel.flavor_step(false),
+            Key::Enter | Key::Char(' ') | Key::Char('i') | Key::Char('c') => panel.flavor_press(),
+            Key::Char('d') => panel.flavor_drop(),
+            Key::Tab => panel.flip_into(),
+            Key::Char('g') => panel.flavor_page = Some(0),
+            Key::Char('G') => panel.flavor_page = Some(panel.flavor_rows().len().saturating_sub(1)),
+            _ => {}
+        }
+        return true;
+    }
     match key {
         // **`Esc` 退一步，走是 `:q`**（2026-10-09 作者報的：「a defensive esc to the
         // normal mode will accidently quit the TUI」）。這扇面板從前是全編輯器唯一一個
@@ -190,7 +215,12 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         Key::Char('j') | Key::Down => panel.step(true),
         Key::Char('k') | Key::Up => panel.step(false),
         Key::Char('h') | Key::Left => panel.across(false),
-        Key::Char('l') | Key::Right => panel.across(true),
+        // `l` goes into the flavour's page from its row, as it goes into a
+        // group from the groups.
+        Key::Char('l') | Key::Right => match (panel.pane, panel.here().map(|s| s.kind)) {
+            (Pane::Settings, Some(Kind::Page)) => panel.open_flavor_page(),
+            _ => panel.across(true),
+        },
         // **`Enter` 改這一項**，撥的撥、打字的打字（2026-10-09 作者定，見
         // `Panel::change_here`）。左欄上它照舊是「進到右邊那一欄」。
         Key::Enter => match panel.pane {
@@ -207,10 +237,15 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         Key::Char('i') => panel.change_here(),
         // **`c` starts from empty** (2026-10-31), as vim's `cc`: `i` keeps the
         // value and adds to it, so 16 and then 12 read 1612.
+        // A tick or a choice has nothing to type (2026-11-02, found in
+        // review): `c` there changes it as `i` does, rather than doing
+        // nothing and leaving the letters typed after it to run as keys.
         Key::Char('c') => {
             panel.begin_typing();
-            if let Some(typing) = panel.typing.as_mut() {
-                typing.clear();
+            match panel.typing.as_mut() {
+                Some(typing) => typing.clear(),
+                None if panel.pane == Pane::Settings => panel.change_here(),
+                None => {}
             }
         }
         Key::Char('d') => panel.drop_here(),
@@ -439,7 +474,49 @@ fn drawn(setting: &Setting, value: &str) -> String {
         // Warning: **`trim_matches` 不是 toml 轉義的反函數**（2026-10-01，見
         // `yumete_config::panel::unwritten`）——`"a\"b"` 畫出來是 `a\"b`。
         Kind::Count { .. } | Kind::Text => yumete_config::panel::unwritten(value),
+        // The page's own row draws its counts (see [`row_value`]).
+        Kind::Page => String::new(),
     }
+}
+
+/// A row's value as the list draws it: a page's row says how many items
+/// are on, and that it opens.
+fn row_value(panel: &Panel, setting: &Setting, value: &str) -> String {
+    match setting.kind {
+        Kind::Page => {
+            let (on, of, _) = panel.flavor_counts();
+            format!("{}  ›", say!("settings.flavor-items.count", on, of))
+        }
+        _ => drawn(setting, value),
+    }
+}
+
+/// An item's keys under a keymap, as the page writes them: `gz`, `]m`,
+/// `C-w e`, `空格 t`.
+fn item_keys(keys: &[&str]) -> String {
+    keys.iter()
+        .map(|key| {
+            let internal = yumete_core::actions::written(key);
+            let mut presses: Vec<String> = Vec::new();
+            let mut chars = internal.chars();
+            while let Some(c) = chars.next() {
+                let one = match c {
+                    yumete_core::actions::ALT => format!("{c}{}", chars.next().map(String::from).unwrap_or_default()),
+                    c => c.to_string(),
+                };
+                presses.push(yumete_core::actions::spell(&one).trim().to_string());
+            }
+            // A one-character group key runs into what follows (`gz`, `]m`);
+            // a named or held one is set apart (`C-w e`, `空格 t`).
+            match presses.split_first() {
+                Some((first, rest)) if first.chars().count() == 1 && !rest.is_empty() => {
+                    format!("{first}{}", rest.join(""))
+                }
+                _ => presses.join(" "),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// **畫一頁。**
@@ -478,7 +555,10 @@ pub fn draw(
     // 「改的是全局還是本項目」擠在右邊路徑的前面——那是這扇面板最要緊的一格狀態，
     // 而它和路徑同一個顏色、同一個位置。原話：「左上標題改爲『設置 [{0}]』……用金字
     // 會更醒目。右側的文件名用正常顔色」。
-    let title = format!("{} [{}]", say!("settings.title"), said(panel.into.layer().label()));
+    let mut title = format!("{} [{}]", say!("settings.title"), said(panel.into.layer().label()));
+    if panel.flavor_page.is_some() {
+        title.push_str(&format!(" › {}", say!("settings.keys.flavor-items")));
+    }
     put_text(buf, area.x + 1, area.y, right, &title, head);
     let sheet = panel.sheet();
     let where_to = match (&sheet.path, sheet.there) {
@@ -542,9 +622,10 @@ pub fn draw(
     let note = note_for(panel);
     // While a value is typed only Enter, Esc and Backspace mean anything
     // (2026-10-31: the row went on listing the other keys).
-    let keys = match panel.typing.is_some() {
-        true => say!("settings.keys-typing"),
-        false => say!("settings.keys"),
+    let keys = match (panel.typing.is_some(), panel.flavor_page.is_some()) {
+        (true, _) => say!("settings.keys-typing"),
+        (false, true) => say!("settings.keys-flavor-page"),
+        (false, false) => say!("settings.keys"),
     };
     // **說明和三層同一塊**（2026-10-13 報的）。原話：「描述欄可以合并到『出厂』『全
     // 局』『本项目』這個框中……这样的话用户的閲讀顺序是符合的：描述+现在的状态和来
@@ -641,6 +722,20 @@ pub fn draw(
     // ---- 右邊：這一組的那些項 ----------------------------------------------
     let mut caret = None;
     let from = col.name;
+    if panel.flavor_page.is_some() {
+        draw_flavor_page(buf, panel, &ink, ground, from, right, area.y + 2, list_ends);
+        if block_high > 0 {
+            draw_flavor_block(buf, panel, &ink, ground, split + 3, right, note_at, &note_rows, layers_at, foot);
+        }
+        for (i, row) in keys_rows.iter().enumerate() {
+            let y = keys_at + i as u16;
+            if y >= bottom {
+                break;
+            }
+            put_text(buf, area.x + 2, y, right, row, text);
+        }
+        return None;
+    }
     if rows.is_empty() {
         put_text(buf, from, area.y + 2, right, &say!("settings.group.not-yet"), quiet);
     }
@@ -704,7 +799,7 @@ pub fn draw(
         // 值 —— 正在打字的那一項畫的是框裏的字，不是算出來的值。
         let value = match (here, panel.typing.as_ref()) {
             (true, Some(typed)) => typed.clone(),
-            _ => drawn(setting, &shown.value),
+            _ => row_value(panel, setting, &shown.value),
         };
         // **底色說「在這一行」，反白的那一格說「動的是它」**（2026-10-09）。兩個記號
         // 分做兩件事，而且兩個樣式這個檔裏本來就有——表格那一族的原話是「光標那一列
@@ -740,7 +835,9 @@ pub fn draw(
     // 上寫字，於是右邊空着一大片而值欄在第 18 格上被截；而且它只說得出贏的那一層和
     // 被它蓋掉的那一個。搬下來之後三層各佔一行，「設了什麼」和「沒設」一眼分得開。
     if block_high > 0 {
-        if let (Pane::Settings, Some(setting)) = (panel.pane, panel.here()) {
+        if let (Pane::Settings, Some(setting)) =
+            (panel.pane, panel.here().filter(|s| s.kind != Kind::Page))
+        {
             let shown = panel.shown(setting);
             for (i, (layer, said_value)) in panel.layers(setting).iter().enumerate() {
                 let y = layers_at + i as u16;
@@ -804,8 +901,230 @@ pub fn draw(
     caret
 }
 
+/// The level row's own hint, shown on the page as on the list.
+const SETTINGS_FLAVOR_HINT: &str = "settings.keys.flavor.hint";
+
+/// One line of the page: a heading, or a row with its index.
+enum PageLine {
+    Heading(String),
+    Row(usize, FlavorRow),
+}
+
+/// **The flavour's page, in the right half** (2026-11-02): the level,
+/// then each item with its tick, its keys, its name, and on the right
+/// where its state comes from or which binding took its keys.
+#[allow(clippy::too_many_arguments)]
+fn draw_flavor_page(
+    buf: &mut ratatui::buffer::Buffer,
+    panel: &Panel,
+    ink: &crate::theme::Palette,
+    ground: ratatui::style::Style,
+    from: u16,
+    right: u16,
+    top: u16,
+    ends: u16,
+) {
+    let text = ground.fg(ink.text());
+    let quiet = ground.fg(ink.quiet());
+    let keymap = panel.flavor_keymap();
+    let mut lines: Vec<PageLine> = Vec::new();
+    for (i, (section, row)) in panel.flavor_rows().into_iter().enumerate() {
+        if let Some(section) = section {
+            lines.push(PageLine::Heading(match section {
+                FlavorSection::Basic => say!("keys.flavor.basic"),
+                FlavorSection::Full => say!("keys.flavor.full"),
+                FlavorSection::Other(other) => say!("settings.flavor.only-under", other.name()),
+            }));
+        }
+        lines.push(PageLine::Row(i, row));
+    }
+    let here = panel.flavor_page.unwrap_or(0);
+    let at = lines.iter().position(|l| matches!(l, PageLine::Row(i, _) if *i == here)).unwrap_or(0);
+    let room = ends.saturating_sub(top) as usize;
+    let first = match room {
+        0 => 0,
+        _ => at.saturating_sub(room - 1),
+    };
+    // The keys column is as wide as the widest keys, at most 14.
+    let keys_of = |item: yumete_cjk::FlavorItem| item_keys(item.keys_under(panel.item_keymap(item)));
+    let keys_wide = yumete_cjk::FlavorItem::ALL
+        .iter()
+        .map(|i| yumete_cjk::str_width(&keys_of(*i)))
+        .max()
+        .unwrap_or(0)
+        .min(14) as u16;
+    for (n, line) in lines.iter().enumerate().skip(first) {
+        let y = top + (n - first) as u16;
+        if y >= ends {
+            break;
+        }
+        match line {
+            PageLine::Heading(name) => {
+                put_text(buf, from, y, right, name, quiet);
+            }
+            PageLine::Row(i, row) => {
+                let on_it = *i == here;
+                let band = match on_it {
+                    true => ink.ground(yumete_config::rung::HEAD),
+                    false => ground,
+                };
+                if on_it {
+                    for x in from..right {
+                        if let Some(cell) = buf.cell_mut((x, y)) {
+                            cell.set_symbol(" ").set_style(band);
+                        }
+                    }
+                }
+                let lit = |style: ratatui::style::Style| match (on_it, band.bg) {
+                    (true, Some(bg)) => style.bg(bg),
+                    _ => style,
+                };
+                match row {
+                    FlavorRow::Level => {
+                        let level = panel.flavor_level();
+                        let name = format!("{} ", say!("settings.keys.flavor"));
+                        put_text(buf, from, y, right, &name, lit(text));
+                        let value = format!("[{}]", match level {
+                            yumete_cjk::FlavorLevel::Off => say!("keys.flavor.off"),
+                            yumete_cjk::FlavorLevel::Basic => say!("keys.flavor.basic"),
+                            yumete_cjk::FlavorLevel::Full => say!("keys.flavor.full"),
+                        });
+                        let x = from + yumete_cjk::str_width(&name) as u16;
+                        let style = match on_it {
+                            true => band.fg(ink.gold()).add_modifier(Modifier::REVERSED),
+                            false => text,
+                        };
+                        put_text(buf, x, y, right, &value, style);
+                        let (on, of, named) = panel.flavor_counts();
+                        let mut sum = format!("{}  {}", keymap.name(), say!("settings.flavor-items.count", on, of));
+                        if named > 0 {
+                            sum.push_str(&format!("，{}", say!("settings.flavor-items.named", named)));
+                        }
+                        let x = x + yumete_cjk::str_width(&value) as u16 + 3;
+                        put_text(buf, x, y, right, &sum, lit(quiet));
+                    }
+                    FlavorRow::Item(item) => {
+                        let (on, source) = panel.item_shown(*item);
+                        let tick = match on {
+                            true => "[x]",
+                            false => "[ ]",
+                        };
+                        let other = !item.info().keymaps.contains(&keymap);
+                        let body = match other {
+                            true => lit(quiet),
+                            false => lit(text),
+                        };
+                        let tick_style = match on_it {
+                            true => band.fg(ink.gold()).add_modifier(Modifier::REVERSED),
+                            false => body,
+                        };
+                        put_text(buf, from + 1, y, right, tick, tick_style);
+                        let keys = crate::elide(&keys_of(*item), keys_wide as usize);
+                        put_text(buf, from + 5, y, right, &keys, body);
+                        let name_at = from + 5 + keys_wide + 2;
+                        // The right end: who set it, or who took its keys.
+                        let taken = panel.item_taken(*item);
+                        let (note, note_style) = match (taken.is_empty(), source) {
+                            (false, _) => (
+                                say!("settings.flavor.taken", item_keys(&taken), match item.info().insert {
+                                    true => "[keys.insert]",
+                                    false => "[keys.normal]",
+                                }),
+                                lit(ground.fg(ink.mark())),
+                            ),
+                            (true, ItemFrom::Layer(layer)) => (said(layer.label()), lit(ground.fg(ink.azure()))),
+                            (true, ItemFrom::Level) => (String::new(), body),
+                        };
+                        let note_wide = yumete_cjk::str_width(&note) as u16;
+                        let note_at = right.saturating_sub(note_wide + 1);
+                        let name = crate::elide(
+                            &said(item.info().label),
+                            note_at.saturating_sub(name_at + 1) as usize,
+                        );
+                        put_text(buf, name_at, y, note_at, &name, body);
+                        if !note.is_empty() && note_at > name_at {
+                            put_text(buf, note_at, y, right, &note, note_style);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The page's note and layers: what the item does and what its key does
+/// with it off, then the level's answer and each file's.
+#[allow(clippy::too_many_arguments)]
+fn draw_flavor_block(
+    buf: &mut ratatui::buffer::Buffer,
+    panel: &Panel,
+    ink: &crate::theme::Palette,
+    ground: ratatui::style::Style,
+    x: u16,
+    right: u16,
+    note_at: u16,
+    note_rows: &[String],
+    layers_at: u16,
+    foot: u16,
+) {
+    for (i, row) in note_rows.iter().enumerate() {
+        let y = note_at + i as u16;
+        if y >= foot {
+            break;
+        }
+        put_text(buf, x, y, right, row, ground.fg(ink.text()));
+    }
+    let Some(FlavorRow::Item(item)) = panel.flavor_here() else { return };
+    let (_, from) = panel.item_shown(item);
+    for (i, (layer, value)) in panel.item_layers(item).iter().enumerate() {
+        let y = layers_at + i as u16;
+        if y >= foot {
+            break;
+        }
+        let name = match layer {
+            Layer::Factory => say!("settings.layer.level"),
+            other => said(other.label()),
+        };
+        let shown = match value {
+            Some(true) => "[x]".to_string(),
+            Some(false) => "[ ]".to_string(),
+            None => say!("settings.layer.unset"),
+        };
+        let pad = 8usize.saturating_sub(yumete_cjk::str_width(&name));
+        let mut line = format!("{name}{}{shown}", " ".repeat(pad));
+        let in_force = match from {
+            ItemFrom::Level => *layer == Layer::Factory,
+            ItemFrom::Layer(l) => *layer == l,
+        };
+        if in_force {
+            line.push_str(&format!("   {}", say!("settings.layer.in-force")));
+        }
+        let style = match (value.is_some(), in_force) {
+            (_, true) => ground.fg(ink.gold()),
+            (true, _) => ground.fg(ink.azure()),
+            (false, _) => ground.fg(ink.quiet()),
+        };
+        put_text(buf, x, y, right, &line, style);
+    }
+}
+
 /// 底下那一句說明：這一項是幹什麽的。
 fn note_for(panel: &Panel) -> String {
+    // A hint marks keys and names with backticks, which the generated
+    // reference draws as code; here they would show as themselves.
+    note_text(panel).replace('`', "")
+}
+
+fn note_text(panel: &Panel) -> String {
+    match panel.flavor_here() {
+        Some(FlavorRow::Level) => return said(SETTINGS_FLAVOR_HINT),
+        Some(FlavorRow::Item(item)) => {
+            let english = yumete_core::messages::language() == yumete_core::messages::Language::English;
+            let gap = if english { "  " } else { "　" };
+            return format!("{}{gap}{}", item.id(), said(item.info().hint));
+        }
+        None => {}
+    }
     match (panel.pane, panel.here()) {
         (Pane::Settings, Some(setting)) => {
             let mut note = said(setting.hint);
@@ -1186,5 +1505,47 @@ mod tests {
         // Esc 退出打字，而不是關掉面板。
         assert!(press(&mut p, Key::Esc), "還開着");
         assert!(p.typing.is_none());
+    }
+
+    /// **`c` on a tick changes it** (2026-11-02, found in review): it used
+    /// to do nothing, and the letters typed after it ran as the panel's keys.
+    #[test]
+    fn c_on_a_tick_changes_it_as_i_does() {
+        let mut p = Panel::open(None, None);
+        p.across(true);
+        let tick = p.rows().iter().position(|s| matches!(s.kind, Kind::Tick)).unwrap();
+        p.row = tick;
+        let setting = p.here().unwrap();
+        let before = p.shown(setting).value;
+        press(&mut p, Key::Char('c'));
+        assert!(p.typing.is_none(), "nothing to type on a tick");
+        assert_ne!(p.shown(setting).value, before, "it changed");
+    }
+
+    /// **No line opens on a comma** (禁則, 2026-11-02): it hangs at the end
+    /// of the line before.
+    #[test]
+    fn a_folded_line_never_opens_on_punctuation() {
+        for wide in 4..30 {
+            for row in fold("在 helix/vim 键位之上的改动。基本：看得见的改动，如菜单、新键；完整：再加。", wide) {
+                assert!(!row.starts_with(['，', '。', '、', '；', '：']), "{wide}: {row:?}");
+            }
+        }
+    }
+
+    /// **`l` on the flavour's row opens its page, and `h` comes back.**
+    #[test]
+    fn the_flavor_page_opens_and_closes_from_its_row() {
+        let mut p = Panel::open(None, None);
+        p.group = GROUPS.iter().position(|g| g.group == yumete_config::settings_ui::Group::Keys).unwrap();
+        p.across(true);
+        p.row = p.rows().iter().position(|s| s.kind == Kind::Page).unwrap();
+        press(&mut p, Key::Char('l'));
+        assert_eq!(p.flavor_page, Some(0));
+        let page = shot(&p, 110, 34);
+        assert!(page.contains(&said("keys.flavor.item.tables")), "{page}");
+        press(&mut p, Key::Char('h'));
+        assert_eq!(p.flavor_page, None);
+        assert_eq!(p.here().map(|s| s.kind), Some(Kind::Page), "back on its row");
     }
 }

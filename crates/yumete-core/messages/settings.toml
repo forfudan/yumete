@@ -754,6 +754,34 @@ zhs = "竖排时一纵写几个字。散文舒服的上限在 32 字前后"
 en = "characters to a column when set down; text reads well up to about 32"
 
 [[message]]
+# 設置面板：開着幾項（草稿）
+key = "settings.flavor-items.count"
+zht = "{0}/{1} 項開着"
+zhs = "{0}/{1} 项开着"
+en = "{0} of {1} on"
+
+[[message]]
+# 設置面板：單獨設過幾項（草稿）
+key = "settings.flavor-items.named"
+zht = "{0} 項單獨設過"
+zhs = "{0} 项单独设过"
+en = "{0} set by name"
+
+[[message]]
+# 設置面板：另一套鍵位的那幾項（草稿）
+key = "settings.flavor.only-under"
+zht = "只在 {0} 下"
+zhs = "只在 {0} 下"
+en = "only under {0}"
+
+[[message]]
+# 設置面板：這一項的鍵被配置佔了（草稿）
+key = "settings.flavor.taken"
+zht = "{0} 被 {1} 佔了"
+zhs = "{0} 被 {1} 占了"
+en = "{0} taken by {1}"
+
+[[message]]
 # 設置面板：組——配色
 key = "settings.group.colours"
 zht = "配色"
@@ -880,6 +908,13 @@ zhs = "hl 换栏, jk 上下, ␣ 切换, i 改, c 重打, d 撤掉这一层, e �
 en = "hl left/right, jk move, space toggle, i edit, c retype, d drop, e open it, Tab which file, :w save, :q leave"
 
 [[message]]
+# 設置面板：風味各項那一頁的按鍵（草稿）
+key = "settings.keys-flavor-page"
+zht = "jk 上下, ␣ 切換, d 跟回檔位, h 回上一層, Tab 切換全局/本地設置, :w 存, :q 退"
+zhs = "jk 上下, ␣ 切换, d 跟回档位, h 回上一层, Tab 切换全局/本地设置, :w 存, :q 退"
+en = "jk move, space toggle, d follow the level, h back, Tab which file, :w save, :q leave"
+
+[[message]]
 # 設置面板正在改一項的值時的鍵位行
 key = "settings.keys-typing"
 zht = "Enter 確定, Esc 放棄, Backspace 刪字"
@@ -892,6 +927,20 @@ key = "settings.keys.flavor"
 zht = "Yumete 鍵位風味"
 zhs = "Yumete 键位风味"
 en = "Yumete keymap flavour"
+
+[[message]]
+# 設置面板：風味各項那一行（草稿）
+key = "settings.keys.flavor-items"
+zht = "風味各項"
+zhs = "风味各项"
+en = "flavour items"
+
+[[message]]
+# 設置面板：風味各項那一行的說明（草稿）
+key = "settings.keys.flavor-items.hint"
+zht = "Yumete 風味的每一項，一項一個勾。按 l 或空格進去。"
+zhs = "Yumete 风味的每一项，一项一个勾。按 l 或空格进去。"
+en = "each item of the Yumete flavour, one tick each. l or Space goes in."
 
 [[message]]
 # 設置：Yumete 鍵位風味——一句話（草稿）
@@ -948,6 +997,13 @@ key = "settings.layer.in-force"
 zht = "← 現在用這一層"
 zhs = "← 现在用这一层"
 en = "← in force"
+
+[[message]]
+# 設置面板：三層裏檔位給的那一層（草稿）
+key = "settings.layer.level"
+zht = "檔位"
+zhs = "档位"
+en = "level"
 
 [[message]]
 # 設置面板：從本項目的配置來

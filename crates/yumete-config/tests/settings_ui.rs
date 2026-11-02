@@ -243,7 +243,8 @@ fn a_value_that_is_not_the_factory_one_actually_lands() {
                 continue;
             }
             // 一段自己打的字没有「另一個值」可推——跳過，那一族靠上面那條。
-            Kind::Text => continue,
+            // A page holds rows of its own (`panel.rs` tests the flavour's).
+            Kind::Text | Kind::Page => continue,
         };
         assert_ne!(
             Config::from_toml(&one(setting, &other)),
@@ -312,6 +313,7 @@ fn every_factory_value_parses_as_the_kind_it_says_it_is() {
             Kind::Tick => v.is_bool(),
             Kind::Count { .. } => v.is_integer(),
             Kind::Pick(_) | Kind::PickOr(_) | Kind::Text => v.is_str(),
+            Kind::Page => v.is_table(),
         };
         assert!(
             fits,

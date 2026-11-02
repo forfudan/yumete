@@ -76,6 +76,15 @@ pub struct Said {
 ///
 /// Warning: **不認得的鍵在這裏一併註釋掉**，因為它們和「存盤」是同一件事：面板存完盤
 /// 之後那個檔必須是**讀得進去的**，否則使用者按了保存而設定一條都没生效。
+/// The table `tables` names, one inside the next, if the file has it.
+fn table_at<'a>(doc: &'a mut DocumentMut, tables: &[&str]) -> Option<&'a mut toml_edit::Table> {
+    let mut t = doc.get_mut(tables.first()?)?.as_table_mut()?;
+    for name in &tables[1..] {
+        t = t.get_mut(name)?.as_table_mut()?;
+    }
+    Some(t)
+}
+
 pub fn rewrite(
     text: &str,
     changes: &[(String, Change)],
@@ -85,24 +94,49 @@ pub fn rewrite(
     let mut said = Said::default();
 
     for (path, change) in changes {
-        let Some((table, key)) = path.split_once('.') else {
+        // `表.鍵`, or `表.子表.鍵` for a table inside a table (2026-11-02:
+        // `keys.flavor_items.esc_collapses`).
+        let Some((tables, key)) = path.rsplit_once('.') else {
             return Err(format!("{path} 不是「表.鍵」"));
         };
+        let tables: Vec<&str> = tables.split('.').collect();
         match change {
             Change::Drop => {
-                if let Some(Item::Table(t)) = doc.get_mut(table) {
+                if let Some(t) = table_at(&mut doc, &tables) {
                     t.remove(key);
+                }
+                // A table inside a table that has nothing left goes too: an
+                // empty `[keys.flavor_items]` says nothing.
+                if tables.len() > 1 {
+                    if let Some(Item::Table(top)) = doc.get_mut(tables[0]) {
+                        let empty = matches!(top.get(tables[1]), Some(Item::Table(inner)) if inner.is_empty());
+                        if empty {
+                            top.remove(tables[1]);
+                        }
+                    }
                 }
             }
             _ => {
                 // Warning: **`or_insert` 一張 implicit table 會寫成 `[表]` 一行**，
-                // 而那正是我們要的：檔裏没有 `[editor]` 的時候補一個出來。
+                // 而那正是我們要的：檔裏没有 `[editor]` 的時候補一個出來。一張只為
+                // 裝子表而補出來的外層表是 implicit 的，不另寫一行空的 `[keys]`。
+                let fresh_outer = doc.get(tables[0]).is_none();
                 let entry = doc
-                    .entry(table)
+                    .entry(tables[0])
                     .or_insert_with(|| Item::Table(toml_edit::Table::new()));
-                let Some(t) = entry.as_table_mut() else {
-                    return Err(format!("{table} 不是一張表"));
+                let Some(mut t) = entry.as_table_mut() else {
+                    return Err(format!("{} 不是一張表", tables[0]));
                 };
+                if fresh_outer && tables.len() > 1 {
+                    t.set_implicit(true);
+                }
+                for name in &tables[1..] {
+                    let inner = t.entry(name).or_insert_with(|| Item::Table(toml_edit::Table::new()));
+                    let Some(inner) = inner.as_table_mut() else {
+                        return Err(format!("{name} 不是一張表"));
+                    };
+                    t = inner;
+                }
                 let value: Value = match change {
                     Change::Tick(on) => (*on).into(),
                     Change::Count(n) => (*n).into(),

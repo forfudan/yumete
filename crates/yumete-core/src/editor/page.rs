@@ -591,8 +591,9 @@ impl Editor {
     /// **What the flavour is now** — the level, how many of this keymap's
     /// items are on, and then only the items worth a word: one written by
     /// name in `[keys.flavor_items]`, and one whose keys `[keys.normal]` or
-    /// `[keys.insert]` has taken. Every item is on the settings panel and
-    /// in the generated reference; a status line of 26 cannot be read.
+    /// `[keys.insert]` has taken. Every item is on the settings panel's
+    /// flavour page and in the generated reference; a status line of 28
+    /// cannot be read.
     ///
     /// Warning: **a taken item has to say so**, or the line reads 「`d`/`c` do
     /// not fill the register」 while `d` does something else — the alias
