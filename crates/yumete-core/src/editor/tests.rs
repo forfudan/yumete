@@ -15985,12 +15985,67 @@ fn alt_o_and_alt_i_walk_the_syntax_tree() {
     press(&mut ed, "jjjfx;");
     ed.on_key(Key::Alt('o'));
     assert_eq!(text(&ed), "let x = 1;", "{}", ed.status());
-    // In prose there is no tree, and it is said.
-    let mut ed = typed("那年冬天。\n");
-    ed.on_key(Key::Alt('o'));
-    assert_eq!(text(&ed), "那");
-    assert!(!ed.status().is_empty());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn alt_o_in_prose_climbs_the_writing_units() {
+    // The prose ladder (2026-11-02, 「折中」): from a bare cursor the block,
+    // from a clause or a sentence the rung above; down, sentences.
+    let doc = "## 第一章\n\n那年冬天，山下起了大雪。我们出门时，路已经看不见了。\n\n第二段。\n\n## 第二章\n\n- 甲。\n- 乙。\n";
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    let at = |key: &str| {
+        let mut ed = markdown(doc);
+        press(&mut ed, key);
+        ed
+    };
+    // A bare cursor: the paragraph, then the section, then the file.
+    let mut ed = at("jjf冬;");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "那年冬天，山下起了大雪。我们出门时，路已经看不见了。\n");
+    ed.on_key(Key::Alt('o'));
+    assert!(text(&ed).starts_with("## 第一章") && text(&ed).ends_with("第二段。\n\n"), "{:?}", text(&ed));
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), doc);
+    // `A-i` takes them back.
+    ed.on_key(Key::Alt('i'));
+    ed.on_key(Key::Alt('i'));
+    assert!(text(&ed).starts_with("那年冬天"));
+    // A clause grows to its sentence, a sentence to its block.
+    let mut ed = at("jjf冬;miu");
+    assert_eq!(text(&ed), "那年冬天");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "那年冬天，山下起了大雪。");
+    // The next sentence beside it.
+    ed.on_key(Key::Alt('n'));
+    assert_eq!(text(&ed), "我们出门时，路已经看不见了。");
+    ed.on_key(Key::Alt('p'));
+    assert_eq!(text(&ed), "那年冬天，山下起了大雪。");
+    // Every clause in the sentence.
+    ed.on_key(Key::Alt('I'));
+    assert_eq!(ed.sel.len(), 2);
+    // `x A-I`: every sentence in the paragraph.
+    let mut ed = at("jjx");
+    ed.on_key(Key::Alt('I'));
+    assert_eq!(ed.sel.len(), 2, "{}", text(&ed));
+    // A list: the item first, then the list.
+    let mut ed = at("Gkf乙;");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "- 乙。\n");
+    ed.on_key(Key::Alt('p'));
+    assert_eq!(text(&ed), "- 甲。\n");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "- 甲。\n- 乙。\n");
+    // Plain text: the paragraph, then the file.
+    let mut ed = typed("甲。乙。\n\n丙。\n");
+    press(&mut ed, "gg");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "甲。乙。\n");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "甲。乙。\n\n丙。\n");
 }
 
 #[test]

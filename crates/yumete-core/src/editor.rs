@@ -5657,6 +5657,7 @@ mod docs;
 mod edits;
 mod fences;
 mod tree_select;
+mod prose_tree;
 mod files;
 mod group_commands;
 mod groups;

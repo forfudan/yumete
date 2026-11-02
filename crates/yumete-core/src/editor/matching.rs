@@ -718,9 +718,10 @@ impl Editor {
     ///
     /// 「一段」照 [`Self::paragraph_span`] 的判準：連着的同一種行（都空或都不空）。
     /// 句對象要它，因為一句話的邊界是段落不是行。
-    fn paragraph_here(&self) -> (usize, usize) {
+    /// (The prose ladder asks about places the caret is not on.)
+    pub(super) fn paragraph_at(&self, at: usize) -> (usize, usize) {
         let rope = self.current_buffer().rope();
-        let here = rope.char_to_line(self.sel.head().min(rope.len_chars()));
+        let here = rope.char_to_line(at.min(rope.len_chars()));
         let last = motion::last_line(rope);
         let blank = |line: usize| rope.line(line).to_string().trim().is_empty();
         let same = blank(here);
@@ -743,15 +744,20 @@ impl Editor {
     }
 
     fn sentence_object_span(&self, around: bool) -> motion::Span {
+        self.sentence_span_at(self.sel.head(), around)
+    }
+
+    /// `mi s` / `ma s` around any character.
+    pub(super) fn sentence_span_at(&self, head: usize, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope();
-        let head = self.sel.head().min(rope.len_chars());
+        let head = head.min(rope.len_chars());
         // **一句話的邊界是段落，不是行**（2026-10-10 定，照 vim）。從前這裏取的是
         // `line_chars(rope, line)`，於是一行没有句末標點的時候那一句就在換行處結
         // 束——vim 裏它跑到段落結束（`alpha beta, gamma delta` 換行 `xx` 同一段，
         // `das` 兩行一起没）。中文稿一段常常就是一行，所以這一條在那裏看不出來；
         // 英文草稿換行多就常撞。`scripts/oracle/vim_sweep.py` 的 `dis`/`das` 逐格
         // 對 nvim。
-        let (start, stop) = self.paragraph_here();
+        let (start, stop) = self.paragraph_at(head);
         let chars: Vec<char> = rope.slice(start..stop).chars().collect();
         if chars.is_empty() {
             return motion::Span::Missed;
@@ -857,9 +863,14 @@ impl Editor {
     /// the clause that mark ends, as a full stop belongs to its sentence; with
     /// nothing before it (a paragraph opening on 「), to the one after.
     fn clause_object_span(&self, around: bool) -> motion::Span {
+        self.clause_span_at(self.sel.head(), around)
+    }
+
+    /// `mi u` / `ma u` around any character.
+    pub(super) fn clause_span_at(&self, head: usize, around: bool) -> motion::Span {
         let rope = self.current_buffer().rope();
-        let head = self.sel.head().min(rope.len_chars());
-        let (start, stop) = self.paragraph_here();
+        let head = head.min(rope.len_chars());
+        let (start, stop) = self.paragraph_at(head);
         let chars: Vec<char> = rope.slice(start..stop).chars().collect();
         if chars.is_empty() {
             return motion::Span::Missed;
