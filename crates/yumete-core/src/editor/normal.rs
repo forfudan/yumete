@@ -199,6 +199,7 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::VimSearchPrev, |e, cx| e.acting(true, |e| e.cmd_search_prev(cx)), Key::Char('N')),
     (NormalCmd::CommandMode, Editor::cmd_command_mode, Key::Char(':')),
     (NormalCmd::Suspend, |e, _| e.suspend_request = true, Key::Ctrl('z')),
+    (NormalCmd::FormatSelections, |e, _| e.ask_format(), Key::Char('=')),
     (NormalCmd::MatchMode, Editor::cmd_match_mode, Key::Char('m')),
     (NormalCmd::Replace, Editor::cmd_replace, Key::Char('r')),
     (NormalCmd::SelectRegister, Editor::cmd_select_register, Key::Char('"')),
@@ -354,6 +355,7 @@ pub(super) const HELIX_NORMAL: &[(Key, NormalCmd)] = &[
     (Key::Char('N'), NormalCmd::SearchPrev),
     (Key::Char(':'), NormalCmd::CommandMode),
     (Key::Ctrl('z'), NormalCmd::Suspend),
+    (Key::Char('='), NormalCmd::FormatSelections),
     (Key::Char('m'), NormalCmd::MatchMode),
     (Key::Char('r'), NormalCmd::Replace),
     (Key::Char('"'), NormalCmd::SelectRegister),
@@ -461,6 +463,9 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     (Key::Ctrl('p'), NormalCmd::MoveLineUp, None),
     (Key::Char('_'), NormalCmd::VimGotoFirstNonwhitespace, None),
     (Key::Char('&'), NormalCmd::NoOp, None),
+    // vim's `=` re-indents over a motion, which yumete does not have; helix's
+    // formats through the server (2026-11-02).
+    (Key::Char('='), NormalCmd::NoOp, None),
     (Key::Char('!'), NormalCmd::NoOp, None),
     (Key::Char('q'), NormalCmd::VimRecordMacro, None),
     (Key::Char('@'), NormalCmd::VimReplayMacro, None),

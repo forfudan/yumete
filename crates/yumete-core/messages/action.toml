@@ -583,6 +583,13 @@ en = "follow the link under the cursor"
 find = "鏈接 链接 跟着 跳過去 跳过去 link follow"
 
 [[message]]
+# 命令說明：format_selections，=（草稿）
+key = "action.format-selections"
+zht = "用語言服務器排版選區"
+zhs = "用语言服务器排版选区"
+en = "format the selection with the language server"
+
+[[message]]
 # 命令說明：goto_column（草稿）
 key = "action.goto-column"
 zht = "到這一行的第幾列(用計數)"

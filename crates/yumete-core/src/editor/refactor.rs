@@ -234,6 +234,58 @@ impl Editor {
         self.rename_query.take()
     }
 
+    /// **`=`, helix's `format_selections`**: the language server is asked to
+    /// format the selection, one selection only, as helix asks it.
+    pub(super) fn ask_format(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        if self.sel.is_plural() {
+            self.status = say!("lsp.format-one-selection");
+            return;
+        }
+        let Some((path, ..)) = self.caret_for_the_server() else {
+            self.status = say!("lsp.buffer-unsaved");
+            return;
+        };
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        let point = |at: usize| {
+            let at = at.min(rope.len_chars());
+            let line = rope.char_to_line(at);
+            let text = rope.line(line).to_string();
+            (line, crate::problem::utf16_column(&text, at - rope.line_to_char(line)))
+        };
+        self.format_query = Some((path, point(start), point(end), self.indent_width, self.tab_spaces));
+        self.asked_format_from = Some((self.current_buffer().id(), self.current_buffer().revision()));
+        self.status = say!("lsp.asking-format");
+    }
+
+    pub fn take_format_query(&mut self) -> Option<super::FormatQuery> {
+        self.format_query.take()
+    }
+
+    /// **`=`'s answer**: the edits, made to this file, or why not. An answer
+    /// to a text that has changed since it was asked is dropped.
+    pub fn formatted(&mut self, edits: Vec<TextEdit>, error: Option<String>) {
+        let here = (self.current_buffer().id(), self.current_buffer().revision());
+        if self.asked_format_from.take() != Some(here) {
+            return;
+        }
+        if let Some(why) = error {
+            self.status = say!("lsp.format-refused", why);
+            return;
+        }
+        if edits.is_empty() {
+            self.status = say!("lsp.format-changed-nothing");
+            return;
+        }
+        let Some(path) = self.current_file_path() else { return };
+        let edits: Vec<TextEdit> = edits.into_iter().map(|edit| TextEdit { path: path.clone(), ..edit }).collect();
+        self.apply_workspace_edit(&edits);
+        self.status = say!("lsp.formatted");
+    }
+
     /// **The rename's answer**: the edits, or the server's refusal.
     pub fn renamed(&mut self, edits: Vec<TextEdit>, error: Option<String>) {
         if let Some(why) = error {

@@ -115,7 +115,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}},"symbol":{{}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"documentHighlight":{{}},"documentSymbol":{{"hierarchicalDocumentSymbolSupport":true}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}},"symbol":{{}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"documentHighlight":{{}},"rangeFormatting":{{}},"documentSymbol":{{"hierarchicalDocumentSymbolSupport":true}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -199,6 +199,19 @@ pub fn goto(id: i64, kind: Goto, path: &Path, line: usize, utf16_column: usize) 
 pub fn document_highlight(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/documentHighlight","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `textDocument/rangeFormatting` — helix's `=` (`format_selections`,
+/// 2026-11-02): the server's edits for the span, as the file indents.
+pub fn range_formatting(id: i64, path: &Path, from: (usize, usize), to: (usize, usize), tab_size: usize, insert_spaces: bool) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/rangeFormatting","params":{{"textDocument":{{"uri":{uri}}},"range":{{"start":{{"line":{},"character":{}}},"end":{{"line":{},"character":{}}}}},"options":{{"tabSize":{tab_size},"insertSpaces":{insert_spaces}}}}}}}"#,
+        from.0,
+        from.1,
+        to.0,
+        to.1,
         uri = json_string(&uri_of(path)),
     )
 }
@@ -666,7 +679,10 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
                 .and_then(|i| i.as_bool())
                 .unwrap_or(false),
             signature: signature(value.get("result")),
-            edits: workspace_edit(value.get("result")),
+            edits: match value.get("result") {
+                Some(serde_json::Value::Array(many)) => bare_edits(many),
+                other => workspace_edit(other),
+            },
             actions: actions(value.get("result")),
             symbols: symbols(value.get("result")),
             spans: spans(value.get("result")),
@@ -677,6 +693,23 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
         },
         _ => Notice::Nothing,
     }
+}
+
+/// **A `TextEdit[]` with no file named** — a formatting answer, about the
+/// file asked; the caller fills the path in.
+fn bare_edits(many: &[serde_json::Value]) -> Vec<TextEdit> {
+    let one = |edit: &serde_json::Value| -> Option<TextEdit> {
+        let at = |key: &str, end: &str| -> Option<usize> {
+            edit.pointer(&format!("/range/{key}/{end}"))?.as_u64().map(|n| n as usize)
+        };
+        Some(TextEdit {
+            path: PathBuf::new(),
+            from: (at("start", "line")?, at("start", "character")?),
+            to: (at("end", "line")?, at("end", "character")?),
+            text: edit.get("newText")?.as_str()?.to_string(),
+        })
+    };
+    many.iter().filter_map(one).collect()
 }
 
 /// **A `WorkspaceEdit`, flattened to edits**: `changes` (a map of URI to
@@ -1666,6 +1699,16 @@ mod tests {
                 signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
             }
         );
+        // A formatting answer is a `TextEdit[]`, with no file named (`=`).
+        let Notice::Answer { edits, spans, .. } = read(
+            r#"{"jsonrpc":"2.0","id":9,"result":[{"range":{"start":{"line":0,"character":2},"end":{"line":0,"character":4}},"newText":" "}]}"#,
+            1,
+        ) else {
+            panic!("an answer")
+        };
+        assert_eq!(edits.len(), 1);
+        assert_eq!((edits[0].from, edits[0].to, edits[0].text.as_str()), ((0, 2), (0, 4), " "));
+        assert!(spans.is_empty(), "an edit is not a highlight");
         // A `DocumentHighlight[]` is ranges with no file named (Space h).
         let Notice::Answer { spans, places, .. } = read(
             r#"{"jsonrpc":"2.0","id":8,"result":[{"range":{"start":{"line":1,"character":4},"end":{"line":1,"character":7}},"kind":1}]}"#,

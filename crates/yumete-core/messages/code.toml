@@ -261,6 +261,13 @@ zhs = "向语言服务器询问这里可做的事"
 en = "asking the language server what it can do here"
 
 [[message]]
+# =：請語言服務器排版選區（草稿）
+key = "lsp.asking-format"
+zht = "請語言服務器排版"
+zhs = "请语言服务器排版"
+en = "asking the language server to format it"
+
+[[message]]
 # gr 問出去了
 key = "lsp.asking-references"
 zht = "向語言服務器詢問用到它的地方"
@@ -294,6 +301,34 @@ key = "lsp.cannot-start"
 zht = "{0} 起不來({1})——檔照常開，只是没人查錯"
 zhs = "{0} 起不来({1})——档照常开，只是没人查错"
 en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
+
+[[message]]
+# =：服務器没有要改的（草稿）
+key = "lsp.format-changed-nothing"
+zht = "語言服務器没有要改的地方"
+zhs = "语言服务器没有要改的地方"
+en = "the language server had nothing to change"
+
+[[message]]
+# =：一次只排一段選區，同 helix（草稿）
+key = "lsp.format-one-selection"
+zht = "一次只能排一段選區"
+zhs = "一次只能排一段选区"
+en = "the server formats one selection at a time"
+
+[[message]]
+# =：服務器不排，後面是它說的理由（草稿）
+key = "lsp.format-refused"
+zht = "語言服務器不排：{0}"
+zhs = "语言服务器不排：{0}"
+en = "the language server would not format it: {0}"
+
+[[message]]
+# =：排好了（草稿）
+key = "lsp.formatted"
+zht = "排好了"
+zhs = "排好了"
+en = "formatted"
 
 [[message]]
 # 起服務器用的是項目自己帶的那一個，不是 PATH 上的

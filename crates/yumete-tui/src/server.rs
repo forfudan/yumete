@@ -139,6 +139,8 @@ struct Server {
     /// `空格 s`/`S`'s question (2026-10-31).
     asked_symbols: Option<i64>,
     asked_rename: Option<i64>,
+    /// `=`'s question (2026-11-02).
+    asked_format: Option<i64>,
     asked_actions: Option<i64>,
     /// **What this server last said was wrong, as it wrote it**, by file: a
     /// code action is asked with the ones over its span.
@@ -205,6 +207,8 @@ struct Heard {
     symbols: Option<Vec<lsp::Symbol>>,
     /// A rename's edits, or what the server said in refusing.
     rename: Option<(Vec<lsp::TextEdit>, Option<String>)>,
+    /// `=`'s edits, or what the server said in refusing.
+    format: Option<(Vec<lsp::TextEdit>, Option<String>)>,
 }
 
 impl Heard {
@@ -263,6 +267,13 @@ impl Heard {
             return;
         }
         self.rename = Some((edits, error));
+    }
+
+    fn formatted(&mut self, edits: Vec<lsp::TextEdit>, error: Option<String>) {
+        if self.format.as_ref().is_some_and(|(had, _)| !had.is_empty()) {
+            return;
+        }
+        self.format = Some((edits, error));
     }
 
     fn next_up(&mut self, offers: Vec<lsp::Offer>, incomplete: bool) {
@@ -339,6 +350,11 @@ impl Heard {
         match self.rename {
             Some((edits, _)) if !edits.is_empty() => editor.renamed(edits, None),
             Some((_, error)) if !waiting(|s| s.asked_rename) => editor.renamed(Vec::new(), error),
+            _ => {}
+        }
+        match self.format {
+            Some((edits, _)) if !edits.is_empty() => editor.formatted(edits, None),
+            Some((_, error)) if !waiting(|s| s.asked_format) => editor.formatted(Vec::new(), error),
             _ => {}
         }
     }
@@ -909,6 +925,15 @@ impl Servers {
                 );
             }
         }
+        if !self.running.values().any(|s| s.asked_format.is_some()) {
+            if let Some((path, from, to, tab_size, spaces)) = editor.take_format_query() {
+                self.ask_them_all(
+                    language,
+                    |server, id| server.asked_format = Some(id),
+                    |id| lsp::range_formatting(id, &path, from, to, tab_size, spaces),
+                );
+            }
+        }
         if !self.running.values().any(|s| s.asked_rename.is_some()) {
             if let Some((path, line, column, name)) = editor.take_rename_query() {
                 self.ask_them_all(
@@ -1264,6 +1289,10 @@ impl Servers {
                             server.asked_rename = None;
                             anything = true;
                             heard.renamed(edits, error);
+                        } else if server.asked_format == Some(id) {
+                            server.asked_format = None;
+                            anything = true;
+                            heard.formatted(edits, error);
                         } else if server.asked_actions == Some(id) {
                             server.asked_actions = None;
                             anything = true;
@@ -1797,6 +1826,7 @@ fn start(
         asked_highlights: None,
         asked_symbols: None,
         asked_rename: None,
+        asked_format: None,
         asked_actions: None,
         raw: HashMap::new(),
         working: HashSet::new(),
@@ -1907,6 +1937,7 @@ mod tests {
                     asked_highlights: None,
                     asked_symbols: None,
                     asked_rename: None,
+                    asked_format: None,
                     asked_actions: None,
                     raw: HashMap::new(),
                     working: HashSet::new(),

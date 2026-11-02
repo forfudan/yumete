@@ -15901,6 +15901,39 @@ fn space_h_selects_every_place_the_server_names() {
 }
 
 #[test]
+fn equals_asks_the_server_to_format_the_selection() {
+    // helix's `=` (`format_selections`, 2026-11-02).
+    use crate::lsp::TextEdit;
+    let dir = tmp().join(format!("yumete-equals-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn  a(){}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "x=");
+    let (_, from, to, ..) = ed.take_format_query().expect("asked");
+    assert_eq!((from, to), ((0, 0), (1, 0)));
+    let edit = |from, to, text: &str| TextEdit { path: std::path::PathBuf::new(), from, to, text: text.into() };
+    ed.formatted(vec![edit((0, 2), (0, 4), " "), edit((0, 7), (0, 7), " ")], None);
+    assert_eq!(ed.current_buffer().text(), "fn a() {}\n", "{}", ed.status());
+    // An answer for a text that has since changed is dropped.
+    press(&mut ed, "=");
+    let _ = ed.take_format_query();
+    press(&mut ed, "ia\u{1b}");
+    ed.formatted(vec![edit((0, 0), (0, 0), "zz")], None);
+    assert!(!ed.current_buffer().text().contains("zz"));
+    // Two selections: one at a time, as helix.
+    press(&mut ed, "C=");
+    assert!(ed.take_format_query().is_none(), "{}", ed.status());
+    // vim's `=` is not helix's.
+    let mut vim = typed_vim("甲\n");
+    press(&mut vim, "=");
+    assert!(vim.take_format_query().is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_system_clipboard_goes_both_ways() {
     let mut ed = typed("那年冬天");
     press(&mut ed, "ggvl");

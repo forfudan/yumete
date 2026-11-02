@@ -2732,6 +2732,11 @@ pub struct Editor {
     quit_from_binding: bool,
     /// `:lsp-rename`'s question: where, and the new name.
     rename_query: Option<(PathBuf, usize, usize, String)>,
+    /// `=`'s question: the file, the span's two ends (line, UTF-16 column),
+    /// the indent's width and whether it is spaces.
+    format_query: Option<FormatQuery>,
+    /// Where `=` was asked from: the buffer and its revision.
+    asked_format_from: Option<(u64, u64)>,
     /// `空格 a`'s question: the file and the span, in (line, UTF-16 column).
     actions_query: Option<ActionsQuery>,
     /// What the server offered last, for the picker's choice to name.
@@ -4208,6 +4213,8 @@ impl Editor {
             symbols_wanted: None,
             quit_from_binding: false,
             rename_query: None,
+            format_query: None,
+            asked_format_from: None,
             actions_query: None,
             offered_actions: Vec::new(),
             command_query: None,
@@ -5652,6 +5659,8 @@ mod groups;
 mod insert;
 mod help;
 pub use docs::{DocKey, DocKeyMenu, DocKeymap};
+/// `=`'s question for the server (see `Editor::take_format_query`).
+pub type FormatQuery = (PathBuf, (usize, usize), (usize, usize), usize, bool);
 pub use groups::DocCommand;
 pub(crate) mod find;
 mod hint;
