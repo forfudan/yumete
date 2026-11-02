@@ -100,22 +100,48 @@ impl Editor {
                 self.asked_where_from = Some((self.current_buffer().id(), self.sel.head()));
                 self.go_to_definition(&places[0]);
             }
-            n => {
-                let root = self.root();
-                let items = places
-                    .into_iter()
-                    .map(|place| {
-                        let text = self.line_of_file(&place.path, place.line).unwrap_or_default();
-                        let column = crate::problem::char_column(&text, place.utf16_column);
-                        let name = place.path.strip_prefix(&root).unwrap_or(&place.path).display().to_string();
-                        let label = format!("{name}:{}  {}", place.line + 1, text.trim());
-                        crate::picker::Item::Place(label, place.path, place.line, column)
-                    })
-                    .collect();
-                let picker = crate::picker::Picker::new(&say!("picker.references", n), items);
-                self.show_the_picker(picker);
-            }
+            n => self.offer_places(&say!("picker.references", n), places),
         }
+    }
+
+    /// **`gd` `gD` `gy` `gi` found their places**: one is gone to, several
+    /// are offered in a picker, as helix's `goto_impl` does (2026-11-03; a
+    /// trait's implementations were cut to the first one until then).
+    pub fn show_places(&mut self, places: Vec<Place>) {
+        if places.len() < 2 {
+            return match places.first() {
+                Some(place) => self.go_to_definition(place),
+                None => self.no_definition(),
+            };
+        }
+        if self.asked_where_from.take() != Some((self.current_buffer().id(), self.sel.head())) {
+            return;
+        }
+        let n = places.len();
+        let title = match self.definition_kind {
+            crate::lsp::Goto::Definition => say!("picker.definitions", n),
+            crate::lsp::Goto::Declaration => say!("picker.declarations", n),
+            crate::lsp::Goto::TypeDefinition => say!("picker.type-definitions", n),
+            crate::lsp::Goto::Implementation => say!("picker.implementations", n),
+        };
+        self.offer_places(&title, places);
+    }
+
+    /// A picker over places a server named, each with its line's text.
+    fn offer_places(&mut self, title: &str, places: Vec<Place>) {
+        let root = self.root();
+        let items = places
+            .into_iter()
+            .map(|place| {
+                let text = self.line_of_file(&place.path, place.line).unwrap_or_default();
+                let column = crate::problem::char_column(&text, place.utf16_column);
+                let name = place.path.strip_prefix(&root).unwrap_or(&place.path).display().to_string();
+                let label = format!("{name}:{}  {}", place.line + 1, text.trim());
+                crate::picker::Item::Place(label, place.path, place.line, column)
+            })
+            .collect();
+        let picker = crate::picker::Picker::new(title, items);
+        self.show_the_picker(picker);
     }
 
     /// **`Space j`, helix's `jumplist_picker`**: every place `C-o` can go

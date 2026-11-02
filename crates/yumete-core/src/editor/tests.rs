@@ -35115,3 +35115,64 @@ fn the_palette_names_the_keys_vim_really_has() {
     assert_eq!(ed.keys_now("delete_word_forward"), None, "A-d does nothing with the item off");
     assert!(ed.keys_now("file_picker").is_some_and(|k| k.starts_with('\\')), "{:?}", ed.keys_now("file_picker"));
 }
+
+/// **vim's `]p` adjusts the indent** (`:h ]p`, 2026-11-03; every case
+/// measured in nvim): the first line put in that is not empty takes the
+/// cursor line's indent, the others keep their place against it, none goes
+/// below zero, and empty lines stay empty. `[p` and `]P` put before. Text
+/// within a line keeps its first line where it lands.
+#[test]
+fn vim_bracket_p_pastes_with_the_cursor_lines_indent() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let line_col = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.cursor());
+        (line, ed.cursor() - rope.line_to_char(line))
+    };
+    let mut ed = vim("a\n  b\n    c\n\nx\n");
+    press(&mut ed, "jjyjG]p");
+    assert_eq!(ed.current_buffer().text(), "a\n  b\n    c\n\nx\nc\n\n");
+    assert_eq!(line_col(&ed), (5, 0));
+    for keys in ["jjyjG[p", "jjyjG]P", "jjyjG[P"] {
+        let mut ed = vim("a\n  b\n    c\n\n      x\n");
+        press(&mut ed, keys);
+        assert_eq!(ed.current_buffer().text(), "a\n  b\n    c\n\n      c\n\n      x\n", "{keys}");
+        assert_eq!(line_col(&ed), (4, 6), "{keys}");
+    }
+    // Shifted left, and stopped at zero.
+    let mut ed = vim("a\n    b\n  c\nx\n");
+    press(&mut ed, "jyjG]p");
+    assert_eq!(ed.current_buffer().text(), "a\n    b\n  c\nx\nb\nc\n");
+    // A line of blanks counts as the first; it is emptied.
+    let mut ed = vim("   \n  b\nx\n");
+    press(&mut ed, "yjG]p");
+    assert_eq!(ed.current_buffer().text(), "   \n  b\nx\n\nb\n");
+    // A count puts each copy at the indent; `.` repeats it.
+    let mut ed = vim("  a\nx\n");
+    press(&mut ed, "yyj2]p");
+    assert_eq!(ed.current_buffer().text(), "  a\nx\na\na\n");
+    let mut ed = vim("  a\n    x\n      y\n");
+    press(&mut ed, "yyj]pj.");
+    assert_eq!(ed.current_buffer().text(), "  a\n    x\n    a\n      y\n      a\n");
+    // Written with tabs only when Tab types one, whatever the line has.
+    let mut ed = vim("  a\n      b\n\tx\n");
+    press(&mut ed, "yjG]p");
+    assert_eq!(ed.current_buffer().text(), "  a\n      b\n\tx\n        a\n            b\n");
+    let mut ed = vim("  a\n      b\n\tx\n");
+    ed.execute(":indent-tab tab").unwrap();
+    press(&mut ed, "yjG]p");
+    assert_eq!(ed.current_buffer().text(), "  a\n      b\n\tx\n\ta\n\t    b\n");
+    // Within a line: the lines after the first take the indent.
+    let mut ed = vim("ab\n  cd\n    x\n");
+    press(&mut ed, "lvjly2j]p");
+    assert_eq!(ed.current_buffer().text(), "ab\n  cd\n  b\n    c  x\n");
+    // One piece of a line is the plain `p`.
+    let mut ed = vim("ab\n    x\n");
+    press(&mut ed, "ylj]p");
+    assert_eq!(ed.current_buffer().text(), "ab\n a   x\n");
+}

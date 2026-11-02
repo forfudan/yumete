@@ -360,6 +360,20 @@ zhs = "存在改动文件"
 en = "changed files"
 
 [[message]]
+# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+key = "picker.declarations"
+zht = "聲明（{0} 處）"
+zhs = "声明（{0} 处）"
+en = "declarations ({0})"
+
+[[message]]
+# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+key = "picker.definitions"
+zht = "定義（{0} 處）"
+zhs = "定义（{0} 处）"
+en = "definitions ({0})"
+
+[[message]]
 # 挑選器標題：這個文件的診斷
 key = "picker.diagnostics"
 zht = "診斷挑選器"
@@ -372,6 +386,13 @@ key = "picker.files"
 zht = "文件"
 zhs = "文件"
 en = "files"
+
+[[message]]
+# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+key = "picker.implementations"
+zht = "實現（{0} 處）"
+zhs = "实现（{0} 处）"
+en = "implementations ({0})"
 
 [[message]]
 # 空格 j 挑選器的標題（草稿）
@@ -466,6 +487,13 @@ key = "picker.symbols"
 zht = "符號挑選器"
 zhs = "符号挑选器"
 en = "symbol picker"
+
+[[message]]
+# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+key = "picker.type-definitions"
+zht = "類型定義（{0} 處）"
+zhs = "类型定义（{0} 处）"
+en = "type definitions ({0})"
 
 [[message]]
 # 挑詞條那扇面板的標題

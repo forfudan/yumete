@@ -193,7 +193,8 @@ impl Server {
 struct Heard {
     /// `Some(Some(…))` 有東西，`Some(None)` 答了說沒有，`None` 這一輪沒人答。
     told: Option<Option<lsp::Told>>,
-    place: Option<Option<lsp::Place>>,
+    /// `gd` `gD` `gy` `gi`'s places, the first server's that found any.
+    place: Option<Vec<lsp::Place>>,
     /// The items, and whether any server said its list is incomplete.
     offers: Option<(Vec<lsp::Offer>, bool)>,
     signature: Option<Option<lsp::Signature>>,
@@ -220,11 +221,11 @@ impl Heard {
         self.told = Some(told);
     }
 
-    fn where_is_it(&mut self, place: Option<lsp::Place>) {
-        if matches!(self.place, Some(Some(_))) {
+    fn where_is_it(&mut self, places: Vec<lsp::Place>) {
+        if self.place.as_ref().is_some_and(|had| !had.is_empty()) {
             return;
         }
-        self.place = Some(place);
+        self.place = Some(places);
     }
 
     fn signature(&mut self, one: Option<lsp::Signature>) {
@@ -294,11 +295,11 @@ impl Heard {
             _ => {}
         }
         match self.place {
-            Some(Some(place)) => {
+            Some(places) if !places.is_empty() => {
                 editor.take_definition_query();
-                editor.go_to_definition(&place);
+                editor.show_places(places);
             }
-            Some(None) if !waiting(|s| s.asked_where) => {
+            Some(_) if !waiting(|s| s.asked_where) => {
                 // **還在建索引的時候那句空答案不算數**（2026-10-11 量出來的）。
                 // rust-analyzer 在 `rustAnalyzer/Fetching` 期間對
                 // `textDocument/definition` 回的是一個**空數組**，而它和「這個
@@ -1317,12 +1318,8 @@ impl Servers {
                         } else if server.asked_where == Some(id) {
                             server.asked_where = None;
                             anything = true;
-                            // Warning: **The first one, and only the first.**
-                            // A definition can have several answers (a trait
-                            // and its impls), and a caret can only be in one
-                            // of them; a picker over the rest is its own
-                            // feature, not this one's half-done corner.
-                            heard.where_is_it(places.into_iter().next());
+                            // Several (a trait's impls) are offered in a picker.
+                            heard.where_is_it(places);
                         }
                     }
                     // **服務器自己說它在忙**（2026-10-01）。開一件記一件，關
@@ -2704,6 +2701,53 @@ mod tests {
     /// applied, the code-action request carries the diagnostics over its span,
     /// and a picked command goes to the server that offered it, whose edit is
     /// then applied and answered.
+    /// **`gi` with several answers offers them** (2026-11-03), as helix's
+    /// `goto_impl` does; one is gone to.
+    #[test]
+    fn several_implementations_open_a_picker() {
+        use yumete_core::input::Key;
+        let (mut servers, _heard, tell) = Servers::pretend("rust");
+        let (mut editor, path) = editor_on("impls.rs", "trait T {}\nimpl T for A {}\nimpl T for B {}\n");
+        let config = Servers::stocked("rust");
+        servers.follow(&mut editor, &config);
+        let answer = |id: i64, places: Vec<lsp::Place>| Notice::Answer {
+            id,
+            places,
+            told: None,
+            offers: Vec::new(),
+            incomplete: false,
+            signature: None,
+            edits: Vec::new(),
+            actions: Vec::new(),
+            symbols: Vec::new(),
+            spans: Vec::new(),
+            error: None,
+        };
+        let place = |line: usize| lsp::Place { path: path.clone(), line, utf16_column: 0 };
+        let ask = |servers: &mut Servers, editor: &mut Editor| {
+            editor.execute(":1").unwrap();
+            editor.on_key(Key::Char('g'));
+            editor.on_key(Key::Char('i'));
+            servers.follow(editor, &config);
+            servers.follow(editor, &config);
+            servers.ask(editor, &config);
+            servers.running.values().find_map(|s| s.asked_where).expect("asked")
+        };
+        let id = ask(&mut servers, &mut editor);
+        tell.send(answer(id, vec![place(1), place(2)])).unwrap();
+        servers.collect(&mut editor);
+        let picker = editor.picker().expect("a picker");
+        assert_eq!(picker.total(), 2);
+        assert_eq!(picker.title, yumete_core::say!("picker.implementations", 2));
+        editor.on_key(Key::Esc);
+
+        let id = ask(&mut servers, &mut editor);
+        tell.send(answer(id, vec![place(2)])).unwrap();
+        servers.collect(&mut editor);
+        assert!(editor.picker().is_none(), "one place is gone to");
+        assert_eq!(editor.current_buffer().rope().char_to_line(editor.cursor()), 2);
+    }
+
     #[test]
     fn references_rename_and_code_actions_go_out_and_come_back() {
         use yumete_core::input::Key;

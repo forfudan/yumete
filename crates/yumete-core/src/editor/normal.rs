@@ -180,6 +180,8 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::VimPasteAfter, |e, cx| e.acting(true, |e| e.cmd_paste(cx.with_key(Key::Char('p')))), Key::Char('p')),
     (NormalCmd::PasteBefore, |e, cx| e.acting(false, |e| e.cmd_paste(cx.with_key(Key::Char('P')))), Key::Char('P')),
     (NormalCmd::VimPasteBefore, |e, cx| e.acting(true, |e| e.cmd_paste(cx.with_key(Key::Char('P')))), Key::Char('P')),
+    (NormalCmd::VimPasteAfterIndented, |e, cx| e.acting(true, |e| e.paste_indented(cx.with_key(Key::Char('p')))), Key::Char('p')),
+    (NormalCmd::VimPasteBeforeIndented, |e, cx| e.acting(true, |e| e.paste_indented(cx.with_key(Key::Char('P')))), Key::Char('P')),
     (NormalCmd::SelectInnerObject, |e, cx| e.cmd_select_object(cx.with_key(Key::Char('i'))), Key::Char('i')),
     (NormalCmd::SelectAroundObject, |e, cx| e.cmd_select_object(cx.with_key(Key::Char('a'))), Key::Char('a')),
     (NormalCmd::InsertMode, |e, cx| e.acting(false, |e| e.cmd_insert_mode(cx)), Key::Char('i')),
@@ -1775,6 +1777,14 @@ impl Editor {
         if count > Self::WRITING_MAX {
             self.status = say!("count.writing-ceiling", Self::WRITING_MAX);
         }
+    }
+
+    /// vim's `]p` and `[p`: a paste whose lines take the cursor line's
+    /// indent. In Visual it is the plain replacing `p`.
+    pub(super) fn paste_indented(&mut self, cx: Cx) {
+        self.paste_fixes_indent = true;
+        self.cmd_paste(cx);
+        self.paste_fixes_indent = false;
     }
 
     // Insert (`i` before the selection, `a` after it, `I`/`A` line ends).

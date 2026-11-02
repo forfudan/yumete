@@ -1674,7 +1674,7 @@ impl Editor {
     /// when `primary`, the others follow the edit made there).
     pub(super) fn fan_out(&mut self, waiting: Pending, acting: Key, primary: bool, run: &dyn Fn(&mut Editor)) {
         // vim's `]p` `[p` put, which is an edit; helix's are paragraph moves.
-        let vim_put = self.vim_keymap() && matches!(waiting, Pending::Hop { .. }) && acting == Key::Char('p');
+        let vim_put = self.vim_keymap() && matches!(waiting, Pending::Hop { .. }) && matches!(acting, Key::Char('p' | 'P'));
         if !vim_put
             && (multi::each_selection_key(&waiting, acting)
                 || (waiting == self.pending && self.copies_every_selection(acting)))
@@ -2775,7 +2775,7 @@ pub(super) fn typed_as(key: Key) -> Option<char> {
 fn keyless_place(name: &str) -> Option<(Pending, Key)> {
     let like = match name {
         "vim_delete_char_forward" => Key::Char('d'),
-        "vim_paste_after" | "vim_paste_before" => Key::Char('p'),
+        "vim_paste_after" | "vim_paste_before" | "vim_paste_after_indented" | "vim_paste_before_indented" => Key::Char('p'),
         "vim_match_brackets" | "vim_goto_line_end" | "vim_goto_first_nonwhitespace" => Key::Char('w'),
         _ => return None,
     };

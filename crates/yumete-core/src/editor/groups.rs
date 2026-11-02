@@ -985,8 +985,9 @@ pub(super) static RIGHT_BRACKET: Group = Group {
         ch('x', NormalCmd::GotoNextXmlElement, "hint.hop.element").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
         // Warning: **段落那一行借的是 `:keymap-actions` 的名字**：同一件事在兩張
         // 表上，寫成兩句話只會讓它們慢慢說岔。
-        // vim's `]p` pastes (with the indent adjusted, which is not done yet).
-        ch('p', NormalCmd::VimPasteAfter, "action.vim-paste-after").when(Only::Vim),
+        // vim's `]p` pastes with the indent adjusted; `]P` is `[p`.
+        ch('p', NormalCmd::VimPasteAfterIndented, "action.vim-paste-after-indented").when(Only::Vim),
+        ch('P', NormalCmd::VimPasteBeforeIndented, "action.vim-paste-before-indented").when(Only::Vim),
         ch('p', NormalCmd::GotoNextParagraph, "action.goto-next-paragraph"),
         ch(' ', NormalCmd::AddNewlineBelow, "hint.hop.blank-below"),
     ],
@@ -1018,7 +1019,8 @@ pub(super) static LEFT_BRACKET: Group = Group {
         ch('e', NormalCmd::GotoPrevEntry, "hint.hop.entry").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
         ch('T', NormalCmd::GotoPrevTest, "hint.hop.test").listed(Only::Code).when(Only::Helix),
         ch('x', NormalCmd::GotoPrevXmlElement, "hint.hop.element").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
-        ch('p', NormalCmd::VimPasteBefore, "action.vim-paste-before").when(Only::Vim),
+        ch('p', NormalCmd::VimPasteBeforeIndented, "action.vim-paste-before-indented").when(Only::Vim),
+        ch('P', NormalCmd::VimPasteBeforeIndented, "action.vim-paste-before-indented").when(Only::Vim),
         ch('p', NormalCmd::GotoPrevParagraph, "action.goto-prev-paragraph"),
         ch(' ', NormalCmd::AddNewlineAbove, "hint.hop.blank-above"),
     ],

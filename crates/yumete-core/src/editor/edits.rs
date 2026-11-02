@@ -1643,6 +1643,7 @@ impl Editor {
         // has been yanked」 about a register they had just named.
         let named = self.pending_register;
         let copies = std::mem::replace(&mut self.paste_copies, 1).max(1);
+        let fix_indent = std::mem::take(&mut self.paste_fixes_indent);
         let text = self.recall().repeat(copies);
         if text.is_empty() {
             // A key that does nothing and says nothing is indistinguishable
@@ -1705,9 +1706,20 @@ impl Editor {
             }
             false => text,
         };
-        let len = text.chars().count();
+        let mut len = text.chars().count();
+        // The cursor's line, for `]p`, read before the paste moves it.
+        let indent_here = fix_indent.then(|| self.indent_columns(self.current_buffer().rope().char_to_line(self.sel.head())));
         if !self.edit_insert(at, &text) {
             return;
+        }
+        // vim's `]p` `[p`: the lines put in take the cursor line's indent
+        // (`:h ]p`; vim's `do_put` with `PUT_FIXINDENT`). Whole lines all
+        // shift; text within a line keeps its first line where it lands.
+        if let Some(want) = indent_here {
+            let rope = self.current_buffer().rope();
+            let first = rope.char_to_line(at) + usize::from(at_the_unterminated_end || !line_wise);
+            let lines = text.matches('\n').count();
+            len = len.saturating_add_signed(self.fix_pasted_indent(first..first + lines, want));
         }
         // **A record pasted into a grid may be several lines of it**
         // (2026-10-22): a field with a line break in it is one record over two
@@ -1743,6 +1755,60 @@ impl Editor {
         self.sel.set_anchor(at);
         self.sel.set_head(head);
         self.refresh_goal_column();
+    }
+
+    /// The indent of `line` in columns, as vim's `get_indent` counts it:
+    /// spaces and tabs only.
+    fn indent_columns(&self, line: usize) -> usize {
+        let rope = self.current_buffer().rope();
+        let mut columns = 0;
+        for c in rope.line(line).chars() {
+            match c {
+                ' ' => columns += 1,
+                '\t' => columns += self.tab_stop - columns % self.tab_stop,
+                _ => break,
+            }
+        }
+        columns
+    }
+
+    /// Shift `lines` so the first that is not empty has `want` columns of
+    /// indent and the rest keep their place against it (none goes below
+    /// zero), as vim's `]p` does. Empty lines stay empty. The new indent
+    /// is written as the Tab setting says, as vim's follows 'expandtab'
+    /// (measured: a tab-indented line under `et` gets spaces). Answers how
+    /// many characters that added (or took, when negative).
+    fn fix_pasted_indent(&mut self, lines: std::ops::Range<usize>, want: usize) -> isize {
+        let mut shift: Option<isize> = None;
+        let mut grew = 0;
+        for line in lines {
+            let rope = self.current_buffer().rope();
+            if line >= rope.len_lines() {
+                break;
+            }
+            let start = rope.line_to_char(line);
+            let blank = rope.line(line).chars().take_while(|c| *c == ' ' || *c == '\t').count();
+            if matches!(rope.line(line).chars().next(), None | Some('\n' | '\r')) {
+                continue;
+            }
+            let had = self.indent_columns(line);
+            let new = match shift {
+                None => {
+                    shift = Some(want as isize - had as isize);
+                    want
+                }
+                Some(by) => (had as isize + by).max(0) as usize,
+            };
+            let indent = match !self.tab_spaces {
+                true => format!("{}{}", "\t".repeat(new / self.tab_stop), " ".repeat(new % self.tab_stop)),
+                false => " ".repeat(new),
+            };
+            let old: String = rope.slice(start..start + blank).to_string();
+            if old != indent && self.overwrite(start, start + blank, &indent) {
+                grew += indent.chars().count() as isize - blank as isize;
+            }
+        }
+        grew
     }
 
     /// Delete the grapheme before the cursor (Insert-mode Backspace).
