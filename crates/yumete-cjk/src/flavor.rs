@@ -223,12 +223,18 @@ flavor_items! {
         insert: false,
         label: "keys.flavor.item.sidebars",
     },
-    /// `gL` follows a link, `gx` and `gz` jump by first letters or by pinyin, `g/` and `g?` search the word here or in the other window, `gD` opens the definition in the other window.
+    /// The `g` group's jumps (2026-11-02, every key free in vim, Neovim and
+    /// helix): `gz` jumps to a word by its first letters (z as in
+    /// easymotion), `gZ` to a Chinese character by its pinyin (Z for 中),
+    /// `g/` searches the word, `gL` follows any link (it hands the work to
+    /// `gx`, `gf` or `gd`, whichever the link is). Under helix `gx` opens a
+    /// link, as vim's does; under vim `gW` is the jump labels, since vim's
+    /// `gw` formats.
     GotoExtras => ItemInfo {
         id: "goto_extras",
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
-        keys: &["gL", "gx", "gz", "g/", "g?", "gD"],
+        keys: &["gz", "gZ", "g/", "gL", "gx", "gW"],
         insert: false,
         label: "keys.flavor.item.goto-extras",
     },
@@ -295,6 +301,28 @@ flavor_items! {
         insert: false,
         label: "keys.flavor.item.d-to-line-end",
     },
+    /// The Space menu under vim, on vim's `Space` (2026-11-01); off, `Space`
+    /// moves right as vim's and the menu is on `\`, vim's leader.
+    VimSpaceMenu => ItemInfo {
+        id: "vim_space_menu",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Vim],
+        keys: &[" "],
+        insert: false,
+        label: "keys.flavor.item.vim-space-menu",
+    },
+    /// helix's keys under vim, on keys vim leaves free (2026-11-02): the Alt
+    /// keys, `C-s`, `Z`'s sticky view, `ga` `gp` `gc` `gb` `gr` `g.`, `]g`
+    /// `]f` `]t`, Insert `C-k` and `A-d`. Off, vim has only vim's. Under helix
+    /// they are helix's own, so this item is always on there.
+    HelixKeysUnderVim => ItemInfo {
+        id: "helix_keys_under_vim",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Vim],
+        keys: &["g.", "A-C", "A-,", "A--", "A-_", "A-:", "A-x", "A-s", "A-(", "A-)", "A-K", "A-d", "A-c", "A-u", "A-U", "A-!", "A-|", "A-J", "A-;", "A-*", "A-.", "A-`", "C-s", "Z", "ga", "gp", "gc", "gb", "gr", "]g", "]f", "]t", "[g", "[f", "[t"],
+        insert: false,
+        label: "keys.flavor.item.helix-keys-under-vim",
+    },
     /// `d` and `c` delete without filling the register, and `A-d`/`A-c` are the pair that cut — in the text and in a table's grid. helix only: vim has `"_d` (2026-11-01, after looking at what vim users write).
     DeleteKeepsRegister => ItemInfo {
         id: "delete_keeps_register",
@@ -356,6 +384,11 @@ pub struct Flavor {
 impl Flavor {
     /// Whether `item` is on under `keymap`.
     pub fn on(&self, item: FlavorItem, keymap: KeyPreset) -> bool {
+        // helix's keys are helix's own under helix: what this item switches
+        // is whether vim borrows them.
+        if item == FlavorItem::HelixKeysUnderVim && keymap == KeyPreset::Helix {
+            return true;
+        }
         let info = item.info();
         info.keymaps.contains(&keymap)
             && self.items.get(&item).copied().unwrap_or(info.level <= self.level && self.level != FlavorLevel::Off)

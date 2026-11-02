@@ -514,7 +514,7 @@ impl Editor {
                 // The `g` operators are spelled with their `g` (2026-10-30: the
                 // sign read 「qg」 for a half-typed `gqg`).
                 let op = match op {
-                    'q' | 'u' | 'U' | '~' => format!("g{op}"),
+                    'q' | 'w' | 'u' | 'U' | '~' => format!("g{op}"),
                     other => other.to_string(),
                 };
                 return Some(Hint::Says(match first {

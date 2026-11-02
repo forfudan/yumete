@@ -30,13 +30,16 @@ pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
     (Key::Backspace, NormalCmd::DeleteCharBackward, None),
     (Key::Ctrl('h'), NormalCmd::DeleteCharBackward, None),
     (Key::Delete, NormalCmd::DeleteCharForward, None),
+    // vim's Insert `C-d` takes an indent off the line (2026-11-02);
+    // helix's deletes forward.
+    (Key::Ctrl('d'), NormalCmd::Unindent, Some(|e| e.vim_keymap())),
     (Key::Ctrl('d'), NormalCmd::DeleteCharForward, None),
-    (Key::Alt('d'), NormalCmd::DeleteWordForward, None),
+    (Key::Alt('d'), NormalCmd::DeleteWordForward, Some(|e| e.flavor_on(FlavorItem::HelixKeysUnderVim))),
     (Key::Ctrl('w'), NormalCmd::DeleteWordBackward, None),
     (Key::Ctrl('u'), NormalCmd::VimKillToLineStart, Some(|e| e.vim_keymap())),
-    (Key::Ctrl('k'), NormalCmd::VimKillToLineEnd, Some(|e| e.vim_keymap())),
+    (Key::Ctrl('k'), NormalCmd::VimKillToLineEnd, Some(|e| e.vim_keymap() && e.flavor_on(FlavorItem::HelixKeysUnderVim))),
     (Key::Ctrl('u'), NormalCmd::KillToLineStart, None),
-    (Key::Ctrl('k'), NormalCmd::KillToLineEnd, None),
+    (Key::Ctrl('k'), NormalCmd::KillToLineEnd, Some(|e| !e.vim_keymap())),
     (Key::Ctrl('r'), NormalCmd::InsertRegister, None),
     (Key::Ctrl('o'), NormalCmd::RunOneNormalCommand, Some(|e| e.vim_keymap())),
     (Key::Left, NormalCmd::MoveCharLeft, None),
@@ -50,8 +53,9 @@ pub(super) const INSERT_KEYS: &[(Key, NormalCmd, InsertWhen)] = &[
     (Key::End, NormalCmd::GotoLineEndNewline, None),
     (Key::Ctrl('e'), NormalCmd::GotoLineEndNewline, Some(|e| e.flavor_on(FlavorItem::InsertExtras))),
     // vim's `C-g u` (helix's `C-s`, which a terminal takes for XOFF).
-    (Key::Ctrl('g'), NormalCmd::CommitUndoCheckpoint, Some(|e| e.flavor_on(FlavorItem::InsertExtras))),
-    (Key::Ctrl('c'), NormalCmd::NormalMode, Some(|e| e.flavor_on(FlavorItem::InsertCtrlC))),
+    (Key::Ctrl('g'), NormalCmd::CommitUndoCheckpoint, Some(|e| e.vim_keymap() || e.flavor_on(FlavorItem::InsertExtras))),
+    // vim's `i_CTRL-C` leaves Insert; under helix it is the flavour's.
+    (Key::Ctrl('c'), NormalCmd::NormalMode, Some(|e| e.vim_keymap() || e.flavor_on(FlavorItem::InsertCtrlC))),
     (Key::Tab, NormalCmd::InsertTab, None),
     (Key::BackTab, NormalCmd::InsertOtherTab, Some(|e| e.flavor_on(FlavorItem::ShiftTabOtherIndent))),
     (Key::BackTab, NormalCmd::InsertTab, None),

@@ -5354,10 +5354,8 @@ fn star_searches_for_the_selection() {
     // starts one of width zero rather than one covering the cursor's own
     // grapheme the way Helix does.
     press(&mut ed, "vl"); // select 春江
-    press(&mut ed, "g?");
-    // **Shown, not jumped to**: 「這個詞還在哪裏」 is answered beside the
-    // place you are standing, and you are still standing there.
-    let (from, to) = ed.other_pane().and_then(|p| p.highlight).expect("a hit");
+    press(&mut ed, "g/");
+    let (from, to) = ed.selection();
     assert_eq!(
         ed.current_buffer().rope().slice(from..to).to_string(),
         "春江",
@@ -7167,11 +7165,11 @@ fn gd_goes_gw_shows_and_a_missing_note_gets_written() {
         assert_eq!(ed.cursor_line(), 0, "該跳到那個標題：{}", ed.status());
     }
 
-    // `g?` is the other question entirely — asked from a word, since
+    // `g/` is the other question entirely — asked from a word, since
     // 「還在哪裏」 needs something to be about.
     press(&mut ed, "gg");
     press(&mut ed, "ll");
-    press(&mut ed, "g?");
+    press(&mut ed, "g/");
     assert!(
         ed.status().contains("處") || ed.status().contains("只有"),
         "{}",
@@ -7210,15 +7208,6 @@ fn a_note_written_into_a_table_still_goes_to_its_note() {
     to_the_caret(&mut ed);
     press(&mut ed, "gd");
     assert_eq!(ed.cursor_line(), 4, "the note at the foot: {}", ed.status());
-
-    // …and `gD` shows the same thing in the other work area rather than
-    // reading the column the cell sits in.
-    ed.goto_line(3);
-    to_the_caret(&mut ed);
-    let was = ed.cursor();
-    press(&mut ed, "gD");
-    assert_eq!(ed.peeked_line(), Some(4), "{}", ed.status());
-    assert_eq!(ed.cursor(), was, "a peek does not move you");
 }
 
 #[test]
@@ -7306,7 +7295,7 @@ fn a_hit_list_belongs_to_the_document_it_was_found_in() {
     // that was never searched — and the next `d` deleted it.
     let mut ed = typed("那年冬天。\n那年夏天。\n");
     ed.goto_line(1);
-    press(&mut ed, "g?");
+    press(&mut ed, "g/");
     assert!(ed.current_hit().is_some(), "{}", ed.status());
 
     // Another file: the hits do not follow, and `n` goes back to `/`.
@@ -7365,29 +7354,6 @@ fn the_keys_a_keyboard_has_are_not_swallowed() {
 }
 
 #[test]
-fn enter_on_prose_asks_where_else_this_word_is() {
-    // One key, one meaning, in a table and out of it: 「在另一個工作區給我
-    // 看這個詞還出現在哪裏」. It used to say 「這裏没有註」 and stop,
-    // which is an answer to a question nobody asked.
-    let mut ed = typed("那年冬天很冷。\n第二行。\n那年夏天很熱。\n");
-    ed.goto_line(1);
-    let standing = ed.cursor();
-    press(&mut ed, "g?");
-    // 那年 is the word under the cursor, and it is on line 3 as well.
-    assert_eq!(ed.peeked_line(), Some(2), "{}", ed.status());
-    assert_eq!(ed.cursor(), standing, "and you did not go anywhere");
-    assert!(ed.status().contains("2/2") || ed.status().contains("1/2"), "{}", ed.status());
-
-    // A word that is only here says so rather than opening an area for it.
-    ed.execute("2").unwrap();
-    for _ in 0..2 {
-        ed.on_key(Key::Char('l'));
-    }
-    press(&mut ed, "g?");
-    assert!(ed.status().contains("只有這一處"), "{}", ed.status());
-}
-
-#[test]
 fn a_footnote_reads_beside_the_sentence_it_belongs_to() {
     let mut ed = typed(
         "那年冬天[^1]，山下起了大雪。\n\n[^1]: 據縣志，那是丁丑年。\n",
@@ -7438,20 +7404,14 @@ fn a_footnote_reads_beside_the_sentence_it_belongs_to() {
     // **`gd`**, not `Enter`: 「它指着哪裏」 and 「還在哪裏」 are two
     // questions, and `Enter` is the second one everywhere — otherwise a
     // word *inside* a note could never be asked about.
-    // `gD` shows it beside the sentence; `gd` goes to it, and `C-o` comes
-    // back — the pair every editor has.
-    press(&mut ed, "gD");
-    assert_eq!(ed.peeked_line(), Some(2), "the note, beside the sentence");
-    assert_eq!(ed.cursor(), was, "and the sentence is still under the cursor");
+    // `gd` goes to it, and `C-o` comes back — the pair every editor has.
     press(&mut ed, "gd");
     assert_eq!(ed.cursor_line(), 2, "…and this one goes there");
     ed.on_key(Key::Ctrl('o'));
     assert_eq!(ed.cursor(), was, "C-o comes back");
     ed.goto_line(1);
-    press(&mut ed, "g?");
-    assert_eq!(ed.cursor_line(), 0, "nothing moves");
-    // Not on a note, so `Enter` is what it is everywhere else: 「這個詞還
-    //在哪裏」, shown in the other work area.
+    press(&mut ed, "g/");
+    // Not on a note: 「這個詞還在哪裏」.
     assert!(ed.status().contains("處") || ed.status().contains("只有"), "{}", ed.status());
 
     // A footnote nobody defined has nothing to show, and does not pretend.
@@ -7900,11 +7860,11 @@ fn a_component_leads_to_its_own_row() {
         "⿰ is the grammar, not a component: it is not listed at all"
     );
 
-    // 「誰用了它」 is `t?`: 相 and 目 both use 目.
+    // 「誰用了它」 is `t/`: 相 and 目 both use 目.
     ed.goto_line(4);
     press(&mut ed, "0");
-    press(&mut ed, " t?");
-    assert_eq!(ed.peeked_line(), Some(1), "相 uses 目");
+    press(&mut ed, " t/");
+    assert_eq!(ed.cursor_line(), 1, "相 uses 目");
     assert!(ed.status().contains("1/2"), "{}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -8555,54 +8515,36 @@ fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
     // Five, not four: 林 is ⿰木木 and that is two of them, exactly as `/`
     // would count two matches on one line. A column search differs from a
     // row search in its *direction* and in nothing else.
-    let standing = ed.cursor();
-    press(&mut ed, " t?");
-    assert_eq!(ed.peeked_line(), Some(1), "木 itself, the first of them");
-    assert_eq!(ed.cursor(), standing, "…and you did not go anywhere");
+    press(&mut ed, " t/");
+    assert_eq!(ed.cursor_line(), 1, "木 itself, the first of them");
     assert!(ed.status().contains("1/5"), "{}", ed.status());
-    // …and the match is what is marked in the other area, exactly the
-    // range `/` would have left as the selection.
-    let (a, b) = ed.other_pane().and_then(|p| p.highlight).expect("a hit");
+    // …and the match is the selection, as `/` leaves it.
+    let (a, b) = ed.selection();
     assert_eq!(
         ed.current_buffer().rope().slice(a..b).to_string(),
         "木",
         "the match is what is marked"
     );
     ed.on_key(Key::Char('n'));
-    assert_eq!(ed.peeked_line(), Some(2), "相");
+    assert_eq!(ed.cursor_line(), (2), "相");
     ed.on_key(Key::Char('n'));
-    assert_eq!(ed.peeked_line(), Some(3), "林's first 木");
+    assert_eq!(ed.cursor_line(), (3), "林's first 木");
     ed.on_key(Key::Char('n'));
-    assert_eq!(ed.peeked_line(), Some(3), "…and its second");
+    assert_eq!(ed.cursor_line(), (3), "…and its second");
     ed.on_key(Key::Char('n'));
-    assert_eq!(ed.peeked_line(), Some(5), "杏");
+    assert_eq!(ed.cursor_line(), (5), "杏");
     ed.on_key(Key::Char('n'));
-    assert_eq!(ed.peeked_line(), Some(1), "and round again");
+    assert_eq!(ed.cursor_line(), (1), "and round again");
     ed.on_key(Key::Char('N'));
-    assert_eq!(ed.peeked_line(), Some(5), "and back");
+    assert_eq!(ed.cursor_line(), (5), "and back");
 
-    // Warning: **`g` does not answer for a table** (#454). A 拆分 cell holding 目
-    // does name another row, and this key still refuses it: 「g 不管表格」.
-    // The one that asks it is `t?`, two lines below.
-    let was = ed.peeked_line();
-    ed.execute("3").unwrap();
-    // Warning: **no `l` before the `Tab`** (2026-10-17). It used to take one press to
-    // reach the comma and a `Tab` to cross it; in 全窗 the separator is not
-    // an object, so that `l` was already in cell 2 and the `Tab` wrapped to
-    // the row below. `Tab` alone is what 「the next cell」 was always meant to
-    // be here.
-    ed.on_key(Key::Tab);
-    ed.on_key(Key::Enter);
-    press(&mut ed, "ll");
-    assert_eq!(ed.char_at_cursor(), Some('目'));
-    press(&mut ed, "gD");
-    assert_eq!(ed.peeked_line(), was, "gD 在格子裏不動：{}", ed.status());
+
 
     // …and the reverse question again, from a different row.
     ed.on_key(Key::Tab);
     ed.execute("5").unwrap();
     assert_eq!(ed.cell_text(4, 0), "目");
-    press(&mut ed, " t?");
+    press(&mut ed, " t/");
     assert!(ed.status().contains("1/2"), "目 is used twice: {}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
@@ -10999,14 +10941,14 @@ fn a_table_with_no_declared_scope_searches_all_of_it() {
     ed.open_file(&csv).unwrap();
     assert!(ed.enter_table(), "{}", ed.status());
     ed.goto_line(2);
-    press(&mut ed, " t?");
-    assert_eq!(ed.peeked_line(), Some(1), "{}", ed.status());
+    press(&mut ed, " t/");
+    assert_eq!(ed.cursor_line(), (1), "{}", ed.status());
     assert!(ed.status().contains("未指定"), "and it says so: {}", ed.status());
     assert!(ed.status().contains("1/2"), "{}", ed.status());
     ed.on_key(Key::Char('n'));
     // Down the first column and then down the second: the second hit is
     // the 甲 in row 2's *other* column.
-    assert_eq!(ed.peeked_line(), Some(2), "the other column");
+    assert_eq!(ed.cursor_line(), (2), "the other column");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -18841,32 +18783,6 @@ fn dot_repeats_an_operator_so_the_proofreading_loop_works() {
     assert_eq!(ed.current_buffer().text(), "裡面\n那裡\n這裡\n");
 }
 
-/// Esc dismisses the preview; `n` brings it back on the next hit.
-///
-/// The reader who presses Esc has closed a window, not called off the
-/// search — and `n` after it used to fall through to `/`'s own repeat,
-/// which answered about whatever was last typed at a `/` prompt, or did
-/// nothing at all and said nothing about why.
-#[test]
-fn escape_shuts_the_preview_and_n_opens_it_again() {
-    let mut ed = typed("那年冬天。\n第二行。\n那年夏天。\n又一行。\n那年秋天。\n");
-    press(&mut ed, "gg");
-    // A previewing search: 那 is on lines 1, 3 and 5.
-    press(&mut ed, "g?");
-    assert_eq!(ed.peeked_line(), Some(2), "{}", ed.status());
-    ed.on_key(Key::Char('n'));
-    assert_eq!(ed.peeked_line(), Some(4), "{}", ed.status());
-
-    ed.on_key(Key::Esc);
-    assert!(ed.other_pane().is_none(), "Esc shuts the preview");
-
-    // …and `n` is still walking the same list, pane and all.
-    ed.on_key(Key::Char('n'));
-    assert_eq!(ed.peeked_line(), Some(0), "round to the first 那");
-    assert!(ed.other_pane().is_some(), "the preview is back");
-    assert!(ed.status().contains("1/3"), "{}", ed.status());
-}
-
 /// `n` with nothing to repeat says so.
 #[test]
 fn n_with_no_search_behind_it_says_so() {
@@ -19430,13 +19346,13 @@ fn search_takes_a_pattern_and_star_takes_text() {
     ed.on_key(Key::Char('n'));
     assert_eq!(ed.selection(), (0, 3));
 
-    // `g?` searches for the *text* selected, so its punctuation is
-    // literal: the second （甲） is found, and shown in the other work
-    // area. (This was `*`, which the editor retired — §14.)
+    // `g/` searches for the *text* selected, so its punctuation is
+    // literal: the second （甲） is found. (This was `*`, which the editor
+    // retired — §14.)
     let mut ed = typed("（甲）乙（甲）\n");
     press(&mut ed, "ggvll");
-    press(&mut ed, "g?");
-    let (from, to) = ed.other_pane().and_then(|p| p.highlight).expect("a hit");
+    press(&mut ed, "g/");
+    let (from, to) = ed.selection();
     assert_eq!(
         ed.current_buffer().rope().slice(from..to).to_string(),
         "（甲）",
@@ -28835,7 +28751,10 @@ fn the_flavor_swaps_the_pair_in_prose_and_in_a_grid() {
         .iter()
         .filter(|i| i.info().keymaps.contains(&yumete_cjk::KeyPreset::Helix))
         .count();
-    let on = yumete_cjk::FlavorItem::ALL.iter().filter(|i| ed.flavor_on(**i)).count();
+    let on = yumete_cjk::FlavorItem::ALL
+        .iter()
+        .filter(|i| i.info().keymaps.contains(&yumete_cjk::KeyPreset::Helix) && ed.flavor_on(**i))
+        .count();
     assert!(
         ed.status().contains(&say!("keys.flavor.basic")) && ed.status().contains(&say!("keys.flavor.count", on, helix)),
         "出廠那一檔和項數：{}",
@@ -34310,4 +34229,80 @@ fn vim_x_is_a_name_and_takes_its_count() {
     assert_eq!(ed.current_buffer().text(), "\n", "not the break");
     press(&mut ed, "p");
     assert!(ed.current_buffer().text().contains("丙丁"), "x fills the register");
+}
+
+/// **The `g` group's jumps and links** (2026-11-02): `gz` by first letters,
+/// `gZ` by pinyin, `gx` a web address to the browser (vim's), `gf` a file
+/// link or an address (helix's), and `gL` whichever of them the link is.
+#[test]
+fn the_g_jumps_and_the_link_keys() {
+    let mut ed = typed("那年冬天。\n");
+    press(&mut ed, "gz");
+    assert_eq!(ed.take_owed_seek(), Some(false), "gz: by letters");
+    press(&mut ed, "gZ");
+    assert_eq!(ed.take_owed_seek(), Some(true), "gZ: by pinyin");
+
+    // A bare address, in any file: `gx`, `gf` and `gL` all send it out.
+    for keys in ["gx", "gf", "gL"] {
+        let mut ed = typed("see https://shurufa.app/, then.\n");
+        ed.goto_line(1);
+        press(&mut ed, "wl");
+        press(&mut ed, keys);
+        assert_eq!(ed.take_open_request().as_deref(), Some("https://shurufa.app/"), "{keys}");
+    }
+    // A link to a heading is not a web address: `gx` says so and stays.
+    let mut ed = typed("# 雪\n\n[去](#雪)\n");
+    ed.current_buffer_mut().set_syntax(crate::syntax::Syntax::Markdown);
+    ed.goto_line(3);
+    press(&mut ed, "l");
+    press(&mut ed, "gx");
+    assert_eq!(ed.cursor_line(), 2);
+    assert_eq!(ed.status(), say!("link.not-a-web-address"));
+    // …and `gL` follows it, as `gd` does.
+    press(&mut ed, "gL");
+    assert_eq!(ed.cursor_line(), 0, "{}", ed.status());
+}
+
+/// **Under vim, the keys are vim's** (2026-11-02): `gw` formats, the labels
+/// are `gW`; `]c` is the next change; Insert `C-c` leaves and `C-d` takes an
+/// indent off. `Space` opens the menu while `vim_space_menu` is on, and
+/// moves right with it off, the menu then on `\`.
+#[test]
+fn under_vim_the_keys_are_vims() {
+    let mut ed = typed_vim("甲乙\n");
+    press(&mut ed, "gW");
+    assert!(ed.take_owed_jump(), "gW: the labels");
+
+    let mut ed = typed_vim("    甲\n");
+    press(&mut ed, "A");
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(ed.current_buffer().text(), "甲\n", "C-d: an indent off");
+    ed.on_key(Key::Ctrl('c'));
+    assert_eq!(ed.mode(), Mode::Normal, "C-c leaves");
+
+    let mut ed = typed_vim("甲乙\n");
+    press(&mut ed, " ");
+    assert!(ed.pending_menu().is_some(), "Space: the menu");
+    ed.on_key(Key::Esc);
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    press(&mut ed, "gg ");
+    assert_eq!(ed.sel.head(), 1, "off: Space moves right");
+    press(&mut ed, "\\");
+    assert!(ed.pending_menu().is_some(), "and the menu is on \\");
+    ed.on_key(Key::Esc);
+
+    // helix's keys under vim go with the item.
+    let mut ed = typed_vim("甲\n乙\n");
+    press(&mut ed, "ggC");
+    // `C` is the preset's `c$` here; `A-C` is helix's copy upward.
+    ed.on_key(Key::Esc);
+    let mut ed = typed_vim("甲\n乙\n");
+    press(&mut ed, "j");
+    ed.on_key(Key::Alt('C'));
+    assert!(ed.sel.is_plural(), "basic: helix's A-C");
+    let mut ed = typed_vim("甲\n乙\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    press(&mut ed, "j");
+    ed.on_key(Key::Alt('C'));
+    assert!(!ed.sel.is_plural(), "off: vim has no A-C");
 }

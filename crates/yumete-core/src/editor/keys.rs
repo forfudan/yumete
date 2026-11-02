@@ -929,7 +929,7 @@ impl Editor {
         }
         // **`gqgq`, `gUgU`, `gugu`, `g~g~`** are the `g` operators doubled
         // with their `g` spelled again (`:h gqgq`), the same lines as `gqq`.
-        if first == Some('g') && c == op && matches!(op, 'q' | 'u' | 'U' | '~') {
+        if first == Some('g') && c == op && matches!(op, 'q' | 'w' | 'u' | 'U' | '~') {
             return self.run_vim_line(op);
         }
         // **`d%`** (`:h %`, inclusive): from here to the other half of the
@@ -1542,10 +1542,19 @@ impl Editor {
                 self.refresh_goal_column();
             }
             // **`gq`** — the lines the motion crosses, filled (2026-10-29).
-            'q' => {
+            // `gw` is the same with the cursor put back (vim's, 2026-11-02).
+            'q' | 'w' => {
+                let kept = (op == 'w').then(|| self.sel.head());
                 self.take_object(span);
                 self.extend_to_line_bounds();
                 self.fill_selected_lines();
+                if let Some(at) = kept {
+                    let at = at.min(self.current_buffer().rope().len_chars());
+                    self.sel.set_anchor(at);
+                    self.sel.set_head(at);
+                    self.clamp_cursor();
+                    self.refresh_goal_column();
+                }
             }
             // **`gu`／`gU`／`g~`** — 換字形，選區就是那一段（2026-10-06）。
             'u' | 'U' | '~' => {

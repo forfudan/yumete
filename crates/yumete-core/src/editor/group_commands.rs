@@ -48,23 +48,19 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoFirstNonwhitespace, |e, _| e.goto_motion(motion::Motion::LineFirstNonBlank), Key::Char('s')),
     (NormalCmd::OpenHere, |e, _| e.goto_file_under_cursor(), Key::Char('f')),
     (NormalCmd::FollowLink, |e, _| e.follow_link(), Key::Char('L')),
+    (NormalCmd::OpenLink, |e, _| e.open_link(), Key::Char('x')),
     (NormalCmd::GotoWord, |e, _| e.start_jump(), Key::Char('w')),
     (NormalCmd::GotoWordByLetters, |e, _| e.start_seek(false), Key::Char('x')),
     (NormalCmd::GotoCharByPinyin, |e, _| e.start_seek(true), Key::Char('z')),
     (NormalCmd::GotoLastAccessedFile, |e, _| e.goto_last_file(), Key::Char('a')),
     (NormalCmd::NextBuffer, |e, _| e.next_buffer(), Key::Char('n')),
     (NormalCmd::PrevBuffer, |e, _| e.prev_buffer(), Key::Char('p')),
-    (NormalCmd::GotoDefinition, |e, _| e.show_definition(false), Key::Char('d')),
-    (NormalCmd::GotoDefinitionOtherWindow, |e, _| e.show_definition(true), Key::Char('D')),
+    (NormalCmd::GotoDefinition, |e, _| e.show_definition(), Key::Char('d')),
     (NormalCmd::GotoReference, |e, _| e.ask_references(), Key::Char('r')),
     (NormalCmd::SearchSelection, |e, _| {
         e.definition_preview = false;
         e.search_the_page(false)
     }, Key::Char('/')),
-    (NormalCmd::SearchSelectionOtherWindow, |e, _| {
-        e.definition_preview = true;
-        e.search_the_page(false)
-    }, Key::Char('?')),
     // A vertical page under the vim preset: `gj` walks the 縱 the way the
     // writing runs, one line of the file at a time.
     (NormalCmd::MoveNextZong, |e, cx| e.walk_zongs(cx, true), Key::Char('j')),
@@ -95,6 +91,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::OperatorUppercase, |e, _| e.g_operator('U'), Key::Char('U')),
     (NormalCmd::OperatorSwitchCase, |e, _| e.g_operator('~'), Key::Char('~')),
     (NormalCmd::OperatorFill, |e, _| e.g_operator('q'), Key::Char('q')),
+    (NormalCmd::OperatorFillKeepCursor, |e, _| e.g_operator('w'), Key::Char('w')),
     (NormalCmd::JoinSelectionsNoSpace, |e, cx| {
         let n = match e.extend {
             true => {
@@ -316,7 +313,6 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::TableConvertMode, |e, _| e.pending = Pending::TableConvert, Key::Char('x')),
     (NormalCmd::TableCellWidth, |e, _| e.table_structure(Key::Char('w')), Key::Char('w')),
     (NormalCmd::TableSearchColumns, |e, _| e.table_structure(Key::Char('/')), Key::Char('/')),
-    (NormalCmd::TableSearchColumnsOtherWindow, |e, _| e.table_structure(Key::Char('?')), Key::Char('?')),
     (NormalCmd::TableGotoCell, |e, _| e.table_structure(Key::Char('g')), Key::Char('g')),
     // **The grid's own four** (2026-11-01). In a table's grid they are
     // reached through `table_takes`, as its `Enter`, `Esc`, `Tab` and

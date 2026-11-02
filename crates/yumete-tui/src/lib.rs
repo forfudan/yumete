@@ -22560,24 +22560,22 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with("那年冬天很冷。\n第二行。\n那年夏天很熱。\n");
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::Absolute;
-        // `g?`: 「這個詞還在哪裏」, shown in the other work area.
+        // `g/`: 「這個詞還在哪裏」, the next one gone to.
         editor.on_key(Key::Char('g'));
-        editor.on_key(Key::Char('?'));
-        assert_eq!(editor.peeked_line(), Some(2), "{}", editor.status());
+        editor.on_key(Key::Char('/'));
+        assert_eq!(editor.cursor_line(), 2, "{}", editor.status());
 
         let buffer = render(&editor, &config, 40, 9);
         let ink = ink(&config);
-        // The hit is in the *other* half, which is drawn a rung back — so the
-        // marks there are the faded ones.
-        let quiet = ink.faded();
         let rows = buffer.area.height;
-        let marked = (0..rows).any(|y| {
-            (0..buffer.area.width)
-                .any(|x| buffer[(x, y)].style().bg == Some(quiet.wash()))
-        });
-        assert!(marked, "the hit is washed in 朱");
-        let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(quiet.mark()));
-        assert!(numbered, "and its line number is 朱");
+        // The hit's row is banded: a ground the plain row beside it has not.
+        let grounds = |y: u16| -> Vec<Option<ratatui::style::Color>> {
+            (0..buffer.area.width).map(|x| buffer[(x, y)].style().bg).collect()
+        };
+        let plain = grounds(1);
+        assert!(grounds(2).iter().any(|bg| !plain.contains(bg)), "the hit's row is banded");
+        let numbered = (0..rows).any(|y| buffer[(0, y)].style().fg == Some(ink.mark()));
+        assert!(numbered, "and the line number of the one stood on is 朱");
     }
 
     /// 疏排 on the horizontal page: a row of air above every row.

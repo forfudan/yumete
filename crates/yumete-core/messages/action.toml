@@ -1437,6 +1437,13 @@ en = "open the file this line names"
 find = "打開 打开 檔名 档名 路徑 路径 open here"
 
 [[message]]
+# 命令說明：open_link（草稿）
+key = "action.open-link"
+zht = "用瀏覽器打開光標下的網址"
+zhs = "用浏览器打开光标下的网址"
+en = "open the web address under the cursor in the browser"
+
+[[message]]
 # 命令說明：operator_change（草稿）
 key = "action.operator-change"
 zht = "改寫(再按一個動作)"
@@ -1449,6 +1456,13 @@ key = "action.operator-delete"
 zht = "刪除(再按一個動作)"
 zhs = "删除(再按一个动作)"
 en = "delete (then a motion)"
+
+[[message]]
+# 命令說明：operator_fill_keep_cursor（草稿）
+key = "action.operator-fill-keep-cursor"
+zht = "重新排版，光標不動（vim 的 gw）"
+zhs = "重新排版，光标不动（vim 的 gw）"
+en = "refill the lines, the cursor staying where it is (vim's gw)"
 
 [[message]]
 # 命令說明：operator_indent（草稿）
@@ -2663,9 +2677,16 @@ en = "`Space E`, the file explorer from this file's directory"
 [[message]]
 # 風味的一項（草稿）
 key = "keys.flavor.item.goto-extras"
-zht = "`gL gx gz g/ g? gD`：鏈接、跳轉、搜這個詞"
-zhs = "`gL gx gz g/ g? gD`：链接、跳转、搜这个词"
-en = "`gL gx gz g/ g? gD`: links, jumps, searching the word"
+zht = "`gz` `gZ` `g/` `gL` `gx` `gW`：跳轉、搜這個詞、鏈接"
+zhs = "`gz` `gZ` `g/` `gL` `gx` `gW`：跳转、搜这个词、链接"
+en = "`gz` `gZ` `g/` `gL` `gx` `gW`: jumps, searching the word, links"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.helix-keys-under-vim"
+zht = "vim 下借用 helix 的鍵：Alt 鍵、`C-s`、`Z` 等"
+zhs = "vim 下借用 helix 的键：Alt 键、`C-s`、`Z` 等"
+en = "helix's keys under vim: the Alt keys, `C-s`, `Z` and more"
 
 [[message]]
 # 風味的一項（草稿）
@@ -2785,6 +2806,13 @@ key = "keys.flavor.item.two-thirds-page"
 zht = "`C-n` `C-p` 翻三分之二頁"
 zhs = "`C-n` `C-p` 翻三分之二页"
 en = "`C-n` and `C-p` turn two-thirds of a page"
+
+[[message]]
+# 風味的一項（草稿）
+key = "keys.flavor.item.vim-space-menu"
+zht = "vim 下 `空格` 打開空格菜單"
+zhs = "vim 下 `空格` 打开空格菜单"
+en = "`Space` opens the Space menu under vim"
 
 [[message]]
 # 風味的一項（草稿）

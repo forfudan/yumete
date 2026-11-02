@@ -1211,6 +1211,18 @@ impl Editor {
     /// The shape a grep result has, and the shape every compiler and every
     /// other grep prints — so it also works on a line pasted in from a shell.
     pub(super) fn goto_file_under_cursor(&mut self) {
+        // **A link to a file, or a web address, as helix's `gf`** (2026-11-02):
+        // `[附錄](fu.md)` opens the chapter, an address goes to the browser.
+        // A `[[page]]` and a `#heading` are `gd`'s.
+        if let Some(link) = self.link_under_cursor().filter(|l| !l.wiki && !l.target.is_empty()) {
+            if !self.open_web_link(&link) {
+                self.follow_in_the_book(link);
+            }
+            return;
+        }
+        if let Some(url) = self.url_under_cursor() {
+            return self.open_url(url);
+        }
         // A `[yumete] 檔名` line names a file too (#287), and it is the one
         // line in a wiki where `gf` has something to open.
         if self.open_wiki_include() {
@@ -1330,11 +1342,45 @@ impl Editor {
     ///
     /// Warning: **`gd` follows one too** (#454), by the same route: a link is a
     /// definition, and the one a manuscript has most of.
+    ///
+    /// **`gL` hands the work to the others** (2026-11-02): a web page is
+    /// `gx`'s ([`Self::open_web_link`]), a file, a `[[page]]` or a heading is
+    /// what `gf` and `gd` follow ([`Self::follow_in_the_book`]). One code
+    /// path each, so the catch-all cannot drift from the keys it stands for.
     pub(super) fn follow_link(&mut self) {
-        let Some(link) = self.link_under_cursor() else {
-            self.status = say!("link.none-here");
+        if let Some(link) = self.link_under_cursor() {
+            if !self.open_web_link(&link) {
+                self.follow_in_the_book(link);
+            }
             return;
-        };
+        }
+        match self.url_under_cursor() {
+            Some(url) => self.open_url(url),
+            None => self.status = say!("link.none-here"),
+        }
+    }
+
+    /// **`gx`, vim's: the web address under the cursor, handed to the
+    /// browser** (2026-11-02) — in a Markdown link or written bare, in any
+    /// file. Only `http` and `https` leave the editor (see
+    /// [`Self::follow_link`]'s first paragraph for why); a link to a file of
+    /// the book is not a web address, and is said so.
+    pub(super) fn open_link(&mut self) {
+        if let Some(link) = self.link_under_cursor() {
+            if !self.open_web_link(&link) {
+                self.status = say!("link.not-a-web-address");
+            }
+            return;
+        }
+        match self.url_under_cursor() {
+            Some(url) => self.open_url(url),
+            None => self.status = say!("link.none-here"),
+        }
+    }
+
+    /// A link with a scheme: `http`/`https` to the browser, any other named
+    /// and refused. `false` when it has no scheme, so it is the book's.
+    pub(super) fn open_web_link(&mut self, link: &crate::markdown::Link) -> bool {
         match link_scheme(&link.target).as_deref() {
             Some("http") | Some("https") => {
                 // The fragment is the page's own business, so it goes back on.
@@ -1342,16 +1388,48 @@ impl Editor {
                     Some(a) => format!("{}#{a}", link.target),
                     None => link.target.clone(),
                 };
-                self.status = say!("link.opening", url);
-                self.open_request = Some(url);
-                return;
+                self.open_url(url);
+                true
             }
             Some(other) => {
                 self.status = say!("link.scheme-refused", other.to_string());
-                return;
+                true
             }
-            None => {}
+            None => false,
         }
+    }
+
+    fn open_url(&mut self, url: String) {
+        self.status = say!("link.opening", url);
+        self.open_request = Some(url);
+    }
+
+    /// **A web address written bare** around the cursor, `http://` or
+    /// `https://` up to the first space, less the punctuation a sentence puts
+    /// after it.
+    pub(super) fn url_under_cursor(&self) -> Option<String> {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.sel.head());
+        let at = self.sel.head() - rope.line_to_char(line);
+        let chars: Vec<char> = rope.line(line).chars().collect();
+        let blank = |c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '(' | '（' | '「' | '『');
+        let mut start = at.min(chars.len());
+        while start > 0 && !blank(chars[start - 1]) {
+            start -= 1;
+        }
+        let mut end = at.min(chars.len());
+        while end < chars.len() && !blank(chars[end]) {
+            end += 1;
+        }
+        let word: String = chars[start..end].iter().collect();
+        let from = word.find("https://").or_else(|| word.find("http://"))?;
+        let url = word[from..].trim_end_matches(['.', ',', ';', ':', ')', ']', '}', '>', '。', '，', '；', '：', '）', '」', '』', '、']);
+        (url.len() > "https://".len()).then(|| url.to_string())
+    }
+
+    /// **A link that stays in the book** — a file, a `[[page]]`, a heading —
+    /// followed: what `gf` does to a file link and `gd` to all three.
+    pub(super) fn follow_in_the_book(&mut self, link: crate::markdown::Link) {
         // `[雪](#雪)` — a place in this same file, so nothing is opened.
         if link.target.is_empty() {
             let Some(anchor) = link.anchor else {

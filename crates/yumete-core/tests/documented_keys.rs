@@ -335,6 +335,12 @@ fn leader_and_key(quote: &str) -> Option<(char, String)> {
         if lead == '空' && matches!(key, "退格" | "Backspace" | "⌫") {
             return Some((lead, "\u{8}".to_string()));
         }
+        // An arrow after a group key (`g Down`) is a key off the menu, which
+        // the generated reference lists and the menu does not offer; it is
+        // not `g` then `D`.
+        if matches!(key, "Up" | "Down" | "Left" | "Right") {
+            return None;
+        }
         let mut key = key.chars();
         let first = key.next()?;
         let rest: String = key.collect();

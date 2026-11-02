@@ -216,6 +216,13 @@ zhs = "{0} 不是本项目里的一篇——绝对路径不跟"
 en = "{0} is not a file of this project — an absolute path is not followed"
 
 [[message]]
+# gx 碰到的鏈接不是網址（草稿）
+key = "link.not-a-web-address"
+zht = "這個鏈接不是網址"
+zhs = "这个链接不是网址"
+en = "this link is not a web address"
+
+[[message]]
 # gx 打開了本書的另一篇
 key = "link.opened"
 zht = "開了 {0}"

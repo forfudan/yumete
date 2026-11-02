@@ -5787,8 +5787,8 @@ impl Editor {
         // taking or writing one column of it, which `cell_lines` bounds.
         if self.block_region().is_some() {
             match key {
-                Key::Char('/') | Key::Char('?') => {
-                    self.definition_preview = key == Key::Char('?');
+                Key::Char('/') => {
+                    self.definition_preview = false;
                     let columns = self.sequence_columns();
                     self.search_columns_in(columns);
                 }
@@ -5819,8 +5819,8 @@ impl Editor {
             self.sort_the_named_columns(key);
             return;
         }
-        if matches!(key, Key::Char('/') | Key::Char('?')) {
-            self.definition_preview = key == Key::Char('?');
+        if key == Key::Char('/') {
+            self.definition_preview = false;
             let columns = self.sequence_columns();
             self.search_columns_in(columns);
             return;

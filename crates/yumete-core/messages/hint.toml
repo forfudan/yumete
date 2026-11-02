@@ -355,14 +355,6 @@ zhs = "前往定义"
 en = "go to definition"
 
 [[message]]
-# goto group
-# go to the definition (in second window)
-key = "hint.goto.follow-note-elsewhere"
-zht = "前往定義(另一窗口顯示)"
-zhs = "前往定义(另一窗口显示)"
-en = "go to definition in the other window"
-
-[[message]]
 # g 選單裏的 i：vim 的 gi，回到上次插入停下的地方再插入
 key = "hint.goto.insert-again"
 zht = "回到上次插入處繼續插入"
@@ -426,6 +418,13 @@ zhs = "下/上一个缓冲区"
 en = "the next or previous buffer"
 
 [[message]]
+# g 選單：gx（草稿）
+key = "hint.goto.open-link"
+zht = "用瀏覽器打開網址"
+zhs = "用浏览器打开网址"
+en = "open the web address"
+
+[[message]]
 # g 組：開這個檔
 key = "hint.goto.open-this-file"
 zht = "打開這個文件"
@@ -459,13 +458,6 @@ key = "hint.goto.search-word"
 zht = "搜索所選内容"
 zhs = "搜索所选内容"
 en = "search the selection"
-
-[[message]]
-# goto: search the selection, shown in the second window
-key = "hint.goto.search-word-elsewhere"
-zht = "搜索所選内容(另一窗口顯示)"
-zhs = "搜索所选内容(另一窗口显示)"
-en = "search the selection in the other window"
 
 [[message]]
 # `gu`：只問中文，打**讀音**，字母不限兩個
@@ -1682,13 +1674,6 @@ key = "hint.table.search-columns"
 zht = "按列搜索(可指定列範圍)"
 zhs = "按列搜索(可指定列范围)"
 en = "search down the columns (a column range can be given)"
-
-[[message]]
-# 空格 t 單子：`?`——同 `/`，但答案畫在另一個區域
-key = "hint.table.search-columns-elsewhere"
-zht = "按列搜索(另一窗口顯示)"
-zhs = "按列搜索(另一窗口显示)"
-en = "search down the columns in the other window"
 
 [[message]]
 # 表格提示：照這欄順排/倒排

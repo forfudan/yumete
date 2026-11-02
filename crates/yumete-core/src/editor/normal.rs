@@ -409,6 +409,41 @@ pub(super) const FLAVOR_NORMAL: &[(Key, NormalCmd, FlavorItem, super::groups::On
     (Key::Char('D'), NormalCmd::DeleteToLineEnd, FlavorItem::DToLineEnd, Only::Always),
     (Key::Alt('D'), NormalCmd::DeleteToLineEndNoyank, FlavorItem::DToLineEnd, Only::Always),
     (Key::Esc, NormalCmd::NormalModeAndCollapse, FlavorItem::EscCollapses, Only::Always),
+    (Key::Char(' '), NormalCmd::SpaceMode, FlavorItem::VimSpaceMenu, Only::Vim),
+];
+
+/// **helix's keys that vim leaves free** (2026-11-02): under vim they reach
+/// helix's table only while `helix_keys_under_vim` is on. A key a binding or
+/// the preset plays is helix's either way: the preset is spelt in them.
+const HELIX_KEYS_UNDER_VIM: &[Key] = &[
+    Key::Char('C'),
+    Key::Alt('C'),
+    Key::Alt(','),
+    Key::Alt('-'),
+    Key::Alt('_'),
+    Key::Alt(':'),
+    Key::Alt('x'),
+    Key::Alt('s'),
+    Key::Alt('('),
+    Key::Alt(')'),
+    Key::Alt('K'),
+    Key::Alt('d'),
+    Key::Alt('c'),
+    Key::Alt('u'),
+    Key::Alt('U'),
+    Key::Alt('!'),
+    Key::Alt('|'),
+    Key::Alt('J'),
+    Key::Alt(';'),
+    Key::Alt('*'),
+    Key::Alt('.'),
+    Key::Alt('`'),
+    Key::Ctrl('s'),
+    Key::Char('Z'),
+    // vim's `;` and `,` with no `f` to repeat do nothing; helix's collapse
+    // and keep the primary selection.
+    Key::Char(';'),
+    Key::Char(','),
 ];
 
 /// **The vim preset's own keys**, before helix's: the commands that do
@@ -430,6 +465,11 @@ pub(super) const VIM_NORMAL: &[(Key, NormalCmd, Option<When>)] = &[
     // there. A terminal sends it as `C-^` or as `C-6`.
     (Key::Ctrl('^'), NormalCmd::GotoLastAccessedFile, None),
     (Key::Ctrl('6'), NormalCmd::GotoLastAccessedFile, None),
+    // vim's `Space` moves right, and `\` (vim's leader, which vim leaves
+    // free) opens the Space menu: the flavour's `vim_space_menu` puts the
+    // menu back on `Space` (2026-11-01).
+    (Key::Char(' '), NormalCmd::MoveCharRight, None),
+    (Key::Char('\\'), NormalCmd::SpaceMode, None),
     (Key::Backspace, NormalCmd::MoveCharLeft, None),
     (Key::Char('k'), NormalCmd::MoveLineUp, None),
     (Key::Up, NormalCmd::MoveLineUp, None),
@@ -771,6 +811,13 @@ impl Editor {
             if let Some((_, name)) = SELECT_NORMAL.iter().find(|(key, _)| *key == cx.key) {
                 return Some(name.name());
             }
+        }
+        if self.vim_keymap()
+            && !self.expanding_alias
+            && HELIX_KEYS_UNDER_VIM.contains(&cx.key)
+            && !self.flavor_on(FlavorItem::HelixKeysUnderVim)
+        {
+            return None;
         }
         HELIX_NORMAL.iter().find(|(key, _)| *key == cx.key).map(|(_, name)| name.name())
     }

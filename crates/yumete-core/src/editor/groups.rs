@@ -825,20 +825,28 @@ pub(super) static GOTO: Group = Group {
         ch('s', NormalCmd::GotoFirstNonwhitespace, "hint.goto.first-non-blank").when(Only::GLetter),
         ch('f', NormalCmd::OpenHere, "hint.goto.open-this-file"),
         ch('L', NormalCmd::FollowLink, "hint.goto.follow-link").flavor(FlavorItem::GotoExtras),
+        // vim's `gw` formats, as `gq` with the cursor kept; the jump labels
+        // are `gW` there, a flavour key (2026-11-02).
+        ch('w', NormalCmd::OperatorFillKeepCursor, "action.operator-fill-keep-cursor").when(Only::Vim),
+        ch('W', NormalCmd::GotoWord, "hint.goto.jump-labels").when(Only::Vim).flavor(FlavorItem::GotoExtras),
         ch('w', NormalCmd::ExtendToWord, "hint.goto.jump-labels").when(Only::Selecting),
         ch('w', NormalCmd::GotoWord, "hint.goto.jump-labels"),
-        ch('x', NormalCmd::GotoWordByLetters, "hint.goto.seek-written").flavor(FlavorItem::GotoExtras),
-        ch('z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading").flavor(FlavorItem::GotoExtras),
-        ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file"),
+        // `gx` opens the link with the system, as vim's: vim's own key, and a
+        // flavour key under helix, which leaves it free.
+        ch('x', NormalCmd::OpenLink, "hint.goto.open-link").when(Only::Vim),
+        ch('x', NormalCmd::OpenLink, "hint.goto.open-link").flavor(FlavorItem::GotoExtras),
+        // The two letter jumps (2026-11-02): `gz` by first letters (z as in
+        // easymotion), `gZ` by pinyin (Z for 中). Both free in vim and helix.
+        ch('z', NormalCmd::GotoWordByLetters, "hint.goto.seek-written").flavor(FlavorItem::GotoExtras),
+        ch('Z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading").flavor(FlavorItem::GotoExtras),
+        ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file").flavor(FlavorItem::HelixKeysUnderVim),
         ch('n', NormalCmd::SearchNext, "hint.goto.next-match").when(Only::Vim),
         ch('N', NormalCmd::SearchPrev, "hint.goto.next-match").when(Only::Vim),
         ch('n', NormalCmd::NextBuffer, "hint.goto.next-or-previous-buffer"),
-        ch('p', NormalCmd::PrevBuffer, "hint.goto.next-or-previous-buffer"),
+        ch('p', NormalCmd::PrevBuffer, "hint.goto.next-or-previous-buffer").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoDefinition, "hint.goto.follow-note"),
-        ch('D', NormalCmd::GotoDefinitionOtherWindow, "hint.goto.follow-note-elsewhere").flavor(FlavorItem::GotoExtras),
-        ch('r', NormalCmd::GotoReference, "hint.goto.references"),
+        ch('r', NormalCmd::GotoReference, "hint.goto.references").flavor(FlavorItem::HelixKeysUnderVim),
         ch('/', NormalCmd::SearchSelection, "hint.goto.search-word").flavor(FlavorItem::GotoExtras),
-        ch('?', NormalCmd::SearchSelectionOtherWindow, "hint.goto.search-word-elsewhere").flavor(FlavorItem::GotoExtras),
         ch('j', NormalCmd::MoveNextZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
         ch('k', NormalCmd::MovePrevZong, "hint.goto.by-file-line-vertical").when(Only::VimVertical),
         ch('j', NormalCmd::MoveVisualLineDown, "action.move-visual-line-down").when(Only::Vim),
@@ -853,10 +861,10 @@ pub(super) static GOTO: Group = Group {
         quiet(Key::Up, NormalCmd::MoveVisualLineUp).when(Only::FlatVim),
         quiet(Key::Down, NormalCmd::MoveLineDown).when(Only::Flat),
         quiet(Key::Up, NormalCmd::MoveLineUp).when(Only::Flat),
-        ch('.', NormalCmd::GotoLastModification, "hint.goto.last-change"),
+        ch('.', NormalCmd::GotoLastModification, "hint.goto.last-change").flavor(FlavorItem::HelixKeysUnderVim),
         ch('t', NormalCmd::GotoWindowTop, "hint.goto.screen-top-middle-bottom").when(Only::GLetter),
-        ch('c', NormalCmd::GotoWindowCenter, "hint.goto.screen-top-middle-bottom"),
-        ch('b', NormalCmd::GotoWindowBottom, "hint.goto.screen-top-middle-bottom"),
+        ch('c', NormalCmd::GotoWindowCenter, "hint.goto.screen-top-middle-bottom").flavor(FlavorItem::HelixKeysUnderVim),
+        ch('b', NormalCmd::GotoWindowBottom, "hint.goto.screen-top-middle-bottom").flavor(FlavorItem::HelixKeysUnderVim),
         // vim's own: none of these is a helix command.
         ch('v', NormalCmd::ReselectLastSelection, "hint.goto.reselect").when(Only::Vim),
         ch('i', NormalCmd::InsertAtLastInsert, "hint.goto.insert-again").when(Only::Vim),
@@ -868,6 +876,8 @@ pub(super) static GOTO: Group = Group {
         ch('q', NormalCmd::OperatorFill, "hint.goto.fill").when(Only::Vim),
         ch('J', NormalCmd::JoinSelectionsNoSpace, "hint.goto.join-without-a-space").when(Only::Vim),
         ch('`', NormalCmd::CaseMode, "action.case-mode").when(Only::Vim).flavor(FlavorItem::CaseMenu),
+        // …and vim's own `` g` `` with the case menu off: to a mark.
+        ch('`', NormalCmd::GotoMark, "action.goto-mark").when(Only::Vim),
     ],
     unknown: Unknown::Silent,
     sticky: false,
@@ -954,11 +964,14 @@ pub(super) static RIGHT_BRACKET: Group = Group {
     path: "]",
     rows: &[
         ch('m', NormalCmd::GotoNextConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts),
-        ch('g', NormalCmd::GotoNextChange, "hint.hop.change"),
+        ch('g', NormalCmd::GotoNextChange, "hint.hop.change").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoNextDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoLastDiag, "hint.hop.problem"),
-        ch('f', NormalCmd::GotoNextFunction, "hint.hop.function").listed(Only::Code),
-        ch('t', NormalCmd::GotoNextClass, "hint.hop.class").listed(Only::Code),
+        ch('f', NormalCmd::GotoNextFunction, "hint.hop.function").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        ch('t', NormalCmd::GotoNextClass, "hint.hop.class").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        // vim's `]c` is the next change, which yumete has (helix's `]g`);
+        // helix's comment is helix's only.
+        ch('c', NormalCmd::GotoNextChange, "hint.hop.change").when(Only::Vim),
         ch('c', NormalCmd::GotoNextComment, "hint.hop.comment").listed(Only::Code),
         // Warning: **段落那一行借的是 `:keymap-actions` 的名字**：同一件事在兩張
         // 表上，寫成兩句話只會讓它們慢慢說岔。
@@ -981,11 +994,14 @@ pub(super) static LEFT_BRACKET: Group = Group {
     path: "[",
     rows: &[
         ch('m', NormalCmd::GotoPrevConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts),
-        ch('g', NormalCmd::GotoPrevChange, "hint.hop.change"),
+        ch('g', NormalCmd::GotoPrevChange, "hint.hop.change").flavor(FlavorItem::HelixKeysUnderVim),
         ch('d', NormalCmd::GotoPrevDiag, "hint.hop.problem"),
         ch('D', NormalCmd::GotoFirstDiag, "hint.hop.problem"),
-        ch('f', NormalCmd::GotoPrevFunction, "hint.hop.function").listed(Only::Code),
-        ch('t', NormalCmd::GotoPrevClass, "hint.hop.class").listed(Only::Code),
+        ch('f', NormalCmd::GotoPrevFunction, "hint.hop.function").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        ch('t', NormalCmd::GotoPrevClass, "hint.hop.class").listed(Only::Code).flavor(FlavorItem::HelixKeysUnderVim),
+        // vim's `]c` is the next change, which yumete has (helix's `]g`);
+        // helix's comment is helix's only.
+        ch('c', NormalCmd::GotoPrevChange, "hint.hop.change").when(Only::Vim),
         ch('c', NormalCmd::GotoPrevComment, "hint.hop.comment").listed(Only::Code),
         ch('p', NormalCmd::VimPasteBefore, "action.vim-paste-before").when(Only::Vim),
         ch('p', NormalCmd::GotoPrevParagraph, "action.goto-prev-paragraph"),
@@ -1341,14 +1357,12 @@ pub(super) static TABLE: Group = Group {
         ch('w', NormalCmd::TableCellWidth, "hint.table.fold-wide-cells").listed(Only::Pane),
         // In a fenced block.
         ch('/', NormalCmd::TableSearchColumns, "hint.table.search-columns").listed(Only::Block),
-        ch('?', NormalCmd::TableSearchColumnsOtherWindow, "hint.table.search-columns-elsewhere").listed(Only::Block),
         ch('g', NormalCmd::TableGotoCell, "hint.table.go-to-cell").listed(Only::Block),
         ch('y', NormalCmd::TableYankColumn, "hint.table.yank-or-replace-column").listed(Only::Block),
         ch('v', NormalCmd::TableReplaceColumn, "hint.table.yank-or-replace-column").listed(Only::Block),
         note("1s 1S", "hint.table.sort-by-column").listed(Only::Block),
         // In a Markdown table.
         ch('/', NormalCmd::TableSearchColumns, "hint.table.search-columns").listed(Only::Md),
-        ch('?', NormalCmd::TableSearchColumnsOtherWindow, "hint.table.search-columns-elsewhere").listed(Only::Md),
         ch('g', NormalCmd::TableGotoCell, "hint.table.go-to-cell").listed(Only::Md),
         ch('r', NormalCmd::TableAddRowBelow, "hint.table.add-row").listed(Only::Md),
         ch('R', NormalCmd::TableAddRowAbove, "hint.table.add-row").listed(Only::Md),
@@ -1374,7 +1388,6 @@ pub(super) static TABLE: Group = Group {
         ch('i', NormalCmd::TableRecordPanel, "hint.table.detail-panel").listed(Only::Md),
         // In a delimited file.
         ch('/', NormalCmd::TableSearchColumns, "hint.table.search-columns").listed(Only::File),
-        ch('?', NormalCmd::TableSearchColumnsOtherWindow, "hint.table.search-columns-elsewhere").listed(Only::File),
         ch('g', NormalCmd::TableGotoCell, "hint.table.go-to-cell").listed(Only::File),
         note("1s 1S", "hint.table.sort-by-column").listed(Only::File),
         ch('r', NormalCmd::TableAddRowBelow, "hint.table.add-row").listed(Only::File),
@@ -1495,7 +1508,7 @@ mod tests {
     #[test]
     fn each_kind_of_table_lists_its_own_keys() {
         let md = Editor::table_keys(Some(Bounds::Md), false);
-        for keys in ["/", "?", "g", "y p P", "v"] {
+        for keys in ["/", "g", "y p P", "v"] {
             assert!(md.iter().any(|(k, _)| k == keys), "{keys} missing: {md:?}");
         }
         let block = Editor::table_keys(Some(Bounds::Block), false);

@@ -96,11 +96,6 @@ pub const LESSON: &str = r#"# 宇夢小課堂
   ⇒ 按 `/`，打「雪」，Enter，再按幾次 `n`。
 
 選中一段之後，**`g/` 就是「這個詞還在哪裏」**——不用重打一遍。
-`g?` 是同一個問題，但答案畫在**另一個工作區**裏，你不用離開現在這裏。
-
-  ⇒ 選中上面某一行裏的「雪」，按 `g?`。看右邊（或下邊）那一半。
-  ⇒ 按 `n` 走下一處。看夠了按 `Esc` 關掉那一半；再按 `n`，它自己回來。
-  ⇒ 真想過去改它：`空格 w`。
 
 換字：`:s/舊/新/` 換這一行的第一處，`:%s/舊/新/g` 換全篇。
 
@@ -271,11 +266,8 @@ Prefer vim's keys? `:keymap vim` — there `.` repeats any change, as vim's does
   ⇒ Press `/`, type `snow`, Enter, then `n` a few times.
 
 With something selected, **`g/` asks where else it is** — no retyping.
-`g?` asks the same, and draws the answer in **the other work area**, so you
-stay where you are.
 
-  ⇒ Select a `snow` above and press `g?`. Look at the other half.
-  ⇒ `n` goes to the next one. `Esc` closes that half.
+  ⇒ Select a `snow` above and press `g/`, then `n` for the next one.
 
 Replacing: `:s/old/new/` on this line, `:%s/old/new/g` in the whole file.
 
@@ -375,7 +367,7 @@ mod tests {
         // that teaches a keystroke the editor does not have is worse than none.
         for key in [
             "`i`", "`Esc`", "`u`", "`w`", "`b`", "`e`", "`x`", "`c`", "`d`", "`y`", "`p`",
-            "`gg`", "`ge`", "`30G`", "`g/`", "`g?`", "`n`", "`:w`", "`:q`", "`:vertical`",
+            "`gg`", "`ge`", "`30G`", "`g/`", "`n`", "`:w`", "`:q`", "`:vertical`",
             "`:table-render window`", "`gd`", "`空格 t /`", "`:help`", "`空格 f`",
         ] {
             assert!(LESSON.contains(key), "the lesson never mentions {key}");
@@ -390,7 +382,7 @@ mod tests {
     fn the_english_lesson_teaches_the_keys_too() {
         for key in [
             "`i`", "`Esc`", "`u`", "`w`", "`b`", "`e`", "`x`", "`c`", "`d`", "`y`", "`p`",
-            "`gg`", "`ge`", "`30G`", "`g/`", "`g?`", "`n`", "`:w`", "`:q`", "`:vertical`",
+            "`gg`", "`ge`", "`30G`", "`g/`", "`n`", "`:w`", "`:q`", "`:vertical`",
             "`:table-render window`", "`.`", "`空格 t /`", "`:help`", "`空格 f`",
         ] {
             assert!(LESSON_EN.contains(key), "the English lesson never mentions {key}");

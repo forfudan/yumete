@@ -376,7 +376,7 @@ impl Editor {
             // `u` until 2026-10-29.
             let mut word = match op {
                 's' => String::from("ys"),
-                'u' | 'U' | '~' | 'q' => format!("g{op}"),
+                'u' | 'U' | '~' | 'q' | 'w' => format!("g{op}"),
                 _ => String::from(op),
             };
             if let Some(f) = first {

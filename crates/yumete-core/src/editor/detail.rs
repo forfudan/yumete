@@ -289,13 +289,7 @@ impl Editor {
             // always followed them; `gd` asks the same question in the same
             // words, so it follows them as well.
             if self.link_under_cursor().is_some() {
-                // Warning: **`gD` on a link is `gd`** — say so rather than pretend.
-                // Everywhere else the capital means 「shown over there, and you
-                // do not move」, and `follow_link` has three destinations (a
-                // web page, another chapter, a heading in this file) of which
-                // only the last could be previewed at all. Doing it for one of
-                // three would be a rule nobody could hold; `Space w` puts the
-                // other pane up and `C-o` comes back.
+                // The same code `gL` runs (2026-11-02).
                 return self.follow_link();
             }
             // **A wiki name is a definition too** (#287): `gd` opens the file
@@ -350,8 +344,8 @@ impl Editor {
     /// Warning: **And that rule is the whole rule** (#454). A 拆分 cell holding 目
     /// still *names* another row, and this key still refuses it: 「g 不管表格，
     /// 表格的我们以后再说」. `t?` is the one that asks it.
-    pub(super) fn show_definition(&mut self, preview: bool) {
-        self.definition_preview = preview;
+    pub(super) fn show_definition(&mut self) {
+        self.definition_preview = false;
         self.follow_note();
     }
 
