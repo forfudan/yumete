@@ -118,8 +118,9 @@ pub enum Kind {
     /// 一段自己打的字。
     Text,
     /// **A row that opens a page of its own** (2026-11-02): the flavour's
-    /// items, one tick each, under `[keys.flavor_items]`. `l`, Space, Enter
-    /// and `i` go in; the page is [`crate::panel::Panel::flavor_page`].
+    /// items, one tick each, under `[keys.flavor_items]`, and the annotation
+    /// modes' fields under `[ime.annotation_modes]`. `l`, Space, Enter and
+    /// `i` go in; the page is [`crate::panel::Panel::page`].
     Page,
 }
 
@@ -265,6 +266,14 @@ const PANEL_DISPLAY_WAYS: &[Choice] = &[
     Choice { word: "box", label: "settings.pick.display.box" },
     Choice { word: "bottom", label: "settings.pick.display.bottom" },
     Choice { word: "inline", label: "settings.pick.display.inline" },
+];
+
+/// `off` and yume's two modes. The labels are the names the status line
+/// and the page use too.
+pub const IME_ANNOTATION_WAYS: &[Choice] = &[
+    Choice { word: "off", label: "annotation.mode.off" },
+    Choice { word: "multi", label: "annotation.mode.multi" },
+    Choice { word: "double", label: "annotation.mode.double" },
 ];
 
 const PANEL_PREEDIT_WAYS: &[Choice] = &[
@@ -802,16 +811,26 @@ pub const SETTINGS: &[Setting] = &[
         factory: r#""１２３４５６７８９""#,
     },
     Setting {
-        table: "editor",
-        key: "show_chaifen",
-        // **拆分歸「輸入法」，不歸「標記」**（2026-10-16 定）。它只在打字的時候
+        table: "ime",
+        key: "annotation",
+        // **注解歸「輸入法」，不歸「標記」**（2026-10-16 定）。它只在打字的時候
         // 說得上話，而且撐寬每一條候選——那是候選欄的事；「標記」問的是稿子自己
-        // 畫出什麼（注音、詞界、縮排提示）。
+        // 畫出什麼（注音、詞界、縮排提示）。`PickOr`: a mode the config adds
+        // is typed by name.
         group: Group::Ime,
-        kind: Kind::Tick,
-        label: "settings.editor.show-chaifen",
-        hint: "settings.editor.show-chaifen.hint",
-        factory: "false",
+        kind: Kind::PickOr(IME_ANNOTATION_WAYS),
+        label: "settings.ime.annotation",
+        hint: "settings.ime.annotation.hint",
+        factory: r#""off""#,
+    },
+    Setting {
+        table: "ime",
+        key: "annotation_modes",
+        group: Group::Ime,
+        kind: Kind::Page,
+        label: "settings.ime.annotation-modes",
+        hint: "settings.ime.annotation-modes.hint",
+        factory: "{}",
     },
     Setting {
         table: "editor",
@@ -1046,6 +1065,8 @@ pub const NOT_IN_THE_PANEL: &[&str] = &[
     "editor.segmentation_threshold",
     // Folded into `word_mark` as its `off` (2026-10-25); kept to say so.
     "editor.show_segmentation",
+    // Gone (2026-11-02): `[ime] annotation` took its place; kept to say so.
+    "editor.show_chaifen",
     // Gone (2026-10-30): both ruby syntaxes were always read; kept to say so.
     "editor.ruby_dialects",
     // **一張表，面板畫不出來**：勾和數字說不完「哪個鍵配哪個動作」。

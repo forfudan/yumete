@@ -1,6 +1,104 @@
-# prefixes: ime yume chaifen language scheme
+# prefixes: ime yume chaifen language scheme annotation
 #
 # What the editor says, one block per tag; see README.md beside this file.
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.chaifen"
+zht = "拆分"
+zhs = "拆分"
+en = "拆分"
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.charset"
+zht = "字集"
+zhs = "字集"
+en = "character set"
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.code"
+zht = "編碼"
+zhs = "编码"
+en = "code"
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.full-chaifen"
+zht = "全息拆分"
+zhs = "全息拆分"
+en = "full 拆分"
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.note"
+zht = "字義"
+zhs = "字义"
+en = "meaning"
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.reading"
+zht = "拼音"
+zhs = "拼音"
+en = "reading"
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.simp-trad"
+zht = "簡繁"
+zhs = "简繁"
+en = "simplified and traditional"
+
+[[message]]
+# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+key = "annotation.field.unicode"
+zht = "統一碼"
+zhs = "统一码"
+en = "code point"
+
+[[message]]
+# 注解模式的名字：yume 出廠的二重注解（草稿，取自 yume）
+key = "annotation.mode.double"
+zht = "二重"
+zhs = "二重"
+en = "double"
+
+[[message]]
+# 注解模式的名字：yume 出廠的多重注解（草稿，取自 yume）
+key = "annotation.mode.multi"
+zht = "多重"
+zhs = "多重"
+en = "multi"
+
+[[message]]
+# 注解模式的名字：關（草稿）
+key = "annotation.mode.off"
+zht = "關"
+zhs = "关"
+en = "off"
+
+[[message]]
+# 狀態欄：換了注解模式，或 :yume-annotation 問現在是哪一個（草稿）
+key = "annotation.now"
+zht = "注解：{0}"
+zhs = "注解：{0}"
+en = "annotation: {0}"
+
+[[message]]
+# 狀態欄：這個方案没有注解可畫（草稿）
+key = "annotation.unavailable"
+zht = "這個方案没有注解"
+zhs = "这个方案没有注解"
+en = "this scheme has no annotation"
+
+[[message]]
+# 狀態欄：:yume-annotation 後面的名字不是一個模式（草稿）
+key = "annotation.unknown"
+zht = "没有叫 {0} 的注解模式；有 {1}"
+zhs = "没有叫 {0} 的注解模式；有 {1}"
+en = "no annotation mode called {0}; there is {1}"
 
 [[message]]
 # :lint 查一張拆分表，兩行用了同一個行名
@@ -22,27 +120,6 @@ key = "chaifen.lint-results"
 zht = "[查 {0}]"
 zhs = "[查 {0}]"
 en = "[lint {0}]"
-
-[[message]]
-# :yume-chaifen off ——關了
-key = "chaifen.off"
-zht = "拆分 off"
-zhs = "拆分 off"
-en = "拆分 off"
-
-[[message]]
-# :yume-chaifen on ——候選後面掛拆分注解，開了
-key = "chaifen.on"
-zht = "拆分 on"
-zhs = "拆分 on"
-en = "拆分 on"
-
-[[message]]
-# :yume-chaifen on，但這個方案没有拆分表
-key = "chaifen.unavailable"
-zht = "拆分 unavailable for this scheme"
-zhs = "拆分 unavailable for this scheme"
-en = "拆分 unavailable for this scheme"
 
 [[message]]
 # :lint 查一張拆分表，某一行的欄數和表頭對不上
@@ -180,11 +257,11 @@ zhs = "快捷符号　按字母上屏"
 en = "quick symbols — press a letter to commit one"
 
 [[message]]
-# :yume ? ——輸入法此刻的樣子
+# :yume ? ——輸入法此刻的樣子（拆分改成注解：草稿）
 key = "ime.state"
-zht = "{0} · 碼表 {1} · 拆分 {2} · 上屏 {3}"
-zhs = "{0} · 码表 {1} · 拆分 {2} · 上屏 {3}"
-en = "{0} · 碼表 {1} · 拆分 {2} · commit {3}"
+zht = "{0} · 碼表 {1} · 注解 {2} · 上屏 {3}"
+zhs = "{0} · 码表 {1} · 注解 {2} · 上屏 {3}"
+en = "{0} · 碼表 {1} · annotation {2} · commit {3}"
 
 [[message]]
 # :yume-table 直接指一個碼表檔，裝上了

@@ -520,7 +520,6 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     if let Some(level) = yumete_core::editor::AutoPairs::parse(&config.editor.auto_pairs) {
         editor.set_auto_pairs(level);
     }
-    editor.set_chaifen(config.editor.show_chaifen);
     editor.set_usage_groups(config.editor.usage_groups.clone());
 }
 
@@ -531,6 +530,9 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
 /// 那幾格——它們是純設定，不碰磁盤。
 pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
     ime.set_page_size(config.panel.page_size);
+    // The modes, not the mode in force: that is the writer's, moved with `/`,
+    // and a reload is not a reason to move it back.
+    ime.set_annotation_modes(&config.ime.annotation_modes);
     ime.set_panel_display(config.panel.display);
     ime.set_inline_preedit(config.panel.inline_preedit);
     // **上屏方式也在這裏推**（2026-10-07 審出來的）。從前只有啓動那一趟推它

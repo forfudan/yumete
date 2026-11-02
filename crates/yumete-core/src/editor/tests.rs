@@ -2874,9 +2874,9 @@ fn the_yume_group_asks_the_front_end_what_each_key_means() {
         assert_eq!(ask(keys).as_deref(), Some(want), "`{keys}`");
     }
 
-    // `Space z i` picks from the command line; `Space z /` flips the 拆分
-    // the way `:yume-chaifen toggle` does (2026-10-30: both used to send a
-    // request nobody answered).
+    // `Space z i` picks from the command line; `Space z /` moves to the next
+    // annotation mode the way `:yume-annotation next` does (2026-10-30: both
+    // used to send a request nobody answered).
     let mut ed = typed("那年冬天。\n");
     ed.set_ime_available(true);
     press(&mut ed, " zi");
@@ -2884,7 +2884,7 @@ fn the_yume_group_asks_the_front_end_what_each_key_means() {
     let mut ed = typed("那年冬天。\n");
     ed.set_ime_available(true);
     press(&mut ed, " z/");
-    assert!(ed.take_chaifen_request().is_some(), "{}", ed.status());
+    assert_eq!(ed.take_annotation_request(), Some(Some("next".into())), "{}", ed.status());
 
     // **`空格 空格` 撤了**，不留別名（2026-10-17 作者定）。
     assert_eq!(ask("  "), None, "`空格 空格` 不再是開關");
@@ -3600,7 +3600,7 @@ fn the_commit_method_rides_the_same_channel_as_the_scheme() {
 ///
 /// 原話：「我使用 `yume-panel` 爲什麽要載入碼表？」從前整個 `:yume-…` 家族掛着
 /// 同一行 `Need::Scheme`，於是這三條在沒載碼表的時候答「還不行，需要：載入碼
-/// 表」——而它們動的是畫面上的一格，碼表在不在都有。`chaifen`/`commit`/
+/// 表」——而它們動的是畫面上的一格，碼表在不在都有。`annotation`/`commit`/
 /// `autocompletion` 還掛着，那三個動的是引擎那一頭。
 #[test]
 fn where_the_candidates_are_drawn_needs_no_table() {
@@ -3613,27 +3613,22 @@ fn where_the_candidates_are_drawn_needs_no_table() {
 }
 
 #[test]
-fn chaifen_command_leaves_a_request_for_the_ime() {
+fn annotation_command_leaves_a_request_for_the_ime() {
     let mut ed = Editor::new();
-    assert_eq!(ed.take_chaifen_request(), None);
-    // 拆分 annotates *candidates*, so it needs a 碼表 — and says so, with
-    // nothing loaded, instead of leaving a request nobody can answer.
-    ed.execute(":yume-chaifen").unwrap();
-    assert_eq!(ed.take_chaifen_request(), None, "{}", ed.status());
+    assert_eq!(ed.take_annotation_request(), None);
+    // An annotation annotates *candidates*, so it needs a 碼表 — and says
+    // so, with nothing loaded, instead of leaving a request nobody can answer.
+    ed.execute(":yume-annotation").unwrap();
+    assert_eq!(ed.take_annotation_request(), None, "{}", ed.status());
     assert!(ed.status().contains("碼表"), "{}", ed.status());
     ed.set_ime_available(true);
-    // 裸的問（答的是此刻這一格），`on` 纔開（2026-10-19 作者定）。
-    ed.execute(":yume-chaifen").unwrap();
-    assert_eq!(ed.take_chaifen_request(), Some(false), "{}", ed.status());
-    ed.execute(":yume-chaifen on").unwrap();
-    assert_eq!(ed.take_chaifen_request(), Some(true));
-    assert_eq!(ed.take_chaifen_request(), None, "taken once only");
-    // `toggle` follows what the IME actually settled on, not the request: a
-    // scheme with no 拆分 layer refuses, and the next `toggle` still asks for
-    // "on" rather than flipping to "off".
-    ed.set_chaifen(false);
-    ed.execute(":yume-chaifen toggle").unwrap();
-    assert_eq!(ed.take_chaifen_request(), Some(true));
+    // The bare word asks; a word moves. The modes' names are the front
+    // end's, so the word goes over as written.
+    ed.execute(":yume-annotation").unwrap();
+    assert_eq!(ed.take_annotation_request(), Some(None), "{}", ed.status());
+    ed.execute(":yume-annotation double").unwrap();
+    assert_eq!(ed.take_annotation_request(), Some(Some("double".into())));
+    assert_eq!(ed.take_annotation_request(), None, "taken once only");
 }
 
 #[test]

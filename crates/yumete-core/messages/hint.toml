@@ -1788,11 +1788,11 @@ zhs = "␣z 后面：{0}"
 en = "after Space z: {0}"
 
 [[message]]
-# ␣z 輸入法那一組
-key = "hint.yume.chaifen"
-zht = "候選旁的拆分注解"
-zhs = "候选旁的拆分注解"
-en = "the 拆分 beside a candidate"
+# ␣z 輸入法那一組：換下一個注解模式（草稿）
+key = "hint.yume.annotation"
+zht = "候選旁的注解，換下一個"
+zhs = "候选旁的注解，换下一个"
+en = "the next annotation beside the candidates"
 
 [[message]]
 # ␣z 輸入法那一組

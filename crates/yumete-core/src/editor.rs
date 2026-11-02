@@ -3066,10 +3066,11 @@ pub struct Editor {
     indent_width: usize,
     /// What Tab types in Insert mode — spaces, or a TAB (Shift-Tab the other).
     tab_spaces: bool,
-    /// Set by `:chaifen`, cleared once the TUI has passed it to the IME. The
-    /// core owns no IME, so a command that configures one leaves a request here
-    /// rather than reaching across the layers.
-    chaifen_request: Option<bool>,
+    /// Set by `:yume-annotation`, cleared once the TUI has passed it to the
+    /// IME. The core owns no IME, so a command that configures one leaves a
+    /// request here rather than reaching across the layers. The inner `None`
+    /// asks which mode is in force.
+    annotation_request: Option<Option<String>>,
     /// A pending `:scheme` request, waiting for the front end to reach the IME.
     scheme_request: Option<String>,
     /// **這一趟的項目根。** 會話檔名是它的哈希，所以名字本身要另記一份——
@@ -3368,8 +3369,6 @@ pub struct Editor {
     /// megabytes, every frame. Keyed by revision, so an edit rebuilds it and a
     /// stale index can never send anybody to the wrong row.
     key_index: RefCell<Option<KeyIndex>>,
-    /// The last known 拆分 state, so `:chaifen` can toggle it.
-    chaifen: bool,
     /// What Ruby mode is editing the reading of.
     ruby_target: Option<RubyTarget>,
     /// How many half-width characters share a slot in vertical layout (緃中横);
@@ -4268,7 +4267,7 @@ impl Editor {
             last_find: None,
             indent_width: 4,
             tab_spaces: true,
-            chaifen_request: None,
+            annotation_request: None,
             scheme_request: None,
             session_root: None,
             reopen_request: None,
@@ -4346,7 +4345,6 @@ impl Editor {
             jumps: Vec::new(),
             jump_at: 0,
             key_index: RefCell::new(None),
-            chaifen: false,
             ruby_target: None,
             completion: None,
             reference: None,

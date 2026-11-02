@@ -105,15 +105,16 @@ pub fn rewrite(
                 if let Some(t) = table_at(&mut doc, &tables) {
                     t.remove(key);
                 }
-                // A table inside a table that has nothing left goes too: an
-                // empty `[keys.flavor_items]` says nothing.
-                if tables.len() > 1 {
-                    if let Some(Item::Table(top)) = doc.get_mut(tables[0]) {
-                        let empty = matches!(top.get(tables[1]), Some(Item::Table(inner)) if inner.is_empty());
-                        if empty {
-                            top.remove(tables[1]);
-                        }
+                // A table inside a table that has nothing left goes too, from
+                // the innermost out: an empty `[keys.flavor_items]` or
+                // `[ime.annotation_modes.double]` says nothing.
+                for depth in (1..tables.len()).rev() {
+                    let Some(outer) = table_at(&mut doc, &tables[..depth]) else { break };
+                    let empty = matches!(outer.get(tables[depth]), Some(Item::Table(inner)) if inner.is_empty());
+                    if !empty {
+                        break;
                     }
+                    outer.remove(tables[depth]);
                 }
             }
             _ => {

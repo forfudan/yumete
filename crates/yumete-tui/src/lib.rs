@@ -1869,16 +1869,8 @@ pub fn run(
                         });
                     }
                 }
-                if let Some(on) = editor.take_chaifen_request() {
-                    let settled = ime.set_annotations(on);
-                    editor.set_chaifen(settled);
-                    editor.set_status(if settled {
-                        say!("chaifen.on")
-                    } else if ime.annotations_available() {
-                        say!("chaifen.off")
-                    } else {
-                        say!("chaifen.unavailable")
-                    });
+                if let Some(word) = editor.take_annotation_request() {
+                    editor.set_status(annotate(ime, word.as_deref()));
                 }
             }
             // Text arriving whole, from the system clipboard by way of the
@@ -4200,10 +4192,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 ime.scheme_name(),
                 // 這一支只在 `available()` 爲真的時候走得到，所以一定說得出。
                 ime.table_source().unwrap_or_default(),
-                match ime.annotations_enabled() {
-                    true => say!("label.on"),
-                    false => say!("label.off"),
-                },
+                annotation_label(ime.annotation()),
                 commit_name(ime.commit_strategy()),
             )
         } else if yumete_ime::has_builtin_table() {
@@ -4302,7 +4291,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             return say!("ime.no-table-installed", ime.scheme_name());
         }
         full.set_page_size(ime.page_size());
-        full.set_annotations(ime.annotations_enabled());
+        full.carry_annotation_from(ime);
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
         full.set_inline_preedit(ime.inline_preedit());
@@ -4325,7 +4314,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             return say!("ime.no-builtin-table");
         };
         full.set_page_size(ime.page_size());
-        full.set_annotations(ime.annotations_enabled());
+        full.carry_annotation_from(ime);
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
         full.set_inline_preedit(ime.inline_preedit());
@@ -4351,7 +4340,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         if full.available() {
             full.set_page_size(ime.page_size());
             full.set_commit_strategy(ime.commit_override());
-            full.set_annotations(ime.annotations_enabled());
+            full.carry_annotation_from(ime);
             full.set_panel_display(ime.panel_display());
             full.set_inline_preedit(ime.inline_preedit());
             let name = full.scheme_name().to_string();
@@ -4367,6 +4356,39 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     // Put back what was working rather than leaving the writer unable to type.
     ime.set_scheme(was);
     say!("scheme.table-not-installed", tag)
+}
+
+/// **A mode's name as the reader sees it** (2026-11-02): yume's two and
+/// `off` in the interface's language, a mode the config adds as written.
+pub fn annotation_label(mode: Option<&str>) -> String {
+    match mode {
+        None | Some("off") => say!("annotation.mode.off"),
+        Some("multi") => say!("annotation.mode.multi"),
+        Some("double") => say!("annotation.mode.double"),
+        Some(other) => other.to_string(),
+    }
+}
+
+/// `:yume-annotation`: `None` asks, `off`, `next`, or a mode by name. Says
+/// what is in force afterwards, or why nothing changed.
+fn annotate(ime: &mut ImeSession, word: Option<&str>) -> String {
+    if !ime.annotations_available() {
+        return say!("annotation.unavailable");
+    }
+    let now = match word {
+        None => ime.annotation().map(str::to_string),
+        Some("off") => ime.set_annotation(None).map(str::to_string),
+        Some("next") => ime.cycle_annotation().map(str::to_string),
+        Some(name) if ime.annotation_modes().iter().any(|m| m.name == name) => {
+            ime.set_annotation(Some(name)).map(str::to_string)
+        }
+        Some(name) => {
+            let names: Vec<String> =
+                ime.annotation_modes().iter().map(|m| m.name.clone()).collect();
+            return say!("annotation.unknown", name, names.join(" "));
+        }
+    };
+    say!("annotation.now", annotation_label(now.as_deref()))
 }
 
 /// Route one Insert-mode key press to the IME. Returns `true` when the IME
@@ -4493,9 +4515,15 @@ fn ime_handle(
         // The keys the scheme binds to a function. 靈明 puts 選二 on `;` and 選三
         // on `'`; the engine owns that table, and asking it is also what lets a
         // custom 碼表 keep a key it uses as a code.
-        KeyCode::Char(c @ (';' | '\'' | '-' | '=')) if composing => {
+        KeyCode::Char(c @ (';' | '\'' | '-' | '=' | '/')) if composing => {
+            let was = ime.annotation().map(str::to_string);
             if !ime.press_func(c) {
                 return false;
+            }
+            // `/` moved the annotation on: say to which, as the status line
+            // says every other mode it changes.
+            if ime.annotation() != was.as_deref() {
+                editor.set_status(say!("annotation.now", annotation_label(ime.annotation())));
             }
         }
         // **方向鍵走候選欄**（2026-10-16 定，原話：「users can still use arrow
@@ -14397,28 +14425,48 @@ fn draw_candidate_panel(
         // 編碼在正文裏，這裏又沒有候選：一個空框沒有可說的。
         return;
     }
-    for (i, cand) in candidates.iter().enumerate() {
-        // The same markers the vertical panel uses: `[panel] markers` is one
-        // setting, and a reader who set 圈碼 does not want ASCII digits back
-        // the moment they switch to horizontal.
-        let mut row = format!(
-            "{} {}",
-            vertical::index_mark(&config.panel.markers, i),
-            cand.text
-        );
-        if !cand.completion.is_empty() {
-            row.push(' ');
-            row.push_str(&cand.completion);
-        }
-        if !cand.comment.is_empty() {
-            row.push_str("  ");
-            row.push_str(&cand.comment);
-        }
-        rows.push(row);
-    }
+    rows.extend(candidate_rows(config, &candidates, area.width));
 
     let what = Floating { rows, lit: Some(highlight), keep_off_the_caret: true };
     draw_panel_rows(frame, config, area, cursor_x, cursor_y, what);
+}
+
+/// The box's candidate rows, in a window `width` cells wide: the marker, the
+/// candidate and the keys still owed, then its annotation.
+fn candidate_rows(config: &Config, candidates: &[Candidate], width: u16) -> Vec<String> {
+    // The same markers the vertical panel uses: `[panel] markers` is one
+    // setting, and a reader who set 圈碼 does not want ASCII digits back the
+    // moment they switch to horizontal.
+    let lefts: Vec<String> = candidates
+        .iter()
+        .enumerate()
+        .map(|(i, cand)| {
+            let mut left = format!("{} {}", vertical::index_mark(&config.panel.markers, i), cand.text);
+            if !cand.completion.is_empty() {
+                left.push(' ');
+                left.push_str(&cand.completion);
+            }
+            left
+        })
+        .collect();
+    // **The annotation is a column of its own** (2026-11-02): every one starts
+    // at the same place, after the widest candidate, and the panel widens to
+    // hold them. What the window cannot hold goes a field at a time, with
+    // `…` (see [`yumete_ime::fit_fields`]).
+    let left_wide = lefts.iter().map(|l| yumete_cjk::str_width(l)).max().unwrap_or(0);
+    let room = (width as usize).saturating_sub(2 + left_wide + CANDIDATE_GAP);
+    let mut rows = Vec::with_capacity(candidates.len());
+    for (left, cand) in lefts.into_iter().zip(candidates) {
+        let fields = cand.fields();
+        if fields.is_empty() || room < 2 {
+            rows.push(left);
+            continue;
+        }
+        let pad = left_wide + CANDIDATE_GAP - yumete_cjk::str_width(&left);
+        let note = yumete_ime::fit_fields(&fields, room, yumete_cjk::str_width);
+        rows.push(format!("{left}{}{note}", " ".repeat(pad)));
+    }
+    rows
 }
 
 /// **行中那一條擺在哪一行上**（2026-10-16）：光標的下一行，蓋住它。
@@ -19018,7 +19066,7 @@ fn squeezed(text: &str) -> String {
             Scheme::LINGMING,
             "xj 相 \u{2ff0}\u{6728}\u{76ee}\nxj 想 \u{2ff1}\u{76f8}\u{5fc3}\n",
         );
-        ime.set_annotations(true);
+        ime.set_annotation(Some("double"));
         ime.input('x');
         ime.input('j');
         let config = vertical_config();
@@ -19027,6 +19075,30 @@ fn squeezed(text: &str) -> String {
         // Both decompositions are on the page, not only the highlighted one's.
         assert!(text.contains('目'), "相's own 拆分 is missing: {text}");
         assert!(text.contains('心'), "想's own 拆分 is missing: {text}");
+    }
+
+    /// **The annotation is a column of its own in the box** (2026-11-02):
+    /// it starts at one column whatever the candidate before it, and a
+    /// window too narrow for it leaves out whole fields with `…`.
+    #[test]
+    fn the_annotations_line_up_and_give_way_by_fields() {
+        let cand = |text: &str, completion: &str, comment: &str| Candidate {
+            text: text.into(),
+            completion: completion.into(),
+            comment: comment.into(),
+            ..Candidate::default()
+        };
+        let cands = [cand("相", "", "木目 · xj · xiāng · U+76F8"), cand("想", "k", "相心 · xjk · xiǎng · U+60F3")];
+        let config = Config::default();
+        let start = |row: &str, glyph: char| yumete_cjk::str_width(&row[..row.find(glyph).unwrap()]);
+        let wide = candidate_rows(&config, &cands, 80);
+        assert_eq!(start(&wide[0], '木'), start(&wide[1], '相'), "{wide:?}");
+        assert!(wide[0].ends_with("U+76F8"), "{wide:?}");
+        // Room for two fields: the rest goes whole, and `…` says so.
+        let left = start(&wide[0], '木');
+        let narrow = candidate_rows(&config, &cands, (left + 2 + 14) as u16);
+        assert!(narrow[0].ends_with("木目 · xj · …"), "{narrow:?}");
+        assert!(narrow.iter().all(|r| yumete_cjk::str_width(r) <= left + 14), "{narrow:?}");
     }
 
     /// The number of rows between the panel's top and bottom border.

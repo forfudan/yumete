@@ -219,9 +219,6 @@ pub struct EditorConfig {
     /// code and shell lists alike. 6, as the input method's candidates.
     /// 1 to 20.
     pub completion_page_size: usize,
-    /// Whether the 拆分 annotation is shown beside candidates (Feature #66).
-    /// Off by default: it is a study aid, and it widens every candidate.
-    pub show_chaifen: bool,
     /// Whether readings are laid out at all (Feature #65).
     ///
     /// **Off** by default, like every other kind of markup: what is in the file
@@ -471,7 +468,6 @@ impl Default for EditorConfig {
             zong_gap: DEFAULT_ZONG_GAP,
             word_completion: 4,
             completion_page_size: 6,
-            show_chaifen: false,
             show_ruby: false,
             usage_groups: Vec::new(),
             tatechuyoko: 4,
@@ -600,6 +596,102 @@ pub struct ImeConfig {
     /// editor and no terminal in the picture. The measurements are in
     /// `yumete_tui::system_ime`.
     pub system: SystemImePolicy,
+    /// The annotation mode the candidates start in: `"off"`, or the name of
+    /// one of [`Self::annotation_modes`] (2026-11-02). `/` while typing and
+    /// `:yume-annotation` move between them.
+    pub annotation: String,
+    /// The annotation modes, in the order `/` steps through them: yume's two
+    /// (`multi`, `double`) first, then any the config adds, by name.
+    pub annotation_modes: Vec<AnnotationMode>,
+}
+
+/// **One annotation mode**: a name and the fields it shows beside each
+/// candidate (2026-11-02). yume's own idea: a mode is a set of ticks, and
+/// 二重 and 多重 are only the two sets that ship. The engine knows modes by
+/// index; the names are the front end's, as they are in yume.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnnotationMode {
+    pub name: String,
+    /// Out of [`ANNOTATION_FIELDS`], in that order. Empty leaves the mode out
+    /// of the round: it would draw nothing.
+    pub fields: Vec<&'static str>,
+}
+
+/// The fields an annotation can show, in the order the engine draws them:
+/// 拆分 · 全息拆分 · 編碼 · 拼音 · 簡繁 · 字義 · 字集 · 統一碼. The words are
+/// yume's own (`CommentFields::NAMES`), so a mode means the same thing there.
+pub const ANNOTATION_FIELDS: [&str; 8] =
+    ["chaifen", "full_chaifen", "code", "reading", "simp_trad", "note", "charset", "unicode"];
+
+/// Each field and the message that names it.
+const ANNOTATION_FIELD_LABELS: [(&str, &str); 8] = [
+    ("chaifen", "annotation.field.chaifen"),
+    ("full_chaifen", "annotation.field.full-chaifen"),
+    ("code", "annotation.field.code"),
+    ("reading", "annotation.field.reading"),
+    ("simp_trad", "annotation.field.simp-trad"),
+    ("note", "annotation.field.note"),
+    ("charset", "annotation.field.charset"),
+    ("unicode", "annotation.field.unicode"),
+];
+
+/// The message that names a field.
+pub fn annotation_field_label(field: &str) -> &'static str {
+    ANNOTATION_FIELD_LABELS
+        .iter()
+        .find(|(name, _)| *name == field)
+        .map(|(_, label)| *label)
+        .unwrap_or("annotation.field.unicode")
+}
+
+/// yume's two modes, as it ships them (`CommentFields::MULTI`, `::DOUBLE`):
+/// 多重 is every field but 全息拆分, 二重 the 拆分 and its code.
+pub const FACTORY_ANNOTATION_MODES: [(&str, &[&str]); 2] = [
+    ("multi", &["chaifen", "code", "reading", "simp_trad", "note", "charset", "unicode"]),
+    ("double", &["chaifen", "code"]),
+];
+
+/// The modes before any config has spoken.
+pub fn factory_annotation_modes() -> Vec<AnnotationMode> {
+    FACTORY_ANNOTATION_MODES
+        .iter()
+        .map(|(name, fields)| AnnotationMode { name: name.to_string(), fields: fields.to_vec() })
+        .collect()
+}
+
+/// `off` and the mode names, as `[ime] annotation` takes them.
+pub fn annotation_words(modes: &[AnnotationMode]) -> Vec<String> {
+    std::iter::once("off".to_string()).chain(modes.iter().map(|m| m.name.clone())).collect()
+}
+
+/// `[ime.annotation_modes]` read over the factory modes: a field written by
+/// name wins, a mode the factory does not have is added after them, by name.
+fn annotation_modes_from(table: &toml::Table) -> Vec<AnnotationMode> {
+    let mut modes = factory_annotation_modes();
+    for (name, ticks) in table {
+        let Some(ticks) = ticks.as_table() else { continue };
+        let at = match modes.iter().position(|m| &m.name == name) {
+            Some(at) => at,
+            None => {
+                modes.push(AnnotationMode { name: name.clone(), fields: Vec::new() });
+                modes.len() - 1
+            }
+        };
+        let mode = &mut modes[at];
+        for (field, on) in ticks {
+            let (Some(field), Some(on)) =
+                (ANNOTATION_FIELDS.iter().find(|f| **f == field.as_str()), on.as_bool())
+            else {
+                continue;
+            };
+            mode.fields.retain(|f| f != field);
+            if on {
+                mode.fields.push(field);
+            }
+        }
+        mode.fields.sort_by_key(|f| ANNOTATION_FIELDS.iter().position(|g| g == f));
+    }
+    modes
 }
 
 /// Whether yumete may switch the **system's** input method out of the way.
@@ -642,6 +734,8 @@ impl Default for ImeConfig {
             commit: None,
             data_dirs: Vec::new(),
             system: SystemImePolicy::Auto,
+            annotation: "off".to_string(),
+            annotation_modes: factory_annotation_modes(),
         }
     }
 }
@@ -3494,6 +3588,44 @@ impl Config {
         }
     }
 
+    // 草稿: the Chinese of the three below.
+    if raw.editor.show_chaifen.is_some() {
+        problems.push(said(
+            "[editor] show_chaifen 已經没有了，改寫成 [ime] annotation = \"double\"".to_string(),
+            "[editor] show_chaifen is gone; write [ime] annotation = \"double\"".to_string(),
+        ));
+    }
+    let modes = annotation_modes_from(&raw.ime.annotation_modes);
+    if let Some(word) = raw.ime.annotation.as_deref() {
+        let words = annotation_words(&modes);
+        if !words.iter().any(|w| w == word) {
+            let names: Vec<&str> = words.iter().map(String::as_str).collect();
+            problems.push(one_of("[ime] annotation", word, &names));
+        }
+    }
+    for (name, ticks) in &raw.ime.annotation_modes {
+        let Some(ticks) = ticks.as_table() else {
+            problems.push(said(
+                format!("[ime.annotation_modes] {name}：要寫成一張表，每一欄 true 或 false"),
+                format!("[ime.annotation_modes] {name}: a table of fields, each true or false"),
+            ));
+            continue;
+        };
+        for (field, on) in ticks {
+            if !ANNOTATION_FIELDS.contains(&field.as_str()) {
+                problems.push(said(
+                    format!("[ime.annotation_modes.{name}] {field}：没有這一欄，只能是 {}", ANNOTATION_FIELDS.join("、")),
+                    format!("[ime.annotation_modes.{name}] {field}: no such field; only {}", ANNOTATION_FIELDS.join(", ")),
+                ));
+            } else if !on.is_bool() {
+                problems.push(said(
+                    format!("[ime.annotation_modes.{name}] {field} = {on}：只能是 true 或 false"),
+                    format!("[ime.annotation_modes.{name}] {field} = {on}: only true or false"),
+                ));
+            }
+        }
+    }
+
     // A command a language declares that will not do what it says is a
     // problem *about the config*, named here rather than discovered when
     // the key is pressed.
@@ -4084,6 +4216,10 @@ struct RawIme {
     commit: Option<String>,
     data_dirs: Option<Vec<String>>,
     system: Option<String>,
+    annotation: Option<String>,
+    /// `[ime.annotation_modes.<name>]`: a field ticked or not, by name.
+    #[serde(default)]
+    annotation_modes: toml::Table,
 }
 
 #[derive(Deserialize, Default)]
@@ -4137,7 +4273,8 @@ struct RawEditor {
     zong_gap: Option<usize>,
     word_completion: Option<usize>,
     completion_page_size: Option<usize>,
-    show_chaifen: Option<bool>,
+    /// Read to be reported: `[ime] annotation` took its place (2026-11-02).
+    show_chaifen: Option<toml::Value>,
     show_ruby: Option<bool>,
     ruby_dialects: Option<Vec<String>>,
     usage_groups: Option<Vec<String>>,
@@ -4333,7 +4470,7 @@ impl RawConfig {
             self.editor.zong_gap = other.editor.zong_gap;
         }
         if other.editor.show_chaifen.is_some() {
-            self.editor.show_chaifen = other.editor.show_chaifen;
+            self.editor.show_chaifen = other.editor.show_chaifen.clone();
         }
         if other.editor.show_ruby.is_some() {
             self.editor.show_ruby = other.editor.show_ruby;
@@ -4424,6 +4561,21 @@ impl RawConfig {
         }
         if other.ime.system.is_some() {
             self.ime.system = other.ime.system.clone();
+        }
+        if other.ime.annotation.is_some() {
+            self.ime.annotation = other.ime.annotation.clone();
+        }
+        // Field by field, as `[keys.flavor_items]`: a project can tick one
+        // field of a mode without restating the rest.
+        for (name, ticks) in &other.ime.annotation_modes {
+            match (self.ime.annotation_modes.get_mut(name), ticks.as_table()) {
+                (Some(toml::Value::Table(mine)), Some(theirs)) => {
+                    mine.extend(theirs.clone());
+                }
+                _ => {
+                    self.ime.annotation_modes.insert(name.clone(), ticks.clone());
+                }
+            }
         }
         // Merged entry by entry, so a project can add to what the global config
         // says rather than having to restate it.
@@ -4715,9 +4867,6 @@ impl RawConfig {
         if let Some(gap) = self.editor.zong_gap {
             config.editor.zong_gap = held(problems, "[editor] zong_gap", gap, gap.min(4), &span(0, 4));
         }
-        if let Some(on) = self.editor.show_chaifen {
-            config.editor.show_chaifen = on;
-        }
         if let Some(on) = self.editor.show_ruby {
             config.editor.show_ruby = on;
         }
@@ -4886,6 +5035,12 @@ impl RawConfig {
         }
         if let Some(system) = self.ime.system {
             config.ime.system = SystemImePolicy::from_config(&system);
+        }
+        config.ime.annotation_modes = annotation_modes_from(&self.ime.annotation_modes);
+        if let Some(word) = self.ime.annotation {
+            if annotation_words(&config.ime.annotation_modes).contains(&word) {
+                config.ime.annotation = word;
+            }
         }
         config.syntax.by_name = self.syntax;
         if let Some(name) = self.theme.name {
@@ -6355,5 +6510,53 @@ mod key_tables {
         merge_key_tables(&mut a, b);
         let space = a["space"].as_table().unwrap();
         assert!(space.contains_key("q") && space.contains_key("w"));
+    }
+}
+
+#[cfg(test)]
+mod annotation_modes {
+    use super::*;
+
+    /// yume's two, then a mode the file adds; a field written by name wins
+    /// over the factory's, and the order is the engine's whatever the file's.
+    #[test]
+    fn the_modes_are_yumes_two_and_what_the_file_adds() {
+        let config = Config::from_toml(
+            "[ime]\nannotation = \"mine\"\n\
+             [ime.annotation_modes.double]\nreading = true\nchaifen = false\n\
+             [ime.annotation_modes.mine]\nunicode = true\nchaifen = true\n",
+        );
+        let names: Vec<&str> = config.ime.annotation_modes.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["multi", "double", "mine"]);
+        assert_eq!(config.ime.annotation_modes[1].fields, ["code", "reading"]);
+        assert_eq!(config.ime.annotation_modes[2].fields, ["chaifen", "unicode"]);
+        assert_eq!(config.ime.annotation, "mine");
+        assert_eq!(Config::from_toml("").ime.annotation, "off");
+    }
+
+    /// A misspelt field, a mode that is not there, and the old switch are
+    /// each said; none of them takes the file down.
+    #[test]
+    fn what_is_wrong_is_said() {
+        let text = "[editor]\nshow_chaifen = true\n\n[ime]\nannotation = \"nope\"\n\
+                    [ime.annotation_modes.double]\nreadng = true\n";
+        let raw: RawConfig = toml::from_str(text).unwrap();
+        let mut said = Vec::new();
+        Config::complain_about(&raw, &mut said);
+        let config = Config::from_toml(text);
+        let all = said.join("\n");
+        assert!(all.contains("show_chaifen"), "{all}");
+        assert!(all.contains("nope"), "{all}");
+        assert!(all.contains("readng"), "{all}");
+        assert_eq!(config.ime.annotation, "off");
+        assert_eq!(config.ime.annotation_modes[1].fields, ["chaifen", "code"]);
+    }
+
+    /// The field words are yume's own.
+    #[test]
+    fn every_field_has_a_label() {
+        for field in ANNOTATION_FIELDS {
+            assert!(annotation_field_label(field).ends_with(&field.replace('_', "-")), "{field}");
+        }
     }
 }

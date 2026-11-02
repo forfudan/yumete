@@ -22,7 +22,7 @@ use ratatui::style::Modifier;
 use ratatui::widgets::Clear;
 use ratatui::Frame;
 
-use yumete_config::panel::{FlavorRow, FlavorSection, ItemFrom, Layer, Pane, Panel};
+use yumete_config::panel::{FlavorRow, FlavorSection, ItemFrom, Layer, Pane, Panel, Subpage};
 use yumete_config::settings_ui::{Kind, Setting, GROUPS};
 use yumete_config::Config;
 use yumete_core::input::Key;
@@ -178,17 +178,17 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         }
         return true;
     }
-    // **The flavour's page** (2026-11-02): its own rows, the panel's keys.
-    if panel.flavor_page.is_some() {
+    // **A page** (2026-11-02): its own rows, the panel's keys.
+    if panel.page.is_some() {
         match key {
-            Key::Esc | Key::Char('h') | Key::Left => panel.close_flavor_page(),
-            Key::Char('j') | Key::Down => panel.flavor_step(true),
-            Key::Char('k') | Key::Up => panel.flavor_step(false),
-            Key::Enter | Key::Char(' ') | Key::Char('i') | Key::Char('c') => panel.flavor_press(),
-            Key::Char('d') => panel.flavor_drop(),
+            Key::Esc | Key::Char('h') | Key::Left => panel.close_page(),
+            Key::Char('j') | Key::Down => panel.page_step(true),
+            Key::Char('k') | Key::Up => panel.page_step(false),
+            Key::Enter | Key::Char(' ') | Key::Char('i') | Key::Char('c') => panel.page_press(),
+            Key::Char('d') => panel.page_drop(),
             Key::Tab => panel.flip_into(),
-            Key::Char('g') => panel.flavor_page = Some(0),
-            Key::Char('G') => panel.flavor_page = Some(panel.flavor_rows().len().saturating_sub(1)),
+            Key::Char('g') => panel.page = Some(0),
+            Key::Char('G') => panel.page = Some(panel.page_len().saturating_sub(1)),
             _ => {}
         }
         return true;
@@ -218,7 +218,7 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         // `l` goes into the flavour's page from its row, as it goes into a
         // group from the groups.
         Key::Char('l') | Key::Right => match (panel.pane, panel.here().map(|s| s.kind)) {
-            (Pane::Settings, Some(Kind::Page)) => panel.open_flavor_page(),
+            (Pane::Settings, Some(Kind::Page)) => panel.open_page(),
             _ => panel.across(true),
         },
         // **`Enter` 改這一項**，撥的撥、打字的打字（2026-10-09 作者定，見
@@ -483,6 +483,9 @@ fn drawn(setting: &Setting, value: &str) -> String {
 /// are on, and that it opens.
 fn row_value(panel: &Panel, setting: &Setting, value: &str) -> String {
     match setting.kind {
+        Kind::Page if setting.path() == "ime.annotation_modes" => {
+            format!("{}  ›", say!("settings.annotation-modes.count", panel.annotation_modes().len()))
+        }
         Kind::Page => {
             let (on, of, _) = panel.flavor_counts();
             format!("{}  ›", say!("settings.flavor-items.count", on, of))
@@ -556,8 +559,9 @@ pub fn draw(
     // 而它和路徑同一個顏色、同一個位置。原話：「左上標題改爲『設置 [{0}]』……用金字
     // 會更醒目。右側的文件名用正常顔色」。
     let mut title = format!("{} [{}]", say!("settings.title"), said(panel.into.layer().label()));
-    if panel.flavor_page.is_some() {
-        title.push_str(&format!(" › {}", say!("settings.keys.flavor-items")));
+    if panel.page.is_some() {
+        let label = panel.here().map(|s| s.label).unwrap_or("settings.keys.flavor-items");
+        title.push_str(&format!(" › {}", said(label)));
     }
     put_text(buf, area.x + 1, area.y, right, &title, head);
     let sheet = panel.sheet();
@@ -622,10 +626,11 @@ pub fn draw(
     let note = note_for(panel);
     // While a value is typed only Enter, Esc and Backspace mean anything
     // (2026-10-31: the row went on listing the other keys).
-    let keys = match (panel.typing.is_some(), panel.flavor_page.is_some()) {
+    let keys = match (panel.typing.is_some(), panel.subpage().filter(|_| panel.page.is_some())) {
         (true, _) => say!("settings.keys-typing"),
-        (false, true) => say!("settings.keys-flavor-page"),
-        (false, false) => say!("settings.keys"),
+        (false, Some(Subpage::Flavor)) => say!("settings.keys-flavor-page"),
+        (false, Some(Subpage::Annotation)) => say!("settings.keys-annotation-page"),
+        (false, None) => say!("settings.keys"),
     };
     // **說明和三層同一塊**（2026-10-13 報的）。原話：「描述欄可以合并到『出厂』『全
     // 局』『本项目』這個框中……这样的话用户的閲讀顺序是符合的：描述+现在的状态和来
@@ -722,8 +727,11 @@ pub fn draw(
     // ---- 右邊：這一組的那些項 ----------------------------------------------
     let mut caret = None;
     let from = col.name;
-    if panel.flavor_page.is_some() {
-        draw_flavor_page(buf, panel, &ink, ground, from, right, area.y + 2, list_ends);
+    if panel.page.is_some() {
+        match panel.subpage() {
+            Some(Subpage::Annotation) => draw_annotation_page(buf, panel, &ink, ground, from, right, area.y + 2, list_ends),
+            _ => draw_flavor_page(buf, panel, &ink, ground, from, right, area.y + 2, list_ends),
+        }
         if block_high > 0 {
             draw_flavor_block(buf, panel, &ink, ground, split + 3, right, note_at, &note_rows, layers_at, foot);
         }
@@ -901,6 +909,98 @@ pub fn draw(
     caret
 }
 
+/// **The annotation modes' page** (2026-11-02): each mode under its name,
+/// its eight fields with their ticks, and on the right the file that set
+/// a field when one did.
+#[allow(clippy::too_many_arguments)]
+fn draw_annotation_page(
+    buf: &mut ratatui::buffer::Buffer,
+    panel: &Panel,
+    ink: &crate::theme::Palette,
+    ground: ratatui::style::Style,
+    from: u16,
+    right: u16,
+    top: u16,
+    ends: u16,
+) {
+    let text = ground.fg(ink.text());
+    let quiet = ground.fg(ink.quiet());
+    // One line each, headings among them: (row index, heading or field).
+    let mut lines: Vec<(Option<usize>, String, Option<yumete_config::panel::AnnotationRow>)> = Vec::new();
+    for (i, (heading, row)) in panel.annotation_rows().into_iter().enumerate() {
+        if let Some(mode) = heading {
+            let label = crate::annotation_label(Some(&mode));
+            let mut head = match label == mode {
+                true => mode.clone(),
+                false => format!("{label}  {mode}"),
+            };
+            if panel.mode_fields(&mode).is_empty() {
+                head.push_str(&format!("  {}", say!("settings.annotation-modes.empty")));
+            }
+            lines.push((None, head, None));
+        }
+        lines.push((Some(i), String::new(), Some(row)));
+    }
+    let here = panel.page.unwrap_or(0);
+    let at = lines.iter().position(|(i, _, _)| *i == Some(here)).unwrap_or(0);
+    let room = ends.saturating_sub(top) as usize;
+    let first = match room {
+        0 => 0,
+        _ => at.saturating_sub(room - 1),
+    };
+    for (n, (index, head, row)) in lines.iter().enumerate().skip(first) {
+        let y = top + (n - first) as u16;
+        if y >= ends {
+            break;
+        }
+        let Some(row) = row else {
+            put_text(buf, from, y, right, head, quiet);
+            continue;
+        };
+        let on_it = *index == Some(here);
+        let band = match on_it {
+            true => ink.ground(yumete_config::rung::HEAD),
+            false => ground,
+        };
+        if on_it {
+            for x in from..right {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_symbol(" ").set_style(band);
+                }
+            }
+        }
+        let lit = |style: ratatui::style::Style| match (on_it, band.bg) {
+            (true, Some(bg)) => style.bg(bg),
+            _ => style,
+        };
+        let (on, layer) = panel.field_shown(row);
+        let tick = match on {
+            true => "[x]",
+            false => "[ ]",
+        };
+        let tick_style = match on_it {
+            true => band.fg(ink.gold()).add_modifier(Modifier::REVERSED),
+            false => text,
+        };
+        put_text(buf, from + 1, y, right, tick, tick_style);
+        let note = match layer {
+            Layer::Factory => String::new(),
+            other => said(other.label()),
+        };
+        let note_wide = yumete_cjk::str_width(&note) as u16;
+        let note_at = right.saturating_sub(note_wide + 1);
+        let name_at = from + 5;
+        let name = crate::elide(
+            &said(yumete_config::annotation_field_label(row.field)),
+            note_at.saturating_sub(name_at + 1) as usize,
+        );
+        put_text(buf, name_at, y, note_at, &name, lit(text));
+        if !note.is_empty() && note_at > name_at {
+            put_text(buf, note_at, y, right, &note, lit(ground.fg(ink.azure())));
+        }
+    }
+}
+
 /// The level row's own hint, shown on the page as on the list.
 const SETTINGS_FLAVOR_HINT: &str = "settings.keys.flavor.hint";
 
@@ -938,7 +1038,7 @@ fn draw_flavor_page(
         }
         lines.push(PageLine::Row(i, row));
     }
-    let here = panel.flavor_page.unwrap_or(0);
+    let here = panel.page.unwrap_or(0);
     let at = lines.iter().position(|l| matches!(l, PageLine::Row(i, _) if *i == here)).unwrap_or(0);
     let room = ends.saturating_sub(top) as usize;
     let first = match room {
@@ -1074,15 +1174,42 @@ fn draw_flavor_block(
         }
         put_text(buf, x, y, right, row, ground.fg(ink.text()));
     }
+    // A field of a mode: the factory's tick, then each file's.
+    if let Some(row) = panel.annotation_here() {
+        let (_, from) = panel.field_shown(&row);
+        let layers = panel.field_layers(&row);
+        let from = match from {
+            Layer::Factory => ItemFrom::Level,
+            other => ItemFrom::Layer(other),
+        };
+        return draw_tick_layers(buf, ink, ground, x, right, layers_at, foot, layers, from, said(Layer::Factory.label()));
+    }
     let Some(FlavorRow::Item(item)) = panel.flavor_here() else { return };
     let (_, from) = panel.item_shown(item);
-    for (i, (layer, value)) in panel.item_layers(item).iter().enumerate() {
+    draw_tick_layers(buf, ink, ground, x, right, layers_at, foot, panel.item_layers(item), from, say!("settings.layer.level"));
+}
+
+/// A tick's three layers, one a line, the one in force in gold.
+#[allow(clippy::too_many_arguments)]
+fn draw_tick_layers(
+    buf: &mut ratatui::buffer::Buffer,
+    ink: &crate::theme::Palette,
+    ground: ratatui::style::Style,
+    x: u16,
+    right: u16,
+    layers_at: u16,
+    foot: u16,
+    layers: [(Layer, Option<bool>); 3],
+    from: ItemFrom,
+    factory: String,
+) {
+    for (i, (layer, value)) in layers.iter().enumerate() {
         let y = layers_at + i as u16;
         if y >= foot {
             break;
         }
         let name = match layer {
-            Layer::Factory => say!("settings.layer.level"),
+            Layer::Factory => factory.clone(),
             other => said(other.label()),
         };
         let shown = match value {
@@ -1116,6 +1243,15 @@ fn note_for(panel: &Panel) -> String {
 }
 
 fn note_text(panel: &Panel) -> String {
+    if let Some(row) = panel.annotation_here() {
+        let english = yumete_core::messages::language() == yumete_core::messages::Language::English;
+        let gap = if english { "  " } else { "　" };
+        let mut note = format!("[ime.annotation_modes.{}] {}", row.mode, row.field);
+        if panel.mode_fields(&row.mode).is_empty() {
+            note.push_str(&format!("{gap}{}", say!("settings.annotation-modes.empty")));
+        }
+        return note;
+    }
     match panel.flavor_here() {
         Some(FlavorRow::Level) => return said(SETTINGS_FLAVOR_HINT),
         Some(FlavorRow::Item(item)) => {
@@ -1541,11 +1677,11 @@ mod tests {
         p.across(true);
         p.row = p.rows().iter().position(|s| s.kind == Kind::Page).unwrap();
         press(&mut p, Key::Char('l'));
-        assert_eq!(p.flavor_page, Some(0));
+        assert_eq!(p.page, Some(0));
         let page = shot(&p, 110, 34);
         assert!(page.contains(&said("keys.flavor.item.tables")), "{page}");
         press(&mut p, Key::Char('h'));
-        assert_eq!(p.flavor_page, None);
+        assert_eq!(p.page, None);
         assert_eq!(p.here().map(|s| s.kind), Some(Kind::Page), "back on its row");
     }
 }

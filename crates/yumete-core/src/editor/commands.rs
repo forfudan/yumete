@@ -1512,9 +1512,8 @@ impl Editor {
                 self.scheme_request = Some(tag);
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetChaifen(want) => {
-                self.chaifen = want.over(self.chaifen);
-                self.chaifen_request = Some(self.chaifen);
+            Command::YumeAnnotation(word) => {
+                self.annotation_request = Some(word);
                 Ok(CommandOutcome::Continue)
             }
 

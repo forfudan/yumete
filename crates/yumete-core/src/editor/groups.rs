@@ -1262,7 +1262,7 @@ pub(super) static YUME: Group = Group {
         ch('7', NormalCmd::YumeMenuSize7, "hint.yume.menu-size"),
         ch('8', NormalCmd::YumeMenuSize8, "hint.yume.menu-size"),
         ch('9', NormalCmd::YumeMenuSize9, "hint.yume.menu-size"),
-        ch('/', NormalCmd::YumeToggleChaifen, "hint.yume.chaifen"),
+        ch('/', NormalCmd::YumeNextAnnotation, "hint.yume.annotation"),
         ch('t', NormalCmd::YumeInstalledTable, "hint.yume.table"),
         ch('w', NormalCmd::YumeTableSource, "hint.yume.which"),
         ch('W', NormalCmd::YumeDataLocation, "hint.yume.where"),

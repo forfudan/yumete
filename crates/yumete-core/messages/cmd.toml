@@ -3,6 +3,38 @@
 # What the editor says, one block per tag; see README.md beside this file.
 
 [[message]]
+# :yume-annotation 的參數：二重（草稿）
+key = "cmd.annotations.double"
+zht = "二重注解：拆分和編碼"
+zhs = "二重注解：拆分和编码"
+en = "the 拆分 and its code"
+find = "注解 二重 拆分 double"
+
+[[message]]
+# :yume-annotation 的參數：多重（草稿）
+key = "cmd.annotations.multi"
+zht = "多重注解：除全息拆分外每一欄"
+zhs = "多重注解：除全息拆分外每一栏"
+en = "every field but the full 拆分"
+find = "注解 多重 multi"
+
+[[message]]
+# :yume-annotation 的參數：下一個（草稿）
+key = "cmd.annotations.next"
+zht = "下一個模式，同打字時按 /"
+zhs = "下一个模式，同打字时按 /"
+en = "the next mode, as / while typing"
+find = "注解 下一個 下一个 next"
+
+[[message]]
+# :yume-annotation 的參數：關（草稿）
+key = "cmd.annotations.off"
+zht = "關掉注解"
+zhs = "关掉注解"
+en = "no annotation"
+find = "注解 關 关 off"
+
+[[message]]
 # : 命令選單裏，吃一個路徑的命令後面畫的佔位
 key = "cmd.arg.path"
 zht = "<路徑>"
@@ -2281,6 +2313,14 @@ en = "save every file that changed, then leave"
 find = "全部保存退出 全存再退 存了再退 write quit all wqa xa"
 
 [[message]]
+# : 命令選單裏 annotation 那一項的説明(yume 組)（草稿）
+key = "cmd.yume.annotation"
+zht = "候選旁的注解：關、下一個、或一個注解模式"
+zhs = "候选旁的注解：关、下一个、或一个注解模式"
+en = "the annotation beside the candidates: off, the next mode, or a mode by name"
+find = "輸入法 输入法 拆分 注解 多重 二重 annotation chaifen"
+
+[[message]]
 # : 命令選單裏 autocompletion 那一項的説明(yume 組)
 key = "cmd.yume.autocompletion"
 zht = "輸入預測：碼没打完就先給候選"
@@ -2295,14 +2335,6 @@ zht = "改用出廠自帶的靈明碼表，不管裝了什麼"
 zhs = "改用出厂自带的灵明码表，不管装了什么"
 en = "use the built-in 靈明 table, whatever else is installed"
 find = "輸入法 输入法 碼表 码表 內置 内置 出廠 出厂 builtin"
-
-[[message]]
-# : 命令選單裏 chaifen 那一項的説明(yume 組)
-key = "cmd.yume.chaifen"
-zht = "候選旁的拆分注解"
-zhs = "候选旁的拆分注解"
-en = "the 拆分 annotation beside the candidates"
-find = "輸入法 输入法 拆分 注解 部件 chaifen"
 
 [[message]]
 # : 命令選單裏 commit 那一項的説明(yume 組)

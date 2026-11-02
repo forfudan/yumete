@@ -2036,21 +2036,34 @@ pub fn draw_candidate_panel(
     // thought it was, so with annotations on the highlight was off by one.)
     let mut columns: Vec<Vec<String>> = vec![header];
     let mut comment_from: Vec<usize> = vec![usize::MAX];
-    for (i, cand) in candidates.iter().enumerate() {
-        // Number, a blank row, the candidate, then the keys still owed.
-        let mut column = vec![index_mark(&config.panel.markers, i), String::new()];
-        column.extend(graphemes(&cand.text).map(String::from));
-        column.extend(graphemes(&cand.completion).map(String::from));
-        let at = if cand.comment.is_empty() {
+    let heads: Vec<Vec<String>> = candidates
+        .iter()
+        .enumerate()
+        .map(|(i, cand)| {
+            // Number, a blank row, the candidate, then the keys still owed.
+            let mut column = vec![index_mark(&config.panel.markers, i), String::new()];
+            column.extend(graphemes(&cand.text).map(String::from));
+            column.extend(graphemes(&cand.completion).map(String::from));
+            column
+        })
+        .collect();
+    // **The annotations start on one row** (2026-11-02), after the longest
+    // candidate, as they start at one column in the box; what the panel's
+    // height cannot hold goes a field at a time, with `…`.
+    let at = heads.iter().map(Vec::len).max().unwrap_or(0) + 1;
+    let room = (area.height as usize).saturating_sub(2 + at);
+    for (mut column, cand) in heads.into_iter().zip(candidates.iter()) {
+        let fields = cand.fields();
+        let from = if fields.is_empty() || room < 1 {
             usize::MAX
         } else {
-            let at = column.len() + 1;
-            column.push(String::new());
-            column.extend(packed(&cand.comment));
+            let note = yumete_ime::fit_fields(&fields, room, |s| packed(s).len());
+            column.resize(at, String::new());
+            column.extend(packed(&note));
             at
         };
         columns.push(column);
-        comment_from.push(at);
+        comment_from.push(from);
     }
 
     let depth = columns.iter().map(|c| c.len()).max().unwrap_or(1);

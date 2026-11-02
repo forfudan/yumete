@@ -295,9 +295,10 @@ pub enum Command {
     /// `:vertical-keys [logical|visual]` — 竪排時 `hjkl` 走行文還是走版面。
     /// `None` 是互換。
     SetVerticalKeys(Option<yumete_cjk::VerticalKeys>),
-    /// `:yume-chaifen [on|off]` — the 拆分 annotation beside candidates
-    /// (Feature #66). `None` is the bare word, which toggles.
-    SetChaifen(Switch),
+    /// `:yume-annotation [off|next|<mode>]` — the annotation beside the
+    /// candidates (2026-11-02). `None` asks which mode is in force; the
+    /// front end knows the modes' names, so it settles the word.
+    YumeAnnotation(Option<String>),
     /// `:scheme <tag>` — switch the input scheme (Feature #86).
     SetScheme(String),
     /// `:view-hanging [on|off]` — 句讀 in the margin rather than a square each
@@ -589,7 +590,7 @@ pub enum Command {
     YumeMenuSize(Option<usize>),
     /// `:yume-autocompletion [on|off]` — 輸入預測: whether a code that is not
     /// finished is answered with the candidates that would finish it. `None`
-    /// toggles, as `:yume-chaifen` does.
+    /// toggles.
     YumeAutocompletion(Switch),
     /// `:yume on` / `:yume abc` / `:yume off` — which of the three states the
     /// input method is in (#290).
@@ -1689,7 +1690,7 @@ const FORCEABLE: &[&str] = &[
     // 這一串就是全樹聲明了 `needs:` 的那些（`:convert!` 另算，它那個 `force` 說
     // 的是「做大的那一種改寫」）。
     "convert!",
-    "yume-chaifen!",
+    "yume-annotation!",
     "yume-commit!",
     "yume-autocompletion!",
     "view-sentence!",
@@ -2168,6 +2169,15 @@ const WRAP: &[Word] = &[
 const ENGAGEMENT: &[Word] = &[
     Word { name: "on", help: "cmd.yume.on", needs: &[] },
     Word { name: "off", help: "cmd.yume.off", needs: &[] },
+];
+
+/// `:yume-annotation`'s words: off, the next, and yume's two modes. A mode
+/// the config adds is typed by name.
+const ANNOTATIONS: &[Word] = &[
+    Word { name: "off", help: "cmd.annotations.off", needs: &[] },
+    Word { name: "next", help: "cmd.annotations.next", needs: &[] },
+    Word { name: "multi", help: "cmd.annotations.multi", needs: &[] },
+    Word { name: "double", help: "cmd.annotations.double", needs: &[] },
 ];
 
 const COMMITS: &[Word] = &[
@@ -3894,12 +3904,13 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
-        name: "yume-chaifen",
+        name: "yume-annotation",
         aliases: &[],
-        help: "cmd.yume.chaifen",
+        help: "cmd.yume.annotation",
         needs: &[Need::Scheme],
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| Ok(Command::SetChaifen(switched(p)))),
+        // 草稿: the placeholder.
+        params: &[Param::WordsOr { of: ANNOTATIONS, default: None, or: "<模式名>" }],
+        build: Some(|p| Ok(Command::YumeAnnotation(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "yume-commit",
@@ -3939,7 +3950,7 @@ pub const COMMANDS: &[Entry] = &[
         // 它。加 `!` 更糟，那是為了挪一條候選欄去載一張碼表。
         //
         // 同一條理由放了 `:yume-inline-preedit` 與 `:yume-menu-size`。還掛着的
-        // 三個（`chaifen`/`commit`/`autocompletion`）動的是引擎那一頭。
+        // 三個（`annotation`/`commit`/`autocompletion`）動的是引擎那一頭。
         needs: &[],
         params: &[Param::Words { of: PANELS, default: None }],
         build: Some(|p| {
@@ -5385,7 +5396,7 @@ const RENAMED: &[(&str, &str)] = &[
     // switcher. A wrong signpost is worse than none.
     ("bd", "buffer-close"),
     ("buffers", "buffer"),
-    ("cf", "yume-chaifen"),
+    ("cf", "yume-annotation"),
     ("conflicts", "check-merge"),
     ("cp", "clipboard-paste"),
     ("cy", "clipboard-yank"),
@@ -5940,7 +5951,8 @@ pub fn all_choices() -> Vec<Choice> {
 /// What the command on this line needs before it can do anything.
 ///
 /// The *deepest* word that says so: `:table-rules` needs a table because
-/// `rules` says it, and `:yume-chaifen` needs a 碼表 because `chaifen` does.
+/// `rules` says it, and `:yume-annotation` needs a 碼表 because `annotation`
+/// does.
 /// Walked from the same table the completion walks, so a prerequisite is
 /// declared once and shown, said and satisfied from the one declaration.
 pub fn needs_of(line: &str) -> &'static [Need] {
@@ -6857,7 +6869,16 @@ mod tests {
 
     #[test]
     fn the_input_method_lives_under_one_word() {
-        assert_eq!(parse(":yume-chaifen"), Ok(Command::SetChaifen(Switch::Ask)));
+        assert_eq!(parse(":yume-annotation"), Ok(Command::YumeAnnotation(None)));
+        assert_eq!(
+            parse(":yume-annotation double"),
+            Ok(Command::YumeAnnotation(Some("double".into())))
+        );
+        // A mode the config adds is a name the table does not know.
+        assert_eq!(
+            parse(":yume-annotation mine"),
+            Ok(Command::YumeAnnotation(Some("mine".into())))
+        );
         assert_eq!(
             parse(":yume-scheme lingming"),
             Ok(Command::SetScheme("lingming".into()))
@@ -7711,10 +7732,10 @@ mod tests {
             Ok(Command::SetScheme("lingming".into()))
         );
         assert_eq!(parse(":yume-scheme ling"), Ok(Command::SetScheme("lingming".into())));
-        // `chaifen` and `commit` both start with `c`, so `yume-c` alone names
-        // neither — the menu shows both, which is the answer.
-        assert_eq!(parse(":yume-ch"), Ok(Command::SetChaifen(Switch::Ask)));
-        assert!(matches!(parse(":yume-c"), Err(CommandError::Unknown(_))));
+        // `annotation` and `autocompletion` both start with `a`, so `yume-a`
+        // alone names neither — the menu shows both, which is the answer.
+        assert_eq!(parse(":yume-an"), Ok(Command::YumeAnnotation(None)));
+        assert!(matches!(parse(":yume-a"), Err(CommandError::Unknown(_))));
         // No name at all means the one the config asked for.
         assert_eq!(parse(":yume-s"), Ok(Command::SetScheme(String::new())));
         // A prefix that names two words names neither, loudly, rather than

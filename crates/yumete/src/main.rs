@@ -897,7 +897,7 @@ fn main() -> ExitCode {
     mark("方案", &mut marks);
     let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or_else(Scheme::first);
     let page_size = config.panel.page_size;
-    let chaifen = config.editor.show_chaifen;
+    let annotation = (config.ime.annotation_modes.clone(), config.ime.annotation.clone());
     let start_scheme = config.ime.start;
     // 上屏方式 (Feature #209). `None` is 「whatever the scheme's own default is」
     // and has to stay a `None` all the way down, or a config that says nothing
@@ -914,14 +914,20 @@ fn main() -> ExitCode {
     let preedit = config.panel.inline_preedit;
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
+    let annotation_at_load = annotation.clone();
     let load = move |ime: &mut ImeSession| -> String {
         *ime = ImeSession::language_only(wanted);
         yumete_tui::want_page_size(page_size);
         ime.set_page_size(page_size);
+        // The modes and the one asked for, kept by the session for the
+        // scheme `:yume-scheme` loads later.
+        let (modes, mode) = &annotation_at_load;
+        ime.set_annotation_modes(modes);
+        ime.set_annotation(Some(mode.as_str()).filter(|m| *m != "off"));
         let said = match start_scheme {
             // …unless the config says this is a session for writing 漢字,
             // which for anybody who writes an input method it usually is.
-            true => switch_scheme_at_startup(ime, wanted, (page_size, chaifen)),
+            true => switch_scheme_at_startup(ime, wanted, (page_size, &annotation_at_load)),
             false => String::new(),
         };
         // After, not before: the line above may have replaced the session
@@ -1049,7 +1055,7 @@ fn main() -> ExitCode {
             // `ImeSession::language_only`，只有在配置說「這一趟是寫漢字的」的時候纔往下
             // 載碼表；不載的話 `input()` 只是把字母堆起來，空格一按原樣上屏（實測打
             // `wo` 空格出來的就是 `wo`）。
-            let said = switch_scheme_at_startup(&mut ime, wanted, (page_size, chaifen));
+            let said = switch_scheme_at_startup(&mut ime, wanted, (page_size, &annotation));
             if !said.is_empty() {
                 editor.set_status(said);
             }
@@ -1204,13 +1210,13 @@ fn main() -> ExitCode {
             unheard.push(line);
         }
         // Warning: **the names here are names, and they rot** (2026-10-20). These two
-        // were the spellings of 2026-09: `:chaifen` is `:yume-chaifen` and
+        // were the spellings of 2026-09: `:chaifen` is `:yume-annotation` and
         // `:preview` is `:view-preview`, and both folds happened without this
         // list hearing about it — so the one notice whose whole job is to say
         // 「what you typed did nothing」 was naming a command that does not
         // exist. `tests/inert_notice.rs` holds the printed names to the table.
-        if editor.take_chaifen_request().is_some() {
-            unheard.push(":yume-chaifen".into());
+        if editor.take_annotation_request().is_some() {
+            unheard.push(":yume-annotation".into());
         }
         if editor.take_preview_request().is_some() {
             unheard.push(":view-preview".into());
@@ -2326,7 +2332,7 @@ fn parse_size(text: &str) -> Result<(u16, u16), String> {
 fn switch_scheme_at_startup(
     ime: &mut ImeSession,
     wanted: Scheme,
-    (page_size, chaifen): (usize, bool),
+    (page_size, (modes, mode)): (usize, &(Vec<yumete_ime::AnnotationMode>, String)),
 ) -> String {
     let mut full = ImeSession::from_default_dirs(wanted);
     // The first installed scheme, not 靈明: on a build that ships only 冰雪
@@ -2336,7 +2342,8 @@ fn switch_scheme_at_startup(
         full = ImeSession::from_default_dirs(fallback);
     }
     full.set_page_size(page_size);
-    full.set_annotations(chaifen);
+    full.set_annotation_modes(modes);
+    full.set_annotation(Some(mode.as_str()).filter(|m| *m != "off"));
     let name = full.scheme_name().to_string();
     let ok = full.available();
     *ime = full;
@@ -2603,7 +2610,8 @@ KEYS (Normal mode, Helix-style):
               :search-project  :toc  across the project / this file's headings
               :export html|typst|csv|tsv   write it out
               :vertical  :horizontal    :view-margin [never|dense|loose|always]
-              :yume-chaifen   the 拆分 annotation beside candidates
+              :yume-annotation  the annotation beside candidates:
+                              off, next, or a mode (multi, double)
               :yume-where     the six places 碼表 and 字料 are looked
                               for, and what each one holds
               :ruby       edit the reading at the cursor, or annotate the

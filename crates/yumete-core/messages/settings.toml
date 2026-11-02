@@ -45,6 +45,20 @@ zhs = "这一条让整份配置都没生效，用的是出厂设置"
 en = "this one line stops the whole file applying; the factory settings are in use"
 
 [[message]]
+# 設置面板：注解模式那一行的值，有幾個模式（草稿）
+key = "settings.annotation-modes.count"
+zht = "{0} 個模式"
+zhs = "{0} 个模式"
+en = "{0} modes"
+
+[[message]]
+# 設置面板：注解模式那一頁，一個模式一欄都没勾，打字時 / 跳過它（草稿）
+key = "settings.annotation-modes.empty"
+zht = "一欄都没勾，/ 跳過它"
+zhs = "一栏都没勾，/ 跳过它"
+en = "nothing ticked: / skips it"
+
+[[message]]
 # 設置面板：存不下去({0} ＝ 為什麽)
 key = "settings.cannot-save"
 zht = "存不下去：{0}"
@@ -488,20 +502,6 @@ zhs = "不带文件名启动时：开空白文档，还是接着上次那些文�
 en = "when started with no file: a blank page, or the files that were open last time"
 
 [[message]]
-# 設置：候选旁的拆分
-key = "settings.editor.show-chaifen"
-zht = "候選旁的拆分"
-zhs = "候选旁的拆分"
-en = "show 拆分"
-
-[[message]]
-# 設置：候选旁的拆分——一句話
-key = "settings.editor.show-chaifen.hint"
-zht = "打字時在候選字旁邊寫出它的拆分"
-zhs = "打字时在候选字旁边写出它的拆分"
-en = "while typing, show each candidate's 拆分 beside it"
-
-[[message]]
 # 設置：排出注音
 key = "settings.editor.show-ruby"
 zht = "排出注音"
@@ -845,6 +845,34 @@ zhs = "这一组还没填——先在 config.toml 里写"
 en = "not filled in yet — write it in config.toml for now"
 
 [[message]]
+# 設置：候選旁的注解（草稿）
+key = "settings.ime.annotation"
+zht = "候選旁的注解"
+zhs = "候选旁的注解"
+en = "annotation"
+
+[[message]]
+# 設置：注解模式那一頁的入口（草稿）
+key = "settings.ime.annotation-modes"
+zht = "注解模式"
+zhs = "注解模式"
+en = "annotation modes"
+
+[[message]]
+# 設置：注解模式那一行的說明（草稿）
+key = "settings.ime.annotation-modes.hint"
+zht = "每個模式寫哪幾欄。要加一個模式，在配置裏寫 [ime.annotation_modes.名字]"
+zhs = "每个模式写哪几栏。要加一个模式，在配置里写 [ime.annotation_modes.名字]"
+en = "which fields each mode shows. To add a mode, write [ime.annotation_modes.name] in the config"
+
+[[message]]
+# 設置：候選旁的注解——一句話（草稿）
+key = "settings.ime.annotation.hint"
+zht = "打字時候選旁寫什麼：關，或一個注解模式；打字時按 / 換下一個"
+zhs = "打字时候选旁写什么：关，或一个注解模式；打字时按 / 换下一个"
+en = "what is written beside each candidate: nothing, or an annotation mode; / while typing moves to the next"
+
+[[message]]
 # 設置：上屏方式
 key = "settings.ime.commit"
 zht = "上屏方式"
@@ -906,6 +934,13 @@ key = "settings.keys"
 zht = "hl 換欄, jk 上下, ␣ 切換, i 改, c 重打, d 撤掉這一層, e 開這個檔, Tab 切換全局/本地設置, :w 存, :q 退"
 zhs = "hl 换栏, jk 上下, ␣ 切换, i 改, c 重打, d 撤掉这一层, e 开这个档, Tab 切换全局/本地设置, :w 存, :q 退"
 en = "hl left/right, jk move, space toggle, i edit, c retype, d drop, e open it, Tab which file, :w save, :q leave"
+
+[[message]]
+# 設置面板：注解模式那一頁底下的鍵（草稿）
+key = "settings.keys-annotation-page"
+zht = "jk 上下, ␣ 切換, d 跟回下一層, h 回上一層, Tab 切換全局/本地設置, :w 存, :q 退"
+zhs = "jk 上下, ␣ 切换, d 跟回下一层, h 回上一层, Tab 切换全局/本地设置, :w 存, :q 退"
+en = "jk move, space toggle, d follow the layer below, h back, Tab which file, :w save, :q leave"
 
 [[message]]
 # 設置面板：風味各項那一頁的按鍵（草稿）

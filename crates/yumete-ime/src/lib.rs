@@ -35,13 +35,13 @@ use yume_core::key_bindings::KeyAction;
 use yume_core::lexicon::Lexicon;
 use yume_core::zigen::ZigenTable;
 use yume_core::{
-    custom_scheme, scheme_slots, AnnotationTable, Charset, CodeTable, Engine, FluencyTable,
-    UnigramTable, NAMED_CHARSETS,
+    custom_scheme, scheme_slots, AnnotationTable, Charset, CodeTable, CommentFields,
+    CommentProfile, Engine, FluencyTable, UnigramTable, NAMED_CHARSETS,
 };
 
 pub use reading::YumeReader;
 pub use segment::YumeSegmenter;
-pub use yumete_config::{PanelDisplay, InlinePreedit};
+pub use yumete_config::{AnnotationMode, PanelDisplay, InlinePreedit};
 // A frontend that reads [`DataProblem`] has to be able to name its `kind`, and
 // it has no yume-core of its own.
 pub use yume_core::data_manifest::{DataFile, DataKind};
@@ -398,12 +398,68 @@ pub struct Candidate {
     /// The remaining-letters 下標 (completion hint), including a `␣` mark when an
     /// explicit Space is needed. Empty for an exact match.
     pub completion: String,
-    /// The 拆分 (chaifen) decomposition comment, when annotations are enabled.
+    /// The annotation, when a mode is on: the mode's fields, joined by
+    /// [`ANNOTATION_SEPARATOR`]. [`Candidate::fields`] takes it apart.
     pub comment: String,
     /// The 陸臺港 (G/T/H) source tag, when applicable.
     pub source_tag: String,
     /// The 簡碼 (shortcut-code) hint (`=k` form), when applicable.
     pub simp_code: String,
+}
+
+/// What the engine joins an annotation's fields with (`AnnotationCommentator`'s
+/// separator).
+pub const ANNOTATION_SEPARATOR: &str = " · ";
+
+impl Candidate {
+    /// The annotation's fields, one each, so a panel too narrow for all of
+    /// them can leave whole fields out rather than cut one in half.
+    pub fn fields(&self) -> Vec<&str> {
+        match self.comment.is_empty() {
+            true => Vec::new(),
+            false => self.comment.split(ANNOTATION_SEPARATOR).collect(),
+        }
+    }
+}
+
+/// **As many whole fields as fit in `room` cells**, joined as the engine
+/// joins them, and `…` after them when some were left out (2026-11-02).
+///
+/// Cut at a field, never inside one: `U+6C` says nothing, and the fields
+/// come in the engine's order, 拆分 first, so what stays is what matters
+/// most. When not even the first field fits, it is cut, with the `…`.
+pub fn fit_fields(fields: &[&str], room: usize, width: impl Fn(&str) -> usize) -> String {
+    let all = fields.join(ANNOTATION_SEPARATOR);
+    if width(&all) <= room {
+        return all;
+    }
+    let ellipsis = "…";
+    let mut out = String::new();
+    for field in fields {
+        let next = match out.is_empty() {
+            true => field.to_string(),
+            false => format!("{out}{ANNOTATION_SEPARATOR}{field}"),
+        };
+        let tail = format!("{ANNOTATION_SEPARATOR}{ellipsis}");
+        if width(&next) + width(&tail) > room {
+            break;
+        }
+        out = next;
+    }
+    if out.is_empty() {
+        // Not one whole field fits: the first, as far as it goes.
+        let mut cut = String::new();
+        for ch in fields.first().copied().unwrap_or("").chars() {
+            let mut more = cut.clone();
+            more.push(ch);
+            if width(&more) + width(ellipsis) > room {
+                break;
+            }
+            cut = more;
+        }
+        return format!("{cut}{ellipsis}");
+    }
+    format!("{out}{ANNOTATION_SEPARATOR}{ellipsis}")
 }
 
 /// The longest a code, or a word, can be and still fit a compiled table.
@@ -453,9 +509,13 @@ pub struct ImeSession {
     scheme: Scheme,
     data_dirs: Vec<PathBuf>,
     available: bool,
-    /// Whether the 拆分 annotation is on (Feature #66). Off by default: it is
-    /// a study aid, and it widens every candidate.
-    annotations: bool,
+    /// The annotation modes by name, in the engine's order (2026-11-02). The
+    /// engine knows them by index, as in yume; the names are ours.
+    annotation_modes: Vec<AnnotationMode>,
+    /// The mode the writer asked for, which is not always the one in force:
+    /// a session with no 碼表 yet cannot annotate, and a scheme that cannot
+    /// draw a mode falls to another. Kept so the next scheme gets the ask.
+    annotation_wanted: Option<String>,
     /// Whether the 碼表 in use is this binary's rather than one found on disk.
     /// Worth knowing: a writer who has just installed a newer 靈明 and is still
     /// seeing the old candidates deserves to be told which one is answering.
@@ -527,7 +587,8 @@ impl ImeSession {
             scheme,
             data_dirs,
             available,
-            annotations: false,
+            annotation_modes: yumete_config::factory_annotation_modes(),
+            annotation_wanted: None,
             builtin,
             table_file: None,
             table_skipped: 0,
@@ -582,7 +643,8 @@ impl ImeSession {
             scheme: Scheme::LINGMING,
             data_dirs: dirs,
             available: true,
-            annotations: false,
+            annotation_modes: yumete_config::factory_annotation_modes(),
+            annotation_wanted: None,
             builtin: false,
             table_file: Some(path.to_path_buf()),
             table_skipped: skipped,
@@ -628,7 +690,8 @@ impl ImeSession {
             scheme,
             data_dirs: dirs,
             available,
-            annotations: false,
+            annotation_modes: yumete_config::factory_annotation_modes(),
+            annotation_wanted: None,
             builtin: true,
             table_file: None,
             table_skipped: 0,
@@ -730,7 +793,8 @@ impl ImeSession {
             scheme,
             data_dirs: dirs,
             available: false,
-            annotations: false,
+            annotation_modes: yumete_config::factory_annotation_modes(),
+            annotation_wanted: None,
             builtin: false,
             table_file: None,
             table_skipped: 0,
@@ -754,7 +818,8 @@ impl ImeSession {
             scheme,
             data_dirs: Vec::new(),
             available: false,
-            annotations: false,
+            annotation_modes: yumete_config::factory_annotation_modes(),
+            annotation_wanted: None,
             builtin: false,
             table_file: None,
             table_skipped: 0,
@@ -774,7 +839,8 @@ impl ImeSession {
             scheme,
             data_dirs: Vec::new(),
             available: true,
-            annotations: false,
+            annotation_modes: yumete_config::factory_annotation_modes(),
+            annotation_wanted: None,
             builtin: false,
             table_file: None,
             table_skipped: 0,
@@ -799,7 +865,8 @@ impl ImeSession {
             scheme,
             data_dirs: Vec::new(),
             available: true,
-            annotations: false,
+            annotation_modes: yumete_config::factory_annotation_modes(),
+            annotation_wanted: None,
             builtin: false,
             table_file: None,
             table_skipped: 0,
@@ -873,6 +940,9 @@ impl ImeSession {
         // new engine, and a preference that evaporated when you tried another
         // scheme would look like a setting that does not stick.
         let chosen = self.commit_override();
+        // The annotation too: a new engine starts with yume's modes and none
+        // on, and the writer's mode went with the old one.
+        let mode = self.annotation_wanted.clone();
         let (mut engine, mut available, problems) = build_engine(scheme, &self.data_dirs);
         // Warning: **換方案也要退得到出廠表**（2026-10-12 量到的）。這一句從前只寫在
         // `new` 裏，而這一支直接拿 `build_engine` 的答案——於是一臺沒裝宇浩的機器上
@@ -887,6 +957,9 @@ impl ImeSession {
         self.available = available;
         self.problems = problems;
         self.set_commit_strategy(chosen);
+        let modes = std::mem::take(&mut self.annotation_modes);
+        self.set_annotation_modes(&modes);
+        self.set_annotation(mode.as_deref());
         available
     }
 
@@ -943,7 +1016,7 @@ impl ImeSession {
     }
 
     /// Press one of the keys the scheme binds to a function — `;` `'` `-` `=`
-    /// — and say whether the engine took it.
+    /// `/` — and say whether the engine took it.
     ///
     /// The binding table is yume's, not yumete's: 靈明 puts 選二 on `;` and 選三
     /// on `'`, which a 形碼 writer presses hundreds of times a day, and yumete
@@ -959,11 +1032,17 @@ impl ImeSession {
             '\'' => FuncKey::Quote,
             '-' => FuncKey::Minus,
             '=' => FuncKey::Equal,
+            '/' => FuncKey::Slash,
             _ => return false,
         };
         match self.engine.key_action(key) {
             KeyAction::Native => false,
             KeyAction::Noop => true,
+            // yume's `/` while typing (2026-11-02): the next annotation mode.
+            KeyAction::CycleComment => {
+                self.cycle_annotation();
+                true
+            }
             KeyAction::SelectSecond => {
                 self.engine.select_second();
                 true
@@ -1263,24 +1342,64 @@ impl ImeSession {
         self.engine.comments_available()
     }
 
-    /// Whether the 拆分 annotation is switched on.
-    pub fn annotations_enabled(&self) -> bool {
-        self.annotations
+    /// **The annotation modes** (2026-11-02), pushed to the engine as yume's
+    /// front ends push theirs: one profile per mode, by index. A mode with
+    /// no field is kept, so the indices stay put, but left out of the round.
+    pub fn set_annotation_modes(&mut self, modes: &[AnnotationMode]) {
+        let profiles = modes
+            .iter()
+            .map(|mode| {
+                let fields = CommentFields::parse_names(&mode.fields.join(" "))
+                    .unwrap_or(CommentFields::NONE);
+                CommentProfile::new(fields, fields.any())
+            })
+            .collect();
+        self.annotation_modes = modes.to_vec();
+        self.engine.set_comment_profiles(profiles);
+        // The engine re-checks the mode in force against the new list; ask
+        // again for the one wanted, which may be drawable now.
+        let wanted = self.annotation_wanted.clone();
+        self.set_annotation(wanted.as_deref());
     }
 
-    /// Switch the 拆分 annotation on or off, returning whether it is now on.
-    ///
-    /// The engine keeps a *table* of annotation profiles and an index into it.
-    /// Profile 1 is 二重注解 — the 拆分 and its code, which is what `:chaifen`
-    /// means. Profile 0 is 多重注解: 拆分 plus 分節碼 plus every reading plus the
-    /// character sets plus the code point, some fifty cells wide, which in a
-    /// terminal panel is not an annotation but a wall. A scheme that cannot
-    /// render annotations stays off whatever is asked.
-    pub fn set_annotations(&mut self, on: bool) -> bool {
-        self.annotations = on && self.engine.comments_available();
-        self.engine
-            .set_comment_mode(if self.annotations { Some(1) } else { None });
-        self.annotations
+    /// The modes, in the order `/` steps through them.
+    pub fn annotation_modes(&self) -> &[AnnotationMode] {
+        &self.annotation_modes
+    }
+
+    /// The mode the candidates are annotated in; `None` is off.
+    pub fn annotation(&self) -> Option<&str> {
+        let at = self.engine.comment_mode()?;
+        self.annotation_modes.get(at).map(|m| m.name.as_str())
+    }
+
+    /// Switch to a mode by name, or off with `None`; answers the mode now in
+    /// force. A mode this scheme cannot draw falls to the first it can, as
+    /// the engine decides; a scheme that cannot annotate at all stays off.
+    pub fn set_annotation(&mut self, name: Option<&str>) -> Option<&str> {
+        self.annotation_wanted = name.map(str::to_string);
+        let at = name.and_then(|name| self.annotation_modes.iter().position(|m| m.name == name));
+        let at = at.filter(|_| self.engine.comments_available());
+        self.engine.set_comment_mode(at);
+        self.annotation()
+    }
+
+    /// The next mode, as `/` while typing: off, each mode that draws
+    /// something, off again.
+    pub fn cycle_annotation(&mut self) -> Option<&str> {
+        if self.engine.comments_available() {
+            self.engine.cycle_comment_mode();
+        }
+        self.annotation_wanted = self.annotation().map(str::to_string);
+        self.annotation()
+    }
+
+    /// Take the modes and the mode in force from the session this one
+    /// replaces (a scheme switch builds a new one).
+    pub fn carry_annotation_from(&mut self, old: &ImeSession) {
+        self.set_annotation_modes(&old.annotation_modes);
+        let mode = old.annotation_wanted.clone();
+        self.set_annotation(mode.as_deref());
     }
 
     /// A word segmenter over this session's language model (Feature #63).
@@ -2731,5 +2850,70 @@ mod timing {
         let mut full = ImeSession::from_default_dirs(Scheme::LINGMING);
         println!("碼表 (from_default_dirs): {:.1?} (available: {})", t.elapsed(), full.available());
         let _ = &mut full;
+    }
+}
+
+#[cfg(test)]
+mod annotation_modes {
+    use super::*;
+
+    fn width(s: &str) -> usize {
+        yumete_cjk::str_width(s)
+    }
+
+    /// Whole fields go, from the end, and `…` says some did.
+    #[test]
+    fn a_narrow_panel_leaves_out_whole_fields() {
+        let fields = ["氵气", "vnk", "qì", "U+6C7D"];
+        assert_eq!(fit_fields(&fields, 80, width), "氵气 · vnk · qì · U+6C7D");
+        assert_eq!(fit_fields(&fields, 20, width), "氵气 · vnk · qì · …");
+        assert_eq!(fit_fields(&fields, 12, width), "氵气 · …");
+        // Not even the first: it is cut, never left out, and `…` follows.
+        assert_eq!(fit_fields(&fields, 3, width), "氵…");
+    }
+
+    /// `/` while typing steps through the modes, then off, as yume's does;
+    /// the modes are the config's, by name.
+    #[test]
+    fn slash_steps_through_the_modes() {
+        let mut ime = ImeSession::from_table_text(
+            Scheme::LINGMING,
+            "xj 相 \u{2ff0}\u{6728}\u{76ee}\nxj 想 \u{2ff1}\u{76f8}\u{5fc3}\n",
+        );
+        ime.set_annotation_modes(&yumete_config::factory_annotation_modes());
+        ime.input('x');
+        ime.input('j');
+        assert_eq!(ime.annotation(), None);
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            assert!(ime.press_func('/'), "the engine takes `/` while typing");
+            seen.push(ime.annotation().map(str::to_string));
+        }
+        assert_eq!(seen, [Some("multi".into()), Some("double".into()), None]);
+        assert!(ime.is_composing(), "`/` typed nothing");
+    }
+
+    /// A mode with no field is left out of the round, and asking for it by
+    /// name finds another.
+    #[test]
+    fn a_mode_with_nothing_ticked_is_skipped() {
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "xj 相 \u{2ff0}\u{6728}\u{76ee}\n");
+        let mut modes = yumete_config::factory_annotation_modes();
+        modes[0].fields.clear();
+        ime.set_annotation_modes(&modes);
+        ime.input('x');
+        assert_eq!(ime.cycle_annotation(), Some("double"));
+        assert_eq!(ime.cycle_annotation(), None);
+    }
+
+    /// The mode asked for before a 碼表 is loaded is the one the next scheme
+    /// starts in.
+    #[test]
+    fn the_mode_asked_for_outlives_the_session() {
+        let mut cold = ImeSession::from_table_text(Scheme::LINGMING, "");
+        cold.set_annotation(Some("double"));
+        let mut full = ImeSession::from_table_text(Scheme::LINGMING, "xj 相 \u{2ff0}\u{6728}\u{76ee}\n");
+        full.carry_annotation_from(&cold);
+        assert_eq!(full.annotation(), Some("double"));
     }
 }

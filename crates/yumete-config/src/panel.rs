@@ -175,23 +175,26 @@ fn declared_in(text: &str) -> BTreeMap<String, String> {
         return out;
     };
     for (table, item) in doc.iter() {
-        let Some(t) = item.as_table() else { continue };
-        for (key, value) in t.iter() {
-            if let Some(v) = value.as_value() {
-                out.insert(format!("{table}.{key}"), v.to_string().trim().to_string());
-            }
-            // One table down (2026-11-02): `[keys.flavor_items]` is a page of
-            // the panel, and `[keys.normal]` says which keys a binding took.
-            if let Some(inner) = value.as_table() {
-                for (sub, value) in inner.iter() {
-                    if let Some(v) = value.as_value() {
-                        out.insert(format!("{table}.{key}.{sub}"), v.to_string().trim().to_string());
-                    }
-                }
-            }
+        if let Some(t) = item.as_table() {
+            declare(&mut out, table, t);
         }
     }
     out
+}
+
+/// One table's values, and the tables inside it, all the way down
+/// (2026-11-02): `[keys.flavor_items]` and `[ime.annotation_modes.double]`
+/// are pages of the panel, and `[keys.normal]` says which keys a binding
+/// took.
+fn declare(out: &mut BTreeMap<String, String>, at: &str, t: &toml_edit::Table) {
+    for (key, value) in t.iter() {
+        if let Some(v) = value.as_value() {
+            out.insert(format!("{at}.{key}"), v.to_string().trim().to_string());
+        }
+        if let Some(inner) = value.as_table() {
+            declare(out, &format!("{at}.{key}"), inner);
+        }
+    }
 }
 
 /// 一個 [`Change`] 寫進 toml 會是什麽樣子。
@@ -282,9 +285,29 @@ pub struct Panel {
     pub typing: Option<String>,
     /// 上一次存盤說的話（哪幾個鍵被註釋掉了）。
     pub said: Option<Said>,
-    /// **The flavour's page is open**, on this row of [`Panel::flavor_rows`]
-    /// (2026-11-02). `None` is the ordinary list.
-    pub flavor_page: Option<usize>,
+    /// **A page is open**, on this row of it (2026-11-02). Which page is the
+    /// row it was opened from ([`Panel::subpage`]). `None` is the ordinary
+    /// list.
+    pub page: Option<usize>,
+}
+
+/// The pages a row can open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subpage {
+    /// `[keys.flavor_items]`.
+    Flavor,
+    /// `[ime.annotation_modes]`.
+    Annotation,
+}
+
+/// One row of the annotation page: a field of a mode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnnotationRow {
+    /// The mode's name, as the config writes it (`multi`, `double`, or one
+    /// the config adds).
+    pub mode: String,
+    /// Out of [`crate::ANNOTATION_FIELDS`].
+    pub field: &'static str,
 }
 
 /// One row of the flavour's page.
@@ -336,7 +359,7 @@ impl Panel {
             row: 0,
             typing: None,
             said: None,
-            flavor_page: None,
+            page: None,
         }
     }
 
@@ -547,7 +570,7 @@ impl Panel {
     pub fn press(&mut self) {
         let Some(setting) = self.here() else { return };
         if setting.kind == Kind::Page {
-            return self.open_flavor_page();
+            return self.open_page();
         }
         let now = self.mine_now(setting);
         let next = match setting.kind {
@@ -813,25 +836,45 @@ impl Panel {
 
     /// The page's row the cursor is on.
     pub fn flavor_here(&self) -> Option<FlavorRow> {
-        let at = self.flavor_page?;
+        let at = self.page.filter(|_| self.subpage() == Some(Subpage::Flavor))?;
         self.flavor_rows().get(at).map(|(_, row)| *row)
     }
 
+    // ---- Pages -----------------------------------------------------------
+
+    /// The page the row under the cursor opens, if it opens one.
+    pub fn subpage(&self) -> Option<Subpage> {
+        let setting = self.here().filter(|s| s.kind == Kind::Page)?;
+        match setting.path().as_str() {
+            "ime.annotation_modes" => Some(Subpage::Annotation),
+            _ => Some(Subpage::Flavor),
+        }
+    }
+
+    /// How many rows the open page has.
+    pub fn page_len(&self) -> usize {
+        match self.subpage() {
+            Some(Subpage::Flavor) => self.flavor_rows().len(),
+            Some(Subpage::Annotation) => self.annotation_rows().len(),
+            None => 0,
+        }
+    }
+
     /// Go in (`l`, Space, Enter, `i` on the entry row).
-    pub fn open_flavor_page(&mut self) {
+    pub fn open_page(&mut self) {
         self.typing = None;
-        self.flavor_page = Some(0);
+        self.page = Some(0);
     }
 
     /// Come back to the entry row (`h`, Esc).
-    pub fn close_flavor_page(&mut self) {
-        self.flavor_page = None;
+    pub fn close_page(&mut self) {
+        self.page = None;
     }
 
     /// `j` / `k` on the page.
-    pub fn flavor_step(&mut self, down: bool) {
-        let many = self.flavor_rows().len();
-        if let Some(at) = self.flavor_page.as_mut() {
+    pub fn page_step(&mut self, down: bool) {
+        let many = self.page_len();
+        if let Some(at) = self.page.as_mut() {
             *at = match down {
                 true => (*at + 1).min(many.saturating_sub(1)),
                 false => at.saturating_sub(1),
@@ -839,10 +882,154 @@ impl Panel {
         }
     }
 
+    /// Space, Enter, `i` on the page.
+    pub fn page_press(&mut self) {
+        match self.subpage() {
+            Some(Subpage::Flavor) => self.flavor_press(),
+            Some(Subpage::Annotation) => self.annotation_press(),
+            None => {}
+        }
+    }
+
+    /// `d` on the page.
+    pub fn page_drop(&mut self) {
+        let path = match self.subpage() {
+            Some(Subpage::Flavor) => match self.flavor_here() {
+                Some(FlavorRow::Level) => "keys.flavor".to_string(),
+                Some(FlavorRow::Item(item)) => Self::item_path(item),
+                None => return,
+            },
+            Some(Subpage::Annotation) => match self.annotation_here() {
+                Some(row) => Self::field_path(&row),
+                None => return,
+            },
+            None => return,
+        };
+        let sheet = self.sheet_mut();
+        match sheet.declared.contains_key(&path) {
+            true => sheet.edits.insert(path, Change::Drop),
+            false => sheet.edits.remove(&path),
+        };
+    }
+
+    /// **A tick on a page flips.** Flipped to what the layers below give,
+    /// the line goes from the file, so the tick follows them again.
+    fn flip(&mut self, path: String, below: bool) {
+        let now = Self::said_bool(self.sheet().says(&path)).unwrap_or(below);
+        let want = !now;
+        let declared = Self::said_bool(self.sheet().declared.get(&path).cloned());
+        let sheet = self.sheet_mut();
+        match (want == below, declared) {
+            (true, Some(_)) => {
+                sheet.edits.insert(path, Change::Drop);
+            }
+            (true, None) => {
+                sheet.edits.remove(&path);
+            }
+            (false, Some(was)) if was == want => {
+                sheet.edits.remove(&path);
+            }
+            (false, _) => {
+                sheet.edits.insert(path, Change::Tick(want));
+            }
+        }
+    }
+
+    // ---- The annotation page (2026-11-02) ----------------------------------
+
+    fn field_path(row: &AnnotationRow) -> String {
+        format!("ime.annotation_modes.{}.{}", row.mode, row.field)
+    }
+
+    /// The modes, as the panel shows them: yume's two, then every name
+    /// either file writes, in order.
+    pub fn annotation_modes(&self) -> Vec<String> {
+        let mut names: Vec<String> =
+            crate::FACTORY_ANNOTATION_MODES.iter().map(|(n, _)| n.to_string()).collect();
+        let mut more = std::collections::BTreeSet::new();
+        for sheet in [&self.global, &self.local] {
+            for path in sheet.declared.keys().chain(sheet.edits.keys()) {
+                let Some(rest) = path.strip_prefix("ime.annotation_modes.") else { continue };
+                if let Some((name, _)) = rest.rsplit_once('.') {
+                    if !names.iter().any(|n| n == name) {
+                        more.insert(name.to_string());
+                    }
+                }
+            }
+        }
+        names.extend(more);
+        names
+    }
+
+    /// The page's rows: each mode's eight fields, the mode's name heading
+    /// its first.
+    pub fn annotation_rows(&self) -> Vec<(Option<String>, AnnotationRow)> {
+        let mut rows = Vec::new();
+        for mode in self.annotation_modes() {
+            for (n, field) in crate::ANNOTATION_FIELDS.iter().enumerate() {
+                rows.push(((n == 0).then(|| mode.clone()), AnnotationRow { mode: mode.clone(), field }));
+            }
+        }
+        rows
+    }
+
+    /// The page's row the cursor is on.
+    pub fn annotation_here(&self) -> Option<AnnotationRow> {
+        let at = self.page.filter(|_| self.subpage() == Some(Subpage::Annotation))?;
+        self.annotation_rows().into_iter().nth(at).map(|(_, row)| row)
+    }
+
+    /// What the factory says of a field: yume's two modes have their ticks,
+    /// a mode the config adds has none.
+    fn field_by_factory(row: &AnnotationRow) -> bool {
+        crate::FACTORY_ANNOTATION_MODES
+            .iter()
+            .any(|(name, fields)| *name == row.mode && fields.contains(&row.field))
+    }
+
+    /// The three layers of a field.
+    pub fn field_layers(&self, row: &AnnotationRow) -> [(Layer, Option<bool>); 3] {
+        let path = Self::field_path(row);
+        [
+            (Layer::Factory, Some(Self::field_by_factory(row))),
+            (Layer::Global, Self::said_bool(self.global.says(&path))),
+            (Layer::Local, Self::said_bool(self.local.says(&path))),
+        ]
+    }
+
+    /// A field as it is now, and the layer that says so.
+    pub fn field_shown(&self, row: &AnnotationRow) -> (bool, Layer) {
+        let [(_, factory), (_, global), (_, local)] = self.field_layers(row);
+        match (local, global) {
+            (Some(on), _) => (on, Layer::Local),
+            (None, Some(on)) => (on, Layer::Global),
+            (None, None) => (factory.unwrap_or(false), Layer::Factory),
+        }
+    }
+
+    /// How many fields a mode shows.
+    pub fn mode_fields(&self, mode: &str) -> Vec<&'static str> {
+        crate::ANNOTATION_FIELDS
+            .iter()
+            .copied()
+            .filter(|field| self.field_shown(&AnnotationRow { mode: mode.to_string(), field }).0)
+            .collect()
+    }
+
+    fn annotation_press(&mut self) {
+        let Some(row) = self.annotation_here() else { return };
+        let path = Self::field_path(&row);
+        let below = match self.into {
+            Which::Global => Self::field_by_factory(&row),
+            Which::Local => Self::said_bool(self.global.says(&path)).unwrap_or_else(|| Self::field_by_factory(&row)),
+        };
+        self.flip(path, below);
+    }
+
     /// Space, Enter, `i`: the level moves on, an item flips. **Flipped to
     /// what the layers below give, the line goes from the file**, so the
     /// item follows the level again and a level change later moves it.
-    pub fn flavor_press(&mut self) {
+    fn flavor_press(&mut self) {
         match self.flavor_here() {
             Some(FlavorRow::Level) => {
                 let level = Self::setting("keys.flavor");
@@ -852,44 +1039,11 @@ impl Panel {
                 self.settle(level, Change::Text(next.to_string()));
             }
             Some(FlavorRow::Item(item)) => {
-                let path = Self::item_path(item);
-                let now = Self::said_bool(self.sheet().says(&path)).unwrap_or_else(|| self.item_below(item));
-                let want = !now;
                 let below = self.item_below(item);
-                let declared = Self::said_bool(self.sheet().declared.get(&path).cloned());
-                let sheet = self.sheet_mut();
-                match (want == below, declared) {
-                    (true, Some(_)) => {
-                        sheet.edits.insert(path, Change::Drop);
-                    }
-                    (true, None) => {
-                        sheet.edits.remove(&path);
-                    }
-                    (false, Some(was)) if was == want => {
-                        sheet.edits.remove(&path);
-                    }
-                    (false, _) => {
-                        sheet.edits.insert(path, Change::Tick(want));
-                    }
-                }
+                self.flip(Self::item_path(item), below);
             }
             None => {}
         }
-    }
-
-    /// `d` on the page: the item follows the level again (the level row,
-    /// as `d` on its own row).
-    pub fn flavor_drop(&mut self) {
-        let path = match self.flavor_here() {
-            Some(FlavorRow::Level) => "keys.flavor".to_string(),
-            Some(FlavorRow::Item(item)) => Self::item_path(item),
-            None => return,
-        };
-        let sheet = self.sheet_mut();
-        match sheet.declared.contains_key(&path) {
-            true => sheet.edits.insert(path, Change::Drop),
-            false => sheet.edits.remove(&path),
-        };
     }
 
     // ---- 存 -------------------------------------------------------------
@@ -1407,14 +1561,14 @@ mod tests {
         p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Keys).unwrap();
         p.row = p.rows().iter().position(|s| s.key == "flavor_items").unwrap();
         p.press();
-        assert_eq!(p.flavor_page, Some(0), "Space on the row goes in");
+        assert_eq!(p.page, Some(0), "Space on the row goes in");
         assert_eq!(p.flavor_here(), Some(FlavorRow::Level));
         let at = |p: &Panel, item: FlavorItem| {
             p.flavor_rows().iter().position(|(_, r)| *r == FlavorRow::Item(item)).unwrap()
         };
 
         // Off by name: a basic item at the basic level.
-        p.flavor_page = Some(at(&p, FlavorItem::Tables));
+        p.page = Some(at(&p, FlavorItem::Tables));
         assert_eq!(p.item_shown(FlavorItem::Tables), (true, ItemFrom::Level));
         p.flavor_press();
         assert_eq!(p.item_shown(FlavorItem::Tables), (false, ItemFrom::Layer(Layer::Global)));
@@ -1427,7 +1581,10 @@ mod tests {
         // Flipped back to what the level gives: the line goes, and the
         // table with it.
         let mut p = Panel::open(Some(path.clone()), None);
-        p.flavor_page = Some(at(&p, FlavorItem::Tables));
+        p.pane = Pane::Settings;
+        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Keys).unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "flavor_items").unwrap();
+        p.page = Some(at(&p, FlavorItem::Tables));
         p.flavor_press();
         assert_eq!(p.item_shown(FlavorItem::Tables), (true, ItemFrom::Level));
         p.save().expect("saved");
@@ -1438,15 +1595,60 @@ mod tests {
         // A full item at the basic level: on by name, then the level moves
         // to full and the line is only the level's own answer; `d` drops it.
         let mut p = Panel::open(Some(path.clone()), None);
-        p.flavor_page = Some(at(&p, FlavorItem::EscCollapses));
+        p.pane = Pane::Settings;
+        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Keys).unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "flavor_items").unwrap();
+        p.page = Some(at(&p, FlavorItem::EscCollapses));
         p.flavor_press();
         assert_eq!(p.item_shown(FlavorItem::EscCollapses), (true, ItemFrom::Layer(Layer::Global)));
-        p.flavor_page = Some(0);
+        p.page = Some(0);
         p.flavor_press();
         assert_eq!(p.flavor_level(), yumete_cjk::FlavorLevel::Full);
-        p.flavor_page = Some(at(&p, FlavorItem::EscCollapses));
-        p.flavor_drop();
+        p.page = Some(at(&p, FlavorItem::EscCollapses));
+        p.page_drop();
         assert_eq!(p.item_shown(FlavorItem::EscCollapses), (true, ItemFrom::Level));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **The annotation modes' page** (2026-11-02): a field ticked is written
+    /// under `[ime.annotation_modes.<mode>]`, ticked back to the factory the
+    /// line goes and the emptied table with it, and a mode the file adds
+    /// gets its own fields.
+    #[test]
+    fn the_annotation_page_writes_fields_by_mode_and_takes_them_back() {
+        let dir = std::env::temp_dir().join(format!("yumete-set-annotation-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "[ime.annotation_modes.mine]\nunicode = true\n").unwrap();
+
+        let mut p = Panel::open(Some(path.clone()), None);
+        p.pane = Pane::Settings;
+        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Ime).unwrap();
+        p.row = p.rows().iter().position(|s| s.key == "annotation_modes").unwrap();
+        p.press();
+        assert_eq!(p.page, Some(0), "Space on the row goes in");
+        assert_eq!(p.annotation_modes(), ["multi", "double", "mine"]);
+        assert_eq!(p.mode_fields("mine"), ["unicode"]);
+        assert_eq!(p.mode_fields("double"), ["chaifen", "code"]);
+
+        let at = |p: &Panel, mode: &str, field: &str| {
+            p.annotation_rows().iter().position(|(_, r)| r.mode == mode && r.field == field).unwrap()
+        };
+        p.page = Some(at(&p, "double", "reading"));
+        p.page_press();
+        p.save().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("[ime.annotation_modes.double]\nreading = true"), "{text}");
+        assert_eq!(p.mode_fields("double"), ["chaifen", "code", "reading"]);
+        assert_eq!(crate::Config::from_toml(&text).ime.annotation_modes[1].fields, ["chaifen", "code", "reading"]);
+
+        // Back to the factory's: the line goes, and the table it was in.
+        p.page_press();
+        p.save().unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("double"), "{text}");
+        assert!(text.contains("[ime.annotation_modes.mine]"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

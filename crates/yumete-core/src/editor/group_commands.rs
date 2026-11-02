@@ -291,7 +291,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::YumeMenuSize7, |e, _| e.ask_the_input_method("menu:7"), Key::Char('7')),
     (NormalCmd::YumeMenuSize8, |e, _| e.ask_the_input_method("menu:8"), Key::Char('8')),
     (NormalCmd::YumeMenuSize9, |e, _| e.ask_the_input_method("menu:9"), Key::Char('9')),
-    (NormalCmd::YumeToggleChaifen, |e, _| e.run_the_line(":yume-chaifen toggle"), Key::Char('/')),
+    (NormalCmd::YumeNextAnnotation, |e, _| e.run_the_line(":yume-annotation next"), Key::Char('/')),
     (NormalCmd::YumeInstalledTable, |e, _| e.ask_the_input_method("~"), Key::Char('t')),
     (NormalCmd::YumeTableSource, |e, _| e.ask_the_input_method("?"), Key::Char('w')),
     (NormalCmd::YumeDataLocation, |e, _| e.ask_the_input_method("where"), Key::Char('W')),

@@ -131,7 +131,7 @@ impl Editor {
         for (keys, what) in [
             (":yume on", say!("help.chinese.toggle-ime")),
             (":yume-scheme", say!("help.chinese.switch-scheme")),
-            (":yume-chaifen on", say!("help.chinese.chaifen-under-candidates")),
+            (":yume-annotation double", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),
             (":word-mark tint", say!("help.chinese.word-tint")),
             (":word-list-reload", say!("help.chinese.reload-project-words")),

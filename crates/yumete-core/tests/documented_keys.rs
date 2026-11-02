@@ -146,10 +146,9 @@ const DISOWNED: &[&str] = &[
     // Ambiguous prefixes: `recover`, `redo`, `render` — the manual's own
     // example of 「兩個都不選」.
     ":re",
-    // Ambiguous one level down, and printed for the same reason: `chaifen` and
-    // `commit` both begin with `c`.
-    ":yume c",
-    ":yume-c",
+    // Ambiguous one level down, and printed for the same reason:
+    // `annotation` and `autocompletion` both begin with `a`.
+    ":yume-a",
     // §「沒有了」 — the names deleted when a group was made, printed beside the
     // spelling that replaced each of them. 舊名字直接刪掉 is the philosophy the
     // table is there to state, so every one of these has to stay missing.

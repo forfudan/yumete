@@ -2625,15 +2625,10 @@ impl Editor {
         self.fill_request.take()
     }
 
-    /// Take a pending `:chaifen` request, if one is waiting for the IME.
-    pub fn take_chaifen_request(&mut self) -> Option<bool> {
-        self.chaifen_request.take()
-    }
-
-    /// Tell the editor what the IME actually settled on, so `:chaifen` toggles
-    /// from the truth rather than from what was asked for.
-    pub fn set_chaifen(&mut self, on: bool) {
-        self.chaifen = on;
+    /// Take a pending `:yume-annotation` request, if one is waiting for the
+    /// IME: `Some(None)` asks, `Some(Some(word))` is `off`, `next` or a mode.
+    pub fn take_annotation_request(&mut self) -> Option<Option<String>> {
+        self.annotation_request.take()
     }
 
     /// Move `amount` steps onward (or `back`) the way the text is read.
