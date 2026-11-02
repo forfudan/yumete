@@ -12605,6 +12605,51 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
 }
 
 #[test]
+fn helix_window_keys_turn_swap_and_open_a_file_in_a_split() {
+    // helix's `C-w t`, `C-w H J K L` and `C-w f F` (2026-11-02).
+    let dir = tmp().join(format!("yumete-cw-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("二.md"), "雪\n").unwrap();
+    let one = dir.join("一.md");
+    std::fs::write(&one, "見 二.md\n那年冬天。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&one).unwrap();
+    let cw = |ed: &mut Editor, key: char| {
+        ed.on_key(Key::Ctrl('w'));
+        ed.on_key(Key::Char(key));
+    };
+    let area = crate::window::Area::new(0, 0, 81, 25);
+    let right_of = |ed: &Editor, id| ed.windows().neighbour(id, crate::window::Direction::Right, area, false);
+
+    cw(&mut ed, 'v');
+    let (left, right) = (ed.windows().leaves()[0], ed.windows().leaves()[1]);
+    assert_eq!(ed.live_window(), right);
+    // `C-w H`: the live window trades places with the one on its left.
+    cw(&mut ed, 'H');
+    assert_eq!(ed.live_window(), right, "the keys stay with it");
+    assert_eq!(right_of(&ed, right), Some(left));
+    // `C-w t`: beside becomes below.
+    cw(&mut ed, 't');
+    assert_eq!(right_of(&ed, right), None);
+    assert_eq!(ed.windows().len(), 2);
+
+    // `C-w f`: what `gf` opens, in a new window below.
+    cw(&mut ed, 'o');
+    press(&mut ed, "f二");
+    cw(&mut ed, 'f');
+    assert_eq!(ed.windows().len(), 2, "{}", ed.status());
+    assert_eq!(ed.current_buffer().display_name(), "二.md");
+    // Nothing to open: no window is left behind.
+    cw(&mut ed, 'o');
+    press(&mut ed, "gg");
+    cw(&mut ed, 'f');
+    assert_eq!(ed.windows().len(), 1, "{}", ed.status());
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn one_key_moves_between_the_two_panes() {
     let dir = tmp().join(format!("yumete-panes-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -15755,6 +15800,45 @@ fn space_slash_opens_the_search_panel_with_the_keys_in_the_box() {
         Some(crate::sidebar::View::Search)
     );
     assert_eq!(ed.mode(), Mode::Field);
+}
+
+#[test]
+fn space_y_copies_every_selection_and_space_capital_y_the_main_one() {
+    // helix's `yank_to_clipboard` and `yank_main_selection_to_clipboard`
+    // (2026-11-02): every selection, one to a line, or the primary alone.
+    let mut ed = typed("那年\n冬天\n");
+    press(&mut ed, "ggvlC");
+    type_keys(&mut ed, " y");
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some("那年\n冬天"));
+    type_keys(&mut ed, " Y");
+    assert_eq!(ed.take_clipboard_request().as_deref(), Some("冬天"), "the copy made last is primary");
+}
+
+#[test]
+fn space_j_lists_the_jumps_and_space_quote_opens_the_last_picker() {
+    let dir = tmp().join(format!("yumete-jumps-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let one = dir.join("一.md");
+    std::fs::write(&one, "那年\n冬天\n山下\n").unwrap();
+    let mut ed = Editor::new();
+    assert!(ed.set_working_dir(&dir));
+    ed.open_file(&one).unwrap();
+    type_keys(&mut ed, " '");
+    assert_eq!(ed.mode(), Mode::Normal, "no picker yet: {}", ed.status());
+    type_keys(&mut ed, " j");
+    assert_eq!(ed.mode(), Mode::Normal, "no jumps yet: {}", ed.status());
+    press(&mut ed, "ge");
+    type_keys(&mut ed, " j");
+    assert_eq!(ed.mode(), Mode::Picker);
+    let labels: Vec<String> = ed.picker().map(|p| p.items().iter().map(|i| i.label().to_string()).collect()).unwrap_or_default();
+    assert_eq!(labels, ["一.md:1  那年"]);
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.cursor_line(), 0, "Enter goes there");
+    // The picker closed last opens again as it was.
+    type_keys(&mut ed, " '");
+    assert_eq!(ed.mode(), Mode::Picker);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

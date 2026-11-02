@@ -224,6 +224,45 @@ impl Windows {
         true
     }
 
+    /// **helix's `C-w t` (`transpose_view`)**: the split `id` is a half of
+    /// turns, beside to below and below to beside. `false` when `id` is the
+    /// only window.
+    pub fn transpose(&mut self, id: WindowId) -> bool {
+        fn go(node: &mut Node, id: WindowId) -> bool {
+            let Node::Split { how, first, second } = node else { return false };
+            if matches!(**first, Node::Window(w) if w == id) || matches!(**second, Node::Window(w) if w == id) {
+                *how = match how {
+                    Split::Beside => Split::Below,
+                    Split::Below => Split::Beside,
+                };
+                return true;
+            }
+            go(first, id) || go(second, id)
+        }
+        go(&mut self.root, id)
+    }
+
+    /// **helix's `C-w H` `J` `K` `L` (`swap_view_*`)**: two windows trade
+    /// places, each keeping its id, so the one that was live still is.
+    pub fn swap(&mut self, a: WindowId, b: WindowId) -> bool {
+        fn go(node: &mut Node, a: WindowId, b: WindowId) {
+            match node {
+                Node::Window(w) if *w == a => *w = b,
+                Node::Window(w) if *w == b => *w = a,
+                Node::Window(_) => {}
+                Node::Split { first, second, .. } => {
+                    go(first, a, b);
+                    go(second, a, b);
+                }
+            }
+        }
+        if a == b || !self.has(a) || !self.has(b) {
+            return false;
+        }
+        go(&mut self.root, a, b);
+        true
+    }
+
     /// The windows laid into `area`, with the rules between them. A split
     /// gives each half the same room less the rule; `rtl` puts a **beside**
     /// split's second half on the left, as a 縱書 page reads.
@@ -332,6 +371,23 @@ mod tests {
         assert_eq!(four, 4, "ids are never reused");
         assert!(w.only(1));
         assert_eq!(w.leaves(), [1]);
+    }
+
+    #[test]
+    fn a_split_turns_and_two_windows_trade_places() {
+        let mut w = Windows::one();
+        w.split(1, Split::Beside);
+        w.split(2, Split::Below);
+        let area = Area::new(0, 0, 81, 25);
+        // 1 | 2 over 3. Turning 3's split puts 2 beside 3.
+        assert!(w.transpose(3));
+        assert_eq!(w.neighbour(2, Direction::Right, area, false), Some(3));
+        assert!(!Windows::one().transpose(1), "one window has no split to turn");
+        // 1 and 3 trade places: 3 is on the left now, and the ids stay.
+        assert!(w.swap(1, 3));
+        assert_eq!(w.leaves(), [3, 2, 1]);
+        assert!(!w.swap(1, 1));
+        assert!(!w.swap(1, 9));
     }
 
     #[test]

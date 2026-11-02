@@ -3606,6 +3606,9 @@ pub struct Editor {
     reload_warned: bool,
     /// The open picker, if `Space f` or `Space b` is up (Feature #90).
     picker: Option<crate::picker::Picker>,
+    /// The picker closed last, as it was: `Space '` opens it again (helix's
+    /// `last_picker`).
+    last_picker: Option<crate::picker::Picker>,
     /// The head of the file the picker is standing on, kept until it moves.
     preview: RefCell<Option<(PathBuf, Vec<String>)>>,
     /// The two panel slots, indexed by [`crate::sidebar::Side`] — Feature #94,
@@ -4409,6 +4412,7 @@ impl Editor {
             compiled: RefCell::new(None),
             smart_case: true,
             picker: None,
+            last_picker: None,
             preview: RefCell::new(None),
             panels: [None, None],
             width: [crate::sidebar::Width::default(); 2],

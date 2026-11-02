@@ -913,6 +913,50 @@ impl Editor {
         self.switch_to(fresh)
     }
 
+    /// **helix's `C-w f` / `C-w F` (`goto_file_hsplit` / `_vsplit`)**: what
+    /// `gf` opens, in a new window below or beside. When `gf` finds nothing
+    /// the new window goes again and its answer stays on the status line.
+    pub(super) fn goto_file_in_split(&mut self, how: crate::window::Split) {
+        if !self.split_window(how) {
+            return;
+        }
+        let (fresh, buffer, head) = (self.live, self.current_buffer().id(), self.sel.head());
+        self.goto_file_under_cursor();
+        if self.live == fresh && self.current_buffer().id() == buffer && self.sel.head() == head {
+            let said = std::mem::take(&mut self.status);
+            self.close_this_region();
+            self.status = said;
+        }
+    }
+
+    /// **helix's `C-w t` (`transpose_view`)**: the split this window is a
+    /// half of turns, beside to below and back, when the halves still fit.
+    pub(super) fn transpose_window(&mut self) {
+        let mut tried = self.windows.clone();
+        if !tried.transpose(self.live) {
+            return;
+        }
+        if let Some(area) = self.text_area.get() {
+            let (placed, _) = tried.place(area, self.splits_right_to_left());
+            if placed.iter().any(|p| p.area.height < Self::WINDOW_MIN_ROWS || p.area.width < Self::WINDOW_MIN_COLUMNS) {
+                self.status = say!("pane.no-room");
+                return;
+            }
+        }
+        self.windows = tried;
+    }
+
+    /// **helix's `C-w H` `J` `K` `L` (`swap_view_*`)**: this window and the
+    /// one that way trade places; the keys stay with this one.
+    pub(super) fn swap_window(&mut self, direction: crate::window::Direction) {
+        if self.panel_focus().is_some() {
+            return;
+        }
+        if let Some(other) = self.window_neighbour_for_swap(direction) {
+            self.windows.swap(self.live, other);
+        }
+    }
+
     /// The smallest window a split may make.
     const WINDOW_MIN_ROWS: u16 = 2;
     const WINDOW_MIN_COLUMNS: u16 = 8;
@@ -1264,12 +1308,18 @@ impl Editor {
     /// 補得起來，不是「不適用」。
     pub(super) fn go_to_change(&mut self, forward: bool) {
         let here = self.cursor_line();
+        self.go_to_a_change(|changes| changes.hunk_from(here, forward));
+    }
+
+    /// helix's `]G` and `[G`: the last change in the file, or the first.
+    pub(super) fn go_to_change_at_the_end(&mut self, last: bool) {
+        self.go_to_a_change(|changes| changes.hunk_at_the_end(last));
+    }
+
+    fn go_to_a_change(&mut self, pick: impl Fn(&crate::vcs::Changes) -> Option<usize>) {
         let found = match self.diff_gutter {
             false => None,
-            true => self
-                .vcs
-                .get(&self.current_buffer().id())
-                .and_then(|(_, changes)| changes.hunk_from(here, forward)),
+            true => self.vcs.get(&self.current_buffer().id()).and_then(|(_, changes)| pick(changes)),
         };
         let Some(line) = found else {
             self.status = say!("vcs.nothing-changed");

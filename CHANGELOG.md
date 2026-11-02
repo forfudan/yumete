@@ -9,8 +9,16 @@ in `docs/development.md` §5.2.
 
 ## Unreleased
 
+### Added
+
+- **helix's window keys that were missing**: `C-w t` turns the split this window is in (beside becomes below and back), `C-w H` `J` `K` `L` swap this window with the one in that direction, and `C-w f` `C-w F` open the file under the cursor, as `gf` does, in a new window below or beside. Under the vim keymap only `C-w f` is there; vim's `C-w t` and `H` `J` `K` `L` mean other things.
+- **`Space j`** lists the jump list, the newest first, and **`Space '`** opens the picker closed last as it was left, as in helix.
+- **`Space Y` copies the main selection** to the system clipboard; `Space y` copies every selection, one to a line, as helix's does (it copied the main one alone).
+- **`]G` and `[G`** go to the last change in the file and the first, beside `]g` and `[g`.
+
 ### Changed
 
+- **Fourteen commands take helix's names**: `goto_file` (was `open_here`), `goto_next_buffer` and `goto_previous_buffer` (`next_buffer`, `prev_buffer`), `page_cursor_half_up` and `page_cursor_half_down` (`half_page_up`, `half_page_down`), `rotate_view` (`next_region`), `toggle_comments` and `toggle_block_comments` (`comment_line`, `comment_block`), `lsp_or_syntax_symbol_picker` and `lsp_or_syntax_workspace_symbol_picker` (`symbol_picker`, `workspace_symbol_picker`), `yank_to_clipboard` (`copy_to_clipboard`), `paste_clipboard_after` (`paste_from_clipboard`), `global_search` (`search_panel`) and `command_palette` (`command_menu`). A config line with an old name is reported and skipped.
 - **`gf` opens a path written in the text, as helix's does**: `~/notes/a.md`, `/etc/hosts`, or `ch02.md:12` for its twelfth line, wherever the cursor stands on it and the file is there. A Markdown link to `~/…` or to an absolute path is followed too, by `gf`, `gd` and `gL`, where it used to be refused; inside the project or not, a file only ever opens in yumete.
 - **The keymap is three pages on the site.** helix's keys and vim's keys each have a page, with the flavour off, so each is that editor's keymap as yumete has it, the whole of Normal, select (or Visual) and Insert mode and every menu. The Yumete flavour has its own page: each level's items with their keys under both keymaps, then, item by item, every key it changes and what that key does without it. The Keymap page, which mixed helix's keys with the flavour's and did not say which was which, now says how the three layers stack and links the pages.
 

@@ -46,7 +46,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     }, Key::Char('e')),
     (NormalCmd::JumpPrevLongWordEnd, |e, cx| e.jump_back_to_word_end(cx, true), Key::Char('E')),
     (NormalCmd::GotoFirstNonwhitespace, |e, _| e.goto_motion(motion::Motion::LineFirstNonBlank), Key::Char('s')),
-    (NormalCmd::OpenHere, |e, _| e.goto_file_under_cursor(), Key::Char('f')),
+    (NormalCmd::GotoFile, |e, _| e.goto_file_under_cursor(), Key::Char('f')),
     (NormalCmd::FollowLink, |e, _| e.follow_link(), Key::Char('L')),
     (NormalCmd::OpenLink, |e, _| e.open_link(), Key::Char('x')),
     (NormalCmd::GotoDeclaration, |e, _| e.ask_for_place(crate::lsp::Goto::Declaration), Key::Char('D')),
@@ -57,8 +57,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoWordByLetters, |e, _| e.start_seek(false), Key::Char('x')),
     (NormalCmd::GotoCharByPinyin, |e, _| e.start_seek(true), Key::Char('z')),
     (NormalCmd::GotoLastAccessedFile, |e, _| e.goto_last_file(), Key::Char('a')),
-    (NormalCmd::NextBuffer, |e, _| e.next_buffer(), Key::Char('n')),
-    (NormalCmd::PrevBuffer, |e, _| e.prev_buffer(), Key::Char('p')),
+    (NormalCmd::GotoNextBuffer, |e, _| e.next_buffer(), Key::Char('n')),
+    (NormalCmd::GotoPreviousBuffer, |e, _| e.prev_buffer(), Key::Char('p')),
     (NormalCmd::GotoDefinition, |e, _| e.show_definition(), Key::Char('d')),
     (NormalCmd::GotoReference, |e, _| e.ask_references(), Key::Char('r')),
     (NormalCmd::SearchSelection, |e, _| {
@@ -120,12 +120,15 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::FileExplorerInCurrentBufferDirectory, |e, _| e.open_explorer_here(), Key::Char('E')),
     (NormalCmd::BufferPicker, |e, _| e.open_buffer_picker(), Key::Char('b')),
     (NormalCmd::ChangedFilePicker, |e, _| e.open_changed_picker(), Key::Char('g')),
-    (NormalCmd::CopyToClipboard, |e, _| e.copy_to_clipboard(), Key::Char('y')),
-    (NormalCmd::PasteFromClipboard, |e, _| e.clipboard_paste(true), Key::Char('p')),
+    (NormalCmd::YankToClipboard, |e, _| e.copy_to_clipboard(true), Key::Char('y')),
+    (NormalCmd::YankMainSelectionToClipboard, |e, _| e.copy_to_clipboard(false), Key::Char('Y')),
+    (NormalCmd::JumplistPicker, |e, _| e.open_jumplist_picker(), Key::Char('j')),
+    (NormalCmd::LastPicker, |e, _| e.reopen_last_picker(), Key::Char('\'')),
+    (NormalCmd::PasteClipboardAfter, |e, _| e.clipboard_paste(true), Key::Char('p')),
     (NormalCmd::PasteClipboardBefore, |e, _| e.clipboard_paste(false), Key::Char('P')),
     (NormalCmd::ReplaceSelectionsWithClipboard, |e, _| e.clipboard_replace(), Key::Char('R')),
-    (NormalCmd::SymbolPicker, |e, _| e.open_symbol_picker(), Key::Char('s')),
-    (NormalCmd::WorkspaceSymbolPicker, |e, _| e.open_project_symbol_picker(), Key::Char('S')),
+    (NormalCmd::LspOrSyntaxSymbolPicker, |e, _| e.open_symbol_picker(), Key::Char('s')),
+    (NormalCmd::LspOrSyntaxWorkspaceSymbolPicker, |e, _| e.open_project_symbol_picker(), Key::Char('S')),
     (NormalCmd::Dictionary, |e, _| e.look_up_under_the_cursor(true), Key::Char('n')),
     (NormalCmd::DictionaryPanel, |e, _| e.look_up_under_the_cursor(false), Key::Char('N')),
     (NormalCmd::Hover, |e, _| {
@@ -150,16 +153,16 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ShowRecordPanel, |e, _| e.show_the_record_here(false), Key::Char('I')),
     (NormalCmd::TableMode, |e, _| e.pending = Pending::Table, Key::Char('t')),
     (NormalCmd::PasteMenu, |e, _| e.open_paste_picker(), Key::Char('"')),
-    (NormalCmd::CommentLine, |e, _| e.toggle_comment(crate::comment::Prefer::Line), Key::Char('c')),
-    (NormalCmd::CommentBlock, |e, _| e.toggle_comment(crate::comment::Prefer::Block), Key::Char('C')),
+    (NormalCmd::ToggleComments, |e, _| e.toggle_comment(crate::comment::Prefer::Line), Key::Char('c')),
+    (NormalCmd::ToggleBlockComments, |e, _| e.toggle_comment(crate::comment::Prefer::Block), Key::Char('C')),
     (NormalCmd::ConflictMode, |e, _| e.pending = Pending::Conflict, Key::Char('m')),
     (NormalCmd::OpenRecentMode, |e, _| e.pending = Pending::Open, Key::Char('o')),
     (NormalCmd::YumeMode, |e, _| e.pending = Pending::Yume, Key::Char('z')),
-    (NormalCmd::SearchPanel, |e, _| e.open_search(), Key::Char('/')),
+    (NormalCmd::GlobalSearch, |e, _| e.open_search(), Key::Char('/')),
     // helix's `command_palette` (2026-11-01): every command and every key's
     // command, each with its key and what it does, searched by description
     // (`::`). It used to open an empty `:` line.
-    (NormalCmd::CommandMenu, |e, _| {
+    (NormalCmd::CommandPalette, |e, _| {
         e.open_the_command_line("");
         e.mode = Mode::Lookfor;
         e.lookfor_focus = 0;
@@ -169,6 +172,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoPrevConflict, |e, _| e.go_to_conflict(false), Key::Char('m')),
     (NormalCmd::GotoNextChange, |e, _| e.go_to_change(true), Key::Char('g')),
     (NormalCmd::GotoPrevChange, |e, _| e.go_to_change(false), Key::Char('g')),
+    (NormalCmd::GotoLastChange, |e, _| e.go_to_change_at_the_end(true), Key::Char('G')),
+    (NormalCmd::GotoFirstChange, |e, _| e.go_to_change_at_the_end(false), Key::Char('G')),
     (NormalCmd::GotoNextDiag, |e, _| e.go_to_problem(true, false), Key::Char('d')),
     (NormalCmd::GotoPrevDiag, |e, _| e.go_to_problem(false, false), Key::Char('d')),
     (NormalCmd::GotoLastDiag, |e, _| e.go_to_problem(true, true), Key::Char('D')),
@@ -225,7 +230,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.operator_count = cx.operator_count;
     }, Key::Char('r')),
     // ── C-w ────────────────────────────────────────────────────────────
-    (NormalCmd::NextRegion, |e, _| e.next_region(), Key::Char('w')),
+    (NormalCmd::RotateView, |e, _| e.next_region(), Key::Char('w')),
     (NormalCmd::JumpViewLeft, |e, _| e.walk_to_region(crate::window::Direction::Left), Key::Char('h')),
     (NormalCmd::JumpViewDown, |e, _| e.walk_to_region(crate::window::Direction::Down), Key::Char('j')),
     (NormalCmd::JumpViewUp, |e, _| e.walk_to_region(crate::window::Direction::Up), Key::Char('k')),
@@ -249,6 +254,13 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::WindowNewMode, |e, _| e.pending = Pending::RegionNew, Key::Char('n')),
     (NormalCmd::Wclose, |e, _| e.close_this_region(), Key::Char('q')),
     (NormalCmd::Wonly, |e, _| e.close_other_regions(), Key::Char('o')),
+    (NormalCmd::TransposeView, |e, _| e.transpose_window(), Key::Char('t')),
+    (NormalCmd::SwapViewLeft, |e, _| e.swap_window(crate::window::Direction::Left), Key::Char('H')),
+    (NormalCmd::SwapViewDown, |e, _| e.swap_window(crate::window::Direction::Down), Key::Char('J')),
+    (NormalCmd::SwapViewUp, |e, _| e.swap_window(crate::window::Direction::Up), Key::Char('K')),
+    (NormalCmd::SwapViewRight, |e, _| e.swap_window(crate::window::Direction::Right), Key::Char('L')),
+    (NormalCmd::GotoFileHsplit, |e, _| e.goto_file_in_split(crate::window::Split::Below), Key::Char('f')),
+    (NormalCmd::GotoFileVsplit, |e, _| e.goto_file_in_split(crate::window::Split::Beside), Key::Char('F')),
     // ── ` ──────────────────────────────────────────────────────────────
     (NormalCmd::SwitchToLowercase, |e, _| e.map_selection(|c| c.to_lowercase().collect()), Key::Char('l')),
     (NormalCmd::SwitchToUppercase, |e, _| e.map_selection(|c| c.to_uppercase().collect()), Key::Char('u')),

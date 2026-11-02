@@ -374,11 +374,32 @@ zhs = "文件"
 en = "files"
 
 [[message]]
+# 空格 j 挑選器的標題（草稿）
+key = "picker.jumplist"
+zht = "跳轉列表"
+zhs = "跳转列表"
+en = "jump list"
+
+[[message]]
 # 檔案選擇面板裏這個目錄是空的
 key = "picker.no-files-here"
 zht = "這裏没有文件"
 zhs = "这里没有文件"
 en = "no files here"
+
+[[message]]
+# 空格 j：跳轉列表是空的（草稿）
+key = "picker.no-jumps"
+zht = "還没有跳轉"
+zhs = "还没有跳转"
+en = "no jumps yet"
+
+[[message]]
+# 空格 '：還没開過挑選器（草稿）
+key = "picker.none-yet"
+zht = "還没開過挑選器"
+zhs = "还没开过挑选器"
+en = "no picker has been opened yet"
 
 [[message]]
 # 選擇面板裏篩不出東西

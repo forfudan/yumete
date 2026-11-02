@@ -73,6 +73,49 @@ impl Editor {
         }
     }
 
+    /// **`Space j`, helix's `jumplist_picker`**: every place `C-o` can go
+    /// back to, the newest first, each once. A place in a buffer with no file,
+    /// or one since closed, is left out.
+    pub(super) fn open_jumplist_picker(&mut self) {
+        let root = self.root();
+        let here = self.working_dir();
+        let mut seen: Vec<(PathBuf, usize)> = Vec::new();
+        let mut items = Vec::new();
+        for &(buffer, at) in self.jumps.iter().rev() {
+            let Some(open) = self.buffers.iter().find(|b| b.id() == buffer) else { continue };
+            let Some(path) = open.path().map(|p| here.join(p)) else { continue };
+            let rope = open.rope();
+            let at = at.min(rope.len_chars());
+            let line = rope.char_to_line(at);
+            if seen.contains(&(path.clone(), line)) {
+                continue;
+            }
+            seen.push((path.clone(), line));
+            let column = at - rope.line_to_char(line);
+            let text = rope.line(line).to_string();
+            let name = path.strip_prefix(&root).unwrap_or(&path).display().to_string();
+            let label = format!("{name}:{}  {}", line + 1, text.trim());
+            items.push(crate::picker::Item::Place(label, path, line, column));
+        }
+        if items.is_empty() {
+            self.status = say!("picker.no-jumps");
+            return;
+        }
+        let picker = crate::picker::Picker::new(&say!("picker.jumplist"), items);
+        self.show_the_picker(picker);
+    }
+
+    /// **`Space '`, helix's `last_picker`**: the picker closed last, as it
+    /// was left.
+    pub(super) fn reopen_last_picker(&mut self) {
+        match self.last_picker.clone() {
+            Some(picker) => {
+                self.show_the_picker(picker);
+            }
+            None => self.status = say!("picker.none-yet"),
+        }
+    }
+
     /// One line of a file: the open buffer's when it is open, the disk's when
     /// it is not.
     pub(super) fn line_of_file(&self, path: &Path, line: usize) -> Option<String> {

@@ -614,6 +614,13 @@ en = "the start of the file"
 find = "開頭 开头 檔頭 档头 最前 start top"
 
 [[message]]
+# 命令說明：goto_first_change（草稿）
+key = "action.goto-first-change"
+zht = "第一處改動"
+zhs = "第一处改动"
+en = "the first change"
+
+[[message]]
 # 命令說明：goto_first_diag（草稿）
 key = "action.goto-first-diag"
 zht = "第一條診斷"
@@ -627,6 +634,13 @@ zht = "第一個非空白字符"
 zhs = "第一个非空白字符"
 en = "the first character that is not a space"
 find = "非空白 行首 第一個字 第一个字 nonblank first"
+
+[[message]]
+# 命令說明：goto_last_change（草稿）
+key = "action.goto-last-change"
+zht = "最後一處改動"
+zhs = "最后一处改动"
+en = "the last change"
 
 [[message]]
 # 命令說明：goto_last_diag（草稿）
@@ -2024,6 +2038,34 @@ key = "action.sticky-view-mode"
 zht = "視圖組(按完不收)"
 zhs = "视图组(按完不收)"
 en = "the view group, staying open"
+
+[[message]]
+# 命令說明：swap_view_down（草稿）
+key = "action.swap-view-down"
+zht = "和下面那一區對調"
+zhs = "和下面那一区对调"
+en = "trade places with the region below"
+
+[[message]]
+# 命令說明：swap_view_left（草稿）
+key = "action.swap-view-left"
+zht = "和左邊那一區對調"
+zhs = "和左边那一区对调"
+en = "trade places with the region on the left"
+
+[[message]]
+# 命令說明：swap_view_right（草稿）
+key = "action.swap-view-right"
+zht = "和右邊那一區對調"
+zhs = "和右边那一区对调"
+en = "trade places with the region on the right"
+
+[[message]]
+# 命令說明：swap_view_up（草稿）
+key = "action.swap-view-up"
+zht = "和上面那一區對調"
+zhs = "和上面那一区对调"
+en = "trade places with the region above"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽

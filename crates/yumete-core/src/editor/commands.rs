@@ -764,7 +764,7 @@ impl Editor {
             }
             Command::Clipboard { yank } => {
                 if yank {
-                    self.copy_to_clipboard();
+                    self.copy_to_clipboard(true);
                 } else {
                     self.clipboard_paste(true);
                 }

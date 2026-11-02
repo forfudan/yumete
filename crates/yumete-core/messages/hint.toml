@@ -544,6 +544,13 @@ zhs = "改动"
 en = "a change"
 
 [[message]]
+# ] 和 [ 組：g 改動，G 第一處或最後一處（草稿）
+key = "hint.hop.change-ends"
+zht = "改動(大寫：第一處/最後一處)"
+zhs = "改动(大写：第一处/最后一处)"
+en = "a change (capital: the first / the last)"
+
+[[message]]
 # ]/[ 的選單：下一個/上一個類(只在整份是代碼的檔上)
 key = "hint.hop.class"
 zht = "類"
@@ -915,6 +922,20 @@ zhs = "关掉这一区"
 en = "close this one"
 
 [[message]]
+# C-w f：光標下的文件在下面開（草稿）
+key = "hint.region.file-below"
+zht = "在下面打開光標下的文件"
+zhs = "在下面打开光标下的文件"
+en = "open the file under the cursor below"
+
+[[message]]
+# C-w F：光標下的文件在旁邊開（草稿）
+key = "hint.region.file-beside"
+zht = "在旁邊打開光標下的文件"
+zhs = "在旁边打开光标下的文件"
+en = "open the file under the cursor beside"
+
+[[message]]
 # C-w h/j/k/l：按方向走到那一區
 key = "hint.region.go"
 zht = "按方向走"
@@ -978,6 +999,13 @@ zhs = "旁边开一个窗口"
 en = "a window beside"
 
 [[message]]
+# C-w H J K L：和那個方向的窗口對調（草稿）
+key = "hint.region.swap"
+zht = "和那個方向的對調"
+zhs = "和那个方向的对调"
+en = "trade places with the one that way"
+
+[[message]]
 # C-w/空格 w 那一組的標題
 key = "hint.region.title"
 zht = "工作區域操作"
@@ -990,6 +1018,13 @@ key = "hint.region.toggle-bar"
 zht = "開關左右欄"
 zhs = "开关左右栏"
 en = "toggle the left / right bar"
+
+[[message]]
+# C-w t：這一區所在的那一刀轉個向（草稿）
+key = "hint.region.transpose"
+zht = "並排與上下互換"
+zhs = "并排与上下互换"
+en = "turn the split: beside or below"
 
 [[message]]
 # " 之後那張小表：# 那一行(選區序號，#405 Phase 3)
@@ -1280,6 +1315,13 @@ zhs = "行注释"
 en = "comment out, by the line"
 
 [[message]]
+# 空格 Y：只把主選區複製到系統剪貼板（草稿）
+key = "hint.space.copy-main-to-clipboard"
+zht = "主選區複製到系統剪貼板"
+zhs = "主选区复制到系统剪贴板"
+en = "copy the main selection to the system clipboard"
+
+[[message]]
 # g 組：複製到系統剪貼簿
 key = "hint.space.copy-to-clipboard"
 zht = "複製到系統剪貼板"
@@ -1320,6 +1362,20 @@ key = "hint.space.explorer-here"
 zht = "瀏覽文件(本文件路徑)"
 zhs = "浏览文件(本文件路径)"
 en = "browse files (this file's dir)"
+
+[[message]]
+# 空格 j：跳轉列表挑選器（草稿）
+key = "hint.space.jumplist"
+zht = "跳轉列表"
+zhs = "跳转列表"
+en = "jump list"
+
+[[message]]
+# 空格 '：再開上一個挑選器（草稿）
+key = "hint.space.last-picker"
+zht = "上一個挑選器"
+zhs = "上一个挑选器"
+en = "the last picker again"
 
 [[message]]
 # space f：open a file

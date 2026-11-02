@@ -109,6 +109,15 @@ impl Changes {
         }
     }
 
+    /// The first change, or the last (helix's `[G` and `]G`).
+    pub fn hunk_at_the_end(&self, last: bool) -> Option<usize> {
+        let mut starts = self.runs.iter().map(|run| run.at.start);
+        match last {
+            true => starts.next_back(),
+            false => starts.next(),
+        }
+    }
+
     /// 一條都沒有——沒進 git、沒動過，或者 git 不肯回答，這三件事這裏不分。
     pub fn is_empty(&self) -> bool {
         self.runs.is_empty()
@@ -477,6 +486,17 @@ pub fn parse_status(raw: &[u8]) -> Vec<FileStatus> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// helix's `[G` and `]G`: the first change and the last, by where each
+    /// run starts.
+    #[test]
+    fn the_first_and_the_last_change() {
+        let diff = "@@ -2,0 +3,2 @@\n+a\n+b\n@@ -9 +11 @@\n-c\n+d\n";
+        let changes = Changes::from_diff(diff, 20);
+        assert_eq!(changes.hunk_at_the_end(false), Some(2));
+        assert_eq!(changes.hunk_at_the_end(true), Some(10));
+        assert_eq!(Changes::default().hunk_at_the_end(true), None);
+    }
 
     /// `git status -z` read into VS Code's letters, coloured by the index
     /// (2026-10-31): what is all staged is green, what still has working-tree

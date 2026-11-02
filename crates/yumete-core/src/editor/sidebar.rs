@@ -542,6 +542,11 @@ impl Editor {
         }
     }
 
+    /// The window `direction` of the live one, for `C-w H` `J` `K` `L`.
+    pub(super) fn window_neighbour_for_swap(&self, direction: crate::window::Direction) -> Option<crate::window::WindowId> {
+        self.window_neighbour(self.live, direction)
+    }
+
     /// The windows laid on a nominal screen — the tree splits by halves, so
     /// which window is where does not depend on the real size.
     fn window_neighbour(&self, id: crate::window::WindowId, direction: crate::window::Direction) -> Option<crate::window::WindowId> {
@@ -2268,7 +2273,9 @@ impl Editor {
     /// Shut the picker and go back to Normal.
     fn close_picker(&mut self) {
         self.stop_filling_the_picker();
-        self.picker = None;
+        if let Some(picker) = self.picker.take() {
+            self.last_picker = Some(picker);
+        }
         self.mode = Mode::Normal;
     }
 
@@ -2358,7 +2365,10 @@ impl Editor {
     /// it is the only way that works over ssh and inside tmux, which is where a
     /// terminal editor is often run from. The terminal may refuse — many do by
     /// default — so this says what it asked for rather than claiming success.
-    pub(super) fn copy_to_clipboard(&mut self) {
+    /// **`Space y` / `Space Y`** (helix's `yank_to_clipboard` and
+    /// `yank_main_selection_to_clipboard`, 2026-11-02): every selection,
+    /// one to a line, or the primary alone.
+    pub(super) fn copy_to_clipboard(&mut self, every: bool) {
         // **At the cell layer the cell is the unit, not the character the caret
         // sits on** (2026-10-23 作者報的: 「when I use `space y` on a cell (CEL
         // layer), it only yank the first char instead of the whole cell. Note
@@ -2374,8 +2384,19 @@ impl Editor {
             }
             return;
         }
-        let (start, end) = self.selection();
-        let text = self.current_buffer().rope().slice(start..end).to_string();
+        let text = match every && self.sel.is_plural() {
+            true => {
+                let mut spans: Vec<(usize, usize)> = self.sel.iter().map(|one| self.drawn(*one)).collect();
+                spans.sort();
+                let rope = self.current_buffer().rope();
+                let ending = self.current_buffer().ending();
+                spans.iter().map(|&(start, end)| rope.slice(start..end).to_string()).collect::<Vec<_>>().join(ending)
+            }
+            false => {
+                let (start, end) = self.selection();
+                self.current_buffer().rope().slice(start..end).to_string()
+            }
+        };
         if text.is_empty() {
             self.status = say!("edit.nothing-selected");
             return;
