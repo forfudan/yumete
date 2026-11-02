@@ -18,6 +18,7 @@ in `docs/development.md` §5.2.
 - **`Space h` selects every place the symbol under the cursor stands in the file**, as the language server finds them (helix's `select_references_to_symbol_under_cursor`).
 - **`$` keeps the selections a shell command succeeds on** (helix's `shell_keep_pipe`, `:keep-pipe`): each selection is given to the command on its own, and those it exits 0 on stay. Under the vim keymap `$` is still the line's end.
 - **`C-z` suspends yumete** to the shell, under either keymap; `fg` brings it back as it was. Not on Windows.
+- **helix's syntax-tree keys**, in a code file and in a fenced block: `A-o` grows the selection to the node around it and `A-i` takes it back (or shrinks to the first child), `A-n` `A-p` select the next and previous node, `A-a` every node beside this one, `A-I` every node inside it, and `A-e` `A-b` go to the end and the start of the node around the cursor (extending, in select mode). Under the vim keymap they are on with the flavour's `helix_keys_under_vim`. In prose they say there is no tree.
 - **`=` formats the selection through the language server** (helix's `format_selections`), one selection at a time. Under the vim keymap `=` does nothing yet: vim's re-indents over a motion.
 
 ### Changed

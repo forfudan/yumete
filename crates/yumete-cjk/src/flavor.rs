@@ -378,7 +378,7 @@ flavor_items! {
         id: "helix_keys_under_vim",
         level: FlavorLevel::Basic,
         keymaps: &[KeyPreset::Vim],
-        keys: &["g.", ";", ",", "A-C", "A-,", "A--", "A-_", "A-:", "A-x", "A-s", "A-(", "A-)", "A-K", "A-d", "A-c", "A-u", "A-U", "A-!", "A-|", "A-J", "A-;", "A-*", "A-.", "A-`", "C-s", "Z", "gb", "gy", "]g", "[g"],
+        keys: &["g.", ";", ",", "A-C", "A-,", "A--", "A-_", "A-:", "A-x", "A-s", "A-(", "A-)", "A-K", "A-d", "A-c", "A-u", "A-U", "A-!", "A-|", "A-J", "A-;", "A-*", "A-.", "A-`", "A-o", "A-i", "A-I", "A-p", "A-n", "A-e", "A-b", "A-a", "C-s", "Z", "gb", "gy", "]g", "[g"],
         vim_keys: None,
         insert: false,
         label: "keys.flavor.item.helix-keys-under-vim",

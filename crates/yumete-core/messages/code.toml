@@ -66,6 +66,13 @@ zhs = "光标不在任何测试函数里"
 en = "the cursor is in no test function"
 
 [[message]]
+# A-o 那一族：這裏没有語法樹（草稿）
+key = "code.no-tree-here"
+zht = "這裏没有語法樹：不是代碼檔，也不在代碼塊裏"
+zhs = "这里没有语法树：不是代码文件，也不在代码块里"
+en = "no syntax tree here: not a code file, nor in a fenced block"
+
+[[message]]
 # 上屏方式的名字：预设(由方案自己说了算)
 key = "commit.name.default"
 zht = "預設"

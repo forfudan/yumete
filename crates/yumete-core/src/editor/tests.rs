@@ -15934,6 +15934,66 @@ fn equals_asks_the_server_to_format_the_selection() {
 }
 
 #[test]
+fn alt_o_and_alt_i_walk_the_syntax_tree() {
+    // helix's `A-o` `A-i` `A-n` `A-e` `A-b` (2026-11-02), on a code file.
+    let dir = tmp().join(format!("yumete-tree-keys-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn a() { let x = 1; let y = 2; }\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    press(&mut ed, "fx;");
+    assert_eq!(text(&ed), "x");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "let x = 1;", "{}", ed.status());
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "{ let x = 1; let y = 2; }");
+    // `A-i` takes back what `A-o` grew, newest first.
+    ed.on_key(Key::Alt('i'));
+    assert_eq!(text(&ed), "let x = 1;");
+    // The next node beside it.
+    ed.on_key(Key::Alt('n'));
+    assert_eq!(text(&ed), "let y = 2;");
+    ed.on_key(Key::Alt('p'));
+    assert_eq!(text(&ed), "let x = 1;");
+    // `A-a`: every statement in the block.
+    ed.on_key(Key::Alt('a'));
+    assert_eq!(ed.sel.len(), 2);
+    // `A-e` / `A-b`: to the end and the start of the node around the cursor.
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "f1;");
+    ed.on_key(Key::Alt('b'));
+    assert_eq!(ed.cursor(), 9, "already at the integer's start: the statement's start");
+    ed.on_key(Key::Alt('e'));
+    assert_eq!(ed.cursor(), 19, "one past the statement's end");
+    // Every selection is walked: two statements, each with two children.
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "fx;");
+    ed.on_key(Key::Alt('o'));
+    ed.on_key(Key::Alt('a'));
+    ed.on_key(Key::Alt('I'));
+    assert_eq!(ed.sel.len(), 4, "{}", ed.status());
+    // A fenced block in Markdown has the tree of its language.
+    let mut ed = markdown("前言。\n\n```rust\nlet x = 1;\n```\n");
+    press(&mut ed, "jjjfx;");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "let x = 1;", "{}", ed.status());
+    // In prose there is no tree, and it is said.
+    let mut ed = typed("那年冬天。\n");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "那");
+    assert!(!ed.status().is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_system_clipboard_goes_both_ways() {
     let mut ed = typed("那年冬天");
     press(&mut ed, "ggvl");

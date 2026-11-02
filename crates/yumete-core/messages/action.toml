@@ -320,6 +320,13 @@ zhs = "展开；展开不了就进入"
 en = "unfold the entry, or go into it"
 
 [[message]]
+# 命令說明：expand_selection，A-o（草稿）
+key = "action.expand-selection"
+zht = "選區擴到外面那一層語法節點"
+zhs = "选区扩到外面那一层语法节点"
+en = "grow the selection to the syntax node around it"
+
+[[message]]
 # 命令說明：extend_char_left（草稿）
 key = "action.extend-char-left"
 zht = "選區向左撑一個字"
@@ -396,6 +403,20 @@ key = "action.extend-next-word-start"
 zht = "選區撑到下一個詞首"
 zhs = "选区撑到下一个词首"
 en = "extend the selection to the next word's start"
+
+[[message]]
+# 命令說明：extend_parent_node_end（草稿）
+key = "action.extend-parent-node-end"
+zht = "選區延到所在節點的末尾"
+zhs = "选区延到所在节点的末尾"
+en = "extend the selection to the end of the node around the cursor"
+
+[[message]]
+# 命令說明：extend_parent_node_start（草稿）
+key = "action.extend-parent-node-start"
+zht = "選區延到所在節點的開頭"
+zhs = "选区延到所在节点的开头"
+en = "extend the selection to the start of the node around the cursor"
 
 [[message]]
 # 命令說明：extend_prev_char（草稿）
@@ -1316,6 +1337,20 @@ zhs = "竖排时到下一纵(文件里的)"
 en = "on a vertical page, on to the next line of the file"
 
 [[message]]
+# 命令說明：move_parent_node_end，A-e（草稿）
+key = "action.move-parent-node-end"
+zht = "到光標所在節點的末尾"
+zhs = "到光标所在节点的末尾"
+en = "to the end of the node around the cursor"
+
+[[message]]
+# 命令說明：move_parent_node_start，A-b（草稿）
+key = "action.move-parent-node-start"
+zht = "到光標所在節點的開頭，再按到上一層的"
+zhs = "到光标所在节点的开头，再按到上一层的"
+en = "to the start of the node around the cursor, then of its parent"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-prev-long-word-start"
 zht = "上一個大詞首"
@@ -1926,6 +1961,20 @@ en = "select the whole file"
 find = "全選 全选 整個文件 整个文件 all"
 
 [[message]]
+# 命令說明：select_all_children，A-I（草稿）
+key = "action.select-all-children"
+zht = "選中裏面的每一個節點"
+zhs = "选中里面的每一个节点"
+en = "select every node inside this one"
+
+[[message]]
+# 命令說明：select_all_siblings，A-a（草稿）
+key = "action.select-all-siblings"
+zht = "選中同一層的每一個節點"
+zhs = "选中同一层的每一个节点"
+en = "select every node beside this one"
+
+[[message]]
 # 命令說明：select_around_object（草稿）
 key = "action.select-around-object"
 zht = "選中整個對象(再按一個對象)"
@@ -1953,6 +2002,20 @@ key = "action.select-line-mode"
 zht = "整行選擇模式"
 zhs = "整行选择模式"
 en = "line-wise Select mode"
+
+[[message]]
+# 命令說明：select_next_sibling，A-n（草稿）
+key = "action.select-next-sibling"
+zht = "選下一個語法節點"
+zhs = "选下一个语法节点"
+en = "select the next syntax node"
+
+[[message]]
+# 命令說明：select_prev_sibling，A-p（草稿）
+key = "action.select-prev-sibling"
+zht = "選上一個語法節點"
+zhs = "选上一个语法节点"
+en = "select the previous syntax node"
 
 [[message]]
 # 命令說明：select_regex（草稿）
@@ -1995,6 +2058,13 @@ key = "action.shell-pipe-to"
 zht = "把選區交給外部命令，不改文本"
 zhs = "把选区交给外部命令，不改文本"
 en = "pipe the selection to a command, keeping the text"
+
+[[message]]
+# 命令說明：shrink_selection，A-i（草稿）
+key = "action.shrink-selection"
+zht = "選區縮回去，或縮到第一個子節點"
+zhs = "选区缩回去，或缩到第一个子节点"
+en = "shrink the selection back, or to its first child node"
 
 [[message]]
 # 命令說明：shrink_to_line_bounds（草稿）

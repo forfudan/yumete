@@ -537,6 +537,23 @@ impl Editor {
         })
     }
 
+    /// **The syntax tree the caret stands in** (helix's tree keys,
+    /// 2026-11-02): a code file's, held as for its colours, or the fenced
+    /// block's, parsed for the asking. `None` in prose.
+    pub(super) fn tree_here(&self) -> Option<TreeHere> {
+        if let crate::syntax::Syntax::Code(language) = self.current_buffer().syntax() {
+            self.hold_the_tree(language);
+            let cache = self.code_cache.borrow();
+            let held = cache.whole.as_ref().filter(|h| h.language == language)?;
+            let rope = self.current_buffer().rope();
+            let starts = (0..held.lines.len()).map(|l| rope.line_to_char(l)).collect();
+            return Some(TreeHere::new(held.tree.clone(), held.source.clone(), starts));
+        }
+        let fence = self.fence_under_caret()?;
+        let tree = crate::code::parse(fence.language, &fence.source, None)?;
+        Some(TreeHere::new(tree, fence.source, fence.starts))
+    }
+
     /// Every fence in the buffer, in order — read once per revision.
     fn fences(&self) -> Rc<Vec<Fence>> {
         let buffer = self.current_buffer();
@@ -590,6 +607,44 @@ impl Editor {
 }
 
 /// One fence's body as a parser reads it, and the way back to the page.
+/// **A syntax tree, and how its bytes meet the buffer's characters**: the
+/// source it was parsed from joins lines with `\n`, and each line starts at
+/// a known character of the buffer.
+pub(super) struct TreeHere {
+    pub tree: tree_sitter::Tree,
+    source: String,
+    /// Where each source line starts in the buffer, in characters.
+    starts: Vec<usize>,
+    /// Where each source line starts in `source`, in bytes.
+    line_bytes: Vec<usize>,
+}
+
+impl TreeHere {
+    fn new(tree: tree_sitter::Tree, source: String, starts: Vec<usize>) -> TreeHere {
+        let mut line_bytes = vec![0];
+        line_bytes.extend(source.match_indices('\n').map(|(at, _)| at + 1));
+        TreeHere { tree, source, starts, line_bytes }
+    }
+
+    /// The buffer's character at a byte of the source.
+    pub fn char_at(&self, byte: usize) -> usize {
+        let byte = byte.min(self.source.len());
+        let line = self.line_bytes.partition_point(|&b| b <= byte).saturating_sub(1);
+        let column = self.source[self.line_bytes[line]..byte].chars().count();
+        self.starts.get(line).copied().unwrap_or(0) + column
+    }
+
+    /// The source's byte at a character of the buffer, clamped to the line.
+    pub fn byte_at(&self, at: usize) -> usize {
+        let line = self.starts.partition_point(|&s| s <= at).saturating_sub(1).min(self.line_bytes.len() - 1);
+        let from = self.line_bytes[line];
+        let to = self.line_bytes.get(line + 1).map_or(self.source.len(), |next| next - 1);
+        let column = at.saturating_sub(self.starts.get(line).copied().unwrap_or(0));
+        let text = &self.source[from..to];
+        from + text.char_indices().nth(column).map_or(text.len(), |(b, _)| b)
+    }
+}
+
 struct FenceSource {
     language: Language,
     source: String,

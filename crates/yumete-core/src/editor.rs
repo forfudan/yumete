@@ -2732,6 +2732,8 @@ pub struct Editor {
     quit_from_binding: bool,
     /// `:lsp-rename`'s question: where, and the new name.
     rename_query: Option<(PathBuf, usize, usize, String)>,
+    /// The selections `A-o` grew from, newest last: `A-i` takes them back.
+    grown_from: Vec<Vec<crate::selection::Range>>,
     /// `=`'s question: the file, the span's two ends (line, UTF-16 column),
     /// the indent's width and whether it is spaces.
     format_query: Option<FormatQuery>,
@@ -4213,6 +4215,7 @@ impl Editor {
             symbols_wanted: None,
             quit_from_binding: false,
             rename_query: None,
+            grown_from: Vec::new(),
             format_query: None,
             asked_format_from: None,
             actions_query: None,
@@ -5653,6 +5656,7 @@ mod detail;
 mod docs;
 mod edits;
 mod fences;
+mod tree_select;
 mod files;
 mod group_commands;
 mod groups;
