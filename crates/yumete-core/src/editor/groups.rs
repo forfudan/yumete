@@ -603,40 +603,6 @@ impl Editor {
             _ => return None,
         })
     }
-
-    /// **Every key menu, for the generated keymap page** (`ye --docgen`):
-    /// each menu's title message, the keys that open it, and its rows as
-    /// (keys, message), read off the same rows the which-key panel draws.
-    /// Helix's keys on a page laid out across; the table group lists every
-    /// key it has in some kind of table, the way in first.
-    pub fn menus_for_docs() -> Vec<super::keys::DocMenu> {
-        let at = Context::for_docs();
-        let mut out = Vec::new();
-        for group in GROUPS {
-            // `Z` is `z` that stays open, and the three value lists under
-            // `Space z` are one line each on that menu.
-            if matches!(group.name, "sticky_view" | "yume_commit" | "yume_panel" | "yume_preedit") {
-                continue;
-            }
-            let rows = match group.name {
-                "table" => {
-                    let mut all: Vec<(String, &'static str)> = Vec::new();
-                    for (inside, pane) in [(Some(Bounds::Md), true), (Some(Bounds::WholeFile), false), (Some(Bounds::Block), false)] {
-                        for (keys, what) in Self::table_keys(inside, pane) {
-                            let taken = all.iter().any(|(k, _)| k.split(' ').any(|one| keys.split(' ').any(|two| one == two)));
-                            if !taken {
-                                all.push((keys, what));
-                            }
-                        }
-                    }
-                    all
-                }
-                _ => group.menu(&at),
-            };
-            out.push((group.title, written_path(group.path), rows));
-        }
-        out
-    }
 }
 
 /// **One command as the generated reference lists it** (`ye --docgen`,
@@ -788,19 +754,6 @@ impl Editor {
             .map(|(key, run)| (yumete_cjk::actions::written(key), run.to_string()))
             .collect()
     }
-}
-
-/// A group's keys as the docs write them: `Space t x`, `C-w n`.
-fn written_path(path: &str) -> String {
-    let mut out: Vec<String> = Vec::new();
-    for c in path.chars() {
-        out.push(match c {
-            ' ' => "Space".to_string(),
-            '\u{17}' => "C-w".to_string(),
-            c => c.to_string(),
-        });
-    }
-    out.join(" ")
 }
 
 // ── The groups ─────────────────────────────────────────────────────────────

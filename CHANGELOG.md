@@ -7,6 +7,12 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Changed
+
+- **The keymap is three pages on the site.** helix's keys and vim's keys each have a page, with the flavour off, so each is that editor's keymap as yumete has it, the whole of Normal, select (or Visual) and Insert mode and every menu. The Yumete flavour has its own page: each level's items with their keys under both keymaps, then, item by item, every key it changes and what that key does without it. The Keymap page, which mixed helix's keys with the flavour's and did not say which was which, now says how the three layers stack and links the pages.
+
 ## 0.16.0 · 2026-11-02
 
 ### Added

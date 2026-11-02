@@ -2740,10 +2740,6 @@ pub(super) fn typed_as(key: Key) -> Option<char> {
     }
 }
 
-/// One key menu for the docs: its title message, the key that opens it, and
-/// its rows as (keys, message).
-pub type DocMenu = (&'static str, String, Vec<(String, &'static str)>);
-
 /// **The cursors a command reaches when no key of the keymap runs it** —
 /// the vim preset's own commands, which its keys reach through the alias
 /// layer (found in review, 2026-11-02: vim's `x` deleted at one cursor of
