@@ -742,6 +742,13 @@ zhs = "跑不动：{0}"
 en = "cannot run: {0}"
 
 [[message]]
+# C-z：這個系統上不能暫停（草稿）
+key = "shell.cannot-suspend"
+zht = "這裏不能暫停"
+zhs = "这里不能暂停"
+en = "suspending is not available here"
+
+[[message]]
 # :! 或 :sh 跑完了
 key = "shell.done"
 zht = "跑完了：{0}"
@@ -782,6 +789,13 @@ key = "shell.no-previous"
 zht = "没有上一條終端命令"
 zhs = "没有上一条终端命令"
 en = "no previous shell command"
+
+[[message]]
+# $：命令在每一段選區上都失敗了，選區不動（草稿）
+key = "shell.none-kept"
+zht = "命令在每一段上都没通過，選區不動"
+zhs = "命令在每一段上都没通过，选区不动"
+en = "the command failed on every selection; they are left as they were"
 
 [[message]]
 # :!命令 跑完，螢幕還在命令那邊，等你看完

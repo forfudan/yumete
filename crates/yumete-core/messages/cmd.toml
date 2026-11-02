@@ -338,6 +338,14 @@ en = "info: which of record / diagnostics / dictionary / wiki / docs follows the
 find = "信息 info 記錄 记录 診斷 诊断 字典 百科 文檔 文档 record diagnostics dictionary wiki docs 即時 即时 及時 及时"
 
 [[message]]
+# :keep-pipe，$：留下終端命令通過的選區（草稿）
+key = "cmd.commands.keep-pipe"
+zht = "只留下終端命令通過的選區"
+zhs = "只留下终端命令通过的选区"
+en = "keep the selections a terminal command succeeds on"
+find = "管道 外部命令 shell 篩選 筛选 filter keep 選區 选区"
+
+[[message]]
 # : 命令選單裏 keymap 那一項的説明
 key = "cmd.commands.keymap"
 zht = "鍵位預設：helix(出廠)或 vim——把 vim 的 x s dd ^ $ 翻過來"

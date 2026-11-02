@@ -324,6 +324,13 @@ zhs = "{0} 的语言服务器已开启但{1}秒未响应"
 en = "the {0} language server started but has not answered in {1} seconds"
 
 [[message]]
+# 空格 h：服務器没找到這個符號（草稿）
+key = "lsp.no-highlights"
+zht = "服務器在這裏没找到符號"
+zhs = "服务器在这里没找到符号"
+en = "the server found no symbol here"
+
+[[message]]
 # gr 問了，服務器說哪兒都沒用到
 key = "lsp.no-references"
 zht = "語言服務器未查到別處用到它"

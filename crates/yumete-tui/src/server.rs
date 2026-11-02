@@ -134,6 +134,8 @@ struct Server {
     /// `gr`, `:lsp-rename` and `空格 a` now out, and a code action's command
     /// (#54, 2026-10-29). Each its own slot, for the reason `asked_what` has one.
     asked_refs: Option<i64>,
+    /// `Space h`'s question (2026-11-02).
+    asked_highlights: Option<i64>,
     /// `空格 s`/`S`'s question (2026-10-31).
     asked_symbols: Option<i64>,
     asked_rename: Option<i64>,
@@ -197,6 +199,8 @@ struct Heard {
     signature_doc: Option<Option<lsp::Told>>,
     /// `gr`'s places, the first server's that found any (#54).
     refs: Option<Vec<lsp::Place>>,
+    /// `Space h`'s spans, the first server's that found any.
+    highlights: Option<Vec<lsp::Span>>,
     /// The symbol pickers' answer, the first server's that named any.
     symbols: Option<Vec<lsp::Symbol>>,
     /// A rename's edits, or what the server said in refusing.
@@ -238,6 +242,13 @@ impl Heard {
             return;
         }
         self.refs = Some(places);
+    }
+
+    fn highlights(&mut self, spans: Vec<lsp::Span>) {
+        if self.highlights.as_ref().is_some_and(|had| !had.is_empty()) {
+            return;
+        }
+        self.highlights = Some(spans);
     }
 
     fn symbols(&mut self, symbols: Vec<lsp::Symbol>) {
@@ -313,6 +324,11 @@ impl Heard {
         match self.refs {
             Some(places) if !places.is_empty() => editor.show_references(places),
             Some(_) if !waiting(|s| s.asked_refs) => editor.show_references(Vec::new()),
+            _ => {}
+        }
+        match self.highlights {
+            Some(spans) if !spans.is_empty() => editor.show_highlights(spans),
+            Some(_) if !waiting(|s| s.asked_highlights) => editor.show_highlights(Vec::new()),
             _ => {}
         }
         match self.symbols {
@@ -884,6 +900,15 @@ impl Servers {
                 );
             }
         }
+        if !self.running.values().any(|s| s.asked_highlights.is_some()) {
+            if let Some((path, line, column)) = editor.take_highlights_query() {
+                self.ask_them_all(
+                    language,
+                    |server, id| server.asked_highlights = Some(id),
+                    |id| lsp::document_highlight(id, &path, line, column),
+                );
+            }
+        }
         if !self.running.values().any(|s| s.asked_rename.is_some()) {
             if let Some((path, line, column, name)) = editor.take_rename_query() {
                 self.ask_them_all(
@@ -1222,7 +1247,7 @@ impl Servers {
                     // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
-                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols }) => {
+                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols, spans }) => {
                         if server.asked_symbols == Some(id) {
                             server.asked_symbols = None;
                             anything = true;
@@ -1231,6 +1256,10 @@ impl Servers {
                             server.asked_refs = None;
                             anything = true;
                             heard.references(places);
+                        } else if server.asked_highlights == Some(id) {
+                            server.asked_highlights = None;
+                            anything = true;
+                            heard.highlights(spans);
                         } else if server.asked_rename == Some(id) {
                             server.asked_rename = None;
                             anything = true;
@@ -1765,6 +1794,7 @@ fn start(
         asked_signature: None,
         asked_signature_doc: None,
         asked_refs: None,
+        asked_highlights: None,
         asked_symbols: None,
         asked_rename: None,
         asked_actions: None,
@@ -1874,6 +1904,7 @@ mod tests {
                     asked_signature: None,
                     asked_signature_doc: None,
                     asked_refs: None,
+                    asked_highlights: None,
                     asked_symbols: None,
                     asked_rename: None,
                     asked_actions: None,
@@ -2495,7 +2526,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2515,7 +2546,7 @@ mod tests {
                 told: Some("fn main()".into()),
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2545,7 +2576,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
             })
             .unwrap();
         }
@@ -2653,7 +2684,7 @@ mod tests {
             servers.running.values().find_map(pick).expect("asked")
         };
         let answer = |id: i64, places: Vec<lsp::Place>, edits: Vec<lsp::TextEdit>, actions: Vec<lsp::Action>| {
-            Notice::Answer { id, places, told: None, offers: Vec::new(), incomplete: false, signature: None, edits, actions, symbols: Vec::new(), error: None }
+            Notice::Answer { id, places, told: None, offers: Vec::new(), incomplete: false, signature: None, edits, actions, symbols: Vec::new(), spans: Vec::new(), error: None }
         };
         let place = |line: usize| lsp::Place { path: path.clone(), line, utf16_column: 4 };
 

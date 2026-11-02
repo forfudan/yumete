@@ -115,7 +115,7 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 pub fn initialize(id: i64, root: &Path) -> String {
     let root = uri_of(root);
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}},"symbol":{{}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"documentSymbol":{{"hierarchicalDocumentSymbolSupport":true}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}},"symbol":{{}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"documentHighlight":{{}},"documentSymbol":{{"hierarchicalDocumentSymbolSupport":true}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -189,6 +189,16 @@ pub fn goto(id: i64, kind: Goto, path: &Path, line: usize, utf16_column: usize) 
     format!(
         r#"{{"jsonrpc":"2.0","id":{id},"method":"{method}","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
         method = kind.method(),
+        uri = json_string(&uri_of(path)),
+    )
+}
+
+/// `textDocument/documentHighlight` — where the symbol at the caret stands
+/// in this file (helix's `Space h`, `select_references_to_symbol_under_cursor`,
+/// 2026-11-02).
+pub fn document_highlight(id: i64, path: &Path, line: usize, utf16_column: usize) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/documentHighlight","params":{{"textDocument":{{"uri":{uri}}},"position":{{"line":{line},"character":{utf16_column}}}}}}}"#,
         uri = json_string(&uri_of(path)),
     )
 }
@@ -505,6 +515,8 @@ pub enum Notice {
         actions: Vec<Action>,
         /// A `documentSymbol` or `workspace/symbol` answer (2026-10-31).
         symbols: Vec<Symbol>,
+        /// A `documentHighlight` answer: spans in the file asked about.
+        spans: Vec<Span>,
         /// What the server said when it refused (`error.message`), as a
         /// rename refuses a keyword.
         error: Option<String>,
@@ -657,6 +669,7 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             edits: workspace_edit(value.get("result")),
             actions: actions(value.get("result")),
             symbols: symbols(value.get("result")),
+            spans: spans(value.get("result")),
             error: value
                 .pointer("/error/message")
                 .and_then(|m| m.as_str())
@@ -764,6 +777,31 @@ fn working(value: &serde_json::Value) -> Notice {
 /// and servers really do differ: `rust-analyzer` sends `LocationLink`, others
 /// send a bare `Location`. Reading only one shape works until the day somebody
 /// uses the other server.
+/// A span of the file a question was about: (line, UTF-16 column) at each
+/// end, as the wire has them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+    pub from: (usize, usize),
+    pub to: (usize, usize),
+}
+
+/// **A `DocumentHighlight[]`**: ranges with no file named, which is what
+/// tells them from a reference's `Location` and an edit's `TextEdit`.
+fn spans(result: Option<&serde_json::Value>) -> Vec<Span> {
+    let Some(serde_json::Value::Array(many)) = result else { return Vec::new() };
+    let one = |value: &serde_json::Value| -> Option<Span> {
+        if value.get("uri").is_some() || value.get("targetUri").is_some() || value.get("newText").is_some() {
+            return None;
+        }
+        let at = |end: &str| -> Option<(usize, usize)> {
+            let point = value.pointer(&format!("/range/{end}"))?;
+            Some((point.get("line")?.as_u64()? as usize, point.get("character")?.as_u64()? as usize))
+        };
+        Some(Span { from: at("start")?, to: at("end")? })
+    };
+    many.iter().filter_map(one).collect()
+}
+
 fn places(result: Option<&serde_json::Value>) -> Vec<Place> {
     let one = |value: &serde_json::Value| -> Option<Place> {
         // `LocationLink` names the file `targetUri` and the spot
@@ -1625,9 +1663,18 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
             }
         );
+        // A `DocumentHighlight[]` is ranges with no file named (Space h).
+        let Notice::Answer { spans, places, .. } = read(
+            r#"{"jsonrpc":"2.0","id":8,"result":[{"range":{"start":{"line":1,"character":4},"end":{"line":1,"character":7}},"kind":1}]}"#,
+            1,
+        ) else {
+            panic!("an answer")
+        };
+        assert_eq!(spans, [Span { from: (1, 4), to: (1, 7) }]);
+        assert!(places.is_empty());
         // A *request* from the server has a method as well as an id, and must
         // be answered or the server may wait on it forever.
         assert_eq!(

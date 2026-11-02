@@ -921,6 +921,7 @@ pub(super) static SPACE: Group = Group {
         ch('x', NormalCmd::ShowChange, "hint.space.change").flavor(FlavorItem::PopupPanelPairs),
         ch('X', NormalCmd::ShowChangePanel, "hint.space.change-panel").flavor(FlavorItem::PopupPanelPairs),
         ch('r', NormalCmd::RenameSymbol, "hint.space.rename"),
+        ch('h', NormalCmd::SelectReferencesToSymbolUnderCursor, "hint.space.select-references"),
         ch('a', NormalCmd::CodeAction, "hint.space.actions"),
         ch('i', NormalCmd::ShowRecord, "hint.space.record").flavor(FlavorItem::PopupPanelPairs),
         ch('I', NormalCmd::ShowRecordPanel, "hint.space.record-panel").flavor(FlavorItem::PopupPanelPairs),

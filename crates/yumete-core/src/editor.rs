@@ -790,6 +790,9 @@ pub enum How {
     /// manuscript, not of a passage — converting the paragraph the cursor
     /// happens to be in leaves a book in two scripts.
     Convert(String),
+    /// Run it once on each selection, given as its input, and keep the
+    /// selections it exits 0 on (helix's `$`, `:keep-pipe`).
+    Keep(Vec<String>),
 }
 
 /// A file to hand to the typesetter, or a typesetter to stop.
@@ -2716,6 +2719,9 @@ pub struct Editor {
     /// **`gr`'s question, and where it was asked from** (#54, 2026-10-29).
     references_query: Option<(PathBuf, usize, usize)>,
     asked_refs_from: Option<(u64, usize)>,
+    /// `Space h`'s question for the server, and where it was asked from.
+    highlights_query: Option<(PathBuf, usize, usize)>,
+    asked_highlights_from: Option<(u64, usize)>,
     /// **The symbol pickers' question for the language server** (`空格 s`/`S`,
     /// 2026-10-31), and which picker the answer is for.
     symbols_query: Option<symbols::SymbolAsk>,
@@ -3203,6 +3209,9 @@ pub struct Editor {
     open_request: Option<String>,
     /// A pending `:sh` or `:!`, waiting for the front end.
     shell_request: Option<Shell>,
+    /// `C-z` was pressed: the front end gives the terminal back to the
+    /// shell until `fg` (helix's `suspend`).
+    suspend_request: bool,
     /// The last command `:!` ran, after its own `!` were replaced: what the
     /// next `!` stands for (vim's rule).
     last_bang: Option<String>,
@@ -4193,6 +4202,8 @@ impl Editor {
             definition_query: None,
             references_query: None,
             asked_refs_from: None,
+            highlights_query: None,
+            asked_highlights_from: None,
             symbols_query: None,
             symbols_wanted: None,
             quit_from_binding: false,
@@ -4319,6 +4330,7 @@ impl Editor {
             open_request: None,
             preview_at: None,
             shell_request: None,
+            suspend_request: false,
             last_bang: None,
             convert_patch: None,
             convert_range: None,

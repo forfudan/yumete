@@ -42,6 +42,51 @@ impl Editor {
         self.references_query.take()
     }
 
+    /// **`Space h`, helix's `select_references_to_symbol_under_cursor`**:
+    /// the server is asked where this symbol stands in this file.
+    pub(super) fn ask_highlights(&mut self) {
+        match self.caret_for_the_server() {
+            Some(at) => {
+                self.highlights_query = Some(at);
+                self.asked_highlights_from = Some((self.current_buffer().id(), self.sel.head()));
+            }
+            None => self.status = say!("lsp.buffer-unsaved"),
+        }
+    }
+
+    pub fn take_highlights_query(&mut self) -> Option<(PathBuf, usize, usize)> {
+        self.highlights_query.take()
+    }
+
+    /// **The spans come back, and each becomes a selection**, the one the
+    /// caret was on staying primary. An answer to a question asked from
+    /// somewhere the caret has since left is dropped.
+    pub fn show_highlights(&mut self, spans: Vec<crate::lsp::Span>) {
+        if self.asked_highlights_from.take() != Some((self.current_buffer().id(), self.sel.head())) {
+            return;
+        }
+        let head = self.sel.head();
+        let rope = self.current_buffer().rope();
+        let at = |(line, utf16): (usize, usize)| -> Option<usize> {
+            let line = (line < rope.len_lines()).then_some(line)?;
+            let text = rope.line(line).to_string();
+            Some(rope.line_to_char(line) + crate::problem::char_column(&text, utf16))
+        };
+        let spans: Vec<(usize, usize)> = spans
+            .iter()
+            .filter_map(|span| Some((at(span.from)?, at(span.to)?)))
+            .filter(|(from, to)| to > from)
+            .collect();
+        let mut ranges: Vec<crate::selection::Range> = spans.into_iter().map(|(from, to)| self.from_drawn(from, to)).collect();
+        if ranges.is_empty() {
+            self.status = say!("lsp.no-highlights");
+            return;
+        }
+        ranges.sort_by_key(|r| r.span());
+        let primary = ranges.iter().position(|r| r.span().0 <= head && head <= r.span().1).unwrap_or(0);
+        self.sel.rebuild(ranges, primary);
+    }
+
     /// **The places come back**: one is gone to, several are offered in a
     /// picker, as helix offers them. An answer to a question asked from
     /// somewhere the caret has since left is dropped, as `gd`'s is.

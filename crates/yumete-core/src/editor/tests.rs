@@ -15842,6 +15842,65 @@ fn space_j_lists_the_jumps_and_space_quote_opens_the_last_picker() {
 }
 
 #[test]
+fn ctrl_z_asks_the_front_end_to_suspend() {
+    // helix's and vim's `C-z`: the front end gives the terminal back.
+    for vim in [false, true] {
+        let mut ed = if vim { typed_vim("那年\n") } else { typed("那年\n") };
+        assert!(!ed.take_suspend_request());
+        ed.on_key(Key::Ctrl('z'));
+        assert!(ed.take_suspend_request(), "vim: {vim}");
+        assert!(!ed.take_suspend_request(), "asked once");
+    }
+}
+
+#[test]
+fn dollar_keeps_the_selections_a_command_passes() {
+    // helix's `$` (`shell_keep_pipe`): each selection goes to the command on
+    // its own, and the ones it exits 0 on stay.
+    use crate::editor::How;
+    let mut ed = typed("甲\n乙\n丙\n");
+    press(&mut ed, "ggCC");
+    assert_eq!(ed.sel.len(), 3);
+    press(&mut ed, "$");
+    type_keys(&mut ed, "grep 乙\n");
+    let want = ed.take_shell_request().expect("asked");
+    assert_eq!(want.how, How::Keep(vec!["甲".into(), "乙".into(), "丙".into()]));
+    ed.provide_kept(&[false, true, false]);
+    assert_eq!(ed.sel.len(), 1);
+    assert_eq!(ed.cursor_line(), 1);
+    // None kept: all stay, and it is said.
+    ed.provide_kept(&[false]);
+    assert_eq!(ed.sel.len(), 1);
+    assert!(!ed.status().is_empty());
+}
+
+#[test]
+fn space_h_selects_every_place_the_server_names() {
+    // helix's `select_references_to_symbol_under_cursor` (2026-11-02): the
+    // server's `documentHighlight` spans become the selections.
+    use crate::lsp::Span;
+    let dir = tmp().join(format!("yumete-space-h-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "let n = 1;\nn + n\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    press(&mut ed, "j");
+    type_keys(&mut ed, " h");
+    let (_, line, column) = ed.take_highlights_query().expect("asked");
+    assert_eq!((line, column), (1, 0));
+    ed.show_highlights(vec![
+        Span { from: (0, 4), to: (0, 5) },
+        Span { from: (1, 0), to: (1, 1) },
+        Span { from: (1, 4), to: (1, 5) },
+    ]);
+    assert_eq!(ed.sel.len(), 3);
+    assert_eq!(ed.cursor(), 11, "the one the caret was on is primary");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_system_clipboard_goes_both_ways() {
     let mut ed = typed("那年冬天");
     press(&mut ed, "ggvl");
@@ -34313,7 +34372,7 @@ fn the_basic_flavour_keys_and_helix_without_them() {
     press(&mut ed, "2G");
     assert_eq!(ed.cursor_line(), 1, "a count's line, as helix's");
 
-    // `0 ^`; `$` is helix's, and does nothing until its command is built.
+    // `0 ^`; `$` is helix's `shell_keep_pipe` (2026-11-02), not the line's end.
     let mut ed = typed("  甲乙\n");
     ed.goto_line(1);
     press(&mut ed, "gl");
@@ -34321,6 +34380,8 @@ fn the_basic_flavour_keys_and_helix_without_them() {
     press(&mut ed, "0");
     assert_eq!(ed.sel.head(), 0);
     press(&mut ed, "$");
+    assert_eq!(ed.mode(), Mode::Command, "$ asks for a command");
+    ed.on_key(Key::Esc);
     assert_eq!(ed.sel.head(), 0, "$ is not the line's end under helix");
     press(&mut ed, "^");
     assert_eq!(ed.sel.head(), 2);

@@ -14,6 +14,11 @@ impl Editor {
         self.shell_request.take()
     }
 
+    /// `C-z` asked the front end to stop the editor until `fg`, once.
+    pub fn take_suspend_request(&mut self) -> bool {
+        std::mem::take(&mut self.suspend_request)
+    }
+
     /// Put what a command said in place of the text it was given.
     ///
     /// One edit, so one `u` takes it back — which matters more here than
@@ -67,6 +72,37 @@ impl Editor {
             line,
             how: crate::editor::How::Pipe(fed, put),
         });
+    }
+
+    /// **helix's `$`**: each selection, in the order they stand, goes to the
+    /// command on its own; [`Self::provide_kept`] takes the answers.
+    pub(super) fn ask_the_shell_to_keep(&mut self, line: String) {
+        let rope = self.current_buffer().rope();
+        let fed = self.sel.iter().map(|one| {
+            let (start, end) = self.drawn(*one);
+            rope.slice(start..end).to_string()
+        });
+        let fed = fed.collect();
+        self.shell_request = Some(crate::editor::Shell { line, how: crate::editor::How::Keep(fed) });
+    }
+
+    /// Which selections the command exited 0 on, one answer each in the
+    /// order they were sent. None kept leaves them all, and says so (helix's
+    /// 「No selections remaining」).
+    pub fn provide_kept(&mut self, kept: &[bool]) {
+        let ranges: Vec<crate::selection::Range> = self.sel.iter().copied().collect();
+        if ranges.len() != kept.len() {
+            return;
+        }
+        let primary = self.sel.primary_index();
+        let keep: Vec<(usize, crate::selection::Range)> =
+            ranges.into_iter().enumerate().filter(|(i, _)| kept[*i]).collect();
+        if keep.is_empty() {
+            self.status = say!("shell.none-kept");
+            return;
+        }
+        let at = keep.iter().position(|(i, _)| *i >= primary).unwrap_or(keep.len() - 1);
+        self.sel.rebuild(keep.into_iter().map(|(_, one)| one).collect(), at);
     }
 
     pub fn provide_pipe_output(&mut self, output: &str, put: crate::editor::Put) {

@@ -1493,6 +1493,13 @@ zhs = "用系统剪贴板替换选区"
 en = "replace the selection with the system clipboard"
 
 [[message]]
+# 空格 h：選中這個符號在本檔裏的每一處（草稿）
+key = "hint.space.select-references"
+zht = "選中本檔裏的每一處"
+zhs = "选中本档里的每一处"
+en = "select every place this symbol stands in the file"
+
+[[message]]
 # space b: 
 # Open buffer picker
 key = "hint.space.switch-buffer"

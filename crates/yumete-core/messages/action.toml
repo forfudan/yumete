@@ -2040,6 +2040,13 @@ zhs = "视图组(按完不收)"
 en = "the view group, staying open"
 
 [[message]]
+# 命令說明：suspend，C-z（草稿）
+key = "action.suspend"
+zht = "暫停，回到終端；fg 回來"
+zhs = "暂停，回到终端；fg 回来"
+en = "suspend to the shell; fg brings it back"
+
+[[message]]
 # 命令說明：swap_view_down（草稿）
 key = "action.swap-view-down"
 zht = "和下面那一區對調"

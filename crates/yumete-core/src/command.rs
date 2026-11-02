@@ -324,6 +324,9 @@ pub enum Command {
     /// `:pipe-before` / `:pipe-after` / `:pipe-to` — the other three of
     /// helix's four (`!`, `A-!`, `A-|`); `:pipe` itself is [`Command::Pipe`].
     PipeInto(String, crate::editor::Put),
+    /// `:keep-pipe <command>` — helix's `$` (`shell_keep_pipe`): the
+    /// selections the command exits 0 on, given each as its input, are kept.
+    KeepPipe(String),
     /// `:read <file>` — a file's contents into this buffer, as vim's `:r` and
     /// helix's `:read`.
     Read(String),
@@ -4742,6 +4745,17 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| match p.arg(0) {
             None => Err(CommandError::MissingArgument("read")),
             Some(path) => Ok(Command::Read(path.to_string())),
+        }),
+    },
+    Entry {
+        name: "keep-pipe",
+        aliases: &[],
+        help: "cmd.commands.keep-pipe",
+        needs: &[],
+        params: &[Param::Free("<命令>")],
+        build: Some(|p| match p.arg(0) {
+            None => Err(CommandError::MissingArgument("keep-pipe")),
+            Some(line) => Ok(Command::KeepPipe(line.to_string())),
         }),
     },
     Entry {

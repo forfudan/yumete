@@ -989,6 +989,11 @@ impl Editor {
             }
             // **helix 那四個裏的另外三個**（2026-10-06）：`!` 插在前面、`A-!` 接在
             // 後面、`A-|` 不收輸出。
+            Command::KeepPipe(line) => {
+                self.last_bang = Some(line.clone());
+                self.ask_the_shell_to_keep(line);
+                Ok(CommandOutcome::Continue)
+            }
             Command::PipeInto(line, put) => {
                 // Warning: **只有「不收輸出」那一個也要擋只讀**——它不改稿子，可是
                 // `:pipe-to` 之外那兩個要往稿子裏插字。鎖住就別跑那條命令，理由

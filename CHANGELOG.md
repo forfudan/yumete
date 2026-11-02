@@ -15,6 +15,9 @@ in `docs/development.md` §5.2.
 - **`Space j`** lists the jump list, the newest first, and **`Space '`** opens the picker closed last as it was left, as in helix.
 - **`Space Y` copies the main selection** to the system clipboard; `Space y` copies every selection, one to a line, as helix's does (it copied the main one alone).
 - **`]G` and `[G`** go to the last change in the file and the first, beside `]g` and `[g`.
+- **`Space h` selects every place the symbol under the cursor stands in the file**, as the language server finds them (helix's `select_references_to_symbol_under_cursor`).
+- **`$` keeps the selections a shell command succeeds on** (helix's `shell_keep_pipe`, `:keep-pipe`): each selection is given to the command on its own, and those it exits 0 on stay. Under the vim keymap `$` is still the line's end.
+- **`C-z` suspends yumete** to the shell, under either keymap; `fg` brings it back as it was. Not on Windows.
 
 ### Changed
 

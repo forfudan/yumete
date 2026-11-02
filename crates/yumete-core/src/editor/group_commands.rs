@@ -123,6 +123,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::YankToClipboard, |e, _| e.copy_to_clipboard(true), Key::Char('y')),
     (NormalCmd::YankMainSelectionToClipboard, |e, _| e.copy_to_clipboard(false), Key::Char('Y')),
     (NormalCmd::JumplistPicker, |e, _| e.open_jumplist_picker(), Key::Char('j')),
+    (NormalCmd::SelectReferencesToSymbolUnderCursor, |e, _| e.ask_highlights(), Key::Char('h')),
     (NormalCmd::LastPicker, |e, _| e.reopen_last_picker(), Key::Char('\'')),
     (NormalCmd::PasteClipboardAfter, |e, _| e.clipboard_paste(true), Key::Char('p')),
     (NormalCmd::PasteClipboardBefore, |e, _| e.clipboard_paste(false), Key::Char('P')),

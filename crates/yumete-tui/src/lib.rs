@@ -1507,6 +1507,16 @@ pub fn run(
                 }
                         // `:view-preview` — the real typesetter, in the background. Its
                 // address arrives on a later turn of the loop.
+                // `C-z` (helix's `suspend`): the terminal goes back to the
+                // shell as it would on the way out, and comes back on `fg`.
+                if editor.take_suspend_request() {
+                    system_ime.release();
+                    match suspend_to_the_shell(&mut terminal, enhanced, all_keys) {
+                        Ok(true) => last_caret = None,
+                        Ok(false) => editor.set_status(say!("shell.cannot-suspend")),
+                        Err(err) => editor.set_status(say!("shell.cannot-run", err)),
+                    }
+                }
                 // `:sh` brings the answer back; `:!` hands over the screen.
                 if let Some(want) = editor.take_shell_request() {
                     use yumete_core::editor::How;
@@ -1562,6 +1572,23 @@ pub fn run(
                         // **exit code alone** — a converter that complains on
                         // stderr while succeeding is still a converter that
                         // succeeded.
+                        // helix's `$`: one run for each selection, judged by
+                        // its exit code alone.
+                        How::Keep(inputs) => {
+                            let mut kept = Vec::new();
+                            for input in &inputs {
+                                match run_capturing(&want.line, Some(input), &editor.working_dir()) {
+                                    Ok(ran) => kept.push(ran.ok),
+                                    Err(err) => {
+                                        editor.set_status(say!("shell.cannot-run", err));
+                                        break;
+                                    }
+                                }
+                            }
+                            if kept.len() == inputs.len() {
+                                editor.provide_kept(&kept);
+                            }
+                        }
                         How::Convert(input) => match run_capturing(&want.line, Some(&input), &editor.working_dir()) {
                             Ok(ran) if ran.ok => editor.provide_conversion(&ran.said),
                             Ok(ran) => editor.set_status(say!("shell.left-alone", ran.why())),
@@ -2809,6 +2836,61 @@ fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::
     let status = shell_command(line, in_dir).status();
     unsafe { SetConsoleCtrlHandler(Some(swallow), 0) };
     status
+}
+
+/// **`C-z`: stop until `fg`** (helix's `suspend`, 2026-11-02). Everything
+/// the terminal was asked for is put back first, as on the way out (the
+/// keyboard's flags, the mouse, the three colours), and asked for again
+/// after. `false` where there is no job control to stop for.
+fn suspend_to_the_shell<B: ratatui::backend::Backend + io::Write>(
+    terminal: &mut ratatui::Terminal<B>,
+    enhanced: bool,
+    all_keys: bool,
+) -> io::Result<bool> {
+    if !cfg!(unix) {
+        return Ok(false);
+    }
+    if enhanced {
+        if all_keys {
+            let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
+        }
+        let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
+    }
+    let _ = execute!(
+        stdout(),
+        DisableMouseCapture,
+        DisableBracketedPaste,
+        DisableFocusChange,
+        SetCursorStyle::DefaultUserShape
+    );
+    let _ = write!(stdout(), "\x1b]110\x07\x1b]111\x07\x1b]112\x07");
+    execute!(terminal.backend_mut(), ratatui::crossterm::terminal::LeaveAlternateScreen)?;
+    let _ = terminal.show_cursor();
+    ratatui::crossterm::terminal::disable_raw_mode()?;
+    let _ = io::Write::flush(&mut stdout());
+    #[cfg(unix)]
+    // Safety: raising a signal at this process; the shell's `fg` sends the
+    // `SIGCONT` that lets `raise` return.
+    unsafe {
+        libc::raise(libc::SIGTSTP);
+    }
+    ratatui::crossterm::terminal::enable_raw_mode()?;
+    execute!(terminal.backend_mut(), ratatui::crossterm::terminal::EnterAlternateScreen)?;
+    let _ = execute!(stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange);
+    if enhanced {
+        let base = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+            | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+            | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS;
+        let _ = execute!(stdout(), PushKeyboardEnhancementFlags(base));
+        if all_keys {
+            let _ = execute!(
+                stdout(),
+                PushKeyboardEnhancementFlags(base | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES)
+            );
+        }
+    }
+    terminal.clear()?;
+    Ok(true)
 }
 
 /// Give the terminal back, run the command in it, and take it again.
