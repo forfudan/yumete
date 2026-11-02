@@ -209,13 +209,6 @@ zhs = "光标下面没有链接"
 en = "there is no link under the cursor"
 
 [[message]]
-# gx：連結指着絕對路徑，不是這本書裏的一篇
-key = "link.not-a-chapter"
-zht = "{0} 不是本項目裏的一篇——絕對路徑不跟"
-zhs = "{0} 不是本项目里的一篇——绝对路径不跟"
-en = "{0} is not a file of this project — an absolute path is not followed"
-
-[[message]]
 # gx 碰到的鏈接不是網址（草稿）
 key = "link.not-a-web-address"
 zht = "這個鏈接不是網址"

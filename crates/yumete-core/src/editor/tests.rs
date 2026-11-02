@@ -362,13 +362,49 @@ fn a_link_to_another_chapter_opens_it_where_it_sits() {
     assert_eq!(ed.current_buffer().display_name(), "二.md", "{}", ed.status());
     assert_eq!(ed.cursor(), 0, "the heading is the first line");
 
-    // An absolute path is not the name of a chapter.
-    std::fs::write(&one, "見[密](/etc/passwd)。\n").unwrap();
+    // An absolute path is followed, as helix's `gf` follows it
+    // (2026-11-02): a file outside the project is opened, not refused.
+    let far = tmp().join(format!("yumete-link-far-{}", std::process::id()));
+    std::fs::create_dir_all(&far).unwrap();
+    std::fs::write(far.join("三.md"), "遠處。\n").unwrap();
+    std::fs::write(&one, format!("見[遠](<{}>)。\n", far.join("三.md").display())).unwrap();
     let mut ed = Editor::new();
     ed.open_file(&one).unwrap();
     press(&mut ed, "lgL");
+    assert_eq!(ed.current_buffer().display_name(), "三.md", "{}", ed.status());
+
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&far).ok();
+}
+
+#[test]
+fn gf_opens_a_path_written_in_the_text() {
+    // helix's `gf` (2026-11-02): the path around the cursor, absolute or
+    // relative to this file's folder, with `:N` for the line. Prose runs
+    // into it on both sides and the sentence's stop is not part of it.
+    let dir = tmp().join(format!("yumete-gf-path-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("注")).unwrap();
+    std::fs::write(dir.join("注/四.md"), "一\n二\n三\n").unwrap();
+    let one = dir.join("一.md");
+    let far = dir.join("注/四.md");
+    std::fs::write(&one, format!("見 注/四.md:2 那一行。\n又見 {}。\n那年冬天。\n", far.display())).unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&one).unwrap();
+    press(&mut ed, "f注gf");
+    assert_eq!(ed.current_buffer().display_name(), "四.md", "{}", ed.status());
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 1, "`:2` is the second line: {}", ed.status());
+
+    let mut ed = Editor::new();
+    ed.open_file(&one).unwrap();
+    press(&mut ed, "jf/gf");
+    assert_eq!(ed.current_buffer().display_name(), "四.md", "{}", ed.status());
+
+    // A word that names no file is not a file to make.
+    let mut ed = Editor::new();
+    ed.open_file(&one).unwrap();
+    press(&mut ed, "jjgf");
     assert_eq!(ed.buffer_count(), 1, "{}", ed.status());
-    assert!(ed.status().contains("/etc/passwd"), "{}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
 }

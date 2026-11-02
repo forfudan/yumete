@@ -1289,6 +1289,21 @@ impl Editor {
             return;
         }
 
+        // **A path written in the text**, as helix's `gf` finds one around
+        // the cursor (2026-11-02): `~/a.txt`, `/etc/hosts`, `notes/b.md`,
+        // with `:12` after it for the line. Only a file that is there: a
+        // word of prose is not a new file to make.
+        if let Some((full, at)) = self.path_under_cursor() {
+            if let Err(err) = self.open_file(&full) {
+                self.status = say!("buffer.cannot-open", full.display(), err);
+                return;
+            }
+            if let Some(n) = at {
+                self.goto_line(n);
+            }
+            return;
+        }
+
         let Some((path, rest)) = text.split_once(':') else {
             self.status = say!("buffer.no-file-named-on-this-line");
             return;
@@ -1417,6 +1432,61 @@ impl Editor {
         self.open_request = Some(url);
     }
 
+    /// **The file a path around the cursor names**, and the line after a
+    /// `:` if one is written. The path's characters are helix's (`gf`):
+    /// letters, digits and `@.-+#$%?!,;~&=_/`, so a colon ends it. Relative
+    /// to this file's folder, then to where a report was gathered, then to
+    /// the working path; `~/` is the home folder.
+    pub(super) fn path_under_cursor(&self) -> Option<(PathBuf, Option<usize>)> {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.sel.head());
+        let at = self.sel.head() - rope.line_to_char(line);
+        let chars: Vec<char> = rope.line(line).chars().collect();
+        let part = |c: char| c.is_alphanumeric() || "@.-+#$%?!,;~&=_/".contains(c);
+        let at = at.min(chars.len());
+        // The cursor on the path, or just after it (helix's rule).
+        let at = match chars.get(at) {
+            Some(c) if part(*c) => at,
+            _ if at > 0 && part(chars[at - 1]) => at - 1,
+            _ => return None,
+        };
+        let mut start = at;
+        while start > 0 && part(chars[start - 1]) {
+            start -= 1;
+        }
+        let mut end = at;
+        while end < chars.len() && part(chars[end]) {
+            end += 1;
+        }
+        let word: String = chars[start..end].iter().collect();
+        let line_no = chars[end..]
+            .strip_prefix(&[':'])
+            .map(|rest| rest.iter().take_while(|c| c.is_ascii_digit()).collect::<String>())
+            .and_then(|n| n.parse::<usize>().ok());
+        // Prose runs into a path (`見~/草稿/一.md。`): from the `~/`, and
+        // without the sentence's own stop.
+        let mut tries = vec![word.clone()];
+        if let Some(home) = word.find("~/").filter(|&n| n > 0) {
+            tries.push(word[home..].to_string());
+        }
+        for one in tries.clone() {
+            let bare = one.trim_end_matches(['.', ',', ';', '!', '?']);
+            if bare != one {
+                tries.push(bare.to_string());
+            }
+        }
+        let mut dirs: Vec<PathBuf> = Vec::new();
+        if let Some(dir) = self.current_file_path().and_then(|p| p.parent().map(Path::to_path_buf)) {
+            dirs.push(dir);
+        }
+        dirs.extend(self.listing_root.clone());
+        dirs.push(self.working_dir());
+        tries.iter().filter(|t| !t.is_empty()).find_map(|one| {
+            let named = Self::expand_tilde(one);
+            dirs.iter().map(|dir| dir.join(&named)).find(|full| full.is_file()).map(|full| (full, line_no))
+        })
+    }
+
     /// **A web address written bare** around the cursor, `http://` or
     /// `https://` up to the first space, less the punctuation a sentence puts
     /// after it.
@@ -1465,11 +1535,11 @@ impl Editor {
             };
             return self.goto_heading_named(&anchor);
         }
-        let named = Path::new(&link.target);
-        if named.is_absolute() || link.target.starts_with('~') {
-            self.status = say!("link.not-a-chapter", link.target);
-            return;
-        }
+        // `~/a.txt` and `/Users/…/a.txt` are followed as helix's `gf` follows
+        // them (2026-11-02): opening a file is a buffer, never a program, so
+        // a path outside the project is no more than `../` already reached.
+        let named = Self::expand_tilde(&link.target);
+        let named = named.as_path();
         let here = self
             .current_buffer()
             .path()

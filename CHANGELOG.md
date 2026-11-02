@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`gf` opens a path written in the text, as helix's does**: `~/notes/a.md`, `/etc/hosts`, or `ch02.md:12` for its twelfth line, wherever the cursor stands on it and the file is there. A Markdown link to `~/…` or to an absolute path is followed too, by `gf`, `gd` and `gL`, where it used to be refused; inside the project or not, a file only ever opens in yumete.
 - **The keymap is three pages on the site.** helix's keys and vim's keys each have a page, with the flavour off, so each is that editor's keymap as yumete has it, the whole of Normal, select (or Visual) and Insert mode and every menu. The Yumete flavour has its own page: each level's items with their keys under both keymaps, then, item by item, every key it changes and what that key does without it. The Keymap page, which mixed helix's keys with the flavour's and did not say which was which, now says how the three layers stack and links the pages.
 
 ## 0.16.0 · 2026-11-02
