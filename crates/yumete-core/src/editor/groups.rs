@@ -1121,6 +1121,25 @@ pub(super) static WINDOW: Group = Group {
     path: "\u{17}",
     rows: &[
         ch('w', NormalCmd::RotateView, "hint.region.next"),
+        // vim's (2026-11-03, measured in nvim): `W` `t` `b` `p` go to a
+        // window; `x` `r` `R` and `H` `J` `K` `L` rearrange them; `c`
+        // closes all but the last; `S` `F` `^` `:` as vim has them.
+        ch('W', NormalCmd::RotateViewReverse, "hint.region.previous").when(Only::Vim),
+        ch('t', NormalCmd::JumpViewFirst, "hint.region.first").when(Only::Vim),
+        ch('b', NormalCmd::JumpViewLast, "hint.region.last").when(Only::Vim),
+        ch('p', NormalCmd::JumpViewLastAccessed, "hint.region.last-accessed").when(Only::Vim),
+        ch('x', NormalCmd::ExchangeView, "hint.region.exchange").when(Only::Vim),
+        ch('r', NormalCmd::RotateViewsForward, "hint.region.rotate").when(Only::Vim),
+        ch('R', NormalCmd::RotateViewsBackward, "hint.region.rotate-back").when(Only::Vim),
+        ch('H', NormalCmd::MoveViewFarLeft, "hint.region.to-edge").when(Only::Vim),
+        ch('J', NormalCmd::MoveViewFarDown, "hint.region.to-edge").when(Only::Vim),
+        ch('K', NormalCmd::MoveViewFarUp, "hint.region.to-edge").when(Only::Vim),
+        ch('L', NormalCmd::MoveViewFarRight, "hint.region.to-edge").when(Only::Vim),
+        ch('c', NormalCmd::VimCloseWindow, "hint.region.close-not-last").when(Only::Vim),
+        ch('S', NormalCmd::Hsplit, "hint.region.split").when(Only::Vim),
+        ch('F', NormalCmd::GotoFileHsplit, "hint.region.file-below").when(Only::Vim),
+        ch('^', NormalCmd::GotoLastAccessedFileHsplit, "hint.region.last-file-below").when(Only::Vim),
+        ch(':', NormalCmd::CommandMode, "action.command-mode").when(Only::Vim),
         ch('h', NormalCmd::JumpViewLeft, "hint.region.go"),
         ch('j', NormalCmd::JumpViewDown, "hint.region.go"),
         ch('k', NormalCmd::JumpViewUp, "hint.region.go"),

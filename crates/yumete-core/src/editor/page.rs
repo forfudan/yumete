@@ -930,8 +930,21 @@ impl Editor {
         self.goto_file_under_cursor();
         if self.live == fresh && self.current_buffer().id() == buffer && self.sel.head() == head {
             let said = std::mem::take(&mut self.status);
-            self.close_this_region();
+            self.close_this_region(false);
             self.status = said;
+        }
+    }
+
+    /// **vim's `C-w ^`**: the file before this one, in a new window below.
+    /// No window when there is no such file (vim's E23).
+    pub(super) fn goto_last_file_in_split(&mut self) {
+        if self.last_file.and_then(|id| self.buffer_with(id)).is_none() {
+            return self.goto_last_file();
+        }
+        let showing = self.current_buffer().id();
+        if self.split_window(crate::window::Split::Below) {
+            self.goto_last_file();
+            self.last_file = Some(showing);
         }
     }
 
@@ -939,9 +952,14 @@ impl Editor {
     /// half of turns, beside to below and back, when the halves still fit.
     pub(super) fn transpose_window(&mut self) {
         let mut tried = self.windows.clone();
-        if !tried.transpose(self.live) {
-            return;
+        if tried.transpose(self.live) {
+            self.lay_out_if_it_fits(tried);
         }
+    }
+
+    /// Take `tried` as the windows when every one of them is still big
+    /// enough to draw; otherwise say there is no room.
+    fn lay_out_if_it_fits(&mut self, tried: crate::window::Windows) {
         if let Some(area) = self.text_area.get() {
             let (placed, _) = tried.place(area, self.splits_right_to_left());
             if placed.iter().any(|p| p.area.height < Self::WINDOW_MIN_ROWS || p.area.width < Self::WINDOW_MIN_COLUMNS) {
@@ -950,6 +968,43 @@ impl Editor {
             }
         }
         self.windows = tried;
+    }
+
+    /// **vim's `C-w H` `J` `K` `L`**: this window takes the whole of that
+    /// edge of the screen; the others share the rest as they were.
+    pub(super) fn move_window_to_edge(&mut self, edge: crate::window::Direction) {
+        if self.panel_focus().is_some() {
+            return;
+        }
+        let mut tried = self.windows.clone();
+        if tried.to_edge(self.live, edge, self.splits_right_to_left()) {
+            self.lay_out_if_it_fits(tried);
+        }
+    }
+
+    /// **vim's `C-w x`**: this window trades places with the next one of
+    /// its row or column, or with the `nth`. The keys stay where they were
+    /// on the screen, so they are in the other window now (measured in
+    /// nvim, 2026-11-03).
+    pub(super) fn exchange_window(&mut self, nth: Option<usize>) {
+        if self.panel_focus().is_some() {
+            return;
+        }
+        if let Some(other) = self.windows.exchange(self.live, nth) {
+            self.switch_to(other);
+        }
+    }
+
+    /// **vim's `C-w r` and `C-w R`**: the windows of this row or column
+    /// move one place on, the keys staying with this one. Not when one of
+    /// them is split the other way (vim's E443).
+    pub(super) fn rotate_windows(&mut self, forward: bool) {
+        if self.panel_focus().is_some() || self.windows.len() < 2 {
+            return;
+        }
+        if !self.windows.rotate(self.live, forward) {
+            self.status = say!("pane.cannot-rotate");
+        }
     }
 
     /// **helix's `C-w H` `J` `K` `L` (`swap_view_*`)**: this window and the

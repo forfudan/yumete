@@ -273,6 +273,13 @@ en = "registers"
 # ── need ──────────────────────────────────────────────────────────────
 
 [[message]]
+# 狀態欄：C-w r 那一排裏有窗口又分開了，輪不動（草稿）
+key = "pane.cannot-rotate"
+zht = "這一排裏有窗口又分開了，輪不動"
+zhs = "这一排里有窗口又分开了，轮不动"
+en = "cannot rotate: a window in this row is split"
+
+[[message]]
 # 關掉了那一半
 key = "pane.closed"
 zht = "關掉了那一半"

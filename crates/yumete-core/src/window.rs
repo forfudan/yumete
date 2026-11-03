@@ -263,6 +263,114 @@ impl Windows {
         true
     }
 
+    /// **The row or column `id` stands in**, as vim's `C-w x` `r` `R` read
+    /// it: the windows and splits lined up the same way as `id` and its
+    /// sibling, in order; `None` marks one that is itself split the other
+    /// way. Empty when `id` is the only window.
+    pub fn row_of(&self, id: WindowId) -> Vec<Option<WindowId>> {
+        fn path<'a>(node: &'a Node, id: WindowId, out: &mut Vec<&'a Node>) -> bool {
+            match node {
+                Node::Window(w) => *w == id,
+                Node::Split { first, second, .. } => {
+                    out.push(node);
+                    if path(first, id, out) || path(second, id, out) {
+                        return true;
+                    }
+                    out.pop();
+                    false
+                }
+            }
+        }
+        fn flatten(node: &Node, how: Split, out: &mut Vec<Option<WindowId>>) {
+            match node {
+                Node::Window(w) => out.push(Some(*w)),
+                Node::Split { how: h, first, second } if *h == how => {
+                    flatten(first, how, out);
+                    flatten(second, how, out);
+                }
+                Node::Split { .. } => out.push(None),
+            }
+        }
+        let mut above = Vec::new();
+        if !path(&self.root, id, &mut above) {
+            return Vec::new();
+        }
+        let how_of = |node: &Node| match node {
+            Node::Split { how, .. } => Some(*how),
+            Node::Window(_) => None,
+        };
+        let Some(how) = above.last().and_then(|node| how_of(node)) else { return Vec::new() };
+        let top = above.iter().rev().take_while(|node| how_of(node) == Some(how)).last().copied();
+        let mut out = Vec::new();
+        if let Some(top) = top {
+            flatten(top, how, &mut out);
+        }
+        out
+    }
+
+    /// **vim's `C-w x`**: `id` trades places with the next window of its
+    /// row (the one before, when it is the last), or with the `nth` (from 1).
+    /// Answers the other window; `None` when that is a split or not there.
+    pub fn exchange(&mut self, id: WindowId, nth: Option<usize>) -> Option<WindowId> {
+        let row = self.row_of(id);
+        let at = row.iter().position(|w| *w == Some(id))?;
+        let other = match nth {
+            Some(n) => *row.get(n.checked_sub(1)?)?,
+            None => *row.get(at + 1).or_else(|| at.checked_sub(1).and_then(|i| row.get(i)))?,
+        }?;
+        self.swap(id, other).then_some(other)
+    }
+
+    /// **vim's `C-w r` (`forward`) and `C-w R`**: the windows of `id`'s row
+    /// each move one place on, the last coming round to the first. `false`
+    /// when one of them is itself split (vim's E443) or there is no row.
+    pub fn rotate(&mut self, id: WindowId, forward: bool) -> bool {
+        let row = self.row_of(id);
+        let Some(row) = row.into_iter().collect::<Option<Vec<_>>>() else { return false };
+        if row.len() < 2 {
+            return false;
+        }
+        let mut moved = row.clone();
+        match forward {
+            true => moved.rotate_right(1),
+            false => moved.rotate_left(1),
+        }
+        fn go(node: &mut Node, from: &[WindowId], to: &[WindowId]) {
+            match node {
+                Node::Window(w) => {
+                    if let Some(i) = from.iter().position(|f| f == w) {
+                        *w = to[i];
+                    }
+                }
+                Node::Split { first, second, .. } => {
+                    go(first, from, to);
+                    go(second, from, to);
+                }
+            }
+        }
+        go(&mut self.root, &row, &moved);
+        true
+    }
+
+    /// **vim's `C-w H` `J` `K` `L`**: `id` leaves its place and takes the
+    /// whole of that edge of the screen, the rest keeping the other half.
+    /// `rtl` is a 縱書 page, where the second half of a beside split is the
+    /// left one. `false` when `id` is the only window.
+    pub fn to_edge(&mut self, id: WindowId, edge: Direction, rtl: bool) -> bool {
+        if self.len() < 2 || !self.close(id) {
+            return false;
+        }
+        let rest = Box::new(self.root.clone());
+        let one = Box::new(Node::Window(id));
+        self.root = match (edge, rtl) {
+            (Direction::Left, false) | (Direction::Right, true) => Node::Split { how: Split::Beside, first: one, second: rest },
+            (Direction::Right, false) | (Direction::Left, true) => Node::Split { how: Split::Beside, first: rest, second: one },
+            (Direction::Up, _) => Node::Split { how: Split::Below, first: one, second: rest },
+            (Direction::Down, _) => Node::Split { how: Split::Below, first: rest, second: one },
+        };
+        true
+    }
+
     /// The windows laid into `area`, with the rules between them. A split
     /// gives each half the same room less the rule; `rtl` puts a **beside**
     /// split's second half on the left, as a 縱書 page reads.
@@ -352,6 +460,53 @@ pub enum Direction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// vim's `C-w x` `r` `R` `H` `J` `K` `L`, each as nvim did it
+    /// (2026-11-03, `winlayout()` before and after) on three windows
+    /// stacked, and on one of them split beside.
+    #[test]
+    fn a_row_exchanges_rotates_and_a_window_goes_to_an_edge() {
+        let three = || {
+            let mut w = Windows::one();
+            w.split(1, Split::Below);
+            w.split(2, Split::Below);
+            w
+        };
+        assert_eq!(three().row_of(2), [Some(1), Some(2), Some(3)]);
+        let mut w = three();
+        assert_eq!(w.exchange(1, None), Some(2));
+        assert_eq!(w.leaves(), [2, 1, 3]);
+        let mut w = three();
+        assert_eq!(w.exchange(3, None), Some(2), "the last trades with the one before");
+        assert_eq!(w.leaves(), [1, 3, 2]);
+        let mut w = three();
+        assert_eq!(w.exchange(1, Some(3)), Some(3));
+        assert_eq!(w.leaves(), [3, 2, 1]);
+        let mut w = three();
+        assert!(w.rotate(1, true));
+        assert_eq!(w.leaves(), [3, 1, 2]);
+        let mut w = three();
+        assert!(w.rotate(1, false));
+        assert_eq!(w.leaves(), [2, 3, 1]);
+        // The middle one split beside: it is no window of the column.
+        let mut w = three();
+        w.split(2, Split::Beside);
+        assert_eq!(w.row_of(1), [Some(1), None, Some(3)]);
+        assert!(!w.rotate(1, true), "E443");
+        assert_eq!(w.exchange(1, None), None);
+        assert_eq!(w.row_of(4), [Some(2), Some(4)]);
+        assert_eq!(w.exchange(4, None), Some(2));
+        assert_eq!(w.leaves(), [1, 4, 2, 3]);
+        // `C-w L`: the whole right edge; `C-w K` the top.
+        let mut w = three();
+        assert!(w.to_edge(1, Direction::Right, false));
+        assert_eq!(w.steps(), [Step::Split(Split::Beside), Step::Split(Split::Below), Step::Window(2), Step::Window(3), Step::Window(1)]);
+        let mut w = three();
+        assert!(w.to_edge(2, Direction::Up, false));
+        assert_eq!(w.leaves(), [2, 1, 3]);
+        assert!(!Windows::one().to_edge(1, Direction::Up, false));
+        assert!(Windows::one().row_of(1).is_empty());
+    }
 
     #[test]
     fn a_split_adds_a_second_half_and_a_close_gives_it_back() {

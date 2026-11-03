@@ -2158,6 +2158,8 @@ impl Editor {
     pub(super) fn cmd_window_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.pending = Pending::Region;
+        // vim's `2 C-w w` and `3 C-w x` name a window.
+        self.operator_count = operator_count;
     }
 
     // …and the keys a keyboard already has for it. `C-f`/`C-b` are

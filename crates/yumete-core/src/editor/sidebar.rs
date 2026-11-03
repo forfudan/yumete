@@ -472,9 +472,54 @@ impl Editor {
         self.go_to_region(open[(at + 1) % open.len()]);
     }
 
-    /// `C-w q`: close the region the keys are in. The last window stays and
-    /// says so — closing it would mean leaving, and that is `:q`.
-    pub(super) fn close_this_region(&mut self) {
+    /// vim's `C-w W`: the open region before this one, wrapping.
+    pub(super) fn previous_region(&mut self) {
+        let open = self.regions_open();
+        if open.len() < 2 {
+            return;
+        }
+        let here = self.which_region();
+        let at = open.iter().position(|&r| r == here).unwrap_or(0);
+        self.go_to_region(open[(at + open.len() - 1) % open.len()]);
+    }
+
+    /// vim's `C-w w` `W` with a count, `C-w t` and `C-w b`: the `n`th
+    /// window (from 1), the last when there are fewer.
+    pub(super) fn go_to_nth_window(&mut self, n: usize) {
+        let windows = self.windows.leaves();
+        let at = n.max(1).min(windows.len()) - 1;
+        self.go_to_region(Region::Window(windows[at]));
+    }
+
+    /// vim's `C-w p`: the window the keys were in before this one; from a
+    /// sidebar, the window they left.
+    pub(super) fn go_to_last_accessed_window(&mut self) {
+        if self.panel_focus().is_some() {
+            return self.go_to_region(Region::Window(self.live));
+        }
+        if let Some(&window) = self.window_history.iter().find(|w| self.windows.has(**w)) {
+            self.switch_to(window);
+        }
+    }
+
+    /// vim's `C-w c`: close this region, or with a count the `n`th window.
+    /// Never the last window (vim's E444).
+    pub(super) fn close_region_numbered(&mut self, n: Option<usize>) {
+        let windows = self.windows.leaves();
+        match n.map(|n| windows[n.max(1).min(windows.len()) - 1]) {
+            Some(window) if window != self.live && self.panel_focus().is_none() => {
+                if self.close_window(window) {
+                    self.status = say!("pane.closed");
+                }
+            }
+            _ => self.close_this_region(false),
+        }
+    }
+
+    /// `C-w q`: close the region the keys are in. In the last window it is
+    /// `:q`, as in helix and vim (2026-11-03; it used to stay and say so,
+    /// which `C-w c` still does: `quit_last` false).
+    pub(super) fn close_this_region(&mut self, quit_last: bool) {
         if let Some(side) = self.panel_focus() {
             if self.info_in_this_sidebar(side).is_some() {
                 return self.close_the_info(side);
@@ -482,6 +527,9 @@ impl Editor {
             return self.close_panel(side);
         }
         let Some(target) = self.window_after_closing() else {
+            if quit_last {
+                return self.run_bound_command("quit");
+            }
             self.status = say!("region.only-one-left");
             return;
         };

@@ -239,7 +239,27 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.operator_count = cx.operator_count;
     }, Key::Char('r')),
     // ── C-w ────────────────────────────────────────────────────────────
-    (NormalCmd::RotateView, |e, _| e.next_region(), Key::Char('w')),
+    // vim's `C-w w` `W` with a count go to that window; helix's take none.
+    (NormalCmd::RotateView, |e, cx| match cx.operator_count.filter(|_| e.vim_keymap()) {
+        Some(n) => e.go_to_nth_window(n),
+        None => e.next_region(),
+    }, Key::Char('w')),
+    (NormalCmd::RotateViewReverse, |e, cx| match cx.operator_count.filter(|_| e.vim_keymap()) {
+        Some(n) => e.go_to_nth_window(n),
+        None => e.previous_region(),
+    }, Key::Char('W')),
+    (NormalCmd::JumpViewFirst, |e, _| e.go_to_nth_window(1), Key::Char('t')),
+    (NormalCmd::JumpViewLast, |e, _| e.go_to_nth_window(usize::MAX), Key::Char('b')),
+    (NormalCmd::JumpViewLastAccessed, |e, _| e.go_to_last_accessed_window(), Key::Char('p')),
+    (NormalCmd::ExchangeView, |e, cx| e.exchange_window(cx.operator_count), Key::Char('x')),
+    (NormalCmd::RotateViewsForward, |e, _| e.rotate_windows(true), Key::Char('r')),
+    (NormalCmd::RotateViewsBackward, |e, _| e.rotate_windows(false), Key::Char('R')),
+    (NormalCmd::MoveViewFarLeft, |e, _| e.move_window_to_edge(crate::window::Direction::Left), Key::Char('H')),
+    (NormalCmd::MoveViewFarDown, |e, _| e.move_window_to_edge(crate::window::Direction::Down), Key::Char('J')),
+    (NormalCmd::MoveViewFarUp, |e, _| e.move_window_to_edge(crate::window::Direction::Up), Key::Char('K')),
+    (NormalCmd::MoveViewFarRight, |e, _| e.move_window_to_edge(crate::window::Direction::Right), Key::Char('L')),
+    (NormalCmd::VimCloseWindow, |e, cx| e.close_region_numbered(cx.operator_count), Key::Char('c')),
+    (NormalCmd::GotoLastAccessedFileHsplit, |e, _| e.goto_last_file_in_split(), Key::Char('^')),
     (NormalCmd::JumpViewLeft, |e, _| e.walk_to_region(crate::window::Direction::Left), Key::Char('h')),
     (NormalCmd::JumpViewDown, |e, _| e.walk_to_region(crate::window::Direction::Down), Key::Char('j')),
     (NormalCmd::JumpViewUp, |e, _| e.walk_to_region(crate::window::Direction::Up), Key::Char('k')),
@@ -261,7 +281,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.new_window(crate::window::Split::Beside);
     }, Key::Char('v')),
     (NormalCmd::WindowNewMode, |e, _| e.pending = Pending::RegionNew, Key::Char('n')),
-    (NormalCmd::Wclose, |e, _| e.close_this_region(), Key::Char('q')),
+    (NormalCmd::Wclose, |e, _| e.close_this_region(true), Key::Char('q')),
     (NormalCmd::Wonly, |e, _| e.close_other_regions(), Key::Char('o')),
     (NormalCmd::TransposeView, |e, _| e.transpose_window(), Key::Char('t')),
     (NormalCmd::SwapViewLeft, |e, _| e.swap_window(crate::window::Direction::Left), Key::Char('H')),

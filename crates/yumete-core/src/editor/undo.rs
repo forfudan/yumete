@@ -27,7 +27,7 @@ impl Editor {
         // then threw the changes away. From a focused sidebar they close the
         // sidebar, as `:q` in vim's file-tree window does.
         if self.panel_focus().is_some() || self.other_pane().is_some() {
-            self.close_this_region();
+            self.close_this_region(false);
             return Ok(CommandOutcome::Continue);
         }
         if self.buffers.len() > 1 {

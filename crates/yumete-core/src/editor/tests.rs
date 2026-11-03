@@ -33795,9 +33795,11 @@ fn windows_open_beside_and_below_and_close_one_at_a_time() {
     ed.on_key(Key::Char('o'));
     assert_eq!(ed.windows().leaves(), [one]);
     assert!(ed.panel(Side::Left).is_none());
+    // In the last window `C-w q` is `:q`, as in helix (2026-11-03), which
+    // with two files open closes this one.
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('q'));
-    assert_eq!(ed.status(), say!("region.only-one-left"));
+    assert_eq!(ed.buffer_count(), 1, "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -35175,4 +35177,65 @@ fn vim_bracket_p_pastes_with_the_cursor_lines_indent() {
     let mut ed = vim("ab\n    x\n");
     press(&mut ed, "ylj]p");
     assert_eq!(ed.current_buffer().text(), "ab\n a   x\n");
+}
+
+/// **vim's `C-w` keys** (2026-11-03, each measured in nvim on three
+/// windows stacked): `W` `t` `b` `p` and a count go to a window, `x`
+/// leaves the keys where they were on the screen, `r` `R` keep them with
+/// their window, `K` takes the top, `c` never closes the last window, and
+/// `q` there is `:q`, as in helix.
+#[test]
+fn vims_window_keys_go_rearrange_and_close() {
+    let mut ed = typed("one\n");
+    ed.execute(":keymap vim").unwrap();
+    let w = |ed: &mut Editor, keys: &str| {
+        for k in keys.chars() {
+            ed.on_key(Key::Ctrl('w'));
+            ed.on_key(Key::Char(k));
+        }
+    };
+    w(&mut ed, "ss");
+    let all = ed.windows().leaves();
+    assert_eq!(all.len(), 3);
+    let at = |ed: &Editor| ed.windows().index_of(ed.live_window()).unwrap();
+    w(&mut ed, "t");
+    assert_eq!(at(&ed), 0);
+    w(&mut ed, "W");
+    assert_eq!(at(&ed), 2, "W from the first wraps to the last");
+    w(&mut ed, "p");
+    assert_eq!(at(&ed), 0, "p: the one before");
+    w(&mut ed, "b");
+    assert_eq!(at(&ed), 2);
+    press(&mut ed, "2");
+    w(&mut ed, "w");
+    assert_eq!(at(&ed), 1, "a count names the window");
+    // `x` from the first: the keys stay at the top, in the other window.
+    w(&mut ed, "t");
+    let first = ed.live_window();
+    w(&mut ed, "x");
+    assert_eq!(ed.windows().leaves(), [all[1], all[0], all[2]]);
+    assert_eq!((at(&ed), ed.live_window()), (0, all[1]));
+    // `r`: the last comes round to the first, the keys with their window.
+    let live = ed.live_window();
+    w(&mut ed, "r");
+    assert_eq!(ed.windows().leaves(), [all[2], all[1], all[0]]);
+    assert_eq!(ed.live_window(), live);
+    w(&mut ed, "R");
+    assert_eq!(ed.windows().leaves(), [all[1], all[0], all[2]]);
+    // `K` from the middle: the top.
+    w(&mut ed, "j");
+    let middle = ed.live_window();
+    assert_eq!(middle, first);
+    w(&mut ed, "K");
+    assert_eq!(ed.windows().leaves()[0], middle);
+    // `c` closes, but not the last; `q` there quits.
+    w(&mut ed, "cc");
+    assert_eq!(ed.windows().len(), 1);
+    w(&mut ed, "c");
+    assert_eq!(ed.windows().len(), 1);
+    assert_eq!(ed.status(), say!("region.only-one-left"));
+    // The text is unsaved, so `:q` refuses, and so does `C-w q`.
+    let refused = ed.execute(":q").unwrap_err().to_string();
+    w(&mut ed, "q");
+    assert_eq!(ed.status(), refused, "C-w q in the last window is :q");
 }

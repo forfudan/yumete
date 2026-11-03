@@ -1451,6 +1451,34 @@ zhs = "把选中的行往上移"
 en = "move the selected lines up"
 
 [[message]]
+# 命令說明：move_view_far_down（草稿）
+key = "action.move-view-far-down"
+zht = "挪到最下面"
+zhs = "挪到最下面"
+en = "move this window to the very bottom"
+
+[[message]]
+# 命令說明：move_view_far_left（草稿）
+key = "action.move-view-far-left"
+zht = "挪到最左邊"
+zhs = "挪到最左边"
+en = "move this window to the far left"
+
+[[message]]
+# 命令說明：move_view_far_right（草稿）
+key = "action.move-view-far-right"
+zht = "挪到最右邊"
+zhs = "挪到最右边"
+en = "move this window to the far right"
+
+[[message]]
+# 命令說明：move_view_far_up（草稿）
+key = "action.move-view-far-up"
+zht = "挪到最上面"
+zhs = "挪到最上面"
+en = "move this window to the very top"
+
+[[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-visual-line-down"
 zht = "下一行(屏幕上的)"

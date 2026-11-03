@@ -1972,14 +1972,21 @@ mod proof_292 {
                 let after: usize = format(table).iter().map(String::len).sum();
                 let grew = after.saturating_sub(before);
                 total += grew;
-                if grew > worst.0 {
-                    worst = (grew, format!("{path} line {}", first + 1));
+                // Per row: a long table pads every row a little, which is
+                // fine; one paragraph-wide cell pads every row a lot.
+                let per_row = grew / table.len();
+                if per_row > worst.0 {
+                    worst = (per_row, format!("{path} line {}", first + 1));
                 }
             }
         }
+        // **Bytes added per row, not per table** (2026-11-03): the command
+        // table the site generates passed 100,000 bytes for one table by
+        // having 575 rows of about 175 each, while #292's table added some
+        // 8,400 a row. A bound on the table grew with every command added.
         assert!(
-            worst.0 < 100_000,
-            "one table would grow by {} bytes: {}",
+            worst.0 < 1_000,
+            "one table would grow by {} bytes a row: {}",
             worst.0,
             worst.1
         );

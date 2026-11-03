@@ -950,6 +950,20 @@ zhs = "关掉这一区"
 en = "close this one"
 
 [[message]]
+# C-w c(vim)：關掉這一區，最後一個窗口不關（草稿）
+key = "hint.region.close-not-last"
+zht = "關掉這一區(最後一個不關)"
+zhs = "关掉这一区(最后一个不关)"
+en = "close this one (never the last)"
+
+[[message]]
+# C-w x(vim)：和下一個窗口對調（草稿）
+key = "hint.region.exchange"
+zht = "和下一個對調"
+zhs = "和下一个对调"
+en = "trade places with the next"
+
+[[message]]
 # C-w f：光標下的文件在下面開（草稿）
 key = "hint.region.file-below"
 zht = "在下面打開光標下的文件"
@@ -964,6 +978,13 @@ zhs = "在旁边打开光标下的文件"
 en = "open the file under the cursor beside"
 
 [[message]]
+# C-w t(vim)：第一個窗口（草稿）
+key = "hint.region.first"
+zht = "第一個窗口"
+zhs = "第一个窗口"
+en = "the first window"
+
+[[message]]
 # C-w h/j/k/l：按方向走到那一區
 key = "hint.region.go"
 zht = "按方向走"
@@ -976,6 +997,27 @@ key = "hint.region.into-bar"
 zht = "進左右欄"
 zhs = "进左右栏"
 en = "go into the left / right sidebar"
+
+[[message]]
+# C-w b(vim)：最後一個窗口（草稿）
+key = "hint.region.last"
+zht = "最後一個窗口"
+zhs = "最后一个窗口"
+en = "the last window"
+
+[[message]]
+# C-w p(vim)：剛纔那個窗口（草稿）
+key = "hint.region.last-accessed"
+zht = "剛纔那個窗口"
+zhs = "刚才那个窗口"
+en = "the window before"
+
+[[message]]
+# C-w ^(vim)：上一個文件在下面開（草稿）
+key = "hint.region.last-file-below"
+zht = "在下面打開上一個文件"
+zhs = "在下面打开上一个文件"
+en = "the file before, below"
 
 [[message]]
 # C-w 提示：n 開一個空白窗口（helix 那裏是一組，後面跟 s 或 v）
@@ -1013,6 +1055,27 @@ zhs = "只留这一区"
 en = "keep only this one"
 
 [[message]]
+# C-w W(vim)：上一個區域（草稿）
+key = "hint.region.previous"
+zht = "上一個"
+zhs = "上一个"
+en = "previous"
+
+[[message]]
+# C-w r(vim)：這一行或一列的窗口往後輪一格（草稿）
+key = "hint.region.rotate"
+zht = "這一排往後輪"
+zhs = "这一排往后轮"
+en = "rotate this row on"
+
+[[message]]
+# C-w R(vim)：這一行或一列的窗口往前輪一格（草稿）
+key = "hint.region.rotate-back"
+zht = "這一排往前輪"
+zhs = "这一排往前轮"
+en = "rotate this row back"
+
+[[message]]
 # C-w s：切一刀，分成上下兩個編輯區
 key = "hint.region.split"
 zht = "下面開一個窗口"
@@ -1039,6 +1102,13 @@ key = "hint.region.title"
 zht = "工作區域操作"
 zhs = "工作区域操作"
 en = "region"
+
+[[message]]
+# C-w H J K L(vim)：挪到那一邊，佔滿整條邊（草稿）
+key = "hint.region.to-edge"
+zht = "挪到那一邊"
+zhs = "挪到那一边"
+en = "move to that edge"
 
 [[message]]
 # C-w e / C-w i：開關左右邊欄，鍵不過去
