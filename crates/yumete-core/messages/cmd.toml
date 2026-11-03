@@ -1038,10 +1038,10 @@ en = "off: helix or vim as upstream has it"
 [[message]]
 # :view-fold：把選中的行做成一個折疊（草稿）
 key = "cmd.fold.make"
-zht = "把選中的行做成折疊"
+zht = "把選中的行做成摺疊"
 zhs = "把选中的行做成折叠"
 en = "make a fold of the selected lines"
-find = "折疊 折叠 收起 選中 选中 fold zf selection"
+find = "摺疊 折疊 折叠 收起 選中 选中 fold zf selection"
 
 [[message]]
 # : 命令選單裏 inline 那一項的説明(footnote-kinds 組)

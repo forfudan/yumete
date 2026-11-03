@@ -385,7 +385,7 @@ en = "measure"
 [[message]]
 # 設置：正文寬度——一句話
 key = "settings.editor.measure.hint"
-zht = "行在這裏折疊，右邊是頁邊距"
+zht = "行在這裏摺疊，右邊是頁邊距"
 zhs = "行在这里折叠，右边是页边距"
 en = "the line really breaks here; what is right of it is margin"
 

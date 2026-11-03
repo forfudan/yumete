@@ -2479,7 +2479,7 @@ find = "縮進 缩进 左移 減少 减少 unindent outdent"
 [[message]]
 # 命令說明：view_mode（草稿）
 key = "action.view-mode"
-zht = "視圖組：放光標行、滾屏、折疊"
+zht = "視圖組：放光標行、滾屏、摺疊"
 zhs = "视图组：放光标行、滚屏、折叠"
 en = "the view group: place the cursor line, scroll, fold"
 
@@ -3006,28 +3006,28 @@ en = "On: gz jumps by first letters, gZ by pinyin, g/ searches the word under th
 [[message]]
 # 風味項：標題折疊（草稿）
 key = "keys.flavor.item.heading-folds"
-zht = "按標題折疊"
+zht = "按標題摺疊"
 zhs = "按标题折叠"
 en = "folds by heading"
 
 [[message]]
 # 風味項：標題折疊的說明（草稿）
 key = "keys.flavor.item.heading-folds.hint"
-zht = "開：Markdown 與 Typst 每個標題下的那一節是一個折疊，開始時全開着。關：照 vim，只有 zf 做的折疊。"
+zht = "開：Markdown 與 Typst 每個標題下的那一節是一個摺疊，開始時全開着。關：照 vim，只有 zf 做的摺疊。"
 zhs = "开：Markdown 与 Typst 每个标题下的那一节是一个折叠，开始时全开着。关：照 vim，只有 zf 做的折叠。"
 en = "On: each Markdown or Typst heading folds its section; all start open. Off: vim's, only folds made with zf."
 
 [[message]]
 # 風味項：helix 下的折疊鍵（草稿）
 key = "keys.flavor.item.helix-fold-keys"
-zht = "helix 下的折疊鍵"
+zht = "helix 下的摺疊鍵"
 zhs = "helix 下的折叠键"
 en = "fold keys under helix"
 
 [[message]]
 # 風味項：helix 下的折疊鍵的說明（草稿）
 key = "keys.flavor.item.helix-fold-keys.hint"
-zht = "開：helix 下也有 vim 的 za 開合折疊、zR 全開、zM 全合；zf 把選中的行做成折疊。關：這幾個鍵空着，只能用命令折疊。"
+zht = "開：helix 下也有 vim 的 za 開合摺疊、zR 全開、zM 全合；zf 把選中的行做成摺疊。關：這幾個鍵空着，只能用命令摺疊。"
 zhs = "开：helix 下也有 vim 的 za 开合折叠、zR 全开、zM 全合；zf 把选中的行做成折叠。关：这几个键空着，只能用命令折叠。"
 en = "On: vim's za, zR and zM under helix (open or close a fold, open all, close all); zf makes a fold of the selected lines. Off: unbound; folds by command only."
 

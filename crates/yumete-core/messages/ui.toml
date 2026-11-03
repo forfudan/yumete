@@ -29,21 +29,21 @@ en = "line {0}"
 [[message]]
 # zm / zr 之後：現在開到第幾層（草稿）
 key = "fold.level"
-zht = "折疊層級 {0}"
+zht = "摺疊層級 {0}"
 zhs = "折叠层级 {0}"
 en = "fold level {0}"
 
 [[message]]
 # 折疊鍵按在没有折疊的地方（草稿）
 key = "fold.none-here"
-zht = "這裏沒有折疊"
+zht = "這裏沒有摺疊"
 zhs = "这里没有折叠"
 en = "no fold here"
 
 [[message]]
 # zd 按在標題折疊上：它不是 zf 做的，刪不掉（草稿）
 key = "fold.not-made-with-zf"
-zht = "這個折疊來自標題，不是 zf 做的，刪不掉"
+zht = "這個摺疊來自標題，不是 zf 做的，刪不掉"
 zhs = "这个折叠来自标题，不是 zf 做的，删不掉"
 en = "this fold comes from a heading; only folds made with zf can be deleted"
 
