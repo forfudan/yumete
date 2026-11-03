@@ -369,6 +369,20 @@ mod tests {
         assert_eq!(fill("{7}", &["x"]), "{7}");
     }
 
+    /// **A value holds no `"` and no `\`** (2026-11-03): the reader takes
+    /// what is between the line's first and last quote and knows no escapes,
+    /// so either would be read through, and the file would stop being TOML
+    /// for every other tool (`cmd.commands.clipboard` was, with a `␣"`).
+    #[test]
+    fn a_value_holds_no_quote_and_no_backslash() {
+        let table = super::table();
+        for (key, entry) in table {
+            for value in [entry.zht, entry.zhs, entry.en, entry.find] {
+                assert!(!value.contains('"') && !value.contains('\\'), "{key}: {value}");
+            }
+        }
+    }
+
     #[test]
     fn every_message_is_written_in_the_simplified_first() {
         // The rule of 2026-09-08: a message is composed in `zhs` and converted
