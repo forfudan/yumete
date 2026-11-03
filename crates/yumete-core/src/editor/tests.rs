@@ -35828,3 +35828,51 @@ fn helix_flavour_fold_keys() {
     press(&mut ed, "ggza");
     assert!(!ed.fold_head(0), "off: za is not a key");
 }
+
+/// **The view sideways** with wrapping off (2026-11-03, numbers from nvim
+/// on 80 columns): vim's `zh` `zl` `zH` `zL` `zs` `ze`, helix's `zm`; the
+/// view stops at the cursor line's last character and pushes the cursor in.
+#[test]
+fn the_view_goes_sideways_with_wrapping_off() {
+    let long: String = (0..300).map(|i| (b'a' + (i % 26) as u8) as char).collect();
+    let text = format!("xxxxxxxxxx {long}\nshort line\n");
+    let col = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        ed.sel.head() - rope.line_to_char(rope.char_to_line(ed.sel.head()))
+    };
+    let mut ed = typed_vim(&text);
+    ed.execute(":view-wrap off").unwrap();
+    let run = |ed: &mut Editor, left: usize, keys: &str| {
+        ed.note_sideways(left, 80);
+        press(ed, keys);
+        ed.take_side_aim()
+    };
+    assert_eq!(run(&mut ed, 0, "gg0zl"), Some(1));
+    assert_eq!(col(&ed), 1, "nvim: leftcol 1, cursor pushed to col 2");
+    assert_eq!(run(&mut ed, 0, "gg050zl"), Some(50));
+    assert_eq!(col(&ed), 50);
+    assert_eq!(run(&mut ed, 0, "gg0zL"), Some(40));
+    assert_eq!(run(&mut ed, 20, "gg099lzh"), Some(19));
+    assert_eq!(col(&ed), 98, "nvim: col 99, pushed in from the right edge");
+    assert_eq!(run(&mut ed, 20, "gg099lzH"), Some(0));
+    assert_eq!(col(&ed), 79, "nvim: pushed to the right edge");
+    assert_eq!(run(&mut ed, 20, "gg099lzs"), Some(99));
+    assert_eq!(run(&mut ed, 20, "gg099lze"), Some(20));
+    assert_eq!(run(&mut ed, 0, "2G050zl"), Some(9), "nvim: no further than the line's last character");
+    assert_eq!(col(&ed), 9);
+    assert_eq!(run(&mut ed, 0, "gg0z5l"), Some(5), "z5l is 5zl");
+    assert_eq!(run(&mut ed, 0, "gg02z5l"), Some(10), "the two counts multiply");
+    assert_eq!(run(&mut ed, 0, "gg0z5j"), None, "z5j is not a key");
+    assert!(ed.pending == Pending::None);
+
+    let mut ed = typed(&text);
+    ed.execute(":view-wrap off").unwrap();
+    ed.note_sideways(0, 80);
+    press(&mut ed, "gg99lzm");
+    assert_eq!(ed.take_side_aim(), Some(59), "helix: the cursor's column in the middle");
+
+    let mut ed = typed_vim(&text);
+    ed.note_sideways(0, 80);
+    press(&mut ed, "gg0zl");
+    assert_eq!(ed.take_side_aim(), None, "wrapped: nothing to the side");
+}

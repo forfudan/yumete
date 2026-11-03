@@ -31,6 +31,20 @@ zhs = "底下，光标到缩进之后"
 en = "bottom, past the indent"
 
 [[message]]
+# z 那一層：zs（草稿）
+key = "hint.aim.cursor-left-edge"
+zht = "光標那一列放到左邊"
+zhs = "光标那一列放到左边"
+en = "the cursor to the left edge"
+
+[[message]]
+# z 那一層：ze（草稿）
+key = "hint.aim.cursor-right-edge"
+zht = "光標那一列放到右邊"
+zhs = "光标那一列放到右边"
+en = "the cursor to the right edge"
+
+[[message]]
 # z 那一層：z C-d（草稿）
 key = "hint.aim.half-page-down"
 zht = "下半頁"
@@ -57,6 +71,13 @@ key = "hint.aim.middle-past-indent"
 zht = "中間，光標到縮進之後"
 zhs = "中间，光标到缩进之后"
 en = "middle, past the indent"
+
+[[message]]
+# z 那一層：helix 的 zm（草稿）
+key = "hint.aim.middle-sideways"
+zht = "橫向居中"
+zhs = "横向居中"
+en = "center sideways"
 
 [[message]]
 # z 那一層：z C-f（草稿）
@@ -106,6 +127,34 @@ key = "hint.aim.top-past-indent"
 zht = "頂上，光標到縮進之後"
 zhs = "顶上，光标到缩进之后"
 en = "top, past the indent"
+
+[[message]]
+# z 那一層：zH（草稿）
+key = "hint.aim.view-half-left"
+zht = "視窗往左半頁"
+zhs = "视窗往左半页"
+en = "the view half a page left"
+
+[[message]]
+# z 那一層：zL（草稿）
+key = "hint.aim.view-half-right"
+zht = "視窗往右半頁"
+zhs = "视窗往右半页"
+en = "the view half a page right"
+
+[[message]]
+# z 那一層：zh（草稿）
+key = "hint.aim.view-left"
+zht = "視窗往左一欄"
+zhs = "视窗往左一栏"
+en = "the view a column left"
+
+[[message]]
+# z 那一層：zl（草稿）
+key = "hint.aim.view-right"
+zht = "視窗往右一欄"
+zhs = "视窗往右一栏"
+en = "the view a column right"
 
 [[message]]
 # 提示欄：取消

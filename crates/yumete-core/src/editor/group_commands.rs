@@ -10,6 +10,7 @@
 
 use super::normal::{Cx, NormalCommand};
 use super::*;
+use crate::editor::Sideways;
 use yumete_cjk::actions::NormalCmd;
 use crate::input::Key;
 use crate::motion;
@@ -273,6 +274,19 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::VimAlignViewBottom, |e, cx| e.vim_aim_past_indent(crate::editor::Aim::Bottom, cx.operator_count), Key::Char('-')),
     (NormalCmd::VimAlignViewBelowTop, |e, cx| e.vim_turn_the_page(true, cx.operator_count), Key::Char('+')),
     (NormalCmd::VimAlignViewAboveBottom, |e, cx| e.vim_turn_the_page(false, cx.operator_count), Key::Char('^')),
+    (NormalCmd::ScrollViewLeft, |e, cx| e.scroll_sideways(Sideways::Shift(-(cx.count as isize))), Key::Char('h')),
+    (NormalCmd::ScrollViewRight, |e, cx| e.scroll_sideways(Sideways::Shift(cx.count as isize)), Key::Char('l')),
+    (NormalCmd::ScrollViewHalfLeft, |e, cx| {
+        let half = (e.side_seen.get().1 / 2).max(1);
+        e.scroll_sideways(Sideways::Shift(-((cx.count * half) as isize)));
+    }, Key::Char('H')),
+    (NormalCmd::ScrollViewHalfRight, |e, cx| {
+        let half = (e.side_seen.get().1 / 2).max(1);
+        e.scroll_sideways(Sideways::Shift((cx.count * half) as isize));
+    }, Key::Char('L')),
+    (NormalCmd::AlignViewCursorLeft, |e, _| e.scroll_sideways(Sideways::CursorAtLeft), Key::Char('s')),
+    (NormalCmd::AlignViewCursorRight, |e, _| e.scroll_sideways(Sideways::CursorAtRight), Key::Char('e')),
+    (NormalCmd::AlignViewMiddle, |e, _| e.scroll_sideways(Sideways::Center), Key::Char('m')),
     (NormalCmd::OpenAllFolds, |e, _| e.fold_all(false), Key::Char('R')),
     (NormalCmd::CloseAllFolds, |e, _| e.fold_all(true), Key::Char('M')),
     (NormalCmd::DeleteFold, |e, _| e.fold_delete(super::folds::FoldDelete::Innermost), Key::Char('d')),

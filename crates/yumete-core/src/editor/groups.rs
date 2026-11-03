@@ -470,6 +470,39 @@ impl Editor {
                 }
             }
         }
+        // **vim's `z{count}`** (`nv_z_get_count`): digits after `z` wait for
+        // `h` `l` `←` `→`, which they multiply (`z5l` is `5zl`); `⌫` takes
+        // one back; any other key ends it. `z{height}<CR>` sets a window's
+        // height, and windows here have none to set.
+        if group.pending == Pending::Aim && at.vim {
+            match (self.z_digits, key) {
+                (_, Key::Char(c @ '0'..='9')) => {
+                    let digit = c as usize - '0' as usize;
+                    self.z_digits = Some(self.z_digits.unwrap_or(0).saturating_mul(10).saturating_add(digit));
+                    return;
+                }
+                (Some(n), Key::Backspace | Key::Delete) => {
+                    self.z_digits = Some(n / 10);
+                    return;
+                }
+                (Some(n), Key::Char('h' | 'l') | Key::Left | Key::Right) => {
+                    self.z_digits = None;
+                    if n > 0 {
+                        self.operator_count = Some(n.saturating_mul(self.operator_count.unwrap_or(1)));
+                    }
+                }
+                (Some(_), _) => {
+                    self.z_digits = None;
+                    self.pending = Pending::None;
+                    self.operator_count = None;
+                    if key != Key::Esc {
+                        self.no_such_combination(typed_before, key);
+                    }
+                    return;
+                }
+                (None, _) => {}
+            }
+        }
         let was = self.pending;
         self.pending = Pending::None;
         if group.sticky && key != Key::Esc {
@@ -1105,12 +1138,22 @@ const VIEW_ROWS: &[Row] = &[
     quiet(Key::Char('p'), NormalCmd::VimPasteAfter).when(Only::Vim),
     quiet(Key::Char('P'), NormalCmd::VimPasteBefore).when(Only::Vim),
     quiet(Key::Char('y'), NormalCmd::OperatorYank).when(Only::Vim),
+    // Sideways, with wrapping off (`zh` and the rest; nothing when wrapped).
+    quiet(Key::Char('h'), NormalCmd::ScrollViewLeft).when(Only::Vim),
+    quiet(Key::Left, NormalCmd::ScrollViewLeft).when(Only::Vim),
+    quiet(Key::Char('l'), NormalCmd::ScrollViewRight).when(Only::Vim),
+    quiet(Key::Right, NormalCmd::ScrollViewRight).when(Only::Vim),
+    quiet(Key::Char('H'), NormalCmd::ScrollViewHalfLeft).when(Only::Vim),
+    quiet(Key::Char('L'), NormalCmd::ScrollViewHalfRight).when(Only::Vim),
+    quiet(Key::Char('s'), NormalCmd::AlignViewCursorLeft).when(Only::Vim),
+    quiet(Key::Char('e'), NormalCmd::AlignViewCursorRight).when(Only::Vim),
     // helix's rows from here on (2026-11-03: under vim they had leaked in,
     // `z␣` `z⌫` `z/` …, where vim beeps). vim's sticky `Z` reads them as
     // helix's, see `context_in`. Listed as helix's popup lists them, the
     // keys of one command on one line.
     ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
     ch('b', NormalCmd::AlignViewBottom, "hint.aim.bottom"),
+    ch('m', NormalCmd::AlignViewMiddle, "hint.aim.middle-sideways").when(Only::Helix),
     ch('j', NormalCmd::ScrollDown, "hint.aim.scroll-down").when(Only::Helix),
     key(Key::Down, NormalCmd::ScrollDown, "hint.aim.scroll-down").when(Only::Helix),
     ch('k', NormalCmd::ScrollUp, "hint.aim.scroll-up").when(Only::Helix),

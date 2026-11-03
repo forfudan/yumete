@@ -444,6 +444,8 @@ fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
     editor.set_pages_on_screen(strips.len());
     editor.set_wrap_width((first.width as usize).saturating_sub(gutter));
     editor.set_page(page.height as usize * strips.len(), first.width.max(1) as usize);
+    // The columns `zl` `zL` `ze` count, known before the keys as the wrap is.
+    editor.note_side_width((first.width as usize).saturating_sub(gutter).max(1));
 }
 
 pub fn fit_the_page(
@@ -11953,6 +11955,11 @@ fn draw_horizontal(
         true => caret_page == Some(0),
         false => wrap::distance(rope, *viewport, cursor_anchor, measure, last_row).is_some(),
     };
+    // A key asked for the view sideways (`zl`, `zs`, helix's `zm`), having
+    // already put the cursor inside it (2026-11-03).
+    if let Some(asked) = peek.is_none().then(|| editor.take_side_aim()).flatten() {
+        *left = asked;
+    }
     if caret_on_this_page {
         // The caret's whole character has to be in view, not its first cell:
         // a 漢字 at the edge used to leave its right half off the page and the
@@ -11970,6 +11977,9 @@ fn draw_horizontal(
         *left = 0;
     }
     let left = *left;
+    if peek.is_none() {
+        editor.note_sideways(left, page);
+    }
 
     // What is marked: the live pane's selection, or the hit the other one was
     // opened to show.

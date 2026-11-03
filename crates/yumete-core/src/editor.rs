@@ -1345,6 +1345,19 @@ pub enum Aim {
     Row(usize),
 }
 
+/// **Which way a key moves the view sideways** (with wrapping off).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sideways {
+    /// `n` columns right (`zl`), or left when negative (`zh`).
+    Shift(isize),
+    /// The cursor's column at the left edge (vim's `zs`).
+    CursorAtLeft,
+    /// The cursor's column at the right edge (vim's `ze`).
+    CursorAtRight,
+    /// The cursor's column in the middle (helix's `zm`).
+    Center,
+}
+
 /// Where the table starts and stops (#261).
 ///
 /// **The rule, not the answer.** The lines are walked from the cursor every
@@ -2616,6 +2629,9 @@ pub struct Editor {
     /// The keys being played are ones the reader typed, held for a binding
     /// they did not finish (vim's `Z` of `ZZ`): typed keys, not a binding's.
     replaying_held: bool,
+    /// Digits typed after vim's `z` (`z5l`, `z12<CR>`), waiting for the key
+    /// that says what they count.
+    z_digits: Option<usize>,
     /// The word segmenter driving `w`/`b`/`e` and the segmentation overlay
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
@@ -3217,6 +3233,11 @@ pub struct Editor {
     /// The scrolloff the page was last drawn with, for the scrolls that push
     /// the cursor in by it (`zj`, `C-f`).
     scrolloff_seen: std::cell::Cell<usize>,
+    /// The page's sideways scroll as last drawn: the columns off its left
+    /// and the columns of text it shows (`note_sideways`).
+    side_seen: std::cell::Cell<(usize, usize)>,
+    /// The sideways scroll a key asked for, taken by the next frame.
+    side_aim: std::cell::Cell<Option<usize>>,
     /// **`z` 那一層要把光標放在第幾行**（`zz`/`zt`/`zb`，2026-09-28）。
     ///
     /// Warning: **這個編輯器没有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
@@ -4223,6 +4244,7 @@ impl Editor {
             alias_count: None,
             expanding_alias: false,
             replaying_held: false,
+            z_digits: None,
             segmenter: Box::new(CategorySegmenter),
             word_completion: 4,
             word_index: HashMap::new(),
@@ -4390,6 +4412,8 @@ impl Editor {
             jumped: false,
             sat_at: std::cell::Cell::new(None),
             scrolloff_seen: std::cell::Cell::new(0),
+            side_seen: std::cell::Cell::new((0, 0)),
+            side_aim: std::cell::Cell::new(None),
             aim: None,
             language_run: None,
             preview_request: None,
@@ -4662,6 +4686,24 @@ impl Editor {
     /// [`Editor::move_page`]）。
     pub fn sat_at(&self) -> Option<usize> {
         self.sat_at.get()
+    }
+
+    /// The front end says how the page is scrolled sideways: the columns
+    /// off its left and the columns of text it shows.
+    pub fn note_sideways(&self, left: usize, page: usize) {
+        self.side_seen.set((left, page));
+    }
+
+    /// The columns of text the page shows, said before the keys; the
+    /// offset stays as the last frame left it.
+    pub fn note_side_width(&self, page: usize) {
+        let (left, _) = self.side_seen.get();
+        self.side_seen.set((left, page));
+    }
+
+    /// The sideways scroll a key asked for (`zl`, `zs`, helix's `zm`), once.
+    pub fn take_side_aim(&self) -> Option<usize> {
+        self.side_aim.take()
     }
 
     pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {

@@ -604,6 +604,71 @@ impl Editor {
         self.move_head(at);
     }
 
+    /// **The view sideways**, with wrapping off (2026-11-03, measured in
+    /// nvim): vim's `zh` `zl` `zH` `zL` `zs` `ze` and helix's `zm`. The
+    /// columns are the page's, from the frame last drawn; the view goes no
+    /// further right than the cursor line's last character, and a cursor
+    /// left off the page is pushed in to its edge. Wrapped, there is nothing
+    /// to the side and nothing happens, as in both editors.
+    pub(super) fn scroll_sideways(&mut self, how: crate::editor::Sideways) {
+        use crate::editor::Sideways;
+        let (left, page) = self.side_seen.get();
+        let wrapped = self.soft_wrap || self.pages_on_screen > 1;
+        if page == 0 || wrapped || self.layout() != Layout::Horizontal {
+            return;
+        }
+        let head = self.sel.head();
+        let (to, left) = self.with_page_measure(crate::wrap::NO_WRAP, |rope, m| {
+            let line = rope.char_to_line(head);
+            let start = rope.line_to_char(line);
+            let last = motion::line_last(rope, start);
+            let column = |at: usize| crate::wrap::column_of(rope, at, m);
+            let wide = |at: usize| match at < rope.len_chars() {
+                true => yumete_cjk::char_width(rope.char(at)).max(1),
+                false => 1,
+            };
+            let c = column(head);
+            let end = column(last);
+            let left = match how {
+                Sideways::Shift(n) if n >= 0 => (left + n as usize).min(end),
+                Sideways::Shift(n) => left.saturating_sub(n.unsigned_abs()),
+                Sideways::CursorAtLeft => c,
+                Sideways::CursorAtRight => (c + wide(head)).saturating_sub(page),
+                Sideways::Center => c.saturating_sub(page / 2),
+            };
+            // The first character from `from` on whose column is at least
+            // `at`; the columns grow along a line, so halve.
+            let first_from = |at: usize| {
+                let (mut lo, mut hi) = (start, last);
+                while lo < hi {
+                    let mid = (lo + hi) / 2;
+                    match column(mid) < at {
+                        true => lo = mid + 1,
+                        false => hi = mid,
+                    }
+                }
+                lo
+            };
+            let to = if c < left {
+                first_from(left)
+            } else if c + wide(head) > left + page {
+                let after = first_from(left + page + 1);
+                let mut at = after;
+                while at > start && column(at) + wide(at) > left + page {
+                    at -= 1;
+                }
+                at
+            } else {
+                head
+            };
+            (to, left)
+        });
+        if to != head {
+            self.move_head(to);
+        }
+        self.side_aim.set(Some(left));
+    }
+
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
         let Some(line) = self.screen_line(which, nth) else { return };
         // vim's `H` `M` `L` are jumps; helix's `gt` `gc` `gb` are not.
@@ -2143,6 +2208,36 @@ impl Editor {
         self.move_row(up, true);
     }
 
+    /// **The page's measure** at `width`: what is hidden, folded, drawn and
+    /// indented, as the renderer lays the rows out, so a key asking about
+    /// rows and columns asks about the ones on the screen.
+    pub(super) fn with_page_measure<R>(&self, width: usize, f: impl FnOnce(&ropey::Rope, crate::wrap::Measure) -> R) -> R {
+        let hide = |line: usize| self.hidden_on_line(line);
+        let fold = |line: usize| self.line_is_folded(line);
+        let drawn = |line: usize| self.drawn_on_line(line);
+        let typed = |line: usize| self.typed_on_line(line);
+        // A table row is one row (#275) — and `j` has to be walking the same
+        // page the renderer drew, or it steps into a row that is not on the
+        // screen.
+        let flat = |line: usize| self.table_row_at(line);
+        // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
+        // 不必每動一下就把前面那一整段逐字素走一遍。
+        let widths = |rope: &ropey::Rope, line: usize, span: usize| self.line_widths(rope, line, span);
+        let rope = self.current_buffer().rope();
+        let m = crate::wrap::Measure::new(width, &hide)
+            .with_indent(self.paragraph_indent())
+            .with_folds(&fold)
+            .with_drawn(&drawn)
+            .with_typed_drawn(&typed)
+            .with_unwrapped(&flat)
+            .with_widths(&widths)
+            .with_version(self.current_buffer().id(), self.current_buffer().revision())
+            .with_edit(self.current_buffer().edit())
+            .with_open_line(self.open_line())
+            .with_caret(Some(self.caret_in_line()));
+        f(rope, m)
+    }
+
     fn move_row(&mut self, up: bool, textual: bool) {
         // **In a grid, the column is the cell** (#357). The goal column is
         // worked out from the *document* — the text and the padding a `|`
@@ -2156,38 +2251,14 @@ impl Editor {
             return;
         }
         let (pos, goal) = {
-            let hide = |line: usize| self.hidden_on_line(line);
-            let fold = |line: usize| self.line_is_folded(line);
-            let rope = self.current_buffer().rope();
-            // …with the indent and the folds, for the same reason: the page
-            // `j` steps through has to be the page on the screen. With wrapping
-            // off a row is a paragraph, which is what `NO_WRAP` gives — through
-            // this same code, so the two cases cannot answer differently about
-            // what is off the page.
+            // With wrapping off a row is a paragraph, which is what `NO_WRAP`
+            // gives — through this same code, so the two cases cannot answer
+            // differently about what is off the page.
             let width = match textual {
                 true => crate::wrap::NO_WRAP,
                 false => self.wrap_width().unwrap_or(crate::wrap::NO_WRAP),
             };
-            let drawn = |line: usize| self.drawn_on_line(line);
-            let typed = |line: usize| self.typed_on_line(line);
-            // A table row is one row (#275) — and `j` has to be walking the
-            // same page the renderer drew, or it steps into a row that is not
-            // on the screen.
-            let flat = |line: usize| self.table_row_at(line);
-            // 一行的前綴寬度索引（2026-10-08）：不折行的長行上，光標的列
-            // 不必每動一下就把前面那一整段逐字素走一遍。
-            let widths = |rope: &ropey::Rope, line: usize, span: usize| self.line_widths(rope, line, span);
-            let m = crate::wrap::Measure::new(width, &hide)
-                .with_indent(self.paragraph_indent())
-                .with_folds(&fold)
-                .with_drawn(&drawn)
-                .with_typed_drawn(&typed)
-                .with_unwrapped(&flat)
-                .with_widths(&widths)
-                .with_version(self.current_buffer().id(), self.current_buffer().revision())
-                .with_edit(self.current_buffer().edit())
-                .with_open_line(self.open_line())
-                .with_caret(Some(self.caret_in_line()));
+            self.with_page_measure(width, |rope, m| {
             // Warning: **目標列現在在這一段自己身上**（#405）。没記過就現算一次——新長出來
             // 的選區、剛從別處跳過來的光標都會落到這一支上。
             //
@@ -2201,6 +2272,7 @@ impl Editor {
                 false => crate::wrap::next_row(rope, self.sel.head(), m, goal),
             };
             (pos, goal)
+            })
         };
         // vim 鍵位下檔尾那條虛行到不了，所以瞄到那裏的 `j` 是一次失手——連目標
         // 列都不動（見 [`Editor::vim_cannot_reach`]）。
