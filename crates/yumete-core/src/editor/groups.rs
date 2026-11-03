@@ -1067,6 +1067,7 @@ pub(super) static LEFT_BRACKET: Group = Group {
 /// paging keys are helix's (`z j`, `z C-d`…) and answer without a line.
 const VIEW_ROWS: &[Row] = &[
     ch('z', NormalCmd::AlignViewCenter, "hint.aim.middle"),
+    ch('c', NormalCmd::AlignViewCenter, "hint.aim.middle").when(Only::Helix),
     // vim's folds (2026-11-03, measured in nvim); `zc` `zj` `zk` are
     // helix's view keys under helix.
     ch('f', NormalCmd::CreateFold, "hint.fold.create").when(Only::Vim),
@@ -1090,28 +1091,47 @@ const VIEW_ROWS: &[Row] = &[
     ch('i', NormalCmd::ToggleFoldsEnabled, "hint.fold.on-off").when(Only::Vim),
     ch('m', NormalCmd::FoldMore, "hint.fold.more").when(Only::Vim),
     ch('r', NormalCmd::FoldLess, "hint.fold.less").when(Only::Vim),
+    ch('x', NormalCmd::ReapplyFoldLevelAndView, "hint.fold.reapply").when(Only::Vim),
+    ch('X', NormalCmd::ReapplyFoldLevel, "hint.fold.reapply-only").when(Only::Vim),
+    // vim's other placings (measured in nvim 2026-11-03): the cursor goes
+    // past the indent, and `z+` `z^` turn a page.
+    quiet(Key::Enter, NormalCmd::VimAlignViewTop).when(Only::Vim),
+    quiet(Key::Char('.'), NormalCmd::VimAlignViewCenter).when(Only::Vim),
+    quiet(Key::Char('-'), NormalCmd::VimAlignViewBottom).when(Only::Vim),
+    quiet(Key::Char('+'), NormalCmd::VimAlignViewBelowTop).when(Only::Vim),
+    quiet(Key::Char('^'), NormalCmd::VimAlignViewAboveBottom).when(Only::Vim),
+    // `zp` `zP` `zy` differ from `p` `P` `y` only in a block's trailing
+    // spaces, which a yank here never pads.
+    quiet(Key::Char('p'), NormalCmd::VimPasteAfter).when(Only::Vim),
+    quiet(Key::Char('P'), NormalCmd::VimPasteBefore).when(Only::Vim),
+    quiet(Key::Char('y'), NormalCmd::OperatorYank).when(Only::Vim),
     // helix's rows from here on (2026-11-03: under vim they had leaked in,
     // `z␣` `z⌫` `z/` …, where vim beeps). vim's sticky `Z` reads them as
-    // helix's, see `context_in`.
-    quiet(Key::Char('c'), NormalCmd::AlignViewCenter).when(Only::Helix),
+    // helix's, see `context_in`. Listed as helix's popup lists them, the
+    // keys of one command on one line.
     ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
     ch('b', NormalCmd::AlignViewBottom, "hint.aim.bottom"),
-    quiet(Key::Char('j'), NormalCmd::ScrollDown).when(Only::Helix),
-    quiet(Key::Down, NormalCmd::ScrollDown).when(Only::Helix),
-    quiet(Key::Char('k'), NormalCmd::ScrollUp).when(Only::Helix),
-    quiet(Key::Up, NormalCmd::ScrollUp).when(Only::Helix),
-    quiet(Key::Ctrl('d'), NormalCmd::PageCursorHalfDown).when(Only::Helix),
-    quiet(Key::Char(' '), NormalCmd::PageCursorHalfDown).when(Only::Helix),
-    quiet(Key::Ctrl('u'), NormalCmd::PageCursorHalfUp).when(Only::Helix),
-    quiet(Key::Backspace, NormalCmd::PageCursorHalfUp).when(Only::Helix),
-    quiet(Key::Ctrl('f'), NormalCmd::PageDown).when(Only::Helix),
-    quiet(Key::PageDown, NormalCmd::PageDown).when(Only::Helix),
-    quiet(Key::Ctrl('b'), NormalCmd::PageUp).when(Only::Helix),
-    quiet(Key::PageUp, NormalCmd::PageUp).when(Only::Helix),
-    quiet(Key::Char('/'), NormalCmd::Search).when(Only::Helix),
-    quiet(Key::Char('?'), NormalCmd::Rsearch).when(Only::Helix),
-    quiet(Key::Char('n'), NormalCmd::SearchNext).when(Only::Helix),
-    quiet(Key::Char('N'), NormalCmd::SearchPrev).when(Only::Helix),
+    ch('j', NormalCmd::ScrollDown, "hint.aim.scroll-down").when(Only::Helix),
+    key(Key::Down, NormalCmd::ScrollDown, "hint.aim.scroll-down").when(Only::Helix),
+    ch('k', NormalCmd::ScrollUp, "hint.aim.scroll-up").when(Only::Helix),
+    key(Key::Up, NormalCmd::ScrollUp, "hint.aim.scroll-up").when(Only::Helix),
+    key(Key::Ctrl('d'), NormalCmd::PageCursorHalfDown, "hint.aim.half-page-down").when(Only::Helix),
+    key(Key::Char(' '), NormalCmd::PageCursorHalfDown, "hint.aim.half-page-down").when(Only::Helix),
+    key(Key::Ctrl('u'), NormalCmd::PageCursorHalfUp, "hint.aim.half-page-up").when(Only::Helix),
+    key(Key::Backspace, NormalCmd::PageCursorHalfUp, "hint.aim.half-page-up").when(Only::Helix),
+    key(Key::Ctrl('f'), NormalCmd::PageDown, "hint.aim.page-down").when(Only::Helix),
+    key(Key::PageDown, NormalCmd::PageDown, "hint.aim.page-down").when(Only::Helix),
+    key(Key::Ctrl('b'), NormalCmd::PageUp, "hint.aim.page-up").when(Only::Helix),
+    key(Key::PageUp, NormalCmd::PageUp, "hint.aim.page-up").when(Only::Helix),
+    ch('/', NormalCmd::Search, "action.search").when(Only::Helix),
+    ch('?', NormalCmd::Rsearch, "action.rsearch").when(Only::Helix),
+    ch('n', NormalCmd::SearchNext, "action.search-next").when(Only::Helix),
+    ch('N', NormalCmd::SearchPrev, "action.search-prev").when(Only::Helix),
+    // The flavour's fold keys under helix, on keys helix leaves free.
+    ch('a', NormalCmd::ToggleFold, "hint.fold.toggle").when(Only::Helix).flavor(FlavorItem::HelixFoldKeys),
+    ch('R', NormalCmd::OpenAllFolds, "hint.fold.open-every").when(Only::Helix).flavor(FlavorItem::HelixFoldKeys),
+    ch('M', NormalCmd::CloseAllFolds, "hint.fold.close-every").when(Only::Helix).flavor(FlavorItem::HelixFoldKeys),
+    ch('f', NormalCmd::CreateFold, "hint.fold.create-selection").when(Only::Helix).flavor(FlavorItem::HelixFoldKeys),
 ];
 
 pub(super) static VIEW: Group = Group {

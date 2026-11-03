@@ -382,6 +382,20 @@ flavor_items! {
         label: "keys.flavor.item.heading-folds",
         hint: "keys.flavor.item.heading-folds.hint",
     },
+    /// vim's `za` `zR` `zM` `zf` under helix (2026-11-03), on `z` keys helix
+    /// leaves free: helix has no folds, and the heading folds came with no
+    /// keys there. `zf` folds the selection's lines, helix's way round.
+    /// `zc` `zm` `zj` `zk` stay helix's; `zo` was left out as `za` does it.
+    HelixFoldKeys => ItemInfo {
+        id: "helix_fold_keys",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Helix],
+        keys: &["za", "zR", "zM", "zf"],
+        vim_keys: None,
+        insert: false,
+        label: "keys.flavor.item.helix-fold-keys",
+        hint: "keys.flavor.item.helix-fold-keys.hint",
+    },
     /// vim's `gc{motion}`, `gcc` and Visual `gc`, as vim 9.1's comment package
     /// and Neovim have them (2026-11-02): the lines, commented as
     /// `Space A-c` comments them. Off, vim has no comment key but `\c`.

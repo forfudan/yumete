@@ -3,6 +3,20 @@
 # What the editor says, one block per tag; see README.md beside this file.
 
 [[message]]
+# z 那一層：z^（草稿）
+key = "hint.aim.above-to-bottom"
+zht = "屏幕上面那一行放到底下"
+zhs = "屏幕上面那一行放到底下"
+en = "the line above the page to the bottom"
+
+[[message]]
+# z 那一層：z+（草稿）
+key = "hint.aim.below-to-top"
+zht = "屏幕下面那一行放到頂上"
+zhs = "屏幕下面那一行放到顶上"
+en = "the line below the page to the top"
+
+[[message]]
 # z 那一層：zb
 key = "hint.aim.bottom"
 zht = "底下"
@@ -10,11 +24,67 @@ zhs = "底下"
 en = "bottom"
 
 [[message]]
+# z 那一層：z-（草稿）
+key = "hint.aim.bottom-past-indent"
+zht = "底下，光標到縮進之後"
+zhs = "底下，光标到缩进之后"
+en = "bottom, past the indent"
+
+[[message]]
+# z 那一層：z C-d（草稿）
+key = "hint.aim.half-page-down"
+zht = "下半頁"
+zhs = "下半页"
+en = "half a page down"
+
+[[message]]
+# z 那一層：z C-u（草稿）
+key = "hint.aim.half-page-up"
+zht = "上半頁"
+zhs = "上半页"
+en = "half a page up"
+
+[[message]]
 # z 那一層：zz
 key = "hint.aim.middle"
 zht = "中間"
 zhs = "中间"
-en = "middle"
+en = "center"
+
+[[message]]
+# z 那一層：z.（草稿）
+key = "hint.aim.middle-past-indent"
+zht = "中間，光標到縮進之後"
+zhs = "中间，光标到缩进之后"
+en = "middle, past the indent"
+
+[[message]]
+# z 那一層：z C-f（草稿）
+key = "hint.aim.page-down"
+zht = "下一頁"
+zhs = "下一页"
+en = "a page down"
+
+[[message]]
+# z 那一層：z C-b（草稿）
+key = "hint.aim.page-up"
+zht = "上一頁"
+zhs = "上一页"
+en = "a page up"
+
+[[message]]
+# z 那一層：zj（草稿）
+key = "hint.aim.scroll-down"
+zht = "往下滾一行"
+zhs = "往下滚一行"
+en = "scroll down"
+
+[[message]]
+# z 那一層：zk（草稿）
+key = "hint.aim.scroll-up"
+zht = "往上滾一行"
+zhs = "往上滚一行"
+en = "scroll up"
 
 [[message]]
 # z 那一層的小表：標題
@@ -29,6 +99,13 @@ key = "hint.aim.top"
 zht = "頂上"
 zhs = "顶上"
 en = "top"
+
+[[message]]
+# z 那一層：z<CR>（草稿）
+key = "hint.aim.top-past-indent"
+zht = "頂上，光標到縮進之後"
+zhs = "顶上，光标到缩进之后"
+en = "top, past the indent"
 
 [[message]]
 # 提示欄：取消
@@ -325,6 +402,13 @@ zhs = "把计数那么多行做成折叠(vim 的 zF)"
 en = "make a fold over count lines (vim's zF)"
 
 [[message]]
+# z 菜單：helix 下的 zf（草稿）
+key = "hint.fold.create-selection"
+zht = "把選中的行做成折疊"
+zhs = "把选中的行做成折叠"
+en = "make a fold of the selected lines"
+
+[[message]]
 # z / [ ] 菜單：delete_fold（草稿）
 key = "hint.fold.delete"
 zht = "刪掉這裏的折疊，字不動(vim 的 zd)"
@@ -421,6 +505,20 @@ key = "hint.fold.prev"
 zht = "到上一個折疊的末尾(vim 的 zk)"
 zhs = "到上一个折叠的末尾(vim 的 zk)"
 en = "to the previous fold's end (vim's zk)"
+
+[[message]]
+# z 菜單：reapply_fold_level_and_view（草稿）
+key = "hint.fold.reapply"
+zht = "折疊回到層級，再打開到光標那一行(vim 的 zx)"
+zhs = "折叠回到层级，再打开到光标那一行(vim 的 zx)"
+en = "folds back to the level, then open to the cursor (vim's zx)"
+
+[[message]]
+# z 菜單：reapply_fold_level（草稿）
+key = "hint.fold.reapply-only"
+zht = "折疊回到層級(vim 的 zX)"
+zhs = "折叠回到层级(vim 的 zX)"
+en = "folds back to the level (vim's zX)"
 
 [[message]]
 # z / [ ] 菜單：goto_fold_start（草稿）

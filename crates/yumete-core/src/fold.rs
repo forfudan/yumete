@@ -40,6 +40,10 @@ pub struct FoldSet {
     pub closed_headings: Vec<(String, usize)>,
     /// vim's `zn` (and `zi`): every fold drawn open while set, and kept.
     pub disabled: bool,
+    /// vim's 'foldlevel', once `zm` `zr` `zM` `zR` have set it: folds deeper
+    /// than it are closed when `zx` `zX` put them back. Unset, every fold is
+    /// open, as a file is when it opens.
+    pub level: Option<usize>,
     next_id: u64,
 }
 

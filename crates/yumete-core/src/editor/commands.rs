@@ -992,11 +992,7 @@ impl Editor {
             // **helix 那四個裏的另外三個**（2026-10-06）：`!` 插在前面、`A-!` 接在
             // 後面、`A-|` 不收輸出。
             Command::Fold => {
-                let (from, to) = self.selection();
-                let rope = self.current_buffer().rope();
-                let (first, last) = (rope.char_to_line(from), rope.char_to_line(to.saturating_sub(1).max(from)));
-                self.extend = false;
-                self.fold_lines(first, last);
+                self.fold_selection();
                 Ok(CommandOutcome::Continue)
             }
             Command::KeepPipe(line) => {

@@ -380,6 +380,8 @@ impl Editor {
         for of in &all {
             self.set_fold_closed(of, closed);
         }
+        let deepest = self.fold_view().spans.iter().map(|s| s.depth).max().unwrap_or(0);
+        self.keep_fold_level(if closed { 0 } else { deepest });
         if closed {
             self.fold_stays_closed = true;
             self.uncover_disabled();
@@ -393,11 +395,14 @@ impl Editor {
     /// other opens, as vim's 'foldlevel' does. `zm` with the headings open
     /// down to `##` is the chapter's outline.
     pub(super) fn fold_level(&mut self, less: bool, count: usize) {
+        let kept = self.current_buffer().folds(self.live).and_then(|s| s.level);
         let (now, deepest) = {
             let view = self.fold_view();
             let deepest = view.spans.iter().map(|s| s.depth).max().unwrap_or(0);
             let shallowest_closed = view.spans.iter().filter(|s| s.closed).map(|s| s.depth).min();
-            (shallowest_closed.map_or(deepest, |d| d - 1), deepest)
+            // The level `zm` `zr` last set, as vim keeps 'foldlevel'; before
+            // any, where the folds stand.
+            (kept.unwrap_or_else(|| shallowest_closed.map_or(deepest, |d| d - 1)).min(deepest), deepest)
         };
         if deepest == 0 {
             return self.no_fold_here();
@@ -406,12 +411,46 @@ impl Editor {
             true => (now + count.max(1)).min(deepest),
             false => now.saturating_sub(count.max(1)),
         };
+        self.apply_fold_level(level);
+        self.keep_fold_level(level);
+        self.fold_stays_closed = true;
+        self.status = say!("fold.level", level);
+    }
+
+    /// Every fold deeper than `level` closed, every other open.
+    fn apply_fold_level(&mut self, level: usize) {
         let all: Vec<(FoldOf, usize)> = self.fold_view().spans.iter().map(|s| (s.of.clone(), s.depth)).collect();
         for (of, depth) in all {
             self.set_fold_closed(&of, depth > level);
         }
-        self.fold_stays_closed = true;
-        self.status = say!("fold.level", level);
+    }
+
+    fn keep_fold_level(&mut self, level: usize) {
+        let window = self.live;
+        self.current_buffer_mut().folds_mut(window).level = Some(level);
+    }
+
+    /// **`zx` (`view`) and `zX`**: the folds opened and closed by hand put
+    /// back to the level, folding turned on; `zx` then opens what the cursor
+    /// is in, as `zv` (`nv_zet`).
+    pub(super) fn reapply_fold_level(&mut self, view: bool) {
+        let window = self.live;
+        let (level, deepest) = {
+            let v = self.fold_view();
+            (self.current_buffer().folds(window).and_then(|s| s.level), v.spans.iter().map(|s| s.depth).max().unwrap_or(0))
+        };
+        if deepest == 0 {
+            return self.no_fold_here();
+        }
+        if self.current_buffer().folds(window).is_some_and(|s| s.disabled) {
+            self.current_buffer_mut().folds_mut(window).disabled = false;
+            self.fold_generation += 1;
+        }
+        self.apply_fold_level(level.unwrap_or(deepest));
+        match view {
+            true => self.fold_view_cursor(),
+            false => self.fold_stays_closed = true,
+        }
     }
 
     /// `zn` (`Some(false)`), `zN` (`Some(true)`), `zi` (`None`, flips): folds
@@ -435,6 +474,16 @@ impl Editor {
             self.current_buffer_mut().folds_mut(window).disabled = false;
             self.fold_generation += 1;
         }
+    }
+
+    /// `:view-fold` and helix's `zf`: a closed fold over the selection's
+    /// lines.
+    pub(super) fn fold_selection(&mut self) {
+        let (from, to) = self.selection();
+        let rope = self.current_buffer().rope();
+        let (first, last) = (rope.char_to_line(from), rope.char_to_line(to.saturating_sub(1).max(from)));
+        self.extend = false;
+        self.fold_lines(first, last);
     }
 
     /// `zf{motion}`, Visual `zf`, `zF` and `:fold`: a closed fold over lines

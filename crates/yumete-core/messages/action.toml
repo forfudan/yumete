@@ -3018,6 +3018,20 @@ zhs = "开：Markdown 与 Typst 的每个标题都是一个折叠，盖住它那
 en = "On: every Markdown and Typst heading is a fold over its section, all open at first. Off: vim's, only the folds zf makes."
 
 [[message]]
+# 風味項：helix 下的折疊鍵（草稿）
+key = "keys.flavor.item.helix-fold-keys"
+zht = "helix 下的折疊鍵"
+zhs = "helix 下的折叠键"
+en = "fold keys under helix"
+
+[[message]]
+# 風味項：helix 下的折疊鍵的說明（草稿）
+key = "keys.flavor.item.helix-fold-keys.hint"
+zht = "開：helix 下 za 開合折疊，zR 全開，zM 全合，zf 把選中的行做成折疊，同 vim。關：這幾個鍵空着，折疊只用命令。"
+zhs = "开：helix 下 za 开合折叠，zR 全开，zM 全合，zf 把选中的行做成折叠，同 vim。关：这几个键空着，折叠只用命令。"
+en = "On: under helix, za opens or closes a fold, zR opens all, zM closes all, zf makes a fold of the selected lines, as vim's. Off: unbound; folds by command only."
+
+[[message]]
 # 風味的一項：設置面板上的名字（草稿）
 key = "keys.flavor.item.helix-keys-under-vim"
 zht = "借用 helix 的鍵"

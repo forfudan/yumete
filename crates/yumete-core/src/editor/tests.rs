@@ -35751,3 +35751,80 @@ fn vims_z_is_vims_and_its_sticky_z_is_helixs() {
     assert_eq!(line(&ed), 2, "j scrolls in Z, pushing the cursor along");
     ed.on_key(Key::Esc);
 }
+
+/// **vim's other `z` keys** (2026-11-03, numbers from nvim on 22 rows):
+/// `z<CR>` `z.` `z-` put the cursor past the indent, `z+` `z^` turn a
+/// page, `zx` `zX` put the folds back to the level, `zp` `zy` are `p` `y`.
+#[test]
+fn vims_other_z_keys() {
+    use crate::editor::Aim;
+    let text: String = (1..=200).map(|n| format!("    line {n}\n")).collect();
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.sel.head());
+        (line, ed.sel.head() - rope.line_to_char(line))
+    };
+    let mut ed = typed_vim(&text);
+    let page = |ed: &mut Editor| {
+        let rope = ed.current_buffer().rope().clone();
+        ed.set_page_span(rope.line_to_char(39), rope.line_to_char(61));
+    };
+    press(&mut ed, "50G0ll");
+    ed.on_key(Key::Char('z'));
+    ed.on_key(Key::Enter);
+    assert_eq!(at(&ed), (49, 4));
+    assert!(matches!(ed.aim, Some(Aim::Top)));
+    press(&mut ed, "50G0llz.");
+    assert!(at(&ed) == (49, 4) && matches!(ed.aim, Some(Aim::Middle)));
+    press(&mut ed, "50G0llz-");
+    assert!(at(&ed) == (49, 4) && matches!(ed.aim, Some(Aim::Bottom)));
+    press(&mut ed, "50G");
+    page(&mut ed);
+    press(&mut ed, "z+");
+    assert!(at(&ed) == (61, 4) && matches!(ed.aim, Some(Aim::Top)), "nvim: line 62 at the top");
+    press(&mut ed, "50G");
+    page(&mut ed);
+    press(&mut ed, "z^");
+    assert!(at(&ed) == (38, 4) && matches!(ed.aim, Some(Aim::Bottom)), "nvim: line 39 at the bottom");
+    page(&mut ed);
+    press(&mut ed, "100z^");
+    assert_eq!(at(&ed), (78, 4), "nvim: line 79 at the bottom");
+    page(&mut ed);
+    press(&mut ed, "30z+");
+    assert!(at(&ed) == (29, 4) && matches!(ed.aim, Some(Aim::Top)));
+    press(&mut ed, "ggyyzp");
+    assert!(ed.current_buffer().text().starts_with("    line 1\n    line 1\n"));
+
+    let doc = "# 一\n\n甲。\n\n## 二\n\n乙。\n\n# 三\n\n丙。\n";
+    let mut ed = markdown(doc);
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggzMzr");
+    assert!(ed.fold_head(4) && !ed.fold_head(0), "zM then zr: level 1");
+    press(&mut ed, "5Gzo9Gzc");
+    assert!(!ed.fold_head(4) && ed.fold_head(8), "opened and closed by hand");
+    press(&mut ed, "ggzX");
+    assert!(ed.fold_head(4) && !ed.fold_head(0) && !ed.fold_head(8), "zX: back to level 1");
+    press(&mut ed, "5Gzx");
+    assert!(!ed.fold_head(4), "zx: back to the level, then open to the cursor");
+}
+
+/// **The flavour's fold keys under helix** (2026-11-03): `za` `zR` `zM`
+/// as vim's, `zf` the selection's lines; off, the keys are unbound.
+#[test]
+fn helix_flavour_fold_keys() {
+    let doc = "# 一\n\n甲。\n\n## 二\n\n乙。\n\n# 三\n\n丙。\n";
+    let mut ed = markdown(doc);
+    press(&mut ed, "ggza");
+    assert!(ed.fold_head(0), "za closes the heading's fold");
+    press(&mut ed, "za");
+    assert!(!ed.fold_head(0), "and opens it");
+    press(&mut ed, "zM");
+    assert!(ed.fold_head(0) && ed.fold_head(8));
+    press(&mut ed, "zR");
+    assert!(!ed.fold_head(0) && !ed.fold_head(8));
+    press(&mut ed, "10Gxxzf");
+    assert!(ed.fold_head(9) && ed.line_is_folded(10), "zf folds the selected lines");
+    ed.execute(":keymap-yumete-flavor off").unwrap();
+    press(&mut ed, "ggza");
+    assert!(!ed.fold_head(0), "off: za is not a key");
+}

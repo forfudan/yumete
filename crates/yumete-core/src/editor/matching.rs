@@ -559,6 +559,51 @@ impl Editor {
         self.move_head(at);
     }
 
+    /// vim's `z<CR>` `z.` `z-`: `zt` `zz` `zb` with the cursor past the
+    /// indent (`nv_zet`'s `beginline(BL_WHITE | BL_FIX)`).
+    pub(super) fn vim_aim_past_indent(&mut self, aim: crate::editor::Aim, count: Option<usize>) {
+        self.vim_aim_at_line(count);
+        self.past_the_indent();
+        self.aim_the_page(aim);
+    }
+
+    /// vim's `z+` and `z^` (measured in nvim 2026-11-03). `z+` puts the
+    /// line below the page at the top; `z^` the line above it at the
+    /// bottom. With a count, `z+` is `z<CR>`, and `z^` is vim's odd one: the
+    /// line that would be at the top with line N at the bottom goes to the
+    /// bottom (`100z^` on 22 rows: line 79).
+    pub(super) fn vim_turn_the_page(&mut self, down: bool, count: Option<usize>) {
+        let (first, last) = (self.screen_line('H', 1), self.screen_line('L', 1));
+        let end = motion::last_line(self.current_buffer().rope());
+        let line = match (down, count, first, last) {
+            (true, Some(_), ..) => None,
+            (true, None, _, Some(last)) => Some((last + 1).min(end)),
+            (false, Some(n), Some(first), Some(last)) => Some(n.saturating_sub(1).min(end).saturating_sub(last - first)),
+            (false, None, Some(first), _) => Some(first.saturating_sub(1)),
+            _ => None,
+        };
+        match line {
+            Some(line) => {
+                self.remember_jump();
+                let at = self.current_buffer().rope().line_to_char(line);
+                self.move_head(at);
+            }
+            None => self.vim_aim_at_line(count),
+        }
+        self.past_the_indent();
+        self.aim_the_page(match down {
+            true => crate::editor::Aim::Top,
+            false => crate::editor::Aim::Bottom,
+        });
+    }
+
+    /// The cursor to its line's first character that is not a blank.
+    fn past_the_indent(&mut self) {
+        let rope = self.current_buffer().rope();
+        let at = motion::line_first_non_blank(rope, self.sel.head());
+        self.move_head(at);
+    }
+
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
         let Some(line) = self.screen_line(which, nth) else { return };
         // vim's `H` `M` `L` are jumps; helix's `gt` `gc` `gb` are not.

@@ -253,7 +253,11 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.operator_count = cx.operator_count;
     }, Key::Char('r')),
     // ── z: vim's folds (2026-11-03) ───────────────────────────────────
-    (NormalCmd::CreateFold, |e, _| e.fold_operator(), Key::Char('f')),
+    // vim's an operator, helix's the selection's lines (the flavour's `zf`).
+    (NormalCmd::CreateFold, |e, _| match e.vim_keymap() {
+        true => e.fold_operator(),
+        false => e.fold_selection(),
+    }, Key::Char('f')),
     (NormalCmd::CreateFoldLines, |e, cx| { let line = e.cursor_line(); e.fold_lines(line, line + cx.count.max(1) - 1) }, Key::Char('F')),
     (NormalCmd::OpenFold, |e, cx| e.fold_open(cx.count, false), Key::Char('o')),
     (NormalCmd::OpenFoldsRecursively, |e, cx| e.fold_open(cx.count, true), Key::Char('O')),
@@ -262,6 +266,13 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ToggleFold, |e, cx| e.fold_toggle(cx.count, false), Key::Char('a')),
     (NormalCmd::ToggleFoldsRecursively, |e, cx| e.fold_toggle(cx.count, true), Key::Char('A')),
     (NormalCmd::OpenFoldsToCursor, |e, _| e.fold_view_cursor(), Key::Char('v')),
+    (NormalCmd::ReapplyFoldLevelAndView, |e, _| e.reapply_fold_level(true), Key::Char('x')),
+    (NormalCmd::ReapplyFoldLevel, |e, _| e.reapply_fold_level(false), Key::Char('X')),
+    (NormalCmd::VimAlignViewTop, |e, cx| e.vim_aim_past_indent(crate::editor::Aim::Top, cx.operator_count), Key::Enter),
+    (NormalCmd::VimAlignViewCenter, |e, cx| e.vim_aim_past_indent(crate::editor::Aim::Middle, cx.operator_count), Key::Char('.')),
+    (NormalCmd::VimAlignViewBottom, |e, cx| e.vim_aim_past_indent(crate::editor::Aim::Bottom, cx.operator_count), Key::Char('-')),
+    (NormalCmd::VimAlignViewBelowTop, |e, cx| e.vim_turn_the_page(true, cx.operator_count), Key::Char('+')),
+    (NormalCmd::VimAlignViewAboveBottom, |e, cx| e.vim_turn_the_page(false, cx.operator_count), Key::Char('^')),
     (NormalCmd::OpenAllFolds, |e, _| e.fold_all(false), Key::Char('R')),
     (NormalCmd::CloseAllFolds, |e, _| e.fold_all(true), Key::Char('M')),
     (NormalCmd::DeleteFold, |e, _| e.fold_delete(super::folds::FoldDelete::Innermost), Key::Char('d')),
