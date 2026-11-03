@@ -110,9 +110,9 @@ en = "scroll up"
 [[message]]
 # z 那一層的小表：標題
 key = "hint.aim.title"
-zht = "這一行挪到哪"
-zhs = "这一行挪到哪"
-en = "put this line where"
+zht = "視圖"
+zhs = "视图"
+en = "view"
 
 [[message]]
 # z 那一層：zt
@@ -131,29 +131,29 @@ en = "top, past the indent"
 [[message]]
 # z 那一層：zH（草稿）
 key = "hint.aim.view-half-left"
-zht = "視窗往左半頁"
-zhs = "视窗往左半页"
+zht = "視圖往左半頁"
+zhs = "视图往左半页"
 en = "the view half a page left"
 
 [[message]]
 # z 那一層：zL（草稿）
 key = "hint.aim.view-half-right"
-zht = "視窗往右半頁"
-zhs = "视窗往右半页"
+zht = "視圖往右半頁"
+zhs = "视图往右半页"
 en = "the view half a page right"
 
 [[message]]
 # z 那一層：zh（草稿）
 key = "hint.aim.view-left"
-zht = "視窗往左一欄"
-zhs = "视窗往左一栏"
+zht = "視圖往左一欄"
+zhs = "视图往左一栏"
 en = "the view a column left"
 
 [[message]]
 # z 那一層：zl（草稿）
 key = "hint.aim.view-right"
-zht = "視窗往右一欄"
-zhs = "视窗往右一栏"
+zht = "視圖往右一欄"
+zhs = "视图往右一栏"
 en = "the view a column right"
 
 [[message]]
