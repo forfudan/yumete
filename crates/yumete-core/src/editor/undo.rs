@@ -13,12 +13,14 @@ impl Editor {
     /// *Some* buffer, not the current one: with `gn` and `gp` able to reach
     /// every open file, quitting from a clean buffer while another one is dirty
     /// would throw away work the editor never warned about.
-    /// `:q` — close **this file**; leave only when it was the last one.
+    /// `:q` — close **this region**; in the last window, leave.
     ///
-    /// Vim's rule and helix's, and the one a writer means: `:q` on the third
-    /// of three open chapters puts you back in the second, not out on the
-    /// shell. `:qa` is the way out with files still open, and `:q` on the last
-    /// one is the same thing.
+    /// helix's and vim's (measured 2026-11-03): a tab is an open file and a
+    /// window a view of one, so closing a window closes no file, and the
+    /// last window closing is the editor closing. `:q` there refuses while a
+    /// tab is unsaved and shows it, as `:qa` does; `:q!` leaves regardless.
+    /// From 2026-09-06 `:q` on the last window closed *a file* while others
+    /// were open, on the belief that vim did so — it does not; `:bc` is that.
     pub(super) fn quit(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         // **With the window split, `:q` and `:q!` close this region only**
         // (2026-10-30, as helix and vim close a view): the file stays open with
@@ -29,9 +31,6 @@ impl Editor {
         if self.panel_focus().is_some() || self.other_pane().is_some() {
             self.close_this_region(false);
             return Ok(CommandOutcome::Continue);
-        }
-        if self.buffers.len() > 1 {
-            return self.close_buffer(force);
         }
         self.quit_all(force)
     }

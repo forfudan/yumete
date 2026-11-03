@@ -19600,19 +19600,22 @@ fn leaving_checks_every_open_file_not_just_this_one() {
     assert_eq!(ed.execute(":qa!").unwrap(), CommandOutcome::Quit);
 }
 
+/// **`:q` in the last window leaves**, whatever tabs are open (2026-11-03,
+/// helix's and vim's, measured): it refuses while a tab is unsaved and shows
+/// it; `:q!` leaves regardless. Closing a file is `:bc`.
 #[test]
-fn quit_closes_this_file_and_only_leaves_on_the_last_one() {
+fn quit_in_the_last_window_leaves_and_a_file_closes_with_bc() {
     let mut ed = Editor::new();
     ed.on_key(Key::Char('i'));
     type_keys(&mut ed, "甲");
     ed.on_key(Key::Esc);
     ed.execute(":new").unwrap();
-    // Two files open: `:q` puts this one away and stays in the editor,
-    // even though the other one is dirty — it is not being asked to leave.
-    assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Continue);
-    assert_eq!(ed.current_buffer().text(), "甲");
-    // Now it is the last one, and `:q` means what it always meant.
+    // Two tabs, one window: `:q` is leaving, and the other tab is unsaved.
     assert!(matches!(ed.execute(":q"), Err(EditorError::UnsavedChanges)));
+    assert_eq!(ed.current_buffer().text(), "甲", "it shows the unsaved one");
+    // `:bc` on a clean tab puts it away and stays.
+    ed.execute(":new").unwrap();
+    assert_eq!(ed.execute(":bc").unwrap(), CommandOutcome::Continue);
     assert_eq!(ed.execute(":q!").unwrap(), CommandOutcome::Quit);
 }
 
@@ -33864,11 +33867,11 @@ fn windows_open_beside_and_below_and_close_one_at_a_time() {
     ed.on_key(Key::Char('o'));
     assert_eq!(ed.windows().leaves(), [one]);
     assert!(ed.panel(Side::Left).is_none());
-    // In the last window `C-w q` is `:q`, as in helix (2026-11-03), which
-    // with two files open closes this one.
+    // In the last window `C-w q` is `:q`, as in helix and vim: it leaves,
+    // with two files open and saved (2026-11-03).
     ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('q'));
-    assert_eq!(ed.buffer_count(), 1, "{}", ed.status());
+    assert_eq!(ed.on_key(Key::Char('q')), KeyOutcome::Quit, "{}", ed.status());
+    assert_eq!(ed.buffer_count(), 2, "no tab was closed");
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -35896,3 +35899,35 @@ fn closing_a_tab_sends_other_windows_back_and_tabs_say_where_they_are() {
     assert!(elsewhere[shown]);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **A sidebar is a window with no file** (2026-11-03, vim's answers):
+/// `:x` and `ZZ` close it writing nothing, `:wq` refuses; `:close` never
+/// closes the last window; `:only` keeps this one.
+#[test]
+fn a_sidebar_has_no_file_and_close_and_only_are_vims() {
+    use crate::sidebar::Side;
+    let dir = tmp().join(format!("yumete-sidebar-quit-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "a\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("a.md")).unwrap();
+    press(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    assert_eq!(ed.panel_focus(), Some(Side::Left));
+    assert_eq!(ed.execute(":wq").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.status(), say!("region.nothing-to-write"));
+    assert!(ed.panel(Side::Left).is_some(), ":wq refused");
+    assert_eq!(ed.execute(":x").unwrap(), CommandOutcome::Continue);
+    assert!(ed.panel(Side::Left).is_none(), ":x closed the sidebar");
+    assert_eq!(std::fs::read_to_string(dir.join("a.md")).unwrap(), "a\n", "nothing written");
+    assert_eq!(ed.execute(":close").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.status(), say!("region.only-one-left"), ":close keeps the last window");
+    ed.execute(":vsplit").unwrap();
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    ed.execute(":only").unwrap();
+    assert!(ed.other_pane().is_none() && ed.panel(Side::Left).is_none());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+

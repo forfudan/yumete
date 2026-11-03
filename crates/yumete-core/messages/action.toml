@@ -1783,7 +1783,7 @@ en = "the previous view in this slot"
 key = "action.quit"
 zht = "關掉這一個"
 zhs = "关掉这一个"
-en = "close this one"
+en = "close this region; in the last window, leave the editor"
 find = "關 关 退出 關掉 关掉 quit close"
 
 [[message]]

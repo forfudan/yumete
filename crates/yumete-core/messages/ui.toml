@@ -620,11 +620,18 @@ en = "preview: tinymist starting…"
 # ── problem ──────────────────────────────────────────
 
 [[message]]
+# 側欄裏打 :wq：沒有文件可寫（草稿）
+key = "region.nothing-to-write"
+zht = "側欄沒有文件可寫；關掉它是 :q"
+zhs = "侧栏没有文件可写；关掉它是 :q"
+en = "a sidebar has no file to write; :q closes it"
+
+[[message]]
 # 只剩一個區域，關不動了
 key = "region.only-one-left"
 zht = "就剩這一個區域了——要離開編輯器是 :q"
 zhs = "就剩这一个区域了——要离开编辑器是 :q"
-en = "this is the only region left — :q leaves the editor"
+en = "this is the only window left; :q leaves the editor"
 
 [[message]]
 # 别的區域都收了

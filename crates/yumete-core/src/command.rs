@@ -151,12 +151,19 @@ pub enum Command {
     /// `:write [path]` (alias `:w`) — save the current buffer, optionally to a
     /// new path (save-as). `None` saves to the buffer's bound file.
     Write(Option<String>),
-    /// `:quit` (alias `:q`) or `:quit!` / `:q!` — close **this file**, and
-    /// leave the editor only when it was the last one open. Vim's rule and
-    /// helix's. `force` skips the unsaved-changes check.
+    /// `:quit` (alias `:q`) or `:quit!` / `:q!` — close **this region**,
+    /// and leave the editor when it was the last window (a sidebar does not
+    /// count), as helix and vim do (measured 2026-11-03). The tabs stay
+    /// open: `:bc` closes a file. `force` leaves with unsaved tabs.
     Quit {
         force: bool,
     },
+    /// `:quit-window` (vim's `:close`, `:clo`) — close this region, but
+    /// never the last window.
+    QuitWindow,
+    /// `:quit-others` (vim's `:only`, `:on`) — keep this window; the other
+    /// windows and the sidebars close.
+    QuitOthers,
     /// `:quitall` (alias `:qa`) or `:quitall!` / `:qa!` — leave, however many
     /// files are open.
     QuitAll {
@@ -3264,6 +3271,22 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|p| Ok(Command::Quit { force: p.force })),
+    },
+    Entry {
+        name: "quit-window",
+        aliases: &["close", "clo"],
+        help: "cmd.quit.window",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::QuitWindow)),
+    },
+    Entry {
+        name: "quit-others",
+        aliases: &["only", "on"],
+        help: "cmd.quit.others",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::QuitOthers)),
     },
     Entry {
         name: "quit-all",
@@ -7495,7 +7518,7 @@ mod tests {
         // …and two characters is worth knowing however it was arrived at.
         // `:theme` grew two children — `-mode` and `-fill`.
         assert_eq!(row("", "theme"), ":theme (th) +2");
-        assert_eq!(row("", "quit"), ":quit (q) +1");
+        assert_eq!(row("", "quit"), ":quit (q) +3");
         // A **different word** is worth knowing at any length: none of these
         // could be read off the name.
         assert_eq!(row("", "open"), ":open (o e edit)");
@@ -7530,7 +7553,8 @@ mod tests {
             found("discover"),
             ["word-discover", "word-discover-working", "word-discover-project"]
         );
-        assert_eq!(found("close"), ["buffer-close"]);
+        // `close` is vim's `:close` now (2026-11-03), its own alias.
+        assert_eq!(found("close"), ["quit-window"]);
         assert_eq!(found("footnote"), ["markdown-footnote", "markdown-footnote-inline"]);
         // Two commands can share a word, and then both are the answer —
         // **not** the two families they came from, which is what a fold would
@@ -7847,7 +7871,7 @@ mod tests {
         assert!(complete("quit ").is_empty());
         assert_eq!(
             complete("quit").iter().map(|e| e.name).collect::<Vec<_>>(),
-            ["quit", "quit-all"]
+            ["quit", "quit-window", "quit-others", "quit-all"]
         );
         // **`:qa` is in the list as itself** (#363): an alias is another name
         // for the command, not a shortcut to it, so it narrows like a name.

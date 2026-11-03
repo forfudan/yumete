@@ -60,9 +60,9 @@ find = "一行 橫 横 逐行 row"
 [[message]]
 # : 命令選單裏 close 那一項的説明(buffers 組)
 key = "cmd.buffers.close"
-zht = "關掉這一個(`close!` 不管改動)"
-zhs = "关掉这一个(`close!` 不管改动)"
-en = "close this one (`close!` ignores changes)"
+zht = "關掉這一個(`buffer-close!` 不管改動)"
+zhs = "关掉这一个(`buffer-close!` 不管改动)"
+en = "close this file (`buffer-close!` ignores changes)"
 find = "關掉 关掉 關閉 关闭 close bd"
 
 [[message]]
@@ -458,12 +458,12 @@ en = "show the working directory"
 find = "pwd show-directory 工作路徑 工作路径 目錄 目录 在哪"
 
 [[message]]
-# : 命令選單裏 quit 那一項的説明(commands 組)
+# : 命令選單裏 quit 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.quit"
-zht = "關掉這一個文件；只剩一個時纔真的退出(`quit!` 不管改動)"
-zhs = "关掉这一个文件；只剩一个时才真的退出(`quit!` 不管改动)"
-en = "close this file; leave only when it was the last one (`quit!` ignores changes)"
-find = "退出 離開 离开 關閉 关闭 exit close bc"
+zht = "關掉這一區；最後一個窗口就離開編輯器(`quit!` 不管改動)"
+zhs = "关掉这一区；最后一个窗口就离开编辑器(`quit!` 不管改动)"
+en = "close this region; in the last window, leave the editor (`quit!` ignores changes)"
+find = "退出 離開 离开 關閉 关闭 窗口 exit close window"
 
 [[message]]
 # : 命令選單：:read
@@ -1404,6 +1404,22 @@ zht = "每個開着的文件都關掉，然後離開(短寫 `:qa`)"
 zhs = "每个开着的文件都关掉，然后离开(短写 `:qa`)"
 en = "close every open file, then leave (short: :qa)"
 find = "全部退出 全關 退出全部 quit all close everything qa"
+
+[[message]]
+# :quit-others —— vim 的 :only（草稿）
+key = "cmd.quit.others"
+zht = "只留這一個窗口，別的窗口和側欄都關掉(vim 的 `:only`，短寫 `:on`)"
+zhs = "只留这一个窗口，别的窗口和侧栏都关掉(vim 的 `:only`，短写 `:on`)"
+en = "keep only this window; the other windows and the sidebars close (vim's `:only`, short: `:on`)"
+find = "只留這一個 只留这一个 關掉別的 关掉别的 only on"
+
+[[message]]
+# :quit-window —— vim 的 :close（草稿）
+key = "cmd.quit.window"
+zht = "關掉這一區，但不關最後一個窗口(vim 的 `:close`，短寫 `:clo`)"
+zhs = "关掉这一区，但不关最后一个窗口(vim 的 `:close`，短写 `:clo`)"
+en = "close this region, but never the last window (vim's `:close`, short: `:clo`)"
+find = "關閉窗口 关闭窗口 關掉這一區 关掉这一区 close window clo"
 
 [[message]]
 # : 命令選單裏 auto 那一項的説明(reload 組)

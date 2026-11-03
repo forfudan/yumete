@@ -1255,7 +1255,7 @@ en = "next one (Shift-Tab goes back)"
 key = "hint.region.close"
 zht = "關掉這一區"
 zhs = "关掉这一区"
-en = "close this one"
+en = "close this region; the last window leaves"
 
 [[message]]
 # C-w c(vim)：關掉這一區，最後一個窗口不關（草稿）

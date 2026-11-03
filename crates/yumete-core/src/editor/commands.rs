@@ -274,6 +274,14 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Quit { force } => self.quit(force),
+            Command::QuitWindow => {
+                self.close_this_region(false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::QuitOthers => {
+                self.close_other_regions();
+                Ok(CommandOutcome::Continue)
+            }
             Command::QuitAll { force } => self.quit_all(force),
             Command::Substitute {
                 pattern,
@@ -1706,6 +1714,17 @@ impl Editor {
         path: Option<String>,
         only_if_changed: bool,
     ) -> Result<CommandOutcome, EditorError> {
+        // **A sidebar has no file** (vim's, measured 2026-11-03): `:x` and
+        // `ZZ` close it, writing nothing; `:wq` refuses, as vim's E32. They
+        // used to save the window's file behind it, unseen.
+        if self.panel_focus().is_some() {
+            if only_if_changed && path.is_none() {
+                self.close_this_region(false);
+            } else {
+                self.status = say!("region.nothing-to-write");
+            }
+            return Ok(CommandOutcome::Continue);
+        }
         match path.as_deref() {
             Some(path) => {
                 let target = self.here_path(path);
