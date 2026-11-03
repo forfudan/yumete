@@ -16048,6 +16048,75 @@ fn alt_o_in_prose_climbs_the_writing_units() {
     assert_eq!(text(&ed), "甲。乙。\n\n丙。\n");
 }
 
+/// **The writer's follow-ups** (2026-11-03): a clause takes the comma or
+/// colon that ends it, the sentence's last clause stops before its 。, and
+/// a quotation is a rung of its own. `A-n` in select mode stays helix's.
+#[test]
+fn prose_clauses_take_their_commas_and_quotations_are_a_rung() {
+    let text = |ed: &Editor| {
+        let (from, to) = ed.selection();
+        ed.current_buffer().rope().slice(from..to).to_string()
+    };
+    let pieces = |ed: &Editor| -> Vec<String> {
+        ed.sel
+            .iter()
+            .map(|r| {
+                let (from, to) = (r.anchor.min(r.head), r.anchor.max(r.head) + 1);
+                ed.current_buffer().rope().slice(from..to).to_string()
+            })
+            .collect()
+    };
+    let mut ed = markdown("那年冬天，山下起了大雪。\n");
+    press(&mut ed, "miu");
+    assert_eq!(text(&ed), "那年冬天");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "那年冬天，山下起了大雪。", "mi u then A-o is the sentence");
+    ed.on_key(Key::Alt('I'));
+    assert_eq!(pieces(&ed), ["那年冬天，", "山下起了大雪"]);
+    // From the first clause the next one.
+    let mut ed = markdown("那年冬天，山下起了大雪。\n");
+    press(&mut ed, "x");
+    ed.on_key(Key::Alt('I'));
+    ed.on_key(Key::Alt('i'));
+    assert_eq!(text(&ed), "那年冬天，", "{}", ed.status());
+    ed.on_key(Key::Alt('n'));
+    assert_eq!(text(&ed), "山下起了大雪");
+
+    // A quotation.
+    let doc = "他说：「我们走吧，天黑了。」她没回答。\n";
+    let mut ed = markdown(doc);
+    press(&mut ed, "f走;miu");
+    assert_eq!(text(&ed), "我们走吧");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "「我们走吧，天黑了。」", "{}", ed.status());
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "他说：「我们走吧，天黑了。」");
+    ed.on_key(Key::Alt('I'));
+    assert_eq!(pieces(&ed), ["他说：", "「我们走吧，天黑了。」"], "the quotation is one child");
+    let mut ed = markdown(doc);
+    press(&mut ed, "f走;miu");
+    ed.on_key(Key::Alt('o'));
+    ed.on_key(Key::Alt('I'));
+    assert_eq!(pieces(&ed), ["我们走吧，", "天黑了"], "a quotation of one sentence: its clauses");
+    let mut ed = markdown(doc);
+    press(&mut ed, "f走;miu");
+    ed.on_key(Key::Alt('o'));
+    ed.on_key(Key::Alt('p'));
+    assert_eq!(text(&ed), "他说：");
+    // A quotation of two sentences holds them.
+    let mut ed = markdown("「走吧。天黑了。」他说。\n");
+    press(&mut ed, "f走;miu");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "走吧。");
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "「走吧。天黑了。」");
+    ed.on_key(Key::Alt('I'));
+    assert_eq!(pieces(&ed), ["走吧。", "天黑了。"]);
+    ed.on_key(Key::Alt('o'));
+    ed.on_key(Key::Alt('o'));
+    assert_eq!(text(&ed), "「走吧。天黑了。」他说。\n", "then the paragraph");
+}
+
 #[test]
 fn the_jump_list_follows_edits_files_and_windows() {
     // 2026-11-02, after a writer's and a helix/vim user's study.

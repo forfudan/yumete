@@ -9,6 +9,13 @@
 //! is a clause or a sentence (`mi u`, `mi s`) it is the rung above. **Down,
 //! a block's children are its sentences** (or its list items), a sentence's
 //! its clauses: `x A-I` is every sentence in the paragraph.
+//!
+//! The writer's two follow-ups (2026-11-03): **a clause takes the mark that
+//! ends it** when that is a comma, a 、, a semicolon or a colon, so the
+//! clauses of a sentence lie end to end and only its 。 is left over; and
+//! **a quotation is a rung of its own**, 「…」 『…』 “…” with their marks,
+//! between the clauses in it and the sentence around it (or around the
+//! sentences in it). `A-n` `A-p` in select mode stay helix's.
 
 use super::tree_select::TreeStep;
 use super::*;
@@ -17,6 +24,7 @@ use crate::selection::Range;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Kind {
     Clause,
+    Quote,
     Sentence,
     Item,
     Block,
@@ -45,6 +53,15 @@ fn half_open(span: motion::Span) -> Option<(usize, usize)> {
         _ => None,
     }
 }
+
+/// The marks a clause takes with it: those that join clauses, not those
+/// that end a sentence or open and close a quotation.
+fn joins_clauses(c: char) -> bool {
+    matches!(c, '，' | '、' | '；' | '：' | ',' | ';' | ':' | '﹐' | '﹑' | '﹔' | '﹕')
+}
+
+/// The quotation marks, opening and closing.
+const QUOTES: [(char, char); 3] = [('「', '」'), ('『', '』'), ('“', '”')];
 
 /// A list item's first line: `- `, `* `, `+ `, `1. ` or `1) `, after its indent.
 fn list_marker(line: &str) -> Option<usize> {
@@ -104,19 +121,20 @@ impl Editor {
     fn prose_ladder(&self, at: usize) -> Vec<Node> {
         let rope = self.current_buffer().rope();
         let at = at.min(rope.len_chars().saturating_sub(1));
-        let mut out: Vec<Node> = Vec::new();
+        let mut found: Vec<Node> = Vec::new();
         let mut push = |node: Node| {
             if node.to > node.from && node.from <= at && at < node.to.max(node.from + 1) {
-                match out.last() {
-                    Some(last) if !node.holds(last.from, last.to) => {}
-                    _ => out.push(node),
-                }
+                found.push(node);
             }
         };
-        if let Some((from, to)) = half_open(self.clause_span_at(at, false)) {
+        if let Some((from, to)) = self.ladder_clause(at) {
             push(Node { kind: Kind::Clause, from, to });
         }
+        for quote in self.quotes_around(at) {
+            push(quote);
+        }
         if let Some((from, to)) = half_open(self.sentence_span_at(at, false)) {
+            let (from, to) = self.without_stray_quotes(from, to);
             push(Node { kind: Kind::Sentence, from, to });
         }
         let (from, to) = self.paragraph_at(at);
@@ -131,6 +149,151 @@ impl Editor {
             push(Node { kind: Kind::Section, from, to });
         }
         push(Node { kind: Kind::File, from: 0, to: rope.len_chars() });
+        // Smallest first, each rung holding the last: a quotation may be
+        // smaller than its sentence or hold several, and a sentence that
+        // runs across a quotation's end holds neither way and is left out.
+        found.sort_by_key(|n| (n.to - n.from, n.kind));
+        let mut out: Vec<Node> = Vec::new();
+        for node in found {
+            match out.last() {
+                Some(last) if !node.holds(last.from, last.to) => {}
+                _ => out.push(node),
+            }
+        }
+        out
+    }
+
+    /// **The clause at `at`, with the comma or colon that ends it**
+    /// (`mi u`'s span, which leaves the mark out, and the joining marks
+    /// after it).
+    fn ladder_clause(&self, at: usize) -> Option<(usize, usize)> {
+        let (from, mut to) = half_open(self.clause_span_at(at, false))?;
+        let rope = self.current_buffer().rope();
+        while to < rope.len_chars() && joins_clauses(rope.char(to)) {
+            to += 1;
+        }
+        Some((from, to))
+    }
+
+    /// **The quotations around `at`** within its paragraph, innermost
+    /// first, each from its opening mark through its closing one.
+    fn quotes_around(&self, at: usize) -> Vec<Node> {
+        let rope = self.current_buffer().rope();
+        let (start, stop) = self.paragraph_at(at);
+        let mut out = Vec::new();
+        for (open, close) in QUOTES {
+            // Opening marks before `at` not yet closed, innermost last.
+            let mut opened: Vec<usize> = Vec::new();
+            for i in start..at.min(stop) {
+                match rope.char(i) {
+                    c if c == open => opened.push(i),
+                    c if c == close => {
+                        opened.pop();
+                    }
+                    _ => {}
+                }
+            }
+            if rope.char(at.min(rope.len_chars().saturating_sub(1))) == open && at < stop {
+                opened.push(at);
+            }
+            // Close them from `at` on, innermost first.
+            let mut depth = 0usize;
+            let from_here = match opened.last() == Some(&at) {
+                true => at + 1,
+                false => at,
+            };
+            for i in from_here..stop {
+                let Some(&first) = opened.last() else { break };
+                match rope.char(i) {
+                    c if c == open => depth += 1,
+                    c if c == close && depth > 0 => depth -= 1,
+                    c if c == close => {
+                        out.push(Node { kind: Kind::Quote, from: first, to: i + 1 });
+                        opened.pop();
+                    }
+                    _ => {}
+                }
+            }
+        }
+        out
+    }
+
+    /// `from..to` less a quotation mark at either end whose other half is
+    /// outside it: the first sentence of 「走吧。天黑了。」 is 走吧。, as
+    /// the second is 天黑了。.
+    fn without_stray_quotes(&self, mut from: usize, mut to: usize) -> (usize, usize) {
+        let rope = self.current_buffer().rope();
+        let closed_within = |open: char, close: char, from: usize, to: usize| {
+            let mut depth = 0usize;
+            for i in from..to {
+                match rope.char(i) {
+                    c if c == open => depth += 1,
+                    c if c == close => {
+                        depth = depth.saturating_sub(1);
+                        if depth == 0 {
+                            return true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            false
+        };
+        let opened_within = |open: char, close: char, from: usize, to: usize| {
+            let mut depth = 0usize;
+            for i in (from..to).rev() {
+                match rope.char(i) {
+                    c if c == close => depth += 1,
+                    c if c == open => {
+                        depth = depth.saturating_sub(1);
+                        if depth == 0 {
+                            return true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            false
+        };
+        while from < to {
+            match QUOTES.iter().find(|(open, _)| *open == rope.char(from)) {
+                Some(&(open, close)) if !closed_within(open, close, from, to) => from += 1,
+                _ => break,
+            }
+        }
+        while to > from {
+            match QUOTES.iter().find(|(_, close)| *close == rope.char(to - 1)) {
+                Some(&(open, close)) if !opened_within(open, close, from, to) => to -= 1,
+                _ => break,
+            }
+        }
+        (from, to)
+    }
+
+    /// The quotations wholly inside `from..to`, outermost only.
+    fn quotes_in(&self, from: usize, to: usize) -> Vec<Node> {
+        let rope = self.current_buffer().rope();
+        let mut out: Vec<Node> = Vec::new();
+        for (open, close) in QUOTES {
+            let mut opened: Vec<usize> = Vec::new();
+            for i in from..to {
+                match rope.char(i) {
+                    c if c == open => opened.push(i),
+                    c if c == close => {
+                        if let Some(first) = opened.pop() {
+                            if opened.is_empty() {
+                                out.push(Node { kind: Kind::Quote, from: first, to: i + 1 });
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        // A quotation inside another of a different kind is not outermost.
+        let all = out.clone();
+        out.retain(|q| !all.iter().any(|o| o != q && o.holds(q.from, q.to)));
+        out.sort_by_key(|q| q.from);
         out
     }
 
@@ -157,10 +320,10 @@ impl Editor {
                 continue;
             }
             let span = match kind {
-                Kind::Clause => self.clause_span_at(at, false),
-                _ => self.sentence_span_at(at, false),
+                Kind::Clause => self.ladder_clause(at),
+                _ => half_open(self.sentence_span_at(at, false)).map(|(a, b)| self.without_stray_quotes(a, b)),
             };
-            match half_open(span) {
+            match span {
                 Some((a, b)) if b > at => {
                     out.push(Node { kind, from: a.max(from), to: b.min(to) });
                     at = b;
@@ -171,6 +334,19 @@ impl Editor {
         out
     }
 
+    /// `runs` with each quotation wholly inside `from..to` standing for the
+    /// runs within it, as one child.
+    fn with_quotes(&self, runs: Vec<Node>, from: usize, to: usize) -> Vec<Node> {
+        let quotes = self.quotes_in(from, to);
+        if quotes.is_empty() {
+            return runs;
+        }
+        let mut out: Vec<Node> = runs.into_iter().filter(|r| !quotes.iter().any(|q| r.from < q.to && q.from < r.to)).collect();
+        out.extend(quotes);
+        out.sort_by_key(|n| n.from);
+        out
+    }
+
     /// **A unit's children**: a file's or a section's blocks and sections
     /// (a heading line is a block of its own), a list's items, a block's or
     /// an item's sentences, a sentence's clauses.
@@ -178,7 +354,16 @@ impl Editor {
         let rope = self.current_buffer().rope();
         match node.kind {
             Kind::Clause => Vec::new(),
-            Kind::Sentence => self.runs_in(node.from, node.to, Kind::Clause),
+            // A quotation's sentences, or its clauses when it is one.
+            Kind::Quote => {
+                let (from, to) = (node.from + 1, node.to.saturating_sub(1).max(node.from + 1));
+                let sentences = self.with_quotes(self.runs_in(from, to, Kind::Sentence), from, to);
+                match sentences.len() > 1 {
+                    true => sentences,
+                    false => self.with_quotes(self.runs_in(from, to, Kind::Clause), from, to),
+                }
+            }
+            Kind::Sentence => self.with_quotes(self.runs_in(node.from, node.to, Kind::Clause), node.from, node.to),
             Kind::Item => self.runs_in(node.from, node.to, Kind::Sentence),
             Kind::Block => {
                 let mut items = Vec::new();
@@ -247,6 +432,12 @@ impl Editor {
                 .prose_ladder(from)
                 .into_iter()
                 .filter(|n| !caret || n.kind >= Kind::Item)
+                // `mi u` and then `A-o` is the sentence, not the same clause
+                // with its comma.
+                .filter(|n| {
+                    let rope = self.current_buffer().rope();
+                    n.kind != Kind::Clause || n.from != from || !(to..n.to).all(|i| joins_clauses(rope.char(i)))
+                })
                 .find(|n| n.holds(from, to) && (n.from, n.to) != (from, to))
                 .map(span)
                 .into_iter()
