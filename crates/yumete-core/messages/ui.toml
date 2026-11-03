@@ -36,7 +36,7 @@ en = "fold level {0}"
 [[message]]
 # 折疊鍵按在没有折疊的地方（草稿）
 key = "fold.none-here"
-zht = "這裏没有折疊"
+zht = "這裏沒有折疊"
 zhs = "这里没有折叠"
 en = "no fold here"
 
@@ -301,18 +301,18 @@ zhs = "这一排里有窗口又分开了，轮不动"
 en = "cannot rotate: a window in this row is split"
 
 [[message]]
-# 關掉了那一半
+# 關掉了那一半（草稿）
 key = "pane.closed"
-zht = "關掉了那一半"
-zhs = "关掉了那一半"
-en = "that region is closed"
+zht = "關掉了一個窗口"
+zhs = "关掉了一个窗口"
+en = "window closed"
 
 [[message]]
-# 另一半顯示的檔案已經關掉了
+# 另一半顯示的檔案已經關掉了（草稿）
 key = "pane.file-was-closed"
-zht = "那一半的文件已經關掉了"
-zhs = "那一半的文件已经关掉了"
-en = "the file that region was showing is closed"
+zht = "那個窗口的文件已經關掉了"
+zhs = "那个窗口的文件已经关掉了"
+en = "the file that window was showing is closed"
 
 [[message]]
 # 狀態欄：分窗會讓一個窗口小得放不下字，没有分（草稿）
@@ -627,17 +627,17 @@ zhs = "侧栏没有文件可写；关掉它是 :q"
 en = "a sidebar has no file to write; :q closes it"
 
 [[message]]
-# 只剩一個區域，關不動了
+# 只剩一個區域，關不動了（草稿）
 key = "region.only-one-left"
-zht = "就剩這一個區域了——要離開編輯器是 :q"
-zhs = "就剩这一个区域了——要离开编辑器是 :q"
+zht = "就剩這一個窗口了；要離開編輯器是 :q"
+zhs = "就剩这一个窗口了；要离开编辑器是 :q"
 en = "this is the only window left; :q leaves the editor"
 
 [[message]]
-# 别的區域都收了
+# 别的區域都收了（草稿）
 key = "region.only-this-one"
-zht = "别的區域都收了"
-zhs = "别的区域都收了"
+zht = "別的區域都關掉了"
+zhs = "别的区域都关掉了"
 en = "every other region is closed"
 
 [[message]]

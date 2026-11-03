@@ -5,16 +5,16 @@
 [[message]]
 # z 那一層：z^（草稿）
 key = "hint.aim.above-to-bottom"
-zht = "屏幕上面那一行放到底下"
-zhs = "屏幕上面那一行放到底下"
-en = "the line above the page to the bottom"
+zht = "上一頁最後一行放到底下"
+zhs = "上一页最后一行放到底下"
+en = "previous page's last line to bottom"
 
 [[message]]
 # z 那一層：z+（草稿）
 key = "hint.aim.below-to-top"
-zht = "屏幕下面那一行放到頂上"
-zhs = "屏幕下面那一行放到顶上"
-en = "the line below the page to the top"
+zht = "下一頁第一行放到頂上"
+zhs = "下一页第一行放到顶上"
+en = "next page's first line to top"
 
 [[message]]
 # z 那一層：zb
@@ -26,37 +26,37 @@ en = "bottom"
 [[message]]
 # z 那一層：z-（草稿）
 key = "hint.aim.bottom-past-indent"
-zht = "底下，光標到縮進之後"
-zhs = "底下，光标到缩进之后"
-en = "bottom, past the indent"
+zht = "這一行放到底下，光標到縮進之後"
+zhs = "这一行放到底下，光标到缩进之后"
+en = "line to bottom, cursor past indent"
 
 [[message]]
 # z 那一層：zs（草稿）
 key = "hint.aim.cursor-left-edge"
-zht = "光標那一列放到左邊"
-zhs = "光标那一列放到左边"
-en = "the cursor to the left edge"
+zht = "光標那一列放到最左邊"
+zhs = "光标那一列放到最左边"
+en = "cursor's column to left edge"
 
 [[message]]
 # z 那一層：ze（草稿）
 key = "hint.aim.cursor-right-edge"
-zht = "光標那一列放到右邊"
-zhs = "光标那一列放到右边"
-en = "the cursor to the right edge"
+zht = "光標那一列放到最右邊"
+zhs = "光标那一列放到最右边"
+en = "cursor's column to right edge"
 
 [[message]]
 # z 那一層：z C-d（草稿）
 key = "hint.aim.half-page-down"
-zht = "下半頁"
-zhs = "下半页"
-en = "half a page down"
+zht = "往下翻半頁"
+zhs = "往下翻半页"
+en = "half page down"
 
 [[message]]
 # z 那一層：z C-u（草稿）
 key = "hint.aim.half-page-up"
-zht = "上半頁"
-zhs = "上半页"
-en = "half a page up"
+zht = "往上翻半頁"
+zhs = "往上翻半页"
+en = "half page up"
 
 [[message]]
 # z 那一層：zz
@@ -68,9 +68,9 @@ en = "center"
 [[message]]
 # z 那一層：z.（草稿）
 key = "hint.aim.middle-past-indent"
-zht = "中間，光標到縮進之後"
-zhs = "中间，光标到缩进之后"
-en = "middle, past the indent"
+zht = "這一行放到中間，光標到縮進之後"
+zhs = "这一行放到中间，光标到缩进之后"
+en = "line to center, cursor past indent"
 
 [[message]]
 # z 那一層：helix 的 zm（草稿）
@@ -82,30 +82,30 @@ en = "center sideways"
 [[message]]
 # z 那一層：z C-f（草稿）
 key = "hint.aim.page-down"
-zht = "下一頁"
-zhs = "下一页"
-en = "a page down"
+zht = "往下翻一頁"
+zhs = "往下翻一页"
+en = "page down"
 
 [[message]]
 # z 那一層：z C-b（草稿）
 key = "hint.aim.page-up"
-zht = "上一頁"
-zhs = "上一页"
-en = "a page up"
+zht = "往上翻一頁"
+zhs = "往上翻一页"
+en = "page up"
 
 [[message]]
 # z 那一層：zj（草稿）
 key = "hint.aim.scroll-down"
 zht = "往下滾一行"
 zhs = "往下滚一行"
-en = "scroll down"
+en = "scroll down a line"
 
 [[message]]
 # z 那一層：zk（草稿）
 key = "hint.aim.scroll-up"
 zht = "往上滾一行"
 zhs = "往上滚一行"
-en = "scroll up"
+en = "scroll up a line"
 
 [[message]]
 # z 那一層的小表：標題
@@ -124,37 +124,37 @@ en = "top"
 [[message]]
 # z 那一層：z<CR>（草稿）
 key = "hint.aim.top-past-indent"
-zht = "頂上，光標到縮進之後"
-zhs = "顶上，光标到缩进之后"
-en = "top, past the indent"
+zht = "這一行放到頂上，光標到縮進之後"
+zhs = "这一行放到顶上，光标到缩进之后"
+en = "line to top, cursor past indent"
 
 [[message]]
 # z 那一層：zH（草稿）
 key = "hint.aim.view-half-left"
-zht = "視圖往左半頁"
-zhs = "视图往左半页"
-en = "the view half a page left"
+zht = "視圖往左半屏"
+zhs = "视图往左半屏"
+en = "view half a screen left"
 
 [[message]]
 # z 那一層：zL（草稿）
 key = "hint.aim.view-half-right"
-zht = "視圖往右半頁"
-zhs = "视图往右半页"
-en = "the view half a page right"
+zht = "視圖往右半屏"
+zhs = "视图往右半屏"
+en = "view half a screen right"
 
 [[message]]
 # z 那一層：zh（草稿）
 key = "hint.aim.view-left"
-zht = "視圖往左一欄"
-zhs = "视图往左一栏"
-en = "the view a column left"
+zht = "視圖往左一列"
+zhs = "视图往左一列"
+en = "view one column left"
 
 [[message]]
 # z 那一層：zl（草稿）
 key = "hint.aim.view-right"
-zht = "視圖往右一欄"
-zhs = "视图往右一栏"
-en = "the view a column right"
+zht = "視圖往右一列"
+zhs = "视图往右一列"
+en = "view one column right"
 
 [[message]]
 # 提示欄：取消
@@ -441,14 +441,14 @@ en = "close every fold (vim's zM)"
 key = "hint.fold.create"
 zht = "做一個折疊(vim 的 zf，後面跟移動)"
 zhs = "做一个折叠(vim 的 zf，后面跟移动)"
-en = "make a fold over a motion (vim's zf)"
+en = "make a fold (vim's zf, then a motion)"
 
 [[message]]
 # z / [ ] 菜單：create_fold_lines（草稿）
 key = "hint.fold.create-lines"
-zht = "把計數那麼多行做成折疊(vim 的 zF)"
-zhs = "把计数那么多行做成折叠(vim 的 zF)"
-en = "make a fold over count lines (vim's zF)"
+zht = "把 N 行做成折疊(vim 的 zF，用計數)"
+zhs = "把 N 行做成折叠(vim 的 zF，用计数)"
+en = "make a fold of N lines (vim's zF)"
 
 [[message]]
 # z 菜單：helix 下的 zf（草稿）
@@ -467,9 +467,9 @@ en = "delete the fold here, not the text (vim's zd)"
 [[message]]
 # z / [ ] 菜單：delete_folds_recursively（草稿）
 key = "hint.fold.delete-all-here"
-zht = "刪掉這裏的所有折疊(vim 的 zD)"
-zhs = "删掉这里的所有折叠(vim 的 zD)"
-en = "delete every fold here (vim's zD)"
+zht = "刪掉這裏所有 zf 做的折疊(vim 的 zD)"
+zhs = "删掉这里所有 zf 做的折叠(vim 的 zD)"
+en = "delete every fold made with zf here (vim's zD)"
 
 [[message]]
 # z / [ ] 菜單：delete_all_folds（草稿）
@@ -483,21 +483,21 @@ en = "delete every fold made with zf (vim's zE)"
 key = "hint.fold.end"
 zht = "到所在折疊的末尾(vim 的 ]z)"
 zhs = "到所在折叠的末尾(vim 的 ]z)"
-en = "to the end of the open fold here (vim's ]z)"
+en = "to this fold's end (vim's ]z)"
 
 [[message]]
 # z 菜單：fold_less（草稿）
 key = "hint.fold.less"
 zht = "多打開一層(vim 的 zr)"
 zhs = "多打开一层(vim 的 zr)"
-en = "fold one level less (vim's zr)"
+en = "open one more level (vim's zr)"
 
 [[message]]
 # z 菜單：fold_more（草稿）
 key = "hint.fold.more"
 zht = "多合上一層(vim 的 zm)"
 zhs = "多合上一层(vim 的 zm)"
-en = "fold one level more (vim's zm)"
+en = "close one more level (vim's zm)"
 
 [[message]]
 # z / [ ] 菜單：goto_next_fold（草稿）
@@ -509,22 +509,22 @@ en = "to the next fold's start (vim's zj)"
 [[message]]
 # z / [ ] 菜單：disable_folds（草稿）
 key = "hint.fold.off"
-zht = "暫時全部展開(vim 的 zn)"
-zhs = "暂时全部展开(vim 的 zn)"
-en = "every fold open, kept (vim's zn)"
+zht = "暫時停用折疊(vim 的 zn)"
+zhs = "暂时停用折叠(vim 的 zn)"
+en = "folds off for now (vim's zn)"
 
 [[message]]
 # z / [ ] 菜單：enable_folds（草稿）
 key = "hint.fold.on"
-zht = "折疊恢復原樣(vim 的 zN)"
-zhs = "折叠恢复原样(vim 的 zN)"
-en = "folds back as they were (vim's zN)"
+zht = "恢復折疊(vim 的 zN)"
+zhs = "恢复折叠(vim 的 zN)"
+en = "folds back on (vim's zN)"
 
 [[message]]
 # z / [ ] 菜單：toggle_folds_enabled（草稿）
 key = "hint.fold.on-off"
-zht = "折疊停用或恢復(vim 的 zi)"
-zhs = "折叠停用或恢复(vim 的 zi)"
+zht = "停用或恢復折疊(vim 的 zi)"
+zhs = "停用或恢复折叠(vim 的 zi)"
 en = "folds off or back on (vim's zi)"
 
 [[message]]
@@ -558,23 +558,23 @@ en = "to the previous fold's end (vim's zk)"
 [[message]]
 # z 菜單：reapply_fold_level_and_view（草稿）
 key = "hint.fold.reapply"
-zht = "折疊回到層級，再打開到光標那一行(vim 的 zx)"
-zhs = "折叠回到层级，再打开到光标那一行(vim 的 zx)"
-en = "folds back to the level, then open to the cursor (vim's zx)"
+zht = "按層級重新折疊，再露出光標所在行(vim 的 zx)"
+zhs = "按层级重新折叠，再露出光标所在行(vim 的 zx)"
+en = "refold to the fold level, then show the cursor line (vim's zx)"
 
 [[message]]
 # z 菜單：reapply_fold_level（草稿）
 key = "hint.fold.reapply-only"
-zht = "折疊回到層級(vim 的 zX)"
-zhs = "折叠回到层级(vim 的 zX)"
-en = "folds back to the level (vim's zX)"
+zht = "按層級重新折疊(vim 的 zX)"
+zhs = "按层级重新折叠(vim 的 zX)"
+en = "refold to the fold level (vim's zX)"
 
 [[message]]
 # z / [ ] 菜單：goto_fold_start（草稿）
 key = "hint.fold.start"
 zht = "到所在折疊的開頭(vim 的 [z)"
 zhs = "到所在折叠的开头(vim 的 [z)"
-en = "to the start of the open fold here (vim's [z)"
+en = "to this fold's start (vim's [z)"
 
 [[message]]
 # z / [ ] 菜單：toggle_fold（草稿）
@@ -593,9 +593,9 @@ en = "open or close every fold here (vim's zA)"
 [[message]]
 # z / [ ] 菜單：open_folds_to_cursor（草稿）
 key = "hint.fold.view"
-zht = "打開到看得見光標那一行(vim 的 zv)"
-zhs = "打开到看得见光标那一行(vim 的 zv)"
-en = "open enough to see the cursor's line (vim's zv)"
+zht = "打開折疊，露出光標所在行(vim 的 zv)"
+zhs = "打开折叠，露出光标所在行(vim 的 zv)"
+en = "open folds to show the cursor line (vim's zv)"
 
 [[message]]
 # 提示：腳注
@@ -1251,18 +1251,18 @@ zhs = "换一条(Shift-Tab 往回)"
 en = "next one (Shift-Tab goes back)"
 
 [[message]]
-# C-w q：關掉這一區
+# C-w q：關掉這一區（草稿）
 key = "hint.region.close"
-zht = "關掉這一區"
-zhs = "关掉这一区"
-en = "close this region; the last window leaves"
+zht = "關掉這一區(最後一個窗口就離開編輯器)"
+zhs = "关掉这一区(最后一个窗口就离开编辑器)"
+en = "close this region (in the last window, quit)"
 
 [[message]]
 # C-w c(vim)：關掉這一區，最後一個窗口不關（草稿）
 key = "hint.region.close-not-last"
 zht = "關掉這一區(最後一個不關)"
 zhs = "关掉这一区(最后一个不关)"
-en = "close this one (never the last)"
+en = "close this region (never the last window)"
 
 [[message]]
 # C-w x(vim)：和下一個窗口對調（草稿）
@@ -1356,11 +1356,11 @@ zhs = "下一个"
 en = "next"
 
 [[message]]
-# C-w o：只留這一區
+# C-w o：只留這一區（草稿）
 key = "hint.region.only"
-zht = "只留這一區"
-zhs = "只留这一区"
-en = "keep only this one"
+zht = "只留這個窗口"
+zhs = "只留这个窗口"
+en = "keep only this window"
 
 [[message]]
 # C-w W(vim)：上一個區域（草稿）

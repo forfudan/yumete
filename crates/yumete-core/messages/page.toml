@@ -519,17 +519,17 @@ en = "wheel: {0} line(s) a notch"
 # ── word ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 折行關掉
+# 折行關掉（草稿）
 key = "wrap.off"
-zht = "折行：關(長段落成一行，頁面跟着光標左右走)"
-zhs = "折行：关(长段落成一行，页面跟着光标左右走)"
-en = "soft wrap: off — a long paragraph is one row, and the page follows the caret"
+zht = "換行：關(長段落成一行，視圖跟着光標左右走)"
+zhs = "换行：关(长段落成一行，视图跟着光标左右走)"
+en = "soft wrap: off; a long paragraph is one row and the view follows the caret"
 
 [[message]]
-# 折行打開
+# 折行打開（草稿）
 key = "wrap.on"
-zht = "折行：開"
-zhs = "折行：开"
+zht = "換行：開"
+zhs = "换行：开"
 en = "soft wrap: on"
 
 [[message]]

@@ -930,10 +930,10 @@ zhs = "全窗表格只走这张表——␣t q 交回窗口，␣t ] 去下一�
 en = "the whole-window table holds this table — ␣t q gives the window back, ␣t ] goes to the next"
 
 [[message]]
-# t w 的第一檔：把過寬的格子折到下面幾行
+# t w 的第一檔：把過寬的格子折到下面幾行（草稿）
 key = "table.wrap-on"
-zht = "單元格軟折行"
-zhs = "单元格软折行"
+zht = "單元格自動換行"
+zhs = "单元格自动换行"
 en = "cells: soft-wrapped"
 
 [[message]]

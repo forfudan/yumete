@@ -1779,12 +1779,12 @@ zhs = "换视图(往回)"
 en = "the previous view in this slot"
 
 [[message]]
-# :keymap-actions 那張表裏這一行寫什麽
+# :keymap-actions 那張表裏這一行寫什麽（草稿）
 key = "action.quit"
-zht = "關掉這一個"
-zhs = "关掉这一个"
+zht = "關掉這一區；最後一個窗口就離開編輯器"
+zhs = "关掉这一区；最后一个窗口就离开编辑器"
 en = "close this region; in the last window, leave the editor"
-find = "關 关 退出 關掉 关掉 quit close"
+find = "關 关 退出 關掉 关掉 離開 离开 窗口 quit close window"
 
 [[message]]
 # 命令說明：record_macro（草稿）
@@ -2479,9 +2479,9 @@ find = "縮進 缩进 左移 減少 减少 unindent outdent"
 [[message]]
 # 命令說明：view_mode（草稿）
 key = "action.view-mode"
-zht = "視圖組：把光標行放到屏幕頂、中、底"
-zhs = "视图组：把光标行放到屏幕顶、中、底"
-en = "the view group: put the cursor line at the top, middle or bottom"
+zht = "視圖組：放光標行、滾屏、折疊"
+zhs = "视图组：放光标行、滚屏、折叠"
+en = "the view group: place the cursor line, scroll, fold"
 
 [[message]]
 # 命令說明：vim_append_mode（草稿）
@@ -3013,9 +3013,9 @@ en = "folds by heading"
 [[message]]
 # 風味項：標題折疊的說明（草稿）
 key = "keys.flavor.item.heading-folds.hint"
-zht = "開：Markdown 與 Typst 的每個標題都是一個折疊，蓋住它那一節，開始時全開着。關：照 vim，只有 zf 做的折疊。"
-zhs = "开：Markdown 与 Typst 的每个标题都是一个折叠，盖住它那一节，开始时全开着。关：照 vim，只有 zf 做的折叠。"
-en = "On: every Markdown and Typst heading is a fold over its section, all open at first. Off: vim's, only the folds zf makes."
+zht = "開：Markdown 與 Typst 每個標題下的那一節是一個折疊，開始時全開着。關：照 vim，只有 zf 做的折疊。"
+zhs = "开：Markdown 与 Typst 每个标题下的那一节是一个折叠，开始时全开着。关：照 vim，只有 zf 做的折叠。"
+en = "On: each Markdown or Typst heading folds its section; all start open. Off: vim's, only folds made with zf."
 
 [[message]]
 # 風味項：helix 下的折疊鍵（草稿）
@@ -3027,9 +3027,9 @@ en = "fold keys under helix"
 [[message]]
 # 風味項：helix 下的折疊鍵的說明（草稿）
 key = "keys.flavor.item.helix-fold-keys.hint"
-zht = "開：helix 下 za 開合折疊，zR 全開，zM 全合，zf 把選中的行做成折疊，同 vim。關：這幾個鍵空着，折疊只用命令。"
-zhs = "开：helix 下 za 开合折叠，zR 全开，zM 全合，zf 把选中的行做成折叠，同 vim。关：这几个键空着，折叠只用命令。"
-en = "On: under helix, za opens or closes a fold, zR opens all, zM closes all, zf makes a fold of the selected lines, as vim's. Off: unbound; folds by command only."
+zht = "開：helix 下也有 vim 的 za 開合折疊、zR 全開、zM 全合；zf 把選中的行做成折疊。關：這幾個鍵空着，只能用命令折疊。"
+zhs = "开：helix 下也有 vim 的 za 开合折叠、zR 全开、zM 全合；zf 把选中的行做成折叠。关：这几个键空着，只能用命令折叠。"
+en = "On: vim's za, zR and zM under helix (open or close a fold, open all, close all); zf makes a fold of the selected lines. Off: unbound; folds by command only."
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）

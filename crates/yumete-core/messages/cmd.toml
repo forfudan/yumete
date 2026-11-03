@@ -58,12 +58,12 @@ en = "row by row — this is what `/` does"
 find = "一行 橫 横 逐行 row"
 
 [[message]]
-# : 命令選單裏 close 那一項的説明(buffers 組)
+# : 命令選單裏 close 那一項的説明(buffers 組)（草稿）
 key = "cmd.buffers.close"
-zht = "關掉這一個(`buffer-close!` 不管改動)"
-zhs = "关掉这一个(`buffer-close!` 不管改动)"
+zht = "關掉這個文件(`buffer-close!` 不管改動)"
+zhs = "关掉这个文件(`buffer-close!` 不管改动)"
 en = "close this file (`buffer-close!` ignores changes)"
-find = "關掉 关掉 關閉 关闭 close bd"
+find = "關掉 关掉 關閉 关闭 文件 close bd buffer"
 
 [[message]]
 # : 命令選單裏 next 那一項的説明(buffers 組)
@@ -463,7 +463,7 @@ key = "cmd.commands.quit"
 zht = "關掉這一區；最後一個窗口就離開編輯器(`quit!` 不管改動)"
 zhs = "关掉这一区；最后一个窗口就离开编辑器(`quit!` 不管改动)"
 en = "close this region; in the last window, leave the editor (`quit!` ignores changes)"
-find = "退出 離開 离开 關閉 关闭 窗口 exit close window"
+find = "退出 離開 离开 關閉 关闭 關掉 关掉 窗口 區域 区域 exit close window quit q"
 
 [[message]]
 # : 命令選單：:read
@@ -1038,10 +1038,10 @@ en = "off: helix or vim as upstream has it"
 [[message]]
 # :view-fold：把選中的行做成一個折疊（草稿）
 key = "cmd.fold.make"
-zht = "把選中的行做成一個折疊"
-zhs = "把选中的行做成一个折叠"
-en = "fold the selected lines"
-find = "折疊 折叠 收起 fold zf"
+zht = "把選中的行做成折疊"
+zhs = "把选中的行做成折叠"
+en = "make a fold of the selected lines"
+find = "折疊 折叠 收起 選中 选中 fold zf selection"
 
 [[message]]
 # : 命令選單裏 inline 那一項的説明(footnote-kinds 組)
@@ -1410,8 +1410,8 @@ find = "全部退出 全關 退出全部 quit all close everything qa"
 key = "cmd.quit.others"
 zht = "只留這一個窗口，別的窗口和側欄都關掉(vim 的 `:only`，短寫 `:on`)"
 zhs = "只留这一个窗口，别的窗口和侧栏都关掉(vim 的 `:only`，短写 `:on`)"
-en = "keep only this window; the other windows and the sidebars close (vim's `:only`, short: `:on`)"
-find = "只留這一個 只留这一个 關掉別的 关掉别的 only on"
+en = "keep only this window; close other windows and sidebars (vim's `:only`, short: `:on`)"
+find = "只留這一個 只留这一个 關掉別的 关掉别的 窗口 側欄 侧栏 only on window sidebar"
 
 [[message]]
 # :quit-window —— vim 的 :close（草稿）
