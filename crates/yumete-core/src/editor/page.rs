@@ -852,6 +852,7 @@ impl Editor {
             jumps: self.jumps.clone(),
             jump_at: self.jump_at,
             seen: self.seen_here.clone(),
+            preview: true,
         };
         match self.other_window() {
             Some(window) => {
@@ -919,6 +920,7 @@ impl Editor {
             jumps: self.jumps.clone(),
             jump_at: self.jump_at,
             seen: self.seen_here.clone(),
+            preview: false,
         };
         let Some(fresh) = self.windows.split(self.live, how) else {
             return false;
@@ -1069,6 +1071,11 @@ impl Editor {
             return false;
         }
         self.panes.remove(&window);
+        // Its folds go with it (review, 2026-11-03: they were kept in every
+        // buffer and every undo point, and shifted on every edit).
+        for buffer in &mut self.buffers {
+            buffer.forget_folds(window);
+        }
         true
     }
 
@@ -1109,6 +1116,7 @@ impl Editor {
             jumps: Vec::new(),
             jump_at: 0,
             seen: Vec::new(),
+            preview: false,
         };
         // The place is clamped rather than trusted: the other pane may have
         // been edited while this one was not looking — and the file it names
@@ -1130,6 +1138,9 @@ impl Editor {
             Some(_) => {}
             None => {
                 self.windows.close(window);
+                for buffer in &mut self.buffers {
+                    buffer.forget_folds(window);
+                }
                 self.status = say!("pane.file-was-closed");
                 return false;
             }

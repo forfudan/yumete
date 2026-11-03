@@ -193,10 +193,19 @@ impl Editor {
                         true => head,
                         false => pos,
                     }),
+                    // vim's cursor goes to the match's first character
+                    // (review, 2026-11-03: it stood on the last, so `/bar`
+                    // then `x` took the `r`).
+                    (false, true) => {
+                        self.sel.set_anchor(pos);
+                        self.sel.set_head(pos);
+                        let merged = self.sel.normalize();
+                        self.say_the_merge(merged);
+                    }
                     // The primary moves to the match and the others stay, as
                     // helix's `Movement::Move` does — and if it lands on one of
                     // them, the two are one.
-                    (false, _) => {
+                    (false, false) => {
                         self.sel.set_anchor(pos);
                         self.sel.set_head(head);
                         let merged = self.sel.normalize();

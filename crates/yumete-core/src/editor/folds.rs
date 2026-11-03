@@ -44,7 +44,9 @@ impl FoldSpan {
 /// The folds of the window and buffer in view, worked out once per change.
 #[derive(Debug, Default)]
 pub(super) struct FoldView {
-    key: (u64, u64, u64, u64, bool),
+    /// The syntax too: `:syntax` changes which lines are headings without
+    /// an edit (review, 2026-11-03).
+    key: (u64, u64, u64, u64, bool, crate::syntax::Syntax),
     /// Outermost first: by first line, the longer of two that start on one
     /// line before the shorter.
     pub(super) spans: Vec<FoldSpan>,
@@ -58,7 +60,7 @@ impl Editor {
     pub(super) fn fold_view(&self) -> std::cell::Ref<'_, FoldView> {
         let buffer = self.current_buffer();
         let headings = self.flavor_on(yumete_cjk::FlavorItem::HeadingFolds) && self.lists_here();
-        let key = (buffer.id(), buffer.revision(), self.folds_window(), self.fold_generation, headings);
+        let key = (buffer.id(), buffer.revision(), self.folds_window(), self.fold_generation, headings, buffer.syntax());
         let stale = self.fold_view.borrow().as_ref().is_none_or(|view| view.key != key);
         if stale {
             let view = self.work_out_folds(key, headings);
@@ -73,7 +75,7 @@ impl Editor {
         self.viewing.get().map_or(self.live, |v| v.window)
     }
 
-    fn work_out_folds(&self, key: (u64, u64, u64, u64, bool), headings: bool) -> FoldView {
+    fn work_out_folds(&self, key: (u64, u64, u64, u64, bool, crate::syntax::Syntax), headings: bool) -> FoldView {
         let buffer = self.current_buffer();
         let rope = buffer.rope();
         let len = rope.len_chars();
@@ -181,8 +183,10 @@ impl Editor {
         // half a cell wide would be a row each: the vertical page measures
         // in characters and fills with ︙.
         let vertical = self.layout() == Layout::Vertical;
+        // Rows down a 縱, packed as the page packs them: `104` is one row
+        // there, and counted as three it cut the heading short (review).
         let size = |text: &str| match vertical {
-            true => yumete_cjk::graphemes(text).count(),
+            true => crate::zong::slot_count(text, self.tatechuyoko),
             false => yumete_cjk::str_width(text),
         };
         let dot = if vertical { "︙" } else { "·" };
@@ -446,7 +450,9 @@ impl Editor {
             self.current_buffer_mut().folds_mut(window).disabled = false;
             self.fold_generation += 1;
         }
-        self.apply_fold_level(level.unwrap_or(deepest));
+        // Unset, vim's 'foldlevel' is 0 (review, 2026-11-03: it opened all).
+        let unset = if self.vim_keymap() { 0 } else { deepest };
+        self.apply_fold_level(level.unwrap_or(unset));
         match view {
             true => self.fold_view_cursor(),
             false => self.fold_stays_closed = true,
@@ -519,14 +525,23 @@ impl Editor {
         };
         let window = self.live;
         match which {
-            FoldDelete::All => self.current_buffer_mut().folds_mut(window).manual.clear(),
+            FoldDelete::All => {
+                let set = self.current_buffer_mut().folds_mut(window);
+                let ids: Vec<u64> = set.manual.iter().map(|f| f.id).collect();
+                set.deleted.extend(ids);
+                set.manual.clear();
+            }
             _ if ids.is_empty() => {
                 return match here.is_empty() {
                     true => self.no_fold_here(),
                     false => self.status = say!("fold.not-made-with-zf"),
                 };
             }
-            _ => self.current_buffer_mut().folds_mut(window).manual.retain(|f| !ids.contains(&f.id)),
+            _ => {
+                let set = self.current_buffer_mut().folds_mut(window);
+                set.deleted.extend(ids.iter().copied());
+                set.manual.retain(|f| !ids.contains(&f.id));
+            }
         }
         self.fold_generation += 1;
     }

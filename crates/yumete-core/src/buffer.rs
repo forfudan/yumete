@@ -1053,11 +1053,44 @@ impl Buffer {
 
     /// The folds of an undo point, each window's as it had them, each fold
     /// open or closed as it is now.
-    fn restore_folds(&mut self, kept: &crate::fold::FoldMap) {
+    ///
+    /// `before` is the text the undo replaced: a fold made since the point
+    /// is moved through the difference, found as what the two texts do not
+    /// share at their start and end.
+    fn restore_folds(&mut self, kept: &crate::fold::FoldMap, before: &Rope) {
+        let after = &self.rope;
+        let made_since = self.folds.iter().any(|(window, set)| {
+            let since = kept.get(window).map_or(0, |then| then.next_id());
+            set.manual.iter().any(|f| f.id > since)
+        });
+        let undone = made_since.then(|| {
+            let (a, b) = (before.len_chars(), after.len_chars());
+            let prefix = before.chars().zip(after.chars()).take_while(|(x, y)| x == y).count();
+            let room = a.min(b) - prefix;
+            let suffix = before
+                .chars_at(a)
+                .reversed()
+                .zip(after.chars_at(b).reversed())
+                .take(room)
+                .take_while(|(x, y)| x == y)
+                .count();
+            let put = b - prefix - suffix;
+            crate::fold::Change {
+                at: prefix,
+                taken: a - prefix - suffix,
+                put,
+                starts_line: prefix == 0 || before.char(prefix - 1) == '\n',
+                put_starts_with_break: put > 0 && after.char(prefix) == '\n',
+                put_ends_with_break: put > 0 && after.char(prefix + put - 1) == '\n',
+            }
+        });
         for (window, set) in self.folds.iter_mut() {
             match kept.get(window) {
-                Some(then) => set.restore(then),
-                None => set.manual.clear(),
+                Some(then) => set.restore(then, undone),
+                None => {
+                    let empty = crate::fold::FoldSet::default();
+                    set.restore(&empty, undone);
+                }
             }
         }
     }
@@ -1791,8 +1824,8 @@ impl Buffer {
         self.revision += 1;
         self.edit = None;
         self.journal = None;
-        self.rope = prev.rope;
-        self.restore_folds(&prev.folds);
+        let before = std::mem::replace(&mut self.rope, prev.rope);
+        self.restore_folds(&prev.folds, &before);
         // **走回去了算不算乾淨，問的是走到了哪裏**，不是那一格當初記了什麼。
         self.modified = match self.still_as_saved() {
             Some(same) => !same,
@@ -1831,8 +1864,8 @@ impl Buffer {
         self.revision += 1;
         self.edit = None;
         self.journal = None;
-        self.rope = next.rope;
-        self.restore_folds(&next.folds);
+        let before = std::mem::replace(&mut self.rope, next.rope);
+        self.restore_folds(&next.folds, &before);
         self.modified = match self.still_as_saved() {
             Some(same) => !same,
             None => next.modified,

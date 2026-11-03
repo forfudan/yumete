@@ -68,6 +68,9 @@ pub struct Pane {
     jump_at: usize,
     /// The tabs this window has shown, the newest last ([`Editor::seen_here`]).
     seen: Vec<u64>,
+    /// Opened to show something (`:table-find`, `:git-show`), which `Esc`
+    /// puts away; a window the reader split is never one.
+    preview: bool,
 }
 
 /// **One place in a jump list** (2026-11-02).

@@ -1405,7 +1405,9 @@ impl Editor {
         if self.hush_the_float() {
             return;
         }
-        if self.other_pane().is_some() && self.live_pane() == 0 {
+        // Only a window opened to show something: Esc closed the reader's own
+        // splits too, from the first window (review, 2026-11-03).
+        if self.other_pane().is_some_and(|pane| pane.preview) && self.live_pane() == 0 {
             // **The window goes; the search stays.** Esc dismissed the
             // pane, and the reader who then presses `n` means the same
             // 「下一處」 they meant a moment ago — so `n` walks to the

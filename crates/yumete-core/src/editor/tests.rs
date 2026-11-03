@@ -35931,3 +35931,89 @@ fn a_sidebar_has_no_file_and_close_and_only_are_vims() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+
+/// **A page is counted in rows** (2026-11-03, review): a paragraph wrapped
+/// over many rows is paged through, not jumped over, and a closed fold's
+/// hidden lines take none, so a scroll or `gc` never lands inside one.
+#[test]
+fn a_page_is_rows_so_wrapped_paragraphs_and_folds_are_not_skipped() {
+    let long = "字".repeat(300);
+    let text = format!("短。\n{long}\n後。\n");
+    let mut ed = typed(&text);
+    ed.set_wrap_width(20);
+    press(&mut ed, "gg");
+    // Ten rows on the page: the short line and nine of the long one.
+    let rope = ed.current_buffer().rope().clone();
+    let start = rope.line_to_char(1);
+    ed.set_page_span(0, start + 9 * 10);
+    ed.on_key(Key::Ctrl('f'));
+    let line = ed.current_buffer().rope().char_to_line(ed.sel.head());
+    assert_eq!(line, 1, "the page turned into the paragraph, not past it");
+
+    let text: String = (1..=40).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed(&text);
+    press(&mut ed, "gg");
+    ed.execute(":2").unwrap();
+    press(&mut ed, "xxxxxxxxx");
+    ed.execute(":view-fold").unwrap();
+    assert!(ed.fold_head(1) && ed.line_is_folded(5));
+    press(&mut ed, "gg");
+    let rope = ed.current_buffer().rope().clone();
+    ed.set_page_span(0, rope.line_to_char(31));
+    ed.page_inset(Some(0), 20, 3);
+    press(&mut ed, "zj");
+    assert!(ed.fold_head(1), "zj next to a closed fold leaves it closed");
+    press(&mut ed, "gg");
+    ed.set_page_span(0, rope.line_to_char(31));
+    press(&mut ed, "gc");
+    assert!(ed.fold_head(1), "the middle of the page is not inside the fold");
+    assert!(!ed.line_is_folded(ed.cursor_line()));
+}
+
+/// **`u` and the folds made or deleted since** (2026-11-03, review): a fold
+/// made after the undone edit stays, moved with the text; one deleted with
+/// `zE` stays deleted; and taking a fold's empty last line does not pull
+/// the next line in.
+#[test]
+fn undo_keeps_later_folds_and_deletions_and_an_empty_last_line_goes() {
+    let mut ed = typed_vim("one\ntwo\nthree\nfour\nfive\n");
+    press(&mut ed, "ggxjzfj");
+    assert!(ed.fold_head(1) && ed.line_is_folded(2));
+    press(&mut ed, "u");
+    assert!(ed.fold_head(1) && ed.line_is_folded(2), "the fold made after x is still there");
+    assert!(ed.current_buffer().text().starts_with("one\n"));
+
+    let mut ed = typed_vim("one\ntwo\nthree\nfour\nfive\n");
+    press(&mut ed, "ggzfjzo5GxzE");
+    press(&mut ed, "uggzc");
+    assert!(!ed.fold_head(0), "zE's fold does not come back with u");
+
+    let mut ed = typed_vim("one\n\n\n\nfive\nsix\n");
+    press(&mut ed, "ggjzfjzojddddkzc");
+    let five = ed.current_buffer().text().lines().position(|l| l == "five").unwrap();
+    assert!(!ed.line_is_folded(five), "five stays out of the fold");
+}
+
+/// **Three vim findings from the pre-release review** (2026-11-03): `Esc`
+/// leaves the reader's own split alone, `/` lands on the match's first
+/// character, and `zX` with no level set closes the folds (vim's
+/// 'foldlevel' starts at 0).
+#[test]
+fn vims_esc_search_and_zx_as_nvim() {
+    let mut ed = typed_vim("foo bar\nbaz\n");
+    ed.execute(":vsplit").unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    ed.on_key(Key::Esc);
+    assert!(ed.other_pane().is_some(), "Esc keeps a split the reader made");
+
+    let mut ed = typed_vim("foo bar\n");
+    press(&mut ed, "gg/bar");
+    ed.on_key(Key::Enter);
+    press(&mut ed, "x");
+    assert_eq!(ed.current_buffer().text(), "foo ar\n");
+
+    let mut ed = typed_vim("a\nb\nc\nd\n");
+    press(&mut ed, "ggzfjzozX");
+    assert!(ed.fold_head(0), "zX closes it again");
+}

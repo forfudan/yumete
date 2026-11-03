@@ -885,6 +885,7 @@ impl Editor {
                         jumps: Vec::new(),
                         jump_at: 0,
                         seen: vec![buffer.id()],
+                        preview: false,
                     },
                 );
             }

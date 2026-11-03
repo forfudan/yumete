@@ -44,6 +44,9 @@ pub struct FoldSet {
     /// than it are closed when `zx` `zX` put them back. Unset, every fold is
     /// open, as a file is when it opens.
     pub level: Option<usize>,
+    /// The folds deleted with `zd` `zD` `zE`, so that `u` does not bring
+    /// them back (vim's `u` leaves folds alone).
+    pub deleted: Vec<u64>,
     next_id: u64,
 }
 
@@ -66,6 +69,12 @@ pub struct Change {
 impl FoldSet {
     /// A new manual fold over `from..=to` (characters as [`Fold`] has
     /// them), closed as `zf` leaves it. Answers its id.
+    /// The id the next fold made will be over: every fold with a larger id
+    /// was made after this set was copied.
+    pub fn next_id(&self) -> u64 {
+        self.next_id
+    }
+
     pub fn add(&mut self, from: usize, to: usize) -> u64 {
         self.next_id += 1;
         let id = self.next_id;
@@ -87,6 +96,11 @@ impl FoldSet {
                 if end <= fold.from {
                     fold.from -= taken;
                     fold.to -= taken;
+                } else if at == fold.to && starts_line && at > fold.from {
+                    // Its last line was empty, so the fold ended where that
+                    // line starts, and that line went: it ends at the line
+                    // before (review, 2026-11-03).
+                    fold.to = at - 1;
                 } else if at >= fold.to {
                     // After its last line's text: a join onto its last line.
                 } else if at <= fold.from && end > fold.to {
@@ -123,15 +137,30 @@ impl FoldSet {
 
     /// The manual folds as `restored` had them (an undo point), each open
     /// or closed as it is now when it is still here.
-    pub fn restore(&mut self, restored: &FoldSet) {
+    ///
+    /// A fold made since that point stays, moved through `undone`, the
+    /// change the undo made; one deleted since with `zd` stays deleted
+    /// (review, 2026-11-03: `u` took the first away and brought the second
+    /// back).
+    pub fn restore(&mut self, restored: &FoldSet, undone: Option<Change>) {
         let now = std::mem::take(&mut self.manual);
+        let deleted = &self.deleted;
+        let mut later = FoldSet {
+            manual: now.iter().filter(|f| f.id > restored.next_id).cloned().collect(),
+            ..FoldSet::default()
+        };
+        if let Some(change) = undone {
+            later.shift(change);
+        }
         self.manual = restored
             .manual
             .iter()
+            .filter(|fold| !deleted.contains(&fold.id))
             .map(|fold| Fold {
                 closed: now.iter().find(|f| f.id == fold.id).map_or(fold.closed, |f| f.closed),
                 ..fold.clone()
             })
+            .chain(later.manual)
             .collect();
         self.next_id = self.next_id.max(restored.next_id);
     }
@@ -212,13 +241,13 @@ mod tests {
         s.manual[0].closed = false;
         s.shift(change(3, 9, "", true));
         assert!(s.manual.is_empty());
-        s.restore(&kept);
+        s.restore(&kept, None);
         assert_eq!(s.manual.len(), 1);
         assert!(s.manual[0].closed, "gone and back: as it was kept");
         let mut s = set();
         let kept = s.clone();
         s.manual[0].closed = false;
-        s.restore(&kept);
+        s.restore(&kept, None);
         assert!(!s.manual[0].closed, "still here: as it is now");
     }
 }

@@ -763,6 +763,9 @@ fn main() -> ExitCode {
             }
         }
     }
+    // **The first file named is the one shown**, as helix and vim open it
+    // (review, 2026-11-03): `ye a.md b.md` opened on b.md.
+    let mut first_opened: Option<usize> = None;
     for file in &files {
         // **`ye 稿/` 開的是那本書，不是一個檔**（2026-09-27）。從前它走到
         // `Buffer::open` 上報「不是一個檔案」，而「打開一本書」正是這個編輯器
@@ -774,12 +777,16 @@ fn main() -> ExitCode {
             eprintln!("yumete: cannot open '{file}': {err}");
             return ExitCode::FAILURE;
         }
+        first_opened.get_or_insert(editor.buffer_position().0.saturating_sub(1));
         // **`--syntax` outranks the extension** (2026-10-30), as `--help`
         // says: the default above only decides where the name says nothing,
         // so `ye --syntax=text notes.md` was still read as Markdown.
         if let Some(syntax) = named_syntax {
             editor.set_syntax(syntax);
         }
+    }
+    if let Some(first) = first_opened.filter(|&first| first + 1 != editor.buffer_position().0) {
+        editor.show_buffer_at(first);
     }
     // **`ye 稿/` 開的是那本書，所以開完要看得見它。** 沒有一個檔可開的時候，
     // 那扇文件樹就是這一趟的答案（2026-09-27）。

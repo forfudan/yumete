@@ -1003,6 +1003,12 @@ pub fn run(
             };
             last_frame = began.elapsed();
             painted = std::time::Instant::now();
+            // **The page as just drawn, for the keys that come next** (review,
+            // 2026-11-03). Said only before the draw, it was the frame before
+            // this one: `C-e C-e` scrolled once and `Z jjjj` skipped steps.
+            if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
+                editor.set_page_span(a, b);
+            }
             drawn = wants_picture.is_some().then(|| completed.buffer.clone());
             // **欠着的那一趟搜索，畫完這一幀再跑**（2026-09-27 報的：掃描期間屏
             // 幕完全靜止）。剛畫的那一幀表頭寫着「正在找…」，所以走一本書的那幾

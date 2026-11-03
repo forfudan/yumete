@@ -36,7 +36,7 @@ en = "fold level {0}"
 [[message]]
 # 折疊鍵按在没有折疊的地方（草稿）
 key = "fold.none-here"
-zht = "這裏沒有摺疊"
+zht = "這裏没有摺疊"
 zhs = "这里没有折叠"
 en = "no fold here"
 
@@ -622,7 +622,7 @@ en = "preview: tinymist starting…"
 [[message]]
 # 側欄裏打 :wq：沒有文件可寫（草稿）
 key = "region.nothing-to-write"
-zht = "側欄沒有文件可寫；關掉它是 :q"
+zht = "側欄没有文件可寫；關掉它是 :q"
 zhs = "侧栏没有文件可写；关掉它是 :q"
 en = "a sidebar has no file to write; :q closes it"
 

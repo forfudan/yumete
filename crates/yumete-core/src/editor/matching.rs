@@ -460,20 +460,39 @@ impl Editor {
     /// page. `None` when no frame has been drawn yet — the off-screen path's
     /// first keystroke — so an operator misses rather than guessing.
     pub(super) fn screen_line(&self, which: char, nth: usize) -> Option<usize> {
+        // Counted in the page's rows (2026-11-03, review): a wrapped
+        // paragraph is several, a closed fold's hidden lines none, so the
+        // middle of the page is never a line the page does not show.
+        let rows = self.page_rows()?;
+        let step = nth.max(1) - 1;
+        let at = match which {
+            'H' => step.min(rows.len() - 1),
+            'L' => (rows.len() - 1).saturating_sub(step),
+            _ => (rows.len() - 1) / 2,
+        };
+        Some(rows[at].line)
+    }
+
+    /// The rows the page last drew, from its top: `None` before a frame.
+    fn page_rows(&self) -> Option<Vec<crate::wrap::Row>> {
         let (from, to) = self.page_span;
-        let rope = self.current_buffer().rope();
-        let len = rope.len_chars();
+        let len = self.current_buffer().rope().len_chars();
         if to <= from || from > len {
             return None;
         }
-        let first = rope.char_to_line(from.min(len));
-        let last = rope.char_to_line(to.min(len).saturating_sub(1).max(from));
-        let step = nth.max(1) - 1;
-        Some(match which {
-            'H' => (first + step).min(last),
-            'L' => last.saturating_sub(step).max(first),
-            _ => first + (last - first) / 2,
-        })
+        let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+        let rows = self.with_page_measure(width, |rope, m| {
+            let top = crate::wrap::Anchor::from(crate::wrap::position(rope, from.min(len), m));
+            let mut rows = Vec::new();
+            for row in crate::wrap::rows_from(rope, top, m, 4096) {
+                if row.start >= to.min(len).max(from + 1) && !rows.is_empty() {
+                    break;
+                }
+                rows.push(row);
+            }
+            rows
+        });
+        (!rows.is_empty()).then_some(rows)
     }
 
     /// **The view scrolls `n` lines and the cursor stays, pushed in only as
@@ -485,43 +504,57 @@ impl Editor {
     /// `zk` scrolled six when each read the same stale frame. A pushed cursor
     /// lands at the line's start under helix and keeps its column under vim.
     pub(super) fn scroll_the_page(&mut self, down: bool, n: usize) {
-        let Some(first) = self.screen_line('H', 1) else { return };
-        let Some(last) = self.screen_line('L', 1) else { return };
+        let Some(rows) = self.page_rows() else { return };
+        let height = rows.len();
         let vim = self.vim_keymap();
-        let rope = self.current_buffer().rope();
-        let end = motion::last_line(rope);
-        let height = last - first + 1;
         let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
         let n = n.max(1);
-        let top = match down {
-            true => (first + n).min(end),
-            false => first.saturating_sub(n),
-        };
         let head = self.sel.head();
-        let edge = match down {
-            true => (top + so).min(end),
-            false => (top + height - 1).saturating_sub(so).min(end),
-        };
-        let start = rope.line_to_char(edge);
-        let pushed = match down {
-            true => start > head,
-            false => start < head && rope.char_to_line(head) >= edge,
-        };
-        if pushed {
-            let to = match vim {
-                true => {
-                    let at = motion::pos_at_visual_column(rope, edge, motion::visual_column(rope, head));
-                    at.min(motion::line_last(rope, start))
-                }
-                false => start,
+        let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+        let (to, row, span) = self.with_page_measure(width, |rope, m| {
+            use crate::wrap::{advance, distance, position, retreat, rows_from, Anchor};
+            let top = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
+            let top = match down {
+                true => advance(rope, top, m, n),
+                false => retreat(rope, top, m, n),
             };
+            let page = rows_from(rope, top, m, height);
+            let edge = match down {
+                true => page.get(so),
+                false => page.get(height.saturating_sub(1 + so)).or(page.last()),
+            };
+            let mut to = head;
+            if let Some(edge) = edge {
+                let pushed = match down {
+                    true => edge.start > head,
+                    false => edge.start < head && head >= edge.end.max(edge.start + 1),
+                };
+                if pushed {
+                    to = match vim {
+                        // vim keeps the column, as far as the row reaches.
+                        true => {
+                            let goal = crate::wrap::column_of(rope, head, m);
+                            let mut at = edge.start;
+                            while at + 1 < edge.end && crate::wrap::column_of(rope, at + 1, m) <= goal {
+                                at += 1;
+                            }
+                            at
+                        }
+                        false => edge.start,
+                    };
+                }
+            }
+            let at = Anchor::from(position(rope, to, m));
+            let row = distance(rope, top, at, m, height + 1).unwrap_or(0);
+            let span = (page.first().map_or(0, |r| r.start), page.last().map_or(0, |r| r.end));
+            (to, row, span)
+        });
+        if to != head {
             self.move_head(to);
         }
-        let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.sel.head());
-        let to = rope.line_to_char((top + height).min(rope.len_lines()));
-        self.page_span = (rope.line_to_char(top), to);
-        self.aim = Some(crate::editor::Aim::Row(line.saturating_sub(top)));
+        // Written back as a guess, so keys faster than the frames add up.
+        self.page_span = span;
+        self.aim = Some(crate::editor::Aim::Row(row));
     }
 
     /// **A whole page** (`C-f` `C-b`, `PgDn` `PgUp`): helix scrolls the
@@ -529,10 +562,10 @@ impl Editor {
     /// lines, `count` times (`:h CTRL-F`, measured in nvim 2026-11-03).
     /// `false` before a page has been drawn, when there is no view to scroll.
     pub(super) fn scroll_a_page(&mut self, down: bool, count: usize) -> bool {
-        let (Some(first), Some(last)) = (self.screen_line('H', 1), self.screen_line('L', 1)) else {
+        let Some(rows) = self.page_rows() else {
             return false;
         };
-        let height = last - first + 1;
+        let height = rows.len();
         let lines = match self.vim_keymap() {
             true => height.saturating_sub(2).max(1) * count.max(1),
             false => height,
