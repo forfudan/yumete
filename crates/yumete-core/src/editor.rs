@@ -66,6 +66,8 @@ pub struct Pane {
     /// Its own jump list, and where it stands in it.
     jumps: Vec<Jump>,
     jump_at: usize,
+    /// The tabs this window has shown, the newest last ([`Editor::seen_here`]).
+    seen: Vec<u64>,
 }
 
 /// **One place in a jump list** (2026-11-02).
@@ -3435,6 +3437,10 @@ pub struct Editor {
     /// window (2026-11-02).
     jumps: Vec<Jump>,
     jump_at: usize,
+    /// **The tabs this window has shown**, the newest last (2026-11-03,
+    /// helix's `docs_access_history`): where it goes back to when its tab
+    /// is closed. Each other window keeps its own in its [`Pane`].
+    seen_here: Vec<u64>,
     /// The buffer was switched during this key: the place it opened at is
     /// not a place anyone jumped from.
     just_switched: bool,
@@ -4454,6 +4460,7 @@ impl Editor {
             hits: None,
             jumps: Vec::new(),
             jump_at: 0,
+            seen_here: Vec::new(),
             just_switched: false,
             walking_jumps: false,
             key_index: RefCell::new(None),

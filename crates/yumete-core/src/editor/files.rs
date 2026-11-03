@@ -788,6 +788,13 @@ impl Editor {
     /// otherwise grow it without end and only the first handful is ever read.
     pub(super) fn mark_visited(&mut self) {
         const KEPT: usize = 32;
+        // This window's own history of tabs, for when one is closed.
+        let id = self.current_buffer().id();
+        self.seen_here.retain(|&b| b != id);
+        self.seen_here.push(id);
+        if self.seen_here.len() > KEPT {
+            self.seen_here.remove(0);
+        }
         let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
             return;
         };
@@ -884,6 +891,23 @@ impl Editor {
             .iter()
             .map(|b| (b.display_name(), b.is_modified()))
             .collect()
+    }
+
+    /// **Which tabs another window is showing** (2026-11-03): a tab is
+    /// current (the live window's), visible (on screen in another window)
+    /// or in the background, as bufferline.nvim and barbar draw them.
+    pub fn tabs_shown_elsewhere(&self) -> Vec<bool> {
+        let mut shown = vec![false; self.buffers.len()];
+        for window in self.windows.leaves() {
+            if window == self.live {
+                continue;
+            }
+            let Some(pane) = self.panes.get(&window) else { continue };
+            if let Some(i) = self.buffers.iter().position(|b| b.id() == pane.buffer) {
+                shown[i] = true;
+            }
+        }
+        shown
     }
 
     /// **Every open buffer's path**, for whoever has to know when one closed.

@@ -9103,9 +9103,13 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
         .fg(ink.gold())
         .add_modifier(Modifier::BOLD);
     let unlit = ground.fg(ink.furniture());
+    // **A tab another window shows** (2026-11-03): in the writing's ink and
+    // underlined, between the lit one and the ones behind.
+    let visible = ground.fg(ink.text()).add_modifier(Modifier::UNDERLINED);
 
     let current = editor.buffer_position().0.saturating_sub(1);
     let tabs = editor.buffer_tabs();
+    let elsewhere = editor.tabs_shown_elsewhere();
     let spans = tab_spans(editor, area);
     let buf = frame.buffer_mut();
     for x in area.x..area.x + area.width {
@@ -9114,7 +9118,11 @@ fn draw_tabs(frame: &mut Frame, editor: &Editor, config: &Config, area: Rect) {
         }
     }
     for (x, w, i) in spans {
-        let style = if i == current { lit } else { unlit };
+        let style = match (i == current, elsewhere.get(i).copied().unwrap_or(false)) {
+            (true, _) => lit,
+            (false, true) => visible,
+            (false, false) => unlit,
+        };
         for n in 0..w {
             if let Some(cell) = buf.cell_mut((x + n, area.y)) {
                 cell.set_symbol(" ").set_style(style);

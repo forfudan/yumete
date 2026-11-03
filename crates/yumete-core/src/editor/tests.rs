@@ -34869,8 +34869,7 @@ fn the_basic_flavour_keys_and_helix_without_them() {
     assert_eq!(ed.current_buffer().text(), "二\n一\n三", "one undo a move");
 }
 
-/// **The Space menu's flavour rows come and go with their items**, and
-/// `Space q` is `:quit`.
+/// **The Space menu's flavour rows come and go with their items.**
 #[test]
 fn the_space_menu_follows_the_flavour() {
     let listed = |ed: &mut Editor, key: &str| -> bool {
@@ -34880,9 +34879,10 @@ fn the_space_menu_follows_the_flavour() {
         rows.iter().any(|(keys, _)| keys.split(' ').any(|k| k == key))
     };
     let mut ed = typed("甲\n");
-    assert!(listed(&mut ed, "t") && listed(&mut ed, "z") && listed(&mut ed, "q"));
+    assert!(listed(&mut ed, "t") && listed(&mut ed, "z"));
+    assert!(!listed(&mut ed, "q"), "Space q is in neither helix nor vim (2026-11-03)");
     ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
-    assert!(!listed(&mut ed, "t") && !listed(&mut ed, "z") && !listed(&mut ed, "q"));
+    assert!(!listed(&mut ed, "t") && !listed(&mut ed, "z"));
     assert!(listed(&mut ed, "f"), "helix's own rows stay");
     // One item by name, the rest off.
     ed.set_flavor(yumete_cjk::Flavor {
@@ -34890,13 +34890,6 @@ fn the_space_menu_follows_the_flavour() {
         items: std::collections::BTreeMap::from([(yumete_cjk::FlavorItem::Tables, true)]),
     });
     assert!(listed(&mut ed, "t") && !listed(&mut ed, "z"));
-
-    // `Space q` closes the window, as `:quit`.
-    let mut ed = typed("甲\n");
-    ed.execute(":vsplit").unwrap();
-    assert!(ed.other_pane().is_some());
-    press(&mut ed, " q");
-    assert!(ed.other_pane().is_none(), "the window closed");
 }
 
 /// **`Esc` collapses (full), Insert's `C-c` leaves (basic), and helix's
@@ -35875,4 +35868,31 @@ fn the_view_goes_sideways_with_wrapping_off() {
     ed.note_sideways(0, 80);
     press(&mut ed, "gg0zl");
     assert_eq!(ed.take_side_aim(), None, "wrapped: nothing to the side");
+}
+
+/// **Closing a tab leaves the windows** (2026-11-03): another window that
+/// showed it goes back to the file it showed before, as helix's views do,
+/// and the tab bar marks the tab another window shows.
+#[test]
+fn closing_a_tab_sends_other_windows_back_and_tabs_say_where_they_are() {
+    let dir = tmp().join(format!("yumete-tabs-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for name in ["a.md", "b.md", "c.md"] {
+        std::fs::write(dir.join(name), format!("{name}\n")).unwrap();
+    }
+    let mut ed = Editor::new();
+    for name in ["a.md", "b.md", "c.md"] {
+        ed.execute(&format!(":open {}", dir.join(name).display())).unwrap();
+    }
+    ed.execute(":vsplit").unwrap();
+    assert_eq!(ed.tabs_shown_elsewhere(), [false, false, true], "c is in both");
+    ed.execute(":buffer-close").unwrap();
+    let other = ed.other_pane().expect("the other window stays");
+    let shown = ed.buffers.iter().position(|b| b.id() == other.buffer).unwrap();
+    assert_eq!(ed.buffers[shown].display_name(), "b.md", "it went back to b");
+    let elsewhere = ed.tabs_shown_elsewhere();
+    assert_eq!(elsewhere.iter().filter(|&&v| v).count(), 1);
+    assert!(elsewhere[shown]);
+    let _ = std::fs::remove_dir_all(&dir);
 }

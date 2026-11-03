@@ -851,6 +851,7 @@ impl Editor {
             caption,
             jumps: self.jumps.clone(),
             jump_at: self.jump_at,
+            seen: self.seen_here.clone(),
         };
         match self.other_window() {
             Some(window) => {
@@ -917,6 +918,7 @@ impl Editor {
             // from, as vim's does.
             jumps: self.jumps.clone(),
             jump_at: self.jump_at,
+            seen: self.seen_here.clone(),
         };
         let Some(fresh) = self.windows.split(self.live, how) else {
             return false;
@@ -1106,6 +1108,7 @@ impl Editor {
             caption: self.current_buffer().display_name().to_string(),
             jumps: Vec::new(),
             jump_at: 0,
+            seen: Vec::new(),
         };
         // The place is clamped rather than trusted: the other pane may have
         // been edited while this one was not looking — and the file it names
@@ -1143,6 +1146,7 @@ impl Editor {
         let mut here = here;
         here.jumps = std::mem::replace(&mut self.jumps, std::mem::take(&mut pane.jumps));
         here.jump_at = std::mem::replace(&mut self.jump_at, pane.jump_at);
+        here.seen = std::mem::replace(&mut self.seen_here, std::mem::take(&mut pane.seen));
         self.panes.insert(self.live, here);
         let leaving = self.live;
         self.window_history.retain(|&w| w != window && w != leaving && self.windows.has(w));
@@ -1166,15 +1170,38 @@ impl Editor {
     /// Drop every window whose buffer is `gone` — a window naming a buffer
     /// that is not there is not a window. The live window is the editor's
     /// own business (`current` has already moved).
+    /// **A window whose tab was closed goes back to the tab it showed
+    /// before** (2026-11-03, helix's `close_document`): the newest tab in
+    /// its own history that is still open, its cursor where that file was
+    /// left. A window with none to go back to closes. The layout stays: a
+    /// tab and a window are closed by different commands.
     pub(super) fn drop_windows_showing(&mut self, gone: impl Fn(u64) -> bool) {
-        let doomed: Vec<_> = self
+        let showing: Vec<_> = self
             .windows
             .leaves()
             .into_iter()
             .filter(|&w| w != self.live && self.panes.get(&w).is_some_and(|p| gone(p.buffer)))
             .collect();
-        for window in doomed {
-            self.close_window(window);
+        for window in showing {
+            let back = self.panes.get(&window).and_then(|pane| {
+                pane.seen.iter().rev().copied().find(|&id| !gone(id) && self.buffer_with(id).is_some())
+            });
+            let Some(id) = back else {
+                self.close_window(window);
+                continue;
+            };
+            let Some(index) = self.buffer_with(id) else { continue };
+            let at = self.buffers[index].saved_cursor().min(self.buffers[index].rope().len_chars());
+            let caption = self.buffers[index].display_name().to_string();
+            if let Some(pane) = self.panes.get_mut(&window) {
+                pane.buffer = id;
+                pane.cursor = at;
+                pane.anchor = at;
+                pane.goal_column = None;
+                pane.goal_slot = None;
+                pane.highlight = None;
+                pane.caption = caption;
+            }
         }
     }
 

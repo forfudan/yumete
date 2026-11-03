@@ -1871,13 +1871,6 @@ zhs = "项目符号挑选器"
 en = "project symbol picker"
 
 [[message]]
-# 空格菜單：q（草稿）
-key = "hint.space.quit"
-zht = "關閉窗口"
-zhs = "关闭窗口"
-en = "close the window"
-
-[[message]]
 # 空格選單：這一行攤開，浮窗
 key = "hint.space.record"
 zht = "顯示表格行記錄(浮窗)"

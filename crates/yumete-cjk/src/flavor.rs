@@ -237,17 +237,6 @@ flavor_items! {
         label: "keys.flavor.item.space-paging",
         hint: "keys.flavor.item.space-paging.hint",
     },
-    /// `Space q` closes the window, as `:quit`.
-    SpaceQuit => ItemInfo {
-        id: "space_quit",
-        level: FlavorLevel::Basic,
-        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
-        keys: &[" q"],
-        vim_keys: None,
-        insert: false,
-        label: "keys.flavor.item.space-quit",
-        hint: "keys.flavor.item.space-quit.hint",
-    },
     /// `C-w e` `i` show or hide the sidebars, `C-w E` `I` go into them.
     Sidebars => ItemInfo {
         id: "sidebars",

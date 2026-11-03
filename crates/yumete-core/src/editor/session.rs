@@ -884,6 +884,7 @@ impl Editor {
                         caption: buffer.display_name().to_string(),
                         jumps: Vec::new(),
                         jump_at: 0,
+                        seen: vec![buffer.id()],
                     },
                 );
             }

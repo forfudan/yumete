@@ -1002,7 +1002,6 @@ pub(super) static SPACE: Group = Group {
         ch('?', NormalCmd::CommandPalette, "hint.space.all-commands"),
         ch(' ', NormalCmd::PageDown, "hint.space.page-down").flavor(FlavorItem::SpacePaging),
         key(Key::Backspace, NormalCmd::PageUp, "hint.space.page-up").flavor(FlavorItem::SpacePaging),
-        ch('q', NormalCmd::Quit, "hint.space.quit").flavor(FlavorItem::SpaceQuit),
     ],
     unknown: Unknown::Silent,
     sticky: false,

@@ -3243,20 +3243,6 @@ en = "On: Space Space turns a page down and Space Backspace a page up. Off: both
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）
-key = "keys.flavor.item.space-quit"
-zht = "關閉窗口"
-zhs = "关闭窗口"
-en = "close the window"
-
-[[message]]
-# 風味的一項：設置面板上的說明（草稿）
-key = "keys.flavor.item.space-quit.hint"
-zht = "開：空格 q 關閉當前窗口，同 :quit。關：這個鍵空着。"
-zhs = "开：空格 q 关闭当前窗口，同 :quit。关：这个键空着。"
-en = "On: Space q closes the window, as :quit does. Off: unbound."
-
-[[message]]
-# 風味的一項：設置面板上的名字（草稿）
 key = "keys.flavor.item.tables"
 zht = "表格菜單"
 zhs = "表格菜单"
