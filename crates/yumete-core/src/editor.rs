@@ -3477,6 +3477,19 @@ pub struct Editor {
     /// blank line inside a fence is code, not a paragraph break), and asking
     /// per line would walk the document once per line.
     fold_cache: RefCell<Option<FoldMap>>,
+    /// The folds of the window and buffer in view (2026-11-03), worked out
+    /// once per change; see [`folds`].
+    fold_view: RefCell<Option<folds::FoldView>>,
+    /// Moves on whenever a fold opens, closes, comes or goes.
+    fold_generation: u64,
+    /// Set by vim's jumps (`G`, `gg`, `:N`, `C-o`, `C-i`) and the fold
+    /// keys: a cursor landing inside a closed fold leaves it closed.
+    fold_stays_closed: bool,
+    /// Where a jump into a closed fold meant to go — buffer, the fold's
+    /// first line, the place — for `zo` to put the cursor back there.
+    fold_return: Option<(u64, usize, usize)>,
+    /// The columns a fold's line fills, as the front end last said.
+    fold_width: std::cell::Cell<usize>,
     /// The Markdown runs of each paragraph, cached the same way and for the
     /// same reason: the renderer asks for every paragraph on screen, every
     /// frame, and the answer only changes when the paragraph does.
@@ -4428,6 +4441,11 @@ impl Editor {
             tab_memo: memo::LineMemo::default(),
             width_memo: memo::LineMemo::default(),
             fold_cache: RefCell::new(None),
+            fold_view: RefCell::new(None),
+            fold_generation: 0,
+            fold_stays_closed: false,
+            fold_return: None,
+            fold_width: std::cell::Cell::new(80),
             markup_memo: memo::LineMemo::default(),
             ruby_memo: memo::LineMemo::default(),
             block_cache: RefCell::new(None),
@@ -5691,6 +5709,7 @@ mod detail;
 mod docs;
 mod edits;
 mod fences;
+mod folds;
 mod tree_select;
 mod prose_tree;
 mod files;

@@ -289,6 +289,8 @@ pub fn char_at(
     let drawn = |line: usize| editor.drawn_runs_on_line(line);
     // 「這一行是不是一條轉過來的表格行」——渲染、折行、藏字三處同一個答案。
     let turned = |line: usize| editor.line_is_table_row(line);
+    // A closed fold's line fills one 縱 (2026-11-03).
+    editor.note_fold_width(metrics.zong_len);
     let grid = editor
         .grid_with(&hidden, &folded, &drawn, &turned)
         .with_zong_len(metrics.zong_len);
@@ -962,6 +964,7 @@ pub fn draw(
     let drawn = |line: usize| editor.drawn_runs_on_line(line);
     // 「這一行是不是一條轉過來的表格行」——渲染、折行、藏字三處同一個答案。
     let turned = |line: usize| editor.line_is_table_row(line);
+    editor.note_fold_width(metrics.zong_len);
     let grid = editor
         .grid_with(&hidden, &folded, &drawn, &turned)
         .with_zong_len(metrics.zong_len);

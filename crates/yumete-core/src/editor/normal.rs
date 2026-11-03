@@ -1677,6 +1677,20 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_delete_or_change(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        // A selection reaching into a closed fold takes the fold whole, as
+        // vim's operators do (2026-11-03): `x` on a fold deletes it.
+        if self.select_over_closed_folds() {
+            // Whole lines, so vim's `x` is not held to its line.
+            self.vim_lines = true;
+            let cx = Cx { count: 1, ..cx };
+            return self.cmd_delete_or_change_now(cx);
+        }
+        self.cmd_delete_or_change_now(cx)
+    }
+
+    #[allow(unused_variables)]
+    fn cmd_delete_or_change_now(&mut self, cx: Cx) {
+        let Cx { key, count, operator_count, continuing_zong } = cx;
         self.snapshot();
         // A count deletes that many graphemes when there is nothing
         // selected, the way `3x` does in vim; with a selection it is
@@ -2215,6 +2229,7 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_jump_backward(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        self.fold_stays_closed = true;
         self.walk_jumps(true, count);
     }
 
@@ -2225,6 +2240,7 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_jump_forward(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        self.fold_stays_closed = true;
         self.walk_jumps(false, count);
     }
 
@@ -2482,6 +2498,7 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_goto_line(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
+        self.fold_stays_closed = true;
         // `operator_count`, not `self.count`: the count was taken at
         // the top of this function, so asking `self.count` here always
         // said "no digits" and `1G` went to the *last* line.

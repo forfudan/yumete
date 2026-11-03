@@ -3004,6 +3004,20 @@ zhs = "开：gz 按头两个字母跳，gZ 按拼音跳，g/ 搜光标下的词�
 en = "On: gz jumps by first letters, gZ by pinyin, g/ searches the word under the cursor, gL follows any link; under helix gx opens a web address, under vim gW is the jump labels. Off: unbound."
 
 [[message]]
+# 風味項：標題折疊（草稿）
+key = "keys.flavor.item.heading-folds"
+zht = "按標題折疊"
+zhs = "按标题折叠"
+en = "folds by heading"
+
+[[message]]
+# 風味項：標題折疊的說明（草稿）
+key = "keys.flavor.item.heading-folds.hint"
+zht = "開：Markdown 與 Typst 的每個標題都是一個折疊，蓋住它那一節，開始時全開着。關：照 vim，只有 zf 做的折疊。"
+zhs = "开：Markdown 与 Typst 的每个标题都是一个折叠，盖住它那一节，开始时全开着。关：照 vim，只有 zf 做的折叠。"
+en = "On: every Markdown and Typst heading is a fold over its section, all open at first. Off: vim's, only the folds zf makes."
+
+[[message]]
 # 風味的一項：設置面板上的名字（草稿）
 key = "keys.flavor.item.helix-keys-under-vim"
 zht = "借用 helix 的鍵"

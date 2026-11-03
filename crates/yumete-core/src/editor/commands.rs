@@ -636,6 +636,7 @@ impl Editor {
                 // (`a_quoted_field_is_read_as_the_one_field_it_is` uses `:3`
                 // for the third **line**). Whether it should become a row is
                 // the author's to decide, not a comment's.
+                self.fold_stays_closed = true;
                 self.goto_line(n);
                 Ok(CommandOutcome::Continue)
             }

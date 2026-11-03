@@ -33,6 +33,7 @@ pub mod discover;
 pub mod drawn;
 pub mod editor;
 pub mod export;
+pub mod fold;
 pub mod glyphs;
 pub mod hardwrap;
 pub mod input;

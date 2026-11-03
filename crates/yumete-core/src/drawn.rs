@@ -61,6 +61,9 @@ pub enum Ink {
     /// rung a table's own bands sit on. Decided 2026-09-10:
     /// 「tab 不用符号，但可以用一个背景色」.
     Tab,
+    /// **A closed fold's line** (2026-11-03): what the fold holds, said in
+    /// place of its first line's text.
+    Fold,
 }
 
 /// One run of text on the page that the file does not contain.

@@ -255,6 +255,9 @@ pub struct Buffer {
     /// by `gi`). Kept here so it is per buffer and moves with the text before
     /// it, as vim's marks do (2026-10-30).
     insert_stop: Option<usize>,
+    /// **Each window's folds in this buffer** (2026-11-03), moved by every
+    /// edit and kept in the undo points; see [`crate::fold`].
+    folds: crate::fold::FoldMap,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -312,6 +315,8 @@ pub struct Buffer {
 #[derive(Clone)]
 struct EditSnapshot {
     rope: Rope,
+    /// The folds as they were, for `u` to bring back one an edit took.
+    folds: crate::fold::FoldMap,
     cursor: usize,
     /// **Every selection, when the editor gave them** (2026-10-27): helix
     /// brings back every cursor on `u`, and one `usize` holds one of them.
@@ -406,6 +411,7 @@ impl Buffer {
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
+            folds: crate::fold::FoldMap::new(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -472,6 +478,7 @@ impl Buffer {
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
+            folds: crate::fold::FoldMap::new(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -586,6 +593,7 @@ impl Buffer {
             changes: Vec::new(),
             changes_at: 0,
             insert_stop: None,
+            folds: crate::fold::FoldMap::new(),
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -730,6 +738,10 @@ impl Buffer {
         self.read_as = Some(digest(&text));
         self.beyond_the_file = false;
         self.rope = Rope::from_str(text.as_ref());
+        // Read again: the text may be anything now, so the manual folds go.
+        for set in self.folds.values_mut() {
+            set.manual.clear();
+        }
         self.seen = seen;
         self.modified = false;
         // 讀了一遍：撤回棧清空（底下那一句），所以乾淨的位置就是棧底。
@@ -903,6 +915,7 @@ impl Buffer {
             return Err(ReadOnly);
         }
         self.earn_snapshot();
+        self.shift_folds(char_idx, 0, text);
         self.rope.insert(char_idx, text);
         self.modified = true;
         self.edited = next_edit();
@@ -931,6 +944,7 @@ impl Buffer {
         let taken = range.end - range.start;
         self.earn_snapshot();
         let at = range.start;
+        self.shift_folds(at, taken, "");
         self.rope.remove(range);
         self.modified = true;
         self.edited = next_edit();
@@ -962,6 +976,7 @@ impl Buffer {
         let start = range.start;
         let taken = range.end - range.start;
         self.earn_snapshot();
+        self.shift_folds(start, taken, text);
         self.rope.remove(range);
         self.rope.insert(start, text);
         self.modified = true;
@@ -1014,6 +1029,60 @@ impl Buffer {
             }
         }
         at.min(self.rope.len_chars())
+    }
+
+    /// Move every window's folds through an edit about to be made: `taken`
+    /// characters at `at` become `put`. Asked before the rope changes, so
+    /// whether `at` starts a line is the text's as it was.
+    fn shift_folds(&mut self, at: usize, taken: usize, put: &str) {
+        if self.folds.values().all(|set| set.manual.is_empty()) {
+            return;
+        }
+        let change = crate::fold::Change {
+            at,
+            taken,
+            put: put.chars().count(),
+            starts_line: at == 0 || (at <= self.rope.len_chars() && self.rope.char(at - 1) == '\n'),
+            put_starts_with_break: put.starts_with('\n') || put.starts_with("\r\n"),
+            put_ends_with_break: put.ends_with('\n'),
+        };
+        for set in self.folds.values_mut() {
+            set.shift(change);
+        }
+    }
+
+    /// The folds of an undo point, each window's as it had them, each fold
+    /// open or closed as it is now.
+    fn restore_folds(&mut self, kept: &crate::fold::FoldMap) {
+        for (window, set) in self.folds.iter_mut() {
+            match kept.get(window) {
+                Some(then) => set.restore(then),
+                None => set.manual.clear(),
+            }
+        }
+    }
+
+    /// `window`'s folds in this buffer, when it has any.
+    pub fn folds(&self, window: u64) -> Option<&crate::fold::FoldSet> {
+        self.folds.get(&window)
+    }
+
+    /// `window`'s folds in this buffer, made when it has none.
+    pub fn folds_mut(&mut self, window: u64) -> &mut crate::fold::FoldSet {
+        self.folds.entry(window).or_default()
+    }
+
+    /// A new window shows what the window it was split from shows, folds
+    /// and all, as vim's `:split` copies them.
+    pub fn copy_folds(&mut self, from: u64, to: u64) {
+        if let Some(set) = self.folds.get(&from).cloned() {
+            self.folds.insert(to, set);
+        }
+    }
+
+    /// A window closed: its folds go.
+    pub fn forget_folds(&mut self, window: u64) {
+        self.folds.remove(&window);
     }
 
     /// Move the `gi` stop through an edit: `taken` characters at `at` became
@@ -1588,6 +1657,7 @@ impl Buffer {
         // point that is never earned costs a pointer.
         self.history.pending = Some(EditSnapshot {
             rope: self.rope.clone(),
+            folds: self.folds.clone(),
             cursor,
             selections,
             modified: self.modified,
@@ -1722,6 +1792,7 @@ impl Buffer {
         self.edit = None;
         self.journal = None;
         self.rope = prev.rope;
+        self.restore_folds(&prev.folds);
         // **走回去了算不算乾淨，問的是走到了哪裏**，不是那一格當初記了什麼。
         self.modified = match self.still_as_saved() {
             Some(same) => !same,
@@ -1761,6 +1832,7 @@ impl Buffer {
         self.edit = None;
         self.journal = None;
         self.rope = next.rope;
+        self.restore_folds(&next.folds);
         self.modified = match self.still_as_saved() {
             Some(same) => !same,
             None => next.modified,
@@ -1772,6 +1844,7 @@ impl Buffer {
     fn here(&self, cursor: usize, selections: Option<crate::selection::Selections>) -> EditSnapshot {
         EditSnapshot {
             rope: self.rope.clone(),
+            folds: self.folds.clone(),
             cursor,
             selections,
             modified: self.modified,

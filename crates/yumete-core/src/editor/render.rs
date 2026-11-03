@@ -367,6 +367,11 @@ impl Editor {
     /// hidden, so the cursor is never inside text that is not on the screen —
     /// which is what makes every motion and every edit act on what can be seen.
     pub fn hidden_on_line(&self, line: usize) -> Spans {
+        // A closed fold's first line: its text is off the page and the
+        // fold's own line drawn instead (2026-11-03).
+        if let Some(all) = self.fold_head_hides(line) {
+            return all.into_iter().collect();
+        }
         // **太長的一行也不藏記號**（`:view-long-line`，2026-10-08）。
         //
         // 和 [`Self::markup_runs`] 同一條門槛，因為是同一筆賬：這一支走
@@ -578,6 +583,10 @@ impl Editor {
 
     pub fn drawn_runs_on_line(&self, line: usize) -> Vec<crate::drawn::Run> {
         use crate::drawn::{Ink, Run};
+        if let Some(text) = self.fold_line(line) {
+            let end = crate::zong::line_chars(self.current_buffer().rope(), line).len();
+            return vec![Run::new(end, text, Ink::Fold)];
+        }
         let mut runs: Vec<Run> = self
             .typed_on_line(line)
             .into_iter()
@@ -675,6 +684,9 @@ impl Editor {
     /// Told apart here so [`crate::wrap`] can put the caret between them;
     /// everything else wants them as one page and asks [`Self::drawn_on_line`].
     pub fn typed_on_line(&self, line: usize) -> Vec<(usize, String)> {
+        if self.fold_head(line) {
+            return Vec::new();
+        }
         self.candidate
             .iter()
             .filter(|&&(l, _, _)| l == line)

@@ -35357,3 +35357,160 @@ fn macros_live_in_registers() {
     assert_eq!(ed.current_buffer().text(), "dd\ntwo\nthree\n");
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 2, "Enter went down a line");
 }
+
+/// **vim's folds** (2026-11-03, each measured in nvim): `zf{motion}` makes
+/// a closed fold; `j` `k` step over it as one line; `zo` `zc` open and
+/// close it with the cursor kept; an operator takes it whole and `u`
+/// brings it back; `G` into it leaves it closed and `zo` then finds the
+/// place; a search into it opens it; `o` opens a line after it.
+#[test]
+fn vims_folds_are_one_line_and_open_as_vim_opens_them() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let line = |ed: &Editor| ed.cursor_line();
+    let mut ed = vim("a\nb\nc\nd\ne\nf\n");
+    press(&mut ed, "jzf2j");
+    assert!(ed.fold_head(1), "{}", ed.status());
+    assert!(ed.line_is_folded(2) && ed.line_is_folded(3));
+    assert!(!ed.line_is_folded(4));
+    assert_eq!(line(&ed), 1);
+    press(&mut ed, "j");
+    assert_eq!(line(&ed), 4, "j steps over the fold");
+    press(&mut ed, "k");
+    assert_eq!(line(&ed), 1, "k lands on its line");
+    press(&mut ed, "k");
+    assert_eq!(line(&ed), 0);
+    press(&mut ed, "jzo");
+    assert!(!ed.line_is_folded(2), "zo opens it");
+    press(&mut ed, "jzc");
+    assert_eq!(line(&ed), 1, "zc puts the cursor on the fold's line");
+    assert!(ed.line_is_folded(2));
+    // An operator takes it whole, and `u` brings back text and fold.
+    press(&mut ed, "dd");
+    assert_eq!(ed.current_buffer().text(), "a\ne\nf\n");
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), "a\nb\nc\nd\ne\nf\n");
+    assert!(ed.line_is_folded(2), "the fold is back");
+    // `x` too.
+    press(&mut ed, "gg");
+    press(&mut ed, "j");
+    press(&mut ed, "x");
+    assert_eq!(ed.current_buffer().text(), "a\ne\nf\n", "x on a fold takes it");
+    press(&mut ed, "u");
+    // `G` into a fold leaves it closed; `zo` finds the place.
+    let mut ed = vim("a\nb\nc\nd\n");
+    press(&mut ed, "jzfG");
+    press(&mut ed, "ggG");
+    assert_eq!(line(&ed), 1, "G stops on the fold's line");
+    assert!(ed.line_is_folded(3));
+    press(&mut ed, "zo");
+    assert_eq!(line(&ed), 3, "zo: where G was going");
+    // A search into it opens it.
+    let mut ed = vim("a\nb\nc\nd\ne\n");
+    press(&mut ed, "jzf2jgg/d");
+    ed.on_key(Key::Enter);
+    assert_eq!(line(&ed), 3);
+    assert!(!ed.line_is_folded(3), "the search opened it");
+    // `o` on a fold opens a line after it, the fold still closed.
+    let mut ed = vim("a\nb\nc\nd\n");
+    press(&mut ed, "jzfjoX");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "a\nb\nc\nX\nd\n");
+    assert!(ed.line_is_folded(2));
+    // `p` puts after it.
+    let mut ed = vim("a\nb\nc\nd\n");
+    press(&mut ed, "yyjzfjp");
+    assert_eq!(ed.current_buffer().text(), "a\nb\nc\na\nd\n");
+}
+
+/// The rest of vim's fold keys, and a fold's line.
+#[test]
+fn vims_fold_keys_and_a_folds_line() {
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let line = |ed: &Editor| ed.cursor_line();
+    // Nested: lines 0–7 hold 1–3 and 5–6.
+    let mut ed = vim("0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n");
+    press(&mut ed, "6Gzfj2Gzf2j1Gzf7jzR");
+    assert!(!ed.line_is_folded(3));
+    press(&mut ed, "gg");
+    press(&mut ed, "zj");
+    assert_eq!(line(&ed), 1);
+    press(&mut ed, "zj");
+    assert_eq!(line(&ed), 5);
+    press(&mut ed, "zk");
+    assert_eq!(line(&ed), 3, "zk: the end of the fold before");
+    press(&mut ed, "6G[z");
+    assert_eq!(line(&ed), 0, "[z at a fold's start: the start of the one holding it");
+    press(&mut ed, "]z");
+    assert_eq!(line(&ed), 7);
+    // `zc` from all open closes the innermost; again, the next out.
+    press(&mut ed, "3Gzc");
+    assert!(ed.fold_head(1) && ed.line_is_folded(2) && !ed.line_is_folded(5));
+    assert_eq!(line(&ed), 1);
+    press(&mut ed, "zc");
+    assert!(ed.fold_head(0) && ed.line_is_folded(5));
+    // `zM` closes all, `zn` shows them, `zN` puts them back.
+    press(&mut ed, "zR");
+    press(&mut ed, "zM");
+    assert!(ed.fold_head(0));
+    press(&mut ed, "zn");
+    assert!(!ed.line_is_folded(3));
+    press(&mut ed, "zN");
+    assert!(ed.line_is_folded(3));
+    // `zd` deletes the fold, not the text; `zE` all of them.
+    press(&mut ed, "zRggjzd");
+    assert_eq!(ed.fold_view().spans.len(), 2);
+    assert_eq!(ed.current_buffer().text(), "0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n");
+    press(&mut ed, "zE");
+    assert!(ed.fold_view().spans.is_empty());
+    // A fold's line: in a text file the first words and the 字 in it.
+    let mut ed = vim("甲\n乙乙\n丙丙丙\n丁\n");
+    ed.note_fold_width(30);
+    press(&mut ed, "jzfj");
+    let said = ed.fold_line(1).expect("a fold's line");
+    assert!(said.starts_with("乙乙 ·") && said.ends_with(&say!("ui.count", 5)), "{said:?}");
+    assert_eq!(yumete_cjk::str_width(&said), 30);
+}
+
+/// **Heading folds** (2026-11-03, the flavour's `heading_folds`, basic): a
+/// Markdown heading folds its section, every one open at first; the keys
+/// close and open them, each window keeps its own, a split copies them,
+/// and with the item off there are only `zf`'s folds, as in vim.
+#[test]
+fn headings_fold_their_sections_per_window() {
+    let doc = "# 一\n\n甲。\n\n## 二\n\n乙。\n\n# 三\n\n丙。\n";
+    let mut ed = markdown(doc);
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    assert!(!ed.line_is_folded(2), "open at first");
+    press(&mut ed, "zM");
+    assert!(ed.fold_head(0) && ed.fold_head(8));
+    assert!(ed.line_is_folded(4), "## 二 is inside # 一");
+    let said = ed.fold_line(0).expect("a fold's line");
+    assert!(said.starts_with("# 一 ") && said.ends_with(&say!("ui.count", 4)), "{said:?}");
+    press(&mut ed, "zo");
+    assert!(ed.fold_head(4) && !ed.line_is_folded(2), "zo opens one level");
+    // A split copies them; then each window has its own.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    assert!(ed.fold_head(4));
+    press(&mut ed, "zR");
+    assert!(!ed.fold_head(4));
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.fold_head(4), "the other window's are its own");
+    // Off: only `zf`'s.
+    ed.execute(":keymap-yumete-flavor off").unwrap();
+    assert!(!ed.fold_head(4) && !ed.line_is_folded(6));
+    press(&mut ed, "zc");
+    assert_eq!(ed.status(), say!("fold.none-here"));
+}

@@ -378,6 +378,7 @@ impl Editor {
                 's' => String::from("ys"),
                 'u' | 'U' | '~' | 'q' | 'w' => format!("g{op}"),
                 '#' => String::from("gc"),
+                'Z' => String::from("zf"),
                 _ => String::from(op),
             };
             if let Some(f) = first {

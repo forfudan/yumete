@@ -369,6 +369,19 @@ flavor_items! {
         label: "keys.flavor.item.block-comment-lines",
         hint: "keys.flavor.item.block-comment-lines.hint",
     },
+    /// Every Markdown and Typst heading is a fold over its section, all
+    /// open at first (2026-11-03, after a writer's review); off, vim's own
+    /// default: folds are only those made with `zf`.
+    HeadingFolds => ItemInfo {
+        id: "heading_folds",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
+        keys: &[],
+        vim_keys: None,
+        insert: false,
+        label: "keys.flavor.item.heading-folds",
+        hint: "keys.flavor.item.heading-folds.hint",
+    },
     /// vim's `gc{motion}`, `gcc` and Visual `gc`, as vim 9.1's comment package
     /// and Neovim have them (2026-11-02): the lines, commented as
     /// `Space A-c` comments them. Off, vim has no comment key but `\c`.

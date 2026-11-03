@@ -476,6 +476,13 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
+        // On a closed fold the new line goes after its last line, and the
+        // fold stays closed (vim's `o`, measured 2026-11-03).
+        if let Some((_, last)) = self.shut_around(self.cursor_line()) {
+            let at = self.current_buffer().rope().line_to_char(last);
+            self.sel.set_anchor(at);
+            self.sel.set_head(at);
+        }
         // **格內的 `o` 開的是這一格的一行**（設計 §03，2026-10-22）。
         if self.open_a_line_in_the_cell(true) {
             return;
@@ -1717,6 +1724,15 @@ impl Editor {
             // 按 p 實際會粘到 hello 之後」。要的是選區**最後一個字**那一行。
             let last = end.max(start).saturating_sub(1).max(start);
             let line = rope.char_to_line(if after { last } else { start });
+            // A closed fold is one line: `p` puts after its last, `P`
+            // before its first (measured in nvim, 2026-11-03).
+            let line = match self.shut_around(line) {
+                Some((first, last)) => match after {
+                    true => last,
+                    false => first,
+                },
+                None => line,
+            };
             if after {
                 let next = line + 1;
                 if next < rope.len_lines() {

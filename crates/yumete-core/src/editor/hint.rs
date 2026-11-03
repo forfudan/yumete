@@ -516,6 +516,7 @@ impl Editor {
                 let op = match op {
                     'q' | 'w' | 'u' | 'U' | '~' => format!("g{op}"),
                     '#' => String::from("gc"),
+                    'Z' => String::from("zf"),
                     other => other.to_string(),
                 };
                 return Some(Hint::Says(match first {

@@ -11768,6 +11768,8 @@ fn draw_horizontal(
     // simply clipped, which is what the row model produces at an unreachable
     // width.
     let width = editor.wrap_width().unwrap_or(usize::MAX / 2).max(1);
+    // A closed fold's line fills the row it is drawn on (2026-11-03).
+    editor.note_fold_width((text_area.width as usize).saturating_sub(gutter).min(width).max(1));
 
     // The measure is the width *and* what is off the page: a row holds what
     // fits on the screen, so markup taken off it takes no room.

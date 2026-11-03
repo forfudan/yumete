@@ -1,4 +1,4 @@
-# prefixes: ui label panel sidebar hud menu picker preview region pane theme show detail info
+# prefixes: ui label panel sidebar hud menu picker preview region pane theme show detail info fold
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -25,6 +25,20 @@ en = "line {0}"
 
 
 # ── diff ──────────────────────────────────────────────────────────────
+
+[[message]]
+# 折疊鍵按在没有折疊的地方（草稿）
+key = "fold.none-here"
+zht = "這裏没有折疊"
+zhs = "这里没有折叠"
+en = "no fold here"
+
+[[message]]
+# zd 按在標題折疊上：它不是 zf 做的，刪不掉（草稿）
+key = "fold.not-made-with-zf"
+zht = "這個折疊來自標題，不是 zf 做的，刪不掉"
+zhs = "这个折叠来自标题，不是 zf 做的，删不掉"
+en = "this fold comes from a heading; only folds made with zf can be deleted"
 
 [[message]]
 # :view-hud basic(出廠)——也是 :view-hud 不帶參數時的回答

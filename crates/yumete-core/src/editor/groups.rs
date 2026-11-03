@@ -989,6 +989,7 @@ pub(super) static RIGHT_BRACKET: Group = Group {
         ch('p', NormalCmd::VimPasteAfterIndented, "action.vim-paste-after-indented").when(Only::Vim),
         ch('P', NormalCmd::VimPasteBeforeIndented, "action.vim-paste-before-indented").when(Only::Vim),
         ch('p', NormalCmd::GotoNextParagraph, "action.goto-next-paragraph"),
+        ch('z', NormalCmd::GotoFoldEnd, "hint.fold.end").when(Only::Vim),
         ch(' ', NormalCmd::AddNewlineBelow, "hint.hop.blank-below"),
     ],
     unknown: Unknown::NoSuchCombination,
@@ -1022,6 +1023,7 @@ pub(super) static LEFT_BRACKET: Group = Group {
         ch('p', NormalCmd::VimPasteBeforeIndented, "action.vim-paste-before-indented").when(Only::Vim),
         ch('P', NormalCmd::VimPasteBeforeIndented, "action.vim-paste-before-indented").when(Only::Vim),
         ch('p', NormalCmd::GotoPrevParagraph, "action.goto-prev-paragraph"),
+        ch('z', NormalCmd::GotoFoldStart, "hint.fold.start").when(Only::Vim),
         ch(' ', NormalCmd::AddNewlineAbove, "hint.hop.blank-above"),
     ],
     unknown: Unknown::NoSuchCombination,
@@ -1036,8 +1038,27 @@ pub(super) static LEFT_BRACKET: Group = Group {
 /// paging keys are helix's (`z j`, `z C-d`…) and answer without a line.
 const VIEW_ROWS: &[Row] = &[
     ch('z', NormalCmd::AlignViewCenter, "hint.aim.middle"),
-    // `zc` `zj` `zk` `zn` `zN` are vim's folds, which yumete does not have:
-    // helix's view keys only (2026-11-01).
+    // vim's folds (2026-11-03, measured in nvim); `zc` `zj` `zk` are
+    // helix's view keys under helix.
+    ch('f', NormalCmd::CreateFold, "hint.fold.create").when(Only::Vim),
+    ch('F', NormalCmd::CreateFoldLines, "hint.fold.create-lines").when(Only::Vim),
+    ch('o', NormalCmd::OpenFold, "hint.fold.open").when(Only::Vim),
+    ch('O', NormalCmd::OpenFoldsRecursively, "hint.fold.open-all-here").when(Only::Vim),
+    ch('c', NormalCmd::CloseFold, "hint.fold.close").when(Only::Vim),
+    ch('C', NormalCmd::CloseFoldsRecursively, "hint.fold.close-all-here").when(Only::Vim),
+    ch('a', NormalCmd::ToggleFold, "hint.fold.toggle").when(Only::Vim),
+    ch('A', NormalCmd::ToggleFoldsRecursively, "hint.fold.toggle-all-here").when(Only::Vim),
+    ch('v', NormalCmd::OpenFoldsToCursor, "hint.fold.view").when(Only::Vim),
+    ch('R', NormalCmd::OpenAllFolds, "hint.fold.open-every").when(Only::Vim),
+    ch('M', NormalCmd::CloseAllFolds, "hint.fold.close-every").when(Only::Vim),
+    ch('d', NormalCmd::DeleteFold, "hint.fold.delete").when(Only::Vim),
+    ch('D', NormalCmd::DeleteFoldsRecursively, "hint.fold.delete-all-here").when(Only::Vim),
+    ch('E', NormalCmd::DeleteAllFolds, "hint.fold.delete-every").when(Only::Vim),
+    ch('j', NormalCmd::GotoNextFold, "hint.fold.next").when(Only::Vim),
+    ch('k', NormalCmd::GotoPrevFold, "hint.fold.prev").when(Only::Vim),
+    ch('n', NormalCmd::DisableFolds, "hint.fold.off").when(Only::Vim),
+    ch('N', NormalCmd::EnableFolds, "hint.fold.on").when(Only::Vim),
+    ch('i', NormalCmd::ToggleFoldsEnabled, "hint.fold.on-off").when(Only::Vim),
     quiet(Key::Char('c'), NormalCmd::AlignViewCenter).when(Only::Helix),
     ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
     ch('b', NormalCmd::AlignViewBottom, "hint.aim.bottom"),

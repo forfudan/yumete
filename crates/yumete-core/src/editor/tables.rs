@@ -1740,6 +1740,10 @@ impl Editor {
     /// grid is one row, however long it is, because a cell that has wrapped
     /// onto the next screen row is no longer in its column.
     pub fn table_row_at(&self, line: usize) -> bool {
+        // A closed fold's line is one row too (2026-11-03).
+        if self.fold_head(line) {
+            return true;
+        }
         if self.table_lines_at(line).is_some() {
             return true;
         }

@@ -35,6 +35,7 @@ impl Editor {
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
         let was = self.before_a_change();
         let outcome = self.on_key_now(key);
+        self.settle_folds();
         self.keep_the_signature_up(was);
         self.settle_the_change(was);
         match std::mem::take(&mut self.quit_from_binding) {
@@ -840,6 +841,14 @@ impl Editor {
             self.extend_to_line_bounds();
             self.vim_lines = false;
         }
+        // Visual `zf`: the selected lines, folded.
+        if c == 'Z' {
+            self.extend = false;
+            let (from, to) = self.selection();
+            let rope = self.current_buffer().rope();
+            let (first, last) = (rope.char_to_line(from), rope.char_to_line(to.saturating_sub(1).max(from)));
+            return self.fold_lines(first, last);
+        }
         // Visual `gc`: the selected lines, commented.
         if c == '#' {
             self.extend = false;
@@ -1094,8 +1103,11 @@ impl Editor {
         self.settle_alias_count();
         let n = self.count.take().unwrap_or(1).max(1);
         let rope = self.current_buffer().rope();
-        let first = rope.char_to_line(self.sel.head());
-        let last = (first + n - 1).min(rope.len_lines().saturating_sub(1));
+        let here = rope.char_to_line(self.sel.head());
+        // A closed fold is one line (`2dd` on a fold: the fold and the line
+        // after it, measured in nvim 2026-11-03).
+        let (first, last) = self.lines_counted_over_folds(here, n);
+        let rope = self.current_buffer().rope();
         // **`yss` is not a linewise `ys`.** vim-surround spells it
         // `^v{count}$h`, which is 「from where the writing begins to the last
         // character of the line」 — the indent stays outside the opener and
@@ -1109,6 +1121,38 @@ impl Editor {
         }
         let span = self.line_span(first, last, op == 'c');
         self.do_vim_span(op, span, Shape::Lines);
+    }
+
+    /// `n` lines from `here`, a closed fold counting as one: the first line
+    /// (a fold's first when `here` is in one) and the last.
+    pub(super) fn lines_counted_over_folds(&self, here: usize, n: usize) -> (usize, usize) {
+        let lines = self.current_buffer().rope().len_lines();
+        let first = self.shut_around(here).map_or(here, |(first, _)| first);
+        let end_of = |line: usize| self.shut_around(line).map_or(line, |(_, last)| last);
+        let mut last = end_of(first);
+        for _ in 1..n {
+            if last + 1 >= lines {
+                break;
+            }
+            last = end_of(last + 1);
+        }
+        (first, last.min(lines.saturating_sub(1)))
+    }
+
+    /// A span reaching into a closed fold, widened to the whole lines of
+    /// the folds at its ends, and linewise.
+    fn over_closed_folds(&self, op: char, span: motion::Span, shape: Shape) -> (motion::Span, Shape) {
+        let motion::Span::Over { anchor, head } = span else { return (span, shape) };
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let (a, b) = (rope.char_to_line(anchor.min(head).min(len)), rope.char_to_line(anchor.max(head).min(len)));
+        let (fa, fb) = (self.shut_around(a), self.shut_around(b));
+        if fa.is_none() && fb.is_none() {
+            return (span, shape);
+        }
+        let first = fa.map_or(a, |(first, _)| first);
+        let last = fb.map_or(b, |(_, last)| last);
+        (self.line_span(first, last, op == 'c'), Shape::Lines)
     }
 
     /// The span whole lines cover. `keep_break` is `cc`'s rule: **`cc` keeps
@@ -1473,6 +1517,12 @@ impl Editor {
     /// 同上，而且說清楚這一段是**整行**還是行內的一截——那道「落在換行符上就什麼
     /// 都不做」的閘只擋行內的（見底下）。
     fn do_vim_span(&mut self, op: char, span: motion::Span, shape: Shape) {
+        // **An operator takes a closed fold whole** (`:h fold-behavior`: 「dl
+        // deletes the whole closed fold under the cursor」, measured).
+        let (span, shape) = match op {
+            's' | 'Z' => (span, shape),
+            _ => self.over_closed_folds(op, span, shape),
+        };
         // **`ys{motion}{bracket}`**: the motion only says what to wrap, so
         // nothing is edited yet and there is nothing to take a snapshot of.
         // Select what it named and wait for the bracket, which is what `ms`
@@ -1569,6 +1619,15 @@ impl Editor {
                     self.sel.set_head(at);
                     self.clamp_cursor();
                     self.refresh_goal_column();
+                }
+            }
+            // **`zf`** — the lines the motion crosses, folded (2026-11-03).
+            'Z' => {
+                if let motion::Span::Over { anchor, head } = span {
+                    let rope = self.current_buffer().rope();
+                    let (a, b) = (anchor.min(head), anchor.max(head));
+                    let (first, last) = (rope.char_to_line(a), rope.char_to_line(b.min(rope.len_chars())));
+                    self.fold_lines(first, last);
                 }
             }
             // **`gc`** — the lines the motion crosses, commented as `Space A-c`

@@ -290,6 +290,153 @@ zhs = "找"
 en = "find"
 
 [[message]]
+# z / [ ] 菜單：close_fold（草稿）
+key = "hint.fold.close"
+zht = "合上折疊(vim 的 zc)"
+zhs = "合上折叠(vim 的 zc)"
+en = "close a fold (vim's zc)"
+
+[[message]]
+# z / [ ] 菜單：close_folds_recursively（草稿）
+key = "hint.fold.close-all-here"
+zht = "合上這裏的所有折疊(vim 的 zC)"
+zhs = "合上这里的所有折叠(vim 的 zC)"
+en = "close every fold here (vim's zC)"
+
+[[message]]
+# z / [ ] 菜單：close_all_folds（草稿）
+key = "hint.fold.close-every"
+zht = "合上所有折疊(vim 的 zM)"
+zhs = "合上所有折叠(vim 的 zM)"
+en = "close every fold (vim's zM)"
+
+[[message]]
+# z / [ ] 菜單：create_fold（草稿）
+key = "hint.fold.create"
+zht = "做一個折疊(vim 的 zf，後面跟移動)"
+zhs = "做一个折叠(vim 的 zf，后面跟移动)"
+en = "make a fold over a motion (vim's zf)"
+
+[[message]]
+# z / [ ] 菜單：create_fold_lines（草稿）
+key = "hint.fold.create-lines"
+zht = "把計數那麼多行做成折疊(vim 的 zF)"
+zhs = "把计数那么多行做成折叠(vim 的 zF)"
+en = "make a fold over count lines (vim's zF)"
+
+[[message]]
+# z / [ ] 菜單：delete_fold（草稿）
+key = "hint.fold.delete"
+zht = "刪掉這裏的折疊，字不動(vim 的 zd)"
+zhs = "删掉这里的折叠，字不动(vim 的 zd)"
+en = "delete the fold here, not the text (vim's zd)"
+
+[[message]]
+# z / [ ] 菜單：delete_folds_recursively（草稿）
+key = "hint.fold.delete-all-here"
+zht = "刪掉這裏的所有折疊(vim 的 zD)"
+zhs = "删掉这里的所有折叠(vim 的 zD)"
+en = "delete every fold here (vim's zD)"
+
+[[message]]
+# z / [ ] 菜單：delete_all_folds（草稿）
+key = "hint.fold.delete-every"
+zht = "刪掉所有 zf 做的折疊(vim 的 zE)"
+zhs = "删掉所有 zf 做的折叠(vim 的 zE)"
+en = "delete every fold made with zf (vim's zE)"
+
+[[message]]
+# z / [ ] 菜單：goto_fold_end（草稿）
+key = "hint.fold.end"
+zht = "到所在折疊的末尾(vim 的 ]z)"
+zhs = "到所在折叠的末尾(vim 的 ]z)"
+en = "to the end of the open fold here (vim's ]z)"
+
+[[message]]
+# z / [ ] 菜單：goto_next_fold（草稿）
+key = "hint.fold.next"
+zht = "到下一個折疊的開頭(vim 的 zj)"
+zhs = "到下一个折叠的开头(vim 的 zj)"
+en = "to the next fold's start (vim's zj)"
+
+[[message]]
+# z / [ ] 菜單：disable_folds（草稿）
+key = "hint.fold.off"
+zht = "暫時全部展開(vim 的 zn)"
+zhs = "暂时全部展开(vim 的 zn)"
+en = "every fold open, kept (vim's zn)"
+
+[[message]]
+# z / [ ] 菜單：enable_folds（草稿）
+key = "hint.fold.on"
+zht = "折疊恢復原樣(vim 的 zN)"
+zhs = "折叠恢复原样(vim 的 zN)"
+en = "folds back as they were (vim's zN)"
+
+[[message]]
+# z / [ ] 菜單：toggle_folds_enabled（草稿）
+key = "hint.fold.on-off"
+zht = "折疊停用或恢復(vim 的 zi)"
+zhs = "折叠停用或恢复(vim 的 zi)"
+en = "folds off or back on (vim's zi)"
+
+[[message]]
+# z / [ ] 菜單：open_fold（草稿）
+key = "hint.fold.open"
+zht = "打開折疊(vim 的 zo)"
+zhs = "打开折叠(vim 的 zo)"
+en = "open a fold (vim's zo)"
+
+[[message]]
+# z / [ ] 菜單：open_folds_recursively（草稿）
+key = "hint.fold.open-all-here"
+zht = "打開這裏的所有折疊(vim 的 zO)"
+zhs = "打开这里的所有折叠(vim 的 zO)"
+en = "open every fold here (vim's zO)"
+
+[[message]]
+# z / [ ] 菜單：open_all_folds（草稿）
+key = "hint.fold.open-every"
+zht = "打開所有折疊(vim 的 zR)"
+zhs = "打开所有折叠(vim 的 zR)"
+en = "open every fold (vim's zR)"
+
+[[message]]
+# z / [ ] 菜單：goto_prev_fold（草稿）
+key = "hint.fold.prev"
+zht = "到上一個折疊的末尾(vim 的 zk)"
+zhs = "到上一个折叠的末尾(vim 的 zk)"
+en = "to the previous fold's end (vim's zk)"
+
+[[message]]
+# z / [ ] 菜單：goto_fold_start（草稿）
+key = "hint.fold.start"
+zht = "到所在折疊的開頭(vim 的 [z)"
+zhs = "到所在折叠的开头(vim 的 [z)"
+en = "to the start of the open fold here (vim's [z)"
+
+[[message]]
+# z / [ ] 菜單：toggle_fold（草稿）
+key = "hint.fold.toggle"
+zht = "開合折疊(vim 的 za)"
+zhs = "开合折叠(vim 的 za)"
+en = "open or close a fold (vim's za)"
+
+[[message]]
+# z / [ ] 菜單：toggle_folds_recursively（草稿）
+key = "hint.fold.toggle-all-here"
+zht = "開合這裏的所有折疊(vim 的 zA)"
+zhs = "开合这里的所有折叠(vim 的 zA)"
+en = "open or close every fold here (vim's zA)"
+
+[[message]]
+# z / [ ] 菜單：open_folds_to_cursor（草稿）
+key = "hint.fold.view"
+zht = "打開到看得見光標那一行(vim 的 zv)"
+zhs = "打开到看得见光标那一行(vim 的 zv)"
+en = "open enough to see the cursor's line (vim's zv)"
+
+[[message]]
 # 提示：腳注
 key = "hint.footnote"
 zht = "腳注"

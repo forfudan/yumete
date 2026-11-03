@@ -22,6 +22,9 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         // `g30g` — the group's own count — and `30gg`, vi's order.
         let line = e.sequence_span().map(|(n, _)| n).or(cx.operator_count);
         e.operator_count = None;
+        // vim's jumps leave a closed fold closed (its `foldopen` has no
+        // `jump`, measured 2026-11-03).
+        e.fold_stays_closed = true;
         if let Some(n) = line.filter(|&n| n > 0) {
             return e.goto_grid_row(n);
         }
@@ -29,12 +32,14 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.goto_motion(motion::Motion::FileStart);
     }, Key::Char('g')),
     (NormalCmd::GotoFileEnd, |e, _| {
+        e.fold_stays_closed = true;
         e.remember_jump();
         e.goto_motion(motion::Motion::FileEnd);
     }, Key::Char('e')),
     // `ge` and then `gh`: helix's `ge`, which this editor gives to the end
     // of the file.
     (NormalCmd::GotoLastLine, |e, _| {
+        e.fold_stays_closed = true;
         e.remember_jump();
         e.goto_motion(motion::Motion::FileEnd);
         e.goto_motion(motion::Motion::LineStart);
@@ -238,6 +243,28 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.pending = Pending::SurroundFrom;
         e.operator_count = cx.operator_count;
     }, Key::Char('r')),
+    // ── z: vim's folds (2026-11-03) ───────────────────────────────────
+    (NormalCmd::CreateFold, |e, _| e.fold_operator(), Key::Char('f')),
+    (NormalCmd::CreateFoldLines, |e, cx| { let line = e.cursor_line(); e.fold_lines(line, line + cx.count.max(1) - 1) }, Key::Char('F')),
+    (NormalCmd::OpenFold, |e, cx| e.fold_open(cx.count, false), Key::Char('o')),
+    (NormalCmd::OpenFoldsRecursively, |e, cx| e.fold_open(cx.count, true), Key::Char('O')),
+    (NormalCmd::CloseFold, |e, cx| e.fold_close(cx.count, false), Key::Char('c')),
+    (NormalCmd::CloseFoldsRecursively, |e, cx| e.fold_close(cx.count, true), Key::Char('C')),
+    (NormalCmd::ToggleFold, |e, cx| e.fold_toggle(cx.count, false), Key::Char('a')),
+    (NormalCmd::ToggleFoldsRecursively, |e, cx| e.fold_toggle(cx.count, true), Key::Char('A')),
+    (NormalCmd::OpenFoldsToCursor, |e, _| e.fold_view_cursor(), Key::Char('v')),
+    (NormalCmd::OpenAllFolds, |e, _| e.fold_all(false), Key::Char('R')),
+    (NormalCmd::CloseAllFolds, |e, _| e.fold_all(true), Key::Char('M')),
+    (NormalCmd::DeleteFold, |e, _| e.fold_delete(super::folds::FoldDelete::Innermost), Key::Char('d')),
+    (NormalCmd::DeleteFoldsRecursively, |e, _| e.fold_delete(super::folds::FoldDelete::Here), Key::Char('D')),
+    (NormalCmd::DeleteAllFolds, |e, _| e.fold_delete(super::folds::FoldDelete::All), Key::Char('E')),
+    (NormalCmd::GotoNextFold, |e, cx| e.fold_step(true, cx.count), Key::Char('j')),
+    (NormalCmd::GotoPrevFold, |e, cx| e.fold_step(false, cx.count), Key::Char('k')),
+    (NormalCmd::DisableFolds, |e, _| e.fold_enable(Some(false)), Key::Char('n')),
+    (NormalCmd::EnableFolds, |e, _| e.fold_enable(Some(true)), Key::Char('N')),
+    (NormalCmd::ToggleFoldsEnabled, |e, _| e.fold_enable(None), Key::Char('i')),
+    (NormalCmd::GotoFoldStart, |e, _| e.fold_edge(false), Key::Char('z')),
+    (NormalCmd::GotoFoldEnd, |e, _| e.fold_edge(true), Key::Char('z')),
     // ── C-w ────────────────────────────────────────────────────────────
     // vim's `C-w w` `W` with a count go to that window; helix's take none.
     (NormalCmd::RotateView, |e, cx| match cx.operator_count.filter(|_| e.vim_keymap()) {
@@ -458,6 +485,12 @@ impl Editor {
 
     /// A vim `g` operator: it waits for a motion, or acts on what Visual mode
     /// has selected.
+    /// vim's `zf`: an operator over a motion, or the Visual selection's
+    /// lines folded.
+    fn fold_operator(&mut self) {
+        self.g_operator('Z');
+    }
+
     fn g_operator(&mut self, op: char) {
         if self.extend {
             return self.vim_visual_key(op);

@@ -212,6 +212,9 @@ impl Editor {
     /// horizontal page, which draws the reading above the row, asks
     /// [`Self::hidden_on_line`], which is this plus the ruby tags.
     pub fn markup_hidden_on_line(&self, line: usize) -> Vec<(usize, usize)> {
+        if let Some(all) = self.fold_head_hides(line) {
+            return all;
+        }
         let mut hidden = match self.wysiwyg() {
             false => Vec::new(),
             true => {
@@ -309,6 +312,10 @@ impl Editor {
     /// break), and anything inside a fence or a page's metadata, where a blank
     /// line is content.
     pub fn line_is_folded(&self, line: usize) -> bool {
+        // **Inside a closed fold** (2026-11-03), whatever the rest says.
+        if self.fold_hides(line) {
+            return true;
+        }
         // 中階 draws the indent and keeps the blank line: adding two squares
         // takes nothing away, folding a line does (#283).
         if self.indent == 0 || !self.indent_folds {
@@ -916,6 +923,9 @@ impl Editor {
         };
         self.panes.insert(fresh, here);
         self.panel_focus = None;
+        // …and its folds, as vim's `:split` copies them (2026-11-03).
+        let from = self.live;
+        self.fold_copy_to(from, fresh);
         self.switch_to(fresh)
     }
 

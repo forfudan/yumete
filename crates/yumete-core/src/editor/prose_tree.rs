@@ -81,12 +81,12 @@ impl Editor {
         !matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_))
     }
 
-    fn lists_here(&self) -> bool {
+    pub(super) fn lists_here(&self) -> bool {
         matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Markdown | crate::syntax::Syntax::Typst)
     }
 
     /// The sections, as (heading line, depth, first char, end char).
-    fn prose_sections(&self) -> Vec<(usize, usize, usize, usize)> {
+    pub(super) fn prose_sections(&self) -> Vec<(usize, usize, usize, usize)> {
         let rope = self.current_buffer().rope();
         let heads = self.outline();
         heads
