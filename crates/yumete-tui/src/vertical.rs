@@ -1205,7 +1205,7 @@ pub fn draw(
     // Not in a pane that is only being read: that half is already a rung back,
     // and standing part of it back again would say it has a cursor.
     let focus = peek.is_none() && editor.focus();
-    let stood_back = ink.faded();
+    let stood_back = ink.stood_back();
 
     // Word ranges are per paragraph, and consecutive 縱 usually share one, so
     // segment each paragraph once as the page is walked. Its Markdown runs are

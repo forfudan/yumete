@@ -459,7 +459,16 @@ pub struct Palette {
     /// the two halves different grounds. It is what tmux does to an inactive
     /// pane and what a printed page does to a facing note: the thing you are
     /// not reading is not louder, it is quieter.
-    faded: bool,
+    ///
+    /// How far, per thousand of the way to the page: 0 for the window the
+    /// keys are in. Set from `[theme] inactive` and `[theme] focus`
+    /// (2026-11-04: 74% kept for both was too much for a window and too
+    /// little for focus mode).
+    faded: u32,
+    /// What [`Self::faded`] stands a window back by, and what
+    /// [`Self::stood_back`] stands a paragraph back by in focus mode.
+    inactive: u32,
+    focus: u32,
 }
 
 /// One of the colours that is **not** a quantity of ink — 金, 朱, and the three
@@ -631,7 +640,13 @@ impl Palette {
              mean. Reading the palette before the first frame gets the light \
              one and the frame comes out dark. 見 development.md §5.12.58."
         );
-        Palette::of_theme(&in_force(config), dark())
+        // The two fades are the reader's, not the theme's: `:theme` swaps the
+        // theme and must not swap them.
+        Palette {
+            inactive: fade_of(config.theme.inactive),
+            focus: fade_of(config.theme.focus),
+            ..Palette::of_theme(&in_force(config), dark())
+        }
     }
 
     /// The palette a config would give in the stated mood.
@@ -665,16 +680,18 @@ impl Palette {
                 false => theme.pinned_light,
             },
             paint: theme.ground == Ground::Paint,
-            faded: false,
+            faded: 0,
+            inactive: fade_of(theme.inactive),
+            focus: fade_of(theme.focus),
         }
     }
 
-    /// How far a stood-back half is moved toward the page, per thousand of the
-    /// distance it still has to go.
-    ///
-    /// 260 of the writing's own 1000, which is the step this was calibrated at
-    /// when it was a fixed one.
-    const FADE: u32 = 260;
+    /// How far an accent goes toward the page when the ink goes `faded`:
+    /// further, since an accent is louder (55% when the ink went 26%), and
+    /// never all the way, so a link stays a link (2026-11-04).
+    fn accent_share(self) -> i64 {
+        (i64::from(self.faded) * 55 / 26).min(850)
+    }
 
     /// **`under`, marked `depth` rungs toward the ink** — the one way anything
     /// is laid over anything else (#488).
@@ -737,14 +754,22 @@ impl Palette {
     /// The same palette, a rung back: the half that is only being read.
     pub fn faded(self) -> Palette {
         Palette {
-            faded: true,
+            faded: self.inactive,
+            ..self
+        }
+    }
+
+    /// The same palette as focus mode stands a paragraph back.
+    pub fn stood_back(self) -> Palette {
+        Palette {
+            faded: self.focus,
             ..self
         }
     }
 
     /// One rung, as a colour.
     pub fn at(self, rung: u16) -> Color {
-        let rung = match self.faded {
+        let rung = match self.faded > 0 {
             // Toward the page, not toward the ink: a quiet pane is *further
             // away*, and a ground it carries (a band, a selection) goes with
             // it so the whole half recedes together.
@@ -755,12 +780,12 @@ impl Palette {
             // the measure, the search band and the colour indent squares did
             // not recede — they vanished, which is a different statement.
             // Scaling the *remaining* distance keeps the rungs in order and in
-            // sight, and leaves the ink end exactly where it was calibrated:
-            // the writing still fades 260 rungs, because that is all of them.
+            // sight: the writing fades by the whole of the setting, and every
+            // rung lighter than it by the same share of what it has left.
             true => {
                 let rung = rung.min(yumete_config::rung::PAPER);
                 let room = (yumete_config::rung::PAPER - rung) as u32;
-                (rung as u32 + room * Self::FADE / 1000) as u16
+                (rung as u32 + room * self.faded / 1000) as u16
             }
             false => rung,
         };
@@ -930,11 +955,12 @@ impl Palette {
 
     /// An accent, taken back with the rest when the half is only being read.
     fn accent(self, (r, g, b): (u8, u8, u8)) -> Color {
-        if !self.faded {
+        if self.faded == 0 {
             return Color::Rgb(r, g, b);
         }
         let paper = self.ladder.paper;
-        let mix = |a: u8, b: u8| -> u8 { ((a as i64) + (b as i64 - a as i64) * 55 / 100) as u8 };
+        let share = self.accent_share();
+        let mix = |a: u8, b: u8| -> u8 { ((a as i64) + (b as i64 - a as i64) * share / 1000) as u8 };
         Color::Rgb(mix(r, paper.0), mix(g, paper.1), mix(b, paper.2))
     }
     /// A highlighter's ground — **金**, washed toward the page.
@@ -1284,8 +1310,8 @@ impl Palette {
     /// An accent, `percent` of the way to the page.
     fn washed_toward(self, accent: (u8, u8, u8), percent: i64) -> Color {
         // A read-only half takes its accents back with everything else.
-        let percent = match self.faded {
-            true => percent + (100 - percent) * 55 / 100,
+        let percent = match self.faded > 0 {
+            true => percent + (100 - percent) * self.accent_share() / 1000,
             false => percent,
         };
         let (paper, accent) = (self.ladder.paper, accent);
@@ -1367,6 +1393,11 @@ mod span_tests {
     }
 }
 
+
+/// A percent of ink kept, as per thousand of the way to the page.
+fn fade_of(percent: u16) -> u32 {
+    (100 - u32::from(percent.min(100))) * 10
+}
 
 #[cfg(test)]
 mod ground_tests {

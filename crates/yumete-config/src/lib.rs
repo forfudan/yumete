@@ -1336,6 +1336,13 @@ pub struct ThemeConfig {
     /// ground behind it is a second answer to a question nobody asked. On for
     /// whoever wants the code to sit in a box.
     pub fill: bool,
+    /// **How much of its ink a window you are not in keeps**, in percent
+    /// (2026-11-04): 95, a little, so two windows still compare; 100 is
+    /// vim's and helix's, which do not dim at all.
+    pub inactive: u16,
+    /// **How much ink focus mode leaves the paragraphs you are not writing**,
+    /// in percent (2026-11-04): 50, so the one being written stands out.
+    pub focus: u16,
     /// **A theme with no light half** (2026-10-25, One Dark). In a light mood
     /// it is drawn dark all the same, and `:theme-mode light` says so.
     pub dark_only: bool,
@@ -2607,6 +2614,8 @@ impl Default for ThemeConfig {
             lime_dark: (0xAA, 0xC7, 0x77),
             lime_light: (0x51, 0x6F, 0x21),
             fill: false,
+            inactive: 95,
+            focus: 50,
             dark_only: false,
             pinned: None,
             pinned_light: None,
@@ -4367,6 +4376,10 @@ struct RawTheme {
     lime_light: Option<String>,
     /// Whether a 品色 run also gets a ground (`:theme-fill`).
     fill: Option<bool>,
+    /// The ink a window you are not in keeps, in percent.
+    inactive: Option<u16>,
+    /// The ink focus mode leaves the other paragraphs, in percent.
+    focus: Option<u16>,
 }
 
 /// `[keys]`: a table per mode, each read line by line (step 5 of the
@@ -4683,6 +4696,12 @@ impl RawConfig {
             if from.is_some() {
                 *to = from.clone();
             }
+        }
+        if other.theme.inactive.is_some() {
+            self.theme.inactive = other.theme.inactive;
+        }
+        if other.theme.focus.is_some() {
+            self.theme.focus = other.theme.focus;
         }
         if other.theme.fill.is_some() {
             self.theme.fill = other.theme.fill;
@@ -5140,6 +5159,12 @@ impl RawConfig {
         }
         if let Some(fill) = self.theme.fill {
             config.theme.fill = fill;
+        }
+        if let Some(inactive) = self.theme.inactive {
+            config.theme.inactive = as_declared(problems, "theme", "inactive", inactive.into(), 95) as u16;
+        }
+        if let Some(focus) = self.theme.focus {
+            config.theme.focus = as_declared(problems, "theme", "focus", focus.into(), 50) as u16;
         }
         if let Some(markers) = self.panel.markers {
             // An empty list would leave every candidate unnumbered; keep the

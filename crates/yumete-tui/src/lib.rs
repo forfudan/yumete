@@ -12148,7 +12148,7 @@ fn draw_horizontal(
     let focus = peek.is_none() && editor.focus();
     // 檔末換行符畫出來的那一格，若有：它的號碼欄寫 `~`，不是一個行號。
     let tail = tail_row(rope);
-    let stood_back = ink.faded();
+    let stood_back = ink.stood_back();
     let mut lines: Vec<Line> = Vec::new();
     // What the bar at the top of the page will hold, taken from the first row
     // of the table this page shows (#379).

@@ -1631,6 +1631,20 @@ zhs = "代码块和引用要不要坐在一块淡底色上"
 en = "whether code blocks and quotes sit on a faint ground"
 
 [[message]]
+# 設置：焦點模式的墨色（草稿）
+key = "settings.theme.focus"
+zht = "焦點模式的墨色"
+zhs = "焦点模式的墨色"
+en = "focus mode"
+
+[[message]]
+# 設置：焦點模式的墨色——一句話（草稿）
+key = "settings.theme.focus.hint"
+zht = "焦點模式下，没在寫的段落留幾成墨色(百分比)"
+zhs = "焦点模式下，没在写的段落留几成墨色(百分比)"
+en = "how much ink focus mode leaves the paragraphs you are not writing, in percent"
+
+[[message]]
 # 設置：纸面
 key = "settings.theme.ground"
 zht = "紙面"
@@ -1643,6 +1657,20 @@ key = "settings.theme.ground.hint"
 zht = "編輯器自己畫出紙的底色，還是把底色還給終端(終端設了透明就用這個)"
 zhs = "编辑器自己画出纸的底色，还是把底色还给终端(终端设了透明就用这个)"
 en = "the editor paints the paper itself, or leaves the background to the terminal (use this with a transparent terminal)"
+
+[[message]]
+# 設置：別的窗口的墨色（草稿）
+key = "settings.theme.inactive"
+zht = "別的窗口的墨色"
+zhs = "别的窗口的墨色"
+en = "inactive windows"
+
+[[message]]
+# 設置：別的窗口的墨色——一句話（草稿）
+key = "settings.theme.inactive.hint"
+zht = "你不在的窗口留幾成墨色(百分比)：100 不變淡，同 vim 和 helix"
+zhs = "你不在的窗口留几成墨色(百分比)：100 不变淡，同 vim 和 helix"
+en = "how much ink a window you are not in keeps, in percent: 100 does not dim, as vim and helix"
 
 [[message]]
 # 設置：深色浅色
