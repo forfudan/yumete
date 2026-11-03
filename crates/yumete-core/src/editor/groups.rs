@@ -412,6 +412,17 @@ pub(super) const GROUPS: &[&Group] = &[
 
 impl Editor {
     /// What this editor's groups are asked against now.
+    /// The context a group's own rows are read in: helix's for its sticky
+    /// view, which vim has only from helix (`helix_keys_under_vim`), so
+    /// `j` `k` scroll there under both keymaps (decided 2026-11-03).
+    fn context_in(&self, group: &Group) -> Context {
+        let at = self.group_context();
+        match group.name == STICKY_VIEW.name {
+            true => Context { vim: false, ..at },
+            false => at,
+        }
+    }
+
     pub(super) fn group_context(&self) -> Context {
         // **Which list is a question about the cursor, not the mode.** It
         // used to be `md_region().is_none()`, which is *also* true of a
@@ -426,7 +437,7 @@ impl Editor {
         Context {
             vim: self.vim_keymap(),
             vertical: self.layout() == crate::zong::Layout::Vertical,
-            alias: self.expanding_alias,
+            alias: self.expanding_alias && !self.replaying_held,
             code: self.writes_code(),
             extend: self.extend,
             pane: self.the_pane_is_on(),
@@ -446,6 +457,19 @@ impl Editor {
                 return;
             }
         }
+        let at = self.context_in(group);
+        // **helix counts inside its view modes** (`z3j`, `Z3j` scroll three,
+        // measured 2026-11-03): a digit adds to the count and the mode stays.
+        // vim's digits there are `z{height}<CR>`.
+        if matches!(group.pending, Pending::Aim | Pending::AimStuck) && !at.vim {
+            if let Key::Char(c @ '0'..='9') = key {
+                if c != '0' || self.operator_count.is_some() {
+                    let digit = c as usize - '0' as usize;
+                    self.operator_count = Some(self.operator_count.unwrap_or(0).saturating_mul(10).saturating_add(digit));
+                    return;
+                }
+            }
+        }
         let was = self.pending;
         self.pending = Pending::None;
         if group.sticky && key != Key::Esc {
@@ -455,7 +479,6 @@ impl Editor {
             (true, Key::Ctrl(c)) => Key::Char(c),
             (_, key) => key,
         };
-        let at = self.group_context();
         match group.bind_for(key, &at) {
             Some(bind) => {
                 if let Some(&(_, run, _)) = super::normal::normal_cmd(bind.run) {
@@ -464,6 +487,12 @@ impl Editor {
                     // `g h` in a table's grid is the record's first cell.
                     if !self.takes_by_name(bind.run, count) {
                         run(self, Cx { key, count, operator_count, continuing_zong });
+                    }
+                    // Spent, unless the command waits for another key with it
+                    // (`mi`) or the group stays open (`Z`, whose next key
+                    // starts again from no count, as helix's does).
+                    if self.pending == Pending::None || group.sticky {
+                        self.operator_count = None;
                     }
                 }
             }
@@ -559,7 +588,7 @@ impl Editor {
     /// **The which-key menu of the group this is waiting in.**
     pub(super) fn group_menu(&self, group: &'static Group) -> (String, KeyRows) {
         let rows = group
-            .menu(&self.group_context())
+            .menu(&self.context_in(group))
             .into_iter()
             .map(|(keys, says)| (keys.into(), crate::messages::say(says, &[])))
             .collect();
@@ -1061,23 +1090,26 @@ const VIEW_ROWS: &[Row] = &[
     ch('i', NormalCmd::ToggleFoldsEnabled, "hint.fold.on-off").when(Only::Vim),
     ch('m', NormalCmd::FoldMore, "hint.fold.more").when(Only::Vim),
     ch('r', NormalCmd::FoldLess, "hint.fold.less").when(Only::Vim),
+    // helix's rows from here on (2026-11-03: under vim they had leaked in,
+    // `z␣` `z⌫` `z/` …, where vim beeps). vim's sticky `Z` reads them as
+    // helix's, see `context_in`.
     quiet(Key::Char('c'), NormalCmd::AlignViewCenter).when(Only::Helix),
     ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
     ch('b', NormalCmd::AlignViewBottom, "hint.aim.bottom"),
     quiet(Key::Char('j'), NormalCmd::ScrollDown).when(Only::Helix),
-    quiet(Key::Down, NormalCmd::ScrollDown),
+    quiet(Key::Down, NormalCmd::ScrollDown).when(Only::Helix),
     quiet(Key::Char('k'), NormalCmd::ScrollUp).when(Only::Helix),
-    quiet(Key::Up, NormalCmd::ScrollUp),
-    quiet(Key::Ctrl('d'), NormalCmd::PageCursorHalfDown),
-    quiet(Key::Char(' '), NormalCmd::PageCursorHalfDown),
-    quiet(Key::Ctrl('u'), NormalCmd::PageCursorHalfUp),
-    quiet(Key::Backspace, NormalCmd::PageCursorHalfUp),
-    quiet(Key::Ctrl('f'), NormalCmd::PageDown),
-    quiet(Key::PageDown, NormalCmd::PageDown),
-    quiet(Key::Ctrl('b'), NormalCmd::PageUp),
-    quiet(Key::PageUp, NormalCmd::PageUp),
-    quiet(Key::Char('/'), NormalCmd::Search),
-    quiet(Key::Char('?'), NormalCmd::Rsearch),
+    quiet(Key::Up, NormalCmd::ScrollUp).when(Only::Helix),
+    quiet(Key::Ctrl('d'), NormalCmd::PageCursorHalfDown).when(Only::Helix),
+    quiet(Key::Char(' '), NormalCmd::PageCursorHalfDown).when(Only::Helix),
+    quiet(Key::Ctrl('u'), NormalCmd::PageCursorHalfUp).when(Only::Helix),
+    quiet(Key::Backspace, NormalCmd::PageCursorHalfUp).when(Only::Helix),
+    quiet(Key::Ctrl('f'), NormalCmd::PageDown).when(Only::Helix),
+    quiet(Key::PageDown, NormalCmd::PageDown).when(Only::Helix),
+    quiet(Key::Ctrl('b'), NormalCmd::PageUp).when(Only::Helix),
+    quiet(Key::PageUp, NormalCmd::PageUp).when(Only::Helix),
+    quiet(Key::Char('/'), NormalCmd::Search).when(Only::Helix),
+    quiet(Key::Char('?'), NormalCmd::Rsearch).when(Only::Helix),
     quiet(Key::Char('n'), NormalCmd::SearchNext).when(Only::Helix),
     quiet(Key::Char('N'), NormalCmd::SearchPrev).when(Only::Helix),
 ];

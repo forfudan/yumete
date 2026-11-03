@@ -28632,16 +28632,16 @@ fn the_z_layer_answers_what_helix_binds_there() {
     let rope = j.current_buffer().rope().clone();
     j.set_page_span(rope.line_to_char(0), rope.line_to_char(20));
     j.goto_line(1);
-    // 這一層裏 `j` 是滾視窗，所以光標的文字不動；出了層纔是走一行。
-    // Warning: **離屏下 `page_span` 不會逐鍵更新**（没有幀），所以這裏驗的是
-    // 「`j` 歸不歸這一層」，不是滾了幾行。
+    // In it `j` scrolls: from the file's top the view goes down two and
+    // pushes the cursor along, as helix's does (scrolloff 0 here). Each
+    // scroll counts from the last one, though no frame was drawn between.
     j.on_key(Key::Char('Z'));
     j.on_key(Key::Char('j'));
     j.on_key(Key::Char('j'));
-    assert_eq!(line(&j), 1, "Zjj 都歸這一層，光標没走");
+    assert_eq!(line(&j), 2, "Zjj: two scrolls, the cursor pushed along");
     j.on_key(Key::Esc);
     j.on_key(Key::Char('j'));
-    assert_eq!(line(&j), 2, "Esc 之後 j 又是走一行");
+    assert_eq!(line(&j), 3, "Esc 之後 j 又是走一行");
 
     // **認不得的鍵報的是手指真按出來的那一串**（2026-10-06 定：「`ze` 爲無效按鍵
     // 組合，請重試」）。從前每一層自己寫一句，而那種句子一加鍵就得重寫。
@@ -35632,4 +35632,122 @@ fn the_outline_shows_which_sections_the_page_folded() {
     assert_eq!(ed.cursor_line(), 2);
     assert_eq!(in_text(&ed), [None, Some(Closed), Some(Hidden), Some(Closed)]);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A count goes through `z`** (2026-11-03, measured in nvim and helix):
+/// vim's `20zt` puts line 20 at the top, the column kept, and `3zF` folds
+/// three lines; helix's `3zj` scrolls three, and so do `z3j` and `Z3j`,
+/// where a count before `Z` is dropped.
+#[test]
+fn a_count_goes_through_z() {
+    let text: String = (0..40).map(|n| format!("第{n:02}行。\n")).collect();
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.sel.head());
+        (line, ed.sel.head() - rope.line_to_char(line))
+    };
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "30Gll20zt");
+    assert_eq!(at(&ed), (19, 2));
+    assert!(matches!(ed.aim, Some(crate::editor::Aim::Top)));
+    press(&mut ed, "gg3zF");
+    assert!(ed.fold_head(0) && ed.line_is_folded(2) && !ed.line_is_folded(3));
+
+    let row = |ed: &Editor| match ed.aim {
+        Some(crate::editor::Aim::Row(n)) => n,
+        _ => usize::MAX,
+    };
+    let mut ed = typed(&text);
+    let rope = ed.current_buffer().rope().clone();
+    let page = |ed: &mut Editor| ed.set_page_span(rope.line_to_char(10), rope.line_to_char(30));
+    ed.goto_line(21);
+    page(&mut ed);
+    press(&mut ed, "3zj");
+    assert_eq!(row(&ed), 7, "3zj: the top from 10 to 13");
+    page(&mut ed);
+    press(&mut ed, "zj");
+    assert_eq!(row(&ed), 9, "the count is spent");
+    page(&mut ed);
+    press(&mut ed, "z3j");
+    assert_eq!(row(&ed), 7, "z3j");
+    page(&mut ed);
+    press(&mut ed, "Z3j");
+    assert_eq!(row(&ed), 7, "Z3j");
+    page(&mut ed);
+    press(&mut ed, "j");
+    assert_eq!(row(&ed), 9, "the next key in Z starts from no count");
+    ed.on_key(Key::Esc);
+    page(&mut ed);
+    press(&mut ed, "3Zj");
+    assert_eq!(row(&ed), 9, "a count before Z is dropped");
+}
+
+/// **A page scrolls the view and pushes the cursor in by scrolloff**
+/// (2026-11-03), on numbers measured in nvim (22 rows, scrolloff 5) and in
+/// helix: vim's `C-f` is the height less two lines, `count` times, the
+/// column kept; helix's is the height, the cursor at the line's start.
+#[test]
+fn a_page_scrolls_the_view_and_pushes_the_cursor_by_scrolloff() {
+    let text: String = (1..=200).map(|n| format!("    line {n}\n")).collect();
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.sel.head());
+        (line, ed.sel.head() - rope.line_to_char(line))
+    };
+    let view = |ed: &mut Editor, top: usize| {
+        let rope = ed.current_buffer().rope().clone();
+        ed.set_page_span(rope.line_to_char(top), rope.line_to_char(top + 22));
+        ed.page_inset(Some(0), 21, 5);
+    };
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "gg0ll");
+    view(&mut ed, 0);
+    ed.on_key(Key::Ctrl('f'));
+    assert_eq!(at(&ed), (25, 2), "nvim: top 21, cursor 26, column kept");
+    view(&mut ed, 0);
+    press(&mut ed, "gg0");
+    press(&mut ed, "3");
+    ed.on_key(Key::Ctrl('f'));
+    assert_eq!(at(&ed).0, 65, "nvim: 3 C-f, top 61, cursor 66");
+    press(&mut ed, "100G0");
+    view(&mut ed, 89);
+    ed.on_key(Key::Ctrl('b'));
+    assert_eq!(at(&ed).0, 85, "nvim: top 70, cursor 86");
+
+    let mut ed = typed(&text);
+    press(&mut ed, "ggll");
+    view(&mut ed, 0);
+    ed.on_key(Key::Ctrl('f'));
+    assert_eq!(at(&ed), (27, 0), "helix: a whole height, the line's start");
+    press(&mut ed, "gg");
+    view(&mut ed, 0);
+    press(&mut ed, "zj");
+    assert_eq!(at(&ed).0, 6, "helix: zj at the top pushes the cursor to top + scrolloff");
+}
+
+/// **vim's `z` is vim's** (2026-11-03): helix's view keys had leaked into
+/// it (`z␣` `z⌫` `z/` …), and `Z` with the flavour off went into helix's
+/// sticky view through the held `Z` of `ZZ`. With the flavour on, the
+/// sticky view is helix's whole: `j` scrolls there.
+#[test]
+fn vims_z_is_vims_and_its_sticky_z_is_helixs() {
+    let text: String = (0..40).map(|n| format!("第{n:02}行。\n")).collect();
+    let line = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head());
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "gg");
+    ed.on_key(Key::Char('z'));
+    ed.on_key(Key::Char(' '));
+    assert!(ed.status().contains('z'), "z␣ is not a key here: {}", ed.status());
+    assert!(ed.pending == Pending::None);
+    ed.execute(":keymap-yumete-flavor off").unwrap();
+    press(&mut ed, "Zjx");
+    assert!(ed.pending == Pending::None, "no sticky view");
+    assert!(ed.current_buffer().text().starts_with("00行"), "j eaten, x deleted on line 1");
+    ed.execute(":keymap-yumete-flavor basic").unwrap();
+    let rope = ed.current_buffer().rope().clone();
+    ed.set_page_span(rope.line_to_char(0), rope.line_to_char(20));
+    press(&mut ed, "ggZjj");
+    assert!(ed.pending == Pending::AimStuck);
+    assert_eq!(line(&ed), 2, "j scrolls in Z, pushing the cursor along");
+    ed.on_key(Key::Esc);
 }

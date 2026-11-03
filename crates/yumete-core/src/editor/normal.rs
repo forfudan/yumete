@@ -896,7 +896,7 @@ impl Editor {
             }
         }
         if self.vim_keymap()
-            && !self.expanding_alias
+            && (!self.expanding_alias || self.replaying_held)
             && HELIX_KEYS_UNDER_VIM.contains(&cx.key)
             && !self.flavor_on(FlavorItem::HelixKeysUnderVim)
         {
@@ -1274,6 +1274,8 @@ impl Editor {
     pub(super) fn cmd_view_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.pending = Pending::Aim;
+        // `20zt`, `3zj`, `3zF`: the count is the key's after `z`.
+        self.operator_count = operator_count;
     }
 
     // **`Z` 是同一層，按完不收**（helix 的 sticky view mode）：`Zjjjj` 一路滾。
@@ -1281,6 +1283,8 @@ impl Editor {
     pub(super) fn cmd_sticky_view_mode(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
         self.pending = Pending::AimStuck;
+        // helix drops a count typed before `Z` (`3Zjj` scrolls two).
+        self.operator_count = None;
     }
 
     // **`3]空格` 加三條空行**，所以這一族要把計數帶過去（同 `g`、`f`/`t`
@@ -2188,13 +2192,17 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_page_down(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.move_page(count, false, 1.0);
+        if self.layout() == Layout::Vertical || !self.scroll_a_page(true, count) {
+            self.move_page(count, false, 1.0);
+        }
     }
 
     #[allow(unused_variables)]
     pub(super) fn cmd_page_up(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.move_page(count, true, 1.0);
+        if self.layout() == Layout::Vertical || !self.scroll_a_page(false, count) {
+            self.move_page(count, true, 1.0);
+        }
     }
 
     // Back and forward through the places jumps came from, as in vi

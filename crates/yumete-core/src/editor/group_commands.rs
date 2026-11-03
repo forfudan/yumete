@@ -215,9 +215,18 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         e.add_blank_line(false, cx.count);
     }, Key::Char(' ')),
     // ── z and Z ────────────────────────────────────────────────────────
-    (NormalCmd::AlignViewCenter, |e, _| e.aim_the_page(crate::editor::Aim::Middle), Key::Char('z')),
-    (NormalCmd::AlignViewTop, |e, _| e.aim_the_page(crate::editor::Aim::Top), Key::Char('t')),
-    (NormalCmd::AlignViewBottom, |e, _| e.aim_the_page(crate::editor::Aim::Bottom), Key::Char('b')),
+    (NormalCmd::AlignViewCenter, |e, cx| {
+        e.vim_aim_at_line(cx.operator_count);
+        e.aim_the_page(crate::editor::Aim::Middle);
+    }, Key::Char('z')),
+    (NormalCmd::AlignViewTop, |e, cx| {
+        e.vim_aim_at_line(cx.operator_count);
+        e.aim_the_page(crate::editor::Aim::Top);
+    }, Key::Char('t')),
+    (NormalCmd::AlignViewBottom, |e, cx| {
+        e.vim_aim_at_line(cx.operator_count);
+        e.aim_the_page(crate::editor::Aim::Bottom);
+    }, Key::Char('b')),
     (NormalCmd::ScrollDown, |e, cx| e.scroll_the_page(true, cx.count), Key::Char('j')),
     (NormalCmd::ScrollUp, |e, cx| e.scroll_the_page(false, cx.count), Key::Char('k')),
     // ── m ──────────────────────────────────────────────────────────────

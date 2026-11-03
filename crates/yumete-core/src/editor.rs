@@ -2613,6 +2613,9 @@ pub struct Editor {
     /// and so a macro records the key that was pressed rather than the key
     /// *and* everything it stands for.
     expanding_alias: bool,
+    /// The keys being played are ones the reader typed, held for a binding
+    /// they did not finish (vim's `Z` of `ZZ`): typed keys, not a binding's.
+    replaying_held: bool,
     /// The word segmenter driving `w`/`b`/`e` and the segmentation overlay
     /// (Feature #24). Defaults to [`CategorySegmenter`]; a dictionary segmenter
     /// can be installed via [`Editor::set_segmenter`].
@@ -3211,6 +3214,9 @@ pub struct Editor {
     jumped: bool,
     /// 光標上一幀坐在第幾行——見 [`Editor::sat_at`]。
     sat_at: std::cell::Cell<Option<usize>>,
+    /// The scrolloff the page was last drawn with, for the scrolls that push
+    /// the cursor in by it (`zj`, `C-f`).
+    scrolloff_seen: std::cell::Cell<usize>,
     /// **`z` 那一層要把光標放在第幾行**（`zz`/`zt`/`zb`，2026-09-28）。
     ///
     /// Warning: **這個編輯器没有 viewport。** `Editor::scroll` 的文檔自己寫着：它移的是光標，
@@ -4216,6 +4222,7 @@ impl Editor {
             alias_held: String::new(),
             alias_count: None,
             expanding_alias: false,
+            replaying_held: false,
             segmenter: Box::new(CategorySegmenter),
             word_completion: 4,
             word_index: HashMap::new(),
@@ -4382,6 +4389,7 @@ impl Editor {
             sort_keys: Vec::new(),
             jumped: false,
             sat_at: std::cell::Cell::new(None),
+            scrolloff_seen: std::cell::Cell::new(0),
             aim: None,
             language_run: None,
             preview_request: None,
@@ -4657,6 +4665,7 @@ impl Editor {
     }
 
     pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
+        self.scrolloff_seen.set(scrolloff);
         let answer = self.page_inset_now(distance, last, scrolloff);
         // 記下光標**實際**坐在第幾行：回了一個位置就是那個，回「別動」就是它本來
         // 那個。畫一幀問一次，所以這一格永遠是上一幀的事實。

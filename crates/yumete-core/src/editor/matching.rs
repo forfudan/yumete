@@ -476,32 +476,87 @@ impl Editor {
         })
     }
 
-    /// **`zj`／`zk`：視窗滾一行，光標的文字不動**（2026-10-06，helix 的
-    /// `scroll_down`／`scroll_up`）。
+    /// **The view scrolls `n` lines and the cursor stays, pushed in only as
+    /// far as scrolloff** (2026-11-03, helix's `scroll` and vim's `CTRL-F`,
+    /// measured): `zj` `zk` `C-e` `C-y` and the whole pages.
     ///
-    /// 滾視窗和挪光標是同一件事的兩面——文字没動而視窗下去了，光標在屏幕上就
-    /// 往上坐了一行。所以這一支只說「坐第幾行」（[`crate::editor::Aim::Row`]），
-    /// 不必給核心一個它改不動的視窗位置。
-    ///
-    /// Warning: **擠到邊上就把光標一起帶走**，同 helix：視窗往下滾而光標已經是最上面
-    /// 那一行了，光標只能跟着下去一行，否則它就留在屏幕外面了。
+    /// The top is worked out from the page last drawn and then written back
+    /// as a guess, so keys faster than the frames still add up: eleven
+    /// `zk` scrolled six when each read the same stale frame. A pushed cursor
+    /// lands at the line's start under helix and keeps its column under vim.
     pub(super) fn scroll_the_page(&mut self, down: bool, n: usize) {
         let Some(first) = self.screen_line('H', 1) else { return };
         let Some(last) = self.screen_line('L', 1) else { return };
+        let vim = self.vim_keymap();
         let rope = self.current_buffer().rope();
-        let here = rope.char_to_line(self.sel.head());
+        let end = motion::last_line(rope);
+        let height = last - first + 1;
+        let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
         let n = n.max(1);
         let top = match down {
-            true => (first + n).min(rope.len_lines().saturating_sub(1)),
+            true => (first + n).min(end),
             false => first.saturating_sub(n),
         };
-        // 光標被擠出去了就跟着走一步，落在新視窗的那一邊上。
-        let deep = last.saturating_sub(first);
-        let line = here.clamp(top, top + deep);
-        if line != here {
-            self.goto_line(line + 1);
+        let head = self.sel.head();
+        let edge = match down {
+            true => (top + so).min(end),
+            false => (top + height - 1).saturating_sub(so).min(end),
+        };
+        let start = rope.line_to_char(edge);
+        let pushed = match down {
+            true => start > head,
+            false => start < head && rope.char_to_line(head) >= edge,
+        };
+        if pushed {
+            let to = match vim {
+                true => {
+                    let at = motion::pos_at_visual_column(rope, edge, motion::visual_column(rope, head));
+                    at.min(motion::line_last(rope, start))
+                }
+                false => start,
+            };
+            self.move_head(to);
         }
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(self.sel.head());
+        let to = rope.line_to_char((top + height).min(rope.len_lines()));
+        self.page_span = (rope.line_to_char(top), to);
         self.aim = Some(crate::editor::Aim::Row(line.saturating_sub(top)));
+    }
+
+    /// **A whole page** (`C-f` `C-b`, `PgDn` `PgUp`): helix scrolls the
+    /// view's height and takes no count; vim scrolls the height less two
+    /// lines, `count` times (`:h CTRL-F`, measured in nvim 2026-11-03).
+    /// `false` before a page has been drawn, when there is no view to scroll.
+    pub(super) fn scroll_a_page(&mut self, down: bool, count: usize) -> bool {
+        let (Some(first), Some(last)) = (self.screen_line('H', 1), self.screen_line('L', 1)) else {
+            return false;
+        };
+        let height = last - first + 1;
+        let lines = match self.vim_keymap() {
+            true => height.saturating_sub(2).max(1) * count.max(1),
+            false => height,
+        };
+        self.scroll_the_page(down, lines);
+        true
+    }
+
+    /// **vim's count on `zt` `zz` `zb`**: the line to put there, gone to
+    /// first as a jump, the column kept (`nv_zet`, measured in nvim
+    /// 2026-11-03). helix's take no count.
+    pub(super) fn vim_aim_at_line(&mut self, count: Option<usize>) {
+        let Some(n) = count.filter(|_| self.vim_keymap()) else { return };
+        let rope = self.current_buffer().rope();
+        let line = n.saturating_sub(1).min(motion::last_line(rope));
+        let here = rope.char_to_line(self.sel.head());
+        if line == here {
+            return;
+        }
+        let column = motion::visual_column(rope, self.sel.head());
+        let at = motion::pos_at_visual_column(rope, line, column);
+        let at = at.min(motion::line_last(rope, rope.line_to_char(line)));
+        self.remember_jump();
+        self.move_head(at);
     }
 
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {

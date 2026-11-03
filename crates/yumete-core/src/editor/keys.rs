@@ -1874,6 +1874,15 @@ impl Editor {
     ///
     /// A count typed before the alias goes to the first key that acts, not to
     /// a leading `;`: `2x` is `;` then `2D`, and `3dd` is `3x` then `d`.
+    /// **Keys the reader typed and a binding held**, played as typed: the
+    /// flavour's gates apply to them (vim's `Zj` with the flavour off is
+    /// vim's beep, not helix's sticky view; found 2026-11-03).
+    fn play_held(&mut self, keys: &str) {
+        let outer = std::mem::replace(&mut self.replaying_held, true);
+        self.play_keys(keys);
+        self.replaying_held = outer;
+    }
+
     fn play_keys(&mut self, keys: &str) {
         // Warning: **Saved and restored, not set and cleared** (2026-09-19). An
         // operator inside an expansion replays its motion through this same
@@ -2193,13 +2202,22 @@ impl Editor {
                         } else if held.ends_with(yumete_cjk::actions::ALT) {
                             held.pop();
                         }
+                        // vim's `Z` waits for one more key and beeps at any
+                        // but `Z` `Q`, eating it: `Zjx` deletes on the line it
+                        // started on (nvim, 2026-11-03). With the flavour on,
+                        // `Z` is helix's sticky view instead.
+                        if held == "Z" && self.vim_keymap() && !self.flavor_on(yumete_cjk::FlavorItem::HelixKeysUnderVim) {
+                            self.alias_count = None;
+                            self.no_such_combination("Z", key);
+                            return;
+                        }
                         // What was held is pressed for real, and the digits
                         // typed after it belong to whatever follows them.
                         self.settle_alias_count();
                         if held.is_empty() {
                             key
                         } else {
-                            self.play_keys(&held);
+                            self.play_held(&held);
                             // The key that did not finish one reaches the
                             // cursors it reaches alone (it came in once).
                             let waiting = self.pending;
@@ -2210,7 +2228,7 @@ impl Editor {
             } else {
                 if !held.is_empty() {
                     self.settle_alias_count();
-                    self.play_keys(&held);
+                    self.play_held(&held);
                 }
                 key
             }
