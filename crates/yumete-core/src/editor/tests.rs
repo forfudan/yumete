@@ -35496,7 +35496,8 @@ fn headings_fold_their_sections_per_window() {
     assert!(ed.fold_head(0) && ed.fold_head(8));
     assert!(ed.line_is_folded(4), "## 二 is inside # 一");
     let said = ed.fold_line(0).expect("a fold's line");
-    assert!(said.starts_with("# 一 ") && said.ends_with(&say!("ui.count", 4)), "{said:?}");
+    // The 字 under the heading, not the heading's own: what the outline counts.
+    assert!(said.starts_with("# 一 ") && said.ends_with(&say!("ui.count", 3)), "{said:?}");
     press(&mut ed, "zo");
     assert!(ed.fold_head(4) && !ed.line_is_folded(2), "zo opens one level");
     // A split copies them; then each window has its own.
@@ -35508,6 +35509,13 @@ fn headings_fold_their_sections_per_window() {
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.fold_head(4), "the other window's are its own");
+    {
+        // …and drawn with its own: the half the keys are not in.
+        let other = ed.windows().leaves().into_iter().find(|&w| w != ed.live_window()).expect("two windows");
+        let _look = ed.view_pane(ed.pane_of(other).expect("its pane"));
+        assert!(!ed.fold_head(4) && !ed.line_is_folded(6), "drawn with its own folds");
+    }
+    assert!(ed.fold_head(4));
     // Off: only `zf`'s.
     ed.execute(":keymap-yumete-flavor off").unwrap();
     assert!(!ed.fold_head(4) && !ed.line_is_folded(6));
@@ -35585,4 +35593,43 @@ fn fold_commands_work_under_helix() {
     let line = ed.cursor_line();
     press(&mut ed, "zj");
     assert_eq!(ed.cursor_line(), line, "zj scrolls under helix");
+}
+
+/// **The outline shows the page's folds** (2026-11-03): a closed section's
+/// row is marked and the headings inside it are hidden; `Enter` on it goes
+/// there and leaves it closed, opening only what hides it.
+#[test]
+fn the_outline_shows_which_sections_the_page_folded() {
+    use crate::sidebar::InText::{Closed, Hidden};
+    let dir = tmp().join(format!("yumete-outline-folds-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("book.md"), "# 卷一\n序\n## 第一章\n一\n### 一節\n甲\n## 第二章\n二\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("book.md")).unwrap();
+    ed.execute(":keymap vim").unwrap();
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    let in_text = |ed: &Editor| -> Vec<Option<crate::sidebar::InText>> {
+        ed.panel(crate::sidebar::Side::Left)
+            .unwrap()
+            .rows()
+            .iter()
+            .map(|r| ed.outline_row_in_text(r))
+            .collect()
+    };
+    assert_eq!(in_text(&ed), [None, None, None, None]);
+    ed.panel_focus = None;
+    press(&mut ed, "zM");
+    assert_eq!(in_text(&ed), [Some(Closed), Some(Hidden), Some(Hidden), Some(Hidden)]);
+    press(&mut ed, "zr");
+    assert_eq!(in_text(&ed), [None, Some(Closed), Some(Hidden), Some(Closed)]);
+    // From the outline to 第一章 with everything closed: 卷一 opens, 第一章
+    // stays closed with the cursor on its line.
+    press(&mut ed, "zM");
+    ed.open_sidebar_showing(&dir, crate::sidebar::View::Outline);
+    ed.on_key(Key::Char('j'));
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.cursor_line(), 2);
+    assert_eq!(in_text(&ed), [None, Some(Closed), Some(Hidden), Some(Closed)]);
+    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -347,6 +347,17 @@ pub enum Wash {
     Added,
 }
 
+/// **Where a 大綱 row's section stands on the page** (2026-11-03). The
+/// outline folds its own list and the page folds the text; this says what
+/// the page did, so a closed chapter does not look open in the outline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InText {
+    /// Its section is closed: the page shows its heading as one line.
+    Closed,
+    /// It is inside a closed section, so not on the page at all.
+    Hidden,
+}
+
 /// One heading of the 大綱, before any of it is folded away (#37).
 ///
 /// The rows the sidebar draws cannot answer 「what is under this one」 — a

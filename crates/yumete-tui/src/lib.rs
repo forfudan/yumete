@@ -9283,8 +9283,17 @@ fn draw_sidebar(
         let row = &rows[i];
         let y = area.y + 1 + slot as u16;
         let picked = i == sidebar.selected();
+        // **The page's folds, in the outline** (2026-11-03): a closed
+        // section gets the leader its fold line has on the page, and the
+        // headings inside it go quiet.
+        let in_text = match sidebar.view() {
+            View::Outline => editor.outline_row_in_text(row),
+            _ => None,
+        };
         let style = if picked {
             on
+        } else if in_text == Some(yumete_core::sidebar::InText::Hidden) {
+            text.fg(ink.quiet())
         } else if row.is_dir {
             dir
         } else if row.quiet {
@@ -9347,7 +9356,21 @@ fn draw_sidebar(
             Some(a) => room - yumete_cjk::str_width(a) - 1,
             None => room,
         };
-        put_text(buf, from + 1, y, to, &elide(&line, room), style);
+        let closed = in_text == Some(yumete_core::sidebar::InText::Closed);
+        // A closed row keeps two cells for at least one dot.
+        let title = elide(&line, if closed { room.saturating_sub(2) } else { room });
+        put_text(buf, from + 1, y, to, &title, style);
+        if closed {
+            let start = from as usize + 2 + yumete_cjk::str_width(&title);
+            let end = from as usize + 1 + room;
+            if end > start {
+                let quiet = match picked {
+                    true => style,
+                    false => text.fg(ink.quiet()),
+                };
+                put_text(buf, start as u16, y, to, &"·".repeat(end - start), quiet);
+            }
+        }
         if let Some(a) = aside {
             let x = to.saturating_sub(yumete_cjk::str_width(a) as u16);
             let quiet = match picked {

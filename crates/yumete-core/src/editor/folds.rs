@@ -58,7 +58,7 @@ impl Editor {
     pub(super) fn fold_view(&self) -> std::cell::Ref<'_, FoldView> {
         let buffer = self.current_buffer();
         let headings = self.flavor_on(yumete_cjk::FlavorItem::HeadingFolds) && self.lists_here();
-        let key = (buffer.id(), buffer.revision(), self.live, self.fold_generation, headings);
+        let key = (buffer.id(), buffer.revision(), self.folds_window(), self.fold_generation, headings);
         let stale = self.fold_view.borrow().as_ref().is_none_or(|view| view.key != key);
         if stale {
             let view = self.work_out_folds(key, headings);
@@ -67,12 +67,18 @@ impl Editor {
         std::cell::Ref::map(self.fold_view.borrow(), |view| view.as_ref().expect("filled above"))
     }
 
+    /// The window whose folds are asked about: the one being drawn while
+    /// another half of a split is, the live one otherwise.
+    fn folds_window(&self) -> crate::window::WindowId {
+        self.viewing.get().map_or(self.live, |v| v.window)
+    }
+
     fn work_out_folds(&self, key: (u64, u64, u64, u64, bool), headings: bool) -> FoldView {
         let buffer = self.current_buffer();
         let rope = buffer.rope();
         let len = rope.len_chars();
         let line_of = |at: usize| rope.char_to_line(at.min(len));
-        let set = buffer.folds(self.live);
+        let set = buffer.folds(key.2);
         let mut spans: Vec<FoldSpan> = Vec::new();
         if headings {
             let mut seen: Vec<String> = Vec::new();
@@ -157,12 +163,12 @@ impl Editor {
     /// the status line counts them (decided 2026-11-03).
     pub fn fold_line(&self, line: usize) -> Option<String> {
         let (first, last) = self.shut_around(line).filter(|&(first, _)| first == line)?;
-        let depth = self
+        let (depth, heading) = self
             .fold_view()
             .spans
             .iter()
             .find(|s| (s.first, s.last) == (first, last))
-            .map_or(1, |s| s.depth);
+            .map_or((1, false), |s| (s.depth, matches!(s.of, FoldOf::Heading(..))));
         let rope = self.current_buffer().rope();
         let text: String = rope
             .line(first)
@@ -215,7 +221,9 @@ impl Editor {
         }
         let mut units = crate::units::Units::default();
         let mut buf = String::new();
-        for l in first..=last.min(rope.len_lines().saturating_sub(1)) {
+        // A heading's fold counts what is under it, as the outline does: the
+        // heading itself is on the line (decided 2026-11-03).
+        for l in first + usize::from(heading)..=last.min(rope.len_lines().saturating_sub(1)) {
             buf.clear();
             buf.extend(rope.line(l).chunks());
             self.units_in_line(&buf, &mut units);
@@ -266,6 +274,22 @@ impl Editor {
             self.set_fold_closed(&of, false);
         }
         self.cursor_back_into_the_fold();
+    }
+
+    /// Open the closed folds that hide `line` and leave one that starts on
+    /// it closed: the outline goes to a heading and shows it, and its mark
+    /// already says whether the section is closed (decided 2026-11-03).
+    pub(super) fn open_folds_over(&mut self, line: usize) {
+        let hiding: Vec<FoldOf> = self
+            .fold_view()
+            .spans
+            .iter()
+            .filter(|s| s.holds(line) && s.first < line && s.closed)
+            .map(|s| s.of.clone())
+            .collect();
+        for of in hiding {
+            self.set_fold_closed(&of, false);
+        }
     }
 
     /// The place `G` left inside a fold, back when that fold opens with the

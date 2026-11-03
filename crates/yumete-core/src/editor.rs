@@ -108,6 +108,8 @@ struct Viewing {
     /// The pane's place in that buffer, **clamped there**. The live cursor is
     /// an offset into another file and would index off the end of this one.
     at: usize,
+    /// The window it is, so its own folds are the ones drawn.
+    window: crate::window::WindowId,
 }
 
 /// Holds [`Editor::view_pane`] open, and closes it however the draw ends.

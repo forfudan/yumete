@@ -926,6 +926,22 @@ impl Editor {
         rows
     }
 
+    /// **Whether a 大綱 row's section is closed on the page**, or inside one
+    /// that is (decided 2026-11-03): asked of the live window when the row is
+    /// drawn, so it is never stale. A chapter in another file has none.
+    pub fn outline_row_in_text(&self, row: &crate::sidebar::Row) -> Option<crate::sidebar::InText> {
+        if !row.path.as_os_str().is_empty() {
+            return None;
+        }
+        if self.fold_head(row.depth) {
+            Some(crate::sidebar::InText::Closed)
+        } else if self.fold_hides(row.depth) {
+            Some(crate::sidebar::InText::Hidden)
+        } else {
+            None
+        }
+    }
+
     /// **Each heading's count**, its own text and the headings under it, by
     /// Word's rule (2026-10-29) — what a writer checks a chapter's length by.
     /// `None` for a code file's symbols and for a chapter in another file.
@@ -1476,6 +1492,7 @@ impl Editor {
     /// The row under the highlight, gone into: a file opened, a buffer
     /// shown, a heading or a line gone to.
     fn open_the_entry(&mut self, side: crate::sidebar::Side) {
+        let outline = self.panel(side).is_some_and(|p| p.view() == crate::sidebar::View::Outline);
         let Some(sidebar) = self.panel_mut(side) else {
             return;
         };
@@ -1496,6 +1513,9 @@ impl Editor {
             }
             Some(crate::sidebar::Chosen::Line(line)) => {
                 self.goto_line(line + 1);
+                if outline {
+                    self.open_folds_over(line);
+                }
                 self.panel_focus = None;
             }
             Some(crate::sidebar::Chosen::FileLine(path, line)) => {

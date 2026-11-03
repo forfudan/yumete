@@ -846,7 +846,12 @@ impl Editor {
             // the pane was left standing in, and a stale offset walked into a
             // rope is a panic, not a misdraw.
             let at = pane.cursor().min(self.buffers[buffer].rope().len_chars());
-            self.viewing.set(Some(Viewing { buffer, at }));
+            let window = self
+                .panes
+                .iter()
+                .find(|(_, p)| std::ptr::eq(*p, pane))
+                .map_or(self.live, |(&id, _)| id);
+            self.viewing.set(Some(Viewing { buffer, at, window }));
         }
         Viewed { editor: self, previous, previous_wrap }
     }

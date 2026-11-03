@@ -1121,6 +1121,8 @@ impl Editor {
                 self.buffers[self.current].save_cursor(at);
                 self.current = index;
                 self.forget_the_document();
+                // The buffer list and the outline are about this file now.
+                self.refresh_sidebar();
             }
             Some(_) => {}
             None => {
