@@ -353,6 +353,20 @@ zhs = "到所在折叠的末尾(vim 的 ]z)"
 en = "to the end of the open fold here (vim's ]z)"
 
 [[message]]
+# z 菜單：fold_less（草稿）
+key = "hint.fold.less"
+zht = "多打開一層(vim 的 zr)"
+zhs = "多打开一层(vim 的 zr)"
+en = "fold one level less (vim's zr)"
+
+[[message]]
+# z 菜單：fold_more（草稿）
+key = "hint.fold.more"
+zht = "多合上一層(vim 的 zm)"
+zhs = "多合上一层(vim 的 zm)"
+en = "fold one level more (vim's zm)"
+
+[[message]]
 # z / [ ] 菜單：goto_next_fold（草稿）
 key = "hint.fold.next"
 zht = "到下一個折疊的開頭(vim 的 zj)"

@@ -77,6 +77,9 @@ scenes() {
 改動帶子-翻到底|60x20|:open GITBIG\n x\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}\{ctrl-f}
 改動帶子-竪排是浮窗|60x24|:open GIT\n:vertical\nj x
 竪排-極窄|24x12|:vertical\n
+折疊-標題|80x20|:open OUTLINE\n:keymap vim\nzMzr
+折疊-竪排|60x24|:open OUTLINE\n:keymap vim\n:vertical\nzMzr
+折疊-代碼|80x20|:open RUST\n:syntax rust\n:keymap vim\njzf2j
 SCENES
 }
 

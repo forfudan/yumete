@@ -35514,3 +35514,75 @@ fn headings_fold_their_sections_per_window() {
     press(&mut ed, "zc");
     assert_eq!(ed.status(), say!("fold.none-here"));
 }
+
+/// **The session keeps the folds** (2026-11-03): each window's, a fold
+/// made with `zf` by its lines, a closed heading by its text.
+#[test]
+fn the_session_keeps_the_folds() {
+    let dir = tmp().join(format!("yumete-session-folds-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (work, data) = (dir.join("work"), dir.join("data"));
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::create_dir_all(&data).unwrap();
+    let a = work.join("a.md");
+    std::fs::write(&a, "# 一\n\n甲。\n\n# 二\n\n乙。\n丙。\n丁。\n").unwrap();
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config"), data.clone());
+        ed.keep_session_in(data.join("sessions"), &work);
+        ed.execute(":keymap vim").unwrap();
+        ed
+    };
+    let mut ed = fresh();
+    ed.open_file(&a).unwrap();
+    press(&mut ed, "ggzc7Gzfj");
+    assert!(ed.fold_head(0) && ed.fold_head(6));
+    ed.save_session();
+
+    let mut back = fresh();
+    assert!(back.restore_session() > 0);
+    back.restore_windows();
+    assert!(back.fold_head(0), "the closed heading");
+    assert!(back.fold_head(6) && back.line_is_folded(7), "the zf fold");
+    assert!(!back.fold_head(4), "the open heading stays open");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **`zm` and `zr`** (2026-11-03): one level more folded or less, vim's
+/// 'foldlevel' worked out from the folds as they stand. With the headings,
+/// `zM` then `zr` is the chapters with their sections folded.
+#[test]
+fn zm_and_zr_fold_by_levels() {
+    let doc = "# 一\n## 甲\n子\n## 乙\n丑\n# 二\n## 丙\n寅\n";
+    let mut ed = markdown(doc);
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    press(&mut ed, "zm");
+    assert!(ed.fold_head(1) && ed.fold_head(3) && !ed.fold_head(0), "zm: the sections fold");
+    assert_eq!(ed.status(), say!("fold.level", 1));
+    press(&mut ed, "zm");
+    assert!(ed.fold_head(0) && ed.fold_head(5));
+    press(&mut ed, "zr");
+    assert!(!ed.fold_head(0) && ed.fold_head(1) && ed.fold_head(6));
+    press(&mut ed, "zr");
+    assert!(!ed.fold_head(1) && !ed.line_is_folded(2));
+}
+
+/// **`:view-fold`** (2026-11-03): the helix keymap's way to make a fold,
+/// and `::` its way to open and close one.
+#[test]
+fn fold_commands_work_under_helix() {
+    let mut ed = typed("a\nb\nc\nd\n");
+    press(&mut ed, "ggxx");
+    ed.execute(":view-fold").unwrap();
+    assert!(ed.fold_head(0) && ed.line_is_folded(1));
+    assert!(ed.run_normal("open_fold"));
+    assert!(!ed.line_is_folded(1));
+    assert!(ed.run_normal("close_fold"));
+    assert!(ed.line_is_folded(1));
+    // helix's `zc` `zj` are still its view keys.
+    press(&mut ed, "G");
+    let line = ed.cursor_line();
+    press(&mut ed, "zj");
+    assert_eq!(ed.cursor_line(), line, "zj scrolls under helix");
+}

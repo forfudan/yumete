@@ -646,6 +646,16 @@ impl Editor {
                 let _ = std::fs::write(&windows, lines.join("\n") + "\n");
             }
         }
+        // The folds likewise (2026-11-03), gone when there are none.
+        let folds = Self::folds_file(&file);
+        match self.folds_to_keep() {
+            lines if lines.is_empty() => {
+                let _ = std::fs::remove_file(&folds);
+            }
+            lines => {
+                let _ = std::fs::write(&folds, lines.join("\n") + "\n");
+            }
+        }
         // The view goes with the files it was kept for: written when they
         // are, gone when nothing differs from the config.
         let view = Self::view_file(&file);
@@ -710,6 +720,87 @@ impl Editor {
         out
     }
 
+    /// **The folds this session keeps** (2026-11-03, decided by popup), each
+    /// window's in each file, the window by its place in the tree:
+    /// `manual⇥n⇥path⇥first⇥last⇥closed` for a fold made with `zf` (lines
+    /// from 0), `heading⇥n⇥path⇥nth⇥text` for a closed heading fold (found
+    /// again by its text), `off⇥n⇥path` for folds switched off with `zn`.
+    fn folds_to_keep(&self) -> Vec<String> {
+        let windows = self.windows.leaves();
+        let mut out = Vec::new();
+        for buffer in &self.buffers {
+            let Some(path) = buffer.path() else { continue };
+            let path = path.display().to_string();
+            let rope = buffer.rope();
+            let len = rope.len_chars();
+            for (n, id) in windows.iter().enumerate() {
+                let Some(set) = buffer.folds(*id) else { continue };
+                for fold in &set.manual {
+                    let (first, last) = (rope.char_to_line(fold.from.min(len)), rope.char_to_line(fold.to.min(len)));
+                    out.push(format!("manual\t{n}\t{path}\t{first}\t{last}\t{}", u8::from(fold.closed)));
+                }
+                for (text, nth) in &set.closed_headings {
+                    out.push(format!("heading\t{n}\t{path}\t{nth}\t{text}"));
+                }
+                if set.disabled {
+                    out.push(format!("off\t{n}\t{path}"));
+                }
+            }
+        }
+        out
+    }
+
+    /// Where the folds of the session in `file` are kept: beside it.
+    fn folds_file(file: &Path) -> PathBuf {
+        file.with_extension("folds.txt")
+    }
+
+    /// **The folds as the session left them**, once its windows are laid
+    /// out. A fold whose lines are not in the file any more is dropped, and
+    /// a heading fold whose heading is gone finds nothing to close.
+    fn restore_folds(&mut self) {
+        let Some(file) = self.session_file.clone() else { return };
+        let Ok(text) = std::fs::read_to_string(Self::folds_file(&file)) else { return };
+        let windows = self.windows.leaves();
+        for line in text.lines() {
+            let fields: Vec<&str> = line.splitn(6, '\t').collect();
+            let (Some(&kind), Some(n), Some(&path)) = (fields.first(), fields.get(1).and_then(|n| n.parse::<usize>().ok()), fields.get(2)) else {
+                continue;
+            };
+            let Some(&window) = windows.get(n) else { continue };
+            let Some(index) = self.buffers.iter().position(|b| b.path().is_some_and(|p| p.display().to_string() == path)) else {
+                continue;
+            };
+            let buffer = &mut self.buffers[index];
+            match (kind, &fields[3..]) {
+                ("manual", [first, last, closed]) => {
+                    let (Ok(first), Ok(last)) = (first.parse::<usize>(), last.parse::<usize>()) else { continue };
+                    let rope = buffer.rope();
+                    if first > last || last >= rope.len_lines() {
+                        continue;
+                    }
+                    let from = rope.line_to_char(first);
+                    let to = rope.line_to_char(last) + crate::zong::line_chars(rope, last).len();
+                    let set = buffer.folds_mut(window);
+                    let id = set.add(from, to);
+                    if let Some(fold) = set.manual.iter_mut().find(|f| f.id == id) {
+                        fold.closed = *closed == "1";
+                    }
+                }
+                ("heading", [nth, text]) => {
+                    let Ok(nth) = nth.parse::<usize>() else { continue };
+                    let set = buffer.folds_mut(window);
+                    if !set.closed_headings.iter().any(|(t, k)| t == text && *k == nth) {
+                        set.closed_headings.push((text.to_string(), nth));
+                    }
+                }
+                ("off", []) => buffer.folds_mut(window).disabled = true,
+                _ => {}
+            }
+        }
+        self.fold_generation += 1;
+    }
+
     /// Where the windows of the session in `file` are kept: beside it.
     fn windows_file(file: &Path) -> PathBuf {
         file.with_extension("windows.txt")
@@ -723,6 +814,11 @@ impl Editor {
     /// not rebuilt; its half goes to the other. A file a window showed that
     /// was not among the session's files is opened for it.
     pub fn restore_windows(&mut self) {
+        self.restore_window_layout();
+        self.restore_folds();
+    }
+
+    fn restore_window_layout(&mut self) {
         let Some(file) = self.session_file.clone() else { return };
         let Ok(text) = std::fs::read_to_string(Self::windows_file(&file)) else { return };
         if self.windows.len() > 1 {

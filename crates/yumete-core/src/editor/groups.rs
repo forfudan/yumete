@@ -1059,6 +1059,8 @@ const VIEW_ROWS: &[Row] = &[
     ch('n', NormalCmd::DisableFolds, "hint.fold.off").when(Only::Vim),
     ch('N', NormalCmd::EnableFolds, "hint.fold.on").when(Only::Vim),
     ch('i', NormalCmd::ToggleFoldsEnabled, "hint.fold.on-off").when(Only::Vim),
+    ch('m', NormalCmd::FoldMore, "hint.fold.more").when(Only::Vim),
+    ch('r', NormalCmd::FoldLess, "hint.fold.less").when(Only::Vim),
     quiet(Key::Char('c'), NormalCmd::AlignViewCenter).when(Only::Helix),
     ch('t', NormalCmd::AlignViewTop, "hint.aim.top"),
     ch('b', NormalCmd::AlignViewBottom, "hint.aim.bottom"),

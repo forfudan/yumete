@@ -362,6 +362,34 @@ impl Editor {
         }
     }
 
+    /// **`zm` (`less` false) and `zr`**: one level more folded, or less,
+    /// `count` levels. The level is where the folds stand now — the depth
+    /// of the shallowest closed fold, less one, or the deepest when none is
+    /// closed — and every fold deeper than the new level closes and every
+    /// other opens, as vim's 'foldlevel' does. `zm` with the headings open
+    /// down to `##` is the chapter's outline.
+    pub(super) fn fold_level(&mut self, less: bool, count: usize) {
+        let (now, deepest) = {
+            let view = self.fold_view();
+            let deepest = view.spans.iter().map(|s| s.depth).max().unwrap_or(0);
+            let shallowest_closed = view.spans.iter().filter(|s| s.closed).map(|s| s.depth).min();
+            (shallowest_closed.map_or(deepest, |d| d - 1), deepest)
+        };
+        if deepest == 0 {
+            return self.no_fold_here();
+        }
+        let level = match less {
+            true => (now + count.max(1)).min(deepest),
+            false => now.saturating_sub(count.max(1)),
+        };
+        let all: Vec<(FoldOf, usize)> = self.fold_view().spans.iter().map(|s| (s.of.clone(), s.depth)).collect();
+        for (of, depth) in all {
+            self.set_fold_closed(&of, depth > level);
+        }
+        self.fold_stays_closed = true;
+        self.status = say!("fold.level", level);
+    }
+
     /// `zn` (`Some(false)`), `zN` (`Some(true)`), `zi` (`None`, flips): folds
     /// off and back on, each kept as it was.
     pub(super) fn fold_enable(&mut self, on: Option<bool>) {

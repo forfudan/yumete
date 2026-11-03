@@ -263,6 +263,8 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::DisableFolds, |e, _| e.fold_enable(Some(false)), Key::Char('n')),
     (NormalCmd::EnableFolds, |e, _| e.fold_enable(Some(true)), Key::Char('N')),
     (NormalCmd::ToggleFoldsEnabled, |e, _| e.fold_enable(None), Key::Char('i')),
+    (NormalCmd::FoldMore, |e, cx| e.fold_level(false, cx.count), Key::Char('m')),
+    (NormalCmd::FoldLess, |e, cx| e.fold_level(true, cx.count), Key::Char('r')),
     (NormalCmd::GotoFoldStart, |e, _| e.fold_edge(false), Key::Char('z')),
     (NormalCmd::GotoFoldEnd, |e, _| e.fold_edge(true), Key::Char('z')),
     // ── C-w ────────────────────────────────────────────────────────────

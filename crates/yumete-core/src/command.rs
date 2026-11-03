@@ -327,6 +327,10 @@ pub enum Command {
     /// `:keep-pipe <command>` — helix's `$` (`shell_keep_pipe`): the
     /// selections the command exits 0 on, given each as its input, are kept.
     KeepPipe(String),
+    /// `:view-fold` — vim's `:fold`: the selection's lines made a fold,
+    /// closed. In the `view-` family, as the command menu holds no more
+    /// families (2026-11-03).
+    Fold,
     /// `:read <file>` — a file's contents into this buffer, as vim's `:r` and
     /// helix's `:read`.
     Read(String),
@@ -4748,6 +4752,14 @@ pub const COMMANDS: &[Entry] = &[
         }),
     },
     Entry {
+        name: "view-fold",
+        aliases: &[],
+        help: "cmd.fold.make",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::Fold)),
+    },
+    Entry {
         name: "keep-pipe",
         aliases: &[],
         help: "cmd.commands.keep-pipe",
@@ -7469,7 +7481,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +17");
+        assert_eq!(row("", "view-"), ":view- +18");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
