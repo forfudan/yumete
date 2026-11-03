@@ -1534,9 +1534,9 @@ en = "one row down"
 [[message]]
 # 命令說明：next_sidebar_view（草稿）
 key = "action.next-sidebar-view"
-zht = "換視圖"
-zhs = "换视图"
-en = "the next view in this slot"
+zht = "換面板"
+zhs = "换面板"
+en = "the next panel in this sidebar"
 
 [[message]]
 # 命令說明：no_op（草稿）
@@ -1774,9 +1774,9 @@ en = "one row up"
 [[message]]
 # 命令說明：prev_sidebar_view（草稿）
 key = "action.prev-sidebar-view"
-zht = "換視圖(往回)"
-zhs = "换视图(往回)"
-en = "the previous view in this slot"
+zht = "換面板(往回)"
+zhs = "换面板(往回)"
+en = "the previous panel in this sidebar"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽（草稿）

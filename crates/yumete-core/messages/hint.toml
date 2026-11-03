@@ -1588,11 +1588,11 @@ zhs = "上下"
 en = "move"
 
 [[message]]
-# 邊欄提示：換視圖
+# 邊欄提示：換面板
 key = "hint.sidebar.other-view"
-zht = "換視圖"
-zhs = "换视图"
-en = "other view"
+zht = "換面板"
+zhs = "换面板"
+en = "other panel"
 
 [[message]]
 # 百科那一頁是文章不是單子：j/k 滾動
