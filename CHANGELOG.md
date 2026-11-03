@@ -7,7 +7,7 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## Unreleased
+## 0.17.0 · 2026-11-03
 
 ### Added
 
