@@ -188,9 +188,160 @@ pub enum Key {
     BackTab,
 }
 
+/// **A macro written as text**, the way helix writes one into its register
+/// (`record_macro`): a plain character as itself, any other key in angle
+/// brackets by helix's name for it — `ihello<esc>`, `<C-w>v`, `<space>`.
+/// Chosen for both keymaps (2026-11-03), so `"ap` shows a macro and an
+/// edited line can be yanked back and played.
+pub fn macro_text(keys: &[Key]) -> String {
+    fn name(c: char) -> String {
+        match c {
+            ' ' => "space".into(),
+            '-' => "minus".into(),
+            '<' => "lt".into(),
+            '>' => "gt".into(),
+            c => c.to_string(),
+        }
+    }
+    keys.iter()
+        .map(|key| match key {
+            Key::Char(c) if !matches!(c, ' ' | '-' | '<' | '>') => c.to_string(),
+            Key::Char(c) => format!("<{}>", name(*c)),
+            Key::Ctrl(c) => format!("<C-{}>", name(*c)),
+            Key::Alt(c) => format!("<A-{}>", name(*c)),
+            Key::Enter => "<ret>".into(),
+            Key::Backspace => "<backspace>".into(),
+            Key::Delete => "<del>".into(),
+            Key::Esc => "<esc>".into(),
+            Key::Left => "<left>".into(),
+            Key::Right => "<right>".into(),
+            Key::Up => "<up>".into(),
+            Key::Down => "<down>".into(),
+            Key::Home => "<home>".into(),
+            Key::End => "<end>".into(),
+            Key::PageUp => "<pageup>".into(),
+            Key::PageDown => "<pagedown>".into(),
+            Key::Tab => "<tab>".into(),
+            Key::BackTab => "<S-tab>".into(),
+        })
+        .collect()
+}
+
+/// **The keys a macro's text names**: [`macro_text`] read back, as helix's
+/// `parse_macro` reads it. A `>` with no `<` and a name nobody knows are
+/// errors, answered with what was not understood. Text yanked rather than
+/// recorded may hold control characters, as vim's registers do: a line
+/// break is `Enter`, a tab `Tab`, `ESC` is `Esc`, and the rest are `C-`.
+pub fn macro_keys(text: &str) -> Result<Vec<Key>, String> {
+    fn named(name: &str) -> Option<Key> {
+        let (ctrl, alt, rest) = {
+            let mut rest = name;
+            let (mut ctrl, mut alt) = (false, false);
+            loop {
+                if let Some(r) = rest.strip_prefix("C-").filter(|r| !r.is_empty()) {
+                    ctrl = true;
+                    rest = r;
+                } else if let Some(r) = rest.strip_prefix("A-").filter(|r| !r.is_empty()) {
+                    alt = true;
+                    rest = r;
+                } else {
+                    break;
+                }
+            }
+            (ctrl, alt, rest)
+        };
+        let plain = match rest {
+            "space" => Some(' '),
+            "minus" => Some('-'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            _ => {
+                let mut chars = rest.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) => Some(c),
+                    _ => None,
+                }
+            }
+        };
+        match (ctrl, alt, plain) {
+            (true, false, Some(c)) => return Some(Key::Ctrl(c)),
+            (false, true, Some(c)) => return Some(Key::Alt(c)),
+            (false, false, Some(c)) => return Some(Key::Char(c)),
+            (false, false, None) => {}
+            _ => return None,
+        }
+        Some(match rest {
+            "ret" | "enter" => Key::Enter,
+            "backspace" => Key::Backspace,
+            "del" => Key::Delete,
+            "esc" => Key::Esc,
+            "left" => Key::Left,
+            "right" => Key::Right,
+            "up" => Key::Up,
+            "down" => Key::Down,
+            "home" => Key::Home,
+            "end" => Key::End,
+            "pageup" => Key::PageUp,
+            "pagedown" => Key::PageDown,
+            "tab" => Key::Tab,
+            "S-tab" => Key::BackTab,
+            _ => return None,
+        })
+    }
+    let mut keys = Vec::new();
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        rest = &rest[c.len_utf8()..];
+        let key = match c {
+            '>' => return Err(">".to_string()),
+            '<' => {
+                let Some(end) = rest.find('>') else { return Err(format!("<{rest}")) };
+                let name = &rest[..end];
+                rest = &rest[end + 1..];
+                named(name).ok_or_else(|| format!("<{name}>"))?
+            }
+            '\n' | '\r' => Key::Enter,
+            '\t' => Key::Tab,
+            '\u{1b}' => Key::Esc,
+            c if (c as u32) < 32 => Key::Ctrl((b'a' + c as u8 - 1) as char),
+            c => Key::Char(c),
+        };
+        keys.push(key);
+    }
+    Ok(keys)
+}
+
 #[cfg(test)]
 mod tests {
     use super::Mode;
+
+    /// A macro's text goes both ways as helix writes it, and reads what
+    /// vim's registers hold too (2026-11-03).
+    #[test]
+    fn a_macro_is_written_as_helix_writes_it() {
+        use super::{macro_keys, macro_text, Key};
+        let keys = [
+            Key::Char('i'),
+            Key::Char('a'),
+            Key::Char(' '),
+            Key::Char('<'),
+            Key::Char('中'),
+            Key::Esc,
+            Key::Ctrl('w'),
+            Key::Char('v'),
+            Key::Alt('o'),
+            Key::BackTab,
+            Key::Enter,
+            Key::Char('-'),
+        ];
+        let text = macro_text(&keys);
+        assert_eq!(text, "ia<space><lt>中<esc><C-w>v<A-o><S-tab><ret><minus>");
+        assert_eq!(macro_keys(&text), Ok(keys.to_vec()));
+        assert_eq!(macro_keys("dd\n\u{1b}\u{17}"), Ok(vec![Key::Char('d'), Key::Char('d'), Key::Enter, Key::Esc, Key::Ctrl('w')]));
+        assert_eq!(macro_keys("a>b"), Err(">".to_string()));
+        assert_eq!(macro_keys("<nope>"), Err("<nope>".to_string()));
+        assert_eq!(macro_keys("a<b"), Err("<b".to_string()));
+    }
 
     /// Every mode, asked all four questions (#351).
     ///

@@ -229,12 +229,18 @@ pub(super) const NORMAL_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::SelectRegister, Editor::cmd_select_register, Key::Char('"')),
     (NormalCmd::RecordMacro, Editor::cmd_record_macro, Key::Char('Q')),
     (NormalCmd::ReplayMacro, Editor::cmd_replay_macro, Key::Char('q')),
-    // vim's `q{a-z}` and `@{a-z}` (2026-11-01): the letter is waited for and
-    // read; there is one macro. `q` while recording stops, as in vim.
+    // vim's `q{a-z}` and `@{a-z}`: the letter names the register the macro
+    // is recorded into or played from (2026-11-03). `q` while recording
+    // stops, as in vim.
     (NormalCmd::VimRecordMacro, |e, cx| match e.recording.is_some() {
-        true => e.toggle_recording(),
+        true => e.stop_recording(),
         false => e.pending = Pending::MacroRegister { record: true, count: cx.count },
     }, Key::Char('q')),
+    // vim's `Q`: the register last recorded into, played (Neovim's).
+    (NormalCmd::VimReplayLastMacro, |e, cx| match e.last_recorded {
+        Some(name) => e.play_register(name, cx.count),
+        None => e.status = say!("macro.nothing-recorded"),
+    }, Key::Char('Q')),
     (NormalCmd::VimReplayMacro, |e, cx| e.pending = Pending::MacroRegister { record: false, count: cx.count }, Key::Char('@')),
     // vim's `_`: the first non-blank character, count \u{2212} 1 lines down.
     (NormalCmd::VimGotoFirstNonwhitespace, |e, cx| {

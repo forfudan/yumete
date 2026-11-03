@@ -206,8 +206,9 @@ impl KeyPreset {
                 //
                 // Warning: **展開出來的鍵不再過別名層**，所以這兩行不會互相咬。
                 // `q{a-z}` waits for its letter (`vim_record_macro`, a row of
-                // the vim table, 2026-11-01); `Q` replays, as Neovim's does.
-                ("Q", "replay_macro"),
+                // the vim table, 2026-11-01); `Q` plays the register last
+                // recorded into, as Neovim's does (2026-11-03).
+                ("Q", "vim_replay_last_macro"),
                 ("K", "hover"),
                 ("%", "vim_match_brackets"),
                 // **`(`/`)` 是句子**（2026-10-06）。這裏它們本來是「換主選區」，

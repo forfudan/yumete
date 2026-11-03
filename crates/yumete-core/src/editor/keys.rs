@@ -1957,15 +1957,21 @@ impl Editor {
                 }
                 return;
             }
-            // vim's `q{a-z}` and `@{a-z}`: the letter names a register, and
-            // there is one macro. Any other key lets the wait go.
+            // vim's `q{a-zA-Z0-9}` and `@{a-z0-9"@}`: the letter names the
+            // register (`qA` adds to `a`; `@@` plays the last one played).
+            // Any other key lets the wait go.
             Pending::MacroRegister { record, count } => {
                 self.pending = Pending::None;
-                if matches!(key, Key::Char(c) if c.is_ascii_alphanumeric() || c == '"' || c == '@') {
-                    match record {
-                        true => self.toggle_recording(),
-                        false => self.replay_macro(count),
+                match (record, key) {
+                    (true, Key::Char(c)) if c.is_ascii_alphanumeric() => self.start_recording(c),
+                    (false, Key::Char('@')) => match self.last_played {
+                        Some(name) => self.play_register(name, count),
+                        None => self.status = say!("macro.nothing-played"),
+                    },
+                    (false, Key::Char(c)) if c.is_ascii_alphanumeric() || c == '"' => {
+                        self.play_register(c.to_ascii_lowercase(), count)
                     }
+                    _ => {}
                 }
                 return;
             }

@@ -34068,7 +34068,7 @@ fn a_macro_stopped_by_a_binding_does_not_hold_the_binding() {
     ed.on_key(Key::Char('R'));
     ed.on_key(Key::Char('l'));
     ed.on_key(Key::Char('R'));
-    assert_eq!(ed.macro_keys, vec![Key::Char('l')]);
+    assert_eq!(ed.recorded_keys_for_test(), "l");
     // The default key leaves itself out the same way, and a `Q` that `f`
     // is waiting for is kept.
     let mut ed = typed("aQc\n");
@@ -34076,7 +34076,7 @@ fn a_macro_stopped_by_a_binding_does_not_hold_the_binding() {
     ed.on_key(Key::Char('Q'));
     press(&mut ed, "fQ");
     ed.on_key(Key::Char('Q'));
-    assert_eq!(ed.macro_keys, vec![Key::Char('f'), Key::Char('Q')]);
+    assert_eq!(ed.recorded_keys_for_test(), "fQ");
 }
 
 /// **Select mode's keys are `extend_*` commands, which extend in either
@@ -35238,4 +35238,53 @@ fn vims_window_keys_go_rearrange_and_close() {
     let refused = ed.execute(":q").unwrap_err().to_string();
     w(&mut ed, "q");
     assert_eq!(ed.status(), refused, "C-w q in the last window is :q");
+}
+
+/// **Named macros** (2026-11-03): a macro is recorded into a register as
+/// text, as helix and vim keep one (`ihello<esc>`, helix's way of writing
+/// it, under both keymaps), so `"ap` shows it and a line yanked into a
+/// register plays. helix: `"aQ` … `Q`, `"aq`; `Q` alone uses `@`. vim:
+/// `qa` … `q`, `@a`, `qA` adds, `@@` plays the last played, `Q` the last
+/// recorded.
+#[test]
+fn macros_live_in_registers() {
+    // helix.
+    let mut ed = typed("a\nb\nc\n");
+    press(&mut ed, "gg");
+    press(&mut ed, "\"aQ");
+    press(&mut ed, "ghiX");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jQ");
+    assert_eq!(ed.held('a'), "ghiX<esc>j");
+    press(&mut ed, "\"aq");
+    assert_eq!(ed.current_buffer().text(), "Xa\nXb\nc\n");
+    press(&mut ed, "Q");
+    press(&mut ed, "x");
+    press(&mut ed, "Q");
+    assert_eq!(ed.held('@'), "x");
+
+    // vim.
+    let mut ed = typed("a\nb\nc\nd\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg");
+    press(&mut ed, "qaiX");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "jq");
+    assert_eq!(ed.held('a'), "iX<esc>j");
+    press(&mut ed, "@a");
+    assert_eq!(ed.current_buffer().text(), "Xa\nXb\nc\nd\n");
+    press(&mut ed, "@@");
+    assert_eq!(ed.current_buffer().text(), "Xa\nXb\nXc\nd\n");
+    press(&mut ed, "qA0q");
+    assert_eq!(ed.held('a'), "iX<esc>j0", "qA adds to a");
+    press(&mut ed, "Q");
+    assert_eq!(ed.current_buffer().text(), "Xa\nXb\nXc\nXd\n", "Q plays the last recorded");
+    press(&mut ed, "@z");
+    assert_eq!(ed.status(), say!("register.empty", 'z'));
+    // A line yanked into a register plays as keys, its line break as Enter.
+    let mut ed = typed("dd\none\ntwo\nthree\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "gg\"byyj@b");
+    assert_eq!(ed.current_buffer().text(), "dd\ntwo\nthree\n");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 2, "Enter went down a line");
 }

@@ -1317,37 +1317,83 @@ impl Editor {
         }
     }
 
-    /// Start recording keys, or stop and keep what was recorded (Helix `q`).
+    /// helix's `Q`: start recording into the register a `"` named, `@`
+    /// when none did, or stop and keep what was recorded there.
     pub(super) fn toggle_recording(&mut self) {
-        match self.recording.take() {
-            Some(mut keys) => {
-                keys.truncate(self.recording_from);
-                let n = keys.len();
-                self.macro_keys = keys;
-                self.status = say!("macro.recorded-keys", n);
-            }
-            None => {
-                self.recording = Some(Vec::new());
-                self.recording_from = 0;
-                self.status = say!("macro.recording");
+        match self.recording.is_some() {
+            true => self.stop_recording(),
+            false => {
+                let register = self.pending_register.take().unwrap_or('@');
+                self.start_recording(register);
             }
         }
     }
 
-    /// Play the last recorded macro back (Helix `Q`).
+    /// Record the keys from now on, for `register`.
+    pub(super) fn start_recording(&mut self, register: char) {
+        self.recording = Some(Vec::new());
+        self.recording_from = 0;
+        self.recording_into = register;
+        self.status = say!("macro.recording");
+    }
+
+    /// Stop recording and write the keys into their register as text
+    /// ([`crate::input::macro_text`]), as helix and vim keep a macro (named
+    /// macros, 2026-11-03; there was one macro, kept apart). vim's `qA`
+    /// adds to register `a`.
+    pub(super) fn stop_recording(&mut self) {
+        let Some(mut keys) = self.recording.take() else { return };
+        keys.truncate(self.recording_from);
+        let n = keys.len();
+        let text = crate::input::macro_text(&keys);
+        let into = self.recording_into;
+        let (name, text) = match into.is_ascii_uppercase() && self.vim_keymap() {
+            true => {
+                let name = into.to_ascii_lowercase();
+                (name, self.held(name) + &text)
+            }
+            false => (into, text),
+        };
+        self.registers.insert(name, vec![text]);
+        self.last_recorded = Some(name);
+        self.status = say!("macro.recorded-keys", n);
+    }
+
+    /// helix's `q`: play the register a `"` named, `@` when none did.
+    pub(super) fn replay_macro(&mut self, count: usize) {
+        let register = self.pending_register.take().unwrap_or('@');
+        self.play_register(register, count);
+    }
+
+    /// Play the keys `register` holds, `count` times. `"` is the unnamed
+    /// register, as vim's `@"` reads it.
     ///
     /// A macro cannot start while one is playing, and cannot play inside
-    /// itself: `Q` recorded into a macro would otherwise recurse until the
+    /// itself: `q` recorded into a macro would otherwise recurse until the
     /// stack ran out.
-    pub(super) fn replay_macro(&mut self, count: usize) {
+    pub(super) fn play_register(&mut self, register: char, count: usize) {
         if self.replaying {
             return;
         }
-        if self.macro_keys.is_empty() {
-            self.status = say!("macro.nothing-recorded");
+        let text = match register {
+            '"' => self.register_text(None),
+            name => self.held(name),
+        };
+        if text.is_empty() {
+            self.status = match register {
+                '@' => say!("macro.nothing-recorded"),
+                name => say!("register.empty", name),
+            };
             return;
         }
-        let keys = self.macro_keys.clone();
+        let keys = match crate::input::macro_keys(&text) {
+            Ok(keys) => keys,
+            Err(bad) => {
+                self.status = say!("macro.cannot-read", register, bad);
+                return;
+            }
+        };
+        self.last_played = Some(register);
         self.replaying = true;
         // A macro may write, so it answers to the writing ceiling; and a round
         // that moved nothing and changed nothing will never move anything on

@@ -238,10 +238,8 @@ enum Pending {
     Replace,
     /// `"` awaiting the letter naming a register.
     Register,
-    /// vim's `q` and `@`, waiting for the register letter (2026-11-01).
-    /// There is one macro, so the letter is read and the one macro is
-    /// recorded or played; before this the letter ran as a command of its
-    /// own (`qa` started recording and then Append).
+    /// vim's `q` and `@`, waiting for the letter of the register the macro
+    /// is recorded into or played from (2026-11-01; named 2026-11-03).
     MacroRegister { record: bool, count: usize },
     /// **`C-g` 剛按下，撤銷已經斷了**——等着把跟在後面那個 `u` 吞掉（2026-09-23）。
     ///
@@ -2532,8 +2530,13 @@ pub struct Editor {
     /// (`vim_paste_after`), `Some(false)` while its helix twin does, `None`
     /// outside both, where the keymap in use answers ([`Editor::as_vim`]).
     acting_as_vim: Option<bool>,
-    /// The last macro recorded, replayed by `Q`.
-    macro_keys: Vec<Key>,
+    /// The register the recording goes into: helix's `"aQ` (`@` without a
+    /// `"`), vim's `qa`. A macro lives in a register as text, as in both.
+    recording_into: char,
+    /// The register last recorded into, which vim's `Q` plays.
+    last_recorded: Option<char>,
+    /// The register last played, which vim's `@@` plays again.
+    last_played: Option<char>,
     /// Whether a macro is being replayed, so it cannot record or replay itself.
     replaying: bool,
     /// How much of the buffer is on screen: lines, and 縱 across. Set by the
@@ -4170,7 +4173,9 @@ impl Editor {
             recording_from: 0,
             motion_extend: None,
             acting_as_vim: None,
-            macro_keys: Vec::new(),
+            recording_into: '@',
+            last_recorded: None,
+            last_played: None,
             replaying: false,
             flavor: yumete_cjk::Flavor::default(),
             page_lines: 20,

@@ -558,13 +558,7 @@ impl Editor {
 
     #[cfg(test)]
     pub(super) fn recorded_keys_for_test(&self) -> String {
-        self.macro_keys
-            .iter()
-            .map(|k| match k {
-                Key::Char(c) => *c,
-                _ => '?',
-            })
-            .collect()
+        self.last_recorded.map(|name| self.held(name)).unwrap_or_default()
     }
 
         /// The current transient status message (may be empty).

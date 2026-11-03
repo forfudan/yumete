@@ -2666,6 +2666,13 @@ zhs = "用新的计数再做一次刚才的改动"
 en = "repeat the last change with a new count"
 
 [[message]]
+# 命令說明：vim_replay_last_macro（草稿）
+key = "action.vim-replay-last-macro"
+zht = "播放最近錄的宏(vim 的 Q)"
+zhs = "播放最近录的宏(vim 的 Q)"
+en = "play the macro recorded last (vim's Q)"
+
+[[message]]
 # 命令說明：vim_replay_macro（草稿）
 key = "action.vim-replay-macro"
 zht = "回放宏(再按一個字母)"

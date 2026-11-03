@@ -764,6 +764,7 @@ normal_commands! {
     VimUnindent = "vim_unindent",
     VimPasteAfter = "vim_paste_after",
     VimPasteBefore = "vim_paste_before",
+    VimReplayLastMacro = "vim_replay_last_macro",
     VimPasteAfterIndented = "vim_paste_after_indented",
     VimPasteBeforeIndented = "vim_paste_before_indented",
     VimIncrement = "vim_increment",
@@ -1318,6 +1319,7 @@ pub const ALL: &[Action] = &[
     normal("action.vim-visual-block-mode", NormalCmd::VimVisualBlockMode),
     normal("action.vim-record-macro", NormalCmd::VimRecordMacro),
     normal("action.vim-replay-macro", NormalCmd::VimReplayMacro),
+    normal("action.vim-replay-last-macro", NormalCmd::VimReplayLastMacro),
     normal("action.vim-goto-first-nonwhitespace", NormalCmd::VimGotoFirstNonwhitespace),
 ];
 

@@ -478,6 +478,20 @@ zhs = "正在打的那一段：{0}"
 en = "preedit: {0}"
 
 [[message]]
+# 寄存器裏的字讀不成按鍵：{0} 寄存器名，{1} 讀不懂的那一段（草稿）
+key = "macro.cannot-read"
+zht = "寄存器 {0} 裏的 {1} 讀不成按鍵"
+zhs = "寄存器 {0} 里的 {1} 读不成按键"
+en = "register {0}: {1} is not a key"
+
+[[message]]
+# vim 的 @@：還没有播放過宏（草稿）
+key = "macro.nothing-played"
+zht = "還没有播放過宏"
+zhs = "还没有播放过宏"
+en = "no macro played yet"
+
+[[message]]
 # 還没錄過宏就按了播放
 key = "macro.nothing-recorded"
 zht = "還没有錄過——Q 開始錄，再按 Q 停"
