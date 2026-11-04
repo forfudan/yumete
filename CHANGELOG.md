@@ -7,6 +7,38 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **How much a window you are not in fades is a setting**: `[theme] inactive`, from 50 to 100, keeps 95% of the ink by default. Focus mode's is `[theme] focus`, from 10 to 100, 50 by default. Both are on the settings panel's Colours page.
+- **The name yumete at the right end of the command line**, dimmed, while nothing else is on it, as it once was: `[editor] signature`, on by default, on the settings panel's Interface page.
+- **Two blocks at the ends of the tab line open and close the sidebars** with a click, as `C-w e` and `C-w i` do: grey when the sidebar is closed, the panel's frame colour when it is open, gold when the keys are in it. `[editor] sidebar_buttons`, on by default. A sidebar opened again, by its block or its key, shows the panel it was closed on.
+- **`:reg`** opens the menu of everything that could be pasted, as `Space "` and `:clipboard` do; `:registers` and `:display` point to it.
+
+### Changed
+
+- **Focus mode fades the other windows too**, as far as it fades the paragraphs around the one being written.
+- **Under vim, a new window opens above or to the left** of the one you are in, as vim's does; under helix, below or to the right as before. `C-w s`, `C-w v`, `:hsplit`, `:vsplit`, `C-w n`, `C-w ^` and `C-w f` all follow it.
+- **The windows of a row or column share its room equally**, as vim's and helix's do; every split used to halve the window it cut, so the third window in a column had a quarter of it. `C-w H` and `C-w L` on three windows now give thirds.
+- **vim's `C-d` and `C-u` are vim's**: a count sets how far they go from then on, in that window (`3 C-d`, then `C-d` moves three lines again); the view never scrolls past the end of the file, and the cursor moves as far whatever the view did. helix's `C-d` and `C-u` take no count, as helix's do.
+- **vim's `C-f` and `C-b` put the cursor on the new top or bottom line**, then in by `scrolloff`, and scroll the whole height when the far end of the file is already in view, so `G` then `C-f` shows the last line alone at the top. Both keep the column `$` asked for.
+- **A jump to a line already on screen leaves the page where it is**, under either keymap: `H` `M` `L`, helix's `gt` `gc` `gb`, `n` to a match in view. A jump off the page still lands in the middle. Under vim, a jump near the end of the file, or `j` on its last lines, fills the page down to the last line instead of scrolling past it, as vim does.
+- **`H` `M` `L` and helix's `gt` `gc` `gb` keep `scrolloff` rows from the edges**, as both editors do; under vim, none above the first line of the file or below its last, and none for an operator (`dL`).
+- **vim's `zH` and `zL` scroll half the window, the line numbers counted**, as vim's do, and a cursor half a page or more off the side of the page is put in the middle (`300|`).
+- **Under vim, `"A` adds to register `a`**, and text added to lines, or lines to text, makes lines; `"Ap` reads `a`. A yank or delete into a named register also fills the unnamed one, so `"ayy` then `p` pastes that line.
+
+### Fixed
+
+- **A cursor a closed fold hides keeps its line under vim.** After `G`, `:`*line* or `zc`, the cursor is drawn on the fold and the status line says the line it is really on, as vim's does (`:3` in a fold of lines 2 to 4 reads Ln 3); the fold keys act there, so `zM` then `zO` opens both of two nested folds, where it opened only the outer one.
+- **The moves along a closed fold's line open it** under vim (`l`, `$`, `0`, `f` …), as vim's do, so `l` then `x` takes one character rather than the whole fold; `w` and `b` step past the fold instead of into its hidden lines.
+- **`zfj` on a closed fold reaches the line after it**, as vim's does, and `j` and `k` after any operator count a closed fold as one line.
+- **`>>` and `<<` on a closed fold open it**, as vim's do.
+- **`J` on the line above a closed fold** leaves the fold on the lines after the joined one, as vim does; the fold used to grow up onto the joined line.
+- **Typing a heading with the same text as a closed one** above it no longer closes the new one and opens the old: a closed heading is kept by its place, which moves with the text and through `u`.
+- **Typing with a second cursor inside a closed fold opens that fold** too; the text it hid was typed into unseen.
+- **A session gives each window its own folds** when a window above it is dropped on the way back because its file is gone; they went to the window below.
+
 ## 0.17.0 · 2026-11-03
 
 ### Added
