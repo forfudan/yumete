@@ -277,11 +277,12 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::ScrollViewLeft, |e, cx| e.scroll_sideways(Sideways::Shift(-(cx.count as isize))), Key::Char('h')),
     (NormalCmd::ScrollViewRight, |e, cx| e.scroll_sideways(Sideways::Shift(cx.count as isize)), Key::Char('l')),
     (NormalCmd::ScrollViewHalfLeft, |e, cx| {
-        let half = (e.side_seen.get().1 / 2).max(1);
+        // Half the window, its gutter counted, as vim's (nvim, 2026-11-04).
+        let half = ((e.side_seen.get().1 + e.side_gutter.get()) / 2).max(1);
         e.scroll_sideways(Sideways::Shift(-((cx.count * half) as isize)));
     }, Key::Char('H')),
     (NormalCmd::ScrollViewHalfRight, |e, cx| {
-        let half = (e.side_seen.get().1 / 2).max(1);
+        let half = ((e.side_seen.get().1 + e.side_gutter.get()) / 2).max(1);
         e.scroll_sideways(Sideways::Shift((cx.count * half) as isize));
     }, Key::Char('L')),
     (NormalCmd::AlignViewCursorLeft, |e, _| e.scroll_sideways(Sideways::CursorAtLeft), Key::Char('s')),

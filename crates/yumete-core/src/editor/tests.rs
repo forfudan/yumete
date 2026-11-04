@@ -35305,6 +35305,53 @@ fn vims_window_keys_go_rearrange_and_close() {
     assert_eq!(ed.status(), refused, "C-w q in the last window is :q");
 }
 
+/// **A new window opens above or to the left under vim** (`nosplitbelow`,
+/// `nosplitright`; nvim 2026-11-04), below or to the right under helix,
+/// and the keys go to it either way.
+#[test]
+fn a_new_window_opens_on_the_side_each_keymap_opens_it() {
+    for (vim, want) in [(false, 1), (true, 0)] {
+        for key in ['s', 'v'] {
+            let mut ed = typed("one\n");
+            if vim {
+                ed.execute(":keymap vim").unwrap();
+            }
+            let old = ed.live_window();
+            ed.on_key(Key::Ctrl('w'));
+            ed.on_key(Key::Char(key));
+            let leaves = ed.windows().leaves();
+            assert_eq!(leaves.len(), 2);
+            assert_ne!(ed.live_window(), old);
+            assert_eq!(ed.windows().index_of(ed.live_window()), Some(want), "vim {vim}, C-w {key}");
+        }
+    }
+}
+
+/// **vim's `"A` adds to `a`, and `""` follows the register written**
+/// (2026-11-04, measured in nvim): lines to lines, text to text, text and
+/// lines make lines; `"ayy` then `p` puts that line, `"Ap` reads `a`.
+#[test]
+fn vims_capital_register_adds_and_the_unnamed_one_follows() {
+    let mut ed = typed_vim("one two\nthree four\nfive\n");
+    press(&mut ed, "gg\"ayyj\"AyyGp");
+    assert_eq!(ed.current_buffer().text(), "one two\nthree four\nfive\none two\nthree four\n");
+    let mut ed = typed_vim("one two\nthree four\nfive\n");
+    press(&mut ed, "gg\"aywj\"Ayw");
+    assert_eq!(ed.held('a'), "one three ");
+    press(&mut ed, "gg\"ayyj\"Ayw");
+    assert_eq!(ed.held('a'), "one two\nthree \n");
+    press(&mut ed, "gg\"aywj\"Ayy");
+    assert_eq!(ed.held('a'), "one \nthree four\n");
+    let mut ed = typed_vim("one two\nthree four\nfive\n");
+    press(&mut ed, "gg\"ayyjp");
+    assert_eq!(ed.current_buffer().text(), "one two\nthree four\none two\nfive\n");
+    press(&mut ed, "G\"Ap");
+    assert!(ed.current_buffer().text().ends_with("five\none two\n"));
+    // `:reg` is the menu of what could be put.
+    ed.execute(":reg").unwrap();
+    assert!(ed.picker.is_some());
+}
+
 /// **Named macros** (2026-11-03): a macro is recorded into a register as
 /// text, as helix and vim keep one (`ihello<esc>`, helix's way of writing
 /// it, under both keymaps), so `"ap` shows it and a line yanked into a
@@ -35719,6 +35766,76 @@ fn a_page_scrolls_the_view_and_pushes_the_cursor_by_scrolloff() {
     view(&mut ed, 0);
     press(&mut ed, "zj");
     assert_eq!(at(&ed).0, 6, "helix: zj at the top pushes the cursor to top + scrolloff");
+}
+
+/// **vim's `C-d` `C-u` and the ends of the file** (2026-11-04, numbers
+/// from nvim on 10 rows of 100 lines): a count is 'scroll' from then on,
+/// the cursor moves as far as the view would whatever the view does, and
+/// scrolloff is kept in from the edges but not past the file's ends. `C-f`
+/// with the last line in view shows it alone at the top. helix's `C-d`
+/// takes no count.
+#[test]
+fn vims_half_page_keeps_its_count_and_the_ends_of_the_file() {
+    let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
+    let line = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head()) + 1;
+    let top = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.page_span.0) + 1;
+    let view = |ed: &mut Editor, top: usize, so: usize| {
+        let rope = ed.current_buffer().rope().clone();
+        let end = (top - 1 + 10).min(100);
+        let to = match end {
+            100 => rope.len_chars(),
+            _ => rope.line_to_char(end),
+        };
+        ed.set_page(10, 80);
+        ed.set_page_span(rope.line_to_char(top - 1), to);
+        ed.page_inset(Some(0), 9, so);
+    };
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "gg");
+    view(&mut ed, 1, 3);
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!((top(&ed), line(&ed)), (6, 9), "nvim: top 6, cursor 9");
+    // 'scroll' from a count, kept.
+    press(&mut ed, "gg");
+    view(&mut ed, 1, 0);
+    press(&mut ed, "3");
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!((top(&ed), line(&ed)), (4, 4));
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!((top(&ed), line(&ed)), (7, 7), "the count stays");
+    press(&mut ed, "50G");
+    view(&mut ed, 46, 3);
+    press(&mut ed, "3");
+    ed.on_key(Key::Ctrl('u'));
+    assert_eq!((top(&ed), line(&ed)), (43, 47));
+    // The last line in view: the cursor moves, the view does not.
+    press(&mut ed, "95G");
+    view(&mut ed, 91, 3);
+    press(&mut ed, "5");
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!((top(&ed), line(&ed)), (91, 100));
+    press(&mut ed, "92G");
+    view(&mut ed, 92, 0);
+    ed.on_key(Key::Ctrl('f'));
+    assert_eq!((top(&ed), line(&ed)), (100, 100), "nvim: line 100 alone");
+    // `H` and `L` keep scrolloff from the edges, but none above line 1.
+    press(&mut ed, "gg");
+    view(&mut ed, 1, 3);
+    press(&mut ed, "L");
+    assert_eq!(line(&ed), 7);
+    press(&mut ed, "H");
+    assert_eq!(line(&ed), 1);
+    press(&mut ed, "50G");
+    view(&mut ed, 46, 3);
+    press(&mut ed, "H");
+    assert_eq!(line(&ed), 49);
+
+    let mut ed = typed(&text);
+    press(&mut ed, "gg");
+    view(&mut ed, 1, 0);
+    press(&mut ed, "3");
+    ed.on_key(Key::Ctrl('d'));
+    assert_eq!(line(&ed), 6, "helix: half the view, the count not read");
 }
 
 /// **vim's `z` is vim's** (2026-11-03): helix's view keys had leaked into

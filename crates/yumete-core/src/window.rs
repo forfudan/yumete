@@ -137,22 +137,33 @@ impl Windows {
     /// Split window `at` and hand back the new window, which takes the
     /// second half. `None` when `at` is no window.
     pub fn split(&mut self, at: WindowId, how: Split) -> Option<WindowId> {
-        fn go(node: &mut Node, at: WindowId, how: Split, fresh: WindowId) -> bool {
+        self.split_on(at, how, false)
+    }
+
+    /// [`Self::split`], the new window going `before` `at` — above it or
+    /// to its left, as vim's `:split` and `:vsplit` open one
+    /// (`nosplitbelow`, `nosplitright`; measured in nvim 2026-11-04).
+    pub fn split_on(&mut self, at: WindowId, how: Split, before: bool) -> Option<WindowId> {
+        fn go(node: &mut Node, at: WindowId, how: Split, fresh: WindowId, before: bool) -> bool {
             match node {
                 Node::Window(id) if *id == at => {
+                    let (first, second) = match before {
+                        true => (fresh, at),
+                        false => (at, fresh),
+                    };
                     *node = Node::Split {
                         how,
-                        first: Box::new(Node::Window(at)),
-                        second: Box::new(Node::Window(fresh)),
+                        first: Box::new(Node::Window(first)),
+                        second: Box::new(Node::Window(second)),
                     };
                     true
                 }
                 Node::Window(_) => false,
-                Node::Split { first, second, .. } => go(first, at, how, fresh) || go(second, at, how, fresh),
+                Node::Split { first, second, .. } => go(first, at, how, fresh, before) || go(second, at, how, fresh, before),
             }
         }
         let fresh = self.next;
-        if !go(&mut self.root, at, how, fresh) {
+        if !go(&mut self.root, at, how, fresh, before) {
             return None;
         }
         self.next += 1;
@@ -177,23 +188,46 @@ impl Windows {
         go(&mut self.root, id)
     }
 
-    /// The window that takes the room `id` leaves when it closes: its
-    /// sibling, or, when the sibling is itself split, the window of it that
-    /// touches `id` — the first of a second half, the last of a first. This
-    /// is vim's choice; closing the middle of three stacked windows gives the
-    /// room and the answer to the one below. `None` for the last window.
+    /// The window that takes `id`'s place when it closes: the next window
+    /// of its row or column, or the one before when it is the last — vim's
+    /// choice (`nosplitbelow`; measured in nvim 2026-11-04). A neighbour
+    /// split the other way answers its window touching `id`. `None` for the
+    /// last window.
     pub fn heir(&self, id: WindowId) -> Option<WindowId> {
-        fn go(node: &Node, id: WindowId) -> Option<WindowId> {
-            let Node::Split { first, second, .. } = node else { return None };
-            if **first == Node::Window(id) {
-                return Some(first_leaf(second));
-            }
-            if **second == Node::Window(id) {
-                return Some(last_leaf(first));
-            }
-            go(first, id).or_else(|| go(second, id))
+        let row = self.row_nodes(id);
+        let at = row.iter().position(|node| **node == Node::Window(id))?;
+        match row.get(at + 1) {
+            Some(next) => Some(first_leaf(next)),
+            None => Some(last_leaf(row.get(at.checked_sub(1)?)?)),
         }
-        go(&self.root, id)
+    }
+
+    /// The nodes of the row or column `id` stands in, in order: a run of
+    /// splits the same way is one row, as vim's frames and helix's
+    /// containers are. Empty when `id` is the only window.
+    fn row_nodes(&self, id: WindowId) -> Vec<&Node> {
+        fn path<'a>(node: &'a Node, id: WindowId, out: &mut Vec<&'a Node>) -> bool {
+            match node {
+                Node::Window(w) => *w == id,
+                Node::Split { first, second, .. } => {
+                    out.push(node);
+                    if path(first, id, out) || path(second, id, out) {
+                        return true;
+                    }
+                    out.pop();
+                    false
+                }
+            }
+        }
+        let mut above = Vec::new();
+        if !path(&self.root, id, &mut above) {
+            return Vec::new();
+        }
+        let Some(how) = above.last().and_then(|node| how_of(node)) else { return Vec::new() };
+        let Some(top) = above.iter().rev().take_while(|node| how_of(node) == Some(how)).last() else { return Vec::new() };
+        let mut out = Vec::new();
+        children(top, how, &mut out);
+        out
     }
 
     /// The tree written out first-half-first: a split, then its two halves.
@@ -268,44 +302,13 @@ impl Windows {
     /// sibling, in order; `None` marks one that is itself split the other
     /// way. Empty when `id` is the only window.
     pub fn row_of(&self, id: WindowId) -> Vec<Option<WindowId>> {
-        fn path<'a>(node: &'a Node, id: WindowId, out: &mut Vec<&'a Node>) -> bool {
-            match node {
-                Node::Window(w) => *w == id,
-                Node::Split { first, second, .. } => {
-                    out.push(node);
-                    if path(first, id, out) || path(second, id, out) {
-                        return true;
-                    }
-                    out.pop();
-                    false
-                }
-            }
-        }
-        fn flatten(node: &Node, how: Split, out: &mut Vec<Option<WindowId>>) {
-            match node {
-                Node::Window(w) => out.push(Some(*w)),
-                Node::Split { how: h, first, second } if *h == how => {
-                    flatten(first, how, out);
-                    flatten(second, how, out);
-                }
-                Node::Split { .. } => out.push(None),
-            }
-        }
-        let mut above = Vec::new();
-        if !path(&self.root, id, &mut above) {
-            return Vec::new();
-        }
-        let how_of = |node: &Node| match node {
-            Node::Split { how, .. } => Some(*how),
-            Node::Window(_) => None,
-        };
-        let Some(how) = above.last().and_then(|node| how_of(node)) else { return Vec::new() };
-        let top = above.iter().rev().take_while(|node| how_of(node) == Some(how)).last().copied();
-        let mut out = Vec::new();
-        if let Some(top) = top {
-            flatten(top, how, &mut out);
-        }
-        out
+        self.row_nodes(id)
+            .into_iter()
+            .map(|node| match node {
+                Node::Window(w) => Some(*w),
+                Node::Split { .. } => None,
+            })
+            .collect()
     }
 
     /// **vim's `C-w x`**: `id` trades places with the next window of its
@@ -371,38 +374,56 @@ impl Windows {
         true
     }
 
-    /// The windows laid into `area`, with the rules between them. A split
-    /// gives each half the same room less the rule; `rtl` puts a **beside**
-    /// split's second half on the left, as a 縱書 page reads.
+    /// The windows laid into `area`, with the rules between them. The
+    /// windows of a row or column share its room equally less the rules,
+    /// as vim's (`equalalways`) and helix's do; what does not divide goes
+    /// to the last. `rtl` lays a **beside** row out from the right, as a
+    /// 縱書 page reads.
     pub fn place(&self, area: Area, rtl: bool) -> (Vec<Placed>, Vec<Rule>) {
         fn go(node: &Node, area: Area, rtl: bool, out: &mut Vec<Placed>, rules: &mut Vec<Rule>) {
-            match node {
-                Node::Window(id) => out.push(Placed { id: *id, area }),
-                Node::Split { how, first, second } => {
-                    let (a, rule, b) = match how {
-                        Split::Below => {
-                            let half = area.height.saturating_sub(1) / 2;
-                            (
-                                Area::new(area.x, area.y, area.width, half),
-                                Area::new(area.x, area.y + half, area.width, 1.min(area.height)),
-                                Area::new(area.x, area.y + half + 1, area.width, area.height.saturating_sub(half + 1)),
-                            )
-                        }
-                        Split::Beside => {
-                            let half = area.width.saturating_sub(1) / 2;
-                            let left = Area::new(area.x, area.y, half, area.height);
-                            let rule = Area::new(area.x + half, area.y, 1.min(area.width), area.height);
-                            let right = Area::new(area.x + half + 1, area.y, area.width.saturating_sub(half + 1), area.height);
-                            match rtl {
-                                true => (right, rule, left),
-                                false => (left, rule, right),
-                            }
-                        }
-                    };
-                    go(first, a, rtl, out, rules);
-                    rules.push(Rule { area: rule, how: *how, first: last_leaf(first), second: first_leaf(second) });
-                    go(second, b, rtl, out, rules);
+            let Some(how) = how_of(node) else {
+                if let Node::Window(id) = node {
+                    out.push(Placed { id: *id, area });
                 }
+                return;
+            };
+            let mut row = Vec::new();
+            children(node, how, &mut row);
+            let n = row.len() as u16;
+            let length = match how {
+                Split::Below => area.height,
+                Split::Beside => area.width,
+            };
+            let share = length.saturating_sub(n - 1) / n;
+            let mut from = 0u16;
+            for (i, child) in row.iter().enumerate() {
+                let last = i + 1 == row.len();
+                let size = match last {
+                    true => length.saturating_sub(from),
+                    false => share,
+                };
+                let (part, rule) = match how {
+                    Split::Below => (
+                        Area::new(area.x, area.y + from, area.width, size),
+                        Area::new(area.x, area.y + from + size, area.width, 1),
+                    ),
+                    Split::Beside => {
+                        let x = match rtl {
+                            true => area.x + length.saturating_sub(from + size),
+                            false => area.x + from,
+                        };
+                        let rule_x = match rtl {
+                            true => x.saturating_sub(1),
+                            false => x + size,
+                        };
+                        (Area::new(x, area.y, size, area.height), Area::new(rule_x, area.y, 1, area.height))
+                    }
+                };
+                go(child, part, rtl, out, rules);
+                if !last {
+                    rules.push(Rule { area: rule, how, first: last_leaf(child), second: first_leaf(row[i + 1]) });
+                }
+                from = (from + size + 1).min(length);
             }
         }
         let mut out = Vec::new();
@@ -424,6 +445,25 @@ impl Windows {
             Direction::Down => (me.x + me.width / 2, me.y + me.height + 1),
         };
         placed.iter().find(|p| p.id != id && p.area.contains(x, y)).map(|p| p.id)
+    }
+}
+
+fn how_of(node: &Node) -> Option<Split> {
+    match node {
+        Node::Split { how, .. } => Some(*how),
+        Node::Window(_) => None,
+    }
+}
+
+/// The halves under `node` that lie `how`, a run of such splits read as one
+/// row.
+fn children<'a>(node: &'a Node, how: Split, out: &mut Vec<&'a Node>) {
+    match node {
+        Node::Split { how: h, first, second } if *h == how => {
+            children(first, how, out);
+            children(second, how, out);
+        }
+        _ => out.push(node),
     }
 }
 
@@ -564,6 +604,43 @@ mod tests {
         let (placed, _) = w.place(Area::new(0, 0, 81, 24), false);
         assert_eq!(placed[0].area, Area::new(0, 0, 40, 24));
         assert_eq!(placed[1].area, Area::new(41, 0, 40, 24));
+    }
+
+    /// A row shares its room equally, however its splits were made, as
+    /// nvim's and helix's do (2026-11-04): three stacked in 40 rows less
+    /// two rules, three beside after `C-w L` from a column.
+    #[test]
+    fn a_row_shares_its_room_equally() {
+        let mut w = Windows::one();
+        let two = w.split(1, Split::Below).unwrap();
+        w.split(two, Split::Below);
+        let (placed, rules) = w.place(Area::new(0, 0, 80, 40), false);
+        let heights: Vec<_> = placed.iter().map(|p| p.area.height).collect();
+        assert_eq!(heights, [12, 12, 14]);
+        assert_eq!(rules.len(), 2);
+        assert_eq!(placed[1].area.y, 13);
+        assert_eq!(rules[1].area.y, 25);
+        // vim's new window goes first: the tree is (3 / 2) / 1.
+        let mut w = Windows::one();
+        let two = w.split_on(1, Split::Below, true).unwrap();
+        let three = w.split_on(two, Split::Below, true).unwrap();
+        assert_eq!(w.leaves(), [three, two, 1]);
+        assert_eq!(w.row_of(1), [Some(three), Some(two), Some(1)]);
+        assert_eq!(w.heir(two), Some(1), "the middle's goes below");
+        assert_eq!(w.heir(1), Some(two), "the last's goes up");
+        // Three beside, then the first to the right edge: thirds still.
+        let mut w = Windows::one();
+        let two = w.split(1, Split::Beside).unwrap();
+        w.split(two, Split::Beside);
+        assert!(w.to_edge(1, Direction::Right, false));
+        let (placed, _) = w.place(Area::new(0, 0, 92, 10), false);
+        let widths: Vec<_> = placed.iter().map(|p| (p.id, p.area.x, p.area.width)).collect();
+        assert_eq!(widths, [(2, 0, 30), (3, 31, 30), (1, 62, 30)]);
+        // 縱書 lays the row out from the right.
+        let (placed, rules) = w.place(Area::new(0, 0, 92, 10), true);
+        let widths: Vec<_> = placed.iter().map(|p| (p.id, p.area.x, p.area.width)).collect();
+        assert_eq!(widths, [(2, 62, 30), (3, 31, 30), (1, 0, 30)]);
+        assert_eq!((rules[0].area.x, rules[1].area.x), (61, 30));
     }
 
     #[test]

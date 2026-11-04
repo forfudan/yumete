@@ -1480,7 +1480,8 @@ impl Editor {
                 first
             }
         };
-        match self.take_register() {
+        let named = self.take_register();
+        match named {
             // **`"_` keeps nothing and `"+` / `"*` are the system clipboard**
             // (2026-10-30), as in helix and vim: `"_d` deletes without touching
             // what `p` puts, and `"+y` copies out of the editor.
@@ -1488,12 +1489,31 @@ impl Editor {
             Some('+' | '*') => {
                 self.clipboard_request = Some(text);
             }
+            // **vim's `"A` adds to register `a`** (`:h quote_alpha`, measured
+            // in nvim 2026-11-04): lines added to text, or text to lines,
+            // make lines.
+            Some(name) if name.is_ascii_uppercase() && self.vim_keymap() => {
+                let name = name.to_ascii_lowercase();
+                let mut held = self.held(name);
+                let mut text = text;
+                if held.ends_with('\n') || text.ends_with('\n') {
+                    if !held.is_empty() && !held.ends_with('\n') {
+                        held.push('\n');
+                    }
+                    if !text.ends_with('\n') {
+                        text.push('\n');
+                    }
+                }
+                self.registers.insert(name, vec![held + &text]);
+                self.unnamed_follows(name);
+            }
             Some(name) => {
                 let parts = self.registers.entry(name).or_default();
                 if fresh {
                     parts.clear();
                 }
                 keep_one_piece(parts, nth, text);
+                self.unnamed_follows(name);
             }
             None => {
                 // The ring keeps what the register is about to lose. Not
@@ -1523,6 +1543,16 @@ impl Editor {
                     self.registers.insert('1', self.register_parts.clone());
                 }
             }
+        }
+    }
+
+    /// **vim's `""` follows the register just written** (`:h quotequote`,
+    /// nvim 2026-11-04): `"ayy` then `p` puts that line. helix's `"` is a
+    /// register like the others.
+    fn unnamed_follows(&mut self, name: char) {
+        if self.vim_keymap() {
+            self.register_parts = self.registers.get(&name).cloned().unwrap_or_default();
+            self.register = self.register_parts.concat();
         }
     }
 
@@ -1607,6 +1637,8 @@ impl Editor {
             // Warning: **只有一段的時候它是「1」**，不是空的：`"#p` 在一個光標上貼一個 1 是
             // 說得通的，而貼一個空字符串看起來像鍵没按上。
             Some('#') => (self.edit_nth.unwrap_or(0) + 1).to_string(),
+            // `"Ap` puts register `a`, as vim's does.
+            Some(name) if name.is_ascii_uppercase() && self.vim_keymap() => self.held(name.to_ascii_lowercase()),
             Some(name) => match self.registers.get(&name) {
                 Some(parts) if parts.len() > 1 => Self::part_for(parts, self.edit_nth),
                 Some(parts) => parts.concat(),

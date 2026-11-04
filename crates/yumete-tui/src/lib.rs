@@ -445,7 +445,7 @@ fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
     editor.set_wrap_width((first.width as usize).saturating_sub(gutter));
     editor.set_page(page.height as usize * strips.len(), first.width.max(1) as usize);
     // The columns `zl` `zL` `ze` count, known before the keys as the wrap is.
-    editor.note_side_width((first.width as usize).saturating_sub(gutter).max(1));
+    editor.note_side_width((first.width as usize).saturating_sub(gutter).max(1), gutter);
 }
 
 pub fn fit_the_page(
@@ -11966,7 +11966,23 @@ fn draw_horizontal(
                 true => scrolloff,
                 false => inset,
             };
+            let was = *viewport;
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
+            // **vim never goes past the file's end to keep scrolloff or to
+            // centre a jump** (`G`, `j` on the last lines; measured in nvim
+            // 2026-11-04): the page stops where its last row is the file's.
+            // helix does go past it, and so do the scrolls asked for.
+            if editor.key_preset() == yumete_core::KeyPreset::Vim && !editor.aimed() && !editor.typewriter() && *viewport > was {
+                let mut line = yumete_core::motion::last_line(rope);
+                while line > 0 && measure.folded(line) {
+                    line -= 1;
+                }
+                let last = wrap::Anchor { line, index_in_line: wrap::row_count_in_line(rope, line, measure).saturating_sub(1) };
+                let full = wrap::retreat(rope, last, measure, last_reach);
+                if *viewport > full {
+                    *viewport = full.max(was);
+                }
+            }
             wrap::distance(rope, *viewport, cursor_anchor, measure, reach).unwrap_or(0)
         }
     };
@@ -12047,7 +12063,16 @@ fn draw_horizontal(
             true => yumete_cjk::char_width(rope.char(at)).max(1),
             false => 1,
         };
-        if cursor_pos.column < *left {
+        // vim puts a caret half a page or more off the side in the middle
+        // (`curs_columns`, measured in nvim 2026-11-04: `300|`); helix and a
+        // nearer caret scroll just enough.
+        let off = match cursor_pos.column < *left {
+            true => *left - cursor_pos.column,
+            false => (cursor_pos.column + wide).saturating_sub(*left + page),
+        };
+        if off > 0 && off >= page / 2 && editor.key_preset() == yumete_core::KeyPreset::Vim {
+            *left = cursor_pos.column.saturating_sub(page / 2);
+        } else if cursor_pos.column < *left {
             *left = cursor_pos.column;
         } else if cursor_pos.column + wide > *left + page {
             *left = (cursor_pos.column + wide).saturating_sub(page);
@@ -23445,6 +23470,31 @@ fn squeezed(text: &str) -> String {
         editor.execute(":table-find 第9行").unwrap();
         let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
         assert_eq!(caret.map(|p| p.y), Some(middle), "and backwards");
+    }
+
+    /// **vim's page never goes past the file's end for a jump** (2026-11-04,
+    /// nvim): `G` fills the page down to the last line, and `L` lands where
+    /// it is without moving the page.
+    #[test]
+    fn under_vim_a_jump_to_the_end_fills_the_page() {
+        let mut editor = editor_with(&(1..=60).map(|n| format!("第{n}行。\n")).collect::<String>());
+        editor.execute(":keymap vim").unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.command_line = false;
+        let rows = 13u16;
+        let mut seats = Seats::default();
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(0));
+        // The page the frame drew, as the loop tells the editor after it.
+        let twelve = editor.current_buffer().rope().line_to_char(12);
+        editor.set_page_span(0, twelve);
+        editor.on_key(Key::Char('L'));
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(11 - config.editor.scrolloff as u16), "L keeps the page");
+        editor.on_key(Key::Char('G'));
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(11), "the last line on the last row");
     }
 
     /// A block's ground is painted to the edge of the page even on a row whose

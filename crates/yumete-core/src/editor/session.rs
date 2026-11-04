@@ -886,6 +886,7 @@ impl Editor {
                         jump_at: 0,
                         seen: vec![buffer.id()],
                         preview: false,
+                        half_page: None,
                     },
                 );
             }

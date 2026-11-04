@@ -71,6 +71,8 @@ pub struct Pane {
     /// Opened to show something (`:table-find`, `:git-show`), which `Esc`
     /// puts away; a window the reader split is never one.
     preview: bool,
+    /// vim's 'scroll' for this window ([`Editor::half_page`]).
+    half_page: Option<(usize, usize)>,
 }
 
 /// **One place in a jump list** (2026-11-02).
@@ -2577,6 +2579,11 @@ pub struct Editor {
     /// any of this is read, and the command's report says so.
     flavor: yumete_cjk::Flavor,
     page_lines: usize,
+    /// **vim's 'scroll'**: how many lines `C-d` and `C-u` move once a count
+    /// set it (`3 C-d`), with the window's height then. Each window has its
+    /// own, and a window of another height goes back to half of it, as vim
+    /// resets 'scroll' when a window is resized (2026-11-04).
+    half_page: Option<(usize, usize)>,
     /// Which line the page starts at — see [`Editor::set_page_top`].
     page_top: usize,
     /// `A-J` — 併行的時候把補出來的那一格留在選區裏（helix 的
@@ -3241,6 +3248,9 @@ pub struct Editor {
     /// The page's sideways scroll as last drawn: the columns off its left
     /// and the columns of text it shows (`note_sideways`).
     side_seen: std::cell::Cell<(usize, usize)>,
+    /// The gutter's columns beside the page: vim's `zH` `zL` halve the
+    /// window with them.
+    side_gutter: std::cell::Cell<usize>,
     /// The sideways scroll a key asked for, taken by the next frame.
     side_aim: std::cell::Cell<Option<usize>>,
     /// **`z` 那一層要把光標放在第幾行**（`zz`/`zt`/`zb`，2026-09-28）。
@@ -4233,6 +4243,7 @@ impl Editor {
             replaying: false,
             flavor: yumete_cjk::Flavor::default(),
             page_lines: 20,
+            half_page: None,
             page_top: 0,
             select_the_seam: false,
             page_columns: 10,
@@ -4425,6 +4436,7 @@ impl Editor {
             sat_at: std::cell::Cell::new(None),
             scrolloff_seen: std::cell::Cell::new(0),
             side_seen: std::cell::Cell::new((0, 0)),
+            side_gutter: std::cell::Cell::new(0),
             side_aim: std::cell::Cell::new(None),
             aim: None,
             language_run: None,
@@ -4708,11 +4720,12 @@ impl Editor {
         self.side_seen.set((left, page));
     }
 
-    /// The columns of text the page shows, said before the keys; the
-    /// offset stays as the last frame left it.
-    pub fn note_side_width(&self, page: usize) {
+    /// The columns of text the page shows and the gutter's beside them,
+    /// said before the keys; the offset stays as the last frame left it.
+    pub fn note_side_width(&self, page: usize, gutter: usize) {
         let (left, _) = self.side_seen.get();
         self.side_seen.set((left, page));
+        self.side_gutter.set(gutter);
     }
 
     /// The sideways scroll a key asked for (`zl`, `zs`, helix's `zm`), once.
@@ -4747,12 +4760,20 @@ impl Editor {
                 // 的話下一幀自己又被推開，滾一行變成跳三行。
                 // `max` then `min`: with very few rows the bounds can cross,
                 // and `clamp` panics on that.
+                // Under vim the scrolls kept scrolloff themselves, and at
+                // the ends of the file none is kept (nvim's
+                // `cursor_correct`); the page stops at the file's end.
+                Aim::Row(row) if self.vim_keymap() => row.min(last),
                 Aim::Row(row) => row.max(scrolloff).min(last.saturating_sub(scrolloff)),
             });
         }
         // Typewriter: the row being written stays in the middle and the paper
         // moves under it. Every move is a jump, which is what that means.
-        if self.typewriter || self.jumped {
+        // A jump lands in the middle only when it lands off the page: one
+        // to a line already on screen (`H` `M` `L`, helix's `gt` `gc` `gb`,
+        // `n` to a hit in view) leaves the page where it is, as in vim and
+        // helix (2026-11-04).
+        if self.typewriter || (self.jumped && distance.is_none()) {
             return Some(last / 2);
         }
         match distance {

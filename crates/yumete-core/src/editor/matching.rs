@@ -473,6 +473,39 @@ impl Editor {
         Some(rows[at].line)
     }
 
+    /// **`H` `M` `L` and helix's `gt` `gc` `gb`**: [`Self::screen_line`]
+    /// kept `scrolloff` rows in from the edges (measured 2026-11-04). helix
+    /// keeps them always; vim keeps none above when the page starts the file
+    /// and none below when it ends it, and counts no row past the file's
+    /// last line.
+    fn screen_line_kept(&self, which: char, nth: usize) -> Option<usize> {
+        let mut rows = self.page_rows()?;
+        let vim = self.vim_keymap();
+        let end = self.last_row_end();
+        if vim {
+            while rows.len() > 1 && rows.last().is_some_and(|r| r.start > end) {
+                rows.pop();
+            }
+        }
+        let last = rows.len() - 1;
+        let so = self.scrolloff_seen.get().min(last / 2);
+        let (above, below) = match vim {
+            true => (
+                if rows[0].start == 0 { 0 } else { so },
+                if rows[last].end >= end { 0 } else { so },
+            ),
+            false => (so, so),
+        };
+        let step = nth.max(1) - 1;
+        let at = match which {
+            'H' => step.max(above),
+            'L' => last.saturating_sub(step).min(last.saturating_sub(below)),
+            _ => last / 2,
+        };
+        let at = at.max(above).min(last.saturating_sub(below).max(above)).min(last);
+        Some(rows[at].line)
+    }
+
     /// The rows the page last drew, from its top: `None` before a frame.
     fn page_rows(&self) -> Option<Vec<crate::wrap::Row>> {
         let (from, to) = self.page_span;
@@ -505,7 +538,7 @@ impl Editor {
     /// lands at the line's start under helix and keeps its column under vim.
     pub(super) fn scroll_the_page(&mut self, down: bool, n: usize) {
         let Some(rows) = self.page_rows() else { return };
-        let height = rows.len();
+        let height = self.window_rows(rows.len());
         let vim = self.vim_keymap();
         let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
         let n = n.max(1);
@@ -557,6 +590,15 @@ impl Editor {
         self.aim = Some(crate::editor::Aim::Row(row));
     }
 
+    /// The rows the window holds: its height, which is more than the page
+    /// drew when the file ends inside it.
+    fn window_rows(&self, drawn: usize) -> usize {
+        match self.layout() == Layout::Horizontal {
+            true => self.page_lines.max(drawn),
+            false => drawn,
+        }
+    }
+
     /// **A whole page** (`C-f` `C-b`, `PgDn` `PgUp`): helix scrolls the
     /// view's height and takes no count; vim scrolls the height less two
     /// lines, `count` times (`:h CTRL-F`, measured in nvim 2026-11-03).
@@ -565,13 +607,183 @@ impl Editor {
         let Some(rows) = self.page_rows() else {
             return false;
         };
-        let height = rows.len();
-        let lines = match self.vim_keymap() {
-            true => height.saturating_sub(2).max(1) * count.max(1),
-            false => height,
-        };
-        self.scroll_the_page(down, lines);
+        let height = self.window_rows(rows.len());
+        if self.vim_keymap() {
+            self.vim_turn_a_page(down, count, &rows, height);
+            return true;
+        }
+        self.scroll_the_page(down, height);
         true
+    }
+
+    /// **vim's `CTRL-F` and `CTRL-B`** (nvim's `pagescroll`, measured
+    /// 2026-11-04): the view moves the height less two lines `count` times
+    /// — the whole height when the far end of the file is already in view —
+    /// and the cursor goes to the new top line (`CTRL-F`) or the last one
+    /// (`CTRL-B`), its column kept, then in by scrolloff. With nothing to
+    /// scroll nothing moves.
+    fn vim_turn_a_page(&mut self, down: bool, count: usize, rows: &[crate::wrap::Row], height: usize) {
+        let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
+        let head = self.sel.head();
+        let wanted = self.sel.goal();
+        let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+        let moved = self.with_page_measure(width, |rope, m| {
+            use crate::wrap::{advance, retreat, rows_from, Anchor};
+            let top = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
+            let last = rows.last().map_or(top, |r| Anchor { line: r.line, index_in_line: r.index_in_line });
+            let end = last_row(rope, m);
+            let at_the_end = last >= end;
+            let at_the_start = top == Anchor::default();
+            let step = match (down, at_the_end, at_the_start) {
+                (true, true, _) | (false, _, true) => height,
+                _ => height.saturating_sub(2).max(1),
+            } * count.max(1);
+            let new_top = match down {
+                true => advance(rope, top, m, step).min(end),
+                false => retreat(rope, top, m, step),
+            };
+            if new_top == top {
+                return None;
+            }
+            let mut page = rows_from(rope, new_top, m, height);
+            page.retain(|r| r.line <= motion::last_line(rope));
+            let row = match down {
+                true => 0,
+                false => page.len().checked_sub(1)?,
+            };
+            let goal = wanted.unwrap_or_else(|| crate::wrap::column_of(rope, head, m));
+            let span = (page.first().map_or(0, |r| r.start), page.last().map_or(0, |r| r.end));
+            Some((row, page.len(), span, new_top == Anchor::default(), goal))
+        });
+        let Some((row, shown, span, from_the_start, goal)) = moved else { return };
+        let ends_here = shown < height || span.1 >= self.last_row_end();
+        let row = self.kept_off_the_edges(row, shown, height, so, from_the_start, ends_here);
+        let to = self.on_page_row(span.0, row, goal);
+        self.move_head(to);
+        self.sel.set_goal(Some(goal));
+        self.page_span = span;
+        self.aim = Some(crate::editor::Aim::Row(row));
+    }
+
+    /// **vim's `CTRL-D` and `CTRL-U`** (nvim's `pagescroll` with `half`,
+    /// measured 2026-11-04): a count sets this window's 'scroll'; the view
+    /// moves that many lines (half the window when unset), never so far
+    /// that it shows past the end of the file, and the cursor moves the same
+    /// number of rows whatever the view did, then in by scrolloff.
+    pub(super) fn vim_half_page(&mut self, down: bool, count: Option<usize>) -> bool {
+        let Some(rows) = self.page_rows() else {
+            return false;
+        };
+        let height = self.window_rows(rows.len());
+        if let Some(n) = count {
+            self.half_page = Some((n.min(height).max(1), height));
+        }
+        let n = match self.half_page {
+            Some((n, at)) if at == height => n,
+            _ => (height / 2).max(1),
+        };
+        let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
+        let head = self.sel.head();
+        let wanted = self.sel.goal();
+        let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+        let (to, row, shown, span, from_the_start, goal) = self.with_page_measure(width, |rope, m| {
+            use crate::wrap::{advance, distance, position, retreat, rows_from, Anchor};
+            let top = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
+            // Never past the end: the view goes as far as puts the file's
+            // last row at the bottom, and no further when it shows that row.
+            let new_top = match down {
+                true => {
+                    let end = last_row(rope, m);
+                    let room = match rows.last().filter(|_| rows.len() >= height) {
+                        Some(r) => {
+                            let bottom = Anchor { line: r.line, index_in_line: r.index_in_line };
+                            distance(rope, bottom, advance(rope, bottom, m, n).min(end), m, n).unwrap_or(0)
+                        }
+                        None => 0,
+                    };
+                    advance(rope, top, m, room)
+                }
+                false => retreat(rope, top, m, n),
+            };
+            let cursor = Anchor::from(position(rope, head, m));
+            let goes_to = match down {
+                true => advance(rope, cursor, m, n).min(last_row(rope, m)),
+                false => retreat(rope, cursor, m, n),
+            };
+            let mut page = rows_from(rope, new_top, m, height);
+            page.retain(|r| r.line <= motion::last_line(rope));
+            let goal = wanted.unwrap_or_else(|| crate::wrap::column_of(rope, head, m));
+            let (row, to) = match distance(rope, new_top, goes_to, m, height) {
+                Some(row) if row < page.len() => {
+                    let r = &page[row];
+                    let mut to = r.start;
+                    while to + 1 < r.end && crate::wrap::column_of(rope, to + 1, m) <= goal {
+                        to += 1;
+                    }
+                    (row, to)
+                }
+                // Off the page: kept to its edge below.
+                Some(_) => (page.len().saturating_sub(1), page.last().map_or(head, |r| r.start)),
+                None => (0, page.first().map_or(head, |r| r.start)),
+            };
+            let span = (page.first().map_or(0, |r| r.start), page.last().map_or(0, |r| r.end));
+            (to, row, page.len(), span, new_top == Anchor::default(), goal)
+        });
+        let ends_here = shown < height || span.1 >= self.last_row_end();
+        let kept = self.kept_off_the_edges(row, shown, height, so, from_the_start, ends_here);
+        let to = match kept == row {
+            true => to,
+            false => self.on_page_row(span.0, kept, goal),
+        };
+        if to != head {
+            self.move_head(to);
+        }
+        self.sel.set_goal(Some(goal));
+        self.page_span = span;
+        self.aim = Some(crate::editor::Aim::Row(kept));
+        true
+    }
+
+    /// Where the file's last row ends: the empty line after a closing
+    /// newline is no row of vim's.
+    fn last_row_end(&self) -> usize {
+        let rope = self.current_buffer().rope();
+        motion::line_last(rope, rope.line_to_char(motion::last_line(rope)))
+    }
+
+    /// The row the cursor may sit on, `so` rows in from either edge of the
+    /// page, as nvim's `cursor_correct`: no room is kept above when the page
+    /// starts the file, nor below when it ends it — and then no more than
+    /// half the window above.
+    fn kept_off_the_edges(&self, row: usize, shown: usize, height: usize, so: usize, starts: bool, ends: bool) -> usize {
+        let above = match (starts, ends) {
+            (true, _) => 0,
+            (false, true) => so.min(height.saturating_sub(1) / 2),
+            (false, false) => so,
+        };
+        let below = match ends {
+            true => 0,
+            false => so,
+        };
+        let lowest = shown.saturating_sub(1).saturating_sub(below);
+        row.max(above).min(lowest.max(above)).min(shown.saturating_sub(1))
+    }
+
+    /// The character on the page's `row` (counted from the row starting at
+    /// `top`) nearest column `goal`.
+    fn on_page_row(&self, top: usize, row: usize, goal: usize) -> usize {
+        let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+        self.with_page_measure(width, |rope, m| {
+            use crate::wrap::{position, rows_from, Anchor};
+            let start = Anchor::from(position(rope, top, m));
+            let rows = rows_from(rope, start, m, row + 1);
+            let Some(r) = rows.get(row).or(rows.last()) else { return top };
+            let mut to = r.start;
+            while to + 1 < r.end && crate::wrap::column_of(rope, to + 1, m) <= goal {
+                to += 1;
+            }
+            to
+        })
     }
 
     /// **vim's count on `zt` `zz` `zb`**: the line to put there, gone to
@@ -703,7 +915,7 @@ impl Editor {
     }
 
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
-        let Some(line) = self.screen_line(which, nth) else { return };
+        let Some(line) = self.screen_line_kept(which, nth) else { return };
         // vim's `H` `M` `L` are jumps; helix's `gt` `gc` `gb` are not.
         match self.vim_keymap() {
             true => self.remember_jump(),
@@ -2928,6 +3140,16 @@ impl Editor {
 
 // Warning: **測試模組擺在檔尾。** `messages.rs` 那張「每個標籤都有條目」的網把源碼切在
 // 第一個頂格的 `#[cfg(test)]\nmod ` 處，擺在檔案中間它後面所有的 `say!` 都從網裏消失。
+/// The file's last row as vim counts rows: the empty line after a closing
+/// newline is none, and a closed fold's hidden lines are none.
+fn last_row(rope: &ropey::Rope, m: crate::wrap::Measure) -> crate::wrap::Anchor {
+    let mut line = motion::last_line(rope);
+    while line > 0 && m.folded(line) {
+        line -= 1;
+    }
+    crate::wrap::Anchor { line, index_in_line: crate::wrap::row_count_in_line(rope, line, m).saturating_sub(1) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2999,3 +3221,4 @@ mod tests {
         println!("四十萬字掃到底：{took:?}");
     }
 }
+

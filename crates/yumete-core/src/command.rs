@@ -5093,7 +5093,9 @@ pub const COMMANDS: &[Entry] = &[
         // 同形：一個命令自己的意思就是有用的那一個，後面不必再跟一個詞。
         // `空格 "` 是同一扇。
         name: "clipboard",
-        aliases: &[],
+        // vim's `:reg` lists what could be put, as this menu does
+        // (2026-11-04); its longer spellings are signposts.
+        aliases: &["reg"],
         help: "cmd.commands.clipboard",
         needs: &[],
         params: &[],
@@ -5451,6 +5453,8 @@ const RENAMED: &[(&str, &str)] = &[
     ("cy", "clipboard-yank"),
     // Two answers to one question it did not name; four answers now (2026-09-16).
     ("dense", "view-margin"),
+    ("di", "clipboard"),
+    ("display", "clipboard"),
     ("layout", "vertical horizontal"),
     ("ls", "buffer"),
     // **The three that were values of one thing** — the fold they came out of
@@ -5463,6 +5467,7 @@ const RENAMED: &[(&str, &str)] = &[
     // the command that opens the thing.
     ("panel-left", "sidebar"),
     ("panel-right", "sidebar"),
+    ("registers", "clipboard"),
     ("row", "table-jump"),
     ("sidebar-left", "sidebar"),
     ("sidebar-right", "sidebar"),

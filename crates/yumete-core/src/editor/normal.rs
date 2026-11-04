@@ -2257,13 +2257,26 @@ impl Editor {
     #[allow(unused_variables)]
     pub(super) fn cmd_half_page_down(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.move_page(count, false, 0.5);
+        self.half_page(false, operator_count);
     }
 
     #[allow(unused_variables)]
     pub(super) fn cmd_half_page_up(&mut self, cx: Cx) {
         let Cx { key, count, operator_count, continuing_zong } = cx;
-        self.move_page(count, true, 0.5);
+        self.half_page(true, operator_count);
+    }
+
+    /// `C-d` `C-u`: vim's scroll the view and take a count as 'scroll';
+    /// helix's take no count (`page_cursor_half_down` reads none).
+    fn half_page(&mut self, back: bool, count: Option<usize>) {
+        if self.vim_keymap() && self.layout() == Layout::Horizontal && !self.sel.is_plural() && self.vim_half_page(!back, count) {
+            return;
+        }
+        let count = match self.vim_keymap() {
+            true => count.unwrap_or(1),
+            false => 1,
+        };
+        self.move_page(count, back, 0.5);
     }
 
     // **三分之二頁**（2026-10-01 定）。起因是 `C-u`/`C-d` 在 Mac 上

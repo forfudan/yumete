@@ -853,6 +853,7 @@ impl Editor {
             jump_at: self.jump_at,
             seen: self.seen_here.clone(),
             preview: true,
+            half_page: None,
         };
         match self.other_window() {
             Some(window) => {
@@ -892,9 +893,12 @@ impl Editor {
         // **As many as fit** (2026-11-02, found in review): a split that
         // would leave a window under a line of text or a few columns is
         // refused, so the keys never go into a window that is not drawn.
+        // Under the vim keymap it opens above or to the left, as vim's does
+        // (2026-11-04); helix's opens below or to the right.
+        let before = self.vim_keymap();
         if let Some(area) = self.text_area.get() {
             let mut tried = self.windows.clone();
-            let room = tried.split(self.live, how).is_some_and(|fresh| {
+            let room = tried.split_on(self.live, how, before).is_some_and(|fresh| {
                 let (placed, _) = tried.place(area, self.splits_right_to_left());
                 placed
                     .iter()
@@ -921,8 +925,9 @@ impl Editor {
             jump_at: self.jump_at,
             seen: self.seen_here.clone(),
             preview: false,
+            half_page: None,
         };
-        let Some(fresh) = self.windows.split(self.live, how) else {
+        let Some(fresh) = self.windows.split_on(self.live, how, before) else {
             return false;
         };
         self.panes.insert(fresh, here);
@@ -1117,6 +1122,7 @@ impl Editor {
             jump_at: 0,
             seen: Vec::new(),
             preview: false,
+            half_page: None,
         };
         // The place is clamped rather than trusted: the other pane may have
         // been edited while this one was not looking — and the file it names
@@ -1158,6 +1164,7 @@ impl Editor {
         here.jumps = std::mem::replace(&mut self.jumps, std::mem::take(&mut pane.jumps));
         here.jump_at = std::mem::replace(&mut self.jump_at, pane.jump_at);
         here.seen = std::mem::replace(&mut self.seen_here, std::mem::take(&mut pane.seen));
+        here.half_page = std::mem::replace(&mut self.half_page, pane.half_page);
         self.panes.insert(self.live, here);
         let leaving = self.live;
         self.window_history.retain(|&w| w != window && w != leaving && self.windows.has(w));
