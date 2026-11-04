@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **A "Coming from LazyVim" page** on the site, with a config that lays yumete's commands out on LazyVim's `Space` groups (`Space f f`, `Space s g`, `Space g g` and the rest), group names included.
 - **vim modelines are read**, under either keymap: `vim: set ft=python ts=2 sw=2 et:` in a file's first or last five lines sets that file's type, tab stop, indent width, Tab and hard-wrap width, read exactly as vim reads them. Nothing else in a modeline is taken, and nothing is run. `[editor] modeline = false` turns it off.
 - **A language server's message is written after its line of code**, as helix's end-of-line diagnostics: the loudest one, cut with `…` at the edge, left off the line being typed. `:view-diagnostics` and `[editor] end_of_line_diagnostics` set the least severity shown (`hint`, the default, to `error`, or `off`).
 - **GB18030, Big5 and Shift-JIS files open and save in their own encoding**, byte for byte when nothing changed. The status line shows `[Big5]` and the like, `:info` lists the encoding, and helix's `:encoding` shows it or changes the one the next save uses. A character the encoding cannot hold stops the save and asks: `u` save as UTF-8, `w` write it anyway as `&#NNNN;`, `n` cancel. A file too short to tell opens a picker of the encodings that read it, previewed, and the choice is remembered for the file; `:open ++enc=big5` and `--encoding=big5` say it outright. `:read`, `:diff` and the change bar read in the buffer's encoding. They used to be refused.
