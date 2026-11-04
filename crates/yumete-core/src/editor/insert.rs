@@ -191,10 +191,8 @@ impl Editor {
 
     /// Install Insert mode's lines (`[keys.insert]`).
     pub fn set_insert_aliases<C: crate::editor::BindingCommands>(&mut self, aliases: HashMap<String, C>) {
-        self.insert_aliases = aliases
-            .into_iter()
-            .map(|(k, v)| (yumete_cjk::actions::written(&k), v.into_commands()))
-            .collect();
-        self.insert_held.clear();
+        self.user_insert = aliases.into_iter().map(|(k, v)| (k, v.into_commands())).collect();
+        // Laid with the keymap's own Insert lines over them.
+        self.lay_aliases();
     }
 }

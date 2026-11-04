@@ -731,16 +731,23 @@ impl Editor {
     /// off the same tables the keys run on, so a key the editor has is a key
     /// the site lists.
     pub fn commands_for_docs() -> Vec<DocCommand> {
+        Self::commands_with(&yumete_cjk::Flavor::default())
+    }
+
+    /// The same, at `flavor` (2026-11-04: `:keymap-actions` lists the keys
+    /// at the flavour in force, and again with it off to tell which keys are
+    /// the flavour's).
+    pub(crate) fn commands_with(flavor: &yumete_cjk::Flavor) -> Vec<DocCommand> {
         use super::normal::{FLAVOR_NORMAL, HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
         let one = |key: Key| vec![super::keys::key_internal(key)];
-        // The factory flavour's keys are listed as each keymap's own: what a
-        // reader who changed nothing presses. The flavour page lists them all.
+        // The flavour's keys are listed as each keymap's own: what a reader
+        // presses. The flavour page lists them all.
         let factory = |vim: bool| {
             let keymap = match vim {
                 true => yumete_cjk::KeyPreset::Vim,
                 false => yumete_cjk::KeyPreset::Helix,
             };
-            Context { vim, flavor: yumete_cjk::Flavor::default().mask(keymap), ..Context::default() }
+            Context { vim, flavor: flavor.mask(keymap), ..Context::default() }
         };
         let mut out = Vec::new();
         for action in yumete_cjk::actions::ALL {

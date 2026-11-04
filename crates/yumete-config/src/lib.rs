@@ -2737,6 +2737,14 @@ impl SyntaxConfig {
     }
 }
 
+/// One keymap's own lines, by mode.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeymapKeys {
+    pub normal: HashMap<String, Vec<String>>,
+    pub select: HashMap<String, Vec<String>>,
+    pub insert: HashMap<String, Vec<String>>,
+}
+
 /// Keymap overrides.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyConfig {
@@ -2783,6 +2791,11 @@ pub struct KeyConfig {
     /// (`label = "My tools"` in `[keys.normal.space.x]` → `"<space>x"`):
     /// the title of that group's menu. helix cannot name one.
     pub labels: HashMap<String, String>,
+    /// **Lines for one keymap only** (`[keys.helix.normal]`, `[keys.vim.insert]`
+    /// and the like, 2026-11-04), laid after the shared tables while that
+    /// keymap is in force. The shared tables hold under both.
+    pub helix: KeymapKeys,
+    pub vim: KeymapKeys,
     /// A whole table of such lines, shipped: `[keys] preset = "vim"`.
     pub preset: KeyPreset,
     /// **The yumete flavour** — what yumete adds over whichever preset is in
@@ -2814,6 +2827,8 @@ impl Default for KeyConfig {
             sidebar: HashMap::new(),
             field: HashMap::new(),
             labels: HashMap::new(),
+            helix: KeymapKeys::default(),
+            vim: KeymapKeys::default(),
             preset: KeyPreset::default(),
             flavor: Flavor::default(),
             inherit: true,
@@ -4507,6 +4522,11 @@ struct RawKeys {
     sidebar: toml::Table,
     #[serde(default)]
     field: toml::Table,
+    /// `[keys.helix.*]` and `[keys.vim.*]`: one keymap's own lines.
+    #[serde(default)]
+    helix: RawKeymapKeys,
+    #[serde(default)]
+    vim: RawKeymapKeys,
     /// Read as values, not as a string and a switch, so a wrong type is one
     /// line said rather than the whole file refused (found in review,
     /// 2026-11-02), as `flavor` already was.
@@ -4521,6 +4541,20 @@ struct RawKeys {
     inherit: Option<toml::Value>,
     /// What else is under `[keys]`: a mode that does not exist
     /// (`[keys.visual]`), kept to be reported.
+    #[serde(flatten)]
+    strays: toml::Table,
+}
+
+/// `[keys.helix]` or `[keys.vim]`: the modes a keymap's own lines may be for.
+#[derive(Deserialize, Default)]
+struct RawKeymapKeys {
+    #[serde(default)]
+    normal: toml::Table,
+    #[serde(default)]
+    select: toml::Table,
+    #[serde(default)]
+    insert: toml::Table,
+    /// Any other mode, kept to be reported.
     #[serde(flatten)]
     strays: toml::Table,
 }
@@ -4844,6 +4878,12 @@ impl RawConfig {
         merge_key_tables(&mut self.keys.picker, other.keys.picker);
         merge_key_tables(&mut self.keys.sidebar, other.keys.sidebar);
         merge_key_tables(&mut self.keys.field, other.keys.field);
+        for (mine, theirs) in [(&mut self.keys.helix, other.keys.helix), (&mut self.keys.vim, other.keys.vim)] {
+            merge_key_tables(&mut mine.normal, theirs.normal);
+            merge_key_tables(&mut mine.select, theirs.select);
+            merge_key_tables(&mut mine.insert, theirs.insert);
+            mine.strays.extend(theirs.strays);
+        }
         self.keys.strays.extend(other.keys.strays);
         if other.keys.preset.is_some() {
             self.keys.preset = other.keys.preset.clone();
@@ -5421,6 +5461,25 @@ impl RawConfig {
         config.keys.picker = read_place_table(Place::Picker, &self.keys.picker, problems);
         config.keys.sidebar = read_place_table(Place::Sidebar, &self.keys.sidebar, problems);
         config.keys.field = read_place_table(Place::Field, &self.keys.field, problems);
+        for (word, raw, out) in [
+            ("helix", &self.keys.helix, &mut config.keys.helix),
+            ("vim", &self.keys.vim, &mut config.keys.vim),
+        ] {
+            let mut labels = HashMap::new();
+            read_key_table(&format!("{word}.normal"), &raw.normal, &mut out.normal, &mut labels, problems);
+            read_key_table(&format!("{word}.select"), &raw.select, &mut out.select, &mut labels, problems);
+            read_key_table(&format!("{word}.insert"), &raw.insert, &mut out.insert, &mut HashMap::new(), problems);
+            config.keys.labels.extend(labels);
+            for (name, _) in &raw.strays {
+                problems.push(said(
+                    format!("[keys.{word}.{name}]：沒有這張表，跳過了。一套鍵位自己的表有 normal、select、insert"),
+                    format!(
+                        "[keys.{word}.{name}] is not a table yumete reads, so it was skipped; \
+                         a keymap's own tables are normal, select and insert"
+                    ),
+                ));
+            }
+        }
         for (name, _) in &self.keys.strays {
             problems.push(said(
                 format!("[keys.{name}]：沒有這張表，跳過了。有 normal、select、insert、table、prompt、picker、sidebar、field"),
@@ -5921,6 +5980,19 @@ mod tests {
     }
 
     use super::*;
+
+    /// **A keymap's own lines** (2026-11-04): `[keys.vim.normal]` holds under
+    /// vim only; an unknown mode under it is said.
+    #[test]
+    fn a_keymap_has_lines_of_its_own() {
+        let (c, said) = Config::from_toml_saying(
+            "[keys.vim.normal]\n\"<tab>\" = \"goto_next_buffer\"\n[keys.helix.insert]\nj = { k = \"normal_mode\" }\n[keys.vim.visual]\nx = \"delete_selection\"\n",
+        );
+        assert_eq!(c.keys.vim.normal.get("<tab>").map(|v| v[0].as_str()), Some("goto_next_buffer"));
+        assert!(c.keys.helix.normal.is_empty() && c.keys.normal.is_empty(), "not shared, not helix's");
+        assert!(c.keys.helix.insert.contains_key("jk"), "{:?}", c.keys.helix.insert);
+        assert!(said.iter().any(|s| s.contains("[keys.vim.visual]")), "{said:?}");
+    }
 
     #[test]
     fn defaults_when_empty() {

@@ -876,31 +876,77 @@ impl Editor {
             Command::ListActions => {
                 let mut listing = String::new();
                 listing.push_str(&say!("keys.actions-head"));
+                // **helix | vim | yours** (2026-11-04): each keymap's keys at
+                // the flavour in force, the one in force in bold, the
+                // flavour's own marked `*`; then the reader's own lines.
+                let vim_now = self.vim_keymap();
+                let column = |name: &str, now: bool| match now {
+                    true => format!("**{name}**"),
+                    false => name.to_string(),
+                };
+                listing.push_str(&format!(
+                    "\n\n| {} | {} | {} | {} | {} |\n| --- | --- | --- | --- | --- |\n",
+                    say!("keys.actions-name"),
+                    say!("keys.actions-what"),
+                    column("helix", !vim_now),
+                    column("vim", vim_now),
+                    say!("keys.actions-yours"),
+                ));
+                let with = Self::commands_with(self.flavor());
+                let off = Self::commands_with(&yumete_cjk::Flavor {
+                    level: yumete_cjk::FlavorLevel::Off,
+                    items: Default::default(),
+                });
+                let keys_of = |docs: &[DocCommand], name: &str, vim: bool| -> Vec<String> {
+                    docs.iter()
+                        .find(|(n, ..)| *n == name)
+                        .map(|(_, _, helix, vim_keys, _)| {
+                            let keys = if vim { vim_keys } else { helix };
+                            keys.iter().map(|k| k.concat()).collect()
+                        })
+                        .unwrap_or_default()
+                };
+                let cell = |keys: Vec<String>, plain: Vec<String>| -> String {
+                    keys.iter()
+                        .map(|k| {
+                            let mark = if plain.contains(k) { "" } else { "*" };
+                            format!("`{}`{mark}", yumete_cjk::actions::spell(k))
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
+                let own = self.own_lines();
+                for action in yumete_cjk::actions::ALL {
+                    let (helix, vim) = match action.how {
+                        yumete_cjk::actions::How::Command(line) => {
+                            let line = format!("`:{line}`");
+                            (line.clone(), line)
+                        }
+                        yumete_cjk::actions::How::Normal => (
+                            cell(keys_of(&with, action.name, false), keys_of(&off, action.name, false)),
+                            cell(keys_of(&with, action.name, true), keys_of(&off, action.name, true)),
+                        ),
+                    };
+                    let mut yours: Vec<String> = own
+                        .iter()
+                        .filter(|(_, run)| run.len() == 1 && run[0] == action.name)
+                        .map(|(key, _)| format!("`{key}`"))
+                        .collect();
+                    yours.sort();
+                    listing.push_str(&format!(
+                        "| `{}` | {} | {helix} | {vim} | {} |\n",
+                        action.name,
+                        crate::messages::say(action.help, &[]),
+                        yours.join(" "),
+                    ));
+                }
+                listing.push_str(&format!("\n{}\n", say!("keys.actions-flavour-note")));
                 let head = format!(
                     "| {} | {} | {} |\n| --- | --- | --- |\n",
                     say!("keys.actions-name"),
                     say!("keys.actions-what"),
                     say!("keys.actions-key")
                 );
-                listing.push_str("\n\n");
-                listing.push_str(&head);
-                for action in yumete_cjk::actions::ALL {
-                    let now = match action.how {
-                        yumete_cjk::actions::How::Command(line) => format!(":{line}"),
-                        // The key it is on under the preset in use.
-                        yumete_cjk::actions::How::Normal => self.keys_now(action.name).unwrap_or_default(),
-                    };
-                    // No key, no backticks: an empty pair reads as a key.
-                    let now = match now.is_empty() {
-                        true => String::new(),
-                        false => format!("`{now}`"),
-                    };
-                    listing.push_str(&format!(
-                        "| `{}` | {} | {now} |\n",
-                        action.name,
-                        crate::messages::say(action.help, &[]),
-                    ));
-                }
                 // A prompt's, a picker's and a sidebar's (2026-11-01), each
                 // under the name of its table.
                 for place in yumete_cjk::actions::Place::ALL {

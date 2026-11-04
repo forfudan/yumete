@@ -2822,6 +2822,13 @@ zhs = "候选栏一页 9 条"
 en = "9 candidates on a page"
 
 [[message]]
+# :keymap-actions 那張表底下：帶星號的鍵是什麽（草稿）
+key = "keys.actions-flavour-note"
+zht = "帶 * 的鍵來自 yumete 風味；粗體那一欄是現在的鍵位。"
+zhs = "带 * 的键来自 yumete 风味；粗体那一栏是现在的键位。"
+en = "Keys marked * come from the yumete flavour; the column in bold is the keymap in force."
+
+[[message]]
 # :keymap-actions 那張清單的開頭一段
 key = "keys.actions-head"
 zht = "把名字寫在配置的 `[keys.normal]` 右邊：`x = 「delete_selection」`。右邊三種：動作名、`:命令`、`@一串鍵`。"
@@ -2855,6 +2862,13 @@ key = "keys.actions-what"
 zht = "做什麽"
 zhs = "做什么"
 en = "what it does"
+
+[[message]]
+# :keymap-actions 那張表的表頭：讀者自己綁的那一欄（草稿）
+key = "keys.actions-yours"
+zht = "你綁的"
+zhs = "你绑的"
+en = "yours"
 
 [[message]]
 # :keymap-yumete-flavor ——無參數時報集合裏有什麼，狀態寫在每一項後面

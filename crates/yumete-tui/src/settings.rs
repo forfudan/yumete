@@ -438,6 +438,12 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_select_aliases(config.keys.select.clone());
     editor.set_key_labels(config.keys.labels.clone());
     editor.set_insert_aliases(config.keys.insert.clone());
+    for (keymap, own) in [
+        (yumete_cjk::KeyPreset::Helix, &config.keys.helix),
+        (yumete_cjk::KeyPreset::Vim, &config.keys.vim),
+    ] {
+        editor.set_keymap_aliases(keymap, own.normal.clone(), own.select.clone(), own.insert.clone());
+    }
     editor.set_table_aliases(config.keys.table.clone());
     use yumete_core::actions::Place;
     editor.set_place_bindings(Place::Prompt, config.keys.prompt.clone());

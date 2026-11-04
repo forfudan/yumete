@@ -36467,8 +36467,11 @@ fn the_vim_column_names_only_keys_that_reach_the_action() {
     ed.execute(":keymap vim").unwrap();
     ed.execute(":keymap-actions").unwrap();
     let listing = ed.current_buffer().text();
-    let row = listing.lines().find(|l| l.contains("goto_next_buffer")).unwrap_or_default();
-    assert!(!row.contains("`gn`"), "{row}");
+    let row = listing.lines().find(|l| l.contains("`goto_next_buffer`")).expect("a row");
+    // | name | what | helix | vim | yours |
+    let cells: Vec<&str> = row.split('|').map(str::trim).collect();
+    assert_eq!(cells[3], "`gn`", "helix's: {row}");
+    assert!(!cells[4].contains("`gn`"), "not vim's: {row}");
 }
 
 /// **A file's vim modeline is its own** (2026-11-04): the type, tab stop and
@@ -36506,4 +36509,48 @@ fn a_modeline_sets_this_file_and_no_other() {
     assert_eq!(off.tab_stop(), 8);
     assert_ne!(off.current_buffer().syntax().name(), "python");
     std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A binding for one keymap holds under that keymap only** (2026-11-04):
+/// `<tab>` to the next buffer under vim leaves helix's Tab as it was.
+#[test]
+fn a_keymaps_own_binding_stays_in_that_keymap() {
+    let mut ed = typed("一\n");
+    ed.new_buffer();
+    let mut tab: HashMap<String, Vec<String>> = HashMap::new();
+    tab.insert("<tab>".into(), vec!["goto_next_buffer".into()]);
+    ed.set_keymap_aliases(yumete_cjk::KeyPreset::Vim, tab, HashMap::new(), HashMap::new());
+    ed.execute(":keymap vim").unwrap();
+    let before = ed.buffer_position().0;
+    ed.on_key(Key::Char('\t'));
+    assert_ne!(ed.buffer_position().0, before, "under vim, Tab is the next buffer");
+    ed.execute(":keymap helix").unwrap();
+    let before = ed.buffer_position().0;
+    ed.on_key(Key::Char('\t'));
+    assert_eq!(ed.buffer_position().0, before, "under helix, Tab is helix's own");
+}
+
+/// **`:keymap-actions` lists helix | vim | yours** (2026-11-04): the
+/// reader's own lines in their column, flavour keys marked `*`.
+#[test]
+fn the_action_list_has_a_column_for_each_keymap_and_one_for_yours() {
+    let mut ed = typed("一\n");
+    let mut tab: HashMap<String, Vec<String>> = HashMap::new();
+    tab.insert("<tab>".into(), vec!["goto_next_buffer".into()]);
+    ed.set_keymap_aliases(yumete_cjk::KeyPreset::Helix, tab, HashMap::new(), HashMap::new());
+    ed.execute(":keymap-actions").unwrap();
+    let listing = ed.current_buffer().text();
+    let row = |name: &str| -> Vec<String> {
+        listing
+            .lines()
+            .find(|l| l.contains(&format!("`{name}`")))
+            .expect("a row")
+            .split('|')
+            .map(|c| c.trim().to_string())
+            .collect()
+    };
+    assert_eq!(row("goto_next_buffer")[5], "`<tab>`", "yours");
+    assert!(listing.contains("| **helix** |"), "the keymap in force in bold");
+    // `A-j` moves a line down by the flavour, under helix.
+    assert!(listing.contains('*'), "a flavour key is marked");
 }

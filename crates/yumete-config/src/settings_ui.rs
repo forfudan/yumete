@@ -1196,4 +1196,7 @@ pub const NOT_IN_THE_PANEL: &[&str] = &[
     "keys.picker",
     "keys.sidebar",
     "keys.field",
+    // A keymap's own tables (2026-11-04), the same shape as the shared ones.
+    "keys.helix",
+    "keys.vim",
 ];

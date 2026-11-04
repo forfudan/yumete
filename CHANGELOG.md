@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Bindings for one keymap only**: `[keys.helix.normal]`, `[keys.vim.insert]` and the like hold under that keymap, laid over the shared `[keys.normal]`, which still holds under both.
 - **A "Coming from LazyVim" page** on the site, with a config that lays yumete's commands out on LazyVim's `Space` groups (`Space f f`, `Space s g`, `Space g g` and the rest), group names included.
 - **vim modelines are read**, under either keymap: `vim: set ft=python ts=2 sw=2 et:` in a file's first or last five lines sets that file's type, tab stop, indent width, Tab and hard-wrap width, read exactly as vim reads them. Nothing else in a modeline is taken, and nothing is run. `[editor] modeline = false` turns it off.
 - **A language server's message is written after its line of code**, as helix's end-of-line diagnostics: the loudest one, cut with `…` at the edge, left off the line being typed. `:view-diagnostics` and `[editor] end_of_line_diagnostics` set the least severity shown (`hint`, the default, to `error`, or `off`).
@@ -27,6 +28,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`:keymap-actions` has a column for helix, one for vim and one for your own bindings**, the keymap in force in bold and the flavour's keys marked `*`; it used to show one column for the keymap in force, your bindings mixed in.
 - **宇浩拼音 is the scheme yumete starts with**; it was 靈明. `[ime] scheme` still chooses.
 - **`:yume-builtin` uses the built-in table of the scheme you are in**; it always meant 靈明.
 - **The `C-w` hints are shorter**: `q` close, `c` close but don't quit, `f` and `F` the file under the cursor below and beside.

@@ -2606,6 +2606,12 @@ pub struct Editor {
     /// (the preset's are under them), and select mode's.
     user_aliases: HashMap<String, Vec<String>>,
     user_select: HashMap<String, Vec<String>>,
+    /// **The reader's lines for one keymap only** (`[keys.helix.normal]`,
+    /// `[keys.vim.insert]`…, 2026-11-04): helix's first, vim's second, laid
+    /// after the shared `[keys.*]` while that keymap is in force.
+    keymap_user: [KeymapLines; 2],
+    /// The shared `[keys.insert]`, before the keymap's own are laid on it.
+    user_insert: HashMap<String, Vec<String>>,
     /// A table grid's own lines (`[keys.table]`), and the two maps they are
     /// laid into (Normal's and select mode's, with them on top).
     user_table: HashMap<String, Vec<String>>,
@@ -4108,6 +4114,14 @@ pub enum Pasting {
     Replace,
 }
 
+/// One keymap's own lines, by mode (`[keys.helix.*]`, `[keys.vim.*]`).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct KeymapLines {
+    pub(crate) normal: HashMap<String, Vec<String>>,
+    pub(crate) select: HashMap<String, Vec<String>>,
+    pub(crate) insert: HashMap<String, Vec<String>>,
+}
+
 /// What a [`Query`] is about.
 ///
 /// It is an enum and not a `bool` because the interface is the point: the next
@@ -4269,6 +4283,8 @@ impl Editor {
             select_aliases: HashMap::new(),
             user_aliases: HashMap::new(),
             user_select: HashMap::new(),
+            keymap_user: Default::default(),
+            user_insert: HashMap::new(),
             user_table: HashMap::new(),
             table_aliases: HashMap::new(),
             table_select_aliases: HashMap::new(),

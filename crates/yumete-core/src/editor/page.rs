@@ -659,6 +659,38 @@ impl Editor {
         self.lay_aliases();
     }
 
+    /// Install one keymap's own lines (`[keys.helix.*]`, `[keys.vim.*]`,
+    /// 2026-11-04), laid after the shared ones while that keymap is in force.
+    pub fn set_keymap_aliases<C: crate::editor::BindingCommands>(
+        &mut self,
+        keymap: yumete_cjk::KeyPreset,
+        normal: HashMap<String, C>,
+        select: HashMap<String, C>,
+        insert: HashMap<String, C>,
+    ) {
+        let lines = |m: HashMap<String, C>| -> HashMap<String, Vec<String>> {
+            m.into_iter().map(|(k, v)| (k, v.into_commands())).collect()
+        };
+        self.keymap_user[keymap_index(keymap)] = crate::editor::KeymapLines {
+            normal: lines(normal),
+            select: lines(select),
+            insert: lines(insert),
+        };
+        self.lay_aliases();
+    }
+
+    /// The reader's own lines for the keymap in force, shared and the
+    /// keymap's, as written in the config: what `:keymap-actions` calls
+    /// theirs.
+    pub(super) fn own_lines(&self) -> Vec<(String, Vec<String>)> {
+        let own = &self.keymap_user[keymap_index(self.key_preset)];
+        self.user_aliases
+            .iter()
+            .chain(own.normal.iter())
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
+    }
+
     /// The names of the reader's own groups (`label` in `[keys.normal.…]`),
     /// by the keys that open them as written in the config.
     pub fn set_key_labels(&mut self, labels: HashMap<String, String>) {
@@ -703,15 +735,28 @@ impl Editor {
     /// [`yumete_cjk::actions::ALT`] ＋ `d`，`C-o` 存成那個控制字節。從前不翻，於是
     /// 配置裏寫 `"A-d" = …` 綁的是 `A`、`-`、`d` 三個鍵連按——那個鍵永遠按不出來，
     /// 而配置照收、一聲不吭。一處翻，兩層（預設表和使用者那一層）都算。
-    fn lay_aliases(&mut self) {
+    pub(super) fn lay_aliases(&mut self) {
         let preset: HashMap<String, Vec<String>> = self
             .key_preset
             .table()
             .iter()
             .map(|(k, v)| (yumete_cjk::actions::written(k), vec![v.to_string()]))
             .collect();
-        let user: Vec<(String, Vec<String>)> =
-            self.user_aliases.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())).collect();
+        // The shared lines, then this keymap's own over them (2026-11-04).
+        let own = self.keymap_user[keymap_index(self.key_preset)].clone();
+        let user: Vec<(String, Vec<String>)> = self
+            .user_aliases
+            .iter()
+            .chain(own.normal.iter())
+            .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone()))
+            .collect();
+        self.insert_aliases = self
+            .user_insert
+            .iter()
+            .chain(own.insert.iter())
+            .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone()))
+            .collect();
+        self.insert_held.clear();
         let mut all = preset.clone();
         all.extend(user.iter().cloned());
         // vim's `x` and `s` are written for Normal mode (`;{n}D`); in Visual
@@ -726,6 +771,7 @@ impl Editor {
         select.extend(
             self.user_select
                 .iter()
+                .chain(own.select.iter())
                 .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
         );
         let table: Vec<(String, Vec<String>)> =
@@ -2933,5 +2979,13 @@ impl Editor {
                 break;
             }
         }
+    }
+}
+
+/// Where a keymap's own lines are kept: helix's first, vim's second.
+fn keymap_index(keymap: yumete_cjk::KeyPreset) -> usize {
+    match keymap {
+        yumete_cjk::KeyPreset::Vim => 1,
+        _ => 0,
     }
 }
