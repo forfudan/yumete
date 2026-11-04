@@ -2829,11 +2829,32 @@ zhs = "把名字写在配置的 `[keys.normal]` 右边：`x = 「delete_selectio
 en = "Write a name on the right of `[keys.normal]`: `x = 'delete_selection'`. Three kinds on the right: an action's name, a `:command`, or keys with an `@` in front."
 
 [[message]]
+# :keymap-actions 那張表的表頭：第三欄
+key = "keys.actions-key"
+zht = "現在是哪個鍵"
+zhs = "现在是哪个键"
+en = "key now"
+
+[[message]]
+# :keymap-actions 那張表的表頭：第一欄
+key = "keys.actions-name"
+zht = "名字"
+zhs = "名字"
+en = "name"
+
+[[message]]
 # :keymap-actions 那個緩衝區的名字
 key = "keys.actions-title"
 zht = "能綁定的動作"
 zhs = "能绑定的动作"
 en = "actions"
+
+[[message]]
+# :keymap-actions 那張表的表頭：第二欄
+key = "keys.actions-what"
+zht = "做什麽"
+zhs = "做什么"
+en = "what it does"
 
 [[message]]
 # :keymap-yumete-flavor ——無參數時報集合裏有什麼，狀態寫在每一項後面

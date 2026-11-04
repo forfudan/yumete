@@ -41,6 +41,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **`:keymap-actions` and the site's key tables list only keys that reach the action.** Under vim, `gn` was listed for next buffer (it selects the next match), `ge` for the last line and `[p` for the previous paragraph. The table's headings follow the interface language, a missing key is a blank cell, and a chord reads `C-w w`.
 - **Diagnostics move with their lines** when lines are added or removed, instead of staying on the old line numbers until the server reports again.
 - **A cursor a closed fold hides keeps its line under vim.** After `G`, `:`*line* or `zc`, the cursor is drawn on the fold and the status line says the line it is really on, as vim's does (`:3` in a fold of lines 2 to 4 reads Ln 3); the fold keys act there, so `zM` then `zO` opens both of two nested folds, where it opened only the outer one.
 - **The moves along a closed fold's line open it** under vim (`l`, `$`, `0`, `f` …), as vim's do, so `l` then `x` takes one character rather than the whole fold; `w` and `b` step past the fold instead of into its hidden lines.

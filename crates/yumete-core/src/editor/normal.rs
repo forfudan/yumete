@@ -764,7 +764,19 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
         super::groups::GROUPS.iter().find_map(|group| {
             group
                 .binds()
-                .find(|bind| bind.run == name && at.reaches(bind) && !bind.says.is_empty())
+                .find(|bind| {
+                    bind.run == name
+                        && at.reaches(bind)
+                        && !bind.says.is_empty()
+                        // The row its key reaches, not one a row before it
+                        // shadows; nor keys the vim preset plays itself.
+                        && group.answers_with(bind, at)
+                        && !(at.vim
+                            && super::groups::group_opened_by(group, true).is_some_and(|path| {
+                                let keys = format!("{}{}", path.concat(), super::keys::key_internal(bind.key));
+                                super::groups::preset_took_path(&keys)
+                            }))
+                })
                 .map(|bind| (group.pending, bind.key))
         })
     })

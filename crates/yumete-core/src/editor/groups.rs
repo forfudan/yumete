@@ -174,6 +174,13 @@ impl Group {
         self.binds().find(|bind| bind.key == key && at.reaches(bind))
     }
 
+    /// Whether pressing `bind`'s key here reaches `bind` itself, and not an
+    /// earlier row on the same key (2026-11-04: the vim `gn` row shadows the
+    /// helix one, and the listing named both).
+    pub(super) fn answers_with(&self, bind: &'static Bind, at: &Context) -> bool {
+        self.bind_for(bind.key, at).is_none_or(|first| std::ptr::eq(first, bind))
+    }
+
     /// **The menu, as (keys, message) rows**: each key the group answers
     /// here and offers here, notes in their places, neighbours that say the
     /// same thing on one row.
@@ -710,7 +717,7 @@ impl Only {
 /// The keys that open a group under a preset, one per keypress. vim's `m`
 /// sets a mark, so the match group has no key there; its case group is
 /// `` g` ``.
-fn group_opened_by(group: &Group, vim: bool) -> Option<Vec<String>> {
+pub(super) fn group_opened_by(group: &Group, vim: bool) -> Option<Vec<String>> {
     match (vim, group.name) {
         (true, "match") => None,
         (true, "case") => Some(vec!["g".to_string(), "`".to_string()]),
@@ -799,7 +806,18 @@ impl Editor {
                         else {
                             continue;
                         };
+                        // **Only the row the key reaches** (2026-11-04): under
+                        // vim `gn` is vim's own and the helix row after it is
+                        // never pressed, so it is not next-buffer's key.
+                        if !group.answers_with(bind, &factory(is_vim)) {
+                            continue;
+                        }
                         path.push(super::keys::key_internal(bind.key));
+                        // …nor a path the vim preset plays as something else
+                        // (`[p` pastes there).
+                        if is_vim && preset_took_path(&path.concat()) {
+                            continue;
+                        }
                         if !keys.contains(&path) {
                             keys.push(path);
                         }
@@ -1709,6 +1727,15 @@ impl Editor {
     }
 }
 
+/// Whether the vim preset plays `path` (keys in the internal spelling) as
+/// something of its own, so a group row reached by those keys is not.
+pub(super) fn preset_took_path(path: &str) -> bool {
+    yumete_cjk::KeyPreset::Vim
+        .table()
+        .iter()
+        .any(|(k, _)| yumete_cjk::actions::written(k) == path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1776,3 +1803,4 @@ mod tests {
         assert_eq!(keys_label(&["t".into(), "c".into(), "b".into()]), "t c b");
     }
 }
+

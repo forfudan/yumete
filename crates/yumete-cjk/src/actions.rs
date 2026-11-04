@@ -200,10 +200,18 @@ pub fn spell(keys: &str) -> String {
                 if let Some(next) = chars.next() {
                     out.push(next);
                 }
+                // **A chord is a word of its own** (2026-11-04): `C-w w`,
+                // not `C-ww`, which reads as one chord with two letters.
+                if chars.clone().next().is_some() {
+                    out.push(' ');
+                }
             }
             c if (c as u32) < 32 => {
                 out.push_str("C-");
                 out.push((b'a' + c as u8 - 1) as char);
+                if chars.clone().next().is_some() {
+                    out.push(' ');
+                }
             }
             c => out.push(c),
         }

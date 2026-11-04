@@ -872,15 +872,27 @@ impl Editor {
             Command::ListActions => {
                 let mut listing = String::new();
                 listing.push_str(&say!("keys.actions-head"));
-                listing.push_str("\n\n| 名字 | 做什麽 | 現在是哪個鍵 |\n| --- | --- | --- |\n");
+                let head = format!(
+                    "| {} | {} | {} |\n| --- | --- | --- |\n",
+                    say!("keys.actions-name"),
+                    say!("keys.actions-what"),
+                    say!("keys.actions-key")
+                );
+                listing.push_str("\n\n");
+                listing.push_str(&head);
                 for action in yumete_cjk::actions::ALL {
                     let now = match action.how {
                         yumete_cjk::actions::How::Command(line) => format!(":{line}"),
                         // The key it is on under the preset in use.
                         yumete_cjk::actions::How::Normal => self.keys_now(action.name).unwrap_or_default(),
                     };
+                    // No key, no backticks: an empty pair reads as a key.
+                    let now = match now.is_empty() {
+                        true => String::new(),
+                        false => format!("`{now}`"),
+                    };
                     listing.push_str(&format!(
-                        "| `{}` | {} | `{now}` |\n",
+                        "| `{}` | {} | {now} |\n",
                         action.name,
                         crate::messages::say(action.help, &[]),
                     ));
@@ -888,10 +900,7 @@ impl Editor {
                 // A prompt's, a picker's and a sidebar's (2026-11-01), each
                 // under the name of its table.
                 for place in yumete_cjk::actions::Place::ALL {
-                    listing.push_str(&format!(
-                        "\n### [keys.{}]\n\n| 名字 | 做什麽 | 現在是哪個鍵 |\n| --- | --- | --- |\n",
-                        place.name()
-                    ));
+                    listing.push_str(&format!("\n### [keys.{}]\n\n{head}", place.name()));
                     for action in place.actions() {
                         let now: Vec<String> = self
                             .keys_in_place(place, action.name)

@@ -36437,3 +36437,36 @@ fn reading_a_big5_note_into_a_big5_chapter() {
     assert_eq!(now.matches('霧').count(), 2, "the note came in as 霧, not as mojibake: {now}");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A key listed for an action is a key that reaches it** (2026-11-04):
+/// under vim `gn` selects the next match, `ge` is the previous word's end and
+/// `[p` pastes, so the vim column named them for next-buffer, the last line
+/// and the previous paragraph by mistake, and so did `:keymap-actions`.
+#[test]
+fn the_vim_column_names_only_keys_that_reach_the_action() {
+    let docs = Editor::commands_for_docs();
+    let vim_keys = |name: &str| -> Vec<String> {
+        docs.iter()
+            .find(|(n, ..)| *n == name)
+            .map(|(_, _, _, vim, _)| vim.iter().map(|k| k.concat()).collect())
+            .unwrap_or_default()
+    };
+    let helix_keys = |name: &str| -> Vec<String> {
+        docs.iter()
+            .find(|(n, ..)| *n == name)
+            .map(|(_, _, helix, _, _)| helix.iter().map(|k| k.concat()).collect())
+            .unwrap_or_default()
+    };
+    assert!(!vim_keys("goto_next_buffer").contains(&"gn".to_string()), "{:?}", vim_keys("goto_next_buffer"));
+    assert!(helix_keys("goto_next_buffer").contains(&"gn".to_string()), "helix keeps it");
+    assert!(!vim_keys("goto_last_line").contains(&"ge".to_string()), "{:?}", vim_keys("goto_last_line"));
+    assert!(!vim_keys("goto_prev_paragraph").contains(&"[p".to_string()), "{:?}", vim_keys("goto_prev_paragraph"));
+
+    // And `:keymap-actions` under vim does not say `gn` for next-buffer.
+    let mut ed = typed("一\n");
+    ed.execute(":keymap vim").unwrap();
+    ed.execute(":keymap-actions").unwrap();
+    let listing = ed.current_buffer().text();
+    let row = listing.lines().find(|l| l.contains("goto_next_buffer")).unwrap_or_default();
+    assert!(!row.contains("`gn`"), "{row}");
+}
