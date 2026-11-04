@@ -117,7 +117,7 @@ pub struct EditorConfig {
     /// helix's end-of-line diagnostics (2026-11-04): the least severity a
     /// language server's message must have to be drawn after its line —
     /// `"hint"` (the default, as helix's), `"info"`, `"warning"`, `"error"`, or
-    /// `"disable"`. Code only.
+    /// `"disable"`. In prose it follows the paragraph's last row.
     pub end_of_line_diagnostics: String,
     /// Whether a file's vim modelines (`vim: set ts=2 ft=python:` in its
     /// first or last five lines) are read: its file type, tab stop, indent
@@ -3123,7 +3123,8 @@ pub struct Server {
     pub args: Vec<String>,
 }
 
-/// The servers that come filled in — 2026-09-19 定的兩種，go 和 rust。
+/// The servers that come filled in: go and rust (2026-09-19), mojo, python,
+/// and helix's lists for Markdown and Typst (2026-11-04).
 ///
 /// Warning: **Filled in is not started.** Nothing is spawned until a file of that
 /// language is really opened, and if the program is not on the machine the
@@ -3145,6 +3146,15 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // `.pixi/envs/*/bin`——所以缺的只是這一行，不是找路那一半。
         // 它不用參數，stdio 是它的默認（`--help` 裏連一個傳輸選項都没有）。
         ("mojo".to_string(), vec![one("mojo-lsp-server", &[])]),
+        // **Text files take helix's lists** (2026-11-04): links and headings
+        // (`marksman`, `markdown-oxide`), markdownlint's rules (`rumdl`), and
+        // Typst's own server. Whichever is installed starts; with none, a
+        // text file says nothing (the front end keeps quiet about these).
+        (
+            "markdown".to_string(),
+            vec![one("marksman", &["server"]), one("markdown-oxide", &[]), one("rumdl", &["server"])],
+        ),
+        ("typst".to_string(), vec![one("tinymist", &[])]),
         // Warning: **python 没有那個顯然的答案**，所以它是一串。helix 給 python 列了
         // 五個（`languages.toml`：`["ty", "ruff", "jedi", "pylsp", "zuban"]`），
         // 而且每一個的命令都不一樣。填一個等於替人在五個裏猜一個，猜錯了他每次

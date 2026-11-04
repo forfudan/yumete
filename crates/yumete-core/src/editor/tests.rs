@@ -35547,6 +35547,26 @@ fn the_column_on_a_closed_fold_is_the_texts() {
     assert_eq!(ed.cursor_visual_column(), 9, "nvim: 2,10");
 }
 
+/// **`zR` and `zr` leave a hidden cursor on its own line**, as `zo` does
+/// and nvim's do (2026-11-04 review: `zR` put it on the fold's first line).
+#[test]
+fn opening_every_fold_keeps_a_hidden_cursors_line() {
+    for keys in ["zR", "zr"] {
+        let mut ed = typed_vim("one\ntwo\nthree\nfour\nfive\n");
+        press(&mut ed, "jzf2j:3");
+        ed.on_key(Key::Enter);
+        press(&mut ed, keys);
+        assert_eq!(ed.cursor_line(), 2, "{keys}: on line 3");
+    }
+    // Before it opens, the readout names the hidden line's character.
+    let mut ed = typed_vim("one\ntwo\nthree\nfour\nfive\n");
+    press(&mut ed, "jzf2j:3");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("t"));
+    press(&mut ed, "~");
+    assert_eq!(ed.grapheme_at_cursor().as_deref(), Some("h"), "line 3's second character");
+}
+
 /// **An edit at a cursor a closed fold hides acts on its own line**
 /// (2026-11-04, nvim, the cursor `:3` in a fold of lines 2 to 4): `~`, `J`,
 /// `gJ` and `r` change line 3 and leave the fold closed, `a` and `A` type

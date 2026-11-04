@@ -787,14 +787,20 @@ impl Editor {
                 }
             }
         }
+        // A cursor a closed fold hides is on its own line, as the status
+        // line's Ln and column already say (review, 2026-11-04).
+        let caret = match self.viewing.get() {
+            None => self.hidden_place().unwrap_or(self.caret()),
+            Some(_) => self.caret(),
+        };
         let rope = self.current_buffer().rope();
-        let line = rope.char_to_line(self.caret().min(rope.len_chars()));
+        let line = rope.char_to_line(caret.min(rope.len_chars()));
         let start = rope.line_to_char(line);
         let text = rope.line(line).to_string();
         let text = text.trim_end_matches(['\n', '\r']);
         // 行裏的第幾個字符 → 它落在哪一個字簇上。走過去而不是切片，因為字簇的
         // 邊界不在字符上。
-        let want = self.caret().saturating_sub(start);
+        let want = caret.saturating_sub(start);
         let mut at = 0usize;
         let mut last: Option<&str> = None;
         for g in yumete_cjk::graphemes(text) {

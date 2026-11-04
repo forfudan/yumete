@@ -1272,6 +1272,13 @@ zhs = "和下一个对调"
 en = "trade places with the next"
 
 [[message]]
+# C-w f / F(vim)：光標下的文件在上面開
+key = "hint.region.file-above"
+zht = "上窗打開光標下文件"
+zhs = "上窗打开光标下文件"
+en = "file under cursor, above"
+
+[[message]]
 # C-w f：光標下的文件在下面開
 key = "hint.region.file-below"
 zht = "下窗打開光標下文件"
@@ -1321,11 +1328,11 @@ zhs = "刚才那个窗口"
 en = "the window before"
 
 [[message]]
-# C-w ^(vim)：上一個文件在下面開（草稿）
-key = "hint.region.last-file-below"
-zht = "在下面打開上一個文件"
-zhs = "在下面打开上一个文件"
-en = "the file before, below"
+# C-w ^(vim)：上一個文件在上面開
+key = "hint.region.last-file-above"
+zht = "在上面打開上一個文件"
+zhs = "在上面打开上一个文件"
+en = "the file before, above"
 
 [[message]]
 # C-w 提示：n 開一個空白窗口（helix 那裏是一組，後面跟 s 或 v）
@@ -1389,6 +1396,13 @@ key = "hint.region.split"
 zht = "下面開一個窗口"
 zhs = "下面开一个窗口"
 en = "a window below"
+
+[[message]]
+# C-w s / S(vim)：在上面開一個窗口
+key = "hint.region.split-above"
+zht = "上面開一個窗口"
+zhs = "上面开一个窗口"
+en = "a window above"
 
 [[message]]
 # C-w 提示：v 在旁邊開一個窗口

@@ -576,7 +576,13 @@ impl Servers {
             // Warning: **每個語言只說一次**（定的）。這是一件關於這臺機器的事實，
             // 不是一個事件——一個項目裏切五個 `.py` 就罵五遍，會把狀態欄上別的話
             // 全蓋掉。同 `lsp.cannot-start` 那一條的理由。
-            if self.told_about.insert(language.to_string()) {
+            // A text file with only the factory's list says nothing: a writer
+            // never asked for a server, and every chapter would open with
+            // 「not installed」.
+            if self.told_about.insert(language.to_string())
+                && !(matches!(language, "markdown" | "typst" | "text")
+                    && config.lsp.get(language) == yumete_config::factory_servers().get(language))
+            {
                 self.says = Some(match config.lsp.get(language).filter(|v| !v.is_empty()) {
                     Some(wanted) => say!("lsp.not-installed", Self::the_names(wanted)),
                     None => say!("lsp.no-server-configured", language),
@@ -2204,17 +2210,23 @@ mod tests {
         assert!(servers.says.is_none(), "說過就不再說：{:?}", servers.says);
     }
 
-    /// Warning: **Prose has no language server here.** Markdown has one in the
-    /// world; this editor *is* the tool for a manuscript, and a second opinion
-    /// about a chapter is not what anybody asked for.
+    /// **Prose takes helix's lists, and says nothing without them**
+    /// (2026-11-04): Markdown's servers start when installed; on a machine
+    /// with none, a manuscript opens without a word about servers. It used
+    /// to start nothing at all.
     #[test]
-    fn a_manuscript_starts_nothing() {
+    fn a_manuscript_without_its_servers_says_nothing() {
         let config = Servers::stocked("rust");
+        assert!(config.lsp.get("markdown").is_some_and(|v| v.iter().any(|s| s.command == "marksman")));
         let (mut editor, _path) = editor_on("第一章.md", "那年冬天。\n");
         let mut servers = Servers::default();
         servers.follow(&mut editor, &config);
-        assert!(servers.running.is_empty(), "散文不起服務器");
-        assert!(servers.says.is_none(), "也不說任何話");
+        assert!(servers.says.is_none() || !servers.running.is_empty(), "{:?}", servers.says);
+        assert!(
+            servers.says.as_deref().is_none_or(|s| !s.contains("marksman")),
+            "no 「not installed」 for a manuscript: {:?}",
+            servers.says
+        );
     }
 
     #[test]

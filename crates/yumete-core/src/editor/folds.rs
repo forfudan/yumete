@@ -486,6 +486,7 @@ impl Editor {
 
     /// `zR` opens every fold, `zM` closes every one.
     pub(super) fn fold_all(&mut self, closed: bool) {
+        let hidden = self.hidden_place();
         let all: Vec<FoldOf> = self.fold_view().spans.iter().map(|s| s.of.clone()).collect();
         for of in &all {
             self.set_fold_closed(of, closed);
@@ -495,6 +496,20 @@ impl Editor {
         if closed {
             self.fold_stays_closed = true;
             self.uncover_disabled();
+        }
+        self.back_where_hidden(hidden);
+    }
+
+    /// **A cursor a closed fold hid stands on its own line** once a key has
+    /// opened the folds over it (`zR`, `zr`), as `zo` leaves it and vim's
+    /// does (review, 2026-11-04: `zR` put it on the fold's first line).
+    fn back_where_hidden(&mut self, hidden: Option<usize>) {
+        let Some(at) = hidden else { return };
+        let line = self.current_buffer().rope().char_to_line(at.min(self.current_buffer().rope().len_chars()));
+        if !self.fold_hides(line) {
+            self.fold_return = None;
+            self.sel.set_head(at);
+            self.sel.set_anchor(at);
         }
     }
 
@@ -521,7 +536,9 @@ impl Editor {
             true => (now + count.max(1)).min(deepest),
             false => now.saturating_sub(count.max(1)),
         };
+        let hidden = self.hidden_place();
         self.apply_fold_level(level);
+        self.back_where_hidden(hidden);
         self.keep_fold_level(level);
         self.fold_stays_closed = true;
         self.status = say!("fold.level", level);
