@@ -407,6 +407,12 @@ const NOT_A_SEQUENCE: &[&str] = &["md", "tw", "go", "[]", "[ ]", "[x]", "[^", "[
 /// helix」 page to say so.
 const DISOWNED_KEYS: &[&str] = &["t s", "Space ."];
 
+/// **Pages about keys a reader binds themselves** (2026-11-04): the
+/// 「Coming from LazyVim」 page teaches the keys its own config adds, which
+/// the editor does not have until it is pasted. That config is held to the
+/// editor by `yumete-tui/tests/lazyvim_page.rs`.
+const YOUR_OWN_KEYS: &[&str] = &["src/from/lazyvim.md"];
+
 /// **Keys the vim keymap has and the `g` menu does not list yet**: `gi`
 /// (2026-10-30) works, and its row in the menu waits for its Chinese label.
 /// Take it off this list in the commit that adds the row.
@@ -417,6 +423,9 @@ fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
     let mut asked = 0;
     let mut wrong = Vec::new();
     for (doc, text) in documents() {
+        if YOUR_OWN_KEYS.iter().any(|page| doc.ends_with(page)) {
+            continue;
+        }
         for (line, quote) in quoted(&text) {
             if NOT_A_SEQUENCE.contains(&quote.as_str())
                 || DISOWNED_KEYS.contains(&quote.as_str())
