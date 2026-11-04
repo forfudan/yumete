@@ -1078,7 +1078,7 @@ pub fn draw(
     let ink = match peek {
         None => crate::theme::Palette::of(config),
         // A rung back, all of it: the half that is only being read.
-        Some(_) => crate::theme::Palette::of(config).faded(),
+        Some(_) => crate::theme::Palette::of(config).reading(editor.focus()),
     };
     // **The page is painted, here too.** A 縱書 page is mostly margin — the
     // squares a 縱 does not reach are the page as much as the ones it does —

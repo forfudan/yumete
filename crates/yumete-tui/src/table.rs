@@ -827,7 +827,7 @@ pub fn draw(
     let ink = match peek {
         None => crate::theme::Palette::of(config),
         // A rung back, all of it: the half that is only being read.
-        Some(_) => crate::theme::Palette::of(config).faded(),
+        Some(_) => crate::theme::Palette::of(config).reading(editor.focus()),
     };
     let gutter_style = ink.ground(yumete_config::rung::CHROME);
     // 金 — the one warm colour on the grid, and it marks **which column and

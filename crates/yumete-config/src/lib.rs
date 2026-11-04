@@ -350,6 +350,9 @@ pub struct EditorConfig {
     /// sequence you have begun are listed. Turned off, all three fall back
     /// onto the status line and take turns with the position readout.
     pub command_line: bool,
+    /// **The name at the right end of the command line**, quiet (2026-11-04,
+    /// back as a setting, on: it was taken off 2026-10-27 as 「看着像广告」).
+    pub signature: bool,
     /// Whether a 縱 — or a row, across — keeps the lane beside it for readings,
     /// hung 句讀, 着重號, 平仄 and ticks: `never`, `dense`, `loose` or `always`
     /// (`:view-margin`, see [`Margin`]).
@@ -487,6 +490,7 @@ impl Default for EditorConfig {
             status_count: "text".to_string(),
             unicode_alarm: true,
             command_line: true,
+            signature: true,
             smart_case: true,
             fuzzy_search: false,
             margin: Margin::Dense,
@@ -4331,6 +4335,7 @@ struct RawEditor {
     status_count: Option<String>,
     unicode_alarm: Option<bool>,
     command_line: Option<bool>,
+    signature: Option<bool>,
     smart_case: Option<bool>,
     fuzzy_search: Option<bool>,
     margin: Option<String>,
@@ -4570,6 +4575,9 @@ impl RawConfig {
         }
         if other.editor.unicode_alarm.is_some() {
             self.editor.unicode_alarm = other.editor.unicode_alarm;
+        }
+        if other.editor.signature.is_some() {
+            self.editor.signature = other.editor.signature;
         }
         if other.editor.command_line.is_some() {
             self.editor.command_line = other.editor.command_line;
@@ -4996,6 +5004,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.unicode_alarm {
             config.editor.unicode_alarm = on;
+        }
+        if let Some(on) = self.editor.signature {
+            config.editor.signature = on;
         }
         if let Some(on) = self.editor.command_line {
             config.editor.command_line = on;

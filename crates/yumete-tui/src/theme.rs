@@ -759,6 +759,20 @@ impl Palette {
         }
     }
 
+    /// **A window you are only reading**: [`Self::faded`], or with focus mode
+    /// on as far back as focus mode stands a paragraph, so that the
+    /// paragraph being written is the one thing at full ink on the screen
+    /// (2026-11-04).
+    pub fn reading(self, focus_mode: bool) -> Palette {
+        Palette {
+            faded: match focus_mode {
+                true => self.inactive.max(self.focus),
+                false => self.inactive,
+            },
+            ..self
+        }
+    }
+
     /// The same palette as focus mode stands a paragraph back.
     pub fn stood_back(self) -> Palette {
         Palette {

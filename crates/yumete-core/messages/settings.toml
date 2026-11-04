@@ -516,6 +516,20 @@ zhs = "把注音排在字的旁边。默认关：文件里是什么，画面上�
 en = "lay readings out beside their characters. Off by default: what is in the file is what is on the page"
 
 [[message]]
+# 設置：右下角的名字（草稿）
+key = "settings.editor.signature"
+zht = "右下角的名字"
+zhs = "右下角的名字"
+en = "name in the corner"
+
+[[message]]
+# 設置：右下角的名字——一句話（草稿）
+key = "settings.editor.signature.hint"
+zht = "命令行空着的時候，右端淡淡地寫着 yumete"
+zhs = "命令行空着的时候，右端淡淡地写着 yumete"
+en = "a quiet yumete at the right end of the command line while it is empty"
+
+[[message]]
 # 設置：智能大小写
 key = "settings.editor.smart-case"
 zht = "智能大小寫"

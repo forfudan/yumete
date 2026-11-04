@@ -5395,7 +5395,7 @@ fn draw(
                     let ink = crate::theme::Palette::of(config);
                     let ink = match peek {
                         None => ink,
-                        Some(_) => ink.faded(),
+                        Some(_) => ink.reading(editor.focus()),
                     };
                     for pair in strips.windows(2) {
                         let from = pair[0].x + pair[0].width;
@@ -5447,7 +5447,7 @@ fn draw(
                                 let ink = crate::theme::Palette::of(config);
                                 let ink = match peek {
                                     None => ink,
-                                    Some(_) => ink.faded(),
+                                    Some(_) => ink.reading(editor.focus()),
                                 };
                                 frame.render_widget(Paragraph::new("").style(ink.page()), *strip);
                                 (None, None)
@@ -11800,7 +11800,7 @@ fn draw_horizontal(
     // cursor.
     let ink = match peek {
         None => crate::theme::Palette::of(config),
-        Some(_) => crate::theme::Palette::of(config).faded(),
+        Some(_) => crate::theme::Palette::of(config).reading(editor.focus()),
     };
 
     // Unwrapped, every paragraph is one row and anything past the right edge is
@@ -14141,11 +14141,19 @@ fn draw_command(
             }
         }
     }
-    // **No name in the corner** (2026-10-27). 「宇夢編輯器」 stood at the right
-    // end of this row from #498 on, and a reader said it 「看着像广告」 — a
-    // signature on every screen, while you work. vim says its name on the
-    // empty start screen and nowhere else, and so does this now: the start
-    // screen opens with 「YUMETE － 宇夢編輯器」 and `:version` carries it.
+    // **The name in the corner, quiet** (#498; a setting since 2026-11-04,
+    // `[editor] signature`, on). Taken off 2026-10-27 as 「看着像广告」 and
+    // asked back as an option, **only on an empty row**: anything the row
+    // says, it says alone (「只要命令行有任何文字，就不顯示」). In furniture
+    // ink, as line numbers and an unlit tab, so it reads as the frame rather
+    // than as something said. The same in every language.
+    if config.editor.signature && x == area.x + 1 {
+        const SIGNATURE: &str = "yumete";
+        let wide = yumete_cjk::str_width(SIGNATURE) as u16;
+        if right > wide + area.x {
+            put_text(buf, right - wide, area.y, right, SIGNATURE, what);
+        }
+    }
 }
 
 /// **The cursor inside one of the search panel's boxes** — #419, 2026-09-25.
@@ -15317,16 +15325,22 @@ fn squeezed(text: &str) -> String {
         assert!(ruled < 24, "不是整行都畫——那就沒有分界了");
     }
 
-    /// **The hint row carries no signature** (2026-10-27): the name is on the
-    /// start screen, as vim's is, not in the corner of every screen.
+    /// **The name sits in the corner of an empty row only** (2026-11-04,
+    /// `[editor] signature`, on): any word on the row and it is gone; off,
+    /// the row is blank.
     #[test]
-    fn the_hint_row_carries_no_signature() {
-        let editor = editor_with("那年冬天。\n");
-        let config = Config::default();
-        let wide = render(&editor, &config, 80, 8);
-        let row = row_text(&wide, 7);
-        assert!(!row.contains("宇夢") && !row.contains("宇梦"), "{row:?}");
-        assert_eq!(row.trim(), "", "nothing begun, nothing said: {row:?}");
+    fn the_signature_sits_on_an_empty_row_only() {
+        let mut editor = editor_with("那年冬天。\n");
+        let mut config = Config::default();
+        let row = row_text(&render(&editor, &config, 80, 8), 7);
+        assert!(row.trim_end().ends_with("yumete"), "{row:?}");
+        assert_eq!(row.trim(), "yumete", "nothing else said: {row:?}");
+        editor.execute(":view-wrap").unwrap();
+        let row = row_text(&render(&editor, &config, 80, 8), 7);
+        assert!(!row.trim().is_empty() && !row.contains("yumete"), "a word on the row, no name: {row:?}");
+        config.editor.signature = false;
+        let row = row_text(&render(&editor_with("那年冬天。\n"), &config, 80, 8), 7);
+        assert_eq!(row.trim(), "", "off: {row:?}");
     }
 
     /// 輸入框要看得出是個框（#447）。
@@ -22010,7 +22024,9 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_row_below_says_what_would_finish_what_you_started() {
         let mut editor = editor_with("那年冬天");
-        let config = Config::default();
+        let mut config = Config::default();
+        // The name in the corner of an empty row is not something said.
+        config.editor.signature = false;
         // A wide glyph covers two cells and only the first carries it, so the
         // row reads back with a gap after every 字.
         let hint = move |e: &Editor| -> String {

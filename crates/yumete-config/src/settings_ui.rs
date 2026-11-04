@@ -674,6 +674,15 @@ pub const SETTINGS: &[Setting] = &[
         factory: "true",
     },
     Setting {
+        table: "editor",
+        key: "signature",
+        group: Group::Interface,
+        kind: Kind::Tick,
+        label: "settings.editor.signature",
+        hint: "settings.editor.signature.hint",
+        factory: "true",
+    },
+    Setting {
         table: "panel",
         key: "rounded",
         group: Group::Interface,
