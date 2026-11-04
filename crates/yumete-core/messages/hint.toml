@@ -455,7 +455,7 @@ en = "make a fold of N lines"
 key = "hint.fold.create-selection"
 zht = "把選中的行做成摺疊"
 zhs = "把选中的行做成折叠"
-en = "make a fold of the selected lines"
+en = "fold the selected lines"
 
 [[message]]
 # z / [ ] 菜單：delete_fold（草稿）
@@ -616,7 +616,7 @@ en = "show the note (or write one)"
 key = "hint.goto.by-file-line"
 zht = "下/上一邏輯行"
 zhs = "下/上一逻辑行"
-en = "down / up a logical line (with line number)"
+en = "down / up a logical line"
 
 [[message]]
 # 豎排時
@@ -779,7 +779,7 @@ en = "select what was selected last"
 key = "hint.goto.screen-top-middle-bottom"
 zht = "光標移至屏幕頂部/中部/底部"
 zhs = "光标移至屏幕顶部/中部/底部"
-en = "the cursor to the top, middle or bottom of the screen"
+en = "screen top / middle / bottom"
 
 [[message]]
 # goto: search the selection
@@ -1704,14 +1704,14 @@ en = "every command"
 key = "hint.space.change"
 zht = "顯示改動(浮窗)"
 zhs = "显示改动(浮窗)"
-en = "show the change (float)"
+en = "change (float)"
 
 [[message]]
 # 空格組：同上，進邊欄
 key = "hint.space.change-panel"
 zht = "顯示改動(邊欄)"
 zhs = "显示改动(边栏)"
-en = "show the change (sidebar)"
+en = "change (sidebar)"
 
 [[message]]
 # 空格菜單：g 開「存在改動文件」挑選器
@@ -1725,35 +1725,35 @@ en = "changed files"
 key = "hint.space.comment-block"
 zht = "塊注釋"
 zhs = "块注释"
-en = "comment out, in a block"
+en = "block comment"
 
 [[message]]
 # 空格 c：行注釋(没有行注釋的格式退到塊注釋)
 key = "hint.space.comment-line"
 zht = "行注釋"
 zhs = "行注释"
-en = "comment out, by the line"
+en = "line comment"
 
 [[message]]
 # 空格 A-c：只用行註釋（草稿）
 key = "hint.space.comment-lines-only"
 zht = "只用行注釋"
 zhs = "只用行注释"
-en = "comment out, by the line only"
+en = "line comment only"
 
 [[message]]
 # 空格 Y：只把主選區複製到系統剪貼板（草稿）
 key = "hint.space.copy-main-to-clipboard"
 zht = "主選區複製到系統剪貼板"
 zhs = "主选区复制到系统剪贴板"
-en = "copy the main selection to the system clipboard"
+en = "copy main to clipboard"
 
 [[message]]
 # g 組：複製到系統剪貼簿
 key = "hint.space.copy-to-clipboard"
 zht = "複製到系統剪貼板"
 zhs = "复制到系统剪贴板"
-en = "copy to the system clipboard"
+en = "copy to clipboard"
 
 [[message]]
 # 空格菜單：這個文件的診斷（helix 的同一個鍵）
@@ -1767,28 +1767,28 @@ en = "diagnostics picker"
 key = "hint.space.dictionary"
 zht = "顯示漢字信息(浮窗)"
 zhs = "显示汉字信息(浮窗)"
-en = "character info (floating)"
+en = "char info (float)"
 
 [[message]]
 # 空格選單裏那一行：把漢字信息開進邊欄(浮窗是小寫的 d)
 key = "hint.space.dictionary-panel"
 zht = "顯示漢字信息(邊欄)"
 zhs = "显示汉字信息(边栏)"
-en = "character info (sidebar)"
+en = "char info (sidebar)"
 
 [[message]]
 # space e：瀏覽文件，一次一個目錄(挑選器式，不是邊欄那棵樹)
 key = "hint.space.explorer"
 zht = "瀏覽文件(項目路徑)"
 zhs = "浏览文件(项目路径)"
-en = "browse files (project dir)"
+en = "browse the project"
 
 [[message]]
 # space E：同上，從這個檔所在的目錄開始
 key = "hint.space.explorer-here"
 zht = "瀏覽文件(本文件路徑)"
 zhs = "浏览文件(本文件路径)"
-en = "browse files (this file's dir)"
+en = "browse this folder"
 
 [[message]]
 # 空格 j：跳轉列表挑選器（草稿）
@@ -1802,7 +1802,7 @@ en = "jump list"
 key = "hint.space.last-picker"
 zht = "上一個挑選器"
 zhs = "上一个挑选器"
-en = "the last picker again"
+en = "last picker again"
 
 [[message]]
 # space f：open a file
@@ -1810,7 +1810,7 @@ en = "the last picker again"
 key = "hint.space.open-file"
 zht = "文件挑選器(項目路徑)"
 zhs = "文件挑选器(项目路径)"
-en = "open file picker (project dir)"
+en = "file picker (project)"
 
 [[message]]
 # space F
@@ -1818,14 +1818,14 @@ en = "open file picker (project dir)"
 key = "hint.space.open-file-here"
 zht = "文件挑選器(工作路徑)"
 zhs = "文件挑选器(工作路径)"
-en = "open file picker (working dir)"
+en = "file picker (work dir)"
 
 [[message]]
 # ␣o 開上次的那一組
 key = "hint.space.open-recent"
 zht = "開上次的"
 zhs = "开上次的"
-en = "open something recent"
+en = "open recent"
 
 [[message]]
 # 空格選單：空格再按一下，往下一頁
@@ -1846,7 +1846,7 @@ en = "page up"
 key = "hint.space.paste-before"
 zht = "從系統剪貼板粘貼在前"
 zhs = "从系统剪贴板粘贴在前"
-en = "paste before, from the system clipboard"
+en = "paste clipboard before"
 
 [[message]]
 # space p:
@@ -1854,28 +1854,28 @@ en = "paste before, from the system clipboard"
 key = "hint.space.paste-from-clipboard"
 zht = "從系統剪貼板粘貼"
 zhs = "从系统剪贴板粘贴"
-en = "paste from the system clipboard"
+en = "paste from clipboard"
 
 [[message]]
 # 空格選單：這一行的診斷，浮窗
 key = "hint.space.problems"
 zht = "顯示診斷信息(浮窗)"
 zhs = "显示诊断信息(浮窗)"
-en = "show diagnostics (float)"
+en = "diagnostic (float)"
 
 [[message]]
 # 空格選單：這一行的診斷，邊欄
 key = "hint.space.problems-panel"
 zht = "顯示診斷信息(邊欄)"
 zhs = "显示诊断信息(边栏)"
-en = "show diagnostics (sidebar)"
+en = "diagnostic (sidebar)"
 
 [[message]]
 # 空格菜單：項目裏每個文件的診斷（helix 的同一個鍵）
 key = "hint.space.project-diagnostics"
 zht = "項目診斷挑選器"
 zhs = "项目诊断挑选器"
-en = "project diagnostics picker"
+en = "project diagnostics"
 
 [[message]]
 # 空格菜單：項目裏的符號：隨查詢問語言服務器，沒有服務器時是各文件的標題（helix 的同一個鍵）
@@ -1889,14 +1889,14 @@ en = "project symbol picker"
 key = "hint.space.record"
 zht = "顯示表格行記錄(浮窗)"
 zhs = "显示表格行记录(浮窗)"
-en = "this row's record (floating)"
+en = "row record (float)"
 
 [[message]]
 # 空格選單：這一行攤開，邊欄
 key = "hint.space.record-panel"
 zht = "顯示表格行記錄(邊欄)"
 zhs = "显示表格行记录(边栏)"
-en = "this row's record (sidebar)"
+en = "row record (sidebar)"
 
 [[message]]
 # 空格組：改名（語言服務器）
@@ -1910,14 +1910,14 @@ en = "rename it everywhere"
 key = "hint.space.replace-from-clipboard"
 zht = "用系統剪貼板替換選區"
 zhs = "用系统剪贴板替换选区"
-en = "replace the selection with the system clipboard"
+en = "replace with clipboard"
 
 [[message]]
 # 空格 h：選中這個符號在本檔裏的每一處（草稿）
 key = "hint.space.select-references"
 zht = "選中本檔裏的每一處"
 zhs = "选中本档里的每一处"
-en = "select every place this symbol stands in the file"
+en = "select every use"
 
 [[message]]
 # space b: 
@@ -1953,14 +1953,14 @@ en = "Space"
 key = "hint.space.what-is-this"
 zht = "顯示定義文檔(浮窗)"
 zhs = "显示定义文档(浮窗)"
-en = "documentation (floating)"
+en = "docs (float)"
 
 [[message]]
 # 空格選單：把服務器那段話開進邊欄(浮窗是小寫的 k)
 key = "hint.space.what-is-this-panel"
 zht = "顯示定義文檔(邊欄)"
 zhs = "显示定义文档(边栏)"
-en = "documentation (sidebar)"
+en = "docs (sidebar)"
 
 [[message]]
 # ␣z 輸入法那一組

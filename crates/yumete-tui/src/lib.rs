@@ -7080,9 +7080,11 @@ fn draw_hud_panel(
 /// sequence it is about: two surfaces saying the same thing is the thing this
 /// editor keeps taking apart.
 ///
-/// One column while it fits, two when it does not. Not scrolling: a menu you
-/// have to scroll is one you cannot answer at a glance, which is the whole of
-/// what it is for.
+/// One column while it fits, more when it does not, and taller than half the
+/// page only while that saves its meanings from being cut — never over the
+/// caret's line (`panel::draw`, 2026-11-04). Not scrolling: a menu you have to
+/// scroll is one you cannot answer at a glance, which is the whole of what it
+/// is for.
 /// The panel for a half-pressed key sequence — `空格` and every other prefix.
 fn draw_which_key(
     frame: &mut Frame,

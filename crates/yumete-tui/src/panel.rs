@@ -289,6 +289,72 @@ fn usual_width(widths: impl Iterator<Item = usize>) -> usize {
         .map_or(1, |(width, _)| width.max(1))
 }
 
+/// **How a key table falls into columns at one depth** (2026-11-04).
+///
+/// Each column is as wide as its own rows — its widest key, the gap, its
+/// longest meaning — and not as wide as the widest row in the whole table: a
+/// column of `page up` beside a column of `file picker (project)` gives
+/// the room it does not need to its neighbour. When the columns together are
+/// wider than `widest`, they are all cut down to one level, the highest whose
+/// sum fits, so the cut falls on the widest columns first and the narrow ones
+/// keep everything.
+///
+/// Warning: **A meaning starts after its column's widest key** (`H J K L`,
+/// `A-c`), so that is what a column is measured from. Until 2026-11-04 the
+/// width was planned with the usual one-cell key and drawn with the widest:
+/// 「下窗打開光標下…」 was cut in an 80-column `C-w` menu with twenty-five
+/// columns of the box still empty.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct KeyColumns {
+    /// How many keys are drawn; the last cell says how many more there are.
+    pub shown: usize,
+    /// Each column's width, after the cut.
+    pub widths: Vec<usize>,
+    /// How many meanings that cut reaches.
+    pub cut: usize,
+}
+
+pub(crate) fn key_columns(
+    keys: &[(String, String)],
+    key_w: usize,
+    widest: usize,
+    most: usize,
+    deep_max: usize,
+) -> KeyColumns {
+    let deep_max = deep_max.max(1);
+    let columns = keys.len().div_ceil(deep_max).clamp(1, most.max(1));
+    let shown = keys.len().min(columns * deep_max);
+    let deep = shown.div_ceil(columns).max(1);
+    // Every row's full width, measured from its own column's key width.
+    let rows: Vec<Vec<usize>> = keys[..shown]
+        .chunks(deep)
+        .map(|column| {
+            let keys_w = column
+                .iter()
+                .map(|(k, _)| yumete_cjk::str_width(k))
+                .max()
+                .unwrap_or(0)
+                .max(key_w);
+            column
+                .iter()
+                .map(|(_, what)| keys_w + 2 + yumete_cjk::str_width(what))
+                .collect()
+        })
+        .collect();
+    let natural: Vec<usize> = rows.iter().map(|r| r.iter().copied().max().unwrap_or(0)).collect();
+    let budget = widest.saturating_sub(natural.len().saturating_sub(1) * 2);
+    let top = natural.iter().copied().max().unwrap_or(0);
+    let level = (1..=top)
+        .rev()
+        .find(|&l| natural.iter().map(|w| (*w).min(l)).sum::<usize>() <= budget)
+        .unwrap_or(1);
+    KeyColumns {
+        shown,
+        widths: natural.iter().map(|w| (*w).min(level)).collect(),
+        cut: rows.iter().flatten().filter(|w| **w > level).count(),
+    }
+}
+
 pub(crate) fn clip(text: &str, cells: usize) -> String {
     if yumete_cjk::str_width(text) <= cells {
         return text.to_string();
@@ -614,7 +680,7 @@ pub fn draw(
     }
 
     // How wide the content wants to be, how deep it is at that width, and —
-    // for a key list — how wide one of its columns is.
+    // for a key list — how many columns and how wide its keys usually are.
     // Prose gets a cell of air on each side; a key list does not — its own
     // left column is the alignment, and an indent only pushes it off centre.
     let pad: usize = match panel.body {
@@ -636,6 +702,9 @@ pub fn draw(
     // 竪排那一支自己算「讀到第幾縱／共幾縱」——它的 `count` 是「一縱幾個字」，
     // 和橫排那一段數的不是同一個維度，所以那一段跳過它（見下面）。
     let mut zong_read: Option<(usize, usize)> = None;
+    // A key table's columns, each as wide as its own rows (`key_columns`);
+    // written by the sizing below, read by the drawing.
+    let mut key_widths: Vec<usize> = Vec::new();
     // **正文原樣交出去**（2026-10-11 定）。
     //
     // 這裏從前有一支 `indented`：**空行濾掉、每段頭上加一個全角空格**
@@ -648,7 +717,7 @@ pub fn draw(
     // 一起把這一層拿掉。段落之間回到空行，那是 Markdown 自己的分法。
     // `lines` is the prose, already wrapped; a key list draws itself from
     // `panel.body` and needs only its `count`.
-    let (inner, count, lines, columns, key_w, one) = match &panel.body {
+    let (inner, count, lines, columns, key_w) = match &panel.body {
         // **竪書的正文**（2026-09-18）：一縱是一列，字往下走，縱往左排。
         // 量法轉置——能放多高就一縱多少字，需要幾縱就多寬（一個漢字兩格）。
         Body::Prose(text) if panel.vertical_text => {
@@ -710,7 +779,7 @@ pub fn draw(
             }
             let deep = zong.iter().map(|z| z.chars().count()).max().unwrap_or(1).max(1);
             let across = zong.len().max(1);
-            (across * 2, deep, zong, 1usize, 0usize, across * 2)
+            (across * 2, deep, zong, 1usize, 0usize)
         }
         Body::Prose(text) => {
             // **As wide as `chrome::room` allows** (2026-09-18). What keeps
@@ -768,7 +837,7 @@ pub fn draw(
             // Shrink to the longest line actually drawn: wrapping a 40-cell
             // note at 60 leaves twenty cells of ring around nothing.
             let inner = lines.iter().map(|l| yumete_cjk::str_width(l)).max().unwrap_or(1).max(1);
-            (inner, lines.len(), lines, 1usize, 0usize, inner)
+            (inner, lines.len(), lines, 1usize, 0usize)
         }
         Body::Keys(keys) => {
             if keys.is_empty() {
@@ -779,14 +848,9 @@ pub fn draw(
             // whole `Space` menu to fewer columns and hid ten of them. A wider
             // key widens its own column only, where it is drawn.
             let key_w = usual_width(keys.iter().map(|(k, _)| yumete_cjk::str_width(k)));
-            let one = keys
-                .iter()
-                .map(|(k, what)| key_w.max(yumete_cjk::str_width(k)) + 2 + yumete_cjk::str_width(what))
-                .max()
-                .unwrap_or(0);
-            // **No deeper than the room** (`cap`, above). A menu is a thing you
-            // glance at beside your writing; one that fills the window has
-            // stopped being a menu.
+            // **The room (`cap`, above) is where the depth starts**, and for a
+            // field list where it stops. A key menu may grow past it — see
+            // `deep_max` below.
             // Warning: **…and never deeper than the page can actually place**
             // (2026-09-19, caught in review). `chrome::place` refuses a box
             // taller than the rows between the top of the page and the footer,
@@ -806,7 +870,7 @@ pub fn draw(
             // │編碼          KKcu                      字集           │
             // ```
             //
-            // 「讀音 h」。切在欄**裏**是這一支有意的（底下那個 `one.min(..)`，
+            // 「讀音 h」。切在欄**裏**是這一支有意的（`key_columns` 的那一刀，
             // 「a key whose meaning is cut short still tells the reader which
             // key it is」），切在框**外**不是。
             let widest = (room_w as usize)
@@ -814,7 +878,7 @@ pub fn draw(
                 .min(area.width as usize)
                 .saturating_sub(2 + pad * 2)
                 .max(1);
-            // Too deep is answered by going **wider** first: as many columns
+            // Within the room, too deep is answered by going **wider**: as many columns
             // as the depth asks for. A short wide menu is still a menu, and a
             // key whose meaning is cut short still tells the reader which key
             // it is — dropping the row entirely does not.
@@ -828,22 +892,55 @@ pub fn draw(
             // to keep a sentence whole.
             let least = key_w + 2 + 8;
             let most = ((widest + 2) / (least + 2)).max(1);
-            let columns = keys.len().div_ceil(deep_max).clamp(1, most);
+            // **A key menu grows downward only to stop cutting meanings**
+            // (2026-11-04, chosen from pictures). Half the page was the cap
+            // until then, and depth it could not have was answered by more,
+            // narrower columns; with 43 keys under `空格` that left an
+            // 80-column menu five columns of 「文件挑選…」, 29 of the 43
+            // meanings cut. Now it starts at the room and takes one more row
+            // at a time until no more than one meaning in twenty is cut — one
+            // long line must not pull the whole menu to the full page — or
+            // until it would reach the caret: the caret's line and one line of
+            // air beside it are never covered, so the text being written stays
+            // in sight. With the caret in the middle of the page neither side
+            // is deeper than the room, and the menu is as it was.
+            // A field list is read, not scanned, and keeps to its room.
+            let full = (tall.saturating_sub(2) as usize).max(1);
+            let deep_max = match panel.reading {
+                true => deep_max,
+                false => {
+                    let (back, on) = caret.keep;
+                    let (from, to) = match vertical {
+                        false => (caret.at.1, caret.at.1 + 1),
+                        true => (caret.at.1.saturating_sub(back), caret.at.1 + on),
+                    };
+                    let above = from.saturating_sub(area.y).saturating_sub(1) as usize;
+                    let below = bottom.saturating_sub(to).saturating_sub(1) as usize;
+                    let reach = above.max(below).saturating_sub(2).clamp(deep_max, full.max(deep_max));
+                    let tolerated = (keys.len() / 20).max(1);
+                    (deep_max..=reach)
+                        .find(|&d| {
+                            let laid = key_columns(keys, key_w, widest, most, d);
+                            laid.shown == keys.len() && laid.cut <= tolerated
+                        })
+                        .unwrap_or(reach)
+                }
+            };
             // Each column gets its share, and what does not fit is cut
             // *inside* the column rather than beyond the border — where it
             // used to be dropped silently, leaving keys with no meanings.
-            let one = one.min(widest.saturating_sub((columns - 1) * 2) / columns.max(1));
             // Only when the width has run out too does the menu say 「there is
             // more」 — in the last cell, rather than ending as if that were all
             // the keys there are.
-            let shown = keys.len().min(columns * deep_max);
+            let laid = key_columns(keys, key_w, widest, most, deep_max);
+            key_widths = laid.widths;
+            let columns = key_widths.len().max(1);
             (
-                one * columns + (columns - 1) * 2,
-                shown,
+                key_widths.iter().sum::<usize>() + (columns - 1) * 2,
+                laid.shown,
                 Vec::new(),
                 columns,
                 key_w,
-                one,
             )
         }
         // **一欄，一條一行**——量法是 `Keys` 去掉分欄那一半。
@@ -861,7 +958,7 @@ pub fn draw(
             let tall = bottom.saturating_sub(area.y).min(area.height);
             let deep_max = cap.min((tall.saturating_sub(2) as usize).max(1));
             let shown = rows.len().min(deep_max.max(1));
-            (widest, shown, Vec::new(), 1, 0, widest)
+            (widest, shown, Vec::new(), 1, 0)
         }
     };
 
@@ -1120,7 +1217,9 @@ pub fn draw(
             for (i, (key, what)) in keys.iter().take(count).enumerate() {
                 let (column, row) = (i / deep, i % deep);
                 let key_w = column_key_w(column);
-                let x = rect.x + 1 + (column * (one + 2)) as u16;
+                // Each column starts where the ones before it end.
+                let x = rect.x + 1 + key_widths[..column].iter().map(|w| w + 2).sum::<usize>() as u16;
+                let one = key_widths[column];
                 let y = rect.y + 1 + row as u16;
                 // The last cell counts what did not fit rather than letting the
                 // table end as though those were all the keys there are.
@@ -1713,5 +1812,128 @@ mod tests {
             .filter(|&x| buffer[(rect.x + x, rect.y + 1)].style().fg == Some(ink.gold()))
             .count();
         assert_eq!(gold, 0, "沒說就不加重");
+    }
+
+    /// Draw a key menu of `rows` on a `w × h` page whose last row is the
+    /// footer, with the caret at `caret`.
+    fn key_menu(rows: &[(&str, &str)], w: u16, h: u16, caret: (u16, u16)) -> (Rect, ratatui::buffer::Buffer) {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let body: Vec<(String, String)> = rows.iter().map(|(k, m)| (k.to_string(), m.to_string())).collect();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                got = draw(frame, &config, Rect::new(0, 0, w, h - 1), h - 1, crate::chrome::Spot::cell(caret), false, &Panel {
+                    stand: Stand::Corner,
+                    accent: None,
+                    pages: false,
+                    reading: false,
+                    scroll: 0,
+                    title: "空格".into(),
+                    lede: None,
+                    entry: false,
+                    body: Body::Keys(body),
+                    vertical_text: false,
+                    tag: None,
+                    marked: false,
+                });
+            })
+            .unwrap();
+        (got.expect("the menu is drawn"), terminal.backend().buffer().clone())
+    }
+
+    /// What the menu says, spaces dropped: a wide glyph's second cell does not
+    /// read back in a `TestBackend`, so what is compared is the words.
+    fn said_in(rect: Rect, buffer: &ratatui::buffer::Buffer) -> String {
+        written(rect, buffer).replace(' ', "")
+    }
+
+    /// The `C-w` menu as it reads in Chinese: two columns once it is short of
+    /// rows, the second with `H J K L` among its keys.
+    const WINDOWS: &[(&str, &str)] = &[
+        ("w", "下一個"),
+        ("h j k l", "按方向走"),
+        ("e i", "開關左右欄"),
+        ("E I", "進左右欄"),
+        ("s", "下面開一個窗口"),
+        ("v", "旁邊開一個窗口"),
+        ("n", "開一個空白窗口"),
+        ("q", "關閉窗口"),
+        ("o", "只留這個窗口"),
+        ("t", "並排與上下互換"),
+        ("H J K L", "和那個方向的對調"),
+        ("f", "下窗打開光標下的文件"),
+        ("F", "側窗打開光標下的文件"),
+    ];
+
+    /// **A meaning is not cut while its box has room** (2026-11-04). A column's
+    /// width was planned with the usual one-cell key and drawn after the
+    /// column's widest one, so `H J K L` took six cells from every meaning in
+    /// its column: 「側窗打開光標下…」 on an 80-column page, with half the
+    /// width of the page still free.
+    #[test]
+    fn a_column_is_as_wide_as_its_widest_key_needs() {
+        // Seven rows on either side of the caret: the menu cannot grow past
+        // half the page, so it stays in two columns of seven.
+        let (rect, buffer) = key_menu(WINDOWS, 80, 19, (0, 9));
+        let said = said_in(rect, &buffer);
+        assert!(!said.contains('…'), "nothing needed cutting: {said:?}");
+        assert!(said.contains("側窗打開光標下的文件"), "{said:?}");
+        assert!(rect.width < 80, "and it did not need the whole width: {rect:?}");
+
+        let rows: Vec<(String, String)> = WINDOWS.iter().map(|(k, m)| (k.to_string(), m.to_string())).collect();
+        let laid = key_columns(&rows, 1, 78, 6, 7);
+        assert_eq!(laid.cut, 0, "{laid:?}");
+        assert_eq!(laid.widths[1], 7 + 2 + yumete_cjk::str_width("側窗打開光標下的文件"), "{laid:?}");
+    }
+
+    /// Forty meanings of 漢字 that half an 80 × 24 page can only hold by
+    /// cutting every one of them to four characters.
+    fn long_menu() -> Vec<(String, String)> {
+        (0..40).map(|n| (format!("{}", (b'a' + (n % 26) as u8) as char), format!("第{n:02}個很長很長的動作"))).collect()
+    }
+
+    /// **A key menu grows downward rather than cut its meanings** (2026-11-04,
+    /// chosen from pictures). Half an 80 × 24 page held 43 keys only as five
+    /// columns of 「文件挑選…」.
+    #[test]
+    fn a_long_menu_grows_down_instead_of_cutting() {
+        let rows = long_menu();
+        let rows: Vec<(&str, &str)> = rows.iter().map(|(k, m)| (k.as_str(), m.as_str())).collect();
+        let (rect, buffer) = key_menu(&rows, 80, 24, (0, 0));
+        let said = said_in(rect, &buffer);
+        assert!(!said.contains('…'), "a meaning was cut: {said:?}");
+        assert!(said.contains("第39個很長很長的動作"), "{said:?}");
+        assert!(rect.height > 23 / 2, "taller than the half it used to stop at: {rect:?}");
+        // The caret's line and one line of air stay uncovered.
+        assert!(rect.y >= 2, "{rect:?}");
+    }
+
+    /// **…but never over the caret's line.** With the caret in the middle of
+    /// the page neither side has more room than half, so the menu is the size
+    /// it always was, and the line being written stays in sight.
+    #[test]
+    fn a_menu_does_not_grow_over_the_caret() {
+        let rows = long_menu();
+        let rows: Vec<(&str, &str)> = rows.iter().map(|(k, m)| (k.as_str(), m.as_str())).collect();
+        for caret in [5u16, 11, 16] {
+            let (rect, _) = key_menu(&rows, 80, 24, (10, caret));
+            assert!(
+                !(rect.y..rect.y + rect.height).contains(&caret),
+                "the box covers the caret's line ({caret}): {rect:?}"
+            );
+        }
+        let (rect, _) = key_menu(&rows, 80, 24, (10, 11));
+        assert!(rect.height <= 23 / 2, "mid-page it keeps to half: {rect:?}");
+    }
+
+    /// **A short menu keeps its height**: growing is only ever to save a
+    /// meaning from the cut, and a menu with nothing cut stays as it is.
+    #[test]
+    fn a_short_menu_keeps_its_height() {
+        let rows = [("a", "代碼動作"), ("r", "改名"), ("w", "工作區域操作"), ("t", "表格操作"), ("?", "命令一覽")];
+        let (rect, _) = key_menu(&rows, 80, 24, (0, 0));
+        assert_eq!(rect.height, 5 + 2, "{rect:?}");
     }
 }

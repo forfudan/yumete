@@ -126,14 +126,20 @@ pub fn draw(frame: &mut Frame, rect: Rect, ring: &Ring) -> Rect {
 /// **A key table is scanned once rather than read**, so neither argument above
 /// is about it: there is no measure to keep to, and a third of a 24-row
 /// terminal is six rows inside the ring — which the 23 items of the `空格`
-/// menu do not fit into at any column count. Measured 2026-10-09 against the
-/// reading room: 100×20 loses 4 of them, 100×16 loses 14, and 80×12 is cut to
-/// three. So it takes the whole width and **half** the page.
+/// menu did not fit into at any column count (measured 2026-10-09). So it
+/// takes the whole width and **half** the page — and half is where it
+/// *starts*, not where it must stop.
 ///
-/// Half, and no longer the half-plus-one it took until 2026-10-09: 「超過一半
-/// 確實危險，寧可更寬」. The row it gave up costs nothing above 16 rows — the
-/// menu reaches that cap only on a short terminal, and it answers depth it
-/// cannot have by spreading into another column.
+/// A key menu grows past this room, one row at a time, while its meanings
+/// would otherwise be cut, and never over the caret's line (`panel::draw`).
+/// 2026-11-04, chosen from pictures: `空格` had 43 keys by then, and going
+/// wider no longer fitted them — on an 80-column page five columns cut 29 of
+/// the 43 meanings to 「文件挑選…」. Covering more of the text for the moment a
+/// menu is open costs less than a menu nobody can read, as long as the line
+/// being written stays in sight.
+///
+/// History: half-plus-one until 2026-10-09, then half, on 「超過一半確實危險，
+/// 寧可更寬」.
 /// **A field list sits between the two.** 記錄 and the five 信息 panels are
 /// read, so the measure applies to their width — but a column of
 /// `name  value` pairs is not a paragraph, and a third of a short terminal is
@@ -164,7 +170,9 @@ pub enum Use {
     Read,
     /// `name  value` pairs: 記錄 and the five 信息 panels.
     Fields,
-    /// A key table: scanned once, for the one row being looked for.
+    /// A key table: scanned once, for the one row being looked for. Its room
+    /// is where it starts; a key menu grows past it to keep its meanings
+    /// whole (`panel::draw`).
     Scan,
 }
 

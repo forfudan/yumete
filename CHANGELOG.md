@@ -29,6 +29,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Key menus grow taller instead of cutting what the keys do**: the `Space` menu and the others start at half the page as before and take more rows, never over the line with the cursor, until their meanings fit; a column is only as wide as its own rows. On an 80 × 24 terminal the `Space` menu used to cut almost every meaning short; the English meanings that still did not fit are shorter (`file picker (project)`, `copy to clipboard`, `docs (float)`, `line comment`).
 - **`:keymap-actions` has a column for helix, one for vim and one for your own bindings**, the keymap in force in bold and the flavour's keys marked `*`; it used to show one column for the keymap in force, your bindings mixed in.
 - **宇浩拼音 is the scheme yumete starts with**; it was 靈明. `[ime] scheme` still chooses.
 - **`:yume-builtin` uses the built-in table of the scheme you are in**; it always meant 靈明.
