@@ -2264,6 +2264,20 @@ zhs = "候选旁的注解，换下一个"
 en = "the next annotation beside the candidates"
 
 [[message]]
+# 空格 z b：切到二進制裏自帶的方案（草稿）
+key = "hint.yume.builtin"
+zht = "切到內置方案"
+zhs = "切到内置方案"
+en = "built-in scheme"
+
+[[message]]
+# 空格 z 0：字集過濾那一組（宇夢的字串）
+key = "hint.yume.charset"
+zht = "字集過濾"
+zhs = "字集过滤"
+en = "charset filter"
+
+[[message]]
 # ␣z 輸入法那一組
 key = "hint.yume.commit"
 zht = "上屏方式"
@@ -2297,6 +2311,13 @@ key = "hint.yume.commit-unique"
 zht = "唯一"
 zhs = "唯一"
 en = "unique"
+
+[[message]]
+# 空格 z g：整句字集軌那一組，按一個軌提到首軌（宇夢的字串）
+key = "hint.yume.lanes"
+zht = "整句字集軌"
+zhs = "整句字集轨"
+en = "sentence lanes"
 
 [[message]]
 # ␣z 輸入法那一組
@@ -2381,6 +2402,13 @@ key = "hint.yume.scheme"
 zht = "選方案"
 zhs = "选方案"
 en = "pick a scheme"
+
+[[message]]
+# 空格 z s：字集排序那一組（宇夢的字串）
+key = "hint.yume.sort"
+zht = "字集排序"
+zhs = "字集排序"
+en = "charset sort"
 
 [[message]]
 # ␣z 輸入法那一組

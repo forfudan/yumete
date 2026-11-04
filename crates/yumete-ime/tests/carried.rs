@@ -108,3 +108,31 @@ fn a_character_answers_from_the_carried_divisions() {
     let got = ime.glosses("行");
     assert!(got.divided, "{got:?}");
 }
+
+/// **Yume's 字集 lanes are on by default** (2026-11-04): a 拼音 sentence stays
+/// in one script, and the other script comes as a sentence of its own. With
+/// no lanes this came out as 數学教授在講臺上讲课.
+#[test]
+fn a_pinyin_sentence_keeps_to_one_script() {
+    if !carry() {
+        return;
+    }
+    let mut ime = ImeSession::new(Scheme::PINYIN, nowhere());
+    assert_eq!(ime.active_lanes(), ["tonggui", "tongfan", "tai"]);
+    for key in "shuxuejiaoshouzaijiangtaishangjiangke".chars() {
+        ime.input(key);
+    }
+    let candidates: Vec<String> = ime.page_candidates().into_iter().map(|c| c.text).collect();
+    assert_eq!(candidates.first().map(String::as_str), Some("数学教授在讲台上讲课"), "{candidates:?}");
+    assert!(candidates.iter().any(|c| c == "數學教授在講臺上講課"), "{candidates:?}");
+
+    // The first lane decides: 繁 first puts the traditional sentence on top.
+    let mut charsets = ime.charsets().clone();
+    charsets.put_first("tongfan");
+    ime.set_charsets(charsets);
+    ime.escape();
+    for key in "shuxuejiaoshouzaijiangtaishangjiangke".chars() {
+        ime.input(key);
+    }
+    assert_eq!(ime.top_candidate(), "數學教授在講臺上講課");
+}

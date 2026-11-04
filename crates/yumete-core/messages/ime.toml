@@ -166,6 +166,48 @@ zhs = "方案：{0}(出厂自带的码表)"
 en = "scheme: {0} (the built-in 碼表)"
 
 [[message]]
+# `:yume-charset` 撥了或問了之後：現在是哪一檔。{0} 是檔名（宇夢的字串「過濾：」）
+key = "ime.charset-is"
+zht = "過濾：{0}"
+zhs = "过滤：{0}"
+en = "filter: {0}"
+
+[[message]]
+# `:yume-charset` 等三條後面跟了一個認不出的詞。{0} 是那個詞
+key = "ime.charset-no-such"
+zht = "認不出 {0}"
+zhs = "认不出 {0}"
+en = "no such value: {0}"
+
+[[message]]
+# 字集過濾：全部漢字（宇夢的字串）
+key = "ime.charset.all"
+zht = "全部漢字"
+zhs = "全部汉字"
+en = "all characters"
+
+[[message]]
+# 字集過濾：僅常用漢字（宇夢的字串）
+key = "ime.charset.common"
+zht = "僅常用漢字"
+zhs = "仅常用汉字"
+en = "common characters only"
+
+[[message]]
+# 字集過濾：僅傳統漢字（宇夢的字串）
+key = "ime.charset.harmonic"
+zht = "僅傳統漢字"
+zhs = "仅传统汉字"
+en = "traditional only"
+
+[[message]]
+# 字集過濾：僅簡化漢字（宇夢的字串）
+key = "ime.charset.tonggui"
+zht = "僅簡化漢字"
+zhs = "仅简化汉字"
+en = "simplified only"
+
+[[message]]
 # 輸入法切到中文
 key = "ime.chinese"
 zht = "中文({0})"
@@ -178,6 +220,48 @@ key = "ime.chinese-tag"
 zht = "[中 {0}]"
 zhs = "[中 {0}]"
 en = "[中 {0}]"
+
+[[message]]
+# `:yume-lanes`：首軌那一條名字後面加的（宇夢的字串）
+key = "ime.lane.first"
+zht = "（首軌）"
+zhs = "（首轨）"
+en = " (first)"
+
+[[message]]
+# `:yume-lanes` 報各軌時，兩個軌名之間的那個
+key = "ime.lane.separator"
+zht = "、"
+zhs = "、"
+en = ", "
+
+[[message]]
+# 整句字集軌：tai 那一軌的名字（宇夢的字串）
+key = "ime.lane.tai"
+zht = "常用與次常用國字"
+zhs = "常用与次常用国字"
+en = "Taiwan common characters"
+
+[[message]]
+# 整句字集軌：tongfan 那一軌的名字（宇夢的字串）
+key = "ime.lane.tongfan"
+zht = "通規標準繁體字"
+zhs = "通规标准繁体字"
+en = "standard traditional"
+
+[[message]]
+# 整句字集軌：tonggui 那一軌的名字（宇夢的字串）
+key = "ime.lane.tonggui"
+zht = "通用規範漢字"
+zhs = "通用规范汉字"
+en = "general standard (simplified)"
+
+[[message]]
+# `:yume-lanes` 撥了或問了之後：各軌依次。{0} 是軌名，用頓號連起來，首軌帶「（首軌）」（宇夢的字串）
+key = "ime.lanes-is"
+zht = "整句字集軌：{0}"
+zhs = "整句字集轨：{0}"
+en = "sentence lanes: {0}"
 
 [[message]]
 # 碼表載入要十分之幾秒，那一格畫在動手之前(#341)
@@ -269,6 +353,48 @@ key = "ime.shortcut"
 zht = "快捷符號　按字母上屏"
 zhs = "快捷符号　按字母上屏"
 en = "quick symbols — press a letter to commit one"
+
+[[message]]
+# `:yume-charset-sort` 撥在一個整句方案上：排序不起作用（宇夢的字串）
+key = "ime.sort-inert"
+zht = "整句字集軌開着，字集排序不起作用"
+zhs = "整句字集轨开着，字集排序不起作用"
+en = "the sentence lanes are on, so the charset sort does nothing"
+
+[[message]]
+# `:yume-charset-sort` 撥了或問了之後：現在是哪一檔。{0} 是檔名（宇夢的字串「排序：」）
+key = "ime.sort-is"
+zht = "排序：{0}"
+zhs = "排序：{0}"
+en = "sort: {0}"
+
+[[message]]
+# 字集排序：常用字優先（宇夢的字串）
+key = "ime.sort.common"
+zht = "常用字優先"
+zhs = "常用字优先"
+en = "common first"
+
+[[message]]
+# 字集排序：傳統字優先（宇夢的字串）
+key = "ime.sort.harmonic"
+zht = "傳統字優先"
+zhs = "传统字优先"
+en = "traditional first"
+
+[[message]]
+# 字集排序：原始排序（宇夢的字串）
+key = "ime.sort.original"
+zht = "原始排序"
+zhs = "原始排序"
+en = "original order"
+
+[[message]]
+# 字集排序：簡化字優先（宇夢的字串）
+key = "ime.sort.tonggui"
+zht = "簡化字優先"
+zhs = "简化字优先"
+en = "simplified first"
 
 [[message]]
 # :yume ? ——輸入法此刻的樣子（拆分改成注解：草稿）

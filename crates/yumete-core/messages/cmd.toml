@@ -1197,6 +1197,14 @@ zhs = "vim：x X 剪字、s 改一个字、V 选行、dd yy cc dw cw、^ $ 0"
 en = "vim: x X cut a character, s changes one, V selects the line, dd yy cc dw cw, ^ $ 0"
 
 [[message]]
+# `:yume-lanes` 的 default 那個詞（草稿）
+key = "cmd.lanes.default"
+zht = "默認：通規、繁體、國字"
+zhs = "默认：通规、繁体、国字"
+en = "the usual order: simplified, traditional, Taiwan"
+find = "默認 默认 default"
+
+[[message]]
 # : 命令選單裏 en 那一項的説明(languages 組)
 key = "cmd.languages.en"
 zht = "English"
@@ -2369,6 +2377,22 @@ en = "use the built-in table of this scheme, whatever else is installed"
 find = "輸入法 输入法 碼表 码表 內置 内置 出廠 出厂 builtin"
 
 [[message]]
+# `:` 命令選單裏 yume-charset 那一項的説明(yume 組)（草稿）
+key = "cmd.yume.charset"
+zht = "字集過濾：全部、常用、簡化、傳統"
+zhs = "字集过滤：全部、常用、简化、传统"
+en = "charset filter: all, common, simplified or traditional characters"
+find = "輸入法 输入法 字集 過濾 过滤 charset filter"
+
+[[message]]
+# `:` 命令選單裏 yume-charset-sort 那一項的説明(yume 組)（草稿）
+key = "cmd.yume.charset-sort"
+zht = "字集排序：原始、常用、簡化、傳統字優先"
+zhs = "字集排序：原始、常用、简化、传统字优先"
+en = "charset sort: original, or common, simplified or traditional first"
+find = "輸入法 输入法 字集 排序 charset sort"
+
+[[message]]
 # : 命令選單裏 commit 那一項的説明(yume 組)
 key = "cmd.yume.commit"
 zht = "上屏方式：預設、延遲(頂字)、唯一、整句"
@@ -2391,6 +2415,14 @@ zht = "改用系統裝的那份碼表(builtin 的反面)"
 zhs = "改用系统装的那份码表(builtin 的反面)"
 en = "use the 碼表 the system has installed (builtin's other half)"
 find = "輸入法 输入法 碼表 码表 系統 系统 installed"
+
+[[message]]
+# `:` 命令選單裏 yume-lanes 那一項的説明(yume 組)（草稿）
+key = "cmd.yume.lanes"
+zht = "整句字集軌：把一軌提到首軌，default 回到默認"
+zhs = "整句字集轨：把一轨提到首轨，default 回到默认"
+en = "sentence lanes: put one first, or default for the usual order"
+find = "輸入法 输入法 字集 整句 軌 轨 lanes"
 
 [[message]]
 # : 命令選單裏 menu-size 那一項的説明(yume 組)

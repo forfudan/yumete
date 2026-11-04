@@ -901,6 +901,34 @@ zhs = "打字时候选旁写什么：关，或一个注解模式；打字时按 
 en = "what is written beside each candidate: nothing, or an annotation mode; / while typing moves to the next"
 
 [[message]]
+# 設置：字集過濾（宇夢的字串）
+key = "settings.ime.charset"
+zht = "字集過濾"
+zhs = "字集过滤"
+en = "charset filter"
+
+[[message]]
+# 設置：字集排序（宇夢的字串）
+key = "settings.ime.charset-sort"
+zht = "字集排序"
+zhs = "字集排序"
+en = "charset sort"
+
+[[message]]
+# 設置：字集排序——一句話（草稿）
+key = "settings.ime.charset-sort.hint"
+zht = "哪一個字集的字排在候選前面，整句方案不起作用"
+zhs = "哪一个字集的字排在候选前面，整句方案不起作用"
+en = "which characters come first among the candidates; a whole-sentence scheme orders its own"
+
+[[message]]
+# 設置：字集過濾——一句話（草稿）
+key = "settings.ime.charset.hint"
+zht = "候選裏只留哪一個字集的漢字"
+zhs = "候选里只留哪一个字集的汉字"
+en = "which characters the candidates may hold"
+
+[[message]]
 # 設置：上屏方式
 key = "settings.ime.commit"
 zht = "上屏方式"

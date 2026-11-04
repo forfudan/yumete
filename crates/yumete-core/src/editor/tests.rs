@@ -2932,6 +2932,23 @@ fn the_yume_group_asks_the_front_end_what_each_key_means() {
         (" zW", "where"),
         (" z3", "menu:3"),
         (" z9", "menu:9"),
+        // 字集 (2026-11-04): `0` is Yume's ⌃⇧0; `s` sort and `g` lanes are
+        // ours. Each opens its values, as `m` does.
+        (" z0a", "charset:all"),
+        (" z0c", "charset:common"),
+        (" z0s", "charset:tonggui"),
+        (" z0t", "charset:harmonic"),
+        (" zso", "charset-sort:original"),
+        (" zsc", "charset-sort:common"),
+        (" zss", "charset-sort:tonggui"),
+        (" zst", "charset-sort:harmonic"),
+        (" zgj", "lanes:tonggui"),
+        (" zgf", "lanes:tongfan"),
+        (" zgt", "lanes:tai"),
+        // `b`: the scheme carried in the binary, whatever is installed.
+        (" zbp", "! pinyin"),
+        (" zbl", "! lingming"),
+        (" zbx", "! xingchen"),
     ] {
         assert_eq!(ask(keys).as_deref(), Some(want), "`{keys}`");
     }

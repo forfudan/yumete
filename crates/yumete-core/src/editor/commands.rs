@@ -898,6 +898,19 @@ impl Editor {
                 self.scheme_request = Some(format!("commit:{}", mode.unwrap_or_default()));
                 Ok(CommandOutcome::Continue)
             }
+            // 字集過濾、排序與整句字集軌 are the engine's too (2026-11-04).
+            Command::YumeCharset(word) => {
+                self.scheme_request = Some(format!("charset:{}", word.unwrap_or_default()));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::YumeCharsetSort(word) => {
+                self.scheme_request = Some(format!("charset-sort:{}", word.unwrap_or_default()));
+                Ok(CommandOutcome::Continue)
+            }
+            Command::YumeLanes(word) => {
+                self.scheme_request = Some(format!("lanes:{}", word.unwrap_or_default()));
+                Ok(CommandOutcome::Continue)
+            }
             // 候選面板 rides it too, for the same reason: the front end is the
             // one that draws a panel, so it is the one that can be asked not
             // to (Feature #211).

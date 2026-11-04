@@ -612,7 +612,24 @@ pub struct ImeConfig {
     /// The annotation modes, in the order `/` steps through them: yume's two
     /// (`multi`, `double`) first, then any the config adds, by name.
     pub annotation_modes: Vec<AnnotationMode>,
+    /// 字集過濾, by yume's names: `all` (the default), `common`, `tonggui`
+    /// (simplified only) or `harmonic` (traditional only), 2026-11-04.
+    pub charset: String,
+    /// 字集排序: `original`, `common` (the default), `tonggui` or `harmonic`.
+    /// It orders a 形碼 scheme's candidates; 拼音's come from the sentence.
+    pub charset_sort: String,
+    /// 整句字集軌, first preferred: by default Yume's `tonggui`, `tongfan`,
+    /// `tai`, so a 拼音 sentence keeps to one script and the other script is
+    /// offered as a sentence of its own. An empty list turns them off.
+    pub lanes: Vec<String>,
 }
+
+/// The words `[ime] charset` takes.
+pub const CHARSET_WORDS: &[&str] = &["all", "common", "tonggui", "harmonic"];
+/// The words `[ime] charset_sort` takes.
+pub const CHARSET_SORT_WORDS: &[&str] = &["original", "common", "tonggui", "harmonic"];
+/// The charsets a lane may be, yume's named seven.
+pub const LANE_WORDS: &[&str] = &["tonggui", "tongfan", "tai", "common", "harmonic", "guji", "gang"];
 
 /// **One annotation mode**: a name and the fields it shows beside each
 /// candidate (2026-11-02). yume's own idea: a mode is a set of ticks, and
@@ -754,6 +771,9 @@ impl Default for ImeConfig {
             system: SystemImePolicy::Auto,
             annotation: "off".to_string(),
             annotation_modes: factory_annotation_modes(),
+            charset: "all".to_string(),
+            charset_sort: "common".to_string(),
+            lanes: ["tonggui", "tongfan", "tai"].map(String::from).to_vec(),
         }
     }
 }
@@ -4261,6 +4281,9 @@ struct RawIme {
     data_dirs: Option<Vec<String>>,
     system: Option<String>,
     annotation: Option<String>,
+    charset: Option<String>,
+    charset_sort: Option<String>,
+    lanes: Option<Vec<String>>,
     /// `[ime.annotation_modes.<name>]`: a field ticked or not, by name.
     #[serde(default)]
     annotation_modes: toml::Table,
@@ -4623,6 +4646,15 @@ impl RawConfig {
         }
         if other.ime.annotation.is_some() {
             self.ime.annotation = other.ime.annotation.clone();
+        }
+        if other.ime.charset.is_some() {
+            self.ime.charset = other.ime.charset.clone();
+        }
+        if other.ime.charset_sort.is_some() {
+            self.ime.charset_sort = other.ime.charset_sort.clone();
+        }
+        if other.ime.lanes.is_some() {
+            self.ime.lanes = other.ime.lanes.clone();
         }
         // Field by field, as `[keys.flavor_items]`: a project can tick one
         // field of a mode without restating the rest.
@@ -5106,6 +5138,20 @@ impl RawConfig {
         }
         if let Some(system) = self.ime.system {
             config.ime.system = SystemImePolicy::from_config(&system);
+        }
+        // A word that is not one of yume's keeps the default, as a mode name
+        // nobody declared does below.
+        if let Some(word) = self.ime.charset.filter(|w| CHARSET_WORDS.contains(&w.as_str())) {
+            config.ime.charset = word;
+        }
+        if let Some(word) = self.ime.charset_sort.filter(|w| CHARSET_SORT_WORDS.contains(&w.as_str())) {
+            config.ime.charset_sort = word;
+        }
+        if let Some(lanes) = self.ime.lanes {
+            config.ime.lanes = lanes
+                .into_iter()
+                .filter(|l| LANE_WORDS.contains(&l.as_str()))
+                .collect();
         }
         config.ime.annotation_modes = annotation_modes_from(&self.ime.annotation_modes);
         if let Some(word) = self.ime.annotation {

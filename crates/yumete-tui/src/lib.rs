@@ -4073,7 +4073,115 @@ pub fn settings_request(ime: &mut ImeSession, tag: &str) -> Option<String> {
     if let Some(want) = tag.strip_prefix("predict:") {
         return Some(autocompletion(ime, want));
     }
+    if let Some(word) = tag.strip_prefix("charset:") {
+        return Some(charset_method(ime, word));
+    }
+    if let Some(word) = tag.strip_prefix("charset-sort:") {
+        return Some(charset_sort_method(ime, word));
+    }
+    if let Some(word) = tag.strip_prefix("lanes:") {
+        return Some(lanes_method(ime, word));
+    }
     None
+}
+
+/// 字集過濾's value in the interface's language: Yume's own names.
+pub fn charset_label(filter: yumete_ime::CharsetFilterMode) -> String {
+    use yumete_ime::CharsetFilterMode as F;
+    match filter {
+        F::All => say!("ime.charset.all"),
+        F::Common => say!("ime.charset.common"),
+        F::Tonggui => say!("ime.charset.tonggui"),
+        F::Harmonic => say!("ime.charset.harmonic"),
+        F::Custom => "custom".to_string(),
+    }
+}
+
+/// 字集排序's value in the interface's language.
+pub fn charset_sort_label(sort: yumete_ime::CharsetSortMode) -> String {
+    use yumete_ime::CharsetSortMode as S;
+    match sort {
+        S::Original => say!("ime.sort.original"),
+        S::Common => say!("ime.sort.common"),
+        S::Tonggui => say!("ime.sort.tonggui"),
+        S::Harmonic => say!("ime.sort.harmonic"),
+        S::Custom => "custom".to_string(),
+    }
+}
+
+/// One lane's name, Yume's own, or its id when it has none.
+pub fn lane_label(id: &str) -> String {
+    match id {
+        "tonggui" => say!("ime.lane.tonggui"),
+        "tongfan" => say!("ime.lane.tongfan"),
+        "tai" => say!("ime.lane.tai"),
+        other => other.to_string(),
+    }
+}
+
+/// `:yume-charset`: `""` asks, or a filter by yume's name (2026-11-04).
+fn charset_method(ime: &mut ImeSession, word: &str) -> String {
+    if !word.is_empty() {
+        let filter = yumete_ime::CharsetFilterMode::from_str_tag(word)
+            .filter(|f| *f != yumete_ime::CharsetFilterMode::Custom);
+        let Some(filter) = filter else {
+            return say!("ime.charset-no-such", word);
+        };
+        let mut charsets = ime.charsets().clone();
+        charsets.filter = filter;
+        ime.set_charsets(charsets);
+    }
+    say!("ime.charset-is", charset_label(ime.charsets().filter))
+}
+
+/// `:yume-charset-sort`. Under a scheme whose candidates come from the
+/// sentence lattice it is set all the same and says it does nothing there,
+/// as Yume's own key does.
+fn charset_sort_method(ime: &mut ImeSession, word: &str) -> String {
+    if !word.is_empty() {
+        let sort = yumete_ime::CharsetSortMode::from_str_tag(word)
+            .filter(|s| *s != yumete_ime::CharsetSortMode::Custom);
+        let Some(sort) = sort else {
+            return say!("ime.charset-no-such", word);
+        };
+        let mut charsets = ime.charsets().clone();
+        charsets.sort = sort;
+        ime.set_charsets(charsets);
+    }
+    let said = say!("ime.sort-is", charset_sort_label(ime.charsets().sort));
+    match ime.commit_strategy() == CommitStrategy::Fluency && !ime.active_lanes().is_empty() {
+        true => format!("{said} · {}", say!("ime.sort-inert")),
+        false => said,
+    }
+}
+
+/// `:yume-lanes`: `""` asks, a lane's id puts it first, `default` is Yume's
+/// order.
+fn lanes_method(ime: &mut ImeSession, word: &str) -> String {
+    let mut charsets = ime.charsets().clone();
+    match word {
+        "" => {}
+        "default" => charsets.lanes = yumete_ime::LANES.iter().map(|l| l.to_string()).collect(),
+        id if yumete_ime::LANES.contains(&id) => charsets.put_first(id),
+        other => return say!("ime.charset-no-such", other),
+    }
+    if !word.is_empty() {
+        ime.set_charsets(charsets);
+    }
+    say!("ime.lanes-is", lanes_said(&ime.charsets().lanes))
+}
+
+/// The lanes in order, the first one marked.
+pub fn lanes_said(lanes: &[String]) -> String {
+    lanes
+        .iter()
+        .enumerate()
+        .map(|(i, id)| match i {
+            0 => format!("{}{}", lane_label(id), say!("ime.lane.first")),
+            _ => lane_label(id),
+        })
+        .collect::<Vec<_>>()
+        .join(&say!("ime.lane.separator"))
 }
 
 /// Switch the IME to the named scheme, and say what happened.
@@ -4133,6 +4241,9 @@ fn loading_the_table(tag: &str, ime: &ImeSession) -> bool {
         // session that is already here.
         "?" => false,
         _ if tag.starts_with("commit:")
+            || tag.starts_with("charset:")
+            || tag.starts_with("charset-sort:")
+            || tag.starts_with("lanes:")
             || tag.starts_with("panel:")
             || tag.starts_with("menu:")
             || tag.starts_with("predict:") =>
@@ -4347,6 +4458,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         return match ImeSession::from_table_file(&path) {
             Ok(mut table) => {
                 table.set_page_size(ime.page_size());
+                table.set_charsets(ime.charsets().clone());
                 table.carry_annotation_from(ime);
                 table.set_commit_strategy(ime.commit_override());
                 table.set_panel_display(ime.panel_display());
@@ -4408,6 +4520,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             return say!("ime.no-table-installed", ime.scheme_name());
         }
         full.set_page_size(ime.page_size());
+        full.set_charsets(ime.charsets().clone());
         full.carry_annotation_from(ime);
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
@@ -4431,6 +4544,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             return say!("ime.no-builtin-table");
         };
         full.set_page_size(ime.page_size());
+        full.set_charsets(ime.charsets().clone());
         full.carry_annotation_from(ime);
         full.set_commit_strategy(ime.commit_override());
         full.set_panel_display(ime.panel_display());
@@ -4456,6 +4570,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         let mut full = ImeSession::from_default_dirs(scheme);
         if full.available() {
             full.set_page_size(ime.page_size());
+            full.set_charsets(ime.charsets().clone());
             full.set_commit_strategy(ime.commit_override());
             full.carry_annotation_from(ime);
             full.set_panel_display(ime.panel_display());
@@ -20413,7 +20528,16 @@ fn squeezed(text: &str) -> String {
         // Warning: **`menu:` 問，不撥**。撥一下寫的是 `PAGE_WISH`，而那是**進程全局**
         // 的——`the_row_holds_as_many_as_the_width_allows` 當場從 6 變成 4，而
         // 它單獨跑是綠的。同「改全局的測試要單獨一個二進制」那一族。
-        for tag in ["commit:fluency", "panel:bottom", "inline-preedit:preview", "menu:", "predict:on"] {
+        for tag in [
+            "commit:fluency",
+            "panel:bottom",
+            "inline-preedit:preview",
+            "menu:",
+            "predict:on",
+            "charset:tonggui",
+            "charset-sort:original",
+            "lanes:tai",
+        ] {
             assert!(settings_request(&mut ime, tag).is_some(), "{tag} 沒人答");
         }
         assert_eq!(ime.panel_display(), PanelDisplay::Bottom);
@@ -20422,6 +20546,33 @@ fn squeezed(text: &str) -> String {
         for tag in ["?", "~", "!", "where", "xingchen", "=/tmp/x.txt"] {
             assert!(settings_request(&mut ime, tag).is_none(), "{tag} 不該在這裏答");
         }
+    }
+
+    /// **字集過濾、排序、整句字集軌** (2026-11-04): each is set, says what it
+    /// is now in Yume's words, and refuses a word yume does not have.
+    #[test]
+    fn the_charset_dials_say_what_they_are() {
+        let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
+        assert_eq!(*ime.charsets(), yumete_ime::Charsets::default());
+        let said = charset_method(&mut ime, "tonggui");
+        assert_eq!(ime.charsets().filter, yumete_ime::CharsetFilterMode::Tonggui);
+        assert!(said.contains(&say!("ime.charset.tonggui")), "{said}");
+        let said = charset_sort_method(&mut ime, "harmonic");
+        assert_eq!(ime.charsets().sort, yumete_ime::CharsetSortMode::Harmonic);
+        assert!(said.contains(&say!("ime.sort.harmonic")), "{said}");
+        // One lane first; the others keep their order.
+        let said = lanes_method(&mut ime, "tai");
+        assert_eq!(ime.charsets().lanes, ["tai", "tonggui", "tongfan"]);
+        assert!(said.contains(&say!("ime.lane.first")), "{said}");
+        lanes_method(&mut ime, "default");
+        assert_eq!(ime.charsets().lanes, ["tonggui", "tongfan", "tai"]);
+        // A word yume does not have changes nothing.
+        let said = charset_method(&mut ime, "custom");
+        assert!(said.contains("custom"), "{said}");
+        assert_eq!(ime.charsets().filter, yumete_ime::CharsetFilterMode::Tonggui);
+        // A new scheme keeps them: the session re-applies them to its engine.
+        ime.set_scheme(Scheme::XINGCHEN);
+        assert_eq!(ime.charsets().filter, yumete_ime::CharsetFilterMode::Tonggui);
     }
 
     /// #211: the setting, the command, and the question, in the writer's words.

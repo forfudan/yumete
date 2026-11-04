@@ -40,6 +40,7 @@ use yume_core::{
 };
 
 pub use reading::YumeReader;
+pub use yume_core::{CharsetFilterMode, CharsetSortMode};
 pub use segment::YumeSegmenter;
 pub use yumete_config::{AnnotationMode, PanelDisplay, InlinePreedit};
 // A frontend that reads [`DataProblem`] has to be able to name its `kind`, and
@@ -588,6 +589,66 @@ pub struct ImeSession {
     /// 記在這裏而不是記成一個全局：全局在測試裏是整個行程共用的，一個測試把它
     /// 撥成「畫不下」，隔壁正在驗選重的那一條就無緣無故紅了（實測中過）。
     panel_room: bool,
+    /// 字集過濾、字集排序、整句字集軌, kept here so a scheme switch, which
+    /// builds a new engine, keeps them.
+    charsets: Charsets,
+}
+
+/// **字集過濾、字集排序與整句字集軌** (2026-11-04), as Yume's own front ends
+/// keep them. The defaults are Yume's: every character, common ones first,
+/// and three lanes, so a 拼音 sentence stays in one script and the other
+/// script is offered as a sentence of its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Charsets {
+    /// 字集過濾.
+    pub filter: CharsetFilterMode,
+    /// 字集排序. It orders a 形碼 scheme's candidates; 拼音's come from the
+    /// sentence lattice in its own order, so it does nothing there.
+    pub sort: CharsetSortMode,
+    /// 整句字集軌, by yume's charset ids, first preferred.
+    pub lanes: Vec<String>,
+}
+
+/// Yume's lanes, in Yume's order (`DEFAULT_FLUENCY_LANES`).
+pub const LANES: [&str; 3] = ["tonggui", "tongfan", "tai"];
+
+impl Default for Charsets {
+    fn default() -> Self {
+        Charsets {
+            filter: CharsetFilterMode::All,
+            sort: CharsetSortMode::Common,
+            lanes: LANES.iter().map(|l| l.to_string()).collect(),
+        }
+    }
+}
+
+impl Charsets {
+    /// From the config's words (`[ime] charset`, `charset_sort`, `lanes`); a
+    /// word yume does not know keeps the default.
+    pub fn from_words(filter: &str, sort: &str, lanes: &[String]) -> Self {
+        let mut out = Charsets::default();
+        if let Some(f) = CharsetFilterMode::from_str_tag(filter) {
+            out.filter = f;
+        }
+        if let Some(s) = CharsetSortMode::from_str_tag(sort) {
+            out.sort = s;
+        }
+        out.lanes = lanes.to_vec();
+        out
+    }
+
+    /// Put lane `id` first; the others keep their order. A lane that was not
+    /// on is turned on.
+    pub fn put_first(&mut self, id: &str) {
+        self.lanes.retain(|l| l != id);
+        self.lanes.insert(0, id.to_string());
+    }
+
+    fn apply(&self, engine: &mut Engine) {
+        engine.set_charset_filter_mode(self.filter);
+        engine.set_charset_sort_mode(self.sort);
+        engine.set_fluency_lanes(yume_core::parse_lane_spec(&self.lanes.join(",")));
+    }
 }
 
 impl ImeSession {
@@ -616,6 +677,7 @@ impl ImeSession {
             preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
+            charsets: Charsets::default(),
         }
     }
 
@@ -672,6 +734,7 @@ impl ImeSession {
             preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
+            charsets: Charsets::default(),
         })
     }
 
@@ -707,6 +770,7 @@ impl ImeSession {
             preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
+            charsets: Charsets::default(),
         }
     }
 
@@ -810,6 +874,7 @@ impl ImeSession {
             preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
+            charsets: Charsets::default(),
         }
     }
 
@@ -835,6 +900,7 @@ impl ImeSession {
             preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
+            charsets: Charsets::default(),
         }
     }
 
@@ -856,6 +922,7 @@ impl ImeSession {
             preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
+            charsets: Charsets::default(),
         }
     }
 
@@ -882,6 +949,7 @@ impl ImeSession {
             preedit: InlinePreedit::default(),
             panel_room: true,
             engaged: true,
+            charsets: Charsets::default(),
         }
     }
 
@@ -940,6 +1008,27 @@ impl ImeSession {
         self.engine.scheme_name()
     }
 
+    /// 字集過濾、字集排序、整句字集軌 in force.
+    pub fn charsets(&self) -> &Charsets {
+        &self.charsets
+    }
+
+    /// Set them, now and for every scheme this session switches to.
+    pub fn set_charsets(&mut self, charsets: Charsets) {
+        charsets.apply(&mut self.engine);
+        self.charsets = charsets;
+    }
+
+    /// The lanes that decode right now: a filter other than every character
+    /// keeps only the lanes that cover it, and a scheme may lock its own.
+    pub fn active_lanes(&self) -> Vec<String> {
+        self.engine
+            .active_fluency_lanes()
+            .iter()
+            .map(|l| l.id.to_string())
+            .collect()
+    }
+
     /// Switch to `scheme`, reloading its tables from the session's data
     /// directories. Returns [`available`](ImeSession::available) after the swap.
     pub fn set_scheme(&mut self, scheme: Scheme) -> bool {
@@ -952,7 +1041,8 @@ impl ImeSession {
         let mode = self.annotation_wanted.clone();
         // Warning: **換方案也要退得到出廠表**（2026-10-12 量到的）：`new` 與這一支
         // 走同一個 `build_engine`，內嵌的那一層在 `locate` 裏，兩條路不會再分家。
-        let (engine, available, problems, builtin) = build_engine(scheme, &self.data_dirs);
+        let (mut engine, available, problems, builtin) = build_engine(scheme, &self.data_dirs);
+        self.charsets.apply(&mut engine);
         self.builtin = builtin;
         // 上一個方案若是從一個上傳的碼表載的，那個檔名不再說的是這一個。
         self.table_file = None;
@@ -2357,6 +2447,8 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
         }
     }
 
+    // Yume's 字集 defaults, until the session is told otherwise.
+    Charsets::default().apply(&mut engine);
     (engine, dictionary, problems, carried)
 }
 

@@ -380,6 +380,10 @@ impl Pending {
             Pending::Yume => &YUME,
             Pending::YumeValue('m') => &YUME_COMMIT,
             Pending::YumeValue('p') => &YUME_PANEL,
+            Pending::YumeValue('0') => &YUME_CHARSET,
+            Pending::YumeValue('s') => &YUME_SORT,
+            Pending::YumeValue('g') => &YUME_LANES,
+            Pending::YumeValue('b') => &YUME_BUILTIN,
             Pending::YumeValue(_) => &YUME_PREEDIT,
             Pending::Table => &TABLE,
             Pending::TableConvert => &TABLE_CONVERT,
@@ -408,6 +412,10 @@ pub(super) const GROUPS: &[&Group] = &[
     &YUME_COMMIT,
     &YUME_PANEL,
     &YUME_PREEDIT,
+    &YUME_CHARSET,
+    &YUME_SORT,
+    &YUME_LANES,
+    &YUME_BUILTIN,
 ];
 
 impl Editor {
@@ -1395,9 +1403,12 @@ pub(super) static OPEN: Group = Group {
 /// the value under it is a letter of that value's own name.
 ///
 /// Warning: **The letters Yume uses and yumete has no answer for stay empty**
-/// — `O U D L H K J A .` and `0`. Lining the two up is only worth doing if
-/// the day yumete grows one of those, the letter is already the same on both
-/// sides and nobody's hand has to change.
+/// — `O U D L H K J A .`. Lining the two up is only worth doing if the day
+/// yumete grows one of those, the letter is already the same on both sides
+/// and nobody's hand has to change. `0` is Yume's 字集過濾 and is ours too
+/// (2026-11-04); it opens the values rather than cycling them, as the other
+/// value letters here do. `s` 字集排序, `g` 整句字集軌 and `b` the built-in
+/// schemes have no Yume letter.
 pub(super) static YUME: Group = Group {
     name: "yume",
     pending: Pending::Yume,
@@ -1418,6 +1429,10 @@ pub(super) static YUME: Group = Group {
         ch('7', NormalCmd::YumeMenuSize7, "hint.yume.menu-size"),
         ch('8', NormalCmd::YumeMenuSize8, "hint.yume.menu-size"),
         ch('9', NormalCmd::YumeMenuSize9, "hint.yume.menu-size"),
+        ch('0', NormalCmd::YumeCharsetMode, "hint.yume.charset"),
+        ch('s', NormalCmd::YumeSortMode, "hint.yume.sort"),
+        ch('g', NormalCmd::YumeLanesMode, "hint.yume.lanes"),
+        ch('b', NormalCmd::YumeBuiltinMode, "hint.yume.builtin"),
         ch('/', NormalCmd::YumeNextAnnotation, "hint.yume.annotation"),
         ch('t', NormalCmd::YumeInstalledTable, "hint.yume.table"),
         ch('w', NormalCmd::YumeTableSource, "hint.yume.which"),
@@ -1430,7 +1445,7 @@ pub(super) static YUME: Group = Group {
     after: None,
 };
 
-/// The values under the three letters of `空格 z` that have any.
+/// The values under the letters of `空格 z` that have any.
 pub(super) static YUME_COMMIT: Group = Group {
     name: "yume_commit",
     pending: Pending::YumeValue('m'),
@@ -1475,6 +1490,79 @@ pub(super) static YUME_PREEDIT: Group = Group {
         ch('o', NormalCmd::YumePreeditOff, "hint.yume.preedit-off"),
         ch('c', NormalCmd::YumePreeditComposition, "hint.yume.preedit-composition"),
         ch('p', NormalCmd::YumePreeditPreview, "hint.yume.preedit-preview"),
+    ],
+    unknown: Unknown::SayKeys("hint.yume.after-z"),
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+pub(super) static YUME_CHARSET: Group = Group {
+    name: "yume_charset",
+    pending: Pending::YumeValue('0'),
+    title: "hint.yume.title",
+    path: " z0",
+    rows: &[
+        ch('a', NormalCmd::YumeCharsetAll, "ime.charset.all"),
+        ch('c', NormalCmd::YumeCharsetCommon, "ime.charset.common"),
+        ch('s', NormalCmd::YumeCharsetTonggui, "ime.charset.tonggui"),
+        ch('t', NormalCmd::YumeCharsetHarmonic, "ime.charset.harmonic"),
+    ],
+    unknown: Unknown::SayKeys("hint.yume.after-z"),
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+pub(super) static YUME_SORT: Group = Group {
+    name: "yume_sort",
+    pending: Pending::YumeValue('s'),
+    title: "hint.yume.title",
+    path: " zs",
+    rows: &[
+        ch('o', NormalCmd::YumeSortOriginal, "ime.sort.original"),
+        ch('c', NormalCmd::YumeSortCommon, "ime.sort.common"),
+        ch('s', NormalCmd::YumeSortTonggui, "ime.sort.tonggui"),
+        ch('t', NormalCmd::YumeSortHarmonic, "ime.sort.harmonic"),
+    ],
+    unknown: Unknown::SayKeys("hint.yume.after-z"),
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+/// **One lane first; the others keep their order** (2026-11-04).
+pub(super) static YUME_LANES: Group = Group {
+    name: "yume_lanes",
+    pending: Pending::YumeValue('g'),
+    title: "hint.yume.title",
+    path: " zg",
+    rows: &[
+        ch('j', NormalCmd::YumeLaneTonggui, "ime.lane.tonggui"),
+        ch('f', NormalCmd::YumeLaneTongfan, "ime.lane.tongfan"),
+        ch('t', NormalCmd::YumeLaneTai, "ime.lane.tai"),
+    ],
+    unknown: Unknown::SayKeys("hint.yume.after-z"),
+    sticky: false,
+    ctrl_is_plain: false,
+    before: None,
+    after: None,
+};
+
+/// **The scheme carried in the binary, whatever is installed** (2026-11-04):
+/// `:yume ! <scheme>`. `Space z i` keeps the usual order, disk first.
+pub(super) static YUME_BUILTIN: Group = Group {
+    name: "yume_builtin",
+    pending: Pending::YumeValue('b'),
+    title: "hint.yume.title",
+    path: " zb",
+    rows: &[
+        ch('p', NormalCmd::YumeBuiltinPinyin, "cmd.schemes.pinyin"),
+        ch('l', NormalCmd::YumeBuiltinLingming, "cmd.schemes.lingming"),
+        ch('x', NormalCmd::YumeBuiltinXingchen, "cmd.schemes.xingchen"),
     ],
     unknown: Unknown::SayKeys("hint.yume.after-z"),
     sticky: false,

@@ -262,6 +262,22 @@ const IME_COMMIT_WAYS: &[Choice] = &[
     Choice { word: "fluency", label: "commit.name.fluency" },
 ];
 
+/// 字集過濾, yume's words with Yume's own names (2026-11-04).
+const IME_CHARSETS: &[Choice] = &[
+    Choice { word: "all", label: "ime.charset.all" },
+    Choice { word: "common", label: "ime.charset.common" },
+    Choice { word: "tonggui", label: "ime.charset.tonggui" },
+    Choice { word: "harmonic", label: "ime.charset.harmonic" },
+];
+
+/// 字集排序.
+const IME_CHARSET_SORTS: &[Choice] = &[
+    Choice { word: "original", label: "ime.sort.original" },
+    Choice { word: "common", label: "ime.sort.common" },
+    Choice { word: "tonggui", label: "ime.sort.tonggui" },
+    Choice { word: "harmonic", label: "ime.sort.harmonic" },
+];
+
 const PANEL_DISPLAY_WAYS: &[Choice] = &[
     Choice { word: "box", label: "settings.pick.display.box" },
     Choice { word: "bottom", label: "settings.pick.display.bottom" },
@@ -786,6 +802,24 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "ime",
+        key: "charset",
+        group: Group::Ime,
+        kind: Kind::Pick(IME_CHARSETS),
+        label: "settings.ime.charset",
+        hint: "settings.ime.charset.hint",
+        factory: r#""all""#,
+    },
+    Setting {
+        table: "ime",
+        key: "charset_sort",
+        group: Group::Ime,
+        kind: Kind::Pick(IME_CHARSET_SORTS),
+        label: "settings.ime.charset-sort",
+        hint: "settings.ime.charset-sort.hint",
+        factory: r#""common""#,
+    },
+    Setting {
+        table: "ime",
         key: "start",
         group: Group::Ime,
         kind: Kind::Tick,
@@ -1046,6 +1080,10 @@ pub const SETTINGS: &[Setting] = &[
 /// 一組一組填，這張表跟着縮短。Warning: **它不是「不做」的名單**——那一張是
 /// [`NOT_IN_THE_PANEL`]，兩者的區別是「還没輪到」與「有理由不進去」。
 pub const LATER: &[&str] = &[
+    // An ordered list of lanes, each on or off: Yume's panel has a row per
+    // lane with up and down; this one has ticks and values only. `Space z g`
+    // and `:yume-lanes` put one first meanwhile (2026-11-04).
+    "ime.lanes",
     "editor.usage_groups",
     "editor.syntax",
     // Warning: **二十四個色位（十二個色 × 深淺兩套）收在二級入口裏，不攤在第一層。**

@@ -928,6 +928,13 @@ fn main() -> ExitCode {
     let panel = config.panel.display;
     // 正在打的那一段寫在哪——面板畫不畫之外的另一格（2026-09-27）。
     let preedit = config.panel.inline_preedit;
+    // 字集過濾、排序與整句字集軌 (2026-11-04), Yume's defaults unless said.
+    let charsets = yumete_ime::Charsets::from_words(
+        &config.ime.charset,
+        &config.ime.charset_sort,
+        &config.ime.lanes,
+    );
+    let charsets_at_load = charsets.clone();
     // Read after the first frame rather than before it — see `yumete_tui::
     // Deferred`. Everything it loads is a keystroke away; the page is not.
     let annotation_at_load = annotation.clone();
@@ -948,6 +955,7 @@ fn main() -> ExitCode {
         };
         // After, not before: the line above may have replaced the session
         // wholesale with one built from the installed tables.
+        ime.set_charsets(charsets_at_load.clone());
         ime.set_commit_strategy(commit);
         ime.set_panel_display(panel);
         ime.set_inline_preedit(preedit);
@@ -1092,6 +1100,7 @@ fn main() -> ExitCode {
             // 個不生效：六種 `inline_preedit × display` 的組合畫出來**逐字節相
             // 同**，而真機各
             // 畫各的。配置那一族的畫面從此離屏審不了。
+            ime.set_charsets(charsets.clone());
             ime.set_commit_strategy(commit);
             ime.set_panel_display(panel);
             ime.set_inline_preedit(preedit);

@@ -567,6 +567,13 @@ pub enum Command {
     /// `:yume-commit delayed|unique|fluency` — 上屏方式: when a finished code
     /// goes to the page. `None` asks which one is in force (Feature #209).
     YumeCommit(Option<String>),
+    /// `:yume-charset all|common|tonggui|harmonic` — 字集過濾. `None` asks.
+    YumeCharset(Option<String>),
+    /// `:yume-charset-sort original|common|tonggui|harmonic` — 字集排序.
+    YumeCharsetSort(Option<String>),
+    /// `:yume-lanes tonggui|tongfan|tai|default` — 整句字集軌: one lane first,
+    /// or Yume's order. `None` asks.
+    YumeLanes(Option<String>),
     /// `:yume-panel box|bottom|inline` — 候選擺在哪：光標邊上那個框、窗口最下
     /// 面那一行，還是光標的下一行。`None` asks which one is in force.
     ///
@@ -2218,6 +2225,79 @@ const COMMITS: &[Word] = &[
     Word {
         name: "fluency",
         help: "cmd.commits.fluency",
+        needs: &[],
+    },
+];
+
+/// 字集過濾——`:yume-charset` 的四個詞，yume 自己的名字（2026-11-04）。
+const CHARSETS: &[Word] = &[
+    Word {
+        name: "all",
+        help: "ime.charset.all",
+        needs: &[],
+    },
+    Word {
+        name: "common",
+        help: "ime.charset.common",
+        needs: &[],
+    },
+    Word {
+        name: "tonggui",
+        help: "ime.charset.tonggui",
+        needs: &[],
+    },
+    Word {
+        name: "harmonic",
+        help: "ime.charset.harmonic",
+        needs: &[],
+    },
+];
+
+/// 字集排序——`:yume-charset-sort` 的四個詞（2026-11-04）。
+const CHARSET_SORTS: &[Word] = &[
+    Word {
+        name: "original",
+        help: "ime.sort.original",
+        needs: &[],
+    },
+    Word {
+        name: "common",
+        help: "ime.sort.common",
+        needs: &[],
+    },
+    Word {
+        name: "tonggui",
+        help: "ime.sort.tonggui",
+        needs: &[],
+    },
+    Word {
+        name: "harmonic",
+        help: "ime.sort.harmonic",
+        needs: &[],
+    },
+];
+
+/// 整句字集軌——`:yume-lanes` 的詞：一軌的名字提到首軌，`default` 回到宇夢的次序
+/// （2026-11-04）。
+const LANES: &[Word] = &[
+    Word {
+        name: "tonggui",
+        help: "ime.lane.tonggui",
+        needs: &[],
+    },
+    Word {
+        name: "tongfan",
+        help: "ime.lane.tongfan",
+        needs: &[],
+    },
+    Word {
+        name: "tai",
+        help: "ime.lane.tai",
+        needs: &[],
+    },
+    Word {
+        name: "default",
+        help: "cmd.lanes.default",
         needs: &[],
     },
 ];
@@ -3968,6 +4048,30 @@ pub const COMMANDS: &[Entry] = &[
                 }
             }))
         }),
+    },
+    Entry {
+        name: "yume-charset",
+        aliases: &[],
+        help: "cmd.yume.charset",
+        needs: &[],
+        params: &[Param::Words { of: CHARSETS, default: None }],
+        build: Some(|p| Ok(Command::YumeCharset(p.arg(0).map(str::to_string)))),
+    },
+    Entry {
+        name: "yume-charset-sort",
+        aliases: &[],
+        help: "cmd.yume.charset-sort",
+        needs: &[],
+        params: &[Param::Words { of: CHARSET_SORTS, default: None }],
+        build: Some(|p| Ok(Command::YumeCharsetSort(p.arg(0).map(str::to_string)))),
+    },
+    Entry {
+        name: "yume-lanes",
+        aliases: &[],
+        help: "cmd.yume.lanes",
+        needs: &[],
+        params: &[Param::Words { of: LANES, default: None }],
+        build: Some(|p| Ok(Command::YumeLanes(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "yume-panel",
@@ -6969,6 +7073,19 @@ mod tests {
         // 上屏方式 (Feature #209): the three are yume's own tags, `auto` is
         // 唯一 under the name the habit uses, and no argument is the question.
         assert_eq!(parse(":yume-commit"), Ok(Command::YumeCommit(None)));
+        assert_eq!(parse(":yume-charset"), Ok(Command::YumeCharset(None)));
+        assert_eq!(
+            parse(":yume-charset tonggui"),
+            Ok(Command::YumeCharset(Some("tonggui".into())))
+        );
+        assert_eq!(
+            parse(":yume-charset-sort original"),
+            Ok(Command::YumeCharsetSort(Some("original".into())))
+        );
+        assert_eq!(
+            parse(":yume-lanes tongfan"),
+            Ok(Command::YumeLanes(Some("tongfan".into())))
+        );
         assert_eq!(
             parse(":yume-commit delayed"),
             Ok(Command::YumeCommit(Some("delayed".into())))
