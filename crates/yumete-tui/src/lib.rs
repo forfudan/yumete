@@ -17838,6 +17838,8 @@ fn squeezed(text: &str) -> String {
         let mut editor = editor_with(&text);
         let mut config = bare();
         config.editor.line_numbers = LineNumbers::Relative;
+        // The rows below are counted at the old default of three.
+        config.editor.scrolloff = 3;
         let gutter = |buffer: &ratatui::buffer::Buffer, row: u16| -> String {
             row_text(buffer, row).chars().take(3).collect::<String>().trim().to_string()
         };
@@ -25809,7 +25811,9 @@ fn squeezed(text: &str) -> String {
     /// otherwise sit on the caret itself.
     #[test]
     fn the_note_panel_keeps_right_and_flips_up_only_to_get_off_the_caret() {
-        let config = Config::default();
+        let mut config = Config::default();
+        // The rows below are counted at the old default of three.
+        config.editor.scrolloff = 3;
         // Where the panel's top-left corner landed, and how the page reads.
         let corner = |editor: &Editor| -> ((u16, u16), Vec<String>) {
             let b = render(editor, &config, 70, 20);

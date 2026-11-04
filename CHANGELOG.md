@@ -18,6 +18,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **`scrolloff` is 5 by default**, as helix's is and vim's `defaults.vim` sets it; it was 3.
 - **Focus mode fades the other windows too**, as far as it fades the paragraphs around the one being written.
 - **Under vim, a new window opens above or to the left** of the one you are in, as vim's does; under helix, below or to the right as before. `C-w s`, `C-w v`, `:hsplit`, `:vsplit`, `C-w n`, `C-w ^` and `C-w f` all follow it.
 - **The windows of a row or column share its room equally**, as vim's and helix's do; every split used to halve the window it cut, so the third window in a column had a quarter of it. `C-w H` and `C-w L` on three windows now give thirds.

@@ -450,7 +450,7 @@ impl Default for EditorConfig {
             indent_width: 4,
             tab_spaces: true,
             line_numbers: LineNumbers::Absolute,
-            scrolloff: 3,
+            scrolloff: 5,
             wheel_step: 3,
             line_number_fill: false,
             diff_gutter: true,
@@ -5794,7 +5794,7 @@ mod tests {
         // Eight, the terminal's own tab stop and every other tool's (#374).
         assert_eq!(c.editor.tab_width, 8);
         assert_eq!(c.editor.line_numbers, LineNumbers::Absolute);
-        assert_eq!(c.editor.scrolloff, 3);
+        assert_eq!(c.editor.scrolloff, 5);
         assert_eq!(c.theme.name, "ink", "the name is ASCII; 墨香 is what it means");
         assert_eq!(c.theme.dark.ink, (0xD2, 0xCE, 0xC4));
         assert!(c.keys.normal.is_empty());

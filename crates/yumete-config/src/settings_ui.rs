@@ -644,7 +644,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::Count { low: 0, high: 20, zero: None },
         label: "settings.editor.scrolloff",
         hint: "settings.editor.scrolloff.hint",
-        factory: "3",
+        factory: "5",
     },
     Setting {
         table: "editor",
