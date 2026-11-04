@@ -3395,7 +3395,9 @@ impl Config {
                                 || !parsed.keys.prompt.is_empty()
                                 || !parsed.keys.picker.is_empty()
                                 || !parsed.keys.sidebar.is_empty()
-                                || !parsed.keys.field.is_empty();
+                                || !parsed.keys.field.is_empty()
+                                || !parsed.keys.helix.is_empty()
+                                || !parsed.keys.vim.is_empty();
                             if bound {
                                 parsed.keys.normal.clear();
                                 parsed.keys.select.clear();
@@ -3406,6 +3408,9 @@ impl Config {
                                 parsed.keys.picker.clear();
                                 parsed.keys.sidebar.clear();
                                 parsed.keys.field.clear();
+                                // One keymap's own lines are key bindings too.
+                                parsed.keys.helix = RawKeymapKeys::default();
+                                parsed.keys.vim = RawKeymapKeys::default();
                                 problems.push(said(
                                     format!(
                                         "{}：[keys.normal] 只認全域設定——一串按鍵裏放得下一整行命令行",
@@ -4557,6 +4562,12 @@ struct RawKeymapKeys {
     /// Any other mode, kept to be reported.
     #[serde(flatten)]
     strays: toml::Table,
+}
+
+impl RawKeymapKeys {
+    fn is_empty(&self) -> bool {
+        self.normal.is_empty() && self.select.is_empty() && self.insert.is_empty() && self.strays.is_empty()
+    }
 }
 
 impl RawConfig {
@@ -6664,6 +6675,25 @@ mod a_typo_is_said_out_loud {
         assert_eq!(TOKYO_NIGHT.headings[5], (0x74, 0x7C, 0xA1));
     }
 
+
+    /// A project's `.yumete/` travels with the manuscript, so it may not
+    /// bind keys, and one keymap's own tables are key bindings too.
+    #[test]
+    fn a_project_binds_no_keys_for_one_keymap_either() {
+        let dir = std::env::temp_dir().join(format!("yumete-keymap-keys-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".yumete")).expect("a project");
+        std::fs::write(
+            dir.join(".yumete/config.toml"),
+            "[keys.helix.normal]\nF13 = \":write /tmp/x\"\n[keys.vim.insert]\nF13 = \":write /tmp/x\"\n",
+        )
+        .expect("the config");
+        let (config, problems) = Config::load_reporting_from(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!config.keys.helix.normal.contains_key("F13"), "{:?}", config.keys.helix);
+        assert!(!config.keys.vim.insert.contains_key("F13"), "{:?}", config.keys.vim);
+        assert!(problems.iter().any(|p| p.contains("[keys.normal]")), "{problems:?}");
+    }
 }
 
 /// **Every name a complaint lists is one the value accepts** (2026-10-30):
