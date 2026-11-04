@@ -1936,7 +1936,9 @@ pub fn run(
                 // A tab is a thing you point at; the mouse is already captured
                 // for the wheel, so this costs nothing but the arithmetic.
                 MouseEventKind::Down(MouseButton::Left) => {
-                    if let Some(i) = tab_at(editor, config, terminal.size().ok(), mouse) {
+                    if let Some(side) = sidebar_block_at(editor, config, terminal.size().ok(), mouse) {
+                        editor.toggle_sidebar(side);
+                    } else if let Some(i) = tab_at(editor, config, terminal.size().ok(), mouse) {
                         editor.show_buffer_at(i);
                     } else if let Some(at) =
                         text_at(editor, config, terminal.size().ok(), &viewport, mouse)
@@ -5167,6 +5169,10 @@ struct Areas {
     /// whose caption it carries.
     dividers: Vec<(Rect, yumete_core::window::WindowId)>,
     tabs: Rect,
+    /// **The sidebars' blocks at the two ends of the tab line**, by [`Side`]
+    /// (2026-11-04): zero wide when there is no tab line, the setting is off
+    /// or the window has no room for a sidebar.
+    blocks: [Rect; 2],
     /// **Two rows at the top of the page, or none** (#379): the column numbers
     /// and names of a table whose own head has scrolled away.
     ///
@@ -5226,6 +5232,19 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
         ),
         false => (Rect::new(body.x, body.y, body.width, 0), body),
     };
+    // Two cells at each end of the tab line for the sidebars, taken from
+    // the tabs and not from the text.
+    let blocked = config.editor.sidebar_buttons && tabs.height > 0 && editor.room_for_a_panel() && tabs.width > 12;
+    let (tabs, blocks) = match blocked {
+        true => (
+            Rect::new(tabs.x + BLOCK, tabs.y, tabs.width - 2 * BLOCK, 1),
+            [
+                Rect::new(tabs.x, tabs.y, BLOCK, 1),
+                Rect::new(tabs.x + tabs.width - BLOCK, tabs.y, BLOCK, 1),
+            ],
+        ),
+        false => (tabs, [Rect::new(tabs.x, tabs.y, 0, 0); 2]),
+    };
     // …and the column bar takes its rows off what the tab bar left, for the
     // same reason and by the same arithmetic.
     let head_rows = head_rows.min(page.height.saturating_sub(1));
@@ -5263,6 +5282,7 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     Areas {
         panels,
         tabs,
+        blocks,
         head,
         text,
         panes,
@@ -5300,6 +5320,7 @@ fn draw(
         panes,
         dividers,
         tabs: tab_area,
+        blocks,
         head: head_area,
         text: text_area,
         status: status_area,
@@ -5337,6 +5358,7 @@ fn draw(
     }
     if tab_area.height > 0 {
         draw_tabs(frame, editor, config, tab_area);
+        draw_sidebar_blocks(frame, editor, config, blocks);
     }
 
     // The text body is the one part that differs between the layouts; both
@@ -8518,6 +8540,49 @@ fn text_at(
 /// The bar's rectangle is worked out the same way `draw` works it out — below
 /// nothing, to the right of the sidebar — rather than remembered, so a click
 /// cannot be answered from a layout that is a frame out of date.
+/// How wide a sidebar's block is: as wide as one 字, an easy target.
+const BLOCK: u16 = 2;
+
+/// **The sidebars' blocks** (2026-11-04): a coloured space at each end of the
+/// tab line, quiet when that side is closed, the panel's frame colour when it
+/// is open, gold when the keys are in it. A space rather than `▌`, whose
+/// width a terminal may draw as two.
+fn draw_sidebar_blocks(frame: &mut Frame, editor: &Editor, config: &Config, blocks: [Rect; 2]) {
+    let ink = crate::theme::Palette::of(config);
+    let buf = frame.buffer_mut();
+    for side in Side::BOTH {
+        let rect = blocks[side as usize];
+        if rect.width == 0 || rect.height == 0 {
+            continue;
+        }
+        let colour = match (editor.panel(side).is_some(), editor.panel_focus() == Some(side)) {
+            (true, true) => ink.gold(),
+            (true, false) => ink.quiet(),
+            (false, _) => ink.at(yumete_config::rung::RULE),
+        };
+        for x in rect.x..rect.x + rect.width {
+            if let Some(cell) = buf.cell_mut((x, rect.y)) {
+                cell.set_symbol(" ").set_style(Style::default().bg(colour));
+            }
+        }
+    }
+}
+
+/// The sidebar whose block the mouse is on, if it is on one.
+fn sidebar_block_at(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    mouse: ratatui::crossterm::event::MouseEvent,
+) -> Option<Side> {
+    let size = size?;
+    let blocks = page_areas(editor, config, Rect::new(0, 0, size.width, size.height), 0).blocks;
+    Side::BOTH.into_iter().find(|&side| {
+        let r = blocks[side as usize];
+        r.width > 0 && mouse.row == r.y && mouse.column >= r.x && mouse.column < r.x + r.width
+    })
+}
+
 fn tab_at(
     editor: &Editor,
     config: &Config,
@@ -15323,6 +15388,38 @@ fn squeezed(text: &str) -> String {
         }
         assert!(ruled > 0, "有詞被畫了線");
         assert!(ruled < 24, "不是整行都畫——那就沒有分界了");
+    }
+
+    /// **The sidebars' blocks** (2026-11-04): two cells at each end of the
+    /// tab line, taken from the tabs; a click on one opens or closes that
+    /// side, and its colour says which; off, or with no tab line, none.
+    #[test]
+    fn the_tab_line_ends_open_and_close_the_sidebars() {
+        use ratatui::crossterm::event::{KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+        let mut editor = editor_with("那年冬天。\n");
+        editor.execute(":new").unwrap();
+        let mut config = Config::default();
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 100, 20), 0);
+        assert_eq!(areas.blocks.map(|r| r.width), [BLOCK, BLOCK]);
+        assert_eq!(areas.tabs.x, areas.blocks[0].x + BLOCK, "the tabs start after the left block");
+        let click = |r: Rect| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: r.x,
+            row: r.y,
+            modifiers: KeyModifiers::NONE,
+        };
+        let size = Some(ratatui::layout::Size::new(100, 20));
+        let left = areas.blocks[Side::Left as usize];
+        assert_eq!(sidebar_block_at(&editor, &config, size, click(left)), Some(Side::Left));
+        let closed = render(&editor, &config, 100, 20)[(left.x, left.y)].style().bg;
+        editor.toggle_sidebar(Side::Left);
+        assert!(editor.panel(Side::Left).is_some(), "the click opens the left sidebar");
+        let left = page_areas(&editor, &config, Rect::new(0, 0, 100, 20), 0).blocks[Side::Left as usize];
+        let open = render(&editor, &config, 100, 20)[(left.x, left.y)].style().bg;
+        assert_ne!(closed, open, "open and closed look different");
+        config.editor.sidebar_buttons = false;
+        let areas = page_areas(&editor, &config, Rect::new(0, 0, 100, 20), 0);
+        assert_eq!(areas.blocks.map(|r| r.width), [0, 0], "off");
     }
 
     /// **The name sits in the corner of an empty row only** (2026-11-04,

@@ -516,6 +516,20 @@ zhs = "把注音排在字的旁边。默认关：文件里是什么，画面上�
 en = "lay readings out beside their characters. Off by default: what is in the file is what is on the page"
 
 [[message]]
+# 設置：標籤欄兩端的側欄開關（草稿）
+key = "settings.editor.sidebar-buttons"
+zht = "側欄開關"
+zhs = "侧栏开关"
+en = "sidebar buttons"
+
+[[message]]
+# 設置：標籤欄兩端的側欄開關——一句話（草稿）
+key = "settings.editor.sidebar-buttons.hint"
+zht = "標籤欄兩端各一個色塊，點一下打開或關上那一側的側欄"
+zhs = "标签栏两端各一个色块，点一下打开或关上那一侧的侧栏"
+en = "a block at each end of the tab line; a click opens or closes that side's sidebar"
+
+[[message]]
 # 設置：右下角的名字（草稿）
 key = "settings.editor.signature"
 zht = "右下角的名字"

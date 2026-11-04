@@ -307,6 +307,9 @@ impl Editor {
     /// Put that slot's resident panel away, and the keys back in the text if
     /// they were in it.
     pub(super) fn close_panel(&mut self, side: crate::sidebar::Side) {
+        if let Some(panel) = &self.panels[side as usize] {
+            self.last_view[side as usize] = Some(panel.view());
+        }
         self.panels[side as usize] = None;
         if self.panel_focus == Some(side) && !self.slot_showing(side) {
             self.panel_focus = None;
@@ -451,14 +454,25 @@ impl Editor {
     }
 
     /// `e`/`i`: a sidebar folded away or brought back, the keys staying put.
+    ///
+    /// Opened again, a side shows the panel it showed when it was closed.
     pub(super) fn toggle_region(&mut self, side: crate::sidebar::Side) {
         match self.panel(side).is_some() {
             true => self.close_panel(side),
             false => {
-                let view = self.side_view(side);
+                let view = self.last_view[side as usize]
+                    .filter(|&view| self.side_for(view) == side)
+                    .unwrap_or_else(|| self.side_view(side));
                 self.open_panel_without_the_keys(side, view);
             }
         }
+    }
+
+    /// **A click on a sidebar's block in the tab line** (2026-11-04): the
+    /// side opened or closed, the keys staying where they are, as `C-w e`
+    /// and `C-w i` do.
+    pub fn toggle_sidebar(&mut self, side: crate::sidebar::Side) {
+        self.toggle_region(side);
     }
 
     /// `C-w w`: the next open region, wrapping. One region has nowhere to go.

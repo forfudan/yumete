@@ -683,6 +683,15 @@ pub const SETTINGS: &[Setting] = &[
         factory: "true",
     },
     Setting {
+        table: "editor",
+        key: "sidebar_buttons",
+        group: Group::Interface,
+        kind: Kind::Tick,
+        label: "settings.editor.sidebar-buttons",
+        hint: "settings.editor.sidebar-buttons.hint",
+        factory: "true",
+    },
+    Setting {
         table: "panel",
         key: "rounded",
         group: Group::Interface,

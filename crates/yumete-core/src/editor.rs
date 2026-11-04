@@ -3716,6 +3716,9 @@ pub struct Editor {
     /// is [`Editor::side_for`]'s answer, one function, and the day it reads a
     /// setting instead of returning `Left` nothing else here changes.
     panels: [Option<crate::sidebar::Sidebar>; 2],
+    /// The panel each side showed when it was last closed, which opening the
+    /// side again brings back (2026-11-04: it was always the first).
+    last_view: [Option<crate::sidebar::View>; 2],
     /// Which slot **and which layer** the keys are going to, if any.
     panel_focus: Option<crate::sidebar::Side>,
     /// **每一側多寬**，三檔（2026-09-26）。記在這裏而不是記在 `Sidebar` 上，因為
@@ -4534,6 +4537,7 @@ impl Editor {
             last_picker: None,
             preview: RefCell::new(None),
             panels: [None, None],
+            last_view: [None, None],
             width: [crate::sidebar::Width::default(); 2],
             window: (u16::MAX, u16::MAX),
             panel_focus: None,

@@ -353,6 +353,10 @@ pub struct EditorConfig {
     /// **The name at the right end of the command line**, quiet (2026-11-04,
     /// back as a setting, on: it was taken off 2026-10-27 as 「看着像广告」).
     pub signature: bool,
+    /// **A block at each end of the tab line that opens and closes that
+    /// side's sidebar** when clicked (2026-11-04, on): the mouse's twin of
+    /// `C-w e` and `C-w i`, as a tab is of `:b`.
+    pub sidebar_buttons: bool,
     /// Whether a 縱 — or a row, across — keeps the lane beside it for readings,
     /// hung 句讀, 着重號, 平仄 and ticks: `never`, `dense`, `loose` or `always`
     /// (`:view-margin`, see [`Margin`]).
@@ -491,6 +495,7 @@ impl Default for EditorConfig {
             unicode_alarm: true,
             command_line: true,
             signature: true,
+            sidebar_buttons: true,
             smart_case: true,
             fuzzy_search: false,
             margin: Margin::Dense,
@@ -4336,6 +4341,7 @@ struct RawEditor {
     unicode_alarm: Option<bool>,
     command_line: Option<bool>,
     signature: Option<bool>,
+    sidebar_buttons: Option<bool>,
     smart_case: Option<bool>,
     fuzzy_search: Option<bool>,
     margin: Option<String>,
@@ -4578,6 +4584,9 @@ impl RawConfig {
         }
         if other.editor.signature.is_some() {
             self.editor.signature = other.editor.signature;
+        }
+        if other.editor.sidebar_buttons.is_some() {
+            self.editor.sidebar_buttons = other.editor.sidebar_buttons;
         }
         if other.editor.command_line.is_some() {
             self.editor.command_line = other.editor.command_line;
@@ -5007,6 +5016,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.signature {
             config.editor.signature = on;
+        }
+        if let Some(on) = self.editor.sidebar_buttons {
+            config.editor.sidebar_buttons = on;
         }
         if let Some(on) = self.editor.command_line {
             config.editor.command_line = on;

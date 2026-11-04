@@ -36017,3 +36017,23 @@ fn vims_esc_search_and_zx_as_nvim() {
     press(&mut ed, "ggzfjzozX");
     assert!(ed.fold_head(0), "zX closes it again");
 }
+
+/// **A sidebar opened again shows the panel it was closed on** (2026-11-04):
+/// `C-w e` and the tab line's block both brought back the first panel.
+#[test]
+fn a_sidebar_reopens_on_its_last_panel() {
+    use crate::sidebar::{Side, View};
+    let dir = tmp().join(format!("yumete-last-panel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.md"), "# 一\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("a.md")).unwrap();
+    ed.open_sidebar_showing(&dir, View::Outline);
+    ed.toggle_sidebar(Side::Left);
+    assert!(ed.panel(Side::Left).is_none());
+    ed.toggle_sidebar(Side::Left);
+    assert_eq!(ed.panel(Side::Left).map(|p| p.view()), Some(View::Outline));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
