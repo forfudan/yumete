@@ -1251,18 +1251,18 @@ zhs = "换一条(Shift-Tab 往回)"
 en = "next one (Shift-Tab goes back)"
 
 [[message]]
-# C-w q：關掉這一區（草稿）
+# C-w q：關掉這一區
 key = "hint.region.close"
-zht = "關掉這一區(最後一個窗口就離開編輯器)"
-zhs = "关掉这一区(最后一个窗口就离开编辑器)"
-en = "close this region (in the last window, quit)"
+zht = "關閉窗口"
+zhs = "关闭窗口"
+en = "close"
 
 [[message]]
-# C-w c(vim)：關掉這一區，最後一個窗口不關（草稿）
+# C-w c(vim)：關掉這一區，最後一個窗口不關
 key = "hint.region.close-not-last"
-zht = "關掉這一區(最後一個不關)"
-zhs = "关掉这一区(最后一个不关)"
-en = "close this region (never the last window)"
+zht = "關閉窗口但不退出"
+zhs = "关闭窗口但不退出"
+en = "close, don't quit"
 
 [[message]]
 # C-w x(vim)：和下一個窗口對調（草稿）
@@ -1272,18 +1272,18 @@ zhs = "和下一个对调"
 en = "trade places with the next"
 
 [[message]]
-# C-w f：光標下的文件在下面開（草稿）
+# C-w f：光標下的文件在下面開
 key = "hint.region.file-below"
-zht = "在下面打開光標下的文件"
-zhs = "在下面打开光标下的文件"
-en = "open the file under the cursor below"
+zht = "下窗打開光標下文件"
+zhs = "下窗打开光标下文件"
+en = "file under cursor, below"
 
 [[message]]
-# C-w F：光標下的文件在旁邊開（草稿）
+# C-w F：光標下的文件在旁邊開
 key = "hint.region.file-beside"
-zht = "在旁邊打開光標下的文件"
-zhs = "在旁边打开光标下的文件"
-en = "open the file under the cursor beside"
+zht = "側窗打開光標下文件"
+zhs = "侧窗打开光标下文件"
+en = "file under cursor, beside"
 
 [[message]]
 # C-w t(vim)：第一個窗口（草稿）
