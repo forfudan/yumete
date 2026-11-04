@@ -63,11 +63,21 @@ pub fn decode_strict(encoding: &'static Encoding, bytes: &[u8]) -> Option<String
         .map(|text| text.into_owned())
 }
 
-/// `bytes` as text, for reading a file beside the one being edited (`:read`,
-/// `:diff`, the committed copy behind the change bar): in `encoding` first,
-/// the encoding of the buffer it goes with; then as UTF-8; then as one of the
-/// three when it is plainly that one. `None` when none of those reads it —
-/// a change bar then draws nothing rather than every line changed.
+/// **Another file's bytes as text** (`:read`, `:diff` against another file):
+/// valid UTF-8 is UTF-8, as on open; then `encoding`, the buffer's; then one
+/// of the three when it is plainly that one.
+pub fn read_other(bytes: &[u8], encoding: &'static Encoding) -> Option<String> {
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return Some(text.strip_prefix('\u{feff}').unwrap_or(text).to_string());
+    }
+    read_bytes(bytes, encoding)
+}
+
+/// **This file's own bytes, from elsewhere** (the copy on disk, the
+/// committed copy behind the change bar): in `encoding` first, the one the
+/// file is in; then as UTF-8; then as one of the three when it is plainly
+/// that one. `None` when none of those reads it — a change bar then draws
+/// nothing rather than every line changed.
 pub fn read_bytes(bytes: &[u8], encoding: &'static Encoding) -> Option<String> {
     if let Some(text) = decode_strict(encoding, bytes) {
         return Some(text);
@@ -81,10 +91,14 @@ pub fn read_bytes(bytes: &[u8], encoding: &'static Encoding) -> Option<String> {
     }
 }
 
-/// [`read_bytes`] of a file.
-pub fn read_file(path: &std::path::Path, encoding: &'static Encoding) -> std::io::Result<String> {
+/// [`read_bytes`] of a file, or [`read_other`] when it is `other`.
+pub fn read_file(path: &std::path::Path, encoding: &'static Encoding, other: bool) -> std::io::Result<String> {
     let bytes = std::fs::read(path)?;
-    read_bytes(&bytes, encoding).ok_or_else(|| {
+    let text = match other {
+        true => read_other(&bytes, encoding),
+        false => read_bytes(&bytes, encoding),
+    };
+    text.ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             crate::say!("encoding.refused", path.display()),
@@ -135,8 +149,14 @@ pub fn detect(bytes: &[u8]) -> Detected {
         return Detected::No;
     }
     let first = texts[0].0;
-    let sure = first == guess
-        && texts[0].1.chars().filter(|c| !c.is_ascii()).count() >= SURE_FROM;
+    let enough = texts[0].1.chars().filter(|c| !c.is_ascii()).count() >= SURE_FROM;
+    // **Long enough to be sure, and the detector says it is none of the
+    // three** (Latin-1 with its umlauts, say): refused, as before, rather
+    // than offered as Chinese read wrong.
+    if enough && !LEGACY.contains(&guess) {
+        return Detected::No;
+    }
+    let sure = first == guess && enough;
     if sure {
         let (encoding, text) = texts.swap_remove(0);
         return Detected::Sure(encoding, text);
@@ -189,6 +209,45 @@ impl fmt::Display for Unencodable {
 
 impl std::error::Error for Unencodable {}
 
+/// **The characters a file can hold that the standard encoder cannot write**
+/// (2026-11-04): Big5's Hong Kong (HKSCS) range and Shift-JIS's user-defined
+/// area. encoding_rs reads them, as the WHATWG standard says, and writes
+/// none of them, so a Cantonese file opened as Big5 could not be saved back
+/// untouched. The table is the decoder run backwards over every two-byte
+/// code, built the first time it is needed.
+fn written_back(encoding: &'static Encoding) -> &'static std::collections::HashMap<char, [u8; 2]> {
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    static BIG5_BACK: OnceLock<HashMap<char, [u8; 2]>> = OnceLock::new();
+    static SJIS_BACK: OnceLock<HashMap<char, [u8; 2]>> = OnceLock::new();
+    static NONE: OnceLock<HashMap<char, [u8; 2]>> = OnceLock::new();
+    let (cell, leads, trails): (_, std::ops::RangeInclusive<u8>, &[std::ops::RangeInclusive<u8>]) =
+        if encoding == BIG5 {
+            (&BIG5_BACK, 0x81..=0xFE, &[0x40..=0x7E, 0xA1..=0xFE])
+        } else if encoding == SHIFT_JIS {
+            (&SJIS_BACK, 0x81..=0xFC, &[0x40..=0x7E, 0x80..=0xFC])
+        } else {
+            return NONE.get_or_init(HashMap::new);
+        };
+    cell.get_or_init(|| {
+        let mut back = HashMap::new();
+        for lead in leads {
+            for trail in trails.iter().flat_map(|r| r.clone()) {
+                let pair = [lead, trail];
+                let Some(text) = decode_strict(encoding, &pair) else { continue };
+                let mut chars = text.chars();
+                let (Some(c), None) = (chars.next(), chars.next()) else { continue };
+                let mut buf = [0u8; 4];
+                let (_, _, bad) = encoding.encode(c.encode_utf8(&mut buf));
+                if bad {
+                    back.entry(c).or_insert(pair);
+                }
+            }
+        }
+        back
+    })
+}
+
 /// Whether `c` is one `encoding` can hold.
 fn holds(encoding: &'static Encoding, c: char) -> bool {
     if c.is_ascii() {
@@ -196,7 +255,7 @@ fn holds(encoding: &'static Encoding, c: char) -> bool {
     }
     let mut buf = [0u8; 4];
     let (_, _, bad) = encoding.encode(c.encode_utf8(&mut buf));
-    !bad
+    !bad || written_back(encoding).contains_key(&c)
 }
 
 /// The characters of `text` that `encoding` cannot hold, or `None` when it
@@ -229,9 +288,28 @@ pub fn unencodable(encoding: &'static Encoding, text: &str) -> Option<Unencodabl
 }
 
 /// `text` in `encoding`; a character it cannot hold becomes `&#NNNN;`, as
-/// helix writes it. Only reached after the writer chose to write anyway.
+/// helix writes it, which is reached only after the writer chose to write
+/// anyway. The Hong Kong and user-defined codes go back as they came.
 pub fn encode(encoding: &'static Encoding, text: &str) -> Vec<u8> {
-    encoding.encode(text).0.into_owned()
+    let (bytes, _, bad) = encoding.encode(text);
+    if !bad {
+        return bytes.into_owned();
+    }
+    let back = written_back(encoding);
+    let mut out = Vec::with_capacity(text.len());
+    let mut run = String::new();
+    for c in text.chars() {
+        match back.get(&c) {
+            Some(pair) => {
+                out.extend_from_slice(&encoding.encode(&run).0);
+                run.clear();
+                out.extend_from_slice(pair);
+            }
+            None => run.push(c),
+        }
+    }
+    out.extend_from_slice(&encoding.encode(&run).0);
+    out
 }
 
 /// `text` with every character `encoding` cannot hold written as `&#NNNN;`,
@@ -297,6 +375,30 @@ mod tests {
         assert_eq!(unencodable(GB18030, text), None, "GB18030 holds every character");
         assert_eq!(with_references(BIG5, "a简"), "a&#31616;");
         assert_eq!(encode(BIG5, "a简"), b"a&#31616;");
+    }
+
+    /// **Hong Kong characters go back as they came** (review 2026-11-04):
+    /// encoding_rs reads Big5-HKSCS and writes none of it.
+    #[test]
+    fn a_big5_hkscs_file_saves_back_as_it_came() {
+        // 咗 is 0x8C 0xBB in Big5-HKSCS: read, and not written by the standard.
+        let bytes = [0x8Cu8, 0xBB];
+        let text = decode_strict(BIG5, &bytes).expect("HKSCS is read");
+        assert_eq!(unencodable(BIG5, &text), None, "and it can be written back");
+        assert_eq!(encode(BIG5, &text), bytes);
+    }
+
+    #[test]
+    fn a_long_latin1_file_is_refused_not_offered_as_chinese() {
+        let text = "Grüße aus München, schöne Grüße an die Familie, über die Brücke".repeat(3);
+        let latin1: Vec<u8> = text.chars().map(|c| c as u32 as u8).collect();
+        assert_eq!(detect(&latin1), Detected::No);
+    }
+
+    #[test]
+    fn another_file_in_utf8_is_read_as_utf8_whatever_this_one_is() {
+        let note = "清晨的雾气还没有散去".as_bytes();
+        assert_eq!(read_other(note, GB18030).as_deref(), Some("清晨的雾气还没有散去"));
     }
 
     #[test]

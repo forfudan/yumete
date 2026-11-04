@@ -1562,9 +1562,9 @@ impl Editor {
         let base = match (force, self.vcs_base.get(&id)) {
             (false, Some(base)) => Some(base.clone()),
             _ => {
-                let encoding = self.current_buffer().encoding();
+                let encoding = self.current_buffer().encoding_on_disk();
                 let base = crate::vcs::Changes::head_text(&path, encoding)
-                    .or_else(|| crate::encoding::read_file(&path, encoding).ok());
+                    .or_else(|| crate::encoding::read_file(&path, encoding, false).ok());
                 match &base {
                     Some(text) => {
                         self.vcs_base.insert(id, text.clone());

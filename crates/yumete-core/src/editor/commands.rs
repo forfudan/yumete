@@ -1161,7 +1161,7 @@ impl Editor {
                 // In this buffer's encoding first, then as it looks
                 // (2026-11-04): a Big5 note read into a Big5 chapter.
                 let encoding = self.current_buffer().encoding();
-                let text = crate::encoding::read_file(&self.here_path(&path), encoding).map_err(|e| {
+                let text = crate::encoding::read_file(&self.here_path(&path), encoding, true).map_err(|e| {
                     EditorError::Io(std::io::Error::new(e.kind(), format!("{path}: {e}")))
                 })?;
                 // An empty file puts nothing in, not an empty line (vim).

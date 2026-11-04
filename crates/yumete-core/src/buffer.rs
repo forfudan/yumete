@@ -1840,6 +1840,13 @@ impl Buffer {
         self.encoding
     }
 
+    /// The encoding the file on disk is in, which `:encoding` does not
+    /// change until the next save: what its other copies (the change bar's
+    /// committed one, `:diff`'s) are read in.
+    pub fn encoding_on_disk(&self) -> &'static crate::encoding::Encoding {
+        self.on_disk
+    }
+
     /// Write it back in `encoding` from the next save on (`:encoding big5`,
     /// helix's command, vim's `:set fenc`). The text is unchanged; the file
     /// will not be, so the buffer is modified.

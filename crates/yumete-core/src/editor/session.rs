@@ -1415,7 +1415,10 @@ impl Editor {
                 }
             },
         };
-        let old = match crate::encoding::read_file(&path, self.current_buffer().encoding()) {
+        // This file's copy on disk is read as it is; another file as files
+        // open, UTF-8 first.
+        let other = self.current_buffer().path() != Some(path.as_path());
+        let old = match crate::encoding::read_file(&path, self.current_buffer().encoding_on_disk(), other) {
             // Same byte-order mark `Buffer::decode` drops on the way in. Left
             // on, it is a token of its own on line 1 and every file a Windows
             // editor has touched reports a change it does not have.
@@ -1450,7 +1453,7 @@ impl Editor {
             return;
         };
         let commit = commit.map(str::trim).filter(|c| !c.is_empty()).unwrap_or("HEAD");
-        let encoding = self.current_buffer().encoding();
+        let encoding = self.current_buffer().encoding_on_disk();
         let old = match crate::vcs::Changes::text_at(&path, commit, encoding) {
             Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
             // git 自己那一句話就是答案：「不在倉裏」和「這個檔還没提交過」是兩件
@@ -1475,7 +1478,7 @@ impl Editor {
             return;
         };
         let commit = commit.map(str::trim).filter(|c| !c.is_empty()).unwrap_or("HEAD");
-        let encoding = self.current_buffer().encoding();
+        let encoding = self.current_buffer().encoding_on_disk();
         let old = match crate::vcs::Changes::text_at(&path, commit, encoding) {
             Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
             Err(why) => {
