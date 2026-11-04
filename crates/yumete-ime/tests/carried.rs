@@ -180,3 +180,24 @@ fn an_installed_file_this_build_refuses_falls_back_to_the_carried_one() {
     assert_eq!(ime.top_candidate(), "你好");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **A new engine keeps the writer's 中/ABC and 輸入預測** (2026-11-04
+/// review): a scheme switch and `:yume-builtin` used to put both back.
+#[test]
+fn a_scheme_switch_keeps_abc_and_prediction() {
+    if !carry() {
+        return;
+    }
+    let mut ime = ImeSession::new(Scheme::LINGMING, nowhere());
+    let prediction = !ime.prediction_enabled();
+    ime.set_prediction_enabled(prediction);
+    ime.toggle_language();
+    assert!(!ime.is_chinese());
+    ime.set_scheme(Scheme::XINGCHEN);
+    assert!(!ime.is_chinese(), "ABC after the switch");
+    assert_eq!(ime.prediction_enabled(), prediction);
+    let mut builtin = ImeSession::builtin(Scheme::PINYIN).expect("carried");
+    builtin.carry_settings_from(&ime);
+    assert!(!builtin.is_chinese());
+    assert_eq!(builtin.prediction_enabled(), prediction);
+}

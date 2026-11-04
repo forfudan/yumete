@@ -1041,6 +1041,8 @@ impl ImeSession {
         // The annotation too: a new engine starts with yume's modes and none
         // on, and the writer's mode went with the old one.
         let mode = self.annotation_wanted.clone();
+        // 中/ABC and 輸入預測 live in the engine, and are the writer's too.
+        let (chinese, prediction) = (self.is_chinese(), self.prediction_enabled());
         // Warning: **換方案也要退得到出廠表**（2026-10-12 量到的）：`new` 與這一支
         // 走同一個 `build_engine`，內嵌的那一層在 `locate` 裏，兩條路不會再分家。
         let (mut engine, available, problems, builtin) = build_engine(scheme, &self.data_dirs);
@@ -1057,7 +1059,30 @@ impl ImeSession {
         let modes = std::mem::take(&mut self.annotation_modes);
         self.set_annotation_modes(&modes);
         self.set_annotation(mode.as_deref());
+        self.keep_engine_state(chinese, prediction);
         available
+    }
+
+    /// Put back 中/ABC and 輸入預測 on a new engine.
+    fn keep_engine_state(&mut self, chinese: bool, prediction: bool) {
+        if self.is_chinese() != chinese {
+            self.engine.toggle_language();
+        }
+        self.engine.set_prediction_enabled(prediction);
+    }
+
+    /// **Take the writer's settings from the session this one replaces**
+    /// (`:yume-builtin`, `:yume-installed`, the first scheme loaded): the
+    /// page size, 字集, annotation, 上屏方式, panel, preedit, 中/ABC and
+    /// 輸入預測. A setting left behind looked like one that did not stick.
+    pub fn carry_settings_from(&mut self, old: &ImeSession) {
+        self.set_page_size(old.page_size());
+        self.set_charsets(old.charsets().clone());
+        self.carry_annotation_from(old);
+        self.set_commit_strategy(old.commit_override());
+        self.set_panel_display(old.panel_display());
+        self.set_inline_preedit(old.inline_preedit());
+        self.keep_engine_state(old.is_chinese(), old.prediction_enabled());
     }
 
     // ---- Per-keystroke input lifecycle ------------------------------------

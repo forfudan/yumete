@@ -4119,6 +4119,10 @@ pub fn lane_label(id: &str) -> String {
         "tonggui" => say!("ime.lane.tonggui"),
         "tongfan" => say!("ime.lane.tongfan"),
         "tai" => say!("ime.lane.tai"),
+        "common" => say!("ime.lane.common"),
+        "harmonic" => say!("ime.lane.harmonic"),
+        "guji" => say!("ime.lane.guji"),
+        "gang" => say!("ime.lane.gang"),
         other => other.to_string(),
     }
 }
@@ -4159,14 +4163,14 @@ fn charset_sort_method(ime: &mut ImeSession, word: &str) -> String {
     }
 }
 
-/// `:yume-lanes`: `""` asks, a lane's id puts it first, `default` is Yume's
-/// order.
+/// `:yume-lanes`: `""` asks, a lane's id puts it first (any of Yume's seven,
+/// as `[ime] lanes` takes them), `default` is Yume's order.
 fn lanes_method(ime: &mut ImeSession, word: &str) -> String {
     let mut charsets = ime.charsets().clone();
     match word {
         "" => {}
         "default" => charsets.lanes = yumete_ime::LANES.iter().map(|l| l.to_string()).collect(),
-        id if yumete_ime::LANES.contains(&id) => charsets.put_first(id),
+        id if yumete_config::LANE_WORDS.contains(&id) => charsets.put_first(id),
         other => return say!("ime.charset-no-such", other),
     }
     if !word.is_empty() {
@@ -4525,12 +4529,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         if !full.available() || full.is_builtin() {
             return say!("ime.no-table-installed", ime.scheme_name());
         }
-        full.set_page_size(ime.page_size());
-        full.set_charsets(ime.charsets().clone());
-        full.carry_annotation_from(ime);
-        full.set_commit_strategy(ime.commit_override());
-        full.set_panel_display(ime.panel_display());
-        full.set_inline_preedit(ime.inline_preedit());
+        full.carry_settings_from(ime);
         *ime = full;
         return say!("ime.scheme-from-system", ime.scheme_name());
     }
@@ -4552,12 +4551,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 false => say!("ime.no-builtin-table-for", scheme.factory_name().unwrap_or(scheme.found_name())),
             };
         };
-        full.set_page_size(ime.page_size());
-        full.set_charsets(ime.charsets().clone());
-        full.carry_annotation_from(ime);
-        full.set_commit_strategy(ime.commit_override());
-        full.set_panel_display(ime.panel_display());
-        full.set_inline_preedit(ime.inline_preedit());
+        full.carry_settings_from(ime);
         *ime = full;
         return say!("ime.builtin-scheme", ime.scheme_name());
     }
@@ -4578,12 +4572,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     if !ime.available() {
         let mut full = ImeSession::from_default_dirs(scheme);
         if full.available() {
-            full.set_page_size(ime.page_size());
-            full.set_charsets(ime.charsets().clone());
-            full.set_commit_strategy(ime.commit_override());
-            full.carry_annotation_from(ime);
-            full.set_panel_display(ime.panel_display());
-            full.set_inline_preedit(ime.inline_preedit());
+            full.carry_settings_from(ime);
             let name = full.scheme_name().to_string();
             *ime = full;
             return say!("ime.scheme-now", name);

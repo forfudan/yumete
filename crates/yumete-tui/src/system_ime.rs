@@ -687,16 +687,35 @@ mod source {
             .unwrap_or_else(|| "xkb:us::eng".to_string())
     }
 
+    /// Run one of the input method's commands, **for half a second at
+    /// most**: it runs on the editor's loop, and a D-Bus that does not
+    /// answer would otherwise freeze the editor with it.
     fn run(program: &str, args: &[&str]) -> Option<String> {
-        let out = Command::new(program)
+        use std::io::Read;
+        use std::time::{Duration, Instant};
+        let mut child = Command::new(program)
             .args(args)
             .stdin(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
-            .output()
+            .spawn()
             .ok()?;
-        out.status
-            .success()
-            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        let deadline = Instant::now() + Duration::from_millis(500);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let mut out = String::new();
+                    child.stdout.take()?.read_to_string(&mut out).ok()?;
+                    return status.success().then(|| out.trim().to_string());
+                }
+                Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+            }
+        }
     }
 
     pub fn take() -> Saved {

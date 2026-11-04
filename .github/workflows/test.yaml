@@ -111,10 +111,22 @@ jobs:
           key: test-${{ matrix.os }}
           workspaces: yumete
 
+      # The cache follows Yume's release: a new package is a new key, so
+      # tables in a format this yume-core no longer reads do not linger.
+      - name: Which Yume package
+        id: yume-package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name=$(gh api repos/forfudan/yume-release/releases/tags/yuhao \
+            --jq '[.assets[].name | select(endswith("-macos-arm64.zip"))][0]' || true)
+          echo "name=${name:-unknown}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/cache@v4
         with:
           path: yume-tables
-          key: yume-tables-${{ matrix.os }}-1
+          key: yume-tables-${{ matrix.os }}-${{ steps.yume-package.outputs.name }}
 
       # `--locked` so a stale `Cargo.lock` is a failure here rather than a
       # surprise in `release.yaml`, which builds with it too.

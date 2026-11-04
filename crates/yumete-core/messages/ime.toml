@@ -222,11 +222,39 @@ zhs = "[中 {0}]"
 en = "[中 {0}]"
 
 [[message]]
+# 整句字集軌：common 那一軌的名字（宇夢的字串）
+key = "ime.lane.common"
+zht = "常用繁簡漢字"
+zhs = "常用繁简汉字"
+en = "common characters, both scripts"
+
+[[message]]
 # `:yume-lanes`：首軌那一條名字後面加的（宇夢的字串）
 key = "ime.lane.first"
 zht = "（首軌）"
 zhs = "（首轨）"
 en = " (first)"
+
+[[message]]
+# 整句字集軌：gang 那一軌的名字（宇夢的字串）
+key = "ime.lane.gang"
+zht = "香港常用字"
+zhs = "香港常用字"
+en = "Hong Kong common characters"
+
+[[message]]
+# 整句字集軌：guji 那一軌的名字（宇夢的字串）
+key = "ime.lane.guji"
+zht = "古籍通用規範漢字"
+zhs = "古籍通用规范汉字"
+en = "general standard for ancient texts"
+
+[[message]]
+# 整句字集軌：harmonic 那一軌的名字（宇夢的字串）
+key = "ime.lane.harmonic"
+zht = "調和傳統漢字"
+zhs = "调和传统汉字"
+en = "harmonized traditional"
 
 [[message]]
 # `:yume-lanes` 報各軌時，兩個軌名之間的那個

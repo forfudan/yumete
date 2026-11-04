@@ -577,8 +577,9 @@ pub enum Command {
     YumeCharset(Option<String>),
     /// `:yume-charset-sort original|common|tonggui|harmonic` — 字集排序.
     YumeCharsetSort(Option<String>),
-    /// `:yume-lanes tonggui|tongfan|tai|default` — 整句字集軌: one lane first,
-    /// or Yume's order. `None` asks.
+    /// `:yume-lanes tonggui|tongfan|tai|common|harmonic|guji|gang|default` —
+    /// 整句字集軌: one lane first (added when it is not one yet), or Yume's
+    /// order. `None` asks.
     YumeLanes(Option<String>),
     /// `:yume-panel box|bottom|inline` — 候選擺在哪：光標邊上那個框、窗口最下
     /// 面那一行，還是光標的下一行。`None` asks which one is in force.
@@ -2352,6 +2353,26 @@ const LANES: &[Word] = &[
     Word {
         name: "tai",
         help: "ime.lane.tai",
+        needs: &[],
+    },
+    Word {
+        name: "common",
+        help: "ime.lane.common",
+        needs: &[],
+    },
+    Word {
+        name: "harmonic",
+        help: "ime.lane.harmonic",
+        needs: &[],
+    },
+    Word {
+        name: "guji",
+        help: "ime.lane.guji",
+        needs: &[],
+    },
+    Word {
+        name: "gang",
+        help: "ime.lane.gang",
         needs: &[],
     },
     Word {
