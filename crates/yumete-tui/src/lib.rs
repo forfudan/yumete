@@ -19070,6 +19070,31 @@ fn squeezed(text: &str) -> String {
         assert!(row(&buffer, 2).contains("fn b() {}  unknown thing"), "moved down: {:?}", row(&buffer, 2));
     }
 
+    /// **Prose too, after the paragraph's last row** (2026-11-04), as
+    /// helix and nvim: a spelling checker's word seen without moving.
+    #[test]
+    fn a_complaint_follows_a_paragraphs_last_row() {
+        use yumete_core::problem::{Problem, Severity};
+        let text = "A paragraph long enough that it has to wrap onto a second row here.\n";
+        let (mut editor, path) = editor_on_disk("p.md", text);
+        editor.mark_served(path.clone());
+        editor.set_problems(
+            path,
+            "test".into(),
+            vec![Problem {
+                line: 0,
+                utf16_column: 2,
+                severity: Severity::Warn,
+                message: "spelling".into(),
+                source: None,
+                code: None,
+            }],
+        );
+        let buffer = render_wrapped(&mut editor, &Config::default(), 50, 8);
+        assert!(!row_text(&buffer, 0).contains("spelling"), "{:?}", row_text(&buffer, 0));
+        assert!(row_text(&buffer, 1).contains("  spelling"), "{:?}", row_text(&buffer, 1));
+    }
+
     #[test]
     fn the_complaint_does_not_float_while_you_are_typing() {
         use yumete_core::problem::Severity;

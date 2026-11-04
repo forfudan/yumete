@@ -1679,14 +1679,15 @@ impl Editor {
 
     /// **The message drawn after the end of `line`** (2026-11-04), helix's
     /// end-of-line diagnostics: the loudest at or above the level asked for,
-    /// the first of equals, on one line. `None` when off, in prose (a line
-    /// there is a paragraph, and its end is far from the fault), and on the
-    /// line being typed in Insert, which is always half broken.
+    /// the first of equals, on one line. `None` when off, and on the line
+    /// being typed in Insert, which is always half broken.
+    ///
+    /// Prose too, as helix, nvim's `virtual_text` and VS Code's Error Lens
+    /// all do: after a paragraph's last row (2026-11-04). It was code only
+    /// once, a paragraph's end being far from the fault; a spelling checker's
+    /// word seen without moving the cursor was worth more.
     pub fn problem_at_end_of(&self, line: usize) -> Option<(crate::problem::Severity, String)> {
         let level = self.end_of_line_diagnostics?;
-        if !self.writes_code() {
-            return None;
-        }
         if self.mode == Mode::Insert && self.viewing.get().is_none_or(|v| v.window == self.live) && line == self.cursor_line() {
             return None;
         }
