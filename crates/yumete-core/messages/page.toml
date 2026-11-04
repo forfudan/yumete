@@ -81,6 +81,13 @@ zhs = "改动条：开(绿＝新添，蓝＝改过，朱的细线＝那里剪掉
 en = "change bar: on (green added, blue changed, a thin red edge where lines were cut)"
 
 [[message]]
+# `:view-diagnostics` 之後：行末診斷現在畫到哪一級。{0} 檔名（草稿）
+key = "layout.eol-diagnostics"
+zht = "行末診斷：{0}"
+zhs = "行末诊断：{0}"
+en = "end-of-line diagnostics: {0}"
+
+[[message]]
 # :indent full — 縮進畫出來，段間的空行也收起
 key = "layout.first-line-indent-folded"
 zht = "首行縮進：{0} 格，段間空行收起"

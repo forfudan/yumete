@@ -3491,6 +3491,9 @@ pub struct Editor {
     /// One write may go through with the oversize gate already answered (#306).
     /// Set only for the duration of the write the reader said 「yes」 to.
     oversize_answered: bool,
+    /// helix's end-of-line diagnostics: the least severity drawn after a
+    /// line, `None` for off (2026-11-04).
+    end_of_line_diagnostics: Option<crate::problem::Severity>,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_memo: memo::LineMemo<Vec<(usize, usize)>>,
     /// 平仄 in the margin (Feature #247), and the answers already worked out.
@@ -4503,6 +4506,7 @@ impl Editor {
             viewing_wrap: Cell::new(None),
             query: None,
             oversize_answered: false,
+            end_of_line_diagnostics: Some(crate::problem::Severity::Hint),
             segment_memo: memo::LineMemo::default(),
             meter: false,
             meter_memo: memo::LineMemo::default(),

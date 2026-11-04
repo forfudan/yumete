@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **A language server's message is written after its line of code**, as helix's end-of-line diagnostics: the loudest one, cut with `…` at the edge, left off the line being typed. `:view-diagnostics` and `[editor] end_of_line_diagnostics` set the least severity shown (`hint`, the default, to `error`, or `off`).
 - **GB18030, Big5 and Shift-JIS files open and save in their own encoding**, byte for byte when nothing changed. The status line shows `[Big5]` and the like, `:info` lists the encoding, and helix's `:encoding` shows it or changes the one the next save uses. A character the encoding cannot hold stops the save and asks: `u` save as UTF-8, `w` write it anyway as `&#NNNN;`, `n` cancel. A file too short to tell opens a picker of the encodings that read it, previewed, and the choice is remembered for the file; `:open ++enc=big5` and `--encoding=big5` say it outright. `:read`, `:diff` and the change bar read in the buffer's encoding. They used to be refused.
 - **Other input methods can be stood aside in Normal mode** (macOS and Linux): `[ime] others = "aside"` switches Squirrel, Sogou, fcitx5 or ibus to English while the keys are commands, and `"aside-and-back"` also switches back where text is typed, which on macOS fails about one time in three. Off by default, never over SSH. On Linux it also stands aside Yume's own fcitx5 add-on.
 - **Yume's character sets**: the filter (`Space z 0`, `:yume-charset`, `[ime] charset`), the sort (`Space z s`, `:yume-charset-sort`, `[ime] charset_sort`) and the sentence lanes (`Space z g` puts one first, `:yume-lanes`, `[ime] lanes`), with Yume's defaults. With the three lanes on, a 宇浩拼音 sentence keeps to one script and the other script comes as a candidate of its own.
@@ -40,6 +41,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Diagnostics move with their lines** when lines are added or removed, instead of staying on the old line numbers until the server reports again.
 - **A cursor a closed fold hides keeps its line under vim.** After `G`, `:`*line* or `zc`, the cursor is drawn on the fold and the status line says the line it is really on, as vim's does (`:3` in a fold of lines 2 to 4 reads Ln 3); the fold keys act there, so `zM` then `zO` opens both of two nested folds, where it opened only the outer one.
 - **The moves along a closed fold's line open it** under vim (`l`, `$`, `0`, `f` …), as vim's do, so `l` then `x` takes one character rather than the whole fold; `w` and `b` step past the fold instead of into its hidden lines.
 - **`zfj` on a closed fold reaches the line after it**, as vim's does, and `j` and `k` after any operator count a closed fold as one line.

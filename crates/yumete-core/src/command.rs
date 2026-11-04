@@ -477,6 +477,9 @@ pub enum Command {
     SetNumberFill(Switch),
     /// `:view-diff` — 行號旁邊那一格說不說 git 的改動（#55）。`None` 是輪替。
     SetDiffGutter(Switch),
+    /// `:view-diagnostics hint|info|warning|error|off` — helix's end-of-line
+    /// diagnostics. `None` asks (2026-11-04).
+    SetEolDiagnostics(Option<String>),
     /// `:shot` — a picture of the page, drawn by the editor itself (#189).
     Screenshot { shot: Shot, force: bool },
     /// `:theme` — which theme, and whether it is dark, light or the
@@ -2228,6 +2231,35 @@ const COMMITS: &[Word] = &[
     Word {
         name: "fluency",
         help: "cmd.commits.fluency",
+        needs: &[],
+    },
+];
+
+/// `:view-diagnostics`'s words: helix's levels, and `off` (2026-11-04).
+const EOL_LEVELS: &[Word] = &[
+    Word {
+        name: "hint",
+        help: "settings.pick.eol-diagnostics.hint",
+        needs: &[],
+    },
+    Word {
+        name: "info",
+        help: "settings.pick.eol-diagnostics.info",
+        needs: &[],
+    },
+    Word {
+        name: "warning",
+        help: "settings.pick.eol-diagnostics.warning",
+        needs: &[],
+    },
+    Word {
+        name: "error",
+        help: "settings.pick.eol-diagnostics.error",
+        needs: &[],
+    },
+    Word {
+        name: "off",
+        help: "settings.pick.eol-diagnostics.disable",
         needs: &[],
     },
 ];
@@ -4382,6 +4414,14 @@ pub const COMMANDS: &[Entry] = &[
             default: None,
         }],
         build: Some(|p| Ok(Command::SetNumberFill(switched(p)))),
+    },
+    Entry {
+        name: "view-diagnostics",
+        aliases: &[],
+        help: "cmd.view.diagnostics",
+        needs: &[],
+        params: &[Param::Words { of: EOL_LEVELS, default: None }],
+        build: Some(|p| Ok(Command::SetEolDiagnostics(p.arg(0).map(str::to_string)))),
     },
     Entry {
         // 跟 `:view-numbers-fill` 排在一起：兩個說的都是行號那一帶（#55）。
@@ -7662,7 +7702,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +18");
+        assert_eq!(row("", "view-"), ":view- +19");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");

@@ -114,6 +114,11 @@ pub struct EditorConfig {
     ///
     /// 代價是開檔與存檔各多一個子進程；量過，見 `local/development.md`。
     pub diff_gutter: bool,
+    /// helix's end-of-line diagnostics (2026-11-04): the least severity a
+    /// language server's message must have to be drawn after its line —
+    /// `"hint"` (the default, as helix's), `"info"`, `"warning"`, `"error"`, or
+    /// `"disable"`. Code only.
+    pub end_of_line_diagnostics: String,
     /// The shell line `:shot` runs to photograph the screen.
     ///
     /// A command rather than a built-in: what「截圖」 means is the window
@@ -454,6 +459,7 @@ impl Default for EditorConfig {
             wheel_step: 3,
             line_number_fill: false,
             diff_gutter: true,
+            end_of_line_diagnostics: "hint".to_string(),
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             auto_pairs: "basic".to_string(),
@@ -3039,6 +3045,9 @@ const TAB_INSERTS_NAMES: &[&str] = &["spaces", "tab"];
 /// `[ime] system`.
 const SYSTEM_IME_NAMES: &[&str] = &["auto", "keep"];
 
+/// The words `[editor] end_of_line_diagnostics` takes, helix's.
+pub const EOL_DIAGNOSTIC_WORDS: &[&str] = &["disable", "hint", "info", "warning", "error"];
+
 /// The fully-resolved configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Config {
@@ -3673,6 +3682,12 @@ impl Config {
     if let Some(word) = raw.editor.tab_inserts.as_deref() {
         if !matches!(word, "spaces" | "tab") {
             problems.push(one_of("[editor] tab_inserts", word, TAB_INSERTS_NAMES));
+        }
+    }
+
+    if let Some(word) = raw.editor.end_of_line_diagnostics.as_deref() {
+        if !EOL_DIAGNOSTIC_WORDS.contains(&word.trim()) {
+            problems.push(one_of("[editor] end_of_line_diagnostics", word, EOL_DIAGNOSTIC_WORDS));
         }
     }
 
@@ -4364,6 +4379,7 @@ struct RawEditor {
     wheel_step: Option<usize>,
     line_number_fill: Option<bool>,
     diff_gutter: Option<bool>,
+    end_of_line_diagnostics: Option<String>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
     auto_pairs: Option<String>,
@@ -4532,6 +4548,9 @@ impl RawConfig {
         }
         if other.editor.diff_gutter.is_some() {
             self.editor.diff_gutter = other.editor.diff_gutter;
+        }
+        if other.editor.end_of_line_diagnostics.is_some() {
+            self.editor.end_of_line_diagnostics = other.editor.end_of_line_diagnostics.clone();
         }
         if other.editor.screenshot.is_some() {
             self.editor.screenshot = other.editor.screenshot.clone();
@@ -4923,6 +4942,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.diff_gutter {
             config.editor.diff_gutter = on;
+        }
+        if let Some(word) = self.editor.end_of_line_diagnostics.filter(|w| EOL_DIAGNOSTIC_WORDS.contains(&w.trim())) {
+            config.editor.end_of_line_diagnostics = word.trim().to_string();
         }
         if let Some(line) = self.editor.screenshot {
             config.editor.screenshot = line;

@@ -53,6 +53,7 @@ impl Editor {
         }
         let (at, every) = (self.sel.head(), self.sel.clone());
         self.current_buffer_mut().settle_after(at, every);
+        self.move_the_problems();
     }
 
     /// The mode, buffer, revision and caret, for [`Self::keep_the_signature_up`].

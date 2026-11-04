@@ -13195,6 +13195,26 @@ fn draw_horizontal(
         if !break_cell.is_empty() {
             spans.push(Span::styled(break_cell, sel_style));
         }
+        // **helix's end-of-line diagnostic** (2026-11-04): the loudest message
+        // of the line, two cells after its last row, in the lane's ink, cut
+        // with `…` at the edge. Drawn, never measured: the caret, `j` and the
+        // mouse never meet it. Not on a closed fold's line, nor in a table.
+        if ends_line && !row_is_a_table && !editor.fold_head(row.line) {
+            if let Some((severity, message)) = editor.problem_at_end_of(row.line) {
+                let used: usize = spans.iter().map(|s| yumete_cjk::str_width(&s.content)).sum();
+                let room = (text_area.width as usize + left).saturating_sub(used + 2);
+                if room >= 3 {
+                    let colour = match severity {
+                        yumete_core::problem::Severity::Error => ink.mark(),
+                        yumete_core::problem::Severity::Warn => ink.amber(),
+                        yumete_core::problem::Severity::Note => ink.azure(),
+                        yumete_core::problem::Severity::Hint => ink.furniture(),
+                    };
+                    let said = format!("  {}", panel::clip(&message, room));
+                    spans.push(Span::styled(said, Style::default().fg(colour)));
+                }
+            }
+        }
         // A row's ground runs its whole width, not just under its words: an
         // aside is a block on the page because it is a block on paper, and a
         // painted page is painted to the edge.
@@ -18882,6 +18902,8 @@ fn squeezed(text: &str) -> String {
         use yumete_core::problem::Severity;
         let (mut editor, path) = editor_on_disk("a.rs", "一\n二\n三\n四\n");
         editor.set_problems(path, "test".into(), vec![said(1, Severity::Error), said(2, Severity::Warn)]);
+        // The lane is the subject: the message after the line is not.
+        editor.set_end_of_line_diagnostics(None);
         let config = Config::default();
         let buffer = render(&editor, &config, 20, 8);
 
@@ -18967,6 +18989,59 @@ fn squeezed(text: &str) -> String {
         assert_eq!(plain.control, None);
     }
 
+    /// **helix's end-of-line diagnostics** (2026-11-04): the loudest message
+    /// after its line, cut with `…` at the edge, off when asked, not on the
+    /// line being typed, and moving with an inserted line.
+    #[test]
+    fn a_complaint_is_written_after_its_line() {
+        use yumete_core::problem::{Problem, Severity};
+        let (mut editor, path) = editor_on_disk("e.rs", "fn a() {}\nfn b() {}\nfn c() {}\n");
+        let one = |line: usize, severity: Severity, message: &str| Problem {
+            line,
+            utf16_column: 0,
+            severity,
+            message: message.into(),
+            source: None,
+            code: None,
+        };
+        editor.set_problems(
+            path,
+            "test".into(),
+            vec![
+                one(1, Severity::Hint, "just a hint"),
+                one(1, Severity::Error, "unknown thing"),
+                one(2, Severity::Warn, "a warning long enough that it cannot fit on a narrow page"),
+            ],
+        );
+        let config = Config::default();
+        let row = |b: &ratatui::buffer::Buffer, y: u16| row_text(b, y);
+        let buffer = render(&editor, &config, 60, 8);
+        assert!(row(&buffer, 1).contains("fn b() {}  unknown thing"), "the loudest: {:?}", row(&buffer, 1));
+        assert!(!row(&buffer, 1).contains("just a hint"));
+        let narrow = render(&editor, &config, 40, 8);
+        assert!(row(&narrow, 2).trim_end().ends_with('…'), "cut at the edge: {:?}", row(&narrow, 2));
+        assert_eq!(row(&buffer, 0).trim_end(), "  1  fn a() {}", "a line with nothing said");
+
+        editor.execute("view-diagnostics error").unwrap();
+        let buffer = render(&editor, &config, 60, 8);
+        assert!(!row(&buffer, 2).contains("warning"), "under the level");
+        assert!(row(&buffer, 1).contains("unknown thing"));
+        editor.execute("view-diagnostics off").unwrap();
+        assert!(!row(&render(&editor, &config, 60, 8), 1).contains("unknown"));
+        editor.execute("view-diagnostics hint").unwrap();
+
+        // Typing on line 2: not there while it is typed; a line opened above
+        // moves the message with its line.
+        editor.execute(":2").unwrap();
+        editor.on_key(yumete_core::input::Key::Char('i'));
+        assert!(!row(&render(&editor, &config, 60, 8), 1).contains("unknown"));
+        editor.on_key(yumete_core::input::Key::Esc);
+        editor.on_key(yumete_core::input::Key::Char('O'));
+        editor.on_key(yumete_core::input::Key::Esc);
+        let buffer = render(&editor, &config, 60, 8);
+        assert!(row(&buffer, 2).contains("fn b() {}  unknown thing"), "moved down: {:?}", row(&buffer, 2));
+    }
+
     #[test]
     fn the_complaint_does_not_float_while_you_are_typing() {
         use yumete_core::problem::Severity;
@@ -18996,6 +19071,8 @@ fn squeezed(text: &str) -> String {
         use yumete_core::problem::Severity;
         let (mut editor, path) = editor_on_disk("b.rs", "一\n二\n三\n四\n");
         editor.set_problems(path, "test".into(), vec![said(1, Severity::Error)]);
+        // The lane is the subject: the message after the line is not.
+        editor.set_end_of_line_diagnostics(None);
         with_diff(&mut editor, "@@ -1,0 +2,1 @@\n");
         let config = Config::default();
         let buffer = render(&editor, &config, 20, 8);

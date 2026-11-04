@@ -266,6 +266,10 @@ pub struct Buffer {
     /// **Each window's folds in this buffer** (2026-11-03), moved by every
     /// edit and kept in the undo points; see [`crate::fold`].
     folds: crate::fold::FoldMap,
+    /// **Lines taken and put by each edit since the editor last asked**
+    /// (2026-11-04): `(line, taken, put, at the line's start)`, so a server's diagnostics move with
+    /// the text until it says again. Only edits that change the line count.
+    line_edits: Vec<(usize, usize, usize, bool)>,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -422,6 +426,7 @@ impl Buffer {
             changes_at: 0,
             insert_stop: None,
             folds: crate::fold::FoldMap::new(),
+            line_edits: Vec::new(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -491,6 +496,7 @@ impl Buffer {
             changes_at: 0,
             insert_stop: None,
             folds: crate::fold::FoldMap::new(),
+            line_edits: Vec::new(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -659,6 +665,7 @@ impl Buffer {
             changes_at: 0,
             insert_stop: None,
             folds: crate::fold::FoldMap::new(),
+            line_edits: Vec::new(),
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -1111,6 +1118,15 @@ impl Buffer {
     /// characters at `at` become `put`. Asked before the rope changes, so
     /// whether `at` starts a line is the text's as it was.
     fn shift_folds(&mut self, at: usize, taken: usize, put: &str) {
+        let len = self.rope.len_chars();
+        let (from, to) = (at.min(len), (at + taken).min(len));
+        let lines_taken = self.rope.slice(from..to).chars().filter(|c| *c == '\n').count();
+        let lines_put = put.matches('\n').count();
+        if lines_taken != lines_put {
+            let line = self.rope.char_to_line(from);
+            let at_start = from == self.rope.line_to_char(line);
+            self.line_edits.push((line, lines_taken, lines_put, at_start));
+        }
         if self.folds.values().all(|set| set.manual.is_empty() && set.closed_headings.is_empty()) {
             return;
         }
@@ -1728,6 +1744,12 @@ impl Buffer {
         })
     }
 
+
+    /// The line-count changes since the last call, oldest first (see
+    /// `line_edits`).
+    pub fn take_line_edits(&mut self) -> Vec<(usize, usize, usize, bool)> {
+        std::mem::take(&mut self.line_edits)
+    }
 
     /// The line ending this file is written with (#309).
     ///

@@ -1587,6 +1587,57 @@ impl Editor {
         self.problems.worst_on(path, line)
     }
 
+    /// The diagnostics of the current file follow its line edits (2026-11-04).
+    pub(super) fn move_the_problems(&mut self) {
+        let edits = self.current_buffer_mut().take_line_edits();
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else { return };
+        for (line, taken, put, at_start) in edits {
+            self.problems.shift(&path, line, taken, put, at_start);
+        }
+    }
+
+    /// **The message drawn after the end of `line`** (2026-11-04), helix's
+    /// end-of-line diagnostics: the loudest at or above the level asked for,
+    /// the first of equals, on one line. `None` when off, in prose (a line
+    /// there is a paragraph, and its end is far from the fault), and on the
+    /// line being typed in Insert, which is always half broken.
+    pub fn problem_at_end_of(&self, line: usize) -> Option<(crate::problem::Severity, String)> {
+        let level = self.end_of_line_diagnostics?;
+        if !self.writes_code() {
+            return None;
+        }
+        if self.mode == Mode::Insert && line == self.cursor_line() {
+            return None;
+        }
+        let path = self.current_buffer().path()?;
+        let mut loudest: Option<&crate::problem::Problem> = None;
+        for p in self.problems.of(path).iter().filter(|p| p.line == line && p.severity >= level) {
+            if loudest.is_none_or(|was| p.severity > was.severity) {
+                loudest = Some(p);
+            }
+        }
+        let p = loudest?;
+        let message = p
+            .message
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join("  ")
+            .replace(|c: char| c.is_control(), " ");
+        Some((p.severity, message))
+    }
+
+    /// The least a diagnostic must be to be drawn after its line, or `None`
+    /// for none (`[editor] end_of_line_diagnostics`, `:view-diagnostics`).
+    pub fn end_of_line_diagnostics(&self) -> Option<crate::problem::Severity> {
+        self.end_of_line_diagnostics
+    }
+
+    pub fn set_end_of_line_diagnostics(&mut self, level: Option<crate::problem::Severity>) {
+        self.end_of_line_diagnostics = level;
+    }
+
     /// 服務器一共說了幾句——`:diagnostics-all` 拿它分「乾淨」和「還没人說過話」。
     pub fn problem_count(&self) -> usize {
         self.problems.count()

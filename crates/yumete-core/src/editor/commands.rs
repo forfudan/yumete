@@ -562,6 +562,21 @@ impl Editor {
                 };
                 Ok(CommandOutcome::Continue)
             }
+            Command::SetEolDiagnostics(word) => {
+                if let Some(level) = word.as_deref().and_then(crate::problem::level_from_word) {
+                    self.end_of_line_diagnostics = level;
+                }
+                use crate::problem::Severity;
+                let level = match self.end_of_line_diagnostics {
+                    None => say!("settings.pick.eol-diagnostics.disable"),
+                    Some(Severity::Hint) => say!("settings.pick.eol-diagnostics.hint"),
+                    Some(Severity::Note) => say!("settings.pick.eol-diagnostics.info"),
+                    Some(Severity::Warn) => say!("settings.pick.eol-diagnostics.warning"),
+                    Some(Severity::Error) => say!("settings.pick.eol-diagnostics.error"),
+                };
+                self.status = say!("layout.eol-diagnostics", level);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetDiffGutter(on) => {
                 // Asking must not call the setter: turning the bands on walks
                 // git, and turning them off throws the answer away.

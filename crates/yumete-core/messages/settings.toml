@@ -180,6 +180,20 @@ zhs = "行号旁边那一格用底色説哪几行跟 git 里的不一样"
 en = "the cell beside the line number marks lines that differ from git, or from the saved file outside git"
 
 [[message]]
+# 設置：行末診斷（草稿）
+key = "settings.editor.eol-diagnostics"
+zht = "行末診斷"
+zhs = "行末诊断"
+en = "end-of-line diagnostics"
+
+[[message]]
+# 設置：行末診斷——一句話（草稿）
+key = "settings.editor.eol-diagnostics.hint"
+zht = "語言服務器的提示寫在代碼行的末尾，從哪一級起寫"
+zhs = "语言服务器的提示写在代码行的末尾，从哪一级起写"
+en = "write the language server's message after its line of code, from which level up"
+
+[[message]]
 # 設置：模糊搜索出厂开着
 key = "settings.editor.fuzzy-search"
 zht = "模糊搜索出廠開着"
@@ -1326,6 +1340,41 @@ key = "settings.pick.display.inline"
 zht = "行中"
 zhs = "行中"
 en = "in the line"
+
+[[message]]
+# 設置選項：行末診斷不畫（草稿）
+key = "settings.pick.eol-diagnostics.disable"
+zht = "不顯示"
+zhs = "不显示"
+en = "off"
+
+[[message]]
+# 設置選項：行末診斷只畫錯誤（草稿）
+key = "settings.pick.eol-diagnostics.error"
+zht = "只顯示錯誤"
+zhs = "只显示错误"
+en = "errors only"
+
+[[message]]
+# 設置選項：行末診斷從建議起（草稿）
+key = "settings.pick.eol-diagnostics.hint"
+zht = "建議及以上"
+zhs = "建议及以上"
+en = "hints and up"
+
+[[message]]
+# 設置選項：行末診斷從說明起（草稿）
+key = "settings.pick.eol-diagnostics.info"
+zht = "說明及以上"
+zhs = "说明及以上"
+en = "info and up"
+
+[[message]]
+# 設置選項：行末診斷從警告起（草稿）
+key = "settings.pick.eol-diagnostics.warning"
+zht = "警告及以上"
+zhs = "警告及以上"
+en = "warnings and up"
 
 [[message]]
 # 設置：纸面——自己画纸

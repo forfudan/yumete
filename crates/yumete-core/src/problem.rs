@@ -49,6 +49,31 @@ impl Severity {
     }
 }
 
+/// helix's words for the least severity end-of-line diagnostics draw
+/// (`end-of-line-diagnostics`): `Some(None)` is off (`disable`, or `off` as
+/// the `:view-*` commands say it), `None` a word that is neither.
+pub fn level_from_word(word: &str) -> Option<Option<Severity>> {
+    match word.trim() {
+        "disable" | "off" => Some(None),
+        "hint" => Some(Some(Severity::Hint)),
+        "info" => Some(Some(Severity::Note)),
+        "warning" => Some(Some(Severity::Warn)),
+        "error" => Some(Some(Severity::Error)),
+        _ => None,
+    }
+}
+
+/// The word for a level, as the config writes it.
+pub fn level_word(level: Option<Severity>) -> &'static str {
+    match level {
+        None => "disable",
+        Some(Severity::Hint) => "hint",
+        Some(Severity::Note) => "info",
+        Some(Severity::Warn) => "warning",
+        Some(Severity::Error) => "error",
+    }
+}
+
 /// One thing a server said about one place.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem {
@@ -160,6 +185,34 @@ impl Problems {
         }
     }
 
+    /// **Move what was said about `path` with an edit** (2026-11-04): at
+    /// `line`, `taken` lines went and `put` came. A complaint below moves by
+    /// the difference; one on a line that went sits on the edit's line, until
+    /// the server says again. Without this a message stayed on its old line
+    /// number, now another line's.
+    ///
+    /// `at_start` says the edit began at the very start of `line`, so that
+    /// line moves too: `O` puts a line above it, `dd` takes it away.
+    pub fn shift(&mut self, path: &Path, line: usize, taken: usize, put: usize, at_start: bool) {
+        // The first line the edit can move, and the first it leaves alone.
+        let first = line + usize::from(!at_start);
+        let moved = |p: &mut Problem| {
+            if p.line < first {
+                return;
+            }
+            p.line = match p.line < first + taken {
+                true => line,
+                false => p.line - taken + put,
+            };
+        };
+        for ((file, _), said) in self.by_source.iter_mut() {
+            if file == path {
+                said.iter_mut().for_each(moved);
+            }
+        }
+        self.gather(path);
+    }
+
     /// What was said about `path`.
     pub fn of(&self, path: &Path) -> &[Problem] {
         self.by_file.get(path).map(Vec::as_slice).unwrap_or(&[])
@@ -195,6 +248,21 @@ impl Problems {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **Complaints move with the lines** (2026-11-04).
+    #[test]
+    fn a_complaint_moves_with_its_line() {
+        let path = PathBuf::from("/a.rs");
+        let mut all = Problems::default();
+        let lines = |all: &Problems| all.of(&path).iter().map(|p| p.line).collect::<Vec<_>>();
+        all.set(path.clone(), "s".into(), vec![at(1, Severity::Error), at(4, Severity::Warn)]);
+        all.shift(&path, 1, 0, 1, true); // `O` on line 1
+        assert_eq!(lines(&all), [2, 5]);
+        all.shift(&path, 2, 0, 1, false); // Enter in the middle of line 2
+        assert_eq!(lines(&all), [2, 6]);
+        all.shift(&path, 2, 1, 0, true); // `dd` on line 2
+        assert_eq!(lines(&all), [2, 5], "the line went; its complaint sits where it was");
+    }
 
     fn at(line: usize, severity: Severity) -> Problem {
         Problem { line, utf16_column: 0, severity, message: "…".into(), source: None, code: None }

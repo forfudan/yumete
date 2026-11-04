@@ -333,6 +333,14 @@ const IME_SYSTEM_WAYS: &[Choice] = &[
     Choice { word: "keep", label: "settings.pick.system.keep" },
 ];
 
+const EOL_DIAGNOSTIC_WAYS: &[Choice] = &[
+    Choice { word: "disable", label: "settings.pick.eol-diagnostics.disable" },
+    Choice { word: "hint", label: "settings.pick.eol-diagnostics.hint" },
+    Choice { word: "info", label: "settings.pick.eol-diagnostics.info" },
+    Choice { word: "warning", label: "settings.pick.eol-diagnostics.warning" },
+    Choice { word: "error", label: "settings.pick.eol-diagnostics.error" },
+];
+
 const IME_OTHERS_WAYS: &[Choice] = &[
     Choice { word: "off", label: "settings.pick.others.off" },
     Choice { word: "aside", label: "settings.pick.others.aside" },
@@ -568,6 +576,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.diff-gutter",
         hint: "settings.editor.diff-gutter.hint",
         factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "end_of_line_diagnostics",
+        group: Group::Marks,
+        kind: Kind::Pick(EOL_DIAGNOSTIC_WAYS),
+        label: "settings.editor.eol-diagnostics",
+        hint: "settings.editor.eol-diagnostics.hint",
+        factory: r#""hint""#,
     },
     Setting {
         table: "editor",
