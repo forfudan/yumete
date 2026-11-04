@@ -43,6 +43,7 @@ in `docs/development.md` §5.2.
 - **A jump to a line already on screen leaves the page where it is**, under either keymap: `H` `M` `L`, helix's `gt` `gc` `gb`, `n` to a match in view. A jump off the page lands in the middle under vim; under helix only a search, `C-o` and `C-i` do, and `gd` and a picker's choice are always centred (see Fixed). Under vim, a jump near the end of the file, or `j` on its last lines, fills the page down to the last line instead of scrolling past it, as vim does.
 - **`H` `M` `L` and helix's `gt` `gc` `gb` keep `scrolloff` rows from the edges**, as both editors do; under vim, none above the first line of the file or below its last, and none for an operator (`dL`).
 - **vim's `zH` and `zL` scroll half the window, the line numbers counted**, as vim's do, and a cursor half a page or more off the side of the page is put in the middle (`300|`).
+- **The ink theme colours bold and italic**, a deep rose and a pale one, gives each heading level its own colour, puts list and task markers in gold, and colours Typst's `#` code by token (keywords, calls, strings, numbers, comments); bold and italic used to be weight and slant alone, and every heading one gold.
 - **Under vim, `"A` adds to register `a`**, and text added to lines, or lines to text, makes lines; `"Ap` reads `a`. A yank or delete into a named register also fills the unnamed one, so `"ayy` then `p` pastes that line.
 
 ### Fixed

@@ -1435,7 +1435,72 @@ pub struct ThemeConfig {
     /// The light mood's pinned colours, for a borrowed theme that has one
     /// (2026-10-26, GitHub). `pinned` is the dark mood's.
     pub pinned_light: Option<Pinned>,
+    /// **Hues for the prose's own marks** — bold, italic, each heading level,
+    /// a list or task marker — one per mood (2026-11-04). `None` marks them by
+    /// weight alone, as `bw` and `morandi` do; a borrowed theme's [`Pinned`]
+    /// outranks it.
+    pub prose_dark: Option<Prose>,
+    pub prose_light: Option<Prose>,
 }
+
+/// **Bold, italic, headings and list markers in colour** (2026-11-04).
+///
+/// 墨香 used to mark bold and italic by weight alone and give every heading one
+/// gold, on the rule that writing is not decorated. Readers found Catppuccin
+/// livelier, and its pink bold was most of the difference; this palette was
+/// chosen from pictures of five candidates. The marks themselves (`**`, `#`)
+/// stay the marker grey.
+///
+/// A theme that sets it also reads Typst's `#` code as tokens and colours a
+/// task's box like its list marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Prose {
+    pub bold: (u8, u8, u8),
+    pub italic: (u8, u8, u8),
+    /// A run that is both — `***this***`, or `*this*` inside `**bold**`.
+    pub bold_italic: (u8, u8, u8),
+    /// `#` to `######`.
+    pub headings: [(u8, u8, u8); 6],
+    pub list_mark: (u8, u8, u8),
+}
+
+/// 墨香's, dark. Bold a deep rose and italic a pale one (OKLCH hue 6–8°, a
+/// family, ΔE 0.11 apart); bold-italic is the bold's. Both stay 22–24° of hue
+/// and ΔE ≥ 0.13 from 朱 (#EC5D4B), which only ever means wrong, and under
+/// the prose's 11.1:1 (7.7 and 10.8). Headings run 金 → 橙 → 黃綠, then fade
+/// back toward the ink; list markers are a deeper gold.
+pub const INK_PROSE_DARK: Prose = Prose {
+    bold: (0xEF, 0x91, 0xA6),
+    italic: (0xF2, 0xBE, 0xC6),
+    bold_italic: (0xEF, 0x91, 0xA6),
+    headings: [
+        (0xEC, 0xCD, 0x8C),
+        (0xEF, 0xAE, 0x7C),
+        (0xB7, 0xCE, 0x92),
+        (0xC6, 0xBE, 0xA5),
+        (0xC1, 0xBA, 0xA5),
+        (0xBD, 0xB7, 0xA6),
+    ],
+    list_mark: (0xD8, 0xBA, 0x79),
+};
+
+/// 墨香's, light. The pinks lean to 356–2°, away from 朱 (#B3241B, 29°): on
+/// cream the two are nearly as dark as each other, so hue is what tells them
+/// apart (27–33°, ΔE ≥ 0.11). Italic stays above 4.5:1 (4.6).
+pub const INK_PROSE_LIGHT: Prose = Prose {
+    bold: (0x7D, 0x19, 0x4A),
+    italic: (0x96, 0x55, 0x68),
+    bold_italic: (0x7D, 0x19, 0x4A),
+    headings: [
+        (0x6F, 0x4B, 0x00),
+        (0x96, 0x4D, 0x09),
+        (0x52, 0x6E, 0x2A),
+        (0x71, 0x61, 0x42),
+        (0x74, 0x67, 0x4F),
+        (0x79, 0x6D, 0x58),
+    ],
+    list_mark: (0x73, 0x51, 0x0E),
+};
 
 /// **The colours a borrowed theme copies value for value** (2026-10-25).
 ///
@@ -2295,6 +2360,8 @@ impl ThemeConfig {
                 cyan_light: (0x6E, 0x6E, 0x6E),
                 lime_dark: (0xB9, 0xB9, 0xB9),
                 lime_light: (0x55, 0x55, 0x55),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // One Dark — Atom's palette as One Dark Pro paints it (2026-10-25).
@@ -2332,6 +2399,8 @@ impl ThemeConfig {
                 pink_dark: (0xE0, 0x6C, 0x75),
                 cyan_dark: (0x56, 0xB6, 0xC2),
                 lime_dark: (0x98, 0xC3, 0x79),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // Dracula — the purple-toned dark theme (2026-10-26), built as
@@ -2363,6 +2432,8 @@ impl ThemeConfig {
                 pink_dark: (0xFF, 0x79, 0xC6),
                 cyan_dark: (0x8B, 0xE9, 0xFD),
                 lime_dark: (0x50, 0xFA, 0x7B),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // Tokyo Night — Night and Light (2026-10-26), in place of 藍曬, built
@@ -2410,6 +2481,8 @@ impl ThemeConfig {
                 cyan_light: (0x00, 0x6C, 0x86),
                 lime_dark: (0x73, 0xDA, 0xCA),
                 lime_light: (0x33, 0x63, 0x5C),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // Catppuccin — Mocha and Latte (2026-10-26), in place of 靛橘, built
@@ -2455,6 +2528,8 @@ impl ThemeConfig {
                 cyan_light: (0x04, 0xA5, 0xE5),
                 lime_dark: (0x94, 0xE2, 0xD5),
                 lime_light: (0x17, 0x92, 0x99),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // Gruvbox — Dark and Light, Medium (2026-10-26), in place of 明度階,
@@ -2497,6 +2572,8 @@ impl ThemeConfig {
                 cyan_light: (0x42, 0x7B, 0x58),
                 lime_dark: (0xB8, 0xBB, 0x26),
                 lime_light: (0x79, 0x74, 0x0E),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // 莫蘭迪 — the greyest grounds of the ten and muted accents, 朱 brought down to a
@@ -2526,6 +2603,8 @@ impl ThemeConfig {
                 cyan_light: (0x42, 0x6D, 0x71),
                 lime_dark: (0xA2, 0xB3, 0x86),
                 lime_light: (0x59, 0x6C, 0x42),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // Monokai — VS Code's, after Wimer Hazenberg's (2026-10-26). Built as
@@ -2557,6 +2636,8 @@ impl ThemeConfig {
                 pink_dark: (0xF9, 0x26, 0x72),
                 cyan_dark: (0x66, 0xD9, 0xEF),
                 lime_dark: (0xA6, 0xE2, 0x2E),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             // GitHub — Dark Default and Light Default, the most installed theme in
@@ -2599,6 +2680,8 @@ impl ThemeConfig {
                 cyan_light: (0x0A, 0x30, 0x69),
                 lime_dark: (0x7E, 0xE7, 0x87),
                 lime_light: (0x11, 0x63, 0x29),
+                prose_dark: None,
+                prose_light: None,
                 ..ThemeConfig::default()
             }),
             _ => None,
@@ -2701,6 +2784,8 @@ impl Default for ThemeConfig {
             dark_only: false,
             pinned: None,
             pinned_light: None,
+            prose_dark: Some(INK_PROSE_DARK),
+            prose_light: Some(INK_PROSE_LIGHT),
         }
     }
 }

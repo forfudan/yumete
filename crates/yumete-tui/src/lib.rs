@@ -7810,7 +7810,12 @@ fn buffer_to_html(buffer: &ratatui::buffer::Buffer) -> String {
                 run.push_str(here.symbol());
                 x += yumete_cjk::drawn_width(here.symbol()).max(1) as u16;
             }
-            let weight = if bold { ";font-weight:600" } else { "" };
+            let weight = match (bold, style.add_modifier.contains(ratatui::style::Modifier::ITALIC)) {
+                (true, true) => ";font-weight:600;font-style:italic",
+                (true, false) => ";font-weight:600",
+                (false, true) => ";font-style:italic",
+                (false, false) => "",
+            };
             // A wiki name's dots survive into the picture (#287).
             let dotted = match style.add_modifier.contains(crate::backend::DOTTED) {
                 true => " dotted",
@@ -7947,7 +7952,7 @@ pub(crate) fn put_marked_text(
     for span in &spans {
         let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
         for (i, one) in styles.iter_mut().enumerate().take(hi).skip(lo) {
-            *one = one.patch(markup_style_in(span, &spans, chars.get(i).copied(), ink));
+            *one = one.patch(markup_style_at(span, &spans, i, chars.get(i).copied(), None, ink));
         }
     }
     // 相鄰同樣式的併成一段再畫，省掉逐格一次 `put_text`。
@@ -8778,6 +8783,18 @@ pub(crate) fn markup_style_in(
             }
         };
     }
+    // 墨香 gives each heading level a hue (2026-11-04); the `#`s stay grey,
+    // since their count already says the level.
+    if span.kind == Kind::Heading {
+        let level = all
+            .iter()
+            .find(|s| s.kind == Kind::HeadingMark)
+            .map_or(1, |mark| mark.end - mark.start)
+            .clamp(1, 6);
+        if let Some(colour) = ink.prose(|p| p.headings[level - 1]) {
+            return Style::default().fg(colour).add_modifier(Modifier::BOLD);
+        }
+    }
     if span.kind != Kind::Marker || !ink.borrowed() {
         return markup_style(span.kind, ink);
     }
@@ -8799,6 +8816,128 @@ pub(crate) fn markup_style_in(
         },
         _ => markup_style(span.kind, ink),
     }
+}
+
+/// [`markup_style_in`] for the character at `at` (a char index in its line),
+/// with the two answers that need the position (2026-11-04): a character both
+/// bold and italic takes the theme's colour for both, whichever run is laid
+/// last; and a Typst `#` call takes its tokens' colours (`tokens`, from
+/// [`typst_line_tokens`]). Both renderers ask this, so 橫書 and 縱書 agree.
+pub(crate) fn markup_style_at(
+    span: &yumete_core::markdown::Span,
+    all: &[yumete_core::markdown::Span],
+    at: usize,
+    ch: Option<char>,
+    tokens: Option<&[Option<yumete_core::code::Token>]>,
+    ink: crate::theme::Palette,
+) -> Style {
+    use yumete_core::markdown::Kind;
+    if span.kind == Kind::Code2 {
+        if let Some(token) = tokens.and_then(|t| t.get(at)).copied().flatten() {
+            return markup_style(Kind::Token(token), ink);
+        }
+    }
+    let style = markup_style_in(span, all, ch, ink);
+    let other = match span.kind {
+        Kind::Strong => Kind::Emphasis,
+        Kind::Emphasis => Kind::Strong,
+        _ => return style,
+    };
+    match ink.prose(|p| p.bold_italic) {
+        Some(both) if all.iter().any(|r| r.kind == other && r.start <= at && at < r.end) => style.fg(both),
+        _ => style,
+    }
+}
+
+/// One token per character of `line` wherever a Typst `#` call
+/// ([`Kind::Code2`](yumete_core::markdown::Kind::Code2)) runs, or `None` when
+/// the line has none or the theme leaves them one colour (2026-11-04).
+pub(crate) fn typst_line_tokens(
+    line: impl FnOnce() -> Vec<char>,
+    runs: &[yumete_core::markdown::Span],
+    ink: crate::theme::Palette,
+) -> Option<Vec<Option<yumete_core::code::Token>>> {
+    let calls = runs.iter().filter(|r| r.kind == yumete_core::markdown::Kind::Code2);
+    if ink.prose(|p| p.bold).is_none() || calls.clone().next().is_none() {
+        return None;
+    }
+    let line = line();
+    let mut out = vec![None; line.len()];
+    for run in calls {
+        let (a, b) = (run.start.min(line.len()), run.end.min(line.len()));
+        for (slot, token) in out[a..b].iter_mut().zip(typst_code_tokens(&line[a..b])) {
+            *slot = token;
+        }
+    }
+    Some(out)
+}
+
+/// **Typst's `#` code, read as code** (2026-11-04): one token per character
+/// of a call, so a string, a number, a comment and a call stop being one
+/// purple — a `// comment` after `#let` was drawn as code.
+///
+/// A scanner, not a grammar: `//` to the end, `"…"`, a number with its unit
+/// (`2cm`, `11pt`, `0.0.8`), a keyword, a name followed by `(` or `[` (or
+/// after `#`) as a call, a name before `:` as an argument, brackets and
+/// commas as punctuation.
+pub(crate) fn typst_code_tokens(text: &[char]) -> Vec<Option<yumete_core::code::Token>> {
+    use yumete_core::code::Token;
+    const KEYWORDS: &[&str] = &[
+        "let", "set", "show", "import", "include", "if", "else", "for", "in", "while", "return",
+        "break", "continue", "context", "as", "and", "or", "not",
+    ];
+    const CONSTANTS: &[&str] = &["none", "auto", "true", "false"];
+    let mut out = vec![None; text.len()];
+    let mut i = 0;
+    while i < text.len() {
+        let c = text[i];
+        let start = i;
+        let token = if c == '/' && text.get(i + 1) == Some(&'/') {
+            i = text.len();
+            Some(Token::Comment)
+        } else if c == '"' {
+            i += 1;
+            while i < text.len() && text[i] != '"' {
+                i += if text[i] == '\\' { 2 } else { 1 };
+            }
+            i = (i + 1).min(text.len());
+            Some(Token::String)
+        } else if c.is_ascii_digit() {
+            while i < text.len() && (text[i].is_ascii_alphanumeric() || text[i] == '.' || text[i] == '%') {
+                i += 1;
+            }
+            Some(Token::Number)
+        } else if c == '#' || c.is_alphabetic() || c == '_' {
+            let hash = c == '#';
+            i += 1;
+            while i < text.len() && (text[i].is_alphanumeric() || text[i] == '_' || text[i] == '-' || text[i] == '.') {
+                i += 1;
+            }
+            let word: String = text[start + usize::from(hash)..i].iter().collect();
+            let next = text.get(i).copied();
+            if KEYWORDS.contains(&word.as_str()) {
+                Some(Token::Keyword)
+            } else if CONSTANTS.contains(&word.as_str()) {
+                Some(Token::Constant)
+            } else if hash || matches!(next, Some('(' | '[')) {
+                Some(Token::Function)
+            } else if next == Some(':') {
+                Some(Token::Parameter)
+            } else {
+                Some(Token::Plain)
+            }
+        } else if "()[]{},:;".contains(c) {
+            i += 1;
+            Some(Token::Punctuation)
+        } else {
+            i += 1;
+            (!c.is_whitespace()).then_some(Token::Operator)
+        };
+        for slot in &mut out[start..i] {
+            *slot = token;
+        }
+    }
+    out
 }
 
 /// **Where a list item's marker is** in its line — `-`, `*`, `+`, `3.` or `3)` —
@@ -8849,8 +8988,9 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
     // **Weight for prose, 品色 for what is not prose** (#449).
     //
     // This said 「weight, not hue」 outright, and it was half right. Bold,
-    // italic and a heading *are* writing, and a hue on them is noise — that
-    // half stands. But 行内代碼, a quotation and a link are **not writing**,
+    // italic and a heading *are* writing — though since 2026-11-04 墨香 gives
+    // them hues as well ([`yumete_config::Prose`]): readers found Catppuccin
+    // livelier, and weight alone was most of the difference. But 行内代碼, a quotation and a link are **not writing**,
     // and marking them by being one rung dimmer says 「less important」 about
     // the most exact thing on the line. It is also the first mark to go as the
     // page darkens: dimming the ink from 13.7:1 to 10:1 took 行内代碼 from
@@ -8880,10 +9020,18 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         // 金, because a heading is not prose and the page is otherwise grey.
         // Weight alone said it in a hundred-line file and stopped saying it in
         // a chapter: bold prose and a heading are the same colour, and the eye
-        // has to read them to tell them apart.
+        // has to read them to tell them apart. (A theme with `Prose` colours
+        // each level instead, in `markup_style_in`, which knows the level.)
         Kind::Heading => Style::default().fg(ink.gold()).add_modifier(Modifier::BOLD),
-        Kind::Strong => Style::default().add_modifier(Modifier::BOLD),
-        Kind::Emphasis => Style::default().add_modifier(Modifier::ITALIC),
+        // Bold and italic: weight or slant, and the theme's rose if it has one.
+        Kind::Strong => match ink.prose(|p| p.bold) {
+            Some(c) => Style::default().fg(c).add_modifier(Modifier::BOLD),
+            None => Style::default().add_modifier(Modifier::BOLD),
+        },
+        Kind::Emphasis => match ink.prose(|p| p.italic) {
+            Some(c) => Style::default().fg(c).add_modifier(Modifier::ITALIC),
+            None => Style::default().add_modifier(Modifier::ITALIC),
+        },
         // 一至三品: a literal, to be read character for character.
         Kind::Code => filled(
             Style::default().fg(ink.purple()),
@@ -12786,6 +12934,7 @@ fn draw_horizontal(
                     &marked.as_ref().unwrap().1
                 }
             };
+            let tokens = typst_line_tokens(|| rope.line(row.line).chars().collect(), runs, ink);
             for run in runs {
                 let a = run.start.saturating_sub(start_in_line);
                 let b = run.end.saturating_sub(start_in_line).min(chars.len());
@@ -12796,19 +12945,27 @@ fn draw_horizontal(
                 }
                 for (i, style) in styles.iter_mut().enumerate().take(b).skip(a.min(b)) {
                     let ch = chars.get(i).copied();
-                    *style = style.patch(markup_style_in(run, runs, ch, ink));
+                    *style = style.patch(markup_style_at(run, runs, i + start_in_line, ch, tokens.as_deref(), ink));
                 }
             }
-            // A list item's `-` or `3.` in a borrowed theme's colour; this
-            // editor's own themes leave it the writing's (2026-10-25).
+            // A list item's `-` or `3.` in the theme's colour: a borrowed
+            // theme's (2026-10-25), or 墨香's gold (2026-11-04).
             let item = matches!(
                 blocks.get(row.line),
                 Some(yumete_core::markdown::Block::Item { .. })
             );
-            if item && start_in_line == 0 && ink.borrowed() {
+            let colour = ink.pinned(|p| p.list_mark).or_else(|| ink.prose(|p| p.list_mark));
+            if item && start_in_line == 0 {
                 let line: String = chars.iter().collect();
-                if let (Some(at), Some(color)) = (list_mark(&line), ink.pinned(|p| p.list_mark)) {
-                    for style in styles.iter_mut().take(at.end).skip(at.start) {
+                if let (Some(at), Some(color)) = (list_mark(&line), colour) {
+                    // A task's box is part of its marker (2026-11-04). Not in a
+                    // borrowed theme, whose own rules have no colour for it.
+                    let boxed: String = line.chars().skip(at.end).take(4).collect();
+                    let end = match ink.borrowed() {
+                        false if matches!(boxed.as_str(), " [ ]" | " [x]" | " [X]") => at.end + 4,
+                        _ => at.end,
+                    };
+                    for style in styles.iter_mut().take(end).skip(at.start) {
                         *style = style.fg(color);
                     }
                 }
@@ -15606,7 +15763,8 @@ fn squeezed(text: &str) -> String {
             gold,
             "標題一種墨，沒有詞界：{head:?}"
         );
-        assert_eq!(gold, Some(ink(&config).gold()), "而且還是金的");
+        // Its level's own colour (2026-11-04: `##` is 墨香's second, not 金).
+        assert_eq!(gold, ink(&config).prose(|p| p.headings[1]), "and still the heading's own colour");
     }
 
     /// 線：字本身一點不動，只在詞下畫一條（#501）。
@@ -28465,6 +28623,159 @@ fn squeezed(text: &str) -> String {
         let own = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::default(), true);
         let mark = all.iter().find(|s| s.kind == Kind::Marker).unwrap();
         assert_eq!(markup_style_in(mark, &all, Some('*'), own), markup_style(Kind::Marker, own));
+    }
+
+    /// The colour the innermost run gives character `i` of `line`, as the page
+    /// draws it.
+    fn prose_fg(line: &str, i: usize, ink: crate::theme::Palette) -> Option<Color> {
+        let all = yumete_core::markdown::spans(line);
+        let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start)?;
+        markup_style_at(span, &all, i, line.chars().nth(i), None, ink).fg
+    }
+
+    /// OKLab, for asking how far apart two colours look.
+    fn oklab(c: Color) -> (f64, f64, f64) {
+        let Color::Rgb(r, g, b) = c else { panic!("not rgb") };
+        let lin = |v: u8| {
+            let v = f64::from(v) / 255.0;
+            if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+        };
+        let (r, g, b) = (lin(r), lin(g), lin(b));
+        let l = (0.412_221_470_8 * r + 0.536_332_536_3 * g + 0.051_445_992_9 * b).cbrt();
+        let m = (0.211_903_498_2 * r + 0.680_699_545_1 * g + 0.107_396_956_6 * b).cbrt();
+        let s = (0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b).cbrt();
+        (
+            0.210_454_255_3 * l + 0.793_617_785 * m - 0.004_072_046_8 * s,
+            1.977_998_495_1 * l - 2.428_592_205 * m + 0.450_593_709_9 * s,
+            0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766 * s,
+        )
+    }
+
+    /// **墨香 colours bold and italic** (2026-11-04): a deep rose and a pale
+    /// one, bold-italic the bold's, in both moods — and none of them may be
+    /// mistaken for 朱, which only ever means wrong.
+    #[test]
+    fn ink_colours_bold_and_italic_apart_from_its_red() {
+        let rgb = |(r, g, b): (u8, u8, u8)| Color::Rgb(r, g, b);
+        let theme = yumete_config::ThemeConfig::default();
+        for (dark, prose) in [(true, yumete_config::INK_PROSE_DARK), (false, yumete_config::INK_PROSE_LIGHT)] {
+            let ink = crate::theme::Palette::of_theme(&theme, dark);
+            let line = "**b** *i* ***x*** **a *y* c**";
+            assert_eq!(prose_fg(line, 2, ink), Some(rgb(prose.bold)), "bold, dark={dark}");
+            assert_eq!(prose_fg(line, 7, ink), Some(rgb(prose.italic)), "italic, dark={dark}");
+            assert_eq!(prose_fg(line, 13, ink), Some(rgb(prose.bold_italic)), "***x***, dark={dark}");
+            assert_eq!(prose_fg(line, 23, ink), Some(rgb(prose.bold_italic)), "*y* in bold, dark={dark}");
+            assert_eq!(prose_fg(line, 20, ink), Some(rgb(prose.bold)), "the bold around it, dark={dark}");
+            assert_eq!(prose_fg(line, 0, ink), Some(ink.marker()), "`**` stays grey, dark={dark}");
+            assert_ne!(prose.bold, prose.italic, "two pinks, dark={dark}");
+            // Hue and distance from 朱: the measured floor is 22° and ΔE 0.10.
+            let red = oklab(ink.mark());
+            for pink in [prose.bold, prose.italic, prose.bold_italic] {
+                let p = oklab(rgb(pink));
+                let de = ((p.0 - red.0).powi(2) + (p.1 - red.1).powi(2) + (p.2 - red.2).powi(2)).sqrt();
+                let hue = |c: (f64, f64, f64)| c.2.atan2(c.1).to_degrees().rem_euclid(360.0);
+                let apart = (hue(p) - hue(red)).abs();
+                let apart = apart.min(360.0 - apart);
+                assert!(de >= 0.10, "{pink:?} is ΔE {de:.3} from 朱, dark={dark}");
+                assert!(apart >= 20.0, "{pink:?} is {apart:.0}° from 朱, dark={dark}");
+            }
+        }
+    }
+
+    /// **Each heading level has its own colour in 墨香** (2026-11-04), and the
+    /// `#`s stay grey: their count already says the level.
+    #[test]
+    fn ink_colours_each_heading_level() {
+        use yumete_core::markdown::{spans, Kind};
+        let rgb = |(r, g, b): (u8, u8, u8)| Color::Rgb(r, g, b);
+        for (dark, prose) in [(true, yumete_config::INK_PROSE_DARK), (false, yumete_config::INK_PROSE_LIGHT)] {
+            let ink = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::default(), dark);
+            for level in 1..=6 {
+                let line = format!("{} 標題", "#".repeat(level));
+                let all = spans(&line);
+                let text = all.iter().find(|s| s.kind == Kind::Heading).expect("a heading");
+                let mark = all.iter().find(|s| s.kind == Kind::HeadingMark).expect("its #s");
+                let style = markup_style_in(text, &all, Some('標'), ink);
+                assert_eq!(style.fg, Some(rgb(prose.headings[level - 1])), "level {level}, dark={dark}");
+                assert!(style.add_modifier.contains(Modifier::BOLD));
+                assert_eq!(markup_style_in(mark, &all, Some('#'), ink).fg, Some(ink.marker()));
+            }
+            assert_ne!(prose.headings[0], prose.headings[1]);
+            assert_ne!(prose.headings[1], prose.headings[2]);
+        }
+    }
+
+    /// **Typst's `#` code is read as code** (2026-11-04): a keyword, a call, a
+    /// string, a number with its unit, a comment — not one purple.
+    #[test]
+    fn typst_code_is_read_as_tokens() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::{Kind, Span};
+        let tokens = |text: &str| typst_code_tokens(&text.chars().collect::<Vec<_>>());
+        let line = r#"#set page(paper: "a5", margin: 2cm) // 版心"#;
+        let got = tokens(line);
+        let at = |needle: &str| got[line[..line.find(needle).unwrap()].chars().count()];
+        assert_eq!(at("#set"), Some(Token::Keyword));
+        assert_eq!(at("page"), Some(Token::Function));
+        assert_eq!(at("paper"), Some(Token::Parameter));
+        assert_eq!(at("\"a5\""), Some(Token::String));
+        assert_eq!(at("2cm"), Some(Token::Number));
+        assert_eq!(at("("), Some(Token::Punctuation));
+        assert_eq!(at("// 版心"), Some(Token::Comment));
+        assert_eq!(got.last().copied().flatten(), Some(Token::Comment), "to the end of the line");
+        let got = tokens("#link(\"x\")[潮汐表]");
+        assert_eq!(got[0], Some(Token::Function), "`#name` is a call");
+        assert_eq!(got[1], Some(Token::Function));
+        let got = tokens("#let n = none");
+        assert_eq!(got[0], Some(Token::Keyword));
+        assert_eq!(got[9], Some(Token::Constant));
+
+        // And the page draws them so under 墨香: the call's tokens, not purple.
+        let line = "#let price = 42 // 每斤";
+        let call = Span { start: 0, end: line.chars().count(), kind: Kind::Code2, construct: 0, depth: 0 };
+        let runs = [call];
+        let ink = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::default(), true);
+        let tokens = typst_line_tokens(|| line.chars().collect(), &runs, ink).expect("ink reads them");
+        let fg = |i: usize| markup_style_at(&runs[0], &runs, i, line.chars().nth(i), Some(&tokens), ink).fg;
+        assert_eq!(fg(0), Some(ink.purple()), "#let is a keyword");
+        assert_eq!(fg(13), Some(ink.orange()), "42 is a number");
+        assert_eq!(fg(16), markup_style(Kind::Token(Token::Comment), ink).fg, "the comment is grey");
+    }
+
+    /// **A theme that sets no prose colours is as it was** (2026-11-04): the
+    /// borrowed ones keep their tables, `bw` and `morandi` their weight alone,
+    /// and none of them reads Typst code as tokens.
+    #[test]
+    fn themes_without_prose_colours_are_unchanged() {
+        use yumete_core::markdown::{Kind, Span};
+        let names = [
+            "one-dark", "github", "monokai", "dracula", "tokyo-night", "catppuccin", "gruvbox", "bw", "morandi",
+        ];
+        for name in names {
+            let theme = yumete_config::ThemeConfig::named(name).expect(name);
+            assert_eq!((theme.prose_dark, theme.prose_light), (None, None), "{name}");
+            for dark in [true, false] {
+                let ink = crate::theme::Palette::of_theme(&theme, dark);
+                let line = "**b** *i* ***x***";
+                let all = yumete_core::markdown::spans(line);
+                for i in [2, 7, 13] {
+                    let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
+                    assert_eq!(
+                        markup_style_at(span, &all, i, line.chars().nth(i), None, ink),
+                        markup_style_in(span, &all, line.chars().nth(i), ink),
+                        "{name}, dark={dark}, char {i}"
+                    );
+                }
+                let call = [Span { start: 0, end: 4, kind: Kind::Code2, construct: 0, depth: 0 }];
+                assert!(typst_line_tokens(|| "#let".chars().collect(), &call, ink).is_none(), "{name}");
+            }
+        }
+        // bw and morandi still mark bold by weight alone.
+        for name in ["bw", "morandi"] {
+            let ink = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::named(name).unwrap(), true);
+            assert_eq!(markup_style(Kind::Strong, ink).fg, None, "{name}");
+            assert_eq!(markup_style(Kind::Emphasis, ink).fg, None, "{name}");
+        }
     }
 
     /// **GitHub has a table for each mood** (2026-10-26): the same keyword,

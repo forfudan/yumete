@@ -450,6 +450,8 @@ pub struct Palette {
     /// Colours copied from a borrowed theme, which win over the ones worked
     /// out here (2026-10-25, see [`yumete_config::Pinned`]).
     pinned: Option<yumete_config::Pinned>,
+    /// Hues for bold, italic, heading levels and list markers (2026-11-04).
+    prose: Option<yumete_config::Prose>,
     paint: bool,
     /// Whether this is the work area that is only being *read* (Feature #176).
     ///
@@ -679,6 +681,10 @@ impl Palette {
                 true => theme.pinned,
                 false => theme.pinned_light,
             },
+            prose: match dark {
+                true => theme.prose_dark,
+                false => theme.prose_light,
+            },
             paint: theme.ground == Ground::Paint,
             faded: 0,
             inactive: fade_of(theme.inactive),
@@ -905,6 +911,12 @@ impl Palette {
     /// A yes-or-no the borrowed theme states — whether its comments lean, say.
     pub fn pinned_says(self, pick: impl Fn(&yumete_config::Pinned) -> bool) -> bool {
         self.pinned.is_some_and(|p| pick(&p))
+    }
+
+    /// A hue the theme gives one of the prose's own marks — `None` when it
+    /// marks them by weight alone.
+    pub fn prose(self, pick: impl Fn(&yumete_config::Prose) -> (u8, u8, u8)) -> Option<Color> {
+        self.prose.map(|p| self.accent(pick(&p)))
     }
 
     /// Whether the theme copies its code and Markdown colours from elsewhere.

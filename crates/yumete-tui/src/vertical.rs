@@ -1214,6 +1214,8 @@ pub fn draw(
     // The wiki names of the line last asked about (#287), for the same reason.
     let mut wiki_names: Option<(usize, Vec<(usize, usize)>)> = None;
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
+    // The marked line's Typst code as tokens, kept beside it (2026-11-04).
+    let mut tokens: Option<Vec<Option<yumete_core::code::Token>>> = None;
     // And its 平仄, for the same reason: the editor caches the answer per line
     // too, but a page is forty 縱 and this saves the lookup as well as the walk.
     let mut metered: Option<(usize, Vec<yumete_core::meter::Mark>)> = None;
@@ -1376,7 +1378,9 @@ pub fn draw(
             // inside a fence or a page's metadata nothing is markup, so the
             // block decides before the line is scanned at all.
             if marked.as_ref().is_none_or(|(l, _)| *l != zong.line) {
-                marked = Some((zong.line, markup.runs(zong.line)));
+                let runs = markup.runs(zong.line);
+                tokens = crate::typst_line_tokens(|| rope.line(zong.line).chars().collect(), &runs, ink);
+                marked = Some((zong.line, runs));
             }
             let runs: &[yumete_core::markdown::Span] = match &marked {
                 Some((l, r)) if *l == zong.line => r.as_slice(),
@@ -1588,7 +1592,8 @@ pub fn draw(
             // 路；格子沒有底色了（見上面那一段），讓路的那一方也就沒有了。
             for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
                 let ch = symbol.chars().next();
-                style = style.patch(crate::markup_style_in(run, runs, ch, ink));
+                let at = column.max(run.start);
+                style = style.patch(crate::markup_style_at(run, runs, at, ch, tokens.as_deref(), ink));
             }
 
             // Warning: **Not `&& !has_selection`** (#450, and again here for #457).
