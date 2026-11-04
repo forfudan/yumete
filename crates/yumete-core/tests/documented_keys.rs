@@ -423,7 +423,9 @@ fn every_key_sequence_the_documents_print_is_one_the_editor_offers() {
     let mut asked = 0;
     let mut wrong = Vec::new();
     for (doc, text) in documents() {
-        if YOUR_OWN_KEYS.iter().any(|page| doc.ends_with(page)) {
+        // Forward slashes on every system: on Windows the path comes
+        // with backslashes.
+        if YOUR_OWN_KEYS.iter().any(|page| doc.replace('\\', "/").ends_with(page)) {
             continue;
         }
         for (line, quote) in quoted(&text) {
