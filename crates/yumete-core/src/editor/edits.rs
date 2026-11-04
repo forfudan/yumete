@@ -466,9 +466,9 @@ impl Editor {
     /// `indent_width` 個空格。問這一行比問設置準——一份檔混着兩種的時候，跟着
     /// 眼前這一段走纔不會把兩種拌在一起。
     pub(super) fn indent_unit(&self, carried: &str) -> String {
-        match carried.contains('\t') || (carried.is_empty() && !self.tab_spaces) {
+        match carried.contains('\t') || (carried.is_empty() && !self.tab_spaces()) {
             true => "\t".to_string(),
-            false => " ".repeat(self.indent_width),
+            false => " ".repeat(self.indent_width()),
         }
     }
 
@@ -1859,7 +1859,7 @@ impl Editor {
         for c in rope.line(line).chars() {
             match c {
                 ' ' => columns += 1,
-                '\t' => columns += self.tab_stop - columns % self.tab_stop,
+                '\t' => columns += self.tab_stop() - columns % self.tab_stop(),
                 _ => break,
             }
         }
@@ -1893,8 +1893,8 @@ impl Editor {
                 }
                 Some(by) => (had as isize + by).max(0) as usize,
             };
-            let indent = match !self.tab_spaces {
-                true => format!("{}{}", "\t".repeat(new / self.tab_stop), " ".repeat(new % self.tab_stop)),
+            let indent = match !self.tab_spaces() {
+                true => format!("{}{}", "\t".repeat(new / self.tab_stop()), " ".repeat(new % self.tab_stop())),
                 false => " ".repeat(new),
             };
             let old: String = rope.slice(start..start + blank).to_string();

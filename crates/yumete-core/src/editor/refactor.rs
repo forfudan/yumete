@@ -283,7 +283,7 @@ impl Editor {
             let text = rope.line(line).to_string();
             (line, crate::problem::utf16_column(&text, at - rope.line_to_char(line)))
         };
-        self.format_query = Some((path, point(start), point(end), self.indent_width, self.tab_spaces));
+        self.format_query = Some((path, point(start), point(end), self.indent_width(), self.tab_spaces()));
         self.asked_format_from = Some((self.current_buffer().id(), self.current_buffer().revision()));
         self.status = say!("lsp.asking-format");
     }

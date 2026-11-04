@@ -25901,7 +25901,7 @@ fn several_selections_leave_insert_indent_merge_and_undo_as_helix_does() {
     press(&mut ed, "%sa");
     ed.on_key(Key::Enter);
     press(&mut ed, ">");
-    let pad = " ".repeat(ed.indent_width);
+    let pad = " ".repeat(ed.indent_width());
     assert_eq!(ed.current_buffer().text(), format!("{pad}a a\n"));
     assert_eq!(spans(&ed), vec!["a", "a"]);
     // `C` `v` `j` on three lines: the two selections overlap and merge.

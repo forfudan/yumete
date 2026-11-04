@@ -596,19 +596,23 @@ impl Editor {
             }
             Command::SetTabInserts(want) => {
                 if let Some(spaces) = want {
-                    self.tab_spaces = spaces;
+                    // A typed setting is this buffer's too: a modeline's
+                    // `et` gives way to it (2026-11-04).
+                    self.set_tab_spaces(spaces);
+                    self.current_buffer_mut().local_mut().tab_spaces = None;
                 }
-                self.status = match self.tab_spaces {
-                    true => say!("layout.tab-spaces", self.indent_width),
-                    false => say!("layout.tab-tab", self.indent_width),
+                self.status = match self.tab_spaces() {
+                    true => say!("layout.tab-spaces", self.indent_width()),
+                    false => say!("layout.tab-tab", self.indent_width()),
                 };
                 Ok(CommandOutcome::Continue)
             }
             Command::SetIndentWidth(want) => {
                 if let Some(width) = want {
                     self.set_indent_width(width);
+                    self.current_buffer_mut().local_mut().indent_width = None;
                 }
-                self.status = say!("layout.indent-width", self.indent_width);
+                self.status = say!("layout.indent-width", self.indent_width());
                 Ok(CommandOutcome::Continue)
             }
             Command::SetAutoPairs(level) => {

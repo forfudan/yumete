@@ -397,7 +397,7 @@ impl Editor {
     /// Indentation: `Tab` the kind the file indents with (`tab_spaces`),
     /// `Shift-Tab` the other kind.
     pub(super) fn insert_indent(&mut self, the_files: bool) {
-        let spaces = the_files == self.tab_spaces;
+        let spaces = the_files == self.tab_spaces();
         let text = match spaces {
             // To the next multiple of the indent, not a fixed run: a
             // Tab after `ab` lands on the same column a Tab after
@@ -412,11 +412,11 @@ impl Editor {
                 let ahead: String = rope.slice(start..self.sel.head()).chars().collect();
                 let column = yumete_cjk::graphemes(&ahead).fold(0, |col, g| {
                     match g {
-                        "\t" => col + self.tab_stop - col % self.tab_stop,
+                        "\t" => col + self.tab_stop() - col % self.tab_stop(),
                         g => col + yumete_cjk::grapheme_width(g),
                     }
                 });
-                let width = self.indent_width;
+                let width = self.indent_width();
                 " ".repeat(width - column % width)
             }
             false => "\t".to_string(),

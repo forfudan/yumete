@@ -230,22 +230,33 @@ impl Editor {
     /// Set how many columns `>` adds and `<` removes.
     /// How far a TAB advances — to the next multiple of `stop` (#374).
     pub fn set_tab_stop(&mut self, stop: usize) {
-        self.tab_stop = stop.max(1);
+        self.tab_stop_global = stop.max(1);
     }
 
-    /// The same, for whoever is drawing.
+    /// The same, for whoever is drawing: this buffer's own when it has one
+    /// (a modeline's `ts`, 2026-11-04), else the editor's.
     pub fn tab_stop(&self) -> usize {
-        self.tab_stop
+        self.current_buffer().local().tab_stop.unwrap_or(self.tab_stop_global)
     }
 
     pub fn set_indent_width(&mut self, width: usize) {
-        self.indent_width = width.max(1);
+        self.indent_width_global = width.max(1);
+    }
+
+    /// How many columns `>` adds and `<` removes, this buffer's own first.
+    pub fn indent_width(&self) -> usize {
+        self.current_buffer().local().indent_width.unwrap_or(self.indent_width_global)
     }
 
     /// Whether Tab types spaces (Shift-Tab then types a TAB), or the other
     /// way round.
     pub fn set_tab_spaces(&mut self, spaces: bool) {
-        self.tab_spaces = spaces;
+        self.tab_spaces_global = spaces;
+    }
+
+    /// The same question asked: this buffer's own answer first.
+    pub fn tab_spaces(&self) -> bool {
+        self.current_buffer().local().tab_spaces.unwrap_or(self.tab_spaces_global)
     }
 
     /// The count typed so far (`3` of a pending `3w`), for the status line.

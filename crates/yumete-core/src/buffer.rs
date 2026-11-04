@@ -101,6 +101,23 @@ fn next_edit() -> u64 {
     EDIT_CLOCK.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1
 }
 
+/// **Settings this buffer holds for itself** (2026-11-04), over the
+/// editor's: what a vim modeline in the file says. `None` is the editor's.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Local {
+    /// `ts`: how far a TAB advances.
+    pub tab_stop: Option<usize>,
+    /// `sw`: how many columns `>` adds.
+    pub indent_width: Option<usize>,
+    /// `et` / `noet`: whether Tab types spaces.
+    pub tab_spaces: Option<bool>,
+    /// `tw`: the width `:hard-wrap` fills to.
+    pub text_width: Option<usize>,
+    /// What the modeline said, for `:info`: the options taken and the ones
+    /// passed over.
+    pub said: Option<String>,
+}
+
 pub struct Buffer {
     /// Which buffer this is, for as long as the session lasts.
     ///
@@ -270,6 +287,8 @@ pub struct Buffer {
     /// (2026-11-04): `(line, taken, put, at the line's start)`, so a server's diagnostics move with
     /// the text until it says again. Only edits that change the line count.
     line_edits: Vec<(usize, usize, usize, bool)>,
+    /// Settings of its own, over the editor's ([`Local`]).
+    local: Local,
     /// This buffer's own edit history.
     ///
     /// Per buffer, not per editor: a single shared stack means `u` in one file
@@ -427,6 +446,7 @@ impl Buffer {
             insert_stop: None,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
+            local: Local::default(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -497,6 +517,7 @@ impl Buffer {
             insert_stop: None,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
+            local: Local::default(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             pending_draft: None,
@@ -666,6 +687,7 @@ impl Buffer {
             insert_stop: None,
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
+            local: Local::default(),
             pending_draft,
             pending_swap,
             wrote_at: None,
@@ -1744,6 +1766,15 @@ impl Buffer {
         })
     }
 
+
+    /// This buffer's own settings ([`Local`]).
+    pub fn local(&self) -> &Local {
+        &self.local
+    }
+
+    pub fn local_mut(&mut self) -> &mut Local {
+        &mut self.local
+    }
 
     /// The line-count changes since the last call, oldest first (see
     /// `line_edits`).

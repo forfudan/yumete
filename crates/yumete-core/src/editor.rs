@@ -3142,9 +3142,9 @@ pub struct Editor {
     /// The last `f`/`t`/`F`/`T`, replayed by `A-.`.
     last_find: Option<(FindKind, char)>,
     /// Columns of indentation added by `>` and removed by `<`.
-    indent_width: usize,
+    indent_width_global: usize,
     /// What Tab types in Insert mode — spaces, or a TAB (Shift-Tab the other).
-    tab_spaces: bool,
+    tab_spaces_global: bool,
     /// Set by `:yume-annotation`, cleared once the TUI has passed it to the
     /// IME. The core owns no IME, so a command that configures one leaves a
     /// request here rather than reaching across the layers. The inner `None`
@@ -3963,7 +3963,7 @@ pub struct Editor {
     /// puts their second column at six and seven — not lined up, which is all
     /// a tab-separated file is for. To the next multiple of eight they both
     /// land on eight — 「既然是 Unix 老默认就用他」 (2026-09-10).
-    tab_stop: usize,
+    tab_stop_global: usize,
     /// The width the *writer* wants to write to, if they have said one.
     ///
     /// A measure, in the typesetter's sense: not how wide the terminal is, but
@@ -4408,8 +4408,8 @@ impl Editor {
             overwritten: Vec::new(),
             insert_opened: None,
             last_find: None,
-            indent_width: 4,
-            tab_spaces: true,
+            indent_width_global: 4,
+            tab_spaces_global: true,
             annotation_request: None,
             scheme_request: None,
             session_root: None,
@@ -4544,7 +4544,7 @@ impl Editor {
             zong_motion: false,
             soft_wrap: true,
             wrap_width: None,
-            tab_stop: 8,
+            tab_stop_global: 8,
             measure: None,
             zong_measure: None,
             autosave: true,

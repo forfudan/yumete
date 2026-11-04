@@ -168,8 +168,8 @@ impl super::Editor {
     /// display column (inclusive; `usize::MAX` after `$`).
     fn block_shape(&self, block: Block) -> (usize, usize, usize, usize) {
         let rope = self.current_buffer().rope();
-        let (la, ca, wa) = place(rope, self.tab_stop, block.anchor);
-        let (lc, cc, wc) = place(rope, self.tab_stop, block.cursor);
+        let (la, ca, wa) = place(rope, self.tab_stop(), block.anchor);
+        let (lc, cc, wc) = place(rope, self.tab_stop(), block.cursor);
         let left = ca.min(cc);
         let right = match block.to_line_end {
             true => usize::MAX,
@@ -185,7 +185,7 @@ impl super::Editor {
         let rope = self.current_buffer().rope();
         (first..=last)
             .filter_map(|line| {
-                let inside: Vec<usize> = cells(rope, self.tab_stop, line)
+                let inside: Vec<usize> = cells(rope, self.tab_stop(), line)
                     .into_iter()
                     .filter(|&(_, c, w)| c + w > left && c <= right)
                     .map(|(at, _, _)| at)
@@ -204,7 +204,7 @@ impl super::Editor {
         let (first, last, left, right) = self.block_shape(block);
         let across = match block.to_line_end {
             true => 0,
-            false => at_column(rope, self.tab_stop, first, right).saturating_sub(at_column(rope, self.tab_stop, first, left)),
+            false => at_column(rope, self.tab_stop(), first, right).saturating_sub(at_column(rope, self.tab_stop(), first, left)),
         };
         Size { down: last - first, across, to_line_end: block.to_line_end }
     }
@@ -269,7 +269,7 @@ impl super::Editor {
         let quiet = self.pending == Pending::None && self.alias_held.is_empty() && self.count.is_none();
         if quiet {
             let (first, _, left, _) = self.block_shape(block);
-            let top_left = at_column(self.current_buffer().rope(), self.tab_stop, first, left);
+            let top_left = at_column(self.current_buffer().rope(), self.tab_stop(), first, left);
             match key {
                 Key::Esc | Key::Ctrl('v') | Key::Ctrl('c') => return self.leave_block(block.cursor),
                 Key::Char('v' | 'V') => return self.leave_block(block.cursor),
@@ -280,10 +280,10 @@ impl super::Editor {
                 // The other corner on the same line: the columns trade places.
                 Key::Char('O') => {
                     let rope = self.current_buffer().rope();
-                    let (la, ca, _) = place(rope, self.tab_stop, block.anchor);
-                    let (lc, cc, _) = place(rope, self.tab_stop, block.cursor);
-                    let anchor = at_column(rope, self.tab_stop, la, cc);
-                    let cursor = at_column(rope, self.tab_stop, lc, ca);
+                    let (la, ca, _) = place(rope, self.tab_stop(), block.anchor);
+                    let (lc, cc, _) = place(rope, self.tab_stop(), block.cursor);
+                    let anchor = at_column(rope, self.tab_stop(), la, cc);
+                    let cursor = at_column(rope, self.tab_stop(), lc, ca);
                     self.block = Some(Block { anchor, cursor, goal: None, ..block });
                     return self.show_block();
                 }
@@ -397,7 +397,7 @@ impl super::Editor {
         };
         for (nth, line) in (first..=last).enumerate() {
             let text = match pieces.iter().find(|&&(l, _, _)| l == line) {
-                Some(&(_, a, b)) => piece_text(&rope, self.tab_stop, line, a..b, left, right),
+                Some(&(_, a, b)) => piece_text(&rope, self.tab_stop(), line, a..b, left, right),
                 None => String::new(),
             };
             self.edit_nth = Some(nth);
@@ -415,12 +415,12 @@ impl super::Editor {
     /// its column.
     fn block_delete(&mut self, block: Block) {
         let (first, _, left, right) = self.block_shape(block);
-        let corner = at_column(self.current_buffer().rope(), self.tab_stop, first, left);
+        let corner = at_column(self.current_buffer().rope(), self.tab_stop(), first, left);
         self.sel = Selections::one(Range::at(corner));
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
         for (line, a, b) in self.block_pieces(block).into_iter().rev() {
-            let cells = cells(self.current_buffer().rope(), self.tab_stop, line);
+            let cells = cells(self.current_buffer().rope(), self.tab_stop(), line);
             let column = |at: usize| cells.iter().find(|&&(pos, _, _)| pos == at).map(|&(_, c, w)| (c, w));
             let before = column(a).map_or(0, |(c, _)| left.saturating_sub(c));
             let after = match (block.to_line_end, column(b - 1)) {
@@ -462,22 +462,22 @@ impl super::Editor {
             }
         }
         self.current_buffer_mut().end_undo_group(grouping);
-        let top_left = at_column(self.current_buffer().rope(), self.tab_stop, first, left);
+        let top_left = at_column(self.current_buffer().rope(), self.tab_stop(), first, left);
         self.leave_block(top_left);
     }
 
     /// `>` and `<`: one level of indent at the block's left edge, every line.
     fn block_shift(&mut self, block: Block, add: bool) {
         let (first, last, left, _) = self.block_shape(block);
-        let pad = " ".repeat(self.indent_width);
+        let pad = " ".repeat(self.indent_width());
         self.snapshot();
         let grouping = self.current_buffer_mut().begin_undo_group();
         for line in (first..=last).rev() {
             let rope = self.current_buffer().rope();
-            if width(rope, self.tab_stop, line) < left || rope.line(line).len_chars() == 0 {
+            if width(rope, self.tab_stop(), line) < left || rope.line(line).len_chars() == 0 {
                 continue;
             }
-            let at = at_column(rope, self.tab_stop, line, left);
+            let at = at_column(rope, self.tab_stop(), line, left);
             if add {
                 if !self.edit_insert(at, &pad) {
                     break;
@@ -485,7 +485,7 @@ impl super::Editor {
             } else {
                 let len = rope.len_chars();
                 let mut n = 0;
-                while n < self.indent_width && at + n < len && rope.char(at + n) == ' ' {
+                while n < self.indent_width() && at + n < len && rope.char(at + n) == ' ' {
                     n += 1;
                 }
                 if n > 0 && !self.edit_remove(at..at + n) {
@@ -507,20 +507,20 @@ impl super::Editor {
         };
         let start = match kind {
             Lay::AtEnd => motion::line_end(&rope, rope.line_to_char(first)),
-            _ => at_column(&rope, self.tab_stop, first, column),
+            _ => at_column(&rope, self.tab_stop(), first, column),
         };
         // The undo point is taken at the block's corner: vim's `u` comes back
         // there, to the first line, not to the line the cursor was on. `c`
         // took one already, before its cut, and the typing belongs to it: one
         // `u` takes back the whole change, as in vim.
-        self.sel = Selections::one(Range::at(at_column(&rope, self.tab_stop, first, left)));
+        self.sel = Selections::one(Range::at(at_column(&rope, self.tab_stop(), first, left)));
         if op != 'c' {
             self.snapshot();
         }
         // `A` on a first line too short for the block pads it, as on the rest.
         let start = match kind {
-            Lay::After if width(&rope, self.tab_stop, first) < column => {
-                let pad = " ".repeat(column - width(&rope, self.tab_stop, first));
+            Lay::After if width(&rope, self.tab_stop(), first) < column => {
+                let pad = " ".repeat(column - width(&rope, self.tab_stop(), first));
                 let end = motion::line_end(&rope, rope.line_to_char(first));
                 match self.edit_insert(end, &pad) {
                     true => end + pad.chars().count(),
@@ -573,13 +573,13 @@ impl super::Editor {
             let grouping = self.current_buffer_mut().begin_undo_group();
             for line in (insert.first + 1..=insert.last).rev() {
                 let rope = self.current_buffer().rope().clone();
-                let wide = width(&rope, self.tab_stop, line);
+                let wide = width(&rope, self.tab_stop(), line);
                 let end = motion::line_end(&rope, rope.line_to_char(line));
                 let (at, pad) = match insert.kind {
                     Lay::Before if wide < insert.column => continue,
-                    Lay::Before => (at_column(&rope, self.tab_stop, line, insert.column), String::new()),
+                    Lay::Before => (at_column(&rope, self.tab_stop(), line, insert.column), String::new()),
                     Lay::After if wide < insert.column => (end, " ".repeat(insert.column - wide)),
-                    Lay::After => (at_column(&rope, self.tab_stop, line, insert.column), String::new()),
+                    Lay::After => (at_column(&rope, self.tab_stop(), line, insert.column), String::new()),
                     Lay::AtEnd => (end, String::new()),
                 };
                 if !self.edit_insert(at, &format!("{pad}{typed}")) {
@@ -593,7 +593,7 @@ impl super::Editor {
         }
         // The block's top-left corner, as vim leaves it after `I`, `A`, `c`.
         let rope = self.current_buffer().rope().clone();
-        self.leave_block(at_column(&rope, self.tab_stop, insert.first, insert.left));
+        self.leave_block(at_column(&rope, self.tab_stop(), insert.first, insert.left));
     }
 
     /// **What `.` plays to do it again**: the same block from the cursor, the
@@ -625,8 +625,8 @@ impl super::Editor {
             _ => self.register_parts.clone(),
         };
         let rope = self.current_buffer().rope().clone();
-        let (line, column, w) = place(&rope, self.tab_stop, self.sel.head());
-        let column = match after && width(&rope, self.tab_stop, line) > 0 {
+        let (line, column, w) = place(&rope, self.tab_stop(), self.sel.head());
+        let column = match after && width(&rope, self.tab_stop(), line) > 0 {
             true => column + w,
             false => column,
         };
@@ -654,10 +654,10 @@ impl super::Editor {
                 }
                 continue;
             }
-            let wide = width(&rope, self.tab_stop, target);
+            let wide = width(&rope, self.tab_stop(), target);
             let (at, pad) = match wide < column {
                 true => (motion::line_end(&rope, rope.line_to_char(target)), " ".repeat(column - wide)),
-                false => (at_column(&rope, self.tab_stop, target, column), String::new()),
+                false => (at_column(&rope, self.tab_stop(), target, column), String::new()),
             };
             if !self.edit_insert(at, &format!("{pad}{piece}")) {
                 break;
@@ -665,7 +665,7 @@ impl super::Editor {
         }
         self.current_buffer_mut().end_undo_group(grouping);
         let rope = self.current_buffer().rope().clone();
-        let at = at_column(&rope, self.tab_stop, line, column);
+        let at = at_column(&rope, self.tab_stop(), line, column);
         self.sel = Selections::one(Range::at(at));
         self.clamp_cursor();
     }

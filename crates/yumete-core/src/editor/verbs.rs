@@ -460,8 +460,10 @@ impl Editor {
         self.hard_wrap = width;
     }
 
+    /// The width `:hard-wrap` fills to: this buffer's own (a modeline's
+    /// `tw`, 2026-11-04), else the config's.
     pub fn hard_wrap(&self) -> usize {
-        self.hard_wrap
+        self.current_buffer().local().text_width.unwrap_or(self.hard_wrap)
     }
 
     /// **`:hard-wrap [N]`** (2026-10-30): the selected lines, or the unit
@@ -474,7 +476,7 @@ impl Editor {
         }
         let width = match asked {
             Some(w) => w,
-            None if self.hard_wrap > 0 => self.hard_wrap,
+            None if self.hard_wrap() > 0 => self.hard_wrap(),
             None => {
                 self.status = say!("hard-wrap.unset");
                 return;
@@ -826,19 +828,19 @@ impl Editor {
         let primary = self.sel.primary();
         let which = self.sel.iter().position(|one| *one == primary).unwrap_or(0);
         let mut ranges: Vec<crate::selection::Range> = self.sel.iter().copied().collect();
-        let pad = " ".repeat(self.indent_width);
+        let pad = " ".repeat(self.indent_width());
         self.snapshot();
         // Bottom-up, so earlier edits do not shift the lines still to come.
         for &line in lines.iter().rev() {
             let at = self.current_buffer().rope().line_to_char(line);
             // `(at, n, grows)`: what changed at `at`, for moving the ranges.
             let change = if add {
-                self.edit_insert(at, &pad).then_some((at, self.indent_width, true))
+                self.edit_insert(at, &pad).then_some((at, self.indent_width(), true))
             } else {
                 let rope = self.current_buffer().rope();
                 let len = rope.len_chars();
                 let mut n = 0;
-                while n < self.indent_width && at + n < len && rope.char(at + n) == ' ' {
+                while n < self.indent_width() && at + n < len && rope.char(at + n) == ' ' {
                     n += 1;
                 }
                 (n > 0 && self.edit_remove(at..at + n)).then_some((at, n, false))
