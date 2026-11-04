@@ -607,6 +607,10 @@ impl Editor {
     /// `r`: every character of the selection.
     pub(super) fn replace_by_key(&mut self, c: char) {
         let count = self.operator_count.take().unwrap_or(1).max(1);
+        // vim's `r` writes on the line a closed fold hides the cursor on.
+        if self.vim_keymap() && !self.extend {
+            self.stand_where_hidden(true);
+        }
         if !self.keymap_rules().replace_from_caret {
             return self.replace_chars(c);
         }

@@ -994,14 +994,34 @@ impl Editor {
             return;
         }
         self.remember_jump();
-        // vim's keep the column wanted, `$`'s end of line too: nvim's
-        // default is 'nostartofline' (measured 2026-11-04), where classic
-        // vim went to the first non-blank.
+        let want = self.column_wanted();
+        self.land_at_column(line, want);
+    }
+
+    /// **The column vim's cursor wants**: the one `j` and `k` keep (`$`'s
+    /// end of line among them), or where it stands. vim's line jumps and
+    /// linewise operators come back to it, nvim's default being
+    /// 'nostartofline' (measured 2026-11-04), where classic vim went to the
+    /// first non-blank.
+    pub(super) fn column_wanted(&self) -> usize {
         let rope = self.current_buffer().rope();
-        let goal = self.sel.goal().unwrap_or_else(|| motion::visual_column(rope, self.sel.head()));
-        let at = motion::pos_at_visual_column(rope, line, goal).min(motion::line_last(rope, rope.line_to_char(line)));
+        self.sel.goal().unwrap_or_else(|| motion::visual_column(rope, self.sel.head()))
+    }
+
+    /// The cursor onto `line` at the column it wants, as near as the line
+    /// reaches, still wanting it.
+    pub(super) fn land_at_column(&mut self, line: usize, want: usize) {
+        let rope = self.current_buffer().rope();
+        let line = line.min(motion::last_line(rope));
+        let at = motion::pos_at_visual_column(rope, line, want).min(motion::line_last(rope, rope.line_to_char(line)));
         self.move_head(at);
-        self.sel.set_goal(Some(goal));
+        self.sel.set_goal(Some(want));
+    }
+
+    /// The column vim's line jumps keep, `None` where they do not: helix's,
+    /// and in a table's grid or cell, where the cell is the place.
+    pub(super) fn line_jump_keeps(&self) -> Option<usize> {
+        (self.as_vim() && !self.grid_has_the_pane() && self.cell_far_wall().is_none()).then(|| self.column_wanted())
     }
 
     /// **跳到下一個/上一個函數或類**（`]f`/`[f`/`]c`/`[c`，2026-10-06）。

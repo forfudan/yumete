@@ -26,11 +26,18 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
         // vim's jumps leave a closed fold closed (its `foldopen` has no
         // `jump`, measured 2026-11-03).
         e.fold_stays_closed = true;
-        if let Some(n) = line.filter(|&n| n > 0) {
-            return e.goto_grid_row(n);
+        // vim's `gg` keeps the column, as `G` does (`line_jump_keeps`).
+        let keep = e.vim_keymap().then(|| e.line_jump_keeps()).flatten();
+        match line.filter(|&n| n > 0) {
+            Some(n) => e.goto_grid_row(n),
+            None => {
+                e.remember_jump();
+                e.goto_motion(motion::Motion::FileStart);
+            }
         }
-        e.remember_jump();
-        e.goto_motion(motion::Motion::FileStart);
+        if let Some(want) = keep {
+            e.land_at_column(e.cursor_line(), want);
+        }
     }, Key::Char('g')),
     (NormalCmd::GotoFileEnd, |e, _| {
         e.fold_stays_closed = true;
@@ -102,6 +109,11 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::OperatorFill, |e, _| e.g_operator('q'), Key::Char('q')),
     (NormalCmd::OperatorFillKeepCursor, |e, _| e.g_operator('w'), Key::Char('w')),
     (NormalCmd::JoinSelectionsNoSpace, |e, cx| {
+        // A group's key is not seen by `before_a_motion`: on a closed fold,
+        // vim's `gJ` joins the line the cursor is hidden on, as `J` does.
+        if e.vim_keymap() && !e.extend {
+            e.stand_where_hidden(true);
+        }
         let n = match e.extend {
             true => {
                 let rope = e.current_buffer().rope();

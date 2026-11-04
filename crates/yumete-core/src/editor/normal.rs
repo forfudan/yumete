@@ -2531,10 +2531,18 @@ impl Editor {
     // 决定。手册也是你写的。手册从来没说过这是『设计的偏离』。请你和
     // helix 对齐。」 A divergence from the reference is the author's to
     // make, not something a comment can grant itself.
-    #[allow(unused_variables)]
     pub(super) fn cmd_goto_line(&mut self, cx: Cx) {
-        let Cx { key, count, operator_count, continuing_zong } = cx;
+        let Cx { count, operator_count, .. } = cx;
         self.fold_stays_closed = true;
+        // vim's `G` keeps the column (`line_jump_keeps`).
+        let keep = self.line_jump_keeps();
+        self.goto_line_unkept(count, operator_count);
+        if let Some(want) = keep {
+            self.land_at_column(self.cursor_line(), want);
+        }
+    }
+
+    fn goto_line_unkept(&mut self, count: usize, operator_count: Option<usize>) {
         // `operator_count`, not `self.count`: the count was taken at
         // the top of this function, so asking `self.count` here always
         // said "no digits" and `1G` went to the *last* line.

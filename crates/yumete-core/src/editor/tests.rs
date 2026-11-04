@@ -35547,6 +35547,49 @@ fn the_column_on_a_closed_fold_is_the_texts() {
     assert_eq!(ed.cursor_visual_column(), 9, "nvim: 2,10");
 }
 
+/// **An edit at a cursor a closed fold hides acts on its own line**
+/// (2026-11-04, nvim, the cursor `:3` in a fold of lines 2 to 4): `~`, `J`,
+/// `gJ` and `r` change line 3 and leave the fold closed, `a` and `A` type
+/// there; `x` and `dd` still take the fold whole.
+#[test]
+fn an_edit_at_a_hidden_cursor_acts_on_its_line() {
+    let text = "one\ntwo alpha\nthree beta\nfour gamma\nfive\nsix\n";
+    let hidden = |ed: &Editor| {
+        ed.hidden_place().map(|at| {
+            let rope = ed.current_buffer().rope();
+            let line = rope.char_to_line(at);
+            (line + 1, at - rope.line_to_char(line) + 1)
+        })
+    };
+    for (keys, after, place) in [
+        ("~", "one\ntwo alpha\nThree beta\n", Some((3, 2))),
+        ("3~", "one\ntwo alpha\nTHRee beta\n", Some((3, 4))),
+        ("J", "one\ntwo alpha\nthree beta four gamma\nfive\n", Some((3, 11))),
+        ("gJ", "one\ntwo alpha\nthree betafour gamma\nfive\n", Some((3, 11))),
+        ("rX", "one\ntwo alpha\nXhree beta\n", Some((3, 1))),
+        ("x", "one\nfive\n", None),
+        ("dd", "one\nfive\n", None),
+    ] {
+        let mut ed = typed_vim(text);
+        press(&mut ed, "jzf2j:3");
+        ed.on_key(Key::Enter);
+        press(&mut ed, keys);
+        assert!(ed.current_buffer().text().starts_with(after), "{keys}: {:?}", ed.current_buffer().text());
+        assert_eq!(hidden(&ed), place, "{keys}: nvim's cursor");
+        if place.is_some() {
+            assert!(ed.fold_head(1), "{keys}: the fold stays closed");
+        }
+    }
+    for (keys, after) in [("aX", "one\ntwo alpha\ntXhree beta\n"), ("AX", "one\ntwo alpha\nthree betaX\n")] {
+        let mut ed = typed_vim(text);
+        press(&mut ed, "jzf2j:3");
+        ed.on_key(Key::Enter);
+        press(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        assert!(ed.current_buffer().text().starts_with(after), "{keys}: {:?}", ed.current_buffer().text());
+    }
+}
+
 /// **Typing opens the folds every cursor is in** (2026-11-04, review of
 /// 0.17.0): a second cursor on a line a closed fold hides used to type
 /// into it unseen.
@@ -36137,6 +36180,107 @@ fn vims_h_m_l_keep_the_column() {
     view(&mut ed);
     press(&mut ed, "gt");
     assert_eq!(at(&ed), (15, 5), "helix: the first non-blank");
+}
+
+/// **vim's `G` and `gg` keep the column** (2026-11-04): nvim's default is
+/// 'nostartofline', so `G`, `gg` and `{count}G` land at the column the
+/// cursor wants, `$`'s end of line too. helix's `gg` and `ge` still go to
+/// the line's start.
+#[test]
+fn vims_g_and_gg_keep_the_column() {
+    let text: String = (1..=100)
+        .map(|n| match n % 7 {
+            0 => "ab\n".to_string(),
+            _ => format!("{}line number {n} here\n", if n % 3 == 0 { "    " } else { "" }),
+        })
+        .collect();
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.sel.head());
+        (line + 1, ed.sel.head() - rope.line_to_char(line) + 1)
+    };
+    for (keys, want) in [
+        ("20G8lG", (100, 9)),
+        ("20G8lgg", (1, 9)),
+        ("20G8l15G", (15, 9)),
+        ("20G8l3gg", (3, 9)),
+        ("20G$15G", (15, 23)),
+        ("20G$G", (100, 20)),
+        ("20G8ljG", (100, 9)),
+    ] {
+        let mut ed = typed_vim(&text);
+        press(&mut ed, keys);
+        assert_eq!(at(&ed), want, "nvim: {keys}");
+    }
+    let mut ed = typed(&text);
+    press(&mut ed, "8lgg");
+    assert_eq!(at(&ed), (1, 1), "helix: gg");
+    press(&mut ed, "20gg8lge");
+    assert_eq!(at(&ed), (100, 1), "helix: ge");
+}
+
+/// **vim's linewise operators keep the column** (2026-11-04, nvim's
+/// 'nostartofline'): `d` leaves the cursor on the line after what it took,
+/// `y`, `gU`, `>` and `zf` on the first line taken, all at the column the
+/// cursor wants; `gUU` goes to the line's start. A count on `G` or `gg`
+/// after an operator, or before it, names the line.
+#[test]
+fn vims_linewise_operators_keep_the_column() {
+    let text: String = (1..=100)
+        .map(|n| match n % 7 {
+            0 => "ab\n".to_string(),
+            _ => format!("{}line number {n} here\n", if n % 3 == 0 { "    " } else { "" }),
+        })
+        .collect();
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.sel.head());
+        (line + 1, ed.sel.head() - rope.line_to_char(line) + 1)
+    };
+    for (keys, want, lines) in [
+        ("20G8ldj", (20, 9), 99),
+        ("20G8ldk", (19, 2), 99),
+        ("20G8ldd", (20, 2), 100),
+        ("20G8l3dd", (20, 9), 98),
+        ("20G8ldG", (19, 9), 20),
+        ("20G8ldgg", (1, 2), 81),
+        ("20G8ld25G", (20, 9), 95),
+        ("20G8ld15G", (15, 2), 95),
+        ("20G8l5dG", (5, 2), 85),
+        ("20G8ld5gg", (5, 2), 85),
+        ("20G8l2d5G", (10, 2), 90),
+        ("20G8lyk", (19, 9), 101),
+        ("20G$yk", (19, 19), 101),
+        ("20G8ly5G", (5, 9), 101),
+        ("20G8lgUj", (20, 9), 101),
+        ("20G14lgUU", (20, 1), 101),
+        ("20G14l>k", (19, 15), 101),
+        ("20G14lzfk", (19, 15), 101),
+    ] {
+        let mut ed = typed_vim(&text);
+        press(&mut ed, keys);
+        assert_eq!(at(&ed), want, "nvim: {keys}");
+        assert_eq!(ed.current_buffer().rope().len_lines(), lines, "{keys}: the lines taken");
+    }
+}
+
+/// **A scrolloff over half the window and vim's `zb`** (2026-11-04, nvim,
+/// six rows, scrolloff 5): `zb` leaves the cursor on the third row, as
+/// `zt` does, where scrolloff halved said the fourth.
+#[test]
+fn vims_zb_with_a_scrolloff_over_half_the_window() {
+    let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "50G");
+    ed.note_scrolloff(5);
+    ed.page_inset(Some(2), 5, 2);
+    press(&mut ed, "zb");
+    assert_eq!(ed.page_inset(Some(2), 5, 2), Some(2), "nvim: the third row");
+    press(&mut ed, "zt");
+    assert_eq!(ed.page_inset(Some(2), 5, 2), Some(2));
+    ed.note_scrolloff(3);
+    press(&mut ed, "zb");
+    assert_eq!(ed.page_inset(Some(2), 5, 2), Some(3), "scrolloff 3: the fourth, as before");
 }
 
 /// **vim's `z` is vim's** (2026-11-03): helix's view keys had leaked into
@@ -36956,3 +37100,4 @@ fn the_action_list_has_a_column_for_each_keymap_and_one_for_yours() {
     // `A-j` moves a line down by the flavour, under helix.
     assert!(listing.contains('*'), "a flavour key is marked");
 }
+

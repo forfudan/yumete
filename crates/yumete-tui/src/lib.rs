@@ -12080,8 +12080,8 @@ fn draw_horizontal(
     if scrolls {
     let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_reach);
     let vim = editor.key_preset() == yumete_core::KeyPreset::Vim;
-    let page_inset = editor.page_inset(found, last_reach, scrolloff);
     editor.note_scrolloff(config.editor.scrolloff);
+    let page_inset = editor.page_inset(found, last_reach, scrolloff);
     // The file's last row, past which vim's page does not go.
     let file_end = || {
         let mut line = yumete_core::motion::last_line(rope);
@@ -12090,7 +12090,36 @@ fn draw_horizontal(
         }
         wrap::Anchor { line, index_in_line: wrap::row_count_in_line(rope, line, measure).saturating_sub(1) }
     };
+    // The rows the file has below the cursor, as far as the page counts.
+    let rows_after = |end: wrap::Anchor| match end < cursor_anchor {
+        true => 0,
+        false => wrap::distance(rope, cursor_anchor, end, measure, reach).unwrap_or(reach),
+    };
+    // **A scrolloff over half the window pins vim's cursor to the middle
+    // row, the upper of two** (nvim 2026-11-04, six rows and scrolloff 5:
+    // `j`, `k`, `zt`, `zb` and a jump all leave it on the third). From the
+    // top of the file it walks down to the row below the middle before the
+    // page moves; at the end, the page stops at the last line.
+    let mid = last_reach / 2;
+    let pin = match vim && 2 * config.editor.scrolloff > reach && !editor.aimed() && !editor.typewriter() && !editor.holds_the_page() {
+        false => None,
+        true => match found {
+            Some(d) if d == mid => None,
+            Some(d) if *viewport == wrap::Anchor::default() && d <= reach / 2 => None,
+            Some(_) => Some(mid),
+            None => Some(mid.max(last_reach.saturating_sub(rows_after(file_end())))),
+        },
+    };
     let cursor_row = match page_inset {
+        _ if pin.is_some() => {
+            let was = *viewport;
+            *viewport = wrap::retreat(rope, cursor_anchor, measure, pin.unwrap_or(mid));
+            let full = wrap::retreat(rope, file_end(), measure, last_reach);
+            if *viewport > was && *viewport > full {
+                *viewport = full.max(was);
+            }
+            wrap::distance(rope, *viewport, cursor_anchor, measure, reach).unwrap_or(0)
+        }
         None => found.unwrap_or(0),
         // **vim's page follows a cursor off it as nvim's does** (2026-11-04),
         // a step and a jump alike: near, it scrolls as far as scrolloff
@@ -12101,11 +12130,7 @@ fn draw_horizontal(
                 _ => yumete_core::editor::Landing::Below(wrap::distance(rope, *viewport, cursor_anchor, measure, 2 * reach + 1)),
             };
             let end = file_end();
-            let after = match end < cursor_anchor {
-                true => 0,
-                false => wrap::distance(rope, cursor_anchor, end, measure, reach).unwrap_or(reach),
-            };
-            let inset = Editor::vim_landing_row(reach, scrolloff, landing, after);
+            let inset = Editor::vim_landing_row(reach, scrolloff, landing, rows_after(end));
             let was = *viewport;
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
             // Never past the file's end, as below.
@@ -23819,6 +23844,42 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('G'));
         let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
         assert_eq!(caret.map(|p| p.y), Some(11), "the last line on the last row");
+    }
+
+    /// **A scrolloff over half the window pins vim's cursor to the upper
+    /// middle row** (2026-11-04, nvim, six rows, scrolloff 5): `j` and `k`
+    /// mid-file stay on the third row; from the top of the file the cursor
+    /// walks to the fourth before the page moves, and at the end the page
+    /// stops at the last line.
+    #[test]
+    fn under_vim_a_big_scrolloff_pins_the_cursor_to_the_middle() {
+        let mut editor = editor_with(&(1..=100).map(|n| format!("line {n}\n")).collect::<String>());
+        editor.execute(":keymap vim").unwrap();
+        let mut config = Config::default();
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        config.editor.command_line = false;
+        config.editor.scrolloff = 5;
+        crate::theme::settle(&config, None);
+        let rows = 7u16;
+        let mut seats = Seats::default();
+        let mut row_after = |editor: &mut Editor, keys: &str| {
+            let mut y = 0;
+            for c in keys.chars() {
+                editor.on_key(Key::Char(c));
+                y = caret_over_time(editor, &config, &mut seats, 30, rows).map_or(0, |p| p.y);
+                if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+            }
+            y
+        };
+        assert_eq!(row_after(&mut editor, "jjj"), 3, "line 4: the fourth row, the page still");
+        assert_eq!(row_after(&mut editor, "j"), 2, "line 5: the third");
+        assert_eq!(row_after(&mut editor, "50G"), 2);
+        assert_eq!(row_after(&mut editor, "j"), 2, "j mid-file");
+        assert_eq!(row_after(&mut editor, "k"), 2, "k mid-file");
+        assert_eq!(row_after(&mut editor, "G"), 5, "G: the last row");
+        assert_eq!(row_after(&mut editor, "kk"), 3, "the page stops at the end");
     }
 
     /// A block's ground is painted to the edge of the page even on a row whose

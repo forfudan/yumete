@@ -4822,6 +4822,12 @@ impl Editor {
         self.scrolloff_asked.set(Some(asked));
     }
 
+    /// Whether the page stays where a vim scroll left it, the cursor not
+    /// having moved since (see `page_inset`).
+    pub fn holds_the_page(&self) -> bool {
+        self.vim_keymap() && self.scrolled_at.get() == Some((self.sel.head(), self.current_buffer().revision()))
+    }
+
     pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
         self.scrolloff_seen.set(scrolloff);
         let answer = self.page_inset_now(distance, last, scrolloff);
@@ -4847,9 +4853,13 @@ impl Editor {
         // ——按完 `zt` 隨便動一下，頁面自己往下跳三行。vim 的 `zt` 也是留 `scrolloff`
         // 的，同一個理由。
         if let Some(aim) = self.aim {
+            // With scrolloff over half the window vim's `zb` leaves the
+            // cursor on the upper middle row, as `zt` does (nvim 2026-11-04).
+            let pinned = self.vim_keymap() && self.scrolloff_asked.get().is_some_and(|asked| 2 * asked > last + 1);
             return Some(match aim {
                 Aim::Top => scrolloff,
                 Aim::Middle => last / 2,
+                Aim::Bottom if pinned => last / 2,
                 Aim::Bottom => last.saturating_sub(scrolloff),
                 // Warning: **夾在 `scrolloff` 裏頭**，同上面那一段說的理由：坐到邊上去
                 // 的話下一幀自己又被推開，滾一行變成跳三行。

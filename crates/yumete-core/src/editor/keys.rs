@@ -1122,6 +1122,11 @@ impl Editor {
         }
         let span = self.line_span(first, last, op == 'c');
         self.do_vim_span(op, span, Shape::Lines);
+        // `gUU` `guu` `g~~` leave the cursor at the line's start, where
+        // `gUj` keeps its column (nvim 2026-11-04).
+        if matches!(op, 'u' | 'U' | '~') {
+            self.land_at_column(first, 0);
+        }
     }
 
     /// `n` lines from `here`, a closed fold counting as one: the first line
@@ -1183,8 +1188,17 @@ impl Editor {
     /// keys could never say.
     fn run_vim_step(&mut self, op: char, step: crate::vim::Step) {
         self.settle_alias_count();
-        let n = self.count.take().unwrap_or(1).max(1);
+        let given = self.count.take();
+        let n = given.unwrap_or(1).max(1);
         let start = self.sel.head();
+        // **`d5G`, `5dG` and `d5gg` reach line 5** (`:h G`, measured in nvim
+        // 2026-11-04). Walked as a motion, the count only repeated `G`, and
+        // all three deleted to the file's end or its start.
+        if let (Some(n), motion::Motion::FileEnd | motion::Motion::FileStart) = (given, step.motion) {
+            let rope = self.current_buffer().rope();
+            let (here, to) = (rope.char_to_line(start), n.max(1).saturating_sub(1).min(motion::last_line(rope)));
+            return self.do_vim_lines(op, here.min(to), here.max(to));
+        }
         // Warning: **`cw` ends the word it is in** — vim's own special case
         // (`:h cw`): 「When the cursor is in a word, `cw` does not include the
         // white space after a word, it only changes up to the end of the
@@ -1582,12 +1596,29 @@ impl Editor {
                 }
             }
         }
+        // **Whole lines keep the column the cursor wants** (nvim's
+        // 'nostartofline', measured 2026-11-04): `dd` `dj` `dG` on the line
+        // left where the first one was, `yk` `yH` `gUj` `>k` `zfk` on the
+        // first line taken. They used to go to its start.
+        let kept = (shape == Shape::Lines).then(|| {
+            let rope = self.current_buffer().rope();
+            let top = match span {
+                motion::Span::Over { anchor, head } => rope.char_to_line(anchor.min(head).min(rope.len_chars())),
+                motion::Span::Missed => rope.char_to_line(self.sel.head()),
+            };
+            (top, self.column_wanted())
+        });
         self.snapshot();
         // 見 [`Editor::yank_whole_lines`]：`dd`／`yy` 取的是整行，末行缺終止符就補。
         self.yank_whole_lines = shape == Shape::Lines;
         match op {
             // vim's `d` and `c` fill the unnamed register.
-            'd' => self.apply(motion::Operator::Cut, span),
+            'd' => {
+                self.apply(motion::Operator::Cut, span);
+                if let Some((_, want)) = kept {
+                    self.land_at_column(self.cursor_line(), want);
+                }
+            }
             'c' => self.apply(motion::Operator::Change { cut: true }, span),
             // `>` and `<` want the selection, because indenting is a
             // line-shaped edit the editor already knows how to do.
@@ -1602,10 +1633,21 @@ impl Editor {
                 self.take_object(span);
                 self.extend_to_line_bounds();
                 self.indent(op == '>');
-                let to = self.column_on_line(line, column);
-                self.sel.set_anchor(to);
-                self.sel.set_head(to);
-                self.refresh_goal_column();
+                match kept {
+                    // On the first line shifted, at the column wanted:
+                    // `>k` lands a line up.
+                    Some((top, want)) => {
+                        self.extend = false;
+                        self.sel.set_anchor(self.sel.head());
+                        self.land_at_column(top, want);
+                    }
+                    None => {
+                        let to = self.column_on_line(line, column);
+                        self.sel.set_anchor(to);
+                        self.sel.set_head(to);
+                        self.refresh_goal_column();
+                    }
+                }
                 // A closed fold shifted opens (nvim, 2026-11-04).
                 if self.shut_around(line).is_some() {
                     self.open_folds_at(line, usize::MAX);
@@ -1634,6 +1676,9 @@ impl Editor {
                     let (first, last) = (rope.char_to_line(a), rope.char_to_line(b.min(rope.len_chars())));
                     self.fold_lines(first, last);
                 }
+                if let Some((top, want)) = kept {
+                    self.land_at_column(top, want);
+                }
             }
             // **`gc`** — the lines the motion crosses, commented as `Space A-c`
             // comments them (vim 9.1's comment package, Neovim's `gc`).
@@ -1655,6 +1700,11 @@ impl Editor {
                     'U' => self.map_selection(|one| one.to_uppercase().collect()),
                     _ => self.map_selection(crate::editor::switch_case),
                 }
+                if let Some((top, want)) = kept {
+                    self.extend = false;
+                    self.sel.set_anchor(self.sel.head());
+                    self.land_at_column(top, want);
+                }
             }
             // **`y` leaves the cursor at the head of what it took** — vim's
             // rule, and why `yyp` puts the copy directly under the line.
@@ -1666,6 +1716,9 @@ impl Editor {
                 self.apply(motion::Operator::Yank, span);
                 self.set_cursor(head);
                 self.sel.set_anchor(head);
+                if let Some((top, want)) = kept {
+                    self.land_at_column(top, want);
+                }
             }
         }
         self.yank_whole_lines = false;

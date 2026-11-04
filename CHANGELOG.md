@@ -60,6 +60,11 @@ in `docs/development.md` §5.2.
 - **A move a little way above the page centres the cursor once that distance and scrolloff add up to half the window** under vim, as vim's does: `G`, `C-f`, `k` on ten rows fills the page down to the last line. A page `C-f` left at the end also stays put while you type a count.
 - **A move that lands a little way below the page centres the cursor one row lower on an even window** under vim (`20G` from the top of ten rows lands on the sixth), and one that lands just below scrolls only as far as scrolloff asks instead of centring, as vim's do.
 - **`H`, `M` and `L` keep the cursor's column** under vim, as Neovim's do, instead of going to the first non-blank.
+- **`G`, `gg` and `{count}G` keep the cursor's column** under vim, as Neovim's do, `$`'s end of line too; they went to the start of the line or its first non-blank. helix's `gg` and `ge` are unchanged, and in a table the cell is still the place.
+- **Linewise operators keep the cursor's column** under vim, as Neovim's do: after `dd`, `dj`, `dG` the cursor is on the line that took the deleted lines' place, after `yk`, `gUj`, `>k`, `zfk` on the first line, each at the column it wants, where they went to the line's start.
+- **`d5G`, `5dG` and `d5gg` take the lines to line 5** under vim; they took everything to the end or the start of the file.
+- **With scrolloff over half the window, the cursor stays on the upper middle row** under vim for `j`, `k`, `zb` and jumps, as vim's does, where it sat one row lower.
+- **`~`, `J`, `gJ`, `r`, `a` and `A` on a cursor a closed fold hides act on the line it is on** under vim, as vim's do, and the first four leave the fold closed; they acted on the fold's first line.
 
 ## 0.17.0 · 2026-11-03
 

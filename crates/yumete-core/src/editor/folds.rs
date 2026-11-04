@@ -297,6 +297,10 @@ impl Editor {
     /// `l` `$` `f` …), and a word motion from one starts past it, at the
     /// end of its last line or the start of its first, as vim's
     /// `fwd_word` does (measured in nvim 2026-11-04).
+    ///
+    /// The edits at the cursor that do not take a closed fold whole act
+    /// where a hidden cursor really is: `~` `J` `gJ` change its own line and
+    /// leave the fold closed, `a` and `A` type there (nvim 2026-11-04).
     pub(super) fn before_a_motion(&mut self, cmd: yumete_cjk::actions::NormalCmd) {
         use yumete_cjk::actions::NormalCmd as C;
         if !self.vim_keymap() || self.pending != Pending::None || self.mode == Mode::Insert {
@@ -338,8 +342,20 @@ impl Editor {
                 self.sel.set_head(at);
                 self.sel.set_anchor(at);
             }
+            C::VimSwitchCase | C::VimJoinSelections => self.stand_where_hidden(true),
+            C::VimAppendMode | C::VimInsertAtLineEnd => self.stand_where_hidden(false),
             _ => {}
         }
+    }
+
+    /// **The cursor to the line a closed fold hides it on**, for an edit
+    /// made there; `closed` keeps the fold closed over it after.
+    pub(super) fn stand_where_hidden(&mut self, closed: bool) {
+        let Some(at) = self.hidden_place() else { return };
+        self.fold_return = None;
+        self.sel.set_head(at);
+        self.sel.set_anchor(at);
+        self.fold_stays_closed |= closed;
     }
 
     /// **Where the cursor stands when a closed fold hides it**: vim keeps it
