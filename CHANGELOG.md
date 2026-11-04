@@ -55,6 +55,11 @@ in `docs/development.md` §5.2.
 - **Typing a heading with the same text as a closed one** above it no longer closes the new one and opens the old: a closed heading is kept by its place, which moves with the text and through `u`.
 - **Typing with a second cursor inside a closed fold opens that fold** too; the text it hid was typed into unseen.
 - **A session gives each window its own folds** when a window above it is dropped on the way back because its file is gone; they went to the window below.
+- **The status line's column on a closed fold is the text's** under vim: after `~` or `J` on a fold it reads where the cursor is on the fold's first line, as vim's ruler does, instead of staying at 1.
+- **With scrolloff at half a window or more, `C-b`, `C-y` and `L` leave the cursor on the upper middle row** under vim, as `C-f` and `H` do and as vim's do, where they left it one row lower.
+- **A move a little way above the page centres the cursor once that distance and scrolloff add up to half the window** under vim, as vim's does: `G`, `C-f`, `k` on ten rows fills the page down to the last line. A page `C-f` left at the end also stays put while you type a count.
+- **A move that lands a little way below the page centres the cursor one row lower on an even window** under vim (`20G` from the top of ten rows lands on the sixth), and one that lands just below scrolls only as far as scrolloff asks instead of centring, as vim's do.
+- **`H`, `M` and `L` keep the cursor's column** under vim, as Neovim's do, instead of going to the first non-blank.
 
 ## 0.17.0 · 2026-11-03
 

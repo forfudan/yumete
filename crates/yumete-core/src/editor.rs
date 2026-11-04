@@ -1334,6 +1334,17 @@ impl Sequence {
     }
 }
 
+/// **Where a cursor that left the page is, for vim's page to follow it**
+/// ([`Editor::vim_landing_row`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Landing {
+    /// This many rows above the page's top row.
+    Above(usize),
+    /// This many rows below the page's top row (the height or more), or
+    /// `None` when further than the page counted.
+    Below(Option<usize>),
+}
+
 /// **`z` 那一層把光標放在哪一行**（`zz`/`zt`/`zb`，2026-09-28）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Aim {
@@ -3254,6 +3265,14 @@ pub struct Editor {
     /// The scrolloff the page was last drawn with, for the scrolls that push
     /// the cursor in by it (`zj`, `C-f`).
     scrolloff_seen: std::cell::Cell<usize>,
+    /// The scrolloff the config asks for, before a short page halves it:
+    /// vim keeps half the window above the cursor but rounds the half below
+    /// up (`note_scrolloff`).
+    scrolloff_asked: std::cell::Cell<Option<usize>>,
+    /// Where the cursor was, and the text's revision, when a scroll last
+    /// placed the page: until either changes, vim's page stays where the
+    /// scroll left it.
+    scrolled_at: std::cell::Cell<Option<(usize, u64)>>,
     /// The page's sideways scroll as last drawn: the columns off its left
     /// and the columns of text it shows (`note_sideways`).
     side_seen: std::cell::Cell<(usize, usize)>,
@@ -4493,6 +4512,8 @@ impl Editor {
             jumped: false,
             sat_at: std::cell::Cell::new(None),
             scrolloff_seen: std::cell::Cell::new(0),
+            scrolloff_asked: std::cell::Cell::new(None),
+            scrolled_at: std::cell::Cell::new(None),
             side_seen: std::cell::Cell::new((0, 0)),
             side_gutter: std::cell::Cell::new(0),
             side_aim: std::cell::Cell::new(None),
@@ -4794,9 +4815,22 @@ impl Editor {
         self.side_aim.take()
     }
 
+    /// The scrolloff the config asks for, unclamped: a page of six rows with
+    /// scrolloff 5 keeps two above the cursor and three below it, where the
+    /// clamped value would say two and two.
+    pub fn note_scrolloff(&self, asked: usize) {
+        self.scrolloff_asked.set(Some(asked));
+    }
+
     pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
         self.scrolloff_seen.set(scrolloff);
         let answer = self.page_inset_now(distance, last, scrolloff);
+        let here = (self.sel.head(), self.current_buffer().revision());
+        match self.aim.is_some() {
+            true => self.scrolled_at.set(Some(here)),
+            false if self.scrolled_at.get() != Some(here) => self.scrolled_at.set(None),
+            false => {}
+        }
         // 記下光標**實際**坐在第幾行：回了一個位置就是那個，回「別動」就是它本來
         // 那個。畫一幀問一次，所以這一格永遠是上一幀的事實。
         self.sat_at.set(answer.or(distance));
@@ -4827,6 +4861,14 @@ impl Editor {
                 Aim::Row(row) if self.vim_keymap() => row.min(last),
                 Aim::Row(row) => row.max(scrolloff).min(last.saturating_sub(scrolloff)),
             });
+        }
+        // **A page vim scrolled stays until the cursor moves** or the text
+        // changes (nvim keeps its topline valid till then): `C-f` at the end
+        // leaves the last line at the top, inside scrolloff, and a count
+        // typed next must not pull the page back (2026-11-04).
+        let here = (self.sel.head(), self.current_buffer().revision());
+        if self.vim_keymap() && distance.is_some() && !self.typewriter && self.scrolled_at.get() == Some(here) {
+            return None;
         }
         // Typewriter: the row being written stays in the middle and the paper
         // moves under it. Every move is a jump, which is what that means.

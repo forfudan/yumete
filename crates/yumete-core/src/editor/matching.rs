@@ -490,10 +490,13 @@ impl Editor {
         let last = rows.len() - 1;
         let so = self.scrolloff_seen.get().min(last / 2);
         let (above, below) = match vim {
-            true => (
-                if rows[0].start == 0 { 0 } else { so },
-                if rows[last].end >= end { 0 } else { so },
-            ),
+            true => {
+                let (above, below) = self.vim_margins(rows.len());
+                (
+                    if rows[0].start == 0 { 0 } else { above },
+                    if rows[last].end >= end { 0 } else { below },
+                )
+            }
             false => (so, so),
         };
         let step = nth.max(1) - 1;
@@ -541,6 +544,11 @@ impl Editor {
         let height = self.window_rows(rows.len());
         let vim = self.vim_keymap();
         let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
+        // vim's half below rounds up (`cursor_correct`; see `vim_margins`).
+        let (above, below) = match vim {
+            true => self.vim_margins(height),
+            false => (so, so),
+        };
         let n = n.max(1);
         let head = self.sel.head();
         let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
@@ -553,8 +561,8 @@ impl Editor {
             };
             let page = rows_from(rope, top, m, height);
             let edge = match down {
-                true => page.get(so),
-                false => page.get(height.saturating_sub(1 + so)).or(page.last()),
+                true => page.get(above),
+                false => page.get(height.saturating_sub(1 + below)).or(page.last()),
             };
             let mut to = head;
             if let Some(edge) = edge {
@@ -623,7 +631,6 @@ impl Editor {
     /// (`CTRL-B`), its column kept, then in by scrolloff. With nothing to
     /// scroll nothing moves.
     fn vim_turn_a_page(&mut self, down: bool, count: usize, rows: &[crate::wrap::Row], height: usize) {
-        let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
         let head = self.sel.head();
         let wanted = self.sel.goal();
         let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
@@ -657,7 +664,7 @@ impl Editor {
         });
         let Some((row, shown, span, from_the_start, goal)) = moved else { return };
         let ends_here = shown < height || span.1 >= self.last_row_end();
-        let row = self.kept_off_the_edges(row, shown, height, so, from_the_start, ends_here);
+        let row = self.kept_off_the_edges(row, shown, height, from_the_start, ends_here);
         let to = self.on_page_row(span.0, row, goal);
         self.move_head(to);
         self.sel.set_goal(Some(goal));
@@ -682,7 +689,6 @@ impl Editor {
             Some((n, at)) if at == height => n,
             _ => (height / 2).max(1),
         };
-        let so = self.scrolloff_seen.get().min(height.saturating_sub(1) / 2);
         let head = self.sel.head();
         let wanted = self.sel.goal();
         let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
@@ -730,7 +736,7 @@ impl Editor {
             (to, row, page.len(), span, new_top == Anchor::default(), goal)
         });
         let ends_here = shown < height || span.1 >= self.last_row_end();
-        let kept = self.kept_off_the_edges(row, shown, height, so, from_the_start, ends_here);
+        let kept = self.kept_off_the_edges(row, shown, height, from_the_start, ends_here);
         let to = match kept == row {
             true => to,
             false => self.on_page_row(span.0, kept, goal),
@@ -751,22 +757,87 @@ impl Editor {
         motion::line_last(rope, rope.line_to_char(motion::last_line(rope)))
     }
 
-    /// The row the cursor may sit on, `so` rows in from either edge of the
-    /// page, as nvim's `cursor_correct`: no room is kept above when the page
-    /// starts the file, nor below when it ends it — and then no more than
-    /// half the window above.
-    fn kept_off_the_edges(&self, row: usize, shown: usize, height: usize, so: usize, starts: bool, ends: bool) -> usize {
-        let above = match (starts, ends) {
-            (true, _) => 0,
-            (false, true) => so.min(height.saturating_sub(1) / 2),
-            (false, false) => so,
-        };
-        let below = match ends {
-            true => 0,
-            false => so,
-        };
+    /// The row the cursor may sit on, scrolloff rows in from either edge of
+    /// the page, as nvim's `cursor_correct`: no room is kept above when the
+    /// page starts the file, nor below when it ends it.
+    fn kept_off_the_edges(&self, row: usize, shown: usize, height: usize, starts: bool, ends: bool) -> usize {
+        let (above, below) = self.vim_margins(height);
+        let above = if starts { 0 } else { above };
+        let below = if ends { 0 } else { below };
         let lowest = shown.saturating_sub(1).saturating_sub(below);
         row.max(above).min(lowest.max(above)).min(shown.saturating_sub(1))
+    }
+
+    /// **The rows vim keeps above and below the cursor** on a page of
+    /// `height`: scrolloff, but no more than half the window, and the half
+    /// below rounds up. `cursor_correct` counts a row below first and then
+    /// one above until they meet, so with scrolloff 5 on six rows the cursor
+    /// sits on the third, not the fourth (nvim 2026-11-04: `C-b` `C-y` `L`).
+    pub(super) fn vim_margins(&self, height: usize) -> (usize, usize) {
+        let so = self.scrolloff_asked.get().unwrap_or(self.scrolloff_seen.get());
+        (so.min(height.saturating_sub(1) / 2), so.min(height / 2))
+    }
+
+    /// **The row vim puts a cursor on when it lands off the page**, a step
+    /// or a jump alike (nvim's `update_topline`, measured 2026-11-04).
+    /// `height` is the page's rows, `so` its scrolloff, `after` how many
+    /// rows the file has below the cursor.
+    ///
+    /// Above the page: within half the window less one (at least two) of
+    /// the top, scrolloff counted, the page scrolls to put it scrolloff
+    /// rows down (`scroll_cursor_top`); further, it is centred.
+    ///
+    /// Below it: further than the window, scrolloff counted, it is
+    /// centred. Nearer, `scroll_cursor_bot` counts a row above the cursor
+    /// and a row below it in turns until the rows between the page and the
+    /// cursor and scrolloff below it are in; when they fill the window
+    /// before that it centres too, but with the extra row of an even
+    /// window above the cursor (`20G` from the top of ten rows lands on
+    /// the sixth), and otherwise the page scrolls as far as needed.
+    ///
+    /// A centred cursor near the file's end sits lower, so the page is
+    /// filled down to the last line.
+    pub fn vim_landing_row(height: usize, so: usize, landing: crate::editor::Landing, after: usize) -> usize {
+        use crate::editor::Landing;
+        let last = height.saturating_sub(1);
+        let centred = |more_above: bool| {
+            let row = match more_above {
+                true => height / 2,
+                false => last / 2,
+            };
+            row.max(last.saturating_sub(after))
+        };
+        match landing {
+            Landing::Above(n) => match n + so >= (height / 2).saturating_sub(1).max(2) {
+                true => centred(false),
+                false => so,
+            },
+            Landing::Below(None) => centred(false),
+            Landing::Below(Some(rows)) => {
+                // Rows past the first one under the page.
+                let past = rows.saturating_sub(height);
+                if past + so > height {
+                    return centred(false);
+                }
+                let (mut used, mut extra, mut up, mut down) = (1, 0, 0, 0);
+                while up < past || (extra < so && down < after) {
+                    up += 1;
+                    used += 1;
+                    if used > height {
+                        return centred(true);
+                    }
+                    if down < after {
+                        down += 1;
+                        used += 1;
+                        if used > height {
+                            return centred(true);
+                        }
+                        extra = (extra + 1).min(so);
+                    }
+                }
+                last.saturating_sub(so.min(after))
+            }
+        }
     }
 
     /// The character on the page's `row` (counted from the row starting at
@@ -917,11 +988,20 @@ impl Editor {
     pub(super) fn go_to_screen(&mut self, which: char, nth: usize) {
         let Some(line) = self.screen_line_kept(which, nth) else { return };
         // vim's `H` `M` `L` are jumps; helix's `gt` `gc` `gb` are not.
-        match self.vim_keymap() {
-            true => self.remember_jump(),
-            false => self.jumped = true,
+        if !self.vim_keymap() {
+            self.jumped = true;
+            self.move_to_line(line + 1);
+            return;
         }
-        self.move_to_line(line + 1);
+        self.remember_jump();
+        // vim's keep the column wanted, `$`'s end of line too: nvim's
+        // default is 'nostartofline' (measured 2026-11-04), where classic
+        // vim went to the first non-blank.
+        let rope = self.current_buffer().rope();
+        let goal = self.sel.goal().unwrap_or_else(|| motion::visual_column(rope, self.sel.head()));
+        let at = motion::pos_at_visual_column(rope, line, goal).min(motion::line_last(rope, rope.line_to_char(line)));
+        self.move_head(at);
+        self.sel.set_goal(Some(goal));
     }
 
     /// **跳到下一個/上一個函數或類**（`]f`/`[f`/`]c`/`[c`，2026-10-06）。

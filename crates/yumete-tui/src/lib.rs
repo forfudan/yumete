@@ -12079,8 +12079,42 @@ fn draw_horizontal(
     let mut caret_page: Option<usize> = None;
     if scrolls {
     let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_reach);
-    let cursor_row = match editor.page_inset(found, last_reach, scrolloff) {
+    let vim = editor.key_preset() == yumete_core::KeyPreset::Vim;
+    let page_inset = editor.page_inset(found, last_reach, scrolloff);
+    editor.note_scrolloff(config.editor.scrolloff);
+    // The file's last row, past which vim's page does not go.
+    let file_end = || {
+        let mut line = yumete_core::motion::last_line(rope);
+        while line > 0 && measure.folded(line) {
+            line -= 1;
+        }
+        wrap::Anchor { line, index_in_line: wrap::row_count_in_line(rope, line, measure).saturating_sub(1) }
+    };
+    let cursor_row = match page_inset {
         None => found.unwrap_or(0),
+        // **vim's page follows a cursor off it as nvim's does** (2026-11-04),
+        // a step and a jump alike: near, it scrolls as far as scrolloff
+        // asks; far, the cursor is centred (see `Editor::vim_landing_row`).
+        Some(_) if vim && found.is_none() && !editor.aimed() && !editor.typewriter() => {
+            let landing = match wrap::distance(rope, cursor_anchor, *viewport, measure, reach) {
+                Some(n) if n > 0 => yumete_core::editor::Landing::Above(n),
+                _ => yumete_core::editor::Landing::Below(wrap::distance(rope, *viewport, cursor_anchor, measure, 2 * reach + 1)),
+            };
+            let end = file_end();
+            let after = match end < cursor_anchor {
+                true => 0,
+                false => wrap::distance(rope, cursor_anchor, end, measure, reach).unwrap_or(reach),
+            };
+            let inset = Editor::vim_landing_row(reach, scrolloff, landing, after);
+            let was = *viewport;
+            *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
+            // Never past the file's end, as below.
+            let full = wrap::retreat(rope, end, measure, last_reach);
+            if *viewport > was && *viewport > full {
+                *viewport = full.max(was);
+            }
+            wrap::distance(rope, *viewport, cursor_anchor, measure, reach).unwrap_or(0)
+        }
         Some(inset) => {
             // `k` at the top edge is one row away, not a jump: it nudges.
             //
@@ -12105,13 +12139,8 @@ fn draw_horizontal(
             // centre a jump** (`G`, `j` on the last lines; measured in nvim
             // 2026-11-04): the page stops where its last row is the file's.
             // helix does go past it, and so do the scrolls asked for.
-            if editor.key_preset() == yumete_core::KeyPreset::Vim && !editor.aimed() && !editor.typewriter() && *viewport > was {
-                let mut line = yumete_core::motion::last_line(rope);
-                while line > 0 && measure.folded(line) {
-                    line -= 1;
-                }
-                let last = wrap::Anchor { line, index_in_line: wrap::row_count_in_line(rope, line, measure).saturating_sub(1) };
-                let full = wrap::retreat(rope, last, measure, last_reach);
+            if vim && !editor.aimed() && !editor.typewriter() && *viewport > was {
+                let full = wrap::retreat(rope, file_end(), measure, last_reach);
                 if *viewport > full {
                     *viewport = full.max(was);
                 }

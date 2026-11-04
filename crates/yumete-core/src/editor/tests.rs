@@ -35529,6 +35529,24 @@ fn a_closed_fold_under_vim_is_as_nvim_keeps_it() {
     assert!(ed.fold_head(0) && ed.line_is_folded(4) && !ed.line_is_folded(5), "zfj from the fold reaches line 5");
 }
 
+/// **The column on a closed fold is the text's** (2026-11-04, nvim): `~`
+/// and `J` move the cursor along the fold's first line and the ruler says
+/// where (`2,2-1`, `2,10-1`), though the fold is drawn from column 1.
+#[test]
+fn the_column_on_a_closed_fold_is_the_texts() {
+    let text = "one\ntwo alpha\nthree beta\nfour gamma\nfive\n";
+    let mut ed = typed_vim(text);
+    press(&mut ed, "jzf2j~");
+    assert!(ed.fold_head(1));
+    assert!(ed.current_buffer().text().starts_with("one\nTwo alpha\n"));
+    assert_eq!((ed.cursor_line(), ed.cursor_visual_column()), (1, 1), "nvim: 2,2");
+    let mut ed = typed_vim(text);
+    press(&mut ed, "jzf2jJ");
+    assert!(ed.fold_head(1));
+    assert!(ed.current_buffer().text().starts_with("one\ntwo alpha three beta\nfour"));
+    assert_eq!(ed.cursor_visual_column(), 9, "nvim: 2,10");
+}
+
 /// **Typing opens the folds every cursor is in** (2026-11-04, review of
 /// 0.17.0): a second cursor on a line a closed fold hides used to type
 /// into it unseen.
@@ -35978,6 +35996,147 @@ fn vims_half_page_keeps_its_count_and_the_ends_of_the_file() {
     press(&mut ed, "3");
     ed.on_key(Key::Ctrl('d'));
     assert_eq!(line(&ed), 6, "helix: half the view, the count not read");
+}
+
+/// **vim's margin below the cursor rounds up** (2026-11-04, nvim's
+/// `cursor_correct`): with scrolloff at least half the window, `C-b`, `C-y`
+/// and `L` leave the cursor on the upper of the two middle rows, as `C-f`
+/// and `H` do.
+#[test]
+fn vims_margin_below_the_cursor_rounds_up() {
+    let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
+    let line = |ed: &Editor| ed.current_buffer().rope().char_to_line(ed.sel.head()) + 1;
+    let view = |ed: &mut Editor, top: usize, rows: usize| {
+        let rope = ed.current_buffer().rope().clone();
+        ed.set_page(rows, 80);
+        ed.set_page_span(rope.line_to_char(top - 1), rope.line_to_char(top - 1 + rows));
+        ed.page_inset(Some(0), rows - 1, 5);
+    };
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "60G");
+    view(&mut ed, 58, 6);
+    ed.on_key(Key::Ctrl('b'));
+    assert_eq!(line(&ed), 56, "nvim: six rows, top 54, the third row");
+    press(&mut ed, "60G");
+    view(&mut ed, 56, 10);
+    ed.on_key(Key::Ctrl('b'));
+    assert_eq!(line(&ed), 52, "nvim: ten rows, top 48, the fifth row");
+    press(&mut ed, "50G");
+    view(&mut ed, 46, 10);
+    ed.on_key(Key::Ctrl('y'));
+    assert_eq!(line(&ed), 49, "nvim: C-y, top 45");
+    press(&mut ed, "50G");
+    view(&mut ed, 46, 10);
+    press(&mut ed, "L");
+    assert_eq!(line(&ed), 50, "nvim: L, the fifth row");
+    press(&mut ed, "60G");
+    view(&mut ed, 56, 10);
+    ed.on_key(Key::Ctrl('f'));
+    assert_eq!(line(&ed), 68, "C-f was right already: top 64, the fifth row");
+}
+
+/// **Where vim's page puts a cursor that left it** (2026-11-04, nvim's
+/// `update_topline` on 100 numbered lines): a step just past the top
+/// scrolls by scrolloff unless that is half the window, and then the
+/// cursor is centred with the page filled to the file's end; a page `C-f`
+/// left at the end stays until the cursor moves.
+#[test]
+fn vims_page_follows_a_cursor_above_it_as_nvim_does() {
+    use crate::editor::Landing;
+    // `G C-f k`, scrolloff 3: line 99, one row above the page at line 100.
+    assert_eq!(Editor::vim_landing_row(10, 3, Landing::Above(1), 1), 8, "ten rows: top 91");
+    assert_eq!(Editor::vim_landing_row(20, 3, Landing::Above(1), 1), 3, "twenty rows: top 96");
+    assert_eq!(Editor::vim_landing_row(10, 3, Landing::Above(3), 3), 6, "G C-f 3k: top 91");
+    assert_eq!(Editor::vim_landing_row(10, 3, Landing::Above(3), 50), 4, "50G 7k: top 39");
+    // The page `C-f` left holds through a count.
+    let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "G");
+    let rope = ed.current_buffer().rope().clone();
+    ed.set_page(10, 80);
+    ed.set_page_span(rope.line_to_char(90), rope.len_chars());
+    ed.page_inset(Some(9), 9, 3);
+    ed.on_key(Key::Ctrl('f'));
+    assert_eq!(ed.page_inset(Some(0), 9, 3), Some(0), "line 100 alone at the top");
+    press(&mut ed, "3");
+    assert_eq!(ed.page_inset(Some(0), 9, 3), None, "a count does not move the page");
+    press(&mut ed, "k");
+    assert_eq!(ed.page_inset(None, 9, 3), Some(4), "a move does");
+}
+
+/// **vim's page below the cursor** (2026-11-04, nvim, ten rows, 100
+/// lines): near, the page scrolls as far as scrolloff asks; far enough
+/// that the rows fill the window, the cursor is centred one row low on an
+/// even window (`20G` from the top: the sixth row); further than the
+/// window, one row high.
+#[test]
+fn vims_page_follows_a_cursor_below_it_as_nvim_does() {
+    use crate::editor::Landing;
+    let row = |height, so, rows| Editor::vim_landing_row(height, so, Landing::Below(Some(rows)), 80);
+    assert_eq!(row(10, 0, 19), 5, "20G: top 15");
+    assert_eq!(row(10, 0, 49), 4, "50G: top 46");
+    assert_eq!(Editor::vim_landing_row(10, 0, Landing::Below(None), 80), 4);
+    assert_eq!(row(10, 0, 10), 9, "j off the bottom: one row");
+    assert_eq!(row(10, 0, 14), 9, "9j5j: still the bottom row");
+    assert_eq!(row(10, 0, 15), 5, "9j6j: top 11");
+    assert_eq!(row(10, 0, 20), 5, "9j11j: top 16");
+    assert_eq!(row(10, 0, 21), 4, "9j12j: top 18");
+    assert_eq!(row(11, 0, 21), 5, "eleven rows, 10j11j: top 17");
+    assert_eq!(row(10, 3, 14), 6, "scrolloff 3, 9j8j: top 12");
+    assert_eq!(row(10, 3, 15), 5, "scrolloff 3, 9j9j: top 14");
+    // At the end of the file the page fills down to its last line.
+    assert_eq!(Editor::vim_landing_row(10, 0, Landing::Below(None), 0), 9, "G: the last row");
+    assert_eq!(Editor::vim_landing_row(10, 3, Landing::Below(Some(10)), 1), 8, "j onto line 99: top 91");
+}
+
+/// **vim's `H` `M` `L` keep the column** (2026-11-04): nvim's default is
+/// 'nostartofline', so the cursor keeps the column it wants, `$`'s end of
+/// line too; helix's `gt` `gc` `gb` go to the first non-blank.
+#[test]
+fn vims_h_m_l_keep_the_column() {
+    let text: String = (1..=100)
+        .map(|n| match n % 7 {
+            0 => "ab\n".to_string(),
+            _ => format!("{}line number {n} here\n", if n % 3 == 0 { "    " } else { "" }),
+        })
+        .collect();
+    let at = |ed: &Editor| {
+        let rope = ed.current_buffer().rope();
+        let line = rope.char_to_line(ed.sel.head());
+        (line + 1, ed.sel.head() - rope.line_to_char(line) + 1)
+    };
+    let view = |ed: &mut Editor| {
+        let rope = ed.current_buffer().rope().clone();
+        ed.set_page(10, 80);
+        ed.set_page_span(rope.line_to_char(14), rope.line_to_char(24));
+        ed.page_inset(Some(5), 9, 0);
+    };
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "20G8l");
+    view(&mut ed);
+    press(&mut ed, "H");
+    assert_eq!(at(&ed), (15, 9), "nvim: 15,9 on an indented line");
+    view(&mut ed);
+    press(&mut ed, "M");
+    assert_eq!(at(&ed), (19, 9));
+    view(&mut ed);
+    press(&mut ed, "L");
+    assert_eq!(at(&ed), (24, 9));
+    press(&mut ed, "20G$");
+    view(&mut ed);
+    press(&mut ed, "H");
+    assert_eq!(at(&ed), (15, 23), "the end of line");
+    press(&mut ed, "20G08lj");
+    assert_eq!(at(&ed), (21, 2), "a short line");
+    view(&mut ed);
+    press(&mut ed, "H");
+    assert_eq!(at(&ed), (15, 9), "the column it wanted");
+
+    let mut ed = typed(&text);
+    press(&mut ed, "20gg8l");
+    view(&mut ed);
+    press(&mut ed, "gt");
+    assert_eq!(at(&ed), (15, 5), "helix: the first non-blank");
 }
 
 /// **vim's `z` is vim's** (2026-11-03): helix's view keys had leaked into

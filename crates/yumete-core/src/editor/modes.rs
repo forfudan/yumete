@@ -674,9 +674,17 @@ impl Editor {
     /// the readout at 3 while the screen had the caret at 8 — and a caret
     /// standing in a column the page does not have is the one thing #212 says
     /// may never happen.
+    ///
+    /// A closed fold's line is the exception: its whole text is off the
+    /// page, so the page's column is always the first. vim's ruler says the
+    /// text's column there (`~` on a fold reads `2,2-1`; nvim 2026-11-04),
+    /// as it does for a line the fold hides.
     pub fn cursor_visual_column(&self) -> usize {
         let text = motion::visual_column(self.current_buffer().rope(), self.caret());
         let line = self.cursor_line();
+        if self.fold_head(line) {
+            return text;
+        }
         let col = self.cursor_column();
         let drawn: usize = self
             .drawn_runs_on_line(line)
