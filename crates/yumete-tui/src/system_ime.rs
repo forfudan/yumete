@@ -107,7 +107,7 @@
 //! session had not been handed over yet, which is a race yumete wins at every
 //! start-up, and yumete then believed it was suspended and never said so again.
 
-use yumete_config::SystemImePolicy;
+use yumete_config::{OtherImePolicy, SystemImePolicy};
 
 /// A stopwatch on the signal, off unless asked for — `YUMETE_IME_LOG=1` appends
 /// to `/tmp/yumete-ime.log`.
@@ -149,11 +149,25 @@ pub struct SystemIme {
     /// Whether a suspension is outstanding. Only ever changed alongside the
     /// signal that causes it, so the two cannot drift.
     suspended: bool,
+    /// **Other input methods** (2026-11-04): whether to switch them to
+    /// English, and back. See [`OtherImePolicy`].
+    others: OtherImePolicy,
+    /// What was switched away from, while it is: `Some` from the switch until
+    /// the switch back (or until it is given up, under `aside`).
+    switched: Option<source::Saved>,
 }
 
 impl SystemIme {
-    pub fn new(policy: SystemImePolicy) -> Self {
-SystemIme { policy, focused: true, suspended: false }
+    pub fn new(policy: SystemImePolicy, others: OtherImePolicy) -> Self {
+        // **Never over SSH**: the input method there is the remote host's, or
+        // nothing, and no terminal sequence reaches the local one.
+        let remote = std::env::var_os("SSH_CONNECTION").is_some()
+            || std::env::var_os("SSH_TTY").is_some();
+        let others = match remote {
+            true => OtherImePolicy::Off,
+            false => others,
+        };
+        SystemIme { policy, focused: true, suspended: false, others, switched: None }
     }
 
     /// The terminal gained or lost the keyboard.
@@ -172,6 +186,7 @@ SystemIme { policy, focused: true, suspended: false }
     /// Ask for the keys, or give them back. Idempotent, and free when the
     /// answer has not changed — it is called on every turn of the main loop.
     pub fn want(&mut self, block: bool) {
+        self.want_others_aside(block && self.focused);
         if self.policy == SystemImePolicy::Keep {
             return;
         }
@@ -204,10 +219,51 @@ SystemIme { policy, focused: true, suspended: false }
     pub fn say_it_again(&mut self) {
         log(|| "-> say it again".to_string());
         self.suspended = false;
+        // The same for another input method switched back on by hand while
+        // the keys were commands: the next turn switches it aside again, and
+        // what it switches from is then the one that was on.
+        if let Some(saved) = self.switched.take() {
+            source::forget(saved);
+        }
+    }
+
+    /// **Other input methods, aside or back** (2026-11-04).
+    ///
+    /// Aside: whatever is current, unless it is 宇浩 (its own signal above
+    /// serves it, and selecting 宇浩 by input source is the road that fails)
+    /// or already a plain layout, is switched to the English one. Back: under
+    /// `aside-and-back` the one that was on is selected again; under `aside`
+    /// it is left to the writer, so the half that fails is never tried.
+    fn want_others_aside(&mut self, aside: bool) {
+        if self.others == OtherImePolicy::Off {
+            return;
+        }
+        match (aside, self.switched.is_some()) {
+            (true, false) => {
+                let saved = source::take();
+                log(|| format!("-> others aside: {}", source::describe(&saved)));
+                self.switched = Some(saved);
+            }
+            (false, true) => self.let_others_back(),
+            _ => {}
+        }
+    }
+
+    fn let_others_back(&mut self) {
+        if let Some(saved) = self.switched.take() {
+            match self.others {
+                OtherImePolicy::AsideAndBack => {
+                    log(|| "-> others back".to_string());
+                    source::restore(saved);
+                }
+                _ => source::forget(saved),
+            }
+        }
     }
 
     /// Give the keys back. Safe to call when nothing was asked for.
     pub fn release(&mut self) {
+        self.let_others_back();
         if self.suspended {
             log(|| "-> resume".to_string());
             self.suspended = false;
@@ -432,6 +488,212 @@ mod backend {
     pub fn resume() {}
 }
 
+/// **Other input methods: the input source itself** (2026-11-04).
+///
+/// The code is the first version of this module (`24116fdc`, 2026-09-16),
+/// which switched the input source for 宇浩 too and was replaced by the
+/// signal two hours later. For 宇浩 the signal is the better road and stays;
+/// for every other input method this is the only road there is, and it is
+/// taken only when `[ime] others` asks for it.
+///
+/// Warning: **On macOS the switch to English is reliable and the switch back is
+/// not**: re-selecting an IMK input method from a background process fails
+/// to re-engage about one time in three, and `TISSelectInputSource` reports
+/// success either way. That is why `aside` never switches back.
+#[cfg(target_os = "macos")]
+mod source {
+    use std::ffi::c_void;
+
+    type InputSource = *mut c_void;
+
+    #[link(name = "Carbon", kind = "framework")]
+    extern "C" {
+        fn TISCopyCurrentKeyboardInputSource() -> InputSource;
+        fn TISCopyCurrentASCIICapableKeyboardInputSource() -> InputSource;
+        fn TISSelectInputSource(source: InputSource) -> i32;
+        fn TISGetInputSourceProperty(source: InputSource, key: *const c_void) -> *const c_void;
+        static kTISPropertyInputSourceID: *const c_void;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(object: *const c_void);
+        fn CFEqual(a: *const c_void, b: *const c_void) -> u8;
+        fn CFStringGetCString(s: *const c_void, buf: *mut u8, n: isize, enc: u32) -> u8;
+    }
+
+    /// The source that was current, owned (+1 from the `Copy` call) until it
+    /// is put back or forgotten — or nothing, when there was nothing in the
+    /// way.
+    pub struct Saved(Option<InputSource>);
+
+    fn id_of(source: InputSource) -> String {
+        unsafe {
+            let id = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
+            let mut buf = [0u8; 256];
+            let ok = !id.is_null()
+                && CFStringGetCString(id, buf.as_mut_ptr(), buf.len() as isize, 0x0800_0100) != 0;
+            match ok {
+                true => {
+                    let end = buf.iter().position(|b| *b == 0).unwrap_or(0);
+                    String::from_utf8_lossy(&buf[..end]).into_owned()
+                }
+                false => String::new(),
+            }
+        }
+    }
+
+    pub fn take() -> Saved {
+        unsafe {
+            let ascii = TISCopyCurrentASCIICapableKeyboardInputSource();
+            let was = TISCopyCurrentKeyboardInputSource();
+            let release = |a: InputSource, b: InputSource| {
+                if !a.is_null() {
+                    CFRelease(a);
+                }
+                if !b.is_null() {
+                    CFRelease(b);
+                }
+            };
+            if ascii.is_null() || was.is_null() {
+                release(ascii, was);
+                return Saved(None);
+            }
+            // **Nothing in the way, so nothing is touched**: `…ASCIICapable…`
+            // is the current source itself when that is a plain layout, so the
+            // two being equal is exactly 「no input method holds the keys」.
+            // **And 宇浩 is never switched by source**: its own signal serves it.
+            if CFEqual(ascii, was) != 0 || id_of(was).starts_with("app.shurufa.inputmethod.Yume") {
+                release(ascii, was);
+                return Saved(None);
+            }
+            let ok = TISSelectInputSource(ascii) == 0;
+            CFRelease(ascii);
+            match ok {
+                true => Saved(Some(was)),
+                false => {
+                    CFRelease(was);
+                    Saved(None)
+                }
+            }
+        }
+    }
+
+    pub fn restore(saved: Saved) {
+        if let Some(source) = saved.0 {
+            unsafe {
+                TISSelectInputSource(source);
+                CFRelease(source);
+            }
+        }
+    }
+
+    pub fn forget(saved: Saved) {
+        if let Some(source) = saved.0 {
+            unsafe { CFRelease(source) };
+        }
+    }
+
+    pub fn describe(saved: &Saved) -> String {
+        match saved.0 {
+            Some(source) => id_of(source),
+            None => "nothing in the way".into(),
+        }
+    }
+}
+
+/// **Linux**: whichever of fcitx5, fcitx or ibus is on `PATH`, through the
+/// commands their own documentation gives. `fcitx5-remote -c` also closes
+/// 宇浩's own fcitx5 add-on, which has no signal of its own yet.
+#[cfg(all(unix, not(target_os = "macos")))]
+mod source {
+    use std::process::{Command, Stdio};
+
+    pub enum Saved {
+        /// Nothing was in the way, or nothing here can be asked.
+        Nothing,
+        /// fcitx was composing and is closed.
+        Fcitx(&'static str),
+        /// ibus was on this engine.
+        Ibus(String),
+    }
+
+    fn run(program: &str, args: &[&str]) -> Option<String> {
+        let out = Command::new(program)
+            .args(args)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    }
+
+    pub fn take() -> Saved {
+        // `fcitx5-remote` with no arguments prints the state: 2 is 「composing
+        // is on」. Only then is there anything to close.
+        for tool in ["fcitx5-remote", "fcitx-remote"] {
+            if let Some(state) = run(tool, &[]) {
+                if state != "2" || run(tool, &["-c"]).is_none() {
+                    return Saved::Nothing;
+                }
+                return Saved::Fcitx(match tool {
+                    "fcitx5-remote" => "fcitx5-remote",
+                    _ => "fcitx-remote",
+                });
+            }
+        }
+        match run("ibus", &["engine"]) {
+            // An `xkb:` engine is a plain layout: nothing holds the keys.
+            Some(engine) if !engine.is_empty() && !engine.starts_with("xkb:") => {
+                match run("ibus", &["engine", "xkb:us::eng"]) {
+                    Some(_) => Saved::Ibus(engine),
+                    None => Saved::Nothing,
+                }
+            }
+            _ => Saved::Nothing,
+        }
+    }
+
+    pub fn restore(saved: Saved) {
+        match saved {
+            Saved::Nothing => {}
+            Saved::Fcitx(tool) => {
+                run(tool, &["-o"]);
+            }
+            Saved::Ibus(engine) => {
+                run("ibus", &["engine", &engine]);
+            }
+        }
+    }
+
+    pub fn forget(_saved: Saved) {}
+
+    pub fn describe(saved: &Saved) -> String {
+        match saved {
+            Saved::Nothing => "nothing in the way".into(),
+            Saved::Fcitx(tool) => format!("{tool} closed"),
+            Saved::Ibus(engine) => format!("ibus {engine}"),
+        }
+    }
+}
+
+/// **Windows and the rest**: nothing yet. Windows' terminal owns the input
+/// context, in another process; reaching it is left to the Windows machine.
+#[cfg(not(unix))]
+mod source {
+    pub struct Saved;
+    pub fn take() -> Saved {
+        Saved
+    }
+    pub fn restore(_saved: Saved) {}
+    pub fn forget(_saved: Saved) {}
+    pub fn describe(_saved: &Saved) -> String {
+        "not on this platform".into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,11 +702,24 @@ mod tests {
     /// to make, since the reason to write it is that the signalling misbehaves.
     #[test]
     fn keep_never_asks_for_anything() {
-        let mut ime = SystemIme::new(SystemImePolicy::Keep);
+        let mut ime = SystemIme::new(SystemImePolicy::Keep, OtherImePolicy::Off);
         ime.want(true);
         assert!(!ime.suspended);
         ime.want(false);
         assert!(!ime.suspended);
+    }
+
+    /// **Other input methods are left alone by default** (2026-11-04): with
+    /// `[ime] others` off, wanting the keys never touches the input source.
+    /// The switch itself is not run here, since it would move this machine's.
+    #[test]
+    fn other_input_methods_are_left_alone_by_default() {
+        let mut ime = SystemIme::new(SystemImePolicy::Keep, OtherImePolicy::Off);
+        ime.want(true);
+        assert!(ime.switched.is_none());
+        assert_eq!(OtherImePolicy::from_config("aside"), OtherImePolicy::Aside);
+        assert_eq!(OtherImePolicy::from_config("aside-and-back"), OtherImePolicy::AsideAndBack);
+        assert_eq!(OtherImePolicy::from_config("asid"), OtherImePolicy::Off, "a typo switches nothing");
     }
 
     /// **Focus outranks the mode**, or the resume is undone on the next turn of
@@ -452,7 +727,7 @@ mod tests {
     /// windows of one terminal are one application.
     #[test]
     fn nothing_is_asked_for_without_focus() {
-        let mut ime = SystemIme::new(SystemImePolicy::Auto);
+        let mut ime = SystemIme::new(SystemImePolicy::Auto, OtherImePolicy::Off);
         ime.set_focus(false);
         ime.want(true);
         assert!(!ime.suspended, "Normal mode, but the window is somebody else's");
@@ -465,7 +740,7 @@ mod tests {
     /// notification per frame.
     #[test]
     fn the_signal_is_sent_on_the_change_and_not_on_the_turn() {
-        let mut ime = SystemIme::new(SystemImePolicy::Auto);
+        let mut ime = SystemIme::new(SystemImePolicy::Auto, OtherImePolicy::Off);
         ime.want(true);
         assert!(ime.suspended);
         ime.want(true);

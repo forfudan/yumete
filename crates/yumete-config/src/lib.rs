@@ -605,6 +605,10 @@ pub struct ImeConfig {
     /// editor and no terminal in the picture. The measurements are in
     /// `yumete_tui::system_ime`.
     pub system: SystemImePolicy,
+    /// Whether **other** input methods are switched to English in Normal
+    /// mode, and back: `"off"` (the default), `"aside"`, `"aside-and-back"`.
+    /// macOS and Linux; never over SSH.
+    pub others: OtherImePolicy,
     /// The annotation mode the candidates start in: `"off"`, or the name of
     /// one of [`Self::annotation_modes`] (2026-11-02). `/` while typing and
     /// `:yume-annotation` move between them.
@@ -761,6 +765,43 @@ impl SystemImePolicy {
     }
 }
 
+/// **Other input methods** in Normal mode — Squirrel, Sogou, Apple's,
+/// Kotoeri, fcitx5, ibus — as against 宇浩, which [`SystemImePolicy`] tells
+/// to step aside by its own signal (2026-11-04).
+///
+/// They have no such signal, so the only way to stop them eating `j` is to
+/// switch the input source to the plain English layout. Switching *back* is
+/// the half that does not work reliably on macOS: a background process
+/// re-selecting an IMK input method fails to re-engage about one time in
+/// three, with no error (measured 2026-09-16, `yumete_tui::system_ime`). So
+/// switching back is its own word, and the default is to touch nothing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum OtherImePolicy {
+    /// Never touch them.
+    #[default]
+    Off,
+    /// Switch to English in Normal mode; switching back is the writer's.
+    Aside,
+    /// Switch to English in Normal mode and back to the one that was on where
+    /// text is typed.
+    AsideAndBack,
+}
+
+/// The words `[ime] others` takes.
+pub const OTHER_IME_NAMES: &[&str] = &["off", "aside", "aside-and-back"];
+
+impl OtherImePolicy {
+    /// Anything that is not one of the three reads as `off`: a typo must not
+    /// start switching the system's input source.
+    pub fn from_config(text: &str) -> Self {
+        match text.trim() {
+            "aside" => OtherImePolicy::Aside,
+            "aside-and-back" => OtherImePolicy::AsideAndBack,
+            _ => OtherImePolicy::Off,
+        }
+    }
+}
+
 impl Default for ImeConfig {
     fn default() -> Self {
         ImeConfig {
@@ -769,6 +810,7 @@ impl Default for ImeConfig {
             commit: None,
             data_dirs: Vec::new(),
             system: SystemImePolicy::Auto,
+            others: OtherImePolicy::Off,
             annotation: "off".to_string(),
             annotation_modes: factory_annotation_modes(),
             charset: "all".to_string(),
@@ -3639,6 +3681,11 @@ impl Config {
             problems.push(one_of("[ime] system", word, SYSTEM_IME_NAMES));
         }
     }
+    if let Some(word) = raw.ime.others.as_deref() {
+        if !OTHER_IME_NAMES.contains(&word.trim()) {
+            problems.push(one_of("[ime] others", word, OTHER_IME_NAMES));
+        }
+    }
 
     // 草稿: the Chinese of the ones below.
     match raw.editor.show_chaifen.as_ref().and_then(toml::Value::as_bool) {
@@ -4280,6 +4327,7 @@ struct RawIme {
     commit: Option<String>,
     data_dirs: Option<Vec<String>>,
     system: Option<String>,
+    others: Option<String>,
     annotation: Option<String>,
     charset: Option<String>,
     charset_sort: Option<String>,
@@ -4643,6 +4691,9 @@ impl RawConfig {
         }
         if other.ime.system.is_some() {
             self.ime.system = other.ime.system.clone();
+        }
+        if other.ime.others.is_some() {
+            self.ime.others = other.ime.others.clone();
         }
         if other.ime.annotation.is_some() {
             self.ime.annotation = other.ime.annotation.clone();
@@ -5138,6 +5189,9 @@ impl RawConfig {
         }
         if let Some(system) = self.ime.system {
             config.ime.system = SystemImePolicy::from_config(&system);
+        }
+        if let Some(others) = self.ime.others {
+            config.ime.others = OtherImePolicy::from_config(&others);
         }
         // A word that is not one of yume's keeps the default, as a mode name
         // nobody declared does below.

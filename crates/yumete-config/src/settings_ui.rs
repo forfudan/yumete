@@ -333,6 +333,12 @@ const IME_SYSTEM_WAYS: &[Choice] = &[
     Choice { word: "keep", label: "settings.pick.system.keep" },
 ];
 
+const IME_OTHERS_WAYS: &[Choice] = &[
+    Choice { word: "off", label: "settings.pick.others.off" },
+    Choice { word: "aside", label: "settings.pick.others.aside" },
+    Choice { word: "aside-and-back", label: "settings.pick.others.aside-and-back" },
+];
+
 const EDITOR_TAB_INSERTS_WAYS: &[Choice] = &[
     Choice { word: "spaces", label: "settings.pick.tab-inserts.spaces" },
     Choice { word: "tab", label: "settings.pick.tab-inserts.tab" },
@@ -835,6 +841,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.ime.system",
         hint: "settings.ime.system.hint",
         factory: r#""auto""#,
+    },
+    Setting {
+        table: "ime",
+        key: "others",
+        group: Group::Ime,
+        kind: Kind::Pick(IME_OTHERS_WAYS),
+        label: "settings.ime.others",
+        hint: "settings.ime.others.hint",
+        factory: r#""off""#,
     },
     // **候選欄那幾項歸「輸入法」，不歸「界面」**（2026-10-10 作者提）。原話：
     // 「An English-speaking user who never use Yume IME will be at loss when

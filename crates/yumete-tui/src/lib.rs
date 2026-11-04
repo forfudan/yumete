@@ -718,7 +718,7 @@ pub fn run(
     // **讓開** — the system's own input method, held aside while yumete wants
     // the keys (see [`system_ime`]). Its `Drop` puts the input source back, so
     // leaving this function restores it however it is left, a panic included.
-    let mut system_ime = crate::system_ime::SystemIme::new(config.ime.system);
+    let mut system_ime = crate::system_ime::SystemIme::new(config.ime.system, config.ime.others);
     // The colour the terminal draws its own cursor in — ours to set, and the
     // one thing on the screen the palette could not reach (#493).
     let mut last_caret: Option<(theme::Rgb, theme::Rgb)> = None;

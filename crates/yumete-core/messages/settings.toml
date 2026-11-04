@@ -943,6 +943,20 @@ zhs = "码打完了什么时候上屏：等下一键、只有一个候选就上�
 en = "when a finished code goes to the page"
 
 [[message]]
+# 設置：Normal 模式下讓開其他輸入法（草稿）
+key = "settings.ime.others"
+zht = "Normal 模式下讓開其他輸入法"
+zhs = "Normal 模式下让开其他输入法"
+en = "move other input methods aside in Normal mode"
+
+[[message]]
+# 設置：讓開其他輸入法——一句話（草稿）
+key = "settings.ime.others.hint"
+zht = "Normal 模式下把鼠須管、搜狗等切到英文；在 macOS 上切回來大約三次有一次不成"
+zhs = "Normal 模式下把鼠须管、搜狗等切到英文；在 macOS 上切回来大约三次有一次不成"
+en = "in Normal mode, switch other input methods (Squirrel, Sogou, fcitx) to English; on macOS switching back fails about one time in three"
+
+[[message]]
 # 設置：输入方案
 key = "settings.ime.scheme"
 zht = "輸入方案"
@@ -1438,6 +1452,27 @@ key = "settings.pick.mode.light"
 zht = "淺色"
 zhs = "浅色"
 en = "light"
+
+[[message]]
+# 設置選項：其他輸入法切到英文（草稿）
+key = "settings.pick.others.aside"
+zht = "切到英文"
+zhs = "切到英文"
+en = "aside"
+
+[[message]]
+# 設置選項：其他輸入法切到英文再切回（草稿）
+key = "settings.pick.others.aside-and-back"
+zht = "切到英文再切回"
+zhs = "切到英文再切回"
+en = "aside and back"
+
+[[message]]
+# 設置選項：其他輸入法不動（草稿）
+key = "settings.pick.others.off"
+zht = "不動"
+zhs = "不动"
+en = "off"
 
 [[message]]
 # 設置：鍵位那一套——helix

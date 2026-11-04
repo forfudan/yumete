@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Other input methods can be stood aside in Normal mode** (macOS and Linux): `[ime] others = "aside"` switches Squirrel, Sogou, fcitx5 or ibus to English while the keys are commands, and `"aside-and-back"` also switches back where text is typed, which on macOS fails about one time in three. Off by default, never over SSH. On Linux it also stands aside Yume's own fcitx5 add-on.
 - **Yume's character sets**: the filter (`Space z 0`, `:yume-charset`, `[ime] charset`), the sort (`Space z s`, `:yume-charset-sort`, `[ime] charset_sort`) and the sentence lanes (`Space z g` puts one first, `:yume-lanes`, `[ime] lanes`), with Yume's defaults. With the three lanes on, a 宇浩拼音 sentence keeps to one script and the other script comes as a candidate of its own.
 - **`Space z b` then `p`, `l` or `x`** switches to the built-in 宇浩拼音, 靈明 or 星陳, whatever is installed; `Space z i` keeps the usual order.
 - **Mojo 1.2**: `match` and `comptime match`, `if case` and `while case`, `__enum` with its cases, `__async` and `__await` are coloured and parsed, and a `case` line is indented under `match`.
