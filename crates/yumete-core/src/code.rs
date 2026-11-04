@@ -367,6 +367,8 @@ impl Language {
                     (function_definition name: (identifier) @function)
                     (struct_definition name: (identifier) @type)
                     (trait_definition name: (identifier) @type)
+                    (enum_definition name: (identifier) @type)
+                    (enum_case name: (identifier) @constant)
                     (extension_definition name: (identifier) @type)
                     (conformance (identifier) @type)
                     (parameter type: (identifier) @type)
@@ -382,12 +384,13 @@ impl Language {
                     (call function: (attribute attribute: (identifier) @function))
                     (call function: (dot_member attribute: (identifier) @function))
                     [
-                      "__extension" "__generator_type" "__match" "__mlir_region"
+                      "__async" "__await" "__enum" "__extension"
+                      "__generator_type" "__match" "__mlir_region"
                       "abi" "alias" "and" "as" "assert" "async" "await"
                       "borrowed" "capturing" "case" "comptime" "def" "deinit"
                       "del" "elif" "else" "except" "finally" "fn" "for" "from"
                       "global" "if" "imm" "import" "in" "inout" "is" "lambda"
-                      "mut" "nonlocal" "not" "or" "out" "owned" "raise" "raises"
+                      "match" "mut" "nonlocal" "not" "or" "out" "owned" "raise" "raises"
                       "read" "ref" "register_passable" "return" "struct" "thin"
                       "trait" "try" "var" "where" "while" "with"
                     ] @keyword
@@ -732,8 +735,11 @@ impl Language {
             }
             // Mojo 和 Python 同形（冒號 ＋ 縮進），節點名是它自己的：括起來那一個
             // 叫 `parenthesised_expression`（英式拼法），形參表另有 `type_parameters`。
+            // **`match` opens a level** (Mojo 1.2): its `case` lines are children
+            // of the statement, not of a block, and the 1.2 sources indent them
+            // in 316 of 449 statements (the rest are in three test files).
             Language::Mojo => {
-                r#"[(block) (argument_list) (parameters) (type_parameters)
+                r#"[(block) (match_statement) (argument_list) (parameters) (type_parameters)
                     (list) (dictionary) (set) (tuple) (parenthesised_expression)] @indent
                    ["}" "]" ")"] @outdent"#
             }
@@ -1487,6 +1493,7 @@ mod tests {
             (Language::Tsx, "function f() {\n  g(\n  )\n}\n", "g("),
             (Language::Bash, "if true; then\n  echo\nfi\n", "then"),
             (Language::Lua, "function f()\n  g(\n  )\nend\n", "g("),
+            (Language::Mojo, "def f():\n    g(\n    )\n", "g("),
         ];
         for (language, source, after) in cases {
             assert!(language.indent_query().is_some(), "{} 的查詢編得起來", language.name());
@@ -1499,6 +1506,12 @@ mod tests {
                 language.name(),
             );
         }
+        // Mojo 1.2 (2026-11-04): a `case` line sits a level under `match`,
+        // which is itself a level in from the `def`.
+        let source = "def f(x: Int):\n    match x:\n        case 1:\n            pass\n";
+        let tree = parse(Language::Mojo, source, None).expect("parses");
+        let byte = source.find("match x:").expect("在") + "match x:".len();
+        assert_eq!(open_levels(Language::Mojo, source, &tree, byte, 2, None), 2);
     }
 
     /// **`.s` 與 `.S` 不是同一門語言**（2026-10-08 定）。
@@ -1646,6 +1659,16 @@ mod tests {
         assert_eq!(at(&got, 2, 25), Some(Token::Type), "參數的類型：{:?}", got[2]);
         assert_eq!(at(&got, 3, 8), Some(Token::Function), "print：{:?}", got[3]);
         assert_eq!(at(&got, 3, 15), Some(Token::String), "{:?}", got[3]);
+
+        // Mojo 1.2 (2026-11-04): bare `match`, `__enum` and its cases.
+        let got = highlight(
+            Language::Mojo,
+            &lines("__enum Shape:\n    case circle(Float64)\ndef f(s: Shape):\n    match s:\n        case circle(r):\n            pass"),
+        );
+        assert_eq!(at(&got, 0, 0), Some(Token::Keyword), "__enum：{:?}", got[0]);
+        assert_eq!(at(&got, 0, 7), Some(Token::Type), "the enum's name：{:?}", got[0]);
+        assert_eq!(at(&got, 3, 4), Some(Token::Keyword), "match：{:?}", got[3]);
+        assert_eq!(at(&got, 4, 8), Some(Token::Keyword), "case：{:?}", got[4]);
     }
 
     /// The two token kinds the borrowed themes added (2026-10-25) come out of

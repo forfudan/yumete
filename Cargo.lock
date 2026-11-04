@@ -1121,8 +1121,8 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-mojo"
-version = "0.3.0"
-source = "git+https://github.com/forfudan/tree-sitter-mojo?tag=v0.3.0#61cb25c6c284a39bd54af53dbdbc998cddd88958"
+version = "0.4.0"
+source = "git+https://github.com/forfudan/tree-sitter-mojo?tag=v0.4.0#ee595c03a279fe9ca0153fb93e5c0e303ad26763"
 dependencies = [
  "cc",
  "tree-sitter-language",

@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **Mojo 1.2**: `match` and `comptime match`, `if case` and `while case`, `__enum` with its cases, `__async` and `__await` are coloured and parsed, and a `case` line is indented under `match`.
 - **The full 宇浩拼音, 靈明 and 星陳 tables are in the binary**, with the word frequencies, the word list and the sentence model, so all three type with nothing installed. They come from the current Yume release at build time and are kept zstd-compressed (the binary grows from 31 MB to 58 MB). An installed Yume still wins, file by file. The 精華版 tables are gone.
 - **How much a window you are not in fades is a setting**: `[theme] inactive`, from 50 to 100, keeps 95% of the ink by default. Focus mode's is `[theme] focus`, from 10 to 100, 50 by default. Both are on the settings panel's Colours page.
 - **The name yumete at the right end of the command line**, dimmed, while nothing else is on it, as it once was: `[editor] signature`, on by default, on the settings panel's Interface page.
