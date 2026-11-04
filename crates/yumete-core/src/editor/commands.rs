@@ -220,6 +220,23 @@ impl Editor {
                 self.reload(force)?;
                 Ok(CommandOutcome::Continue)
             }
+            Command::Encoding(word) => {
+                if let Some(word) = word {
+                    // The parser takes only the four words, so this is never
+                    // `None`; said rather than unwrapped all the same.
+                    let Some(encoding) = crate::encoding::by_name(&word) else {
+                        self.status = say!("encoding.is", word);
+                        return Ok(CommandOutcome::Continue);
+                    };
+                    self.current_buffer_mut().set_encoding(encoding);
+                    let name = crate::encoding::name(encoding);
+                    self.status = say!("encoding.set", name);
+                } else {
+                    let name = crate::encoding::name(self.current_buffer().encoding());
+                    self.status = say!("encoding.is", name);
+                }
+                Ok(CommandOutcome::Continue)
+            }
             Command::ReloadConfig => {
                 // 核心只記一筆；重讀那件事歸前端（它知道配置檔在哪）。
                 self.config_reload = true;

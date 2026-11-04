@@ -547,6 +547,9 @@ pub enum Command {
     /// `:reload` / `:reload!` — read the file again. The `!` throws away
     /// unsaved changes; without it a dirty buffer is refused (Feature #214).
     Reload { force: bool },
+    /// `:encoding [name]` — the encoding the file is saved in (helix's
+    /// command, vim's `:set fenc`). `None` asks (2026-11-04).
+    Encoding(Option<String>),
     /// `:reload-auto on|off` — re-read a **clean** buffer by itself when the
     /// file changes on disk. `None` asks which it is (Feature #214).
     ReloadAuto(Switch),
@@ -2229,6 +2232,30 @@ const COMMITS: &[Word] = &[
     },
 ];
 
+/// `:encoding`'s words, [`crate::encoding::NAMES`] (2026-11-04).
+const ENCODINGS: &[Word] = &[
+    Word {
+        name: "utf-8",
+        help: "cmd.encodings.utf-8",
+        needs: &[],
+    },
+    Word {
+        name: "gb18030",
+        help: "cmd.encodings.gb18030",
+        needs: &[],
+    },
+    Word {
+        name: "big5",
+        help: "cmd.encodings.big5",
+        needs: &[],
+    },
+    Word {
+        name: "shift-jis",
+        help: "cmd.encodings.shift-jis",
+        needs: &[],
+    },
+];
+
 /// 字集過濾——`:yume-charset` 的四個詞，yume 自己的名字（2026-11-04）。
 const CHARSETS: &[Word] = &[
     Word {
@@ -3113,6 +3140,14 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Recover)),
+    },
+    Entry {
+        name: "encoding",
+        aliases: &[],
+        help: "cmd.commands.encoding",
+        needs: &[],
+        params: &[Param::Words { of: ENCODINGS, default: None }],
+        build: Some(|p| Ok(Command::Encoding(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "reload",
@@ -7073,6 +7108,7 @@ mod tests {
         // 上屏方式 (Feature #209): the three are yume's own tags, `auto` is
         // 唯一 under the name the habit uses, and no argument is the question.
         assert_eq!(parse(":yume-commit"), Ok(Command::YumeCommit(None)));
+        assert_eq!(parse(":encoding big5"), Ok(Command::Encoding(Some("big5".into()))));
         assert_eq!(parse(":yume-charset"), Ok(Command::YumeCharset(None)));
         assert_eq!(
             parse(":yume-charset tonggui"),

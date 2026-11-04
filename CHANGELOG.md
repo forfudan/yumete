@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **GB18030, Big5 and Shift-JIS files open and save in their own encoding**, byte for byte when nothing changed. The status line shows `[Big5]` and the like, `:info` lists the encoding, and helix's `:encoding` shows it or changes the one the next save uses. A character the encoding cannot hold stops the save and says where it is. They used to be refused.
 - **Other input methods can be stood aside in Normal mode** (macOS and Linux): `[ime] others = "aside"` switches Squirrel, Sogou, fcitx5 or ibus to English while the keys are commands, and `"aside-and-back"` also switches back where text is typed, which on macOS fails about one time in three. Off by default, never over SSH. On Linux it also stands aside Yume's own fcitx5 add-on.
 - **Yume's character sets**: the filter (`Space z 0`, `:yume-charset`, `[ime] charset`), the sort (`Space z s`, `:yume-charset-sort`, `[ime] charset_sort`) and the sentence lanes (`Space z g` puts one first, `:yume-lanes`, `[ime] lanes`), with Yume's defaults. With the three lanes on, a 宇浩拼音 sentence keeps to one script and the other script comes as a candidate of its own.
 - **`Space z b` then `p`, `l` or `x`** switches to the built-in 宇浩拼音, 靈明 or 星陳, whatever is installed; `Space z i` keeps the usual order.

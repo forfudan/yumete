@@ -123,6 +123,14 @@ pub struct Buffer {
     /// here instead. For prose it is three bytes nobody misses; for a `.csv`
     /// it is how the next program decides the file is UTF-8.
     marked: bool,
+    /// **The encoding this file is written back in** (2026-11-04): UTF-8, or
+    /// the GB18030, Big5 or Shift-JIS it was read in. The rope holds the text
+    /// either way; only the read and the write know.
+    encoding: &'static crate::encoding::Encoding,
+    /// The encoding the file **on disk** is in: what it was last read or
+    /// written in. Not [`Self::encoding`], which `:encoding` changes for the
+    /// next save — asking whether the disk changed must read it as it is.
+    on_disk: &'static crate::encoding::Encoding,
     /// The line ending this file is written with, for the ones this editor
     /// adds to it (#309).
     ///
@@ -398,6 +406,8 @@ impl Buffer {
             cursor: 0,
             label: None,
             marked: false,
+            encoding: crate::encoding::UTF_8,
+            on_disk: crate::encoding::UTF_8,
             ending: "\n",
             history: History::default(),
             revision: 0,
@@ -465,6 +475,8 @@ impl Buffer {
             cursor: 0,
             label: None,
             marked: false,
+            encoding: crate::encoding::UTF_8,
+            on_disk: crate::encoding::UTF_8,
             ending,
             history: History::default(),
             revision: 0,
@@ -504,7 +516,21 @@ impl Buffer {
     /// **not** exist, an empty buffer *bound to* `path` is returned, so a later
     /// save creates it — this matches what writers expect from `yumete newfile`.
     /// Any other I/O error (permissions, a directory, invalid UTF-8) is returned.
+    ///
+    /// A file that is not UTF-8 is read as GB18030, Big5 or Shift-JIS when it
+    /// is plainly one of them (see [`crate::encoding`]); when it could be more
+    /// than one, the error carries an [`crate::encoding::Undecided`] naming
+    /// them, for the front end to ask which.
     pub fn open<P: AsRef<Path>>(path: P) -> io::Result<Self> {
+        Self::open_as(path, None)
+    }
+
+    /// Open `path` in `encoding`, whatever it looks like: the writer's answer
+    /// (`:open ++enc=big5`). Every byte must decode, or it is refused.
+    pub fn open_as<P: AsRef<Path>>(
+        path: P,
+        forced: Option<&'static crate::encoding::Encoding>,
+    ) -> io::Result<Self> {
         // **一份檔只許有一個名字**（2026-10-10 一輪審查報來的，LSP 整個靜靜地死）。
         //
         // 從前這裏原樣收下人打的那一個，於是 `yumete src/main.rs` 存的是
@@ -534,6 +560,7 @@ impl Buffer {
         let path = full.as_path();
         // **What the file was, to be written back as** (#309, #310).
         let mut marked = false;
+        let mut encoding = crate::encoding::UTF_8;
         // Before the read, not after it — see [`Buffer::reread`] for why a
         // stamp taken afterwards can pin a half-written file down as current.
         let seen = stamp_of(path);
@@ -542,6 +569,19 @@ impl Buffer {
         // 兩份；而且 macOS 的 malloc 釋放之後不把頁還給系統，所以「峰值」就是住下
         // 來的那個數。量過：361 MB 的檔，兩份是 775 MB，一份是 420 MB。
         let rope = match fs::File::open(path) {
+            // **Told what it is**: read whole, and every byte must decode.
+            Ok(_) if forced.is_some_and(|e| e != crate::encoding::UTF_8) => {
+                let told = forced.unwrap_or(crate::encoding::UTF_8);
+                let bytes = fs::read(path)?;
+                let text = crate::encoding::decode_strict(told, &bytes).ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        say!("encoding.not-in", path.display(), crate::encoding::name(told)),
+                    )
+                })?;
+                encoding = told;
+                Rope::from_str(&text)
+            }
             Ok(file) => {
                 let mut reader = io::BufReader::with_capacity(64 * 1024, file);
                 // BOM 要自己看：`Rope::from_reader` 不認它，而它既不算正文、也要
@@ -553,7 +593,30 @@ impl Buffer {
                     true => Box::new(reader),
                     false => Box::new(io::Read::chain(&head[..got], reader)),
                 };
-                Rope::from_reader(rest).map_err(|err| not_utf8(err, path))?
+                match Rope::from_reader(rest) {
+                    Ok(rope) => rope,
+                    // **Not UTF-8: one of the three, or refused.** Read whole
+                    // this time; a legacy manuscript is small, and the
+                    // detector and the decoder both want the bytes.
+                    Err(err) if err.kind() == io::ErrorKind::InvalidData => {
+                        marked = false;
+                        let bytes = fs::read(path)?;
+                        match crate::encoding::detect(&bytes) {
+                            crate::encoding::Detected::Sure(found, text) => {
+                                encoding = found;
+                                Rope::from_str(&text)
+                            }
+                            crate::encoding::Detected::Ask(candidates) => {
+                                return Err(io::Error::other(crate::encoding::Undecided {
+                                    path: path.to_path_buf(),
+                                    candidates,
+                                }));
+                            }
+                            crate::encoding::Detected::No => return Err(not_utf8(err, path)),
+                        }
+                    }
+                    Err(err) => return Err(err),
+                }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => Rope::new(),
             Err(err) => return Err(err),
@@ -581,6 +644,8 @@ impl Buffer {
             cursor: 0,
             label: None,
             marked,
+            encoding,
+            on_disk: encoding,
             history: History::default(),
             revision: 0,
             edited: 0,
@@ -708,7 +773,8 @@ impl Buffer {
         let Some(had) = self.read_as else {
             return true;
         };
-        match fs::read(path).ok().and_then(|bytes| decode(&bytes, path).ok().map(|t| digest(&t))) {
+        let read = fs::read(path).ok();
+        match read.and_then(|bytes| decode_in(&bytes, path, self.on_disk).ok().map(|t| digest(&t))) {
             // The bytes are the ones we read. Whatever happened to this file,
             // it did not happen to its contents.
             Some(now) => now != had,
@@ -734,7 +800,8 @@ impl Buffer {
         // again.
         let seen = stamp_of(&path);
         let bytes = fs::read(&path)?;
-        let text = decode(&bytes, &path)?;
+        let text = decode_in(&bytes, &path, self.encoding)?;
+        self.on_disk = self.encoding;
         self.read_as = Some(digest(&text));
         self.beyond_the_file = false;
         self.rope = Rope::from_str(text.as_ref());
@@ -1414,6 +1481,7 @@ impl Buffer {
         }
         Buffer::room_for(&path, force)?;
         self.write_atomically(&path, finish)?;
+        self.on_disk = self.encoding;
         self.seen = stamp_of(&path);
         self.read_as = Some(digest_of_written(&self.rope, tail_for(&self.rope, self.ending, finish)));
         self.modified = false;
@@ -1571,7 +1639,24 @@ impl Buffer {
         like: Option<&Path>,
         finish: bool,
     ) -> io::Result<()> {
+        if self.encoding != crate::encoding::UTF_8 {
+            return self.write_legacy(path, like, finish);
+        }
         self.write_body(path, like, self.marked, finish)
+    }
+
+    /// **The file in the encoding it came in** (2026-11-04). Every character
+    /// is checked before anything touches the disk: one the encoding cannot
+    /// hold stops the save, and the error carries where it is
+    /// ([`crate::encoding::Unencodable`]) for the front end to ask what to do.
+    fn write_legacy(&self, path: &Path, like: Option<&Path>, finish: bool) -> io::Result<()> {
+        let mut text = self.rope.to_string();
+        text.push_str(tail_for(&self.rope, self.ending, finish));
+        if let Some(found) = crate::encoding::unencodable(self.encoding, &text) {
+            return Err(io::Error::other(found));
+        }
+        let bytes = crate::encoding::encode(self.encoding, &text);
+        write_bytes_atomically_like(path, like, |file| file.write_all(&bytes))
     }
 
     /// The write itself. `mark` says whether the BOM the file arrived with goes
@@ -1651,6 +1736,21 @@ impl Buffer {
 
     pub fn ending(&self) -> &'static str {
         self.ending
+    }
+
+    /// The encoding this file is written back in (2026-11-04).
+    pub fn encoding(&self) -> &'static crate::encoding::Encoding {
+        self.encoding
+    }
+
+    /// Write it back in `encoding` from the next save on (`:encoding big5`,
+    /// helix's command, vim's `:set fenc`). The text is unchanged; the file
+    /// will not be, so the buffer is modified.
+    pub fn set_encoding(&mut self, encoding: &'static crate::encoding::Encoding) {
+        if encoding != self.encoding {
+            self.encoding = encoding;
+            self.modified = true;
+        }
     }
 
     /// A short, human-readable name for status lines: the file name, or
@@ -2006,12 +2106,28 @@ fn not_utf8(err: io::Error, path: &Path) -> io::Error {
     }
     io::Error::new(
         io::ErrorKind::InvalidData,
-        format!(
-            "{} is not UTF-8 — an older Chinese manuscript is usually Big5 or GB18030; \
-             convert it first, e.g. `iconv -f big5 -t utf-8`",
-            path.display()
-        ),
+        say!("encoding.refused", path.display()),
     )
+}
+
+/// `bytes` read back in `encoding`: UTF-8 as [`decode`] reads it, any other
+/// strictly, as the file was opened.
+fn decode_in<'a>(
+    bytes: &'a [u8],
+    path: &Path,
+    encoding: &'static crate::encoding::Encoding,
+) -> io::Result<std::borrow::Cow<'a, str>> {
+    if encoding == crate::encoding::UTF_8 {
+        return decode(bytes, path);
+    }
+    crate::encoding::decode_strict(encoding, bytes)
+        .map(std::borrow::Cow::Owned)
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                say!("encoding.not-in", path.display(), crate::encoding::name(encoding)),
+            )
+        })
 }
 
 fn decode<'a>(bytes: &'a [u8], path: &Path) -> io::Result<std::borrow::Cow<'a, str>> {
@@ -3380,21 +3496,72 @@ fn tmp() -> std::path::PathBuf {
         fs::remove_dir_all(&dir).ok();
     }
 
+    /// **A Big5 manuscript opens as Big5, and goes back as Big5** (2026-11-04;
+    /// it used to be refused with a hint to convert it).
     #[test]
-    fn a_big5_manuscript_is_refused_in_words_its_author_can_act_on() {
+    fn a_big5_manuscript_opens_and_saves_as_it_came() {
+        use crate::encoding::{BIG5, UTF_8};
         let dir = tmp().join(format!("yumete-big5-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("old.txt");
+        let text = "清晨的霧氣還沒有散去，小鎮的石板路上已經有了行人。\r\n賣豆漿的攤子冒着熱氣。\r\n";
+        let bytes = BIG5.encode(text).0.into_owned();
+        fs::write(&path, &bytes).unwrap();
+
+        let mut b = Buffer::open(&path).unwrap();
+        assert_eq!(b.encoding(), BIG5);
+        assert_eq!(b.text(), text);
+        // Opening and saving is not an edit: the bytes come back as they were,
+        // line endings and all.
+        b.save_forcing(true, true).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert!(!b.changed_underneath(), "what was written reads back the same");
+
+        // 简 has no Big5 code: the save stops before the disk is touched, and
+        // says where.
+        b.insert(0, "简").unwrap();
+        let err = b.save(true).unwrap_err();
+        let found = err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<crate::encoding::Unencodable>())
+            .expect("the error says which character");
+        assert_eq!(found.first, (1, 1, '简'));
+        assert_eq!(fs::read(&path).unwrap(), bytes, "the file is untouched");
+
+        // Saved as UTF-8 instead, it holds it.
+        b.set_encoding(UTF_8);
+        b.save(true).unwrap();
+        assert!(String::from_utf8(fs::read(&path).unwrap()).unwrap().starts_with("简清晨"));
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Two characters cannot be told apart: the writer is asked, and the
+    /// error names the candidates. Told, it opens.
+    #[test]
+    fn a_file_too_short_to_tell_is_asked_about() {
+        use crate::encoding::{Undecided, BIG5};
+        let dir = tmp().join(format!("yumete-short-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("short.txt");
         // 「第一段」 in Big5.
         fs::write(&path, b"\xb2\xc4\xa4\x40\xacq").unwrap();
-
         let Err(err) = Buffer::open(&path) else {
-            panic!("a Big5 manuscript was read as if it were UTF-8");
+            panic!("three characters were guessed");
         };
-        let err = err.to_string();
-        assert!(err.contains("Big5"), "{err}");
-        assert!(err.contains("iconv"), "{err}");
-
+        let asked = err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<Undecided>())
+            .expect("the writer is asked");
+        assert!(asked.candidates.contains(&BIG5), "{:?}", asked.candidates);
+        let b = Buffer::open_as(&path, Some(BIG5)).unwrap();
+        assert_eq!(b.text(), "第一段");
+        // A file that is none of the three is still refused.
+        fs::write(&path, b"caf\xe9").unwrap();
+        let Err(err) = Buffer::open(&path) else {
+            panic!("Latin-1 was opened");
+        };
+        assert!(err.get_ref().and_then(|e| e.downcast_ref::<Undecided>()).is_none());
         fs::remove_dir_all(&dir).ok();
     }
 

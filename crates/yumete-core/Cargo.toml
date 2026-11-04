@@ -7,6 +7,12 @@ repository.workspace = true
 version.workspace = true
 
 [dependencies]
+# **Legacy encodings** (2026-11-04): GB18030, Big5 and Shift-JIS opened and
+# saved. encoding_rs is the WHATWG Encoding Standard as Firefox implements it;
+# chardetng is Firefox's detector. About 0.3 MB together. The `less-slow`
+# features make encoding Chinese and Japanese about ten times faster.
+encoding_rs = { version = "0.8.42", features = ["less-slow-gb-hanzi-encode", "less-slow-big5-hanzi-encode", "less-slow-kanji-encode"] }
+chardetng = "1.0.0"
 # ripgrep's directory walker (#362). What it buys is `.gitignore`: the hand-
 # written skip list it replaces was three names and an extension table, it did
 # not read the ignore file sitting right there, and it was never going to be

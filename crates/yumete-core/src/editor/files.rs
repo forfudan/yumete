@@ -124,6 +124,7 @@ impl Editor {
                 _ => "LF".to_string(),
             },
         );
+        row(say!("file.encoding"), crate::encoding::name(buffer.encoding()).to_string());
         if let Some(when) = on_disk.as_ref().and_then(|it| it.modified().ok()) {
             row(say!("file.modified-at"), when_was(when));
         }

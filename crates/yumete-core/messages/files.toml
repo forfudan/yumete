@@ -1,4 +1,4 @@
-# prefixes: buffer file recover write readonly reload autoreload recent export cd data progress
+# prefixes: buffer file recover write readonly reload autoreload recent export cd data progress encoding
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -223,6 +223,48 @@ en = "{0} could not be read: {1}"
 # ── detail ────────────────────────────────────────────────────────────
 
 [[message]]
+# 存盤時有字這個編碼存不下。{0} 編碼名，{1} 第一個字，{2} 行，{3} 列，{4} 一共幾個（草稿）
+key = "encoding.cannot-hold"
+zht = "{0} 存不下第 {2} 行第 {3} 列的「{1}」，共 {4} 處"
+zhs = "{0} 存不下第 {2} 行第 {3} 列的「{1}」，共 {4} 处"
+en = "{0} cannot hold {1} at line {2}, column {3} ({4} in all)"
+
+[[message]]
+# `:encoding` 沒有參數：這個文件存盤時用什麼編碼。{0} 編碼名（草稿）
+key = "encoding.is"
+zht = "編碼：{0}"
+zhs = "编码：{0}"
+en = "encoding: {0}"
+
+[[message]]
+# 按指定的編碼讀，有字節解不開。{0} 是路徑，{1} 是編碼名（草稿）
+key = "encoding.not-in"
+zht = "{0} 不是 {1}"
+zhs = "{0} 不是 {1}"
+en = "{0} is not {1}"
+
+[[message]]
+# 打開一個既不是 UTF-8、也不是 GB18030／Big5／Shift-JIS 的檔。{0} 是路徑（草稿）
+key = "encoding.refused"
+zht = "{0} 不是 UTF-8，也不是 GB18030、Big5 或 Shift-JIS，打不開"
+zhs = "{0} 不是 UTF-8，也不是 GB18030、Big5 或 Shift-JIS，打不开"
+en = "{0} is not UTF-8, nor GB18030, Big5 or Shift-JIS, so it cannot be opened"
+
+[[message]]
+# `:encoding X` 之後：下次存盤用 X。{0} 編碼名（草稿）
+key = "encoding.set"
+zht = "存盤時改用 {0}"
+zhs = "存盘时改用 {0}"
+en = "will be saved as {0}"
+
+[[message]]
+# 打開一個分不出編碼的檔（太短）。{0} 是路徑，{1} 是解得開它的幾種編碼（草稿）
+key = "encoding.undecided"
+zht = "{0} 的編碼分不出來，可能是 {1}"
+zhs = "{0} 的编码分不出来，可能是 {1}"
+en = "cannot tell what {0} is written in; it could be {1}"
+
+[[message]]
 # :export 給了不認得的格式
 key = "export.no-such-format"
 zht = "没有「{0}」這種格式——html、typst，或者 csv、tsv(光標所在的表格)"
@@ -266,6 +308,13 @@ key = "file.chars"
 zht = "字數(不含空白)"
 zhs = "字数(不含空白)"
 en = "characters (no spaces)"
+
+[[message]]
+# `:info` 那一欄：編碼（草稿）
+key = "file.encoding"
+zht = "編碼"
+zhs = "编码"
+en = "encoding"
 
 [[message]]
 # :info：換行符

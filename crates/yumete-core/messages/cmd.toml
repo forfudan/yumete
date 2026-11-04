@@ -226,6 +226,14 @@ en = "undo to so many steps or so long ago (5m, 1h)"
 find = "撤銷 撤销 撤消 以前 時間 时间 undo earlier ago time"
 
 [[message]]
+# : 命令選單裏 encoding 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.encoding"
+zht = "文件存盤用的編碼：utf-8、gb18030、big5、shift-jis"
+zhs = "文件存盘用的编码：utf-8、gb18030、big5、shift-jis"
+en = "the encoding the file is saved in: utf-8, gb18030, big5 or shift-jis"
+find = "編碼 编码 encoding fenc 字符集"
+
+[[message]]
 # : 命令選單裏 exit 那一項的説明(commands 組)
 key = "cmd.commands.exit"
 zht = "改過纔存，然後退出(短寫 `:x`，也認 `:xit`)"
@@ -985,6 +993,34 @@ zht = "每天要寫多少字；`:count-target off` 不再算"
 zhs = "每天要写多少字；`:count-target off` 不再算"
 en = "how many words a day; `:count-target off` stops counting against one"
 find = "目標 目标 每日 進度 进度 target daily goal"
+
+[[message]]
+# `:encoding` 的詞 big5（草稿）
+key = "cmd.encodings.big5"
+zht = "Big5"
+zhs = "Big5"
+en = "Big5"
+
+[[message]]
+# `:encoding` 的詞 gb18030（草稿）
+key = "cmd.encodings.gb18030"
+zht = "GB18030，也讀 GBK、GB2312"
+zhs = "GB18030，也读 GBK、GB2312"
+en = "GB18030, which reads GBK and GB2312 too"
+
+[[message]]
+# `:encoding` 的詞 shift-jis（草稿）
+key = "cmd.encodings.shift-jis"
+zht = "Shift-JIS"
+zhs = "Shift-JIS"
+en = "Shift-JIS"
+
+[[message]]
+# `:encoding` 的詞 utf-8（草稿）
+key = "cmd.encodings.utf-8"
+zht = "UTF-8"
+zhs = "UTF-8"
+en = "UTF-8"
 
 [[message]]
 # : 命令選單裏 csv 那一項的説明(export 組)

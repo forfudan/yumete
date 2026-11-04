@@ -13474,6 +13474,13 @@ fn draw_status(
             true => say!("ui.readonly-tag"),
             false => String::new(),
         };
+        // **The encoding, only when it is not UTF-8** (2026-11-04), as helix
+        // shows it: a Big5 file says so standing, so a save that refuses 简 is
+        // never a surprise.
+        let encoded = match buffer.encoding() == yumete_core::encoding::UTF_8 {
+            true => String::new(),
+            false => format!(" [{}]", yumete_core::encoding::name(buffer.encoding())),
+        };
         // 中/英 + scheme, in every mode — Normal included (#337): it is what
         // the next `i` will land in, and there is no other way to find out.
         let ime_tag = match standing_language_tag(ime).as_str() {
@@ -13537,7 +13544,7 @@ fn draw_status(
             (ime_tag, 5),
             (buffer.display_name(), 4),
             (dirty.to_string(), 1),
-            (format!("{locked}{draft}"), 2),
+            (format!("{locked}{draft}{encoded}"), 2),
             (preview.to_string(), 6),
             (which, 3),
         ];
@@ -25273,7 +25280,9 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char(':'));
 
         let tall = render_with(&editor, &config, no_ime(), 160, 60);
-        let short = render_with(&editor, &config, no_ime(), 160, 24);
+        // Twenty-six rows: the shortest that holds all 79 (2026-11-04: with
+        // `:encoding` the list outgrew 24 rows, and on one it scrolls by a row).
+        let short = render_with(&editor, &config, no_ime(), 160, 26);
         let (deep, wide) = menu_shape(&tall);
         assert_eq!(wide.len(), MENU_COLUMNS, "six columns at this width: {wide:?}");
         assert_eq!(
@@ -25647,7 +25656,7 @@ fn squeezed(text: &str) -> String {
         // with the rest of the page standing empty beside it.
         let mut wide = editor_with("那年冬天");
         wide.on_key(Key::Char(':'));
-        let buffer = render_with(&wide, &config, no_ime(), 140, 24);
+        let buffer = render_with(&wide, &config, no_ime(), 140, 26);
         let text = buffer_text(&buffer);
         assert!(text.contains(":open"), "{text:?}");
         assert!(text.contains(":render"), "a command from the far end of the list");
@@ -25658,7 +25667,7 @@ fn squeezed(text: &str) -> String {
         // a window this short — half of it, footer and rings included.
         let (rows, columns) = menu_shape(&buffer);
         assert!(
-            rows.len() <= 24 * 2 / 3 - 3,
+            rows.len() <= 26 * 2 / 3 - 3,
             "a menu is glanced at, not read: {rows:?}"
         );
         assert!(columns.len() >= 3, "several columns: {columns:?}");
