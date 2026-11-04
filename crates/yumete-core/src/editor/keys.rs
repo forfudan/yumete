@@ -1620,7 +1620,15 @@ impl Editor {
                     self.land_at_column(self.cursor_line(), want);
                 }
             }
-            'c' => self.apply(motion::Operator::Change { cut: true }, span),
+            'c' => match (shape, span) {
+                (Shape::Lines, motion::Span::Over { anchor, head }) => {
+                    let rope = self.current_buffer().rope();
+                    let (a, b) = (anchor.min(head).min(rope.len_chars()), anchor.max(head).min(rope.len_chars()));
+                    let (first, last) = (rope.char_to_line(a), rope.char_to_line(b));
+                    self.change_whole_lines(first, last, true);
+                }
+                _ => self.apply(motion::Operator::Change { cut: true }, span),
+            },
             // `>` and `<` want the selection, because indenting is a
             // line-shaped edit the editor already knows how to do.
             // The cursor keeps its column (nvim's `nostartofline`, measured).

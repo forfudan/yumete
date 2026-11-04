@@ -425,6 +425,68 @@ impl Editor {
         }
     }
 
+    /// **vim's linewise `c`** (`cc`, `S`, `cj`, Visual `V` `c`): the lines'
+    /// text goes, the last one's break stays, and Insert starts there. An
+    /// empty last line is not joined to the next (it was, 2026-11-04).
+    ///
+    /// **In code the first line's indent stays** (autoindent, measured in
+    /// nvim 2026-11-04), as `o` keeps it; not when that line is only blanks.
+    pub(super) fn change_whole_lines(&mut self, first: usize, last: usize, cut: bool) {
+        let rope = self.current_buffer().rope();
+        let start = rope.line_to_char(first);
+        let end = motion::line_end(rope, rope.line_to_char(last)).max(start);
+        let blank = rope.slice(start..motion::line_end(rope, start)).chars().all(char::is_whitespace);
+        let indent = match blank {
+            true => String::new(),
+            false => self.indent_of_line(first, None),
+        };
+        if end == start && cut {
+            self.store("\n".to_string());
+        }
+        self.cut_range((start, end), cut);
+        self.enter_insert();
+        if indent.is_empty() || self.mode != Mode::Insert {
+            return;
+        }
+        let at = self.sel.head();
+        if self.edit_insert(at, &indent) {
+            self.set_cursor(at + indent.chars().count());
+            self.note_fresh_indent(indent.chars().count(), false);
+        }
+    }
+
+    /// Mark the `len` characters before the caret as vim's autoindent, so
+    /// `Esc` or Enter with nothing typed takes them back.
+    pub(super) fn note_fresh_indent(&mut self, len: usize, recorded: bool) {
+        self.fresh_indent = (len > 0 && self.vim_keymap()).then(|| {
+            let buffer = self.current_buffer();
+            (buffer.id(), buffer.revision(), self.sel.head(), len, recorded)
+        });
+    }
+
+    /// **vim drops an autoindent nothing was typed after** (`:h autoindent`):
+    /// on `Esc` or Enter, a line that is only that indent, the caret at its
+    /// end, goes back to empty.
+    pub(super) fn take_back_fresh_indent(&mut self) {
+        let Some((id, revision, at, len, recorded)) = self.fresh_indent.take() else { return };
+        let buffer = self.current_buffer();
+        let rope = buffer.rope();
+        let fresh = buffer.id() == id
+            && buffer.revision() == revision
+            && self.sel.head() == at
+            && at >= len
+            && at == motion::line_end(rope, at)
+            && rope.line_to_char(rope.char_to_line(at)) == at - len;
+        if !fresh || !self.edit_remove(at - len..at) {
+            return;
+        }
+        self.set_cursor(at - len);
+        if recorded {
+            let keep = self.insert_recording.chars().count().saturating_sub(len);
+            self.insert_recording = self.insert_recording.chars().take(keep).collect();
+        }
+    }
+
     /// 眼下這一行要帶下去的那一段縮進（Enter 用的，截到光標為止）。
     ///
     /// **外加語法樹說的那幾級**（2026-10-08 第二期）：行尾一個 `(`、`{`、`[`，下一
@@ -518,6 +580,7 @@ impl Editor {
         self.sel.set_head(end + ending.chars().count() + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
         self.enter_insert();
+        self.note_fresh_indent(indent.chars().count(), false);
     }
 
     /// **`o`/`O` inside a `|` table open a *row*, the way `t r` does**
@@ -579,6 +642,7 @@ impl Editor {
         self.sel.set_head(start + indent.chars().count());
         self.sel.set_anchor(self.sel.head());
         self.enter_insert();
+        self.note_fresh_indent(indent.chars().count(), false);
     }
 
     /// **A blank line, and stay where you are** — helix's `]空格` / `[空格`

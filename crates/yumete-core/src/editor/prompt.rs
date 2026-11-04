@@ -284,6 +284,7 @@ impl Editor {
     /// **Leave Insert mode** (`Esc`, and `normal_mode` from a binding such as
     /// `jk`).
     pub(super) fn leave_insert(&mut self) {
+        self.take_back_fresh_indent();
         // **`5ix` spends its count here** (2026-10-06): what repeats is
         // the whole typing session, and nobody knows what that is until
         // now.
@@ -361,11 +362,15 @@ impl Editor {
         // 規矩與代價都在 [`Editor::indent_of_line`] 上：只帶光標前面那一截
         // 空白，所以一個字符都不是憑空長出來的；行首按下去什麼都不帶。
         let indent = self.indent_to_carry();
+        // An autoindent nothing was typed after goes; the next line still
+        // gets it.
+        self.take_back_fresh_indent();
         // 重放（`3i…`、`.`）是把記下來的字串原樣插進去的，所以縮進要記在
         // 裏面——不記，`.` 重放出來的那幾行就貼着左邊。
         self.insert_recording.push_str(&ending);
         self.insert_recording.push_str(&indent);
         self.insert_str(&format!("{ending}{indent}"));
+        self.note_fresh_indent(indent.chars().count(), true);
     }
 
         // **`C-h` is Backspace** and **`C-j` is Enter** — the two the
@@ -387,6 +392,9 @@ impl Editor {
         if self.delete_an_empty_pair() {
             return;
         }
+        if self.vim_keymap() && self.vim_backspace_in_the_indent() {
+            return;
+        }
         self.delete_before_cursor();
         // The server's list widens again, as helix's does (2026-10-28).
         if self.sel.head() < before && self.narrow_the_server_list(before) == Some(true) {
@@ -394,9 +402,76 @@ impl Editor {
         }
     }
 
+    /// The line's start and the caret's column when only blanks (spaces,
+    /// TABs) are before it.
+    fn caret_in_the_indent(&self) -> Option<(usize, usize)> {
+        let rope = self.current_buffer().rope();
+        let head = self.sel.head();
+        let start = rope.line_to_char(rope.char_to_line(head));
+        let ts = self.tab_stop();
+        let mut cols = 0;
+        for c in rope.slice(start..head).chars() {
+            cols = match c {
+                '\t' => cols + ts - cols % ts,
+                ' ' => cols + 1,
+                _ => return None,
+            };
+        }
+        Some((start, cols))
+    }
+
+    /// **vim's Backspace in the indent goes back to the last multiple of
+    /// `sw`** (nvim's 'smarttab', measured 2026-11-04): blanks taken off the
+    /// end until the column is no further, spaces put back to reach it.
+    /// Answers whether it did.
+    fn vim_backspace_in_the_indent(&mut self) -> bool {
+        let Some((start, cols)) = self.caret_in_the_indent().filter(|&(start, _)| self.sel.head() > start) else {
+            return false;
+        };
+        let (sw, ts) = (self.indent_width(), self.tab_stop());
+        let want = (cols - 1) / sw * sw;
+        let head = self.sel.head();
+        let blanks: Vec<char> = self.current_buffer().rope().slice(start..head).chars().collect();
+        let width = |n: usize| blanks[..n].iter().fold(0, |col, c| match c {
+            '\t' => col + ts - col % ts,
+            _ => col + 1,
+        });
+        let mut keep = blanks.len() - 1;
+        while keep > 0 && width(keep) > want {
+            keep -= 1;
+        }
+        let pad = " ".repeat(want - width(keep));
+        if !self.edit_remove(start + keep..head) || (!pad.is_empty() && !self.edit_insert(start + keep, &pad)) {
+            return true;
+        }
+        self.set_cursor(start + keep + pad.len());
+        true
+    }
+
     /// Indentation: `Tab` the kind the file indents with (`tab_spaces`),
     /// `Shift-Tab` the other kind.
     pub(super) fn insert_indent(&mut self, the_files: bool) {
+        // **vim's Tab in the indent writes the indent afresh** (nvim's
+        // 'smarttab', measured 2026-11-04): to the next multiple of `sw`, as
+        // TABs and spaces when Tab types TABs. After text, or when `sw` is
+        // the tab stop, it is a TAB, as below.
+        //
+        // With Tab typing spaces nvim goes to the next multiple of `ts` after
+        // text; this keeps `sw`, as nvim's `softtabstop=-1` does: there is no
+        // 'softtabstop' here, and at the factory `ts=8 sw=4` one Tab would
+        // jump eight columns.
+        if the_files && self.vim_keymap() && !self.tab_spaces() && self.indent_width() != self.tab_stop() {
+            if let Some((start, cols)) = self.caret_in_the_indent() {
+                let sw = self.indent_width();
+                let text = self.vim_indent_text((cols / sw + 1) * sw);
+                let head = self.sel.head();
+                if self.edit_remove(start..head) && self.edit_insert(start, &text) {
+                    self.set_cursor(start + text.chars().count());
+                    self.insert_recording.push('\t');
+                }
+                return;
+            }
+        }
         let spaces = the_files == self.tab_spaces();
         let text = match spaces {
             // To the next multiple of the indent, not a fixed run: a
@@ -508,6 +583,7 @@ impl Editor {
             PlaceCmd::NormalMode => {
                 // 退出去：把預覽放回原樣（helix 的 `PromptEvent::Abort`）。
                 self.end_a_trial(crate::editor::Trial::Undo);
+                self.leave_visual_for_the_line();
                 self.close_prompt();
             }
             PlaceCmd::HistoryPrev | PlaceCmd::HistoryNext => {
@@ -527,10 +603,15 @@ impl Editor {
                 if !self.settings_open {
                     remember_line(&mut self.command_history, &line);
                 }
+                let visual = self.visual_start_for_the_line();
+                let before = (self.sel.anchor(), self.sel.head());
                 match self.execute(&line) {
                     Ok(CommandOutcome::Quit) => self.quit_from_binding = true,
                     Ok(CommandOutcome::Continue) => {}
                     Err(err) => self.status = err.to_string(),
+                }
+                if let Some(start) = visual {
+                    self.leave_visual_after_the_line(start, before, line.trim().is_empty());
                 }
             }
             other => {
@@ -591,7 +672,10 @@ impl Editor {
     /// One of a picker's or a prompt's commands, on the `::` line.
     fn lookfor_command(&mut self, name: PlaceCmd) {
         match name {
-            PlaceCmd::NormalMode => self.close_prompt(),
+            PlaceCmd::NormalMode => {
+                self.leave_visual_for_the_line();
+                self.close_prompt();
+            }
             // Backspacing `::` empty goes back to `:`, not out to the page:
             // the second colon is the last thing there was to take back.
             PlaceCmd::DeleteCharBackward if self.command_line.is_empty() => {
@@ -680,6 +764,65 @@ impl Editor {
         (found, focus)
     }
 
+    /// **Where vim's cursor goes when `:` leaves Visual** (`:h v_:`,
+    /// measured in nvim 2026-11-04): the start of the Visual area, which
+    /// under `V` is the first line's start unless the cursor is the line
+    /// above. `None` outside vim's Visual mode.
+    fn visual_start_for_the_line(&self) -> Option<usize> {
+        if !self.vim_keymap() || !self.extend {
+            return None;
+        }
+        let (anchor, head) = (self.sel.anchor(), self.sel.head());
+        if !self.vim_lines {
+            return Some(anchor.min(head));
+        }
+        let rope = self.current_buffer().rope();
+        let len = rope.len_chars();
+        let (top, cursor) = (rope.char_to_line(anchor.min(len)), rope.char_to_line(head.min(len)));
+        Some(match cursor < top {
+            true => self.column_on_line(cursor, self.vim_line_column),
+            false => rope.line_to_char(top),
+        })
+    }
+
+    /// vim's Visual ends when its `:` line does: the command has taken the
+    /// selected lines, and the cursor stays where the command put it, else
+    /// at the start of the Visual area. An empty line goes to the last line
+    /// of the range (vim's `:'<,'>`), keeping the column.
+    fn leave_visual_after_the_line(&mut self, start: usize, before: (usize, usize), empty: bool) {
+        if !self.extend {
+            return;
+        }
+        let last = {
+            let rope = self.current_buffer().rope();
+            let (_, end) = self.selection();
+            rope.char_to_line(end.saturating_sub(1).min(rope.len_chars()))
+        };
+        let at = match (self.sel.anchor(), self.sel.head()) == before {
+            true => start,
+            false => self.sel.head(),
+        };
+        self.extend = false;
+        self.vim_lines = false;
+        self.sel.set_anchor(at);
+        self.sel.set_head(at);
+        self.clamp_cursor();
+        self.refresh_goal_column();
+        if empty {
+            let want = self.column_wanted();
+            self.land_at_column(last, want);
+        }
+    }
+
+    /// The `:` line given up from vim's Visual mode ends Visual too, the
+    /// cursor at the start of the Visual area.
+    fn leave_visual_for_the_line(&mut self) {
+        if let Some(start) = self.visual_start_for_the_line() {
+            let before = (self.sel.anchor(), self.sel.head());
+            self.leave_visual_after_the_line(start, before, false);
+        }
+    }
+
     /// Shut the prompt and forget what was on it.
     fn close_prompt(&mut self) {
         self.command_line.clear();
@@ -718,6 +861,9 @@ impl Editor {
                     // Backspacing past the start leaves the prompt: the line is
                     // the only thing there was to go back over.
                     if len == 0 {
+                        if self.mode == Mode::Command {
+                            self.leave_visual_for_the_line();
+                        }
                         self.close_prompt();
                     }
                     return;

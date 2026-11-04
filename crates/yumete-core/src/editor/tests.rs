@@ -37229,3 +37229,174 @@ fn write_quit_bang_leaves_with_others_unsaved() {
     assert_eq!(std::fs::read_to_string(&b).unwrap(), "ytwo\n");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// Keys with the named ones spelled as one character each: `⎋` Esc, `⏎`
+/// Enter, `»` Tab, `«` Backspace.
+fn keyed(ed: &mut Editor, keys: &str) {
+    for c in keys.chars() {
+        ed.on_key(match c {
+            '⎋' => Key::Esc,
+            '⏎' => Key::Enter,
+            '»' => Key::Tab,
+            '«' => Key::Backspace,
+            c => Key::Char(c),
+        });
+    }
+}
+
+/// **vim's `:` from Visual leaves Visual** (`:h v_:`, measured in nvim
+/// 2026-11-04): the command still takes the selected lines; the cursor goes
+/// where the command put it, else to the start of the Visual area, and
+/// Esc on the `:` line ends Visual too.
+#[test]
+fn vims_colon_line_from_visual_leaves_visual() {
+    let lines: String = (1..=8).map(|n| format!("a{n} aa\n")).collect();
+    let line = |ed: &Editor, n: usize| ed.current_buffer().text().lines().nth(n).unwrap_or_default().to_string();
+    let mut ed = typed_vim(&lines);
+    keyed(&mut ed, "jVj:s/a/Q/⏎");
+    assert!(!ed.is_extending(), "Visual is over");
+    press(&mut ed, "x");
+    assert_eq!((line(&ed, 1), line(&ed, 2)), ("Q2 aa".into(), "3 aa".into()), "x takes one character on the last line changed");
+    let mut ed = typed_vim(&lines);
+    keyed(&mut ed, "j3lvjh:⎋");
+    assert!(!ed.is_extending());
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (1, 3), "Esc: the start of the Visual area");
+    press(&mut ed, "x");
+    assert_eq!(line(&ed, 1), "a2 a");
+    // `V` with the cursor below: the first line's start.
+    let mut ed = typed_vim(&lines);
+    keyed(&mut ed, "j3lVj:⎋");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (1, 0));
+    // A substitution that finds nothing leaves it at the start too.
+    let mut ed = typed_vim(&lines);
+    keyed(&mut ed, "jvj:s/zzz/Q/⏎");
+    assert_eq!((ed.cursor_line(), ed.cursor_column(), ed.is_extending()), (1, 0, false));
+    // An empty line goes to the range's last line, the column kept.
+    let mut ed = typed_vim(&lines);
+    keyed(&mut ed, "j3lvk:⏎");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (1, 3));
+    // Helix's select mode is not vim's Visual: Esc on `:` keeps it.
+    let mut ed = typed(&lines);
+    keyed(&mut ed, "vj:⎋");
+    assert!(ed.is_extending(), "helix untouched");
+}
+
+/// **vim's `cc`, `S` and linewise `c` keep the first line's indent in code**
+/// (autoindent, measured in nvim 2026-11-04), and the indent goes again
+/// when nothing is typed after it, after `o`, `O` and Enter too. Not in a
+/// text file: no autoindent in prose.
+#[test]
+fn vims_linewise_change_keeps_the_indent_in_code() {
+    let code = "fn main() {\n    let a = 1;\n      \n\n\tb();\n}\n";
+    let vim = |keys: &str| {
+        let mut ed = typed(code);
+        ed.execute(":syntax rust").unwrap();
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        keyed(&mut ed, keys);
+        ed.on_key(Key::Esc);
+        ed.current_buffer().text()
+    };
+    assert_eq!(vim("jccq"), "fn main() {\n    q\n      \n\n\tb();\n}\n");
+    assert_eq!(vim("jSq"), "fn main() {\n    q\n      \n\n\tb();\n}\n");
+    assert_eq!(vim("jcjq"), "fn main() {\n    q\n\n\tb();\n}\n", "the first line's indent");
+    assert_eq!(vim("jVjcq"), "fn main() {\n    q\n\n\tb();\n}\n", "Visual V c is cc");
+    assert_eq!(vim("4jccq"), "fn main() {\n    let a = 1;\n      \n\n\tq\n}\n");
+    assert_eq!(vim("jccq⎋3j."), "fn main() {\n    q\n      \n\n\tq\n}\n", ". keeps that line's own");
+    assert_eq!(vim("jcc"), "fn main() {\n\n      \n\n\tb();\n}\n", "nothing typed: the indent goes");
+    assert_eq!(vim("jo"), "fn main() {\n    let a = 1;\n\n      \n\n\tb();\n}\n", "o too");
+    assert_eq!(vim("jO"), "fn main() {\n\n    let a = 1;\n      \n\n\tb();\n}\n", "O too");
+    assert_eq!(vim("jccx«"), "fn main() {\n    \n      \n\n\tb();\n}\n", "a key typed keeps it");
+    assert_eq!(vim("2jccq"), "fn main() {\n    let a = 1;\nq\n\n\tb();\n}\n", "a line of blanks keeps none");
+    // An empty line changed is not joined to the next.
+    assert_eq!(vim("3jccq"), "fn main() {\n    let a = 1;\n      \nq\n\tb();\n}\n");
+    assert_eq!(vim("3jVcq"), "fn main() {\n    let a = 1;\n      \nq\n\tb();\n}\n");
+    assert_eq!(vim("3jVd"), "fn main() {\n    let a = 1;\n      \n\tb();\n}\n", "V on an empty line is that line");
+    // Enter on a line of autoindent alone empties it; the next keeps it.
+    assert_eq!(vim("jA⏎⏎x"), "fn main() {\n    let a = 1;\n\n    x\n      \n\n\tb();\n}\n");
+    // Prose has no autoindent.
+    let mut ed = typed_vim("a\n    b\n");
+    keyed(&mut ed, "jccq⎋");
+    assert_eq!(ed.current_buffer().text(), "a\nq\n");
+}
+
+/// **`j`/`k` onto a closed fold keep the column wanted** (nvim,
+/// 2026-11-04): they used to land at the end of the fold's first line, and
+/// `x` then took its last character.
+#[test]
+fn j_and_k_onto_a_closed_fold_keep_the_column() {
+    let lines: String = (1..=10).map(|n| format!("w{n}_0 w{n}_1 w{n}_2\n")).collect();
+    let mut ed = typed_vim(&lines);
+    press(&mut ed, "3Gzf2jjk");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (2, 0));
+    let mut ed = typed_vim(&lines);
+    press(&mut ed, "3Gzf2jj3lk");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (2, 3));
+    press(&mut ed, "zox");
+    assert!(ed.current_buffer().text().contains("\nw3_ w3_1"), "x takes the character under the cursor");
+    let mut ed = typed_vim(&lines);
+    press(&mut ed, "3G5lzf2jkj");
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (2, 5));
+}
+
+/// **vim's `:s` leaves the cursor on the last line substituted**, on its
+/// first non-blank (`:h :s`, measured in nvim 2026-11-04); with nothing
+/// found it stays. Helix has no `:s`, and its users keep the cursor.
+#[test]
+fn vims_substitute_leaves_the_cursor_on_the_last_line_changed() {
+    let text = "  a1\n    a2\nb3\n  a4\nb5\n";
+    let mut ed = typed_vim(text);
+    ed.execute(":%s/a/X/").unwrap();
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (3, 2));
+    let mut ed = typed_vim(text);
+    press(&mut ed, "4Gll");
+    ed.execute(":%s/zzz/X/").unwrap();
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (3, 2), "nothing found: it stays");
+    let mut ed = typed_vim(text);
+    ed.execute(":1,2s/a/a/").unwrap();
+    assert_eq!((ed.cursor_line(), ed.cursor_column()), (1, 4), "found, even if the text came out the same");
+    let mut ed = typed(text);
+    ed.execute(":%s/a/X/").unwrap();
+    assert_eq!(ed.cursor_line(), 0, "helix untouched");
+}
+
+/// **vim's `>`/`<` and Insert Tab with `ts=4 sw=6 noet`** (nvim,
+/// 2026-11-04): `>>` writes the indent afresh as a TAB and two spaces;
+/// Tab in the indent goes to the next multiple of `sw` the same way
+/// ('smarttab'), Backspace there back to the last; Tab after text is a TAB.
+#[test]
+fn vims_shift_and_tab_write_tabs_when_tab_types_tabs() {
+    let vim = |text: &str, keys: &str| {
+        let mut ed = typed(text);
+        ed.execute(":syntax rust").unwrap();
+        ed.execute(":keymap vim").unwrap();
+        ed.set_tab_stop(4);
+        ed.set_indent_width(6);
+        ed.set_tab_spaces(false);
+        press(&mut ed, "gg");
+        keyed(&mut ed, keys);
+        ed.current_buffer().text()
+    };
+    assert_eq!(vim("x\n", ">>"), "\t  x\n");
+    assert_eq!(vim("x\n", ">>>>"), "\t\t\tx\n");
+    assert_eq!(vim("    y\n", ">>"), "\t\t  y\n");
+    assert_eq!(vim("\tz\n", "<<"), "z\n");
+    assert_eq!(vim("\t\t\tz\n", "<<"), "\t  z\n");
+    assert_eq!(vim("ab\n", "I»q⎋"), "\t  qab\n", "in the indent: to sw");
+    assert_eq!(vim("    y\n", "I»q⎋"), "\t  qy\n");
+    assert_eq!(vim("ab\n", "A»q⎋"), "ab\tq\n", "after text: a TAB");
+    assert_eq!(vim("ab\n", "I»»«q⎋"), "\t  qab\n", "Backspace in the indent: back to sw");
+    // With Tab typing spaces, `>>` takes the TABs out.
+    let mut ed = typed("\tz\n");
+    ed.execute(":keymap vim").unwrap();
+    ed.set_tab_stop(4);
+    press(&mut ed, "gg>>");
+    assert_eq!(ed.current_buffer().text(), "        z\n");
+    // Helix's `>` is as it was.
+    let mut ed = typed("x\n");
+    ed.set_tab_stop(4);
+    ed.set_indent_width(6);
+    ed.set_tab_spaces(false);
+    press(&mut ed, ">");
+    assert_eq!(ed.current_buffer().text(), "      x\n", "helix untouched");
+}

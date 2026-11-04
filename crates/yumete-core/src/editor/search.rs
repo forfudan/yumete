@@ -312,6 +312,8 @@ impl Editor {
         }
         let mut count = 0usize;
         let mut rebuilt = String::with_capacity(text.len());
+        // The last line substituted, counted in the new text.
+        let (mut row, mut last_hit) = (0usize, None);
 
         for (idx, line) in text.split_inclusive('\n').enumerate() {
             if chosen.has(idx) {
@@ -320,11 +322,17 @@ impl Editor {
                 let (body, eol) = crate::editor::line_body(line);
                 let (new_line, n) = replace_in_line(body, &look, &replacement, global);
                 count += n;
+                let breaks = new_line.matches('\n').count();
+                if n > 0 {
+                    last_hit = Some(row + breaks);
+                }
+                row += breaks;
                 rebuilt.push_str(&new_line);
                 rebuilt.push_str(eol);
             } else {
                 rebuilt.push_str(line);
             }
+            row += usize::from(line.ends_with('\n'));
         }
 
         // A substitution rewrites whole lines, so the cell guard cannot judge it
@@ -355,6 +363,15 @@ impl Editor {
             self.clamp_cursor();
             self.sel.set_anchor(self.sel.head());
             self.refresh_goal_column();
+        }
+        // **vim's cursor goes to the last line substituted**, on its first
+        // non-blank, even when the text came out the same (`:h :s`, measured
+        // in nvim 2026-11-04). Helix has no `:s`; its users keep the cursor.
+        if let Some(line) = last_hit.filter(|_| self.vim_keymap()) {
+            let rope = self.current_buffer().rope();
+            let line = line.min(motion::last_line(rope));
+            let at = motion::line_first_non_blank(rope, rope.line_to_char(line));
+            self.set_cursor(at);
         }
         self.status = say!("find.substitute-changed", count);
     }

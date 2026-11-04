@@ -39,6 +39,7 @@ impl Editor {
         self.extend = false;
         self.edit_was_insert = true;
         self.insert_recording.clear();
+        self.fresh_indent = None;
         // Warning: **没花掉的插入計數在這裏清**（2026-10-06 夜審報的）。從前它只在
         // `Esc` 那一臂清，而回 Normal 的路不止那一條（`show_buffer` 就是一條），
         // 於是一個没走完的 `5i` 會把那個 5 記到下一次插入上——下一次打一個字就
@@ -852,6 +853,32 @@ impl Editor {
                     continue;
                 }
             }
+            // **vim shifts by columns and writes the indent afresh**
+            // (`shift_line`, measured in nvim 2026-11-04): tabs as far as
+            // they go and spaces for the rest, unless Tab types spaces. So
+            // `ts=4 sw=6 noet` gives a TAB and two spaces where this wrote
+            // six spaces.
+            if vim {
+                if let Some((old, new)) = self.vim_shifted_indent(line, add) {
+                    let spaces = |s: &str| s.chars().all(|c| c == ' ');
+                    if !(spaces(&old) && spaces(&new)) {
+                        let (o, n) = (old.chars().count(), new.chars().count());
+                        if (o > 0 && !self.edit_remove(at..at + o)) || (n > 0 && !self.edit_insert(at, &new)) {
+                            continue;
+                        }
+                        let moved = |p: usize| match p >= at + o {
+                            true => p + n - o,
+                            false => p.min(at + n),
+                        };
+                        for one in ranges.iter_mut() {
+                            one.anchor = moved(one.anchor);
+                            one.head = moved(one.head);
+                            one.goal = None;
+                        }
+                        continue;
+                    }
+                }
+            }
             // `(at, n, grows)`: what changed at `at`, for moving the ranges.
             let change = if add {
                 self.edit_insert(at, &pad).then_some((at, self.indent_width(), true))
@@ -879,6 +906,35 @@ impl Editor {
         }
         self.sel.rebuild(ranges, which);
         self.clamp_cursor();
+    }
+
+    /// A line's indent and what vim's `>`/`<` make of it, `None` when `<`
+    /// has nothing to take.
+    fn vim_shifted_indent(&self, line: usize, add: bool) -> Option<(String, String)> {
+        let rope = self.current_buffer().rope();
+        let old: String = rope.line(line).chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+        let ts = self.tab_stop();
+        let cols = old.chars().fold(0, |col, c| match c {
+            '\t' => col + ts - col % ts,
+            _ => col + 1,
+        });
+        if !add && cols == 0 {
+            return None;
+        }
+        let cols = match add {
+            true => cols + self.indent_width(),
+            false => cols.saturating_sub(self.indent_width()),
+        };
+        Some((old, self.vim_indent_text(cols)))
+    }
+
+    /// `cols` columns of indent as vim writes them: spaces when Tab types
+    /// spaces, else as many TABs as fit and spaces after.
+    pub(super) fn vim_indent_text(&self, cols: usize) -> String {
+        match self.tab_spaces() {
+            true => " ".repeat(cols),
+            false => format!("{}{}", "\t".repeat(cols / self.tab_stop()), " ".repeat(cols % self.tab_stop())),
+        }
     }
 
     /// **The number `C-a` at `at` would change**: the one under it, else the

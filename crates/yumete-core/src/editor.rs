@@ -3097,6 +3097,11 @@ pub struct Editor {
     /// The Insert session being recorded, so `C-w` can take a word back out
     /// of it.
     insert_recording: String,
+    /// **The indent vim's autoindent wrote and nothing typed after it**
+    /// (`:h autoindent`): `Esc` or Enter on such a line takes it back out.
+    /// The buffer, its revision once written, where the caret stood, how many
+    /// characters, and whether `insert_recording` ends with them.
+    fresh_indent: Option<(u64, u64, usize, usize, bool)>,
     /// **`5ix` 要五個 `x`** — how many *more* times the text typed in this
     /// insert session goes in when it ends (0 = once, the usual).
     ///
@@ -4480,6 +4485,7 @@ impl Editor {
             marks: HashMap::new(),
             repeating_edit: false,
             insert_recording: String::new(),
+            fresh_indent: None,
             insert_again: 0,
             searching: None,
             filling: None,

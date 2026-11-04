@@ -46,6 +46,11 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Under vim, a `:` command typed from Visual mode ends Visual mode**, as vim's does: the command still takes the selected lines, and Esc on the `:` line ends it too, the cursor at the start of the selection. A key after it used to act on the whole selection.
+- **vim's `cc`, `S` and `cj` keep the first line's indent in code**, as `o` does, and an indent nothing was typed after goes again on Esc or Enter, after `o` and `O` too. Text files still have no autoindent. `cc` on an empty line no longer joins the next one, and `V` on an empty line selects that line alone.
+- **`j` and `k` onto a closed fold keep the column** under vim; the cursor used to go to the end of the fold's first line, so `x` took its last character.
+- **Under vim, `:s` leaves the cursor on the last line it changed**, on the first non-blank, as vim's does; it used to stay where it was.
+- **Under vim, `>>`, `<<`, and Tab and Backspace in the indent go by indent levels, as nvim's do**: `>>` and `<<` write the indent afresh, with tabs where Tab types tabs (`ts=4 sw=6 noet` gives a tab and two spaces; `>>` used to add spaces whatever the setting); Tab in the indent goes to the next level and Backspace back to the last. Where Tab types tabs, Tab after text types one tab.
 - **`:keymap-actions` and the site's key tables list only keys that reach the action.** Under vim, `gn` was listed for next buffer (it selects the next match), `ge` for the last line and `[p` for the previous paragraph. The table's headings follow the interface language, a missing key is a blank cell, and a chord reads `C-w w`.
 - **Diagnostics move with their lines** when lines are added or removed, instead of staying on the old line numbers until the server reports again.
 - **A cursor a closed fold hides keeps its line under vim.** After `G`, `:`*line* or `zc`, the cursor is drawn on the fold and the status line says the line it is really on, as vim's does (`:3` in a fold of lines 2 to 4 reads Ln 3); the fold keys act there, so `zM` then `zO` opens both of two nested folds, where it opened only the outer one.

@@ -2624,6 +2624,35 @@ impl Editor {
         if self.vim_cannot_reach(self.current_buffer().rope(), pos) {
             return;
         }
+        // **Onto a closed fold, vim keeps the column wanted** on the fold's
+        // first line (nvim, 2026-11-04). That line's text is off the page, so
+        // the row alone put the cursor at its end.
+        let pos = match self.vim_keymap() {
+            true => {
+                let rope = self.current_buffer().rope();
+                let line = rope.char_to_line(pos.min(rope.len_chars()));
+                match self.fold_head(line) {
+                    true => {
+                        let start = rope.line_to_char(line);
+                        let text: String = rope.slice(start..motion::line_end(rope, start)).chars().collect();
+                        let (ts, mut col, mut at) = (self.tab_stop(), 0, start);
+                        for g in yumete_cjk::graphemes(&text) {
+                            col += match g {
+                                "\t" => ts - col % ts,
+                                g => yumete_cjk::grapheme_width(g),
+                            };
+                            if col > goal {
+                                break;
+                            }
+                            at += g.chars().count();
+                        }
+                        at.min(motion::line_last(rope, start))
+                    }
+                    false => pos,
+                }
+            }
+            false => pos,
+        };
         let remembered = self.sel.goal();
         self.sel.set_head(pos);
         if !self.extend {

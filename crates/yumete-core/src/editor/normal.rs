@@ -1388,7 +1388,19 @@ impl Editor {
             let head = self.sel.head().min(rope.len_chars());
             head - rope.line_to_char(rope.char_to_line(head))
         };
-        self.select_line();
+        // From a caret, the caret's line alone: helix's `x` on an empty
+        // line, already whole, took the next line too (2026-11-04: `V` `d`
+        // on an empty line deleted two).
+        match self.sel.anchor() == self.sel.head() {
+            true => {
+                let rope = self.current_buffer().rope();
+                let start = rope.line_to_char(rope.char_to_line(self.sel.head().min(rope.len_chars())));
+                let last = motion::line_last(rope, start);
+                self.sel.set_anchor(start);
+                self.sel.set_head(last);
+            }
+            false => self.select_line(),
+        }
         self.extend = true;
         self.vim_lines = true;
     }
@@ -1777,6 +1789,17 @@ impl Editor {
                 (anchor, head.min(breaks_at - 1))
             }
         };
+        // **vim's Visual `V` then `c` is `cc` on those lines**: the last
+        // line's break stays (2026-11-04: it went, and the next line was
+        // joined on).
+        if whole_lines && self.as_vim() && matches!(op, motion::Operator::Change { .. }) {
+            let rope = self.current_buffer().rope();
+            let (first, last) = (rope.char_to_line(anchor.min(rope.len_chars())), rope.char_to_line(head.min(rope.len_chars())));
+            self.yank_whole_lines = true;
+            self.change_whole_lines(first, last, cut);
+            self.yank_whole_lines = false;
+            return;
+        }
         self.apply(op, motion::Span::Over { anchor, head });
     }
 
