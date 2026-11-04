@@ -159,15 +159,17 @@ pub struct SystemIme {
 
 impl SystemIme {
     pub fn new(policy: SystemImePolicy, others: OtherImePolicy) -> Self {
-        // **Never over SSH**: the input method there is the remote host's, or
-        // nothing, and no terminal sequence reaches the local one.
-        let remote = std::env::var_os("SSH_CONNECTION").is_some()
-            || std::env::var_os("SSH_TTY").is_some();
-        let others = match remote {
-            true => OtherImePolicy::Off,
-            false => others,
-        };
-        SystemIme { policy, focused: true, suspended: false, others, switched: None }
+        SystemIme { policy, focused: true, suspended: false, others: here(others), switched: None }
+    }
+
+    /// `[ime] others` read again (`:reload-config`): what the old answer
+    /// switched aside is let back by the old answer first.
+    pub fn set_others(&mut self, others: OtherImePolicy) {
+        let others = here(others);
+        if others != self.others {
+            self.let_others_back();
+            self.others = others;
+        }
     }
 
     /// The terminal gained or lost the keyboard.
@@ -176,17 +178,27 @@ impl SystemIme {
     /// turn of the main loop, so lifting the suspension when focus left and
     /// nothing more would have it re-asserted a millisecond later. Losing focus
     /// has to *stop the asking*, not answer it once.
+    ///
+    /// **On Linux another input method is left as it is while the focus is
+    /// away**: fcitx and ibus answer for the window that has the focus, so
+    /// switching back then would open the input method of the window just
+    /// gone to. The terminal's stays switched aside until Insert asks for it.
     pub fn set_focus(&mut self, focused: bool) {
         self.focused = focused;
         if !focused {
-            self.release();
+            match source::PER_WINDOW {
+                true => self.resume(),
+                false => self.release(),
+            }
         }
     }
 
     /// Ask for the keys, or give them back. Idempotent, and free when the
     /// answer has not changed — it is called on every turn of the main loop.
     pub fn want(&mut self, block: bool) {
-        self.want_others_aside(block && self.focused);
+        if self.focused || !source::PER_WINDOW {
+            self.want_others_aside(block && self.focused);
+        }
         if self.policy == SystemImePolicy::Keep {
             return;
         }
@@ -220,10 +232,20 @@ impl SystemIme {
         log(|| "-> say it again".to_string());
         self.suspended = false;
         // The same for another input method switched back on by hand while
-        // the keys were commands: the next turn switches it aside again, and
-        // what it switches from is then the one that was on.
-        if let Some(saved) = self.switched.take() {
-            source::forget(saved);
+        // the keys were commands: switched aside again now. What comes back
+        // in Insert is the one switched from now, when there was one, and
+        // the one kept from before when the source was English already (a
+        // second Esc out of habit must not lose it).
+        if self.switched.is_some() {
+            let again = source::take();
+            match source::holds(&again) {
+                true => {
+                    if let Some(old) = self.switched.replace(again) {
+                        source::forget(old);
+                    }
+                }
+                false => source::forget(again),
+            }
         }
     }
 
@@ -264,11 +286,27 @@ impl SystemIme {
     /// Give the keys back. Safe to call when nothing was asked for.
     pub fn release(&mut self) {
         self.let_others_back();
+        self.resume();
+    }
+
+    /// The signal half of [`Self::release`]: 宇浩's suspension lifted.
+    fn resume(&mut self) {
         if self.suspended {
             log(|| "-> resume".to_string());
             self.suspended = false;
             backend::resume();
         }
+    }
+}
+
+/// `others` on this machine: **never over SSH**, where the input method is
+/// the remote host's, or nothing, and no terminal sequence reaches the local
+/// one.
+fn here(others: OtherImePolicy) -> OtherImePolicy {
+    let remote = std::env::var_os("SSH_CONNECTION").is_some() || std::env::var_os("SSH_TTY").is_some();
+    match remote {
+        true => OtherImePolicy::Off,
+        false => others,
     }
 }
 
@@ -527,6 +565,14 @@ mod source {
     /// way.
     pub struct Saved(Option<InputSource>);
 
+    /// The input source is the machine's, not one window's.
+    pub const PER_WINDOW: bool = false;
+
+    /// Whether anything was switched aside.
+    pub fn holds(saved: &Saved) -> bool {
+        saved.0.is_some()
+    }
+
     fn id_of(source: InputSource) -> String {
         unsafe {
             let id = TISGetInputSourceProperty(source, kTISPropertyInputSourceID);
@@ -618,6 +664,29 @@ mod source {
         Ibus(String),
     }
 
+    /// fcitx and ibus answer for the window that has the focus.
+    pub const PER_WINDOW: bool = true;
+
+    /// Whether anything was switched aside.
+    pub fn holds(saved: &Saved) -> bool {
+        !matches!(saved, Saved::Nothing)
+    }
+
+    /// ibus's settings schema.
+    const IBUS_GENERAL: &str = "org.freedesktop.ibus.general";
+
+    /// The writer's own keyboard layout in ibus: the first `xkb:` engine
+    /// of the ones set up, so a German keyboard stays German in Normal.
+    fn plain_layout() -> String {
+        run("gsettings", &["get", IBUS_GENERAL, "preload-engines"])
+            .and_then(|list| {
+                list.split(['\'', '"'])
+                    .find(|engine| engine.starts_with("xkb:"))
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "xkb:us::eng".to_string())
+    }
+
     fn run(program: &str, args: &[&str]) -> Option<String> {
         let out = Command::new(program)
             .args(args)
@@ -647,7 +716,7 @@ mod source {
         match run("ibus", &["engine"]) {
             // An `xkb:` engine is a plain layout: nothing holds the keys.
             Some(engine) if !engine.is_empty() && !engine.starts_with("xkb:") => {
-                match run("ibus", &["engine", "xkb:us::eng"]) {
+                match run("ibus", &["engine", &plain_layout()]) {
                     Some(_) => Saved::Ibus(engine),
                     None => Saved::Nothing,
                 }
@@ -684,6 +753,10 @@ mod source {
 #[cfg(not(unix))]
 mod source {
     pub struct Saved;
+    pub const PER_WINDOW: bool = false;
+    pub fn holds(_saved: &Saved) -> bool {
+        false
+    }
     pub fn take() -> Saved {
         Saved
     }

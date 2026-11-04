@@ -159,3 +159,24 @@ fn the_carried_words_join_in_both_scripts() {
         assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
     }
 }
+
+/// **An installed file this build cannot read is passed over** (2026-11-04
+/// review): an older Yume's `pinyin.yflb` used to take 宇浩拼音 down, and the
+/// editor started in 靈明 with nothing said.
+#[test]
+fn an_installed_file_this_build_refuses_falls_back_to_the_carried_one() {
+    if !carry() {
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("yumete-refused-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("data")).unwrap();
+    std::fs::write(dir.join("data/pinyin.yflb"), b"YFL3 not this build's format").unwrap();
+    let mut ime = ImeSession::new(Scheme::PINYIN, vec![dir.clone()]);
+    assert!(ime.available(), "{:?}", ime.problems());
+    for key in "nihao".chars() {
+        ime.input(key);
+    }
+    assert_eq!(ime.top_candidate(), "你好");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -443,6 +443,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         (yumete_cjk::KeyPreset::Vim, &config.keys.vim),
     ] {
         editor.set_keymap_aliases(keymap, own.normal.clone(), own.select.clone(), own.insert.clone());
+        editor.set_keymap_labels(keymap, own.labels.clone());
     }
     editor.set_table_aliases(config.keys.table.clone());
     use yumete_core::actions::Place;
@@ -554,6 +555,12 @@ pub fn apply_ime(config: &Config, ime: &mut crate::ImeSession) {
     ime.set_commit_strategy(
         config.ime.commit.as_deref().and_then(yumete_ime::CommitStrategy::from_str_tag),
     );
+    // 字集過濾、排序與整句字集軌, picked in the panel (2026-11-04 review).
+    ime.set_charsets(yumete_ime::Charsets::from_words(
+        &config.ime.charset,
+        &config.ime.charset_sort,
+        &config.ime.lanes,
+    ));
 }
 
 #[cfg(test)]
@@ -592,7 +599,7 @@ mod every_setting_is_pushed_here {
         // 是因為啓動那一趟會把整個輸入法會話**換掉**（`ImeSession::language_only`），
         // 換完的那一個沒聽過 `apply_ime`。所以釘的是「這個檔裏也有」，不是「那邊
         // 沒有」。
-        for needle in ["set_ambiguous_wide", "messages::set_language", "set_commit_strategy"] {
+        for needle in ["set_ambiguous_wide", "messages::set_language", "set_commit_strategy", "set_charsets"] {
             assert!(here.contains(needle), "{needle} 要在這個檔裏也推一遍");
         }
     }

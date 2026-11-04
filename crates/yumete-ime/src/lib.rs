@@ -758,7 +758,9 @@ impl ImeSession {
         ImeSession {
             engine,
             scheme,
-            data_dirs: Vec::new(),
+            // This scheme only: the next one switched to is found as usual,
+            // installed first.
+            data_dirs: yumete_config::data_search_dirs(),
             available,
             annotation_modes: yumete_config::factory_annotation_modes(),
             annotation_wanted: None,
@@ -1790,7 +1792,8 @@ fn carries(name: &str) -> bool {
 /// One data file, found on disk or carried in the binary.
 enum Found {
     Disk(PathBuf),
-    Carried(Vec<u8>),
+    /// Unpacked, and taken by the one loader that reads it.
+    Carried(std::cell::RefCell<Vec<u8>>),
 }
 
 impl Found {
@@ -1805,12 +1808,12 @@ impl Found {
         matches!(self, Found::Carried(_))
     }
 
-    /// The bytes. A carried file's are cloned: the loaders that take bytes
-    /// keep their own, and a carried file is asked for once per load.
+    /// The bytes. A carried file's are taken, not copied: a file is asked
+    /// for once per load, and `lang.ygram` alone is 24 MB.
     fn bytes(&self) -> std::io::Result<Vec<u8>> {
         match self {
             Found::Disk(path) => std::fs::read(path),
-            Found::Carried(bytes) => Ok(bytes.clone()),
+            Found::Carried(bytes) => Ok(std::mem::take(&mut *bytes.borrow_mut())),
         }
     }
 }
@@ -1827,7 +1830,7 @@ fn locate(dirs: &[PathBuf], relative: &str) -> Option<Found> {
     if Path::new(relative).is_absolute() {
         return None;
     }
-    carried(relative).map(Found::Carried)
+    carried(relative).map(|bytes| Found::Carried(std::cell::RefCell::new(bytes)))
 }
 /// What [`ImeSession::glosses`] found about one character.
 ///
@@ -2158,6 +2161,26 @@ fn magic_mismatch(path: &Path, kind: DataKind) -> Option<MagicMismatch> {
 /// The error carries the core's own reason (Feature #220). yume-core has always
 /// returned one; this function used to throw it away.
 fn load_data_file(
+    engine: &mut Engine,
+    dirs: &[PathBuf],
+    file: &DataFile,
+) -> Result<bool, DataProblem> {
+    match load_data_file_in(engine, dirs, file) {
+        // **An installed file this build cannot read is passed over for the
+        // binary's copy** (2026-11-04 review): an older Yume's format, or a
+        // newer one's, would otherwise take a carried scheme down with it.
+        Err(problem)
+            if matches!(problem.fault, DataFault::Rejected { .. })
+                && problem.file == file.file
+                && carries(&file.file) =>
+        {
+            load_data_file_in(engine, &[], file).map_err(|_| problem)
+        }
+        other => other,
+    }
+}
+
+fn load_data_file_in(
     engine: &mut Engine,
     dirs: &[PathBuf],
     file: &DataFile,

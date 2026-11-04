@@ -1786,6 +1786,7 @@ pub fn run(
                         settings::view_back_to_config(editor, &fresh);
                     }
                     settings::apply_ime(&fresh, ime);
+                    system_ime.set_others(fresh.ime.others);
                     *config = fresh;
                     // Back to the saved settings means the saved theme too: what
                     // `:theme` chose would otherwise stay on (2026-10-28).
@@ -4519,7 +4520,9 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
     }
     if tag == "~" {
         let mut full = ImeSession::from_default_dirs(ime.scheme());
-        if !full.available() {
+        // The binary's own tables answer when nothing is installed, and they
+        // are not what was asked for.
+        if !full.available() || full.is_builtin() {
             return say!("ime.no-table-installed", ime.scheme_name());
         }
         full.set_page_size(ime.page_size());
@@ -4544,7 +4547,10 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
             return no_such_scheme(rest);
         };
         let Some(mut full) = ImeSession::builtin(scheme) else {
-            return say!("ime.no-builtin-table");
+            return match yumete_ime::builtin_tables().is_empty() {
+                true => say!("ime.no-builtin-table"),
+                false => say!("ime.no-builtin-table-for", scheme.factory_name().unwrap_or(scheme.found_name())),
+            };
         };
         full.set_page_size(ime.page_size());
         full.set_charsets(ime.charsets().clone());

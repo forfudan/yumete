@@ -292,6 +292,13 @@ zhs = "这个二进制不带码表"
 en = "this build carries no 碼表"
 
 [[message]]
+# :yume ! 日月 之類，二進制帶了別的方案的碼表而没帶這一個（草稿）
+key = "ime.no-builtin-table-for"
+zht = "這個二進制不帶{0}的碼表"
+zhs = "这个二进制不带{0}的码表"
+en = "this build carries no 碼表 for {0}"
+
+[[message]]
 # 啟動時認出終端機報不出單獨的 Shift，説一次備用鍵是哪一個(#339)
 key = "ime.no-lone-shift"
 zht = "此終端機報不出單獨的 Shift，中/ABC 按 {0}(或 :yume on|off)"

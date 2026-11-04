@@ -103,17 +103,10 @@ install_ime_data() {
     # 的那幾張表是公開的，說出來比不說強。
     echo "==> IME data: skipped (no source tables in $yume_root/data)"
     echo "    那幾張源表在一個私有倉裏，不過**出廠自帶的碼表不用你管**："
-    echo "    build.rs 自己去 yume-release 取一次 靈明精華版，放進"
-    echo "    ~/.cache/yumete/builtin，往後每一趟編譯都用它（2026-10-07 起）。"
-    echo "    取不到（離線）就是不帶表，編得過，只是打不了漢字。"
-    echo ""
-    echo "    詞表要自己取——它歸另一支 build script（yumete-cjk），不自動："
-    echo "      base=https://github.com/forfudan/yume-release/releases/download/yumete-data"
-    echo "      mkdir -p ~/.local/share/yumete/data"
-    echo "      curl -fsSL -o ~/.local/share/yumete/data/common_words.txt \$base/common_words.txt"
-    echo ""
-    echo "    要指定一個目錄（發布構建）就設 YUMETE_BUILTIN_DIR，那時它只看那裏，"
-    echo "    一個字節都不去網上取。"
+    echo "    crates/yumete-tables fetches 宇浩拼音, 靈明, 星陳 and the sentence model"
+    echo "    from the current Yume release once, into ~/.cache/yumete/tables"
+    echo "    (or \$YUMETE_BUILTIN_DIR), and every build after uses them."
+    echo "    Offline, the binary builds without them and the next build tries again."
     return 0
   fi
 

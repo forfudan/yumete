@@ -21,8 +21,9 @@
 //! machine is never read, so the binary does not depend on the machine.
 //!
 //! **A machine that cannot fetch builds anyway**, without tables, and says
-//! so; a release build (`YUMETE_RELEASE`) fails instead, because a package
-//! that silently cannot type is worse than no package.
+//! so, and the next build tries again; a release build (`YUMETE_RELEASE`)
+//! fails instead, because a package that silently cannot type is worse than
+//! no package.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -58,7 +59,9 @@ const RELEASE: &str = "https://api.github.com/repos/forfudan/yume-release/releas
 const INSIDE: &str = "Yume.app/Contents/Resources/";
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=YUMETE_BUILTIN_DIR");
+    for name in ["YUMETE_BUILTIN_DIR", "YUMETE_RELEASE", "XDG_CACHE_HOME", "HOME", "LOCALAPPDATA"] {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
     let release = std::env::var_os("YUMETE_RELEASE").is_some();
     let dir = match std::env::var_os("YUMETE_BUILTIN_DIR") {
@@ -75,6 +78,13 @@ fn main() {
     });
     if !ready && release {
         panic!("a release build needs the 宇浩 tables, and they could not be fetched");
+    }
+    // **Not ready, so asked again on the next build**: cargo reruns a build
+    // script whose watched file does not exist, and the stamp is written
+    // last. Without this an offline first build stayed without tables for
+    // good.
+    if let Some(dir) = dir.as_deref().filter(|_| !ready) {
+        println!("cargo:rerun-if-changed={}", dir.join("VERSION").display());
     }
     let mut body = String::from("pub static FILES: &[(&str, &[u8])] = &[\n");
     let mut version = None;
@@ -125,8 +135,17 @@ fn pack(dir: &Path, name: &str) -> PathBuf {
     }
     let bytes = std::fs::read(&raw).expect("read a table");
     let squeezed = zstd::encode_all(&bytes[..], 19).expect("compress a table");
-    std::fs::write(&packed, squeezed).expect("write a compressed table");
+    write_whole(&packed, &squeezed).expect("write a compressed table");
     packed
+}
+
+/// Write `bytes` beside `path` and move them into place, so another build
+/// sharing the cache never reads half a file.
+fn write_whole(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let part = path.with_file_name(format!(".{name}.{}", std::process::id()));
+    std::fs::write(&part, bytes)?;
+    std::fs::rename(&part, path)
 }
 
 /// Fetch the current macOS package and take the tables out of it.
@@ -145,7 +164,7 @@ fn fetch(dir: &Path) -> Result<(), String> {
         .find(|s| s.starts_with("https://") && s.ends_with("-macos-arm64.zip"))
         .ok_or("no macOS package on the yuhao release")?
         .to_string();
-    let zip = dir.join("package.zip");
+    let zip = dir.join(format!("package.{}.zip", std::process::id()));
     curl(&url, Some(&zip))?;
     let opened = std::fs::File::open(&zip).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(opened).map_err(|e| e.to_string())?;
@@ -167,7 +186,7 @@ fn fetch(dir: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        write_whole(&path, &bytes).map_err(|e| e.to_string())?;
     }
     // `Yume-v3.14.0-beta.20261029163103-macos-arm64.zip` → the version and the
     // build stamp, in the form Yume's own `VERSION` files take.
@@ -178,23 +197,38 @@ fn fetch(dir: &Path) -> Result<(), String> {
         .unwrap_or_default();
     let (version, build) = middle.rsplit_once(['-', '.']).unwrap_or((middle, ""));
     let stamp = format!("version={version}\nbuild={build}\nfrom={file}\n");
-    std::fs::write(dir.join("VERSION"), stamp).map_err(|e| e.to_string())
+    write_whole(&dir.join("VERSION"), stamp.as_bytes()).map_err(|e| e.to_string())
 }
 
 /// `curl` the URL, into `to` or back as bytes. A token in `GITHUB_TOKEN` is
-/// passed to the API, so a CI runner sharing an address is not rate limited.
+/// passed to the API, so a CI runner sharing an address is not rate limited;
+/// it goes in on standard input, never on the command line, where `ps`
+/// would show it.
 fn curl(url: &str, to: Option<&Path>) -> Result<Vec<u8>, String> {
+    use std::io::Write;
+    use std::process::Stdio;
     let mut command = std::process::Command::new("curl");
-    command.args(["-fsSL", "--retry", "3", "--max-time", "600"]);
-    if url.starts_with("https://api.github.com/") {
-        if let Ok(token) = std::env::var("GITHUB_TOKEN") {
-            command.arg("-H").arg(format!("Authorization: Bearer {token}"));
-        }
-    }
+    command.args(["-fsSL", "--retry", "3", "--max-time", "600", "-K", "-"]);
     if let Some(to) = to {
         command.arg("-o").arg(to);
     }
-    let out = command.arg(url).output().map_err(|e| format!("curl: {e}"))?;
+    let mut config = String::new();
+    if url.starts_with("https://api.github.com/") {
+        if let Ok(token) = std::env::var("GITHUB_TOKEN") {
+            config = format!("header = \"Authorization: Bearer {token}\"\n");
+        }
+    }
+    let mut child = command
+        .arg(url)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("curl: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(config.as_bytes()).map_err(|e| format!("curl: {e}"))?;
+    }
+    let out = child.wait_with_output().map_err(|e| format!("curl: {e}"))?;
     if !out.status.success() {
         return Err(format!("curl {url}: {}", String::from_utf8_lossy(&out.stderr).trim()));
     }
