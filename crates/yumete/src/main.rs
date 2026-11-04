@@ -134,6 +134,9 @@ fn main() -> ExitCode {
     // this says it for one run, which is what you want when the file is
     // called `.txt` and you know what is in it.
     let mut force_syntax: Option<String> = None;
+    // `--encoding=big5`: what the files named are written in, for files that
+    // cannot be told (2026-11-04), as `:open ++enc=big5` says it inside.
+    let mut force_encoding: Option<String> = None;
     // `--export FMT`: write the files named out as html, typst, csv, tsv or
     // pdf and exit — the editor's own `:export`, with `typst compile` for the
     // last (2026-10-30). `--out` is where; one file only, then.
@@ -219,6 +222,7 @@ fn main() -> ExitCode {
             }
             match which {
                 "--syntax" => force_syntax = Some(arg),
+                "--encoding" => force_encoding = Some(arg),
                 "--grep" => grep = Some(arg),
                 "--files" => listing = Some(arg),
                 "--export" => export = Some(arg),
@@ -403,6 +407,10 @@ fn main() -> ExitCode {
             "--html" => shot_html = true,
             s if s.starts_with("--keys=") => keys = Some(s["--keys=".len()..].to_string()),
             "--syntax" => owed = Some("--syntax"),
+            "--encoding" => owed = Some("--encoding"),
+            s if s.starts_with("--encoding=") => {
+                force_encoding = Some(s["--encoding=".len()..].to_string())
+            }
             s if s.starts_with("--syntax=") => {
                 force_syntax = Some(s["--syntax=".len()..].to_string())
             }
@@ -782,7 +790,20 @@ fn main() -> ExitCode {
         if std::path::Path::new(&yumete_config::expand_tilde(file)).is_dir() {
             continue;
         }
-        if let Err(err) = editor.open_file(file) {
+        let told = force_encoding.as_deref().map(|word| yumete_core::encoding::by_name(word));
+        if let Some(None) = told {
+            eprintln!("yumete: no encoding called {:?}; utf-8, gb18030, big5 or shift-jis", force_encoding.as_deref().unwrap_or_default());
+            return ExitCode::from(2);
+        }
+        if let Err(err) = editor.open_file_as(file, told.flatten()) {
+            // **Asked, not refused** (2026-11-04): a file too short to tell
+            // has the picker open on it, and the editor starts to show it.
+            let asked = err
+                .get_ref()
+                .is_some_and(|e| e.is::<yumete_core::encoding::Undecided>());
+            if asked && (shot.is_some() || std::io::stdout().is_terminal()) {
+                continue;
+            }
             eprintln!("yumete: cannot open '{file}': {err}");
             return ExitCode::FAILURE;
         }
@@ -2473,6 +2494,9 @@ OPTIONS:
         --syntax     Which markup these files are written in: markdown, typst,
                      text, or a code language (python, rust, …). Outranks
                      both the extension and the config.
+        --encoding   What these files are written in when it cannot be told:
+                     utf-8, gb18030, big5 or shift-jis. Remembered for each
+                     file, as a choice made inside is.
         --preview    Print a non-interactive preview instead of the editor.
 
 SEARCHING FROM THE SHELL:

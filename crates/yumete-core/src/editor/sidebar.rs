@@ -1664,6 +1664,17 @@ impl Editor {
             }
             // A code action's title is the whole of what there is to show.
             crate::picker::Item::Action(..) => None,
+            // **The file read in the highlighted encoding** (2026-11-04): the
+            // head of it, so the reader sees which one makes sense.
+            crate::picker::Item::Encoding(name, path, word) => {
+                let encoding = crate::encoding::by_name(word)?;
+                let mut head_bytes = vec![0u8; 8 * 1024];
+                let mut file = std::fs::File::open(&path).ok()?;
+                let got = std::io::Read::read(&mut file, &mut head_bytes).ok()?;
+                head_bytes.truncate(got);
+                let text = encoding.decode_without_bom_handling(&head_bytes).0.into_owned();
+                Some((name, text.lines().take(rows).map(str::to_string).collect()))
+            }
             // **The entry itself, beside the list of names** (2026-09-25).
             // The preview a picker already has is exactly the 「選中的條目浮窗
             // 顯示」 the request asked for — no second mechanism.
@@ -1730,6 +1741,11 @@ impl Editor {
             Some(crate::picker::Item::Wiki(name, _)) => self.pin_wiki_entry(name),
             Some(crate::picker::Item::Place(_, path, line, column)) => self.go_to_place(&path, line, column),
             Some(crate::picker::Item::Action(which, _)) => self.take_action(which),
+            Some(crate::picker::Item::Encoding(_, path, word)) => {
+                if let Err(err) = self.open_file_as(&path, crate::encoding::by_name(word)) {
+                    self.status = say!("buffer.cannot-open", path.display(), err);
+                }
+            }
             None => self.status = say!("picker.nothing-matched"),
         }
     }
@@ -1771,6 +1787,26 @@ impl Editor {
         for c in name.chars() {
             picker.push(c);
         }
+        self.show_the_picker(picker);
+    }
+
+    /// **Which encoding to open a file in** (2026-11-04): the ones that read
+    /// it, the likeliest first, each previewed as the file would read.
+    pub(super) fn open_encoding_picker(&mut self, asked: &crate::encoding::Undecided) {
+        let items = asked
+            .candidates
+            .iter()
+            .map(|e| {
+                let name = crate::encoding::name(e);
+                crate::picker::Item::Encoding(name.to_string(), asked.path.clone(), name)
+            })
+            .collect();
+        let shown = asked
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let picker = crate::picker::Picker::new(&say!("encoding.picker-title", shown), items);
         self.show_the_picker(picker);
     }
 
@@ -2656,11 +2692,31 @@ fn head_of_file(path: &Path, rows: usize) -> Option<Vec<String>> {
     for line in std::io::BufReader::new(file).lines().take(rows) {
         match line {
             Ok(line) => out.push(line.replace('\t', "    ")),
+            // **Not UTF-8: perhaps one of the three** (2026-11-04). The head
+            // of the file, read as it plainly is; a Big5 chapter used to
+            // preview as an empty pane.
+            Err(_) if out.is_empty() => return head_in_another_encoding(path, rows),
             // 讀到這裏爲止——前面那些照樣是正文。
             Err(_) => break,
         }
     }
     Some(out)
+}
+
+/// The head of a file that is not UTF-8, when its first few kilobytes read
+/// plainly as GB18030, Big5 or Shift-JIS; nothing for a binary.
+fn head_in_another_encoding(path: &Path, rows: usize) -> Option<Vec<String>> {
+    let mut bytes = vec![0u8; 8 * 1024];
+    let mut file = std::fs::File::open(path).ok()?;
+    let got = std::io::Read::read(&mut file, &mut bytes).ok()?;
+    bytes.truncate(got);
+    let encoding = match crate::encoding::detect(&bytes) {
+        crate::encoding::Detected::Sure(encoding, _) => encoding,
+        crate::encoding::Detected::Ask(candidates) => *candidates.first()?,
+        crate::encoding::Detected::No => return None,
+    };
+    let text = encoding.decode_without_bom_handling(&bytes).0.into_owned();
+    Some(text.lines().take(rows).map(|l| l.replace('\t', "    ")).collect())
 }
 
 /// **一條詞條說的頭一句，裁到一行放得下**——挑詞條那扇面板每一行的後半截。

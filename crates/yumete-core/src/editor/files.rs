@@ -929,6 +929,21 @@ impl Editor {
 
     /// Open `path` as a new buffer and make it active.
     pub fn open_file<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
+        self.open_file_as(path, None)
+    }
+
+    /// Open `path`, in `told` when the reader said which encoding
+    /// (`:open ++enc=big5`, `--encoding=`, the picker), else as it looks
+    /// (2026-11-04).
+    ///
+    /// A choice is remembered for the file, and a remembered one is used
+    /// while the file keeps the size it had. A file whose encoding cannot be
+    /// told opens the picker that asks, and the error says so.
+    pub fn open_file_as<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        told: Option<&'static crate::encoding::Encoding>,
+    ) -> io::Result<()> {
         // A file already open is *shown*, not opened again. Two buffers over
         // one file means two undo histories, two dirty flags, and two claims on
         // one recovery copy — a way to lose work, not a way to open a file.
@@ -937,7 +952,39 @@ impl Editor {
             self.show_buffer(i);
             return Ok(());
         }
-        let mut buffer = Buffer::open(path)?;
+        let remembered = match told {
+            Some(_) => None,
+            None => self.remembered_encoding_still_true(path),
+        };
+        let opened = match told.or(remembered) {
+            Some(encoding) => Buffer::open_as(path, Some(encoding)).or_else(|err| match told {
+                Some(_) => Err(err),
+                // The remembered one no longer reads it: forget it, say so,
+                // and look again.
+                None => {
+                    self.remember_encoding(path, None);
+                    self.status = say!("encoding.forgot", path.display(), crate::encoding::name(encoding));
+                    Buffer::open(path)
+                }
+            }),
+            None => Buffer::open(path),
+        };
+        let mut buffer = match opened {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                let asked = err
+                    .get_ref()
+                    .and_then(|e| e.downcast_ref::<crate::encoding::Undecided>())
+                    .cloned();
+                if let Some(asked) = asked {
+                    self.open_encoding_picker(&asked);
+                }
+                return Err(err);
+            }
+        };
+        if told.is_some() {
+            self.remember_encoding(path, told);
+        }
         // `--readonly` is about the *session*, so it locks what the session
         // opens — not only the file named on the command line. The disk's own
         // answer is already in there and is never overruled by this.
@@ -2027,4 +2074,21 @@ fn when_was(when: std::time::SystemTime) -> String {
         month += 1;
     }
     format!("{year:04}-{:02}-{:02} {hour:02}:{minute:02} UTC", month + 1, left + 1)
+}
+
+impl Editor {
+    /// The encoding remembered for `path`, while the file keeps the size it
+    /// had when it was chosen (2026-11-04). A file whose size changed is one
+    /// that may have been converted elsewhere: the memory goes, and it says
+    /// so once.
+    fn remembered_encoding_still_true(&mut self, path: &Path) -> Option<&'static crate::encoding::Encoding> {
+        let (encoding, bytes) = self.remembered_encoding(path)?;
+        let now = std::fs::metadata(path).map(|m| m.len()).ok()?;
+        if now == bytes {
+            return Some(encoding);
+        }
+        self.remember_encoding(path, None);
+        self.status = say!("encoding.forgot", path.display(), crate::encoding::name(encoding));
+        None
+    }
 }

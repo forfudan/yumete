@@ -175,8 +175,8 @@ impl Changes {
         Some(format!("{head}\u{1}{}\u{1}{logged}", now.trim()))
     }
 
-    pub fn head_text(path: &Path) -> Option<String> {
-        Changes::text_at(path, "HEAD").ok()
+    pub fn head_text(path: &Path, encoding: &'static crate::encoding::Encoding) -> Option<String> {
+        Changes::text_at(path, "HEAD", encoding).ok()
     }
 
     /// **同一件事，可以問別的提交**——`:git-diff HEAD~3`、`:git-diff v1.0`。
@@ -189,7 +189,14 @@ impl Changes {
     /// Warning: **`<提交>:./<檔名>` 那個 `./`** 讓 git 拿**當前目錄**去解析路徑，於是
     /// 呼叫方不必先算出倉根在哪。`current_dir` 是檔案自己那一層——編輯器開着兩個
     /// 倉裏的檔是常事，呼叫者的 cwd 說了不算。
-    pub fn text_at(path: &Path, commit: &str) -> Result<String, String> {
+    ///
+    /// The committed bytes are read in `encoding`, the buffer's (2026-11-04):
+    /// a Big5 file read back as UTF-8 marked every line changed.
+    pub fn text_at(
+        path: &Path,
+        commit: &str,
+        encoding: &'static crate::encoding::Encoding,
+    ) -> Result<String, String> {
         let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
         let Some(name) = path.file_name() else {
             return Err(path.display().to_string());
@@ -204,7 +211,8 @@ impl Changes {
             .output()
             .map_err(|e| e.to_string())?;
         match out.status.success() {
-            true => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
+            true => crate::encoding::read_bytes(&out.stdout, encoding)
+                .ok_or_else(|| crate::say!("encoding.refused", path.display())),
             // git 的抱怨自己就是最好的說明（「exists on disk, but not in
             // 'HEAD'」「not a git repository」），照搬，別另編一句。
             false => Err(String::from_utf8_lossy(&out.stderr).trim().to_string()),

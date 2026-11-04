@@ -14,6 +14,13 @@ const PLACES_FILE: &str = "places.txt";
 /// file because somebody looked.
 const TABLES_FILE: &str = "tables.txt";
 
+/// **The encoding the reader chose for each file** (2026-11-04), one line a
+/// file: `path⇥encoding⇥bytes`. Only choices, never what was detected: the
+/// same bytes detect the same way every time. The size is how a file that
+/// changed under the choice is told apart — converted to UTF-8 elsewhere, it
+/// may still decode in the old encoding, and its size gives it away.
+const ENCODINGS_FILE: &str = "encodings.txt";
+
 /// **那份「我在哪些項目裏幹過活」**，同一個目錄，同一種形狀（2026-10-18）。
 ///
 /// Warning: **為什麽不寫進會話檔自己的頭一行。** 提案的時候我傾向那樣——一份數據
@@ -404,6 +411,47 @@ impl Editor {
     /// **那份「我在哪裏」在哪**（`places.txt`），没有數據目錄就是没有。
     fn tables_file(&self) -> Option<PathBuf> {
         self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(TABLES_FILE))
+    }
+
+    fn encodings_file(&self) -> Option<PathBuf> {
+        self.where_data.as_ref().filter(|_| self.remembers).map(|d| d.join(ENCODINGS_FILE))
+    }
+
+    /// The encoding chosen for `path`, with the size the file had then.
+    pub(super) fn remembered_encoding(&self, path: &Path) -> Option<(&'static crate::encoding::Encoding, u64)> {
+        let text = std::fs::read_to_string(self.encodings_file()?).ok()?;
+        let want = path.to_string_lossy();
+        let line = text.lines().find(|line| line.split('\t').next() == Some(&*want))?;
+        let mut parts = line.split('\t').skip(1);
+        let encoding = crate::encoding::by_name(parts.next()?)?;
+        let bytes = parts.next()?.trim().parse().ok()?;
+        Some((encoding, bytes))
+    }
+
+    /// Keep `encoding` for `path`, at the size it has now; `None` forgets it.
+    pub(super) fn remember_encoding(&self, path: &Path, encoding: Option<&'static crate::encoding::Encoding>) {
+        let Some(file) = self.encodings_file() else { return };
+        let want = path.to_string_lossy().into_owned();
+        let mut out: Vec<String> = Vec::new();
+        let bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        if let Some(encoding) = encoding.filter(|e| *e != crate::encoding::UTF_8) {
+            out.push(format!("{want}\t{}\t{bytes}", crate::encoding::name(encoding)));
+        }
+        if let Ok(text) = std::fs::read_to_string(&file) {
+            out.extend(
+                text.lines()
+                    .filter(|line| line.split('\t').next() != Some(&*want) && !line.trim().is_empty())
+                    .map(str::to_string),
+            );
+        }
+        if out.is_empty() && !file.exists() {
+            return;
+        }
+        out.truncate(PLACES);
+        if let Some(parent) = file.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&file, out.join("\n") + "\n");
     }
 
     /// What was chosen for this file last time, if anything was.
@@ -1363,7 +1411,7 @@ impl Editor {
                 }
             },
         };
-        let old = match std::fs::read_to_string(&path) {
+        let old = match crate::encoding::read_file(&path, self.current_buffer().encoding()) {
             // Same byte-order mark `Buffer::decode` drops on the way in. Left
             // on, it is a token of its own on line 1 and every file a Windows
             // editor has touched reports a change it does not have.
@@ -1398,7 +1446,8 @@ impl Editor {
             return;
         };
         let commit = commit.map(str::trim).filter(|c| !c.is_empty()).unwrap_or("HEAD");
-        let old = match crate::vcs::Changes::text_at(&path, commit) {
+        let encoding = self.current_buffer().encoding();
+        let old = match crate::vcs::Changes::text_at(&path, commit, encoding) {
             Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
             // git 自己那一句話就是答案：「不在倉裏」和「這個檔還没提交過」是兩件
             // 事，而編一句概括它們的話會把兩件都說不準。
@@ -1422,7 +1471,8 @@ impl Editor {
             return;
         };
         let commit = commit.map(str::trim).filter(|c| !c.is_empty()).unwrap_or("HEAD");
-        let old = match crate::vcs::Changes::text_at(&path, commit) {
+        let encoding = self.current_buffer().encoding();
+        let old = match crate::vcs::Changes::text_at(&path, commit, encoding) {
             Ok(text) => text.strip_prefix('\u{feff}').unwrap_or(&text).to_string(),
             Err(why) => {
                 self.status = say!("diff.git-said", commit, why);

@@ -67,6 +67,9 @@ pub enum Item {
     /// root, and what git says of it, when git says anything (a buffer with
     /// unsaved changes in a file git thinks clean has none).
     Changed(String, Option<(char, crate::vcs::Staging)>),
+    /// **An encoding to open a file in** (2026-11-04): its name as shown, the
+    /// file, and the name `encoding::by_name` reads back.
+    Encoding(String, std::path::PathBuf, &'static str),
 }
 
 impl Item {
@@ -75,6 +78,7 @@ impl Item {
         match self {
             Item::File(path) | Item::Project(path) | Item::Dir(path) | Item::Changed(path, _) => path,
             Item::Buffer(_, name) | Item::Paste(_, name) | Item::Action(_, name) => name,
+            Item::Encoding(name, ..) => name,
             Item::Place(label, ..) => label,
             Item::Wiki(name, _) => name,
         }

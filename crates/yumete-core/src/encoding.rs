@@ -63,6 +63,35 @@ pub fn decode_strict(encoding: &'static Encoding, bytes: &[u8]) -> Option<String
         .map(|text| text.into_owned())
 }
 
+/// `bytes` as text, for reading a file beside the one being edited (`:read`,
+/// `:diff`, the committed copy behind the change bar): in `encoding` first,
+/// the encoding of the buffer it goes with; then as UTF-8; then as one of the
+/// three when it is plainly that one. `None` when none of those reads it —
+/// a change bar then draws nothing rather than every line changed.
+pub fn read_bytes(bytes: &[u8], encoding: &'static Encoding) -> Option<String> {
+    if let Some(text) = decode_strict(encoding, bytes) {
+        return Some(text);
+    }
+    if let Ok(text) = std::str::from_utf8(bytes) {
+        return Some(text.to_string());
+    }
+    match detect(bytes) {
+        Detected::Sure(_, text) => Some(text),
+        _ => None,
+    }
+}
+
+/// [`read_bytes`] of a file.
+pub fn read_file(path: &std::path::Path, encoding: &'static Encoding) -> std::io::Result<String> {
+    let bytes = std::fs::read(path)?;
+    read_bytes(&bytes, encoding).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            crate::say!("encoding.refused", path.display()),
+        )
+    })
+}
+
 /// What the bytes of a file that is not UTF-8 are.
 #[derive(Debug, PartialEq)]
 pub enum Detected {

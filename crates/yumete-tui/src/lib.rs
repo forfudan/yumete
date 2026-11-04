@@ -6186,8 +6186,28 @@ fn wrap_to(text: &str, width: usize) -> Vec<String> {
         }
         let w = yumete_cjk::str_width(&ch.to_string());
         if wide + w > width && !line.is_empty() && !NO_START.contains(ch) {
-            lines.push(std::mem::take(&mut line));
-            wide = 0;
+            // **An ASCII word is not cut** (2026-11-04: 「149」 / 「27.8×」 and
+            // `Ln 1204` broke across rows). The word so far moves down with
+            // its next letter, when there is somewhere before it to break.
+            if ch == ' ' {
+                lines.push(std::mem::take(&mut line));
+                wide = 0;
+                continue;
+            }
+            let carry_from = match ch.is_ascii_graphic() {
+                true => line
+                    .char_indices()
+                    .rev()
+                    .take_while(|(_, c)| c.is_ascii_graphic())
+                    .last()
+                    .map(|(at, _)| at)
+                    .filter(|&at| at > 0),
+                false => None,
+            };
+            let carry = carry_from.map(|at| line.split_off(at)).unwrap_or_default();
+            lines.push(line.trim_end().to_string());
+            line = carry;
+            wide = yumete_cjk::str_width(&line);
         }
         line.push(ch);
         wide += w;
@@ -23791,6 +23811,17 @@ fn squeezed(text: &str) -> String {
         assert_eq!(rows[divider + 1], "乙乙乙", "and the other half is what it says it is: {rows:?}");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn wrapping_a_panel_keeps_ascii_words_whole() {
+        let lines = wrap_to("存不下第 1204 行第 17 列的字 at line 1204, column 17", 14);
+        for line in &lines {
+            assert!(!line.starts_with(' '), "{lines:?}");
+        }
+        let joined = lines.join("|");
+        assert!(joined.contains("1204"), "a number is never cut: {lines:?}");
+        assert!(!joined.contains("12|04") && !joined.contains("colu|mn"), "{lines:?}");
     }
 
     #[test]

@@ -4110,6 +4110,13 @@ pub enum Pasting {
 /// inherits the panel, the key routing and the 「Esc is no」 rule without
 /// touching any of them. The recovery pair below is what that promise bought.
 enum Asking {
+    /// **A character the file's encoding cannot hold** (2026-11-04): save as
+    /// UTF-8, write anyway as `&#NNNN;`, or not at all. `quit` is set when
+    /// `:wq` asked, so an answer that saves then leaves.
+    Unencodable {
+        path: Option<String>,
+        quit: bool,
+    },
     /// `:write` about to make the file on disk very much bigger.
     OversizeWrite {
         /// The path `:write` was given, if it was given one.

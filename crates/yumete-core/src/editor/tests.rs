@@ -36303,3 +36303,137 @@ fn a_sidebar_reopens_on_its_last_panel() {
 fn some_words() -> DictionarySegmenter {
     DictionarySegmenter::from_text("今天\n天氣\n很好\n山路\n你好\n世界\n那年\n冬天\n", 0)
 }
+
+/// **A character the file's encoding cannot hold** (2026-11-04): the save
+/// stops and asks in the central window; `u` saves as UTF-8, `w` writes
+/// `&#NNNN;` (and the buffer says so, undoably), `n` writes nothing.
+#[test]
+fn saving_what_big5_cannot_hold_asks_what_to_do() {
+    use crate::encoding::BIG5;
+    let dir = tmp().join(format!("yumete-unenc-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.txt");
+    let text = "清晨的霧氣還沒有散去，小鎮的石板路上已經有了行人。\n";
+    let bytes = BIG5.encode(text).0.into_owned();
+    let open = |ed: &mut Editor| {
+        std::fs::write(&path, &bytes).unwrap();
+        ed.open_file(&path).unwrap();
+        assert_eq!(ed.current_buffer().encoding(), BIG5);
+        press(ed, "i简");
+        ed.on_key(Key::Esc);
+    };
+
+    // `n`: nothing written, the buffer still holds 简 and is unsaved.
+    let mut ed = Editor::new();
+    open(&mut ed);
+    ed.execute("w").unwrap();
+    let asked = ed.query().expect("the save asks");
+    assert_eq!(asked.choices.iter().map(|a| a.key).collect::<String>(), "uwn");
+    ed.answer_query(Key::Esc);
+    assert_eq!(std::fs::read(&path).unwrap(), bytes, "untouched");
+    assert!(ed.current_buffer().is_modified());
+
+    // `w`: written as Big5 with 简 as &#31616;, and the buffer says the same;
+    // `u` (undo) brings 简 back.
+    ed.execute("w").unwrap();
+    ed.answer_query(Key::Char('w'));
+    let on_disk = BIG5.decode(&std::fs::read(&path).unwrap()).0.into_owned();
+    assert!(on_disk.starts_with("&#31616;清晨"), "{on_disk}");
+    assert_eq!(ed.current_buffer().text(), on_disk);
+    press(&mut ed, "u");
+    assert!(ed.current_buffer().text().starts_with("简清晨"));
+
+    // `u` (the answer): saved as UTF-8 from now on.
+    let mut ed = Editor::new();
+    open(&mut ed);
+    ed.execute("w").unwrap();
+    ed.answer_query(Key::Char('u'));
+    assert_eq!(ed.current_buffer().encoding(), crate::encoding::UTF_8);
+    assert!(String::from_utf8(std::fs::read(&path).unwrap()).unwrap().starts_with("简清晨"));
+
+    // After `:wq`, an answer that saves goes on to quit.
+    let mut ed = Editor::new();
+    open(&mut ed);
+    ed.execute("wq").unwrap();
+    assert!(ed.query().is_some(), ":wq asks too, and does not leave yet");
+    assert_eq!(ed.on_key(Key::Char('u')), KeyOutcome::Quit);
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A file too short to tell opens a picker of encodings** (2026-11-04),
+/// each previewed; the choice opens it and is remembered for the file, while
+/// it keeps its size. `:open ++enc=` says it outright.
+#[test]
+fn a_short_legacy_file_asks_once_and_is_remembered() {
+    use crate::encoding::{BIG5, GB18030};
+    let dir = tmp().join(format!("yumete-encpick-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("short.txt");
+    // 「第一段」 in Big5: too short to tell.
+    std::fs::write(&path, b"\xb2\xc4\xa4\x40\xacq\n").unwrap();
+    let paths = (dir.join("config.toml"), dir.join("data"));
+
+    let mut ed = Editor::new();
+    ed.knows_its_paths(paths.0.clone(), paths.1.clone());
+    assert!(ed.open_file(&path).is_err(), "not opened yet");
+    let picker = ed.picker().expect("the picker asks which encoding");
+    let offered: Vec<&str> = picker.items().iter().map(|i| i.label()).collect();
+    assert!(offered.contains(&"Big5") && offered.contains(&"GB18030"), "{offered:?}");
+    for c in "big5".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.current_buffer().encoding(), BIG5);
+    assert_eq!(ed.current_buffer().text(), "第一段\n");
+    assert!(paths.1.join("encodings.txt").is_file());
+
+    // Remembered: the next session opens it without asking.
+    let mut again = Editor::new();
+    again.knows_its_paths(paths.0.clone(), paths.1.clone());
+    again.open_file(&path).unwrap();
+    assert!(again.picker().is_none());
+    assert_eq!(again.current_buffer().encoding(), BIG5);
+
+    // A file of another size is not the one chosen for: asked again.
+    std::fs::write(&path, b"\xb2\xc4\xa4\x40\xacq\xb2\xc4\n").unwrap();
+    let mut third = Editor::new();
+    third.knows_its_paths(paths.0.clone(), paths.1.clone());
+    assert!(third.open_file(&path).is_err());
+    assert!(third.picker().is_some());
+
+    // `:open ++enc=` says it outright, and `:open ++enc=` with no file reads
+    // this one again in it.
+    let mut told = Editor::new();
+    told.knows_its_paths(paths.0, paths.1);
+    told.execute(&format!("open ++enc=gb18030 {}", path.display())).unwrap();
+    assert_eq!(told.current_buffer().encoding(), GB18030);
+    told.execute("open ++enc=big5").unwrap();
+    assert_eq!(told.current_buffer().encoding(), BIG5);
+    assert!(told.current_buffer().text().starts_with("第一段"));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`:read` reads in the buffer's encoding** (2026-11-04): a Big5 note read
+/// into a Big5 chapter is text.
+#[test]
+fn reading_a_big5_note_into_a_big5_chapter() {
+    use crate::encoding::BIG5;
+    let dir = tmp().join(format!("yumete-encread-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let chapter = dir.join("chapter.txt");
+    let note = dir.join("note.txt");
+    let text = "清晨的霧氣還沒有散去，小鎮的石板路上已經有了行人。\n";
+    std::fs::write(&chapter, BIG5.encode(text).0).unwrap();
+    std::fs::write(&note, BIG5.encode("霧\n").0).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&chapter).unwrap();
+    ed.execute(&format!("read {}", note.display())).unwrap();
+    let now = ed.current_buffer().text();
+    assert_eq!(now.matches('霧').count(), 2, "the note came in as 霧, not as mojibake: {now}");
+    std::fs::remove_dir_all(&dir).ok();
+}

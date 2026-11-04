@@ -223,11 +223,53 @@ en = "{0} could not be read: {1}"
 # ── detail ────────────────────────────────────────────────────────────
 
 [[message]]
+# 同上，選項 w（草稿）
+key = "encoding.ask-anyway"
+zht = "照存，寫成 &#31616; 這樣"
+zhs = "照存，写成 &#31616; 这样"
+en = "write anyway, as &#31616; and so on"
+
+[[message]]
+# 同上，選項 n（草稿）
+key = "encoding.ask-no"
+zht = "不存"
+zhs = "不存"
+en = "cancel"
+
+[[message]]
+# 存盤時有字這個編碼存不下：中央窗口的標題。{0} 編碼名（草稿）
+key = "encoding.ask-title"
+zht = "{0} 存不下"
+zhs = "{0} 存不下"
+en = "cannot save as {0}"
+
+[[message]]
+# 同上，選項 u（草稿）
+key = "encoding.ask-utf8"
+zht = "改存爲 UTF-8"
+zhs = "改存为 UTF-8"
+en = "save as UTF-8"
+
+[[message]]
+# 同上，窗口正文。{0} 文件名，{1} 編碼名，{2} 一共幾處，{3} 第一個字，{4} 行，{5} 列，{6} 有哪幾個字（草稿）
+key = "encoding.ask-what"
+zht = "{1} 存不下《{0}》裏的 {2} 處字，第一處是第 {4} 行第 {5} 列的「{3}」。存不下的字：{6}"
+zhs = "{1} 存不下《{0}》里的 {2} 处字，第一处是第 {4} 行第 {5} 列的「{3}」。存不下的字：{6}"
+en = "{1} cannot hold {2} characters in 《{0}》; the first is {3} at line {4}, column {5}. They are: {6}"
+
+[[message]]
 # 存盤時有字這個編碼存不下。{0} 編碼名，{1} 第一個字，{2} 行，{3} 列，{4} 一共幾個（草稿）
 key = "encoding.cannot-hold"
 zht = "{0} 存不下第 {2} 行第 {3} 列的「{1}」，共 {4} 處"
 zhs = "{0} 存不下第 {2} 行第 {3} 列的「{1}」，共 {4} 处"
 en = "{0} cannot hold {1} at line {2}, column {3} ({4} in all)"
+
+[[message]]
+# 記住的編碼不再對得上（文件大小變了，或解不開了），忘掉。{0} 路徑，{1} 編碼名（草稿）
+key = "encoding.forgot"
+zht = "{0} 變了，不再按 {1} 打開"
+zhs = "{0} 变了，不再按 {1} 打开"
+en = "{0} has changed; no longer opened as {1}"
 
 [[message]]
 # `:encoding` 沒有參數：這個文件存盤時用什麼編碼。{0} 編碼名（草稿）
@@ -237,11 +279,39 @@ zhs = "编码：{0}"
 en = "encoding: {0}"
 
 [[message]]
+# `:open ++enc=X` 的 X 不是認得的編碼。{0} 那個詞（草稿）
+key = "encoding.no-such"
+zht = "不認得編碼 {0}，可用 utf-8、gb18030、big5、shift-jis"
+zhs = "不认得编码 {0}，可用 utf-8、gb18030、big5、shift-jis"
+en = "no encoding called {0}; utf-8, gb18030, big5 or shift-jis"
+
+[[message]]
 # 按指定的編碼讀，有字節解不開。{0} 是路徑，{1} 是編碼名（草稿）
 key = "encoding.not-in"
 zht = "{0} 不是 {1}"
 zhs = "{0} 不是 {1}"
 en = "{0} is not {1}"
+
+[[message]]
+# 同上，按了 n：没有寫盤（草稿）
+key = "encoding.not-saved"
+zht = "沒有存，磁盤上的文件沒動"
+zhs = "没有存，磁盘上的文件没动"
+en = "not saved; the file on disk is untouched"
+
+[[message]]
+# 打開一個分不出編碼的檔：挑編碼那扇面板的標題。{0} 文件名（草稿）
+key = "encoding.picker-title"
+zht = "用哪種編碼打開《{0}》"
+zhs = "用哪种编码打开《{0}》"
+en = "open 《{0}》 as"
+
+[[message]]
+# `:open ++enc=X` 沒給文件：這一份按 X 重讀了。{0} 編碼名（草稿）
+key = "encoding.read-as"
+zht = "按 {0} 重讀了"
+zhs = "按 {0} 重读了"
+en = "read again as {0}"
 
 [[message]]
 # 打開一個既不是 UTF-8、也不是 GB18030／Big5／Shift-JIS 的檔。{0} 是路徑（草稿）

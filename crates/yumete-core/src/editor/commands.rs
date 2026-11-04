@@ -158,10 +158,37 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::Open(path) => {
+                // **`++enc=big5` first, as vim writes it** (2026-11-04): open
+                // in that encoding; with no file, read this one again in it.
+                let (told, path) = match path.strip_prefix("++enc=") {
+                    Some(rest) => {
+                        let (word, file) = rest.split_once(' ').unwrap_or((rest, ""));
+                        let Some(encoding) = crate::encoding::by_name(word) else {
+                            self.status = say!("encoding.no-such", word);
+                            return Ok(CommandOutcome::Continue);
+                        };
+                        (Some(encoding), file.trim().to_string())
+                    }
+                    None => (None, path),
+                };
+                if path.is_empty() {
+                    if let Some(encoding) = told {
+                        // As `:reload` refuses: unsaved work is not read over.
+                        if self.current_buffer().is_modified() {
+                            return Err(EditorError::UnsavedChanges);
+                        }
+                        self.current_buffer_mut().reread_as(encoding).map_err(EditorError::Io)?;
+                        if let Some(at) = self.current_buffer().path().map(|p| p.to_path_buf()) {
+                            self.remember_encoding(&at, Some(encoding));
+                        }
+                        self.status = say!("encoding.read-as", crate::encoding::name(encoding));
+                    }
+                    return Ok(CommandOutcome::Continue);
+                }
                 // **相對路徑按[工作路徑][`Editor::working_dir`]算**（2026-10-01）。
                 // 從前它原樣交給 `Buffer::open`，由作業系統按**進程的 cwd** 解
                 // ——於是 `:pwd` 報的那個目録 `:open` 不認，`:cd` 改了也没用。
-                self.open_file(self.here_path(path.as_ref())).map_err(EditorError::Io)?;
+                self.open_file_as(self.here_path(path.as_ref()), told).map_err(EditorError::Io)?;
                 // A file opened mid-session can carry a draft just as one named
                 // on the command line can.
                 self.announce_recovery();
@@ -1057,7 +1084,10 @@ impl Editor {
                 }
                 // The name goes into the error, as vim's E484 has it: a bare
                 // "No such file or directory" does not say which.
-                let text = std::fs::read_to_string(self.here_path(&path)).map_err(|e| {
+                // In this buffer's encoding first, then as it looks
+                // (2026-11-04): a Big5 note read into a Big5 chapter.
+                let encoding = self.current_buffer().encoding();
+                let text = crate::encoding::read_file(&self.here_path(&path), encoding).map_err(|e| {
                     EditorError::Io(std::io::Error::new(e.kind(), format!("{path}: {e}")))
                 })?;
                 // An empty file puts nothing in, not an empty line (vim).
@@ -1632,6 +1662,38 @@ impl Editor {
             },
             // 一顆按鈕的窗，按了就關——它不問什麼，只是不讓那句話從狀態欄滑過去。
             Asking::ReplaceUndoneInPart => {}
+            // **A character the encoding cannot hold** (2026-11-04): the
+            // three answers asked for, `u` UTF-8, `w` write anyway, `n` not.
+            Asking::Unencodable { path, quit } => {
+                let saved = match answer {
+                    'u' => {
+                        self.current_buffer_mut().set_encoding(crate::encoding::UTF_8);
+                        self.write_forcing(path.as_deref(), false)
+                    }
+                    'w' => {
+                        // The buffer says what the file will: the characters
+                        // become `&#NNNN;` in one undoable edit, or the next
+                        // read of the disk would differ from the screen.
+                        let encoding = self.current_buffer().encoding();
+                        let text = self.current_buffer().text();
+                        self.replace_everything(&crate::encoding::with_references(encoding, &text));
+                        self.write_forcing(path.as_deref(), false)
+                    }
+                    _ => {
+                        self.status = say!("encoding.not-saved");
+                        return;
+                    }
+                };
+                match saved {
+                    Ok(Wrote::Saved | Wrote::Copied(_)) if quit => {
+                        if let Ok(CommandOutcome::Quit) = self.quit(false) {
+                            self.quit_from_binding = true;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(err) => self.status = err.to_string(),
+                }
+            }
             Asking::OversizeWrite { path } => match answer {
                 // Yes: the same save, with the gate already answered.
                 'y' => {
@@ -1703,6 +1765,34 @@ impl Editor {
         let doubled = was > 0 && now / 2 >= was;
         let jumped = now >= was.saturating_add(OVERSIZE_JUMP);
         (doubled && jumped).then_some((was, now))
+    }
+
+    /// The question a save asks when the file's encoding cannot hold some of
+    /// its characters (2026-11-04).
+    fn unencodable_query(&self, found: &crate::encoding::Unencodable, path: Option<&str>) -> Query {
+        let name = crate::encoding::name(found.encoding);
+        let (line, col, c) = found.first;
+        let sample: String = found.sample.iter().map(|c| format!("{c} ")).collect();
+        Query {
+            title: say!("encoding.ask-title", name),
+            body: say!(
+                "encoding.ask-what",
+                self.current_buffer().display_name(),
+                name,
+                found.count,
+                c,
+                line,
+                col,
+                sample.trim_end()
+            ),
+            choices: vec![
+                Answer { key: 'u', label: say!("encoding.ask-utf8") },
+                Answer { key: 'w', label: say!("encoding.ask-anyway") },
+                Answer { key: 'n', label: say!("encoding.ask-no") },
+            ],
+            what: Asking::Unencodable { path: path.map(str::to_string), quit: false },
+            about: None,
+        }
     }
 
     /// The question `:write` asks when [`Self::oversize_write`] says to.
@@ -1788,6 +1878,11 @@ impl Editor {
                 // did not happen would take the manuscript off the screen with
                 // the answer still unanswered.
                 if matches!(self.write_current(None)?, Wrote::Asked) {
+                    // Asked about the encoding: an answer that saves goes on
+                    // to leave, as `:wq` meant.
+                    if let Some(Query { what: Asking::Unencodable { quit, .. }, .. }) = &mut self.query {
+                        *quit = true;
+                    }
                     return Ok(CommandOutcome::Continue);
                 }
             }
@@ -1877,6 +1972,19 @@ impl Editor {
                     .map_err(EditorError::Io)
             }
         };
+        // **A character the encoding cannot hold** (2026-11-04): nothing was
+        // written; ask what to do, in the central window.
+        if let Err(EditorError::Io(err)) = &saved {
+            let found = err
+                .get_ref()
+                .and_then(|e| e.downcast_ref::<crate::encoding::Unencodable>())
+                .cloned();
+            if let Some(found) = found {
+                self.status = found.to_string();
+                self.query = Some(self.unencodable_query(&found, path));
+                return Ok(Wrote::Asked);
+            }
+        }
         // A save that said nothing was a save you could not tell from a save
         // that did not happen — and the manual has been quoting this line as
         // its example of the command row all along.

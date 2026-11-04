@@ -784,6 +784,15 @@ impl Buffer {
         }
     }
 
+    /// Read the file again in `encoding` (`:open ++enc=big5` with no file,
+    /// 2026-11-04). A file that does not decode in it leaves the buffer as it
+    /// was.
+    pub fn reread_as(&mut self, encoding: &'static crate::encoding::Encoding) -> io::Result<()> {
+        let was = self.encoding;
+        self.encoding = encoding;
+        self.reread().inspect_err(|_| self.encoding = was)
+    }
+
     /// Read the file again, throwing away what is in the buffer (`:e!`).
     pub fn reread(&mut self) -> io::Result<()> {
         let path = self
