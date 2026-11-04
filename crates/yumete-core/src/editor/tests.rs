@@ -27408,11 +27408,11 @@ fn the_z_layer_aims_at_a_row_the_next_frame_will_leave_alone() {
     press(&mut ed, "l");
 
     // 没按 `z` 的時候：光標舒舒服服在頁面上，別動。
-    assert_eq!(ed.page_inset(Some(10), last, scrolloff), None);
+    assert_eq!(ed.page_inset(Some(10), false, last, scrolloff), None);
 
     // `zt` 瞄的是第 `scrolloff` 行，不是第 0 行。
     press(&mut ed, "zt");
-    let row = ed.page_inset(Some(0), last, scrolloff).expect("有覆蓋");
+    let row = ed.page_inset(Some(0), false, last, scrolloff).expect("有覆蓋");
     assert_eq!(row, scrolloff, "zt");
 
     // Warning: **這一條是整件事成不成立的關鍵。** 覆蓋是一次性的（下一個鍵清掉），視口是靠
@@ -27420,30 +27420,30 @@ fn the_z_layer_aims_at_a_row_the_next_frame_will_leave_alone() {
     // `d < scrolloff` 立刻把它推開——按完 `zt` 隨便動一下，頁面自己往下跳三行。
     press(&mut ed, "l");
     assert_eq!(
-        ed.page_inset(Some(row), last, scrolloff),
+        ed.page_inset(Some(row), false, last, scrolloff),
         None,
         "下一幀不會把它推開"
     );
 
     // `zz` 中間，`zc` 也是（同 helix）。
     press(&mut ed, "zz");
-    assert_eq!(ed.page_inset(Some(0), last, scrolloff), Some(last / 2));
+    assert_eq!(ed.page_inset(Some(0), false, last, scrolloff), Some(last / 2));
     press(&mut ed, "l");
     press(&mut ed, "zc");
-    assert_eq!(ed.page_inset(Some(0), last, scrolloff), Some(last / 2));
+    assert_eq!(ed.page_inset(Some(0), false, last, scrolloff), Some(last / 2));
 
     // `zb` 往回留一截，理由同 `zt`。
     press(&mut ed, "l");
     press(&mut ed, "zb");
-    let row = ed.page_inset(Some(last), last, scrolloff).expect("有覆蓋");
+    let row = ed.page_inset(Some(last), false, last, scrolloff).expect("有覆蓋");
     assert_eq!(row, last - scrolloff, "zb");
     press(&mut ed, "l");
-    assert_eq!(ed.page_inset(Some(row), last, scrolloff), None);
+    assert_eq!(ed.page_inset(Some(row), false, last, scrolloff), None);
 
     // `z` 後面按了別的：說一句，不動。
     press(&mut ed, "l");
     press(&mut ed, "zx");
-    assert_eq!(ed.page_inset(Some(10), last, scrolloff), None, "没有覆蓋");
+    assert_eq!(ed.page_inset(Some(10), false, last, scrolloff), None, "没有覆蓋");
     assert!(!ed.status().is_empty(), "要說一句：{:?}", ed.status());
 }
 
@@ -31688,13 +31688,13 @@ fn a_half_page_keeps_the_cursor_on_the_same_screen_row() {
     // 跳轉那一格是一次性的，按一下清掉——不清的話下面問到的是「跳轉落在正中」。
     ed.on_key(Key::Char('l'));
     // 畫一幀：視窗 1..66，光標第 33 行，坐在第 32 列。
-    assert_eq!(ed.page_inset(Some(32), 65, 3), None, "舒舒服服在頁面上，別動");
+    assert_eq!(ed.page_inset(Some(32), false, 65, 3), None, "舒舒服服在頁面上，別動");
     assert_eq!(ed.sat_at(), Some(32), "坐在第幾行，畫的那一支自己記下來");
 
     ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cursor_line(), 65, "光標走了半頁");
     // 走完之後它離舊視窗的頭 65 行——換句話說貼着底邊。釘住的話視窗跟着挪。
-    assert_eq!(ed.page_inset(Some(65), 65, 3), Some(32), "視窗跟着走，光標原地不動");
+    assert_eq!(ed.page_inset(Some(65), false, 65, 3), Some(32), "視窗跟着走，光標原地不動");
 
     // 回來一樣。Warning: **`C-u` 常常正好落在視窗上邊一行**，而畫的那一支有一條
     // 「貼上邊就推 scrolloff」的修正——指定過坐在第幾行的時候那一條要讓路，
@@ -31702,7 +31702,7 @@ fn a_half_page_keeps_the_cursor_on_the_same_screen_row() {
     ed.on_key(Key::Ctrl('u'));
     assert_eq!(ed.cursor_line(), 32);
     assert!(ed.aimed(), "釘住了，畫的那一支不許再推它");
-    assert_eq!(ed.page_inset(None, 65, 3), Some(32));
+    assert_eq!(ed.page_inset(None, false, 65, 3), Some(32));
 }
 
 /// 到頭了就別釘：一步都没挪的時候釘住反而會把視窗拉過來，而使用者看到的是
@@ -31714,7 +31714,7 @@ fn a_half_page_that_cannot_move_does_not_pin_the_page() {
     ed.set_page(66, 10);
     ed.goto_line(1);
     ed.on_key(Key::Char('l'));
-    ed.page_inset(Some(0), 65, 3);
+    ed.page_inset(Some(0), false, 65, 3);
     ed.on_key(Key::Ctrl('u'));
     assert_eq!(ed.cursor_line(), 0, "已經在第一行");
     assert!(!ed.aimed(), "没挪就不釘");
@@ -35963,7 +35963,7 @@ fn a_page_scrolls_the_view_and_pushes_the_cursor_by_scrolloff() {
     let view = |ed: &mut Editor, top: usize| {
         let rope = ed.current_buffer().rope().clone();
         ed.set_page_span(rope.line_to_char(top), rope.line_to_char(top + 22));
-        ed.page_inset(Some(0), 21, 5);
+        ed.page_inset(Some(0), false, 21, 5);
     };
     let mut ed = typed_vim(&text);
     press(&mut ed, "gg0ll");
@@ -36011,7 +36011,7 @@ fn vims_half_page_keeps_its_count_and_the_ends_of_the_file() {
         };
         ed.set_page(10, 80);
         ed.set_page_span(rope.line_to_char(top - 1), to);
-        ed.page_inset(Some(0), 9, so);
+        ed.page_inset(Some(0), false, 9, so);
     };
     let mut ed = typed_vim(&text);
     press(&mut ed, "gg");
@@ -36073,7 +36073,7 @@ fn vims_margin_below_the_cursor_rounds_up() {
         let rope = ed.current_buffer().rope().clone();
         ed.set_page(rows, 80);
         ed.set_page_span(rope.line_to_char(top - 1), rope.line_to_char(top - 1 + rows));
-        ed.page_inset(Some(0), rows - 1, 5);
+        ed.page_inset(Some(0), false, rows - 1, 5);
     };
     let mut ed = typed_vim(&text);
     press(&mut ed, "60G");
@@ -36118,13 +36118,83 @@ fn vims_page_follows_a_cursor_above_it_as_nvim_does() {
     let rope = ed.current_buffer().rope().clone();
     ed.set_page(10, 80);
     ed.set_page_span(rope.line_to_char(90), rope.len_chars());
-    ed.page_inset(Some(9), 9, 3);
+    ed.page_inset(Some(9), false, 9, 3);
     ed.on_key(Key::Ctrl('f'));
-    assert_eq!(ed.page_inset(Some(0), 9, 3), Some(0), "line 100 alone at the top");
+    assert_eq!(ed.page_inset(Some(0), false, 9, 3), Some(0), "line 100 alone at the top");
     press(&mut ed, "3");
-    assert_eq!(ed.page_inset(Some(0), 9, 3), None, "a count does not move the page");
+    assert_eq!(ed.page_inset(Some(0), false, 9, 3), None, "a count does not move the page");
     press(&mut ed, "k");
-    assert_eq!(ed.page_inset(None, 9, 3), Some(4), "a move does");
+    assert_eq!(ed.page_inset(None, false, 9, 3), Some(4), "a move does");
+}
+
+/// **helix's page centres only some moves off it** (hx 25.07.1, 2026-11-04,
+/// 200 lines on 22 rows, scrolloff 5): a search hit and the jump list land in
+/// the middle (`ensure_cursor_in_view_center`); `ge`, `gg`, `30j` scroll as
+/// little as scrolloff allows (`ensure_cursor_in_view`). vim's other
+/// surfaces centre them all, as before.
+#[test]
+fn helix_centres_a_search_and_the_jump_list_and_nothing_else() {
+    let text: String = (1..=200).map(|n| format!("line {n}\n")).collect();
+    let (last, so) = (21, 5);
+    let mut ed = typed(&text);
+    press(&mut ed, "ge");
+    assert_eq!(ed.page_inset(None, false, last, so), Some(last - so), "ge: top 184");
+    press(&mut ed, "gg");
+    assert_eq!(ed.page_inset(None, true, last, so), Some(so), "gg from the end");
+    press(&mut ed, "30j");
+    assert_eq!(ed.page_inset(None, false, last, so), Some(last - so), "30j: top 15");
+    press(&mut ed, "/line 150");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.cursor_line(), 149);
+    assert_eq!(ed.page_inset(None, false, last, so), Some(last / 2), "a search: top 140");
+    // A hit on the page leaves it, as before.
+    assert_eq!(ed.page_inset(Some(8), false, last, so), None, "a hit in view");
+    press(&mut ed, "gg");
+    press(&mut ed, "n");
+    assert_eq!(ed.page_inset(None, false, last, so), Some(last / 2), "n");
+    // Back to where `/` was typed (helix's `n` notes no jump).
+    ed.on_key(Key::Ctrl('o'));
+    assert_eq!(ed.cursor_line(), 30);
+    assert_eq!(ed.page_inset(None, true, last, so), Some(last / 2), "C-o");
+    ed.on_key(Key::Ctrl('i'));
+    assert_eq!(ed.page_inset(None, false, last, so), Some(last / 2), "C-i");
+    // A step after a jump is a step again.
+    press(&mut ed, "30j");
+    assert_eq!(ed.page_inset(None, false, last, so), Some(last - so), "30j after C-i");
+
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "G");
+    assert_eq!(ed.page_inset(None, false, last, so), Some(last / 2), "vim");
+    press(&mut ed, "30k");
+    assert_eq!(ed.page_inset(None, true, last, so), Some(last / 2), "vim");
+}
+
+/// **helix's `gd` centres even a place on the page** (`align_view`, hx
+/// 25.07.1 2026-11-04: `gd` from line 104 to line 100 on a page from line
+/// 88 leaves line 90 at the top), until the cursor moves on. vim's leaves
+/// the page.
+#[test]
+fn helix_centres_a_definition_even_on_the_page() {
+    let dir = tmp().join(format!("yumete-centred-definition-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("a.rs");
+    std::fs::write(&path, (1..=200).map(|n| format!("// {n}\n")).collect::<String>()).unwrap();
+    for vim in [false, true] {
+        let mut ed = Editor::new();
+        if vim {
+            ed.execute(":keymap vim").unwrap();
+        }
+        ed.open_file(&path).unwrap();
+        ed.asked_where_from = Some((ed.current_buffer().id(), ed.sel.head()));
+        ed.go_to_definition(&crate::lsp::Place { path: path.clone(), line: 99, utf16_column: 0 });
+        assert_eq!(ed.cursor_line(), 99);
+        let want = (!vim).then_some(10);
+        assert_eq!(ed.page_inset(Some(7), false, 21, 5), want, "vim {vim}");
+        // The wheel moves the cursor with no key: the page is left alone.
+        ed.scroll(1, false);
+        assert_eq!(ed.page_inset(Some(11), false, 21, 5), None, "vim {vim}");
+    }
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 /// **vim's page below the cursor** (2026-11-04, nvim, ten rows, 100
@@ -36176,7 +36246,7 @@ fn vims_h_m_l_keep_the_column() {
         let rope = ed.current_buffer().rope().clone();
         ed.set_page(10, 80);
         ed.set_page_span(rope.line_to_char(14), rope.line_to_char(24));
-        ed.page_inset(Some(5), 9, 0);
+        ed.page_inset(Some(5), false, 9, 0);
     };
     let mut ed = typed_vim(&text);
     press(&mut ed, "20G8l");
@@ -36297,14 +36367,14 @@ fn vims_zb_with_a_scrolloff_over_half_the_window() {
     let mut ed = typed_vim(&text);
     press(&mut ed, "50G");
     ed.note_scrolloff(5);
-    ed.page_inset(Some(2), 5, 2);
+    ed.page_inset(Some(2), false, 5, 2);
     press(&mut ed, "zb");
-    assert_eq!(ed.page_inset(Some(2), 5, 2), Some(2), "nvim: the third row");
+    assert_eq!(ed.page_inset(Some(2), false, 5, 2), Some(2), "nvim: the third row");
     press(&mut ed, "zt");
-    assert_eq!(ed.page_inset(Some(2), 5, 2), Some(2));
+    assert_eq!(ed.page_inset(Some(2), false, 5, 2), Some(2));
     ed.note_scrolloff(3);
     press(&mut ed, "zb");
-    assert_eq!(ed.page_inset(Some(2), 5, 2), Some(3), "scrolloff 3: the fourth, as before");
+    assert_eq!(ed.page_inset(Some(2), false, 5, 2), Some(3), "scrolloff 3: the fourth, as before");
 }
 
 /// **vim's `z` is vim's** (2026-11-03): helix's view keys had leaked into
@@ -36546,7 +36616,7 @@ fn a_page_is_rows_so_wrapped_paragraphs_and_folds_are_not_skipped() {
     press(&mut ed, "gg");
     let rope = ed.current_buffer().rope().clone();
     ed.set_page_span(0, rope.line_to_char(31));
-    ed.page_inset(Some(0), 20, 3);
+    ed.page_inset(Some(0), false, 20, 3);
     press(&mut ed, "zj");
     assert!(ed.fold_head(1), "zj next to a closed fold leaves it closed");
     press(&mut ed, "gg");

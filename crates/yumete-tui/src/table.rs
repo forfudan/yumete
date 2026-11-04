@@ -706,7 +706,7 @@ pub fn draw(
         room,
         rows,
     );
-    let inset = editor.page_inset(distance, rows.saturating_sub(1), scrolloff);
+    let inset = editor.page_inset(distance, cursor_row < viewport.top, rows.saturating_sub(1), scrolloff);
     if !rowless {
         let from = viewport.top;
         if let Some(inset) = inset {

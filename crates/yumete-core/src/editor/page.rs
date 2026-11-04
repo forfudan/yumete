@@ -1852,6 +1852,8 @@ impl Editor {
         let text = rope.line(line).to_string();
         let at = rope.line_to_char(line) + crate::problem::char_column(&text, place.utf16_column);
         self.set_cursor(at.min(rope.len_chars()));
+        // helix centres it even on screen (`jump_to_location`).
+        self.centre_here();
         self.status = say!("lsp.went", self.current_buffer().display_name(), line + 1);
     }
 

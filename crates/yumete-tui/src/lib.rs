@@ -12074,24 +12074,19 @@ fn draw_horizontal(
     let scrolloff = config.editor.scrolloff.min(reach.saturating_sub(1) / 2);
     let last_row = height.saturating_sub(1);
     let last_reach = reach.saturating_sub(1);
-    // **A jump lands in the middle, wherever it came from.** Whether the page
-    // has to scroll at all is the wrong question to key this on: a hit two rows
-    // below the bottom edge and a hit two rows above it are the same act, and
-    // one of them used to land on the fourth row from the top while the other
-    // landed in the middle. The editor knows which moves are jumps — it is the
-    // same answer `C-o` is built on.
     // **Where the cursor sits on a page is the editor's answer** — one rule,
-    // asked by this page, by 縱書 and by the grid. A jump lands in the middle
-    // (a search hit, `gg`, a mark), a step off an edge nudges by `scrolloff`,
-    // and typewriter mode keeps the row being written in the middle whatever
-    // it was.
+    // asked by this page, by 縱書 and by the grid. Off the page, helix's
+    // searches and jump list land in the middle and its other moves come in
+    // by `scrolloff` from the edge they crossed (see `Centring`); vim's are
+    // below. Typewriter mode keeps the row being written in the middle
+    // whatever it was.
     // The page of the chain the caret is on, once the page has been scrolled.
     let mut caret_page: Option<usize> = None;
     if scrolls {
     let found = wrap::distance(rope, *viewport, cursor_anchor, measure, last_reach);
     let vim = editor.key_preset() == yumete_core::KeyPreset::Vim;
     editor.note_scrolloff(config.editor.scrolloff);
-    let page_inset = editor.page_inset(found, last_reach, scrolloff);
+    let page_inset = editor.page_inset(found, cursor_anchor < *viewport, last_reach, scrolloff);
     // The file's last row, past which vim's page does not go.
     let file_end = || {
         let mut line = yumete_core::motion::last_line(rope);
@@ -12155,23 +12150,6 @@ fn draw_horizontal(
             wrap::distance(rope, *viewport, cursor_anchor, measure, reach).unwrap_or(0)
         }
         Some(inset) => {
-            // `k` at the top edge is one row away, not a jump: it nudges.
-            //
-            // Warning: **指定過坐在第幾行的就別推**（2026-10-12）。`C-u` 走半頁，
-            // 落腳點常常**正好在視窗上邊一行**——於是這一條把「坐回原來那一
-            // 行」改判成「貼着上邊推三行」，視窗只挪三行而光標一下跳到頂上。
-            // 報的原話：「翻页会自动把 cursor 挪到屏幕底部；再按 ctrl+d 又回到
-            // 中间」，`C-u` 是它的鏡像。`zt`/`zz`/`zb` 本來也中這一條，只是它
-            // 們很少落在邊上一行。
-            let inset = match found.is_none()
-                && wrap::distance(rope, cursor_anchor, *viewport, measure, scrolloff + 1).is_some()
-                && !editor.typewriter()
-                && !editor.jumped()
-                && !editor.aimed()
-            {
-                true => scrolloff,
-                false => inset,
-            };
             let was = *viewport;
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
             // **vim never goes past the file's end to keep scrolloff or to
@@ -23801,8 +23779,11 @@ fn squeezed(text: &str) -> String {
         Some(caret_of(&mut terminal, config))
     }
 
+    /// **helix centres a search hit off the page; a goto scrolls as little
+    /// as scrolloff allows** (hx 25.07.1, 2026-11-04: `ensure_cursor_in_view`
+    /// for `gg` `G` `:N`, `ensure_cursor_in_view_center` for a search).
     #[test]
-    fn a_jump_lands_in_the_middle_and_a_step_does_not() {
+    fn under_helix_a_search_centres_and_a_goto_scrolls_as_little_as_it_can() {
         let mut editor = editor_with(&(1..=60).map(|n| format!("第{n}行。\n")).collect::<String>());
         let mut config = Config::default();
         config.editor.line_numbers = yumete_config::LineNumbers::None;
@@ -23810,27 +23791,40 @@ fn squeezed(text: &str) -> String {
         // 13 terminal rows: twelve of page and the status line, so the last
         // row of the page is 11 and the middle of it is 5.
         let rows = 13u16;
-        let middle = 5;
-
+        let (middle, so) = (5, config.editor.scrolloff as u16);
+        assert_eq!(so, 5);
         let mut seats = Seats::default();
 
-        // `:30` is a jump: line 30 lands in the middle of the page.
+        // `:30` below the page: scrolloff rows up from the bottom.
         editor.execute(":30").unwrap();
         let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
-        assert_eq!(caret.map(|p| p.y), Some(middle), "a jump centres");
+        assert_eq!(caret.map(|p| p.y), Some(11 - so), "a goto below");
 
-        // `j` from there is a step: it moves one row, it does not re-centre.
-        editor.on_key(Key::Char('j'));
-        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
-        assert_eq!(caret.map(|p| p.y), Some(middle + 1), "a step nudges");
-
-        // …and a search hit is a jump, whichever direction it was found in.
+        // A search hit off the page lands in the middle, either way.
         editor.execute(":table-find 第55行").unwrap();
         let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
         assert_eq!(caret.map(|p| p.y), Some(middle), "forwards");
         editor.execute(":table-find 第9行").unwrap();
         let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
         assert_eq!(caret.map(|p| p.y), Some(middle), "and backwards");
+
+        // `:30` then `:20` above the page: scrolloff rows down from the top.
+        editor.execute(":30").unwrap();
+        caret_over_time(&editor, &config, &mut seats, 30, rows);
+        editor.execute(":20").unwrap();
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(so), "a goto above");
+
+        // `j` from there is a step: it moves one row.
+        editor.on_key(Key::Char('j'));
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(so + 1), "a step");
+
+        // `C-o` back to line 30, off the page, is centred.
+        editor.on_key(Key::Ctrl('o'));
+        assert_eq!(editor.cursor_line(), 29);
+        let caret = caret_over_time(&editor, &config, &mut seats, 30, rows);
+        assert_eq!(caret.map(|p| p.y), Some(middle), "the jump list");
     }
 
     /// **vim's page never goes past the file's end for a jump** (2026-11-04,

@@ -1394,6 +1394,7 @@ impl Editor {
                     return;
                 }
                 self.goto_line(at);
+                self.centre_off_the_page();
                 return;
             }
         }
@@ -1430,6 +1431,7 @@ impl Editor {
             }
             if let Some(n) = at {
                 self.goto_line(n);
+                self.centre_off_the_page();
             }
             return;
         }
@@ -1454,6 +1456,7 @@ impl Editor {
         }
         if let Some(n) = at {
             self.goto_line(n);
+            self.centre_off_the_page();
         }
     }
 

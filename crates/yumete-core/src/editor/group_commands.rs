@@ -69,7 +69,15 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoLastAccessedFile, |e, _| e.goto_last_file(), Key::Char('a')),
     (NormalCmd::GotoNextBuffer, |e, _| e.next_buffer(), Key::Char('n')),
     (NormalCmd::GotoPreviousBuffer, |e, _| e.prev_buffer(), Key::Char('p')),
-    (NormalCmd::GotoDefinition, |e, _| e.show_definition(), Key::Char('d')),
+    (NormalCmd::GotoDefinition, |e, _| {
+        let was = (e.current_buffer().id(), e.sel.head());
+        e.show_definition();
+        // helix's `gd` centres where it lands, on the page or off it; a
+        // language server's answer comes later (`go_to_definition`).
+        if (e.current_buffer().id(), e.sel.head()) != was {
+            e.centre_here();
+        }
+    }, Key::Char('d')),
     (NormalCmd::GotoReference, |e, _| e.ask_references(), Key::Char('r')),
     (NormalCmd::SearchSelection, |e, _| {
         e.definition_preview = false;

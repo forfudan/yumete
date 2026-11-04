@@ -1334,6 +1334,23 @@ impl Sequence {
     }
 }
 
+/// **Which of helix's moves put their landing in the middle** (helix-term's
+/// `commands.rs`, read and measured in hx 25.07.1 2026-11-04). Every other
+/// move that leaves the page scrolls only as far as scrolloff asks
+/// (`ensure_cursor_in_view`): `gg`, `G`, `ge`, `:N`, `30j`. vim's page has its
+/// own rule ([`Editor::vim_landing_row`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Centring {
+    /// In the middle when it landed off the page (`ensure_cursor_in_view_center`):
+    /// a search hit, `n` `N`, `C-o` `C-i`, the jump list picker; and yumete's
+    /// own ways to a place (`gf` on `file:12`, the outline, the search panel).
+    OffPage,
+    /// In the middle wherever it landed, while the cursor stays at this
+    /// character (`align_view(.., Align::Center)`): `gd` `gD` `gy` `gi`, and
+    /// whatever else yumete's `gd` follows; a picker's place.
+    At(usize),
+}
+
 /// **Where a cursor that left the page is, for vim's page to follow it**
 /// ([`Editor::vim_landing_row`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3258,8 +3275,11 @@ pub struct Editor {
     /// without asking for anything to happen, and `s` is the one key that acts.
     sort_keys: Vec<(usize, bool)>,
     /// Whether the move that just happened was a **jump** — a search hit, a
-    /// mark, `gg`, `:42` — rather than a step. The page centres a jump.
+    /// mark, `gg`, `:42` — rather than a step. Where the page puts it is
+    /// [`Centring`]'s question.
     jumped: bool,
+    /// Whether helix's page centres the move that just happened ([`Centring`]).
+    centring: Option<Centring>,
     /// 光標上一幀坐在第幾行——見 [`Editor::sat_at`]。
     sat_at: std::cell::Cell<Option<usize>>,
     /// The scrolloff the page was last drawn with, for the scrolls that push
@@ -4511,6 +4531,7 @@ impl Editor {
             sequence: None,
             sort_keys: Vec::new(),
             jumped: false,
+            centring: None,
             sat_at: std::cell::Cell::new(None),
             scrolloff_seen: std::cell::Cell::new(0),
             scrolloff_asked: std::cell::Cell::new(None),
@@ -4829,9 +4850,10 @@ impl Editor {
         self.vim_keymap() && self.scrolled_at.get() == Some((self.sel.head(), self.current_buffer().revision()))
     }
 
-    pub fn page_inset(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
+    /// `before`: whether a cursor off the page is above it.
+    pub fn page_inset(&self, distance: Option<usize>, before: bool, last: usize, scrolloff: usize) -> Option<usize> {
         self.scrolloff_seen.set(scrolloff);
-        let answer = self.page_inset_now(distance, last, scrolloff);
+        let answer = self.page_inset_now(distance, before, last, scrolloff);
         let here = (self.sel.head(), self.current_buffer().revision());
         match self.aim.is_some() {
             true => self.scrolled_at.set(Some(here)),
@@ -4844,7 +4866,7 @@ impl Editor {
         answer
     }
 
-    fn page_inset_now(&self, distance: Option<usize>, last: usize, scrolloff: usize) -> Option<usize> {
+    fn page_inset_now(&self, distance: Option<usize>, before: bool, last: usize, scrolloff: usize) -> Option<usize> {
         // **`z` 那一層先說話**（2026-09-28）：讀者剛剛親口說了這一行要坐在哪。
         //
         // Warning: **`zt` 瞄的是第 `scrolloff` 行，不是第 0 行**，`zb` 同理往回留一截。
@@ -4883,21 +4905,35 @@ impl Editor {
         }
         // Typewriter: the row being written stays in the middle and the paper
         // moves under it. Every move is a jump, which is what that means.
-        // A jump lands in the middle only when it lands off the page: one
-        // to a line already on screen (`H` `M` `L`, helix's `gt` `gc` `gb`,
-        // `n` to a hit in view) leaves the page where it is, as in vim and
-        // helix (2026-11-04).
-        if self.typewriter || (self.jumped && distance.is_none()) {
+        if self.typewriter {
+            return Some(last / 2);
+        }
+        let vim = self.vim_keymap();
+        let centres = match self.centring {
+            Some(Centring::OffPage) => true,
+            // Until the cursor moves on (the wheel moves it with no key).
+            Some(Centring::At(at)) => at == self.sel.head(),
+            None => false,
+        };
+        // helix's definitions and pickers centre even a place on screen.
+        if !vim && centres && matches!(self.centring, Some(Centring::At(_))) {
             return Some(last / 2);
         }
         match distance {
-            // On the page with room to spare: leave it alone.
+            // On the page with room to spare: leave it alone. A jump to a
+            // line on screen (`H` `M` `L`, helix's `gt` `gc` `gb`, `n` to a
+            // hit in view) leaves it too, as in vim and helix (2026-11-04).
             Some(d) if d >= scrolloff && d + scrolloff <= last => None,
             Some(d) if d < scrolloff => Some(scrolloff),
             Some(_) => Some(last.saturating_sub(scrolloff)),
-            // Off the page altogether is a jump, and a jump lands in the
-            // middle.
-            None => Some(last / 2),
+            // Off the page, vim's horizontal page has its own rule; its
+            // other surfaces centre. So do helix's searches and jump list;
+            // helix's other moves scroll as little as scrolloff allows
+            // (2026-11-04: `ge` on 200 lines, 22 rows, scrolloff 5, leaves
+            // line 184 at the top, not 190).
+            None if vim || centres => Some(last / 2),
+            None if before => Some(scrolloff),
+            None => Some(last.saturating_sub(scrolloff)),
         }
     }
 

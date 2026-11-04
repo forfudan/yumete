@@ -107,6 +107,8 @@ impl Editor {
         // as in helix and vim; `n`/`N` do under vim only — helix's do not,
         // so forty hits are not forty steps of `C-o`.
         self.jumped = true;
+        // helix centres a hit off the page (`search_impl`).
+        self.centre_off_the_page();
         let pattern = self.last_search.clone();
         let re = match self.compile(&pattern) {
             Ok(re) => re,

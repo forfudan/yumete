@@ -2757,6 +2757,8 @@ impl Editor {
         self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end.max(at)).max(at));
         self.extend = false;
         self.refresh_goal_column();
+        // A hit off the page is shown in the middle, as helix's global search.
+        self.centre_off_the_page();
         // **看一眼不是改一下**（2026-10-03 修）。
         //
         // 「名單還算不算數」問的是 [`Editor::search_mark`]，而那裏頭帶着**當前是

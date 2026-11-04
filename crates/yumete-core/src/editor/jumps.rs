@@ -111,6 +111,21 @@ impl Editor {
         self.note_where_we_came_from();
     }
 
+    /// **helix's page centres this place, on the page or off it**
+    /// ([`crate::editor::Centring::At`]): a definition, a picker's place, a
+    /// file opened at a line.
+    pub(super) fn centre_here(&mut self) {
+        self.centring = Some(crate::editor::Centring::At(self.sel.head()));
+    }
+
+    /// **helix's page centres this place if it is off the page**
+    /// ([`crate::editor::Centring::OffPage`]): a search hit, the jump list.
+    /// yumete's own ways to a place in another file or another part of
+    /// this one (`gf` on `file:12`, the outline) do the same.
+    pub(super) fn centre_off_the_page(&mut self) {
+        self.centring = Some(crate::editor::Centring::OffPage);
+    }
+
     /// **記一筆，可是別把版面挪動** —— 落腳點本來就在屏幕上的那幾種跳法。
     ///
     /// Warning: **「記進跳轉表」和「落在正中」是兩件事**（2026-10-04 報的：「`gw`
@@ -322,6 +337,8 @@ impl Editor {
             }
             self.jump_at = target;
             self.go_to_jump(&self.jumps[target].clone());
+            // helix centres a place off the page (`Editor::jump_to`).
+            self.centre_off_the_page();
             self.status = say!("goto.jump-list-position", self.jump_at + 1, self.jumps.len());
             return;
         }

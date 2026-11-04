@@ -1035,7 +1035,7 @@ pub fn draw(
     // 它是第四縱，於是跳到第六縱照樣往左退兩縱。照 `holds` 算是螢幕的正中，退
     // 到頭就停在開頭，一縱都不動。
     let found = zong::distance(rope, *viewport, cursor_anchor, grid, last_column);
-    let cursor_column = match editor.page_inset(found, last_column, scrolloff) {
+    let cursor_column = match editor.page_inset(found, cursor_anchor < *viewport, last_column, scrolloff) {
         None => found.unwrap_or(0),
         Some(inset) => {
             // Warning: **沒有「不許超過半頁」這一道**（2026-10-12 報的兩條都是它）。

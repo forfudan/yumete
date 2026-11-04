@@ -1527,6 +1527,7 @@ impl Editor {
             }
             Some(crate::sidebar::Chosen::Line(line)) => {
                 self.goto_line(line + 1);
+                self.centre_off_the_page();
                 if outline {
                     self.open_folds_over(line);
                 }
@@ -1534,7 +1535,10 @@ impl Editor {
             }
             Some(crate::sidebar::Chosen::FileLine(path, line)) => {
                 match self.open_included_file(&path) {
-                    Ok(()) => self.goto_line(line + 1),
+                    Ok(()) => {
+                        self.goto_line(line + 1);
+                        self.centre_off_the_page();
+                    }
                     Err(err) => {
                         self.status = say!("buffer.cannot-open", path.display(), err)
                     }
@@ -1706,6 +1710,9 @@ impl Editor {
         }
         // **根要在關掉挑選器之前取**：關掉就連根一起没了。
         let root = self.picker.as_ref().and_then(|p| p.root.clone());
+        // helix's jump list picker centres a place off the page; its other
+        // pickers centre it wherever it is (`align_view`).
+        let jumps = self.picker.as_ref().is_some_and(|p| p.title == say!("picker.jumplist"));
         self.close_picker();
         match chosen {
             Some(crate::picker::Item::File(path) | crate::picker::Item::Changed(path, _)) => {
@@ -1739,7 +1746,13 @@ impl Editor {
             // **釘住它**，直到光標一動（2026-09-25）。面板關掉，鍵回正文——
             // 「直到光標移動」本來就要求鍵已經不在面板裏了。
             Some(crate::picker::Item::Wiki(name, _)) => self.pin_wiki_entry(name),
-            Some(crate::picker::Item::Place(_, path, line, column)) => self.go_to_place(&path, line, column),
+            Some(crate::picker::Item::Place(_, path, line, column)) => {
+                self.go_to_place(&path, line, column);
+                match jumps {
+                    true => self.centre_off_the_page(),
+                    false => self.centre_here(),
+                }
+            }
             Some(crate::picker::Item::Action(which, _)) => self.take_action(which),
             Some(crate::picker::Item::Encoding(_, path, word)) => {
                 if let Err(err) = self.open_file_as(&path, crate::encoding::by_name(word)) {
