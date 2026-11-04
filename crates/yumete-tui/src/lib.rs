@@ -12130,7 +12130,11 @@ fn draw_horizontal(
                 _ => yumete_core::editor::Landing::Below(wrap::distance(rope, *viewport, cursor_anchor, measure, 2 * reach + 1)),
             };
             let end = file_end();
-            let inset = Editor::vim_landing_row(reach, scrolloff, landing, rows_after(end));
+            // nvim's own margin, up to half the window: the clamp to
+            // (h-1)/2 the page keeps lost the even-height case (review,
+            // 2026-11-04: `17G` on ten rows, scrolloff 5, landed a row low).
+            let margin = config.editor.scrolloff.min(reach / 2);
+            let inset = Editor::vim_landing_row(reach, margin, landing, rows_after(end));
             let was = *viewport;
             *viewport = wrap::retreat(rope, cursor_anchor, measure, inset);
             // Never past the file's end, as below.

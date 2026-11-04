@@ -700,7 +700,7 @@ mod source {
             .stderr(Stdio::null())
             .spawn()
             .ok()?;
-        let deadline = Instant::now() + Duration::from_millis(500);
+        let deadline = BUDGET.with(|b| b.get()).unwrap_or_else(|| Instant::now() + Duration::from_millis(500));
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => {
@@ -718,7 +718,22 @@ mod source {
         }
     }
 
+    thread_local! {
+        /// One switch's whole budget: `take` may run five commands, and a
+        /// D-Bus that does not answer costs the switch half a second, not
+        /// five halves (review, 2026-11-04).
+        static BUDGET: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+    }
+
     pub fn take() -> Saved {
+        let half = std::time::Duration::from_millis(500);
+        BUDGET.with(|b| b.set(Some(std::time::Instant::now() + half)));
+        let saved = take_within();
+        BUDGET.with(|b| b.set(None));
+        saved
+    }
+
+    fn take_within() -> Saved {
         // `fcitx5-remote` with no arguments prints the state: 2 is 「composing
         // is on」. Only then is there anything to close.
         for tool in ["fcitx5-remote", "fcitx-remote"] {

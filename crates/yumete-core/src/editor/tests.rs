@@ -36150,6 +36150,10 @@ fn vims_page_follows_a_cursor_below_it_as_nvim_does() {
     // At the end of the file the page fills down to its last line.
     assert_eq!(Editor::vim_landing_row(10, 0, Landing::Below(None), 0), 9, "G: the last row");
     assert_eq!(Editor::vim_landing_row(10, 3, Landing::Below(Some(10)), 1), 8, "j onto line 99: top 91");
+    // scrolloff half an even window (the default 5 on ten rows): `17G`
+    // from the top lands on the fifth row, top 13, as nvim's (review,
+    // 2026-11-04).
+    assert_eq!(row(10, 5, 16), 4, "17G, scrolloff 5: top 13");
 }
 
 /// **vim's `H` `M` `L` keep the column** (2026-11-04): nvim's default is
@@ -37121,3 +37125,14 @@ fn the_action_list_has_a_column_for_each_keymap_and_one_for_yours() {
     assert!(listing.contains('*'), "a flavour key is marked");
 }
 
+/// **`>` leaves a line with nothing on it alone** (2026-11-04 review): vim
+/// skips an empty line, helix a blank one too.
+#[test]
+fn indenting_skips_empty_lines() {
+    let mut ed = typed_vim("a\n\n  \nb\n");
+    press(&mut ed, "gg>3j");
+    assert_eq!(ed.current_buffer().text(), "    a\n\n      \n    b\n", "vim: only the empty line is skipped");
+    let mut ed = typed("a\n\n  \nb\n");
+    press(&mut ed, "%>");
+    assert_eq!(ed.current_buffer().text(), "    a\n\n  \n    b\n", "helix: blank lines too");
+}

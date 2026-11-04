@@ -120,8 +120,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           name=$(gh api repos/forfudan/yume-release/releases/tags/yuhao \
-            --jq '[.assets[].name | select(endswith("-macos-arm64.zip"))][0]' || true)
-          echo "name=${name:-unknown}" >> "$GITHUB_OUTPUT"
+            --jq '[.assets[].name | select(endswith("-macos-arm64.zip"))][0] // empty' || true)
+          # No package found: a key of this run's own, so nothing sticks.
+          echo "name=${name:-none-${{ github.run_id }}}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache@v4
         with:

@@ -835,8 +835,23 @@ impl Editor {
         let pad = " ".repeat(self.indent_width());
         self.snapshot();
         // Bottom-up, so earlier edits do not shift the lines still to come.
+        let vim = self.as_vim();
         for &line in lines.iter().rev() {
             let at = self.current_buffer().rope().line_to_char(line);
+            // **A line with nothing on it is not indented**: vim skips an
+            // empty line (`op_shift`), helix a blank one, spaces only
+            // (`indent`; review, 2026-11-04).
+            if add {
+                let text = self.current_buffer().rope().line(line);
+                let mut chars = text.chars().filter(|c| *c != '\n' && *c != '\r');
+                let skip = match vim {
+                    true => chars.next().is_none(),
+                    false => chars.all(char::is_whitespace),
+                };
+                if skip {
+                    continue;
+                }
+            }
             // `(at, n, grows)`: what changed at `at`, for moving the ranges.
             let change = if add {
                 self.edit_insert(at, &pad).then_some((at, self.indent_width(), true))

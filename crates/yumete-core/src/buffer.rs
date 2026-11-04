@@ -1199,12 +1199,21 @@ impl Buffer {
 
     /// An undo or a redo swaps the whole text: the lines it really changed
     /// go to the diagnostics as an edit would.
+    ///
+    /// Compared line by line on the ropes from both ends, never copied out:
+    /// an undo in a long manuscript costs its changed lines, not the book
+    /// (review, 2026-11-04).
     fn note_lines_changed(&mut self, before: &Rope) {
-        if before.len_lines() == self.rope.len_lines() {
+        let (was, now) = (before.len_lines(), self.rope.len_lines());
+        if was == now || self.path.is_none() {
             return;
         }
-        if let Some((skip, taken, put)) = lines_changed(&before.to_string(), &self.rope.to_string()) {
-            self.line_edits.push((skip, taken, put, true));
+        let head = (0..was.min(now)).take_while(|&i| before.line(i) == self.rope.line(i)).count();
+        let most = was.min(now) - head;
+        let tail = (1..=most).take_while(|&i| before.line(was - i) == self.rope.line(now - i)).count();
+        let (taken, put) = (was - head - tail, now - head - tail);
+        if taken != put {
+            self.line_edits.push((head, taken, put, true));
         }
     }
 
