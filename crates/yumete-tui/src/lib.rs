@@ -14567,6 +14567,18 @@ fn position_in(editor: &Editor, full: bool) -> String {
             false => say!("ui.position-vertical-short", at.line + 1, at.slot_in_line + 1),
         };
     }
+    // **A cursor a closed fold hides is said where it is**, as vim says it
+    // (`:3` in a fold of lines 2–4 reads Ln 3; 2026-11-04).
+    if let Some(at) = editor.hidden_place() {
+        let rope = editor.current_buffer().rope();
+        let line = rope.char_to_line(at);
+        let column = yumete_core::motion::visual_column(rope, at);
+        let chars = at - rope.line_to_char(line);
+        return match full {
+            true => say!("ui.position", line + 1, column + 1, chars + 1),
+            false => say!("ui.position-short", line + 1, column + 1),
+        };
+    }
     // Warning: **Said, not spelt out** (#497). This was a hardcoded `Ln {}, Col {}`,
     // so the one part of the status line a reader looks at most was English on
     // a 繁體 page and stayed English under `--lang=zhs` too.

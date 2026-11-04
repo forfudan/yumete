@@ -1035,7 +1035,7 @@ impl Buffer {
     /// characters at `at` become `put`. Asked before the rope changes, so
     /// whether `at` starts a line is the text's as it was.
     fn shift_folds(&mut self, at: usize, taken: usize, put: &str) {
-        if self.folds.values().all(|set| set.manual.is_empty()) {
+        if self.folds.values().all(|set| set.manual.is_empty() && set.closed_headings.is_empty()) {
             return;
         }
         let change = crate::fold::Change {
@@ -1045,6 +1045,10 @@ impl Buffer {
             starts_line: at == 0 || (at <= self.rope.len_chars() && self.rope.char(at - 1) == '\n'),
             put_starts_with_break: put.starts_with('\n') || put.starts_with("\r\n"),
             put_ends_with_break: put.ends_with('\n'),
+            break_after: {
+                let line = self.rope.char_to_line((at + taken).min(self.rope.len_chars()));
+                (line + 1 < self.rope.len_lines()).then(|| self.rope.line_to_char(line + 1) - 1)
+            },
         };
         for set in self.folds.values_mut() {
             set.shift(change);
@@ -1061,7 +1065,7 @@ impl Buffer {
         let after = &self.rope;
         let made_since = self.folds.iter().any(|(window, set)| {
             let since = kept.get(window).map_or(0, |then| then.next_id());
-            set.manual.iter().any(|f| f.id > since)
+            set.manual.iter().any(|f| f.id > since) || !set.closed_headings.is_empty()
         });
         let undone = made_since.then(|| {
             let (a, b) = (before.len_chars(), after.len_chars());
@@ -1082,6 +1086,7 @@ impl Buffer {
                 starts_line: prefix == 0 || before.char(prefix - 1) == '\n',
                 put_starts_with_break: put > 0 && after.char(prefix) == '\n',
                 put_ends_with_break: put > 0 && after.char(prefix + put - 1) == '\n',
+                break_after: None,
             }
         });
         for (window, set) in self.folds.iter_mut() {

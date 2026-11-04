@@ -2584,6 +2584,9 @@ pub struct Editor {
     /// own, and a window of another height goes back to half of it, as vim
     /// resets 'scroll' when a window is resized (2026-11-04).
     half_page: Option<(usize, usize)>,
+    /// The windows a session put back, by their place when it was saved,
+    /// for the folds it kept ([`Editor::restore_windows`]).
+    windows_restored: Vec<(usize, crate::window::WindowId)>,
     /// Which line the page starts at — see [`Editor::set_page_top`].
     page_top: usize,
     /// `A-J` — 併行的時候把補出來的那一格留在選區裏（helix 的
@@ -4244,6 +4247,7 @@ impl Editor {
             flavor: yumete_cjk::Flavor::default(),
             page_lines: 20,
             half_page: None,
+            windows_restored: Vec::new(),
             page_top: 0,
             select_the_seam: false,
             page_columns: 10,

@@ -799,6 +799,7 @@ impl Editor {
         if self.takes_by_name(cmd, count) {
             return true;
         }
+        self.before_a_motion(cmd);
         run(self, Cx { key, count, operator_count, continuing_zong: false });
         true
     }

@@ -739,7 +739,11 @@ impl Editor {
                     let (first, last) = (rope.char_to_line(fold.from.min(len)), rope.char_to_line(fold.to.min(len)));
                     out.push(format!("manual\t{n}\t{path}\t{first}\t{last}\t{}", u8::from(fold.closed)));
                 }
-                for (text, nth) in &set.closed_headings {
+                // A closed heading by its text and which of the headings
+                // with that text it is, so the file can change in between.
+                for (at, text) in &set.closed_headings {
+                    let line = rope.char_to_line((*at).min(len));
+                    let nth = (0..line).filter(|&l| rope.line(l).to_string().trim_end() == text).count();
                     out.push(format!("heading\t{n}\t{path}\t{nth}\t{text}"));
                 }
                 if set.disabled {
@@ -762,12 +766,17 @@ impl Editor {
         let Some(file) = self.session_file.clone() else { return };
         let Ok(text) = std::fs::read_to_string(Self::folds_file(&file)) else { return };
         let windows = self.windows.leaves();
+        let restored = std::mem::take(&mut self.windows_restored);
         for line in text.lines() {
             let fields: Vec<&str> = line.splitn(6, '\t').collect();
             let (Some(&kind), Some(n), Some(&path)) = (fields.first(), fields.get(1).and_then(|n| n.parse::<usize>().ok()), fields.get(2)) else {
                 continue;
             };
-            let Some(&window) = windows.get(n) else { continue };
+            let window = match restored.is_empty() {
+                true => windows.get(n).copied(),
+                false => restored.iter().find(|(nth, _)| *nth == n).map(|(_, id)| *id),
+            };
+            let Some(window) = window else { continue };
             let Some(index) = self.buffers.iter().position(|b| b.path().is_some_and(|p| p.display().to_string() == path)) else {
                 continue;
             };
@@ -789,9 +798,14 @@ impl Editor {
                 }
                 ("heading", [nth, text]) => {
                     let Ok(nth) = nth.parse::<usize>() else { continue };
+                    let rope = buffer.rope();
+                    let Some(line) = (0..rope.len_lines()).filter(|&l| rope.line(l).to_string().trim_end() == *text).nth(nth) else {
+                        continue;
+                    };
+                    let place = super::folds::heading_place(rope, line);
                     let set = buffer.folds_mut(window);
-                    if !set.closed_headings.iter().any(|(t, k)| t == text && *k == nth) {
-                        set.closed_headings.push((text.to_string(), nth));
+                    if !set.closed_headings.contains(&place) {
+                        set.closed_headings.push(place);
                     }
                 }
                 ("off", []) => buffer.folds_mut(window).disabled = true,
@@ -835,11 +849,11 @@ impl Editor {
                 _ => {}
             }
         }
-        // Which window had the keys, marked before the tree is pruned.
+        // Which window had the keys, and each one's place, marked before
+        // the tree is pruned.
         let mut shape = shape;
-        if let Some(n) = keys.as_deref().and_then(|k| k.parse::<usize>().ok()) {
-            shape.mark(n, &mut 0);
-        }
+        let n = keys.as_deref().and_then(|k| k.parse::<usize>().ok()).unwrap_or(usize::MAX);
+        shape.mark(n, &mut 0);
         // Every file a window showed, open; the windows on nothing dropped.
         let mut found = std::collections::HashMap::new();
         for path in shape.paths() {
@@ -857,6 +871,10 @@ impl Editor {
             let mut placed = Vec::new();
             self.grow(self.live, shape, &mut placed);
             let mut keys_in = None;
+            // The kept folds name a window by its place in the tree as it
+            // was saved; one dropped above shifts the others (review,
+            // 2026-11-03).
+            self.windows_restored = placed.iter().map(|(id, leaf)| (leaf.nth, *id)).collect();
             for (id, leaf) in placed {
                 let Some(index) = found.get(&leaf.path).and_then(|&b| self.buffer_with(b)) else { continue };
                 let len = self.buffers[index].rope().len_chars();
@@ -1588,6 +1606,9 @@ struct Leaf {
     cursor: usize,
     anchor: usize,
     keys: bool,
+    /// Which window it was, counting first halves first: what the kept
+    /// folds name it by.
+    nth: usize,
 }
 
 impl Shape {
@@ -1607,7 +1628,7 @@ impl Shape {
                 let path = PathBuf::from(parts.next()?);
                 let cursor = parts.next()?.parse().ok()?;
                 let anchor = parts.next()?.parse().ok()?;
-                Some(Shape::Leaf(Leaf { path, cursor, anchor, keys: false }))
+                Some(Shape::Leaf(Leaf { path, cursor, anchor, keys: false, nth: 0 }))
             }
         }
     }
@@ -1621,6 +1642,7 @@ impl Shape {
             }
             Shape::Leaf(leaf) => {
                 leaf.keys = *seen == n;
+                leaf.nth = *seen;
                 *seen += 1;
             }
         }

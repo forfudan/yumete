@@ -3010,8 +3010,15 @@ impl Editor {
             // and a failed motion takes the whole operator with it — so `dk`
             // there deletes nothing, while clamping made it delete the line
             // the caret is on (184/184 against nvim).
+            // A closed fold is one line: `j` from it goes on from its last
+            // line, `k` from its first (nvim, 2026-11-04: `zfj` on a fold).
             motion::Motion::Line { down } => {
                 let line = rope.char_to_line(self.sel.head());
+                let line = match (down, self.shut_around(line)) {
+                    (true, Some((_, last))) => last,
+                    (false, Some((first, _))) => first,
+                    (_, None) => line,
+                };
                 let last = rope.len_lines().saturating_sub(1);
                 match down {
                     true if line < last => at(rope.line_to_char(line + 1)),

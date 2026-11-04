@@ -33,11 +33,12 @@ pub struct FoldSet {
     /// The folds made with `zf`, in no particular order; they nest when one
     /// holds another.
     pub manual: Vec<Fold>,
-    /// The heading folds that are closed, by the heading line's text and
-    /// which of the lines with that text it is (from 0). Text rather than
-    /// place, so an edit above moves nothing and the session can find them
-    /// again.
-    pub closed_headings: Vec<(String, usize)>,
+    /// The heading folds that are closed: where the heading's line starts,
+    /// moved with every edit as a manual fold is, and its text. A heading
+    /// is closed while its line starts there and still reads so, so typing
+    /// another heading with the same text closes nothing (review,
+    /// 2026-11-03), and one rewritten or deleted is open.
+    pub closed_headings: Vec<(usize, String)>,
     /// vim's `zn` (and `zi`): every fold drawn open while set, and kept.
     pub disabled: bool,
     /// vim's 'foldlevel', once `zm` `zr` `zM` `zR` have set it: folds deeper
@@ -64,6 +65,9 @@ pub struct Change {
     pub starts_line: bool,
     pub put_starts_with_break: bool,
     pub put_ends_with_break: bool,
+    /// The first line break at or after the end of what was taken, in the
+    /// text as it was: where the line a join pulls up ends.
+    pub break_after: Option<usize>,
 }
 
 impl FoldSet {
@@ -88,10 +92,19 @@ impl FoldSet {
     /// (`O`) push it down; a line opened after its last line (`o`) stays
     /// outside; a fold whose lines are all taken goes.
     pub fn shift(&mut self, change: Change) {
-        let Change { at, taken, put, starts_line, put_starts_with_break, put_ends_with_break } = change;
+        let Change { at, taken, put, starts_line, put_starts_with_break, put_ends_with_break, break_after } = change;
         let end = at + taken;
         self.manual.retain_mut(|fold| {
             // The taking.
+            let joined = fold.from > at && fold.from <= end && !starts_line && !put_ends_with_break;
+            if let (true, Some(b)) = (joined && taken > 0, break_after.filter(|&b| b < fold.to)) {
+                // A join pulled its first line up onto the line above
+                // (`J`): that line is gone from the fold, which starts at the
+                // next (nvim, 2026-11-04).
+                fold.from = b + 1 - taken + put;
+                fold.to = fold.to - taken + put;
+                return true;
+            }
             if taken > 0 {
                 if end <= fold.from {
                     fold.from -= taken;
@@ -133,6 +146,18 @@ impl FoldSet {
             }
             fold.from <= fold.to
         });
+        for (anchor, _) in &mut self.closed_headings {
+            if taken > 0 {
+                if end <= *anchor {
+                    *anchor -= taken;
+                } else if at < *anchor {
+                    *anchor = at;
+                }
+            }
+            if put > 0 && (at < *anchor || (at == *anchor && starts_line && put_ends_with_break && taken == 0)) {
+                *anchor += put;
+            }
+        }
     }
 
     /// The manual folds as `restored` had them (an undo point), each open
@@ -151,6 +176,11 @@ impl FoldSet {
         };
         if let Some(change) = undone {
             later.shift(change);
+            // The closed headings are kept as they are now, moved back
+            // through what the undo did.
+            let mut headings = FoldSet { closed_headings: std::mem::take(&mut self.closed_headings), ..FoldSet::default() };
+            headings.shift(change);
+            self.closed_headings = headings.closed_headings;
         }
         self.manual = restored
             .manual
@@ -178,8 +208,11 @@ mod tests {
             starts_line,
             put_starts_with_break: put.starts_with('\n'),
             put_ends_with_break: put.ends_with('\n'),
+            break_after: TEXT[at + taken..].find('\n').map(|i| at + taken + i),
         }
     }
+
+    const TEXT: &str = "aa\nbb\ncc\ndd\nee\n";
 
     /// The text is `aa\nbb\ncc\ndd\nee\n`: lines start at 0 3 6 9 12. The
     /// fold is lines 1–3, `bb` to `dd`: from 3 to 11 (the break after dd).
@@ -232,6 +265,11 @@ mod tests {
         let mut s = set();
         s.shift(change(12, 3, "", true));
         assert_eq!((s.manual[0].from, s.manual[0].to), (3, 11));
+        // `J` on the line above: its first line is pulled up out of it, and
+        // it is lines 2–3 of what is left (`cc` `dd`), as nvim has it.
+        let mut s = set();
+        s.shift(change(2, 1, " ", false));
+        assert_eq!((s.manual[0].from, s.manual[0].to), (6, 11));
     }
 
     #[test]

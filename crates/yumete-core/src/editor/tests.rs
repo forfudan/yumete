@@ -35470,6 +35470,67 @@ fn vims_folds_are_one_line_and_open_as_vim_opens_them() {
     assert_eq!(ed.current_buffer().text(), "a\nb\nc\na\nd\n");
 }
 
+/// **A closed fold under vim, as nvim keeps it** (2026-11-04, typed keys):
+/// a cursor it hides keeps its line, a sideways move opens it, a word
+/// motion steps past it, `j` in `zfj` goes on from its end, `>>` opens it,
+/// and `J` above it pulls its first line out.
+#[test]
+fn a_closed_fold_under_vim_is_as_nvim_keeps_it() {
+    let lines: String = (1..=20).map(|n| format!("a{n}\n")).collect();
+    let vim = |text: &str| {
+        let mut ed = typed(text);
+        ed.execute(":keymap vim").unwrap();
+        press(&mut ed, "gg");
+        ed
+    };
+    let mut ed = vim(&lines);
+    press(&mut ed, "jzf2jG:3");
+    ed.on_key(Key::Enter);
+    let hidden = ed.hidden_place().map(|at| ed.current_buffer().rope().char_to_line(at));
+    assert_eq!((ed.cursor_line(), hidden), (1, Some(2)), "drawn on the fold, Ln 3");
+    press(&mut ed, "zo");
+    assert_eq!((ed.cursor_line(), ed.hidden_place()), (2, None));
+    let mut ed = vim(&lines);
+    press(&mut ed, "jzf2jlx");
+    assert!(ed.current_buffer().text().starts_with("a1\na\na3\n"), "l opened it");
+    let mut ed = vim(&lines);
+    press(&mut ed, "jzf2jx");
+    assert!(ed.current_buffer().text().starts_with("a1\na5\n"), "x takes it whole");
+    let mut ed = vim(&lines);
+    press(&mut ed, "jzf2jwx");
+    assert!(ed.current_buffer().text().starts_with("a1\na2\na3\na4\n5\n"), "w steps past it");
+    assert!(ed.fold_head(1));
+    let mut ed = vim(&lines);
+    press(&mut ed, "jzf2j>>");
+    assert!(!ed.fold_head(1), ">> opened it");
+    let mut ed = vim(&lines);
+    press(&mut ed, "jzf2jkJ");
+    assert!(ed.current_buffer().text().starts_with("a1 a2\na3\n"));
+    assert!(ed.fold_head(1) && ed.line_is_folded(2) && !ed.line_is_folded(3), "now a3 a4");
+    let mut ed = vim("p1a\np1b\np1c\n\np2a\np2b\n\np3a\n");
+    press(&mut ed, "zfapzfj");
+    assert!(ed.fold_head(0) && ed.line_is_folded(4) && !ed.line_is_folded(5), "zfj from the fold reaches line 5");
+}
+
+/// **Typing opens the folds every cursor is in** (2026-11-04, review of
+/// 0.17.0): a second cursor on a line a closed fold hides used to type
+/// into it unseen.
+#[test]
+fn typing_opens_the_fold_any_cursor_is_in() {
+    let mut ed = typed("a1\na2\na3\na4\na5\n");
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "ggjzf2j");
+    assert!(ed.fold_head(1) && ed.line_is_folded(2));
+    ed.execute(":keymap helix").unwrap();
+    press(&mut ed, "%sa[13]");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.sel.len(), 2);
+    press(&mut ed, "iX");
+    assert!(!ed.fold_head(1), "the fold the second cursor is in opened");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text(), "Xa1\na2\nXa3\na4\na5\n");
+}
+
 /// The rest of vim's fold keys, and a fold's line.
 #[test]
 fn vims_fold_keys_and_a_folds_line() {
@@ -35480,7 +35541,8 @@ fn vims_fold_keys_and_a_folds_line() {
         ed
     };
     let line = |ed: &Editor| ed.cursor_line();
-    // Nested: lines 0–7 hold 1–3 and 5–6.
+    // Nested: lines 0–9 hold 1–3 and 5–6 (`7j` counts each closed fold as
+    // one line, so from line 0 it reaches the last, as in nvim).
     let mut ed = vim("0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n");
     press(&mut ed, "6Gzfj2Gzf2j1Gzf7jzR");
     assert!(!ed.line_is_folded(3));
@@ -35494,7 +35556,7 @@ fn vims_fold_keys_and_a_folds_line() {
     press(&mut ed, "6G[z");
     assert_eq!(line(&ed), 0, "[z at a fold's start: the start of the one holding it");
     press(&mut ed, "]z");
-    assert_eq!(line(&ed), 7);
+    assert_eq!(line(&ed), 9);
     // `zc` from all open closes the innermost; again, the next out.
     press(&mut ed, "3Gzc");
     assert!(ed.fold_head(1) && ed.line_is_folded(2) && !ed.line_is_folded(5));
@@ -35566,6 +35628,26 @@ fn headings_fold_their_sections_per_window() {
     assert_eq!(ed.status(), say!("fold.none-here"));
 }
 
+/// **A closed heading is the one at its place** (2026-11-04, review of
+/// 0.17.0): a heading with the same text typed above it closes nothing,
+/// it moves with what is put in above it, and `u` keeps it closed.
+#[test]
+fn a_closed_heading_is_the_one_at_its_place() {
+    let doc = "# 甲\n\n一。\n\n# 乙\n\n二。\n";
+    let mut ed = markdown(doc);
+    ed.execute(":keymap vim").unwrap();
+    press(&mut ed, "5Gzc");
+    assert!(ed.fold_head(4) && ed.line_is_folded(6));
+    // The same heading typed above it.
+    press(&mut ed, "ggO# 乙");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Esc);
+    assert!(!ed.fold_head(0), "the new one is open");
+    assert!(ed.fold_head(5) && ed.line_is_folded(7), "the closed one moved down with its text");
+    press(&mut ed, "u");
+    assert!(ed.fold_head(4) && ed.line_is_folded(6), "u keeps it closed");
+}
+
 /// **The session keeps the folds** (2026-11-03): each window's, a fold
 /// made with `zf` by its lines, a closed heading by its text.
 #[test]
@@ -35596,6 +35678,49 @@ fn the_session_keeps_the_folds() {
     assert!(back.fold_head(0), "the closed heading");
     assert!(back.fold_head(6) && back.line_is_folded(7), "the zf fold");
     assert!(!back.fold_head(4), "the open heading stays open");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A window dropped on the way back takes no folds with it** (2026-11-04,
+/// review of 0.17.0): the folds are kept by each window's place in the
+/// tree, and the window above whose file went used to hand its place, and
+/// the next window's folds, to the wrong one.
+#[test]
+fn the_session_gives_each_window_its_own_folds_when_one_is_dropped() {
+    let dir = tmp().join(format!("yumete-session-folds-dropped-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let (work, data) = (dir.join("work"), dir.join("data"));
+    std::fs::create_dir_all(&work).unwrap();
+    std::fs::create_dir_all(&data).unwrap();
+    let (a, b) = (work.join("a.txt"), work.join("b.txt"));
+    std::fs::write(&a, "a1\na2\na3\na4\n").unwrap();
+    std::fs::write(&b, "b1\nb2\nb3\nb4\n").unwrap();
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config"), data.clone());
+        ed.keep_session_in(data.join("sessions"), &work);
+        ed.execute(":keymap vim").unwrap();
+        ed
+    };
+    let mut ed = fresh();
+    ed.open_file(&b).unwrap();
+    press(&mut ed, "jzfj");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('s'));
+    // The new window above has b's fold too, as a split copies them; open
+    // there, and then it shows a.txt.
+    press(&mut ed, "zo");
+    ed.open_file(&a).unwrap();
+    assert_eq!(ed.windows().index_of(ed.live_window()), Some(0));
+    ed.save_session();
+    std::fs::remove_file(&a).unwrap();
+
+    let mut back = fresh();
+    assert!(back.restore_session() > 0);
+    back.restore_windows();
+    assert_eq!(back.windows().len(), 1);
+    assert_eq!(back.current_buffer().path(), Some(b.as_path()));
+    assert!(back.fold_head(1) && back.line_is_folded(2), "b's fold, in b's window");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -1520,7 +1520,7 @@ impl Editor {
         // **An operator takes a closed fold whole** (`:h fold-behavior`: 「dl
         // deletes the whole closed fold under the cursor」, measured).
         let (span, shape) = match op {
-            's' | 'Z' => (span, shape),
+            's' => (span, shape),
             _ => self.over_closed_folds(op, span, shape),
         };
         // **`ys{motion}{bracket}`**: the motion only says what to wrap, so
@@ -1605,6 +1605,10 @@ impl Editor {
                 self.sel.set_anchor(to);
                 self.sel.set_head(to);
                 self.refresh_goal_column();
+                // A closed fold shifted opens (nvim, 2026-11-04).
+                if self.shut_around(line).is_some() {
+                    self.open_folds_at(line, usize::MAX);
+                }
             }
             // **`gq`** — the lines the motion crosses, filled (2026-10-29).
             // `gw` is the same with the cursor put back (vim's, 2026-11-02).
@@ -2331,6 +2335,7 @@ impl Editor {
         // default keymap: the vim preset's own entries first, helix's after.
         let cx = super::normal::Cx { key, count, operator_count, continuing_zong };
         if let Some(run) = self.normal_command_for(&cx).and_then(super::normal::normal_command) {
+            self.before_a_motion(run.0);
             (run.1)(self, cx);
         }
         // Warning: **An unbound key does nothing** (2026-10-08 定). A phrasebook here

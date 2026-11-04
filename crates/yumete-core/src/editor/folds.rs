@@ -20,8 +20,8 @@ use crate::fold::FoldSet;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum FoldOf {
     Manual(u64),
-    /// The heading line's text, and which of the headings with that text.
-    Heading(String, usize),
+    /// The heading's line.
+    Heading(usize),
 }
 
 /// One fold, as lines.
@@ -83,15 +83,10 @@ impl Editor {
         let set = buffer.folds(key.2);
         let mut spans: Vec<FoldSpan> = Vec::new();
         if headings {
-            let mut seen: Vec<String> = Vec::new();
             for (line, _, start, end) in self.prose_sections() {
-                let text = rope.line(line).to_string().trim_end().to_string();
-                let nth = seen.iter().filter(|t| **t == text).count();
-                seen.push(text.clone());
                 let last = line_of(end.saturating_sub(1).max(start));
-                let of = FoldOf::Heading(text, nth);
-                let closed = set.is_some_and(|s| matches!(&of, FoldOf::Heading(t, n) if s.closed_headings.iter().any(|(ct, cn)| ct == t && cn == n)));
-                spans.push(FoldSpan { first: line, last, closed, of, depth: 0 });
+                let closed = set.is_some_and(|s| s.closed_headings.iter().any(|(at, text)| heading_is(rope, line, *at, text)));
+                spans.push(FoldSpan { first: line, last, closed, of: FoldOf::Heading(line), depth: 0 });
             }
         }
         if let Some(set) = set {
@@ -247,6 +242,23 @@ impl Editor {
     /// closed and the cursor on its line (the place is kept for `zo`).
     pub(super) fn settle_folds(&mut self) {
         let keep_closed = std::mem::take(&mut self.fold_stays_closed);
+        // A hidden place outlives no move off the fold's line.
+        if self.fold_return.is_some() && self.hidden_place().is_none() {
+            self.fold_return = None;
+        }
+        // Typing opens the folds every cursor is in, not the primary's
+        // alone: text a closed fold hides is not typed into unseen (review,
+        // 2026-11-03).
+        if self.mode == Mode::Insert && self.sel.is_plural() {
+            let rope = self.current_buffer().rope();
+            let len = rope.len_chars();
+            let lines: Vec<usize> = self.sel.secondaries().map(|r| rope.char_to_line(r.head.min(len))).collect();
+            for line in lines {
+                if self.shut_around(line).is_some() {
+                    self.open_folds_at(line, usize::MAX);
+                }
+            }
+        }
         let line = self.cursor_line();
         let Some((first, _)) = self.shut_around(line) else { return };
         // Typing on a closed fold's line opens it, as vim's Insert does.
@@ -266,7 +278,7 @@ impl Editor {
 
     /// Open the closed folds holding `line`, outermost first, `levels` of
     /// them (vim's `zo` with a count; `zv` and `zO` open them all).
-    fn open_folds_at(&mut self, line: usize, levels: usize) {
+    pub(super) fn open_folds_at(&mut self, line: usize, levels: usize) {
         let closed: Vec<FoldOf> = self
             .fold_view()
             .spans
@@ -278,6 +290,78 @@ impl Editor {
             self.set_fold_closed(&of, false);
         }
         self.cursor_back_into_the_fold();
+    }
+
+    /// **Before a Normal command under vim**: a sideways move on a closed
+    /// fold opens it and moves on its first line ('foldopen' has `hor`:
+    /// `l` `$` `f` …), and a word motion from one starts past it, at the
+    /// end of its last line or the start of its first, as vim's
+    /// `fwd_word` does (measured in nvim 2026-11-04).
+    pub(super) fn before_a_motion(&mut self, cmd: yumete_cjk::actions::NormalCmd) {
+        use yumete_cjk::actions::NormalCmd as C;
+        if !self.vim_keymap() || self.pending != Pending::None || self.mode == Mode::Insert {
+            return;
+        }
+        let line = self.cursor_line();
+        let Some((first, last)) = self.shut_around(line) else { return };
+        match cmd {
+            C::MoveCharLeft
+            | C::MoveCharRight
+            | C::GotoLineStart
+            | C::GotoLineEnd
+            | C::VimGotoLineEnd
+            | C::GotoFirstNonwhitespace
+            | C::VimGotoFirstNonwhitespace
+            | C::GotoColumn
+            | C::FindNextChar
+            | C::FindPrevChar
+            | C::FindTillChar
+            | C::TillPrevChar
+            | C::RepeatFindChar
+            | C::RepeatFindCharReverse => {
+                let at = self.hidden_place();
+                self.fold_return = None;
+                self.open_folds_at(line, usize::MAX);
+                if let Some(at) = at {
+                    self.sel.set_head(at);
+                    self.sel.set_anchor(at);
+                }
+            }
+            C::JumpNextWordStart | C::JumpNextLongWordStart | C::JumpNextWordEnd | C::JumpNextLongWordEnd => {
+                let rope = self.current_buffer().rope();
+                let at = crate::motion::line_last(rope, rope.line_to_char(last));
+                self.sel.set_head(at);
+                self.sel.set_anchor(at);
+            }
+            C::JumpPrevWordStart | C::JumpPrevLongWordStart => {
+                let at = self.current_buffer().rope().line_to_char(first);
+                self.sel.set_head(at);
+                self.sel.set_anchor(at);
+            }
+            _ => {}
+        }
+    }
+
+    /// **Where the cursor stands when a closed fold hides it**: vim keeps it
+    /// on its own line inside the fold, drawn on the fold's (`:3` in a fold
+    /// of lines 2–4 reads Ln 3; nvim 2026-11-04), and the fold keys act
+    /// there. `None` when the cursor is where it is drawn.
+    pub fn hidden_place(&self) -> Option<usize> {
+        let (buffer, first, at) = self.fold_return?;
+        let rope = self.current_buffer().rope();
+        let at = at.min(rope.len_chars());
+        let drawn = rope.line_to_char(first.min(rope.len_lines().saturating_sub(1)));
+        (buffer == self.current_buffer().id() && self.sel.head() == drawn && self.fold_hides(rope.char_to_line(at)))
+            .then_some(at)
+    }
+
+    /// The cursor's line as the fold keys read it: the hidden one, when a
+    /// closed fold hides it.
+    fn fold_cursor_line(&self) -> usize {
+        match self.hidden_place() {
+            Some(at) => self.current_buffer().rope().char_to_line(at),
+            None => self.cursor_line(),
+        }
     }
 
     /// Open the closed folds that hide `line` and leave one that starts on
@@ -314,17 +398,23 @@ impl Editor {
     /// Open or close one fold.
     fn set_fold_closed(&mut self, of: &FoldOf, closed: bool) {
         let window = self.live;
-        let set: &mut FoldSet = self.current_buffer_mut().folds_mut(window);
         match of {
             FoldOf::Manual(id) => {
+                let set: &mut FoldSet = self.current_buffer_mut().folds_mut(window);
                 if let Some(fold) = set.manual.iter_mut().find(|f| f.id == *id) {
                     fold.closed = closed;
                 }
             }
-            FoldOf::Heading(text, nth) => {
-                set.closed_headings.retain(|(t, n)| !(t == text && n == nth));
+            FoldOf::Heading(line) => {
+                let rope = self.current_buffer().rope().clone();
+                let (at, text) = heading_place(&rope, *line);
+                let set: &mut FoldSet = self.current_buffer_mut().folds_mut(window);
+                // A place whose heading went (deleted, rewritten) is let go.
+                set.closed_headings.retain(|(a, t)| {
+                    !(*a == at && *t == text) && heading_is(&rope, rope.char_to_line((*a).min(rope.len_chars())), *a, t)
+                });
                 if closed {
-                    set.closed_headings.push((text.clone(), *nth));
+                    set.closed_headings.push((at, text));
                 }
             }
         }
@@ -333,7 +423,7 @@ impl Editor {
 
     /// The folds holding the cursor's line, outermost first.
     fn folds_here(&self) -> Vec<FoldSpan> {
-        let line = self.cursor_line();
+        let line = self.fold_cursor_line();
         self.fold_view().spans.iter().filter(|s| s.holds(line)).cloned().collect()
     }
 
@@ -341,7 +431,7 @@ impl Editor {
 
     /// `zo` (`count` levels) and `zO` (all).
     pub(super) fn fold_open(&mut self, count: usize, all: bool) {
-        let line = self.cursor_line();
+        let line = self.fold_cursor_line();
         if self.folds_here().is_empty() {
             return self.no_fold_here();
         }
@@ -366,7 +456,7 @@ impl Editor {
     /// `za` / `zA`: open the closed fold the cursor is on, or close the
     /// open one it is in.
     pub(super) fn fold_toggle(&mut self, count: usize, all: bool) {
-        match self.shut_around(self.cursor_line()).is_some() {
+        match self.shut_around(self.fold_cursor_line()).is_some() {
             true => self.fold_open(count, all),
             false => self.fold_close(count, all),
         }
@@ -374,7 +464,7 @@ impl Editor {
 
     /// `zv`: open just enough to see the cursor's line.
     pub(super) fn fold_view_cursor(&mut self) {
-        let line = self.cursor_line();
+        let line = self.fold_cursor_line();
         self.open_folds_at(line, usize::MAX);
     }
 
@@ -622,4 +712,17 @@ pub(super) enum FoldDelete {
     Innermost,
     Here,
     All,
+}
+
+/// Where a heading's line starts, and its text: how a closed heading is
+/// kept ([`crate::fold::FoldSet::closed_headings`]).
+pub(super) fn heading_place(rope: &crate::Rope, line: usize) -> (usize, String) {
+    let line = line.min(rope.len_lines().saturating_sub(1));
+    (rope.line_to_char(line), rope.line(line).to_string().trim_end().to_string())
+}
+
+/// Whether the heading on `line` is the one kept as `at` and `text`.
+fn heading_is(rope: &crate::Rope, line: usize, at: usize, text: &str) -> bool {
+    let (start, now) = heading_place(rope, line);
+    start == at && now == text
 }
