@@ -96,9 +96,11 @@ pub type Deferred = Box<dyn FnOnce(&mut ImeSession) -> String>;
 /// language model.
 ///
 /// 1. Yume's own language model — over a million weighted entries in both
-///    scripts, already loaded with the IME and shared by reference.
+///    scripts, already loaded with the IME and shared by reference. The
+///    binary carries it, so this is the answer everywhere but in a build
+///    that could not fetch the tables.
 /// 2. A `segmentation.txt` the reader wrote, in the data directory.
-/// 3. The compact list bundled with the binary, which covers common prose.
+/// 3. One 漢字 at a time (the compact bundled list is gone, 2026-11-04).
 ///
 /// `level` is `:word-level`, applied to whichever of the three it settled on.
 pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn Segmenter> {
@@ -108,7 +110,7 @@ pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn S
     } else if let Some(written) = read_word_list() {
         Box::new(written)
     } else {
-        Box::new(yumete_core::DictionarySegmenter::builtin(0))
+        Box::new(yumete_core::DictionarySegmenter::one_character_at_a_time())
     };
     words.set_level(level);
     words
@@ -1178,12 +1180,11 @@ pub fn run(
                 detecting = true;
                 detected = Some((name, std::time::Instant::now()));
                 let tx = found_tx.clone();
+                // 宇浩's own word list, shared by reference: the thread reads
+                // it and touches nothing else the editor owns (2026-11-04; it
+                // was the compact bundled list, built on the thread).
+                let seg = ime.segmenter();
                 std::thread::spawn(move || {
-                    // The bundled dictionary, built here: 8 ms, and it keeps
-                    // the thread from touching anything the editor owns. It
-                    // knows less than 宇浩's own table, which only leaves a few
-                    // words in the answer that are already joined — filtered
-                    // below, where the segmenter in force can be asked.
                     // Warning: **The flag is cleared by this guard, not by the
                     // send** (#476). `found_tx` is held by the main loop, so a
                     // worker that panicked would never disconnect the channel:
@@ -1192,7 +1193,6 @@ pub fn run(
                     // said. Dropping this sends an empty answer, which the
                     // receiver ignores and which unlatches the flag.
                     let _guard = Unlatch(tx.clone());
-                    let seg = yumete_core::DictionarySegmenter::builtin(0);
                     let joins =
                         |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
                     // **This file first, and it keeps its half whatever the
@@ -15937,6 +15937,14 @@ fn squeezed(text: &str) -> String {
     use yumete_core::{DictionarySegmenter, Key};
     use yumete_ime::Scheme;
 
+    /// **A few words, written here** (2026-11-04), for the tests that need a
+    /// line to cut into more than single 漢字. They used the bundled list, which
+    /// the binary no longer carries, and which only machines with 宇浩 installed
+    /// had, so on CI they cut one 漢字 at a time.
+    fn some_words() -> DictionarySegmenter {
+        DictionarySegmenter::from_text("今天\n天氣\n很好\n山路\n你好\n世界\n那年\n冬天\n", 0)
+    }
+
     /// An unavailable IME (no data), for tests that don't exercise composing.
     ///
     /// Warning: **一份，不是一幀一份**（2026-10-01）。名字裏的「no data」是錯的，
@@ -19378,14 +19386,8 @@ fn squeezed(text: &str) -> String {
 
     #[test]
     fn the_segmentation_overlay_tints_words_down_the_zong() {
-        // The bundled word list is a build input, not a tracked file
-        // (`yumete-cjk/build.rs`), so a machine that has never installed 宇浩
-        // has none and every word is one 漢字 — which this picture is not of.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
         let mut editor = editor_with("你好世界");
-        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        editor.set_segmenter(Box::new(some_words()));
         editor.set_segmentation_visible(true);
         let mut config = vertical_config();
         config.editor.show_segmentation = true;
@@ -20756,7 +20758,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn segmentation_overlay_tints_words() {
         let mut editor = Editor::new();
-        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        editor.set_segmenter(Box::new(some_words()));
         editor.set_segmentation_visible(true);
         // Type a two-word CJK phrase, then return to Normal mode.
         editor.on_key(Key::Char('i'));
@@ -20795,7 +20797,7 @@ fn squeezed(text: &str) -> String {
         // for a page that is tinted for something else already, and for a
         // reader to whom a band under the writing is heavier than the writing.
         let mut editor = Editor::new();
-        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        editor.set_segmenter(Box::new(some_words()));
         editor.set_segmentation_visible(true);
         editor.on_key(Key::Char('i'));
         for c in "你好世界".chars() {
@@ -20830,7 +20832,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn no_overlay_when_disabled() {
         let mut editor = Editor::new();
-        editor.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        editor.set_segmenter(Box::new(some_words()));
         editor.set_segmentation_visible(false);
         editor.on_key(Key::Char('i'));
         for c in "你好世界".chars() {
@@ -24268,12 +24270,6 @@ fn squeezed(text: &str) -> String {
 
     #[test]
     fn the_status_line_names_the_character_under_the_cursor() {
-        // The bundled word list is a build input, not a tracked file
-        // (`yumete-cjk/build.rs`), so a machine that has never installed 宇浩
-        // has none and every word is one 漢字 — which this picture is not of.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
         // A scheme that can type, so the standing 中 tag is drawn: the test

@@ -33,18 +33,6 @@ use std::collections::HashMap;
 
 use crate::word::word_ranges;
 
-/// The bundled word list, put here at build time by `build.rs` when this
-/// machine has one — **empty when it does not**.
-///
-/// It is a generated table, not source, so it is not in the repository: see
-/// `build.rs` for where it comes from and why. An empty one is a working
-/// build with no bundled dictionary, and [`DictionarySegmenter::builtin`]
-/// then cuts one 漢字 at a time, exactly as it did before the list existed.
-mod bundled {
-    include!(concat!(env!("OUT_DIR"), "/words.rs"));
-}
-use bundled::BUILTIN_DICTIONARY;
-
 /// Splits a string into word ranges as character-index `(start, end)` pairs,
 /// with whitespace skipped. `end` is exclusive.
 /// What the segmenter in force is made of, for the status line to word (#494).
@@ -466,20 +454,11 @@ impl DictionarySegmenter {
         DictionarySegmenter::new(entries, threshold)
     }
 
-    /// Build a segmenter from the word list bundled with this binary, so word
-    /// motions and the overlay work without any setup.
-    ///
-    /// Warning: **The list may be empty** — it is a build-time input, not a tracked
-    /// file (see `build.rs`). Then every word is one 漢字 wide, which is
-    /// honest and is what this did before the list existed. Ask
-    /// [`Self::word_count`] before writing a test that needs real words.
-    pub fn builtin(threshold: i64) -> Self {
-        DictionarySegmenter::from_text(BUILTIN_DICTIONARY, threshold)
-    }
-
-    /// Whether this build carries a bundled word list at all.
-    pub fn has_builtin() -> bool {
-        !BUILTIN_DICTIONARY.trim().is_empty()
+    /// No words at all: every 漢字 is a word of its own. What `w` walks by
+    /// before the language layer is loaded (2026-11-04: the bundled list is
+    /// gone, since the binary carries 宇浩's own word list in full).
+    pub fn one_character_at_a_time() -> Self {
+        DictionarySegmenter::from_text("", 0)
     }
 
     /// The number of distinct words in the dictionary.
@@ -535,7 +514,6 @@ impl Segmenter for DictionarySegmenter {
         crate::ranges_around_cjk(s, |run| self.segment_cjk_run(run))
     }
 }
-
 
 /// A segmenter with a project's own words layered over it — Feature #144.
 ///
@@ -802,61 +780,6 @@ impl Segmenter for Memo {
 mod tests {
     use super::*;
 
-    /// **The bundled dictionary reads the script this editor is written in.**
-    ///
-    /// It was simplified-only, so `w` stepped one character at a time through
-    /// every 繁體 manuscript — including the editor's own lesson, whose example
-    /// sentence exists to show the feature working. The sentence below is that
-    /// line, verbatim from `tutor.rs`.
-    #[test]
-    fn word_motions_find_words_in_traditional_prose() {
-        // The list is a build input, not a tracked file (`build.rs`), so a
-        // machine that has never installed 宇浩 has none — and「every word is
-        // one 漢字」is the right answer there, not a failure.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
-        let seg = DictionarySegmenter::builtin(0);
-        let line = "他抬頭看了看那片天，雪還在下，山路已經看不見了。";
-        // The ranges are in characters, the way every motion in the editor
-        // counts them.
-        let chars: Vec<char> = line.chars().collect();
-        let words: Vec<String> = seg
-            .segment(line)
-            .into_iter()
-            .map(|(a, b)| chars[a..b].iter().collect())
-            .collect();
-        for word in ["抬頭", "已經"] {
-            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
-        }
-    }
-
-    /// The traditional forms are an addition, not a replacement: a writer with a
-    /// simplified manuscript keeps every word they had.
-    #[test]
-    fn the_simplified_words_are_still_there() {
-        // The list is a build input, not a tracked file (`build.rs`), so a
-        // machine that has never installed 宇浩 has none — and「every word is
-        // one 漢字」is the right answer there, not a failure.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
-        let seg = DictionarySegmenter::builtin(0);
-        let line = "他抬头看了看那片天，雪还在下，山路已经看不见了。";
-        // The ranges are in characters, the way every motion in the editor
-        // counts them.
-        let chars: Vec<char> = line.chars().collect();
-        let words: Vec<String> = seg
-            .segment(line)
-            .into_iter()
-            .map(|(a, b)| chars[a..b].iter().collect())
-            .collect();
-        for word in ["抬头", "已经"] {
-            assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
-        }
-    }
-
-
     #[test]
     fn category_segmenter_matches_word_ranges() {
         let seg = CategorySegmenter;
@@ -912,7 +835,7 @@ mod tests {
         };
         let plain = CategorySegmenter.segment(line);
         for other in [
-            DictionarySegmenter::builtin(0).segment(line),
+            DictionarySegmenter::one_character_at_a_time().segment(line),
             DictionarySegmenter::new([("山路".to_string(), 900)], 1).segment(line),
         ] {
             assert_eq!(outside(other), outside(plain.clone()));
@@ -931,23 +854,5 @@ mod tests {
         let seg = DictionarySegmenter::from_text("# comment\n世界\t100\n中文 50\n", 1);
         assert_eq!(seg.word_count(), 2);
         assert_eq!(seg.segment("世界中文"), vec![(0, 2), (2, 4)]);
-    }
-
-    #[test]
-    fn builtin_dictionary_segments_common_prose() {
-        // The list is a build input, not a tracked file (`build.rs`), so a
-        // machine that has never installed 宇浩 has none — and「every word is
-        // one 漢字」is the right answer there, not a failure.
-        if !DictionarySegmenter::has_builtin() {
-            return;
-        }
-        let seg = DictionarySegmenter::builtin(0);
-        assert!(seg.word_count() > 100);
-        // 你好 and 世界 are both in the bundled list.
-        assert_eq!(seg.segment("你好世界"), vec![(0, 2), (2, 4)]);
-        // Two words in a row cut apart. Warning: Pick a pair the corpus does *not*
-        // also list as one four-character entry — 「我们今天」 is such an entry
-        // (7,395), so the maximum-probability path joins it, correctly.
-        assert_eq!(seg.segment("冬天早晨"), vec![(0, 2), (2, 4)]);
     }
 }

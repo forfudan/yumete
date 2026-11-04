@@ -264,7 +264,7 @@ mod tests {
             ["冬天", "abc123", "，", "冬天", "。「", "好", "」"]
         );
         // The same ranges, boundaries inside a run of 漢字 aside.
-        let plain = yumete_cjk::DictionarySegmenter::builtin(0);
+        let plain = yumete_cjk::DictionarySegmenter::one_character_at_a_time();
         let outside = |ranges: Vec<(usize, usize)>| -> Vec<(usize, usize)> {
             let chars: Vec<char> = line.chars().collect();
             ranges

@@ -18383,7 +18383,7 @@ fn a_book_can_teach_the_editor_its_own_names() {
 
     let mut ed = Editor::new();
     ed.set_root(&dir);
-    ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+    ed.set_segmenter(Box::new(some_words()));
     ed.open_file(&file).unwrap();
     let before = ed.segment_line(0);
     assert!(before.len() >= 2, "two characters, two words: {before:?}");
@@ -18435,7 +18435,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     // ---- ① 開文件只**留下一個請求**，一個字都不說 ---------------------
     let mut ed = Editor::new();
     ed.set_root(&dir);
-    ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+    ed.set_segmenter(Box::new(some_words()));
     ed.open_file(dir.join("ch02.md")).unwrap();
     let ask = ed.take_detect_request().expect("開文件要請前端讀一遍");
     // Warning: **請求裏帶的是一棵 `Rope`，不是一份 `String`**（2026-10-13）：那一份
@@ -18445,7 +18445,7 @@ fn the_book_hands_the_editor_its_own_names_without_being_asked() {
     assert!(ed.take_detect_request().is_none(), "只請一次");
 
     // ---- ② 前端算完交回來，只在内存，分詞立刻跟上 ---------------------
-    let seg = DictionarySegmenter::builtin(0);
+    let seg = some_words();
     let joins = |w: &str| yumete_cjk::Segmenter::segment(&seg, w).len() == 1;
     let (found, files, _han) = crate::editor::detect_words_in(&dir, &joins);
     assert_eq!(files, 3, "三個章節都讀了");
@@ -21990,7 +21990,7 @@ fn walking_a_line_by_word_cuts_the_line_once() {
     }
     line.push('\n');
 
-    let plain = DictionarySegmenter::builtin(0);
+    let plain = some_words();
     let expected = plain.segment(line.trim_end_matches('\n'));
     assert!(
         expected.len() > 2_000,
@@ -22002,7 +22002,7 @@ fn walking_a_line_by_word_cuts_the_line_once() {
     assert!(ed.replace_everything(&line));
     let asked = std::rc::Rc::new(std::cell::Cell::new(0usize));
     ed.set_segmenter(Box::new(Counted {
-        inner: DictionarySegmenter::builtin(0),
+        inner: some_words(),
         asked: std::rc::Rc::clone(&asked),
     }));
     press(&mut ed, "gg");
@@ -26133,7 +26133,7 @@ fn every_selection_remembers_its_own_goal_column() {
 fn the_word_object_walks_the_segmenter_like_w_does() {
     let vim = |text: &str| {
         let mut ed = typed(text);
-        ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+        ed.set_segmenter(Box::new(some_words()));
         ed.execute(":keymap vim").unwrap();
         press(&mut ed, "gg");
         ed
@@ -26173,7 +26173,7 @@ fn the_word_object_walks_the_segmenter_like_w_does() {
 
     // 原生鍵位的拼法：`mi w` 同樣走分詞器。
     let mut ed = typed("今天天氣很好。\n");
-    ed.set_segmenter(Box::new(DictionarySegmenter::builtin(0)));
+    ed.set_segmenter(Box::new(some_words()));
     press(&mut ed, "gg");
     press(&mut ed, "miw");
     assert_eq!(ed.selection().1, first, "選中的是第一個詞：{:?}", ed.selection());
@@ -36296,3 +36296,10 @@ fn a_sidebar_reopens_on_its_last_panel() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **A few words, written here** (2026-11-04), for the tests that need a
+/// line to cut into more than single 漢字. They used the bundled list, which
+/// the binary no longer carries, and which only machines with 宇浩 installed
+/// had, so on CI they cut one 漢字 at a time.
+fn some_words() -> DictionarySegmenter {
+    DictionarySegmenter::from_text("今天\n天氣\n很好\n山路\n你好\n世界\n那年\n冬天\n", 0)
+}

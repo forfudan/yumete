@@ -136,3 +136,26 @@ fn a_pinyin_sentence_keeps_to_one_script() {
     }
     assert_eq!(ime.top_candidate(), "數學教授在講臺上講課");
 }
+
+/// **The word list the binary carries reads both scripts** (2026-11-04). It
+/// replaces the compact bundled list, whose test this was: `w` must not step
+/// one 漢字 at a time through a 繁體 manuscript, nor through a 简体 one.
+#[test]
+fn the_carried_words_join_in_both_scripts() {
+    if !carry() {
+        return;
+    }
+    let ime = ImeSession::language_only(Scheme::PINYIN);
+    let seg = ime.segmenter();
+    for (line, word) in [
+        ("他抬頭看了看那片天，山路已經看不見了。", "已經"),
+        ("他抬头看了看那片天，山路已经看不见了。", "已经"),
+    ] {
+        let chars: Vec<char> = line.chars().collect();
+        let words: Vec<String> = yumete_cjk::Segmenter::segment(&seg, line)
+            .into_iter()
+            .map(|(a, b)| chars[a..b].iter().collect())
+            .collect();
+        assert!(words.contains(&word.to_string()), "{words:?} never joins {word}");
+    }
+}

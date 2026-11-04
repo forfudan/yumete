@@ -236,22 +236,6 @@ jobs:
       # Yume release. It checks that every file arrived, fetches all or
       # nothing, and fails a release build that could not get them; the smoke
       # test below types with them.
-      #
-      # The word list (`common_words.txt`) is still a build input of
-      # `yumete-cjk`, from the `yumete-data` page.
-      - name: Fetch the word list
-        working-directory: .
-        run: |
-          set -uo pipefail
-          dir="${YUMETE_BUILTIN_DIR}"
-          command -v cygpath > /dev/null && dir=$(cygpath -u "${dir}")
-          mkdir -p "${dir}/data"
-          base="https://github.com/forfudan/yume-release/releases/download/yumete-data"
-          curl -fsSL --retry 3 --retry-delay 2 -o "${dir}/data/common_words.txt" "${base}/common_words.txt"
-          if [[ ! -s "${dir}/data/common_words.txt" ]]; then
-            echo "!! common_words.txt did not arrive — re-run this job." >&2
-            exit 1
-          fi
 
       # **The tests run here too.** A release built from a tree that does not
       # pass them is the one build where nobody would notice in time.
