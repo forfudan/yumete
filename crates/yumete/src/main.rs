@@ -712,8 +712,19 @@ fn main() -> ExitCode {
     // **`--export` runs here**, after the config has been applied and before
     // anything touches the data directory: the export reads the paper, the
     // layout and the ruby settings the way `:export` in the editor does.
+    // `--encoding`: what the files named are in when that cannot be told.
+    let guess = match force_encoding.as_deref() {
+        None => None,
+        Some(word) => match yumete_core::encoding::by_name(word) {
+            Some(encoding) => Some(encoding),
+            None => {
+                eprintln!("yumete: no encoding called {word:?}; utf-8, gb18030, big5 or shift-jis");
+                return ExitCode::from(2);
+            }
+        },
+    };
     if let Some(format) = &export {
-        return run_export(&mut editor, format, &files, out.as_deref());
+        return run_export(&mut editor, format, &files, out.as_deref(), guess);
     }
     if out.is_some() {
         eprintln!("yumete: --out only means something with --export");
@@ -790,12 +801,7 @@ fn main() -> ExitCode {
         if std::path::Path::new(&yumete_config::expand_tilde(file)).is_dir() {
             continue;
         }
-        let told = force_encoding.as_deref().map(|word| yumete_core::encoding::by_name(word));
-        if let Some(None) = told {
-            eprintln!("yumete: no encoding called {:?}; utf-8, gb18030, big5 or shift-jis", force_encoding.as_deref().unwrap_or_default());
-            return ExitCode::from(2);
-        }
-        if let Err(err) = editor.open_file_as(file, told.flatten()) {
+        if let Err(err) = editor.open_file_guessing(file, guess) {
             // **Asked, not refused** (2026-11-04): a file too short to tell
             // has the picker open on it, and the editor starts to show it.
             let asked = err
@@ -1903,7 +1909,13 @@ fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
 /// `pdf` is `typst compile`: a Typst file as it is, Markdown through the
 /// editor's own Typst export into a file beside the source (so images and
 /// includes resolve as they would in the `.typ`), compiled and removed.
-fn run_export(editor: &mut Editor, format: &str, files: &[String], out: Option<&str>) -> ExitCode {
+fn run_export(
+    editor: &mut Editor,
+    format: &str,
+    files: &[String],
+    out: Option<&str>,
+    guess: Option<&'static yumete_core::encoding::Encoding>,
+) -> ExitCode {
     let format = format.trim().to_ascii_lowercase();
     let known = ["html", "htm", "typst", "typ", "csv", "tsv", "pdf"];
     if !known.contains(&format.as_str()) {
@@ -1938,7 +1950,7 @@ fn run_export(editor: &mut Editor, format: &str, files: &[String], out: Option<&
             failed = true;
             continue;
         }
-        if let Err(err) = editor.open_file(&source) {
+        if let Err(err) = editor.open_file_guessing(&source, guess) {
             eprintln!("yumete: {}: {err}", source.display());
             failed = true;
             continue;

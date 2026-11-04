@@ -28,7 +28,7 @@ pub struct Modeline {
     pub syntax: Option<crate::syntax::Syntax>,
     /// `ts=`, 1 to 16.
     pub tab_stop: Option<usize>,
-    /// `sw=`, 1 to 16 (`sw=0` is the tab stop).
+    /// `sw=`, 0 to 16; `0` follows the tab stop, whatever sets it.
     pub indent_width: Option<usize>,
     /// `et` / `noet`.
     pub tab_spaces: Option<bool>,
@@ -48,23 +48,6 @@ impl Modeline {
             && self.text_width.is_none()
     }
 }
-
-/// The options vim knows that yumete passes over: present, they are not an
-/// error, and the options after them on the line still count.
-const PASSED_OVER: &[&str] = &[
-    "fenc", "fileencoding", "ff", "fileformat", "bomb", "nobomb", "ro", "readonly", "noro",
-    "noreadonly", "sts", "softtabstop", "ai", "autoindent", "noai", "noautoindent", "si",
-    "smartindent", "nosi", "cindent", "cin", "nocin", "wrap", "nowrap", "fdm", "foldmethod",
-    "fdl", "foldlevel", "fen", "foldenable", "nofen", "nofoldenable", "fmr", "foldmarker",
-    "spell", "nospell", "spl", "spelllang", "nu", "number", "nonu", "nonumber", "rnu",
-    "relativenumber", "nornu", "list", "nolist", "lbr", "linebreak", "nolbr", "cc",
-    "colorcolumn", "fo", "formatoptions", "com", "comments", "cms", "commentstring", "kmp",
-    "keymap", "bin", "binary", "nobin", "eol", "endofline", "noeol", "fixeol", "nofixeol",
-    "ma", "modifiable", "noma", "nomodifiable", "sr", "shiftround", "nosr", "sta", "smarttab",
-    "nosta", "vts", "vartabstop", "vsts", "varsofttabstop", "isk", "iskeyword", "tag", "tags",
-    "conceallevel", "cole", "cocu", "concealcursor", "lisp", "nolisp", "bh", "bufhidden",
-    "bt", "buftype", "et", "expandtab",
-];
 
 /// Read the modelines of `lines` (all of a file's lines; only the first and
 /// last [`LINES`] are looked at).
@@ -128,12 +111,12 @@ fn prefix(rest: &str, may_start: bool, blank_before: bool) -> Option<(usize, boo
     if rest.starts_with("vi:") {
         return Some((3, false));
     }
-    if rest.starts_with("Vim:") {
-        return Some((4, true));
-    }
-    let tail = rest.strip_prefix("vim")?;
+    let (tail, capital) = match rest.strip_prefix("vim") {
+        Some(tail) => (tail, false),
+        None => (rest.strip_prefix("Vim")?, true),
+    };
     if tail.starts_with(':') {
-        return Some((4, false));
+        return Some((4, capital));
     }
     // `vim{N}:`, `vim<N:`, `vim=N:`, `vim>N:` against nvim's version.
     let (op, digits_from) = match tail.chars().next()? {
@@ -153,11 +136,11 @@ fn prefix(rest: &str, may_start: bool, blank_before: bool) -> Option<(usize, boo
         (_, 1) => VERSION > wanted,
         _ => VERSION >= wanted,
     };
-    holds.then_some((3 + end + 1, false))
+    holds.then_some((3 + end + 1, capital))
 }
 
 /// Read one line into `out`. `false` when it said `nomodeline`, which stops
-/// the lines after it.
+/// the lines after it (the rest of its own line still counts, as in nvim).
 fn read_line(line: &str, out: &mut Modeline) -> bool {
     let Some((options, set_form)) = options_of(line) else {
         return true;
@@ -193,6 +176,7 @@ fn read_line(line: &str, out: &mut Modeline) -> bool {
     if !word.is_empty() {
         words.push(word);
     }
+    let mut go_on = true;
     for word in words {
         let (name, value) = match word.split_once('=') {
             Some((name, value)) => (name, Some(value)),
@@ -200,7 +184,7 @@ fn read_line(line: &str, out: &mut Modeline) -> bool {
         };
         match (name, value) {
             ("ml" | "modeline", None) => {}
-            ("noml" | "nomodeline", None) => return false,
+            ("noml" | "nomodeline", None) => go_on = false,
             ("ft" | "filetype" | "syn" | "syntax", Some(value)) => {
                 if let Some(syntax) = syntax_named(value) {
                     out.syntax = Some(syntax);
@@ -234,15 +218,14 @@ fn read_line(line: &str, out: &mut Modeline) -> bool {
                     out.said.push(word.clone());
                 }
             }
-            (name, _) if PASSED_OVER.contains(&name) => {}
-            // An option vim does not know: vim refuses the rest of the line.
-            _ => break,
+            // Anything else is passed over, and the options after it still
+            // count: yumete cannot tell an option vim refuses from one it
+            // only does not use, and a modeline that reached a file almost
+            // always says what it meant.
+            _ => {}
         }
     }
-    if out.indent_width == Some(0) {
-        out.indent_width = out.tab_stop.or(Some(8));
-    }
-    true
+    go_on
 }
 
 /// A number in `low..=high`, or nothing: out of range is ignored, never
@@ -314,6 +297,8 @@ mod tests {
         assert_eq!(of("vim900: ts=2\n").tab_stop, None);
         assert_eq!(of("vim<900: ts=2\n").tab_stop, Some(2));
         assert_eq!(of("vim=801: ts=2\n").tab_stop, Some(2));
+        assert_eq!(of("Vim600: set ts=2:\n").tab_stop, Some(2), "Vim with a version, in the set form");
+        assert_eq!(of("Vim600: ts=2\n").tab_stop, None);
     }
 
     #[test]
@@ -323,15 +308,17 @@ mod tests {
         assert_eq!(of("vim: set ft=xml:\n").syntax, None, "no XML here, and no stand-in");
         let m = of("vim: set fdm=marker spell ts=2:\n");
         assert_eq!(m.tab_stop, Some(2), "options vim knows are passed over");
-        let m = of("vim: set foo=1 ts=2:\n");
-        assert_eq!(m.tab_stop, None, "one vim refuses ends the line");
-        assert_eq!(of("vim: set sw=0 ts=4:\n").indent_width, Some(4), "sw=0 is the tab stop");
+        for line in ["vim: set fo+=t ts=2:", "vim: set cul ts=2:", "vim: set et! ts=2:", "vim: set foo=1 ts=2:"] {
+            assert_eq!(of(line).tab_stop, Some(2), "{line}: what yumete does not use is passed over");
+        }
+        assert_eq!(of("vim: set sw=0 ts=4:\n").indent_width, Some(0), "sw=0 follows the tab stop");
         assert_eq!(of("vim: set ft=typescriptreact:\n").syntax.map(Syntax::name), Some("tsx"));
     }
 
     #[test]
     fn nomodeline_stops_the_lines_after_it() {
         assert_eq!(of("vim: set noml:\nvim: ts=2\n").tab_stop, None);
+        assert_eq!(of("vim: set noml ts=3:\n").tab_stop, Some(3), "its own line still counts");
         assert!(of("For ex: see the notes\n").is_empty(), "prose is not a modeline");
     }
 }

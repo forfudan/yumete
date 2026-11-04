@@ -1609,6 +1609,9 @@ impl Editor {
         whose: String,
         said: Vec<crate::problem::Problem>,
     ) {
+        // What was edited before this was said moves the old word first, and
+        // never the new one: it already knows those edits.
+        self.move_the_problems();
         self.problems.set(path, whose, said);
     }
 
@@ -1633,12 +1636,17 @@ impl Editor {
         self.problems.worst_on(path, line)
     }
 
-    /// The diagnostics of the current file follow its line edits (2026-11-04).
-    pub(super) fn move_the_problems(&mut self) {
-        let edits = self.current_buffer_mut().take_line_edits();
-        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else { return };
-        for (line, taken, put, at_start) in edits {
-            self.problems.shift(&path, line, taken, put, at_start);
+    /// **The diagnostics follow the line edits** (2026-11-04), of every
+    /// buffer: after each key, before each frame, and before a server's
+    /// new word, so an edit made by a paste, a formatter or a rename in
+    /// another file is never held over to move fresher news later.
+    pub fn move_the_problems(&mut self) {
+        for buffer in &mut self.buffers {
+            let edits = buffer.take_line_edits();
+            let Some(path) = buffer.path().filter(|_| !edits.is_empty()) else { continue };
+            for (line, taken, put, at_start) in edits {
+                self.problems.shift(path, line, taken, put, at_start);
+            }
         }
     }
 
@@ -1652,7 +1660,7 @@ impl Editor {
         if !self.writes_code() {
             return None;
         }
-        if self.mode == Mode::Insert && line == self.cursor_line() {
+        if self.mode == Mode::Insert && self.viewing.get().is_none_or(|v| v.window == self.live) && line == self.cursor_line() {
             return None;
         }
         let path = self.current_buffer().path()?;

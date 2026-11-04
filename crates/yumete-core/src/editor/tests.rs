@@ -36438,6 +36438,130 @@ fn reading_a_big5_note_into_a_big5_chapter() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **The answers to the encoding question** (2026-11-04 review): a copy's
+/// answer changes the copy only, the `!` is kept, `:wa` goes on with the
+/// rest, and `:write-as` asks too.
+#[test]
+fn the_encoding_answers_touch_only_what_was_being_written() {
+    use crate::encoding::BIG5;
+    let dir = tmp().join(format!("yumete-unenc2-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.txt");
+    let bytes = BIG5.encode("清晨的霧氣還沒有散去，小鎮的石板路上已經有了行人。\n").0.into_owned();
+    let open = |ed: &mut Editor| {
+        std::fs::write(&path, &bytes).unwrap();
+        ed.open_file(&path).unwrap();
+        press(ed, "i简");
+        ed.on_key(Key::Esc);
+    };
+
+    // `:w copy` then `u`: the copy is UTF-8, the buffer is still Big5 and
+    // still holds 简.
+    let copy = dir.join("copy.txt");
+    let mut ed = Editor::new();
+    open(&mut ed);
+    ed.execute(&format!("w {}", copy.display())).unwrap();
+    ed.answer_query(Key::Char('u'));
+    assert!(String::from_utf8(std::fs::read(&copy).unwrap()).unwrap().starts_with("简清晨"));
+    assert_eq!(ed.current_buffer().encoding(), BIG5);
+    assert!(ed.current_buffer().text().starts_with("简清晨"));
+
+    // `:w! copy` then `w`: written over, with the reference, and the buffer
+    // keeps 简.
+    ed.execute(&format!("w! {}", copy.display())).unwrap();
+    ed.answer_query(Key::Char('w'));
+    let on_disk = BIG5.decode(&std::fs::read(&copy).unwrap()).0.into_owned();
+    assert!(on_disk.starts_with("&#31616;清晨"), "{on_disk}");
+    assert!(ed.current_buffer().text().starts_with("简清晨"));
+
+    // `:wa`: the answer saves the file that asked, then the rest.
+    let other = dir.join("other.md");
+    std::fs::write(&other, "one\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&other).unwrap();
+    press(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    open(&mut ed);
+    ed.execute("wa").unwrap();
+    ed.answer_query(Key::Char('u'));
+    assert_eq!(std::fs::read_to_string(&other).unwrap(), "xone\n");
+    assert!(ed.buffers.iter().all(|b| !b.is_modified()));
+
+    // `:write-as` asks, and `u` saves under the new name.
+    let renamed = dir.join("renamed.txt");
+    let mut ed = Editor::new();
+    open(&mut ed);
+    ed.execute(&format!("write-as {}", renamed.display())).unwrap();
+    assert!(ed.query().is_some(), ":write-as asks");
+    ed.answer_query(Key::Char('u'));
+    assert!(String::from_utf8(std::fs::read(&renamed).unwrap()).unwrap().starts_with("简清晨"));
+    assert_eq!(ed.current_buffer().path(), Some(renamed.as_path()));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **What is remembered of an encoding stays true** (2026-11-04 review):
+/// a save keeps the size, a UTF-8 file is never read in a remembered or
+/// guessed legacy encoding, and two files that cannot be told are asked
+/// about one after the other.
+#[test]
+fn remembered_and_guessed_encodings_stay_out_of_the_way() {
+    use crate::encoding::{BIG5, GB18030};
+    let dir = tmp().join(format!("yumete-encmem-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let paths = (dir.join("config.toml"), dir.join("data"));
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(paths.0.clone(), paths.1.clone());
+        ed
+    };
+
+    // Told Big5, edited and saved: still Big5 next time, not asked again.
+    let short = dir.join("short.txt");
+    std::fs::write(&short, b"\xb2\xc4\xa4\x40\xacq\n").unwrap();
+    let mut ed = fresh();
+    ed.open_file_as(&short, Some(BIG5)).unwrap();
+    press(&mut ed, "i第");
+    ed.on_key(Key::Esc);
+    ed.execute("w").unwrap();
+    let mut again = fresh();
+    again.open_file(&short).unwrap();
+    assert_eq!(again.current_buffer().encoding(), BIG5);
+    assert!(again.current_buffer().text().starts_with("第第一段"));
+
+    // `--encoding` for a UTF-8 file opens it as UTF-8, and remembers nothing.
+    let utf8 = dir.join("utf8.md");
+    std::fs::write(&utf8, "清晨的雾气还没有散去\n").unwrap();
+    let mut ed = fresh();
+    ed.open_file_guessing(&utf8, Some(GB18030)).unwrap();
+    assert_eq!(ed.current_buffer().encoding(), crate::encoding::UTF_8);
+    assert_eq!(ed.current_buffer().text(), "清晨的雾气还没有散去\n");
+
+    // …and for a file that cannot be told, it answers the question.
+    let other = dir.join("other.txt");
+    std::fs::write(&other, b"\xb2\xc4\xa4\x40\xacq\n").unwrap();
+    let mut ed = fresh();
+    ed.open_file_guessing(&other, Some(BIG5)).unwrap();
+    assert!(ed.picker().is_none());
+    assert_eq!(ed.current_buffer().text(), "第一段\n");
+
+    // Two that cannot be told: the second waits for the first's picker.
+    let (one, two) = (dir.join("one.txt"), dir.join("two.txt"));
+    std::fs::write(&one, b"\xb2\xc4\xa4\x40\xacq\n").unwrap();
+    std::fs::write(&two, b"\xb2\xc4\xa4\x40\xacq\n").unwrap();
+    let mut ed = Editor::new();
+    assert!(ed.open_file(&one).is_err());
+    assert!(ed.open_file(&two).is_err());
+    let title = |ed: &Editor| ed.picker().map(|p| p.title.clone()).unwrap_or_default();
+    assert!(title(&ed).contains("one.txt"), "{}", title(&ed));
+    ed.on_key(Key::Esc);
+    assert!(title(&ed).contains("two.txt"), "{}", title(&ed));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **A key listed for an action is a key that reaches it** (2026-11-04):
 /// under vim `gn` selects the next match, `ge` is the previous word's end and
 /// `[p` pastes, so the vim column named them for next-buffer, the last line
@@ -36508,6 +36632,78 @@ fn a_modeline_sets_this_file_and_no_other() {
     off.open_file(&notes).unwrap();
     assert_eq!(off.tab_stop(), 8);
     assert_ne!(off.current_buffer().syntax().name(), "python");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Diagnostics follow every edit, once** (2026-11-04 review): a paste is
+/// not held over to move a fresher word later, a whole-file replacement
+/// moves only the lines it changed, and an undo takes them back.
+#[test]
+fn diagnostics_follow_pastes_replacements_and_undo_once() {
+    let dir = tmp().join(format!("yumete-diag-follow-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn a() {}\nfn b() {}\nfn c() {}\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    let say = |ed: &mut Editor, line: usize| {
+        ed.set_problems(file.clone(), "test".into(), vec![crate::problem::Problem {
+            line,
+            utf16_column: 0,
+            severity: crate::problem::Severity::Error,
+            message: "no".into(),
+            source: None,
+            code: None,
+        }]);
+    };
+    let line = |ed: &Editor| ed.problems.of(&file).first().map(|p| p.line);
+
+    // A paste of two lines at the top, then the server's word for the new
+    // text: a later key does not move it a second time.
+    say(&mut ed, 2);
+    press(&mut ed, "gg");
+    ed.paste_text("x\ny\n");
+    say(&mut ed, 4);
+    press(&mut ed, "l");
+    ed.move_the_problems();
+    assert_eq!(line(&ed), Some(4));
+
+    // The whole file replaced by itself and one more line at the end: the
+    // complaint stays where it was, not on line 1.
+    let text = ed.current_buffer().text();
+    ed.replace_everything(&format!("{text}fn d() {{}}\n"));
+    ed.move_the_problems();
+    assert_eq!(line(&ed), Some(4));
+
+    // A line opened above, then undone.
+    press(&mut ed, "ggO");
+    ed.on_key(Key::Esc);
+    ed.move_the_problems();
+    assert_eq!(line(&ed), Some(5));
+    press(&mut ed, "u");
+    ed.move_the_problems();
+    assert_eq!(line(&ed), Some(4));
+
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A reload keeps a syntax chosen by hand** (2026-11-04 review), and an
+/// `sw=0` modeline follows the tab stop.
+#[test]
+fn a_reload_keeps_the_syntax_chosen_by_hand() {
+    let dir = tmp().join(format!("yumete-ml-hand-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let notes = dir.join("notes.txt");
+    std::fs::write(&notes, "def f():\n\treturn 1\n# vim: set ft=python ts=3 sw=0:\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&notes).unwrap();
+    assert_eq!(ed.current_buffer().syntax().name(), "python");
+    assert_eq!(ed.indent_width(), 3, "sw=0 is the tab stop");
+    ed.execute("syntax text").unwrap();
+    ed.execute("reload").unwrap();
+    assert_eq!(ed.current_buffer().syntax().name(), "text");
     std::fs::remove_dir_all(&dir).ok();
 }
 

@@ -244,8 +244,14 @@ impl Editor {
     }
 
     /// How many columns `>` adds and `<` removes, this buffer's own first.
+    ///
+    /// A modeline's `sw=0` follows the tab stop.
     pub fn indent_width(&self) -> usize {
-        self.current_buffer().local().indent_width.unwrap_or(self.indent_width_global)
+        match self.current_buffer().local().indent_width {
+            Some(0) => self.tab_stop(),
+            Some(width) => width,
+            None => self.indent_width_global,
+        }
     }
 
     /// Whether Tab types spaces (Shift-Tab then types a TAB), or the other

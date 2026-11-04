@@ -947,10 +947,29 @@ impl Editor {
         path: P,
         told: Option<&'static crate::encoding::Encoding>,
     ) -> io::Result<()> {
+        self.open_file_with(path.as_ref(), told, None)
+    }
+
+    /// Open `path`, in `guess` only when it cannot be told what the file
+    /// is in (`--encoding`). A file in UTF-8, or one that says plainly what
+    /// it is, opens as it is.
+    pub fn open_file_guessing<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        guess: Option<&'static crate::encoding::Encoding>,
+    ) -> io::Result<()> {
+        self.open_file_with(path.as_ref(), None, guess)
+    }
+
+    fn open_file_with(
+        &mut self,
+        path: &Path,
+        told: Option<&'static crate::encoding::Encoding>,
+        guess: Option<&'static crate::encoding::Encoding>,
+    ) -> io::Result<()> {
         // A file already open is *shown*, not opened again. Two buffers over
         // one file means two undo histories, two dirty flags, and two claims on
         // one recovery copy — a way to lose work, not a way to open a file.
-        let path = path.as_ref();
         if let Some(i) = self.buffer_showing(path) {
             self.show_buffer(i);
             return Ok(());
@@ -970,7 +989,23 @@ impl Editor {
                     Buffer::open(path)
                 }
             }),
-            None => Buffer::open(path),
+            None => {
+                let mut guessed = false;
+                let opened = Buffer::open(path).or_else(|err| {
+                    let undecided = err.get_ref().is_some_and(|e| e.is::<crate::encoding::Undecided>());
+                    match guess {
+                        Some(guess) if undecided => {
+                            guessed = true;
+                            Buffer::open_as(path, Some(guess)).map_err(|_| err)
+                        }
+                        _ => Err(err),
+                    }
+                });
+                if guessed && opened.is_ok() {
+                    self.remember_encoding(path, guess);
+                }
+                opened
+            }
         };
         let mut buffer = match opened {
             Ok(buffer) => buffer,
@@ -985,7 +1020,8 @@ impl Editor {
                 return Err(err);
             }
         };
-        if told.is_some() {
+        // Nothing to remember of a file that is not there yet.
+        if told.is_some() && path.exists() {
             self.remember_encoding(path, told);
         }
         // `--readonly` is about the *session*, so it locks what the session
@@ -1236,7 +1272,7 @@ impl Editor {
     }
 
     /// The same, and `force` writes over files changed outside (`:wqa!`).
-    fn write_all_forcing(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
+    pub(super) fn write_all_forcing(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         let mut saved = 0usize;
         let mut asked = None;
         let mut failed: Vec<String> = Vec::new();
@@ -1246,6 +1282,8 @@ impl Editor {
             }
             match self.with_buffer(i, |e| e.write_forcing(None, force)) {
                 Ok(Wrote::Asked) => {
+                    // An answer that saves goes on with the rest.
+                    self.then_after_the_answer(super::Then::WriteAll(force));
                     asked = Some(i);
                     break;
                 }
@@ -1292,6 +1330,7 @@ impl Editor {
     /// the bang is the writer saying so.
     pub(super) fn write_quit_all(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
         self.write_all_forcing(force)?;
+        self.then_after_the_answer(super::Then::WriteQuitAll(force));
         let unsaved = self.buffers.iter().any(|b| b.is_modified());
         if self.query.is_some() || (unsaved && !force) {
             return Ok(CommandOutcome::Continue);
@@ -2089,10 +2128,14 @@ impl Editor {
     /// had when it was chosen (2026-11-04). A file whose size changed is one
     /// that may have been converted elsewhere: the memory goes, and it says
     /// so once.
+    ///
+    /// A file that reads as UTF-8 with more than ASCII in it is in UTF-8,
+    /// whatever was chosen for it once.
     fn remembered_encoding_still_true(&mut self, path: &Path) -> Option<&'static crate::encoding::Encoding> {
         let (encoding, bytes) = self.remembered_encoding(path)?;
         let now = std::fs::metadata(path).map(|m| m.len()).ok()?;
-        if now == bytes {
+        let utf8 = || std::fs::read(path).is_ok_and(|b| !b.is_ascii() && std::str::from_utf8(&b).is_ok());
+        if now == bytes && !utf8() {
             return Some(encoding);
         }
         self.remember_encoding(path, None);

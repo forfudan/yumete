@@ -3497,6 +3497,9 @@ pub struct Editor {
     /// One write may go through with the oversize gate already answered (#306).
     /// Set only for the duration of the write the reader said 「yes」 to.
     oversize_answered: bool,
+    /// Files on the command line that could not be told, waiting for the
+    /// encoding picker the one before them has open.
+    encodings_to_ask: Vec<crate::encoding::Undecided>,
     /// helix's end-of-line diagnostics: the least severity drawn after a
     /// line, `None` for off (2026-11-04).
     end_of_line_diagnostics: Option<crate::problem::Severity>,
@@ -4122,6 +4125,25 @@ pub(crate) struct KeymapLines {
     pub(crate) insert: HashMap<String, Vec<String>>,
 }
 
+/// Where a save that met a character its encoding cannot hold was going.
+#[derive(Clone)]
+enum Saving {
+    /// The buffer's own file.
+    Here,
+    /// `:w <path>`: a copy, and the buffer is left as it is.
+    Copy(String),
+    /// `:write-as` and `:wq <path>`: the buffer takes this name.
+    As(String),
+}
+
+/// What the command that asked about an encoding goes on to do.
+#[derive(Clone, Copy)]
+enum Then {
+    Quit,
+    WriteAll(bool),
+    WriteQuitAll(bool),
+}
+
 /// What a [`Query`] is about.
 ///
 /// It is an enum and not a `bool` because the interface is the point: the next
@@ -4130,11 +4152,13 @@ pub(crate) struct KeymapLines {
 /// touching any of them. The recovery pair below is what that promise bought.
 enum Asking {
     /// **A character the file's encoding cannot hold** (2026-11-04): save as
-    /// UTF-8, write anyway as `&#NNNN;`, or not at all. `quit` is set when
-    /// `:wq` asked, so an answer that saves then leaves.
+    /// UTF-8, write anyway as `&#NNNN;`, or not at all. `force` is the `!`
+    /// the save was given, and `then` what the command goes on to do once
+    /// the answer has saved (`:wq` leaves, `:wa` saves the rest).
     Unencodable {
-        path: Option<String>,
-        quit: bool,
+        how: Saving,
+        force: bool,
+        then: Option<Then>,
     },
     /// `:write` about to make the file on disk very much bigger.
     OversizeWrite {
@@ -4524,6 +4548,7 @@ impl Editor {
             viewing_wrap: Cell::new(None),
             query: None,
             oversize_answered: false,
+            encodings_to_ask: Vec::new(),
             end_of_line_diagnostics: Some(crate::problem::Severity::Hint),
             modeline: true,
             segment_memo: memo::LineMemo::default(),

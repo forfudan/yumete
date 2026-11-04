@@ -210,6 +210,9 @@ pub struct Buffer {
     /// Whether that was read out of the file rather than out of its name — a
     /// guess a project's own setting is entitled to overrule.
     syntax_guessed: bool,
+    /// Whether `:syntax` or `--syntax` chose it: a re-read file's modeline
+    /// says its own again, but not over that.
+    syntax_by_hand: bool,
     /// How many times the text has changed.
     ///
     /// What lets an answer *about the whole document* — which line is inside a
@@ -449,6 +452,7 @@ impl Buffer {
             local: Local::default(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
+            syntax_by_hand: false,
             pending_draft: None,
             pending_swap: None,
             wrote_at: None,
@@ -520,6 +524,7 @@ impl Buffer {
             local: Local::default(),
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
+            syntax_by_hand: false,
             pending_draft: None,
             pending_swap: None,
             wrote_at: None,
@@ -697,6 +702,7 @@ impl Buffer {
             owns_swap: false,
             syntax,
             syntax_guessed: named.is_none(),
+            syntax_by_hand: false,
             seen,
             read_as,
             clean_at: std::cell::Cell::new(None),
@@ -838,7 +844,16 @@ impl Buffer {
         // again.
         let seen = stamp_of(&path);
         let bytes = fs::read(&path)?;
-        let text = decode_in(&bytes, &path, self.encoding)?;
+        // The encoding asked for, as helix's `:encoding` then `:reload`; one
+        // that does not read the file falls back to the one it is in.
+        let text = match decode_in(&bytes, &path, self.encoding) {
+            Err(_) if self.on_disk != self.encoding => {
+                let text = decode_in(&bytes, &path, self.on_disk)?;
+                self.encoding = self.on_disk;
+                text
+            }
+            read => read?,
+        };
         self.on_disk = self.encoding;
         self.read_as = Some(digest(&text));
         self.beyond_the_file = false;
@@ -889,11 +904,22 @@ impl Buffer {
         self.syntax = syntax;
     }
 
+    /// [`Self::set_syntax`] for `:syntax` and `--syntax`, which a modeline
+    /// read again later does not overrule.
+    pub fn set_syntax_by_hand(&mut self, syntax: crate::syntax::Syntax) {
+        self.syntax = syntax;
+        self.syntax_by_hand = true;
+    }
+
     /// **Read this file's modelines** (2026-11-04): its settings of its own
     /// ([`Local`]) from what they say, and its syntax, which is then the
     /// file's own word and no longer a guess. What they said before goes.
     pub fn read_modelines(&mut self) {
-        let n = self.rope.len_lines();
+        // The empty "line" after a final line break is not one.
+        let mut n = self.rope.len_lines();
+        if n > 1 && self.rope.line(n - 1).len_chars() == 0 {
+            n -= 1;
+        }
         let wanted: Vec<usize> = match n <= 2 * crate::modeline::LINES {
             true => (0..n).collect(),
             false => (0..crate::modeline::LINES).chain(n - crate::modeline::LINES..n).collect(),
@@ -918,7 +944,7 @@ impl Buffer {
             text_width: said.text_width,
             said: (!said.said.is_empty()).then(|| said.said.join(" ")),
         };
-        if let Some(syntax) = said.syntax {
+        if let Some(syntax) = said.syntax.filter(|_| !self.syntax_by_hand) {
             self.syntax = syntax;
             self.syntax_guessed = false;
         }
@@ -1171,6 +1197,17 @@ impl Buffer {
         at.min(self.rope.len_chars())
     }
 
+    /// An undo or a redo swaps the whole text: the lines it really changed
+    /// go to the diagnostics as an edit would.
+    fn note_lines_changed(&mut self, before: &Rope) {
+        if before.len_lines() == self.rope.len_lines() {
+            return;
+        }
+        if let Some((skip, taken, put)) = lines_changed(&before.to_string(), &self.rope.to_string()) {
+            self.line_edits.push((skip, taken, put, true));
+        }
+    }
+
     /// Move every window's folds through an edit about to be made: `taken`
     /// characters at `at` become `put`. Asked before the rope changes, so
     /// whether `at` starts a line is the text's as it was.
@@ -1182,7 +1219,20 @@ impl Buffer {
         if lines_taken != lines_put {
             let line = self.rope.char_to_line(from);
             let at_start = from == self.rope.line_to_char(line);
-            self.line_edits.push((line, lines_taken, lines_put, at_start));
+            // A replacement of many lines (a formatter, `:convert`, the whole
+            // file read again) moves only the lines it really changed, or
+            // every diagnostic in it would land on its first line.
+            let edit = match lines_taken > 1 && lines_put > 1 {
+                true => {
+                    let was = self.rope.slice(from..to).to_string();
+                    lines_changed(&was, put).map(|(skip, taken, put)| match skip {
+                        0 => (line, taken, put, at_start),
+                        _ => (line + skip, taken, put, true),
+                    })
+                }
+                false => Some((line, lines_taken, lines_put, at_start)),
+            };
+            self.line_edits.extend(edit);
         }
         if self.folds.values().all(|set| set.manual.is_empty() && set.closed_headings.is_empty()) {
             return;
@@ -1650,6 +1700,26 @@ impl Buffer {
         self.write_atomically(path, finish)
     }
 
+    /// [`Self::write_copy`] for a copy that the buffer's encoding cannot hold
+    /// (2026-11-04): in UTF-8, or with `&#NNNN;` for what it cannot. The
+    /// buffer is left as it is.
+    pub fn write_copy_spilling(&self, path: &Path, force: bool, finish: bool, references: bool) -> io::Result<()> {
+        if self.readonly {
+            return Err(io::Error::other(say!("readonly.refused")));
+        }
+        Buffer::room_for(path, force)?;
+        if !force && path.exists() {
+            return Err(io::Error::other(say!("buffer.file-already-exists")));
+        }
+        if !references {
+            return self.write_body(path, None, false, finish);
+        }
+        let mut text = self.rope.to_string();
+        text.push_str(tail_for(&self.rope, self.ending, finish));
+        let bytes = crate::encoding::encode(self.encoding, &crate::encoding::with_references(self.encoding, &text));
+        write_bytes_atomically_like(path, None, |file| file.write_all(&bytes))
+    }
+
     /// **父目錄不在就不寫**，`force`（`:w!`）＝ 把它建出來（2026-10-11 報的）。
     ///
     /// 從前一路落到 `File::create` 上，於是在一個没有 `.yumete/` 的項目裏
@@ -2034,6 +2104,7 @@ impl Buffer {
         self.edit = None;
         self.journal = None;
         let before = std::mem::replace(&mut self.rope, prev.rope);
+        self.note_lines_changed(&before);
         self.restore_folds(&prev.folds, &before);
         // **走回去了算不算乾淨，問的是走到了哪裏**，不是那一格當初記了什麼。
         self.modified = match self.still_as_saved() {
@@ -2074,6 +2145,7 @@ impl Buffer {
         self.edit = None;
         self.journal = None;
         let before = std::mem::replace(&mut self.rope, next.rope);
+        self.note_lines_changed(&before);
         self.restore_folds(&next.folds, &before);
         self.modified = match self.still_as_saved() {
             Some(same) => !same,
@@ -2839,6 +2911,22 @@ fn pid_is_running(pid: u32) -> bool {
 #[cfg(not(any(unix, windows)))]
 fn pid_is_running(_pid: u32) -> bool {
     false
+}
+
+/// **Which lines a replacement of `was` by `now` really changed**: whole
+/// lines alike at the start are skipped, and lines alike at the end are not
+/// counted. `(lines skipped, lines taken, lines put)`, or `None` when the
+/// line count does not change.
+fn lines_changed(was: &str, now: &str) -> Option<(usize, usize, usize)> {
+    let a: Vec<&str> = was.split_inclusive('\n').collect();
+    let b: Vec<&str> = now.split_inclusive('\n').collect();
+    let head = a.iter().zip(&b).take_while(|(x, y)| x == y && x.ends_with('\n')).count();
+    let most = a.len().min(b.len()) - head;
+    let tail = (0..most).take_while(|&i| a[a.len() - 1 - i] == b[b.len() - 1 - i]).count();
+    let breaks = |lines: &[&str]| lines.iter().filter(|l| l.ends_with('\n')).count();
+    let taken = breaks(&a[head..a.len() - tail]);
+    let put = breaks(&b[head..b.len() - tail]);
+    (taken != put).then_some((head, taken, put))
 }
 
 #[cfg(test)]
@@ -3856,3 +3944,4 @@ fn tmp() -> std::path::PathBuf {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+

@@ -991,6 +991,9 @@ pub fn run(
             // **背景那一趟交回來的，每一幀收一批**（§5.93）。收完就畫，所以名單
             // 是在長的，而右上角那個「N+」跟着跳。
             editor.collect_search_results();
+            // Diagnostics follow what was edited since the last frame: a
+            // paste, a formatter, a rename in another file.
+            editor.move_the_problems();
             // **挑選器的名單也是長出來的**（2026-10-09）：`空格 f` 的走查跑在旁邊，
             // 每一幀收一批，所以面板立刻就開得出來，不再凍最多五秒。
             editor.collect_picker_items();
@@ -13211,7 +13214,8 @@ fn draw_horizontal(
                         yumete_core::problem::Severity::Hint => ink.furniture(),
                     };
                     let said = format!("  {}", panel::clip(&message, room));
-                    spans.push(Span::styled(said, Style::default().fg(colour)));
+                    // On the row's own ground, or a banded row has a hole.
+                    spans.push(Span::styled(said, fill.fg(colour)));
                 }
             }
         }

@@ -424,7 +424,7 @@ impl Editor {
     /// The encoding chosen for `path`, with the size the file had then.
     pub(super) fn remembered_encoding(&self, path: &Path) -> Option<(&'static crate::encoding::Encoding, u64)> {
         let text = std::fs::read_to_string(self.encodings_file()?).ok()?;
-        let want = path.to_string_lossy();
+        let want = encoding_key(path);
         let line = text.lines().find(|line| line.split('\t').next() == Some(&*want))?;
         let mut parts = line.split('\t').skip(1);
         let encoding = crate::encoding::by_name(parts.next()?)?;
@@ -435,7 +435,7 @@ impl Editor {
     /// Keep `encoding` for `path`, at the size it has now; `None` forgets it.
     pub(super) fn remember_encoding(&self, path: &Path, encoding: Option<&'static crate::encoding::Encoding>) {
         let Some(file) = self.encodings_file() else { return };
-        let want = path.to_string_lossy().into_owned();
+        let want = encoding_key(path);
         let mut out: Vec<String> = Vec::new();
         let bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         if let Some(encoding) = encoding.filter(|e| *e != crate::encoding::UTF_8) {
@@ -456,6 +456,16 @@ impl Editor {
             let _ = std::fs::create_dir_all(parent);
         }
         let _ = std::fs::write(&file, out.join("\n") + "\n");
+    }
+
+    /// A save keeps what is remembered of the file's encoding true: the
+    /// size the file has now, or nothing once it is saved as UTF-8.
+    pub(super) fn encoding_saved(&mut self) {
+        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else { return };
+        if self.remembered_encoding(&path).is_some() {
+            let encoding = self.current_buffer().encoding();
+            self.remember_encoding(&path, Some(encoding));
+        }
     }
 
     /// What was chosen for this file last time, if anything was.
@@ -1725,4 +1735,10 @@ impl Shape {
             Shape::Leaf(leaf) => kept(&leaf.path).then_some(Shape::Leaf(leaf)),
         }
     }
+}
+
+/// The line `encodings.txt` keeps for `path`: the file itself, however it
+/// was spelt (`short.txt`, `./short.txt`, the full path).
+fn encoding_key(path: &Path) -> String {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().into_owned()
 }

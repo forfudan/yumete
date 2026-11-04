@@ -1793,6 +1793,11 @@ impl Editor {
     /// **Which encoding to open a file in** (2026-11-04): the ones that read
     /// it, the likeliest first, each previewed as the file would read.
     pub(super) fn open_encoding_picker(&mut self, asked: &crate::encoding::Undecided) {
+        // One at a time: a second file waits for the picker on the first.
+        if self.asking_an_encoding() {
+            self.encodings_to_ask.push(asked.clone());
+            return;
+        }
         let items = asked
             .candidates
             .iter()
@@ -2390,11 +2395,26 @@ impl Editor {
 
     /// Shut the picker and go back to Normal.
     fn close_picker(&mut self) {
+        let was_asking = self.asking_an_encoding();
         self.stop_filling_the_picker();
         if let Some(picker) = self.picker.take() {
             self.last_picker = Some(picker);
         }
         self.mode = Mode::Normal;
+        // The next file the command line could not tell.
+        if was_asking && !self.encodings_to_ask.is_empty() {
+            let next = self.encodings_to_ask.remove(0);
+            self.open_encoding_picker(&next);
+        }
+    }
+
+    /// Whether the picker open is the one asking a file's encoding.
+    fn asking_an_encoding(&self) -> bool {
+        self.mode == Mode::Picker
+            && self
+                .picker
+                .as_ref()
+                .is_some_and(|p| matches!(p.items().first(), Some(crate::picker::Item::Encoding(..))))
     }
 
     /// Insert text that arrived from outside — the system clipboard, by way of
@@ -2710,6 +2730,14 @@ fn head_in_another_encoding(path: &Path, rows: usize) -> Option<Vec<String>> {
     let mut file = std::fs::File::open(path).ok()?;
     let got = std::io::Read::read(&mut file, &mut bytes).ok()?;
     bytes.truncate(got);
+    // A head cut short may end inside a character, and a strict reading
+    // of it then fails in the right encoding: end it at a line break,
+    // which no trailing byte of the three can be.
+    if got == 8 * 1024 {
+        if let Some(end) = bytes.iter().rposition(|&b| b == b'\n') {
+            bytes.truncate(end + 1);
+        }
+    }
     let encoding = match crate::encoding::detect(&bytes) {
         crate::encoding::Detected::Sure(encoding, _) => encoding,
         crate::encoding::Detected::Ask(candidates) => *candidates.first()?,

@@ -1332,7 +1332,7 @@ impl Editor {
 
     /// Say which markup it is in, overriding what was guessed on opening.
     pub fn set_syntax(&mut self, syntax: crate::syntax::Syntax) {
-        self.current_buffer_mut().set_syntax(syntax);
+        self.current_buffer_mut().set_syntax_by_hand(syntax);
         self.markup_memo.forget();
         *self.block_cache.borrow_mut() = None;
     }

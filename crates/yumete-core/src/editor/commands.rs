@@ -213,26 +213,7 @@ impl Editor {
                 self.settings_request = true;
                 Ok(CommandOutcome::Continue)
             }
-            Command::SaveAs { path, force } => {
-                let target = self.here_path(&path);
-                // The same one rule: a file another buffer is holding may only
-                // be written by that buffer.
-                if let Some(which) = self.buffer_holding(&target) {
-                    if which != self.current {
-                        let name = self.buffers[which].display_name();
-                        self.status = say!("buffer.already-open-elsewhere", name);
-                        return Ok(CommandOutcome::Continue);
-                    }
-                }
-                let self_finish = self.insert_final_newline();
-                self.current_buffer_mut()
-                    .save_as(target, force, self_finish)
-                    .map_err(EditorError::Io)?;
-                // 改了名就是換了一份磁碟上的東西，改動條要重問一次（#55）。
-                self.refresh_vcs(true);
-                self.status = say!("buffer.saved", self.current_buffer().display_name());
-                Ok(CommandOutcome::Continue)
-            }
+            Command::SaveAs { path, force } => self.write_as(&path, force),
             // `:w!` 與 `:up` 同 `:w`：面板開着的時候它們說的也是面板。Warning: 不接的
             // 話，在設置頁上打 `:w!` 會**存眼前那一章**——看起來像設定存下去了。
             Command::WriteForce(_) | Command::Update if self.settings_open => {
@@ -1736,35 +1717,32 @@ impl Editor {
             },
             // 一顆按鈕的窗，按了就關——它不問什麼，只是不讓那句話從狀態欄滑過去。
             Asking::ReplaceUndoneInPart => {}
-            // **A character the encoding cannot hold** (2026-11-04): the
+            // **A character the file's encoding cannot hold** (2026-11-04): the
             // three answers asked for, `u` UTF-8, `w` write anyway, `n` not.
-            Asking::Unencodable { path, quit } => {
-                let saved = match answer {
-                    'u' => {
-                        self.current_buffer_mut().set_encoding(crate::encoding::UTF_8);
-                        self.write_forcing(path.as_deref(), false)
-                    }
-                    'w' => {
-                        // The buffer says what the file will: the characters
-                        // become `&#NNNN;` in one undoable edit, or the next
-                        // read of the disk would differ from the screen.
-                        let encoding = self.current_buffer().encoding();
-                        let text = self.current_buffer().text();
-                        self.replace_everything(&crate::encoding::with_references(encoding, &text));
-                        self.write_forcing(path.as_deref(), false)
-                    }
+            Asking::Unencodable { how, force, then } => {
+                let references = match answer {
+                    'u' => false,
+                    'w' => true,
                     _ => {
                         self.status = say!("encoding.not-saved");
                         return;
                     }
                 };
-                match saved {
-                    Ok(Wrote::Saved | Wrote::Copied(_)) if quit => {
-                        if let Ok(CommandOutcome::Quit) = self.quit(false) {
-                            self.quit_from_binding = true;
+                match self.answer_unencodable(how, force, references) {
+                    Ok(Wrote::Asked) => {}
+                    Ok(_) => {
+                        let went = match then {
+                            Some(Then::Quit) => self.quit(false),
+                            Some(Then::WriteAll(force)) => self.write_all_forcing(force),
+                            Some(Then::WriteQuitAll(force)) => self.write_quit_all(force),
+                            None => Ok(CommandOutcome::Continue),
+                        };
+                        match went {
+                            Ok(CommandOutcome::Quit) => self.quit_from_binding = true,
+                            Ok(_) => {}
+                            Err(err) => self.status = err.to_string(),
                         }
                     }
-                    Ok(_) => {}
                     Err(err) => self.status = err.to_string(),
                 }
             }
@@ -1841,9 +1819,88 @@ impl Editor {
         (doubled && jumped).then_some((was, now))
     }
 
+    /// **The answer to [`Asking::Unencodable`].** A copy is written in UTF-8
+    /// or with references and the buffer is left alone; the buffer's own
+    /// file changes the buffer first, so the screen says what the disk will,
+    /// and the change is taken back when the save then fails.
+    fn answer_unencodable(&mut self, how: Saving, force: bool, references: bool) -> Result<Wrote, EditorError> {
+        if let Saving::Copy(path) = &how {
+            let target = self.here_path(path);
+            let finish = self.insert_final_newline();
+            self.current_buffer()
+                .write_copy_spilling(&target, force, finish, references)
+                .map_err(EditorError::Io)?;
+            self.status = say!("buffer.copied-to", target.display());
+            return Ok(Wrote::Copied(target));
+        }
+        let was = self.current_buffer().encoding();
+        let revision = self.current_buffer().revision();
+        match references {
+            // The characters become `&#NNNN;` in one undoable edit, or the
+            // next read of the disk would differ from the screen.
+            true => {
+                let text = self.current_buffer().text();
+                self.replace_everything(&crate::encoding::with_references(was, &text));
+            }
+            false => self.current_buffer_mut().set_encoding(crate::encoding::UTF_8),
+        }
+        let saved = match &how {
+            Saving::As(path) => self.write_as(path, force).map(|_| Wrote::Saved),
+            _ => self.write_forcing(None, force),
+        };
+        if saved.is_err() {
+            match references {
+                true if self.current_buffer().revision() != revision => self.undo(),
+                true => {}
+                false => self.current_buffer_mut().set_encoding(was),
+            }
+        }
+        saved
+    }
+
+    /// **A save refused for a character its encoding cannot hold** asks what
+    /// to do, in the central window; `false` for any other failure.
+    fn asked_about_encoding(&mut self, err: &std::io::Error, how: Saving, force: bool) -> bool {
+        let Some(found) = err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<crate::encoding::Unencodable>())
+            .cloned()
+        else {
+            return false;
+        };
+        self.status = found.to_string();
+        self.query = Some(self.unencodable_query(&found, how, force));
+        true
+    }
+
+    /// `:write-as <path>`: save under a new name, and stay bound to it.
+    fn write_as(&mut self, path: &str, force: bool) -> Result<CommandOutcome, EditorError> {
+        let target = self.here_path(path);
+        // The same one rule: a file another buffer is holding may only
+        // be written by that buffer.
+        if let Some(which) = self.buffer_holding(&target) {
+            if which != self.current {
+                let name = self.buffers[which].display_name();
+                self.status = say!("buffer.already-open-elsewhere", name);
+                return Ok(CommandOutcome::Continue);
+            }
+        }
+        let self_finish = self.insert_final_newline();
+        if let Err(err) = self.current_buffer_mut().save_as(target, force, self_finish) {
+            if self.asked_about_encoding(&err, Saving::As(path.to_string()), force) {
+                return Ok(CommandOutcome::Continue);
+            }
+            return Err(EditorError::Io(err));
+        }
+        // 改了名就是換了一份磁碟上的東西，改動條要重問一次（#55）。
+        self.refresh_vcs(true);
+        self.status = say!("buffer.saved", self.current_buffer().display_name());
+        Ok(CommandOutcome::Continue)
+    }
+
     /// The question a save asks when the file's encoding cannot hold some of
     /// its characters (2026-11-04).
-    fn unencodable_query(&self, found: &crate::encoding::Unencodable, path: Option<&str>) -> Query {
+    fn unencodable_query(&self, found: &crate::encoding::Unencodable, how: Saving, force: bool) -> Query {
         let name = crate::encoding::name(found.encoding);
         let (line, col, c) = found.first;
         let sample: String = found.sample.iter().map(|c| format!("{c} ")).collect();
@@ -1864,7 +1921,7 @@ impl Editor {
                 Answer { key: 'w', label: say!("encoding.ask-anyway") },
                 Answer { key: 'n', label: say!("encoding.ask-no") },
             ],
-            what: Asking::Unencodable { path: path.map(str::to_string), quit: false },
+            what: Asking::Unencodable { how, force, then: None },
             about: None,
         }
     }
@@ -1939,9 +1996,13 @@ impl Editor {
                     }
                 }
                 let self_finish = self.insert_final_newline();
-                self.current_buffer_mut()
-                    .save_as(target, false, self_finish)
-                    .map_err(EditorError::Io)?;
+                if let Err(err) = self.current_buffer_mut().save_as(target, false, self_finish) {
+                    if self.asked_about_encoding(&err, Saving::As(path.to_string()), false) {
+                        self.then_after_the_answer(Then::Quit);
+                        return Ok(CommandOutcome::Continue);
+                    }
+                    return Err(EditorError::Io(err));
+                }
                 self.status = say!("buffer.saved", self.current_buffer().display_name());
             }
             None if only_if_changed && !self.current_buffer().is_modified() => {
@@ -1954,9 +2015,7 @@ impl Editor {
                 if matches!(self.write_current(None)?, Wrote::Asked) {
                     // Asked about the encoding: an answer that saves goes on
                     // to leave, as `:wq` meant.
-                    if let Some(Query { what: Asking::Unencodable { quit, .. }, .. }) = &mut self.query {
-                        *quit = true;
-                    }
+                    self.then_after_the_answer(Then::Quit);
                     return Ok(CommandOutcome::Continue);
                 }
             }
@@ -1965,6 +2024,14 @@ impl Editor {
         // still be dirty, and `:wq` reads as "everything is safe now", so it is
         // held to the same check `:q` is.
         self.quit(false)
+    }
+
+    /// What the command goes on to do once an encoding question standing
+    /// now is answered with a save.
+    pub(super) fn then_after_the_answer(&mut self, then: Then) {
+        if let Some(Query { what: Asking::Unencodable { then: slot, .. }, .. }) = &mut self.query {
+            *slot = Some(then);
+        }
     }
 
     /// Save the active buffer, optionally to a new `path` (save-as).
@@ -1997,6 +2064,12 @@ impl Editor {
         // 缺的那個行尾補不補（`[editor] insert_final_newline`）——在借出可變那一份
         // 之前先問一次。
         let self_finish = self.insert_final_newline();
+        // A buffer with no name of its own takes the one `:w` gives it.
+        let how = match path {
+            None => Saving::Here,
+            Some(p) if self.current_buffer().path().is_some() => Saving::Copy(p.to_string()),
+            Some(p) => Saving::As(p.to_string()),
+        };
         let saved: Result<Wrote, EditorError> = match path {
             // `:w path` writes a **copy** and stays here; `:w! path` writes it
             // over whatever is already there. Rebinding this buffer to another
@@ -2049,13 +2122,7 @@ impl Editor {
         // **A character the encoding cannot hold** (2026-11-04): nothing was
         // written; ask what to do, in the central window.
         if let Err(EditorError::Io(err)) = &saved {
-            let found = err
-                .get_ref()
-                .and_then(|e| e.downcast_ref::<crate::encoding::Unencodable>())
-                .cloned();
-            if let Some(found) = found {
-                self.status = found.to_string();
-                self.query = Some(self.unencodable_query(&found, path));
+            if self.asked_about_encoding(err, how, force) {
                 return Ok(Wrote::Asked);
             }
         }
@@ -2066,6 +2133,7 @@ impl Editor {
         // holds is what the writer committed to disk that day (Feature #244).
         let word_list = matches!(saved, Ok(Wrote::Saved)) && self.note_word_list_saved();
         if matches!(saved, Ok(Wrote::Saved)) {
+            self.encoding_saved();
             // 改動條：存檔是喊 git 的三個時刻之一（#55）。`force`，因為變的是
             // **磁碟上那一份**而 revision 没動——存檔不是一次編輯。
             self.refresh_vcs(true);
