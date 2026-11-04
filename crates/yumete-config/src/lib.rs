@@ -2743,6 +2743,8 @@ pub struct KeymapKeys {
     pub normal: HashMap<String, Vec<String>>,
     pub select: HashMap<String, Vec<String>>,
     pub insert: HashMap<String, Vec<String>>,
+    /// Its own groups' names (`label`), under this keymap only.
+    pub labels: HashMap<String, String>,
 }
 
 /// Keymap overrides.
@@ -5480,7 +5482,7 @@ impl RawConfig {
             read_key_table(&format!("{word}.normal"), &raw.normal, &mut out.normal, &mut labels, problems);
             read_key_table(&format!("{word}.select"), &raw.select, &mut out.select, &mut labels, problems);
             read_key_table(&format!("{word}.insert"), &raw.insert, &mut out.insert, &mut HashMap::new(), problems);
-            config.keys.labels.extend(labels);
+            out.labels = labels;
             for (name, _) in &raw.strays {
                 problems.push(said(
                     format!("[keys.{word}.{name}]：沒有這張表，跳過了。一套鍵位自己的表有 normal、select、insert"),

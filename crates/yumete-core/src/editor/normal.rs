@@ -459,7 +459,7 @@ pub(super) const FLAVOR_NORMAL: &[(Key, NormalCmd, FlavorItem, super::groups::On
 /// **helix's keys that vim leaves free** (2026-11-02): under vim they reach
 /// helix's table only while `helix_keys_under_vim` is on. A key a binding or
 /// the preset plays is helix's either way: the preset is spelt in them.
-const HELIX_KEYS_UNDER_VIM: &[Key] = &[
+pub(super) const HELIX_KEYS_UNDER_VIM: &[Key] = &[
     Key::Char('C'),
     Key::Alt('C'),
     Key::Alt(','),

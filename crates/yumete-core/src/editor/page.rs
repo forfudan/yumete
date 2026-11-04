@@ -615,9 +615,10 @@ impl Editor {
         let mut parts = vec![flavor_level_word(self.flavor.level), say!("keys.flavor.count", on, here.len())];
         for item in here {
             let info = item.info();
+            let normal = self.normal_lines_in_force();
             let aliases = match info.insert {
                 true => &self.insert_aliases,
-                false => &self.user_aliases,
+                false => &normal,
             };
             let written = |k: &str| yumete_cjk::actions::written(k);
             // The keys under this keymap (`g\`` under vim, not `` ` ``).
@@ -671,24 +672,50 @@ impl Editor {
         let lines = |m: HashMap<String, C>| -> HashMap<String, Vec<String>> {
             m.into_iter().map(|(k, v)| (k, v.into_commands())).collect()
         };
+        let labels = std::mem::take(&mut self.keymap_user[keymap_index(keymap)].labels);
         self.keymap_user[keymap_index(keymap)] = crate::editor::KeymapLines {
             normal: lines(normal),
             select: lines(select),
             insert: lines(insert),
+            labels,
         };
         self.lay_aliases();
     }
 
-    /// The reader's own lines for the keymap in force, shared and the
-    /// keymap's, as written in the config: what `:keymap-actions` calls
-    /// theirs.
-    pub(super) fn own_lines(&self) -> Vec<(String, Vec<String>)> {
+    /// **The reader's own Normal-mode lines in force** (2026-11-04 review):
+    /// the shared ones, then this keymap's own over them, by the internal
+    /// spelling of their keys. What the which-key menu, the sidebar, the
+    /// flavour report and `:keymap-actions` read, so a line in
+    /// `[keys.vim.normal]` counts wherever one in `[keys.normal]` does.
+    pub(super) fn normal_lines_in_force(&self) -> HashMap<String, Vec<String>> {
         let own = &self.keymap_user[keymap_index(self.key_preset)];
         self.user_aliases
             .iter()
             .chain(own.normal.iter())
-            .map(|(k, v)| (k.clone(), v.clone()))
+            .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone()))
             .collect()
+    }
+
+    /// The same for select mode's own lines (`[keys.select]`).
+    pub(super) fn select_lines_in_force(&self) -> HashMap<String, Vec<String>> {
+        let own = &self.keymap_user[keymap_index(self.key_preset)];
+        self.user_select
+            .iter()
+            .chain(own.select.iter())
+            .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone()))
+            .collect()
+    }
+
+    /// The names the reader gave groups (`label`), this keymap's own over
+    /// the shared ones.
+    pub(super) fn key_label_for(&self, keys: &str) -> Option<&String> {
+        self.keymap_user[keymap_index(self.key_preset)].labels.get(keys).or_else(|| self.key_labels.get(keys))
+    }
+
+    /// One keymap's own group names (`label` in `[keys.helix.normal.…]`).
+    pub fn set_keymap_labels(&mut self, keymap: yumete_cjk::KeyPreset, labels: HashMap<String, String>) {
+        self.keymap_user[keymap_index(keymap)].labels =
+            labels.into_iter().map(|(k, v)| (yumete_cjk::actions::written(&k), v)).collect();
     }
 
     /// The names of the reader's own groups (`label` in `[keys.normal.…]`),

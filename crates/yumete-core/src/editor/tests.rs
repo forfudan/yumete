@@ -36594,8 +36594,55 @@ fn the_vim_column_names_only_keys_that_reach_the_action() {
     let row = listing.lines().find(|l| l.contains("`goto_next_buffer`")).expect("a row");
     // | name | what | helix | vim | yours |
     let cells: Vec<&str> = row.split('|').map(str::trim).collect();
-    assert_eq!(cells[3], "`gn`", "helix's: {row}");
-    assert!(!cells[4].contains("`gn`"), "not vim's: {row}");
+    assert_eq!(cells[3], "`g n`", "helix's: {row}");
+    assert!(!cells[4].contains("`g n`"), "not vim's: {row}");
+}
+
+/// **The key lists follow the flavour and every place a row applies**
+/// (2026-11-04 review): a Select-mode row is listed, Space under vim is the
+/// menu's, vim's sticky `Z` is listed as it answers, and a key the reader
+/// has bound to something else leaves the column in force.
+#[test]
+fn the_key_lists_follow_the_flavour_and_the_readers_lines() {
+    let docs = Editor::commands_for_docs();
+    let keys = |name: &str, vim: bool| -> Vec<String> {
+        docs.iter()
+            .find(|(n, ..)| *n == name)
+            .map(|(_, _, helix, vim_keys, _)| {
+                let keys = if vim { vim_keys } else { helix };
+                keys.iter().map(|k| k.concat()).collect()
+            })
+            .unwrap_or_default()
+    };
+    assert!(keys("extend_to_file_start", false).contains(&"gg".to_string()), "{:?}", keys("extend_to_file_start", false));
+    assert!(!keys("move_char_right", true).contains(&" ".to_string()), "Space is the menu's under vim");
+    assert!(!keys("operator_yank", true).contains(&"Zy".to_string()), "{:?}", keys("operator_yank", true));
+
+    let mut ed = typed("一\n");
+    let mine: HashMap<String, Vec<String>> = [("x".to_string(), vec!["goto_next_buffer".to_string()])].into_iter().collect();
+    ed.set_key_aliases(mine);
+    ed.execute(":keymap-actions").unwrap();
+    let listing = ed.current_buffer().text();
+    let row = listing.lines().find(|l| l.contains("`extend_line_below`")).expect("a row");
+    let cells: Vec<&str> = row.split('|').map(str::trim).collect();
+    assert!(!cells[3].split(' ').any(|k| k == "`x`"), "x is the reader's now: {row}");
+    let row = listing.lines().find(|l| l.contains("`goto_next_buffer`")).expect("a row");
+    assert!(row.trim_end_matches('|').trim_end().ends_with("`x`"), "{row}");
+}
+
+/// **A keymap's own group name titles its menu under that keymap only**
+/// (2026-11-04 review).
+#[test]
+fn a_keymaps_own_label_is_that_keymaps() {
+    let mut ed = typed("一\n");
+    let mut space: HashMap<String, Vec<String>> = HashMap::new();
+    space.insert("<space>xa".into(), vec!["file_picker".into()]);
+    ed.set_keymap_aliases(yumete_cjk::KeyPreset::Vim, space, HashMap::new(), HashMap::new());
+    ed.set_keymap_labels(yumete_cjk::KeyPreset::Vim, [("<space>x".to_string(), "Vim tools".to_string())].into_iter().collect());
+    ed.execute(":keymap vim").unwrap();
+    assert_eq!(ed.key_label_for(" x").map(String::as_str), Some("Vim tools"));
+    ed.execute(":keymap helix").unwrap();
+    assert_eq!(ed.key_label_for(" x"), None);
 }
 
 /// **A file's vim modeline is its own** (2026-11-04): the type, tab stop and

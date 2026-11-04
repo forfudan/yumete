@@ -149,9 +149,10 @@ impl Editor {
     fn lines_that_follow(&self, place: Place) -> Vec<(String, String)> {
         // `[keys.normal]` is kept as written; `[keys.insert]` in the
         // internal spelling already.
+        let normal = self.normal_lines_in_force();
         let from: Vec<(String, &Vec<String>)> = match place {
             _ if !self.place_inherits => return Vec::new(),
-            Place::Sidebar => self.user_aliases.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v)).collect(),
+            Place::Sidebar => normal.iter().map(|(k, v)| (k.clone(), v)).collect(),
             Place::Prompt => self.insert_aliases.iter().map(|(k, v)| (k.clone(), v)).collect(),
             Place::Picker | Place::Field => return Vec::new(),
         };

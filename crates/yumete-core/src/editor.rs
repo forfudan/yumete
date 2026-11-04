@@ -4123,6 +4123,8 @@ pub(crate) struct KeymapLines {
     pub(crate) normal: HashMap<String, Vec<String>>,
     pub(crate) select: HashMap<String, Vec<String>>,
     pub(crate) insert: HashMap<String, Vec<String>>,
+    /// Its groups' names (`label`), by the internal spelling of their keys.
+    pub(crate) labels: HashMap<String, String>,
 }
 
 /// Where a save that met a character its encoding cannot hold was going.

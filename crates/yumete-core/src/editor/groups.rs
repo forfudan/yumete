@@ -572,15 +572,11 @@ impl Editor {
         if held.is_empty() || self.mode != Mode::Normal {
             return None;
         }
-        let written = |k: &String| yumete_cjk::actions::written(k);
-        let mut mine: Vec<(String, &Vec<String>)> = self.user_aliases.iter().map(|(k, v)| (written(k), v)).collect();
+        let mut lines = self.normal_lines_in_force();
         if self.extend {
-            for (k, v) in &self.user_select {
-                let k = written(k);
-                mine.retain(|(m, _)| *m != k);
-                mine.push((k, v));
-            }
+            lines.extend(self.select_lines_in_force());
         }
+        let mine: Vec<(String, &Vec<String>)> = lines.iter().map(|(k, v)| (k.clone(), v)).collect();
         let group = GROUPS.iter().find(|g| g.path == held).copied();
         let at = self.group_context();
         // The reader's keys after the run: each the command it runs, or the
@@ -596,7 +592,7 @@ impl Editor {
             let opens = format!("{held}{next}");
             let said = match exact {
                 true => describe(commands),
-                false => match self.key_labels.get(&opens) {
+                false => match self.key_label_for(&opens) {
                     Some(label) => Some(label.clone()),
                     // A default group's key with the reader's keys under it
                     // keeps its own line.
@@ -625,7 +621,7 @@ impl Editor {
         if rows.is_empty() {
             return None;
         }
-        let title = match (self.key_labels.get(held), group) {
+        let title = match (self.key_label_for(held), group) {
             (Some(label), _) => label.clone(),
             (None, Some(group)) => crate::messages::say(group.title, &[]),
             (None, None) => yumete_cjk::actions::spell(held),
@@ -725,6 +721,27 @@ pub(super) fn group_opened_by(group: &Group, vim: bool) -> Option<Vec<String>> {
     }
 }
 
+/// Whether `bind`'s key reaches it in some place where its row applies: in
+/// Select mode, on a vertical page, in code, by a pane, in a table.
+fn answers_somewhere(group: &Group, bind: &'static Bind, base: &Context) -> bool {
+    let tables = [None, Some(Bounds::Block), Some(Bounds::Md), Some(Bounds::WholeFile)];
+    for extend in [false, true] {
+        for vertical in [false, true] {
+            for code in [false, true] {
+                for pane in [false, true] {
+                    for table in tables {
+                        let at = Context { extend, vertical, code, pane, table, ..*base };
+                        if at.reaches(bind) && group.answers_with(bind, &at) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
 impl Editor {
     /// **Every bindable command, with every key that reaches it** under
     /// each preset and in Insert mode: the generated reference's rows, read
@@ -738,7 +755,8 @@ impl Editor {
     /// at the flavour in force, and again with it off to tell which keys are
     /// the flavour's).
     pub(crate) fn commands_with(flavor: &yumete_cjk::Flavor) -> Vec<DocCommand> {
-        use super::normal::{FLAVOR_NORMAL, HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
+        use super::normal::{FLAVOR_NORMAL, HELIX_KEYS_UNDER_VIM, HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
+        use yumete_cjk::FlavorItem;
         let one = |key: Key| vec![super::keys::key_internal(key)];
         // The flavour's keys are listed as each keymap's own: what a reader
         // presses. The flavour page lists them all.
@@ -778,13 +796,21 @@ impl Editor {
                 let written = super::keys::key_internal(*key);
                 yumete_cjk::KeyPreset::Vim.table().iter().any(|(k, _)| yumete_cjk::actions::written(k) == written)
             };
+            // helix's keys vim leaves free reach helix's table under vim only
+            // while `helix_keys_under_vim` is on.
+            let helix_under_vim =
+                |key: &Key| !HELIX_KEYS_UNDER_VIM.contains(key) || factory(true).has(Some(FlavorItem::HelixKeysUnderVim));
             for (key, n) in HELIX_NORMAL.iter().chain(SELECT_NORMAL) {
                 if n.name() != name || flavor_took(key, false) {
                     continue;
                 }
                 helix.push(one(*key));
                 // The vim preset keeps a helix key it has no entry of its own for.
-                if !VIM_NORMAL.iter().any(|(k, _, _)| k == key) && !flavor_took(key, true) && !preset_took(key) {
+                if !VIM_NORMAL.iter().any(|(k, _, _)| k == key)
+                    && !flavor_took(key, true)
+                    && !preset_took(key)
+                    && helix_under_vim(key)
+                {
                     vim.push(one(*key));
                 }
             }
@@ -798,8 +824,10 @@ impl Editor {
                     }
                 }
             }
+            // A vim key the flavour takes first (Space, for the menu) is the
+            // flavour's.
             for (key, n, _) in VIM_NORMAL {
-                if n.name() == name {
+                if n.name() == name && !flavor_took(key, true) {
                     vim.push(one(*key));
                 }
             }
@@ -808,16 +836,33 @@ impl Editor {
                 // number comes before): a key the editor has is listed.
                 for bind in group.binds().filter(|b| b.run.name() == name) {
                     for (is_vim, keys) in [(false, &mut helix), (true, &mut vim)] {
+                        // vim's sticky `Z` is helix's group, read as helix's
+                        // (and there only while helix's keys are lent to vim).
+                        let sticky = group.name == STICKY_VIEW.name;
+                        if sticky && is_vim && !factory(true).has(Some(FlavorItem::HelixKeysUnderVim)) {
+                            continue;
+                        }
+                        // The case menu's opener is the flavour's.
+                        if group.name == "case" && !factory(is_vim).has(Some(FlavorItem::CaseMenu)) {
+                            continue;
+                        }
+                        let at = Context { vim: is_vim && !sticky, ..factory(is_vim) };
                         let Some(mut path) = group_opened_by(group, is_vim)
-                            .filter(|_| bind.when.under(is_vim) && factory(is_vim).has(bind.flavor))
+                            .filter(|_| bind.when.under(at.vim) && at.has(bind.flavor))
                         else {
                             continue;
                         };
                         // **Only the row the key reaches** (2026-11-04): under
                         // vim `gn` is vim's own and the helix row after it is
-                        // never pressed, so it is not next-buffer's key.
-                        if !group.answers_with(bind, &factory(is_vim)) {
+                        // never pressed, so it is not next-buffer's key. Asked
+                        // wherever the row applies: Select mode, a vertical
+                        // page, code, a table.
+                        if !answers_somewhere(group, bind, &at) {
                             continue;
+                        }
+                        // With `vim_space_menu` off, the menu is on `\`.
+                        if is_vim && path.first().is_some_and(|k| k == " ") && !factory(true).has(Some(FlavorItem::VimSpaceMenu)) {
+                            path[0] = "\\".to_string();
                         }
                         path.push(super::keys::key_internal(bind.key));
                         // …nor a path the vim preset plays as something else

@@ -878,25 +878,39 @@ impl Editor {
                     level: yumete_cjk::FlavorLevel::Off,
                     items: Default::default(),
                 });
-                let keys_of = |docs: &[DocCommand], name: &str, vim: bool| -> Vec<String> {
+                // The reader's own lines in force; a key of theirs no longer
+                // does what the keymap gave it, so the column in force drops it.
+                let own = self.normal_lines_in_force();
+                let keys_of = |docs: &[DocCommand], name: &str, vim: bool| -> Vec<Vec<String>> {
                     docs.iter()
                         .find(|(n, ..)| *n == name)
                         .map(|(_, _, helix, vim_keys, _)| {
                             let keys = if vim { vim_keys } else { helix };
-                            keys.iter().map(|k| k.concat()).collect()
+                            keys.iter()
+                                .filter(|k| vim != vim_now || !own.contains_key(&k.concat()))
+                                .cloned()
+                                .collect()
                         })
                         .unwrap_or_default()
                 };
-                let cell = |keys: Vec<String>, plain: Vec<String>| -> String {
+                // One key at a time, a space between: `z C-d`, `Space Space`.
+                let spelt = |keys: &[String]| -> String {
+                    keys.iter().map(|k| yumete_cjk::actions::spell(k).trim().to_string()).collect::<Vec<_>>().join(" ")
+                };
+                // A key with a backtick in it needs a longer fence.
+                let code = |text: String| match text.contains('`') {
+                    true => format!("`` {text} ``"),
+                    false => format!("`{text}`"),
+                };
+                let cell = |keys: Vec<Vec<String>>, plain: Vec<Vec<String>>| -> String {
                     keys.iter()
                         .map(|k| {
                             let mark = if plain.contains(k) { "" } else { "*" };
-                            format!("`{}`{mark}", yumete_cjk::actions::spell(k))
+                            format!("{}{mark}", code(spelt(k)))
                         })
                         .collect::<Vec<_>>()
                         .join(" ")
                 };
-                let own = self.own_lines();
                 for action in yumete_cjk::actions::ALL {
                     let (helix, vim) = match action.how {
                         yumete_cjk::actions::How::Command(line) => {
@@ -911,7 +925,7 @@ impl Editor {
                     let mut yours: Vec<String> = own
                         .iter()
                         .filter(|(_, run)| run.len() == 1 && run[0] == action.name)
-                        .map(|(key, _)| format!("`{key}`"))
+                        .map(|(key, _)| code(yumete_cjk::actions::spell(key).trim().to_string()))
                         .collect();
                     yours.sort();
                     listing.push_str(&format!(
