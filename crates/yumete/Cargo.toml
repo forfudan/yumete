@@ -20,4 +20,5 @@ libc = "0.2"
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
+yumete-tables = {path = "../yumete-tables"}
 yumete-tui = {path = "../yumete-tui"}

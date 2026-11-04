@@ -308,6 +308,22 @@ pub fn discover(dirs: &[PathBuf]) -> usize {
         files.extend(here);
     }
     let mut taken = 0;
+    // **The carried schemes first**, so a file on disk, read after them, wins.
+    if let Some(c) = CARRIED.get() {
+        for name in (c.names)() {
+            let Some(text) = name
+                .strip_prefix("schemes/")
+                .filter(|n| n.ends_with(".toml"))
+                .and_then(|_| (c.file)(name))
+                .and_then(|b| String::from_utf8(b).ok())
+            else {
+                continue;
+            };
+            if data_manifest::add_factory_scheme(&text) {
+                taken += 1;
+            }
+        }
+    }
     for file in &files {
         if let Ok(text) = std::fs::read_to_string(file) {
             if data_manifest::add_factory_scheme(&text) {
@@ -582,13 +598,9 @@ impl ImeSession {
     ///
     /// [`available`]: ImeSession::available
     pub fn new(scheme: Scheme, data_dirs: Vec<PathBuf>) -> Self {
-        let (mut engine, mut available, problems) = build_engine(scheme, &data_dirs);
-        // Nothing installed. Rather than an editor that cannot type 漢字 until
-        // somebody clones the 宇浩 source tree, 靈明's own 碼表 stands in when
-        // this binary was built on a machine that had it.
-        // **哪個方案有出廠表就認哪個**（2026-10-07 加星陳）。從前這裏寫死
-        // `== Scheme::LINGMING`，於是多嵌一張也沒人讀得到。
-        let builtin = stand_in(&mut engine, scheme, &mut available);
+        // Nothing installed: the tables the binary carries stand in, file by
+        // file (`locate`), so `builtin` says the essential one came from there.
+        let (engine, available, problems, builtin) = build_engine(scheme, &data_dirs);
         ImeSession {
             engine,
             scheme,
@@ -673,29 +685,17 @@ impl ImeSession {
     /// `None` ＝ 這個方案在這一份二進制裏沒有表（2026-10-07 加星陳之前寫死的是
     /// 靈明，於是多嵌一張也走不到）。
     pub fn builtin(scheme: Scheme) -> Option<Self> {
-        builtin_for(scheme)?;
-        Some(Self::builtin_made(scheme))
+        carries_scheme(scheme).then(|| Self::builtin_made(scheme))
     }
 
+    /// Every file from the binary: with no directory to search, `locate`
+    /// answers from the carried set alone.
     fn builtin_made(scheme: Scheme) -> Self {
-        let dirs = yumete_config::data_search_dirs();
-        let mut engine = Engine::new(CodeTable::new());
-        // The language layer still comes from disk where it is: it is not what
-        // was being overridden, and it is what makes the candidates sensible.
-        let mut problems = Vec::new();
-        for file in data_manifest::shared() {
-            if !matches!(file.kind, DataKind::Table | DataKind::Symbols) {
-                if let Err(problem) = load_data_file(&mut engine, &dirs, &file) {
-                    problems.push(problem);
-                }
-            }
-        }
-        let available = load_builtin(&mut engine, scheme);
-        engine.set_scheme_by_tag(scheme.tag());
+        let (engine, available, problems, _) = build_engine(scheme, &[]);
         ImeSession {
             engine,
             scheme,
-            data_dirs: dirs,
+            data_dirs: Vec::new(),
             available,
             annotation_modes: yumete_config::factory_annotation_modes(),
             annotation_wanted: None,
@@ -950,12 +950,10 @@ impl ImeSession {
         // The annotation too: a new engine starts with yume's modes and none
         // on, and the writer's mode went with the old one.
         let mode = self.annotation_wanted.clone();
-        let (mut engine, mut available, problems) = build_engine(scheme, &self.data_dirs);
-        // Warning: **換方案也要退得到出廠表**（2026-10-12 量到的）。這一句從前只寫在
-        // `new` 裏，而這一支直接拿 `build_engine` 的答案——於是一臺沒裝宇浩的機器上
-        // 開機打得了靈明，`:yume-scheme xingchen` 卻說「碼表沒有裝」，哪怕那張星陳
-        // 的出廠表就嵌在同一個二進制裏。兩條路現在同一句。
-        self.builtin = stand_in(&mut engine, scheme, &mut available);
+        // Warning: **換方案也要退得到出廠表**（2026-10-12 量到的）：`new` 與這一支
+        // 走同一個 `build_engine`，內嵌的那一層在 `locate` 裏，兩條路不會再分家。
+        let (engine, available, problems, builtin) = build_engine(scheme, &self.data_dirs);
+        self.builtin = builtin;
         // 上一個方案若是從一個上傳的碼表載的，那個檔名不再說的是這一個。
         self.table_file = None;
         self.table_skipped = 0;
@@ -1667,15 +1665,79 @@ fn find_file(dirs: &[PathBuf], relative: &str) -> Option<PathBuf> {
     None
 }
 
-/// 出廠自帶的那幾張精簡碼表，`build.rs` 在編譯時放進來的——取不到就是 `None`。
+/// **The tables the binary carries** (2026-11-04): the full 宇浩拼音, 靈明 and
+/// 星陳, with the language layer, packed by `yumete-tables`. Only the `yumete`
+/// binary links that crate, so they are handed over at startup rather than
+/// named here.
+pub struct Carried {
+    /// The bytes of one file by manifest name, unpacked.
+    pub file: fn(&str) -> Option<Vec<u8>>,
+    /// Whether the binary carries that file, without unpacking it.
+    pub has: fn(&str) -> bool,
+    /// Every name carried.
+    pub names: fn() -> Vec<&'static str>,
+    /// Which Yume release the files came from.
+    pub version: Option<&'static str>,
+}
+
+static CARRIED: std::sync::OnceLock<Carried> = std::sync::OnceLock::new();
+
+/// Hand over the tables the binary carries. Called once by `main`, before
+/// [`discover`]; a test binary or another front end never calls it, and then
+/// nothing is carried, as on a machine with no data.
+pub fn carry(tables: Carried) {
+    let _ = CARRIED.set(tables);
+}
+
+fn carried(name: &str) -> Option<Vec<u8>> {
+    CARRIED.get().and_then(|c| (c.file)(name))
+}
+
+fn carries(name: &str) -> bool {
+    CARRIED.get().is_some_and(|c| (c.has)(name))
+}
+
+/// One data file, found on disk or carried in the binary.
+enum Found {
+    Disk(PathBuf),
+    Carried(Vec<u8>),
+}
+
+impl Found {
+    fn path(&self) -> Option<&Path> {
+        match self {
+            Found::Disk(path) => Some(path),
+            Found::Carried(_) => None,
+        }
+    }
+
+    fn carried(&self) -> bool {
+        matches!(self, Found::Carried(_))
+    }
+
+    /// The bytes. A carried file's are cloned: the loaders that take bytes
+    /// keep their own, and a carried file is asked for once per load.
+    fn bytes(&self) -> std::io::Result<Vec<u8>> {
+        match self {
+            Found::Disk(path) => std::fs::read(path),
+            Found::Carried(bytes) => Ok(bytes.clone()),
+        }
+    }
+}
+
+/// `relative` on disk, in the order of `dirs`, else in the binary.
 ///
-/// Everything else yume needs is data a writer installs; these files are the
-/// difference between "an editor that types Chinese" and "an editor that will
-/// type Chinese once you have cloned another repository and run a script".
-/// They are never committed: see `build.rs` for why, and for where they come
-/// from.
-mod builtin {
-    include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
+/// **The disk wins, file by file** (2026-11-04): an installed Yume is newer
+/// than the snapshot this binary was built with, and a data set that lacks
+/// one file (the sentence model, say) still gets that one from here.
+fn locate(dirs: &[PathBuf], relative: &str) -> Option<Found> {
+    if let Some(path) = find_file(dirs, relative) {
+        return Some(Found::Disk(path));
+    }
+    if Path::new(relative).is_absolute() {
+        return None;
+    }
+    carried(relative).map(Found::Carried)
 }
 /// What [`ImeSession::glosses`] found about one character.
 ///
@@ -1710,9 +1772,11 @@ fn shared_divisions() -> &'static AnnotationTable {
     static ONCE: std::sync::OnceLock<AnnotationTable> = std::sync::OnceLock::new();
     ONCE.get_or_init(|| {
         let mut table = AnnotationTable::new();
-        let disk = chaifen_on_disk().and_then(|p| std::fs::read(p).ok());
-        if let Some(bytes) = disk.as_deref().or(builtin::BUILTIN_CHAIFEN) {
-            let _ = table.load_division_bytes(bytes);
+        let bytes = chaifen_on_disk()
+            .and_then(|p| std::fs::read(p).ok())
+            .or_else(|| carried(CHAIFEN));
+        if let Some(bytes) = bytes {
+            let _ = table.load_division_bytes(&bytes);
         }
         table
     })
@@ -1733,77 +1797,50 @@ fn chaifen_on_disk() -> Option<PathBuf> {
 
 /// **這一份二進制帶不帶全息拆分表**——`:yume-where` 那一行問的。
 pub fn has_builtin_chaifen() -> bool {
-    builtin::BUILTIN_CHAIFEN.is_some()
+    carries(CHAIFEN)
 }
 
-/// **裝不出來就退到出廠自帶的那一張**，回「用的是不是它」。
-///
-/// 開機（[`ImeSession::new`]）與換方案（[`ImeSession::set_scheme`]）走的是同一句：
-/// 從前只有前者寫着，後者就少了這條退路。
-fn stand_in(engine: &mut Engine, scheme: Scheme, available: &mut bool) -> bool {
-    if *available {
-        return false;
-    }
-    *available = load_builtin(engine, scheme);
-    *available
-}
+const CHAIFEN: &str = "data/chaifen.ydiv";
 
-/// 這個方案有沒有一張出廠自帶的精簡碼表。
-fn builtin_for(scheme: Scheme) -> Option<&'static [u8]> {
-    match scheme {
-        Scheme::LINGMING => builtin::BUILTIN_LINGMING,
-        Scheme::XINGCHEN => builtin::BUILTIN_XINGCHEN,
-        _ => None,
-    }
-}
-
-/// Put `scheme`'s built-in table into `engine`, reporting whether it can type.
-///
-/// **符號表兩個方案共用一張**（2026-10-07 比對過：星陳源表那 15,711 條是靈明
-/// 15,716 條的真子集，共有的逐字相同，多出來的五條是 `/bdkg`、`/em`、`/en`、
-/// `/kg`、`/nbsp`）。符號碼是 `/` 引導的助記符，與方案無關。
-fn load_builtin(engine: &mut Engine, scheme: Scheme) -> bool {
-    let Some(bytes) = builtin_for(scheme) else {
-        return false;
+/// The file that makes `scheme` typable: its 碼表 for a 形碼 scheme, its
+/// reading table for a 音碼 one.
+fn essential_file(scheme: Scheme) -> Option<String> {
+    let essential = match scheme.is_phonetic() {
+        true => DataKind::Reading,
+        false => DataKind::Table,
     };
-    let mut table = CodeTable::new();
-    if table.load_binary_bytes(bytes).is_err() {
-        return false;
-    }
-    engine.set_table(Arc::new(table));
-    if let Some(bytes) = builtin::BUILTIN_SYMBOLS {
-        let mut symbols = CodeTable::new();
-        if symbols.load_binary_bytes(bytes).is_ok() {
-            engine.set_symbol_table(symbols);
-        }
-    }
-    true
-}
-
-/// Whether this binary carries a 碼表 at all.
-pub fn has_builtin_table() -> bool {
-    builtin::BUILTIN_LINGMING.is_some() || builtin::BUILTIN_XINGCHEN.is_some()
-}
-
-/// **哪幾家的碼表真編進了這個二進制**（2026-10-08）。
-///
-/// Warning: 從前只問得出「有沒有」（[`has_builtin_table`]）和「哪一版」
-/// （[`builtin_version`]），於是 `:yume-where` 那一行寫死了「靈明碼表」——而
-/// 2026-10-07 起裏面是兩張（靈明 ＋ 星陳），報出來的只有一張。
-pub fn builtin_tables() -> Vec<Scheme> {
-    [Scheme::LINGMING, Scheme::XINGCHEN]
+    own_data_set(scheme)
         .into_iter()
-        .filter(|&s| builtin_for(s).is_some())
+        .find(|f| f.kind == essential)
+        .map(|f| f.file)
+}
+
+/// Whether this binary carries `scheme`'s essential file.
+fn carries_scheme(scheme: Scheme) -> bool {
+    essential_file(scheme).is_some_and(|f| carries(&f))
+}
+
+/// Whether this binary carries a scheme at all.
+pub fn has_builtin_table() -> bool {
+    !builtin_tables().is_empty()
+}
+
+/// **Which schemes this binary can type with on its own** (2026-11-04: 宇浩拼音,
+/// 靈明 and 星陳, in full).
+pub fn builtin_tables() -> Vec<Scheme> {
+    [Scheme::PINYIN, Scheme::LINGMING, Scheme::XINGCHEN]
+        .into_iter()
+        .filter(|&s| carries_scheme(s))
         .collect()
 }
 
-/// Which build of yume the built-in 碼表 came from.
+/// Which Yume release the carried tables came from.
 ///
 /// A table compiled into a binary is a *snapshot*, and a writer looking at a
 /// candidate they do not recognise deserves to know how old the snapshot is
 /// before they go looking for a bug in 宇浩.
 pub fn builtin_version() -> Option<&'static str> {
-    builtin::BUILTIN_VERSION
+    CARRIED.get().and_then(|c| c.version)
 }
 
 /// Why one entry of the factory data set is not in the engine (Feature #220).
@@ -2034,82 +2071,111 @@ fn load_data_file(
     engine: &mut Engine,
     dirs: &[PathBuf],
     file: &DataFile,
-) -> Result<(), DataProblem> {
+) -> Result<bool, DataProblem> {
     let at = |name: &str, fault: DataFault| DataProblem {
         file: name.to_string(),
         kind: file.kind,
         fault,
     };
-    let Some(path) = find_file(dirs, &file.file) else {
+    let Some(found) = locate(dirs, &file.file) else {
         return Err(at(&file.file, DataFault::Missing));
     };
-    let Some(p) = path.to_str() else {
-        // A path this host cannot spell in UTF-8. The core's doors take `&str`,
-        // so there is nothing to try.
-        return Err(at(&file.file, DataFault::Unreadable("path is not UTF-8".into())));
-    };
-    // Building the mismatch costs a read of the file's head, so it is only
-    // built on the failing path.
-    let rejected = |path: &Path, reason: String| DataFault::Rejected {
+    // The bytes, read from disk or unpacked from the binary. Only a file on
+    // disk can be stale against this build, so only it has a 檔頭 worth
+    // comparing on the failing path.
+    let path = found.path().map(Path::to_path_buf);
+    let rejected = |reason: String| DataFault::Rejected {
         reason,
-        magic: magic_mismatch(path, file.kind),
+        magic: path.as_deref().and_then(|p| magic_mismatch(p, file.kind)),
+    };
+    // A file on disk goes through the core's own path door, which maps it;
+    // only a carried file is handed over as bytes.
+    let p = match &path {
+        Some(path) => match path.to_str() {
+            Some(p) => Some(p.to_string()),
+            // A path this host cannot spell in UTF-8. The core's doors take
+            // `&str`, so there is nothing to try.
+            None => {
+                let why = DataFault::Unreadable("path is not UTF-8".into());
+                return Err(at(&file.file, why));
+            }
+        },
+        None => None,
+    };
+    let bytes = || {
+        found
+            .bytes()
+            .map_err(|e| at(&file.file, DataFault::Unreadable(e.to_string())))
     };
     match file.kind {
         DataKind::Table => {
             let mut table = CodeTable::new();
-            if let Err(e) = table.load_binary(p) {
-                let why = table_reason(e);
-                return Err(at(&file.file, rejected(&path, why)));
+            let loaded = match &p {
+                Some(p) => table.load_binary(p),
+                None => table.load_binary_bytes(&bytes()?),
+            };
+            if let Err(e) = loaded {
+                return Err(at(&file.file, rejected(table_reason(e))));
             }
             engine.set_table(Arc::new(table));
         }
         DataKind::Symbols => {
             let mut table = CodeTable::new();
-            if let Err(e) = table.load_binary(p) {
-                let why = table_reason(e);
-                return Err(at(&file.file, rejected(&path, why)));
+            let loaded = match &p {
+                Some(p) => table.load_binary(p),
+                None => table.load_binary_bytes(&bytes()?),
+            };
+            if let Err(e) = loaded {
+                return Err(at(&file.file, rejected(table_reason(e))));
             }
             engine.set_symbol_table(table);
         }
         DataKind::Reading => {
             let mut fluency = FluencyTable::new();
-            if let Err(e) = fluency.load_binary(p) {
-                let why = reading_reason(e);
-                return Err(at(&file.file, rejected(&path, why)));
+            let loaded = match &p {
+                Some(p) => fluency.load_binary(p),
+                None => fluency.load_binary_owned(bytes()?),
+            };
+            if let Err(e) = loaded {
+                return Err(at(&file.file, rejected(reading_reason(e))));
             }
             engine.set_reading_table(Arc::new(fluency));
         }
         DataKind::Weights => {
             let mut unigram = UnigramTable::new();
-            if let Err(e) = unigram.load_binary(p) {
-                let why = weights_reason(e);
-                return Err(at(&file.file, rejected(&path, why)));
+            let loaded = match &p {
+                Some(p) => unigram.load_binary(p),
+                None => unigram.load_binary_owned(bytes()?),
+            };
+            if let Err(e) = loaded {
+                return Err(at(&file.file, rejected(weights_reason(e))));
             }
             engine.unigram = Arc::new(unigram);
         }
         DataKind::Lexicon => {
             let mut lexicon = Lexicon::new();
-            if let Err(e) = lexicon.load_binary(p) {
-                let why = lexicon_reason(e);
-                return Err(at(&file.file, rejected(&path, why)));
+            let loaded = match &p {
+                Some(p) => lexicon.load_binary(p),
+                None => lexicon.load_binary_owned(bytes()?),
+            };
+            if let Err(e) = loaded {
+                return Err(at(&file.file, rejected(lexicon_reason(e))));
             }
             engine.lexicon = Arc::new(lexicon);
         }
         DataKind::Annotations => {
             // 全息拆分表 plus this scheme's 字根表; the divisions are shared by
             // every scheme, and pinyin takes them with no 字根表 at all.
-            let bytes = std::fs::read(&path)
-                .map_err(|e| at(&file.file, DataFault::Unreadable(e.to_string())))?;
-            let divisions = DivisionTable::from_binary(&bytes)
-                .map_err(|e| at(&file.file, rejected(&path, e.to_string())))?;
+            let divisions = DivisionTable::from_binary(&bytes()?)
+                .map_err(|e| at(&file.file, rejected(e.to_string())))?;
             // The 字根表 is the *second* half of this entry, and losing it must
             // not cost the first: 拆分・讀音・字集 all come off the divisions,
             // and only 編碼 comes off the 字根表. So the annotations go in
             // either way, and a refused 字根表 is reported afterwards.
             let divisions = Arc::new(divisions);
-            let zigen_path = find_file(dirs, &file.aux);
-            let zigen = match zigen_path.as_ref() {
-                Some(aux) => match std::fs::read(aux) {
+            let zigen_found = locate(dirs, &file.aux);
+            let zigen = match zigen_found.as_ref() {
+                Some(aux) => match aux.bytes() {
                     // The 字根表 has no exported magic of its own, so the
                     // core's sentence is the whole answer here.
                     Ok(bytes) => ZigenTable::from_binary(&bytes).map_err(|e| {
@@ -2138,7 +2204,11 @@ fn load_data_file(
             // was built from and it is meaningless anywhere else. So it has no
             // manifest entry of its own and is picked up here, exactly as
             // yume's own loader picks it up.
-            if let Some(derived) = zigen_path.as_ref().map(|p| p.with_extension("ycdv")) {
+            let derived = zigen_found
+                .as_ref()
+                .and_then(Found::path)
+                .map(|p| p.with_extension("ycdv"));
+            if let Some(derived) = derived {
                 if derived.is_file() {
                     if let Ok(d) = CustomDivisions::load_binary(&derived.to_string_lossy()) {
                         table.attach_custom_divisions(d);
@@ -2156,27 +2226,38 @@ fn load_data_file(
                 .and_then(|i| NAMED_CHARSETS.get(i))
             else {
                 let why = format!("no charset slot {}", file.slot);
-                return Err(at(&file.file, rejected(&path, why)));
+                return Err(at(&file.file, rejected(why)));
             };
             let mut charset = Charset::new(id);
-            if let Err(e) = charset.load_binary(p) {
-                return Err(at(&file.file, rejected(&path, e.to_string())));
+            let loaded = match &p {
+                Some(p) => charset.load_binary(p).map_err(|e| e.to_string()),
+                None => charset.load_binary_bytes(&bytes()?).map_err(str::to_string),
+            };
+            if let Err(e) = loaded {
+                return Err(at(&file.file, rejected(e)));
             }
             if !engine.set_named_charset(id, charset) {
                 let why = "the engine refused the charset".to_string();
-                return Err(at(&file.file, rejected(&path, why)));
+                return Err(at(&file.file, rejected(why)));
             }
         }
-        DataKind::Words => match yume_core::word_whitelist::load_binary(p) {
-            Ok(words) => engine.set_word_whitelist(words),
-            Err(e) => return Err(at(&file.file, rejected(&path, e.to_string()))),
-        },
+        DataKind::Words => {
+            let loaded = match &p {
+                Some(p) => yume_core::word_whitelist::load_binary(p).map_err(|e| e.to_string()),
+                None => yume_core::word_whitelist::load_binary_bytes(&bytes()?)
+                    .map_err(str::to_string),
+            };
+            match loaded {
+                Ok(words) => engine.set_word_whitelist(words),
+                Err(e) => return Err(at(&file.file, rejected(e))),
+            }
+        }
         DataKind::Grammar => {
-            if let Err(e) = engine.load_grammar_binary(p) {
-                return Err(at(&file.file, rejected(&path, e.to_string())));
+            if let Err(e) = engine.load_packed_grammar_owned(bytes()?) {
+                return Err(at(&file.file, rejected(e.to_string())));
             }
         }
-        DataKind::SimpTrad => match std::fs::read_to_string(&path) {
+        DataKind::SimpTrad => match String::from_utf8(bytes()?) {
             Ok(text) => engine.load_simp_trad_text(&text),
             Err(e) => return Err(at(&file.file, DataFault::Unreadable(e.to_string()))),
         },
@@ -2186,11 +2267,13 @@ fn load_data_file(
         // kind broke the *build* instead. Now it does what it said.
         _ => return Err(at(&file.file, DataFault::UnknownKind)),
     }
-    Ok(())
+    Ok(found.carried())
 }
 
-/// Assemble an engine for `scheme` from the compiled tables in `dirs`. Returns
-/// the engine and whether the scheme can actually be typed with.
+/// Assemble an engine for `scheme` from the compiled tables in `dirs`, and
+/// from the binary's for what they lack. Returns the engine, whether the
+/// scheme can actually be typed with, what would not load, and whether the
+/// essential file came from the binary.
 ///
 /// The list of files *is* `yume_core::data_manifest` — deliberately, because
 /// that module exists to stop every frontend keeping its own copy that silently
@@ -2200,9 +2283,10 @@ fn load_data_file(
 /// composing needs the scheme's own dictionary and nothing else. Missing word
 /// weights or charsets cost ranking and filtering, but an editor that can still
 /// type 漢字 should not fall back to ASCII over them.
-fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProblem>) {
+fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProblem>, bool) {
     let mut engine = Engine::new(CodeTable::new());
     let mut dictionary = false;
+    let mut carried = false;
     let mut problems = Vec::new();
     // Which file *is* this scheme: a 形碼 scheme is dead without its 碼表, a
     // 音碼 one decodes through its reading table and has no 碼表 at all. Asked
@@ -2232,14 +2316,15 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
 
     for file in data_set(scheme) {
         let loaded = match load_data_file(&mut engine, dirs, &file) {
-            Ok(()) => true,
+            Ok(from_binary) => Some(from_binary),
             Err(problem) => {
                 problems.push(problem);
-                false
+                None
             }
         };
-        if loaded && file.kind == essential && is_own(&file) {
+        if let Some(from_binary) = loaded.filter(|_| file.kind == essential && is_own(&file)) {
             dictionary = true;
+            carried = from_binary;
         }
     }
 
@@ -2272,7 +2357,7 @@ fn build_engine(scheme: Scheme, dirs: &[PathBuf]) -> (Engine, bool, Vec<DataProb
         }
     }
 
-    (engine, dictionary, problems)
+    (engine, dictionary, problems, carried)
 }
 
 #[cfg(test)]
@@ -2372,39 +2457,6 @@ mod tests {
                 got.rows.iter().rev().take(2).map(|(n, _)| n.as_str()).collect();
             assert_eq!(last, ["統一碼區塊", "統一碼"], "兩行在最後，區塊貼着碼位");
         }
-    }
-
-    /// **出廠自帶的那幾張，一個方案一張**（2026-10-07 加星陳）。
-    ///
-    /// 從前這道閘寫死 `scheme == Scheme::LINGMING`，所以就算多嵌一張也沒人讀得
-    /// 到。這一條驗的是真的打得出字——沒裝任何東西的機器上，選星陳也能打。
-    ///
-    /// ⚠️ **取不到就跳過**：出廠表是編譯時從 `yume-release` 取的，離線編出來的
-    /// 二進制本來就不帶表，那時這一條什麼也證明不了（同 `:convert` 那幾條在沒有
-    /// opencc 的機器上的辦法）。
-    #[test]
-    fn each_scheme_with_a_built_in_table_can_type_with_nothing_installed() {
-        for (scheme, code, want) in [
-            (Scheme::LINGMING, 'e', "的"),
-            (Scheme::XINGCHEN, 'd', "的"),
-        ] {
-            if builtin_for(scheme).is_none() {
-                continue;
-            }
-            // **空的搜索路徑**：裝好的東西一概看不見，只剩內嵌那一張。
-            let mut ime = ImeSession::new(scheme, Vec::new());
-            assert!(ime.available(), "{} 該靠內嵌的那張站得住", scheme.tag());
-            assert!(ime.is_builtin(), "{} 用的該是內嵌的那一張", scheme.tag());
-            ime.input(code);
-            assert_eq!(ime.top_candidate(), want, "{} 打 {code} 該出「{want}」", scheme.tag());
-        }
-    }
-
-    /// 沒有出廠表的方案照舊答「沒有」，不許拿靈明那張頂上。
-    #[test]
-    fn a_scheme_with_no_built_in_table_says_so() {
-        assert!(builtin_for(Scheme::PINYIN).is_none());
-        assert!(builtin_for(Scheme::QINGYUN).is_none());
     }
 
     #[test]
@@ -2539,60 +2591,6 @@ mod tests {
         assert!(!s.is_chinese());
         s.toggle_language();
         assert!(s.is_chinese());
-    }
-
-    /// Warning: This used to hedge — 「whether it can depends on the machine that
-    /// built this binary, and both answers are correct」 — and the hedge is
-    /// back, on purpose and narrowed. The 碼表 is a **build input**, not a
-    /// tracked file (`build.rs`): a release build downloads it, a developer's
-    /// build finds the installed one, and a bare machine with neither builds
-    /// with none. So what is tested is that the two facts **agree** — a build
-    /// that says it carries a table must be able to type with it, which is
-    /// also the guard against a `.ytab` magic bump silently emptying it.
-    #[test]
-    fn a_machine_with_nothing_installed_can_still_type() {
-        let mut s = ImeSession::new(Scheme::LINGMING, vec![PathBuf::from("/no/such/dir")]);
-        if !has_builtin_table() {
-            assert!(!s.available(), "no table, and it says so");
-            assert!(builtin_version().is_none());
-            return;
-        }
-        assert!(s.available());
-        assert!(s.is_builtin());
-        assert_eq!(s.scheme(), Scheme::LINGMING);
-        s.input('a');
-        assert!(!s.page_candidates().is_empty(), "and it really answers");
-        let source = s.table_source().expect("有表就說得出是哪一份");
-        assert!(source.starts_with("出廠自帶"), "and says which one: {source}");
-
-        // Only 靈明 — the others are installed, and without their tables the
-        // session is honestly unavailable rather than silently 靈明.
-        let other = ImeSession::new(Scheme::RIYUE, vec![PathBuf::from("/no/such/dir")]);
-        assert!(!other.available());
-        assert_eq!(other.scheme(), Scheme::RIYUE);
-    }
-
-    /// **換方案也退得到出廠表**（2026-10-12 量到的）。
-    ///
-    /// 那句退路從前只寫在 `new` 裏，而 `set_scheme` 直接拿 `build_engine` 的答案。
-    /// 症狀：一臺沒裝宇浩的機器上開機打得了靈明，`:yume-scheme xingchen` 卻說
-    /// 「碼表沒有裝」——而那張星陳的出廠表就嵌在同一個二進制裏。拿發布包在一個空
-    /// 的 HOME 底下量到的，新舊兩個包都這麽說。
-    ///
-    /// 同上一條的規矩：嵌了什麽由建這個二進制的機器決定，所以驗的是**兩件事對不
-    /// 對得上**——說自己帶了星陳，就得切得過去並且答得出候選。
-    #[test]
-    fn switching_scheme_falls_back_to_a_built_in_table_too() {
-        let mut s = ImeSession::new(Scheme::LINGMING, vec![PathBuf::from("/no/such/dir")]);
-        if !builtin_tables().contains(&Scheme::XINGCHEN) {
-            assert!(!s.set_scheme(Scheme::XINGCHEN), "沒嵌星陳就該說不行");
-            return;
-        }
-        assert!(s.set_scheme(Scheme::XINGCHEN), "嵌了星陳就該切得過去");
-        assert_eq!(s.scheme(), Scheme::XINGCHEN);
-        assert!(s.is_builtin(), "用的是出廠那一張，說得出來");
-        s.input('a');
-        assert!(!s.page_candidates().is_empty(), "而且真答得出候選");
     }
 
 }

@@ -1,0 +1,17 @@
+[package]
+name = "yumete-tables"
+description = "The full 宇浩拼音, 靈明 and 星陳 tables, compressed into the binary."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+version.workspace = true
+
+# **Only the `yumete` binary depends on this crate.** The tables are about
+# 60 MB raw; a crate every test binary links would copy them into each one.
+
+[dependencies]
+zstd = { version = "0.13", default-features = false }
+
+[build-dependencies]
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+zstd = { version = "0.13", default-features = false }

@@ -5,6 +5,7 @@ members = [
   "crates/yumete-config",
   "crates/yumete-ime",
   "crates/yumete-tui",
+  "crates/yumete-tables",
   "crates/yumete",
 ]
 resolver = "2"
@@ -45,3 +46,13 @@ debug = "line-tables-only"
 # Warning: **回溯照舊讀得懂**（#300）：`line-tables-only` 那一半原樣還在，只是換了個
 # 地方放。代價是每次鏈接多跑一趟 dsymutil。
 split-debuginfo = "packed"
+
+# **zstd at full speed, also inside a build script.** `yumete-tables`'s build
+# script packs about 60 MB at level 19 once per cache; build scripts are
+# compiled unoptimised by default, and the C at -O0 is several times slower.
+# A package override wins over `build-override`, so this reaches the copy the
+# build script links as well as the one the binary does.
+[profile.dev.package.zstd-sys]
+opt-level = 3
+[profile.release.package.zstd-sys]
+opt-level = 3

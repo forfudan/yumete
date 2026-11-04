@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **The full 宇浩拼音, 靈明 and 星陳 tables are in the binary**, with the word frequencies, the word list and the sentence model, so all three type with nothing installed. They come from the current Yume release at build time and are kept zstd-compressed (the binary grows from 31 MB to 58 MB). An installed Yume still wins, file by file. The 精華版 tables are gone.
 - **How much a window you are not in fades is a setting**: `[theme] inactive`, from 50 to 100, keeps 95% of the ink by default. Focus mode's is `[theme] focus`, from 10 to 100, 50 by default. Both are on the settings panel's Colours page.
 - **The name yumete at the right end of the command line**, dimmed, while nothing else is on it, as it once was: `[editor] signature`, on by default, on the settings panel's Interface page.
 - **Two blocks at the ends of the tab line open and close the sidebars** with a click, as `C-w e` and `C-w i` do: grey when the sidebar is closed, the panel's frame colour when it is open, gold when the keys are in it. `[editor] sidebar_buttons`, on by default. A sidebar opened again, by its block or its key, shows the panel it was closed on.
@@ -18,6 +19,9 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **宇浩拼音 is the scheme yumete starts with**; it was 靈明. `[ime] scheme` still chooses.
+- **`:yume-builtin` uses the built-in table of the scheme you are in**; it always meant 靈明.
+- **The `C-w` hints are shorter**: `q` close, `c` close but don't quit, `f` and `F` the file under the cursor below and beside.
 - **`scrolloff` is 5 by default**, as helix's is and vim's `defaults.vim` sets it; it was 3.
 - **Focus mode fades the other windows too**, as far as it fades the paragraphs around the one being written.
 - **Under vim, a new window opens above or to the left** of the one you are in, as vim's does; under helix, below or to the right as before. `C-w s`, `C-w v`, `:hsplit`, `:vsplit`, `C-w n`, `C-w ^` and `C-w f` all follow it.

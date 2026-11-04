@@ -17,9 +17,11 @@ name: Tests
 # likely to find something: every other `cfg` in the tree has one arm nobody
 # runs, and the paths there use the other separator.
 #
-# Warning: **No 碼表 and no word list.** `release.yaml` fetches them because it is
-# packaging; a bare `cargo test` has never needed them, and pulling 36 MB per
-# run to prove that again is a cost with no answer attached.
+# **The tables the binary carries are built here too** (2026-11-04): the
+# `yumete` binary depends on `yumete-tables`, whose build script fetches Yume's
+# macOS package once. The directory is cached between runs, so a run pays for
+# the download only when the cache is cold, and `yumete-ime/tests/carried.rs`
+# checks that the binary can type with them.
 on:
   push:
   pull_request:
@@ -59,6 +61,12 @@ jobs:
       run:
         shell: bash
         working-directory: yumete
+    # Where `yumete-tables` keeps the tables, and a token for the one GitHub
+    # API call it makes to find the package, so a shared runner address is
+    # not rate limited.
+    env:
+      YUMETE_BUILTIN_DIR: ${{ github.workspace }}/yume-tables
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,6 +110,11 @@ jobs:
         with:
           key: test-${{ matrix.os }}
           workspaces: yumete
+
+      - uses: actions/cache@v4
+        with:
+          path: yume-tables
+          key: yume-tables-${{ matrix.os }}-1
 
       # `--locked` so a stale `Cargo.lock` is a failure here rather than a
       # surprise in `release.yaml`, which builds with it too.

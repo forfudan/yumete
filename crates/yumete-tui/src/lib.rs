@@ -4415,13 +4415,13 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
         *ime = full;
         return say!("ime.scheme-from-system", ime.scheme_name());
     }
-    // **`!` 後面跟得了一個方案名**（2026-10-07 定）。`!` 光着還是靈明，和從前
-    // 一個字不差；`! xingchen` 是內嵌的星陳。從前這裏寫死 `builtin_lingming`，
-    // 於是二進制裏多嵌一張也走不到——星陳裝好的表壞了的時候沒有這條路。
+    // **`!` 後面跟得了一個方案名**（2026-10-07 定）；`! xingchen` 是內嵌的星陳。
+    // `!` 光着是**眼下這個方案**的內嵌那一份（2026-11-04）：從前是靈明，因爲那時
+    // 二進制裏只有靈明一張能打；現在拼音、靈明、星陳三家都在裏面。
     if let Some(rest) = tag.strip_prefix('!') {
         let rest = rest.trim();
         let scheme = match rest.is_empty() {
-            true => Some(yumete_ime::Scheme::LINGMING),
+            true => Some(ime.scheme()),
             false => yumete_ime::Scheme::from_tag(rest),
         };
         let Some(scheme) = scheme else {
@@ -24125,6 +24125,9 @@ fn squeezed(text: &str) -> String {
         }
         let mut editor = editor_with("那年冬天");
         let config = Config::default();
+        // A scheme that can type, so the standing 中 tag is drawn: the test
+        // binaries carry no tables (2026-11-04), and `no_ime` has none.
+        let ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
         let row = |b: &ratatui::buffer::Buffer, w: u16| -> String {
             let y = b.area.height - 2;
             (0..w).map(|x| at(b, x, y)).collect::<String>()
@@ -24135,7 +24138,7 @@ fn squeezed(text: &str) -> String {
         // field, and ninety cells with an IME tag on them can no longer hold
         // the block name as well — which is the readout's own third stage of
         // giving way working correctly, not this test's subject.
-        let buffer = render(&editor, &config, 100, 10);
+        let buffer = render_with(&editor, &config, &ime, 100, 10);
         let line = row(&buffer, 100);
         assert!(
             line.contains("U+90A3") && line.contains("CJK Unified Ideographs"),
@@ -24150,12 +24153,12 @@ fn squeezed(text: &str) -> String {
         // Moving names a different one.
         editor.on_key(Key::Char('l'));
         editor.on_key(Key::Char('l'));
-        let buffer = render(&editor, &config, 90, 10);
+        let buffer = render_with(&editor, &config, &ime, 90, 10);
         assert!(row(&buffer, 90).contains("U+51AC"), "冬");
 
         // A narrow line gives up the block name before the code point, and the
         // position readout is never squeezed.
-        let buffer = render(&editor, &config, 60, 10);
+        let buffer = render_with(&editor, &config, &ime, 60, 10);
         let line = row(&buffer, 60);
         assert!(line.contains("U+51AC"), "the code point survives: {line:?}");
         assert!(!line.contains("CJK Unified"), "the block name gives way first");
@@ -24165,7 +24168,7 @@ fn squeezed(text: &str) -> String {
         assert!(line.contains("靈"), "the language tag stands: {line:?}");
 
         // Narrower still and it says nothing rather than truncating.
-        let buffer = render(&editor, &config, 44, 10);
+        let buffer = render_with(&editor, &config, &ime, 44, 10);
         assert!(!row(&buffer, 44).contains("U+"), "nothing rather than a stub");
     }
 
@@ -26158,9 +26161,10 @@ fn squeezed(text: &str) -> String {
         let buf = render_with(&editor, &config, no_ime(), 100, 24);
         let ink = ink(&config);
         // The leftmost: the list stands left of the preview, whose title
-        // names the file too.
+        // names the file too. Above the status line, which names the open
+        // file as well.
         let find = |name: &str| -> (u16, u16) {
-            (0..24u16)
+            (0..22u16)
                 .filter_map(|y| {
                     let row: String = (0..100u16).map(|x| buf.cell((x, y)).map_or(" ", |c| c.symbol())).collect();
                     row.find(name).map(|at| (row[..at].chars().count() as u16, y))

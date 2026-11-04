@@ -2361,11 +2361,11 @@ en = "autocompletion: offer candidates before the code is finished"
 find = "輸入法 输入法 預測 预测 補全 补全 候選 候选 autocompletion prediction"
 
 [[message]]
-# : 命令選單裏 builtin 那一項的説明(yume 組)
+# : 命令選單裏 builtin 那一項的説明(yume 組)（草稿）
 key = "cmd.yume.builtin"
-zht = "改用出廠自帶的靈明碼表，不管裝了什麼"
-zhs = "改用出厂自带的灵明码表，不管装了什么"
-en = "use the built-in 靈明 table, whatever else is installed"
+zht = "改用出廠自帶的碼表，不管裝了什麼"
+zhs = "改用出厂自带的码表，不管装了什么"
+en = "use the built-in table of this scheme, whatever else is installed"
 find = "輸入法 输入法 碼表 码表 內置 内置 出廠 出厂 builtin"
 
 [[message]]

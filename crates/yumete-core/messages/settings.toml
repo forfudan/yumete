@@ -922,11 +922,11 @@ zhs = "输入方案"
 en = "scheme"
 
 [[message]]
-# 設置：输入方案——一句話
+# 設置：输入方案——一句話（草稿）
 key = "settings.ime.scheme.hint"
-zht = "用哪一套輸入方案（靈明和星陳自帶精華版），其他方案需安裝"
-zhs = "用哪一套输入方案（灵明和星陈自带精华版），其他方案需安装"
-en = "which 碼表 to type with. 靈明 and 星陳 come built in; the others need the data installed"
+zht = "用哪一套輸入方案（拼音、靈明、星陳自帶），其他方案需安裝"
+zhs = "用哪一套输入方案（拼音、灵明、星陈自带），其他方案需安装"
+en = "which 碼表 to type with. 拼音, 靈明 and 星陳 come built in; the others need the data installed"
 
 [[message]]
 # 設置：启动就载入码表

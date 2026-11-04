@@ -385,8 +385,8 @@ zhs = "宇浩拆分表"
 en = "宇浩 拆分表"
 
 [[message]]
-# `:yume-where`：出廠自帶的碼表，一家一行。{0} 是方案名，{1} 是版本(「精華版
-# 日期」那一段是編譯時戳的，見 `yumete-ime/build.rs`)。
+# `:yume-where`：出廠自帶的碼表，一家一行。{0} 是方案名，{1} 是版本(宇浩發布包
+# 的日期，編譯時戳的，見 `yumete-tables/build.rs`)。
 key = "yume.where.builtin-is"
 zht = "{0} {1}"
 zhs = "{0} {1}"

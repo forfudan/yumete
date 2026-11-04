@@ -9,3 +9,8 @@ version.workspace = true
 yume-core = { path = "../../../yume/crates/yume-core" }
 yumete-cjk = {path = "../yumete-cjk"}
 yumete-config = { path = "../yumete-config" }
+
+[dev-dependencies]
+# Only `tests/carried.rs` hands the tables over: the set is process-wide, so
+# the tests that see it live in a binary of their own.
+yumete-tables = { path = "../yumete-tables" }

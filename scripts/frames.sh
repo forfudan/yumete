@@ -66,11 +66,11 @@ scenes() {
 代碼-Mojo|80x20|:open MOJO\n
 代碼-竪排是橫的|60x24|:open RUST\n:vertical\n
 合併衝突|80x20|:open CONFLICT\n
-輸入法-候選|80x20|i\{ime}nahnian
-輸入法-候選-竪排|60x24|:vertical\ni\{ime}nahnian
-輸入法-底行|80x20|:yume-panel bottom\ni\{ime}nahnian
-輸入法-行中|80x20|:yume-panel inline\ni\{ime}nahnian
-輸入法-行中-竪排|60x24|:vertical\n:yume-panel inline\ni\{ime}nahnian
+輸入法-候選|80x20|i\{ime}nianjia
+輸入法-候選-竪排|60x24|:vertical\ni\{ime}nianjia
+輸入法-底行|80x20|:yume-panel bottom\ni\{ime}nianjia
+輸入法-行中|80x20|:yume-panel inline\ni\{ime}nianjia
+輸入法-行中-竪排|60x24|:vertical\n:yume-panel inline\ni\{ime}nianjia
 改動帶子|80x24|:open GIT\nj x
 改動帶子-還原|80x24|:open GIT\nj xu
 改動帶子-裝不下|60x20|:open GITBIG\n x
@@ -168,9 +168,10 @@ shoot() {
         # The config too (2026-10-31): `hard_wrap = 80` in the user's own
         # config changed the settings frame. An empty folder beside the run,
         # named relatively so the settings page shows the same path on every
-        # machine. Not an empty HOME: the input-method frames need the tables
-        # installed under it.
-        if ! ( cd "${work}" && mkdir -p ../config && XDG_CONFIG_HOME=../config XDG_DATA_HOME="${PWD}/../data" "${BIN}" --lang=zh --shot="${size}" --keys="${pressed}" 文.md ) \
+        # machine. And an empty HOME (2026-11-04): the binary carries its own
+        # tables now, so the input-method frames no longer read the ones
+        # installed on this machine, and do not change when Yume is updated.
+        if ! ( cd "${work}" && mkdir -p ../config ../home && HOME="${PWD}/../home" XDG_CONFIG_HOME=../config XDG_DATA_HOME="${PWD}/../data" "${BIN}" --lang=zh --shot="${size}" --keys="${pressed}" 文.md ) \
             > "${into}/${name}.txt" 2> "${whined}"; then
             printf 'Warning: 拍 %s 的時候 yumete 自己就退出了：\n' "${name}" >&2
             sed 's/^/    /' "${whined}" >&2

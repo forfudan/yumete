@@ -747,7 +747,7 @@ impl SystemImePolicy {
 impl Default for ImeConfig {
     fn default() -> Self {
         ImeConfig {
-            scheme: "lingming".to_string(),
+            scheme: "pinyin".to_string(),
             start: false,
             commit: None,
             data_dirs: Vec::new(),

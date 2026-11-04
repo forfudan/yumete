@@ -111,6 +111,15 @@ fn reopen_in(there: &std::path::Path) -> std::io::Result<()> {
 mod docgen;
 
 fn main() -> ExitCode {
+    // **The tables this binary carries** (2026-11-04): handed to the IME
+    // before anything asks it for a scheme, so the scan and every load see
+    // them behind whatever is installed.
+    yumete_ime::carry(yumete_ime::Carried {
+        file: yumete_tables::file,
+        has: yumete_tables::has,
+        names: || yumete_tables::names().collect(),
+        version: yumete_tables::VERSION,
+    });
     // **第一次打開就問一次**，在任何東西碰數據目錄之前（見 `first_time_ever`）。
     let brand_new = first_time_ever();
     let mut files: Vec<String> = Vec::new();

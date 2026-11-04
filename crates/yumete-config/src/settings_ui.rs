@@ -770,7 +770,7 @@ pub const SETTINGS: &[Setting] = &[
         kind: Kind::PickOr(SCHEME_NAMES),
         label: "settings.ime.scheme",
         hint: "settings.ime.scheme.hint",
-        factory: r#""lingming""#,
+        factory: r#""pinyin""#,
     },
     // **上屏方式也有一行**（2026-10-16 補）。`[ime] commit` 從前只有命令與配置
     // 檔，而設置頁是 `[ime]` 那一張表上唯一缺的一格。出廠「未設」，同
