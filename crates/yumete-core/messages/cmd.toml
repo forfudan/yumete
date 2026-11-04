@@ -1617,9 +1617,9 @@ find = "靈明 灵明 lingming 形碼 形码"
 [[message]]
 # : 命令選單裏 pinyin 那一項的説明(schemes 組)
 key = "cmd.schemes.pinyin"
-zht = "拼音"
-zhs = "拼音"
-en = "拼音"
+zht = "宇浩拼音"
+zhs = "宇浩拼音"
+en = "宇浩拼音"
 find = "拼音 漢語拼音 汉语拼音 音碼 音码 pinyin"
 
 [[message]]

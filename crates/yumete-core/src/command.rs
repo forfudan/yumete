@@ -169,8 +169,10 @@ pub enum Command {
     QuitAll {
         force: bool,
     },
-    /// `:wq [path]` — save (optionally to a new path), then leave.
-    WriteQuit(Option<String>),
+    /// `:wq [path]` — save (optionally to a new path), then leave. `:wq!`
+    /// (helix's `write-quit!`) writes over a file changed outside and
+    /// leaves whatever else is unsaved, as `:q!` does.
+    WriteQuit { path: Option<String>, force: bool },
     /// `:write-quit-all` (aliases `:wqa`, `:xa`) — save every file that
     /// changed, then leave. vim's `:wqa` / `:xa` and helix's
     /// `:write-quit-all`: a file that could not be saved keeps the editor open.
@@ -1698,6 +1700,8 @@ const FORCEABLE: &[&str] = &[
     // then leave, as `:qa!` does. The oversize question still stops it — a
     // bang never answers that one (see `write_forcing`).
     "write-quit-all!",
+    // `:wq!`, helix's `write-quit!` (2026-11-04).
+    "write-quit!",
     "reload!",
     "quit!",
     "export!",
@@ -3470,7 +3474,7 @@ pub const COMMANDS: &[Entry] = &[
         help: "cmd.commands.write-quit",
         needs: &[],
         params: &[Param::Path],
-        build: Some(|p| Ok(Command::WriteQuit(p.arg(0).map(|s| s.to_string())))),
+        build: Some(|p| Ok(Command::WriteQuit { path: p.arg(0).map(|s| s.to_string()), force: p.force })),
     },
     // `:xa` beside `:wqa`, as in vim and helix: both save only what changed,
     // the way `:x` does, so the two spellings are one command here too.
@@ -7067,11 +7071,14 @@ mod tests {
         for line in [":write-quit-all!", ":wqa!", ":xa!"] {
             assert_eq!(parse(line), Ok(Command::WriteQuitAll { force: true }), "{line}");
         }
-        // A spelling of `write-quit`, or one that names no single command,
-        // does not become `:wqa!` by growing a bang (2026-10-26 review).
-        for line in [":write-q!", ":write-qui!", ":write-!", ":wq!"] {
-            assert!(matches!(parse(line), Err(CommandError::Unknown(_))), "{line}");
+        // A spelling of `write-quit` with a bang is `:wq!` (2026-11-04,
+        // helix's `write-quit!`), never `:wqa!`; one that names no single
+        // command is nothing (2026-10-26 review).
+        for line in [":write-q!", ":write-qui!", ":wq!"] {
+            assert!(!matches!(parse(line), Ok(Command::WriteQuitAll { .. })), "{line}: {:?}", parse(line));
         }
+        assert_eq!(parse(":wq!"), Ok(Command::WriteQuit { path: None, force: true }));
+        assert!(matches!(parse(":write-!"), Err(CommandError::Unknown(_))));
         // `:x` is `exit`'s whole spelling, so it heads the menu and Tab takes
         // it; `write-quit-all`, reached by `xa`, stands as itself.
         let rows: Vec<String> = complete("x").iter().map(Choice::written).collect();
@@ -7874,7 +7881,8 @@ mod tests {
             complete("wq").iter().map(|e| e.name).collect::<Vec<_>>(),
             ["write-quit", "write-quit-all"]
         );
-        assert_eq!(parse(":wq"), Ok(Command::WriteQuit(None)));
+        assert_eq!(parse(":wq"), Ok(Command::WriteQuit { path: None, force: false }));
+        assert_eq!(parse(":wq!"), Ok(Command::WriteQuit { path: None, force: true }));
         assert_eq!(
             complete("bc").iter().map(|e| e.name).collect::<Vec<_>>(),
             ["buffer-close"]

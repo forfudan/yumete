@@ -233,7 +233,7 @@ en = "common characters, both scripts"
 key = "ime.lane.first"
 zht = "（首軌）"
 zhs = "（首轨）"
-en = " (first)"
+en = ", first"
 
 [[message]]
 # 整句字集軌：gang 那一軌的名字（宇夢的字串）
@@ -430,6 +430,27 @@ key = "ime.sort.tonggui"
 zht = "簡化字優先"
 zhs = "简化字优先"
 en = "simplified first"
+
+[[message]]
+# `:yume-which`：碼表是二進制自帶的
+key = "ime.source.builtin"
+zht = "出廠自帶"
+zhs = "出厂自带"
+en = "built in"
+
+[[message]]
+# 同上，帶宇夢的版本。{0} 是版本
+key = "ime.source.builtin-version"
+zht = "出廠自帶 {0}"
+zhs = "出厂自带 {0}"
+en = "built in, {0}"
+
+[[message]]
+# `:yume-which`：碼表是裝好的宇夢那一份（拼音沒有單獨的表檔可報）
+key = "ime.source.installed"
+zht = "已安裝"
+zhs = "已安装"
+en = "installed"
 
 [[message]]
 # :yume ? ——輸入法此刻的樣子（拆分改成注解：草稿）

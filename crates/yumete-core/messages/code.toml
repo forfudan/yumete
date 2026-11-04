@@ -396,9 +396,9 @@ en = "not a program file — no server to ask"
 [[message]]
 # 按 空格 k 的時候：設置裏寫了，可這臺機器上没有那個程序
 key = "lsp.not-installed"
-zht = "找不到 {0}，請在設置中檢查拼寫或確保其已經安裝"
-zhs = "找不到 {0}，请在设置中检查拼写或确保其已经安装"
-en = "{0} is not on this machine — check the spelling in :settings, or install it"
+zht = "找不到 {0}，請在配置的 [lsp] 表中檢查拼寫，或安裝它"
+zhs = "找不到 {0}，请在配置的 [lsp] 表中检查拼写，或安装它"
+en = "not on this machine: {0}. Check the spelling in the config's [lsp] table, or install it"
 
 [[message]]
 # gr、空格 r、空格 a 在沒接語言服務器的文件裏

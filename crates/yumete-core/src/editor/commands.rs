@@ -439,7 +439,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             // `:wq` 在面板上是「存了再關」，兩張條子一起放。
-            Command::WriteQuit(_) if self.settings_open => {
+            Command::WriteQuit { .. } if self.settings_open => {
                 self.settings_save = true;
                 self.settings_close = Some(false);
                 Ok(CommandOutcome::Continue)
@@ -462,11 +462,11 @@ impl Editor {
                 self.settings_close = Some(false);
                 self.write_all()
             }
-            Command::WriteQuit(path) => self.write_then_quit(path, false),
+            Command::WriteQuit { path, force } => self.write_then_quit(path, false, force),
             Command::WriteQuitAll { force } => self.write_quit_all(force),
             // `:x` and `:xit`: the same, and the save is skipped when nothing
             // was changed. A path is an instruction, so it is always written.
-            Command::Exit(path) => self.write_then_quit(path, true),
+            Command::Exit(path) => self.write_then_quit(path, true, false),
             Command::Update => {
                 if !self.current_buffer().is_modified() {
                     self.status = say!("buffer.unchanged-not-written");
@@ -1746,7 +1746,7 @@ impl Editor {
                     Ok(Wrote::Asked) => {}
                     Ok(_) => {
                         let went = match then {
-                            Some(Then::Quit) => self.quit(false),
+                            Some(Then::Quit(force)) => self.quit(force),
                             Some(Then::WriteAll(force)) => self.write_all_forcing(force),
                             Some(Then::WriteQuitAll(force)) => self.write_quit_all(force),
                             None => Ok(CommandOutcome::Continue),
@@ -1918,18 +1918,14 @@ impl Editor {
         let name = crate::encoding::name(found.encoding);
         let (line, col, c) = found.first;
         let sample: String = found.sample.iter().map(|c| format!("{c} ")).collect();
+        let file = self.current_buffer().display_name();
         Query {
             title: say!("encoding.ask-title", name),
-            body: say!(
-                "encoding.ask-what",
-                self.current_buffer().display_name(),
-                name,
-                found.count,
-                c,
-                line,
-                col,
-                sample.trim_end()
-            ),
+            // One character is named once, not counted and listed again.
+            body: match found.count {
+                1 => say!("encoding.ask-what-one", file, name, found.count, c, line, col, ""),
+                _ => say!("encoding.ask-what", file, name, found.count, c, line, col, sample.trim_end()),
+            },
             choices: vec![
                 Answer { key: 'u', label: say!("encoding.ask-utf8") },
                 Answer { key: 'w', label: say!("encoding.ask-anyway") },
@@ -1978,6 +1974,7 @@ impl Editor {
         &mut self,
         path: Option<String>,
         only_if_changed: bool,
+        force: bool,
     ) -> Result<CommandOutcome, EditorError> {
         // **A sidebar has no file** (vim's, measured 2026-11-03): `:x` and
         // `ZZ` close it, writing nothing; `:wq` refuses, as vim's E32. They
@@ -2010,9 +2007,9 @@ impl Editor {
                     }
                 }
                 let self_finish = self.insert_final_newline();
-                if let Err(err) = self.current_buffer_mut().save_as(target, false, self_finish) {
-                    if self.asked_about_encoding(&err, Saving::As(path.to_string()), false) {
-                        self.then_after_the_answer(Then::Quit);
+                if let Err(err) = self.current_buffer_mut().save_as(target, force, self_finish) {
+                    if self.asked_about_encoding(&err, Saving::As(path.to_string()), force) {
+                        self.then_after_the_answer(Then::Quit(force));
                         return Ok(CommandOutcome::Continue);
                     }
                     return Err(EditorError::Io(err));
@@ -2026,18 +2023,18 @@ impl Editor {
                 // A question standing is not a save, and `:wq` on a save that
                 // did not happen would take the manuscript off the screen with
                 // the answer still unanswered.
-                if matches!(self.write_current(None)?, Wrote::Asked) {
+                if matches!(self.write_forcing(None, force)?, Wrote::Asked) {
                     // Asked about the encoding: an answer that saves goes on
                     // to leave, as `:wq` meant.
-                    self.then_after_the_answer(Then::Quit);
+                    self.then_after_the_answer(Then::Quit(force));
                     return Ok(CommandOutcome::Continue);
                 }
             }
         }
         // Saving *this* buffer is not saving the session: another open file may
         // still be dirty, and `:wq` reads as "everything is safe now", so it is
-        // held to the same check `:q` is.
-        self.quit(false)
+        // held to the same check `:q` is; `:wq!` leaves as `:q!` does.
+        self.quit(force)
     }
 
     /// What the command goes on to do once an encoding question standing

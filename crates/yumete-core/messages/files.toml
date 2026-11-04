@@ -258,6 +258,13 @@ zhs = "{1} 存不下《{0}》里的 {2} 处字，第一处是第 {4} 行第 {5} 
 en = "{1} cannot hold {2} characters in 《{0}》; the first is {3} at line {4}, column {5}. They are: {6}"
 
 [[message]]
+# 同上，只有一處的時候。{0} 文件名，{1} 編碼名，{3} 那個字，{4} 行，{5} 列（草稿）
+key = "encoding.ask-what-one"
+zht = "{1} 存不下《{0}》第 {4} 行第 {5} 列的「{3}」。"
+zhs = "{1} 存不下《{0}》第 {4} 行第 {5} 列的「{3}」。"
+en = "{1} cannot hold {3} in 《{0}》, at line {4}, column {5}."
+
+[[message]]
 # 存盤時有字這個編碼存不下。{0} 編碼名，{1} 第一個字，{2} 行，{3} 列，{4} 一共幾個（草稿）
 key = "encoding.cannot-hold"
 zht = "{0} 存不下第 {2} 行第 {3} 列的「{1}」，共 {4} 處"

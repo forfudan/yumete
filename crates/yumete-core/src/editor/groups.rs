@@ -1522,7 +1522,7 @@ pub(super) static YUME: Group = Group {
 pub(super) static YUME_COMMIT: Group = Group {
     name: "yume_commit",
     pending: Pending::YumeValue('m'),
-    title: "hint.yume.title",
+    title: "hint.yume.commit",
     path: " zm",
     rows: &[
         ch('0', NormalCmd::YumeCommitDefault, "hint.yume.commit-default"),
@@ -1540,7 +1540,7 @@ pub(super) static YUME_COMMIT: Group = Group {
 pub(super) static YUME_PANEL: Group = Group {
     name: "yume_panel",
     pending: Pending::YumeValue('p'),
-    title: "hint.yume.title",
+    title: "hint.yume.panel",
     path: " zp",
     rows: &[
         ch('b', NormalCmd::YumePanelBox, "hint.yume.panel-box"),
@@ -1557,7 +1557,7 @@ pub(super) static YUME_PANEL: Group = Group {
 pub(super) static YUME_PREEDIT: Group = Group {
     name: "yume_preedit",
     pending: Pending::YumeValue('e'),
-    title: "hint.yume.title",
+    title: "hint.yume.preedit",
     path: " ze",
     rows: &[
         ch('o', NormalCmd::YumePreeditOff, "hint.yume.preedit-off"),
@@ -1574,7 +1574,7 @@ pub(super) static YUME_PREEDIT: Group = Group {
 pub(super) static YUME_CHARSET: Group = Group {
     name: "yume_charset",
     pending: Pending::YumeValue('0'),
-    title: "hint.yume.title",
+    title: "hint.yume.charset",
     path: " z0",
     rows: &[
         ch('a', NormalCmd::YumeCharsetAll, "ime.charset.all"),
@@ -1592,7 +1592,7 @@ pub(super) static YUME_CHARSET: Group = Group {
 pub(super) static YUME_SORT: Group = Group {
     name: "yume_sort",
     pending: Pending::YumeValue('s'),
-    title: "hint.yume.title",
+    title: "hint.yume.sort",
     path: " zs",
     rows: &[
         ch('o', NormalCmd::YumeSortOriginal, "ime.sort.original"),
@@ -1611,7 +1611,7 @@ pub(super) static YUME_SORT: Group = Group {
 pub(super) static YUME_LANES: Group = Group {
     name: "yume_lanes",
     pending: Pending::YumeValue('g'),
-    title: "hint.yume.title",
+    title: "hint.yume.lanes",
     path: " zg",
     rows: &[
         ch('j', NormalCmd::YumeLaneTonggui, "ime.lane.tonggui"),
@@ -1630,7 +1630,7 @@ pub(super) static YUME_LANES: Group = Group {
 pub(super) static YUME_BUILTIN: Group = Group {
     name: "yume_builtin",
     pending: Pending::YumeValue('b'),
-    title: "hint.yume.title",
+    title: "hint.yume.builtin",
     path: " zb",
     rows: &[
         ch('p', NormalCmd::YumeBuiltinPinyin, "cmd.schemes.pinyin"),

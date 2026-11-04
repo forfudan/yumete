@@ -8687,7 +8687,7 @@ fn a_file_nobody_changed_is_not_written_again() {
     // `:x` is no longer `:wq`, which stays unconditional.
     assert_eq!(
         crate::command::parse(":wq"),
-        Ok(crate::command::Command::WriteQuit(None))
+        Ok(crate::command::Command::WriteQuit { path: None, force: false })
     );
     // A path is an instruction, not a convenience: it is always written.
     assert_eq!(
@@ -37135,4 +37135,27 @@ fn indenting_skips_empty_lines() {
     let mut ed = typed("a\n\n  \nb\n");
     press(&mut ed, "%>");
     assert_eq!(ed.current_buffer().text(), "    a\n\n  \n    b\n", "helix: blank lines too");
+}
+
+/// **`:wq!` is helix's `write-quit!`** (2026-11-04 review): it saves this
+/// file and leaves with another still unsaved, where `:wq` refuses.
+#[test]
+fn write_quit_bang_leaves_with_others_unsaved() {
+    let dir = tmp().join(format!("yumete-wq-bang-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let (a, b) = (dir.join("a.md"), dir.join("b.md"));
+    std::fs::write(&a, "one\n").unwrap();
+    std::fs::write(&b, "two\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&a).unwrap();
+    press(&mut ed, "ix");
+    ed.on_key(Key::Esc);
+    ed.open_file(&b).unwrap();
+    press(&mut ed, "iy");
+    ed.on_key(Key::Esc);
+    assert!(!matches!(ed.execute("wq"), Ok(CommandOutcome::Quit)), ":wq stops for a.md");
+    assert!(matches!(ed.execute("wq!"), Ok(CommandOutcome::Quit)));
+    assert_eq!(std::fs::read_to_string(&b).unwrap(), "ytwo\n");
+    std::fs::remove_dir_all(&dir).ok();
 }

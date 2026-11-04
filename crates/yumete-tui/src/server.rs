@@ -1016,7 +1016,7 @@ impl Servers {
             .map(|s| s.command.as_str())
             .filter(|c| !c.is_empty())
             .collect::<Vec<_>>()
-            .join("、")
+            .join(if yumete_cjk::speaks_english() { ", " } else { "、" })
     }
 
     /// **為什麽這一問發不出去**，`None` ＝ 發得出去（2026-09-29）。

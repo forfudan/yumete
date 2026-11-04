@@ -4398,12 +4398,22 @@ fn where_report(ime: &ImeSession) -> String {
         }
     }
     // 沒有表的時候由這一頭說——`table_source` 住在一個沒有文案表的 crate 裏。
-    let now = match ime.table_source() {
+    let now = match source_said(ime) {
         Some(said) => said,
         None => say!("yume.where.no-table"),
     };
     let _ = writeln!(out, "\n{}", say!("yume.where.now", now));
     out
+}
+
+/// Where the 碼表 in use came from, in words (`:yume-which`, `:yume ?`).
+fn source_said(ime: &ImeSession) -> Option<String> {
+    Some(match ime.table_source()? {
+        yumete_ime::TableSource::File(path) => path,
+        yumete_ime::TableSource::Builtin(Some(version)) => say!("ime.source.builtin-version", version),
+        yumete_ime::TableSource::Builtin(None) => say!("ime.source.builtin"),
+        yumete_ime::TableSource::Installed => say!("ime.source.installed"),
+    })
 }
 
 /// What to answer when a 方案名 is not one of ours. Both the `!` form and the
@@ -4426,7 +4436,7 @@ fn switch_scheme(ime: &mut ImeSession, tag: &str, config: &Config) -> String {
                 "ime.state",
                 ime.scheme_name(),
                 // 這一支只在 `available()` 爲真的時候走得到，所以一定說得出。
-                ime.table_source().unwrap_or_default(),
+                source_said(ime).unwrap_or_default(),
                 annotation_state(ime),
                 commit_name(ime.commit_strategy()),
             )
@@ -15984,9 +15994,7 @@ fn squeezed(text: &str) -> String {
             "the built-in layer comes after the directories\n{report}"
         );
         // …and the last thing it says is which one is mounted — or that none is.
-        let mounted = ime
-            .table_source()
-            .unwrap_or_else(|| crate::say!("yume.where.no-table"));
+        let mounted = crate::source_said(&ime).unwrap_or_else(|| crate::say!("yume.where.no-table"));
         assert!(report.trim_end().ends_with(&mounted), "{report}");
         // **出廠自帶那一段一家一行**（2026-10-08）：嵌了幾張就寫幾行，每一行帶方案
         // 名。從前它寫死「靈明碼表 …」，於是二進制裏那第二張報不出來。

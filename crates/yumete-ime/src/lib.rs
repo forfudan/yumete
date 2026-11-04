@@ -157,7 +157,7 @@ impl Scheme {
             Scheme::XINGCHEN => "星陳",
             Scheme::QINGYUN => "卿雲",
             Scheme::RIYUE => "日月",
-            Scheme::PINYIN => "拼音",
+            Scheme::PINYIN => "宇浩拼音",
             _ => return None,
         })
     }
@@ -235,7 +235,7 @@ impl Scheme {
             "xing" | "星陳" => "xingchen",
             "qing" | "卿雲" => "qingyun",
             "日月" => "riyue",
-            "拼音" => "pinyin",
+            "宇浩拼音" | "拼音" => "pinyin",
             other => other,
         };
         // `canonical` is lower-cased and a found tag need not be: comparing
@@ -807,8 +807,9 @@ impl ImeSession {
             .collect()
     }
 
-    /// Where the 碼表 in use came from, for `:yume` to say.
-    pub fn table_source(&self) -> Option<String> {
+    /// Where the 碼表 in use came from, for `:yume` to say; the front end
+    /// puts it in words ([`TableSource`]).
+    pub fn table_source(&self) -> Option<TableSource> {
         // Warning: **沒有碼表就回 `None`，不回一句中文**（2026-10-08）。這個 crate 沒有
         // 文案表，所以從前那句寫死的「沒有碼表」在英文界面上也是中文，而且改一個
         // 字要動代碼。說這句話的是呼叫方（`yume.where.no-table`）。
@@ -816,13 +817,10 @@ impl ImeSession {
             return None;
         }
         if let Some(path) = &self.table_file {
-            return Some(path.display().to_string());
+            return Some(TableSource::File(path.display().to_string()));
         }
         if self.builtin {
-            return Some(match builtin_version() {
-                Some(version) => format!("出廠自帶 {version}"),
-                None => "出廠自帶".to_string(),
-            });
+            return Some(TableSource::Builtin(builtin_version()));
         }
         // The manifest knows which file this scheme's 碼表 is — and for a
         // 自定義方案, which the manifest says nothing about, the slot does.
@@ -832,8 +830,8 @@ impl ImeSession {
                 .into_iter()
                 .find(|f| f.kind == DataKind::Table)
                 .and_then(|f| find_file(&self.data_dirs, &f.file))
-                .map(|path| path.display().to_string())
-                .unwrap_or_else(|| "已安裝".to_string()),
+                .map(|path| TableSource::File(path.display().to_string()))
+                .unwrap_or(TableSource::Installed),
         )
     }
 
@@ -1812,6 +1810,17 @@ fn carried(name: &str) -> Option<Vec<u8>> {
 
 fn carries(name: &str) -> bool {
     CARRIED.get().is_some_and(|c| (c.has)(name))
+}
+
+/// **Where the 碼表 in use came from** (`:yume-which`): a file, the
+/// binary's own (with Yume's version when known), or Yume's installed data
+/// (pinyin has no table file of its own to name). This crate has no message
+/// table, so the front end says it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TableSource {
+    File(String),
+    Builtin(Option<&'static str>),
+    Installed,
 }
 
 /// One data file, found on disk or carried in the binary.

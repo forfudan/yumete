@@ -4160,7 +4160,8 @@ enum Saving {
 /// What the command that asked about an encoding goes on to do.
 #[derive(Clone, Copy)]
 enum Then {
-    Quit,
+    /// `:wq`, and `:wq!` (true) leaving as `:q!` does.
+    Quit(bool),
     WriteAll(bool),
     WriteQuitAll(bool),
 }

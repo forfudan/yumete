@@ -50,7 +50,7 @@ fn each_carried_scheme_types_with_nothing_installed() {
         }
         assert_eq!(ime.top_candidate(), want, "{} {keys}", scheme.tag());
         let source = ime.table_source().expect("a table, and where it is from");
-        assert!(source.starts_with("出廠自帶"), "{source}");
+        assert!(matches!(source, yumete_ime::TableSource::Builtin(_)), "{source:?}");
     }
 }
 

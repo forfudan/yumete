@@ -98,14 +98,14 @@ en = "the range runs backwards: line {0} to line {1} — y swaps and changes, n 
 key = "find.substitute-changed"
 zht = "換了 {0} 處"
 zhs = "换了 {0} 处"
-en = "changed {0} hit(s)"
+en = "changed: {0}"
 
 [[message]]
 # :s 找到了但一處也没改
 key = "find.substitute-nothing-changed"
 zht = "{0} 處(没有改)"
 zhs = "{0} 处(没有改)"
-en = "{0} hit(s), nothing changed"
+en = "found: {0}, nothing changed"
 
 
 # ── goto ──────────────────────────────────────────────────────────────
