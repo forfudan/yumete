@@ -44,6 +44,7 @@ pub mod lookfor;
 pub mod lsp;
 pub mod messages;
 pub mod mdtable;
+pub mod modeline;
 pub mod meter;
 pub mod motion;
 pub mod vim;

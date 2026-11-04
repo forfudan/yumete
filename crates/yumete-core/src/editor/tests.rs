@@ -36470,3 +36470,40 @@ fn the_vim_column_names_only_keys_that_reach_the_action() {
     let row = listing.lines().find(|l| l.contains("goto_next_buffer")).unwrap_or_default();
     assert!(!row.contains("`gn`"), "{row}");
 }
+
+/// **A file's vim modeline is its own** (2026-11-04): the type, tab stop and
+/// indent width it names hold for that file, not the next, give way to a
+/// typed `:indent-width`, are read again by `:reload`, and are left alone
+/// with `[editor] modeline` off.
+#[test]
+fn a_modeline_sets_this_file_and_no_other() {
+    let dir = tmp().join(format!("yumete-modeline-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let notes = dir.join("notes.txt");
+    std::fs::write(&notes, "def f():\n  return 1\n# vim: set ft=python ts=2 sw=2:\n").unwrap();
+    let plain = dir.join("plain.txt");
+    std::fs::write(&plain, "一\n").unwrap();
+
+    let mut ed = Editor::new();
+    ed.open_file(&notes).unwrap();
+    assert_eq!(ed.current_buffer().syntax().name(), "python");
+    assert!(!ed.current_buffer().syntax_was_guessed(), "the file's own word");
+    assert_eq!((ed.tab_stop(), ed.indent_width()), (2, 2));
+    ed.open_file(&plain).unwrap();
+    assert_eq!((ed.tab_stop(), ed.indent_width()), (8, 4), "the other file keeps the editor's");
+    ed.show_buffer_at(0);
+    assert_eq!(ed.indent_width(), 2);
+
+    ed.execute("indent-width 6").unwrap();
+    assert_eq!(ed.indent_width(), 6, "typed, it wins");
+    ed.execute("reload").unwrap();
+    assert_eq!(ed.indent_width(), 2, "read again, the modeline says it again");
+
+    let mut off = Editor::new();
+    off.set_modeline(false);
+    off.open_file(&notes).unwrap();
+    assert_eq!(off.tab_stop(), 8);
+    assert_ne!(off.current_buffer().syntax().name(), "python");
+    std::fs::remove_dir_all(&dir).ok();
+}

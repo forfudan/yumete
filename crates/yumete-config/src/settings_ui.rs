@@ -588,6 +588,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "modeline",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.modeline",
+        hint: "settings.editor.modeline.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "word_level",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_WORD_LEVEL_WAYS),

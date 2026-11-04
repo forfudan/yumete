@@ -3494,6 +3494,8 @@ pub struct Editor {
     /// helix's end-of-line diagnostics: the least severity drawn after a
     /// line, `None` for off (2026-11-04).
     end_of_line_diagnostics: Option<crate::problem::Severity>,
+    /// Whether vim modelines are read (`[editor] modeline`, 2026-11-04).
+    modeline: bool,
     /// Word ranges already worked out, per line, against a hash of that line.
     segment_memo: memo::LineMemo<Vec<(usize, usize)>>,
     /// 平仄 in the margin (Feature #247), and the answers already worked out.
@@ -4507,6 +4509,7 @@ impl Editor {
             query: None,
             oversize_answered: false,
             end_of_line_diagnostics: Some(crate::problem::Severity::Hint),
+            modeline: true,
             segment_memo: memo::LineMemo::default(),
             meter: false,
             meter_memo: memo::LineMemo::default(),

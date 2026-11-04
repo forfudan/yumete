@@ -125,6 +125,9 @@ impl Editor {
             },
         );
         row(say!("file.encoding"), crate::encoding::name(buffer.encoding()).to_string());
+        if let Some(said) = &buffer.local().said {
+            row(say!("file.modeline"), format!("`{said}`"));
+        }
         if let Some(when) = on_disk.as_ref().and_then(|it| it.modified().ok()) {
             row(say!("file.modified-at"), when_was(when));
         }
@@ -998,6 +1001,11 @@ impl Editor {
             if let Some(syntax) = self.configured_syntax(&name) {
                 buffer.set_syntax(syntax);
             }
+        }
+        // **The file's own word, over the name's and the project's**
+        // (2026-11-04): a vim modeline. `--syntax` is applied after this.
+        if self.modeline {
+            buffer.read_modelines();
         }
         self.add_buffer(buffer);
         // **回到上次停的那一行**（2026-10-05 定）。不知道就不動。

@@ -415,6 +415,13 @@ zhs = "行数"
 en = "lines"
 
 [[message]]
+# `:info` 那一欄：這個文件的 modeline 說了什麽（草稿）
+key = "file.modeline"
+zht = "modeline"
+zhs = "modeline"
+en = "modeline"
+
+[[message]]
 # :info：修改時間(磁碟上那一份的)
 key = "file.modified-at"
 zht = "修改時間"

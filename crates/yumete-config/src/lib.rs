@@ -119,6 +119,10 @@ pub struct EditorConfig {
     /// `"hint"` (the default, as helix's), `"info"`, `"warning"`, `"error"`, or
     /// `"disable"`. Code only.
     pub end_of_line_diagnostics: String,
+    /// Whether a file's vim modelines (`vim: set ts=2 ft=python:` in its
+    /// first or last five lines) are read: its file type, tab stop, indent
+    /// width, Tab, text width, and nothing else (2026-11-04).
+    pub modeline: bool,
     /// The shell line `:shot` runs to photograph the screen.
     ///
     /// A command rather than a built-in: what「截圖」 means is the window
@@ -460,6 +464,7 @@ impl Default for EditorConfig {
             line_number_fill: false,
             diff_gutter: true,
             end_of_line_diagnostics: "hint".to_string(),
+            modeline: true,
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             auto_pairs: "basic".to_string(),
@@ -4380,6 +4385,7 @@ struct RawEditor {
     line_number_fill: Option<bool>,
     diff_gutter: Option<bool>,
     end_of_line_diagnostics: Option<String>,
+    modeline: Option<bool>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
     auto_pairs: Option<String>,
@@ -4551,6 +4557,9 @@ impl RawConfig {
         }
         if other.editor.end_of_line_diagnostics.is_some() {
             self.editor.end_of_line_diagnostics = other.editor.end_of_line_diagnostics.clone();
+        }
+        if other.editor.modeline.is_some() {
+            self.editor.modeline = other.editor.modeline;
         }
         if other.editor.screenshot.is_some() {
             self.editor.screenshot = other.editor.screenshot.clone();
@@ -4945,6 +4954,9 @@ impl RawConfig {
         }
         if let Some(word) = self.editor.end_of_line_diagnostics.filter(|w| EOL_DIAGNOSTIC_WORDS.contains(&w.trim())) {
             config.editor.end_of_line_diagnostics = word.trim().to_string();
+        }
+        if let Some(on) = self.editor.modeline {
+            config.editor.modeline = on;
         }
         if let Some(line) = self.editor.screenshot {
             config.editor.screenshot = line;

@@ -514,6 +514,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     }
     editor.set_number_fill(config.editor.line_number_fill);
     editor.set_diff_gutter(config.editor.diff_gutter);
+    editor.set_modeline(config.editor.modeline);
     if let Some(level) = yumete_core::problem::level_from_word(&config.editor.end_of_line_diagnostics) {
         editor.set_end_of_line_diagnostics(level);
     }

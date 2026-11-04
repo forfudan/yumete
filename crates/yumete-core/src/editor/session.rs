@@ -242,6 +242,10 @@ impl Editor {
             return false;
         }
         self.clamp_cursor();
+        // A file read again may say something else in its modelines.
+        if self.modeline {
+            self.current_buffer_mut().read_modelines();
+        }
         // The one list, not the three caches this used to clear: a re-read is
         // a new document, and `md_cache`, `fold_cache` and `key_index` all
         // described the old one. It also puts the warning latch back.

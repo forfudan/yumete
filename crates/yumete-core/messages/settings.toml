@@ -404,6 +404,20 @@ zhs = "行在这里折叠，右边是页边距"
 en = "the line really breaks here; what is right of it is margin"
 
 [[message]]
+# 設置：讀 vim 的 modeline（草稿）
+key = "settings.editor.modeline"
+zht = "讀 vim 的 modeline"
+zhs = "读 vim 的 modeline"
+en = "read vim modelines"
+
+[[message]]
+# 設置：讀 modeline——一句話（草稿）
+key = "settings.editor.modeline.hint"
+zht = "文件頭尾五行裏的 vim: set ft=… ts=…: 定這個文件的類型、縮進和硬換行寬度"
+zhs = "文件头尾五行里的 vim: set ft=… ts=…: 定这个文件的类型、缩进和硬换行宽度"
+en = "vim: set ft=… ts=…: in the first or last five lines of a file sets its type, indentation and hard-wrap width"
+
+[[message]]
 # 設置面板：橫排分頁那一行
 key = "settings.editor.pages-horizontal"
 zht = "橫排分頁"

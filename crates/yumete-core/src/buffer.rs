@@ -889,6 +889,41 @@ impl Buffer {
         self.syntax = syntax;
     }
 
+    /// **Read this file's modelines** (2026-11-04): its settings of its own
+    /// ([`Local`]) from what they say, and its syntax, which is then the
+    /// file's own word and no longer a guess. What they said before goes.
+    pub fn read_modelines(&mut self) {
+        let n = self.rope.len_lines();
+        let wanted: Vec<usize> = match n <= 2 * crate::modeline::LINES {
+            true => (0..n).collect(),
+            false => (0..crate::modeline::LINES).chain(n - crate::modeline::LINES..n).collect(),
+        };
+        let lines: Vec<String> = wanted
+            .iter()
+            .map(|&i| {
+                let line = self.rope.line(i);
+                // A line too long to be one is not copied out to find out.
+                match line.len_bytes() > 4096 {
+                    true => String::new(),
+                    false => line.to_string().trim_end_matches(['\n', '\r']).to_string(),
+                }
+            })
+            .collect();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let said = crate::modeline::scan(&refs);
+        self.local = Local {
+            tab_stop: said.tab_stop,
+            indent_width: said.indent_width,
+            tab_spaces: said.tab_spaces,
+            text_width: said.text_width,
+            said: (!said.said.is_empty()).then(|| said.said.join(" ")),
+        };
+        if let Some(syntax) = said.syntax {
+            self.syntax = syntax;
+            self.syntax_guessed = false;
+        }
+    }
+
     /// When the text last changed, against every other buffer (`0`: never).
     pub fn edited(&self) -> u64 {
         self.edited

@@ -1638,6 +1638,11 @@ impl Editor {
         self.end_of_line_diagnostics = level;
     }
 
+    /// Whether files' vim modelines are read (`[editor] modeline`).
+    pub fn set_modeline(&mut self, on: bool) {
+        self.modeline = on;
+    }
+
     /// 服務器一共說了幾句——`:diagnostics-all` 拿它分「乾淨」和「還没人說過話」。
     pub fn problem_count(&self) -> usize {
         self.problems.count()
