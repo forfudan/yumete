@@ -995,8 +995,23 @@ fn autolink(chars: &[char], at: usize, to: usize) -> Option<usize> {
     (uri || email()).then_some(close + 1)
 }
 
+/// The elements a tag in prose may name. CommonMark takes any name, and
+/// `Vec<String>` or `a<b and c>d` then lost their words on export.
+const HTML_ELEMENTS: &[&str] = &[
+    "a", "abbr", "audio", "b", "bdi", "bdo", "blockquote", "br", "center", "cite", "code", "dd", "del", "details",
+    "dfn", "div", "dl", "dt", "em", "figcaption", "figure", "font", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i",
+    "iframe", "img", "ins", "kbd", "li", "mark", "ol", "p", "picture", "pre", "q", "rp", "rt", "ruby", "s", "samp",
+    "small", "source", "span", "strong", "sub", "summary", "sup", "table", "tbody", "td", "tfoot", "th", "thead",
+    "tr", "u", "ul", "var", "video", "wbr",
+];
+
+/// The attributes a tag may carry without a value.
+const HTML_FLAGS: &[&str] = &["autoplay", "checked", "controls", "disabled", "hidden", "loop", "muted", "open"];
+
 /// An HTML tag opening at `at` — `<kbd>`, `<br/>`, `<a href="x">`, `</kbd>` —
-/// as CommonMark's grammar has it, on one line. Where it ends, past its `>`.
+/// on one line: a name from [`HTML_ELEMENTS`], and attributes written
+/// `name="…"`, `name='…'`, `name=value` or one of [`HTML_FLAGS`]. Where it
+/// ends, past its `>`.
 fn html_tag(chars: &[char], at: usize, to: usize) -> Option<usize> {
     let get = |i: usize| (i < to).then(|| chars[i]);
     let closing = get(at + 1) == Some('/');
@@ -1004,8 +1019,13 @@ fn html_tag(chars: &[char], at: usize, to: usize) -> Option<usize> {
     if !get(i)?.is_ascii_alphabetic() {
         return None;
     }
+    let name_at = i;
     while get(i).is_some_and(|c| c.is_ascii_alphanumeric() || c == '-') {
         i += 1;
+    }
+    let name = chars[name_at..i].iter().collect::<String>().to_ascii_lowercase();
+    if !HTML_ELEMENTS.contains(&name.as_str()) {
+        return None;
     }
     let space = |i: &mut usize| {
         let from = *i;
@@ -1021,11 +1041,16 @@ fn html_tag(chars: &[char], at: usize, to: usize) -> Option<usize> {
             if !space(&mut j) || !get(j).is_some_and(|c| c.is_ascii_alphabetic() || matches!(c, '_' | ':')) {
                 break;
             }
+            let attribute_at = j;
             while get(j).is_some_and(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-')) {
                 j += 1;
             }
+            let attribute = chars[attribute_at..j].iter().collect::<String>().to_ascii_lowercase();
             let mut k = j;
             space(&mut k);
+            if get(k) != Some('=') && !HTML_FLAGS.contains(&attribute.as_str()) {
+                return None;
+            }
             if get(k) == Some('=') {
                 k += 1;
                 space(&mut k);
@@ -3193,5 +3218,20 @@ mod tests {
         // A comment is still a comment, and code still wins.
         assert_eq!(shape("<!-- 註 -->"), "....%%%...");
         assert_eq!(shape("`<br>`"), ".CCCC.");
+    }
+
+    /// A tag names an HTML element and carries attributes as HTML writes
+    /// them; generics and comparisons in prose are prose.
+    #[test]
+    fn only_a_real_element_is_a_tag() {
+        let prose = |line: &str| shape(line).trim().is_empty();
+        let tag = |line: &str| shape(line).chars().all(|c| c == 'T');
+        assert!(prose("Vec<String> 和 Option<i32>"));
+        assert!(prose("a<b and c>d"));
+        assert!(prose("<kbd x>"));
+        assert_eq!(shape("<B>粗</B>"), "TTT TTTT");
+        assert!(tag("<details open>"));
+        assert!(tag("<video src=a.mp4 controls>"));
+        assert!(tag("<span lang='en'>"));
     }
 }

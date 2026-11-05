@@ -465,7 +465,7 @@ fn line_into(
     let marks = match source {
         crate::syntax::Syntax::Typst => crate::markdown::typst::spans(line),
         crate::syntax::Syntax::Text => Vec::new(),
-        _ => crate::markdown::spans(line),
+        _ => without_maths(crate::markdown::spans(line)),
     };
     render(&chars, &groups, &marks, None, 0, chars.len(), dialect, escape)
 }
@@ -580,6 +580,17 @@ fn render(
     }
     out.push_str(&escape(&plain));
     out
+}
+
+/// **Markdown's maths is LaTeX**, which Typst cannot read (`\frac` stops
+/// the PDF): its `$…$` and `$$…$$` go over as written text, escaped, as
+/// before Markdown drew them as maths. A formula and its dollars are one
+/// construct.
+fn without_maths(mut marks: Vec<crate::markdown::Span>) -> Vec<crate::markdown::Span> {
+    use crate::markdown::Kind;
+    let maths: Vec<(usize, u8)> = marks.iter().filter(|s| s.kind == Kind::Math).map(|s| (s.construct, s.depth)).collect();
+    marks.retain(|s| !maths.contains(&(s.construct, s.depth)));
+    marks
 }
 
 /// One marked run, written the way `dialect` writes it.
@@ -1113,14 +1124,14 @@ mod tests {
     #[test]
     fn export_reads_the_source_syntax_not_the_output_format() {
         // Markdown 源：一個價錢裏的 `$` 就是一個 `$`，寫進 Typst 要轉義（Typst 那一端
-        // 它開公式）。Since 2026-11-05 `$a + b$` is maths there too (Pandoc's
-        // rule), and goes over as maths.
+        // 它開公式）。A Markdown formula is LaTeX, which Typst cannot read, so
+        // it goes over as written, escaped.
         let mut md = style();
         md.vertical = false;
         let out = export("$3 and $5\n", Format::Typst, &md);
         assert!(out.contains(r"\$3 and \$5"), "Markdown 源裏它是字面：{out}");
         let out = export("$a_b$\n", Format::Typst, &md);
-        assert!(out.contains("$a_b$"), "a formula, not escaped: {out}");
+        assert!(out.contains(r"\$a\_b\$"), "LaTeX, escaped: {out}");
 
         // Typst 源：那是一條公式，原樣過去。
         let mut ts = style();
@@ -1564,5 +1575,31 @@ mod tests {
         assert!(out.contains("按 <kbd>Esc</kbd> 退出"), "{out}");
         let out = export("按 <kbd>Esc</kbd> 退出\n", Format::Typst, &md);
         assert!(out.contains("按 Esc 退出"), "{out}");
+    }
+
+    /// Markdown maths is LaTeX: Typst gets it as escaped text, so the PDF
+    /// builds, and HTML as written, `$$` and all.
+    #[test]
+    fn markdown_maths_goes_over_as_written() {
+        let mut md = style();
+        md.vertical = false;
+        let out = export("Area $\\frac{a}{b}$ and $$E=mc^2$$\n", Format::Typst, &md);
+        assert!(out.contains(r"Area \$\\frac{a}{b}\$ and \$\$E=mc^2\$\$"), "{out}");
+        let out = export("Area $\\frac{a}{b}$ and $$E=mc^2$$\n", Format::Html, &md);
+        assert!(out.contains(r"Area $\frac{a}{b}$ and $$E=mc^2$$"), "{out}");
+        let out = export("**$x_1$** 粗\n", Format::Typst, &md);
+        assert!(out.contains(r"*\$x\_1\$* 粗"), "{out}");
+    }
+
+    /// Only a real tag is HTML: `Vec<String>` and `a<b and c>d` are prose,
+    /// on either page.
+    #[test]
+    fn angle_brackets_that_are_not_a_tag_stay_prose() {
+        let mut md = style();
+        md.vertical = false;
+        let out = export("Vec<String> and a<b and c>d\n", Format::Typst, &md);
+        assert!(out.contains(r"Vec\<String\> and a\<b and c\>d"), "{out}");
+        let out = export("Vec<String> and a<b and c>d\n", Format::Html, &md);
+        assert!(out.contains("Vec&lt;String&gt; and a&lt;b and c&gt;d"), "{out}");
     }
 }

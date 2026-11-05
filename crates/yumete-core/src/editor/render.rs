@@ -218,8 +218,9 @@ impl Editor {
                     note = crate::markdown::comment_left_open(&text.to_string());
                 }
             }
-            // Typst's `/*`, the same way.
-            if typst && !blocks[line].is_literal() && text.chunks().any(|c| c.contains('/')) {
+            // Typst's `/*`, the same way: only a line holding one is read
+            // whole (a URL's `/` is not one).
+            if typst && !blocks[line].is_literal() && opens_a_block_comment(text) {
                 note = crate::markdown::typst::comment_left_open(&text.to_string()).then_some("*/");
             }
         }
@@ -1784,4 +1785,17 @@ impl Editor {
         }
         rows
     }
+}
+
+/// Whether a line holds Typst's `/*`, also across two of the rope's chunks.
+pub(super) fn opens_a_block_comment(text: ropey::RopeSlice) -> bool {
+    if !text.chunks().any(|c| c.contains('/')) {
+        return false;
+    }
+    let mut slash = false;
+    text.chars().any(|c| {
+        let opens = slash && c == '*';
+        slash = c == '/';
+        opens
+    })
 }

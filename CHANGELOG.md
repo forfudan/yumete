@@ -16,9 +16,9 @@ in `docs/development.md` §5.2.
 - **Typst: `#(1 + 2)` and `#{…}` are drawn as code**, as `#set` and `#let` are.
 - **Typst: `_emphasis_` inside `*strong*` takes both styles**, and the other way round.
 - **Typst: `#if`, `#for` and `#while` draw their head as code and their `[…]` as writing**, also when the brackets run over several lines.
-- **Markdown: `$a + b$` and `$$x^2$$` are drawn as maths**, as in Typst, and export as maths; `$3 and $5` stays two prices.
+- **Markdown: `$a + b$` and `$$x^2$$` are drawn as maths**, as in Typst; `$3 and $5` stays two prices. They export as written, since Markdown's maths is LaTeX and Typst's is not.
 - **Markdown: `<https://…>` and `<mailto:…>` are links**, and open as links.
-- **Markdown: inline HTML tags (`<kbd>`, `<br>`) are drawn set back**, with the text between them as prose; `:export html` keeps them as HTML.
+- **Markdown: inline HTML tags (`<kbd>`, `<br>`) are drawn set back**, with the text between them as prose; `:export html` keeps them as HTML. A tag names an HTML element, so `Vec<String>` and `a<b and c>d` stay prose.
 
 ### Added
 

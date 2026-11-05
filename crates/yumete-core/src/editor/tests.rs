@@ -37568,3 +37568,16 @@ fn a_typst_block_comment_over_several_lines_is_a_comment() {
     let chapters: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
     assert!(chapters.is_empty(), "a = in a comment is not a chapter: {chapters:?}");
 }
+
+/// The scan reads a Typst line whole only when it holds a `/*` (a URL's
+/// `/` costs nothing), and still finds one split across the rope's chunks.
+#[test]
+fn only_a_line_with_a_slash_star_is_read_for_a_typst_comment() {
+    use super::render::opens_a_block_comment;
+    let rope = |text: &str| ropey::Rope::from_str(text);
+    assert!(!opens_a_block_comment(rope("見 https://a.b/c 頁").slice(..)));
+    assert!(!opens_a_block_comment(rope("a */ b").slice(..)));
+    assert!(opens_a_block_comment(rope("a /* b").slice(..)));
+    let long = format!("{}/*{}", "x".repeat(5000), "y".repeat(5000));
+    assert!(opens_a_block_comment(rope(&long).slice(..)));
+}
