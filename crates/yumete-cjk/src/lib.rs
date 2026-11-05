@@ -65,7 +65,7 @@ pub use grapheme::{
     prev_grapheme_boundary,
 };
 pub use flavor::{Flavor, FlavorItem, FlavorLevel, ItemInfo};
-pub use keymap::{read_which_wrap, KeyPreset, Rules, WHICH_WRAP};
+pub use keymap::{read_which_wrap, KeyGroup, KeyPreset, KeyShape, KeyShapes, Rules, WHICH_WRAP};
 pub use reading::{split_charset, NoReader, Reader, CHARSET_TAGS};
 pub use segment::{
     best_path, CategorySegmenter, CoarseSegmenter, DictionarySegmenter, Memo, SegmentMemo,

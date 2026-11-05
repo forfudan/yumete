@@ -676,11 +676,13 @@ impl Editor {
             m.into_iter().map(|(k, v)| (k, v.into_commands())).collect()
         };
         let labels = std::mem::take(&mut self.keymap_user[keymap_index(keymap)].labels);
+        let shapes = std::mem::take(&mut self.keymap_user[keymap_index(keymap)].shapes);
         self.keymap_user[keymap_index(keymap)] = crate::editor::KeymapLines {
             normal: lines(normal),
             select: lines(select),
             insert: lines(insert),
             labels,
+            shapes,
         };
         self.lay_aliases();
     }
@@ -710,6 +712,19 @@ impl Editor {
     pub fn set_keymap_labels(&mut self, keymap: yumete_cjk::KeyPreset, labels: HashMap<String, String>) {
         self.keymap_user[keymap_index(keymap)].labels =
             labels.into_iter().map(|(k, v)| (yumete_cjk::actions::written(&k), v)).collect();
+        self.lay_aliases();
+    }
+
+    /// **How the reader's tables were written** (2026-11-05): which keys
+    /// are groups, the order of the lines, a command row's own text.
+    pub fn set_key_shapes(&mut self, shapes: yumete_cjk::KeyShapes) {
+        self.key_shapes = shapes;
+        self.lay_aliases();
+    }
+
+    /// The same for one keymap's own tables (`[keys.helix.*]`, `[keys.vim.*]`).
+    pub fn set_keymap_shapes(&mut self, keymap: yumete_cjk::KeyPreset, shapes: yumete_cjk::KeyShapes) {
+        self.keymap_user[keymap_index(keymap)].shapes = shapes;
         self.lay_aliases();
     }
 
@@ -774,7 +789,7 @@ impl Editor {
         self.insert_aliases = written(&self.user_insert).into_iter().chain(written(&own.insert)).collect();
         self.insert_held.clear();
         let mut all = preset.clone();
-        all.extend(user.iter().cloned());
+        all.extend(user);
         // vim's `x` and `s` are written for Normal mode (`;{n}D`); in Visual
         // mode they are its own delete and change (`vim_*` in the table).
         // The reader's own lines come after, so an `x` of theirs holds in
@@ -783,27 +798,29 @@ impl Editor {
         for key in self.key_preset.normal_only() {
             select_preset.remove(&yumete_cjk::actions::written(key));
         }
-        let select: Vec<(String, Vec<String>)> = user
-            .iter()
-            .cloned()
-            .chain(written(&self.user_select))
-            .chain(written(&own.select))
-            .collect();
-        let table = written(&self.user_table);
-        // The later of two lines for one run wins.
-        let once = |lines: Vec<(String, Vec<String>)>| -> Vec<(String, Vec<String>)> {
-            let mut kept: HashMap<String, Vec<String>> = HashMap::new();
-            for (k, v) in lines {
-                kept.insert(k, v);
+        // Each tree's layers: the shared tables, then the keymap's own over
+        // them; select mode's and a grid's over Normal mode's.
+        let shared = self.key_shapes.clone();
+        let lines = |select: bool, grid: bool| {
+            let mut lines = super::keymap::Lines::default();
+            lines.add(&self.user_aliases, &shared.normal);
+            lines.add(&own.normal, &own.shapes.normal);
+            if select {
+                lines.add(&self.user_select, &shared.select);
+                lines.add(&own.select, &own.shapes.select);
             }
-            kept.into_iter().collect()
+            if grid {
+                lines.add(&self.user_table, &shared.table);
+            }
+            lines.name(&self.key_labels);
+            lines.name(&own.labels);
+            lines
         };
-        let mut labels = self.key_labels.clone();
-        labels.extend(own.labels.clone());
-        self.normal_tree = self.lay_tree(&preset, &once(user.clone()), &labels, false);
-        self.select_tree = self.lay_tree(&select_preset, &once(select.clone()), &labels, true);
-        self.table_tree = self.lay_tree(&preset, &once(user.into_iter().chain(table.iter().cloned()).collect()), &labels, false);
-        self.table_select_tree = self.lay_tree(&select_preset, &once(select.into_iter().chain(table).collect()), &labels, true);
+        let (normal, select, table, table_select) = (lines(false, false), lines(true, false), lines(false, true), lines(true, true));
+        self.normal_tree = self.lay_tree(&preset, &normal, false);
+        self.select_tree = self.lay_tree(&select_preset, &select, true);
+        self.table_tree = self.lay_tree(&preset, &table, false);
+        self.table_select_tree = self.lay_tree(&select_preset, &table_select, true);
         self.key_aliases = all;
         self.alias_held.clear();
         self.node_held = None;

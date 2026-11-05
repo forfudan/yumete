@@ -2830,6 +2830,8 @@ pub struct KeymapKeys {
     pub insert: HashMap<String, Vec<String>>,
     /// Its own groups' names (`label`), under this keymap only.
     pub labels: HashMap<String, String>,
+    /// How its tables were written (its groups, their order).
+    pub shapes: yumete_cjk::KeyShapes,
 }
 
 /// Keymap overrides.
@@ -2878,6 +2880,10 @@ pub struct KeyConfig {
     /// (`label = "My tools"` in `[keys.normal.space.x]` → `"<space>x"`):
     /// the title of that group's menu. helix cannot name one.
     pub labels: HashMap<String, String>,
+    /// **How the tables were written** (2026-11-05): which keys are groups
+    /// (a table under a key takes the key), the file's order, and a command
+    /// row's own menu text. `normal`, `select` and `table` are their runs.
+    pub shapes: yumete_cjk::KeyShapes,
     /// **Lines for one keymap only** (`[keys.helix.normal]`, `[keys.vim.insert]`
     /// and the like, 2026-11-04), laid after the shared tables while that
     /// keymap is in force. The shared tables hold under both.
@@ -2914,6 +2920,7 @@ impl Default for KeyConfig {
             sidebar: HashMap::new(),
             field: HashMap::new(),
             labels: HashMap::new(),
+            shapes: yumete_cjk::KeyShapes::default(),
             helix: KeymapKeys::default(),
             vim: KeymapKeys::default(),
             preset: KeyPreset::default(),
@@ -5552,18 +5559,22 @@ impl RawConfig {
         // binding went in, and the key still typed `delete_slection` into a
         // chapter one letter at a time (2026-09-19, caught in review).
         let mut keys = KeyBindings::default();
-        read_key_table("normal", &self.keys.normal, &mut keys.normal, &mut keys.labels, problems);
-        read_key_table("select", &self.keys.select, &mut keys.select, &mut keys.labels, problems);
+        let mut shapes = yumete_cjk::KeyShapes::default();
+        read_key_table("normal", &self.keys.normal, &mut keys.normal, &mut keys.labels, &mut shapes.normal, problems);
+        read_key_table("select", &self.keys.select, &mut keys.select, &mut keys.labels, &mut shapes.select, problems);
         // Insert mode holds a run of keys (`j` of `jk`) without a menu, so a
-        // `label` there names nothing (found in review, 2026-11-02).
+        // `label` there names nothing (found in review, 2026-11-02), and its
+        // tables are runs, not groups.
         let mut no_menu = HashMap::new();
-        read_key_table("insert", &self.keys.insert, &mut keys.insert, &mut no_menu, problems);
-        read_key_table("table", &self.keys.table, &mut keys.table, &mut keys.labels, problems);
+        let mut runs_only = yumete_cjk::KeyShape::default();
+        read_key_table("insert", &self.keys.insert, &mut keys.insert, &mut no_menu, &mut runs_only, problems);
+        read_key_table("table", &self.keys.table, &mut keys.table, &mut keys.labels, &mut shapes.table, problems);
         config.keys.normal = keys.normal;
         config.keys.select = keys.select;
         config.keys.insert = keys.insert;
         config.keys.table = keys.table;
         config.keys.labels = keys.labels;
+        config.keys.shapes = shapes;
         use yumete_cjk::actions::Place;
         config.keys.prompt = read_place_table(Place::Prompt, &self.keys.prompt, problems);
         config.keys.picker = read_place_table(Place::Picker, &self.keys.picker, problems);
@@ -5574,10 +5585,20 @@ impl RawConfig {
             ("vim", &self.keys.vim, &mut config.keys.vim),
         ] {
             let mut labels = HashMap::new();
-            read_key_table(&format!("{word}.normal"), &raw.normal, &mut out.normal, &mut labels, problems);
-            read_key_table(&format!("{word}.select"), &raw.select, &mut out.select, &mut labels, problems);
-            read_key_table(&format!("{word}.insert"), &raw.insert, &mut out.insert, &mut HashMap::new(), problems);
+            let mut shapes = yumete_cjk::KeyShapes::default();
+            read_key_table(&format!("{word}.normal"), &raw.normal, &mut out.normal, &mut labels, &mut shapes.normal, problems);
+            read_key_table(&format!("{word}.select"), &raw.select, &mut out.select, &mut labels, &mut shapes.select, problems);
+            let mut runs_only = yumete_cjk::KeyShape::default();
+            read_key_table(
+                &format!("{word}.insert"),
+                &raw.insert,
+                &mut out.insert,
+                &mut HashMap::new(),
+                &mut runs_only,
+                problems,
+            );
             out.labels = labels;
+            out.shapes = shapes;
             for (name, _) in &raw.strays {
                 problems.push(said(
                     format!("[keys.{word}.{name}]：沒有這張表，跳過了。一套鍵位自己的表有 normal、select、insert"),
@@ -5693,20 +5714,41 @@ fn unbindable_key(header: &str, key: &str) -> String {
 /// run of keys and a list of commands, each line that cannot is said and
 /// left out, and a nested table is a group whose keys follow the keys that
 /// open it (`[keys.normal.space]` then `q` is `<space>q`), with `label` its
-/// name.
+/// name. How it was written goes into `shape`: the groups, the order of the
+/// lines, and a command row's own text.
+///
+/// **Inside a group's table four words are the group's, not keys**
+/// (2026-11-05): `label`, `sticky` and `inherit` set the group, and a table
+/// with `run` in it is one command with its menu text,
+/// `d = { run = ":!lazygit", label = "lazygit" }`. A run of keys spelt as one
+/// of them is written flat, `"<space>run" = …`.
 fn read_key_table(
     mode: &str,
     table: &toml::Table,
     out: &mut HashMap<String, Vec<String>>,
     labels: &mut HashMap<String, String>,
+    shape: &mut yumete_cjk::KeyShape,
     problems: &mut Vec<String>,
 ) {
+    /// The commands a right-hand side names, or `None` when it is not
+    /// a command or a list of them.
+    fn commands_of(value: &toml::Value) -> Option<Vec<String>> {
+        match value {
+            toml::Value::String(one) => Some(vec![one.clone()]),
+            toml::Value::Array(many) => {
+                let strings: Option<Vec<String>> = many.iter().map(|v| v.as_str().map(str::to_string)).collect();
+                strings.filter(|s| !s.is_empty())
+            }
+            _ => None,
+        }
+    }
     fn walk(
         header: &str,
         path: &str,
         table: &toml::Table,
         out: &mut HashMap<String, Vec<String>>,
         labels: &mut HashMap<String, String>,
+        shape: &mut yumete_cjk::KeyShape,
         problems: &mut Vec<String>,
     ) {
         for (key, value) in table {
@@ -5718,15 +5760,36 @@ fn read_key_table(
                     ),
                 ));
             };
-            // A group's name, in the group's own table.
-            if key == "label" && !path.is_empty() {
-                match value {
-                    toml::Value::String(name) => {
-                        labels.insert(path.to_string(), name.clone());
+            // A group's own words, in the group's own table.
+            if !path.is_empty() {
+                match key.as_str() {
+                    "label" => {
+                        match value {
+                            toml::Value::String(name) => {
+                                labels.insert(path.to_string(), name.clone());
+                            }
+                            _ => wrong(problems),
+                        }
+                        continue;
                     }
-                    _ => wrong(problems),
+                    "sticky" | "inherit" => {
+                        let group = shape.groups.iter_mut().rev().find(|g| g.path == path);
+                        match (value.as_bool(), group) {
+                            (Some(on), Some(group)) if key == "sticky" => group.sticky = on,
+                            (Some(on), Some(group)) => group.inherit = on,
+                            _ => problems.push(said(
+                                format!("[keys.{header}] {key} 只能是 true 或 false，跳過了"),
+                                format!("[keys.{header}] {key} must be true or false, so it was skipped"),
+                            )),
+                        }
+                        continue;
+                    }
+                    "run" => {
+                        // Read by the table that holds it, as one command.
+                        continue;
+                    }
+                    _ => {}
                 }
-                continue;
             }
             let Ok(key_written) = helix_key(key) else {
                 problems.push(unbindable_key(header, key));
@@ -5734,32 +5797,47 @@ fn read_key_table(
             };
             let run = format!("{path}{key_written}");
             let commands: Vec<String> = match value {
-                toml::Value::Table(inner) => {
-                    walk(&format!("{header}.{key}"), &run, inner, out, labels, problems);
-                    continue;
-                }
-                toml::Value::String(one) => vec![one.clone()],
-                toml::Value::Array(many) => {
-                    let strings: Option<Vec<String>> = many.iter().map(|v| v.as_str().map(str::to_string)).collect();
-                    match strings.filter(|s| !s.is_empty()) {
-                        Some(strings) => strings,
-                        None => {
-                            wrong(problems);
-                            continue;
+                // **One command and its menu text** (`{ run = …, label = … }`).
+                toml::Value::Table(inner) if inner.contains_key("run") => {
+                    let Some(commands) = inner.get("run").and_then(commands_of) else {
+                        wrong(problems);
+                        continue;
+                    };
+                    for (word, said_here) in inner {
+                        match (word.as_str(), said_here) {
+                            ("run", _) => {}
+                            ("label", toml::Value::String(text)) => {
+                                shape.says.insert(run.clone(), text.clone());
+                            }
+                            _ => problems.push(said(
+                                format!("[keys.{header}.{key}] {word}：一條命令只寫 run 和 label，跳過了"),
+                                format!("[keys.{header}.{key}] {word}: a command takes only run and label, so it was skipped"),
+                            )),
                         }
                     }
+                    commands
                 }
-                _ => {
-                    wrong(problems);
+                toml::Value::Table(inner) => {
+                    shape.groups.push(yumete_cjk::KeyGroup { path: run.clone(), sticky: false, inherit: true });
+                    shape.order.push(run.clone());
+                    walk(&format!("{header}.{key}"), &run, inner, out, labels, shape, problems);
                     continue;
                 }
+                value => match commands_of(value) {
+                    Some(commands) => commands,
+                    None => {
+                        wrong(problems);
+                        continue;
+                    }
+                },
             };
             if key.is_empty() {
                 continue;
             }
             match commands.iter().find(|one| yumete_cjk::actions::bound(one).is_none()) {
                 None => {
-                    out.insert(run, commands);
+                    out.insert(run.clone(), commands);
+                    shape.order.push(run);
                 }
                 Some(bad) => problems.push(said(
                     format!(
@@ -5774,7 +5852,7 @@ fn read_key_table(
             }
         }
     }
-    walk(mode, "", table, out, labels, problems);
+    walk(mode, "", table, out, labels, shape, problems);
 }
 
 /// **`[keys.prompt]`, `[keys.picker]` or `[keys.sidebar]`, line by line**
@@ -7066,5 +7144,51 @@ mod helix_key_names {
         let mut said = Vec::new();
         Config::complain_about(&raw, &mut said);
         assert!(said.iter().any(|s| s.contains("inherit")) && said.iter().any(|s| s.contains("preset")), "{said:?}");
+    }
+}
+
+#[cfg(test)]
+mod key_shapes {
+    use super::*;
+
+    /// **How the tables were written** (2026-11-05): each table is a group,
+    /// with `sticky` and `inherit` its own; a table with `run` is one command
+    /// with its menu text; the lines keep the file's order; a group word with
+    /// the wrong kind of value is said and skipped.
+    #[test]
+    fn the_tables_shape_is_read() {
+        let (c, problems) = Config::from_toml_saying(
+            r#"
+            [keys.normal.space]
+            z = "select_all"
+            "," = "buffer_picker"
+
+            [keys.normal.space.g]
+            label = "git"
+            g = { run = ":!lazygit", label = "lazygit" }
+
+            [keys.normal.space.h]
+            sticky = true
+            inherit = false
+            j = "move_line_down"
+
+            [keys.normal.space.q]
+            sticky = "yes"
+            q = { run = ":quit", where = "here" }
+            "#,
+        );
+        let shape = &c.keys.shapes.normal;
+        let paths: Vec<&str> = shape.groups.iter().map(|g| g.path.as_str()).collect();
+        assert_eq!(paths, ["<space>", "<space>g", "<space>h", "<space>q"]);
+        let h = &shape.groups[2];
+        assert!(h.sticky && !h.inherit, "{h:?}");
+        assert_eq!(c.keys.normal.get("<space>gg"), Some(&vec![":!lazygit".to_string()]));
+        assert_eq!(shape.says.get("<space>gg").map(String::as_str), Some("lazygit"));
+        assert_eq!(c.keys.labels.get("<space>g").map(String::as_str), Some("git"));
+        let at = |run: &str| shape.order.iter().position(|r| r == run).unwrap_or(usize::MAX);
+        assert!(at("<space>z") < at("<space>,") && at("<space>,") < at("<space>g"), "{:?}", shape.order);
+        assert!(!c.keys.normal.contains_key("<space>hsticky"), "a group word is not a key");
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("sticky")) && problems.iter().any(|p| p.contains("where")), "{problems:?}");
     }
 }

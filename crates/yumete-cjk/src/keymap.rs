@@ -233,6 +233,41 @@ impl KeyPreset {
     }
 }
 
+/// **How a `[keys.<mode>]` table was written** (2026-11-05), beside the runs
+/// it reads into: which keys are groups (a table under a key), the order
+/// the lines are in, and the menu text a command row gives itself. The
+/// config reads it, and the editor lays its key tree from it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyShape {
+    /// Each table that is a group, by the keys that open it as the config
+    /// spells them (`<space>b`), in the file's order.
+    pub groups: Vec<KeyGroup>,
+    /// Every line's run and every group's, in the file's order.
+    pub order: Vec<String>,
+    /// A command row's own text (`d = { run = ":!lazygit", label = "lazygit" }`),
+    /// by its run.
+    pub says: std::collections::HashMap<String, String>,
+}
+
+/// One group a table makes: its keys, and the two words its table may set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyGroup {
+    pub path: String,
+    /// Stays open after each key until `Esc` (`sticky = true`).
+    pub sticky: bool,
+    /// `inherit = false`: a built-in group's own keys are not read.
+    pub inherit: bool,
+}
+
+/// The shapes of one set of tables: Normal mode's, select mode's and a
+/// table grid's (`[keys.normal]`, `[keys.select]`, `[keys.table]`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyShapes {
+    pub normal: KeyShape,
+    pub select: KeyShape,
+    pub table: KeyShape,
+}
+
 /// **What may follow a vim operator** (`d`, `c`, `y`) — #429, 2026-09-18.
 ///
 /// A translation table could give a vim hand `dw` and `dd`; it could not give

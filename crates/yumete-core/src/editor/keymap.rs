@@ -4,17 +4,23 @@
 //! a group is an edge to that node wherever it is bound: `Space w`, `C-w` and,
 //! under vim, `\ w` reach one node, and so does a key the reader moves a
 //! group to (`";" = "@ "`, `";" = "space_mode"`). The vim preset's lines and
-//! the reader's are laid on it. A line that walks into a group is a row of
-//! that group, so the group has it however it is opened; the rest of a run
-//! past the last group is held, as a run at the top level is, and a key
-//! that does not continue it lets the held keys act first.
+//! the reader's are laid on it:
+//!
+//! - **A table is a group** (`[keys.normal.space.b]`). Over a built-in group
+//!   it adds to it; anywhere else it takes its key, as helix's tables do, and
+//!   a key the group does not have closes it, saying nothing.
+//! - **A run written flat** (`"<space>bd"`, `"gggg"`, Insert's `jk`) walks
+//!   the same path. Where it walks into a group it is a row of that group;
+//!   past the last group it is held, and a key that does not go on with it
+//!   lets the held keys act first, the reader's own binding for them
+//!   included.
 //!
 //! Dispatch ([`Editor::on_node_key`]) and the which-key menu
 //! ([`Editor::tree_menu`]) read the same tree, and so do the generated
 //! pages: the ways into each group ([`ways_in`]) are found by walking its
 //! edges from the top level, not by spelling them.
 
-use super::groups::{opens, Context, Group, GROUPS, SPACE};
+use super::groups::{describe, key_label, key_of, keys_label, opens, Context, Group, GROUPS, SPACE};
 use super::keys::key_internal;
 use super::*;
 use crate::input::Key;
@@ -22,7 +28,7 @@ use std::collections::HashSet;
 use yumete_cjk::actions::NormalCmd;
 
 /// One mode's keys as a tree: the runs at the top level, and the reader's
-/// keys laid over the groups.
+/// keys laid over the groups and in groups of their own.
 #[derive(Clone, Default)]
 pub(crate) struct KeyTree {
     /// The runs that start at the top level, internal spelling: the
@@ -30,46 +36,67 @@ pub(crate) struct KeyTree {
     pub(super) runs: HashMap<String, Vec<String>>,
     /// The ones of `runs` the preset wrote, which no menu lists.
     pub(super) preset: HashSet<String>,
+    /// Where each of the reader's `runs` was written.
+    order: HashMap<String, usize>,
     /// The names of runs held at the top level (`label` on a key that
     /// opens no group).
     pub(super) labels: HashMap<String, String>,
-    /// The reader's keys over the groups.
+    /// Keys at the top level a table of the reader's took.
+    pub(super) root: HashMap<String, usize>,
     pub(super) nodes: Vec<Node>,
-    /// A group, by its place in [`GROUPS`], to its node.
+    /// A built-in group, by its place in [`GROUPS`], to its node.
     over: HashMap<usize, usize>,
+    /// What laying it found worth a line at start-up: a table that took a
+    /// key from a command.
+    pub(super) notes: Vec<String>,
 }
 
-/// **The reader's keys in one group.**
+/// **A group in the tree**: a built-in one with the reader's keys over it,
+/// or one of the reader's own.
 #[derive(Clone, Default)]
 pub(super) struct Node {
-    /// The group under it, by its place in [`GROUPS`].
-    pub(super) group: Option<usize>,
+    /// The built-in group under it, by its place in [`GROUPS`].
+    group: Option<usize>,
     /// Its name (`label` in its table).
-    pub(super) label: Option<String>,
+    label: Option<String>,
     /// The keys that reached it when it was laid, internal spelling.
-    pub(super) path: String,
-    /// The reader's keys, one each, in the order laid.
-    pub(super) rows: Vec<Mine>,
+    path: String,
+    /// Open after each key until `Esc` (`sticky = true`).
+    sticky: bool,
+    /// `false`: the built-in group's own keys are not read (`inherit = false`).
+    inherit: bool,
+    /// The layer of the table that made it (see [`Lines`]).
+    layer: usize,
+    /// The reader's keys here, one each.
+    rows: Vec<Mine>,
     /// Runs of keys from here that pass a key opening no group, held as
-    /// the top level holds its runs.
-    pub(super) runs: HashMap<String, Vec<String>>,
+    /// the top level holds its runs, and where each was written.
+    runs: HashMap<String, Vec<String>>,
+    run_order: HashMap<String, usize>,
     /// The names of such runs' beginnings.
-    pub(super) labels: HashMap<String, String>,
+    labels: HashMap<String, String>,
 }
 
-/// One of the reader's keys in a group, and the commands it runs.
+/// One of the reader's keys in a group.
 #[derive(Clone)]
-pub(super) struct Mine {
-    pub(super) key: String,
-    pub(super) run: Vec<String>,
+struct Mine {
+    key: String,
+    to: To,
+    /// Its own menu text (`{ run = …, label = … }`).
+    says: Option<String>,
+    /// Where it was written, for the menu's order.
+    order: usize,
+    layer: usize,
+}
+
+/// What a key of the reader's does: run commands, or open a group of theirs.
+#[derive(Clone)]
+enum To {
+    Run(Vec<String>),
+    Node(usize),
 }
 
 impl Node {
-    /// Whether the reader put anything here.
-    pub(super) fn has_keys(&self) -> bool {
-        !self.rows.is_empty() || !self.runs.is_empty()
-    }
-
     fn row(&self, key: &str) -> Option<&Mine> {
         self.rows.iter().find(|row| row.key == key)
     }
@@ -77,6 +104,71 @@ impl Node {
     /// Whether a run from here is longer than `held` and begins with it.
     fn runs_on(&self, held: &str) -> bool {
         !held.is_empty() && self.runs.keys().any(|run| run.len() > held.len() && run.starts_with(held))
+    }
+}
+
+/// **What one mode's tree is laid from**: the reader's lines and tables,
+/// each with its layer (the shared tables first, then the keymap's own,
+/// then select mode's or a table grid's, each over the ones before it) and
+/// where in its file it was written.
+#[derive(Default)]
+pub(super) struct Lines {
+    lines: Vec<Line>,
+    groups: Vec<GroupAt>,
+    says: HashMap<String, String>,
+    labels: HashMap<String, String>,
+    /// The layers added so far.
+    layers: usize,
+}
+
+struct Line {
+    run: String,
+    commands: Vec<String>,
+    layer: usize,
+    order: usize,
+}
+
+struct GroupAt {
+    path: String,
+    sticky: bool,
+    inherit: bool,
+    layer: usize,
+    order: usize,
+}
+
+/// A line no file placed (a binding made in code): after the written ones,
+/// in the order of its keys.
+const UNPLACED: usize = 1 << 20;
+
+impl Lines {
+    /// One more layer: its lines and how its tables were written, as the
+    /// config spells them.
+    pub(super) fn add(&mut self, lines: &HashMap<String, Vec<String>>, shape: &yumete_cjk::KeyShape) {
+        let layer = self.layers;
+        self.layers += 1;
+        let at = |run: &str| (layer << 21) + shape.order.iter().position(|r| r == run).unwrap_or(UNPLACED);
+        let written = yumete_cjk::actions::written;
+        for (run, commands) in lines {
+            self.lines.push(Line { run: written(run), commands: commands.clone(), layer, order: at(run) });
+        }
+        for group in &shape.groups {
+            self.groups.push(GroupAt {
+                path: written(&group.path),
+                sticky: group.sticky,
+                inherit: group.inherit,
+                layer,
+                order: at(&group.path),
+            });
+        }
+        for (run, text) in &shape.says {
+            self.says.insert(written(run), text.clone());
+        }
+    }
+
+    /// The groups' names, internal spelling, the later layer's over the
+    /// earlier.
+    pub(super) fn name(&mut self, labels: &HashMap<String, String>) {
+        self.labels.extend(labels.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
 }
 
@@ -103,15 +195,14 @@ impl KeyTree {
         if let Some(&n) = self.over.get(&group) {
             return n;
         }
-        self.nodes.push(Node { group: Some(group), path: path.to_string(), ..Node::default() });
+        self.nodes.push(Node { group: Some(group), path: path.to_string(), inherit: true, ..Node::default() });
         self.over.insert(group, self.nodes.len() - 1);
         self.nodes.len() - 1
     }
 
     /// The node over `group`, if the reader laid one.
     pub(super) fn node_of(&self, group: &Group) -> Option<usize> {
-        let at = GROUPS.iter().position(|g| std::ptr::eq(*g, group))?;
-        self.over.get(&at).copied()
+        self.over.get(&place_of(group)?).copied()
     }
 
     /// Whether a run at the top level takes these keys (vim's `ZZ`): the
@@ -131,39 +222,49 @@ impl KeyTree {
     }
 }
 
+/// A group's place in [`GROUPS`].
+fn place_of(group: &Group) -> Option<usize> {
+    GROUPS.iter().position(|g| std::ptr::eq(*g, group))
+}
+
+/// How a menu row's line is held: a message of the group's own, which
+/// merges with a neighbour saying the same, or text.
+enum Said {
+    Msg(&'static str),
+    Text(String),
+}
+
 impl Editor {
     /// **One mode's tree**: the preset's `runs` at the top level, then the
-    /// reader's `lines` and group names (`labels`), all in the internal
-    /// spelling. `extend` says which mode's keys the groups are read in.
-    pub(super) fn lay_tree(
-        &mut self,
-        preset: &HashMap<String, Vec<String>>,
-        lines: &[(String, Vec<String>)],
-        labels: &HashMap<String, String>,
-        extend: bool,
-    ) -> KeyTree {
+    /// reader's tables and lines. `extend` says which mode's keys the groups
+    /// are read in.
+    pub(super) fn lay_tree(&mut self, preset: &HashMap<String, Vec<String>>, lines: &Lines, extend: bool) -> KeyTree {
         let was = (self.extend, self.expanding_alias, self.replaying_held);
         // The groups are opened by keys typed in that mode.
         (self.extend, self.expanding_alias, self.replaying_held) = (extend, false, false);
         let mut tree = KeyTree { runs: preset.clone(), preset: preset.keys().cloned().collect(), ..KeyTree::default() };
-        // One key at the top level is that key; the rest walk the tree,
-        // shorter first, so a run walks through the keys laid before it.
-        let mut longer: Vec<(usize, &String, &Vec<String>)> = Vec::new();
-        for (run, commands) in lines {
-            match split_keys(run).len() {
-                0 => {}
-                1 => {
-                    tree.runs.insert(run.clone(), commands.clone());
-                    tree.preset.remove(run);
+        // Tables first, shorter first: a run then walks into the groups.
+        let mut groups: Vec<&GroupAt> = lines.groups.iter().collect();
+        groups.sort_by(|a, b| (split_keys(&a.path).len(), a.order, &a.path).cmp(&(split_keys(&b.path).len(), b.order, &b.path)));
+        for group in groups {
+            self.lay_group(&mut tree, group);
+        }
+        // A later layer's line for the same run wins.
+        let mut kept: HashMap<&str, &Line> = HashMap::new();
+        for line in &lines.lines {
+            match kept.get(line.run.as_str()) {
+                Some(was) if was.layer > line.layer => {}
+                _ => {
+                    kept.insert(&line.run, line);
                 }
-                n => longer.push((n, run, commands)),
             }
         }
-        longer.sort();
-        for (_, run, commands) in longer {
-            self.lay_line(&mut tree, run, commands);
+        let mut sorted: Vec<&Line> = kept.into_values().filter(|l| !split_keys(&l.run).is_empty()).collect();
+        sorted.sort_by(|a, b| (split_keys(&a.run).len(), a.order, &a.run).cmp(&(split_keys(&b.run).len(), b.order, &b.run)));
+        for line in sorted {
+            self.lay_line(&mut tree, line, lines.says.get(&line.run));
         }
-        let mut names: Vec<(&String, &String)> = labels.iter().collect();
+        let mut names: Vec<(&String, &String)> = lines.labels.iter().collect();
         names.sort();
         for (path, label) in names {
             self.lay_label(&mut tree, path, label);
@@ -172,27 +273,133 @@ impl Editor {
         tree
     }
 
-    /// Walk one line of two keys or more into the tree.
-    fn lay_line(&self, tree: &mut KeyTree, run: &str, commands: &[String]) {
-        let keys = split_keys(run);
+    /// **A table**: merged into the group its keys reach, or a group of the
+    /// reader's that takes the key.
+    fn lay_group(&self, tree: &mut KeyTree, group: &GroupAt) {
+        let keys = split_keys(&group.path);
+        let mut at: Option<usize> = None;
+        let mut walked = String::new();
+        for (i, key) in keys.iter().enumerate() {
+            walked.push_str(key);
+            let last = i + 1 == keys.len();
+            if let Some(n) = self.step(tree, at, key, &walked) {
+                if last {
+                    let node = &mut tree.nodes[n];
+                    node.sticky |= group.sticky;
+                    node.inherit &= group.inherit;
+                }
+                at = Some(n);
+                continue;
+            }
+            let took = self.what_ran(tree, at, key);
+            let m = tree.nodes.len();
+            tree.nodes.push(Node {
+                path: walked.clone(),
+                sticky: last && group.sticky,
+                inherit: true,
+                layer: group.layer,
+                ..Node::default()
+            });
+            match at {
+                None => {
+                    tree.runs.retain(|run, _| !run.starts_with(key.as_str()));
+                    tree.preset.retain(|run| !run.starts_with(key.as_str()));
+                    tree.root.insert(key.clone(), m);
+                }
+                Some(n) => {
+                    let row = Mine { key: key.clone(), to: To::Node(m), says: None, order: group.order, layer: group.layer };
+                    let node = &mut tree.nodes[n];
+                    match node.rows.iter_mut().find(|r| r.key == *key) {
+                        Some(was) => *was = Mine { order: was.order, ..row },
+                        None => node.rows.push(row),
+                    }
+                    node.runs.retain(|run, _| !run.starts_with(key.as_str()));
+                }
+            }
+            if let Some(name) = took {
+                tree.notes.push(say!("keys.table-takes-a-command", yumete_cjk::actions::spell(&walked), name));
+            }
+            at = Some(m);
+        }
+    }
+
+    /// The command `key` ran at `at` before a table took it, if it ran one.
+    fn what_ran(&self, tree: &KeyTree, at: Option<usize>, key: &str) -> Option<String> {
+        let ran = match at {
+            None => match tree.runs.get(key) {
+                Some(commands) => Some(commands.join(", ")),
+                None => {
+                    let pressed = super::keys::pressed_key(key)?;
+                    let cx = super::normal::Cx { key: pressed, count: 1, operator_count: None, continuing_zong: false };
+                    self.normal_command_for(&cx).map(str::to_string)
+                }
+            },
+            Some(n) => {
+                let node = &tree.nodes[n];
+                match node.row(key) {
+                    Some(Mine { to: To::Run(commands), .. }) => Some(commands.join(", ")),
+                    Some(_) => None,
+                    None if node.inherit => {
+                        let group = GROUPS[node.group?];
+                        let bind = group.bind_for(super::keys::pressed_key(key)?, &self.context_in(group))?;
+                        Some(bind.run.name().to_string())
+                    }
+                    None => None,
+                }
+            }
+        };
+        ran.filter(|name| name != NormalCmd::NoOp.name())
+    }
+
+    /// **A line**: one key at the top level is that key; a longer one walks
+    /// the tree, a row of the group it ends in, or a run held past the last
+    /// group it reaches.
+    fn lay_line(&self, tree: &mut KeyTree, line: &Line, says: Option<&String>) {
+        let keys = split_keys(&line.run);
+        let first = &keys[0];
+        let at_root = |tree: &mut KeyTree| {
+            tree.runs.insert(line.run.clone(), line.commands.clone());
+            tree.preset.remove(&line.run);
+            tree.order.insert(line.run.clone(), line.order);
+        };
+        if keys.len() == 1 {
+            match tree.root.get(first).copied() {
+                // A table of a later layer keeps the key.
+                Some(m) if tree.nodes[m].layer > line.layer => {}
+                Some(_) => {
+                    tree.root.remove(first);
+                    at_root(tree);
+                }
+                None => at_root(tree),
+            }
+            return;
+        }
         // A key the top level holds for a longer run stays the run's: the
         // run is what the key waits for (vim's `Z` of `ZZ`).
-        let first = &keys[0];
-        if tree.runs.contains_key(run) || tree.runs.keys().any(|r| r.len() > first.len() && r.starts_with(first.as_str())) {
-            tree.runs.insert(run.to_string(), commands.to_vec());
-            tree.preset.remove(run);
+        let held = tree.runs.contains_key(&line.run)
+            || tree.runs.keys().any(|r| r.len() > first.len() && r.starts_with(first.as_str()));
+        if held && !tree.root.contains_key(first) {
+            at_root(tree);
             return;
         }
         let mut at: Option<usize> = None;
         let mut walked = String::new();
         for (i, key) in keys.iter().enumerate() {
             if i + 1 == keys.len() {
-                if let Some(n) = at {
-                    let node = &mut tree.nodes[n];
-                    match node.rows.iter_mut().find(|row| row.key == *key) {
-                        Some(row) => row.run = commands.to_vec(),
-                        None => node.rows.push(Mine { key: key.clone(), run: commands.to_vec() }),
-                    }
+                let Some(n) = at else { return };
+                let row = Mine {
+                    key: key.clone(),
+                    to: To::Run(line.commands.clone()),
+                    says: says.cloned(),
+                    order: line.order,
+                    layer: line.layer,
+                };
+                let node = &mut tree.nodes[n];
+                match node.rows.iter_mut().find(|r| r.key == *key) {
+                    // A group of a later layer keeps its key.
+                    Some(was) if matches!(was.to, To::Node(_)) && was.layer > line.layer => {}
+                    Some(was) => *was = Mine { order: was.order, ..row },
+                    None => node.rows.push(row),
                 }
                 return;
             }
@@ -201,12 +408,11 @@ impl Editor {
                 Some(n) => at = Some(n),
                 None => {
                     match at {
-                        None => {
-                            tree.runs.insert(run.to_string(), commands.to_vec());
-                            tree.preset.remove(run);
-                        }
+                        None => at_root(tree),
                         Some(n) => {
-                            tree.nodes[n].runs.insert(keys[i..].concat(), commands.to_vec());
+                            let rest = keys[i..].concat();
+                            tree.nodes[n].run_order.insert(rest.clone(), line.order);
+                            tree.nodes[n].runs.insert(rest, line.commands.clone());
                         }
                     }
                     return;
@@ -248,25 +454,31 @@ impl Editor {
     /// Space key itself is a line of one key.
     fn step(&self, tree: &mut KeyTree, at: Option<usize>, key: &str, walked: &str) -> Option<usize> {
         let group = match at {
-            None if key == " " => Some(&SPACE),
-            None => match tree.runs.get(key) {
-                Some(commands) => self.binding_opens(commands),
-                None => self.top_opens(key),
-            },
+            None => {
+                if let Some(&m) = tree.root.get(key) {
+                    return Some(m);
+                }
+                match tree.runs.get(key) {
+                    _ if key == " " => Some(&SPACE),
+                    Some(commands) => self.binding_opens(commands),
+                    None => self.top_opens(key),
+                }
+            }
             Some(n) => {
                 let node = &tree.nodes[n];
                 match node.row(key) {
-                    Some(row) => self.binding_opens(&row.run),
-                    None => {
+                    Some(Mine { to: To::Node(m), .. }) => return Some(*m),
+                    Some(Mine { to: To::Run(commands), .. }) => self.binding_opens(commands),
+                    None if node.inherit => {
                         let group = GROUPS[node.group?];
                         let bind = group.bind_for(super::keys::pressed_key(key)?, &self.context_in(group))?;
                         opens(bind.run)
                     }
+                    None => None,
                 }
             }
         }?;
-        let at = GROUPS.iter().position(|g| std::ptr::eq(*g, group))?;
-        Some(tree.over(at, walked))
+        Some(tree.over(place_of(group)?, walked))
     }
 
     /// The group a key opens at the top level by the keymap's own tables.
@@ -304,6 +516,12 @@ impl Editor {
         }
     }
 
+    /// **What laying the keys found worth saying at start-up**: each table
+    /// that took a key from the command it ran.
+    pub fn key_notes(&self) -> Vec<String> {
+        self.normal_tree.notes.clone()
+    }
+
     /// Whether the reader's keys are read now: not while a run of keys on
     /// the right of a binding plays, which always means the editor's own.
     fn reading_mine(&self) -> bool {
@@ -315,7 +533,23 @@ impl Editor {
         if !self.reading_mine() {
             return None;
         }
-        self.tree().node_of(self.pending.group()?)
+        match self.pending {
+            Pending::Node(n) => Some(n as usize).filter(|n| *n < self.tree().nodes.len()),
+            waiting => self.tree().node_of(waiting.group()?),
+        }
+    }
+
+    /// What waits in node `n`.
+    fn pending_for(&self, n: usize) -> Pending {
+        match self.tree().nodes[n].group {
+            Some(group) => GROUPS[group].pending,
+            None => Pending::Node(n as u16),
+        }
+    }
+
+    /// The node a key at the top level opens, when a table took the key.
+    pub(super) fn root_node(&self, typed: &str) -> Option<usize> {
+        self.reading_mine().then(|| self.tree().root.get(typed).copied()).flatten()
     }
 
     /// What the reader is holding in this group (`b` of `Space bd`).
@@ -326,27 +560,57 @@ impl Editor {
         }
     }
 
-    /// Whether a key in this group is the reader's: it is a key of theirs
-    /// here, begins a run of theirs, or goes on with one held. Its commands
-    /// then reach the cursors themselves.
+    /// Whether a key in this group is the reader's: a group of theirs, a
+    /// key of theirs here, a run of theirs begun or held. Its commands then
+    /// reach the cursors themselves.
     pub(super) fn node_takes(&self, key: Key) -> bool {
         let Some(n) = self.node_here() else { return false };
         let node = &self.tree().nodes[n];
         let typed = key_internal(key);
-        !self.held_here().is_empty() || node.row(&typed).is_some() || node.runs_on(&typed)
+        node.group.is_none()
+            || !node.inherit
+            || !self.held_here().is_empty()
+            || node.row(&typed).is_some()
+            || node.runs_on(&typed)
     }
 
-    /// **A key arriving in a group**: the reader's keys there first (a key
-    /// of theirs, a run of theirs held), then the group's own rows.
+    /// **A key arriving in a group**: Backspace back a level, the reader's
+    /// keys there (a key of theirs, a run of theirs held), then the group's
+    /// own rows. Keeps the trail of the groups it came through.
     pub(super) fn on_node_key(&mut self, key: Key, typed_before: &str, continuing_zong: bool) {
+        let was = self.pending;
+        let back = self.node_key(key, typed_before, continuing_zong);
+        if self.pending == Pending::None {
+            self.node_trail.clear();
+        } else if !back && self.pending != was && self.pending.is_node() {
+            self.node_trail.push(was);
+        }
+    }
+
+    /// The key itself; `true` when it went back a level.
+    fn node_key(&mut self, key: Key, typed_before: &str, continuing_zong: bool) -> bool {
         let group = self.pending.group();
-        let Some(n) = self.node_here() else {
-            if let Some(group) = group {
-                self.on_group_key(group, key, typed_before, continuing_zong);
+        let node = self.node_here().map(|n| self.tree().nodes[n].clone());
+        // **Backspace goes back a level** where the group has no Backspace of
+        // its own (Space's `⌫` turns the page, and it is the first level).
+        if key == Key::Backspace && self.held_here().is_empty() && !self.has_its_own_backspace(group, node.as_ref()) {
+            if let Some(back) = self.node_trail.pop() {
+                self.pending = back;
+                self.node_held = None;
+                self.z_digits = None;
+                self.sequence = None;
+                self.sort_keys.clear();
+                self.alias_count = None;
+                return true;
             }
-            return;
+        }
+        let Some(node) = node else {
+            match group {
+                Some(group) => self.on_group_key(group, key, typed_before, continuing_zong, group.sticky),
+                None => self.pending = Pending::None,
+            }
+            return false;
         };
-        let node = self.tree().nodes[n].clone();
         let typed = key_internal(key);
         let held = self.held_here().to_string();
         self.node_held = None;
@@ -354,47 +618,89 @@ impl Editor {
         let may_hold = !self.expanding_alias;
         if !held.is_empty() {
             if key == Key::Esc {
-                self.pending = Pending::None;
-                self.alias_count = None;
-                self.operator_count = None;
-                return;
+                self.close_the_node();
+                return false;
             }
             let longer = format!("{held}{typed}");
             // A digit inside a held run is a count (`Space b 3d`), unless a
             // run of the reader's goes on with it.
-            if let Some(c) = typed.chars().next().filter(|c| typed.len() == 1 && c.is_ascii_digit()) {
-                if !node.runs.keys().any(|r| r.starts_with(longer.as_str())) && (c != '0' || self.alias_count.is_some()) {
-                    let n = self.alias_count.unwrap_or(0);
-                    self.alias_count =
-                        Some(n.saturating_mul(10).saturating_add(c.to_digit(10).unwrap_or(0) as usize).min(1_000_000));
-                    self.node_held = Some((self.pending, held));
-                    return;
-                }
+            if !node.runs.keys().any(|r| r.starts_with(longer.as_str())) && self.count_inside(key) {
+                self.node_held = Some((self.pending, held));
+                return false;
             }
             if !typed.is_empty() && node.runs_on(&longer) {
                 self.node_held = Some((self.pending, longer));
-                return;
+                return false;
             }
             if let Some(commands) = node.runs.get(&longer).filter(|_| !typed.is_empty()).cloned() {
-                self.run_mine(&commands);
-                return;
+                self.run_mine(&commands, node.sticky);
+                return false;
             }
             self.let_go_in(&node, &held);
             let waiting = self.pending;
             self.fan_out(waiting, key, false, &|e| e.on_normal_key(key));
-            return;
+            return false;
         }
         if may_hold && node.runs_on(&typed) {
             self.node_held = Some((self.pending, typed));
-            return;
+            return false;
         }
         if let Some(row) = node.row(&typed) {
-            self.run_mine(&row.run.clone());
-            return;
+            match &row.to {
+                To::Run(commands) => self.run_mine(commands, node.sticky),
+                To::Node(m) => self.pending = self.pending_for(*m),
+            }
+            return false;
         }
-        if let Some(group) = group {
-            self.on_group_key(group, key, typed_before, continuing_zong);
+        let sticky = node.sticky || group.is_some_and(|g| g.sticky);
+        match group.filter(|_| node.inherit) {
+            Some(group) => self.on_group_key(group, key, typed_before, continuing_zong, sticky),
+            // **A key a group of the reader's does not have closes it**,
+            // saying nothing, as which-key's; a digit there is a count.
+            None => {
+                if key == Key::Esc || !self.count_inside(key) {
+                    self.close_the_node();
+                }
+            }
         }
+        false
+    }
+
+    /// A digit typed inside a run or a group of the reader's, as a count:
+    /// `true` when `key` was one.
+    fn count_inside(&mut self, key: Key) -> bool {
+        let Key::Char(c @ '0'..='9') = key else { return false };
+        if c == '0' && self.alias_count.is_none() {
+            return false;
+        }
+        let n = self.alias_count.unwrap_or(0);
+        self.alias_count = Some(n.saturating_mul(10).saturating_add(c as usize - '0' as usize).min(1_000_000));
+        true
+    }
+
+    fn close_the_node(&mut self) {
+        self.pending = Pending::None;
+        self.alias_count = None;
+        self.operator_count = None;
+        self.group_count = None;
+    }
+
+    /// Whether Backspace is a key of this group's: a row of its own, a key
+    /// of the reader's, or vim's `z{count}` taking a digit back.
+    fn has_its_own_backspace(&self, group: Option<&'static Group>, node: Option<&Node>) -> bool {
+        let typed = key_internal(Key::Backspace);
+        if let Some(node) = node {
+            if node.row(&typed).is_some() || node.runs_on(&typed) {
+                return true;
+            }
+            if !node.inherit {
+                return false;
+            }
+        }
+        group.is_some_and(|g| {
+            g.bind_for(Key::Backspace, &self.context_in(g)).is_some()
+                || (g.opener == NormalCmd::ViewMode && self.z_digits.is_some())
+        })
     }
 
     /// After a command at the top level: the count typed before it, kept
@@ -403,15 +709,19 @@ impl Editor {
         self.group_count = self.pending.group().and(before);
     }
 
-    /// Run one of the reader's keys in a group: the group closes, and the
-    /// count typed before the group, and any typed inside a run held there,
-    /// goes to the commands.
-    fn run_mine(&mut self, commands: &[String]) {
+    /// Run one of the reader's keys in a group: the group closes, unless it
+    /// is sticky, and the count typed before the group, and any typed inside
+    /// it, goes to the commands.
+    fn run_mine(&mut self, commands: &[String], sticky: bool) {
+        let was = self.pending;
         self.pending = Pending::None;
         self.count = self.group_count.take().or(self.operator_count.take());
         self.operator_count = None;
         self.settle_alias_count();
         self.run_binding(commands);
+        if sticky && self.pending == Pending::None && self.mode == Mode::Normal {
+            self.pending = was;
+        }
     }
 
     /// **What was held in a group acts first**: the longest start of it the
@@ -422,11 +732,14 @@ impl Editor {
         for cut in (1..=keys.len()).rev() {
             let start = keys[..cut].concat();
             let bound = match cut {
-                1 => node.row(&start).map(|row| row.run.clone()),
+                1 => node.row(&start).and_then(|row| match &row.to {
+                    To::Run(commands) => Some(commands.clone()),
+                    To::Node(_) => None,
+                }),
                 _ => node.runs.get(&start).cloned(),
             };
             if let Some(commands) = bound {
-                self.run_mine(&commands);
+                self.run_mine(&commands, false);
                 let rest = keys[cut..].concat();
                 if !rest.is_empty() {
                     self.play_held(&rest);
@@ -471,12 +784,19 @@ impl Editor {
             }
             return self.root_held_menu(held);
         }
-        let group = self.pending.group()?;
-        let Some(n) = self.node_here() else { return Some(self.group_menu(group)) };
-        let node = &self.tree().nodes[n];
+        let group = self.pending.group();
+        let n = self.node_here();
+        let node = n.map(|n| &self.tree().nodes[n]);
+        if group.is_none() && node.is_none() {
+            return None;
+        }
         let held = self.held_here();
-        if !held.is_empty() {
-            let mine: Vec<(String, Vec<String>)> = node.runs.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        if let Some(node) = node.filter(|_| !held.is_empty()) {
+            let mine: Vec<(String, Vec<String>, usize)> = node
+                .runs
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone(), node.run_order.get(k).copied().unwrap_or(UNPLACED)))
+                .collect();
             let rows = held_rows(held, &mine, None, &self.group_context(), |keys| node.labels.get(keys).cloned());
             if rows.is_empty() {
                 return None;
@@ -487,21 +807,7 @@ impl Editor {
             };
             return Some((title, rows));
         }
-        if !node.has_keys() {
-            return Some(self.group_menu(group));
-        }
-        let mine: Vec<(String, Vec<String>)> = node
-            .rows
-            .iter()
-            .map(|row| (row.key.clone(), row.run.clone()))
-            .chain(node.runs.iter().map(|(k, v)| (k.clone(), v.clone())))
-            .collect();
-        let rows = held_rows("", &mine, Some(group), &self.context_in(group), |keys| node.labels.get(keys).cloned());
-        let title = match &node.label {
-            Some(label) => label.clone(),
-            None => self.group_menu(group).0,
-        };
-        Some((title, rows))
+        Some(self.menu_of(group, node))
     }
 
     /// The menu of a run held at the top level: the reader's runs that go on
@@ -509,8 +815,12 @@ impl Editor {
     /// `ZZ`), that group's keys besides.
     fn root_held_menu(&self, held: &str) -> Option<(String, KeyRows)> {
         let tree = self.tree();
-        let mine: Vec<(String, Vec<String>)> =
-            tree.runs.iter().filter(|(k, _)| !tree.preset.contains(*k)).map(|(k, v)| (k.clone(), v.clone())).collect();
+        let mine: Vec<(String, Vec<String>, usize)> = tree
+            .runs
+            .iter()
+            .filter(|(k, _)| !tree.preset.contains(*k))
+            .map(|(k, v)| (k.clone(), v.clone(), tree.order.get(k).copied().unwrap_or(UNPLACED)))
+            .collect();
         let group = (split_keys(held).len() == 1).then(|| self.top_opens(held)).flatten();
         let rows = held_rows(held, &mine, group, &self.group_context(), |keys| tree.labels.get(keys).cloned());
         if rows.is_empty() {
@@ -524,31 +834,151 @@ impl Editor {
         Some((title, rows))
     }
 
-    /// **The which-key menu of a group as it ships.**
-    pub(super) fn group_menu(&self, group: &'static Group) -> (String, KeyRows) {
-        let rows = group
-            .menu(&self.context_in(group))
+    /// **A group's menu**: its own rows in their order, a key of the
+    /// reader's in the place of the row it takes, then the reader's other
+    /// keys in the order they were written. A row that opens a group says
+    /// `+` and the group's name, and a group left with no keys is not
+    /// listed. Titled with the reader's name for it, the group's, or its
+    /// keys.
+    fn menu_of(&self, group: Option<&'static Group>, node: Option<&Node>) -> (String, KeyRows) {
+        let mine = node.map(|node| self.mine_rows(node)).unwrap_or_default();
+        let mut rows: Vec<(Vec<String>, Said, bool)> = Vec::new();
+        let mut placed: HashSet<String> = HashSet::new();
+        if let Some(group) = group.filter(|_| node.is_none_or(|node| node.inherit)) {
+            for (bind, name, says) in group.listed(&self.context_in(group)) {
+                let Some(bind) = bind else {
+                    rows.push((vec![name], Said::Msg(says), false));
+                    continue;
+                };
+                let key = key_internal(bind.key);
+                if let Some((_, text, _)) = mine.iter().find(|(k, _, _)| *k == key) {
+                    if placed.insert(key) {
+                        if let Some(text) = text {
+                            rows.push((vec![name], Said::Text(text.clone()), false));
+                        }
+                    }
+                    continue;
+                }
+                match opens(bind.run) {
+                    Some(sub) => {
+                        if self.group_is_empty(sub) {
+                            continue;
+                        }
+                        let tree = self.tree();
+                        let label = tree.node_of(sub).and_then(|n| tree.nodes[n].label.clone());
+                        let label = label.unwrap_or_else(|| crate::messages::say(says, &[]));
+                        rows.push((vec![name], Said::Text(format!("+{label}")), false));
+                    }
+                    None => match rows.last_mut() {
+                        Some((keys, Said::Msg(said), true)) if *said == says => keys.push(name),
+                        _ => rows.push((vec![name], Said::Msg(says), true)),
+                    },
+                }
+            }
+        }
+        let mut rest: Vec<&(String, Option<String>, usize)> = mine.iter().filter(|(k, _, _)| !placed.contains(k)).collect();
+        rest.sort_by(|a, b| (a.2, &a.0).cmp(&(b.2, &b.0)));
+        for (key, text, _) in rest {
+            if let Some(text) = text {
+                rows.push((vec![key_label(key_of(key))], Said::Text(text.clone()), false));
+            }
+        }
+        let rows: KeyRows = rows
             .into_iter()
-            .map(|(keys, says)| (keys.into(), crate::messages::say(says, &[])))
+            .map(|(keys, said, _)| {
+                let said = match said {
+                    Said::Msg(id) => crate::messages::say(id, &[]),
+                    Said::Text(text) => text,
+                };
+                (keys_label(&keys).into(), said)
+            })
             .collect();
-        // The Space menu is titled by its key, and under vim that may be `\`.
-        let title = match (group.name, self.space_sign()) {
-            ("space", "\\") => "\\".to_string(),
-            _ => crate::messages::say(group.title, &[]),
+        let title = match (node.and_then(|n| n.label.clone()), group) {
+            (Some(label), _) => label,
+            // The Space menu is titled by its key, and under vim that may be `\`.
+            (None, Some(group)) if group.name == SPACE.name && self.space_sign() == "\\" => "\\".to_string(),
+            (None, Some(group)) => crate::messages::say(group.title, &[]),
+            (None, None) => yumete_cjk::actions::spell(node.map_or("", |n| n.path.as_str())),
         };
         (title, rows)
+    }
+
+    /// **The reader's keys in a group, as menu rows**: each key, its line
+    /// (`None` for a key that leaves the menu: `no_op`, an empty group), and
+    /// where it was written. A key that only begins runs held here says the
+    /// name of what it begins, or `…`.
+    fn mine_rows(&self, node: &Node) -> Vec<(String, Option<String>, usize)> {
+        let tree = self.tree();
+        let mut out: Vec<(String, Option<String>, usize)> = Vec::new();
+        for row in &node.rows {
+            let text = match &row.to {
+                To::Run(commands) => row.says.clone().or_else(|| describe(commands)),
+                To::Node(m) => match self.node_is_empty(*m) {
+                    true => None,
+                    false => Some(match &tree.nodes[*m].label {
+                        Some(label) => format!("+{label}"),
+                        None => format!("+{}", self.keys_in(*m)),
+                    }),
+                },
+            };
+            out.push((row.key.clone(), text, row.order));
+        }
+        let group = node.group.filter(|_| node.inherit).map(|g| GROUPS[g]);
+        for run in node.runs.keys() {
+            let Some(next) = split_keys(run).into_iter().next() else { continue };
+            let order = node.run_order.get(run).copied().unwrap_or(UNPLACED);
+            if let Some(row) = out.iter_mut().find(|(k, _, _)| *k == next) {
+                row.2 = row.2.min(order);
+                continue;
+            }
+            let said = match node.labels.get(&next) {
+                Some(label) => label.clone(),
+                // A group's key with the reader's runs under it keeps its own
+                // line.
+                None if group.is_some_and(|g| g.binds().any(|b| key_internal(b.key) == next)) => continue,
+                None => "…".to_string(),
+            };
+            out.push((next, Some(said), order));
+        }
+        out
+    }
+
+    /// A group of the reader's with no name, on its parent's row: its keys.
+    fn keys_in(&self, n: usize) -> String {
+        let (_, rows) = self.menu_of(None, Some(&self.tree().nodes[n]));
+        let mut keys: Vec<String> = rows.into_iter().take(4).map(|(k, _)| k.into_owned()).collect();
+        if keys.len() == 4 {
+            keys[3] = "…".to_string();
+        }
+        keys.join(" ")
+    }
+
+    /// Whether a node has nothing left on its menu.
+    fn node_is_empty(&self, n: usize) -> bool {
+        let node = &self.tree().nodes[n];
+        let group = node.group.map(|g| GROUPS[g]);
+        self.menu_of(group, Some(node)).1.is_empty()
+    }
+
+    /// Whether a built-in group has nothing left on its menu (the reader
+    /// took every key of it).
+    fn group_is_empty(&self, group: &Group) -> bool {
+        self.tree().node_of(group).is_some_and(|n| self.node_is_empty(n))
+    }
+
+    /// The sign of a group of the reader's: the keys that opened it.
+    pub(super) fn node_sign(&self) -> Option<String> {
+        let Pending::Node(n) = self.pending else { return None };
+        let node = self.tree().nodes.get(n as usize)?;
+        Some(split_keys(&node.path).iter().map(|k| key_label(key_of(k))).collect())
     }
 
     /// **The key that opens the Space menu**, as a sign writes it: the
     /// first key at the top level that opens it, `␣` when that is Space.
     pub(super) fn space_sign(&self) -> &'static str {
         let at = self.group_context();
-        match home_paths(&Context { vim: at.vim, flavor: at.flavor, ..Context::default() })
-            [GROUPS.iter().position(|g| g.name == SPACE.name).unwrap_or(0)]
-        .as_ref()
-        .and_then(|path| path.first())
-        .map(String::as_str)
-        {
+        let homes = home_paths(&Context { vim: at.vim, flavor: at.flavor, ..Context::default() });
+        match place_of(&SPACE).and_then(|p| homes[p].as_ref()).and_then(|path| path.first()).map(String::as_str) {
             Some("\\") => "\\",
             _ => "␣",
         }
@@ -557,22 +987,22 @@ impl Editor {
 
 /// **A menu's rows from the reader's runs**: the next key of each run that
 /// goes on from `held`, as the command it runs or the name of what it
-/// opens, after the rows of `group` the reader did not take. Today's order:
-/// the group's rows as it ships, then the reader's by key.
+/// opens, after the rows of `group` the reader did not take, in the order
+/// the runs were written.
 fn held_rows(
     held: &str,
-    mine: &[(String, Vec<String>)],
+    mine: &[(String, Vec<String>, usize)],
     group: Option<&'static Group>,
     at: &Context,
     label_of: impl Fn(&str) -> Option<String>,
 ) -> KeyRows {
-    let mut next_keys: Vec<(String, Option<String>)> = Vec::new();
-    for (left, commands) in mine {
+    let mut next_keys: Vec<(String, Option<String>, usize)> = Vec::new();
+    for (left, commands, order) in mine {
         let Some(rest) = left.strip_prefix(held).filter(|r| !r.is_empty()) else { continue };
         let Some(next) = split_keys(rest).into_iter().next() else { continue };
         let exact = rest.len() == next.len();
         let said = match exact {
-            true => super::groups::describe(commands),
+            true => describe(commands),
             false => match label_of(&format!("{held}{next}")) {
                 Some(label) => Some(label),
                 // A group's key with the reader's keys under it keeps its
@@ -581,23 +1011,27 @@ fn held_rows(
                 None => Some("…".to_string()),
             },
         };
-        match next_keys.iter_mut().find(|(n, _)| *n == next) {
-            Some(row) if exact => row.1 = said,
-            Some(_) => {}
-            None => next_keys.push((next, said)),
+        match next_keys.iter_mut().find(|(n, _, _)| *n == next) {
+            Some(row) => {
+                row.2 = row.2.min(*order);
+                if exact {
+                    row.1 = said;
+                }
+            }
+            None => next_keys.push((next, said, *order)),
         }
     }
-    next_keys.sort_by(|a, b| a.0.cmp(&b.0));
+    next_keys.sort_by(|a, b| (a.2, &a.0).cmp(&(b.2, &b.0)));
     let mut rows: KeyRows = Vec::new();
     if let Some(group) = group {
-        let taken = |key: Key| next_keys.iter().any(|(n, _)| *n == key_internal(key));
+        let taken = |key: Key| next_keys.iter().any(|(n, _, _)| *n == key_internal(key));
         for (keys, says) in group.menu_without(at, taken) {
             rows.push((keys.into(), crate::messages::say(says, &[])));
         }
     }
-    for (next, said) in next_keys {
+    for (next, said, _) in next_keys {
         let Some(said) = said else { continue };
-        rows.push((super::groups::key_label(super::groups::key_of(&next)).into(), said));
+        rows.push((key_label(key_of(&next)).into(), said));
     }
     rows
 }
@@ -638,7 +1072,7 @@ pub(super) fn rank(key: &Key) -> (u8, u32, u8) {
 /// group's place in [`GROUPS`]: a key at the top level that opens it, or a
 /// key in a group reached already whose row opens it, in the order found.
 pub(super) fn ways_in(roots: &[(Vec<String>, NormalCmd)], at: &Context) -> Vec<Vec<Vec<String>>> {
-    let place = |cmd: NormalCmd| opens(cmd).and_then(|g| GROUPS.iter().position(|one| std::ptr::eq(*one, g)));
+    let place = |cmd: NormalCmd| opens(cmd).and_then(place_of);
     let mut opened: Vec<Vec<Vec<String>>> = vec![Vec::new(); GROUPS.len()];
     for (keys, cmd) in roots {
         if let Some(to) = place(*cmd) {

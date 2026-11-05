@@ -3387,3 +3387,10 @@ key = "keys.preset-vim"
 zht = "鍵位：vim——x X 剪字、s 改一個字、V 選行、dd yy cc dw cw、^ $ 0"
 zhs = "键位：vim——x X 剪字、s 改一个字、V 选行、dd yy cc dw cw、^ $ 0"
 en = "keymap: vim — x X cut a character, s changes one, V selects the line, dd yy cc dw cw, ^ $ 0"
+
+[[message]]
+# 配置裏一張鍵表蓋住了一個本來運行命令的鍵，啓動時説一次（草稿）
+key = "keys.table-takes-a-command"
+zht = "{0} 現在是你的一組鍵，不再是 {1}"
+zhs = "{0} 现在是你的一组键，不再是 {1}"
+en = "{0} is a group of your keys now, so it no longer runs {1}"

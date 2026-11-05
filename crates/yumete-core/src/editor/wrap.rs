@@ -407,6 +407,8 @@ impl Editor {
             // 撤銷已經斷了，光標旁邊那個牌子没什麽好報的。範圍寫反了那一問同理：
             // 它問的是剛打的那一條命令，不是光標旁邊正在攢的一串鍵。
             Pending::UndoBreak | Pending::SwapRange | Pending::None => "",
+            // A group of the reader's: the keys that opened it, below.
+            Pending::Node(_) => "",
             Pending::Goto => "g",
             Pending::Space => "␣",
             // 輸入法那一組：`␣z`，再按一個字母就進了它的值那一層。
@@ -461,6 +463,7 @@ impl Editor {
             }
             Pending::Table | Pending::TableConvert => format!("{space}{word}"),
             Pending::Case if self.vim_keymap() => "g`".to_string(),
+            Pending::Node(_) => self.node_sign().unwrap_or_default(),
             _ => word.to_string(),
         };
         // **In the order it was typed.** Inside a sequence the number comes

@@ -1769,7 +1769,7 @@ impl Editor {
         if self.pending != Pending::None && self.node_takes(key) {
             return Fan::Once;
         }
-        if self.pending != Pending::None || self.expanding_alias || self.aliases().is_empty() {
+        if self.pending != Pending::None || self.expanding_alias || (self.aliases().is_empty() && self.tree().root.is_empty()) {
             return raw;
         }
         if !self.alias_held.is_empty() {
@@ -1784,7 +1784,7 @@ impl Editor {
                 None => return raw,
             },
         };
-        if self.aliases().keys().any(|k| k.len() > typed.len() && k.starts_with(typed.as_str())) {
+        if self.root_node(&typed).is_some() || self.aliases().keys().any(|k| k.len() > typed.len() && k.starts_with(typed.as_str())) {
             return Fan::Once;
         }
         let Some(commands) = self.aliases().get(&typed) else { return raw };
@@ -2032,9 +2032,12 @@ impl Editor {
         }
         // **A group's key**: the reader's keys laid over the group, then its
         // own rows (`keymap.rs`, `groups.rs`).
-        if self.pending.group().is_some() {
+        if self.pending.is_node() {
             self.on_node_key(key, &typed_before, continuing_zong);
             return;
+        }
+        if self.pending == Pending::None {
+            self.node_trail.clear();
         }
         match self.pending {
             Pending::Mark => {
@@ -2163,7 +2166,7 @@ impl Editor {
         // the next key decides: it completes one (played), or it does not, and
         // then what was held is pressed for real and the new key goes through
         // as itself. `Esc` lets go of what was held without pressing it.
-        let key = if self.expanding_alias || self.aliases().is_empty() {
+        let key = if self.expanding_alias || (self.aliases().is_empty() && self.tree().root.is_empty()) {
             key
         } else {
             let typed = match key {
@@ -2199,6 +2202,15 @@ impl Editor {
                 self.alias_held.clear();
                 self.alias_count = None;
                 return;
+            }
+            // **A key a table of the reader's took opens that group**
+            // (`[keys.normal.","]`), the count typed before it kept for its keys.
+            if self.alias_held.is_empty() {
+                if let Some(n) = typed.as_deref().and_then(|typed| self.root_node(typed)) {
+                    self.pending = Pending::Node(n as u16);
+                    self.group_count = self.count.take();
+                    return;
+                }
             }
             let mut held = std::mem::take(&mut self.alias_held);
             if let Some(typed) = typed {

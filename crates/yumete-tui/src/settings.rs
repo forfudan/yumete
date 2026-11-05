@@ -437,6 +437,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_key_aliases(config.keys.normal.clone());
     editor.set_select_aliases(config.keys.select.clone());
     editor.set_key_labels(config.keys.labels.clone());
+    editor.set_key_shapes(config.keys.shapes.clone());
     editor.set_insert_aliases(config.keys.insert.clone());
     for (keymap, own) in [
         (yumete_cjk::KeyPreset::Helix, &config.keys.helix),
@@ -444,6 +445,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     ] {
         editor.set_keymap_aliases(keymap, own.normal.clone(), own.select.clone(), own.insert.clone());
         editor.set_keymap_labels(keymap, own.labels.clone());
+        editor.set_keymap_shapes(keymap, own.shapes.clone());
     }
     editor.set_table_aliases(config.keys.table.clone());
     use yumete_core::actions::Place;
@@ -779,5 +781,245 @@ mod config_watch_tests {
         super::view_back_to_config(&mut ed, &config);
         assert!(!ed.sentences(), "put back although it needs 竪排");
         assert!(view(&ed, &config).is_empty(), "{:?}", view(&ed, &config));
+    }
+}
+
+/// **The key tree read from a config** (2026-11-05): tables are groups,
+/// flat runs are held, and the menus say so.
+#[cfg(test)]
+mod key_tree_tests {
+    use yumete_config::Config;
+    use yumete_core::editor::Editor;
+    use yumete_core::input::Key;
+    use yumete_core::TextStore as _;
+
+    /// An editor laid with `config`, which reads without a problem, holding
+    /// `one two three` with the cursor at its start.
+    fn laid(config: &str) -> Editor {
+        let (config, problems) = Config::from_toml_saying(config);
+        assert!(problems.is_empty(), "{problems:?}");
+        let mut ed = Editor::new();
+        super::apply_to_editor(&config, &mut ed, None);
+        ed.on_key(Key::Char('i'));
+        for c in "one two three".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Home);
+        ed
+    }
+
+    fn press(ed: &mut Editor, keys: &str) {
+        for c in keys.chars() {
+            ed.on_key(Key::Char(c));
+        }
+    }
+
+    /// The menu open now, as (title, [(keys, line)]).
+    fn menu(ed: &Editor) -> (String, Vec<(String, String)>) {
+        let (title, rows) = ed.pending_menu().expect("a menu");
+        (title, rows.into_iter().map(|(k, v)| (k.into_owned(), v)).collect())
+    }
+
+    fn line_of<'a>(rows: &'a [(String, String)], keys: &str) -> Option<&'a str> {
+        rows.iter().find(|(k, _)| k == keys).map(|(_, v)| v.as_str())
+    }
+
+    /// **`Space w` with the reader's keys under it still lists `C-w`'s**,
+    /// and the reader's key is `C-w`'s too: one group, two doors.
+    #[test]
+    fn a_table_under_space_w_keeps_the_window_keys() {
+        let mut ed = laid("[keys.normal.space.w]\nz = \"select_all\"\n");
+        press(&mut ed, " w");
+        let (_, rows) = menu(&ed);
+        for keys in ["z", "v", "q"] {
+            assert!(line_of(&rows, keys).is_some(), "{keys}: {rows:?}");
+        }
+        ed.on_key(Key::Esc);
+        ed.on_key(Key::Ctrl('w'));
+        press(&mut ed, "z");
+        assert_eq!(ed.selection(), (0, 13), "C-w z is Space w z");
+    }
+
+    /// **A group moved to another key keeps the reader's keys**, a table of
+    /// theirs in it included.
+    #[test]
+    fn a_moved_space_keeps_the_readers_tables() {
+        let mut ed = laid(
+            "[keys.normal]\n\";\" = \"@ \"\n\"<space>\" = \"@l\"\n\n[keys.normal.space.b]\nlabel = \"buffer\"\nd = \"select_all\"\n",
+        );
+        press(&mut ed, " ");
+        assert_eq!(ed.cursor(), 1, "Space moves right");
+        press(&mut ed, ";");
+        let (_, rows) = menu(&ed);
+        assert_eq!(line_of(&rows, "b"), Some("+buffer"), "{rows:?}");
+        press(&mut ed, "bd");
+        assert_eq!(ed.selection(), (0, 13));
+    }
+
+    /// **Under vim with Space moving right, `\` is the Space group**, and
+    /// `[keys.normal.space.b]` is reached by `\ b`.
+    #[test]
+    fn backslash_reaches_the_space_tables_under_vim() {
+        let mut ed = laid(
+            "[keys]\npreset = \"vim\"\nflavor = \"off\"\n\n[keys.normal.space.b]\nlabel = \"buffer\"\nd = \"select_all\"\n",
+        );
+        press(&mut ed, "\\b");
+        let (title, rows) = menu(&ed);
+        assert_eq!(title, "buffer");
+        assert!(line_of(&rows, "d").is_some(), "{rows:?}");
+        press(&mut ed, "d");
+        assert!(ed.pending_menu().is_none());
+        assert!(ed.selection().1 >= 12, "{:?}", ed.selection());
+    }
+
+    /// **A table takes its key, and a key its group lacks closes it**: with
+    /// LazyVim's `Space f`, `Space f x` opens no picker, and the startup
+    /// list says once what the table took.
+    #[test]
+    fn a_table_takes_its_key_and_says_so() {
+        let mut ed = laid("[keys.normal.space.f]\nlabel = \"file/find\"\nn = \":new\"\n");
+        press(&mut ed, " f");
+        let (title, _) = menu(&ed);
+        assert_eq!(title, "file/find");
+        press(&mut ed, "x");
+        assert!(ed.pending_menu().is_none(), "x closed the group");
+        assert_eq!(ed.current_buffer().text(), "one two three", "and typed nothing");
+        assert_eq!(ed.cursor(), 0, "nor moved");
+        let notes = ed.key_notes();
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("file_picker"), "{notes:?}");
+    }
+
+    /// **A run written flat keeps the keys before it**: `"<space>bd"` holds
+    /// after `Space b`, and a key that does not go on lets Space b's own
+    /// meaning act, the reader's when they bound it.
+    #[test]
+    fn a_flat_run_holds_and_lets_go() {
+        let mut ed = laid("[keys.normal]\n\"<space>bd\" = \"select_all\"\n\"<space>b\" = \"move_char_right\"\n");
+        press(&mut ed, " bl");
+        assert_eq!(ed.cursor(), 2, "Space b was the reader's, then l");
+        press(&mut ed, " bd");
+        assert_eq!(ed.selection(), (0, 13));
+    }
+
+    /// **`label` alone renames a built-in group**, on its parent's row as
+    /// `+name` and as the title of its own menu.
+    #[test]
+    fn a_label_alone_renames_a_group() {
+        let mut ed = laid("[keys.normal.space.w]\nlabel = \"windows\"\n");
+        press(&mut ed, " ");
+        let (_, rows) = menu(&ed);
+        assert_eq!(line_of(&rows, "w"), Some("+windows"), "{rows:?}");
+        press(&mut ed, "w");
+        let (title, rows) = menu(&ed);
+        assert_eq!(title, "windows");
+        assert!(line_of(&rows, "v").is_some(), "its keys stay: {rows:?}");
+    }
+
+    /// **Backspace goes back a level** where the group has none of its own,
+    /// and Space's own `⌫` still turns the page.
+    #[test]
+    fn backspace_goes_back_a_level() {
+        let mut ed = laid("[keys.normal.space.g]\nlabel = \"git\"\n\n[keys.normal.space.g.h]\nlabel = \"hunks\"\np = \"show_change\"\n");
+        press(&mut ed, " gh");
+        assert_eq!(menu(&ed).0, "hunks");
+        ed.on_key(Key::Backspace);
+        assert_eq!(menu(&ed).0, "git");
+        ed.on_key(Key::Backspace);
+        assert!(menu(&ed).1.iter().any(|(k, _)| k == "f"), "back in Space");
+        ed.on_key(Key::Esc);
+        // Space w, then back to Space.
+        press(&mut ed, " w");
+        ed.on_key(Key::Backspace);
+        assert!(menu(&ed).1.iter().any(|(k, v)| k == "w" && v.starts_with('+')), "{:?}", menu(&ed));
+        // Esc closes every level.
+        press(&mut ed, "gh");
+        ed.on_key(Key::Esc);
+        assert!(ed.pending_menu().is_none());
+    }
+
+    /// **The menu keeps the config's order**; a key of the reader's over a
+    /// built-in one keeps that row's place, and a command row says its own
+    /// text.
+    #[test]
+    fn the_menu_keeps_the_configs_order() {
+        let mut ed = laid(
+            r#"[keys.normal.space]
+z = "select_all"
+"," = "buffer_picker"
+f = { run = ":new", label = "scratch" }
+q = ":quit"
+"#,
+        );
+        press(&mut ed, " ");
+        let (_, rows) = menu(&ed);
+        let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys.first(), Some(&"f"), "f keeps its place: {keys:?}");
+        assert_eq!(line_of(&rows, "f"), Some("scratch"));
+        let at = |k: &str| keys.iter().position(|one| *one == k).unwrap_or(usize::MAX);
+        assert!(at("z") < keys.len(), "z keeps the input method's place: {keys:?}");
+        assert!(at(",") < at("q"), "the new ones in the file's order: {keys:?}");
+        assert!(at("q") == keys.len() - 1, "{keys:?}");
+    }
+
+    /// **`sticky = true` keeps a group open**, and `inherit = false` takes
+    /// a built-in group's own keys away.
+    #[test]
+    fn sticky_and_inherit() {
+        let mut ed = laid("[keys.normal.space.h]\nlabel = \"hydra\"\nsticky = true\nl = \"move_char_right\"\n");
+        press(&mut ed, " hll");
+        assert_eq!(ed.cursor(), 2);
+        assert_eq!(menu(&ed).0, "hydra", "still open");
+        ed.on_key(Key::Esc);
+        assert!(ed.pending_menu().is_none());
+
+        let mut ed = laid("[keys.normal.g]\ninherit = false\nx = \"goto_last_line\"\n");
+        press(&mut ed, "g");
+        let (_, rows) = menu(&ed);
+        assert_eq!(rows.len(), 1, "only the reader's: {rows:?}");
+        press(&mut ed, "e");
+        assert!(ed.pending_menu().is_none(), "g e is gone");
+    }
+
+    /// **A group left with no keys leaves its parent's menu**: `no_op` on
+    /// each key of the merge-conflict group, or on the group's own key.
+    #[test]
+    fn an_empty_group_leaves_the_menu() {
+        let mut ed = laid("[keys.normal.space.m]\no = \"no_op\"\nt = \"no_op\"\nb = \"no_op\"\n");
+        press(&mut ed, " ");
+        assert!(line_of(&menu(&ed).1, "m").is_none(), "{:?}", menu(&ed).1);
+        let mut ed = laid("[keys.normal.space]\nw = \"no_op\"\n");
+        press(&mut ed, " ");
+        assert!(line_of(&menu(&ed).1, "w").is_none());
+    }
+
+    /// **The LazyVim page's config reads without a problem**, and its groups
+    /// are `+name` rows on the Space menu.
+    #[test]
+    fn the_lazyvim_config_reads_and_shows_its_groups() {
+        let Ok(docs) = std::env::var("YUMETE_DOCS") else { return };
+        let page = std::fs::read_to_string(std::path::Path::new(&docs).join("src/from/lazyvim.md")).expect("the LazyVim page");
+        let mut config = String::new();
+        let mut inside = false;
+        for line in page.lines() {
+            match (inside, line.trim()) {
+                (false, "```toml") => inside = true,
+                (true, "```") => inside = false,
+                (true, _) => {
+                    config.push_str(line);
+                    config.push('\n');
+                }
+                _ => {}
+            }
+        }
+        let mut ed = laid(&config);
+        press(&mut ed, " ");
+        let (_, rows) = menu(&ed);
+        for (keys, name) in [("b", "+buffer"), ("c", "+code"), ("f", "+file/find"), ("g", "+git"), ("s", "+search"), ("<tab>", "+tabs")] {
+            assert_eq!(line_of(&rows, keys), Some(name), "{rows:?}");
+        }
+        press(&mut ed, "g");
+        assert_eq!(line_of(&menu(&ed).1, "h"), Some("+hunks"));
     }
 }

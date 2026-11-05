@@ -37490,3 +37490,39 @@ fn a_run_four_keys_deep() {
     press(&mut ed, "ggj");
     assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 1, "gg, then j");
 }
+
+/// **A `[keys.table]` group has a menu in the grid** (2026-11-05): its
+/// table is a group of the reader's there, titled with its label, and
+/// outside a table the key is what it always was.
+#[test]
+fn a_table_grids_group_draws_a_menu() {
+    let bind = |ed: &mut Editor| {
+        let mut shapes = yumete_cjk::KeyShapes::default();
+        shapes.table.groups.push(yumete_cjk::KeyGroup { path: ",".into(), sticky: false, inherit: true });
+        ed.set_key_shapes(shapes);
+        ed.set_table_aliases(lines_of(&[(",l", "move_char_right")]));
+        ed.set_key_labels([(",".to_string(), "cells".to_string())].into_iter().collect());
+    };
+    let grid = || {
+        let mut ed = typed("| 甲甲 | 乙 |\n| --- | --- |\n| 木木 | 水 |\n");
+        ed.goto_line(3);
+        assert!(ed.enter_table(), "{}", ed.status());
+        press(&mut ed, " tt");
+        ed
+    };
+    let mut by_l = grid();
+    by_l.on_key(Key::Char('l'));
+    let mut ed = grid();
+    bind(&mut ed);
+    press(&mut ed, ",");
+    let (title, rows) = ed.pending_menu().expect("the group's menu");
+    assert_eq!(title, "cells");
+    assert!(rows.iter().any(|(k, _)| k == "l"), "{rows:?}");
+    press(&mut ed, "l");
+    assert_eq!(ed.cell_position(), by_l.cell_position(), ", l steps a cell");
+
+    let mut prose = typed("one two\n");
+    bind(&mut prose);
+    press(&mut prose, ",");
+    assert!(prose.pending_menu().is_none(), "no group outside a table");
+}

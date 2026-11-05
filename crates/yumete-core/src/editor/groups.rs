@@ -193,10 +193,27 @@ impl Group {
     /// to something else.
     pub(super) fn menu_without(&'static self, at: &Context, taken: impl Fn(Key) -> bool) -> Vec<(String, &'static str)> {
         let mut out: Vec<(Vec<String>, &'static str, bool)> = Vec::new();
+        for (bind, name, says) in self.listed(at) {
+            match bind {
+                Some(bind) if taken(bind.key) => {}
+                Some(_) => match out.last_mut() {
+                    Some((keys, said, true)) if *said == says => keys.push(name),
+                    _ => out.push((vec![name], says, true)),
+                },
+                None => out.push((vec![name], says, false)),
+            }
+        }
+        out.into_iter().map(|(keys, says, _)| (keys_label(&keys), says)).collect()
+    }
+
+    /// **The rows the menu lists here, one each and unmerged**: the bind a
+    /// key row is (`None` for a note), its keys as written, and its line.
+    pub(super) fn listed(&'static self, at: &Context) -> Vec<(Option<&'static Bind>, String, &'static str)> {
+        let mut out = Vec::new();
         for (nth, row) in self.rows.iter().enumerate() {
             match row {
                 Row::Bind(bind) => {
-                    if bind.says.is_empty() || !at.reaches(bind) || !at.holds(bind.listed) || taken(bind.key) {
+                    if bind.says.is_empty() || !at.reaches(bind) || !at.holds(bind.listed) {
                         continue;
                     }
                     // Only a row the key reaches, once: a key with a vim row
@@ -208,22 +225,15 @@ impl Group {
                         }
                         _ => false,
                     });
-                    if hidden {
-                        continue;
-                    }
-                    let name = key_label(bind.key);
-                    match out.last_mut() {
-                        Some((keys, says, true)) if *says == bind.says => keys.push(name),
-                        _ => out.push((vec![name], bind.says, true)),
+                    if !hidden {
+                        out.push((Some(bind), key_label(bind.key), bind.says));
                     }
                 }
-                Row::Note { keys, says, listed } if at.holds(*listed) => {
-                    out.push((vec![keys.to_string()], says, false));
-                }
+                Row::Note { keys, says, listed } if at.holds(*listed) => out.push((None, keys.to_string(), *says)),
                 Row::Note { .. } => {}
             }
         }
-        out.into_iter().map(|(keys, says, _)| (keys_label(&keys), says)).collect()
+        out
     }
 
     /// Every key the group has anywhere, each once, for the test that asks
@@ -294,7 +304,7 @@ pub(super) fn key_label(key: Key) -> String {
 
 /// A row's keys, side by side. Three or more characters in a run are written
 /// as the run (`3-9`), as a reader would.
-fn keys_label(keys: &[String]) -> String {
+pub(super) fn keys_label(keys: &[String]) -> String {
     let chars: Option<Vec<char>> = keys
         .iter()
         .map(|k| {
@@ -370,6 +380,12 @@ impl Context {
 }
 
 impl Pending {
+    /// Whether this waits in a group of the key tree: a built-in one, or
+    /// one of the reader's.
+    pub(super) fn is_node(self) -> bool {
+        self.group().is_some() || matches!(self, Pending::Node(_))
+    }
+
     /// **The group this is waiting in**, when it is one.
     pub(super) fn group(self) -> Option<&'static Group> {
         Some(match self {
@@ -473,7 +489,9 @@ impl Editor {
     /// The count typed before the group's key (`3]d`, `5gt`) is handed to
     /// the command in its [`Cx`] and left where it was, for the commands
     /// that pass it on (`mi` keeps it for the pair it waits for).
-    pub(super) fn on_group_key(&mut self, group: &'static Group, key: Key, typed_before: &str, continuing_zong: bool) {
+    /// `sticky` keeps it open after the key (the group's own, or a table of
+    /// the reader's that says `sticky = true`).
+    pub(super) fn on_group_key(&mut self, group: &'static Group, key: Key, typed_before: &str, continuing_zong: bool, sticky: bool) {
         if let Some(before) = group.before {
             if before(self, key) {
                 return;
@@ -527,7 +545,7 @@ impl Editor {
         }
         let was = self.pending;
         self.pending = Pending::None;
-        if group.sticky && key != Key::Esc {
+        if sticky && key != Key::Esc {
             self.pending = was;
         }
         let key = match (group.ctrl_is_plain, key) {
@@ -546,7 +564,7 @@ impl Editor {
                     // Spent, unless the command waits for another key with it
                     // (`mi`) or the group stays open (`Z`, whose next key
                     // starts again from no count, as helix's does).
-                    if self.pending == Pending::None || group.sticky {
+                    if self.pending == Pending::None || sticky {
                         self.operator_count = None;
                     }
                 }

@@ -1067,6 +1067,8 @@ fn main() -> ExitCode {
     // 它的兄弟、看不見它。見 [`yumete_tui::settings::complaints`]。
     let mut config_problems = config_problems;
     config_problems.extend(yumete_tui::settings::complaints(&config));
+    // A table that took a key from its command, said once (2026-11-05).
+    config_problems.extend(editor.key_notes());
     if !config_problems.is_empty() {
         for problem in &config_problems {
             eprintln!("yumete: {problem}");

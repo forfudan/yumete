@@ -332,6 +332,10 @@ enum Pending {
     /// 區、開關哪一欄、切一刀、關掉、只留這一個。從前它們散在 `空格 1234`、
     /// `空格 !@#$`、`空格 w/W/q/Q` 三套詞彙裏。
     Region,
+    /// **A group of the reader's own** (2026-11-05): a table in the config
+    /// under a key that opens no built-in group, by its node in the key tree
+    /// in force (`keymap.rs`).
+    Node(u16),
     /// A `:s …c` is asking about one match — `y`/`n`/`a`/`q`/`l` (#415).
     ///
     /// Unlike every other pending here this one is not opened by a key: the
@@ -402,7 +406,8 @@ impl Pending {
             // 字都没有。
             | Pending::Region
             | Pending::RegionNew
-            | Pending::Conflict => false,
+            | Pending::Conflict
+            | Pending::Node(_) => false,
             // **A vim operator is waiting for a *motion*, which is keys** — the
             // character `f` asks for is read by the motion itself.
             //
@@ -2667,6 +2672,12 @@ pub struct Editor {
     table_select_tree: keymap::KeyTree,
     /// The keys of a run of the reader's held inside a group, and the group.
     node_held: Option<(Pending, String)>,
+    /// The groups a key went through to the one open now, for Backspace to
+    /// go back to.
+    node_trail: Vec<Pending>,
+    /// How the reader's tables were written (`[keys.normal]`, `[keys.select]`,
+    /// `[keys.table]`): their groups, the order of their lines.
+    key_shapes: yumete_cjk::KeyShapes,
     /// The count typed before the group open now, for the reader's keys in
     /// it (`3 Space b d`): the group's own rows read theirs as they always did.
     group_count: Option<usize>,
@@ -4175,6 +4186,8 @@ pub(crate) struct KeymapLines {
     pub(crate) insert: HashMap<String, Vec<String>>,
     /// Its groups' names (`label`), by the internal spelling of their keys.
     pub(crate) labels: HashMap<String, String>,
+    /// How its tables were written.
+    pub(crate) shapes: yumete_cjk::KeyShapes,
 }
 
 /// Where a save that met a character its encoding cannot hold was going.
@@ -4375,6 +4388,8 @@ impl Editor {
             table_tree: Default::default(),
             table_select_tree: Default::default(),
             node_held: None,
+            node_trail: Vec::new(),
+            key_shapes: Default::default(),
             group_count: None,
             alias_count: None,
             expanding_alias: false,
