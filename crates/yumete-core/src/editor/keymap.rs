@@ -450,7 +450,10 @@ impl Editor {
         // run is what the key waits for (vim's `Z` of `ZZ`).
         let held = tree.runs.contains_key(&line.run)
             || tree.runs.keys().any(|r| r.len() > first.len() && r.starts_with(first.as_str()));
-        if held && !tree.root.contains_key(first) {
+        // …except a line written in `[keys.<mode>.space]`, which is the
+        // Space group's wherever that is opened, beside a flat `"<space>…"`
+        // the top level holds (review, 2026-11-05).
+        if held && !line.space && !tree.root.contains_key(first) {
             at_root(tree);
             return;
         }
@@ -816,6 +819,18 @@ impl Editor {
         let n = self.alias_count.unwrap_or(0);
         self.alias_count = Some(n.saturating_mul(10).saturating_add(c as usize - '0' as usize).min(1_000_000));
         true
+    }
+
+    /// **A group with nothing in it is no group** (review, 2026-11-05): one
+    /// `inherit = false` left empty, or that holds only `no_op`, closes as
+    /// it opens, as a key bound to nothing would; its row is not listed
+    /// either ([`Self::group_is_empty`]).
+    pub(super) fn leave_an_empty_group(&mut self) {
+        let Some(n) = self.node_here() else { return };
+        if self.held_here().is_empty() && self.rows_of(n, &Memo::default()).is_empty() {
+            self.close_the_node();
+            self.node_trail.clear();
+        }
     }
 
     fn close_the_node(&mut self) {

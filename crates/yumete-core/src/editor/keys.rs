@@ -35,6 +35,7 @@ impl Editor {
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
         let was = self.before_a_change();
         let outcome = self.on_key_now(key);
+        self.leave_an_empty_group();
         self.settle_folds();
         self.keep_the_signature_up(was);
         self.settle_the_change(was);

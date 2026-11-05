@@ -468,6 +468,12 @@ impl Editor {
         };
         // And a run of the reader's held in it: `␣b` of `Space bd`.
         let word = word + &self.held_sign();
+        // And a count typed in a group of the reader's, after the keys before
+        // it: `␣abc3` (review, 2026-11-05).
+        let word = match self.alias_count.filter(|_| self.node_here().is_some()) {
+            Some(n) => format!("{word}{n}"),
+            None => word,
+        };
         // **In the order it was typed.** Inside a sequence the number comes
         // *after* the prefix — `g3` is on its way to `g3d` — and outside one it
         // comes before the key it multiplies, which is `3w`.

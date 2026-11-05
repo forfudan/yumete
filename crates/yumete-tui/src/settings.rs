@@ -860,6 +860,60 @@ mod key_tree_tests {
         assert_eq!(ed.selection(), (0, 13));
     }
 
+    /// **A count typed in a group is in the key echo** (review, 2026-11-05):
+    /// `Space a b 3` says `␣ab3`, and `Backspace` takes the 3 back.
+    #[test]
+    fn a_count_in_a_group_is_echoed() {
+        let mut ed = laid("[keys.normal.space.a.b]\nl = \"move_char_right\"\n");
+        press(&mut ed, " ab3");
+        assert_eq!(ed.typed_so_far(), "␣ab3");
+        ed.on_key(Key::Backspace);
+        assert_eq!(ed.typed_so_far(), "␣ab");
+        press(&mut ed, "2l");
+        assert_eq!(ed.cursor(), 2, "Space a b 2 l");
+    }
+
+    /// **A group with nothing in it is no group** (review, 2026-11-05):
+    /// emptied by `inherit = false`, or holding only `no_op`, it closes as
+    /// it opens, and the Space menu does not list it.
+    #[test]
+    fn an_empty_group_closes_as_it_opens() {
+        for config in [
+            "[keys.normal.space.t]\ninherit = false\n",
+            "[keys.normal.space.t]\ninherit = false\nx = \"no_op\"\n",
+        ] {
+            let mut ed = laid(config);
+            press(&mut ed, " ");
+            let (_, rows) = menu(&ed);
+            assert!(line_of(&rows, "t").is_none(), "{config}: {rows:?}");
+            press(&mut ed, "t");
+            assert!(ed.pending_menu().is_none(), "{config}: Space t waits for nothing");
+            press(&mut ed, "l");
+            assert_eq!(ed.cursor(), 1, "{config}: l is l again");
+        }
+        let mut ed = laid("[keys.normal.Q]\nj = \"no_op\"\n");
+        press(&mut ed, "Ql");
+        assert_eq!(ed.cursor(), 1, "Q opened nothing, and l moved");
+    }
+
+    /// **`[keys.normal.space]` is the Space group's beside a flat
+    /// `"<space>v"`** (review, 2026-11-05): with the Space menu on `\`, the
+    /// flat run held the Space key, and the table's keys landed on it too.
+    #[test]
+    fn a_space_table_follows_the_group_beside_a_flat_space_run() {
+        let mut ed = laid(
+            "[keys]\npreset = \"vim\"\nflavor = \"off\"\n\n[keys.normal]\n\"<space>v\" = \"select_all\"\n\n[keys.normal.space]\nq = \"goto_line_end\"\n",
+        );
+        press(&mut ed, "\\");
+        let (_, rows) = menu(&ed);
+        assert!(line_of(&rows, "q").is_some(), "{rows:?}");
+        press(&mut ed, "q");
+        assert_eq!(ed.cursor(), 12, "\\ q");
+        ed.on_key(Key::Home);
+        press(&mut ed, " v");
+        assert_eq!(ed.selection(), (0, 13), "Space v is still the flat run");
+    }
+
     /// **Under vim with Space moving right, `\` is the Space group**, and
     /// `[keys.normal.space.b]` is reached by `\ b`.
     #[test]

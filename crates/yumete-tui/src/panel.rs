@@ -1022,6 +1022,9 @@ pub fn draw(
         .max(tag_w + 4)
         // 底邊兩頭各站一個，中間至少留一格橫線。
         .max(read_w + tag_w + 7)
+        // `chrome::place` takes no box under eight cells, and a menu of one
+        // short row (`j  :w`) is seven: it drew nothing (review, 2026-11-05).
+        .max(8)
         // Every float keeps to its room (above); which room that is was
         // settled once, by what the float is for.
         .min((room_w as usize).max(24))
@@ -1935,5 +1938,35 @@ mod tests {
         let rows = [("a", "代碼動作"), ("r", "改名"), ("w", "工作區域操作"), ("t", "表格操作"), ("?", "命令一覽")];
         let (rect, _) = key_menu(&rows, 80, 24, (0, 0));
         assert_eq!(rect.height, 5 + 2, "{rect:?}");
+    }
+
+    /// **A menu of one short row is drawn** (review, 2026-11-05): `Q` over
+    /// `j  :w` is seven cells with its ring, and the floats take none under
+    /// eight, so `[keys.normal.Q] j = ":w"` opened a group with no menu.
+    #[test]
+    fn a_menu_of_one_short_row_is_drawn() {
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let mut got = None;
+        terminal
+            .draw(|frame| {
+                got = draw(frame, &config, Rect::new(0, 0, 80, 23), 23, crate::chrome::Spot::cell((0, 0)), false, &Panel {
+                    stand: Stand::Corner,
+                    accent: None,
+                    pages: false,
+                    reading: false,
+                    scroll: 0,
+                    title: "Q".into(),
+                    lede: None,
+                    entry: false,
+                    body: Body::Keys(vec![("j".into(), ":w".into())]),
+                    vertical_text: false,
+                    tag: None,
+                    marked: false,
+                });
+            })
+            .unwrap();
+        assert_eq!(got.map(|r| r.width), Some(8));
     }
 }
