@@ -2304,8 +2304,19 @@ impl Editor {
 
     /// `C-d` `C-u`: vim's scroll the view and take a count as 'scroll';
     /// helix's take no count (`page_cursor_half_down` reads none).
+    ///
+    /// Warning: **Not in a table's grid** (0.18.0, reported 2026-11-05): vim's
+    /// scroll counts the text's screen rows, and the grid draws its own (a
+    /// pinned header, one row per record), so `C-d` landed on the same two
+    /// rows for ever with the view standing still. There the cursor moves
+    /// and the grid follows it, as helix's does.
     fn half_page(&mut self, back: bool, count: Option<usize>) {
-        if self.vim_keymap() && self.layout() == Layout::Horizontal && !self.sel.is_plural() && self.vim_half_page(!back, count) {
+        if self.vim_keymap()
+            && self.layout() == Layout::Horizontal
+            && !self.sel.is_plural()
+            && !self.table_here()
+            && self.vim_half_page(!back, count)
+        {
             return;
         }
         let count = match self.vim_keymap() {

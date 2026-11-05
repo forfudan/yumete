@@ -7,6 +7,12 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Fixed
+
+- **vim's `C-d` and `C-u` page through a Markdown table** again; in 0.18.0 they bounced between two rows with the view standing still, in a `.md` file with a table and on the `:keymap-actions` page.
+
 ## 0.18.0 · 2026-11-05
 
 ### Added

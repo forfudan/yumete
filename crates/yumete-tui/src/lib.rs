@@ -5781,7 +5781,7 @@ fn draw(
         // already hide it. Typing puts it back: [`Layer::caret`] is asked the
         // mode, and `i` at this layer leaves the layer alone.
     } else if editor.layout() == WritingLayout::Horizontal || editor.mode() == Mode::Insert {
-        the_caret_reads_back(editor, config, area, viewport, (cursor_x, cursor_y));
+        the_caret_reads_back(editor, config, area, viewport, (cursor_x, cursor_y), Some(head_rows));
         // **A block is painted into the page; a bar is the terminal's.**
         //
         // The vertical page has always painted its own block, and 2026-10-16
@@ -8474,6 +8474,7 @@ fn the_caret_reads_back(
     area: Rect,
     seats: &Seats,
     at: (u16, u16),
+    head_rows: Option<u16>,
 ) {
     let rope = editor.current_buffer().rope();
     let want = editor.cursor();
@@ -8489,7 +8490,7 @@ fn the_caret_reads_back(
         modifiers: KeyModifiers::NONE,
     };
     let size = ratatui::layout::Size::new(area.width, area.height);
-    let Some(back) = text_at(editor, config, Some(size), seats, mouse) else {
+    let Some(back) = text_at_under(editor, config, Some(size), seats, mouse, head_rows) else {
         return;
     };
     if back == want {
@@ -8517,6 +8518,21 @@ fn text_at(
     seats: &Seats,
     mouse: ratatui::crossterm::event::MouseEvent,
 ) -> Option<usize> {
+    text_at_under(editor, config, size, seats, mouse, None)
+}
+
+/// [`text_at`], with the table head's rows the frame was drawn with when the
+/// caller knows them: inside a draw the scroll has already moved on, and
+/// working the rows out again from it answers for the next frame
+/// (2026-11-05: the read-back check fired on the frame a head left the page).
+fn text_at_under(
+    editor: &Editor,
+    config: &Config,
+    size: Option<ratatui::layout::Size>,
+    seats: &Seats,
+    mouse: ratatui::crossterm::event::MouseEvent,
+    drawn_head_rows: Option<u16>,
+) -> Option<usize> {
     let size = size?;
     // The very rectangle the page was drawn into — command row, tab bar, sidebar
     // and detail panel all already taken off. Working it out again by hand is
@@ -8529,8 +8545,9 @@ fn text_at(
     // 去，整頁往下兩行而點擊照舊按没有表頭算，**每一下都落在低兩行的那一行
     // 上**。這一支和 `draw` 問的是同一句話，就要拿同一個答案。
     let top = seats[editor.live_pane()].top.line;
-    let head_rows =
-        2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top));
+    let head_rows = drawn_head_rows.unwrap_or_else(|| {
+        2 * u16::from(!editor.grid_has_the_pane() && editor.table_head_is_off_the_page(top))
+    });
     let areas =
         page_areas(editor, config, Rect::new(0, 0, size.width, size.height), head_rows);
     let live = editor.live_pane();
@@ -16903,7 +16920,7 @@ fn squeezed(text: &str) -> String {
         // The caret is on line 1; row 0 of the page is where it is drawn. Row
         // 1 holds a different character, which is the whole complaint.
         let at = (gutter_width(editor.current_buffer().line_count(), config.editor.line_numbers, false) as u16, 1);
-        the_caret_reads_back(&editor, &config, area, &seats, at);
+        the_caret_reads_back(&editor, &config, area, &seats, at, None);
     }
 
     /// #375/#377: the status line never hands the terminal a character it
@@ -19243,6 +19260,39 @@ fn squeezed(text: &str) -> String {
         editor.on_key(yumete_core::input::Key::Esc);
         let buffer = render(&editor, &config, 60, 8);
         assert!(row(&buffer, 2).contains("fn b() {}  unknown thing"), "moved down: {:?}", row(&buffer, 2));
+    }
+
+    /// **vim's `C-d` pages through a Markdown table** (0.18.0, reported
+    /// 2026-11-05): it counted the text's rows while the grid drew its own,
+    /// and bounced between two rows with the view standing still. The bounce
+    /// itself needed the live loop's settled page and was measured in a pty
+    /// (`:keymap-actions`, 80x24: rows 24, 34, 24, 34 before the fix); this
+    /// keeps the path covered.
+    #[test]
+    fn vims_half_page_walks_down_a_markdown_table() {
+        let mut text = String::from("A line before the table, as on the keymap-actions page.\n\n| name | what |\n| --- | --- |\n");
+        for i in 0..150 {
+            // Wider than the window: as text each row wraps, while the grid
+            // draws it as one.
+            text.push_str(&format!("| row{i} | {} |\n", "a long cell of text ".repeat(6)));
+        }
+        let (mut editor, _path) = editor_on_disk("t.md", &text);
+        editor.execute(":keymap vim").unwrap();
+        // The table drawn as a grid, as the factory render level draws it.
+        editor.set_render(yumete_core::editor::Render::Full);
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let (w, h) = (80u16, 24u16);
+        editor.set_wrap_width((w as usize).saturating_sub(gutter_in(w as usize, editor.current_buffer().line_count(), config.editor.line_numbers, false)));
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let mut seats = Seats::default();
+        let mut seen = Vec::new();
+        for _ in 0..7 {
+            terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+            editor.on_key(yumete_core::input::Key::Ctrl('d'));
+            seen.push(editor.cursor_line());
+        }
+        assert!(seen.windows(2).all(|w| w[1] > w[0]), "each C-d goes further down: {seen:?}");
     }
 
     /// **Prose too, after the paragraph's last row** (2026-11-04), as
