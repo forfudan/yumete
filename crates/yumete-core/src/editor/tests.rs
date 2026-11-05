@@ -35991,6 +35991,27 @@ fn a_page_scrolls_the_view_and_pushes_the_cursor_by_scrolloff() {
     assert_eq!(at(&ed).0, 6, "helix: zj at the top pushes the cursor to top + scrolloff");
 }
 
+/// **A page counted short is not the file's end** (0.18.1, reported
+/// 2026-11-05): when the rows this side counts on the drawn page fell short
+/// of the window (an indented front matter wrapped with its hanging
+/// indent), vim's `C-d` read it as the end of the file, never scrolled, and
+/// sent the cursor back to the page's first line.
+#[test]
+fn vims_half_page_scrolls_a_page_counted_short() {
+    let text: String = (1..=100).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed_vim(&text);
+    press(&mut ed, "gg");
+    let rope = ed.current_buffer().rope().clone();
+    // Ten rows on the screen, eight of them counted here.
+    ed.set_page(10, 80);
+    ed.set_page_span(0, rope.line_to_char(8));
+    ed.page_inset(Some(0), false, 9, 0);
+    ed.on_key(Key::Ctrl('d'));
+    let top = ed.current_buffer().rope().char_to_line(ed.page_span.0) + 1;
+    let line = ed.current_buffer().rope().char_to_line(ed.sel.head()) + 1;
+    assert!(top > 1 && line > 1, "C-d scrolls on: top {top}, cursor {line}");
+}
+
 /// **vim's `C-d` `C-u` and the ends of the file** (2026-11-04, numbers
 /// from nvim on 10 rows of 100 lines): a count is 'scroll' from then on,
 /// the cursor moves as far as the view would whatever the view does, and

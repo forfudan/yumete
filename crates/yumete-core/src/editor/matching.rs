@@ -692,6 +692,13 @@ impl Editor {
         let head = self.sel.head();
         let wanted = self.sel.goal();
         let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
+        // **Whether the file's end is on the page is asked of the text the page
+        // drew**, not of how many rows it holds (0.18.1, reported 2026-11-05):
+        // a page whose rows this side counts short of the drawn ones (an
+        // indented front matter wrapped with its hanging indent) read as the
+        // end of the file, so `C-d` never scrolled, and a cursor sent below
+        // that short page went back to its first line.
+        let shows_the_end = self.page_span.1 >= self.last_row_end();
         let (to, row, shown, span, from_the_start, goal) = self.with_page_measure(width, |rope, m| {
             use crate::wrap::{advance, distance, position, retreat, rows_from, Anchor};
             let top = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
@@ -700,7 +707,7 @@ impl Editor {
             let new_top = match down {
                 true => {
                     let end = last_row(rope, m);
-                    let room = match rows.last().filter(|_| rows.len() >= height) {
+                    let room = match rows.last().filter(|_| !shows_the_end) {
                         Some(r) => {
                             let bottom = Anchor { line: r.line, index_in_line: r.index_in_line };
                             distance(rope, bottom, advance(rope, bottom, m, n).min(end), m, n).unwrap_or(0)

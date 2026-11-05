@@ -9,6 +9,10 @@ in `docs/development.md` §5.2.
 
 ## Unreleased
 
+### Fixed
+
+- **vim's `C-d` scrolls through every file**: in 0.18.0 and 0.18.1, in a file whose first page holds lines that wrap with an indent (a front matter, for one), it never scrolled, stopped at the same rows or went back to the first line, at a place that changed with the window's size.
+
 ### Added
 
 - **Groups of your own keys, nested to any depth, behave as which-key's**: a table under a key (`[keys.normal.space.b]`) is a group, its menu titled with its `label`, and its parent's menu shows it as `+buffer` (an unnamed one as `+` and its keys). `Esc` closes every level; `Backspace` goes back one, wherever the group has no `Backspace` of its own (Space's `⌫` still turns the page). No timeout.
