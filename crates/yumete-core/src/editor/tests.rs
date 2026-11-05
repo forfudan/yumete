@@ -37547,3 +37547,24 @@ fn a_table_grids_group_draws_a_menu() {
     press(&mut prose, ",");
     assert!(prose.pending_menu().is_none(), "no group outside a table");
 }
+
+/// Typst's `/* … */` over several lines is a comment on every one of them,
+/// as Markdown's `<!-- -->` is (2026-11-05).
+#[test]
+fn a_typst_block_comment_over_several_lines_is_a_comment() {
+    use crate::markdown::{Block, Kind};
+    let mut ed = typed("正文 /* 想想\n= 不是一章\n*不粗*\n再想想 */之後*粗*\n尾巴");
+    ed.execute(":syntax typst").unwrap();
+    let kinds = |line: usize| -> Vec<Kind> {
+        ed.markup_line_in(line, ed.block_of(line)).iter().map(|s| s.kind).collect()
+    };
+    assert_eq!(ed.block_of(1), Block::Comment { close: None });
+    assert_eq!(kinds(1), [Kind::Comment], "the = inside the comment is the comment's");
+    assert_eq!(kinds(2), [Kind::Comment], "and so is the *");
+    assert_eq!(ed.block_of(3), Block::Comment { close: Some(4) });
+    assert_eq!(kinds(3)[0], Kind::Comment, "the */ is the comment's: {:?}", kinds(3));
+    assert!(kinds(3).contains(&Kind::Strong), "after the closer the line is itself: {:?}", kinds(3));
+    assert_eq!(ed.block_of(4), Block::Prose, "closed");
+    let chapters: Vec<String> = ed.outline().into_iter().map(|(_, _, t)| t).collect();
+    assert!(chapters.is_empty(), "a = in a comment is not a chapter: {chapters:?}");
+}

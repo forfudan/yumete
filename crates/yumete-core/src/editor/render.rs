@@ -188,12 +188,15 @@ impl Editor {
             if let Some(kind) = crate::conflict::marker(head) {
                 marks.push((line, kind, crate::conflict::label(head)));
             }
-            if let Some(closer) = note.filter(|_| markdown_syntax) {
+            if let Some(closer) = note.filter(|_| markdown_syntax || typst) {
                 let whole = text.to_string();
                 let close = crate::markdown::comment_closes(&whole, closer);
                 if let Some(at) = close {
                     let rest: String = whole.chars().skip(at + closer.chars().count()).collect();
-                    note = crate::markdown::comment_left_open(&rest);
+                    note = match typst {
+                        true => crate::markdown::typst::comment_left_open(&rest).then_some("*/"),
+                        false => crate::markdown::comment_left_open(&rest),
+                    };
                 }
                 blocks.push(crate::markdown::Block::Comment { close });
                 continue;
@@ -214,6 +217,10 @@ impl Editor {
                 if text.chunks().any(|c| c.contains('<') || c.contains('%')) {
                     note = crate::markdown::comment_left_open(&text.to_string());
                 }
+            }
+            // Typst's `/*`, the same way.
+            if typst && !blocks[line].is_literal() && text.chunks().any(|c| c.contains('/')) {
+                note = crate::markdown::typst::comment_left_open(&text.to_string()).then_some("*/");
             }
         }
         // **Laid over the answer, not woven into it.** A forward scan cannot
@@ -1376,18 +1383,28 @@ impl Editor {
         let Some(at) = close else {
             return vec![Span { start: 0, end: length, kind: Kind::Comment, construct, depth: 0 }];
         };
+        let typst = self.current_buffer().syntax() == crate::syntax::Syntax::Typst;
         let closer = match text.chars().nth(at) {
-            Some('%') => 2,
+            Some('%' | '*') => 2,
             _ => 3,
         };
         let after = (at + closer).min(length);
         let mut out = Vec::new();
-        if at > 0 {
-            out.push(Span { start: 0, end: at, kind: Kind::Comment, construct, depth: 0 });
+        // Typst's `*/` is part of the comment, as its `/*` is.
+        if typst {
+            out.push(Span { start: 0, end: after, kind: Kind::Comment, construct, depth: 0 });
+        } else {
+            if at > 0 {
+                out.push(Span { start: 0, end: at, kind: Kind::Comment, construct, depth: 0 });
+            }
+            out.push(Span { start: at, end: after, kind: Kind::Marker, construct, depth: 0 });
         }
-        out.push(Span { start: at, end: after, kind: Kind::Marker, construct, depth: 0 });
         let rest: String = text.chars().skip(after).collect();
-        out.extend(crate::markdown::spans(&rest).into_iter().map(|s| Span {
+        let runs = match typst {
+            true => crate::markdown::typst::spans(&rest),
+            false => crate::markdown::spans(&rest),
+        };
+        out.extend(runs.into_iter().map(|s| Span {
             start: s.start + after,
             end: s.end + after,
             ..s

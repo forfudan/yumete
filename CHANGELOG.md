@@ -12,6 +12,13 @@ in `docs/development.md` §5.2.
 ### Fixed
 
 - **vim's `C-d` scrolls through every file**: in 0.18.0 and 0.18.1, in a file whose first page holds lines that wrap with an indent (a front matter, for one), it never scrolled, stopped at the same rows or went back to the first line, at a place that changed with the window's size.
+- **Typst: a `/* … */` comment is drawn as a comment**, on every line it runs over; its `*` used to set the note bold.
+- **Typst: `#(1 + 2)` and `#{…}` are drawn as code**, as `#set` and `#let` are.
+- **Typst: `_emphasis_` inside `*strong*` takes both styles**, and the other way round.
+- **Typst: `#if`, `#for` and `#while` draw their head as code and their `[…]` as writing**, also when the brackets run over several lines.
+- **Markdown: `$a + b$` and `$$x^2$$` are drawn as maths**, as in Typst, and export as maths; `$3 and $5` stays two prices.
+- **Markdown: `<https://…>` and `<mailto:…>` are links**, and open as links.
+- **Markdown: inline HTML tags (`<kbd>`, `<br>`) are drawn set back**, with the text between them as prose; `:export html` keeps them as HTML.
 
 ### Added
 

@@ -551,7 +551,7 @@ fn render(
                 let end = span.end.min(to);
                 // **這三種不往裏走。** 代碼與批注裏寫的就是字面（`spans()` 本來
                 // 也不往它們裏面遞），而分隔符自己没有內容。
-                let leaf = matches!(span.kind, Kind::Code | Kind::Comment | Kind::Marker);
+                let leaf = matches!(span.kind, Kind::Code | Kind::Comment | Kind::Marker | Kind::Math | Kind::Html);
                 let body = match leaf {
                     true => {
                         let text: String = chars[start..end].iter().collect();
@@ -559,7 +559,9 @@ fn render(
                         // 斜線，所以 `` `code_here` `` 從前出成 `` `code\_here` ``
                         // （#386）。HTML 的 `<code>` 正相反，`&lt;` 是必須的。
                         match (span.kind, dialect) {
-                            (Kind::Code, Dialect::Typst) => text,
+                            // A formula is read by the maths, not as markup:
+                            // `$a_b$` with its `_` escaped is a different formula.
+                            (Kind::Code | Kind::Math, Dialect::Typst) | (Kind::Html, Dialect::Html) => text,
                             _ => escape(&text),
                         }
                     }
@@ -592,6 +594,9 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
     match (kind, dialect) {
         // The delimiters, and the writer's private notes. Not in the book.
         (Kind::Marker | Kind::Comment, _) => String::new(),
+        // Inline HTML is HTML; Typst has nothing to make of a tag.
+        (Kind::Html, Dialect::Html) => text.to_string(),
+        (Kind::Html, Dialect::Typst) => String::new(),
         (Kind::Strong, Dialect::Html) => format!("<strong>{text}</strong>"),
         (Kind::Emphasis, Dialect::Html) => format!("<em>{text}</em>"),
         (Kind::Code, Dialect::Html) => format!("<code>{text}</code>"),
@@ -1107,11 +1112,15 @@ mod tests {
     /// `*粗*` 是四個字符、`$a+b$` 被當成兩個字面美元號轉義掉。
     #[test]
     fn export_reads_the_source_syntax_not_the_output_format() {
-        // Markdown 源：`$` 就是一個 `$`，寫進 Typst 要轉義（Typst 那一端它開公式）。
+        // Markdown 源：一個價錢裏的 `$` 就是一個 `$`，寫進 Typst 要轉義（Typst 那一端
+        // 它開公式）。Since 2026-11-05 `$a + b$` is maths there too (Pandoc's
+        // rule), and goes over as maths.
         let mut md = style();
         md.vertical = false;
-        let out = export("$a + b$\n", Format::Typst, &md);
-        assert!(out.contains(r"\$a + b\$"), "Markdown 源裏它是字面：{out}");
+        let out = export("$3 and $5\n", Format::Typst, &md);
+        assert!(out.contains(r"\$3 and \$5"), "Markdown 源裏它是字面：{out}");
+        let out = export("$a_b$\n", Format::Typst, &md);
+        assert!(out.contains("$a_b$"), "a formula, not escaped: {out}");
 
         // Typst 源：那是一條公式，原樣過去。
         let mut ts = style();
@@ -1298,7 +1307,8 @@ mod tests {
         assert_eq!(body("甲`a**b`\n", Format::Html), "<p>甲<code>a**b</code></p>");
 
         // 稿子裏自己打的尖括號照舊轉義——遞歸之後也只轉一遍。
-        assert_eq!(body("甲**a<b>c**\n", Format::Html), "<p>甲<strong>a&lt;b&gt;c</strong></p>");
+        // (`<b>` would be an HTML tag, which goes through as HTML.)
+        assert_eq!(body("甲**a<1>c**\n", Format::Html), "<p>甲<strong>a&lt;1&gt;c</strong></p>");
 
         // Warning: **一條腳註正好填滿一層標記，兩條 span 一樣大**（2026-10-01 審出
         // 來的回歸）。腳註那一支不帶前導 `Marker`，所以 `Strong` 與 `Footnote`
@@ -1542,5 +1552,17 @@ mod tests {
         assert!(html.contains("私用\u{E000}字"), "{html}");
         let typst = export("1.\n2. 二\n", Format::Typst, &flat);
         assert!(typst.contains("1.\n2. 二"), "{typst}");
+    }
+
+    /// Inline HTML is HTML (2026-11-05): through as it is to an HTML page,
+    /// and gone from a Typst one, which has nothing to make of a tag.
+    #[test]
+    fn inline_html_goes_through_to_html_and_not_to_typst() {
+        let mut md = style();
+        md.vertical = false;
+        let out = export("按 <kbd>Esc</kbd> 退出\n", Format::Html, &md);
+        assert!(out.contains("按 <kbd>Esc</kbd> 退出"), "{out}");
+        let out = export("按 <kbd>Esc</kbd> 退出\n", Format::Typst, &md);
+        assert!(out.contains("按 Esc 退出"), "{out}");
     }
 }

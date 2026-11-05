@@ -66,6 +66,10 @@ pub enum Kind {
     /// The markup itself — the asterisks, the brackets and the target. Shown
     /// and set back in source mode; hidden in 所見即所得.
     Marker,
+    /// An inline HTML tag, `<kbd>` or `</kbd>`, the whole of it. Set back as
+    /// a marker is, but never hidden: `<br>` says something `**` does not.
+    /// The text between two tags is prose.
+    Html,
     /// `[-什麼走了-]` in a `:diff` listing — the old draft's words.
     ///
     /// Not Markdown; the listing has [`crate::syntax::Syntax::Diff`] and this
@@ -818,6 +822,41 @@ fn scan(
                 continue;
             }
         }
+        // `$a + b$` and `$$x^2$$`, as Pandoc reads them: nothing inside is
+        // markup, and `$3 and $5` is two prices. This and the two below stop
+        // at a backtick: a code span after them is still a code span.
+        if chars[at] == '$' {
+            match math(chars, at, to) {
+                Some((open, close)) => {
+                    mark(out, at, at + open, Kind::Marker, *construct, depth);
+                    mark(out, at + open, close, Kind::Math, *construct, depth);
+                    mark(out, close, close + open, Kind::Marker, *construct, depth);
+                    at = close + open;
+                    *construct += 1;
+                }
+                // An unclosed `$$` is not a `$` and then another.
+                None => at += 1 + usize::from(chars.get(at + 1) == Some(&'$')),
+            }
+            continue;
+        }
+        // `<https://…>` is a link with the address for its text; `<kbd>` and
+        // `</kbd>` are HTML, and what stands between them is prose.
+        if chars[at] == '<' {
+            if let Some(end) = autolink(chars, at, to) {
+                mark(out, at, at + 1, Kind::Marker, *construct, depth);
+                mark(out, at + 1, end - 1, Kind::Link, *construct, depth);
+                mark(out, end - 1, end, Kind::Marker, *construct, depth);
+                at = end;
+                *construct += 1;
+                continue;
+            }
+            if let Some(end) = html_tag(chars, at, to) {
+                mark(out, at, end, Kind::Html, *construct, depth);
+                at = end;
+                *construct += 1;
+                continue;
+            }
+        }
         if let Some((len, run)) = fence(chars, at, to) {
             let kind = match (chars[at], len) {
                 ('*', 2) | ('_', 2) => Kind::Strong,
@@ -905,6 +944,120 @@ fn scan(
     }
 }
 
+/// Inline maths opening at `at`: how many `$` open and close it (1 or 2),
+/// and where the closing ones start.
+///
+/// Pandoc's `tex_math_dollars`: an opening `$` has no space after it, the
+/// closing one no space before it and no digit after it, and the first `$`
+/// that comes is the one that has to close. `$$…$$` takes anything.
+fn math(chars: &[char], at: usize, to: usize) -> Option<(usize, usize)> {
+    let stop = |i: usize| chars[i] == '`' || (chars[i] == '$' && !escaped(chars, i));
+    if chars.get(at + 1) == Some(&'$') {
+        let close = (at + 2..to.saturating_sub(1))
+            .find(|&i| chars[i] == '`' || stop(i) && chars[i + 1] == '$')?;
+        return (close > at + 2 && chars[close] == '$').then_some((2, close));
+    }
+    if chars.get(at + 1).is_none_or(|c| c.is_whitespace()) {
+        return None;
+    }
+    let close = (at + 1..to).find(|&i| stop(i)).filter(|&i| chars[i] == '$')?;
+    let shuts = !chars[close - 1].is_whitespace()
+        && !chars.get(close + 1).is_some_and(|c| c.is_ascii_digit());
+    shuts.then_some((1, close))
+}
+
+/// An autolink opening at `at`, CommonMark's two kinds: `<scheme:…>` and
+/// `<name@host>`. Where it ends, past its `>`.
+fn autolink(chars: &[char], at: usize, to: usize) -> Option<usize> {
+    let close = (at + 1..to).find(|&i| matches!(chars[i], '>' | '<' | '`') || chars[i].is_whitespace())?;
+    if chars[close] != '>' {
+        return None;
+    }
+    let body = &chars[at + 1..close];
+    let scheme = body.iter().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-')).count();
+    let uri = (2..=32).contains(&scheme)
+        && body[0].is_ascii_alphabetic()
+        && body.get(scheme) == Some(&':');
+    let email = || {
+        let Some(sign) = body.iter().position(|&c| c == '@') else {
+            return false;
+        };
+        let (local, host) = (&body[..sign], &body[sign + 1..]);
+        !local.is_empty()
+            && local.iter().all(|&c| c.is_ascii_alphanumeric() || ".!#$%&'*+/=?^_`{|}~-".contains(c))
+            && host.split(|&c| c == '.').all(|label| {
+                !label.is_empty()
+                    && label.iter().all(|&c| c.is_ascii_alphanumeric() || c == '-')
+                    && label[0] != '-'
+                    && label[label.len() - 1] != '-'
+            })
+    };
+    (uri || email()).then_some(close + 1)
+}
+
+/// An HTML tag opening at `at` — `<kbd>`, `<br/>`, `<a href="x">`, `</kbd>` —
+/// as CommonMark's grammar has it, on one line. Where it ends, past its `>`.
+fn html_tag(chars: &[char], at: usize, to: usize) -> Option<usize> {
+    let get = |i: usize| (i < to).then(|| chars[i]);
+    let closing = get(at + 1) == Some('/');
+    let mut i = at + 1 + usize::from(closing);
+    if !get(i)?.is_ascii_alphabetic() {
+        return None;
+    }
+    while get(i).is_some_and(|c| c.is_ascii_alphanumeric() || c == '-') {
+        i += 1;
+    }
+    let space = |i: &mut usize| {
+        let from = *i;
+        while get(*i).is_some_and(char::is_whitespace) {
+            *i += 1;
+        }
+        *i > from
+    };
+    if !closing {
+        // Attributes, each after a space: a name, and maybe `=` and a value.
+        loop {
+            let mut j = i;
+            if !space(&mut j) || !get(j).is_some_and(|c| c.is_ascii_alphabetic() || matches!(c, '_' | ':')) {
+                break;
+            }
+            while get(j).is_some_and(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-')) {
+                j += 1;
+            }
+            let mut k = j;
+            space(&mut k);
+            if get(k) == Some('=') {
+                k += 1;
+                space(&mut k);
+                match get(k)? {
+                    quote @ ('"' | '\'') => {
+                        k = (k + 1..to).find(|&n| chars[n] == quote || chars[n] == '`')? + 1;
+                        if chars[k - 1] != quote {
+                            return None;
+                        }
+                    }
+                    _ => {
+                        let from = k;
+                        while get(k).is_some_and(|c| !c.is_whitespace() && !"\"'=<>`".contains(c)) {
+                            k += 1;
+                        }
+                        if k == from {
+                            return None;
+                        }
+                    }
+                }
+                j = k;
+            }
+            i = j;
+        }
+    }
+    space(&mut i);
+    if !closing && get(i) == Some('/') {
+        i += 1;
+    }
+    (get(i)? == '>').then_some(i + 1)
+}
+
 /// Where a link points, and how it was written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Link {
@@ -948,11 +1101,18 @@ pub fn link_at(line: &str, at: usize) -> Option<Link> {
     let chars: Vec<char> = line.chars().collect();
     let whole: String = chars.get(start..end)?.iter().collect();
 
-    let (written, wiki) = match whole.strip_prefix("[[").and_then(|b| b.strip_suffix("]]")) {
+    let double = whole.strip_prefix("[[").and_then(|b| b.strip_suffix("]]"));
+    let angled = whole.strip_prefix('<').and_then(|b| b.strip_suffix('>'));
+    let (written, wiki) = match (double, angled) {
         // `[[第三章|那一夜]]` — the alias is what the reader reads, so the
         // destination is the half before the bar.
-        Some(body) => (body.split('|').next().unwrap_or(body).to_string(), true),
-        None => {
+        (Some(body), _) => (body.split('|').next().unwrap_or(body).to_string(), true),
+        // `<https://…>` names itself; `<name@host>` is an address to write to.
+        (None, Some(body)) => match body.contains(':') {
+            true => (body.to_string(), false),
+            false => (format!("mailto:{body}"), false),
+        },
+        (None, None) => {
             let shut = whole.rfind("](")?;
             let inside = whole.get(shut + 2..whole.len().checked_sub(1)?)?.trim();
             // `[甲](url "說明")` — the title is for a reader, not for whatever
@@ -1497,13 +1657,27 @@ pub mod typst {
     /// The marked-up runs of one line of Typst.
     pub fn spans(line: &str) -> Vec<Span> {
         let chars: Vec<char> = line.chars().collect();
+        scan(&chars, true, 0)
+    }
+
+    /// How deep `*…*` and `_…_` are read inside each other, as Markdown's
+    /// [`super::DEPTH`].
+    const DEPTH: u8 = 3;
+
+    /// One pass over `chars`: a whole line, or the text inside a construct.
+    /// Only a whole line can be a heading.
+    fn scan(chars: &[char], line: bool, depth: u8) -> Vec<Span> {
         let mut out = Vec::new();
         let mut construct = 1usize;
         let mut at = 0usize;
 
         // A heading is `=` through `======`, and the rest of the line is it.
         // 判準在 `super::heading_marks`，三處共用一支。
-        if let Some(equals) = super::heading_marks(line, '=') {
+        let heading = match line {
+            true => super::heading_marks(&chars.iter().collect::<String>(), '='),
+            false => None,
+        };
+        if let Some(equals) = heading {
             push(&mut out, 0, equals, Kind::HeadingMark, 0);
             push(&mut out, equals, chars.len(), Kind::Heading, 0);
             at = equals;
@@ -1523,11 +1697,23 @@ pub mod typst {
                 push(&mut out, at, chars.len(), Kind::Comment, construct);
                 break;
             }
+            // `/* a note */`, to its `*/` or the end of the line: one left
+            // open carries on below ([`comment_left_open`]). Its `*` used to
+            // open a strong run.
+            if chars[at] == '/' && chars.get(at + 1) == Some(&'*') {
+                let end = block_comment_end(chars, at + 2).unwrap_or(chars.len());
+                push(&mut out, at, end, Kind::Comment, construct);
+                construct += 1;
+                at = end;
+                continue;
+            }
             // `#import`, `#let`, `#show`, `#set` and every call: the
             // instructions, not the writing. Shown, always — a writer needs to
-            // see what produces the page.
-            if chars[at] == '#' && chars.get(at + 1).is_some_and(|c| c.is_alphabetic()) {
-                let (end, bodies) = code_parts(&chars, at + 1);
+            // see what produces the page. `#(1 + 2)` and `#{…}` are code too.
+            if chars[at] == '#'
+                && chars.get(at + 1).is_some_and(|&c| c.is_alphabetic() || matches!(c, '(' | '{'))
+            {
+                let (end, bodies) = code_parts(chars, at + 1);
                 let mine = construct;
                 construct += 1;
                 // **方括號裏裝的是正文，不是代碼**（2026-09-28）。`#chapter[初雪]`、
@@ -1544,17 +1730,7 @@ pub mod typst {
                 let mut cut = at;
                 for (a, b) in bodies {
                     push(&mut out, cut, a, Kind::Code2, mine);
-                    let body: String = chars[a..b].iter().collect();
-                    let inner = spans(&body);
-                    let top = inner.iter().map(|s| s.construct).max().unwrap_or(0);
-                    for mut one in inner {
-                        one.start += a;
-                        one.end += a;
-                        one.construct += construct;
-                        one.depth = 1;
-                        out.push(one);
-                    }
-                    construct += top + 1;
+                    graft(&mut out, scan(&chars[a..b], true, depth + 1), a, &mut construct);
                     cut = b;
                 }
                 push(&mut out, cut, end, Kind::Code2, mine);
@@ -1598,25 +1774,32 @@ pub mod typst {
                 }
             }
             // `*粗*` and `_斜_` — one delimiter, not two.
-            if matches!(chars[at], '*' | '_') && !in_word(&chars, at) {
+            if matches!(chars[at], '*' | '_') && !in_word(chars, at) {
                 let kind = if chars[at] == '*' {
                     Kind::Strong
                 } else {
                     Kind::Emphasis
                 };
-                if let Some(close) = closing(&chars, at + 1, chars[at]) {
-                    push(&mut out, at, at + 1, Kind::Marker, construct);
-                    push(&mut out, at + 1, close, kind, construct);
-                    push(&mut out, close, close + 1, Kind::Marker, construct);
-                    at = close + 1;
+                if let Some(close) = closing(chars, at + 1, chars[at]) {
+                    let mine = construct;
                     construct += 1;
+                    push(&mut out, at, at + 1, Kind::Marker, mine);
+                    push(&mut out, at + 1, close, kind, mine);
+                    // `*粗的 _斜的_*`: the text inside is read again, so both
+                    // styles land on 斜的. Before the closing marker, to keep
+                    // the runs in order.
+                    if depth + 1 < DEPTH {
+                        graft(&mut out, scan(&chars[at + 1..close], false, depth + 1), at + 1, &mut construct);
+                    }
+                    push(&mut out, close, close + 1, Kind::Marker, mine);
+                    at = close + 1;
                     continue;
                 }
             }
             // `` `code` ``. Counted in backticks — see `super::code_span`;
             // without that ``` ``//`` ``` opened a Typst comment.
             if chars[at] == '`' {
-                if let Some((open, close, end)) = super::code_span(&chars, at) {
+                if let Some((open, close, end)) = super::code_span(chars, at) {
                     push(&mut out, at, at + open, Kind::Marker, construct);
                     push(&mut out, at + open, close, Kind::Code, construct);
                     push(&mut out, close, end, Kind::Marker, construct);
@@ -1630,6 +1813,53 @@ pub mod typst {
         out
     }
 
+    /// `inner`, read from `offset` of the run it came out of, laid into `out`
+    /// with constructs of its own.
+    fn graft(out: &mut Vec<Span>, inner: Vec<Span>, offset: usize, construct: &mut usize) {
+        let top = inner.iter().map(|s| s.construct).max().unwrap_or(0);
+        for mut one in inner {
+            one.start += offset;
+            one.end += offset;
+            one.construct += *construct;
+            one.depth += 1;
+            out.push(one);
+        }
+        *construct += top + 1;
+    }
+
+    /// Where the `/*` whose body starts at `from` ends, past its `*/`. Typst's
+    /// comments nest, so `/* a /* b */ c */` is one; counted on this line only.
+    fn block_comment_end(chars: &[char], from: usize) -> Option<usize> {
+        let mut deep = 1usize;
+        let mut at = from;
+        while at + 1 < chars.len() {
+            match (chars[at], chars[at + 1]) {
+                ('/', '*') => deep += 1,
+                ('*', '/') => deep -= 1,
+                _ => {
+                    at += 1;
+                    continue;
+                }
+            }
+            at += 2;
+            if deep == 0 {
+                return Some(at);
+            }
+        }
+        None
+    }
+
+    /// Whether `line` opens a `/*` it does not close, read as [`spans`] reads
+    /// it: a `/*` in a raw span or a call's string is not one.
+    pub fn comment_left_open(line: &str) -> bool {
+        let chars: Vec<char> = line.chars().collect();
+        spans(line).iter().any(|s| {
+            s.kind == Kind::Comment
+                && chars[s.start..].starts_with(&['/', '*'])
+                && block_comment_end(&chars, s.start + 2).is_none()
+        })
+    }
+
     /// Which block a line of Typst belongs to.
     ///
     /// Far less state than Markdown's: Typst has no `:::` and its raw blocks
@@ -1637,13 +1867,16 @@ pub mod typst {
     #[derive(Debug, Default)]
     pub struct BlockScanner {
         in_raw: bool,
-        /// How deep inside a `{`, `(` or `[` the scan is.
+        /// The `{`, `(` and `[` the scan is inside, innermost last.
         ///
         /// Typst code runs across lines — `#show heading: it => block({` opens
         /// a body that closes several lines later — and every one of those
         /// lines is code, not writing. Counting brackets is not parsing Typst,
         /// but it is enough to tell a template apart from a manuscript.
-        depth: i32,
+        ///
+        /// Which bracket matters: a `[` is content, so the lines of
+        /// `#if x [` … `]` are writing, where those of `{` … `}` are code.
+        open: Vec<char>,
     }
 
     impl BlockScanner {
@@ -1656,21 +1889,23 @@ pub mod typst {
             let trimmed = line.trim_start();
             if trimmed.starts_with("```") {
                 self.in_raw = !self.in_raw;
-                self.depth = 0;
+                self.open.clear();
                 return Block::Code { inside: None };
             }
             if self.in_raw {
                 return Block::Code { inside: None };
             }
             // Inside a code body that opened on an earlier line.
-            let was_open = self.depth > 0;
+            let was_open = !self.open.is_empty();
+            // Inside a `[` the line is markup, but for the `]` that ends it.
+            let content = self.open.last() == Some(&'[') && !trimmed.starts_with(']');
             // **A blank line closes it.** The bracket count is a guess, and a
             // guess that has gone wrong must not run to the end of the file —
             // one line used to be able to tint an entire manuscript. The cost
             // is a `#show` body with a blank line in it, which loses its shade
             // from there on: a shade, against a whole novel.
             if trimmed.is_empty() {
-                self.depth = 0;
+                self.open.clear();
                 return Block::Prose;
             }
             // **Only a line seen whole may be counted.** The caller hands over
@@ -1686,13 +1921,15 @@ pub mod typst {
             if whole && (was_open || trimmed.starts_with('#')) {
                 for c in line.chars() {
                     match c {
-                        '{' | '(' | '[' => self.depth += 1,
-                        '}' | ')' | ']' => self.depth = (self.depth - 1).max(0),
+                        '{' | '(' | '[' => self.open.push(c),
+                        '}' | ')' | ']' => {
+                            self.open.pop();
+                        }
                         _ => {}
                     }
                 }
             }
-            if was_open {
+            if was_open && !content {
                 return Block::Code { inside: None };
             }
             let equals = trimmed.chars().take_while(|&c| c == '=').count();
@@ -1760,6 +1997,12 @@ pub mod typst {
         if matches!(word.as_str(), "import" | "include" | "let" | "set" | "show") {
             return chars.len();
         }
+        // `#if x [甲] else [乙]`, `#for x in xs [丙]`, `#while c {…}`: not a
+        // call, so the brackets do not follow the name. The head runs to the
+        // first block, and an `else` takes another.
+        if matches!(word.as_str(), "if" | "for" | "while") {
+            return keyword_end(chars, at);
+        }
         // A trailing bracket group, and the string or arguments in it.
         while let Some(&open) = chars.get(at) {
             let close = match open {
@@ -1786,6 +2029,45 @@ pub mod typst {
             at = (scan + 1).min(chars.len());
         }
         at.max(from)
+    }
+
+    /// Where `#if`, `#for` or `#while` ends, from just after the keyword.
+    fn keyword_end(chars: &[char], mut at: usize) -> usize {
+        loop {
+            let (mut deep, mut quoted) = (0usize, false);
+            while at < chars.len() {
+                match chars[at] {
+                    '"' => quoted = !quoted,
+                    _ if quoted => {}
+                    '(' => deep += 1,
+                    ')' => deep = deep.saturating_sub(1),
+                    '[' | '{' if deep == 0 => break,
+                    _ => {}
+                }
+                at += 1;
+            }
+            // A block left open runs on below; the line is all head.
+            let Some(open) = chars.get(at).copied() else {
+                return chars.len();
+            };
+            let shut = if open == '[' { ']' } else { '}' };
+            let mut deep = 0usize;
+            let close = (at..chars.len()).find(|&i| {
+                deep += usize::from(chars[i] == open);
+                deep -= usize::from(chars[i] == shut);
+                deep == 0
+            });
+            let Some(close) = close else {
+                return chars.len();
+            };
+            at = close + 1;
+            let next = (at..chars.len()).find(|&i| chars[i] != ' ').unwrap_or(chars.len());
+            let word: String = chars[next..].iter().take_while(|c| c.is_alphanumeric()).collect();
+            if word != "else" {
+                return at;
+            }
+            at = next + 4;
+        }
     }
 
     /// 一個引用名裏許不許出現這個字符。
@@ -2034,6 +2316,74 @@ mod typst_tests {
             .collect();
         assert_eq!(walk, ".``....", "{walk}");
     }
+
+    /// `/* … */` is a comment, as `//` is (2026-11-05): its `*` opened a
+    /// strong run, so the note was drawn bold.
+    #[test]
+    fn a_block_comment_is_a_comment_not_a_strong_run() {
+        assert_eq!(shape("那年 /* 註 */ 冬天"), "   %%%%%%%   ");
+        assert_eq!(shape("/* 甲 /* 乙 */ 丙 */*粗*"), "%%%%%%%%%%%%%%%%%.B.");
+        assert_eq!(shape("那年 /* 沒收"), "   %%%%%");
+        assert!(comment_left_open("那年 /* 沒收"));
+        assert!(!comment_left_open("那年 /* 收了 */"));
+        assert!(!comment_left_open("`/*` 是代碼"));
+    }
+
+    /// `#(1 + 2)` and `#{…}` are code, as `#set` is (2026-11-05).
+    #[test]
+    fn an_expression_after_a_hash_is_code() {
+        assert_eq!(shape("值 #(1 + 2) 個"), "  ########  ");
+        assert_eq!(shape("#{ x }"), "######");
+        // A `#` before a space or a digit is a `#`.
+        assert_eq!(shape("第 # 3 #1"), "        ");
+    }
+
+    /// `*粗 _斜_ 粗*` sets 斜 both ways, and the reverse (2026-11-05).
+    #[test]
+    fn emphasis_and_strong_nest_inside_each_other() {
+        let kinds_at = |line: &str, at: usize| -> Vec<Kind> {
+            spans(line).iter().filter(|s| s.start <= at && at < s.end).map(|s| s.kind).collect()
+        };
+        assert_eq!(kinds_at("*粗 _斜_ 粗*", 4), [Kind::Strong, Kind::Emphasis]);
+        assert_eq!(kinds_at("_斜 *粗* 斜_", 4), [Kind::Emphasis, Kind::Strong]);
+        assert_eq!(kinds_at("*粗 _斜_ 粗*", 3), [Kind::Strong, Kind::Marker]);
+        // The two invariants: nested or apart, in order of start.
+        let all = spans("*甲 _乙 `丙` 乙_ 甲* 和 _丁_");
+        for (i, a) in all.iter().enumerate() {
+            for b in &all[i + 1..] {
+                assert!(a.start <= b.start, "{all:?}");
+                assert!(b.start >= a.end || b.end <= a.end, "{all:?}");
+            }
+        }
+    }
+
+    /// `#if x [甲] else [乙]`: the head is code and the brackets are writing
+    /// (2026-11-05); the whole of it was code, or none of the head was.
+    #[test]
+    fn a_keyword_block_is_code_around_writing() {
+        assert_eq!(shape("#if x [甲 *乙*] else [丙]"), "#######  .B.######## #");
+        assert_eq!(shape("#for x in (1, 2) [第 #x 項]"), "##################  ##  #");
+        assert_eq!(shape("#while i < 3 { i += 1 } 後"), "#######################  ");
+        // A block left open runs on below: the line is all head.
+        assert_eq!(shape("#if cond ["), "##########");
+    }
+
+    /// The lines inside a `[` opened by code are writing; inside `{` or `(`
+    /// they are code (2026-11-05).
+    #[test]
+    fn the_lines_of_a_content_block_are_writing() {
+        let mut scanner = BlockScanner::new();
+        let walk: String = "#if cond [\n  多行 *正文*\n  - 一項\n]\n#let f() = {\n  [甲]\n}\n那年"
+            .lines()
+            .map(|line| match scanner.feed(line, line.chars().count()) {
+                Block::Code { .. } => '`',
+                Block::Item { .. } => '-',
+                Block::Prose => '.',
+                _ => '?',
+            })
+            .collect();
+        assert_eq!(walk, "..-`.``.", "{walk}");
+    }
 }
 
 /// #418 二. What the reference completion reads out of a file.
@@ -2223,6 +2573,7 @@ mod tests {
                 Kind::Math => '$',
                 Kind::Ref => '@',
                 Kind::Label => '<',
+                Kind::Html => 'T',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
                 *slot = mark;
@@ -2796,4 +3147,51 @@ mod tests {
         );
     }
 
+    /// `$a + b$` and `$$x^2$$` are maths, as Pandoc reads them (2026-11-05).
+    #[test]
+    fn dollars_around_a_formula_are_maths_and_prices_are_not() {
+        assert_eq!(shape("式 $a + b$ 和 $$x^2$$"), "  .$$$$$.   ..$$$..");
+        // No space inside the dollars, no digit after the closing one.
+        assert_eq!(shape("價 $3 and $5"), "           ");
+        assert_eq!(shape("$ a$ 和 $a $"), "           ");
+        assert_eq!(shape("$5 到 10$5"), "         ");
+        assert_eq!(shape(r"\$a$"), ".   ");
+        // Nothing inside is markup, and a code span keeps winning.
+        assert_eq!(shape("$a*b*c$"), ".$$$$$.");
+        assert_eq!(shape("`$a$` 碼"), ".CCC.  ");
+        assert_eq!(shape("$a `b$` c"), "   .CC.  ");
+        // Inside emphasis.
+        assert_eq!(shape("**$x$**"), "...$...");
+    }
+
+    /// `<https://…>` and `<name@host>` are links (2026-11-05), and say where
+    /// they go.
+    #[test]
+    fn an_autolink_is_a_link() {
+        assert_eq!(shape("見 <https://a.b/c> 頁"), "  .LLLLLLLLLLLLL.  ");
+        assert_eq!(shape("<mailto:a@b.c>"), ".LLLLLLLLLLLL.");
+        assert_eq!(shape("<a@b.cn>"), ".LLLLLL.");
+        assert_eq!(link_at("見 <https://a.b/c> 頁", 5).map(|l| l.target), Some("https://a.b/c".into()));
+        assert_eq!(link_at("<a@b.cn>", 0).map(|l| l.target), Some("mailto:a@b.cn".into()));
+        // A space, or no scheme, and it is not one.
+        assert_eq!(shape("<https://a b>"), "             ");
+        assert_eq!(shape("1 < 2 > 3"), "         ");
+    }
+
+    /// `<kbd>`, `</kbd>` and `<br>` are HTML: set back, never hidden, and
+    /// the text between them is prose (2026-11-05).
+    #[test]
+    fn an_html_tag_is_markup_and_what_it_holds_is_prose() {
+        assert_eq!(shape("按 <kbd>Esc</kbd> 鍵"), "  TTTTT   TTTTTT  ");
+        assert_eq!(shape("行<br>行<br/>"), " TTTT TTTTT");
+        assert_eq!(shape(r#"<a href="x y" id=z>甲</a>"#), "TTTTTTTTTTTTTTTTTTT TTTT");
+        assert!(hidden(&spans("按 <kbd>Esc</kbd>"), None).is_empty(), "a tag stays on the page");
+        // Not a tag: a space after `<`, an attribute without a space before it.
+        assert_eq!(shape("a < b > c"), "         ");
+        assert_eq!(shape("<a\"x\">"), "      ");
+        assert_eq!(shape("<1>"), "   ");
+        // A comment is still a comment, and code still wins.
+        assert_eq!(shape("<!-- 註 -->"), "....%%%...");
+        assert_eq!(shape("`<br>`"), ".CCCC.");
+    }
 }

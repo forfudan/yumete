@@ -8912,6 +8912,11 @@ pub(crate) fn typst_code_tokens(text: &[char]) -> Vec<Option<yumete_core::code::
         let token = if c == '/' && text.get(i + 1) == Some(&'/') {
             i = text.len();
             Some(Token::Comment)
+        } else if c == '/' && text.get(i + 1) == Some(&'*') {
+            i = (i + 2..text.len().saturating_sub(1))
+                .find(|&j| text[j] == '*' && text[j + 1] == '/')
+                .map_or(text.len(), |j| j + 2);
+            Some(Token::Comment)
         } else if c == '"' {
             i += 1;
             while i < text.len() && text[i] != '"' {
@@ -8932,7 +8937,10 @@ pub(crate) fn typst_code_tokens(text: &[char]) -> Vec<Option<yumete_core::code::
             }
             let word: String = text[start + usize::from(hash)..i].iter().collect();
             let next = text.get(i).copied();
-            if KEYWORDS.contains(&word.as_str()) {
+            if word.is_empty() {
+                // `#(1 + 2)`, `#{…}`: the `#` alone.
+                Some(Token::Punctuation)
+            } else if KEYWORDS.contains(&word.as_str()) {
                 Some(Token::Keyword)
             } else if CONSTANTS.contains(&word.as_str()) {
                 Some(Token::Constant)
@@ -9030,7 +9038,7 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
         // A real rung, not `DIM`: a terminal that ignores DIM used to draw
         // `**` exactly like the word between them, which is the whole of
         // 所見即所得 gone.
-        Kind::Marker | Kind::HeadingMark => Style::default().fg(ink.marker()),
+        Kind::Marker | Kind::HeadingMark | Kind::Html => Style::default().fg(ink.marker()),
         // A terminal cannot make a heading bigger, and bold is what it has.
         // The old colour was five ΔE from the ink for a third of a stop of
         // contrast — the weight was doing all the work already.
@@ -29010,6 +29018,20 @@ fn squeezed(text: &str) -> String {
         assert_eq!(number(3), Some(ink.furniture()), "line 4 is past the break `x` took");
     }
 
+    /// `#(1 + 2)` reads as code and a `/* note */` inside a call as a comment
+    /// (2026-11-05).
+    #[test]
+    fn typst_tokens_take_an_expression_and_a_block_comment() {
+        use yumete_core::code::Token;
+        let tokens = |text: &str| typst_code_tokens(&text.chars().collect::<Vec<_>>());
+        let got = tokens("#(1 + 2)");
+        assert_eq!(got[0], Some(Token::Punctuation), "the `#` alone");
+        assert_eq!(got[2], Some(Token::Number));
+        let got = tokens("#let x = 1 /* 註 */ + 2");
+        assert_eq!(got[11], Some(Token::Comment));
+        assert_eq!(got[17], Some(Token::Comment), "to its `*/`");
+        assert_eq!(got[21], Some(Token::Number), "and code after it");
+    }
 }
 
 #[cfg(test)]
