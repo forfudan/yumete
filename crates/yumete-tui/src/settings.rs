@@ -434,31 +434,34 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
             false => ":ruby-render basic",
         })
         .ok();
-    editor.set_key_aliases(config.keys.normal.clone());
-    editor.set_select_aliases(config.keys.select.clone());
-    editor.set_key_labels(config.keys.labels.clone());
-    editor.set_key_shapes(config.keys.shapes.clone());
-    editor.set_insert_aliases(config.keys.insert.clone());
-    for (keymap, own) in [
-        (yumete_cjk::KeyPreset::Helix, &config.keys.helix),
-        (yumete_cjk::KeyPreset::Vim, &config.keys.vim),
-    ] {
-        editor.set_keymap_aliases(keymap, own.normal.clone(), own.select.clone(), own.insert.clone());
-        editor.set_keymap_labels(keymap, own.labels.clone());
-        editor.set_keymap_shapes(keymap, own.shapes.clone());
-    }
-    editor.set_table_aliases(config.keys.table.clone());
+    // The key trees are laid once, after every setter.
+    editor.lay_keys_once(|editor| {
+        editor.set_key_aliases(config.keys.normal.clone());
+        editor.set_select_aliases(config.keys.select.clone());
+        editor.set_key_labels(config.keys.labels.clone());
+        editor.set_key_shapes(config.keys.shapes.clone());
+        editor.set_insert_aliases(config.keys.insert.clone());
+        for (keymap, own) in [
+            (yumete_cjk::KeyPreset::Helix, &config.keys.helix),
+            (yumete_cjk::KeyPreset::Vim, &config.keys.vim),
+        ] {
+            editor.set_keymap_aliases(keymap, own.normal.clone(), own.select.clone(), own.insert.clone());
+            editor.set_keymap_labels(keymap, own.labels.clone());
+            editor.set_keymap_shapes(keymap, own.shapes.clone());
+        }
+        editor.set_table_aliases(config.keys.table.clone());
+        editor.set_key_preset(config.keys.preset);
+        // **`d`/`c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。和上面兩句同一族：
+        // 鍵位那一層的事，所以擺在一起。
+        editor.set_flavor(config.keys.flavor.clone());
+    });
     use yumete_core::actions::Place;
     editor.set_place_bindings(Place::Prompt, config.keys.prompt.clone());
     editor.set_place_bindings(Place::Picker, config.keys.picker.clone());
     editor.set_place_bindings(Place::Sidebar, config.keys.sidebar.clone());
     editor.set_place_bindings(Place::Field, config.keys.field.clone());
     editor.set_place_inheritance(config.keys.inherit);
-    editor.set_key_preset(config.keys.preset);
     editor.set_which_wrap(config.editor.which_wrap.clone());
-    // **`d`/`c` 進不進寄存器**（`:yank-on-delete`，2026-10-08）。和上面兩句同一族：
-    // 鍵位那一層的事，所以擺在一起。
-    editor.set_flavor(config.keys.flavor.clone());
     editor.set_layout(layout.unwrap_or(config.editor.layout));
     // Warning: **這四個是「寫了纔算」**，不是「寫了零就當零」：出廠值在 `Editor` 那一
     // 頭，而配置裏的 0 是「沒說」。照抄啓動時的判準，一個字都不改。
@@ -963,7 +966,12 @@ q = ":quit"
         assert_eq!(keys.first(), Some(&"f"), "f keeps its place: {keys:?}");
         assert_eq!(line_of(&rows, "f"), Some("scratch"));
         let at = |k: &str| keys.iter().position(|one| *one == k).unwrap_or(usize::MAX);
-        assert!(at("z") < keys.len(), "z keeps the input method's place: {keys:?}");
+        let mut plain = laid("");
+        press(&mut plain, " ");
+        let factory: Vec<String> = menu(&plain).1.into_iter().map(|(k, _)| k).collect();
+        let was = factory.iter().position(|k| k == "z").expect("the input method's row");
+        assert_eq!(at("z"), was, "z keeps the input method's place: {keys:?}");
+        assert_ne!(line_of(&rows, "z"), menu(&plain).1.iter().find(|(k, _)| k == "z").map(|(_, v)| v.as_str()));
         assert!(at(",") < at("q"), "the new ones in the file's order: {keys:?}");
         assert!(at("q") == keys.len() - 1, "{keys:?}");
     }
@@ -1003,8 +1011,12 @@ q = ":quit"
     /// are `+name` rows on the Space menu.
     #[test]
     fn the_lazyvim_config_reads_and_shows_its_groups() {
-        let Ok(docs) = std::env::var("YUMETE_DOCS") else { return };
-        let page = std::fs::read_to_string(std::path::Path::new(&docs).join("src/from/lazyvim.md")).expect("the LazyVim page");
+        // CI checks the docs out beside the repo, as the site tests read them.
+        let docs = match std::env::var_os("YUMETE_DOCS") {
+            Some(dir) => std::path::PathBuf::from(dir),
+            None => std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../yumete-docs"),
+        };
+        let page = std::fs::read_to_string(docs.join("src/from/lazyvim.md")).expect("the docs site beside yumete, with from/lazyvim.md");
         let mut config = String::new();
         let mut inside = false;
         for line in page.lines() {
@@ -1026,5 +1038,155 @@ q = ":quit"
         }
         press(&mut ed, "g");
         assert_eq!(line_of(&menu(&ed).1, "h"), Some("+hunks"));
+    }
+
+    /// **A flat `"<space>…"` is the Space key**, as in 0.18: where Space is
+    /// not the Space menu (vim at flavour off, `vim_space_menu = false`, a
+    /// Space of the reader's) the run holds Space and waits. Only
+    /// `[keys.normal.space]` is the Space group wherever it is opened.
+    #[test]
+    fn a_flat_space_run_is_the_space_key() {
+        let flat = "[keys.normal]\n\"<space>x\" = \"select_all\"\n\"<space>ff\" = \"goto_line_end\"\n";
+        for head in [
+            "[keys]\npreset = \"vim\"\nflavor = \"off\"\n",
+            "[keys]\npreset = \"vim\"\n[keys.flavor_items]\nvim_space_menu = false\n",
+            "",
+        ] {
+            let mut ed = laid(&format!("{head}{flat}"));
+            press(&mut ed, " x");
+            assert_eq!(ed.selection(), (0, 13), "{head}");
+            assert_eq!(ed.current_buffer().text(), "one two three", "nothing deleted: {head}");
+            ed.on_key(Key::Esc);
+            ed.on_key(Key::Home);
+            press(&mut ed, " ff");
+            assert!(ed.cursor() >= 12, "{head}: {}", ed.cursor());
+        }
+        // Under vim at flavour off `\` is the Space group, and a flat run
+        // of the Space key is not in it.
+        let mut ed = laid(&format!("[keys]\npreset = \"vim\"\nflavor = \"off\"\n{flat}"));
+        press(&mut ed, "\\");
+        let (_, rows) = menu(&ed);
+        let mut helix = laid(flat);
+        press(&mut helix, " ");
+        let says = line_of(&menu(&helix).1, "x").expect("x in helix's Space menu").to_string();
+        assert!(rows.iter().all(|(_, v)| *v != says), "{rows:?}");
+        // A Space of the reader's acts first when the run does not go on.
+        let mut ed = laid("[keys.normal]\n\" \" = \"move_char_right\"\n\"<space>x\" = \"goto_line_end\"\n");
+        press(&mut ed, " x");
+        assert!(ed.cursor() >= 12, "the run: {}", ed.cursor());
+        ed.on_key(Key::Home);
+        press(&mut ed, " l");
+        assert_eq!(ed.cursor(), 2, "Space, then l");
+        // The table is the group, and `\` reaches it.
+        let mut ed = laid("[keys]\npreset = \"vim\"\nflavor = \"off\"\n[keys.normal.space]\nx = \"select_all\"\n");
+        press(&mut ed, "\\x");
+        assert_eq!(ed.selection(), (0, 13));
+    }
+
+    /// **Two spellings into one group** (`"C-wz"`, `"<space>wz"`): the one
+    /// later in the file wins, and startup says which it replaced.
+    #[test]
+    fn of_two_spellings_into_one_group_the_later_wins() {
+        for (config, select) in [
+            ("\"<space>wz\" = \"goto_file_end\"\n\"C-wz\" = \"select_all\"\n", true),
+            ("\"C-wz\" = \"select_all\"\n\"<space>wz\" = \"goto_file_end\"\n", false),
+        ] {
+            let mut ed = laid(&format!("[keys.normal]\n{config}"));
+            ed.on_key(Key::Ctrl('w'));
+            press(&mut ed, "z");
+            assert_eq!(ed.selection() == (0, 13), select, "{config}");
+            ed.on_key(Key::Esc);
+            ed.on_key(Key::Home);
+            press(&mut ed, " wz");
+            assert_eq!(ed.selection() == (0, 13), select, "{config}");
+            let notes = ed.key_notes();
+            let (kept, lost) = match select {
+                true => ("<C-w>z", "<Space>wz"),
+                false => ("<Space>wz", "<C-w>z"),
+            };
+            assert_eq!(notes.len(), 1, "{notes:?}");
+            let at = |path: &str| notes[0].find(path);
+            assert!(at(kept).is_some_and(|k| at(lost).is_some_and(|l| k < l)), "{notes:?}");
+        }
+        // vim's two doors into Space, `\` and Space itself.
+        for (config, select) in [
+            ("\"<space>x\" = \"goto_line_end\"\n\"\\\\x\" = \"select_all\"\n", true),
+            ("\"\\\\x\" = \"select_all\"\n\"<space>x\" = \"goto_line_end\"\n", false),
+        ] {
+            let mut ed = laid(&format!("[keys]\npreset = \"vim\"\n[keys.normal]\n{config}"));
+            press(&mut ed, "\\x");
+            let (from, to) = ed.selection();
+            assert_eq!(from == 0 && to >= 12, select, "{config}: {from}..{to}");
+            assert_eq!(ed.key_notes().len(), 1, "{config}");
+        }
+    }
+
+    /// **A group stays the same group when the tree in force changes**:
+    /// a sticky group whose key enters select mode keeps its own keys, not
+    /// those of the node at its place in select mode's tree.
+    #[test]
+    fn a_sticky_group_survives_select_mode() {
+        let mut ed = laid(
+            "[keys.normal.space.h]\nlabel = \"hop\"\nsticky = true\nv = \"select_mode\"\nl = \"move_char_right\"\n\n[keys.select.\",\"]\nlabel = \"commasel\"\nx = \"select_all\"\n",
+        );
+        press(&mut ed, " hv");
+        assert_eq!(menu(&ed).0, "hop");
+        press(&mut ed, "l");
+        assert_eq!(menu(&ed).0, "hop", "still the group");
+        assert_eq!(ed.cursor(), 1, "l moved");
+    }
+
+    /// **A deep group's menu costs one look at each level**: twenty-four
+    /// unnamed levels used to cost 2^24 menus.
+    #[test]
+    fn a_deep_menu_is_drawn_at_once() {
+        let mut config = String::new();
+        let mut path = String::from("[keys.normal.space.q");
+        for _ in 0..24 {
+            config.push_str(&format!("{path}]\nx = \"select_all\"\ny = \"goto_file_end\"\n"));
+            path.push_str(".q");
+        }
+        let mut ed = laid(&config);
+        let started = std::time::Instant::now();
+        press(&mut ed, " ");
+        let (_, rows) = menu(&ed);
+        assert!(line_of(&rows, "q").is_some_and(|l| l.starts_with('+')), "{rows:?}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "{:?}", started.elapsed());
+    }
+
+    /// **A label on vim's `Z` table titles the held `Z`'s menu.**
+    #[test]
+    fn a_label_on_vims_z_titles_its_menu() {
+        let mut ed = laid("[keys]\npreset = \"vim\"\n[keys.normal.Z]\nlabel = \"zed\"\nx = \"goto_file_end\"\n");
+        press(&mut ed, "Z");
+        let (title, rows) = menu(&ed);
+        assert_eq!(title, "zed");
+        assert!(line_of(&rows, "x").is_some(), "{rows:?}");
+    }
+
+    /// **The startup note**: a `,` path is quoted, and a group a later
+    /// line took back is not claimed.
+    #[test]
+    fn the_note_quotes_a_comma_and_forgets_a_group_taken_back() {
+        let ed = laid("[keys.normal.\",\"]\nx = \"select_all\"\n[keys.normal.space.f]\nn = \":new\"\n");
+        let notes = ed.key_notes();
+        assert!(notes[0].contains("\",\", <Space>f"), "{notes:?}");
+        let ed = laid("[keys]\npreset = \"vim\"\n[keys.normal.space.f]\nn = \":new\"\n[keys.vim.normal]\n\"<space>f\" = \"file_picker\"\n");
+        assert!(ed.key_notes().is_empty(), "{:?}", ed.key_notes());
+    }
+
+    /// **The sign shows the whole run held** (`␣b` of `Space bd`), and
+    /// Backspace takes a digit typed in a group back before the level.
+    #[test]
+    fn the_sign_shows_a_held_run_and_backspace_takes_a_digit() {
+        let mut ed = laid("[keys.normal]\n\"<space>bd\" = \"select_all\"\n");
+        press(&mut ed, " b");
+        assert_eq!(ed.typed_so_far(), "␣b");
+        let mut ed = laid("[keys.normal.space.g]\nlabel = \"git\"\n[keys.normal.space.g.h]\nlabel = \"hunks\"\nl = \"move_char_right\"\n");
+        press(&mut ed, " gh3");
+        ed.on_key(Key::Backspace);
+        assert_eq!(menu(&ed).0, "hunks", "the digit went, not the level");
+        press(&mut ed, "l");
+        assert_eq!(ed.cursor(), 1, "and with it the count");
     }
 }

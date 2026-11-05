@@ -466,6 +466,8 @@ impl Editor {
             Pending::Node(_) => self.node_sign().unwrap_or_default(),
             _ => word.to_string(),
         };
+        // And a run of the reader's held in it: `␣b` of `Space bd`.
+        let word = word + &self.held_sign();
         // **In the order it was typed.** Inside a sequence the number comes
         // *after* the prefix — `g3` is on its way to `g3d` — and outside one it
         // comes before the key it multiplies, which is `3w`.

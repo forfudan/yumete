@@ -2207,7 +2207,7 @@ impl Editor {
             // (`[keys.normal.","]`), the count typed before it kept for its keys.
             if self.alias_held.is_empty() {
                 if let Some(n) = typed.as_deref().and_then(|typed| self.root_node(typed)) {
-                    self.pending = Pending::Node(n as u16);
+                    self.pending = self.node_pending(n);
                     self.group_count = self.count.take();
                     return;
                 }

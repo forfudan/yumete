@@ -760,7 +760,8 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
     // A group's select-mode rows hold only while extending; their command
     // is there to be found either way.
     let selecting = super::groups::Context { extend: true, ..*at };
-    let vim_runs = super::keymap::KeyTree::of_preset(yumete_cjk::KeyPreset::Vim);
+    static VIM_RUNS: std::sync::OnceLock<super::keymap::KeyTree> = std::sync::OnceLock::new();
+    let vim_runs = VIM_RUNS.get_or_init(|| super::keymap::KeyTree::of_preset(yumete_cjk::KeyPreset::Vim));
     [*at, selecting].iter().find_map(|at| {
         super::groups::GROUPS.iter().find_map(|group| {
             group

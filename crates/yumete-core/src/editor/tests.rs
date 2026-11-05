@@ -37461,11 +37461,22 @@ fn a_moved_group_keeps_the_readers_keys() {
 
 /// **Under vim with Space moving right, `\` is the Space group, the
 /// reader's keys in it** (2026-11-05): `[keys.normal.space]` names the
-/// group, and Space itself moves without drawing a menu.
+/// group, and Space itself moves without drawing a menu. Written flat,
+/// `"<space>b"` is the Space key, held for its `b` as in 0.18.
 #[test]
 fn backslash_reaches_the_readers_space_keys() {
+    let mut flat = typed_vim("一二三\n");
+    flat.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    flat.set_key_aliases(lines_of(&[("<space>b", "select_all")]));
+    press(&mut flat, " ");
+    assert_eq!(flat.sel.head(), 0, "Space waits for its b");
+    press(&mut flat, "l");
+    assert_eq!(flat.sel.head(), 2, "and lets go: Space, then l");
     let mut ed = typed_vim("一二\n");
     ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    let mut shapes = yumete_cjk::KeyShapes::default();
+    shapes.normal.in_space_table.insert("<space>b".into());
+    ed.set_key_shapes(shapes);
     ed.set_key_aliases(lines_of(&[("<space>b", "select_all")]));
     press(&mut ed, " ");
     assert_eq!(ed.sel.head(), 1, "Space moves right");

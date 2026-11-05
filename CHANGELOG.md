@@ -30,12 +30,12 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
-- **A group is one group however it is opened**: your keys under `Space w` are `C-w`'s too, and `Space w` still lists `C-w`'s keys; a group moved with `";" = "@ "` or `";" = "space_mode"` keeps your keys; under vim with Space moving right, `\` opens the Space group with your `[keys.normal.space]` keys in it. `[keys.normal.space]` names the Space group wherever it is opened; the Space key itself is `" "` at the top of `[keys.normal]`.
+- **A group is one group however it is opened**: your keys under `Space w` are `C-w`'s too, and `Space w` still lists `C-w`'s keys; a group moved with `";" = "@ "` or `";" = "space_mode"` keeps your keys; under vim with Space moving right, `\` opens the Space group with your `[keys.normal.space]` keys in it. `[keys.normal.space]` names the Space group wherever it is opened; the Space key itself is `" "` at the top of `[keys.normal]`, and a run written flat, `"<space>x"`, presses it as before: it reaches the Space group where Space opens it, and holds Space where Space does something else. Of two spellings that reach one key of a group (`"C-wz"` and `"<space>wz"`, or vim's `"\\x"` and `"<space>x"`), the one later in the file wins, and startup says which one it replaced.
 - **A table takes its key** (Breaking): a table under a key that ran a command makes it a group, and a key the group does not have closes the menu, saying nothing. With LazyVim's `Space f`, `Space f x` no longer opens the file picker. Startup says once which keys a table took from a command. A run written flat (`"<space>bd"`, `"gggg"`) still keeps the keys before it: yumete waits, and a key that does not go on lets them act first, your own binding for them included.
 - **Menus keep your config's order**: your keys come after a group's own in the order you wrote them, and a key of yours that replaces one of the group's takes that row's place. They used to be sorted, and a replaced row moved to the end.
 - **`run`, `label`, `sticky` and `inherit` are the group's own words inside a group's table** (Breaking): a run of keys spelt as one of them is written flat, `"<space>run" = …`.
 - **A group left with no keys leaves its parent's menu**: `no_op` on each of its keys, or on its own key.
-- **A count before a group reaches your key in it** (`3 Space q`), and a digit typed inside a group of yours is a count.
+- **A count before a group reaches your key in it** (`3 Space q`), and a digit typed inside a group of yours is a count, which `Backspace` takes back before it goes up a level.
 
 ## 0.18.1 · 2026-11-05
 

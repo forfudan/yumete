@@ -247,6 +247,10 @@ pub struct KeyShape {
     /// A command row's own text (`d = { run = ":!lazygit", label = "lazygit" }`),
     /// by its run.
     pub says: std::collections::HashMap<String, String>,
+    /// The runs and groups written inside a `[keys.<mode>.space]` table,
+    /// which mean the Space group wherever it is opened; a flat
+    /// `"<space>…"` is the Space key itself.
+    pub in_space_table: std::collections::HashSet<String>,
 }
 
 /// One group a table makes: its keys, and the two words its table may set.

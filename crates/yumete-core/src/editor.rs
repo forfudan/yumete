@@ -2678,6 +2678,9 @@ pub struct Editor {
     /// How the reader's tables were written (`[keys.normal]`, `[keys.select]`,
     /// `[keys.table]`): their groups, the order of their lines.
     key_shapes: yumete_cjk::KeyShapes,
+    /// The trees are laid once at the end of [`Editor::lay_keys_once`], not
+    /// by each setter inside it.
+    keys_on_hold: bool,
     /// The count typed before the group open now, for the reader's keys in
     /// it (`3 Space b d`): the group's own rows read theirs as they always did.
     group_count: Option<usize>,
@@ -4390,6 +4393,7 @@ impl Editor {
             node_held: None,
             node_trail: Vec::new(),
             key_shapes: Default::default(),
+            keys_on_hold: false,
             group_count: None,
             alias_count: None,
             expanding_alias: false,

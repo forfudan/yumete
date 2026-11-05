@@ -5742,9 +5742,12 @@ fn read_key_table(
             _ => None,
         }
     }
+    #[allow(clippy::too_many_arguments)]
     fn walk(
         header: &str,
         path: &str,
+        // Inside a `[keys.<mode>.space]` table.
+        space: bool,
         table: &toml::Table,
         out: &mut HashMap<String, Vec<String>>,
         labels: &mut HashMap<String, String>,
@@ -5820,7 +5823,12 @@ fn read_key_table(
                 toml::Value::Table(inner) => {
                     shape.groups.push(yumete_cjk::KeyGroup { path: run.clone(), sticky: false, inherit: true });
                     shape.order.push(run.clone());
-                    walk(&format!("{header}.{key}"), &run, inner, out, labels, shape, problems);
+                    // `[keys.normal.space]`: the Space group, not the Space key.
+                    let space = space || (path.is_empty() && yumete_cjk::actions::written(&key_written) == " ");
+                    if space {
+                        shape.in_space_table.insert(run.clone());
+                    }
+                    walk(&format!("{header}.{key}"), &run, space, inner, out, labels, shape, problems);
                     continue;
                 }
                 value => match commands_of(value) {
@@ -5836,6 +5844,9 @@ fn read_key_table(
             }
             match commands.iter().find(|one| yumete_cjk::actions::bound(one).is_none()) {
                 None => {
+                    if space {
+                        shape.in_space_table.insert(run.clone());
+                    }
                     out.insert(run.clone(), commands);
                     shape.order.push(run);
                 }
@@ -5852,7 +5863,7 @@ fn read_key_table(
             }
         }
     }
-    walk(mode, "", table, out, labels, shape, problems);
+    walk(mode, "", false, table, out, labels, shape, problems);
 }
 
 /// **`[keys.prompt]`, `[keys.picker]` or `[keys.sidebar]`, line by line**

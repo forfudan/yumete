@@ -736,6 +736,15 @@ impl Editor {
         self.lay_aliases();
     }
 
+    /// **Set the keys with the setters in `set`, and lay the trees once**
+    /// after them: a config's fifteen setters each laid all four.
+    pub fn lay_keys_once(&mut self, set: impl FnOnce(&mut Editor)) {
+        let was = std::mem::replace(&mut self.keys_on_hold, true);
+        set(self);
+        self.keys_on_hold = was;
+        self.lay_aliases();
+    }
+
     /// Lay a shipped keymap under the reader's aliases (`:keymap`, #428).
     pub fn set_key_preset(&mut self, preset: yumete_cjk::KeyPreset) {
         self.key_preset = preset;
@@ -774,6 +783,9 @@ impl Editor {
     /// 配置裏寫 `"A-d" = …` 綁的是 `A`、`-`、`d` 三個鍵連按——那個鍵永遠按不出來，
     /// 而配置照收、一聲不吭。一處翻，兩層（預設表和使用者那一層）都算。
     pub(super) fn lay_aliases(&mut self) {
+        if self.keys_on_hold {
+            return;
+        }
         let preset: HashMap<String, Vec<String>> = self
             .key_preset
             .table()
