@@ -3361,6 +3361,13 @@ zhs = "开启"
 en = "on"
 
 [[message]]
+# 配置裏的一張鍵表裏一個鍵都没有（只寫了 label），啓動時說一次（草稿）
+key = "keys.group-has-no-keys"
+zht = "{0} 是空的鍵組，什麼都不做"
+zhs = "{0} 是空的键组，什么都不做"
+en = "{0} is a group with no keys, so it does nothing"
+
+[[message]]
 # 按出來的那一串在這一層裏没有綁任何東西
 key = "keys.no-such-combination"
 zht = "{0} 爲無效按鍵組合，請重試"
@@ -3400,4 +3407,4 @@ en = "{0} replaces {1}"
 key = "keys.table-takes-a-command"
 zht = "{0} 現在是你的鍵組"
 zhs = "{0} 现在是你的键组"
-en = "now groups of your own keys: {0}"
+en = "your groups now take {0}"

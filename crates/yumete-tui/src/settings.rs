@@ -860,6 +860,25 @@ mod key_tree_tests {
         assert_eq!(ed.selection(), (0, 13));
     }
 
+    /// **What a group's table gets wrong is said** (review, 2026-11-05): a
+    /// `label` that is not text, one key written twice, and a table with no
+    /// keys in it.
+    #[test]
+    fn a_groups_mistakes_are_said() {
+        let (_, problems) = Config::from_toml_saying("[keys.normal.space.b]\nlabel = 3\n");
+        assert!(problems.iter().any(|p| p.contains("label 只能是一段文字")), "{problems:?}");
+
+        let twice = "[keys.normal]\n\"<space>bx\" = \"move_line_down\"\n\n[keys.normal.space.b]\nx = \"move_line_up\"\n";
+        let (_, problems) = Config::from_toml_saying(twice);
+        assert!(problems.iter().any(|p| p.contains("[keys.normal.space.b] x 與 [keys.normal] <space>bx 是同一個鍵")), "{problems:?}");
+
+        let ed = laid("[keys.normal.space.b]\ne = { label = \"no run\" }\nf = { run = \":write\", label = \"save\" }\n");
+        let notes = ed.key_notes().join(" ");
+        assert!(notes.contains("<Space>be 是空的鍵組"), "{notes}");
+        let ed = laid("[keys.normal.space.w]\nlabel = \"windows\"\n");
+        assert!(!ed.key_notes().join(" ").contains("空的鍵組"), "a built-in group renamed is not hollow");
+    }
+
     /// **A count typed in a group is in the key echo** (review, 2026-11-05):
     /// `Space a b 3` says `␣ab3`, and `Backspace` takes the 3 back.
     #[test]

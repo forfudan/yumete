@@ -52,6 +52,8 @@ pub(crate) struct KeyTree {
     /// Two spellings that reached one row (`"C-wz"`, `"<space>wz"`): the
     /// one in force, the one it replaced, and the row's node.
     replaced: Vec<(String, String, usize)>,
+    /// The reader's groups with no keys in them, as written.
+    hollow: Vec<String>,
 }
 
 /// **A group in the tree**: a built-in one with the reader's keys over it,
@@ -330,6 +332,14 @@ impl Editor {
         let reached = reached(&tree);
         tree.notes.retain(|(_, n)| reached[*n]);
         tree.replaced.retain(|(_, _, n)| reached[*n]);
+        // A table of the reader's with no keys in it (`{ label = … }` with
+        // no `run`) is said, not dropped without a word (review, 2026-11-05).
+        tree.hollow = (0..tree.nodes.len())
+            .filter(|&n| reached[n])
+            .filter(|&n| tree.nodes[n].group.is_none() && tree.nodes[n].rows.is_empty() && tree.nodes[n].runs.is_empty())
+            .map(|n| path_spelt(&tree.nodes[n].path))
+            .collect();
+        tree.hollow.sort();
         (self.extend, self.expanding_alias, self.replaying_held) = was;
         tree
     }
@@ -650,6 +660,10 @@ impl Editor {
         if !tree.notes.is_empty() {
             let paths: Vec<String> = tree.notes.iter().map(|(path, _)| quoted(path)).collect();
             parts.push(say!("keys.table-takes-a-command", paths.join(", ")));
+        }
+        if !tree.hollow.is_empty() {
+            let paths: Vec<String> = tree.hollow.iter().map(|path| quoted(path)).collect();
+            parts.push(say!("keys.group-has-no-keys", paths.join(", ")));
         }
         for (kept, lost, _) in &tree.replaced {
             parts.push(say!("keys.spelt-twice", quoted(kept), quoted(lost)));

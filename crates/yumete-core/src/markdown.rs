@@ -1717,6 +1717,21 @@ pub mod typst {
                 at += 2;
                 continue;
             }
+            // **A bare `https://…` is a link**, as Typst reads it in writing; its
+            // `//` drew the rest of the line as a comment (review, 2026-11-05).
+            // It runs to a space, less the stop or comma after it.
+            if (at == 0 || !chars[at - 1].is_alphanumeric())
+                && ["https://", "http://"].iter().any(|p| chars[at..].starts_with(&p.chars().collect::<Vec<_>>()))
+            {
+                let mut end = (at..chars.len()).find(|&i| chars[i].is_whitespace()).unwrap_or(chars.len());
+                while end > at && matches!(chars[end - 1], '.' | ',' | ';' | ':' | '!' | '?' | ')' | '。' | '，') {
+                    end -= 1;
+                }
+                push(&mut out, at, end, Kind::Link, construct);
+                construct += 1;
+                at = end;
+                continue;
+            }
             // `// to the end of the line` is a note to oneself.
             if chars[at] == '/' && chars.get(at + 1) == Some(&'/') {
                 push(&mut out, at, chars.len(), Kind::Comment, construct);
@@ -2180,6 +2195,7 @@ mod typst_tests {
                 Kind::Math => '$',
                 Kind::Ref => '@',
                 Kind::Label => '<',
+                Kind::Link => 'L',
                 _ => '?',
             };
             for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
@@ -2380,6 +2396,14 @@ mod typst_tests {
                 assert!(b.start >= a.end || b.end <= a.end, "{all:?}");
             }
         }
+    }
+
+    /// **A bare URL is a link, not a comment from its `//`** (review,
+    /// 2026-11-05).
+    #[test]
+    fn a_bare_url_is_a_link() {
+        assert_eq!(shape("see https://e.com/a. Then"), "    LLLLLLLLLLLLLLL      ");
+        assert_eq!(shape("x // note"), "  %%%%%%%");
     }
 
     /// `#if x [甲] else [乙]`: the head is code and the brackets are writing

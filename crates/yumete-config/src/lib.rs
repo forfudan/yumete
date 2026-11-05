@@ -5752,6 +5752,8 @@ fn read_key_table(
         out: &mut HashMap<String, Vec<String>>,
         labels: &mut HashMap<String, String>,
         shape: &mut yumete_cjk::KeyShape,
+        // Where each run was written, to say which of two spellings won.
+        spelt: &mut HashMap<String, String>,
         problems: &mut Vec<String>,
     ) {
         for (key, value) in table {
@@ -5771,7 +5773,11 @@ fn read_key_table(
                             toml::Value::String(name) => {
                                 labels.insert(path.to_string(), name.clone());
                             }
-                            _ => wrong(problems),
+                            // 草稿
+                            _ => problems.push(said(
+                                format!("[keys.{header}] label 只能是一段文字，跳過了"),
+                                format!("[keys.{header}] label must be text, so it was skipped"),
+                            )),
                         }
                         continue;
                     }
@@ -5828,7 +5834,7 @@ fn read_key_table(
                     if space {
                         shape.in_space_table.insert(run.clone());
                     }
-                    walk(&format!("{header}.{key}"), &run, space, inner, out, labels, shape, problems);
+                    walk(&format!("{header}.{key}"), &run, space, inner, out, labels, shape, spelt, problems);
                     continue;
                 }
                 value => match commands_of(value) {
@@ -5847,6 +5853,16 @@ fn read_key_table(
                     if space {
                         shape.in_space_table.insert(run.clone());
                     }
+                    // **Two spellings of one key** (`"<space>bx"` and
+                    // `[keys.normal.space.b] x`): the later wins, and is said.
+                    let here = format!("[keys.{header}] {key}");
+                    if let Some(was) = spelt.insert(run.clone(), here.clone()) {
+                        // 草稿
+                        problems.push(said(
+                            format!("{here} 與 {was} 是同一個鍵，用的是後寫的 {here}"),
+                            format!("{here} and {was} are one key; the later, {here}, is used"),
+                        ));
+                    }
                     out.insert(run.clone(), commands);
                     shape.order.push(run);
                 }
@@ -5863,7 +5879,7 @@ fn read_key_table(
             }
         }
     }
-    walk(mode, "", false, table, out, labels, shape, problems);
+    walk(mode, "", false, table, out, labels, shape, &mut HashMap::new(), problems);
 }
 
 /// **`[keys.prompt]`, `[keys.picker]` or `[keys.sidebar]`, line by line**
