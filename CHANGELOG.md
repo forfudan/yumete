@@ -7,6 +7,12 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## 0.18.2 · 2026-11-05
+
+### Fixed
+
+- **vim's `C-d` scrolls through every file**: in 0.18.0 and 0.18.1, in a file whose first page holds lines that wrap with an indent (a front matter, for one), it never scrolled, stopped at the same rows or went back to the first line, at a place that changed with the window's size.
+
 ## 0.18.1 · 2026-11-05
 
 ### Fixed

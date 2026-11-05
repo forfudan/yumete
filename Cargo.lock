@@ -1461,7 +1461,7 @@ version = "0.1.0"
 
 [[package]]
 name = "yumete"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "libc",
  "yumete-config",
@@ -1473,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-cjk"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "unicode-segmentation",
  "unicode-width 0.2.0",
@@ -1481,7 +1481,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-config"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "serde",
  "toml",
@@ -1491,7 +1491,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-core"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "chardetng",
  "encoding_rs",
@@ -1532,7 +1532,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-ime"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "yume-core",
  "yumete-cjk",
@@ -1542,7 +1542,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-tables"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "zip",
  "zstd",
@@ -1550,7 +1550,7 @@ dependencies = [
 
 [[package]]
 name = "yumete-tui"
-version = "0.18.1"
+version = "0.18.2"
 dependencies = [
  "libc",
  "ratatui",
