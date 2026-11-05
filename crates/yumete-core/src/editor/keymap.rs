@@ -316,8 +316,11 @@ impl Editor {
                     node.runs.retain(|run, _| !run.starts_with(key.as_str()));
                 }
             }
-            if let Some(name) = took {
-                tree.notes.push(say!("keys.table-takes-a-command", yumete_cjk::actions::spell(&walked), name));
+            if took.is_some() {
+                let path = path_spelt(&walked);
+                if !tree.notes.contains(&path) {
+                    tree.notes.push(path);
+                }
             }
             at = Some(m);
         }
@@ -518,8 +521,15 @@ impl Editor {
 
     /// **What laying the keys found worth saying at start-up**: each table
     /// that took a key from the command it ran.
+    ///
+    /// One line however many (2026-11-05, the wording asked for): the
+    /// whole path of each key, so a group several levels deep reads as
+    /// where it is.
     pub fn key_notes(&self) -> Vec<String> {
-        self.normal_tree.notes.clone()
+        match self.normal_tree.notes.is_empty() {
+            true => Vec::new(),
+            false => vec![say!("keys.table-takes-a-command", self.normal_tree.notes.join(", "))],
+        }
     }
 
     /// Whether the reader's keys are read now: not while a run of keys on
@@ -1141,3 +1151,25 @@ pub(super) fn home_paths(at: &Context) -> std::sync::Arc<Vec<Option<Vec<String>>
     }
     homes
 }
+
+/// A key path as vim writes one: `<Space>b`, `<C-w>s`, `gge`.
+fn path_spelt(keys: &str) -> String {
+    let mut out = String::new();
+    let mut chars = keys.chars();
+    while let Some(c) = chars.next() {
+        let one: String = match c {
+            yumete_cjk::actions::ALT => [c].into_iter().chain(chars.next()).collect(),
+            c => c.to_string(),
+        };
+        let word = match one.as_str() {
+            " " => "Space".to_string(),
+            _ => yumete_cjk::actions::spell(&one).trim().trim_matches(['<', '>']).to_string(),
+        };
+        match word.chars().count() > 1 {
+            true => out.push_str(&format!("<{word}>")),
+            false => out.push_str(&word),
+        }
+    }
+    out
+}
+

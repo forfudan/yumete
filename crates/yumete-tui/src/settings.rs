@@ -888,7 +888,12 @@ mod key_tree_tests {
         assert_eq!(ed.cursor(), 0, "nor moved");
         let notes = ed.key_notes();
         assert_eq!(notes.len(), 1, "{notes:?}");
-        assert!(notes[0].contains("file_picker"), "{notes:?}");
+        assert!(notes[0].contains("<Space>f"), "{notes:?}");
+        // Several, and deeper ones, on one line by their whole path.
+        let ed = laid("[keys.normal.space.f]\nn = \":new\"\n[keys.normal.space.b]\nd = \":buffer-close\"\n");
+        let notes = ed.key_notes();
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].contains("<Space>f") && notes[0].contains("<Space>b"), "{notes:?}");
     }
 
     /// **A run written flat keeps the keys before it**: `"<space>bd"` holds
