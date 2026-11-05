@@ -7,21 +7,7 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
-## Unreleased
-
-### Fixed
-
-- **vim's `C-d` scrolls through every file**: in 0.18.0 and 0.18.1, in a file whose first page holds lines that wrap with an indent (a front matter, for one), it never scrolled, stopped at the same rows or went back to the first line, at a place that changed with the window's size.
-- **A menu of one short row is drawn**: a group holding only `j = ":w"` or `j = "@j"` opened with no menu, since the box was a cell too narrow to place.
-- **A count typed inside a group shows in the key echo**: `Space a b 3` reads `␣ab3`.
-- **Typst: a bare `https://…` in the text is a link**; its `//` drew the rest of the line as a comment.
-- **Typst: a `/* … */` comment is drawn as a comment**, on every line it runs over; its `*` used to set the note bold.
-- **Typst: `#(1 + 2)` and `#{…}` are drawn as code**, as `#set` and `#let` are.
-- **Typst: `_emphasis_` inside `*strong*` takes both styles**, and the other way round.
-- **Typst: `#if`, `#for` and `#while` draw their head as code and their `[…]` as writing**, also when the brackets run over several lines.
-- **Markdown: `$a + b$` and `$$x^2$$` are drawn as maths** when written on one line, as in Typst; `$3 and $5` stays two prices. They export as written, since Markdown's maths is LaTeX and Typst's is not.
-- **Markdown: `<https://…>` and `<mailto:…>` are links**, and open as links.
-- **Markdown: inline HTML tags (`<kbd>`, `<br>`) are drawn set back**, with the text between them as prose; `:export html` keeps them as HTML. A tag names an HTML element, so `Vec<String>` and `a<b and c>d` stay prose.
+## 0.19.0 · 2026-11-05
 
 ### Added
 
@@ -39,6 +25,25 @@ in `docs/development.md` §5.2.
 - **`run`, `label`, `sticky` and `inherit` are the group's own words inside a group's table** (Breaking): a run of keys spelt as one of them is written flat, `"<space>run" = …`.
 - **A group left with no keys leaves its parent's menu**: `no_op` on each of its keys, or on its own key.
 - **A count before a group reaches your key in it** (`3 Space q`), and a digit typed inside a group of yours is a count, which `Backspace` takes back before it goes up a level.
+
+### Fixed
+
+- **A menu of one short row is drawn**: a group holding only `j = ":w"` or `j = "@j"` opened with no menu, since the box was a cell too narrow to place.
+- **A count typed inside a group shows in the key echo**: `Space a b 3` reads `␣ab3`.
+- **Typst: a bare `https://…` in the text is a link**; its `//` drew the rest of the line as a comment.
+- **Typst: a `/* … */` comment is drawn as a comment**, on every line it runs over; its `*` used to set the note bold.
+- **Typst: `#(1 + 2)` and `#{…}` are drawn as code**, as `#set` and `#let` are.
+- **Typst: `_emphasis_` inside `*strong*` takes both styles**, and the other way round.
+- **Typst: `#if`, `#for` and `#while` draw their head as code and their `[…]` as writing**, also when the brackets run over several lines.
+- **Markdown: `$a + b$` and `$$x^2$$` are drawn as maths** when written on one line, as in Typst; `$3 and $5` stays two prices. They export as written, since Markdown's maths is LaTeX and Typst's is not.
+- **Markdown: `<https://…>` and `<mailto:…>` are links**, and open as links.
+- **Markdown: inline HTML tags (`<kbd>`, `<br>`) are drawn set back**, with the text between them as prose; `:export html` keeps them as HTML. A tag names an HTML element, so `Vec<String>` and `a<b and c>d` stay prose.
+
+## 0.18.2 · 2026-11-05
+
+### Fixed
+
+- **vim's `C-d` scrolls through every file**: in 0.18.0 and 0.18.1, in a file whose first page holds lines that wrap with an indent (a front matter, for one), it never scrolled, stopped at the same rows or went back to the first line, at a place that changed with the window's size.
 
 ## 0.18.1 · 2026-11-05
 
