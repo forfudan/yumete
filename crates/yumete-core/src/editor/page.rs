@@ -575,11 +575,14 @@ impl Editor {
     /// Lay a flavour: the config's level and its items.
     pub fn set_flavor(&mut self, flavor: yumete_cjk::Flavor) {
         self.flavor = flavor;
+        // The flavour moves which keys open a group (vim's Space).
+        self.lay_aliases();
     }
 
     /// Move the level and keep the items written by name.
     pub fn set_flavor_level(&mut self, level: yumete_cjk::FlavorLevel) {
         self.flavor.level = level;
+        self.lay_aliases();
     }
 
     /// **Whether one item of the flavour is on** under the keymap in force.
@@ -696,18 +699,9 @@ impl Editor {
             .collect()
     }
 
-    /// The same for select mode's own lines (`[keys.select]`).
-    pub(super) fn select_lines_in_force(&self) -> HashMap<String, Vec<String>> {
-        let own = &self.keymap_user[keymap_index(self.key_preset)];
-        self.user_select
-            .iter()
-            .chain(own.select.iter())
-            .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone()))
-            .collect()
-    }
-
     /// The names the reader gave groups (`label`), this keymap's own over
     /// the shared ones.
+    #[cfg(test)]
     pub(super) fn key_label_for(&self, keys: &str) -> Option<&String> {
         self.keymap_user[keymap_index(self.key_preset)].labels.get(keys).or_else(|| self.key_labels.get(keys))
     }
@@ -716,6 +710,7 @@ impl Editor {
     pub fn set_keymap_labels(&mut self, keymap: yumete_cjk::KeyPreset, labels: HashMap<String, String>) {
         self.keymap_user[keymap_index(keymap)].labels =
             labels.into_iter().map(|(k, v)| (yumete_cjk::actions::written(&k), v)).collect();
+        self.lay_aliases();
     }
 
     /// The names of the reader's own groups (`label` in `[keys.normal.…]`),
@@ -723,6 +718,7 @@ impl Editor {
     pub fn set_key_labels(&mut self, labels: HashMap<String, String>) {
         self.key_labels =
             labels.into_iter().map(|(k, v)| (yumete_cjk::actions::written(&k), v)).collect();
+        self.lay_aliases();
     }
 
     /// Lay a shipped keymap under the reader's aliases (`:keymap`, #428).
@@ -771,18 +767,11 @@ impl Editor {
             .collect();
         // The shared lines, then this keymap's own over them (2026-11-04).
         let own = self.keymap_user[keymap_index(self.key_preset)].clone();
-        let user: Vec<(String, Vec<String>)> = self
-            .user_aliases
-            .iter()
-            .chain(own.normal.iter())
-            .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone()))
-            .collect();
-        self.insert_aliases = self
-            .user_insert
-            .iter()
-            .chain(own.insert.iter())
-            .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone()))
-            .collect();
+        let written = |lines: &HashMap<String, Vec<String>>| -> Vec<(String, Vec<String>)> {
+            lines.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())).collect()
+        };
+        let user: Vec<(String, Vec<String>)> = written(&self.user_aliases).into_iter().chain(written(&own.normal)).collect();
+        self.insert_aliases = written(&self.user_insert).into_iter().chain(written(&own.insert)).collect();
         self.insert_held.clear();
         let mut all = preset.clone();
         all.extend(user.iter().cloned());
@@ -790,40 +779,40 @@ impl Editor {
         // mode they are its own delete and change (`vim_*` in the table).
         // The reader's own lines come after, so an `x` of theirs holds in
         // Visual mode too (found in review, 2026-11-02).
-        let mut select = preset;
+        let mut select_preset = preset.clone();
         for key in self.key_preset.normal_only() {
-            select.remove(&yumete_cjk::actions::written(key));
+            select_preset.remove(&yumete_cjk::actions::written(key));
         }
-        select.extend(user);
-        select.extend(
-            self.user_select
-                .iter()
-                .chain(own.select.iter())
-                .map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())),
-        );
-        let table: Vec<(String, Vec<String>)> =
-            self.user_table.iter().map(|(k, v)| (yumete_cjk::actions::written(k), v.clone())).collect();
-        self.table_aliases = all.clone();
-        self.table_aliases.extend(table.iter().cloned());
-        self.table_select_aliases = select.clone();
-        self.table_select_aliases.extend(table);
+        let select: Vec<(String, Vec<String>)> = user
+            .iter()
+            .cloned()
+            .chain(written(&self.user_select))
+            .chain(written(&own.select))
+            .collect();
+        let table = written(&self.user_table);
+        // The later of two lines for one run wins.
+        let once = |lines: Vec<(String, Vec<String>)>| -> Vec<(String, Vec<String>)> {
+            let mut kept: HashMap<String, Vec<String>> = HashMap::new();
+            for (k, v) in lines {
+                kept.insert(k, v);
+            }
+            kept.into_iter().collect()
+        };
+        let mut labels = self.key_labels.clone();
+        labels.extend(own.labels.clone());
+        self.normal_tree = self.lay_tree(&preset, &once(user.clone()), &labels, false);
+        self.select_tree = self.lay_tree(&select_preset, &once(select.clone()), &labels, true);
+        self.table_tree = self.lay_tree(&preset, &once(user.into_iter().chain(table.iter().cloned()).collect()), &labels, false);
+        self.table_select_tree = self.lay_tree(&select_preset, &once(select.into_iter().chain(table).collect()), &labels, true);
         self.key_aliases = all;
-        self.select_aliases = select;
         self.alias_held.clear();
+        self.node_held = None;
     }
 
-    /// **The bindings in force now**: select mode's while a selection is
-    /// being extended, Normal mode's otherwise.
+    /// **The runs at the top level in force now** (`keymap.rs`): the
+    /// preset's and the reader's that do not walk into a group.
     pub(super) fn aliases(&self) -> &HashMap<String, Vec<String>> {
-        // A table's grid lays `[keys.table]` over either (2026-11-01); asked
-        // only when the reader wrote some, `table_here` being a lookup.
-        let grid = !self.user_table.is_empty() && self.table_here();
-        match (self.extend, grid) {
-            (true, false) => &self.select_aliases,
-            (false, false) => &self.key_aliases,
-            (true, true) => &self.table_select_aliases,
-            (false, true) => &self.table_aliases,
-        }
+        &self.tree().runs
     }
 
     /// Install a table grid's own lines (`[keys.table]`).

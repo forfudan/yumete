@@ -5,7 +5,8 @@
 //! that flavour, asked what each key runs, so a key on a page is a key the
 //! editor has, and a key the flavour adds is on the flavour's page only.
 
-use super::groups::{Context, Group, GROUPS};
+use super::groups::{Context, GROUPS};
+use super::keymap::rank;
 use super::keys::key_internal;
 use super::normal::{Cx, FLAVOR_NORMAL, HELIX_NORMAL, SELECT_NORMAL, VIM_NORMAL};
 use yumete_cjk::actions::NormalCmd;
@@ -40,60 +41,6 @@ pub struct DocKeymap {
     pub select: Vec<DocKey>,
     pub insert: Vec<DocKey>,
     pub menus: Vec<DocKeyMenu>,
-}
-
-/// The command that opens a group, which is how the pages find its keys.
-fn opener(group: &Group) -> Option<NormalCmd> {
-    Some(match group.name {
-        "goto" => NormalCmd::GotoMode,
-        "space" => NormalCmd::SpaceMode,
-        "right_bracket" => NormalCmd::RightBracketMode,
-        "left_bracket" => NormalCmd::LeftBracketMode,
-        "view" => NormalCmd::ViewMode,
-        "match" => NormalCmd::MatchMode,
-        "window" => NormalCmd::WindowMode,
-        "window_new" => NormalCmd::WindowNewMode,
-        "case" => NormalCmd::CaseMode,
-        "conflict" => NormalCmd::ConflictMode,
-        "open" => NormalCmd::OpenRecentMode,
-        "yume" => NormalCmd::YumeMode,
-        "table" => NormalCmd::TableMode,
-        "table_convert" => NormalCmd::TableConvertMode,
-        // `Z` is `z` that stays open, and the three value lists under
-        // `Space z` are one line each on that menu.
-        _ => return None,
-    })
-}
-
-/// The order a page lists keys in: letters as `a A b B`, then digits and
-/// the other characters, then Ctrl, Alt and the named keys.
-fn rank(key: &Key) -> (u8, u32, u8) {
-    match *key {
-        Key::Char(c) if c.is_ascii_alphabetic() => (0, c.to_ascii_lowercase() as u32, c.is_ascii_uppercase() as u8),
-        Key::Char(c) if c.is_ascii_digit() => (1, c as u32, 0),
-        Key::Char(c) => (2, c as u32, 0),
-        Key::Ctrl(c) => (3, c.to_ascii_lowercase() as u32, c.is_ascii_uppercase() as u8),
-        Key::Alt(c) => (4, c.to_ascii_lowercase() as u32, c.is_ascii_uppercase() as u8),
-        named => {
-            let order = [
-                Key::Esc,
-                Key::Enter,
-                Key::Tab,
-                Key::BackTab,
-                Key::Backspace,
-                Key::Delete,
-                Key::Left,
-                Key::Right,
-                Key::Up,
-                Key::Down,
-                Key::Home,
-                Key::End,
-                Key::PageUp,
-                Key::PageDown,
-            ];
-            (5, order.iter().position(|k| *k == named).unwrap_or(order.len()) as u32, 0)
-        }
-    }
 }
 
 impl Editor {
@@ -182,36 +129,18 @@ impl Editor {
     /// level that opens it, or a key in a menu reached already.
     fn menus_for_docs(&self, normal: &[DocKey]) -> Vec<DocKeyMenu> {
         let at = Context { code: true, ..self.group_context() };
-        let mut opened: Vec<Vec<Vec<String>>> = GROUPS
+        let roots: Vec<(Vec<String>, NormalCmd)> = normal
             .iter()
-            .map(|group| {
-                let Some(cmd) = opener(group) else { return Vec::new() };
-                normal.iter().filter(|k| k.run == cmd.name()).map(|k| k.keys.clone()).collect()
-            })
+            .filter_map(|k| NormalCmd::from_name(&k.run).map(|cmd| (k.keys.clone(), cmd)))
             .collect();
-        // A menu opened from a menu: as many rounds as there are levels.
-        for _ in 0..GROUPS.len() {
-            let mut grew = false;
-            for (from, group) in GROUPS.iter().enumerate() {
-                for bind in group.binds().filter(|b| at.reaches(b)) {
-                    let Some(to) = GROUPS.iter().position(|g| opener(g) == Some(bind.run)) else { continue };
-                    for path in opened[from].clone() {
-                        let mut path = path;
-                        path.push(key_internal(bind.key));
-                        if !opened[to].contains(&path) {
-                            opened[to].push(path);
-                            grew = true;
-                        }
-                    }
-                }
-            }
-            if !grew {
-                break;
-            }
-        }
+        let opened = super::keymap::ways_in(&roots, &at);
         let mut out = Vec::new();
         for (group, opened_by) in GROUPS.iter().zip(opened) {
-            if opened_by.is_empty() {
+            // `Z` is `z` that stays open, and the value lists under `Space z`
+            // are one line each on that menu: neither has a menu of its own
+            // on the pages.
+            let own_menu = group.name != "sticky_view" && !group.name.starts_with("yume_");
+            if opened_by.is_empty() || !own_menu {
                 continue;
             }
             let rows = match group.name {

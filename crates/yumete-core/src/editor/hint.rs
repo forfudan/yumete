@@ -464,16 +464,13 @@ impl Editor {
             }));
         }
         // **A group's menu is its own rows** (step 3 of the keymap plan,
-        // `groups.rs`): what a key there does and the line it shows are
-        // written once, side by side.
-        if self.pending == Pending::None {
-            if let Some((title, rows)) = self.held_menu() {
-                return Some(Hint::Keys(title, rows));
-            }
-        }
-        if let Some(group) = self.pending.group() {
-            let (title, rows) = self.group_menu(group);
+        // `groups.rs`), with the reader's keys laid over them, read off the
+        // same key tree the keys run on (`keymap.rs`).
+        if let Some((title, rows)) = self.tree_menu() {
             return Some(Hint::Keys(title, rows));
+        }
+        if self.pending.group().is_some() {
+            return None;
         }
         let keys = match self.pending {
             // 撤銷已經斷了，剩下那個 `u` 吞不吞都行——没什麽要提示的。

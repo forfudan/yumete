@@ -145,8 +145,9 @@ pub(super) struct Group {
     pub pending: Pending,
     /// The menu's title.
     pub title: &'static str,
-    /// The keys that open it, in a binding's spelling (`g`, `" t"`).
-    pub path: &'static str,
+    /// The command that opens it: every key bound to it is a way in, found
+    /// by walking the key tree (`keymap.rs`), never spelled here.
+    pub opener: NormalCmd,
     pub rows: &'static [Row],
     pub unknown: Unknown,
     /// Stays open until `Esc` (helix's `Z`).
@@ -254,7 +255,7 @@ impl Group {
 /// **What a binding does, in a menu line**: a named command's description,
 /// a command line or a run of keys as written, a list's parts in order.
 /// `None` for `no_op`, which leaves the menu.
-fn describe(commands: &[String]) -> Option<String> {
+pub(super) fn describe(commands: &[String]) -> Option<String> {
     if commands.iter().all(|one| one == NormalCmd::NoOp.name()) {
         return None;
     }
@@ -271,7 +272,7 @@ fn describe(commands: &[String]) -> Option<String> {
 }
 
 /// One key in the internal spelling (`d`, Alt and a letter), as a [`Key`].
-fn key_of(next: &str) -> Key {
+pub(super) fn key_of(next: &str) -> Key {
     let mut chars = next.chars();
     match (chars.next(), chars.next()) {
         (Some(yumete_cjk::actions::ALT), Some(c)) => Key::Alt(c),
@@ -281,7 +282,7 @@ fn key_of(next: &str) -> Key {
 }
 
 /// A key as a menu writes it: `␣` for the space bar, `⌫` for Backspace.
-fn key_label(key: Key) -> String {
+pub(super) fn key_label(key: Key) -> String {
     match key {
         Key::Char(c) => Editor::key_name(c).into_owned(),
         Key::Backspace => "⌫".to_string(),
@@ -399,6 +400,12 @@ impl Pending {
     }
 }
 
+/// **The group `cmd` opens**, when it opens one: the edges of the key tree
+/// (`keymap.rs`), wherever the command is bound.
+pub(super) fn opens(cmd: NormalCmd) -> Option<&'static Group> {
+    GROUPS.iter().copied().find(|group| group.opener == cmd)
+}
+
 /// Every group, for the docs and the tests.
 pub(super) const GROUPS: &[&Group] = &[
     &SPACE,
@@ -430,7 +437,7 @@ impl Editor {
     /// The context a group's own rows are read in: helix's for its sticky
     /// view, which vim has only from helix (`helix_keys_under_vim`), so
     /// `j` `k` scroll there under both keymaps (decided 2026-11-03).
-    fn context_in(&self, group: &Group) -> Context {
+    pub(super) fn context_in(&self, group: &Group) -> Context {
         let at = self.group_context();
         match group.name == STICKY_VIEW.name {
             true => Context { vim: false, ..at },
@@ -560,99 +567,6 @@ impl Editor {
         }
     }
 
-    /// **The menu of a run of keys the reader's bindings are holding**
-    /// (2026-10-31, step 5 of the keymap plan): their own keys that may come
-    /// next, and when the run is the way into one of the groups (`Space`, once
-    /// `[keys.normal.space]` adds a key to it), that group's keys besides.
-    /// Titled with the name the reader gave it (`label`), the group's, or the
-    /// keys themselves. `None` when the run is the vim preset's own (`Z` of
-    /// `ZZ`), which never had a menu.
-    pub(super) fn held_menu(&self) -> Option<(String, KeyRows)> {
-        let held = self.alias_held.as_str();
-        if held.is_empty() || self.mode != Mode::Normal {
-            return None;
-        }
-        let mut lines = self.normal_lines_in_force();
-        if self.extend {
-            lines.extend(self.select_lines_in_force());
-        }
-        let mine: Vec<(String, &Vec<String>)> = lines.iter().map(|(k, v)| (k.clone(), v)).collect();
-        let group = GROUPS.iter().find(|g| g.path == held).copied();
-        let at = self.group_context();
-        // The reader's keys after the run: each the command it runs, or the
-        // name of the group it opens.
-        let mut next_keys: Vec<(String, Option<String>)> = Vec::new();
-        for (left, commands) in &mine {
-            let Some(rest) = left.strip_prefix(held).filter(|r| !r.is_empty()) else { continue };
-            let next: String = match rest.starts_with(yumete_cjk::actions::ALT) {
-                true => rest.chars().take(2).collect(),
-                false => rest.chars().take(1).collect(),
-            };
-            let exact = rest.len() == next.len();
-            let opens = format!("{held}{next}");
-            let said = match exact {
-                true => describe(commands),
-                false => match self.key_label_for(&opens) {
-                    Some(label) => Some(label.clone()),
-                    // A default group's key with the reader's keys under it
-                    // keeps its own line.
-                    None if group.is_some_and(|g| g.binds().any(|b| super::keys::key_internal(b.key) == next)) => continue,
-                    None => Some("…".to_string()),
-                },
-            };
-            match next_keys.iter_mut().find(|(n, _)| *n == next) {
-                Some(row) if exact => row.1 = said,
-                Some(_) => {}
-                None => next_keys.push((next, said)),
-            }
-        }
-        next_keys.sort_by(|a, b| a.0.cmp(&b.0));
-        let mut rows: KeyRows = Vec::new();
-        if let Some(group) = group {
-            let taken = |key: Key| next_keys.iter().any(|(n, _)| *n == super::keys::key_internal(key));
-            for (keys, says) in group.menu_without(&at, taken) {
-                rows.push((keys.into(), crate::messages::say(says, &[])));
-            }
-        }
-        for (next, said) in next_keys {
-            let Some(said) = said else { continue };
-            rows.push((key_label(key_of(&next)).into(), said));
-        }
-        if rows.is_empty() {
-            return None;
-        }
-        let title = match (self.key_label_for(held), group) {
-            (Some(label), _) => label.clone(),
-            (None, Some(group)) => crate::messages::say(group.title, &[]),
-            (None, None) => yumete_cjk::actions::spell(held),
-        };
-        Some((title, rows))
-    }
-
-    /// **The which-key menu of the group this is waiting in.**
-    pub(super) fn group_menu(&self, group: &'static Group) -> (String, KeyRows) {
-        let rows = group
-            .menu(&self.context_in(group))
-            .into_iter()
-            .map(|(keys, says)| (keys.into(), crate::messages::say(says, &[])))
-            .collect();
-        // The Space menu is titled by its key, and under vim that may be `\`.
-        let title = match (group.name, self.space_sign()) {
-            ("space", "\\") => "\\".to_string(),
-            _ => crate::messages::say(group.title, &[]),
-        };
-        (title, rows)
-    }
-
-    /// **The key that opens the Space menu**, as a sign writes it: `␣`, or
-    /// `\` under vim while the flavour's `vim_space_menu` leaves Space to vim.
-    pub(super) fn space_sign(&self) -> &'static str {
-        match self.vim_keymap() && !self.flavor_on(FlavorItem::VimSpaceMenu) {
-            true => "\\",
-            false => "␣",
-        }
-    }
-
     /// The keys `Space t` offers given what the cursor is standing in and
     /// whether a table has the window, as (keys, message).
     pub(super) fn table_keys(inside: Option<Bounds>, pane: bool) -> Vec<(String, &'static str)> {
@@ -710,17 +624,6 @@ impl Only {
     }
 }
 
-/// The keys that open a group under a preset, one per keypress. vim's `m`
-/// sets a mark, so the match group has no key there; its case group is
-/// `` g` ``.
-pub(super) fn group_opened_by(group: &Group, vim: bool) -> Option<Vec<String>> {
-    match (vim, group.name) {
-        (true, "match") => None,
-        (true, "case") => Some(vec!["g".to_string(), "`".to_string()]),
-        _ => Some(group.path.chars().map(|c| c.to_string()).collect()),
-    }
-}
-
 /// Whether `bind`'s key reaches it in some place where its row applies: in
 /// Select mode, on a vertical page, in code, by a pane, in a table.
 fn answers_somewhere(group: &Group, bind: &'static Bind, base: &Context) -> bool {
@@ -767,6 +670,8 @@ impl Editor {
             };
             Context { vim, flavor: flavor.mask(keymap), ..Context::default() }
         };
+        let homes = [super::keymap::home_paths(&factory(false)), super::keymap::home_paths(&factory(true))];
+        let vim_runs = super::keymap::KeyTree::of_preset(yumete_cjk::KeyPreset::Vim);
         let mut out = Vec::new();
         for action in yumete_cjk::actions::ALL {
             if action.how != yumete_cjk::actions::How::Normal {
@@ -831,23 +736,19 @@ impl Editor {
                     vim.push(one(*key));
                 }
             }
-            for group in GROUPS {
+            for (place, group) in GROUPS.iter().enumerate() {
                 // Keys off the menu too (`z j`, the sort keys a column
                 // number comes before): a key the editor has is listed.
                 for bind in group.binds().filter(|b| b.run.name() == name) {
                     for (is_vim, keys) in [(false, &mut helix), (true, &mut vim)] {
-                        // vim's sticky `Z` is helix's group, read as helix's
-                        // (and there only while helix's keys are lent to vim).
+                        // vim's sticky `Z` is helix's group, read as helix's.
                         let sticky = group.name == STICKY_VIEW.name;
-                        if sticky && is_vim && !factory(true).has(Some(FlavorItem::HelixKeysUnderVim)) {
-                            continue;
-                        }
-                        // The case menu's opener is the flavour's.
-                        if group.name == "case" && !factory(is_vim).has(Some(FlavorItem::CaseMenu)) {
-                            continue;
-                        }
                         let at = Context { vim: is_vim && !sticky, ..factory(is_vim) };
-                        let Some(mut path) = group_opened_by(group, is_vim)
+                        // The way in is the key tree's: none for a group no
+                        // key opens (vim's `m` sets a mark), `\` for Space
+                        // under vim with `vim_space_menu` off.
+                        let Some(mut path) = homes[is_vim as usize][place]
+                            .clone()
                             .filter(|_| bind.when.under(at.vim) && at.has(bind.flavor))
                         else {
                             continue;
@@ -860,14 +761,9 @@ impl Editor {
                         if !answers_somewhere(group, bind, &at) {
                             continue;
                         }
-                        // With `vim_space_menu` off, the menu is on `\`.
-                        if is_vim && path.first().is_some_and(|k| k == " ") && !factory(true).has(Some(FlavorItem::VimSpaceMenu)) {
-                            path[0] = "\\".to_string();
-                        }
                         path.push(super::keys::key_internal(bind.key));
-                        // …nor a path the vim preset plays as something else
-                        // (`[p` pastes there).
-                        if is_vim && preset_took_path(&path.concat()) {
+                        // …nor a path a run of the vim preset's takes.
+                        if is_vim && vim_runs.takes(&path.concat()) {
                             continue;
                         }
                         if !keys.contains(&path) {
@@ -926,7 +822,7 @@ pub(super) static GOTO: Group = Group {
     name: "goto",
     pending: Pending::Goto,
     title: "hint.goto.title",
-    path: "g",
+    opener: NormalCmd::GotoMode,
     rows: &[
         // Select mode's own (helix's select keymap): the same places,
         // reached by extending.
@@ -1035,7 +931,7 @@ pub(super) static SPACE: Group = Group {
     name: "space",
     pending: Pending::Space,
     title: "hint.space.title",
-    path: " ",
+    opener: NormalCmd::SpaceMode,
     rows: &[
         ch('f', NormalCmd::FilePicker, "hint.space.open-file"),
         ch('F', NormalCmd::FilePickerInCurrentDirectory, "hint.space.open-file-here"),
@@ -1099,7 +995,7 @@ pub(super) static RIGHT_BRACKET: Group = Group {
     name: "right_bracket",
     pending: Pending::Hop { forward: true },
     title: "hint.hop.next",
-    path: "]",
+    opener: NormalCmd::RightBracketMode,
     rows: &[
         // vim's `]m` `[m` are its member motions: under vim the conflicts
         // are on `Space m` only.
@@ -1142,7 +1038,7 @@ pub(super) static LEFT_BRACKET: Group = Group {
     name: "left_bracket",
     pending: Pending::Hop { forward: false },
     title: "hint.hop.previous",
-    path: "[",
+    opener: NormalCmd::LeftBracketMode,
     rows: &[
         ch('m', NormalCmd::GotoPrevConflict, "hint.hop.conflict").flavor(FlavorItem::MergeConflicts).when(Only::Helix),
         ch('g', NormalCmd::GotoPrevChange, "hint.hop.change-ends").flavor(FlavorItem::HelixKeysUnderVim),
@@ -1258,7 +1154,7 @@ pub(super) static VIEW: Group = Group {
     name: "view",
     pending: Pending::Aim,
     title: "hint.aim.title",
-    path: "z",
+    opener: NormalCmd::ViewMode,
     rows: VIEW_ROWS,
     unknown: Unknown::NoSuchCombination,
     sticky: false,
@@ -1272,7 +1168,7 @@ pub(super) static STICKY_VIEW: Group = Group {
     name: "sticky_view",
     pending: Pending::AimStuck,
     title: "hint.aim.title",
-    path: "Z",
+    opener: NormalCmd::StickyViewMode,
     rows: VIEW_ROWS,
     unknown: Unknown::NoSuchCombination,
     sticky: true,
@@ -1287,7 +1183,7 @@ pub(super) static MATCH: Group = Group {
     name: "match",
     pending: Pending::Match,
     title: "hint.match.title",
-    path: "m",
+    opener: NormalCmd::MatchMode,
     rows: &[
         ch('m', NormalCmd::MatchBrackets, "hint.match.pair"),
         ch('i', NormalCmd::SelectTextobjectInner, "hint.match.inside"),
@@ -1313,7 +1209,7 @@ pub(super) static WINDOW: Group = Group {
     name: "window",
     pending: Pending::Region,
     title: "hint.region.title",
-    path: "\u{17}",
+    opener: NormalCmd::WindowMode,
     rows: &[
         ch('w', NormalCmd::RotateView, "hint.region.next"),
         // vim's (2026-11-03, measured in nvim): `W` `t` `b` `p` go to a
@@ -1380,7 +1276,7 @@ pub(super) static WINDOW_NEW: Group = Group {
     name: "window_new",
     pending: Pending::RegionNew,
     title: "hint.region.new",
-    path: "\u{17}n",
+    opener: NormalCmd::WindowNewMode,
     rows: &[
         ch('s', NormalCmd::HsplitNew, "hint.region.new-below"),
         ch('v', NormalCmd::VsplitNew, "hint.region.new-beside"),
@@ -1402,7 +1298,7 @@ pub(super) static CASE: Group = Group {
     name: "case",
     pending: Pending::Case,
     title: "hint.case.title",
-    path: "`",
+    opener: NormalCmd::CaseMode,
     rows: &[
         ch('l', NormalCmd::SwitchToLowercase, "hint.case.lower"),
         ch('u', NormalCmd::SwitchToUppercase, "hint.case.upper"),
@@ -1430,7 +1326,7 @@ pub(super) static CONFLICT: Group = Group {
     name: "conflict",
     pending: Pending::Conflict,
     title: "hint.conflict.title",
-    path: " m",
+    opener: NormalCmd::ConflictMode,
     rows: &[
         ch('o', NormalCmd::ConflictKeepOurs, "hint.conflict.ours"),
         ch('t', NormalCmd::ConflictKeepTheirs, "hint.conflict.theirs"),
@@ -1453,7 +1349,7 @@ pub(super) static OPEN: Group = Group {
     name: "open",
     pending: Pending::Open,
     title: "hint.open.title",
-    path: " o",
+    opener: NormalCmd::OpenRecentMode,
     rows: &[
         ch('f', NormalCmd::RecentFilePicker, "hint.open.recent-files"),
         ch('g', NormalCmd::GlobalRecentFilePicker, "hint.open.recent-files-global"),
@@ -1486,7 +1382,7 @@ pub(super) static YUME: Group = Group {
     name: "yume",
     pending: Pending::Yume,
     title: "hint.yume.title",
-    path: " z",
+    opener: NormalCmd::YumeMode,
     rows: &[
         ch('z', NormalCmd::YumeToggle, "hint.yume.toggle"),
         ch('m', NormalCmd::YumeCommitMode, "hint.yume.commit"),
@@ -1523,7 +1419,7 @@ pub(super) static YUME_COMMIT: Group = Group {
     name: "yume_commit",
     pending: Pending::YumeValue('m'),
     title: "hint.yume.commit",
-    path: " zm",
+    opener: NormalCmd::YumeCommitMode,
     rows: &[
         ch('0', NormalCmd::YumeCommitDefault, "hint.yume.commit-default"),
         ch('d', NormalCmd::YumeCommitDelayed, "hint.yume.commit-delayed"),
@@ -1541,7 +1437,7 @@ pub(super) static YUME_PANEL: Group = Group {
     name: "yume_panel",
     pending: Pending::YumeValue('p'),
     title: "hint.yume.panel",
-    path: " zp",
+    opener: NormalCmd::YumePanelMode,
     rows: &[
         ch('b', NormalCmd::YumePanelBox, "hint.yume.panel-box"),
         ch('m', NormalCmd::YumePanelBottom, "hint.yume.panel-bottom"),
@@ -1558,7 +1454,7 @@ pub(super) static YUME_PREEDIT: Group = Group {
     name: "yume_preedit",
     pending: Pending::YumeValue('e'),
     title: "hint.yume.preedit",
-    path: " ze",
+    opener: NormalCmd::YumePreeditMode,
     rows: &[
         ch('o', NormalCmd::YumePreeditOff, "hint.yume.preedit-off"),
         ch('c', NormalCmd::YumePreeditComposition, "hint.yume.preedit-composition"),
@@ -1575,7 +1471,7 @@ pub(super) static YUME_CHARSET: Group = Group {
     name: "yume_charset",
     pending: Pending::YumeValue('0'),
     title: "hint.yume.charset",
-    path: " z0",
+    opener: NormalCmd::YumeCharsetMode,
     rows: &[
         ch('a', NormalCmd::YumeCharsetAll, "ime.charset.all"),
         ch('c', NormalCmd::YumeCharsetCommon, "ime.charset.common"),
@@ -1593,7 +1489,7 @@ pub(super) static YUME_SORT: Group = Group {
     name: "yume_sort",
     pending: Pending::YumeValue('s'),
     title: "hint.yume.sort",
-    path: " zs",
+    opener: NormalCmd::YumeSortMode,
     rows: &[
         ch('o', NormalCmd::YumeSortOriginal, "ime.sort.original"),
         ch('c', NormalCmd::YumeSortCommon, "ime.sort.common"),
@@ -1612,7 +1508,7 @@ pub(super) static YUME_LANES: Group = Group {
     name: "yume_lanes",
     pending: Pending::YumeValue('g'),
     title: "hint.yume.lanes",
-    path: " zg",
+    opener: NormalCmd::YumeLanesMode,
     rows: &[
         ch('j', NormalCmd::YumeLaneTonggui, "ime.lane.tonggui"),
         ch('f', NormalCmd::YumeLaneTongfan, "ime.lane.tongfan"),
@@ -1631,7 +1527,7 @@ pub(super) static YUME_BUILTIN: Group = Group {
     name: "yume_builtin",
     pending: Pending::YumeValue('b'),
     title: "hint.yume.builtin",
-    path: " zb",
+    opener: NormalCmd::YumeBuiltinMode,
     rows: &[
         ch('p', NormalCmd::YumeBuiltinPinyin, "cmd.schemes.pinyin"),
         ch('l', NormalCmd::YumeBuiltinLingming, "cmd.schemes.lingming"),
@@ -1668,7 +1564,7 @@ pub(super) static TABLE: Group = Group {
     name: "table",
     pending: Pending::Table,
     title: "hint.table.title",
-    path: " t",
+    opener: NormalCmd::TableMode,
     rows: &[
         ch('o', NormalCmd::TableSourceView, "hint.table.back-to-prose"),
         ch('b', NormalCmd::TableBasicView, "hint.table.operate-it"),
@@ -1747,7 +1643,7 @@ pub(super) static TABLE_CONVERT: Group = Group {
     name: "table_convert",
     pending: Pending::TableConvert,
     title: "hint.table.convert",
-    path: " tx",
+    opener: NormalCmd::TableConvertMode,
     rows: &[
         ch('p', NormalCmd::ConvertTableToPipe, "hint.table.convert-pipe"),
         ch('P', NormalCmd::PasteTableAsPipe, "hint.table.convert-pipe"),
@@ -1780,15 +1676,6 @@ impl Editor {
         }
         false
     }
-}
-
-/// Whether the vim preset plays `path` (keys in the internal spelling) as
-/// something of its own, so a group row reached by those keys is not.
-pub(super) fn preset_took_path(path: &str) -> bool {
-    yumete_cjk::KeyPreset::Vim
-        .table()
-        .iter()
-        .any(|(k, _)| yumete_cjk::actions::written(k) == path)
 }
 
 #[cfg(test)]

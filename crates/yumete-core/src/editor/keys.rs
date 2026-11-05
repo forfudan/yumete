@@ -1765,6 +1765,10 @@ impl Editor {
     /// and as itself otherwise.
     fn binding_fan(&self, key: Key) -> Fan {
         let raw = Fan::Key(self.pending, key);
+        // A key of the reader's in a group (`keymap.rs`).
+        if self.pending != Pending::None && self.node_takes(key) {
+            return Fan::Once;
+        }
         if self.pending != Pending::None || self.expanding_alias || self.aliases().is_empty() {
             return raw;
         }
@@ -1944,7 +1948,7 @@ impl Editor {
     /// **Keys the reader typed and a binding held**, played as typed: the
     /// flavour's gates apply to them (vim's `Zj` with the flavour off is
     /// vim's beep, not helix's sticky view; found 2026-11-03).
-    fn play_held(&mut self, keys: &str) {
+    pub(super) fn play_held(&mut self, keys: &str) {
         let outer = std::mem::replace(&mut self.replaying_held, true);
         self.play_keys(keys);
         self.replaying_held = outer;
@@ -2007,7 +2011,7 @@ impl Editor {
     ///
     /// vim multiplies the two — `2d3w` is six words — and one of them is
     /// almost always absent, so this is the whole of that rule.
-    fn settle_alias_count(&mut self) {
+    pub(super) fn settle_alias_count(&mut self) {
         let inside = self.alias_count.take();
         self.count = match (self.count.take(), inside) {
             (Some(before), Some(after)) => Some(before.saturating_mul(after)),
@@ -2026,10 +2030,10 @@ impl Editor {
         if self.pending == Pending::None && !self.jumping() {
             self.motion_extend = None;
         }
-        // **A group's key**: the group's own rows say what it runs (step 3
-        // of the keymap plan; `groups.rs`).
-        if let Some(group) = self.pending.group() {
-            self.on_group_key(group, key, &typed_before, continuing_zong);
+        // **A group's key**: the reader's keys laid over the group, then its
+        // own rows (`keymap.rs`, `groups.rs`).
+        if self.pending.group().is_some() {
+            self.on_node_key(key, &typed_before, continuing_zong);
             return;
         }
         match self.pending {
@@ -2278,13 +2282,18 @@ impl Editor {
                             self.no_such_combination("Z", key);
                             return;
                         }
-                        // What was held is pressed for real, and the digits
-                        // typed after it belong to whatever follows them.
-                        self.settle_alias_count();
+                        // What was held acts first: the reader's binding for
+                        // the longest start of it, else the keys pressed for
+                        // real; the digits typed after it belong to whatever
+                        // follows them.
                         if held.is_empty() {
+                            self.settle_alias_count();
                             key
                         } else {
-                            self.play_held(&held);
+                            if !self.let_go_of_the_root(&held) {
+                                self.settle_alias_count();
+                                self.play_held(&held);
+                            }
                             // The key that did not finish one reaches the
                             // cursors it reaches alone (it came in once).
                             let waiting = self.pending;
@@ -2400,6 +2409,7 @@ impl Editor {
         if let Some(run) = self.normal_command_for(&cx).and_then(super::normal::normal_command) {
             self.before_a_motion(run.0);
             (run.1)(self, cx);
+            self.note_the_group_count(operator_count);
         }
         // Warning: **An unbound key does nothing** (2026-10-08 定). A phrasebook here
         // once answered 「`$` is `gl` here」; that guesses what the person meant,

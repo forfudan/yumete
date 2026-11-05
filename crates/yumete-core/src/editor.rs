@@ -2628,8 +2628,6 @@ pub struct Editor {
     /// Normal-mode bindings from the config (Feature #23): a run of keys,
     /// in the internal spelling, and the commands it runs.
     key_aliases: HashMap<String, Vec<String>>,
-    /// The same with `[keys.select]` laid over it, read in select mode.
-    select_aliases: HashMap<String, Vec<String>>,
     /// The layers `key_aliases` is laid from (#428): the reader's own lines
     /// (the preset's are under them), and select mode's.
     user_aliases: HashMap<String, Vec<String>>,
@@ -2640,11 +2638,8 @@ pub struct Editor {
     keymap_user: [KeymapLines; 2],
     /// The shared `[keys.insert]`, before the keymap's own are laid on it.
     user_insert: HashMap<String, Vec<String>>,
-    /// A table grid's own lines (`[keys.table]`), and the two maps they are
-    /// laid into (Normal's and select mode's, with them on top).
+    /// A table grid's own lines (`[keys.table]`), laid into the table trees.
     user_table: HashMap<String, Vec<String>>,
-    table_aliases: HashMap<String, Vec<String>>,
-    table_select_aliases: HashMap<String, Vec<String>>,
     /// The names the reader gave their own groups, by the keys that open
     /// them (`label` in a `[keys.normal.…]` table), internal spelling.
     key_labels: HashMap<String, String>,
@@ -2664,6 +2659,17 @@ pub struct Editor {
     which_wrap: String,
     /// The keys typed so far of an alias that may still be completed (#428).
     alias_held: String,
+    /// **The key trees** (`keymap.rs`, 2026-11-05): Normal mode's, select
+    /// mode's, and each with `[keys.table]` over it, laid with the bindings.
+    normal_tree: keymap::KeyTree,
+    select_tree: keymap::KeyTree,
+    table_tree: keymap::KeyTree,
+    table_select_tree: keymap::KeyTree,
+    /// The keys of a run of the reader's held inside a group, and the group.
+    node_held: Option<(Pending, String)>,
+    /// The count typed before the group open now, for the reader's keys in
+    /// it (`3 Space b d`): the group's own rows read theirs as they always did.
+    group_count: Option<usize>,
     /// **The digits typed *inside* a held sequence** (2026-09-18).
     ///
     /// vim writes `d10w`, and those digits are not part of the alias's name —
@@ -4351,14 +4357,11 @@ impl Editor {
             last_search: String::new(),
             search_forward: true,
             key_aliases: HashMap::new(),
-            select_aliases: HashMap::new(),
             user_aliases: HashMap::new(),
             user_select: HashMap::new(),
             keymap_user: Default::default(),
             user_insert: HashMap::new(),
             user_table: HashMap::new(),
-            table_aliases: HashMap::new(),
-            table_select_aliases: HashMap::new(),
             key_labels: HashMap::new(),
             insert_aliases: HashMap::new(),
             insert_held: String::new(),
@@ -4367,6 +4370,12 @@ impl Editor {
             key_preset: yumete_cjk::KeyPreset::Helix,
             which_wrap: String::new(),
             alias_held: String::new(),
+            normal_tree: Default::default(),
+            select_tree: Default::default(),
+            table_tree: Default::default(),
+            table_select_tree: Default::default(),
+            node_held: None,
+            group_count: None,
             alias_count: None,
             expanding_alias: false,
             replaying_held: false,
@@ -5970,6 +5979,7 @@ mod hint;
 mod info;
 mod jumps;
 mod seek;
+mod keymap;
 mod keys;
 mod labels;
 mod links;

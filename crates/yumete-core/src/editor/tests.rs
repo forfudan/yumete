@@ -37400,3 +37400,93 @@ fn vims_shift_and_tab_write_tabs_when_tab_types_tabs() {
     press(&mut ed, ">");
     assert_eq!(ed.current_buffer().text(), "      x\n", "helix untouched");
 }
+
+/// The reader's lines, as a config gives them.
+fn lines_of(pairs: &[(&str, &str)]) -> HashMap<String, Vec<String>> {
+    pairs.iter().map(|(k, v)| (k.to_string(), vec![v.to_string()])).collect()
+}
+
+/// **A group is one node however it is opened** (2026-11-05, the key
+/// tree): a key under `Space w` is `C-w`'s too, and `Space w` still lists
+/// `C-w`'s own keys beside it.
+#[test]
+fn space_w_and_ctrl_w_are_one_group() {
+    let mut ed = typed("one\n");
+    ed.set_key_aliases(lines_of(&[("<space>wz", "select_all")]));
+    press(&mut ed, " w");
+    let (_, rows) = ed.pending_menu().expect("the window menu");
+    let keys: Vec<&str> = rows.iter().map(|(k, _)| k.as_ref()).collect();
+    assert!(keys.contains(&"z") && keys.contains(&"v") && keys.contains(&"q"), "{keys:?}");
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    press(&mut ed, "z");
+    assert_eq!(ed.selection(), (0, 4), "C-w z is the same key");
+}
+
+/// **A group moved to another key keeps the reader's keys** (2026-11-05):
+/// `;` opens Space with `q` in it, by the run `"@ "` or by `space_mode`.
+#[test]
+fn a_moved_group_keeps_the_readers_keys() {
+    for opener in ["@ ", "space_mode"] {
+        let mut ed = typed("one\n");
+        ed.set_key_aliases(lines_of(&[(";", opener), ("<space>q", "select_all")]));
+        press(&mut ed, ";");
+        let (_, rows) = ed.pending_menu().expect("the Space menu on ;");
+        assert!(rows.iter().any(|(k, _)| k == "q"), "{opener}: {rows:?}");
+        press(&mut ed, "q");
+        assert_eq!(ed.selection(), (0, 4), "{opener}: ; q is Space q");
+    }
+}
+
+/// **Under vim with Space moving right, `\` is the Space group, the
+/// reader's keys in it** (2026-11-05): `[keys.normal.space]` names the
+/// group, and Space itself moves without drawing a menu.
+#[test]
+fn backslash_reaches_the_readers_space_keys() {
+    let mut ed = typed_vim("一二\n");
+    ed.set_flavor_level(yumete_cjk::FlavorLevel::Off);
+    ed.set_key_aliases(lines_of(&[("<space>b", "select_all")]));
+    press(&mut ed, " ");
+    assert_eq!(ed.sel.head(), 1, "Space moves right");
+    assert!(ed.pending_menu().is_none(), "and draws no menu");
+    press(&mut ed, "\\");
+    let (title, rows) = ed.pending_menu().expect("the menu on \\");
+    assert_eq!(title, "\\");
+    assert!(rows.iter().any(|(k, _)| k == "b"), "{rows:?}");
+    press(&mut ed, "b");
+    let mut all = typed_vim("一二\n");
+    all.set_key_aliases(lines_of(&[("Q", "select_all")]));
+    press(&mut all, "Q");
+    assert_eq!(ed.selection(), all.selection(), "\\ b is the reader's");
+}
+
+/// **A count before a group reaches the reader's key in it**, and a key
+/// that does not go on with a run held there lets the reader's own key for
+/// what was held act first (2026-11-05).
+#[test]
+fn a_held_run_in_a_group_lets_the_readers_prefix_act() {
+    let mut ed = typed("abcdef\n");
+    ed.set_key_aliases(lines_of(&[("<space>q", "move_char_right")]));
+    press(&mut ed, "3 q");
+    assert_eq!(ed.cursor(), 3, "3 Space q");
+
+    let mut ed = typed("abcdef\n");
+    ed.set_key_aliases(lines_of(&[("<space>b", "move_char_right"), ("<space>bd", "select_all")]));
+    press(&mut ed, " bl");
+    assert_eq!(ed.cursor(), 2, "Space b was the reader's, then l");
+    press(&mut ed, " bd");
+    assert_eq!(ed.selection(), (0, 7), "Space b d");
+}
+
+/// **A run four keys deep keeps the keys before it** (2026-11-05):
+/// `gggg` goes to the last line, and `gg` then a key that does not go on
+/// is still the first line.
+#[test]
+fn a_run_four_keys_deep() {
+    let mut ed = typed("a\nb\nc\n");
+    ed.set_key_aliases(lines_of(&[("gggg", "goto_last_line")]));
+    press(&mut ed, "gggg");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 2, "gggg");
+    press(&mut ed, "ggj");
+    assert_eq!(ed.current_buffer().rope().char_to_line(ed.cursor()), 1, "gg, then j");
+}

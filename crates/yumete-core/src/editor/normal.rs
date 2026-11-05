@@ -760,6 +760,7 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
     // A group's select-mode rows hold only while extending; their command
     // is there to be found either way.
     let selecting = super::groups::Context { extend: true, ..*at };
+    let vim_runs = super::keymap::KeyTree::of_preset(yumete_cjk::KeyPreset::Vim);
     [*at, selecting].iter().find_map(|at| {
         super::groups::GROUPS.iter().find_map(|group| {
             group
@@ -772,9 +773,9 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
                         // shadows; nor keys the vim preset plays itself.
                         && group.answers_with(bind, at)
                         && !(at.vim
-                            && super::groups::group_opened_by(group, true).is_some_and(|path| {
+                            && home_of(group, at).is_some_and(|path| {
                                 let keys = format!("{}{}", path.concat(), super::keys::key_internal(bind.key));
-                                super::groups::preset_took_path(&keys)
+                                vim_runs.takes(&keys)
                             }))
                 })
                 .map(|bind| (group.pending, bind.key))
@@ -782,11 +783,49 @@ pub(super) fn place_of(name: &str, at: &super::groups::Context) -> Option<(Pendi
     })
 }
 
+/// The keys that open `group` under `at`'s keymap and flavour, by the key
+/// tree; helix's at the factory flavour for a group the keymap has no key
+/// for, as a command's place is still told by its group.
+fn home_of(group: &super::groups::Group, at: &super::groups::Context) -> Option<Vec<String>> {
+    let place = super::groups::GROUPS.iter().position(|g| std::ptr::eq(*g, group))?;
+    super::keymap::home_paths(at)[place].clone().or_else(|| {
+        let helix = super::groups::Context::for_docs();
+        super::keymap::home_paths(&helix)[place].clone()
+    })
+}
+
+/// **The command `key` runs at the top level**, by the default keymap: the
+/// flavour's key when its item is on, then the vim preset's own entry when
+/// it has one whose condition `holds`, helix's otherwise. The key tree asks
+/// it which keys open a group (`keymap.rs`), with every condition holding,
+/// as for a key typed.
+pub(super) fn top_command(key: Key, at: &super::groups::Context, holds: &dyn Fn(When) -> bool) -> Option<NormalCmd> {
+    let flavored = FLAVOR_NORMAL.iter().find(|(k, _, item, only)| *k == key && at.has(Some(*item)) && at.holds(*only));
+    if let Some((_, name, _, _)) = flavored {
+        return Some(*name);
+    }
+    if at.vim {
+        let vim = VIM_NORMAL.iter().find(|(k, _, when)| *k == key && when.is_none_or(holds));
+        if let Some((_, name, _)) = vim {
+            return Some(*name);
+        }
+    }
+    if at.extend {
+        if let Some((_, name)) = SELECT_NORMAL.iter().find(|(k, _)| *k == key) {
+            return Some(*name);
+        }
+    }
+    if at.vim && !at.alias && HELIX_KEYS_UNDER_VIM.contains(&key) && !at.has(Some(FlavorItem::HelixKeysUnderVim)) {
+        return None;
+    }
+    HELIX_NORMAL.iter().find(|(k, _)| *k == key).map(|(_, name)| *name)
+}
+
 /// **The keys that reach a command**, in a binding's spelling (`gh`,
 /// `" f"`): the group's keys and the command's own.
-pub(super) fn keys_of(place: (Pending, Key)) -> String {
+pub(super) fn keys_of(place: (Pending, Key), at: &super::groups::Context) -> String {
     let (pending, key) = place;
-    let path = pending.group().map_or("", |group| group.path);
+    let path = pending.group().and_then(|group| home_of(group, at)).map(|path| path.concat()).unwrap_or_default();
     format!("{path}{}", super::keys::key_internal(key))
 }
 
@@ -794,8 +833,9 @@ pub(super) fn keys_of(place: (Pending, Key)) -> String {
 /// writes them (`f`, `A-d`, `C-o`, `<space>f`): what `::` shows beside a
 /// command, which has no editor to ask which preset is in use.
 pub(crate) fn default_key_written(name: &str) -> Option<String> {
-    let place = place_of(name, &super::groups::Context::for_docs())?;
-    Some(yumete_cjk::actions::spell(&keys_of(place)))
+    let at = super::groups::Context::for_docs();
+    let place = place_of(name, &at)?;
+    Some(yumete_cjk::actions::spell(&keys_of(place, &at)))
 }
 
 impl Editor {
@@ -813,13 +853,15 @@ impl Editor {
         }
         self.before_a_motion(cmd);
         run(self, Cx { key, count, operator_count, continuing_zong: false });
+        self.note_the_group_count(operator_count);
         true
     }
 
     /// **The keys a command is on now**, in a binding's spelling, under the
     /// preset in use. `None` when it has none.
     pub(super) fn normal_keys_for(&self, name: &str) -> Option<String> {
-        place_of(name, &self.group_context()).map(keys_of)
+        let at = self.group_context();
+        place_of(name, &at).map(|place| keys_of(place, &at))
     }
 
     /// **The key that runs `name` now, as the palette and `:keymap-actions`
@@ -888,34 +930,7 @@ impl Editor {
     /// the flavour's key when its item is on, then the vim preset's own entry
     /// when it has one whose condition holds, helix's otherwise.
     pub(super) fn normal_command_for(&self, cx: &Cx) -> Option<&'static str> {
-        let at = self.group_context();
-        let flavored = FLAVOR_NORMAL
-            .iter()
-            .find(|(key, _, item, only)| *key == cx.key && at.has(Some(*item)) && at.holds(*only));
-        if let Some((_, name, _, _)) = flavored {
-            return Some(name.name());
-        }
-        if self.vim_keymap() {
-            let vim = VIM_NORMAL
-                .iter()
-                .find(|(key, _, when)| *key == cx.key && when.is_none_or(|holds| holds(self, cx)));
-            if let Some((_, name, _)) = vim {
-                return Some(name.name());
-            }
-        }
-        if self.extend {
-            if let Some((_, name)) = SELECT_NORMAL.iter().find(|(key, _)| *key == cx.key) {
-                return Some(name.name());
-            }
-        }
-        if self.vim_keymap()
-            && (!self.expanding_alias || self.replaying_held)
-            && HELIX_KEYS_UNDER_VIM.contains(&cx.key)
-            && !self.flavor_on(FlavorItem::HelixKeysUnderVim)
-        {
-            return None;
-        }
-        HELIX_NORMAL.iter().find(|(key, _)| *key == cx.key).map(|(_, name)| name.name())
+        top_command(cx.key, &self.group_context(), &|holds| holds(self, cx)).map(NormalCmd::name)
     }
 
     /// Run one Normal command by its variant, with its own row's key.
