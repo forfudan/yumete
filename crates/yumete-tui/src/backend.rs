@@ -117,6 +117,13 @@ impl<W: Write> Backend for Dotted<W> {
     where
         I: Iterator<Item = (u16, u16, &'a Cell)>,
     {
+        // **A picture's upload goes ahead of the cells that show it**
+        // (2026-11-06, `graphics.rs`): the placeholders below are only text
+        // until the terminal has the picture they name.
+        let owed = crate::graphics::take_pending();
+        if !owed.is_empty() {
+            self.inner.writer_mut().write_all(&owed)?;
+        }
         let cells: Vec<(u16, u16, &Cell)> = content.collect();
         let mut at = 0;
         while at < cells.len() {

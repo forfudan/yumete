@@ -6012,6 +6012,7 @@ mod keys;
 mod labels;
 mod links;
 mod matching;
+mod maths;
 mod memo;
 mod modes;
 mod multi;

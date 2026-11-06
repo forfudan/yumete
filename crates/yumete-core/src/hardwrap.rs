@@ -389,6 +389,7 @@ fn classify_markdown(lines: &[String]) -> Vec<Line> {
             | Block::Container(_)
             | Block::Table { .. }
             | Block::Comment { .. }
+            | Block::Math { .. }
             | Block::Conflict(_) => out.push(Line::Keep(line.clone())),
         }
     }

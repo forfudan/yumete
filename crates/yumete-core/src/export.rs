@@ -30,6 +30,23 @@
 
 use crate::ruby::{self, Dialect, Dialects};
 
+/// **The Typst compiler** (2026-11-06): the `typst` on `PATH`, which
+/// `--export pdf` runs and the formula float under the cursor runs too. One
+/// place says which program that is, so the two cannot come to disagree.
+pub fn typst_command() -> std::process::Command {
+    std::process::Command::new("typst")
+}
+
+/// Whether [`typst_command`] answers at all.
+pub fn typst_is_installed() -> bool {
+    typst_command()
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
 /// What to write the manuscript out as.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {

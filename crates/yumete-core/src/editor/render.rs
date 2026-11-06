@@ -264,6 +264,17 @@ impl Editor {
                 }
             }
         }
+        // **Display maths over several lines** (2026-11-06), found the same
+        // way as the bare tables above: after the scan, with both ends at
+        // hand. Only a line holding a `$` is copied.
+        if markdown_syntax || typst {
+            crate::markdown::maths_blocks(
+                &mut blocks,
+                typst,
+                |i| rope.line(i).chunks().any(|c| c.contains('$')),
+                |i| rope.line(i).to_string().trim_end_matches(['\n', '\r']).to_string(),
+            );
+        }
         let conflicts = crate::conflict::assemble(marks);
         for found in &conflicts {
             for line in found.lines() {
@@ -1364,6 +1375,12 @@ impl Editor {
             // Inside a note that opened lines above (#288): the note up to its
             // closer, and the line's own runs after it.
             crate::markdown::Block::Comment { close } => self.note_line(line, close),
+            // A line of display maths over several lines (2026-11-06).
+            crate::markdown::Block::Math { first, last } => {
+                let text = self.current_buffer().rope().line(line).to_string();
+                let typst = self.current_buffer().syntax() == crate::syntax::Syntax::Typst;
+                crate::markdown::maths_block_spans(text.trim_end_matches(['\n', '\r']), first, last, typst)
+            }
             _ if block.is_literal() => Vec::new(),
             _ => self.markup_line(line),
         }

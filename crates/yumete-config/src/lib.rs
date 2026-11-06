@@ -129,6 +129,11 @@ pub struct EditorConfig {
     /// first or last five lines) are read: its file type, tab stop, indent
     /// width, Tab, text width, and nothing else (2026-11-04).
     pub modeline: bool,
+    /// **The formula under the cursor, drawn** (2026-11-06): a float showing
+    /// the `$…$` the cursor is in as typeset maths, in a terminal that can
+    /// show a picture in its text (Ghostty, kitty), through the `typst`
+    /// command. On; elsewhere it draws nothing either way.
+    pub maths_preview: bool,
     /// The shell line `:shot` runs to photograph the screen.
     ///
     /// A command rather than a built-in: what「截圖」 means is the window
@@ -471,6 +476,7 @@ impl Default for EditorConfig {
             diff_gutter: true,
             end_of_line_diagnostics: "hint".to_string(),
             modeline: true,
+            maths_preview: true,
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             auto_pairs: "basic".to_string(),
@@ -4516,6 +4522,7 @@ struct RawEditor {
     diff_gutter: Option<bool>,
     end_of_line_diagnostics: Option<String>,
     modeline: Option<bool>,
+    maths_preview: Option<bool>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
     auto_pairs: Option<String>,
@@ -4715,6 +4722,9 @@ impl RawConfig {
         }
         if other.editor.modeline.is_some() {
             self.editor.modeline = other.editor.modeline;
+        }
+        if other.editor.maths_preview.is_some() {
+            self.editor.maths_preview = other.editor.maths_preview;
         }
         if other.editor.screenshot.is_some() {
             self.editor.screenshot = other.editor.screenshot.clone();
@@ -5118,6 +5128,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.modeline {
             config.editor.modeline = on;
+        }
+        if let Some(on) = self.editor.maths_preview {
+            config.editor.maths_preview = on;
         }
         if let Some(line) = self.editor.screenshot {
             config.editor.screenshot = line;

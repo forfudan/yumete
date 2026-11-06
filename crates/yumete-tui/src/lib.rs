@@ -17,6 +17,8 @@ pub mod theme;
 pub mod vertical;
 pub mod ambiguous;
 pub mod backend;
+pub mod graphics;
+pub mod maths;
 pub mod server;
 pub mod settings;
 pub mod settings_page;
@@ -751,6 +753,10 @@ pub fn run(
     // that has one is really opened, and everything it says arrives through
     // `collect` below without anything here ever waiting on it.
     let mut servers = crate::server::Servers::default();
+    // **公式浮窗**（2026-11-06）: the same bell, rung when a picture lands;
+    // and whether this terminal can show one at all, asked once.
+    crate::maths::ring_on_answers(doorbell.clone());
+    crate::graphics::set_support(crate::graphics::detect());
     servers.ring_on_answers(doorbell);
     // **配置檔開着的時候，現查現說**（2026-10-20 作者定）。和上面那一行一樣是
     // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
@@ -999,6 +1005,18 @@ pub fn run(
             editor.collect_picker_items();
             // 雙鏈: the project's links, read on a thread, land here.
             editor.collect_links_index();
+            // How big a cell is in pixels, for the formula float — asked
+            // every frame, so a font made bigger is followed (2026-11-06).
+            if crate::graphics::support() != crate::graphics::Support::None {
+                if let Ok(window) = ratatui::backend::Backend::window_size(terminal.backend_mut()) {
+                    crate::graphics::note_window(
+                        window.columns_rows.width,
+                        window.columns_rows.height,
+                        window.pixels.width,
+                        window.pixels.height,
+                    );
+                }
+            }
             let began = std::time::Instant::now();
             let completed = match terminal
                 .draw(|frame| draw(frame, editor, config, ime, &mut viewport, settings.panel.as_ref()))
@@ -2017,6 +2035,9 @@ pub fn run(
     // outlive the process, so a page that set them and did not put them back
     // leaves the reader's shell wearing yumete's ink and paper.
     let _ = write!(stdout(), "\x1b]110\x07\x1b]111\x07\x1b]112\x07");
+    // …and the formulas it was shown (2026-11-06): a picture stays in the
+    // terminal until it is freed.
+    let _ = stdout().write_all(&crate::graphics::release_all());
     if enhanced {
         if all_keys {
             let _ = execute!(stdout(), PopKeyboardEnhancementFlags);
@@ -2890,6 +2911,8 @@ fn suspend_to_the_shell<B: ratatui::backend::Backend + io::Write>(
     }
     ratatui::crossterm::terminal::enable_raw_mode()?;
     execute!(terminal.backend_mut(), ratatui::crossterm::terminal::EnterAlternateScreen)?;
+    // The pictures may have gone with the screen; upload again (2026-11-06).
+    crate::graphics::forget();
     let _ = execute!(stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange);
     if enhanced {
         let base = KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
@@ -2960,6 +2983,8 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         terminal.backend_mut(),
         ratatui::crossterm::terminal::EnterAlternateScreen
     )?;
+    // The pictures may have gone with the screen; upload again (2026-11-06).
+    crate::graphics::forget();
     let _ = execute!(
         stdout(),
         EnableMouseCapture,
@@ -7634,6 +7659,14 @@ fn band_rows(row: &yumete_core::diff::DraftRow, head: String, room: usize) -> Ve
             marked: false,
         });
     }
+    // **公式：光標在 `$…$` 裏，浮出排好的公式**（2026-11-06）。只在畫得出圖片的
+    // 終端裏（Ghostty、kitty），別處什麼都不畫，下面的浮窗照舊。It is about what
+    // the cursor stands on, as the note and the 百科 entry below are, and a
+    // formula is never a wiki name or a footnote, so the order among those
+    // settles nothing; it gives way to everything above, which was asked for.
+    if let Some(drawn) = crate::maths::float(frame, editor, config, area, bottom, caret, vertical, composing) {
+        return drawn;
+    }
     // **A wiki name floats the same way** (#287) — when nothing the writer
     // typed answers first, and when the sidebar's 百科 page is not already
     // showing it: one place at a time.
@@ -9324,7 +9357,13 @@ fn block_style(block: yumete_core::markdown::Block, ink: crate::theme::Palette) 
         Block::Item { .. } if ink.borrowed() => {
             ink.pinned(|p| p.list_text).map(|c| Style::default().fg(c))
         }
-        Block::Prose | Block::Heading(_) | Block::Item { .. } | Block::Comment { .. } => None,
+        // Display maths over several lines has its ink from its runs, the
+        // same as the one-line form (2026-11-06).
+        Block::Prose
+        | Block::Heading(_)
+        | Block::Item { .. }
+        | Block::Comment { .. }
+        | Block::Math { .. } => None,
         // An aside is a block on the page because it is a block on paper.
         // **A table is a block too** (#270). It was the one thing in this list
         // that had a shape on the page and no ground under it, so a table in a

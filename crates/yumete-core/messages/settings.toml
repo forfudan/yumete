@@ -397,6 +397,20 @@ zhs = "何时显示夹行(注音、着重号、平仄等信息)"
 en = "when to show the lane that carries readings, emphasis and 平仄"
 
 [[message]]
+# 設置：公式預覽（草稿）
+key = "settings.editor.maths-preview"
+zhs = "公式预览"
+zht = "公式預覽"
+en = "maths preview"
+
+[[message]]
+# 設置：公式預覽——一句話（草稿）
+key = "settings.editor.maths-preview.hint"
+zhs = "光标在公式里时，在下面浮出排好的公式；要 Ghostty 或 kitty，和 typst 命令"
+zht = "光標在公式裏時，在下面浮出排好的公式；要 Ghostty 或 kitty，和 typst 命令"
+en = "while the cursor is in a formula, a float under it shows it typeset; needs Ghostty or kitty, and the typst command"
+
+[[message]]
 # 設置：正文寬度
 key = "settings.editor.measure"
 zht = "正文寬度"

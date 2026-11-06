@@ -160,6 +160,18 @@ pub enum Block {
     /// merge conflict. The opening line itself stays whatever it was: its own
     /// runs already carry the comment to the end of the line.
     Comment { close: Option<usize> },
+    /// **A line of display maths that runs over several lines** (2026-11-06):
+    /// Markdown's `$$` … `$$`, Typst's `$` … `$`. `first` is the line the
+    /// opening delimiter is on, `last` the line the closing one is on; the
+    /// lines between are the formula through and through.
+    ///
+    /// Not read by either scanner, which look at a line's opening only and
+    /// could not know whether a `$$` ever closes; [`maths_blocks`] finds them
+    /// after the scan, the way the merge conflicts are found, and only a block
+    /// that closes before a blank line takes the label. Until then only the
+    /// one-line forms were coloured, and the formula a writer sets on lines of
+    /// its own was drawn as prose — its `\\` and `&` and all.
+    Math { first: bool, last: bool },
     /// A line of a merge conflict (#249) — which side of it, or [`None`] for
     /// one of the four marker lines.
     ///
@@ -1564,6 +1576,208 @@ fn balanced(chars: &[char], from: usize, shut: char, to: usize) -> Option<usize>
     None
 }
 
+/// **The formula the cursor is in** (2026-11-06), as the float under the
+/// cursor draws it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Maths {
+    /// The formula, without its delimiters.
+    pub source: String,
+    /// Whether it is LaTeX (Markdown's maths) rather than Typst's own.
+    pub latex: bool,
+    /// Whether it is set on its own (`$$…$$`, Typst's `$ … $`) rather than
+    /// in the run of the text.
+    pub display: bool,
+}
+
+/// The construct a display-maths block's runs carry on every line
+/// (2026-11-06), clear of the ones the line's own writing has — so the formula
+/// can be told from a `*` beside it on the line that opens it.
+pub const MATHS_BLOCK_CONSTRUCT: usize = usize::MAX / 4;
+
+/// How many lines a display-maths block may run before it is taken for a
+/// stray delimiter instead (2026-11-06). A blank line already ends one; this
+/// bounds a paragraph that never has one.
+const MATHS_BLOCK_LINES: usize = 400;
+
+/// **Find the display maths that runs over several lines** (2026-11-06) and
+/// label its lines [`Block::Math`].
+///
+/// Markdown's opens on a line that begins with `$$` and does not close it,
+/// and closes at the next `$$`; Typst's opens at a `$` its line leaves
+/// unpaired and closes at the next `$`. Either way **a blank line before the
+/// close means it was never maths** — Pandoc ends a paragraph there, and a
+/// stray dollar must not tint the rest of the chapter. Nothing is labelled
+/// until the close is found, which a forward scan could not promise.
+///
+/// `has_dollar` is asked first, so a line without a `$` is never copied;
+/// `text` hands over a line without its line ending.
+pub fn maths_blocks(
+    blocks: &mut [Block],
+    typst: bool,
+    has_dollar: impl Fn(usize) -> bool,
+    text: impl Fn(usize) -> String,
+) {
+    let opens_here = |block: Block| match typst {
+        true => matches!(block, Block::Prose | Block::Item { .. }),
+        false => matches!(block, Block::Prose | Block::Item { .. } | Block::FootnoteDef),
+    };
+    // What may stand inside one: anything a formula's own lines can look like
+    // (`- b`, `| x |`, `= y`), but not the structure a fence or a merge is.
+    let walks = |block: Block| {
+        !matches!(
+            block,
+            Block::Code { .. }
+                | Block::FrontMatter
+                | Block::Container(_)
+                | Block::Conflict(_)
+                | Block::Comment { .. }
+        )
+    };
+    let mut i = 0;
+    while i < blocks.len() {
+        if !opens_here(blocks[i]) || !has_dollar(i) {
+            i += 1;
+            continue;
+        }
+        let first: Vec<char> = text(i).chars().collect();
+        if maths_opener(&first, typst).is_none() {
+            i += 1;
+            continue;
+        }
+        let close = (i + 1..blocks.len().min(i + 1 + MATHS_BLOCK_LINES))
+            .take_while(|&j| walks(blocks[j]))
+            .map(|j| (j, text(j)))
+            .take_while(|(_, t)| !t.trim().is_empty())
+            .find(|(_, t)| maths_closer(&t.chars().collect::<Vec<_>>(), 0, typst).is_some())
+            .map(|(j, _)| j);
+        let Some(last) = close else {
+            i += 1;
+            continue;
+        };
+        for (j, block) in blocks.iter_mut().enumerate().take(last + 1).skip(i) {
+            *block = Block::Math { first: j == i, last: j == last };
+        }
+        i = last + 1;
+    }
+}
+
+/// Where the opening delimiter of a display-maths block stands on its first
+/// line, as a char range, or `None` when the line opens none.
+fn maths_opener(chars: &[char], typst: bool) -> Option<std::ops::Range<usize>> {
+    if typst {
+        // The `$` the line leaves unpaired: one no span of the line covers,
+        // so not in a comment, a raw span, a call or a closed `$…$`.
+        let line: String = chars.iter().collect();
+        let spans = typst::spans(&line);
+        let at = (0..chars.len()).rev().find(|&i| {
+            chars[i] == '$' && !escaped(chars, i) && !spans.iter().any(|s| s.start <= i && i < s.end)
+        })?;
+        return Some(at..at + 1);
+    }
+    let start = chars.iter().take_while(|c| c.is_whitespace()).count();
+    let opens = chars.get(start) == Some(&'$') && chars.get(start + 1) == Some(&'$');
+    (opens && maths_closer(chars, start + 2, false).is_none()).then_some(start..start + 2)
+}
+
+/// Where the closing delimiter of a display-maths block stands on a line,
+/// looking from `from`: the first `$$` (Markdown) or `$` (Typst) no
+/// backslash escapes.
+fn maths_closer(chars: &[char], from: usize, typst: bool) -> Option<std::ops::Range<usize>> {
+    let n = if typst { 1 } else { 2 };
+    (from..chars.len())
+        .find(|&i| {
+            chars[i] == '$' && !escaped(chars, i) && (typst || chars.get(i + 1) == Some(&'$'))
+        })
+        .map(|i| i..i + n)
+}
+
+/// One line of a display-maths block, cut where its delimiters stand:
+/// `(open, body, close)` as char ranges.
+fn maths_parts(
+    chars: &[char],
+    first: bool,
+    last: bool,
+    typst: bool,
+) -> (Option<std::ops::Range<usize>>, std::ops::Range<usize>, Option<std::ops::Range<usize>>) {
+    let open = first.then(|| maths_opener(chars, typst)).flatten();
+    let from = open.as_ref().map_or(0, |o| o.end);
+    let close = last.then(|| maths_closer(chars, from, typst)).flatten();
+    let to = close.as_ref().map_or(chars.len(), |c| c.start);
+    (open, from..to.max(from), close)
+}
+
+/// **The runs of one line of a display-maths block** (2026-11-06): the
+/// delimiters as markup, the formula as [`Kind::Math`], and whatever stands
+/// before the opening delimiter or after the closing one read as the line's
+/// own writing.
+pub fn maths_block_spans(line: &str, first: bool, last: bool, typst: bool) -> Vec<Span> {
+    let chars: Vec<char> = line.chars().collect();
+    let (open, body, close) = maths_parts(&chars, first, last, typst);
+    let read = |text: &str| match typst {
+        true => typst::spans(text),
+        false => spans(text),
+    };
+    let mine = MATHS_BLOCK_CONSTRUCT;
+    let mut out = Vec::new();
+    if let Some(open) = &open {
+        let before: String = chars[..open.start].iter().collect();
+        out.extend(read(&before));
+        mark(&mut out, open.start, open.end, Kind::Marker, mine, 0);
+    }
+    mark(&mut out, body.start, body.end, Kind::Math, mine, 0);
+    if let Some(close) = &close {
+        mark(&mut out, close.start, close.end, Kind::Marker, mine, 0);
+        let after: String = chars[close.end..].iter().collect();
+        out.extend(read(&after).into_iter().map(|s| Span {
+            start: s.start + close.end,
+            end: s.end + close.end,
+            construct: s.construct + mine + 1,
+            ..s
+        }));
+    }
+    out
+}
+
+/// **The formula a display-maths block holds** (2026-11-06): its lines from
+/// the one that opens it to the one that closes it, less the delimiters.
+pub fn maths_block_source(lines: &[String], typst: bool) -> String {
+    let n = lines.len();
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            let chars: Vec<char> = line.chars().collect();
+            let (_, body, _) = maths_parts(&chars, i == 0, i + 1 == n, typst);
+            chars[body].iter().collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// **The one-line formula a char column of `line` stands in** (2026-11-06),
+/// delimiters included: `$a$`, `$$a$$`, Typst's `$a$` and `$ a $`. `runs`
+/// are the line's runs as the page has them, so the answer is the formula
+/// the page draws.
+pub fn maths_at(line: &str, runs: &[Span], column: usize, typst: bool) -> Option<Maths> {
+    // The run the column is in — the formula or one of its two delimiters,
+    // which share its construct.
+    let construct = runs
+        .iter()
+        .filter(|s| s.start <= column && column < s.end)
+        .filter(|s| matches!(s.kind, Kind::Math | Kind::Marker))
+        .max_by_key(|s| s.start)?
+        .construct;
+    let body = runs.iter().find(|s| s.kind == Kind::Math && s.construct == construct)?;
+    let chars: Vec<char> = line.chars().collect();
+    let source: String = chars[body.start..body.end].iter().collect();
+    let display = match typst {
+        // Typst sets it on its own when there is space inside both ends.
+        true => source.starts_with(char::is_whitespace) && source.ends_with(char::is_whitespace),
+        false => body.start >= 2 && chars[body.start - 2] == '$' && chars[body.start - 1] == '$',
+    };
+    Some(Maths { source: source.trim().to_string(), latex: !typst, display })
+}
+
 /// Push a span, dropping empty ones.
 fn mark(
     out: &mut Vec<Span>,
@@ -2243,6 +2457,34 @@ mod typst_tests {
         assert_eq!(shape("1 < 2 > 3"), "         ");
     }
 
+    /// **Typst's `$` … `$` over several lines is maths** (2026-11-06): it
+    /// opens at the `$` its line leaves unpaired and closes at the next `$`.
+    #[test]
+    fn typst_maths_over_several_lines_is_maths() {
+        use super::{maths_at, maths_block_source, maths_blocks, Maths};
+        let doc = ["見 $x$ 與 $", "  a + b", "  = c $ 下文", "後文 $y$"];
+        let mut blocks = vec![Block::Prose; doc.len()];
+        maths_blocks(&mut blocks, true, |i| doc[i].contains('$'), |i| doc[i].to_string());
+        assert_eq!(blocks[0], Block::Math { first: true, last: false });
+        assert_eq!(blocks[1], Block::Math { first: false, last: false });
+        assert_eq!(blocks[2], Block::Math { first: false, last: true });
+        assert_eq!(blocks[3], Block::Prose, "a closed `$y$` opens nothing");
+        let shape = |line, first, last| super::tests::block_shape(line, first, last, true);
+        // `= c` is the formula going on, not a heading.
+        assert_eq!(shape("  = c $ 下文", false, true), "$$$$$$.   ");
+        assert_eq!(shape("  a + b", false, false), "$$$$$$$");
+        let lines: Vec<String> = doc[..3].iter().map(|s| s.to_string()).collect();
+        assert_eq!(maths_block_source(&lines, true), "\n  a + b\n  = c ");
+        // A blank line ends the guess.
+        let doc = ["$ a", "", "b $"];
+        let mut blocks = vec![Block::Prose; doc.len()];
+        maths_blocks(&mut blocks, true, |i| doc[i].contains('$'), |i| doc[i].to_string());
+        assert!(blocks.iter().all(|b| *b == Block::Prose));
+        // One-line forms: space inside both ends sets it on its own.
+        assert_eq!(maths_at("$ x $", &spans("$ x $"), 2, true), Some(Maths { source: "x".into(), latex: false, display: true }));
+        assert_eq!(maths_at("文 $x$", &spans("文 $x$"), 3, true), Some(Maths { source: "x".into(), latex: false, display: false }));
+    }
+
     /// **Typst 官方那條「詞內不算分隔符」**（`typst-syntax/src/lexer.rs:628` 的
     /// `in_word`，2026-09-28 照抄）。
     #[test]
@@ -2815,6 +3057,8 @@ mod tests {
                 // answer by the editor, which is the only thing that can know
                 // whether a `<<<<<<<` ever closes.
                 Block::Conflict(_) => '!',
+                // Nor this: display maths is found after the scan.
+                Block::Math { .. } => '$',
             })
             .collect()
     }
@@ -3225,6 +3469,85 @@ mod tests {
         assert_eq!(shape("$a `b$` c"), "   .CC.  ");
         // Inside emphasis.
         assert_eq!(shape("**$x$**"), "...$...");
+    }
+
+    /// The labels [`maths_blocks`] gives a small document, a line each.
+    fn maths_labels(doc: &[&str], typst: bool) -> Vec<Block> {
+        let mut blocks = vec![Block::Prose; doc.len()];
+        maths_blocks(&mut blocks, typst, |i| doc[i].contains('$'), |i| doc[i].to_string());
+        blocks
+    }
+
+    /// The runs of one line of a maths block, one character a cell.
+    pub(super) fn block_shape(line: &str, first: bool, last: bool, typst: bool) -> String {
+        let n = line.chars().count();
+        let mut out = vec![' '; n];
+        for span in maths_block_spans(line, first, last, typst) {
+            let c = match span.kind {
+                Kind::Math => '$',
+                Kind::Marker => '.',
+                Kind::Strong => 'B',
+                _ => '?',
+            };
+            for slot in out.iter_mut().take(span.end.min(n)).skip(span.start) {
+                *slot = c;
+            }
+        }
+        out.into_iter().collect()
+    }
+
+    /// **`$$` on a line of its own opens display maths that runs to the next
+    /// `$$`** (2026-11-06). Only the one-line form used to be coloured, so a
+    /// formula set on lines of its own was drawn as prose.
+    #[test]
+    fn display_maths_over_several_lines_is_maths() {
+        let doc = ["前文", "$$", r"\begin{aligned}", r"a &= b \\", r"\end{aligned}", "$$", "後文"];
+        let blocks = maths_labels(&doc, false);
+        assert_eq!(blocks[0], Block::Prose);
+        assert_eq!(blocks[1], Block::Math { first: true, last: false });
+        assert_eq!(blocks[3], Block::Math { first: false, last: false });
+        assert_eq!(blocks[5], Block::Math { first: false, last: true });
+        assert_eq!(blocks[6], Block::Prose);
+        assert_eq!(block_shape("$$", true, false, false), "..");
+        assert_eq!(block_shape(r"a &= b \\", false, false, false), "$$$$$$$$$");
+        // Text on the delimiters' lines: the formula up to the `$$`, the
+        // writing after it read as writing.
+        assert_eq!(block_shape("$$ x +", true, false, false), "..$$$$");
+        assert_eq!(block_shape("y $$ **是**", false, true, false), "$$.. ..B..");
+        let lines: Vec<String> = doc[1..6].iter().map(|s| s.to_string()).collect();
+        assert_eq!(maths_block_source(&lines, false), "\n\\begin{aligned}\na &= b \\\\\n\\end{aligned}\n");
+    }
+
+    /// **A blank line before the close means it was never maths** — Pandoc
+    /// ends the paragraph there, and a stray `$$` must not tint the chapter.
+    #[test]
+    fn a_dollar_pair_with_a_blank_line_between_is_not_a_block() {
+        assert!(maths_labels(&["$$", "a", "", "b", "$$"], false).iter().all(|b| *b == Block::Prose));
+        // A one-line formula is not a block, and neither is a price.
+        assert!(maths_labels(&["$$x$$", "a", "$$"], false)[0] == Block::Prose);
+        assert!(maths_labels(&["價 $3", "和 $5"], false).iter().all(|b| *b == Block::Prose));
+        // A fence between them is a fence.
+        let mut blocks = vec![Block::Prose, Block::Code { inside: None }, Block::Prose];
+        let doc = ["$$", "```", "$$"];
+        maths_blocks(&mut blocks, false, |i| doc[i].contains('$'), |i| doc[i].to_string());
+        assert_eq!(blocks[0], Block::Prose);
+    }
+
+    /// **The formula a column stands in**, delimiters included (2026-11-06).
+    #[test]
+    fn the_formula_under_a_column() {
+        let line = "式 $a + b$ 和 $$x^2$$";
+        let inline = Maths { source: "a + b".into(), latex: true, display: false };
+        assert_eq!(maths_at(line, &spans(line), 2, false), Some(inline.clone()), "on the opening `$`");
+        assert_eq!(maths_at(line, &spans(line), 4, false), Some(inline.clone()));
+        assert_eq!(maths_at(line, &spans(line), 8, false), Some(inline), "on the closing `$`");
+        assert_eq!(maths_at(line, &spans(line), 9, false), None, "past it");
+        assert_eq!(maths_at(line, &spans(line), 0, false), None);
+        assert_eq!(
+            maths_at(line, &spans(line), 14, false),
+            Some(Maths { source: "x^2".into(), latex: true, display: true })
+        );
+        assert_eq!(maths_at("價 $3 and $5", &spans("價 $3 and $5"), 3, false), None);
     }
 
     /// `<https://…>` and `<name@host>` are links (2026-11-05), and say where

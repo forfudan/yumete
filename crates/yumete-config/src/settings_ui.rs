@@ -597,6 +597,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "maths_preview",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.maths-preview",
+        hint: "settings.editor.maths-preview.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "word_level",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_WORD_LEVEL_WAYS),

@@ -1,4 +1,4 @@
-# prefixes: check wiki links link note
+# prefixes: check wiki links link note maths
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -320,6 +320,20 @@ key = "links.reindexed"
 zht = "重讀了 {0} 個文件的鏈接"
 zhs = "重读了 {0} 个文件的链接"
 en = "links of {0} files read again"
+
+[[message]]
+# 光標在公式裏，typst 排這個公式時報錯：公式浮窗裏寫的那一句，{0} 是 typst 自己說的（草稿）
+key = "maths.failed"
+zhs = "typst 排不出这个公式：{0}"
+zht = "typst 排不出這個公式：{0}"
+en = "typst could not set this formula: {0}"
+
+[[message]]
+# 光標在公式裏、終端畫得出圖片，可是找不到 typst 命令：公式浮窗裏寫的那一句（草稿）
+key = "maths.no-typst"
+zhs = "要装了 typst 命令才画得出公式"
+zht = "要裝了 typst 命令纔畫得出公式"
+en = "drawing the formula needs the typst command"
 
 [[message]]
 # 跟着註走，註就在本行

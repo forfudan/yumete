@@ -14,3 +14,9 @@ all under the MIT license. Their notices are kept here, unchanged.
 | `tokyo-night.LICENSE` | [Tokyo Night](https://github.com/enkia/tokyo-night-vscode-theme) 1.1.2, `themes/tokyo-night-color-theme.json` and `themes/tokyo-night-light-color-theme.json` in the published extension | the code and Markdown colours of `tokyo-night` (`TOKYO_NIGHT`, `TOKYO_NIGHT_LIGHT`) |
 | `catppuccin.LICENSE` | [Catppuccin for VS Code](https://github.com/catppuccin/vscode) 3.19.0, `themes/mocha.json` and `themes/latte.json` in the published extension | the code and Markdown colours of `catppuccin` (`CATPPUCCIN_MOCHA`, `CATPPUCCIN_LATTE`) |
 | `gruvbox.LICENSE` | [Gruvbox Theme for VS Code](https://github.com/jdinhify/vscode-theme-gruvbox) 1.29.1, `themes/gruvbox-dark-medium.json` and `themes/gruvbox-light-medium.json` in the published extension | the code and Markdown colours of `gruvbox` (`GRUVBOX_DARK`, `GRUVBOX_LIGHT`) |
+
+The formula float bundles a Typst package, under the Apache License 2.0. Its notice is kept here and beside the package, unchanged.
+
+| File | Project | What is used |
+| --- | --- | --- |
+| `mitex.LICENSE` | [MiTeX](https://github.com/mitex-rs/mitex) 0.2.6, the `@preview/mitex` Typst package | the whole package, unchanged but for its README and CHANGELOG left out (`crates/yumete-tui/assets/mitex/0.2.6/`): it turns Markdown's LaTeX maths into Typst's for the formula float |

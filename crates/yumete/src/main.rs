@@ -2047,12 +2047,7 @@ fn written_path(source: &std::path::Path, format: &str, out: Option<&str>) -> st
 }
 
 fn typst_is_installed() -> bool {
-    std::process::Command::new("typst")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+    yumete_core::export::typst_is_installed()
 }
 
 fn export_pdf(
@@ -2086,7 +2081,7 @@ fn export_pdf(
             (draft.clone(), Some(draft))
         }
     };
-    let compiled = std::process::Command::new("typst")
+    let compiled = yumete_core::export::typst_command()
         .arg("compile")
         .arg(&input)
         .arg(&target)
