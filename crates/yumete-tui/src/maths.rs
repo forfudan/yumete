@@ -286,6 +286,10 @@ pub fn document(key: &Key) -> String {
     }
     out.push_str("#set page(width: auto, height: auto, margin: 2pt, fill: none)\n");
     out.push_str(&format!("#set text(size: {size}pt, fill: rgb(\"#{r:02x}{g:02x}{b:02x}\"))\n"));
+    // **The page is as tall as the ink, not the line** (2026-11-06): by
+    // default a line runs from cap height to baseline, and a page of
+    // `height: auto` cut an inline `1/2` or `sqrt` off at both edges.
+    out.push_str("#set text(top-edge: \"bounds\", bottom-edge: \"bounds\")\n");
     match key.maths.latex {
         true => out.push_str(&format!("#mimath(sys.inputs.at(\"{INPUT}\"), block: {block})\n")),
         false => out.push_str(&format!(
@@ -588,6 +592,21 @@ mod tests {
         assert!(!typ.contains("mitex"), "{typ}");
         assert!(typ.contains("eval(sys.inputs.at(\"yumete-maths\"), mode: \"math\")"), "{typ}");
         assert!(typ.contains("block: false"), "{typ}");
+    }
+
+    /// **An inline fraction is not cut off** (2026-11-06): the page is as
+    /// tall as the ink. With the line's own edges, `1/2` came out exactly as
+    /// tall as `x`, its numerator and denominator outside the picture.
+    #[test]
+    fn an_inline_fraction_is_as_tall_as_its_ink() {
+        if !yumete_core::export::typst_is_installed() {
+            return;
+        }
+        let tall = |source: &str| match render(&key(source, false, false), None) {
+            Answer::Ready(picture) => picture.height,
+            other => panic!("{other:?}"),
+        };
+        assert!(tall("1/2") > tall("x") + 4, "1/2 {} vs x {}", tall("1/2"), tall("x"));
     }
 
     /// Cells: rounded up, and shrunk as a whole to the room.
