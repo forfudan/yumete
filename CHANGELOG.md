@@ -20,6 +20,7 @@ in `docs/development.md` §5.2.
 
 - **The first start leaves a `config.toml` that is already there alone**: it no longer switches that session to vim's keys because it sees a `.vimrc`, since the file says which keys you use.
 - **Display maths over several lines is drawn as maths**: a `$$` line … `$$` line in Markdown and a `$` … `$` over several lines in Typst, where only the one-line forms were. A blank line before the closing `$$` means it was not maths.
+- **A new buffer with no name is plain text, not Markdown**, until what you write in it says otherwise: each time you leave Insert mode it is guessed again, the way a `.txt` is guessed when it opens, so a scratch of Typst is drawn as Typst and its maths set as Typst. `:syntax` or saving it under a name ends the guessing, and a name like `draft.typ` is believed.
 - **Startup says which keys a table took from a command once**, at the first start-up after they change, not at every start-up; `:check-config` says it whenever you ask. A mistake in the tables (one key written twice, a table with no keys) is still said at every start-up until it is fixed.
 
 ### Fixed

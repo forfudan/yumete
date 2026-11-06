@@ -16,8 +16,9 @@ use yumete_cjk::{CategorySegmenter, DictionarySegmenter};
 
 /// Type `text` into a fresh editor, then return to Normal at the top.
 ///
-/// **Typed as plain text and handed back as Markdown**, which is what a
-/// scratch buffer is ([`crate::syntax::Syntax::default`]). The two are the
+/// **Typed as plain text and handed back as Markdown**, chosen the way
+/// `:syntax markdown` chooses it, so a scratch's own guessing (see
+/// `Editor::sniff_the_scratch`) leaves the fixture alone. The two are the
 /// same document except while it is being written: `Enter` carries a list
 /// marker down in Markdown (#418), so a fixture whose lines open with `- `
 /// would come back with markers this helper wrote rather than the ones it was
@@ -36,7 +37,7 @@ fn typed(text: &str) -> Editor {
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('g'));
     ed.current_buffer_mut()
-        .set_syntax(crate::syntax::Syntax::Markdown);
+        .set_syntax_by_hand(crate::syntax::Syntax::Markdown);
     ed
 }
 
@@ -5087,6 +5088,7 @@ fn every_step_of_m_lists_its_choices() {
 fn vim_objects_follow_the_m_and_k_split() {
     let vim = |steps: &str| {
         let mut ed = Editor::new();
+        ed.execute(":syntax markdown").unwrap();
         ed.on_key(Key::Char('i'));
         for c in "a **bold** b (day)".chars() {
             ed.on_key(Key::Char(c));
@@ -23132,7 +23134,7 @@ fn the_syntax_tree_gives_up_its_functions_and_classes() {
     let code = || {
         let mut ed = Editor::new();
         ed.current_buffer_mut()
-            .set_syntax(crate::syntax::Syntax::Code(crate::code::Language::Python));
+            .set_syntax_by_hand(crate::syntax::Syntax::Code(crate::code::Language::Python));
         ed.replace_everything(py);
         ed.goto_line(1);
         ed
@@ -26658,6 +26660,7 @@ fn look_alikes_and_vertical_forms_join_their_families() {
 fn the_markup_object_takes_whatever_marks_the_cursor_is_in() {
     let took = |text: &str, steps: &str| {
         let mut ed = Editor::new();
+        ed.execute(":syntax markdown").unwrap();
         ed.on_key(Key::Char('i'));
         for c in text.chars() {
             ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
@@ -37632,5 +37635,47 @@ fn config_open_opens_the_global_and_the_project_files() {
 
     ed.execute(":config-reload").unwrap();
     assert!(ed.take_config_reload(), ":config-reload asks for the reload");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A scratch is plain text until what is written in it says otherwise**
+/// (2026-11-06). It used to open as Markdown and stay so: a scratch of Typst
+/// had its `$…$` set as LaTeX. Guessed again on leaving Insert, not between
+/// letters; `:syntax` and a name end the guessing.
+#[test]
+fn a_scratch_is_text_until_its_writing_says_otherwise() {
+    use crate::syntax::Syntax;
+    let mut ed = Editor::new();
+    assert_eq!(ed.syntax(), Syntax::Text, "an empty scratch says nothing");
+    ed.on_key(Key::Char('i'));
+    for c in "= 題\n\n== 一\n".chars() {
+        ed.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });
+    }
+    assert_eq!(ed.syntax(), Syntax::Text, "not while typing");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.syntax(), Syntax::Typst, "on Esc");
+
+    // `:syntax` settles it, and later writing does not overrule that.
+    ed.execute(":syntax markdown").unwrap();
+    press(&mut ed, "o");
+    for c in "#let x = 1".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.syntax(), Syntax::Markdown);
+
+    // A name that says is believed over the guess.
+    let dir = tmp().join(format!("yumete-scratch-syntax-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut ed = Editor::new();
+    ed.on_key(Key::Char('i'));
+    for c in "# 題".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.syntax(), Syntax::Markdown);
+    ed.execute(&format!(":w {}", dir.join("草稿.typ").display())).unwrap();
+    assert_eq!(ed.syntax(), Syntax::Typst);
     let _ = std::fs::remove_dir_all(&dir);
 }

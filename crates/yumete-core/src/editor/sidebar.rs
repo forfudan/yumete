@@ -2438,6 +2438,11 @@ impl Editor {
     /// paragraph runs as a command: that is not a paste going wrong so much as
     /// the editor running a macro nobody wrote.
     pub fn paste_text(&mut self, text: &str) {
+        self.paste_text_now(text);
+        self.sniff_the_scratch();
+    }
+
+    fn paste_text_now(&mut self, text: &str) {
         if text.is_empty() {
             return;
         }

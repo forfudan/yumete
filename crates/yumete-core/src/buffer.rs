@@ -206,6 +206,10 @@ pub struct Buffer {
     /// Decided once, when the file is opened: from its name if the name says,
     /// and otherwise by reading it. A guess that changed as the writer typed
     /// would change what comes off the page under them.
+    ///
+    /// **Except in a scratch** (2026-11-06): it opens with nothing to read, so
+    /// it is guessed again as it is written, until it has a name
+    /// ([`Self::sniffs_as_typed`]).
     syntax: crate::syntax::Syntax,
     /// Whether that was read out of the file rather than out of its name — a
     /// guess a project's own setting is entitled to overrule.
@@ -213,6 +217,10 @@ pub struct Buffer {
     /// Whether `:syntax` or `--syntax` chose it: a re-read file's modeline
     /// says its own again, but not over that.
     syntax_by_hand: bool,
+    /// Whether it began as an empty scratch, and the revision its syntax was
+    /// last guessed at.
+    from_nothing: bool,
+    sniffed_at: u64,
     /// How many times the text has changed.
     ///
     /// What lets an answer *about the whole document* — which line is inside a
@@ -450,9 +458,12 @@ impl Buffer {
             folds: crate::fold::FoldMap::new(),
             line_edits: Vec::new(),
             local: Local::default(),
-            syntax: crate::syntax::Syntax::default(),
+            // Nothing in it yet says anything (see `syntax::sniff`).
+            syntax: crate::syntax::Syntax::Text,
             syntax_guessed: true,
             syntax_by_hand: false,
+            from_nothing: true,
+            sniffed_at: 0,
             pending_draft: None,
             pending_swap: None,
             wrote_at: None,
@@ -525,6 +536,8 @@ impl Buffer {
             syntax: crate::syntax::Syntax::default(),
             syntax_guessed: true,
             syntax_by_hand: false,
+            from_nothing: false,
+            sniffed_at: 0,
             pending_draft: None,
             pending_swap: None,
             wrote_at: None,
@@ -703,6 +716,8 @@ impl Buffer {
             syntax,
             syntax_guessed: named.is_none(),
             syntax_by_hand: false,
+            from_nothing: false,
+            sniffed_at: 0,
             seen,
             read_as,
             clean_at: std::cell::Cell::new(None),
@@ -897,6 +912,24 @@ impl Buffer {
     /// Whether the markup was read out of the file rather than out of its name.
     pub fn syntax_was_guessed(&self) -> bool {
         self.syntax_guessed
+    }
+
+    /// Whether the text still decides the syntax as it is written: a scratch
+    /// that has no name yet, and whose syntax nobody — `:syntax`, a modeline —
+    /// has chosen.
+    pub fn sniffs_as_typed(&self) -> bool {
+        self.from_nothing && self.path.is_none() && self.syntax_guessed && !self.syntax_by_hand
+    }
+
+    /// Guess the scratch's syntax again if its text changed since the last
+    /// guess. Returns whether the guess is different.
+    pub fn sniff_as_typed(&mut self) -> bool {
+        if !self.sniffs_as_typed() || self.sniffed_at == self.revision {
+            return false;
+        }
+        self.sniffed_at = self.revision;
+        let now = crate::syntax::sniff_rope(&self.rope);
+        std::mem::replace(&mut self.syntax, now) != now
     }
 
     /// Say which markup it is written in, overriding what was guessed.
@@ -1673,7 +1706,17 @@ impl Buffer {
         // made every save-as look like a file that had changed underneath.
         self.owns_swap = false;
         match self.save_forcing(true, finish) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                // A guess gives way to a name that says: a scratch saved as
+                // `草稿.typ` is Typst from now on.
+                let named = self.path.as_deref().and_then(|p| p.file_name());
+                let said = named.and_then(|n| crate::syntax::from_extension(&n.to_string_lossy()));
+                if let Some(syntax) = said.filter(|_| self.syntax_guessed && !self.syntax_by_hand) {
+                    self.syntax = syntax;
+                    self.syntax_guessed = false;
+                }
+                Ok(())
+            }
             Err(err) => {
                 self.path = old_path;
                 self.owns_swap = old_owns;

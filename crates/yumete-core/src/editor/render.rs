@@ -1328,6 +1328,26 @@ impl Editor {
         *self.block_cache.borrow_mut() = None;
     }
 
+    /// **A scratch is guessed again as it is written** (2026-11-06): it
+    /// opened empty, so the guess made then had nothing to go on, and a
+    /// scratch of Typst kept being drawn as Markdown. Asked whenever the text
+    /// changed outside Insert mode — on `Esc`, not between two letters of a
+    /// word — until `:syntax` or a name settles it. The project's word, when
+    /// it has one for a nameless buffer, is not second-guessed.
+    pub fn sniff_the_scratch(&mut self) {
+        if self.mode == Mode::Insert {
+            return;
+        }
+        let name = self.current_buffer().display_name();
+        if self.configured_syntax(&name).is_some() {
+            return;
+        }
+        if self.current_buffer_mut().sniff_as_typed() {
+            self.markup_memo.forget();
+            *self.block_cache.borrow_mut() = None;
+        }
+    }
+
     /// What the project's config says about a file called `name`.
     ///
     /// The exact name wins over the extension, so a project can say "all my

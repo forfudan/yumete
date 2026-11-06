@@ -16940,8 +16940,13 @@ fn squeezed(text: &str) -> String {
     }
 
     /// Type `text` into a fresh editor and return to Normal mode.
+    ///
+    /// As Markdown, said up front: a scratch is plain text until its writing
+    /// says otherwise, and these fixtures are Markdown however little of it
+    /// they hold.
     fn editor_with(text: &str) -> Editor {
         let mut editor = Editor::new();
+        editor.execute(":syntax markdown").unwrap();
         editor.on_key(Key::Char('i'));
         for c in text.chars() {
             editor.on_key(if c == '\n' { Key::Enter } else { Key::Char(c) });

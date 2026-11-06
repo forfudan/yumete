@@ -47,6 +47,7 @@ impl Editor {
         self.settle_folds();
         self.keep_the_signature_up(was);
         self.settle_the_change(was);
+        self.sniff_the_scratch();
         match std::mem::take(&mut self.quit_from_binding) {
             true => KeyOutcome::Quit,
             false => outcome,
