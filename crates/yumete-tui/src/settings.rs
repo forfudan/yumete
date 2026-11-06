@@ -921,6 +921,31 @@ mod key_tree_tests {
         assert!(!ed.key_notes().join(" ").contains("空的鍵組"), "a built-in group renamed is not hollow");
     }
 
+    /// **A table grid's group that takes a key is said too** (review,
+    /// 2026-11-06): `Q` replays a macro, and `[keys.table.Q]` takes it there.
+    #[test]
+    fn a_table_grids_group_says_the_key_it_took() {
+        let ed = laid("[keys.table.Q]\nl = \"move_char_right\"\n");
+        assert!(ed.taken_keys().iter().any(|k| k == "Q"), "{:?}", ed.taken_keys());
+    }
+
+    /// **A moved Space menu says the key that opened it**, and a named key
+    /// in a menu reads as the hint row writes it (review, 2026-11-06).
+    #[test]
+    fn a_moved_space_echoes_its_own_key_and_tab_reads_tab() {
+        let mut ed = laid("[keys.normal]\n\";\" = \"space_mode\"\n\n[keys.normal.space.tab]\nlabel = \"tabs\"\nn = \":new\"\n");
+        press(&mut ed, ";");
+        assert_eq!(ed.typed_so_far(), ";");
+        let (title, rows) = menu(&ed);
+        assert_eq!(title, ";");
+        assert_eq!(line_of(&rows, "Tab"), Some("+tabs"), "{rows:?}");
+        ed.on_key(Key::Tab);
+        assert_eq!(ed.typed_so_far(), ";Tab");
+        ed.on_key(Key::Esc);
+        press(&mut ed, " ");
+        assert_eq!(ed.typed_so_far(), "␣", "Space itself still says Space");
+    }
+
     /// **A count typed in a group is in the key echo** (review, 2026-11-05):
     /// `Space a b 3` says `␣ab3`, and `Backspace` takes the 3 back.
     #[test]
@@ -1148,7 +1173,7 @@ q = ":quit"
         let mut ed = laid(&config);
         press(&mut ed, " ");
         let (_, rows) = menu(&ed);
-        for (keys, name) in [("b", "+buffer"), ("c", "+code"), ("f", "+file/find"), ("g", "+git"), ("s", "+search"), ("<tab>", "+tabs")] {
+        for (keys, name) in [("b", "+buffer"), ("c", "+code"), ("f", "+file/find"), ("g", "+git"), ("s", "+search"), ("Tab", "+tabs")] {
             assert_eq!(line_of(&rows, keys), Some(name), "{rows:?}");
         }
         press(&mut ed, "g");

@@ -17,6 +17,13 @@ in `docs/development.md` §5.2.
 
 - **Startup says which keys a table took from a command once**, at the first start-up after they change, not at every start-up; `:check-config` says it whenever you ask. A mistake in the tables (one key written twice, a table with no keys) is still said at every start-up until it is fixed.
 
+### Fixed
+
+- **Menus write named keys as the hint row does**: `Tab`, `S-Tab`, `Enter`, `↑`, not `<tab>`.
+- **A group opened from a key you bound says that key**: with `";" = "space_mode"`, the key echo reads `;` and `;b`, and the menu is titled `;`.
+- **A `[keys.table]` group that takes a key is said at startup**, as a `[keys.normal]` one is.
+- **Typst: `#[…]` is drawn as code around writing**, and the `.` in `第 #w. 項` ends the variable; `#w.len()` still runs on.
+
 ## 0.19.0 · 2026-11-05
 
 ### Added

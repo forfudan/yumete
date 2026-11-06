@@ -666,7 +666,16 @@ impl Editor {
     /// Not a mistake: a LazyVim-style config takes them on purpose, so
     /// start-up says it once for each change of them (2026-11-06).
     pub fn taken_keys(&self) -> Vec<String> {
-        self.normal_tree.notes.iter().map(|(path, _)| quoted(path)).collect()
+        // A table grid's too (`[keys.table.Q]` takes `Q` there), once each
+        // (review, 2026-11-06).
+        let mut out: Vec<String> = Vec::new();
+        for (path, _) in self.normal_tree.notes.iter().chain(&self.table_tree.notes) {
+            let path = quoted(path);
+            if !out.contains(&path) {
+                out.push(path);
+            }
+        }
+        out
     }
 
     /// [`Self::taken_keys`] as the one line that says them.
@@ -1083,8 +1092,9 @@ impl Editor {
             .collect();
         let title = match (node.and_then(|n| n.label.clone()), group) {
             (Some(label), _) => label,
-            // The Space menu is titled by its key, and under vim that may be `\`.
-            (None, Some(group)) if group.name == SPACE.name && self.space_sign() == "\\" => "\\".to_string(),
+            // The Space menu is titled by its key when that is not Space: `\`
+            // under vim, or the key a binding moved it to.
+            (None, Some(group)) if group.name == SPACE.name && self.space_sign() != "␣" => self.space_sign(),
             (None, Some(group)) => crate::messages::say(group.title, &[]),
             (None, None) => yumete_cjk::actions::spell(node.map_or("", |n| n.path.as_str())),
         };
@@ -1158,7 +1168,13 @@ impl Editor {
     pub(super) fn node_sign(&self) -> Option<String> {
         let Pending::Node(code) = self.pending else { return None };
         let node = self.tree().nodes.get(self.node_in_force(code)?)?;
-        Some(split_keys(&node.path).iter().map(|k| key_label(key_of(k))).collect())
+        let mut keys: Vec<String> = split_keys(&node.path).iter().map(|k| key_label(key_of(k))).collect();
+        // The first is the key that opened it this time (`;` for a moved
+        // Space, `\` under vim), where the path holds the group's own.
+        if let (Some(first), Some(opened)) = (keys.first_mut(), self.group_opened_by.as_ref()) {
+            first.clone_from(opened);
+        }
+        Some(keys.concat())
     }
 
     /// The keys held in a group (`b` of `Space bd`), as a sign writes them.
@@ -1168,12 +1184,17 @@ impl Editor {
 
     /// **The key that opens the Space menu**, as a sign writes it: the
     /// first key at the top level that opens it, `␣` when that is Space.
-    pub(super) fn space_sign(&self) -> &'static str {
+    pub(super) fn space_sign(&self) -> String {
+        // The key that opened it this time, when one did: `;` with
+        // `";" = "space_mode"` (review, 2026-11-06).
+        if let Some(key) = self.group_opened_by.as_ref().filter(|_| self.pending.group().is_some()) {
+            return key.clone();
+        }
         let at = self.group_context();
         let homes = home_paths(&Context { vim: at.vim, flavor: at.flavor, ..Context::default() });
         match place_of(&SPACE).and_then(|p| homes[p].as_ref()).and_then(|path| path.first()).map(String::as_str) {
-            Some("\\") => "\\",
-            _ => "␣",
+            Some("\\") => "\\".to_string(),
+            _ => "␣".to_string(),
         }
     }
 }

@@ -459,7 +459,7 @@ impl Editor {
         let space = self.space_sign();
         let word: String = match self.pending {
             Pending::Space | Pending::Open | Pending::Yume | Pending::YumeValue(_) | Pending::Conflict => {
-                word.replacen('␣', space, 1)
+                word.replacen('␣', &space, 1)
             }
             Pending::Table | Pending::TableConvert => format!("{space}{word}"),
             Pending::Case if self.vim_keymap() => "g`".to_string(),

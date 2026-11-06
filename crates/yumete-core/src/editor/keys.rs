@@ -34,7 +34,15 @@ impl Editor {
     /// Handle a single key press according to the current mode.
     pub fn on_key(&mut self, key: Key) -> KeyOutcome {
         let was = self.before_a_change();
+        let opened_from_top = self.pending == Pending::None;
         let outcome = self.on_key_now(key);
+        match self.pending {
+            Pending::None => self.group_opened_by = None,
+            _ if opened_from_top && self.pending.group().is_some() => {
+                self.group_opened_by = Some(super::groups::key_label(key));
+            }
+            _ => {}
+        }
         self.leave_an_empty_group();
         self.settle_folds();
         self.keep_the_signature_up(was);

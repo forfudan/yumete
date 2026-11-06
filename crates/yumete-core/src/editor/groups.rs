@@ -298,7 +298,9 @@ pub(super) fn key_label(key: Key) -> String {
         Key::Backspace => "⌫".to_string(),
         Key::Ctrl(c) => format!("C-{c}"),
         Key::Alt(c) => format!("A-{c}"),
-        other => yumete_cjk::actions::spell(&super::keys::key_internal(other)),
+        // As the hint row writes them (`Tab`, `↑`, `Enter`), not as a config
+        // spells them (`<tab>`): a menu is read, not copied (review, 2026-11-06).
+        other => super::places::hint_key(other),
     }
 }
 

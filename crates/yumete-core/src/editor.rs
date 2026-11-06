@@ -2881,6 +2881,10 @@ pub struct Editor {
     /// Warning: **只在 Esc 没有別的事可做的時候。** Esc 先收窗口、先收選區；那幾件都
     /// 不是這一件，而一個鍵一次只該做一件事。
     say_it_again: bool,
+    /// **The key that opened the group waiting now**, as a sign writes it,
+    /// when a key at the top level did: a Space group moved to `;` echoes
+    /// `;` (2026-11-06). Cleared when nothing waits.
+    group_opened_by: Option<String>,
     /// Where the global `config.toml` is, for `:config-open`: the frontend
     /// says (`set_config_file`), since where it lives is XDG's business.
     config_file: Option<std::path::PathBuf>,
@@ -4458,6 +4462,7 @@ impl Editor {
             asked_where_from: None,
             definition_kind: crate::lsp::Goto::Definition,
             say_it_again: false,
+            group_opened_by: None,
             config_file: None,
             config_reload: false,
             config_back: false,

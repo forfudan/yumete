@@ -1749,9 +1749,10 @@ pub mod typst {
             }
             // `#import`, `#let`, `#show`, `#set` and every call: the
             // instructions, not the writing. Shown, always — a writer needs to
-            // see what produces the page. `#(1 + 2)` and `#{…}` are code too.
+            // see what produces the page. `#(1 + 2)`, `#{…}` and `#[…]` are code
+            // too, the last with writing inside (review, 2026-11-06).
             if chars[at] == '#'
-                && chars.get(at + 1).is_some_and(|&c| c.is_alphabetic() || matches!(c, '(' | '{'))
+                && chars.get(at + 1).is_some_and(|&c| c.is_alphabetic() || matches!(c, '(' | '{' | '['))
             {
                 let (end, bodies) = code_parts(chars, at + 1);
                 let mine = construct;
@@ -2026,8 +2027,12 @@ pub mod typst {
 
     fn code_end(chars: &[char], from: usize) -> usize {
         let mut at = from;
+        // A `.` goes on only into a field or method (`#w.len()`); the one
+        // in `第 #w. 項` ends the sentence, as Typst reads it (review,
+        // 2026-11-06).
+        let goes_on = |i: usize| chars.get(i + 1).is_some_and(|&c| c.is_alphanumeric() || c == '_');
         while at < chars.len()
-            && (chars[at].is_alphanumeric() || chars[at] == '.' || chars[at] == '_')
+            && (chars[at].is_alphanumeric() || chars[at] == '_' || (chars[at] == '.' && goes_on(at)))
         {
             at += 1;
         }
@@ -2396,6 +2401,15 @@ mod typst_tests {
                 assert!(b.start >= a.end || b.end <= a.end, "{all:?}");
             }
         }
+    }
+
+    /// `#[…]` is code around writing, and the `.` after `#w` ends it unless
+    /// a field follows (review, 2026-11-06).
+    #[test]
+    fn content_blocks_and_a_stop_after_a_variable() {
+        assert_eq!(shape("#[甲 *乙*] 丙"), "##  .B.#  ");
+        assert_eq!(shape("第 #w. 項"), "  ##   ");
+        assert_eq!(shape("#w.len() x"), "########  ");
     }
 
     /// **A bare URL is a link, not a comment from its `//`** (review,
