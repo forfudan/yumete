@@ -37679,3 +37679,73 @@ fn a_scratch_is_text_until_its_writing_says_otherwise() {
     assert_eq!(ed.syntax(), Syntax::Typst);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **Typst is code where it is code** (2026-11-06): in a served `.typ`, the
+/// caret on `#footnotes` asks the server (`Space k`, `gd`, completion,
+/// signature help); on writing it asks the wiki and the words, as before.
+/// It used to be decided by the file, so tinymist was never asked anything
+/// and a friend took it for broken.
+#[test]
+fn typst_asks_the_server_on_code_and_the_wiki_on_writing() {
+    let dir = tmp().join(format!("yumete-typst-spot-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("書.typ");
+    std::fs::write(&path, "#footnotes\n\n那年冬天，$x^2$ 很冷。\n\n#let n = 1\n").unwrap();
+    let open = |served: bool| {
+        let mut ed = Editor::new();
+        ed.open_file(&path).unwrap();
+        if served {
+            ed.mark_served(path.clone());
+        }
+        ed
+    };
+
+    // `Space k` on code: the server.
+    let mut ed = open(true);
+    press(&mut ed, "ggll");
+    press(&mut ed, " k");
+    assert!(ed.take_hover_query().is_some(), "#footnotes asks tinymist");
+    // On writing: the wiki, and no question to the server.
+    press(&mut ed, "2gg");
+    press(&mut ed, " k");
+    assert!(ed.take_hover_query().is_none(), "prose is the wiki's");
+    // Maths is code.
+    press(&mut ed, "2gg0");
+    press(&mut ed, "f$l");
+    press(&mut ed, " k");
+    assert!(ed.take_hover_query().is_some(), "$x^2$ asks tinymist");
+    // `gd` on code asks the server too.
+    press(&mut ed, "ggll");
+    press(&mut ed, "gd");
+    assert!(ed.take_definition_query().is_some(), "gd on code asks");
+
+    // Completion: `#` opens code and asks; a word of writing does not.
+    press(&mut ed, "Go");
+    ed.on_key(Key::Char('#'));
+    assert!(ed.take_completion_query().is_some(), "`#` asks");
+    for c in "fig".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.take_completion_query().is_some(), "#fig asks");
+    // …and `(` after it asks for the signature.
+    ed.on_key(Key::Char('('));
+    assert!(ed.take_signature_query().is_some(), "#fig( asks for a signature");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "o");
+    for c in "冬天 and (snow".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    assert!(ed.take_completion_query().is_none(), "writing never asks the server");
+    assert!(ed.take_signature_query().is_none(), "nor does a `(` in writing");
+    ed.on_key(Key::Esc);
+
+    // Not served (no tinymist): code says so rather than showing the wiki.
+    let mut ed = open(false);
+    press(&mut ed, "ggll");
+    press(&mut ed, " k");
+    assert!(ed.take_hover_query().is_none());
+    assert_eq!(ed.status(), say!("lsp.not-served"));
+
+    std::fs::remove_dir_all(&dir).ok();
+}

@@ -292,6 +292,14 @@ impl Editor {
                 // The same code `gL` runs (2026-11-02).
                 return self.follow_link();
             }
+            // **Typst code is the server's before the wiki's** (2026-11-06), as
+            // `Space k` is: a name in `#let` is a variable, not an entry.
+            if !self.writes_code()
+                && self.server_spot(self.sel.head())
+                && self.ask_where_this_is_written(crate::lsp::Goto::Definition)
+            {
+                return;
+            }
             // **A wiki name is a definition too** (#287): `gd` opens the file
             // its entry is written in, on the heading.
             if self.follow_wiki() {

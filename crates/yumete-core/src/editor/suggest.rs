@@ -129,7 +129,8 @@ impl Editor {
         }
         let items = match self.path_offers(by_hand) {
             Some(items) => items,
-            None if self.writes_code() => return false,
+            // Code asks the server, a Typst `#…` as much as a program.
+            None if self.writes_code() || self.server_answers_here() => return false,
             None => match self.word_offers(by_hand) {
                 Some(items) => items,
                 None => return false,

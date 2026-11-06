@@ -76,6 +76,85 @@ impl Editor {
         matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_))
     }
 
+    /// **Whether a language server is there to ask about this file**: a code
+    /// file, or a text file one serves (2026-10-30, tinymist for Typst).
+    pub(super) fn serves_this_file(&self) -> bool {
+        self.writes_code() || self.current_buffer().path().is_some_and(|p| self.served.contains(p))
+    }
+
+    /// **Whether the spot `at` is code** (2026-11-06): all of a code file,
+    /// and in Typst a `#…` expression, maths, a `@reference` or `<label>`,
+    /// or a code block's body. There the server answers, as in a program:
+    /// `Space k` is its documentation, and completion and signature help ask
+    /// it. Everywhere else is writing, where the wiki and the words answer.
+    /// Markdown has no such spot: its fences hold other languages.
+    ///
+    /// Decided on the spot rather than the file because Typst is both
+    /// (2026-11-06: `Space k` on `#footnotes` showed the wiki, and completion
+    /// never offered a function).
+    pub(super) fn server_spot(&self, at: usize) -> bool {
+        match self.current_buffer().syntax() {
+            crate::syntax::Syntax::Code(_) => true,
+            crate::syntax::Syntax::Typst => self.typst_code_at(at),
+            _ => false,
+        }
+    }
+
+    /// A server is asked about the caret: the file is served and the caret
+    /// is on code.
+    pub(super) fn server_answers_here(&self) -> bool {
+        self.serves_this_file() && self.server_spot(self.sel.head())
+    }
+
+    fn typst_code_at(&self, at: usize) -> bool {
+        use crate::markdown::{Block, Kind};
+        let rope = self.current_buffer().rope();
+        let at = at.min(rope.len_chars());
+        let line = rope.char_to_line(at);
+        let column = at - rope.line_to_char(line);
+        // In Insert the caret stands after what was typed, at the end of a
+        // run; in Normal it stands on a character.
+        let typing = self.mode == Mode::Insert;
+        // A `#` or `@` just typed opens code or a reference before there is
+        // anything after it for the parser to see.
+        if typing && at > 0 && matches!(rope.char(at - 1), '#' | '@') {
+            return true;
+        }
+        let on = |s: &crate::markdown::Span| s.start <= column && (column < s.end || typing && column == s.end);
+        let code = |k: Kind| matches!(k, Kind::Code2 | Kind::Math | Kind::Ref | Kind::Label);
+        if self.markup_runs(line).iter().any(|s| code(s.kind) && on(s)) {
+            return true;
+        }
+        match self.block_scanned(line) {
+            Block::Math { .. } => true,
+            // A code body over several lines, but not a raw ``` block, which
+            // is a listing in whatever language it names.
+            Block::Code { .. } => !self.in_a_raw_block(line),
+            _ => false,
+        }
+    }
+
+    /// The block `line` is in, whatever is being rendered: [`Self::block_of`]
+    /// says prose for everything when markup is not shown.
+    fn block_scanned(&self, line: usize) -> crate::markdown::Block {
+        self.scan_blocks();
+        let key = (self.current_buffer().id(), self.current_buffer().revision());
+        match self.block_cache.borrow().as_ref() {
+            Some((cached, blocks, _)) if *cached == key => blocks.get(line).copied().unwrap_or_default(),
+            _ => crate::markdown::Block::default(),
+        }
+    }
+
+    /// Whether the code block `line` is in opened with ```.
+    fn in_a_raw_block(&self, line: usize) -> bool {
+        let rope = self.current_buffer().rope();
+        let mut first = line;
+        while first > 0 && matches!(self.block_scanned(first - 1), crate::markdown::Block::Code { .. }) {
+            first -= 1;
+        }
+        rope.line(first).chars().skip_while(|c| c.is_whitespace()).take(3).eq("```".chars())
+    }
+
     /// **竪排時 `hjkl` 走行文還是走版面**，此刻是哪一種。
     pub fn vertical_keys(&self) -> yumete_cjk::VerticalKeys {
         self.vertical_keys
@@ -1669,7 +1748,7 @@ impl Editor {
     /// **Whether the gutter has a lane for diagnostics**: always in code, and
     /// in prose when a server serves the file (2026-10-30).
     pub fn has_a_problem_lane(&self) -> bool {
-        self.writes_code() || self.current_buffer().path().is_some_and(|p| self.served.contains(p))
+        self.serves_this_file()
     }
 
     /// 第 `line` 行（0 起算）上最響的那一句話，給行號旁邊那一格。
@@ -1792,7 +1871,7 @@ impl Editor {
     /// Warning: **問完不等**。編輯器是一條線程，答案下一趟循環纔回得來——所以這裏只
     /// 把問題放下，光標過一會兒纔跳。helix 也是這樣（它的請求同樣是異步的）。
     pub(super) fn ask_where_this_is_written(&mut self, kind: crate::lsp::Goto) -> bool {
-        if !matches!(self.current_buffer().syntax(), crate::syntax::Syntax::Code(_)) {
+        if !self.server_answers_here() {
             return false;
         }
         let Some(path) = self.current_buffer().path().map(std::path::Path::to_path_buf) else {
@@ -1893,8 +1972,16 @@ impl Editor {
     /// 显示文档。这是不好的，它以就可以显示百科」）。兩個鍵說的是同一句話，而
     /// 「畫在哪」是另一件事——`afloat` 那一半，見 [`Editor::ask_for_info`]。
     pub(super) fn ask_what_this_is(&mut self, afloat: bool) -> bool {
-        if !self.writes_code() {
+        // Writing asks the wiki; code, in a program or in Typst, the server.
+        if !self.server_spot(self.sel.head()) {
             return self.show_the_wiki_here(afloat);
+        }
+        if !self.serves_this_file() {
+            self.status = match self.current_buffer().path() {
+                None => say!("lsp.buffer-unsaved"),
+                Some(_) => say!("lsp.not-served"),
+            };
+            return true;
         }
         let Some((path, line, utf16)) = self.where_the_cursor_is_in_code() else {
             return false;
@@ -2003,7 +2090,7 @@ impl Editor {
     /// 光標那一格是 [`Self::where_the_cursor_is_in_code`]；問別的格子的只有一處，
     /// 見 [`Self::a_hover_on_the_callee`]。
     fn where_in_code(&self, at: usize) -> Option<(std::path::PathBuf, usize, usize)> {
-        if !self.writes_code() {
+        if !self.serves_this_file() || !self.server_spot(at) {
             return None;
         }
         let path = self.current_buffer().path()?.to_path_buf();
@@ -2359,7 +2446,7 @@ impl Editor {
     /// - **An empty answer to those closes it**, as helix's does; `)` no longer
     ///   closes it by itself (in `f(g(x)`, `f` is still being filled).
     pub(super) fn maybe_ask_for_a_signature(&mut self, just_typed: &str) {
-        if !self.writes_code() || self.mode != Mode::Insert || just_typed.is_empty() {
+        if !self.serves_this_file() || self.mode != Mode::Insert || just_typed.is_empty() {
             return;
         }
         let Some(last) = just_typed.chars().last() else { return };
@@ -2401,8 +2488,10 @@ impl Editor {
 
     /// The trigger characters of the servers for this file's language.
     fn signature_triggers_here(&self) -> Vec<String> {
+        // The keys the front end files a server's answers under.
         let language = match self.current_buffer().syntax() {
             crate::syntax::Syntax::Code(language) => language.name(),
+            crate::syntax::Syntax::Typst => "typst",
             _ => return Vec::new(),
         };
         match self.signature_triggers.get(language) {
@@ -2432,7 +2521,7 @@ impl Editor {
     /// or a caret move asks again once things have been still for
     /// [`SIGNATURE_AGAIN`].
     pub(super) fn keep_the_signature_up(&mut self, was: (Mode, u64, u64, usize)) {
-        if self.mode != Mode::Insert || !self.writes_code() {
+        if self.mode != Mode::Insert || !self.serves_this_file() {
             return;
         }
         if was.0 != Mode::Insert {
@@ -2639,12 +2728,18 @@ impl Editor {
         if self.offer_from_the_text(false) {
             return;
         }
-        if !self.writes_code() {
+        // In writing the words answer; the server only where the caret is on
+        // code (2026-11-06), so a chapter typed in Chinese does not ask it
+        // for every character.
+        if !self.server_answers_here() {
             self.offering = None;
             return;
         }
         let Some(last) = just_typed.chars().last() else { return };
-        let asks = last.is_alphanumeric() || last == '_' || last == '.' || last == ':';
+        // `#` and `@` open code and references in Typst; in a program they
+        // are comments and decorators.
+        let typst = self.current_buffer().syntax() == crate::syntax::Syntax::Typst;
+        let asks = last.is_alphanumeric() || matches!(last, '_' | '.' | ':') || typst && matches!(last, '#' | '@');
         if !asks {
             self.offering = None;
             self.completion_query = None;
