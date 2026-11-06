@@ -3243,9 +3243,13 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
     };
     HashMap::from([
         // rust-analyzer comes with rustup and gopls is Go's own: one obvious
-        // answer each. Go also takes helix's linter server after it.
+        // answer each.
         ("rust".to_string(), vec![one("rust-analyzer", &[])]),
-        ("go".to_string(), vec![one("gopls", &[]), one("golangci-lint-langserver", &[])]),
+        // Warning: **Not helix's `golangci-lint-langserver`** (review, 2026-11-06):
+        // it needs its `command` in initialization options, which a server
+        // here cannot be given, and without it golangci-lint 2 reports
+        // nothing.
+        ("go".to_string(), vec![one("gopls", &[])]),
         // **Every language yumete colours takes helix's list** (2026-11-06,
         // helix `languages.toml` of 2026-07-23). Only what is installed
         // starts, so a list costs nothing to a machine without it; and
@@ -6114,7 +6118,7 @@ mod runner_tests {
             c.lsp[lang].iter().map(|s| s.command.clone()).collect()
         };
         assert_eq!(named(&bare, "rust"), ["rust-analyzer"]);
-        assert_eq!(named(&bare, "go"), ["gopls", "golangci-lint-langserver"]);
+        assert_eq!(named(&bare, "go"), ["gopls"]);
         // helix's list for every language yumete colours (2026-11-06), with
         // its arguments: `jdtls` alone, `typescript-language-server --stdio`.
         assert_eq!(named(&bare, "java"), ["jdtls"]);
@@ -6146,7 +6150,7 @@ args = [\"--log-file\", \"/tmp/ra.log\"]
         );
         assert_eq!(config.lsp["rust"][0].args, ["--log-file", "/tmp/ra.log"]);
         // …and the ones nobody mentioned are still there.
-        assert_eq!(named(&config, "go"), ["gopls", "golangci-lint-langserver"]);
+        assert_eq!(named(&config, "go"), ["gopls"]);
 
         // Warning: **一串的寫法，而且一串「表」**——每個候選的參數不一樣，所以一串名字
         // 表達不了（`ruff server`、`ty server`，而 `jedi-language-server` 不帶）。

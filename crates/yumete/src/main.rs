@@ -74,7 +74,7 @@ fn write_the_first_config() {
     if path.exists() {
         return;
     }
-    let _ = std::fs::write(&path, "[keys]\npreset = \"vim\"\n");
+    let _ = std::fs::write(&path, import::FIRST_CONFIG);
 }
 
 /// **Start again in `there`** — the other half of `空格 o p` (2026-10-18).

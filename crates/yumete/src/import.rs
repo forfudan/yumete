@@ -86,26 +86,46 @@ pub fn lazyvim_sign(nvim: &Path) -> Option<PathBuf> {
         .find(|file| std::fs::read_to_string(file).is_ok_and(|text| text.contains("LazyVim")))
 }
 
+/// The whole of the `config.toml` the first start writes for a vim reader.
+pub const FIRST_CONFIG: &str = "[keys]\npreset = \"vim\"\n";
+
 /// **Where the import goes**: `config.toml` when there is none, else beside
 /// it, `config.imported.toml` (then `-2`, `-3`…, so an earlier import the
 /// reader may have edited is not written over either). The flag says which.
+///
+/// The one-line file the first start wrote counts as none (review,
+/// 2026-11-06): that start tells a LazyVim reader to run `--import
+/// lazyvim`, and the import should then become their config. A name taken by
+/// anything, a link to nowhere included, counts as taken.
 pub fn target(dir: &Path) -> (PathBuf, bool) {
+    let taken = |path: &Path| path.symlink_metadata().is_ok();
     let config = dir.join("config.toml");
-    if !config.exists() {
+    let only_the_first = || std::fs::read_to_string(&config).is_ok_and(|text| text == FIRST_CONFIG);
+    if !taken(&config) || only_the_first() {
         return (config, false);
     }
     let first = dir.join("config.imported.toml");
-    if !first.exists() {
+    if !taken(&first) {
         return (first, true);
     }
     let mut n = 2;
     loop {
         let next = dir.join(format!("config.imported-{n}.toml"));
-        if !next.exists() {
+        if !taken(&next) {
             return (next, true);
         }
         n += 1;
     }
+}
+
+/// Write the import: a new file is only ever created, never written through
+/// one that appeared since, and the first start's one-liner is replaced.
+fn write(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    if std::fs::read_to_string(path).is_ok_and(|was| was == FIRST_CONFIG) {
+        return std::fs::write(path, text);
+    }
+    std::fs::OpenOptions::new().write(true).create_new(true).open(path)?.write_all(text.as_bytes())
 }
 
 /// What an import wrote, and how much of it.
@@ -917,7 +937,7 @@ pub fn run(which: &str) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    if let Err(err) = std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(&path, &imported.text)) {
+    if let Err(err) = std::fs::create_dir_all(&dir).and_then(|()| write(&path, &imported.text)) {
         eprintln!("yumete: cannot write {}: {err}", path.display());
         return ExitCode::FAILURE;
     }
@@ -1190,8 +1210,12 @@ j = { k = "normal_mode" }
     fn an_import_never_writes_over_a_config() {
         let dir = scratch("target");
         assert_eq!(target(&dir), (dir.join("config.toml"), false));
-        std::fs::write(dir.join("config.toml"), "[keys]\npreset = \"vim\"\n").unwrap();
+        // The first start's one-liner is no config of the reader's.
+        std::fs::write(dir.join("config.toml"), FIRST_CONFIG).unwrap();
+        assert_eq!(target(&dir), (dir.join("config.toml"), false));
+        write(&dir.join("config.toml"), "[keys]\npreset = \"helix\"\n").unwrap();
         assert_eq!(target(&dir), (dir.join("config.imported.toml"), true));
+        assert!(write(&dir.join("config.toml"), "x").is_err(), "a config of theirs is never written over");
         std::fs::write(dir.join("config.imported.toml"), "").unwrap();
         assert_eq!(target(&dir), (dir.join("config.imported-2.toml"), true));
         let _ = std::fs::remove_dir_all(&dir);

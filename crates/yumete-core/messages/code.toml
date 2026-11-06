@@ -401,6 +401,13 @@ zhs = "找不到 {0}，请在配置的 [lsp] 表中检查拼写，或安装它"
 en = "not on this machine: {0}. Check the spelling in the config's [lsp] table, or install it"
 
 [[message]]
+# 打開代碼檔時：出廠填好的服務器這臺機器上一個都没有（草稿）
+key = "lsp.not-installed-factory"
+zht = "未安裝 {0}，裝上即可使用"
+zhs = "未安装 {0}，装上即可使用"
+en = "not installed: {0}. Install one to use it here"
+
+[[message]]
 # gr、空格 r、空格 a 在沒接語言服務器的文件裏
 key = "lsp.not-served"
 zht = "此文件未綁定語言服務器"

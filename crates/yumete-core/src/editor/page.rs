@@ -117,7 +117,8 @@ impl Editor {
         let typing = self.mode == Mode::Insert;
         // A `#` or `@` just typed opens code or a reference before there is
         // anything after it for the parser to see.
-        if typing && at > 0 && matches!(rope.char(at - 1), '#' | '@') {
+        let escaped = at > 1 && rope.char(at - 2) == '\\';
+        if typing && at > 0 && matches!(rope.char(at - 1), '#' | '@') && !escaped {
             return true;
         }
         let on = |s: &crate::markdown::Span| s.start <= column && (column < s.end || typing && column == s.end);

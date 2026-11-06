@@ -1339,7 +1339,15 @@ impl Editor {
             return;
         }
         let name = self.current_buffer().display_name();
-        if self.configured_syntax(&name).is_some() {
+        // The project's word for a nameless buffer is taken, not guessed
+        // over: a `:new` made after start-up never had it applied
+        // (review, 2026-11-06).
+        if let Some(said) = self.configured_syntax(&name) {
+            if self.current_buffer().sniffs_as_typed() && self.current_buffer().syntax() != said {
+                self.current_buffer_mut().set_syntax(said);
+                self.markup_memo.forget();
+                *self.block_cache.borrow_mut() = None;
+            }
             return;
         }
         if self.current_buffer_mut().sniff_as_typed() {

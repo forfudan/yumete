@@ -502,6 +502,7 @@ impl Servers {
         language: &str,
         from: Option<&Path>,
     ) -> Vec<&'a yumete_config::Server> {
+        let from = from.filter(|_| from_the_project(language));
         config
             .lsp
             .get(language)
@@ -583,7 +584,11 @@ impl Servers {
                 && !(matches!(language, "markdown" | "typst" | "text")
                     && config.lsp.get(language) == yumete_config::factory_servers().get(language))
             {
+                // The factory's list was nobody's spelling to check
+                // (2026-11-06).
+                let factory = config.lsp.get(language) == yumete_config::factory_servers().get(language);
                 self.says = Some(match config.lsp.get(language).filter(|v| !v.is_empty()) {
+                    Some(wanted) if factory => say!("lsp.not-installed-factory", Self::the_names(wanted)),
                     Some(wanted) => say!("lsp.not-installed", Self::the_names(wanted)),
                     None => say!("lsp.no-server-configured", language),
                 });
@@ -605,7 +610,8 @@ impl Servers {
                 if self.running.contains_key(&named.command) {
                     continue;
                 }
-                let Some(at) = found_here(&named.command, Some(&here)) else { continue };
+                let from = from_the_project(language).then_some(here.as_path());
+                let Some(at) = found_here(&named.command, from) else { continue };
                 // **用的是項目裏那一個就說一句**（2026-09-29 定）。Warning: 不
                 // 寫目錄——狀態欄那一行很貴，完整路徑在 `:diagnostics-all` 頂上
                 // 那一行。
@@ -1039,7 +1045,11 @@ impl Servers {
         // 候選（`ty`/`ruff`/`pylsp`/`jedi-language-server`，抄的 helix），而
         // 從前這句話只說第一個——讀者於是只會去裝 `ty`，其實裝哪一個都行。
         if Self::named(config, language, Some(&Self::look_from(editor))).is_none() {
-            return Some(Cannot { word: say!("lsp.not-installed", Self::the_names(wanted)), for_now: false });
+            let word = match config.lsp.get(language) == yumete_config::factory_servers().get(language) {
+                true => say!("lsp.not-installed-factory", Self::the_names(wanted)),
+                false => say!("lsp.not-installed", Self::the_names(wanted)),
+            };
+            return Some(Cannot { word, for_now: false });
         }
         // 三、稿子還沒存盤——服務器答的是檔案，沒有路徑就沒得問。
         if editor.current_buffer().path().is_none() {
@@ -1272,7 +1282,7 @@ impl Servers {
                         anything = true;
                     }
                     // Warning: An unanswered request can stall a server for good.
-                    Ok(Notice::Asked { id }) => server.say(lsp::empty_answer(&id)),
+                    Ok(Notice::Asked { id, result }) => server.say(lsp::answer_with(&id, &result)),
                     // **The answer to `gd`** — anything else with an id is an
                     // answer nobody is waiting for any more.
                     // Warning: **答案先收着，出了這個迴圈再說**（#425）。一個
@@ -1568,6 +1578,16 @@ impl Server {
         // its own round; there is nothing useful to do here.
         let _ = self.to.send(message);
     }
+}
+
+/// **Whose servers may come from inside the project** (2026-11-06): Python's
+/// and Mojo's, which need the project's own environment and are why the
+/// lookup exists. Every other language's come from `PATH`, as helix's do:
+/// with servers filled in for JSON, YAML and the rest, opening the
+/// `package.json` of an untrusted clone would otherwise run whatever that
+/// clone put in `node_modules/.bin`.
+fn from_the_project(language: &str) -> bool {
+    matches!(language, "python" | "mojo")
 }
 
 /// **Is this program on the machine?**
@@ -2179,6 +2199,18 @@ mod tests {
         // 找不到就回 `PATH` 上那一個：`sh` 哪臺機器都有。
         assert!(found_here("sh", Some(&deep)).is_some(), "退回 PATH");
 
+        // **Only Python's and Mojo's servers come from the project**
+        // (2026-11-06): a clone's `node_modules/.bin` is not run for its JSON.
+        let node = dir.join("node_modules/.bin");
+        std::fs::create_dir_all(&node).unwrap();
+        std::fs::write(node.join("vscode-json-language-server"), "#!/bin/sh\n").unwrap();
+        let config = yumete_config::Config::from_toml("");
+        let commands = |language: &str| -> Vec<String> {
+            Servers::all_named(&config, language, Some(&deep)).iter().map(|s| s.command.clone()).collect()
+        };
+        assert!(!commands("json").contains(&"vscode-json-language-server".to_string()), "not from the clone");
+        assert!(commands("python").contains(&"pylsp".to_string()), "Python's from the project");
+
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&above);
     }
@@ -2299,7 +2331,7 @@ mod tests {
     fn a_request_from_the_server_is_answered_rather_than_left_hanging() {
         let (mut editor, _path) = editor_on("c.rs", "fn main() {}\n");
         let (mut servers, heard, tell) = Servers::pretend("rust");
-        tell.send(Notice::Asked { id: "7".into() }).unwrap();
+        tell.send(Notice::Asked { id: "7".into(), result: "null".into() }).unwrap();
         servers.collect(&mut editor);
         let answer: serde_json::Value =
             serde_json::from_str(&heard.try_recv().expect("答了")).unwrap();

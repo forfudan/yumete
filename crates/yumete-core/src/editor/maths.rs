@@ -64,6 +64,17 @@ impl Editor {
         }
         .filter(|m| !m.source.trim().is_empty())
     }
+
+    /// **Which formula that is**: the buffer and the line it starts on, so
+    /// the float can tell a formula being typed from another one
+    /// (review, 2026-11-06: it showed the last picture made, wherever that was).
+    pub fn maths_anchor(&self) -> (u64, usize) {
+        let mut line = self.cursor_line();
+        while line > 0 && matches!(self.block_of(line), Block::Math { first: false, .. }) {
+            line -= 1;
+        }
+        (self.current_buffer().id(), line)
+    }
 }
 
 #[cfg(test)]

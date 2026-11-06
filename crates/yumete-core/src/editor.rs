@@ -4925,6 +4925,17 @@ impl Editor {
             return Some(match aim {
                 Aim::Top => scrolloff,
                 Aim::Middle => last / 2,
+                // vim never scrolls past the file's end for `zb` (review,
+                // 2026-11-06): the margin below is no more than the lines
+                // there are.
+                Aim::Bottom if self.vim_keymap() => {
+                    let rope = self.current_buffer().rope();
+                    let after = crate::motion::last_line(rope).saturating_sub(self.cursor_line());
+                    match pinned {
+                        true => (last / 2).max(last.saturating_sub(after)),
+                        false => last.saturating_sub(scrolloff.min(after)),
+                    }
+                }
                 Aim::Bottom if pinned => last / 2,
                 Aim::Bottom => last.saturating_sub(scrolloff),
                 // Warning: **夾在 `scrolloff` 裏頭**，同上面那一段說的理由：坐到邊上去

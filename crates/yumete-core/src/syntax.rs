@@ -153,8 +153,24 @@ const SNIFF_CHARS: usize = 64 * 1024;
 pub fn sniff(text: &str) -> Syntax {
     let mut typst = 0i32;
     let mut markdown = 0i32;
+    // **Code is neither** (review, 2026-11-06): a C snippet pasted into a
+    // scratch has `#include <…>` and `//` comments, and was read as Typst.
+    // Lines ending in `;` and C's preprocessor count against both, and with
+    // them in the file a `//` is a comment of the code's.
+    let mut code = 0i32;
+    let mut slashes = 0i32;
     for line in text.lines().take(SAMPLE) {
         let trimmed = line.trim_start();
+        if ["#include <", "#define ", "#ifndef ", "#ifdef ", "#endif", "#pragma ", "#[derive", "#!/"]
+            .iter()
+            .any(|k| trimmed.starts_with(k))
+        {
+            code += 4;
+            continue;
+        }
+        if trimmed.trim_end().ends_with(';') {
+            code += 2;
+        }
         // Typst code, which Markdown has no spelling for at all.
         if ["#import", "#include", "#let", "#set", "#show"]
             .iter()
@@ -190,8 +206,11 @@ pub fn sniff(text: &str) -> Syntax {
             markdown += 3;
         }
         // A call, a code block, or maths — all of them Typst.
-        if trimmed.starts_with("#[") || trimmed.starts_with("//") || trimmed.starts_with("$") {
+        if trimmed.starts_with("#[") || trimmed.starts_with("$") {
             typst += 2;
+        }
+        if trimmed.starts_with("//") {
+            slashes += 1;
         }
         // `#name(` or `#name[` mid-line is a Typst call, and as good as the
         // keywords: `#` followed by a letter is never Markdown, whose heading
@@ -209,8 +228,15 @@ pub fn sniff(text: &str) -> Syntax {
             }
         }
     }
+    match code > 0 {
+        true => code += 2 * slashes,
+        false => typst += 2 * slashes,
+    }
     // Nobody made a claim on this file, so nothing gets to interpret it.
     if typst < ENOUGH && markdown < ENOUGH {
+        return Syntax::Text;
+    }
+    if code >= typst.max(markdown) {
         return Syntax::Text;
     }
     match typst > markdown {
@@ -296,6 +322,16 @@ mod tests {
         // with two slashes, two of them is Typst.
         assert_eq!(sniff("// 待補\n"), Syntax::Text);
         assert_eq!(sniff("// 待補\n// 再補\n"), Syntax::Typst);
+    }
+
+    /// **A snippet of code is not markup** (review, 2026-11-06).
+    #[test]
+    fn code_pasted_into_a_scratch_is_neither() {
+        assert_eq!(sniff("#include <stdio.h>\nint main() {\n  printf(\"$x$\");\n}\n"), Syntax::Text);
+        assert_eq!(sniff("// add one\nlet a = $b;\n// done\n"), Syntax::Text);
+        assert_eq!(sniff("#[derive(Debug)]\nstruct A;\n"), Syntax::Text);
+        // Typst with a `;` in it is still Typst.
+        assert_eq!(sniff("#let a = 1; #let b = 2\n= 題\n#set text(size: 12pt)\n"), Syntax::Typst);
     }
 
     /// A file of tables never writes a heading, and it is the one place the

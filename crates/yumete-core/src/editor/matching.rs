@@ -552,13 +552,19 @@ impl Editor {
         let n = n.max(1);
         let head = self.sel.head();
         let width = self.wrap_width().unwrap_or(crate::wrap::NO_WRAP);
-        let (to, row, span) = self.with_page_measure(width, |rope, m| {
+        let moved = self.with_page_measure(width, |rope, m| {
             use crate::wrap::{advance, distance, position, retreat, rows_from, Anchor};
-            let top = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
+            let was = Anchor { line: rows[0].line, index_in_line: rows[0].index_in_line };
             let top = match down {
-                true => advance(rope, top, m, n),
-                false => retreat(rope, top, m, n),
+                true => advance(rope, was, m, n),
+                false => retreat(rope, was, m, n),
             };
+            // **Nothing to scroll moves nothing** under vim (review,
+            // 2026-11-06): `C-y` in a file that fits the window pulled the
+            // cursor in by scrolloff, where nvim leaves it.
+            if vim && top == was {
+                return None;
+            }
             let page = rows_from(rope, top, m, height);
             let edge = match down {
                 true => page.get(above),
@@ -588,8 +594,9 @@ impl Editor {
             let at = Anchor::from(position(rope, to, m));
             let row = distance(rope, top, at, m, height + 1).unwrap_or(0);
             let span = (page.first().map_or(0, |r| r.start), page.last().map_or(0, |r| r.end));
-            (to, row, span)
+            Some((to, row, span))
         });
+        let Some((to, row, span)) = moved else { return };
         if to != head {
             self.move_head(to);
         }
@@ -641,16 +648,24 @@ impl Editor {
             let end = last_row(rope, m);
             let at_the_end = last >= end;
             let at_the_start = top == Anchor::default();
-            // The overlap is two lines, fewer in a window too short to spare
-            // them (nvim's `get_scroll_overlap`, measured 2026-11-06): one at
-            // four rows, none at three or fewer.
+            // The overlap is two lines, fewer where they are not there to
+            // spare (nvim's `get_scroll_overlap`, measured 2026-11-06): one at
+            // four rows and none at three or fewer, and none or one when the
+            // page runs out of file — a `C-b` from a page showing only the
+            // last line overlaps nothing.
+            let third = match down {
+                true => rows.len() >= 2 || !at_the_start,
+                false => top != end,
+            };
+            let fourth = match down {
+                true => rows.len() >= 3 || !at_the_start,
+                false => third && advance(rope, top, m, 1) != end,
+            };
             let step = match (down, at_the_end, at_the_start) {
                 (true, true, _) | (false, _, true) => height,
-                _ => match height {
-                    0..=3 => height.max(1),
-                    4 => 3,
-                    _ => height - 2,
-                },
+                _ if height <= 3 || !third => height.max(1),
+                _ if height == 4 || !fourth => height - 1,
+                _ => height - 2,
             } * count.max(1);
             let new_top = match down {
                 true => advance(rope, top, m, step).min(end),

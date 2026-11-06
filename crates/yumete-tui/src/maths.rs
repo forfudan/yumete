@@ -91,6 +91,14 @@ struct Studio {
     started: bool,
     /// No `typst` on this machine: every answer is [`Answer::NoTypst`].
     no_typst: bool,
+    /// The formula whose last run took too long: answered so while it is
+    /// still the one asked about, and tried again once another was.
+    slow: Option<Key>,
+}
+
+/// What a run that ran out of time says.
+fn too_slow() -> String {
+    format!("more than {} s", PATIENCE.as_secs())
 }
 
 fn studio() -> &'static (Mutex<Studio>, Condvar) {
@@ -103,6 +111,7 @@ fn studio() -> &'static (Mutex<Studio>, Condvar) {
                 wanted: None,
                 started: false,
                 no_typst: false,
+                slow: None,
             }),
             Condvar::new(),
         )
@@ -138,6 +147,11 @@ pub fn ask(key: &Key) -> Answer {
     if let Some(answer) = studio.made.get(key) {
         return answer.clone();
     }
+    match &studio.slow {
+        Some(slow) if slow == key => return Answer::Failed(too_slow()),
+        Some(_) => studio.slow = None,
+        None => {}
+    }
     studio.wanted = Some(key.clone());
     if !studio.started {
         studio.started = true;
@@ -170,13 +184,25 @@ fn work() {
                 }
             }
         };
-        let answer = render(&key, place.as_ref());
+        // Without a folder of its own typst would take the working folder as
+        // its root, where a formula could read the project's files.
+        let answer = match &place {
+            Some(place) => render(&key, Some(place)),
+            None => Answer::Failed("no private folder for typst to work in".to_string()),
+        };
         {
             let mut studio = lock.lock().unwrap_or_else(|e| e.into_inner());
             if matches!(answer, Answer::NoTypst) {
                 studio.no_typst = true;
             }
-            keep(&mut studio, key, answer);
+            // A run that took too long may only have met a busy machine (the
+            // first font scan): it is tried again when next asked, not kept.
+            match &answer {
+                Answer::Failed(why) if *why == too_slow() => {
+                    studio.slow = Some(key);
+                }
+                _ => keep(&mut studio, key, answer),
+            }
         }
         if let Some(ring) = BELL.get() {
             ring();
@@ -216,6 +242,26 @@ impl Place {
         #[cfg(not(unix))]
         let me = std::env::var("USERNAME").unwrap_or_default();
         let base = std::env::temp_dir().join(format!("yumete-maths-{me}"));
+        // **This user's own, and nobody else's** (review, 2026-11-06): on
+        // Linux the temporary folder is the shared `/tmp`, where anyone could
+        // make this folder first and plant a package or a link in it. It is
+        // made private, and used only if it is a real folder of ours.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+            let _ = std::fs::DirBuilder::new().mode(0o700).create(&base);
+            let ours = std::fs::symlink_metadata(&base).ok()?;
+            // SAFETY: as above.
+            let uid = unsafe { libc::getuid() };
+            if !ours.is_dir() || ours.uid() != uid {
+                return None;
+            }
+            // One made by an earlier yumete is ours but readable by all.
+            if ours.mode() & 0o077 != 0 {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700)).ok()?;
+            }
+        }
         let packages = base.join("packages");
         let package = packages.join("local").join("mitex").join("0.2.6");
         for (name, bytes) in MITEX {
@@ -378,7 +424,7 @@ fn render(key: &Key, place: Option<&Place>) -> Answer {
             None => Answer::Failed("no picture came back".to_string()),
         },
         Some(_) => Answer::Failed(first_error(&said)),
-        None => Answer::Failed(format!("more than {} s", PATIENCE.as_secs())),
+        None => Answer::Failed(too_slow()),
     }
 }
 
@@ -393,7 +439,18 @@ fn first_error(said: &str) -> String {
 
 /// What the float last showed — drawn again while the next picture is being
 /// made, so typing inside a formula does not make the float blink.
-static LAST: Mutex<Option<(u64, Arc<Picture>)>> = Mutex::new(None);
+/// Kept with the formula it showed (`Editor::maths_anchor`): another
+/// formula never borrows it.
+static LAST: Mutex<Option<Shown>> = Mutex::new(None);
+
+/// A picture the float showed: which formula (buffer, first line), the
+/// picture's key hash, and the picture.
+type Shown = ((u64, usize), u64, Arc<Picture>);
+
+/// **No `typst` is said at one formula only**, the first one stood in;
+/// every other formula draws nothing, as in a terminal without pictures
+/// (review, 2026-11-06: it was said at every formula, for good).
+static TOLD_NO_TYPST: Mutex<Option<(u64, usize)>> = Mutex::new(None);
 
 /// **The formula float**, if the cursor is in a formula and this terminal
 /// can show one: `None` when it does not apply, so the next float may have
@@ -420,7 +477,14 @@ pub fn float(
     };
     let (cell_w, cell_h) = crate::graphics::cell_pixels();
     let key = Key { maths, ink: ink_rgb, cell_height: cell_h };
-    let last = || LAST.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let anchor = editor.maths_anchor();
+    let last = || {
+        LAST.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .filter(|(at, ..)| *at == anchor)
+            .map(|(_, hash, picture)| (hash, picture))
+    };
     // **While typing, a formula is broken most of the time** — `\frac{` on
     // the way to `\frac{1}{2}` — so in Insert the last picture stays up
     // instead of typst's complaint, and the complaint is said once the hand
@@ -428,14 +492,20 @@ pub fn float(
     let typing = editor.mode() == yumete_core::Mode::Insert;
     let picture = match ask(&key) {
         Answer::Ready(picture) => {
-            *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((key.hash(), picture.clone()));
+            *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((anchor, key.hash(), picture.clone()));
             (key.hash(), picture)
         }
         Answer::Making => match last() {
             Some(last) => last,
             None => return Some(None),
         },
-        Answer::NoTypst => return Some(said(frame, config, area, bottom, caret, vertical, say_no_typst())),
+        Answer::NoTypst => {
+            let mut told = TOLD_NO_TYPST.lock().unwrap_or_else(|e| e.into_inner());
+            if *told.get_or_insert(anchor) != anchor {
+                return None;
+            }
+            return Some(said(frame, config, area, bottom, caret, vertical, say_no_typst()));
+        }
         Answer::Failed(_) if typing && last().is_some() => last()?,
         Answer::Failed(why) => {
             return Some(said(frame, config, area, bottom, caret, vertical, yumete_core::say!("maths.failed", why)))

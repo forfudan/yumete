@@ -37678,6 +37678,20 @@ fn a_scratch_is_text_until_its_writing_says_otherwise() {
     ed.execute(&format!(":w {}", dir.join("草稿.typ").display())).unwrap();
     assert_eq!(ed.syntax(), Syntax::Typst);
     let _ = std::fs::remove_dir_all(&dir);
+
+    // A project that names a syntax gets it in every new buffer, `:new`
+    // included, and the guess does not overrule it (review, 2026-11-06).
+    let mut ed = Editor::new();
+    ed.set_default_syntax(Some(Syntax::Typst));
+    press(&mut ed, ":new");
+    ed.on_key(Key::Enter);
+    assert_eq!(ed.syntax(), Syntax::Typst, "the project's word");
+    ed.on_key(Key::Char('i'));
+    for c in "# 題 **粗** **又粗**".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.syntax(), Syntax::Typst, "not guessed over");
 }
 
 /// **Typst is code where it is code** (2026-11-06): in a served `.typ`, the

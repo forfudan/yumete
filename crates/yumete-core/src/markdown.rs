@@ -2005,10 +2005,17 @@ pub mod typst {
             }
             // **`@定理一`** — 交叉引用（2026-09-28）。Warning: 一個孤零零的 `@` 不是引用。
             if chars[at] == '@' {
-                let end = (at + 1..chars.len())
+                let mut end = (at + 1..chars.len())
                     .take_while(|&i| ref_name(chars[i]))
                     .last()
                     .map(|i| i + 1);
+                // A `.` or `:` at the end ends the sentence, not the name, as
+                // typst reads it: `See @intro.` refers to `intro` (review,
+                // 2026-11-06).
+                while let Some(e) = end.filter(|&e| e > at + 1 && matches!(chars[e - 1], '.' | ':')) {
+                    end = Some(e - 1);
+                }
+                let end = end.filter(|&e| e > at + 1);
                 if let Some(end) = end {
                     push(&mut out, at, end, Kind::Ref, construct);
                     at = end;
@@ -2393,6 +2400,18 @@ pub mod typst {
 mod typst_tests {
     use super::typst::*;
     use super::{hidden, Block, Kind};
+
+    /// **A sentence's full stop is not the reference's** (review,
+    /// 2026-11-06): typst reads `See @intro.` as `@intro`.
+    #[test]
+    fn a_reference_leaves_the_full_stop_to_the_sentence() {
+        let refs = |line: &str| -> Vec<(usize, usize)> {
+            spans(line).into_iter().filter(|s| s.kind == Kind::Ref).map(|s| (s.start, s.end)).collect()
+        };
+        assert_eq!(refs("See @intro."), [(4, 10)]);
+        assert_eq!(refs("See @fig:a: here"), [(4, 10)]);
+        assert_eq!(refs("See @sec.two now"), [(4, 12)], "a dot inside the name stays");
+    }
 
     fn shape(line: &str) -> String {
         let n = line.chars().count();

@@ -45,7 +45,8 @@ pub enum Support {
 }
 
 /// What tmux says about the client it is drawing on: the outer terminal's
-/// `TERM`, and whether `allow-passthrough` lets an escape sequence through.
+/// `TERM` and the name it answers to (`client_termname`, `client_termtype`),
+/// and whether `allow-passthrough` lets an escape sequence through.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Tmux {
     pub client_term: String,
@@ -70,11 +71,17 @@ pub fn support_from(var: impl Fn(&str) -> Option<String>, tmux: impl FnOnce() ->
     }
     let draws = |term: &str| matches!(term, "xterm-ghostty" | "xterm-kitty");
     let inherited = || set("GHOSTTY_RESOURCES_DIR") || set("KITTY_WINDOW_ID");
+    // **In tmux only tmux's word for the client counts** (review,
+    // 2026-11-06): the pane's environment is the tmux server's, from
+    // whichever terminal started it, and a session begun in Ghostty and
+    // attached from iTerm2 still carries Ghostty's variables.
     if set("TMUX") {
         let Some(said) = tmux() else {
             return Support::None;
         };
-        return match said.passthrough && (draws(said.client_term.trim()) || inherited()) {
+        let client = said.client_term.to_ascii_lowercase();
+        let named = client.contains("ghostty") || client.contains("kitty");
+        return match said.passthrough && named {
             true => Support::KittyInTmux,
             false => Support::None,
         };
@@ -88,10 +95,25 @@ pub fn support_from(var: impl Fn(&str) -> Option<String>, tmux: impl FnOnce() ->
         "" => {}
         _ => return Support::None,
     }
-    if ["KONSOLE_VERSION", "WEZTERM_EXECUTABLE", "ITERM_SESSION_ID", "VSCODE_INJECTION", "WT_SESSION"]
-        .iter()
-        .any(|name| set(name))
+    if [
+        "KONSOLE_VERSION",
+        "WEZTERM_EXECUTABLE",
+        "ITERM_SESSION_ID",
+        "VSCODE_INJECTION",
+        "WT_SESSION",
+        "VTE_VERSION",
+        "ALACRITTY_WINDOW_ID",
+        "TERMINAL_EMULATOR",
+    ]
+    .iter()
+    .any(|name| set(name))
     {
+        return Support::None;
+    }
+    // A `TERM` naming some other terminal (`alacritty`, `foot`) outranks
+    // variables inherited from a kitty or Ghostty it was started in; only a
+    // plain `xterm` one leaves them to decide.
+    if !matches!(term.trim(), "" | "xterm" | "xterm-256color") {
         return Support::None;
     }
     match inherited() {
@@ -110,7 +132,7 @@ pub fn detect() -> Support {
                 let out = std::process::Command::new("tmux").args(args).output().ok()?;
                 out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
             };
-            let client_term = ask(&["display-message", "-p", "#{client_termname}"])?;
+            let client_term = ask(&["display-message", "-p", "#{client_termname} #{client_termtype}"])?;
             // The pane's own setting first, then the global one.
             let on = |v: Option<String>| v.is_some_and(|v| v == "on" || v == "all");
             let passthrough = on(ask(&["show-options", "-pqv", "allow-passthrough"]))
@@ -478,6 +500,12 @@ mod tests {
             assert_eq!(support_from(env(&[("TERM_PROGRAM", other)]), none), Support::None, "{other}");
         }
         assert_eq!(support_from(env(&[("TERM", "xterm-256color")]), none), Support::None);
+        // Alacritty and gnome-terminal started from a kitty shell.
+        assert_eq!(support_from(env(&[("KITTY_WINDOW_ID", "1"), ("TERM", "alacritty")]), none), Support::None);
+        assert_eq!(
+            support_from(env(&[("KITTY_WINDOW_ID", "1"), ("TERM", "xterm-256color"), ("VTE_VERSION", "7600")]), none),
+            Support::None
+        );
         assert_eq!(support_from(env(&[("TERM", "xterm-ghostty"), ("ZELLIJ", "0")]), none), Support::None);
     }
 
@@ -493,7 +521,13 @@ mod tests {
         assert_eq!(support_from(env(&vars), said("xterm-ghostty", true)), Support::KittyInTmux);
         assert_eq!(support_from(env(&vars), said("xterm-ghostty", false)), Support::None);
         assert_eq!(support_from(env(&vars), said("xterm-256color", true)), Support::None);
+        // The terminal's own name when its TERM is a plain one.
+        assert_eq!(support_from(env(&vars), said("xterm-256color ghostty 1.2.0", true)), Support::KittyInTmux);
         assert_eq!(support_from(env(&vars), || None), Support::None, "tmux would not say");
+        // Begun in Ghostty, attached from iTerm2: the server's variables are
+        // Ghostty's, the client is not.
+        let begun = [("TMUX", "/tmp/tmux-501/default,1,0"), ("GHOSTTY_RESOURCES_DIR", "/x")];
+        assert_eq!(support_from(env(&begun), said("xterm-256color iTerm2 3.5", true)), Support::None);
     }
 
     #[test]

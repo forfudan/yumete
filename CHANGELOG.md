@@ -12,28 +12,28 @@ in `docs/development.md` §5.2.
 ### Added
 
 - **`:config-open` and `:config-open-workspace`**, as helix's: they open your global `config.toml` and the project's `.yumete/config.toml`, empty when the file is not there yet (`:w!` makes a folder that is missing, as in helix). `:config-reload` is `:reload-config` under helix's name.
-- **`ye --import helix` and `ye --import lazyvim`** write another editor's config into yours, once. From helix: your keys, the `[editor]` settings yumete has, and the theme. From LazyVim: its `Space` menu, the config on the Coming from LazyVim page. Nothing of the other editor runs. With no `config.toml` yet the import becomes it; with one, it goes beside it as `config.imported.toml`. The file ends with a list of what did not come over, and why.
+- **`ye --import helix` and `ye --import lazyvim`** write another editor's config into yours, once. From helix: your keys, the `[editor]` settings yumete has, and the theme. From LazyVim: its `Space` menu, the config on the Coming from LazyVim page. Nothing of the other editor runs. With no `config.toml` yet the import becomes it (the one-line file the first start writes counts as none); with one, it goes beside it as `config.imported.toml`, then `config.imported-2.toml` and so on. The file ends with a list of what did not come over, and why.
 - **The first start names the import** when it sees a helix config or LazyVim.
-- **Every language yumete colours comes with helix's language servers filled in**: `jdtls` for Java, `clangd` for C and C++, `typescript-language-server` for JavaScript, TypeScript and TSX, and so on for Bash, CSS, HTML, JSON, Lua, YAML, TOML, R, Pascal, Ada and assembly; Go adds `golangci-lint-langserver`. Installing the server is enough. Without it, opening such a file says once which program is missing, where it said no server was configured.
+- **Every language yumete colours comes with helix's language servers filled in**: `jdtls` for Java, `clangd` for C and C++, `typescript-language-server` for JavaScript, TypeScript and TSX, and so on for Bash, CSS, HTML, JSON, Lua, YAML, TOML, R, Pascal, Ada and assembly. Installing the server is enough. Without it, opening such a file says once which program is missing, where it said no server was configured.
+- **Only Python's and Mojo's language servers are looked for inside the project** (`.venv`, `.pixi`); every other language's comes from `PATH`, so opening a file in a repository you do not trust does not run a program that repository put in `node_modules/.bin`.
 - **The formula under the cursor, typeset**: in Ghostty and kitty (and either one inside tmux with `allow-passthrough on`), a float under the cursor shows the `$…$` or `$$…$$` it stands in as maths, Markdown's LaTeX included, and follows it as you type. It needs the `typst` command on your `PATH`; other terminals show what they showed before. `[editor] maths_preview = false` turns it off.
 
 ### Changed
 
 - **The first start leaves a `config.toml` that is already there alone**: it no longer switches that session to vim's keys because it sees a `.vimrc`, since the file says which keys you use.
 - **Display maths over several lines is drawn as maths**: a `$$` line … `$$` line in Markdown and a `$` … `$` over several lines in Typst, where only the one-line forms were. A blank line before the closing `$$` means it was not maths.
-- **A new buffer with no name is plain text, not Markdown**, until what you write in it says otherwise: each time you leave Insert mode it is guessed again, the way a `.txt` is guessed when it opens, so a scratch of Typst is drawn as Typst and its maths set as Typst. `:syntax` or saving it under a name ends the guessing, and a name like `draft.typ` is believed.
+- **A new buffer with no name is plain text, not Markdown**, until what you write in it says otherwise: each time you leave Insert mode it is guessed again, the way a `.txt` is guessed when it opens, so a scratch of Typst is drawn as Typst and its maths set as Typst. `:syntax` or saving it under a name ends the guessing, and a name like `draft.typ` is believed. A project's `[syntax]` default still applies to every new buffer. Code pasted into one stays plain text, and a `- ` list continues on Enter once the buffer is Markdown.
 - **Startup says which keys a table took from a command once**, at the first start-up after they change, not at every start-up; `:check-config` says it whenever you ask. A mistake in the tables (one key written twice, a table with no keys) is still said at every start-up until it is fixed.
 
 ### Fixed
 
 - **Menus write named keys as the hint row does**: `Tab`, `S-Tab`, `Enter`, `↑`, not `<tab>`.
 - **A group opened from a key you bound says that key**: with `";" = "space_mode"`, the key echo reads `;` and `;b`, and the menu is titled `;`.
-- **A `[keys.table]` group that takes a key is said at startup**, as a `[keys.normal]` one is.
+- **A `[keys.table]` group that takes a key is in that startup note too**, as a `[keys.normal]` one is.
 - **vim: `C-f` and `C-b` in a short window overlap as nvim's do**: one line at four rows, none at three or fewer, where it was always two. `C-b` at the top of the file still pulls the cursor in by scrolloff.
-- **Typst's language server answers on Typst code**: with the cursor on a `#` expression, maths, a `@reference` or a `<label>`, `Space k` shows tinymist's documentation, `gd` asks it, completion offers its functions (from the moment `#` is typed) and `(` shows the parameters. It was never asked, because a Typst file counted as writing throughout. On writing, `Space k` still shows the wiki entry and completion offers words.
-- **A tall formula in the float is no longer cut off**: an inline `1/2` or `sqrt(…)` lost its top and bottom, because the picture was as tall as a line rather than as the formula.
+- **Typst's language server answers on Typst code**: with the cursor on a `#` expression, maths, a `@reference` or a `<label>`, `Space k` shows tinymist's documentation, `gd` asks it, completion offers its functions (from the moment `#` or `@` is typed) and `(` shows the parameters. It was never asked, because a Typst file counted as writing throughout. On writing, `Space k` still shows the wiki entry and completion offers words. With no server running, `Space k` on Typst code says so, where it used to show the wiki.
 - **A closed fold no longer writes to the log on every frame** while the cursor is on it, and a click on a closed fold goes to its first character.
-- **Typst: `#[…]` is drawn as code around writing**, and the `.` in `第 #w. 項` ends the variable; `#w.len()` still runs on.
+- **Typst: `#[…]` is drawn as code around writing**, and the `.` in `see #w. Next` ends the variable; `#w.len()` still runs on.
 
 ## 0.19.0 · 2026-11-05
 

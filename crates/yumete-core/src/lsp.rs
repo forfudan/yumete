@@ -498,7 +498,12 @@ pub enum Notice {
     /// `id` 可以是數字**也可以是字串**，而從前這裏是 `as_i64()`：字串號碼的請求
     /// 讀成了 [`Notice::Nothing`]，於是**永遠没人答**，而那正是這一格存在的理由
     /// ——等自己註冊回音的服務器就停在那裏。`"3"` 原樣回 `"3"`，數字原樣回數字。
-    Asked { id: String },
+    Asked {
+        id: String,
+        /// What to answer: `null`, or for `workspace/configuration` one
+        /// `null` per item asked about, which the spec wants as a list.
+        result: String,
+    },
     /// **The answer to something we asked**, with the id that says which.
     ///
     /// Warning: **Typed, not raw JSON.** Only the front end knows which id it sent
@@ -664,9 +669,9 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             edits: workspace_edit(value.pointer("/params/edit")),
         },
         // A request from the server: it has both a method *and* an id.
-        (Some(_), Some(id)) => Notice::Asked { id: asked.unwrap_or_else(|| id.to_string()) },
+        (Some(method), Some(id)) => Notice::Asked { id: asked.unwrap_or_else(|| id.to_string()), result: nothing_for(method, &value) },
         // 號碼是字串的請求——同上一檔，只是號碼不是數字。
-        (Some(_), None) if asked.is_some() => Notice::Asked { id: asked.unwrap_or_default() },
+        (Some(method), None) if asked.is_some() => Notice::Asked { id: asked.unwrap_or_default(), result: nothing_for(method, &value) },
         // An answer to something we sent: an id and no method.
         (None, Some(id)) => Notice::Answer {
             id,
@@ -1423,6 +1428,25 @@ fn signature(result: Option<&serde_json::Value>) -> Option<Signature> {
     Some(Signature { label, active: span })
 }
 
+/// The answer that says nothing to a request: `null`, except for
+/// `workspace/configuration`, which is answered item for item (review,
+/// 2026-11-06: a bare `null` broke the spec, and the factory now starts
+/// servers that ask).
+fn nothing_for(method: &str, value: &serde_json::Value) -> String {
+    match method {
+        "workspace/configuration" => {
+            let items = value.pointer("/params/items").and_then(|i| i.as_array()).map_or(0, Vec::len);
+            format!("[{}]", vec!["null"; items].join(","))
+        }
+        _ => "null".to_string(),
+    }
+}
+
+/// The answer to a request we do not really implement.
+pub fn answer_with(id: &str, result: &str) -> String {
+    format!(r#"{{"jsonrpc":"2.0","id":{id},"result":{result}}}"#)
+}
+
 /// The empty answer to a request we do not really implement.
 ///
 /// `id` 是**那條請求裏的 JSON 原樣**（`4` 或 `"abc"`），所以回去的號碼和來的那個
@@ -1722,16 +1746,21 @@ mod tests {
         // be answered or the server may wait on it forever.
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":2,"method":"client/registerCapability"}"#, 1),
-            Notice::Asked { id: "2".into() }
+            Notice::Asked { id: "2".into(), result: "null".into() }
         );
         // Warning: **號碼也可以是字串**（協議兩種都許，2026-10-07 審出來的）。從前這一
         // 條讀成 `Nothing`：没人答，而等自己註冊回音的服務器就停在那裏。回去的號
         // 碼要和來的那個逐字節相同，所以引號也帶着。
         assert_eq!(
             read(r#"{"jsonrpc":"2.0","id":"abc","method":"client/registerCapability"}"#, 1),
-            Notice::Asked { id: "\"abc\"".into() }
+            Notice::Asked { id: "\"abc\"".into(), result: "null".into() }
         );
         assert_eq!(empty_answer("\"abc\""), r#"{"jsonrpc":"2.0","id":"abc","result":null}"#);
+        // Settings asked for come back as a list, one per item.
+        assert_eq!(
+            read(r#"{"jsonrpc":"2.0","id":7,"method":"workspace/configuration","params":{"items":[{"section":"a"},{"section":"b"}]}}"#, 1),
+            Notice::Asked { id: "7".into(), result: "[null,null]".into() }
+        );
         // A plain notification wants nothing back.
         assert_eq!(read(r#"{"jsonrpc":"2.0","method":"$/progress"}"#, 1), Notice::Nothing);
     }
