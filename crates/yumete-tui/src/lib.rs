@@ -8516,6 +8516,12 @@ fn the_caret_reads_back(
     if want >= rope.len_chars() || matches!(rope.char(want), '\n' | '\r') {
         return;
     }
+    // **Nor is a closed fold's line**: its characters are all off the page
+    // and the caret stands at its head whichever one it is on (2026-11-06:
+    // `3Gzfj` logged this every frame).
+    if editor.fold_head(rope.char_to_line(want)) {
+        return;
+    }
     let mouse = ratatui::crossterm::event::MouseEvent {
         kind: MouseEventKind::Moved,
         column: at.0,
@@ -8685,6 +8691,11 @@ fn text_at_under(
             let hidden = editor.hidden_on_line(row.line);
             let runs = editor.drawn_on_line(row.line);
             let line_start = buffer.rope().line_to_char(row.line);
+            // A closed fold's line shows none of its characters: a click on
+            // it means the fold, at its first.
+            if editor.fold_head(row.line) {
+                return Some(line_start);
+            }
             // The row starts where it was drawn: a click anywhere in a
             // paragraph's opening indent means its first character.
             let mut column =
@@ -24039,6 +24050,107 @@ fn squeezed(text: &str) -> String {
             .draw(|frame| draw(frame, editor, config, no_ime(), viewport, None))
             .unwrap();
         Some(caret_of(&mut terminal, config))
+    }
+
+    /// Where vim's keys leave the cursor and the page, for
+    /// `scripts/oracle/view_sweep.py` to hold against nvim. Does nothing
+    /// unless `PROBE` names a file of `lines height scrolloff keys` rows; it
+    /// writes `line column top` per row beside it. A frame is drawn between
+    /// keys, as the loop draws one, because paging reads the last page.
+    #[test]
+    fn vim_view_probe() {
+        let Ok(file) = std::env::var("PROBE") else { return };
+        let mut report = String::new();
+        for row in std::fs::read_to_string(&file).unwrap().lines() {
+            let mut parts = row.splitn(4, ' ');
+            let n: usize = parts.next().unwrap().parse().unwrap();
+            let h: u16 = parts.next().unwrap().parse().unwrap();
+            let so: usize = parts.next().unwrap().parse().unwrap();
+            let ks = parts.next().unwrap();
+            let mut editor = Editor::new();
+            editor.execute(":syntax text").unwrap();
+            editor.replace_everything(&(1..=n).map(|i| format!("line {i}\n")).collect::<String>());
+            editor.execute(":keymap vim").unwrap();
+            let mut config = Config::default();
+            if std::env::var("PROBE_GUTTER").is_err() {
+                config.editor.line_numbers = yumete_config::LineNumbers::None;
+            }
+            config.editor.command_line = false;
+            config.editor.scrolloff = so;
+            crate::theme::settle(&config, None);
+            let mut seats = Seats::default();
+            editor.set_page(h as usize, 58);
+            let frame = |editor: &mut Editor, seats: &mut Seats| {
+                caret_over_time(editor, &config, seats, 60, h + 1);
+                if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+            };
+            frame(&mut editor, &mut seats);
+            let mut it = ks.chars();
+            while let Some(c) = it.next() {
+                let key = match c {
+                    '<' => {
+                        let name: String = it.by_ref().take_while(|&c| c != '>').collect();
+                        match name.as_str() {
+                            "Esc" => Key::Esc,
+                            n => Key::Ctrl(n.chars().nth(2).unwrap()),
+                        }
+                    }
+                    c => Key::Char(c),
+                };
+                editor.on_key(key);
+                frame(&mut editor, &mut seats);
+            }
+            let top = seats[editor.live_pane()].drawn_span.map_or(0, |(a, _)| editor.current_buffer().rope().char_to_line(a) + 1);
+            report.push_str(&format!("{} {} {}\n", editor.cursor_line() + 1, editor.cursor_column() + 1, top));
+        }
+        std::fs::write(format!("{file}.out"), report).unwrap();
+    }
+
+    /// **A short window pages with less overlap, and `C-b` at the top still
+    /// keeps scrolloff** (nvim 0.12, measured 2026-11-06 with
+    /// `scripts/oracle/view_sweep.py`): `get_scroll_overlap` keeps two lines
+    /// from five rows up, one at four and none below that; `cursor_correct`
+    /// runs after a `C-b` that had nothing to scroll.
+    #[test]
+    fn under_vim_a_short_window_pages_with_less_overlap() {
+        let after = |height: u16, so: usize, start: usize, keys: &[Key]| {
+            let mut editor = Editor::new();
+            editor.execute(":syntax text").unwrap();
+            editor.replace_everything(&(1..=100).map(|n| format!("line {n}\n")).collect::<String>());
+            editor.execute(":keymap vim").unwrap();
+            let mut config = Config::default();
+            config.editor.line_numbers = yumete_config::LineNumbers::None;
+            config.editor.command_line = false;
+            config.editor.scrolloff = so;
+            crate::theme::settle(&config, None);
+            editor.set_page(height as usize, 58);
+            let mut seats = Seats::default();
+            let frame = |editor: &mut Editor, seats: &mut Seats| {
+                caret_over_time(editor, &config, seats, 60, height + 1);
+                if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+            };
+            frame(&mut editor, &mut seats);
+            let goto = format!("{start}G").chars().map(Key::Char).collect::<Vec<_>>();
+            for &key in goto.iter().chain(keys) {
+                editor.on_key(key);
+                frame(&mut editor, &mut seats);
+            }
+            let top = seats[editor.live_pane()].drawn_span.map(|(a, _)| editor.current_buffer().rope().char_to_line(a) + 1);
+            (editor.cursor_line() + 1, top)
+        };
+        let f = Key::Ctrl('f');
+        let b = Key::Ctrl('b');
+        assert_eq!(after(3, 0, 1, &[f, f]), (7, Some(7)), "three rows: no overlap");
+        assert_eq!(after(4, 0, 1, &[f, f]), (7, Some(7)), "four rows: one line");
+        assert_eq!(after(5, 0, 1, &[f, f]), (7, Some(7)), "five rows: two lines");
+        assert_eq!(after(4, 0, 50, &[b]), (49, Some(46)));
+        assert_eq!(after(8, 5, 5, &[b]), (4, Some(1)), "pulled in by scrolloff");
+        assert_eq!(after(8, 5, 3, &[b]), (3, Some(1)));
+        assert_eq!(after(8, 0, 5, &[b]), (5, Some(1)), "no scrolloff, no pull");
     }
 
     /// **helix centres a search hit off the page; a goto scrolls as little

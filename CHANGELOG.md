@@ -28,6 +28,8 @@ in `docs/development.md` §5.2.
 - **Menus write named keys as the hint row does**: `Tab`, `S-Tab`, `Enter`, `↑`, not `<tab>`.
 - **A group opened from a key you bound says that key**: with `";" = "space_mode"`, the key echo reads `;` and `;b`, and the menu is titled `;`.
 - **A `[keys.table]` group that takes a key is said at startup**, as a `[keys.normal]` one is.
+- **vim: `C-f` and `C-b` in a short window overlap as nvim's do**: one line at four rows, none at three or fewer, where it was always two. `C-b` at the top of the file still pulls the cursor in by scrolloff.
+- **A closed fold no longer writes to the log on every frame** while the cursor is on it, and a click on a closed fold goes to its first character.
 - **Typst: `#[…]` is drawn as code around writing**, and the `.` in `第 #w. 項` ends the variable; `#w.len()` still runs on.
 
 ## 0.19.0 · 2026-11-05

@@ -629,7 +629,7 @@ impl Editor {
     /// — the whole height when the far end of the file is already in view —
     /// and the cursor goes to the new top line (`CTRL-F`) or the last one
     /// (`CTRL-B`), its column kept, then in by scrolloff. With nothing to
-    /// scroll nothing moves.
+    /// scroll only the scrolloff moves it.
     fn vim_turn_a_page(&mut self, down: bool, count: usize, rows: &[crate::wrap::Row], height: usize) {
         let head = self.sel.head();
         let wanted = self.sel.goal();
@@ -641,22 +641,29 @@ impl Editor {
             let end = last_row(rope, m);
             let at_the_end = last >= end;
             let at_the_start = top == Anchor::default();
+            // The overlap is two lines, fewer in a window too short to spare
+            // them (nvim's `get_scroll_overlap`, measured 2026-11-06): one at
+            // four rows, none at three or fewer.
             let step = match (down, at_the_end, at_the_start) {
                 (true, true, _) | (false, _, true) => height,
-                _ => height.saturating_sub(2).max(1),
+                _ => match height {
+                    0..=3 => height.max(1),
+                    4 => 3,
+                    _ => height - 2,
+                },
             } * count.max(1);
             let new_top = match down {
                 true => advance(rope, top, m, step).min(end),
                 false => retreat(rope, top, m, step),
             };
-            if new_top == top {
-                return None;
-            }
             let mut page = rows_from(rope, new_top, m, height);
             page.retain(|r| r.line <= motion::last_line(rope));
-            let row = match down {
-                true => 0,
-                false => page.len().checked_sub(1)?,
+            // Nothing to scroll still pulls the cursor in by scrolloff, as
+            // nvim's `cursor_correct` does after a `CTRL-B` at the top.
+            let row = match (new_top == top, down) {
+                (true, _) => page.iter().rposition(|r| r.start <= head)?,
+                (false, true) => 0,
+                (false, false) => page.len().checked_sub(1)?,
             };
             let goal = wanted.unwrap_or_else(|| crate::wrap::column_of(rope, head, m));
             let span = (page.first().map_or(0, |r| r.start), page.last().map_or(0, |r| r.end));
