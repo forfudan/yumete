@@ -24,6 +24,13 @@ zhs = "配置档的毛病"
 en = "config problems"
 
 [[message]]
+# :config-open 時前端没說配置檔在哪（草稿）
+key = "config.no-file"
+zht = "不知道配置檔在哪"
+zhs = "不知道配置文件在哪"
+en = "where the config file is is not known"
+
+[[message]]
 # :reload-config 讀到的設定檔有毛病
 key = "config.reload-said"
 zht = "設定重讀了，但有話説：{0}"

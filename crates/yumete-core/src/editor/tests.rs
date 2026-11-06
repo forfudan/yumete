@@ -37592,3 +37592,45 @@ fn only_a_line_with_a_slash_star_is_read_for_a_typst_comment() {
     let long = format!("{}/*{}", "x".repeat(5000), "y".repeat(5000));
     assert!(opens_a_block_comment(rope(&long).slice(..)));
 }
+
+/// **`:config-open` and `:config-open-workspace`** (helix's, 2026-11-06):
+/// the global file the frontend named, even before it exists, and the
+/// project's `.yumete/config.toml`; `:config-reload` is `:reload-config`.
+#[test]
+fn config_open_opens_the_global_and_the_project_files() {
+    let dir = tmp().join(format!("yumete-config-open-{}", std::process::id()));
+    let project = dir.join("novel");
+    std::fs::create_dir_all(project.join(".yumete")).unwrap();
+    std::fs::write(project.join(".yumete").join("config.toml"), "[editor]\n").unwrap();
+    let global = dir.join("config.toml");
+
+    let mut ed = Editor::new();
+    ed.execute(":config-open").unwrap();
+    assert_eq!(ed.current_buffer().path(), None, "no file named: {}", ed.status());
+    ed.set_config_file(global.clone());
+    ed.execute(":config-open").unwrap();
+    assert_eq!(ed.current_buffer().path(), Some(global.as_path()), "opens though it is not there yet");
+
+    assert!(ed.set_working_dir(&project));
+    ed.execute(":config-open-workspace").unwrap();
+    assert_eq!(ed.current_buffer().path(), Some(project.join(".yumete").join("config.toml").as_path()));
+    assert_eq!(ed.current_buffer().char_count(), "[editor]\n".chars().count());
+
+    ed.execute(":config-open").unwrap();
+    ed.on_key(Key::Char('i'));
+    ed.on_key(Key::Char('#'));
+    ed.on_key(Key::Esc);
+    ed.execute(":w").unwrap();
+    assert!(global.is_file(), ":w makes the file, though its folder was not there: {}", ed.status());
+    // A folder not there yet takes `:w!`, as helix's `:config-open` does.
+    let nested = dir.join("yumete").join("config.toml");
+    ed.set_config_file(nested.clone());
+    ed.execute(":config-open").unwrap();
+    assert!(ed.execute(":w").is_err() || !nested.is_file(), "asks for :w!");
+    ed.execute(":w!").unwrap();
+    assert!(nested.is_file(), ":w! makes the folder: {}", ed.status());
+
+    ed.execute(":config-reload").unwrap();
+    assert!(ed.take_config_reload(), ":config-reload asks for the reload");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -560,6 +560,10 @@ pub enum Command {
     ReloadAuto(Switch),
     /// **把配置檔重讀一遍，推進來** —— 改完 `config.toml` 不必重啓（2026-09-23）。
     ReloadConfig,
+    /// `:config-open` and `:config-open-workspace`: open the global
+    /// `config.toml`, or this project's `.yumete/config.toml` (helix's two
+    /// commands, 2026-11-06).
+    ConfigOpen { workspace: bool },
     /// `:readonly on|off` — lock this buffer against editing. `None` asks
     /// (Feature #213).
     SetReadonly(Switch),
@@ -3223,11 +3227,28 @@ pub const COMMANDS: &[Entry] = &[
         // 的窗口下裝得下 54 格，而命令已經 54 條」。那個理由在 #369 折疊同族之後
         // 不成立了——`reload-config` 折進 `:reload` 那一行，頂層一格都不多佔。
         name: "reload-config",
-        aliases: &[],
+        // helix's name for it.
+        aliases: &["config-reload"],
         help: "cmd.reload.config",
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::ReloadConfig)),
+    },
+    Entry {
+        name: "config-open",
+        aliases: &[],
+        help: "cmd.config.open",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::ConfigOpen { workspace: false })),
+    },
+    Entry {
+        name: "config-open-workspace",
+        aliases: &[],
+        help: "cmd.config.open-workspace",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::ConfigOpen { workspace: true })),
     },
     Entry {
         name: "reload-auto",

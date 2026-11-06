@@ -245,6 +245,30 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::ConfigOpen { workspace } => {
+                let path = match workspace {
+                    // As the loader looks (`yumete_config::local_config_path`):
+                    // `.yumete/config.toml`, or a flat `.yumete.toml` already
+                    // there. A file not there yet opens empty, as helix's does.
+                    true => {
+                        let root = self.root();
+                        let flat = root.join(".yumete.toml");
+                        match flat.is_file() && !root.join(".yumete").join("config.toml").is_file() {
+                            true => flat,
+                            false => root.join(".yumete").join("config.toml"),
+                        }
+                    }
+                    false => match self.config_file.clone() {
+                        Some(path) => path,
+                        None => {
+                            self.status = say!("config.no-file");
+                            return Ok(CommandOutcome::Continue);
+                        }
+                    },
+                };
+                self.open_file_as(path, None).map_err(EditorError::Io)?;
+                Ok(CommandOutcome::Continue)
+            }
             Command::ReloadConfig => {
                 // 核心只記一筆；重讀那件事歸前端（它知道配置檔在哪）。
                 self.config_reload = true;

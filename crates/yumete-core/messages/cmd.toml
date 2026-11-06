@@ -923,6 +923,22 @@ en = "unique (auto): a finished code with one candidate goes straight to the pag
 find = "上屏 唯一 自動 自动 auto unique"
 
 [[message]]
+# : 命令選單裏 config-open 的説明（草稿）
+key = "cmd.config.open"
+zht = "打開全局的 config.toml"
+zhs = "打开全局的 config.toml"
+en = "open your config.toml"
+find = "配置 設置 设置 config settings"
+
+[[message]]
+# : 命令選單裏 config-open-workspace 的説明（草稿）
+key = "cmd.config.open-workspace"
+zht = "打開本項目的 .yumete/config.toml"
+zhs = "打开本项目的 .yumete/config.toml"
+en = "open this project's .yumete/config.toml"
+find = "配置 設置 设置 項目 项目 config workspace project"
+
+[[message]]
 # : 命令選單裏 c 那一項(convert 組)，是稿子現在的樣子，也是要變成的樣子
 key = "cmd.convert.c"
 zht = "大陸通規繁體(説 爲 内 吴 裏 髮 臺)"

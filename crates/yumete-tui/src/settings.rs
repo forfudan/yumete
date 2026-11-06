@@ -182,15 +182,40 @@ pub fn answer_config_check(editor: &mut Editor) {
             format!("{}:{}: {one}", path.display(), line + 1)
         }));
     }
+    // The keys a table took are not a fault, but asking is when a reader
+    // wants the whole list: it is said once at start-up (2026-11-06).
+    let taken = editor.taken_keys_note();
     if lines.is_empty() {
-        editor.set_status(say!("config.check-clean", looked));
+        let clean = say!("config.check-clean", looked);
+        editor.set_status(taken.map_or(clean.clone(), |note| format!("{clean} · {note}")));
         return;
     }
     let n = lines.len();
+    lines.extend(taken);
     editor.open_report(&say!("config.check-name"), &format!("{}
 ", lines.join("
 ")));
     editor.set_status(say!("config.check-found", n));
+}
+
+/// **Whether the keys a table took are news**: they differ from the ones
+/// last said, which `dir`'s `taken-keys` file keeps. Saying them every
+/// start-up was saying the same thing to someone who chose it; a config that
+/// takes no key forgets the file, so taking them again is said again
+/// (2026-11-06).
+pub fn taken_keys_are_news(taken: &[String], dir: &std::path::Path) -> bool {
+    let file = dir.join("taken-keys");
+    if taken.is_empty() {
+        let _ = std::fs::remove_file(&file);
+        return false;
+    }
+    let now = taken.join("\n");
+    if std::fs::read_to_string(&file).is_ok_and(|was| was == now) {
+        return false;
+    }
+    let _ = std::fs::create_dir_all(dir);
+    let _ = std::fs::write(&file, now);
+    true
 }
 
 /// The config files that exist, global first — the order the loader reads
@@ -366,6 +391,7 @@ pub fn apply(
     language: Option<yumete_core::messages::Language>,
 ) {
     apply_to_the_process(config, language);
+    editor.set_config_file(yumete_config::config_dir().join("config.toml"));
     apply_to_editor(config, editor, layout);
 }
 
@@ -641,6 +667,22 @@ mod config_watch_tests {
         for one in no {
             assert!(!ConfigWatch::is_a_config(std::path::Path::new(one)), "{one}");
         }
+    }
+
+    /// **The keys a table took are said once per change** (2026-11-06), and
+    /// again after a config that took none.
+    #[test]
+    fn taken_keys_are_said_once_for_each_change() {
+        let dir = std::env::temp_dir().join(format!("yumete-taken-keys-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = vec!["<Space>f".to_string()];
+        let fb = vec!["<Space>f".to_string(), "<Space>b".to_string()];
+        assert!(super::taken_keys_are_news(&f, &dir), "the first time");
+        assert!(!super::taken_keys_are_news(&f, &dir), "the same keys again");
+        assert!(super::taken_keys_are_news(&fb, &dir), "one more key");
+        assert!(!super::taken_keys_are_news(&[], &dir), "none taken");
+        assert!(super::taken_keys_are_news(&fb, &dir), "taken again after none");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **`:check-config` — both files, without opening either** (2026-10-20).

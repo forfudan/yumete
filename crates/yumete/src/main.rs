@@ -1067,8 +1067,16 @@ fn main() -> ExitCode {
     // 它的兄弟、看不見它。見 [`yumete_tui::settings::complaints`]。
     let mut config_problems = config_problems;
     config_problems.extend(yumete_tui::settings::complaints(&config));
-    // A table that took a key from its command, said once (2026-11-05).
-    config_problems.extend(editor.key_notes());
+    // What is wrong in the key tables, at every start-up; the keys a table
+    // took from a command, at the first start-up after they change
+    // (2026-11-06).
+    let mistakes = editor.key_mistakes();
+    if !mistakes.is_empty() {
+        config_problems.push(mistakes.join(" · "));
+    }
+    if yumete_tui::settings::taken_keys_are_news(&editor.taken_keys(), &yumete_config::data_dir()) {
+        config_problems.extend(editor.taken_keys_note());
+    }
     if !config_problems.is_empty() {
         for problem in &config_problems {
             eprintln!("yumete: {problem}");

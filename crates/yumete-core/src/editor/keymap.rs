@@ -655,12 +655,32 @@ impl Editor {
     /// whole path of each key, so a group several levels deep reads as
     /// where it is.
     pub fn key_notes(&self) -> Vec<String> {
+        let parts: Vec<String> = self.taken_keys_note().into_iter().chain(self.key_mistakes()).collect();
+        match parts.is_empty() {
+            true => Vec::new(),
+            false => vec![parts.join(" · ")],
+        }
+    }
+
+    /// **The keys a table took from a command**, as written (`<Space>f`).
+    /// Not a mistake: a LazyVim-style config takes them on purpose, so
+    /// start-up says it once for each change of them (2026-11-06).
+    pub fn taken_keys(&self) -> Vec<String> {
+        self.normal_tree.notes.iter().map(|(path, _)| quoted(path)).collect()
+    }
+
+    /// [`Self::taken_keys`] as the one line that says them.
+    pub fn taken_keys_note(&self) -> Option<String> {
+        let paths = self.taken_keys();
+        (!paths.is_empty()).then(|| say!("keys.table-takes-a-command", paths.join(", ")))
+    }
+
+    /// **What is wrong in the reader's tables**: a group with no keys, and
+    /// each key two spellings reached, the one in force first. Said at every
+    /// start-up until it is fixed (2026-11-06).
+    pub fn key_mistakes(&self) -> Vec<String> {
         let tree = &self.normal_tree;
         let mut parts = Vec::new();
-        if !tree.notes.is_empty() {
-            let paths: Vec<String> = tree.notes.iter().map(|(path, _)| quoted(path)).collect();
-            parts.push(say!("keys.table-takes-a-command", paths.join(", ")));
-        }
         if !tree.hollow.is_empty() {
             let paths: Vec<String> = tree.hollow.iter().map(|path| quoted(path)).collect();
             parts.push(say!("keys.group-has-no-keys", paths.join(", ")));
@@ -668,10 +688,7 @@ impl Editor {
         for (kept, lost, _) in &tree.replaced {
             parts.push(say!("keys.spelt-twice", quoted(kept), quoted(lost)));
         }
-        match parts.is_empty() {
-            true => Vec::new(),
-            false => vec![parts.join(" · ")],
-        }
+        parts
     }
 
     /// Whether the reader's keys are read now: not while a run of keys on

@@ -2022,6 +2022,11 @@ impl Editor {
     /// `:reload-config`。於是把排版方向改成竪排、存、屏幕一動不動，螢幕上也没有一句話
     /// 說編輯器跑的還是舊的那一份——面板自己的註釋卻寫着「落完由 `:reload-config`
     /// 那條同一支推進編輯器」，那個打算從來没接上線。
+    /// Where the global `config.toml` is, which `:config-open` opens.
+    pub fn set_config_file(&mut self, path: std::path::PathBuf) {
+        self.config_file = Some(path);
+    }
+
     pub fn set_config_reload(&mut self) {
         self.config_reload = true;
     }

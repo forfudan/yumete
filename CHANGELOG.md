@@ -7,6 +7,16 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Added
+
+- **`:config-open` and `:config-open-workspace`**, as helix's: they open your global `config.toml` and the project's `.yumete/config.toml`, empty when the file is not there yet (`:w!` makes a folder that is missing, as in helix). `:config-reload` is `:reload-config` under helix's name.
+
+### Changed
+
+- **Startup says which keys a table took from a command once**, at the first start-up after they change, not at every start-up; `:check-config` says it whenever you ask. A mistake in the tables (one key written twice, a table with no keys) is still said at every start-up until it is fixed.
+
 ## 0.19.0 · 2026-11-05
 
 ### Added
