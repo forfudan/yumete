@@ -109,6 +109,7 @@ fn reopen_in(there: &std::path::Path) -> std::io::Result<()> {
 }
 
 mod docgen;
+mod import;
 
 fn main() -> ExitCode {
     // **The tables this binary carries** (2026-11-04): handed to the IME
@@ -185,6 +186,9 @@ fn main() -> ExitCode {
     // `ye --files jia` 列出名字配得上的檔——走檔是 fd 那一半，配名字是 fzf 那一半，
     // 而它也認拼音。
     let mut listing: Option<String> = None;
+    // `--import helix` or `--import lazyvim` (2026-11-06): another editor's
+    // config written once into ours, then exit. See `import.rs`.
+    let mut import: Option<String> = None;
     let mut g = Grep::default();
     // **還欠着一個值的那個旗標**（2026-10-03 一輪審查報來的）。
     //
@@ -227,6 +231,7 @@ fn main() -> ExitCode {
                 "--files" => listing = Some(arg),
                 "--export" => export = Some(arg),
                 "--out" => out = Some(arg),
+                "--import" => import = Some(arg),
                 _ => unreachable!("every owed flag is named here"),
             }
             continue;
@@ -285,6 +290,8 @@ fn main() -> ExitCode {
             s if s.starts_with("--export=") => export = Some(s["--export=".len()..].to_string()),
             "--out" => owed = Some("--out"),
             s if s.starts_with("--out=") => out = Some(s["--out=".len()..].to_string()),
+            "--import" => owed = Some("--import"),
+            s if s.starts_with("--import=") => import = Some(s["--import=".len()..].to_string()),
             "--files" => owed = Some("--files"),
             s if s.starts_with("--files=") => listing = Some(s["--files=".len()..].to_string()),
             "--ignore-case" => {
@@ -567,6 +574,15 @@ fn main() -> ExitCode {
         eprintln!("yumete: {which} wants a word after it");
         eprintln!("try 'yumete --help'");
         return ExitCode::from(2);
+    }
+    // **`--import` does one thing and leaves** (2026-11-06): files or a
+    // search beside it would be quietly dropped, so they are refused.
+    if let Some(which) = import {
+        if !files.is_empty() || grep.is_some() || listing.is_some() || export.is_some() {
+            eprintln!("yumete: --import writes a config file and exits; it takes nothing else");
+            return ExitCode::from(2);
+        }
+        return import::run(&which);
     }
     if grep.is_some() && listing.is_some() {
         eprintln!("yumete: --grep and --files ask two different questions; pick one");
@@ -879,17 +895,32 @@ fn main() -> ExitCode {
     // Warning: **只在第一次，而且只在偵測到的時候寫檔。** 沒偵測到就一個字都不動
     // 他的硬盤（定的）——yumete 在這之前**從來不寫配置文件**，所以建一個是一件
     // 新行為，得有由頭。
-    if brand_new && drawing {
+    //
+    // **A config already there says the keymap itself** (2026-11-06): one
+    // synced from another machine, or written by `--import` before the first
+    // start. Switching this session to vim over it would contradict the file.
+    //
+    // **The note names `--import` when it would help** (2026-11-06): LazyVim
+    // or a helix config seen, read only to know they are there.
+    let configured = yumete_config::config_dir().join("config.toml").exists();
+    if brand_new && drawing && !configured {
+        let env = |name: &str| std::env::var(name).ok();
+        let lazyvim = import::nvim_dir(&env).and_then(|dir| import::lazyvim_sign(&dir)).is_some();
+        let helix = import::helix_config_path(&env).is_some_and(|path| path.is_file());
         // Warning: **鍵名要寫成字面量。** 那條「文案網」測試掃的是 `say!("…")` 的寫
         // 法；把鍵名存進變量再傳給 `messages::say`，它就掃不到，於是報「在
         // messages.toml 裏可沒人說它」（寫完當場紅了一次）。
-        let note = match looks_like_a_vim_reader() {
-            true => {
+        let note = match (looks_like_a_vim_reader() || lazyvim, lazyvim, helix) {
+            (true, lazyvim, _) => {
                 editor.set_key_preset(yumete_core::KeyPreset::Vim);
                 write_the_first_config();
-                yumete_core::say!("start.now-vim")
+                match lazyvim {
+                    true => yumete_core::say!("start.now-vim-lazyvim"),
+                    false => yumete_core::say!("start.now-vim"),
+                }
             }
-            false => yumete_core::say!("start.now-helix"),
+            (false, _, true) => yumete_core::say!("start.now-helix-config"),
+            (false, _, false) => yumete_core::say!("start.now-helix"),
         };
         // **有開場屏就寫在屏上，沒有就寫命令行**（定的）。一句話只出一次。
         match editor.intro() {
@@ -2520,6 +2551,14 @@ OPTIONS:
                      utf-8, gb18030, big5 or shift-jis. Remembered for each
                      file, as a choice made inside is.
         --preview    Print a non-interactive preview instead of the editor.
+        --import EDITOR
+                     Write another editor's config into yumete's, once, and
+                     exit. helix: its config.toml, the keys, the settings
+                     yumete has and the theme. lazyvim: LazyVim's Space menu,
+                     the config the docs site shows. Nothing of the other
+                     editor runs. With no config.toml yet it writes one; with
+                     one, config.imported.toml beside it. What did not carry
+                     over is listed at the end of the file.
 
 SEARCHING FROM THE SHELL:
     -G, --grep PAT   Print every place PAT is, as `file:line:column:text`, and

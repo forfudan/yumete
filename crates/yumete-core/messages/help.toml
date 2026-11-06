@@ -688,11 +688,25 @@ zhs = "已使用 helix 键位。可通过 :keymap vim 切换 vim 键位。"
 en = "using the helix keys; :keymap vim switches to vim's"
 
 [[message]]
+# 第一次打開、没看見 vim 的痕跡，但有 helix 的配置文件：提示可以導入（草稿）
+key = "start.now-helix-config"
+zht = "已使用 helix 鍵位。可通過 yumete --import helix 導入 helix 的配置。"
+zhs = "已使用 helix 键位。可通过 yumete --import helix 导入 helix 的配置。"
+en = "using the helix keys; yumete --import helix brings over your helix config"
+
+[[message]]
 # 第一次打開、機器上有 vim 的痕跡：已經替他換好了
 key = "start.now-vim"
 zht = "已自動使用 vim 鍵位。可通過 :keymap helix 切換 helix 鍵位。"
 zhs = "已自动使用 vim 键位。可通过 :keymap helix 切换 helix 键位。"
 en = "using the vim keys, as chosen; :keymap helix switches to helix's"
+
+[[message]]
+# 第一次打開、機器上有 LazyVim：已經換成 vim 鍵位，並提示可以導入 LazyVim 的空格菜單（草稿）
+key = "start.now-vim-lazyvim"
+zht = "已自動使用 vim 鍵位。可通過 yumete --import lazyvim 導入 LazyVim 的空格菜單。"
+zhs = "已自动使用 vim 键位。可通过 yumete --import lazyvim 导入 LazyVim 的空格菜单。"
+en = "using the vim keys, as chosen; yumete --import lazyvim brings over LazyVim's Space menu"
 
 [[message]]
 # 打不開課文

@@ -17,6 +17,12 @@ path = "src/main.rs"
 libc = "0.2"
 
 [dependencies]
+# `--import` (2026-11-06) reads another editor's files: helix's TOML, in the
+# order it was written so the imported tables keep it, and LazyVim's
+# `lazyvim.json`. Both were already in the lock file (`yumete-config` and
+# `yumete-core` use them).
+serde_json = "1"
+toml = {version = "0.8", features = ["preserve_order"]}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}

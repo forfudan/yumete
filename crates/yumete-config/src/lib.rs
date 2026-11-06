@@ -33,6 +33,12 @@ pub use yumete_cjk::{
     TATECHUYOKO_MAX,
 };
 
+/// **LazyVim's keys laid out in yumete's config, one copy** (2026-11-06).
+/// `yumete --import lazyvim` writes it, and the docs site's
+/// `from/lazyvim.md` shows it: a test in the `yumete` crate holds the
+/// page's TOML blocks to this file, so the two cannot drift apart.
+pub const LAZYVIM: &str = include_str!("lazyvim.toml");
+
 /// How line numbers are displayed in the gutter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineNumbers {
@@ -5667,7 +5673,11 @@ fn merge_key_tables(into: &mut toml::Table, from: toml::Table) {
 /// modifier on a named key such as `C-space`): said and skipped, never read
 /// as a run of its letters (found in review, 2026-11-02: `esc = …` bound
 /// `e` `s` `c`, and every `e` then waited for the next key).
-fn helix_key(key: &str) -> Result<String, ()> {
+///
+/// Public for `yumete --import helix` (2026-11-06), which lists the keys it
+/// leaves out rather than writing lines the config would then refuse.
+#[allow(clippy::result_unit_err)]
+pub fn helix_key(key: &str) -> Result<String, ()> {
     let mut mods = String::new();
     let mut base = key;
     while base.len() > 2 && ["C-", "A-", "S-"].iter().any(|m| base.starts_with(m)) {

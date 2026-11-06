@@ -1465,6 +1465,8 @@ name = "yumete"
 version = "0.19.0"
 dependencies = [
  "libc",
+ "serde_json",
+ "toml",
  "yumete-config",
  "yumete-core",
  "yumete-ime",

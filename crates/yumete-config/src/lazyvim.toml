@@ -1,0 +1,118 @@
+[keys]
+preset = "vim"
+
+[keys.normal.space]
+space = "file_picker"                  # Find Files (Root Dir)
+"," = "buffer_picker"                  # Buffers
+":" = "command_mode"                   # Command History (Up/C-p walks it)
+"`" = "goto_last_accessed_file"        # Switch to Other Buffer
+"|" = "vsplit"                         # Split Window Right
+"-" = "hsplit"                         # Split Window Below
+"." = { run = ":new", label = "Scratch Buffer" }
+# "/" "?" "e" "w" are already LazyVim's: search panel, every command,
+# explorer, the window group.
+
+[keys.normal.space.b]
+label = "buffer"
+b = "goto_last_accessed_file"
+d = { run = ":buffer-close", label = "Delete Buffer" }
+D = [":buffer-close", ":quit-window"]
+j = "buffer_picker"
+
+[keys.normal.space.c]
+label = "code"
+a = "code_action"
+A = "code_action"
+r = "rename_symbol"
+f = { run = ":format", label = "Format" }
+d = "show_diagnostic"
+s = "lsp_or_syntax_symbol_picker"
+S = "goto_reference"
+l = { run = ":info", label = "Lsp Info" }
+
+[keys.normal.space.f]
+label = "file/find"
+f = "file_picker"
+F = "file_picker_in_current_directory"
+g = "file_picker"
+b = "buffer_picker"
+r = { run = ":recent-files-global", label = "Recent" }
+R = { run = ":recent-files", label = "Recent (cwd)" }
+p = { run = ":recent-projects", label = "Projects" }
+n = { run = ":new", label = "New File" }
+e = "file_explorer"
+E = "file_explorer_in_current_buffer_directory"
+c = { run = ":settings", label = "Find Config File" }
+t = "suspend"
+T = "suspend"
+
+[keys.normal.space.g]
+label = "git"
+g = { run = ":!lazygit", label = "Lazygit (Root Dir)" }
+G = { run = ":!lazygit", label = "Lazygit (cwd)" }
+s = "changed_file_picker"
+d = { run = ":git-diff", label = "Git Diff" }
+
+[keys.normal.space.g.h]
+label = "hunks"
+p = "show_change"
+d = { run = ":git-diff", label = "Diff This" }
+
+[keys.normal.space.q]
+label = "quit/session"
+q = { run = ":quit-all", label = "Quit All" }
+s = { run = ":resume", label = "Restore Session" }
+l = { run = ":resume", label = "Restore Last Session" }
+S = { run = ":recent-projects", label = "Select Session" }
+
+[keys.normal.space.s]
+label = "search"
+g = { run = ":search-project", label = "Grep (Root Dir)" }
+G = { run = ":search-working", label = "Grep (cwd)" }
+B = { run = ":search-buffers", label = "Grep Open Buffers" }
+r = { run = ":replace-project", label = "Search and Replace" }
+s = "lsp_or_syntax_symbol_picker"
+S = "lsp_or_syntax_workspace_symbol_picker"
+d = "workspace_diagnostics_picker"
+D = "diagnostics_picker"
+j = "jumplist_picker"
+R = "last_picker"
+C = "command_palette"
+k = { run = ":keymap-actions", label = "Keymaps" }
+h = { run = ":help", label = "Help Pages" }
+'"' = "paste_menu"
+
+[keys.normal.space.u]
+label = "ui"
+D = { run = ":view-focus toggle", label = "Toggle Dimming" }
+z = { run = ":view-typewriter toggle", label = "Toggle Zen Mode" }
+G = { run = ":view-diff toggle", label = "Toggle Git Signs" }
+T = { run = ":view-code toggle", label = "Toggle Treesitter Highlight" }
+L = { run = ":line-numbers relative", label = "Relative Numbers" }
+l = { run = ":line-numbers absolute", label = "Line Numbers" }
+
+[keys.normal.space.x]
+label = "diagnostics/quickfix"
+x = "workspace_diagnostics_picker"
+X = "diagnostics_picker"
+q = { run = ":diagnostics-all", label = "Quickfix List" }
+
+[keys.normal.space.tab]
+label = "tabs"
+tab = { run = ":new", label = "New Tab" }
+"]" = { run = ":buffer-next", label = "Next Tab" }
+"[" = { run = ":buffer-previous", label = "Previous Tab" }
+d = { run = ":buffer-close", label = "Close Tab" }
+
+[keys.normal]
+H = ":buffer-previous"
+L = ":buffer-next"
+"]b" = ":buffer-next"
+"[b" = ":buffer-previous"
+"]h" = "goto_next_change"
+"[h" = "goto_prev_change"
+"C-h" = "jump_view_left"
+"C-j" = "jump_view_down"
+"C-k" = "jump_view_up"
+"C-l" = "jump_view_right"
+"C-s" = ":write"

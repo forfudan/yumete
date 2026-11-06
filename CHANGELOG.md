@@ -12,9 +12,12 @@ in `docs/development.md` §5.2.
 ### Added
 
 - **`:config-open` and `:config-open-workspace`**, as helix's: they open your global `config.toml` and the project's `.yumete/config.toml`, empty when the file is not there yet (`:w!` makes a folder that is missing, as in helix). `:config-reload` is `:reload-config` under helix's name.
+- **`ye --import helix` and `ye --import lazyvim`** write another editor's config into yours, once. From helix: your keys, the `[editor]` settings yumete has, and the theme. From LazyVim: its `Space` menu, the config on the Coming from LazyVim page. Nothing of the other editor runs. With no `config.toml` yet the import becomes it; with one, it goes beside it as `config.imported.toml`. The file ends with a list of what did not come over, and why.
+- **The first start names the import** when it sees a helix config or LazyVim.
 
 ### Changed
 
+- **The first start leaves a `config.toml` that is already there alone**: it no longer switches that session to vim's keys because it sees a `.vimrc`, since the file says which keys you use.
 - **Startup says which keys a table took from a command once**, at the first start-up after they change, not at every start-up; `:check-config` says it whenever you ask. A mistake in the tables (one key written twice, a table with no keys) is still said at every start-up until it is fixed.
 
 ### Fixed
