@@ -3228,7 +3228,8 @@ pub struct Server {
 }
 
 /// The servers that come filled in: go and rust (2026-09-19), mojo, python,
-/// and helix's lists for Markdown and Typst (2026-11-04).
+/// helix's lists for Markdown and Typst (2026-11-04), and helix's list for
+/// every other language yumete colours (2026-11-06).
 ///
 /// Warning: **Filled in is not started.** Nothing is spawned until a file of that
 /// language is really opened, and if the program is not on the machine the
@@ -3241,10 +3242,39 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         args: args.iter().map(|a| a.to_string()).collect(),
     };
     HashMap::from([
-        // rust-analyzer 跟着 rustup 走，gopls 是 go 官方的——**各只有一個顯然的
-        // 答案**，所以這兩種填一個就够。
+        // rust-analyzer comes with rustup and gopls is Go's own: one obvious
+        // answer each. Go also takes helix's linter server after it.
         ("rust".to_string(), vec![one("rust-analyzer", &[])]),
-        ("go".to_string(), vec![one("gopls", &[])]),
+        ("go".to_string(), vec![one("gopls", &[]), one("golangci-lint-langserver", &[])]),
+        // **Every language yumete colours takes helix's list** (2026-11-06,
+        // helix `languages.toml` of 2026-07-23). Only what is installed
+        // starts, so a list costs nothing to a machine without it; and
+        // 「jdtls is not installed」 says what to do, where 「no server is
+        // configured」 did not. Python and Mojo below keep their own reasons.
+        ("ada".to_string(), vec![one("ada_language_server", &[])]),
+        ("bash".to_string(), vec![one("bash-language-server", &["start"])]),
+        ("c".to_string(), vec![one("clangd", &[])]),
+        ("cpp".to_string(), vec![one("clangd", &[])]),
+        ("css".to_string(), vec![one("vscode-css-language-server", &["--stdio"])]),
+        ("gas".to_string(), vec![one("asm-lsp", &[])]),
+        ("nasm".to_string(), vec![one("asm-lsp", &[])]),
+        (
+            "html".to_string(),
+            vec![one("vscode-html-language-server", &["--stdio"]), one("superhtml", &["lsp"])],
+        ),
+        ("java".to_string(), vec![one("jdtls", &[])]),
+        ("javascript".to_string(), vec![one("typescript-language-server", &["--stdio"])]),
+        ("typescript".to_string(), vec![one("typescript-language-server", &["--stdio"])]),
+        ("tsx".to_string(), vec![one("typescript-language-server", &["--stdio"])]),
+        ("json".to_string(), vec![one("vscode-json-language-server", &["--stdio"])]),
+        ("lua".to_string(), vec![one("lua-language-server", &[])]),
+        ("pascal".to_string(), vec![one("pasls", &[])]),
+        ("r".to_string(), vec![one("R", &["--vanilla", "--no-echo", "-e", "languageserver::run()"])]),
+        ("toml".to_string(), vec![one("taplo", &["lsp", "stdio"]), one("tombi", &["lsp"])]),
+        (
+            "yaml".to_string(),
+            vec![one("yaml-language-server", &["--stdio"]), one("ansible-language-server", &["--stdio"])],
+        ),
         // **Mojo 的服務器跟着 Mojo 一起裝**（2026-10-11）：`mojo-lsp-server` 和
         // `mojo` 同在 pixi 環境的 `bin/` 底下，而 `found_here` 本來就展開
         // `.pixi/envs/*/bin`——所以缺的只是這一行，不是找路那一半。
@@ -6084,7 +6114,17 @@ mod runner_tests {
             c.lsp[lang].iter().map(|s| s.command.clone()).collect()
         };
         assert_eq!(named(&bare, "rust"), ["rust-analyzer"]);
-        assert_eq!(named(&bare, "go"), ["gopls"]);
+        assert_eq!(named(&bare, "go"), ["gopls", "golangci-lint-langserver"]);
+        // helix's list for every language yumete colours (2026-11-06), with
+        // its arguments: `jdtls` alone, `typescript-language-server --stdio`.
+        assert_eq!(named(&bare, "java"), ["jdtls"]);
+        assert_eq!(bare.lsp["tsx"][0].args, ["--stdio"]);
+        for language in [
+            "ada", "bash", "c", "cpp", "css", "gas", "go", "html", "java", "javascript", "json", "lua",
+            "mojo", "nasm", "pascal", "python", "r", "rust", "toml", "tsx", "typescript", "yaml",
+        ] {
+            assert!(bare.lsp.contains_key(language), "{language} has helix's server");
+        }
         // Warning: **python 是一串**：它没有那個顯然的答案（helix 列了五個），填一個
         // 等於替人在五個裏猜一個。
         //
@@ -6106,7 +6146,7 @@ args = [\"--log-file\", \"/tmp/ra.log\"]
         );
         assert_eq!(config.lsp["rust"][0].args, ["--log-file", "/tmp/ra.log"]);
         // …and the ones nobody mentioned are still there.
-        assert_eq!(named(&config, "go"), ["gopls"]);
+        assert_eq!(named(&config, "go"), ["gopls", "golangci-lint-langserver"]);
 
         // Warning: **一串的寫法，而且一串「表」**——每個候選的參數不一樣，所以一串名字
         // 表達不了（`ruff server`、`ty server`，而 `jedi-language-server` 不帶）。
