@@ -20,6 +20,7 @@ pub mod backend;
 pub mod graphics;
 pub mod maths;
 pub mod page_window;
+pub mod tex;
 pub mod server;
 pub mod settings;
 pub mod settings_page;
@@ -624,7 +625,11 @@ pub fn run(
     // three steps by hand, with a hook that cannot print.
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        let _ = ratatui::try_restore();
+        // A panic RaTeX's render catches leaves the screen as it is: it is
+        // said as the formula's error (`tex.rs`).
+        if !crate::tex::panicking_quietly() {
+            let _ = ratatui::try_restore();
+        }
         previous(info);
     }));
     ratatui::crossterm::terminal::enable_raw_mode()?;

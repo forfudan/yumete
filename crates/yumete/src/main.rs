@@ -112,6 +112,10 @@ mod docgen;
 mod import;
 
 fn main() -> ExitCode {
+    // **The font 漢字 in a TeX formula are set in** (2026-11-08): RaTeX reads
+    // it from the environment, which may only be changed while this is the
+    // one thread — so first, before anything starts another.
+    yumete_tui::tex::choose_cjk_font();
     // **The tables this binary carries** (2026-11-04): handed to the IME
     // before anything asks it for a scheme, so the scan and every load see
     // them behind whatever is installed.

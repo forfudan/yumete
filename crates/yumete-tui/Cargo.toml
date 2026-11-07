@@ -15,6 +15,17 @@ yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
 
+# **TeX formulas as pictures** (2026-11-08): KaTeX's layout in Rust, with
+# KaTeX's fonts built in (`embed-fonts`), for Markdown's formulas in the
+# formula float. In the process and well under a millisecond a formula,
+# where the `typst` command and the bundled `mitex` package it replaces took
+# 5 to 20 ms and a `typst` on `PATH`. MIT; the fonts are OFL
+# (`licenses/katex-fonts.LICENSE`).
+ratex-layout = "0.1.15"
+ratex-parser = "0.1.15"
+ratex-render = { version = "0.1.15", features = ["embed-fonts"] }
+ratex-types = "0.1.15"
+
 # Only the tests read JSON here: what this crate *sends* is built by
 # `yumete_core::lsp` out of literals, and the tests check that what came out
 # really is the message it claims to be.
@@ -29,4 +40,4 @@ libc = "0.2"
 # version (`ignore` -> `winapi-util`), and it links through the small
 # `windows-link` rather than pulling the whole `windows-targets` set.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
+windows-sys = { version = "0.61", features = ["Win32_System_Console", "Win32_Foundation"] }
