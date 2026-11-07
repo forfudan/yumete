@@ -189,6 +189,16 @@ impl Editor {
             self.on_sidebar_key(key);
             return KeyOutcome::Continue;
         }
+        // **A page window holds no text** (2026-11-07): its keys scroll the
+        // page, and only `:` and `C-w` go on.
+        if self.page_window_has_the_keys()
+            && self.mode == Mode::Normal
+            && self.pending == Pending::None
+            && self.on_page_window_key(key)
+        {
+            self.status.clear();
+            return KeyOutcome::Continue;
+        }
         // Watch this command, so `.` can play it back. A command begins in
         // Normal mode with nothing pending; it ends when it is back there.
         // A key describes one move, and「was that a jump?」is about *this* one.

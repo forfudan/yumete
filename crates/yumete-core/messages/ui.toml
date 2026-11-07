@@ -477,6 +477,18 @@ zhs = "预览：{0}"
 en = "preview: {0}"
 
 [[message]]
+# :view-preview-fit page，或裸的 :view-preview-fit 问到是整页（草稿）
+key = "preview.fit-page"
+zhs = "页面窗口：整页放进窗口"
+en = "page window: the whole page in the window"
+
+[[message]]
+# :view-preview-fit width，或裸的 :view-preview-fit 问到是页宽（草稿）
+key = "preview.fit-width"
+zhs = "页面窗口：页宽适应窗口"
+en = "page window: the page as wide as the window"
+
+[[message]]
 # :view-preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
 key = "preview.made"
 zhs = "预览：{0}"
@@ -526,6 +538,18 @@ en = "preview: tinymist starting…"
 
 
 # ── problem ──────────────────────────────────────────
+
+[[message]]
+# :view-preview off 关掉了页面窗口（草稿）
+key = "preview.window-closed"
+zhs = "已关闭页面窗口"
+en = "closed the page window"
+
+[[message]]
+# :view-preview on 或 :view-preview-window，而页面窗口已经开着；裸的 :view-preview 问到它开着（草稿）
+key = "preview.window-open"
+zhs = "页面窗口已打开(`:view-preview off` 关闭)"
+en = "the page window is open (`:view-preview off` closes it)"
 
 [[message]]
 # 側欄裏打 :wq：沒有文件可寫

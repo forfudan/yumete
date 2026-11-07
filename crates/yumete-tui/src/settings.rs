@@ -265,6 +265,10 @@ pub fn complaints(config: &Config) -> Vec<String> {
     if !word.is_empty() && !matches!(word, "text" | "all" | "off") {
         said.push(format!("[editor] status_count = \"{word}\" 只能是 text、all、off"));
     }
+    let word = config.editor.preview_fit.trim();
+    if !word.is_empty() && yumete_core::editor::PreviewFit::parse(word).is_none() {
+        said.push(format!("[editor] preview_fit = \"{word}\" 只能是 width、page"));
+    }
     said
 }
 
@@ -314,6 +318,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
             Some(upto) => format!("view-long-line {upto}"),
             None => "view-long-line off".to_string(),
         },
+        format!("view-preview-fit {}", editor.preview_fit().name()),
     ]
 }
 
@@ -564,6 +569,9 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     }
     if let Some(level) = yumete_core::editor::AutoPairs::parse(&config.editor.auto_pairs) {
         editor.set_auto_pairs(level);
+    }
+    if let Some(fit) = yumete_core::editor::PreviewFit::parse(&config.editor.preview_fit) {
+        editor.set_preview_fit(fit);
     }
     editor.set_usage_groups(config.editor.usage_groups.clone());
 }

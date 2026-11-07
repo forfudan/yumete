@@ -1643,6 +1643,13 @@ pub fn run(
                     show(&url);
                 }
                 if let Some(want) = editor.take_preview_request() {
+                    // The page window is not drawn here yet: the browser's.
+                    let want = match want {
+                        yumete_core::editor::Preview::Window { path, syntax, .. } => {
+                            yumete_core::editor::Preview::Start { path, syntax }
+                        }
+                        other => other,
+                    };
                     // Already running: hand back the address and open the page
                     // again. Killing it and starting another is a fresh compile
                     // of the whole book to answer 「where was that page?」.

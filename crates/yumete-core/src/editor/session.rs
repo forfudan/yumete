@@ -742,15 +742,17 @@ impl Editor {
     /// path empty for a buffer with no file. Then `keys⇥n` (the n-th
     /// window) or `keys⇥left`/`keys⇥right`, and `sidebar⇥panel` for each
     /// sidebar open.
-    fn windows_to_keep(&self) -> Vec<String> {
+    pub(super) fn windows_to_keep(&self) -> Vec<String> {
         use crate::sidebar::Side;
         use crate::window::{Split, Step};
         let sidebars: Vec<_> = Side::BOTH.into_iter().filter_map(|side| self.panel(side)).collect();
-        if self.windows.len() < 2 && sidebars.is_empty() {
+        // Without the page windows (2026-11-07): see `windows_kept`.
+        let windows = self.windows_kept();
+        if windows.len() < 2 && sidebars.is_empty() {
             return Vec::new();
         }
         let mut out = Vec::new();
-        for step in self.windows.steps() {
+        for step in windows.steps() {
             match step {
                 Step::Split(Split::Below) => out.push("below".to_string()),
                 Step::Split(Split::Beside) => out.push("beside".to_string()),
@@ -774,7 +776,7 @@ impl Editor {
         match self.panel_focus() {
             Some(Side::Left) => out.push("keys\tleft".to_string()),
             Some(Side::Right) => out.push("keys\tright".to_string()),
-            None => out.push(format!("keys\t{}", self.windows.index_of(self.live).unwrap_or(0))),
+            None => out.push(format!("keys\t{}", windows.index_of(self.keys_window_kept()).unwrap_or(0))),
         }
         for panel in sidebars {
             out.push(format!("sidebar\t{}", crate::sidebar::Panel::from(panel.view()).key()));
@@ -788,7 +790,7 @@ impl Editor {
     /// from 0), `heading⇥n⇥path⇥nth⇥text` for a closed heading fold (found
     /// again by its text), `off⇥n⇥path` for folds switched off with `zn`.
     fn folds_to_keep(&self) -> Vec<String> {
-        let windows = self.windows.leaves();
+        let windows = self.windows_kept().leaves();
         let mut out = Vec::new();
         for buffer in &self.buffers {
             let Some(path) = buffer.path() else { continue };

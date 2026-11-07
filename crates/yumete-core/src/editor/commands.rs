@@ -1219,29 +1219,58 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetPreview(how) => {
+                // **Either preview counts as running** (2026-11-07): the
+                // window beside the text, or the browser's.
+                let window = self.has_a_page_window();
                 let running = self.preview_at.is_some();
-                let on = how.over(running);
+                let on = how.over(window || running);
                 // Already running: the question 「where is it?」 is the one a
                 // writer actually asks, and the address was said once and lost.
                 // A bare `:view-preview` is exactly that question.
+                if on && window {
+                    self.status = say!("preview.window-open");
+                    return Ok(CommandOutcome::Continue);
+                }
                 if on && running {
                     self.preview_request = Some(Preview::Show);
                     return Ok(CommandOutcome::Continue);
                 }
-                self.preview_request = Some(if on {
-                    match self.current_buffer().path() {
-                        Some(path) => Preview::Start {
-                            path: path.to_path_buf(),
-                            syntax: self.current_buffer().syntax(),
-                        },
-                        None => {
-                            self.status = say!("preview.save-first");
-                            return Ok(CommandOutcome::Continue);
-                        }
-                    }
-                } else {
-                    Preview::Stop
-                });
+                if on {
+                    // The window when it can be drawn, the browser when not.
+                    self.ask_for_a_preview(true, true);
+                    return Ok(CommandOutcome::Continue);
+                }
+                // `off` closes whichever is open.
+                if self.close_page_windows() {
+                    self.status = say!("preview.window-closed");
+                }
+                self.preview_request = Some(Preview::Stop);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::PreviewWindow => {
+                if self.has_a_page_window() {
+                    self.status = say!("preview.window-open");
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.ask_for_a_preview(true, false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::PreviewBrowser => {
+                if self.preview_at.is_some() {
+                    self.preview_request = Some(Preview::Show);
+                    return Ok(CommandOutcome::Continue);
+                }
+                self.ask_for_a_preview(false, false);
+                Ok(CommandOutcome::Continue)
+            }
+            Command::PreviewFit(fit) => {
+                if let Some(fit) = fit {
+                    self.preview_fit = fit;
+                }
+                self.status = match self.preview_fit {
+                    crate::editor::PreviewFit::Width => say!("preview.fit-width"),
+                    crate::editor::PreviewFit::Page => say!("preview.fit-page"),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::SetRender(how) => {

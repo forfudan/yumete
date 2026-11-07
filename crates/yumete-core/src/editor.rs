@@ -858,6 +858,16 @@ pub enum Preview {
     /// page again?」.
     Show,
     Stop,
+    /// **The page beside the text** (`:view-preview on`, `:view-preview-window`,
+    /// 2026-11-07): a window drawn by tinymist, opened by the front end, which
+    /// knows whether this terminal draws pictures and how old the tinymist is.
+    /// With `fallback`, a window that cannot be drawn becomes the browser's
+    /// preview ([`Preview::Start`]) instead.
+    Window {
+        path: PathBuf,
+        syntax: crate::syntax::Syntax,
+        fallback: bool,
+    },
 }
 
 /// How much of the result the page shows.
@@ -3376,6 +3386,13 @@ pub struct Editor {
     /// there so it can say so on the status bar, hand the address back when
     /// asked, and refuse to start a second one.
     preview_at: Option<String>,
+    /// **The windows that show a page instead of text** (2026-11-07), and
+    /// what each follows ([`PageWindow`]). See `editor/page_preview.rs`.
+    page_windows: std::collections::HashMap<crate::window::WindowId, PageWindow>,
+    /// How big a page window draws the page (`:view-preview-fit`).
+    preview_fit: PreviewFit,
+    /// The scroll keys pressed in a page window, for the front end.
+    page_steps: Vec<PageStep>,
     /// A link the reader followed to a page on the web (`gL`), waiting for
     /// the front end — only it can hand a URL to the machine, and only ever as
     /// one argument to `open`/`xdg-open`.
@@ -4608,6 +4625,9 @@ impl Editor {
             preview_request: None,
             open_request: None,
             preview_at: None,
+            page_windows: std::collections::HashMap::new(),
+            preview_fit: PreviewFit::default(),
+            page_steps: Vec::new(),
             shell_request: None,
             suspend_request: false,
             last_bang: None,
@@ -6059,6 +6079,8 @@ mod multi;
 mod normal;
 pub(crate) use normal::default_key_written;
 mod page;
+mod page_preview;
+pub use page_preview::{PageStep, PageTarget, PageWindow, PreviewFit};
 mod pairing;
 mod places;
 pub use pairing::AutoPairs;

@@ -461,6 +461,18 @@ zhs = "竖排时每隔几个字在页边画一个淡刻度，像稿纸一样"
 en = "a faint tick in the margin every few cells, like manuscript paper"
 
 [[message]]
+# 设置面板：页面窗口大小（草稿）
+key = "settings.editor.preview-fit"
+zhs = "页面窗口大小"
+en = "page window fit"
+
+[[message]]
+# 设置面板：页面窗口大小——一句话（草稿）
+key = "settings.editor.preview-fit.hint"
+zhs = "页面窗口中页面的大小：页宽适应窗口并随光标滚动，或整页放进窗口"
+en = "how the page window draws the page: as wide as the window and scrolled to the cursor, or the whole page"
+
+[[message]]
 # 設置面板：盤上那一份變了就讀回來
 key = "settings.editor.reload-auto"
 zhs = "自动重载"
@@ -1407,6 +1419,18 @@ en = "helix"
 key = "settings.pick.preset.vim"
 zhs = "vim"
 en = "vim"
+
+[[message]]
+# 设置面板：页面窗口大小 page（草稿）
+key = "settings.pick.preview-fit.page"
+zhs = "整页"
+en = "whole page"
+
+[[message]]
+# 设置面板：页面窗口大小 width（草稿）
+key = "settings.pick.preview-fit.width"
+zhs = "页宽"
+en = "width"
 
 [[message]]
 # 設置：状态栏的底——往墨抬一阶

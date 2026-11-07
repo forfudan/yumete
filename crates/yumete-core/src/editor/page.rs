@@ -1209,8 +1209,8 @@ impl Editor {
     }
 
     /// The smallest window a split may make.
-    const WINDOW_MIN_ROWS: u16 = 2;
-    const WINDOW_MIN_COLUMNS: u16 = 8;
+    pub(super) const WINDOW_MIN_ROWS: u16 = 2;
+    pub(super) const WINDOW_MIN_COLUMNS: u16 = 8;
 
     /// The text area the front end laid the windows out in this frame.
     pub fn note_text_area(&self, area: crate::window::Area) {
@@ -1233,11 +1233,20 @@ impl Editor {
     /// Which is the same act as「關掉另一個」 when there are two of them, and
     /// it means the half you are standing in can never vanish under you.
     pub fn close_split(&mut self) -> bool {
+        // From a page window the keys go back to the text it showed: a page
+        // window alone has nothing in it to show (2026-11-07).
+        if self.page_window_has_the_keys() {
+            let back = self.page_windows.get(&self.live).map(|p| p.follows).filter(|&w| self.windows.has(w));
+            if let Some(back) = back.or_else(|| self.window_after_closing()) {
+                self.switch_to(back);
+            }
+        }
         let others: Vec<_> = self.windows.leaves().into_iter().filter(|&w| w != self.live).collect();
         for window in &others {
             self.windows.close(*window);
             self.panes.remove(window);
         }
+        self.page_windows.retain(|&id, _| self.windows.has(id));
         !others.is_empty()
     }
 
@@ -1252,6 +1261,8 @@ impl Editor {
         for buffer in &mut self.buffers {
             buffer.forget_folds(window);
         }
+        // A page window that showed its page follows another (2026-11-07).
+        self.page_windows_lose(window);
         true
     }
 
@@ -1273,6 +1284,8 @@ impl Editor {
         if window == self.live || !self.windows.has(window) {
             return false;
         }
+        // A page window shows the buffer of the window it follows.
+        self.aim_the_page_pane(window);
         let Some(mut pane) = self.panes.remove(&window) else {
             return false;
         };
@@ -1348,12 +1361,16 @@ impl Editor {
     /// Where the keys go when the live window closes: the window they were
     /// in last, or, when none of those is left, the one that takes the room
     /// (2026-10-31, chosen over vim's room rule and helix's tree order).
+    /// A page window is never where they go (2026-11-07): with only page
+    /// windows left besides this one, this is the last window.
     pub(super) fn window_after_closing(&self) -> Option<crate::window::WindowId> {
+        let usable = |w: crate::window::WindowId| w != self.live && self.windows.has(w) && !self.is_page_window(w);
         self.window_history
             .iter()
             .copied()
-            .find(|&w| w != self.live && self.windows.has(w))
-            .or_else(|| self.windows.heir(self.live))
+            .find(|&w| usable(w))
+            .or_else(|| self.windows.heir(self.live).filter(|&w| usable(w)))
+            .or_else(|| self.windows.leaves().into_iter().find(|&w| usable(w)))
     }
 
     /// Drop every window whose buffer is `gone` — a window naming a buffer
@@ -1369,7 +1386,7 @@ impl Editor {
             .windows
             .leaves()
             .into_iter()
-            .filter(|&w| w != self.live && self.panes.get(&w).is_some_and(|p| gone(p.buffer)))
+            .filter(|&w| w != self.live && !self.is_page_window(w) && self.panes.get(&w).is_some_and(|p| gone(p.buffer)))
             .collect();
         for window in showing {
             let back = self.panes.get(&window).and_then(|pane| {

@@ -28,7 +28,9 @@ impl Editor {
         // close the file, or the whole editor with one file open, and `:q!`
         // then threw the changes away. From a focused sidebar they close the
         // sidebar, as `:q` in vim's file-tree window does.
-        if self.panel_focus().is_some() || self.other_pane().is_some() {
+        // A page window does not count (2026-11-07): `:q` in the last text
+        // window leaves, as it would with no preview beside it.
+        if self.panel_focus().is_some() || self.window_after_closing().is_some() || self.page_window_has_the_keys() {
             self.close_this_region(false);
             return Ok(CommandOutcome::Continue);
         }

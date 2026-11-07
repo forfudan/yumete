@@ -134,6 +134,11 @@ pub struct EditorConfig {
     /// show a picture in its text (Ghostty, kitty), through the `typst`
     /// command. On; elsewhere it draws nothing either way.
     pub maths_preview: bool,
+    /// **How big the page window draws the page** (2026-11-07): `"width"`
+    /// (the default), the page as wide as the window and scrolled to the
+    /// cursor, or `"page"`, the whole page in the window.
+    /// `:view-preview-fit` sets it for the session.
+    pub preview_fit: String,
     /// **What a yank copied, lit for a moment** (2026-11-07): nvim's
     /// `vim.hl.on_yank`, 150 ms on the selection's ground. Off, as nvim has
     /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
@@ -494,6 +499,7 @@ impl Default for EditorConfig {
             end_of_line_diagnostics: "hint".to_string(),
             modeline: true,
             maths_preview: true,
+            preview_fit: "width".to_string(),
             yank_flash: false,
             indent_guides: false,
             indent_guides_character: "│".to_string(),
@@ -4628,6 +4634,7 @@ struct RawEditor {
     end_of_line_diagnostics: Option<String>,
     modeline: Option<bool>,
     maths_preview: Option<bool>,
+    preview_fit: Option<String>,
     yank_flash: Option<bool>,
     indent_guides: Option<bool>,
     indent_guides_character: Option<String>,
@@ -4850,6 +4857,9 @@ impl RawConfig {
         }
         if other.editor.maths_preview.is_some() {
             self.editor.maths_preview = other.editor.maths_preview;
+        }
+        if other.editor.preview_fit.is_some() {
+            self.editor.preview_fit = other.editor.preview_fit.clone();
         }
         if other.editor.screenshot.is_some() {
             self.editor.screenshot = other.editor.screenshot.clone();
@@ -5272,6 +5282,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.maths_preview {
             config.editor.maths_preview = on;
+        }
+        if let Some(fit) = self.editor.preview_fit {
+            config.editor.preview_fit = fit;
         }
         if let Some(line) = self.editor.screenshot {
             config.editor.screenshot = line;

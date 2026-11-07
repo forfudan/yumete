@@ -542,6 +542,15 @@ pub enum Command {
     /// `:view-preview` / `:view-preview off` — hand the file to the real typesetter and
     /// show what it makes (Feature #128).
     SetPreview(Switch),
+    /// `:view-preview-window` — the page beside the text, never the browser
+    /// (2026-11-07).
+    PreviewWindow,
+    /// `:view-preview-browser` — the page in the browser, as `:view-preview`
+    /// was before the window.
+    PreviewBrowser,
+    /// `:view-preview-fit width|page` — how big the page window draws the
+    /// page; bare, which it is.
+    PreviewFit(Option<crate::editor::PreviewFit>),
     /// `:w!` — write over a file that changed on disk since it was read.
     WriteForce(Option<String>),
     /// `:reload` / `:reload!` — read the file again. The `!` throws away
@@ -2145,6 +2154,12 @@ const RENDER: &[Word] = &[
         help: "cmd.render.full",
         needs: &[],
     },
+];
+
+/// `:view-preview-fit` takes one of these (2026-11-07).
+const PREVIEW_FIT: &[Word] = &[
+    Word { name: "width", help: "cmd.preview-fit.width", needs: &[] },
+    Word { name: "page", help: "cmd.preview-fit.page", needs: &[] },
 ];
 
 /// `:view-wrap-height`'s one word: `0` follows the window.
@@ -4526,6 +4541,30 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::SetPreview(switched(p)))),
     },
     Entry {
+        name: "view-preview-window",
+        aliases: &[],
+        help: "cmd.view.preview-window",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::PreviewWindow)),
+    },
+    Entry {
+        name: "view-preview-browser",
+        aliases: &[],
+        help: "cmd.view.preview-browser",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::PreviewBrowser)),
+    },
+    Entry {
+        name: "view-preview-fit",
+        aliases: &[],
+        help: "cmd.view.preview-fit",
+        needs: &[],
+        params: &[Param::Words { of: PREVIEW_FIT, default: None }],
+        build: Some(|p| Ok(Command::PreviewFit(p.arg(0).and_then(crate::editor::PreviewFit::parse)))),
+    },
+    Entry {
         name: "render",
         aliases: &[],
         help: "cmd.commands.render",
@@ -5743,6 +5782,13 @@ fn moved_to(word: &str) -> Option<String> {
     // 兩次。Warning: **去重要在數數之前**：底下那個「超過三個就別猜了」數的是**幾個去
     // 處**，不是幾次命中。
     found.dedup();
+    // **A family's head stands for the family** (2026-11-07): `preview` is a
+    // segment of `:view-preview-window` and its two siblings too, and naming
+    // `:view-preview` says where all four are.
+    let heads = found.clone();
+    found.retain(|one| {
+        !heads.iter().any(|head| head != one && one.starts_with(&format!("{}-", head.trim_end_matches('`'))))
+    });
     if found.is_empty() || found.len() > 3 {
         return None;
     }

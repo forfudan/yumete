@@ -226,6 +226,11 @@ const EDITOR_AUTO_PAIRS_WAYS: &[Choice] = &[
     Choice { word: "full", label: "settings.pick.auto-pairs.full" },
 ];
 
+const EDITOR_PREVIEW_FIT_WAYS: &[Choice] = &[
+    Choice { word: "width", label: "settings.pick.preview-fit.width" },
+    Choice { word: "page", label: "settings.pick.preview-fit.page" },
+];
+
 const EDITOR_STATUS_COUNT_WAYS: &[Choice] = &[
     Choice { word: "text", label: "settings.pick.status-count.text" },
     Choice { word: "all", label: "settings.pick.status-count.all" },
@@ -603,6 +608,15 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.maths-preview",
         hint: "settings.editor.maths-preview.hint",
         factory: "true",
+    },
+    Setting {
+        table: "editor",
+        key: "preview_fit",
+        group: Group::Marks,
+        kind: Kind::Pick(EDITOR_PREVIEW_FIT_WAYS),
+        label: "settings.editor.preview-fit",
+        hint: "settings.editor.preview-fit.hint",
+        factory: r#""width""#,
     },
     Setting {
         table: "editor",

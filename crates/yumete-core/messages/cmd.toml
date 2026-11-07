@@ -1323,6 +1323,18 @@ en = "in the line: the candidates take the line under the cursor, nearest the ey
 find = "候選 候选 面板 行中 inline"
 
 [[message]]
+# :view-preview-fit 的参数 page 的说明（草稿）
+key = "cmd.preview-fit.page"
+zhs = "整页放进窗口"
+en = "the whole page in the window"
+
+[[message]]
+# :view-preview-fit 的参数 width 的说明（草稿）
+key = "cmd.preview-fit.width"
+zhs = "页宽适应窗口，随光标滚动"
+en = "as wide as the window, scrolled to the cursor"
+
+[[message]]
 # :quit-all —— 全部關掉再走；短寫 :qa
 key = "cmd.quit.all"
 zhs = "关闭所有文件并退出(简写 `:qa`)"
@@ -1917,6 +1929,27 @@ key = "cmd.view.preview"
 zhs = "交给排版器排版，在浏览器中查看"
 en = "typeset with a real typesetter and preview in a browser"
 find = "預覽 预览 瀏覽器 浏览器 排版 browser"
+
+[[message]]
+# : 命令菜单里 view-preview-browser 那一项的说明（草稿）
+key = "cmd.view.preview-browser"
+zhs = "交给排版器排版，在浏览器中查看"
+en = "typeset with a real typesetter and preview in a browser"
+find = "預覽 预览 瀏覽器 浏览器 排版 browser"
+
+[[message]]
+# : 命令菜单里 view-preview-fit 那一项的说明（草稿）
+key = "cmd.view.preview-fit"
+zhs = "页面窗口中页面的大小：页宽或整页"
+en = "how big the page window draws the page: as wide as the window, or whole"
+find = "預覽 预览 頁寬 页宽 整頁 整页 fit width page"
+
+[[message]]
+# : 命令菜单里 view-preview-window 那一项的说明（草稿）
+key = "cmd.view.preview-window"
+zhs = "在旁边的窗口中显示排好的页面，跟随光标(需要 tinymist，以及 Ghostty 或 kitty)"
+en = "the typeset page in a window beside the text, following the cursor (needs tinymist, and Ghostty or kitty)"
+find = "預覽 预览 頁面 页面 窗口 排版 preview page window"
 
 [[message]]
 # : 命令選單裏 punct 那一項的説明(view 組)
