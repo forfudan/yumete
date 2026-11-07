@@ -254,7 +254,11 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     // ── m ──────────────────────────────────────────────────────────────
     (NormalCmd::MatchBrackets, |e, _| e.acting(false, |e| e.goto_matching_bracket()), Key::Char('m')),
     // vim's `%`: off a bracket, the next one along the line.
-    (NormalCmd::VimMatchBrackets, |e, _| e.acting(true, |e| e.goto_matching_bracket()), Key::Char('m')),
+    // With a count, `{count}%` goes that far down the file (`:h N%`).
+    (NormalCmd::VimMatchBrackets, |e, cx| match cx.operator_count {
+        Some(n) => e.goto_percent(n, cx),
+        None => e.acting(true, |e| e.goto_matching_bracket()),
+    }, Key::Char('m')),
     // These four wait for a pair or an object, and keep the count for it
     // (`2mi(` is the second pair out).
     (NormalCmd::SelectTextobjectInner, |e, cx| {

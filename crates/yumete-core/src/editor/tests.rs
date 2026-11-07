@@ -27871,6 +27871,30 @@ fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **vim's `{count}%`** (2026-11-07, measured in vim 9.1 and nvim 0.12 on
+/// ten lines): `50%` is line 5, `(count × lines + 99) / 100`; with an
+/// operator the far line is left out, so `d50%` takes lines 1 to 4.
+#[test]
+fn vims_count_percent_goes_that_far_down_the_file() {
+    let ten: String = (1..=10).map(|n| format!("line {n}\n")).collect();
+    let mut ed = typed_vim(&ten);
+    press(&mut ed, "50%");
+    assert_eq!(ed.cursor_line(), 4, "line 5");
+    press(&mut ed, "gg30%");
+    assert_eq!(ed.cursor_line(), 2, "line 3");
+    press(&mut ed, "gg101%");
+    assert_eq!(ed.cursor_line(), 0, "over 100 does nothing");
+    let left = |keys: &str| {
+        let mut ed = typed_vim(&ten);
+        press(&mut ed, keys);
+        ed.current_buffer().text().lines().map(|l| l.trim_start_matches("line ").to_string()).collect::<Vec<_>>().join(",")
+    };
+    assert_eq!(left("d50%"), "5,6,7,8,9,10");
+    assert_eq!(left("Gd50%"), "1,2,3,4,10");
+    assert_eq!(left("jjjjd50%"), "1,2,3,4,5,6,7,8,9,10", "on the line itself, nothing");
+    assert_eq!(left("v50%d"), "ine 5,6,7,8,9,10", "Visual: charwise, to line 5");
+}
+
 /// **vim's charwise Visual reaches the line break** (2026-11-07, measured
 /// against nvim): `v$` and `l` stand on it, `d` joins the next line, a copy
 /// that ends in a break pastes inside the line, and the file's last break is

@@ -102,6 +102,23 @@ impl Editor {
         }
     }
 
+    /// **vim's `{count}%`** (`:h N%`, 2026-11-07): the line `count` percent
+    /// of the way down, worked out as vim's `nv_percent` does,
+    /// `(count × lines + 99) / 100`, and landed on as `{line}G` lands (the
+    /// same `beginline`). A count over 100 does nothing, as in vim.
+    pub(super) fn percent_line(&self, count: usize) -> Option<usize> {
+        if count == 0 || count > 100 {
+            return None;
+        }
+        let lines = motion::last_line(self.current_buffer().rope()) + 1;
+        Some(((count * lines).div_ceil(100)).clamp(1, lines))
+    }
+
+    pub(super) fn goto_percent(&mut self, count: usize, cx: super::normal::Cx) {
+        let Some(line) = self.percent_line(count) else { return };
+        self.acting(true, |e| e.cmd_goto_line(super::normal::Cx { count: line, operator_count: Some(line), ..cx }));
+    }
+
     /// **vim's `%`** (`:h %`, 2026-10-30): the bracket under the cursor, or
     /// else the first one after it on the line, and that bracket's other
     /// half, as `(bracket, other half)`.

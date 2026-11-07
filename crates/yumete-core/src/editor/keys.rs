@@ -982,6 +982,22 @@ impl Editor {
         // bracket under the cursor. The pair search is the editor's, which is
         // why it is here and not in the pure motion table.
         if first.is_none() && c == '%' {
+            // **`d50%` takes the lines short of the far one** (`:h N%`,
+            // measured in vim 9.1 and nvim 0.12, 2026-11-07): on ten lines
+            // `d50%` from line 1 takes lines 1 to 4, `Gd50%` lines 5 to 9,
+            // and from line 5 itself nothing. Not `d{line}G`, which takes
+            // both ends.
+            self.settle_alias_count();
+            if let Some(n) = self.count.take() {
+                self.alias_count = None;
+                let Some(line) = self.percent_line(n) else { return };
+                let here = self.current_buffer().rope().char_to_line(self.sel.head());
+                let to = line - 1;
+                if here == to {
+                    return;
+                }
+                return self.do_vim_lines(op, here.min(to), here.max(to) - 1);
+            }
             self.count = None;
             self.alias_count = None;
             // Off a bracket, `%` looks along the line for the first one, and
