@@ -34,6 +34,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **The preview window no longer shakes.** On some page sizes and window widths (an A5 book, for one) it asked tinymist for the page at two sizes in turn without end, and the page jumped between them.
 - **`A-h` in the `Space e` explorer keeps it the explorer.** It used to turn the explorer into the project's file picker; it now lists the same folder again, and what it skips lasts as you move between folders and in the preview.
 - **The browser preview follows the caret again.** tinymist 0.15.2 stopped reading the message yumete sent; it now sends the one tinymist scrolls by.
 - **One `Esc` leaves Insert mode while the completion list is up**, as in helix and vim. It used to close the list and stay in Insert, so a second `Esc` was needed. Leaving Insert any other way (`C-c`, a `[keys.insert]` run) takes the list away too.

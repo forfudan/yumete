@@ -370,7 +370,8 @@ impl PagePreview {
             let number = board.shown();
             let number = total.map_or(number, |t| number.min(t.max(1)));
             let inches = board.page.as_ref().map_or(A4, |p| p.inches());
-            let ppi = ppi_for(editor.preview_fit(), board.cells, crate::graphics::cell_pixels(), inches);
+            let shown = board.page.as_ref().filter(|p| p.number == number).map(|p| p.ppi);
+            let ppi = ppi_to_ask(editor.preview_fit(), board.cells, crate::graphics::cell_pixels(), inches, shown);
             Want { main: main.clone(), page: number, ppi, text: servers.typst_told() }
         };
         if self.refresh.due(&want, now) && self.server_has_it(editor, servers) {
@@ -556,6 +557,26 @@ pub fn ppi_for(fit: PreviewFit, cells: Option<(u16, u16)>, cell: (u16, u16), inc
     ppi.clamp(24.0, most.max(24.0)).round() as u32
 }
 
+/// **The ppi to ask for, holding on to the one shown** (2026-11-08): the page
+/// size is read back from a PNG Typst rounded to whole pixels, so near a
+/// half-integer the ideal ppi came out P from P+1 and P+1 from P, and the
+/// window asked for one and then the other forever, the page shaking between
+/// two sizes. Rounding moves it by less than 0.06, so a difference of one is
+/// that and nothing else.
+pub fn ppi_to_ask(
+    fit: PreviewFit,
+    cells: Option<(u16, u16)>,
+    cell: (u16, u16),
+    inches: (f64, f64),
+    shown: Option<u32>,
+) -> u32 {
+    let ppi = ppi_for(fit, cells, cell, inches);
+    match shown {
+        Some(shown) if ppi.abs_diff(shown) <= 1 => shown,
+        _ => ppi,
+    }
+}
+
 /// **The cells a page takes when it is as wide as the window**: `columns`
 /// wide, and as many rows as keep its shape — at most what the placeholders
 /// can number, the width shrinking with them past that.
@@ -618,7 +639,12 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
                 .filter(|j| j.page == page.number)
                 .map(|j| (j.y * page.ppi as f64 / 72.0 / page.height as f64 * rows as f64) as i32);
             let (top, base) = scroll_top(cursor_row, board.base, board.nudge, rows, room.height);
-            board.nudge = top as i32 - base;
+            // Only a hand scroll is folded back into the page: storing the
+            // clamp as one made a one-row wobble of the cursor's row move the
+            // whole page.
+            if board.nudge != 0 {
+                board.nudge = top as i32 - base;
+            }
             board.base = base;
             let picture = crate::graphics::show_page(page.hash, &page.png, columns, rows);
             let spot = Rect {
@@ -857,5 +883,46 @@ mod tests {
         assert_eq!(turn(3, Some(10), PageStep::Goto(5)), 5);
         assert_eq!(turn(3, Some(10), PageStep::Goto(50)), 10);
         assert_eq!(turn(3, None, PageStep::Goto(50)), 50, "the total is not known yet");
+    }
+
+    /// **The asked ppi settles** (2026-11-08): with Typst rounding the PNG to
+    /// whole pixels, an A5 page 47 columns of 8 px wide asked for 65 and 64
+    /// in turn forever, and the page shook between the two sizes.
+    #[test]
+    fn the_asked_ppi_settles_instead_of_flipping() {
+        let made = |ppi: u32| -> (u32, u32) {
+            ((419.5276 * ppi as f64 / 72.0).round() as u32, (595.2756 * ppi as f64 / 72.0).round() as u32)
+        };
+        let mut shown: Option<u32> = None;
+        let mut asked = Vec::new();
+        for _ in 0..6 {
+            let inches = match shown {
+                Some(p) => {
+                    let (w, h) = made(p);
+                    (w as f64 / p as f64, h as f64 / p as f64)
+                }
+                None => (8.27, 11.69),
+            };
+            let ppi = ppi_to_ask(PreviewFit::Width, Some((47, 30)), (8, 17), inches, shown);
+            asked.push(ppi);
+            shown = Some(ppi);
+        }
+        assert!(asked[2..].windows(2).all(|w| w[0] == w[1]), "{asked:?}");
+    }
+
+    /// **A wobble of the cursor's row does not move the page** when nothing
+    /// was scrolled by hand: the clamp at the top is not a hand scroll.
+    #[test]
+    fn a_clamped_top_is_not_kept_as_a_hand_scroll() {
+        let mut base = 0;
+        let mut nudge = 0;
+        for row in [5, 6, 5, 6] {
+            let (top, b) = scroll_top(Some(row), base, nudge, 100, 30);
+            assert_eq!(top, 0, "row {row}");
+            if nudge != 0 {
+                nudge = top as i32 - b;
+            }
+            base = b;
+        }
     }
 }
