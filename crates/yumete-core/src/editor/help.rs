@@ -129,7 +129,7 @@ impl Editor {
     pub(super) fn help_chinese() -> String {
         let mut out = format!("# {}\n\n", say!("help.chinese.title"));
         for (keys, what) in [
-            (":yume on", say!("help.chinese.toggle-ime")),
+            (":yume", say!("help.chinese.toggle-ime")),
             (":yume-scheme", say!("help.chinese.switch-scheme")),
             (":yume-annotation double", say!("help.chinese.chaifen-under-candidates")),
             ("w b e", say!("help.chinese.word-boundaries")),
@@ -140,7 +140,7 @@ impl Editor {
             (":ruby-format html", say!("help.chinese.unify-reading-spelling")),
             (":render full", say!("render.wysiwyg")),
             (":indent 2", say!("help.chinese.first-line-indent")),
-            (":view-hanging on", say!("help.chinese.hung-punctuation")),
+            (":view-hanging", say!("help.chinese.hung-punctuation")),
             (":count", say!("help.chinese.count")),
         ] {
             out.push_str(&format!("- `{keys}` — {what}
@@ -155,11 +155,11 @@ impl Editor {
             (":vertical", say!("help.vertical.turn-vertical")),
             ("h l", say!("help.vertical.previous-next-column")),
             ("j k", say!("help.vertical.down-up-column")),
-            (":view-wrap-vertical 24", say!("help.vertical.column-length")),
+            (":view-wrap-height 24", say!("help.vertical.column-length")),
             (":view-pages-vertical 2", say!("help.vertical.pages")),
-            (":view-hanging on", say!("help.vertical.hung-punctuation")),
+            (":view-hanging", say!("help.vertical.hung-punctuation")),
             (":view-margin always", say!("help.vertical.margin")),
-            (":view-sentence on", say!("help.vertical.sentence")),
+            (":view-sentence", say!("help.vertical.sentence")),
             (":indent 2", say!("help.vertical.first-line-indent")),
             (":render full", say!("help.vertical.wysiwyg")),
         ] {

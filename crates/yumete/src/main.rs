@@ -1270,7 +1270,7 @@ fn main() -> ExitCode {
         // colours are globals settled before anything is drawn, not state the
         // loop owns — so `:theme`, `:theme-mode` and `:theme-fill` work here
         // exactly as they do in the editor, and a reviewer asking 「what does
-        // `:theme-fill on` look like」 gets the answer instead of a warning.
+        // `:theme-fill` (on) look like」 gets the answer instead of a warning.
         // The ones below genuinely need the loop: they hold an input method, a
         // child process, the clipboard or the window system.
         take_the_colours(&mut editor, &config);
@@ -1635,7 +1635,7 @@ fn press(
                     // **`\{ime}` 撥一下「往後走不走輸入法」**（2026-09-28）。
                     if name == "ime" {
                         composing = !composing;
-                        // Warning: **撥開關的時候順手把它打開。** `:yume on` 走的是請求/回應
+                        // Warning: **撥開關的時候順手把它打開。** `:yume` (on) 走的是請求/回應
                         // 那條路，而那條路要互動循環來服務——`--shot` 沒有循環，工具自己
                         // 早就印過一句話說這件事。這裏直接撥會話上那兩格。
                         if composing {
@@ -2523,7 +2523,7 @@ OPTIONS:
         --vertical   Lay the text out vertically for this run (縱書), overriding
                      the config. --horizontal forces the ordinary layout.
         --readonly   Open locked: nothing this run opens can be typed into.
-                     `:readonly off` unlocks the one you are looking at.
+                     `:readonly` unlocks the one you are looking at.
     -r, --resume     Reopen the files that were open last time here, each at
                      the line it was left on. `:resume` does it from inside.
         --new        Start on an empty buffer even when `[editor] session` is
@@ -2744,7 +2744,8 @@ KEYS (Normal mode, Helix-style):
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :word  :wq  :count
               :yume-scheme <tag>   {schemes}
-              :view-wrap [on|off|<n>]  soft-wrap; a number is a fixed measure
+              :view-wrap       soft-wrap on or off
+              :view-wrap-width <n>  a fixed measure; 0 follows the window
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
               :recover         use or drop a crash-recovery draft
@@ -2778,7 +2779,7 @@ KEYS (Normal mode, Helix-style):
               :ruby-render off|basic|full   full lays the readings out,
                           basic keeps the markup on the page and still counts
                           a reading as no 字, off is the source
-              :ruby-html on|off   :ruby-typst on|off   which is drawn)
+              :ruby-html   :ruby-typst   which is drawn, each a toggle)
 
 In Insert mode C-w takes back a word and C-u the line. The `:` and `/` prompts
 are editable: arrows, Home/End, C-w, C-u, and Up/Down through what you typed
