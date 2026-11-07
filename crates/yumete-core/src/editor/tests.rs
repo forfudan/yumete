@@ -36590,6 +36590,32 @@ fn vims_g_and_gg_keep_the_column() {
     assert_eq!(at(&ed), (100, 1), "helix: ge");
 }
 
+/// **vim's line jumps count a tab to its stop** (nvim 0.12, measured
+/// 2026-11-07 with `scripts/oracle/vim_sweep.py`): a wanted column inside a
+/// tab lands on the tab, one inside a wide character on it, and a cursor
+/// standing on a tab wants the tab's last column. They used to count a tab
+/// as one column, landing past it.
+#[test]
+fn vims_line_jumps_count_a_tab_to_its_stop() {
+    let text = "  he said (no) then;\n\t你也是人類, ok\nz\n\ntail 段\n";
+    for (keys, want) in [
+        ("l2Gx", "  he said (no) then;\n你也是人類, ok\n"),
+        ("7l2Gx", "  he said (no) then;\n你也是人類, ok\n"),
+        ("8l2Gx", "  he said (no) then;\n\t也是人類, ok\n"),
+        ("9l2Gx", "  he said (no) then;\n\t也是人類, ok\n"),
+        ("10l2Gx", "  he said (no) then;\n\t你是人類, ok\n"),
+        ("l30%x", "  he said (no) then;\n你也是人類, ok\n"),
+        ("l3G2Gx", "  he said (no) then;\n你也是人類, ok\n"),
+        ("2G0kx", "  he sad (no) then;\n\t你也是人類, ok\n"),
+        ("2G0ggx", "  he sad (no) then;\n\t你也是人類, ok\n"),
+    ] {
+        let mut ed = typed_vim(text);
+        press(&mut ed, keys);
+        let got = ed.current_buffer().rope().to_string();
+        assert!(got.starts_with(want), "nvim: {keys} leaves {want:?}, not {got:?}");
+    }
+}
+
 /// **vim's linewise operators keep the column** (2026-11-04, nvim's
 /// 'nostartofline'): `d` leaves the cursor on the line after what it took,
 /// `y`, `gU`, `>` and `zf` on the first line taken, all at the column the

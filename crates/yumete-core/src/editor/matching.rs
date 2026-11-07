@@ -697,7 +697,7 @@ impl Editor {
                 (false, true) => 0,
                 (false, false) => page.len().checked_sub(1)?,
             };
-            let goal = wanted.unwrap_or_else(|| crate::wrap::column_of(rope, head, m));
+            let goal = wanted.unwrap_or_else(|| self.standing_column(rope, head, m));
             let span = (page.first().map_or(0, |r| r.start), page.last().map_or(0, |r| r.end));
             Some((row, page.len(), span, new_top == Anchor::default(), goal))
         });
@@ -764,7 +764,7 @@ impl Editor {
             };
             let mut page = rows_from(rope, new_top, m, height);
             page.retain(|r| r.line <= motion::last_line(rope));
-            let goal = wanted.unwrap_or_else(|| crate::wrap::column_of(rope, head, m));
+            let goal = wanted.unwrap_or_else(|| self.standing_column(rope, head, m));
             let (row, to) = match distance(rope, new_top, goes_to, m, height) {
                 Some(row) if row < page.len() => {
                     let r = &page[row];
@@ -1050,16 +1050,92 @@ impl Editor {
     /// 'nostartofline' (measured 2026-11-04), where classic vim went to the
     /// first non-blank.
     pub(super) fn column_wanted(&self) -> usize {
+        let head = self.sel.head();
+        self.sel.goal().unwrap_or_else(|| self.line_column(head))
+    }
+
+    /// Whether vim's cursor at `head` stands on a tab's last column: in
+    /// Normal mode it is drawn there and takes 'curswant' from there
+    /// (`getvcol`), so `0` on a tab-indented line and then `k` or `gg`
+    /// lands under the tab's end (nvim, 2026-11-07).
+    fn stands_at_tab_end(&self, rope: &ropey::Rope, head: usize) -> bool {
+        self.as_vim() && self.mode == Mode::Normal && !self.extend && rope.get_char(head) == Some('\t')
+    }
+
+    /// The column the cursor at `head` stands at in the page's measure `m`
+    /// (see [`Self::stands_at_tab_end`]).
+    pub(super) fn standing_column(&self, rope: &ropey::Rope, head: usize, m: crate::wrap::Measure) -> usize {
+        let at = crate::wrap::column_of(rope, head, m);
+        match self.stands_at_tab_end(rope, head) {
+            true => crate::wrap::column_of(rope, head + 1, m).saturating_sub(1).max(at),
+            false => at,
+        }
+    }
+
+    /// The column `pos` stands at on its line, a tab spanning to its stop
+    /// (see [`Self::stands_at_tab_end`]).
+    fn line_column(&self, pos: usize) -> usize {
         let rope = self.current_buffer().rope();
-        self.sel.goal().unwrap_or_else(|| motion::visual_column(rope, self.sel.head()))
+        let start = rope.line_to_char(rope.char_to_line(pos));
+        let ts = self.tab_stop();
+        // Up to the grapheme the cursor is on, with room for its marks.
+        let text: String = rope.slice(start..(pos + 64).min(motion::line_end(rope, start))).chars().collect();
+        let (mut col, mut at) = (0, start);
+        for g in yumete_cjk::graphemes(&text) {
+            let w = match g {
+                "\t" => ts - col % ts,
+                g => yumete_cjk::grapheme_width(g),
+            };
+            if at >= pos {
+                return match self.stands_at_tab_end(rope, pos) {
+                    true => col + w - 1,
+                    false => col,
+                };
+            }
+            col += w;
+            at += g.chars().count();
+        }
+        col
+    }
+
+    /// **The character on `line` at column `want`**, a tab spanning to its
+    /// stop: a column inside a tab or a wide character lands on it, as
+    /// vim's `coladvance` does; past the end, on the last character.
+    pub(super) fn char_at_line_column(&self, line: usize, want: usize) -> usize {
+        let rope = self.current_buffer().rope();
+        let start = rope.line_to_char(line);
+        let end = motion::line_end(rope, start);
+        let ts = self.tab_stop();
+        // Every grapheme takes a column at least, so the answer is among
+        // the first `want + 1`: a stretch of the line is read, not all of
+        // it, and read again twice as long when it falls short.
+        let mut span = want.saturating_add(1).saturating_mul(4).max(256);
+        loop {
+            let upto = start.saturating_add(span).min(end);
+            let text: String = rope.slice(start..upto).chars().collect();
+            let (mut col, mut at) = (0, start);
+            for g in yumete_cjk::graphemes(&text) {
+                col += match g {
+                    "\t" => ts - col % ts,
+                    g => yumete_cjk::grapheme_width(g),
+                };
+                if col > want {
+                    return at.min(motion::line_last(rope, start));
+                }
+                at += g.chars().count();
+            }
+            if upto == end {
+                return at.min(motion::line_last(rope, start));
+            }
+            span = span.saturating_mul(2);
+        }
     }
 
     /// The cursor onto `line` at the column it wants, as near as the line
-    /// reaches, still wanting it.
+    /// reaches, still wanting it ([`Self::char_at_line_column`]).
     pub(super) fn land_at_column(&mut self, line: usize, want: usize) {
-        let rope = self.current_buffer().rope();
-        let line = line.min(motion::last_line(rope));
-        let at = motion::pos_at_visual_column(rope, line, want).min(motion::line_last(rope, rope.line_to_char(line)));
+        let line = line.min(motion::last_line(self.current_buffer().rope()));
+        let at = self.char_at_line_column(line, want);
         self.move_head(at);
         self.sel.set_goal(Some(want));
     }
@@ -2660,7 +2736,7 @@ impl Editor {
             // 目標列的原因），所以這裏不記的話，下一次 `j` 又從**已經被壓到行尾的**那
             // 一列現算，連按兩下就再也回不到原來那一列了。
             let goal = self.sel.goal();
-            let goal = goal.unwrap_or_else(|| crate::wrap::column_of(rope, self.sel.head(), m));
+            let goal = goal.unwrap_or_else(|| self.standing_column(rope, self.sel.head(), m));
             let pos = match up {
                 true => crate::wrap::prev_row(rope, self.sel.head(), m, goal),
                 false => crate::wrap::next_row(rope, self.sel.head(), m, goal),
@@ -2681,22 +2757,7 @@ impl Editor {
                 let rope = self.current_buffer().rope();
                 let line = rope.char_to_line(pos.min(rope.len_chars()));
                 match self.fold_head(line) {
-                    true => {
-                        let start = rope.line_to_char(line);
-                        let text: String = rope.slice(start..motion::line_end(rope, start)).chars().collect();
-                        let (ts, mut col, mut at) = (self.tab_stop(), 0, start);
-                        for g in yumete_cjk::graphemes(&text) {
-                            col += match g {
-                                "\t" => ts - col % ts,
-                                g => yumete_cjk::grapheme_width(g),
-                            };
-                            if col > goal {
-                                break;
-                            }
-                            at += g.chars().count();
-                        }
-                        at.min(motion::line_last(rope, start))
-                    }
+                    true => self.char_at_line_column(line, goal),
                     false => pos,
                 }
             }
