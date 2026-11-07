@@ -119,3 +119,4 @@ L = ":buffer-next"
 
 [editor]
 yank_flash = true
+indent_guides = true
