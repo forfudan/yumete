@@ -20,6 +20,9 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **One `Esc` leaves Insert mode while the completion list is up**, as in helix and vim. It used to close the list and stay in Insert, so a second `Esc` was needed. Leaving Insert any other way (`C-c`, a `[keys.insert]` run) takes the list away too.
+- **vim's Visual `$` takes the line break**: `v$d` joins the next line on and `v$y` copies the break, as in vim; `p` puts such a copy inside the line, not on a line of its own. The file's last line break is never deleted.
+
 - **The paging keys page when a float has nothing more to show**: with a diagnostic, docs or a wiki entry floating in the corner, `C-d`, `C-u`, `C-f`, `C-b`, `PageDown` and `PageUp` did nothing if the float already showed all of it. Such a float now leaves them to the text; one with more to show still scrolls. A long diagnostic that is cut now scrolls too.
 
 ## 0.20.0 · 2026-11-07

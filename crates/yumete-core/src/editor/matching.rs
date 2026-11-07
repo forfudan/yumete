@@ -2304,8 +2304,11 @@ impl Editor {
         // 不跨行（出廠 `whichwrap` 不含 `]`）。下面那一段 `across` 管的正是跨不
         // 跨，所以這裏只要把界放對。
         let first = motion::line_start(rope, here);
+        // Charwise Visual reaches the break too (2026-11-07, nvim: `vlld`
+        // at a line's end takes the break), as `keep_off_the_newline` allows.
         let last = match self.mode {
             crate::editor::Mode::Insert => motion::line_end(rope, here),
+            _ if self.extend && !self.vim_lines => motion::line_end(rope, here),
             _ => motion::line_last(rope, here),
         };
         if (first..=last).contains(&pos) {

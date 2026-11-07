@@ -11,15 +11,10 @@ use yumete_cjk::actions::PlaceCmd;
 const HISTORY: &[PlaceCmd] = &[PlaceCmd::HistoryPrev, PlaceCmd::HistoryNext];
 
 impl Editor {
-    // Warning: **`Key::Esc` 那一支不收 `collapsible_match`**（2026-10-01）：收了就
-    // 成了 `Key::Esc if self.drop_the_offering()`，一個**帶副作用的守衛**——中間
-    // 插一支 arm 進來就換了意思，而「按 Esc 一定要把那張單子撤掉」跟它撤没撤成
-    // 是兩件事。
-    //
-    // Warning: **這裏原先寫的是 `collapsible_if`，壓不住它**（2026-10-02）。
-    // clippy 的提示句「this `if` can be collapsed into the outer `match`」看着
-    // 像 `collapsible_if`，底下那行 `#[warn(...)]` 纔是真名。壓一條警告之後要
-    // 回頭再跑一次，看它真的不見了。
+    // Warning: **The list's arms are not folded into guards**
+    // (`collapsible_match`, 2026-10-01): `Key::Tab if self.take_the_offer()`
+    // would be a guard with a side effect, which changes meaning when an arm
+    // is put between.
     #[allow(clippy::collapsible_match)]
     pub(super) fn on_insert_key(&mut self, key: Key) {
         // Warning: **`Pending` 的分派只在 Normal 那一支跑**（`on_normal_key`），所以
@@ -79,16 +74,11 @@ impl Editor {
                         return;
                     }
                 }
-                // Warning: **不寫成 `Key::Esc if self.drop_the_offering()`**
-                // （`clippy::collapsible_if` 提的，不收）
-                // （2026-10-01 `clippy --fix` 提的，退回來了）。守衛裏帶副作用
-                // 是給下一個讀的人埋的坑：中間插一支 arm 進來就換了意思，而
-                // 「按 Esc 一定要把那張單子撤掉」跟它撤没撤成是兩件事。
-                Key::Esc => {
-                    if self.drop_the_offering() {
-                        return;
-                    }
-                }
+                // Warning: **`Esc` is not the list's** (2026-11-07, reported by
+                // a LazyVim user): it closes the list and leaves Insert in one
+                // press, as helix's popup (`ignore_escape_key`) and vim's
+                // menu (`i_<Esc>` ends completion) do. `leave_insert` puts the
+                // list away. It used to take the first Esc alone.
                 // 別的鍵照舊：打字就該打進去，而打完這張單子就過期了（它記着
                 // 問的時候光標在哪）。
                 _ => {}
@@ -313,7 +303,10 @@ impl Editor {
         self.signature_query = None;
         self.signature_due = None;
         self.signature_on = None;
-        // A completion question out is about the typing just ended.
+        // A completion question out is about the typing just ended, and so
+        // is the list it brought: whichever key left Insert (`Esc`, `C-c`, a
+        // `[keys.insert]` run), it does not stand over Normal mode.
+        self.offering = None;
         self.completion_at = None;
         self.completion_query = None;
         self.completion_sent = None;

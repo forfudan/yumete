@@ -27871,6 +27871,62 @@ fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **vim's charwise Visual reaches the line break** (2026-11-07, measured
+/// against nvim): `v$` and `l` stand on it, `d` joins the next line, a copy
+/// that ends in a break pastes inside the line, and the file's last break is
+/// never deleted.
+#[test]
+fn vims_visual_dollar_takes_the_line_break() {
+    let text = |ed: &Editor| ed.current_buffer().text();
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "llv$d");
+    assert_eq!(text(&ed), "abxyz\n", "v$d joins");
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "llllvlld");
+    assert_eq!(text(&ed), "abcdxyz\n", "l reaches the break");
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "llv$y");
+    press(&mut ed, "j$p");
+    assert_eq!(text(&ed), "abcdef\nxyzcdef\n\n", "a charwise copy pastes in the line");
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "Vyjp");
+    assert_eq!(text(&ed), "abcdef\nxyz\nabcdef\n", "V still copies lines");
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "jlv$d");
+    assert_eq!(text(&ed), "abcdef\nx\n", "the last break stays");
+    // Normal mode's `$` and `l` still stop on the last character.
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "$x");
+    assert_eq!(text(&ed), "abcde\nxyz\n");
+}
+
+/// **One `Esc` closes the list and leaves Insert** (2026-11-07, reported by
+/// a LazyVim user), as helix's popup and vim's menu do; and no way out of
+/// Insert leaves the list standing over Normal mode.
+#[test]
+fn esc_closes_the_list_and_leaves_insert_at_once() {
+    for keymap in ["helix", "vim"] {
+        let mut ed = typed("alpha alphabet\n");
+        ed.execute(&format!(":keymap {keymap}")).unwrap();
+        press(&mut ed, "Go");
+        press(&mut ed, "alp");
+        ed.on_key(Key::Ctrl('x'));
+        assert!(ed.offers_here().is_some(), "{keymap}: the list is up");
+        ed.on_key(Key::Esc);
+        assert_eq!(ed.mode(), Mode::Normal, "{keymap}: one Esc");
+        assert!(ed.offers_here().is_none(), "{keymap}: and the list is gone");
+        assert_eq!(ed.current_buffer().text(), "alpha alphabet\nalp\n", "{keymap}: nothing taken");
+    }
+    // `C-c` leaves Insert under vim, and takes the list with it.
+    let mut ed = typed_vim("alpha alphabet\n");
+    press(&mut ed, "Go");
+    press(&mut ed, "alp");
+    ed.on_key(Key::Ctrl('x'));
+    ed.on_key(Key::Ctrl('c'));
+    assert_eq!(ed.mode(), Mode::Normal);
+    assert!(ed.offers_here().is_none(), "C-c too");
+}
+
 /// **`:align`, mini.align's `=`** (2026-11-07): the selected lines on the
 /// first sign, by display width, `+=` and `=>` as one sign, one space either
 /// side; lines without it left alone; under both keymaps.

@@ -3001,11 +3001,6 @@ impl Editor {
         true
     }
 
-    /// 把單子收了，什麽也不打。
-    pub(super) fn drop_the_offering(&mut self) -> bool {
-        self.offering.take().is_some()
-    }
-
     /// **選中的那一條真打進去**（#53 ④），打了回 `true`。
     ///
     /// Warning: **替換多少是服務器說的**，不是這一頭猜的：`self.co` 補成 `count` 要

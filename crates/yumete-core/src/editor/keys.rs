@@ -195,6 +195,7 @@ impl Editor {
         self.jumped = false;
         self.centring = None;
         self.just_switched = false;
+        self.lines_at_key = self.vim_lines && self.extend;
         // Warning: **`z` 那一層的覆蓋也是一次性的。** 不清的話 `zt` 之後每一幀都把光標釘在頂
         // 上，`j` 走一行整頁跟着挪一行——那是打字機模式，不是 `zt`。清掉之後視口停在
         // 剛纔擺好的地方，因為下一幀 `page_inset` 回的是「光標舒舒服服在頁面上，別動」。
@@ -439,11 +440,20 @@ impl Editor {
         }
         let rope = self.current_buffer().rope().clone();
         let floor = self.last_real_line(&rope);
-        self.sel.map(|one| crate::selection::Range {
-            anchor: hold_in_line(&rope, one.anchor, floor),
-            head: hold_in_line(&rope, one.head, floor),
-            ..one
-        });
+        // **Charwise Visual may stand on the line break** (2026-11-07,
+        // measured against nvim): vim's `coladvance` allows one past the
+        // last character while Visual is active, so `v$` reaches the break
+        // and `v$d` joins the lines. The empty line after the last break is
+        // still out of reach.
+        let visual = self.extend && !self.vim_lines;
+        let hold = |at: usize| match visual {
+            true => match rope.char_to_line(at.min(rope.len_chars())) > floor {
+                true => hold_in_line(&rope, at, floor),
+                false => at.min(rope.len_chars()),
+            },
+            false => hold_in_line(&rope, at, floor),
+        };
+        self.sel.map(|one| crate::selection::Range { anchor: hold(one.anchor), head: hold(one.head), ..one });
     }
 
     /// 檔尾那條虛行在 vim 鍵位下**到不了**，所以瞄到那裏的縱向動作是一次失手

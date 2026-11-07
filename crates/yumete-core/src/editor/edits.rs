@@ -1559,6 +1559,17 @@ impl Editor {
             }
         };
         let named = self.take_register();
+        // **vim keeps the kind with the register** (`:h linewise-register`,
+        // measured 2026-11-07): `v$y` holds a line break but is charwise, so
+        // `p` puts it inside the line, not on a line of its own.
+        let charwise = self.as_vim() && self.extend && !self.vim_lines && !self.lines_at_key && text.ends_with('\n');
+        let kept = named.is_none_or(|n| n.is_ascii_alphanumeric());
+        for key in ['"'].into_iter().chain(named.filter(|n| n.is_ascii_alphanumeric()).map(|n| n.to_ascii_lowercase())).filter(|_| kept) {
+            match charwise {
+                true => self.charwise_breaks.insert(key),
+                false => self.charwise_breaks.remove(&key),
+            };
+        }
         match named {
             // **`"_` keeps nothing and `"+` / `"*` are the system clipboard**
             // (2026-10-30), as in helix and vim: `"_d` deletes without touching
@@ -1762,6 +1773,22 @@ impl Editor {
         // not.
         let (start, last) = (anchor.min(head), anchor.max(head));
         let range = (start, motion::next_grapheme(self.current_buffer().rope(), last));
+        // **vim never takes the file's last line break** (measured against
+        // nvim 2026-11-07): charwise Visual may stand on a break, and on the
+        // last line `v$d` leaves `abcd\n`, not `abcd`. Yanking it is fine;
+        // linewise operators keep their own rule.
+        let range = match op {
+            motion::Operator::Yank => range,
+            _ if self.as_vim() && self.extend && !self.vim_lines && !self.lines_at_key => {
+                let rope = self.current_buffer().rope();
+                let len = rope.len_chars();
+                match range.1 == len && range.1 > range.0 && rope.get_char(len - 1) == Some('\n') {
+                    true => (range.0, len - 1),
+                    false => range,
+                }
+            }
+            _ => range,
+        };
         match op {
             motion::Operator::Delete => self.cut_range(range, false),
             motion::Operator::Cut => self.cut_range(range, true),
@@ -1881,7 +1908,8 @@ impl Editor {
         // break, and dropping that in the middle of another line cuts it in
         // two — which is exactly what the standard way of moving a paragraph
         // (`xy`, move, `p`) does most.
-        let line_wise = text.ends_with('\n');
+        let kind = named.filter(|n| n.is_ascii_alphanumeric()).map_or('"', |n| n.to_ascii_lowercase());
+        let line_wise = text.ends_with('\n') && !(self.as_vim() && self.charwise_breaks.contains(&kind));
         let (start, end) = (start, end.max(start));
         let at = if line_wise {
             let rope = self.current_buffer().rope();

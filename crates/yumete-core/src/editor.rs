@@ -3159,6 +3159,13 @@ pub struct Editor {
     /// **The register holds a block**: `p` puts it back one piece a line.
     /// Any other store clears it.
     register_block: bool,
+    /// The registers holding a charwise Visual yank that ends in a line
+    /// break (`v$y`), `"` for the unnamed one: vim pastes those as text, not
+    /// as lines.
+    charwise_breaks: std::collections::HashSet<char>,
+    /// Whether linewise Visual (`V`) was on when this key arrived: the key's
+    /// own arm spends [`Self::vim_lines`] before the text is stored.
+    lines_at_key: bool,
     /// **This insert keeps the selection ahead of the caret** — the one `i`
     /// opened under the helix keymap (2026-10-27, measured against helix
     /// 25.07.1: `w` `i` `X` `Esc` leaves `foo ` selected after the `X`).
@@ -4559,6 +4566,8 @@ impl Editor {
             block_replace: false,
             block_repeat: None,
             register_block: false,
+            charwise_breaks: std::collections::HashSet::new(),
+            lines_at_key: false,
             insert_keeps_tail: false,
             keep_anchor_while_inserting: false,
             swap_asked: None,

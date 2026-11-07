@@ -1085,6 +1085,26 @@ impl Editor {
         self.goto_motion(motion::Motion::LineEnd);
         if self.as_vim() {
             self.sel.set_goal(Some(super::keys::LINE_END_GOAL));
+            // **vim's Visual `$` takes the line break** (`:h v_$`, measured
+            // against nvim 2026-11-07): `v$d` joins the next line on, `v$y`
+            // yanks the break. Charwise only; in Normal `$` stays on the
+            // last character.
+            if self.extend && !self.vim_lines {
+                let rope = self.current_buffer().rope();
+                let head = self.sel.head();
+                let line = rope.char_to_line(head);
+                let text = rope.line(line);
+                let len = text.len_chars();
+                let ending = match (len.checked_sub(2).map(|i| text.char(i)), len.checked_sub(1).map(|i| text.char(i))) {
+                    (Some('\r'), Some('\n')) => 2,
+                    (_, Some('\n' | '\r')) => 1,
+                    _ => 0,
+                };
+                let at = rope.line_to_char(line) + len - ending;
+                if ending > 0 && head < at {
+                    self.sel.set_head(at);
+                }
+            }
         }
     }
 
