@@ -253,7 +253,9 @@ fn said() -> BTreeMap<String, String> {
 #[derive(Default)]
 struct Entry {
     note: bool,
-    zht: bool,
+    /// Simplified is what every message is written in (2026-11-07); the
+    /// Traditional is made from it at build time unless written by hand.
+    zhs: bool,
     /// The words a reader might look the entry up by but never sees (#224):
     /// the other script's spelling, the manual's word, the English name.
     find: String,
@@ -278,15 +280,15 @@ fn table() -> BTreeMap<String, Entry> {
                     k.clone(),
                     Entry {
                         note,
-                        zht: false,
+                        zhs: false,
                         find: String::new(),
                     },
                 );
                 key = Some(k);
             }
-        } else if let Some(rest) = line.strip_prefix("zht = ") {
+        } else if let Some(rest) = line.strip_prefix("zhs = ").or_else(|| line.strip_prefix("sc = ")) {
             if let Some(entry) = key.as_ref().and_then(|k| out.get_mut(k)) {
-                entry.zht = unquote(rest).is_some_and(|v| !v.is_empty());
+                entry.zhs = unquote(rest).is_some_and(|v| !v.is_empty());
             }
         } else if let Some(rest) = line.strip_prefix("find = ") {
             if let Some(entry) = key.as_ref().and_then(|k| out.get_mut(k)) {
@@ -329,19 +331,19 @@ fn the_table_holds_no_entry_the_editor_never_says() {
 }
 
 #[test]
-fn every_entry_says_when_it_is_said_and_has_its_traditional() {
+fn every_entry_says_when_it_is_said_and_has_its_simplified() {
     let table = table();
     let bad: Vec<String> = table
         .iter()
-        .filter(|(_, e)| !e.note || !e.zht)
-        .map(|(k, e)| match e.zht {
-            false => format!("  {k}  — no zht"),
+        .filter(|(_, e)| !e.note || !e.zhs)
+        .map(|(k, e)| match e.zhs {
+            false => format!("  {k}  — no zhs"),
             true => format!("  {k}  — no `#` line saying when it is said"),
         })
         .collect();
     assert!(
         bad.is_empty(),
-        "an entry is a `# when it is said` line, a key, and at least `zht`:\n{}",
+        "an entry is a `# when it is said` line, a key, and at least `zhs`:\n{}",
         bad.join("\n")
     );
 }
@@ -360,7 +362,7 @@ fn an_escape_is_not_a_thing_this_file_understands() {
         .lines()
         .filter(|l| {
             let l = l.trim_start();
-            ["zht = ", "zhs = ", "en = ", "find = "]
+            ["zht = ", "zhs = ", "sc = ", "tc = ", "zh = ", "en = ", "find = "]
                 .iter()
                 .any(|k| l.starts_with(k))
                 && l.contains('\\')

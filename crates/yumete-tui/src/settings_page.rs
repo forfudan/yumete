@@ -1362,7 +1362,7 @@ mod tests {
         for group in ["版面", "標記", "界面", "配色", "輸入法", "編輯", "文件", "鍵盤"] {
             assert!(page.contains(group), "少了組 {group}：\n{page}");
         }
-        for row in ["排版方向", "每縱字數", "竪排分頁", "橫排分頁", "首行縮進", "標點旁置", "稿紙刻度"] {
+        for row in ["排版方向", "每縱字數", "豎排分頁", "横排分頁", "首行縮進", "標點旁置", "稿紙刻度"] {
             assert!(page.contains(row), "少了 {row}：\n{page}");
         }
         assert!(page.contains('┬') && page.contains('┴') && page.contains('│'), "{page}");

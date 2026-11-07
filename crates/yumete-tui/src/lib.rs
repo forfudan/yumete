@@ -21659,7 +21659,7 @@ fn squeezed(text: &str) -> String {
         // 横排的列」 — so 縱 is the absolute line, 橫 is how far along it, and
         // 字 is how far along in characters.
         assert!(status.contains("縱 1"), "which line: {status:?}");
-        assert!(status.contains("橫 2"), "how far down it: {status:?}");
+        assert!(status.contains("横 2"), "how far down it: {status:?}");
         assert!(status.contains("字 2"), "and in characters: {status:?}");
         assert!(!status.contains("Ln"), "no ambiguous line number");
 
@@ -21683,7 +21683,7 @@ fn squeezed(text: &str) -> String {
         let status = raw.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(status.contains("縱 2,"), "still the one line: {status:?}");
         assert!(!status.contains("2-2"), "and no piece number: {status:?}");
-        assert!(status.contains("橫 13"), "thirteen slots down: {status:?}");
+        assert!(status.contains("横 13"), "thirteen slots down: {status:?}");
     }
 
     /// The guess has to be visibly *not yet* part of the line, or it reads as

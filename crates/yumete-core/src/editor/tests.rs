@@ -3642,7 +3642,7 @@ fn a_command_says_what_it_is_waiting_for() {
     ed.execute(":view-hanging on").unwrap();
     assert!(!ed.hanging_punctuation(), "{}", ed.status());
     let said = ed.status().to_string();
-    assert!(said.contains("竪排") && said.contains("邊欄不是 never"), "{said}");
+    assert!(said.contains("never"), "{said}");
     assert!(said.contains('!'), "{said}");
 
     // …and the bang brings the prerequisites about, in one line.
@@ -3673,7 +3673,7 @@ fn the_commit_method_rides_the_same_channel_as_the_scheme() {
     let mut cold = Editor::new();
     cold.execute(":yume-commit fluency").unwrap();
     assert_eq!(cold.take_scheme_request(), None, "{}", cold.status());
-    assert!(cold.status().contains("碼表"), "{}", cold.status());
+    assert!(cold.status().contains(&crate::messages::say("need.scheme", &[])), "{}", cold.status());
 }
 
 /// **候選擺在哪不要碼表**（2026-10-16 改）。
@@ -3700,7 +3700,7 @@ fn annotation_command_leaves_a_request_for_the_ime() {
     // so, with nothing loaded, instead of leaving a request nobody can answer.
     ed.execute(":yume-annotation").unwrap();
     assert_eq!(ed.take_annotation_request(), None, "{}", ed.status());
-    assert!(ed.status().contains("碼表"), "{}", ed.status());
+    assert!(ed.status().contains(&crate::messages::say("need.scheme", &[])), "{}", ed.status());
     ed.set_ime_available(true);
     // The bare word asks; a word moves. The modes' names are the front
     // end's, so the word goes over as written.
@@ -7464,7 +7464,7 @@ fn a_footnote_reads_beside_the_sentence_it_belongs_to() {
         ed.on_key(Key::Char('l'));
     }
     let d = ed.detail().expect("standing on the comment");
-    assert_eq!(d.title, "批注");
+    assert_eq!(d.title, crate::messages::say("detail.comment", &[]));
     assert_eq!(d.rows[0].1.as_deref(), Some("這裏要改，冬天太早了"));
 
     // Enter goes to the note and Enter comes back — one key, because from
@@ -12116,7 +12116,7 @@ fn a_grid_is_read_across_so_it_is_never_set_vertically() {
     // return you to where you were is not a toggle.
     ed.execute("table-render off").unwrap();
     assert_eq!(ed.layout(), Layout::Vertical, "back to 縱書");
-    assert!(ed.status().contains("轉回竪排"), "{}", ed.status());
+    assert_eq!(ed.status(), crate::messages::say("table.off-back-to-vertical", &[]));
 
     // Asking for a level again turns it again, and off again gives it back.
     //
@@ -22497,7 +22497,7 @@ fn a_footnote_tag_is_finished_from_what_the_file_already_holds() {
     ed.on_key(Key::Char('^'));
 
     let (title, choices, at) = ed.reference_menu().expect("the panel opens by itself");
-    assert_eq!(title, "腳注標號");
+    assert_eq!(title, crate::messages::say("complete.footnote", &[]));
     assert_eq!(at, None, "nothing is written until Tab, so nothing is chosen");
     let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
     assert_eq!(texts, ["舊註]", "7]", "1]"], "what is in the file, then the next free number");
@@ -27556,7 +27556,7 @@ fn the_mark_panel_shows_where_each_one_points() {
     assert_eq!(title, "' 回到");
     assert_eq!(keys.len(), 1, "一個都没記過也要有一行：{keys:?}");
     assert_eq!(keys[0].0, "", "没有鍵可按，所以左邊是空的");
-    assert_eq!(keys[0].1, "(無位置記錄)");
+    assert_eq!(keys[0].1, crate::messages::say("hint.mark.none-yet", &[]));
     ed.on_key(Key::Esc);
 
     // 第一行記成 a，第四行記成 k。

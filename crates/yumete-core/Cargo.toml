@@ -78,3 +78,10 @@ libc = "0.2"
 # build.
 [target.'cfg(windows)'.dependencies]
 windows-sys = {version = "0.59", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_SystemInformation", "Win32_System_Threading"]}
+
+[build-dependencies]
+# **The interface's Traditional Chinese is made at build time** (2026-11-07,
+# build.rs): OpenCC's s2t, then the 大陸通規 glyph table, for every message
+# without a hand-written `zht`, and t2s to check the ones with one. A pure-Rust
+# OpenCC with its dictionaries built in, so no machine needs opencc installed.
+ferrous-opencc = "0.4.0"

@@ -1,0 +1,12 @@
+# Fixes after s2t and the 大陸通規 glyph table, for the interface's generated
+# Traditional (build.rs). OpenCC's s2t picks the wrong character in these words
+# where the text is not about what the dictionary thinks: 碼錶 is a stopwatch,
+# a code table is 碼表.
+#
+# One fix a line: `wrong<TAB>right`, matched as plain text, longer ones first.
+# `#` lines and blank lines are skipped.
+碼錶	碼表
+隻讀	只讀
+隻寫	只寫
+格里	格裏
+覈驗	核驗

@@ -31,17 +31,19 @@
 //!
 //! ## The languages
 //!
-//! `zhs` 简体, `zht` 繁體, `en`. Traditional is what the editor shows by
-//! default and the one that is always filled in; the other two fall back to it
-//! when they are empty, so a missing translation is a missing *translation*,
-//! never a missing message.
+//! `en` and `zhs` 简体 (alias `sc`) are written for every message; `zht` 繁體
+//! (aliases `tc`, `zh`) only where the conversion gets it wrong (2026-11-07).
+//! `build.rs` makes every other `zht` from `zhs` as `:convert s c` does
+//! (OpenCC `s2t`, then the 大陸通規 glyph table) and warns when a written
+//! `zht` does not convert back to its `zhs`. Traditional is what the editor
+//! shows by default; English and Simplified fall back to it when empty, so a
+//! missing translation is a missing *translation*, never a missing message.
 //!
-//! **But it is not where a message is written.** Since 2026-09-08 a new
-//! message is composed in `zhs`, in 大陆用语, and converted into `zht` —
-//! the rule, and the reason is vocabulary rather than characters: 檔案 and
-//! 文件 are the same file, 預設 and 默认 the same default, and a sentence
-//! drafted in 繁體 quietly picks the 港臺 word for both. Converting runs one
-//! way only, over the characters; the words have to be chosen first.
+//! **A message is composed in `zhs`, in 大陆用语** (since 2026-09-08): the
+//! reason is vocabulary rather than characters — 檔案 and 文件 are the same
+//! file, 預設 and 默认 the same default, and a sentence drafted in 繁體 picks
+//! the 港臺 word for both. Converting runs over the characters; the words
+//! have to be chosen first.
 //!
 //! ## The placeholders are numbered
 //!
@@ -134,24 +136,25 @@ pub fn language() -> Language {
     }
 }
 
-/// The table, as written: one file per area under `messages/`, each holding
-/// the tags of the prefixes its first line names (2026-10-31; it was one
-/// file of 14,000 lines).
+/// The table: one file per area under `messages/`, each holding the tags of
+/// the prefixes its first line names (2026-10-31; it was one file of 14,000
+/// lines), read from the copies `build.rs` writes, where every message has its
+/// `zht` (2026-11-07: made from `zhs` unless written by hand).
 const TABLES: &[&str] = &[
-    include_str!("../messages/action.toml"),
-    include_str!("../messages/cmd.toml"),
-    include_str!("../messages/code.toml"),
-    include_str!("../messages/editing.toml"),
-    include_str!("../messages/files.toml"),
-    include_str!("../messages/help.toml"),
-    include_str!("../messages/hint.toml"),
-    include_str!("../messages/ime.toml"),
-    include_str!("../messages/page.toml"),
-    include_str!("../messages/search.toml"),
-    include_str!("../messages/settings.toml"),
-    include_str!("../messages/table.toml"),
-    include_str!("../messages/ui.toml"),
-    include_str!("../messages/writing.toml"),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/action.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/cmd.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/code.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/editing.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/files.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/help.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/hint.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/ime.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/page.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/search.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/settings.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/table.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/ui.toml")),
+    include_str!(concat!(env!("OUT_DIR"), "/messages/writing.toml")),
 ];
 
 /// One message, in every language it has been written in.
