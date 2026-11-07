@@ -617,6 +617,66 @@ impl Editor {
         self.sel.set_head(open);
     }
 
+    /// **mini.align, as a command** (2026-11-07, `:align =`): the selected
+    /// lines lined up on the first `sign` in each, the parts before it
+    /// padded to one display width, one space on either side of it.
+    ///
+    /// As mini.align's `=` preset, `=` takes the run it stands in (`+=`,
+    /// `==`, `=>`, `<=`) as one sign. Lines without the sign are left as
+    /// they are. Under helix `s=` then `&` does it with the keys; this is
+    /// the way under vim, where `ga` is vim's own.
+    pub(super) fn align_lines(&mut self, sign: &str) {
+        if self.refuse_readonly() || sign.is_empty() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let (start, end) = self.selection();
+        let first = rope.char_to_line(start);
+        let last = rope.char_to_line(end.saturating_sub(1).max(start));
+        let from = rope.line_to_char(first);
+        let to = rope.line_to_char(last) + rope.line(last).len_chars();
+        let lines: Vec<String> = (first..=last).map(|n| rope.line(n).to_string()).collect();
+        let found: Vec<Option<(usize, usize)>> = lines.iter().map(|line| find_the_sign(line, sign)).collect();
+        if found.iter().flatten().count() < 2 {
+            self.status = say!("edit.nothing-to-align", sign);
+            return;
+        }
+        let width = lines
+            .iter()
+            .zip(&found)
+            .filter_map(|(line, at)| at.map(|(a, _)| yumete_cjk::str_width(line[..a].trim_end())))
+            .max()
+            .unwrap_or(0);
+        let mut out = String::new();
+        for (line, at) in lines.iter().zip(&found) {
+            match *at {
+                Some((a, b)) => {
+                    let left = line[..a].trim_end();
+                    let pad = width - yumete_cjk::str_width(left);
+                    let rest = line[b..].trim_start_matches([' ', '\t']);
+                    out.push_str(left);
+                    out.push_str(&" ".repeat(pad));
+                    out.push(' ');
+                    out.push_str(&line[a..b]);
+                    if !rest.is_empty() && !rest.starts_with(['\n', '\r']) {
+                        out.push(' ');
+                    }
+                    out.push_str(rest);
+                }
+                None => out.push_str(line),
+            }
+        }
+        let was: String = lines.concat();
+        if out == was {
+            return;
+        }
+        self.snapshot();
+        if !self.overwrite(from, to, &out) {
+            return;
+        }
+        self.clamp_cursor();
+    }
+
     /// Rewrite every character of the selection through `f` (`~`, `` ` ``).
     pub(super) fn map_selection(&mut self, f: impl Fn(char) -> String) {
         let (start, selected) = self.selection();
@@ -1109,6 +1169,37 @@ impl Editor {
         }
         self.clamp_cursor();
     }
+}
+
+/// Where the first `sign` stands in `line`, as byte offsets, outside a
+/// string. `=` grows to the run around it, as mini.align's `=` preset:
+/// punctuation before it, more `=` and `<` `>` `~` after (`+=`, `==`, `=>`).
+fn find_the_sign(line: &str, sign: &str) -> Option<(usize, usize)> {
+    let mut quote: Option<char> = None;
+    let mut at = None;
+    for (i, c) in line.char_indices() {
+        match quote {
+            Some(q) if c == q => quote = None,
+            Some(_) => {}
+            None if c == '"' || c == '\'' => quote = Some(c),
+            None if line[i..].starts_with(sign) => {
+                at = Some((i, i + sign.len()));
+                break;
+            }
+            None => {}
+        }
+    }
+    let (mut a, mut b) = at?;
+    if sign == "=" {
+        let bytes = line.as_bytes();
+        while a > 0 && bytes[a - 1].is_ascii_punctuation() && !matches!(bytes[a - 1], b'"' | b'\'' | b')' | b']' | b'}') {
+            a -= 1;
+        }
+        while b < bytes.len() && matches!(bytes[b], b'=' | b'<' | b'>' | b'~') {
+            b += 1;
+        }
+    }
+    Some((a, b))
 }
 
 /// The items between a pair of brackets, each trimmed and keeping its comma:

@@ -697,6 +697,10 @@ impl Editor {
                 self.new_window(how);
                 Ok(CommandOutcome::Continue)
             }
+            Command::Align(sign) => {
+                self.align_lines(&sign);
+                Ok(CommandOutcome::Continue)
+            }
             Command::SplitJoin => {
                 self.edit_each(|e| e.split_join_here());
                 Ok(CommandOutcome::Continue)

@@ -320,6 +320,7 @@ zhs = "光标不在可以拆开或合并的括号里"
 zht = "光標不在可以拆開或合併的括號裏"
 en = "the cursor is not in brackets with items to split or join"
 
+
 [[message]]
 # mi g / ma g，可是這個文件 git 管不着(helix 的 "Diff is not available")
 key = "edit.no-diff-here"
@@ -361,6 +362,13 @@ key = "edit.nothing-selected"
 zht = "没有選中東西"
 zhs = "没有选中东西"
 en = "nothing selected"
+
+[[message]]
+# :align 的時候選中的行裏不到兩行有那個符號（草稿）
+key = "edit.nothing-to-align"
+zhs = "选中的行里不到两行有 {0}，没有什么可对齐"
+zht = "選中的行裏不到兩行有 {0}，没有什麼可對齊"
+en = "fewer than two selected lines have {0}: nothing to line up"
 
 [[message]]
 # . 重複，但還没有改過東西

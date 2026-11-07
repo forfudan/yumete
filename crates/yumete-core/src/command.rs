@@ -229,6 +229,8 @@ pub enum Command {
     /// mini.splitjoin's `gS`: the brackets round the cursor onto lines, or back.
     SplitJoin,
     Reflow(Option<usize>),
+    /// mini.align: the selected lines lined up on a sign, `=` when none is given.
+    Align(String),
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
     /// live one, showing `file` when one is named (2026-10-30).
     SplitWindow { how: crate::window::Split, file: Option<String> },
@@ -4708,6 +4710,14 @@ pub const COMMANDS: &[Entry] = &[
             None => Ok(Command::HardWrap(None)),
             Some(_) => Ok(Command::HardWrap(Some(p.number(0)?))),
         }),
+    },
+    Entry {
+        name: "align",
+        aliases: &[],
+        help: "cmd.commands.align",
+        needs: &[],
+        params: &[Param::Free("<符號>")],
+        build: Some(|p| Ok(Command::Align(p.arg(0).unwrap_or("=").to_string()))),
     },
     Entry {
         name: "split-join",

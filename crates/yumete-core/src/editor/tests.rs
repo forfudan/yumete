@@ -27871,6 +27871,38 @@ fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **`:align`, mini.align's `=`** (2026-11-07): the selected lines on the
+/// first sign, by display width, `+=` and `=>` as one sign, one space either
+/// side; lines without it left alone; under both keymaps.
+#[test]
+fn align_lines_up_the_selected_lines_on_a_sign() {
+    let text = "a = 1\nlong_name += 2\n甲乙 => 3\nnone here\n  s =\"x=y\"\n";
+    let lined = "a         = 1\nlong_name += 2\n甲乙      => 3\nnone here\n  s       = \"x=y\"\n";
+    let mut ed = typed_vim(text);
+    press(&mut ed, "ggVG");
+    ed.execute(":align").unwrap();
+    assert_eq!(ed.current_buffer().text(), lined, "vim");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "u");
+    assert_eq!(ed.current_buffer().text(), text, "one undo");
+
+    let mut ed = typed(text);
+    press(&mut ed, "%");
+    ed.execute(":align =").unwrap();
+    assert_eq!(ed.current_buffer().text(), lined, "helix");
+
+    // Another sign; and one line is nothing to line up.
+    let mut ed = typed("a: 1\nlonger: 2\n");
+    press(&mut ed, "%");
+    ed.execute(":align :").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a      : 1\nlonger : 2\n");
+    let mut ed = typed("a = 1\nb\n");
+    press(&mut ed, "%");
+    ed.execute(":align").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a = 1\nb\n");
+    assert!(!ed.status().is_empty(), "says why");
+}
+
 /// **mini.splitjoin's `gS`** (2026-11-07): the brackets round the cursor
 /// onto lines and back, commas inside nested brackets and strings kept, one
 /// indent in from the opener's line, one undo, both keymaps, a flavour key.
