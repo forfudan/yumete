@@ -395,10 +395,10 @@ zhs = "公式预览"
 en = "maths preview"
 
 [[message]]
-# 設置：公式預覽——一句話
+# 設置：公式預覽——一句話（草稿）
 key = "settings.editor.maths-preview.hint"
-zhs = "光标在公式中时，在下方浮窗显示排版结果；需要 Ghostty 或 kitty 以及 typst 命令"
-en = "while the cursor is in a formula, a popup below shows it typeset; needs Ghostty or kitty, and the typst command"
+zhs = "光标在公式中时，在下方浮窗显示排版结果；需要 Ghostty 或 kitty，Typst 公式还需要 typst 命令"
+en = "while the cursor is in a formula, a popup below shows it typeset; needs Ghostty or kitty, and the typst command for Typst formulas"
 
 [[message]]
 # 設置：正文寬度

@@ -24,6 +24,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **Markdown formulas in the float under the cursor no longer need the `typst` command**: TeX such as `$\frac{a}{b}$` is now drawn inside yumete by RaTeX, with KaTeX's fonts built in, in well under a millisecond, and Chinese inside `\text{}` is set in the same CJK font Typst formulas use. Typst formulas still go through `typst`. On Linux without any CJK font, Chinese in a TeX formula shows as empty boxes.
 - **The `Space e` explorer shows hidden and ignored files at first**, as helix's file explorer does; `Space f` still skips them. `A-h` steps what is skipped.
 - **The interface wording, reviewed**: shorter, plainer messages in English and Chinese, mainland vocabulary in the Chinese, and common terms such as 选择器 for a picker. The Traditional interface now follows the mainland standard glyphs (説 内 吴 rather than 說 內 吳) and drops Taiwan wording such as 檔案 and 選單.
 - **`zht` is the name of the Traditional interface language**, beside `zhs` and `en`; `zh`, `tc` and `sc` still work.

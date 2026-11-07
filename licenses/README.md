@@ -15,8 +15,8 @@ all under the MIT license. Their notices are kept here, unchanged.
 | `catppuccin.LICENSE` | [Catppuccin for VS Code](https://github.com/catppuccin/vscode) 3.19.0, `themes/mocha.json` and `themes/latte.json` in the published extension | the code and Markdown colours of `catppuccin` (`CATPPUCCIN_MOCHA`, `CATPPUCCIN_LATTE`) |
 | `gruvbox.LICENSE` | [Gruvbox Theme for VS Code](https://github.com/jdinhify/vscode-theme-gruvbox) 1.29.1, `themes/gruvbox-dark-medium.json` and `themes/gruvbox-light-medium.json` in the published extension | the code and Markdown colours of `gruvbox` (`GRUVBOX_DARK`, `GRUVBOX_LIGHT`) |
 
-The formula float bundles a Typst package, under the Apache License 2.0. Its notice is kept here and beside the package, unchanged.
+The formula float draws TeX formulas with [RaTeX](https://github.com/erweixin/RaTeX) (MIT), which builds KaTeX's fonts into the binary. The fonts are under the SIL Open Font License 1.1; its text is kept here, unchanged, as the `ratex-katex-fonts` crate ships it.
 
 | File | Project | What is used |
 | --- | --- | --- |
-| `mitex.LICENSE` | [MiTeX](https://github.com/mitex-rs/mitex) 0.2.6, the `@preview/mitex` Typst package | the whole package, unchanged but for its README and CHANGELOG left out (`crates/yumete-tui/assets/mitex/0.2.6/`): it turns Markdown's LaTeX maths into Typst's for the formula float |
+| `katex-fonts.LICENSE` | [KaTeX](https://github.com/KaTeX/KaTeX) fonts, by way of `ratex-katex-fonts` 0.1.15 (`fonts/OFL.txt`) | the `KaTeX_*.ttf` fonts RaTeX sets formulas in, embedded in the binary |

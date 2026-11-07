@@ -291,6 +291,12 @@ zht = "需要安裝 typst 命令纔能顯示公式"
 en = "showing formulas needs the typst command"
 
 [[message]]
+# 光标在 Markdown 的公式里，RaTeX 画不出它：公式浮窗里写的那一句；{0} 是 RaTeX 说的原因（草稿）
+key = "maths.tex-failed"
+zhs = "无法绘制这个公式：{0}"
+en = "could not draw this formula: {0}"
+
+[[message]]
 # 跟着註走，註就在本行
 key = "note.already-on-this-line"
 zhs = "脚注就在本行"

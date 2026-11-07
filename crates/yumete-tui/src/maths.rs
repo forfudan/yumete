@@ -6,17 +6,19 @@
 //! changes: the coloured source stays what the page shows. `[editor]
 //! maths_preview = false` turns it off.
 //!
-//! **Rendered by the `typst` command**, the same one `--export pdf` runs
-//! ([`yumete_core::export::typst_command`]), off the drawing thread: a
-//! formula takes about 5 ms (20 ms with 漢字 in it), and nothing waits for
-//! it. The frame asks ([`ask`]); a picture not made yet is queued, and the
-//! loop is woken when it lands. Each picture is kept by what it shows — the
-//! formula, its ink and its size — so walking the cursor back over a formula
-//! does not run typst again.
+//! **Typst's maths is drawn by the `typst` command**, the same one
+//! `--export pdf` runs ([`yumete_core::export::typst_command`]), off the
+//! drawing thread: a formula takes about 5 ms (20 ms with 漢字 in it), and
+//! nothing waits for it. The frame asks ([`ask`]); a picture not made yet is
+//! queued, and the loop is woken when it lands. Each picture is kept by what
+//! it shows — the formula, its ink and its size — so walking the cursor back
+//! over a formula does not run typst again.
 //!
-//! **Markdown's maths is LaTeX**, which Typst reads through the `mitex`
-//! package. It is bundled (`assets/mitex/`, Apache-2.0) and handed to typst
-//! as a local package, so nothing is ever downloaded.
+//! **Markdown's maths is TeX, drawn by RaTeX** ([`crate::tex`], 2026-11-08),
+//! in the process, in well under a millisecond, so it is drawn when asked
+//! (and kept, [`crate::tex::picture`]) and needs no
+//! `typst` at all. (Until then it went through typst and the `mitex`
+//! package, which was bundled for it.)
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -137,8 +139,25 @@ fn keep(studio: &mut Studio, key: Key, answer: Answer) {
     }
 }
 
-/// **The picture for `key`**, or the news that it is on its way.
+/// The RaTeX picture a TeX formula's `key` asks for.
+pub fn tex_key(key: &Key) -> crate::tex::Key {
+    crate::tex::Key {
+        tex: key.maths.source.clone(),
+        display: key.maths.display,
+        ink: key.ink,
+        size: key.size() as u32 * 10,
+    }
+}
+
+/// **The picture for `key`**, or the news that it is on its way. A TeX
+/// formula is drawn there and then, by RaTeX.
 pub fn ask(key: &Key) -> Answer {
+    if key.maths.latex {
+        return match crate::tex::picture(&tex_key(key)) {
+            Ok(picture) => Answer::Ready(picture),
+            Err(why) => Answer::Failed(why),
+        };
+    }
     let (lock, wake) = studio();
     let mut studio = lock.lock().unwrap_or_else(|e| e.into_inner());
     if studio.no_typst {
@@ -210,24 +229,10 @@ fn work() {
     }
 }
 
-/// The files `mitex` is made of, as typst wants them laid out.
-const MITEX: &[(&str, &[u8])] = &[
-    ("typst.toml", include_bytes!("../assets/mitex/0.2.6/typst.toml")),
-    ("LICENSE", include_bytes!("../assets/mitex/0.2.6/LICENSE")),
-    ("lib.typ", include_bytes!("../assets/mitex/0.2.6/lib.typ")),
-    ("mitex.typ", include_bytes!("../assets/mitex/0.2.6/mitex.typ")),
-    ("mitex.wasm", include_bytes!("../assets/mitex/0.2.6/mitex.wasm")),
-    ("specs/mod.typ", include_bytes!("../assets/mitex/0.2.6/specs/mod.typ")),
-    ("specs/prelude.typ", include_bytes!("../assets/mitex/0.2.6/specs/prelude.typ")),
-    ("specs/latex/standard.typ", include_bytes!("../assets/mitex/0.2.6/specs/latex/standard.typ")),
-];
-
 /// Where typst runs: a folder of this user's own under the system's
-/// temporary one, holding the bundled package, a folder with one CJK font in
-/// it, and an empty working folder for the root.
+/// temporary one, holding a folder with one CJK font in it, and an empty
+/// working folder for the root.
 struct Place {
-    packages: PathBuf,
-    cache: PathBuf,
     work: PathBuf,
     /// A folder holding one CJK font, when this system has one where it was
     /// looked for — so a formula with 漢字 in it need not scan every font.
@@ -262,43 +267,17 @@ impl Place {
                 std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700)).ok()?;
             }
         }
-        let packages = base.join("packages");
-        let package = packages.join("local").join("mitex").join("0.2.6");
-        for (name, bytes) in MITEX {
-            let path = package.join(name);
-            let same = std::fs::metadata(&path).is_ok_and(|m| m.len() == bytes.len() as u64);
-            if !same {
-                std::fs::create_dir_all(path.parent()?).ok()?;
-                // Written beside and moved into place, so a second yumete
-                // reading it halfway never sees half a file.
-                let part = path.with_extension(format!("part{}", std::process::id()));
-                std::fs::write(&part, bytes).ok()?;
-                std::fs::rename(&part, &path).ok()?;
-            }
-        }
         let work = base.join("work");
-        let cache = base.join("cache");
         std::fs::create_dir_all(&work).ok()?;
         let fonts = Self::one_cjk_font(&base.join("fonts"));
-        Some(Place { packages, cache, work, fonts })
+        Some(Place { work, fonts })
     }
 
     /// A folder with a link to the first CJK font found where systems keep
     /// one. typst takes folders, not files, for `--font-path`.
     #[cfg(unix)]
     fn one_cjk_font(folder: &Path) -> Option<PathBuf> {
-        const WHERE: &[&str] = &[
-            "/System/Library/Fonts/STHeiti Medium.ttc",
-            "/System/Library/Fonts/Hiragino Sans GB.ttc",
-            "/System/Library/Fonts/Supplemental/Songti.ttc",
-            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/google-noto-cjk/NotoSansCJK-Regular.ttc",
-            "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
-            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-            "/usr/share/fonts/wenquanyi/wqy-microhei/wqy-microhei.ttc",
-        ];
-        let font = WHERE.iter().map(Path::new).find(|p| p.is_file())?;
+        let font = Path::new(crate::tex::cjk_font()?);
         let link = folder.join(format!("cjk.{}", font.extension()?.to_string_lossy()));
         if std::fs::read_link(&link).ok().as_deref() != Some(font) {
             std::fs::create_dir_all(folder).ok()?;
@@ -320,28 +299,20 @@ impl Place {
 /// to be quoted into the document.
 const INPUT: &str = "yumete-maths";
 
-/// **The document typst is given**: a page the size of the formula, no
-/// ground, the text in the page's own ink.
+/// **The document typst is given** for a Typst formula: a page the size of
+/// the formula, no ground, the text in the page's own ink.
 pub fn document(key: &Key) -> String {
     let (r, g, b) = key.ink;
     let size = key.size();
     let block = key.maths.display;
     let mut out = String::new();
-    if key.maths.latex {
-        out.push_str("#import \"@local/mitex:0.2.6\": mimath\n");
-    }
     out.push_str("#set page(width: auto, height: auto, margin: 2pt, fill: none)\n");
     out.push_str(&format!("#set text(size: {size}pt, fill: rgb(\"#{r:02x}{g:02x}{b:02x}\"))\n"));
     // **The page is as tall as the ink, not the line** (2026-11-06): by
     // default a line runs from cap height to baseline, and a page of
     // `height: auto` cut an inline `1/2` or `sqrt` off at both edges.
     out.push_str("#set text(top-edge: \"bounds\", bottom-edge: \"bounds\")\n");
-    match key.maths.latex {
-        true => out.push_str(&format!("#mimath(sys.inputs.at(\"{INPUT}\"), block: {block})\n")),
-        false => out.push_str(&format!(
-            "#math.equation(block: {block}, eval(sys.inputs.at(\"{INPUT}\"), mode: \"math\"))\n"
-        )),
-    }
+    out.push_str(&format!("#math.equation(block: {block}, eval(sys.inputs.at(\"{INPUT}\"), mode: \"math\"))\n"));
     out
 }
 
@@ -351,15 +322,16 @@ fn wants_cjk(text: &str) -> bool {
     text.chars().any(|c| c as u32 >= 0x2E80)
 }
 
-/// Run typst on one formula.
+/// Run typst on one formula — RaTeX for a TeX one.
 fn render(key: &Key, place: Option<&Place>) -> Answer {
     use std::io::{Read, Write};
+    if key.maths.latex {
+        return ask(key);
+    }
     let mut command = yumete_core::export::typst_command();
     command.args(["compile", "-", "-", "--format", "png", "--ppi", "72"]);
     if let Some(place) = place {
         command.arg("--root").arg(&place.work).current_dir(&place.work);
-        command.arg("--package-path").arg(&place.packages);
-        command.arg("--package-cache-path").arg(&place.cache);
     }
     // The system's fonts are the slow part (0.1 s of a 0.12 s run): the
     // bundled maths fonts are enough, and one CJK font when the formula has
@@ -513,7 +485,11 @@ pub fn float(
         }
         Answer::Failed(_) if typing && last().is_some() => last()?,
         Answer::Failed(why) => {
-            return Some(said(frame, config, area, bottom, caret, vertical, yumete_core::say!("maths.failed", why)))
+            let why = match key.maths.latex {
+                true => yumete_core::say!("maths.tex-failed", why),
+                false => yumete_core::say!("maths.failed", why),
+            };
+            return Some(said(frame, config, area, bottom, caret, vertical, why));
         }
     };
     let (hash, picture) = picture;
@@ -653,20 +629,33 @@ mod tests {
         }
     }
 
-    /// The document: LaTeX through the bundled package, Typst through
-    /// `eval`, the formula never written into it.
+    /// The document: Typst through `eval`, the formula never written into
+    /// it.
     #[test]
     fn the_document_hands_the_formula_over_as_an_input() {
-        let tex = document(&key(r"\frac{1}{2}", true, true));
-        assert!(tex.contains("#import \"@local/mitex:0.2.6\": mimath"), "{tex}");
-        assert!(tex.contains("block: true"), "{tex}");
-        assert!(tex.contains("rgb(\"#c8a2ff\")"), "{tex}");
-        assert!(tex.contains("size: 30pt"), "{tex}");
-        assert!(!tex.contains("frac"), "the formula is an input, not text: {tex}");
+        let typ = document(&key("sum_(k=1)^n k", false, true));
+        assert!(typ.contains("block: true"), "{typ}");
+        assert!(typ.contains("rgb(\"#c8a2ff\")"), "{typ}");
+        assert!(typ.contains("size: 30pt"), "{typ}");
+        assert!(!typ.contains("sum"), "the formula is an input, not text: {typ}");
         let typ = document(&key("x^2", false, false));
-        assert!(!typ.contains("mitex"), "{typ}");
         assert!(typ.contains("eval(sys.inputs.at(\"yumete-maths\"), mode: \"math\")"), "{typ}");
         assert!(typ.contains("block: false"), "{typ}");
+    }
+
+    /// **Markdown's TeX is drawn by RaTeX** (2026-11-08), there and then,
+    /// with no `typst` anywhere, and kept for the next time it is asked.
+    #[test]
+    fn a_tex_formula_is_drawn_by_ratex() {
+        let k = key(r"\sqrt{\alpha^2+\beta^2}", true, false);
+        match ask(&k) {
+            Answer::Ready(picture) => {
+                let same = crate::tex::picture(&tex_key(&k)).unwrap();
+                assert!(Arc::ptr_eq(&picture, &same), "drawn once and kept");
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(ask(&key(r"\frac{1}{", true, false)), Answer::Failed(_)));
     }
 
     /// **An inline fraction is not cut off** (2026-11-06): the page is as
@@ -699,9 +688,8 @@ mod tests {
         assert_eq!(first_error("something else"), "something else");
     }
 
-    /// **The real thing**, when this machine has typst: a formula comes back
-    /// as a PNG, LaTeX through the bundled package with nothing downloaded.
-    /// Skipped where there is no typst.
+    /// **The real thing**, when this machine has typst: a Typst formula
+    /// comes back as a PNG. Skipped where there is no typst.
     #[test]
     fn typst_makes_the_picture() {
         if !yumete_core::export::typst_is_installed() {
@@ -709,7 +697,7 @@ mod tests {
             return;
         }
         let place = Place::set_up();
-        for k in [key("sum_(k=1)^n k", false, true), key(r"\sqrt{\alpha^2+\beta^2}", true, false), key("\"面积\" = pi r^2", false, true)] {
+        for k in [key("sum_(k=1)^n k", false, true), key("\"面积\" = pi r^2", false, true)] {
             match render(&k, place.as_ref()) {
                 Answer::Ready(p) => assert!(p.width > 10 && p.height > 10, "{k:?}: {}×{}", p.width, p.height),
                 other => panic!("{k:?}: {other:?}"),
