@@ -90,10 +90,10 @@ zhs = "中文"
 en = "Chinese"
 
 [[message]]
-# 中文幫助：開/關輸入法
+# 中文幫助：開/關輸入法（草稿）
 key = "help.chinese.toggle-ime"
-zhs = "接管键盘(`:yume off` 交还系统)；接管时单按 Shift 切换 中/ABC"
-en = "take the keyboard (`:yume off` hands it back); a lone Shift tap switches 中/ABC"
+zhs = "接管键盘或交还系统；接管时单按 Shift 切换 中/ABC"
+en = "take the keyboard or hand it back; while yume has it, a lone Shift tap switches 中/ABC"
 
 [[message]]
 # 中文幫助：注音寫法統一
@@ -399,8 +399,8 @@ en = "{0} (:q closes it; / searches)"
 [[message]]
 # 竪排幫助：一縱多少字
 key = "help.vertical.column-length"
-zhs = "每纵字数；:view-wrap-vertical 0 随窗口高度"
-en = "characters per column; :view-wrap-vertical 0 follows the window"
+zhs = "每纵字数；:view-wrap-height 0 随窗口高度"
+en = "characters per column; :view-wrap-height 0 follows the window"
 
 [[message]]
 # 竪排幫助：沿着這一縱往下/往上

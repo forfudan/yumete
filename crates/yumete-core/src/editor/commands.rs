@@ -22,7 +22,7 @@ impl Editor {
         buffer.name_as(name);
         // **生成出來的頁面是只讀的**（2026-10-08 定）。它没有檔案，改了存不到任何
         // 地方，而改一下就掛上「改過没存」那個 `+`，`:q` 於是攔着不讓走——為一份
-        // 編輯器自己算出來的東西。`:readonly off` 照舊解得開。
+        // 編輯器自己算出來的東西。`:readonly` (off) 照舊解得開。
         buffer.set_readonly(true);
         buffer.set_computed(true);
         self.add_buffer(buffer);
@@ -99,7 +99,12 @@ impl Editor {
                 }
             }
         }
-        let asked = command::parse(line)?;
+        // A kept view line names a state (`view-focus on`), which the
+        // toggles themselves cannot: read by the replay, never typed.
+        let asked = match self.quiet_view.then(|| command::setting(line)).flatten() {
+            Some(set) => set,
+            None => command::parse(line)?,
+        };
         match asked {
             // `:open` with nothing to open is the picker — the command line
             // takes no 中文, and a chapter's name is 中文 (2026-09-16).
@@ -442,8 +447,10 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::RenderRuby { dialect, on } => {
+                // Turned round from what the page draws, not what was asked
+                // for: at 中階 nothing is drawn, so the toggle shows it.
                 if !on.is_a_question() {
-                    self.render_ruby(dialect, on.over(self.ruby.contains(dialect)));
+                    self.render_ruby(dialect, on.over(self.ruby().contains(dialect)));
                 }
                 let listed_names: Vec<String> =
                     self.ruby.iter().map(|d| d.name().to_string()).collect();
@@ -557,9 +564,6 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetNumberFill(on) => {
-                // **裸的報告，帶參數的纔設**（2026-10-09 作者定）。從前裸的是輪替，
-                // 而兄弟那幾個（`:readonly`／`:reload-auto`／`:yank-on-delete`／
-                // `:view-code`）裸的都報告——於是這一個現在是開還是關，没有辦法問。
                 self.number_fill = on.over(self.number_fill);
                 self.status = match self.number_fill {
                     true => say!("layout.line-numbers-on-a-band"),
@@ -1115,19 +1119,11 @@ impl Editor {
                 self.scheme_request = Some(String::from("~"));
                 Ok(CommandOutcome::Continue)
             }
-            Command::YumeLanguage(want) => {
+            Command::YumeToggle => {
                 // `lang:` for the same reason `commit:` and `panel:` have a
-                // prefix: the front end holds the session, and this is one
-                // more question about it — asked by name now that there are
-                // three answers and not two (#290).
-                self.scheme_request = Some(format!(
-                    "lang:{}",
-                    match want {
-                        command::Engagement::Chinese => "chinese",
-                        command::Engagement::Ascii => "abc",
-                        command::Engagement::Off => "off",
-                    }
-                ));
+                // prefix: the front end holds the session, and only it knows
+                // whether yume holds the keys now (#290).
+                self.scheme_request = Some(String::from("lang:toggle"));
                 Ok(CommandOutcome::Continue)
             }
             Command::UserTable(path) => {
@@ -1316,7 +1312,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             // A measure is only a measure if the rows honour it, so setting
-            // one turns wrapping on: `:view-wrap 50` says "write to fifty", and
+            // one turns wrapping on: `:view-wrap-width 50` says "write to fifty", and
             // fifty columns of text running off the edge is not that.
             Command::SetMargin(want) => {
                 match want {
@@ -1381,14 +1377,14 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::ShowDetail(want) => {
-                // Warning: **裸的報告，帶參數的纔設**（2026-10-09 作者定，三個表格開關
-                // 一起）。從前裸形寫的是 `!self.detail_visible()`，而那一支還要問「這
-                // 一格有没有記錄可畫」——站在表頭或者 `| --- |` 那一行上没有，於是它
-                // 恆假、`!` 恆真：`:table-detail on` 之後再按一下光的，答的還是
-                // 「記錄：開」，開關只有一個方向。
+                // Warning: **Flip what the reader said, not what is drawn.** The
+                // flip used to read `!self.detail_visible()`, and that also asks
+                // whether this cell has a record to draw: on the header or the
+                // `| --- |` row it has none, so it was always false and the
+                // switch only ever went one way.
                 //
-                // 報的是**讀者說過的話**（`show_detail`），不是此刻畫着没有
-                // （`detail_visible()`）；没說過話就報「這一格本來開不開」。
+                // So it turns round what the reader said (`show_detail`), and
+                // with nothing said, whether this cell opens it by itself.
                 let now = self.show_detail.unwrap_or_else(|| self.detail_opens_here());
                 let want = want.over(now);
                 self.show_detail = Some(want);
@@ -1468,10 +1464,6 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetCode(want) => {
-                // The bare word **reports**, the shape `:view-hud` has: with a
-                // switch, 「which am I on」 is a better use of the word than a
-                // second spelling of `on` — and it is where a reader asks why
-                // a block has no colours (below).
                 self.code_colours = want.over(self.code_colours);
                 let known = crate::code::Language::ALL
                     .iter()
@@ -1504,7 +1496,6 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableNumbers(want) => {
-                // 裸的報告，帶參數的纔設（2026-10-09 作者定）。
                 let on = want.over(self.table_numbers);
                 self.table_numbers = on;
                 self.status = match on {
@@ -1514,8 +1505,6 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableHeader(want) => {
-                // 裸的報告，帶參數的纔設（2026-10-09 作者定）。`空格 t H` 那個**鍵**
-                // 照舊翻——規矩擺在這裏，不擺在 `set_table_header` 裏。
                 let now = self.table.as_ref().map(|view| view.schema.header);
                 self.set_table_header(now.map(|now| want.over(now)));
                 Ok(CommandOutcome::Continue)
@@ -1603,17 +1592,23 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetMeasure(measure) => {
+            Command::SetMeasure(None) => {
+                self.status = match self.measure() {
+                    Some(m) => say!("layout.measure-columns", m),
+                    None => say!("layout.measure-window"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetMeasure(Some(measure)) => {
                 // **給一個寬度就是折，`0` 也算**（2026-10-05 定）。
                 //
                 // Warning: **從前這裏是 `if measure.is_some()`**，於是 `0`（＝按窗口
-                // 寬折）是唯一一個「給了寬度卻可能什麼都不發生」的參數：從 `off`
-                // 出發按 `:view-wrap 0`，屏幕一點反應都没有。一位 vim 用戶就是在
-                // 這裏斷定「不能禁止 wrap」的（`:view-wrap 500` 同樣一聲不響，
-                // 而真正關掉它的是 `off`，說明裏當時也没寫）。
+                // 寬折）是唯一一個「給了寬度卻可能什麼都不發生」的參數：從不折
+                // 出發給 `0`，屏幕一點反應都没有。一位 vim 用戶就是在這裏斷定
+                // 「不能禁止 wrap」的（給 `500` 同樣一聲不響）。
                 //
-                // 整條命令現在一句話說得完：**給一個寬度就是折（`0` ＝ 窗口寬）；
-                // `off` 是不折；`on` 是接着用上次那個寬度。**
+                // **給一個寬度就是折（`0` ＝ 窗口寬）**；`:view-wrap` 翻折與不折，
+                // 接着用上次那個寬度。
                 self.set_soft_wrap(true);
                 self.set_measure(measure);
                 self.refresh_goal_column();
@@ -1622,7 +1617,14 @@ impl Editor {
             // **竖排那一個自己一條命令**（2026-10-09 作者定）。從前 `:view-wrap` 兩種
             // 排版共用一個數：橫排是行寬，竖排是一列幾個字。原話：「一个东西怎么能有
             // 两个命令……view-wrap 只在横排生效，view-wrap-vertical 只在竖排生效」。
-            Command::SetZongMeasure(measure) => {
+            Command::SetZongMeasure(None) => {
+                self.status = match self.zong_measure() {
+                    Some(m) => say!("layout.zong-measure", m),
+                    None => say!("layout.zong-measure-window"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
+            Command::SetZongMeasure(Some(measure)) => {
                 self.set_zong_measure(measure);
                 self.refresh_goal_column();
                 Ok(CommandOutcome::Continue)
@@ -1672,11 +1674,11 @@ impl Editor {
                 }, &[]));
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetSoftWrap(on) => {
+            Command::SetSoftWrap(want) => {
                 // **縱書 has nothing to turn off.** A 縱 is broken by the
                 // height of the window, and that is not the writer's to set —
-                // `:view-wrap 40` does set the 縱 length, in either layout, but
-                // 開/關 does not reach it. Taking it anyway and answering
+                // `:view-wrap-height` sets the 縱 length, but the switch does
+                // not reach it. Taking it anyway and answering
                 // 「長段落跑出右邊」 named a right edge this page does not
                 // have, and left the reader looking for a change that had not
                 // been made.
@@ -1684,6 +1686,7 @@ impl Editor {
                     self.status = say!("wrap.vertical-has-no-wrap");
                     return Ok(CommandOutcome::Continue);
                 }
+                let on = want.over(self.soft_wrap());
                 self.set_soft_wrap(on);
                 self.refresh_goal_column();
                 self.status = if on {

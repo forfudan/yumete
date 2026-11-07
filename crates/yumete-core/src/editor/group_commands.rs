@@ -411,7 +411,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::YumeCommitMode, |e, _| e.pending = Pending::YumeValue('m'), Key::Char('m')),
     (NormalCmd::YumePanelMode, |e, _| e.pending = Pending::YumeValue('p'), Key::Char('p')),
     (NormalCmd::YumePreeditMode, |e, _| e.pending = Pending::YumeValue('e'), Key::Char('e')),
-    (NormalCmd::YumeTogglePrediction, |e, _| e.run_the_line(":yume-autocompletion toggle"), Key::Char('y')),
+    (NormalCmd::YumeTogglePrediction, |e, _| e.run_the_line(":yume-autocompletion"), Key::Char('y')),
     (NormalCmd::YumePickScheme, |e, _| e.open_the_command_line("yume-scheme "), Key::Char('i')),
     (NormalCmd::YumeNextScheme, |e, _| e.ask_the_input_method("scheme:next"), Key::Char('n')),
     (NormalCmd::YumeMenuSize3, |e, _| e.ask_the_input_method("menu:3"), Key::Char('3')),

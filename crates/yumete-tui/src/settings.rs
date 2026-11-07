@@ -271,7 +271,9 @@ pub fn complaints(config: &Config) -> Vec<String> {
 /// **How the page looks, as the `:` commands that would set it** (2026-10-28),
 /// without the colon: the layout, the `:view-*` settings (not `:view-preview`,
 /// which starts a server) and the theme. Order matters where one sets another:
-/// `view-wrap 40` turns wrapping on, so the measure comes before the switch.
+/// `view-wrap-width 40` turns wrapping on, so the width comes before the
+/// switch. The switches are written `on`/`off`, which only the replay reads
+/// ([`yumete_core::command::setting`]): typed, they are plain toggles.
 fn view_lines(editor: &Editor) -> Vec<String> {
     use yumete_core::editor::Hud;
     use yumete_core::zong::Layout;
@@ -284,9 +286,9 @@ fn view_lines(editor: &Editor) -> Vec<String> {
             Layout::Vertical => "vertical".to_string(),
             Layout::Horizontal => "horizontal".to_string(),
         },
-        format!("view-wrap {}", editor.measure().unwrap_or(0)),
+        format!("view-wrap-width {}", editor.measure().unwrap_or(0)),
         format!("view-wrap {}", on(editor.soft_wrap())),
-        format!("view-wrap-vertical {}", editor.zong_measure().unwrap_or(0)),
+        format!("view-wrap-height {}", editor.zong_measure().unwrap_or(0)),
         format!("view-pages-vertical {}", editor.pages_vertical()),
         format!("view-pages-horizontal {}", editor.pages_horizontal()),
         format!("view-margin {}", editor.margin().name()),
@@ -325,12 +327,13 @@ pub fn view_to_keep(editor: &Editor, config: &Config) -> Vec<String> {
     let given = view_lines(&as_configured(config));
     let lines = view_lines(editor);
     // **The wrap width and the switch go together** (2026-10-29, review): a
-    // kept `view-wrap 40` without its `view-wrap off` turned wrapping on when
-    // replayed, since a width turns it on.
-    let wrap_differs = lines.iter().filter(|l| l.starts_with("view-wrap ")).any(|l| !given.contains(l));
+    // kept `view-wrap-width 40` without its `view-wrap off` turned wrapping
+    // on when replayed, since a width turns it on.
+    let wrapping = |l: &String| l.starts_with("view-wrap ") || l.starts_with("view-wrap-width ");
+    let wrap_differs = lines.iter().filter(|l| wrapping(l)).any(|l| !given.contains(l));
     let mut keep: Vec<String> = lines
         .into_iter()
-        .filter(|line| !given.contains(line) || (wrap_differs && line.starts_with("view-wrap ")))
+        .filter(|line| !given.contains(line) || (wrap_differs && wrapping(line)))
         .collect();
     // **Not what the config says already** (2026-10-29, review): a chosen
     // theme or mood the config gives too was kept, and then outlived a later
@@ -373,7 +376,7 @@ fn as_configured(config: &Config) -> Editor {
 pub fn view_back_to_config(editor: &mut Editor, config: &Config) {
     let was = editor.status().to_string();
     // Asked afresh before each line (2026-10-29, review): one line can change
-    // another (`view-wrap 0` turns wrapping on), so what was true before the
+    // another (`view-wrap-width 0` turns wrapping on), so what was true before the
     // first is not true before the third. Quietly, so a setting that needs
     // 竪排 is put back on a horizontal page too.
     for line in view_lines(&as_configured(config)) {
@@ -769,11 +772,11 @@ mod config_watch_tests {
                 .collect()
         };
         assert!(view(&ed).is_empty(), "{:?}", view(&ed));
-        ed.execute(":view-focus on").unwrap();
+        ed.execute(":view-focus").unwrap();
         ed.execute(":view-pages-vertical 2").unwrap();
         ed.execute(":vertical").unwrap();
         assert_eq!(view(&ed), ["vertical", "view-pages-vertical 2", "view-focus on"]);
-        ed.execute(":view-focus off").unwrap();
+        ed.execute(":view-focus").unwrap();
         assert_eq!(view(&ed), ["vertical", "view-pages-vertical 2"], "put back, not kept");
 
         // `:reload-config` puts the rest back too.
@@ -811,21 +814,21 @@ mod config_watch_tests {
 
         // The width and the switch go together.
         let mut ed = fresh(&config);
-        ed.execute(":view-wrap 40").unwrap();
-        ed.execute(":view-wrap off").unwrap();
+        ed.execute(":view-wrap-width 40").unwrap();
+        ed.execute(":view-wrap").unwrap();
         let kept = view(&ed, &config);
-        assert!(kept.contains(&"view-wrap 40".to_string()) && kept.contains(&"view-wrap off".to_string()), "{kept:?}");
+        assert!(kept.contains(&"view-wrap-width 40".to_string()) && kept.contains(&"view-wrap off".to_string()), "{kept:?}");
 
         // The reload puts wrapping back off after a width turned it on.
         let mut ed = fresh(&config);
-        ed.execute(":view-wrap 40").unwrap();
+        ed.execute(":view-wrap-width 40").unwrap();
         super::view_back_to_config(&mut ed, &config);
         assert!(!ed.soft_wrap(), "wrapping back off, as the config has it");
 
         // …and a 竪排-only setting, on a page the config turns horizontal.
         let mut ed = fresh(&config);
         ed.execute(":vertical").unwrap();
-        ed.execute(":view-sentence on").unwrap();
+        ed.execute(":view-sentence").unwrap();
         assert!(ed.sentences());
         super::view_back_to_config(&mut ed, &config);
         assert!(!ed.sentences(), "put back although it needs 竪排");

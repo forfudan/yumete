@@ -1148,7 +1148,7 @@ pub fn run(
         // macOS, and `Shift+Space` is 全/半角 in most system input methods,
         // which are the ones holding the keyboard while yume is 關 —
         // so the one direction that matters most is the one it could not
-        // be relied on for. `:yume on|abc|off` says it, and the lone-Shift
+        // be relied on for. `:yume` says it, and the lone-Shift
         // tap — the switch a writer actually reaches for — needs no key of
         // its own at all.
         if enhanced {
@@ -1834,7 +1834,7 @@ pub fn run(
                 // 那扇設置面板（`:settings`）：開、存、關。
                 settings.settle(editor);
                 if let Some(tag) = editor.take_scheme_request() {
-                    // `:yume on` / `:yume abc` / `:yume off` **is** an answer
+                    // `:yume` **is** an answer
                     // about the language, typed on the command line that
                     // borrowed it. Putting the borrow back afterwards undid
                     // the command the writer had just run, silently, one
@@ -2390,7 +2390,7 @@ impl Borrow {
         AtTheDoor::default()
     }
 
-    /// The language was answered outright — a lone-Shift tap, or `:yume on`.
+    /// The language was answered outright — a lone-Shift tap, or `:yume` (on).
     ///
     /// **Only when the answer is about Insert** (#338). A tap on an open
     /// prompt changes that one line and nothing else; forgetting the borrow
@@ -2404,7 +2404,7 @@ impl Borrow {
 
     /// The language was answered by a command typed on the prompt itself.
     ///
-    /// `:yume on` / `:yume off` **is** an answer about the language, and it
+    /// `:yume` **is** an answer about the language, and it
     /// was typed on the very line that borrowed it. Putting the borrow back
     /// afterwards undid the command the writer had just run, one keystroke
     /// later and without a word.
@@ -2435,7 +2435,7 @@ fn answer_a_shift_tap(
     if !ime.holding_the_keys() || settings_open {
         return false;
     }
-    // The same answer as `:yume on`, given by the hand rather than by the
+    // The same answer as `:yume` (on), given by the hand rather than by the
     // command line, so it ends the borrow the same way (#225) — but only when
     // the hand is answering about Insert (#338).
     borrowed.answered_in(editor.mode());
@@ -2481,7 +2481,7 @@ struct Viewport {
     top: WrapAnchor,
     /// How many columns of writing are off the **left** edge, in horizontal
     /// layout. Zero whenever the rows fit, which with soft wrap on is always;
-    /// with `:view-wrap off` a paragraph is one row of any length, and without this
+    /// with `:view-wrap` (off) a paragraph is one row of any length, and without this
     /// the page could only ever show its first screenful (Feature #221).
     left: usize,
     /// **The sideways offset of each page after the first**, as last drawn
@@ -8262,7 +8262,7 @@ fn draw_command_menu(
         }
         }
     };
-    // **一條都配不中、可是有話要說**（2026-10-07 定）：`:view-wrap 10` 的 `10` 不在
+    // **一條都配不中、可是有話要說**（2026-10-07 定）：`:view-wrap-width 10` 的 `10` 不在
     // 任何一張詞表上，而按下 Enter 它確實會把寬度定成 10。那時候整扇面板就是那
     // 一段話，底下那道橫線不必畫——橫線隔的是說明和單子，而單子是空的。
     if matches.is_empty() && about.is_empty() {
@@ -9117,7 +9117,7 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
     // brightest thing on the page, which is what the old rule was protecting.
     //
     // A **ground** is not part of this: the backtick is drawn, so the run's
-    // extent is already visible. `:theme-fill on` adds one for whoever wants
+    // extent is already visible. `:theme-fill` (on) adds one for whoever wants
     // the box.
     let filled = |style: Style, rung| match ink.fill() {
         true => style.bg(ink.at(rung)),
@@ -12430,7 +12430,7 @@ fn draw_horizontal(
     // …and sideways, by the same promise: **the caret is on the page**. With
     // soft wrap on this never moves — a row is folded before it can reach the
     // right edge, so the column is always inside the window and `left` settles
-    // back to zero. With `:view-wrap off` a paragraph is one row of whatever length
+    // back to zero. With `:view-wrap` (off) a paragraph is one row of whatever length
     // it happens to be, and until this was here the window showed its first
     // screenful and nothing else: `gl` walked the cursor off the right edge and
     // the writing it landed in was never drawn (Feature #221).
@@ -12760,9 +12760,9 @@ fn draw_horizontal(
     // writing, which is what a writer means by it. The line-number gutter is
     // furniture, not text, so it does not eat into the measure — and the ruler
     // moves with the gutter rather than the writing moving under it.
-    // A measure set with `:view-wrap 50` is a ruler by definition — it is the width
+    // A measure set with `:view-wrap-width 50` is a ruler by definition — it is the width
     // the writer asked to write to — so it stands in for the configured one,
-    // **but only while it is folding rows**. `:view-wrap off` stops the folding and
+    // **but only while it is folding rows**. `:view-wrap` (off) stops the folding and
     // keeps the number, so that `:view-wrap` on its own can put it back; drawing a
     // rule at fifty and tinting everything past it, while the rows run straight
     // through both, names an edge the page no longer has. A ruler out of the
@@ -12867,7 +12867,7 @@ fn draw_horizontal(
         };
         // **一行再長，一幀畫出來的也只有窗口那麼寬**（2026-10-03 量出來的）。
         //
-        // `:view-wrap off` 把一段變成一行，而一行四十兆的檔上這裏從前把**整整
+        // `:view-wrap` (off) 把一段變成一行，而一行四十兆的檔上這裏從前把**整整
         // 兩千萬個字符**拷成一個 `String`、再拆成一個 `Vec<char>`，底下每一道
         // 樣式都在那上面走一遍——一幀 12.7 秒。開着折行同一個檔是 1.9 秒，所以
         // 慢的不是檔有多大，是這一行有多長。
@@ -13808,7 +13808,7 @@ fn draw_horizontal(
 
     // The margin: everything past the measure, whether or not there is writing
     // in it. Tinting only the characters that run past says nothing at all
-    // when nothing does — which is exactly the case under `:view-wrap 50`, where
+    // when nothing does — which is exactly the case under `:view-wrap-width 50`, where
     // the rows are folded before they can reach it. A region is what a writer
     // means by a measure: this is the paper, that is the edge of it.
     //
@@ -18327,7 +18327,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_note_is_drawn_in_the_ink_of_something_pointed_at() {
         let mut editor = editor_with("他說,好");
-        editor.execute(":view-punct on").unwrap();
+        editor.execute(":view-punct").unwrap();
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
@@ -18349,7 +18349,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn a_note_set_vertically_is_not_read_as_the_manuscript() {
         let mut editor = editor_with("他說,好");
-        editor.execute(":view-punct on").unwrap();
+        editor.execute(":view-punct").unwrap();
         let config = vertical_config();
         let buffer = render_vertical(&mut editor, &config, 30, 12);
         // Down the rightmost 縱: 他 說 ␣ ︐ 好 — the half-width comma is hung
@@ -18390,7 +18390,7 @@ fn squeezed(text: &str) -> String {
         config
     }
 
-    /// With `:view-wrap off` the page follows the caret off the right edge
+    /// With `:view-wrap` (off) the page follows the caret off the right edge
     /// (Feature #221).
     ///
     /// A paragraph is then one row of whatever length it happens to be, and
@@ -22026,17 +22026,17 @@ fn squeezed(text: &str) -> String {
         config.editor.line_numbers = LineNumbers::None;
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.show_segmentation = false;
-        // Nothing configured: every mark on this page comes from `:view-wrap 20`.
+        // Nothing configured: every mark on this page comes from `:view-wrap-width 20`.
         assert_eq!(config.editor.ruler, 0);
         let tint = Some(ink(&config).at(yumete_config::rung::BAND));
 
-        editor.execute("view-wrap 20").unwrap();
+        editor.execute("view-wrap-width 20").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_eq!(buffer[(20, 0)].style().bg, tint, "the measure is in force");
 
-        // `:view-wrap off`: the rows are no longer folded at twenty, so nothing on
+        // `:view-wrap` (off): the rows are no longer folded at twenty, so nothing on
         // the page may claim they are.
-        editor.execute("view-wrap off").unwrap();
+        editor.execute("view-wrap").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint, "no margin past it");
         assert!(
@@ -22150,7 +22150,7 @@ fn squeezed(text: &str) -> String {
         // page ends.
         assert_eq!(config.editor.ruler, 0);
 
-        editor.execute("view-wrap 20").unwrap();
+        editor.execute("view-wrap-width 20").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
 
         // Twenty columns is ten 字, so the eleventh is on the second row.
@@ -22165,7 +22165,7 @@ fn squeezed(text: &str) -> String {
         assert_eq!(buffer[(20, 5)].style().bg, tint, "and down the empty rows");
 
         // Giving the window back takes the margin with it.
-        editor.execute("view-wrap 0").unwrap();
+        editor.execute("view-wrap-width 0").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 40, 8);
         assert_ne!(buffer[(20, 0)].style().bg, tint);
         assert_eq!(at(&buffer, 20, 0), "字", "the row runs the full width");
@@ -23929,7 +23929,7 @@ fn squeezed(text: &str) -> String {
     fn metered(text: &str) -> yumete_core::Editor {
         let mut editor = editor_with(text);
         editor.set_reader(Box::new(Tones));
-        editor.execute(":view-meter on").unwrap();
+        editor.execute(":view-meter").unwrap();
         editor
     }
 
@@ -23978,7 +23978,7 @@ fn squeezed(text: &str) -> String {
         editor.set_line_numbers_baseline(yumete_core::editor::LineNumbers::None);
         config.editor.command_line = false;
         config.editor.show_segmentation = false;
-        editor.execute(":view-meter off").unwrap();
+        editor.execute(":view-meter").unwrap();
         let buffer = render_wrapped(&mut editor, &config, 30, 8);
         assert!(row_text(&buffer, 0).starts_with("春眠不覺曉。"));
     }
@@ -23988,7 +23988,7 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn without_a_reader_the_meter_has_nothing_to_say() {
         let mut editor = editor_with("春眠不覺曉。\n");
-        editor.execute(":view-meter on").unwrap();
+        editor.execute(":view-meter").unwrap();
         assert!(editor.status().contains("讀音") || editor.status().contains("reading"));
         let mut config = Config::default();
         config.editor.line_numbers = LineNumbers::None;
@@ -24011,7 +24011,7 @@ fn squeezed(text: &str) -> String {
         let plain = (0..20u16).find(|&x| at(&quiet, x, 0) == "春");
 
         let mut on = editor_with("春眠不覺曉。\n");
-        on.execute(":view-meter on").unwrap();
+        on.execute(":view-meter").unwrap();
         assert!(!on.meter_drawn(), "asked for, and not drawable");
         let buffer = render_vertical(&mut on, &config, 20, 10);
         assert_eq!(
@@ -24045,7 +24045,7 @@ fn squeezed(text: &str) -> String {
     /// and the answers are kept against a hash of the line's *text*, which
     /// does not change when the dictionary does.
     ///
-    /// The trigger in the field is the ordinary one: `:view-meter on` before the
+    /// The trigger in the field is the ordinary one: `:view-meter` (on) before the
     /// IME has finished loading its dictionary. Until this was fixed, the 了
     /// in 為了 stayed marked 仄 for the rest of the session — the exact
     /// mistake the feature exists to catch.
@@ -24053,7 +24053,7 @@ fn squeezed(text: &str) -> String {
     fn a_new_dictionary_takes_the_meter_marks_with_it() {
         let mut editor = editor_with("為了他。\n");
         editor.set_reader(Box::new(Both));
-        editor.execute(":view-meter on").unwrap();
+        editor.execute(":view-meter").unwrap();
         // One character at a time: 為 仄, 了 liǎo 仄, 他 平 and the 韻腳.
         let apart = editor.meter_on_line(0);
         assert_eq!(apart.len(), 3, "{apart:?}");
@@ -24088,7 +24088,7 @@ fn squeezed(text: &str) -> String {
         // Nothing is stood back until it is asked for.
         assert_eq!(ink(&lit, 0), ink(&lit, 1), "{:?}", ink(&lit, 0));
 
-        editor.execute(":view-focus on").unwrap();
+        editor.execute(":view-focus").unwrap();
         let focused = render_wrapped(&mut editor, &config, 30, 8);
         // The cursor's own 段 is drawn exactly as it was.
         assert_eq!(ink(&focused, 1), ink(&lit, 1));
@@ -24097,7 +24097,7 @@ fn squeezed(text: &str) -> String {
         assert_ne!(ink(&focused, 0), ink(&lit, 0));
         assert_eq!(ink(&focused, 0), ink(&focused, 2));
 
-        editor.execute(":view-focus off").unwrap();
+        editor.execute(":view-focus").unwrap();
         let again = render_wrapped(&mut editor, &config, 30, 8);
         assert_eq!(ink(&again, 0), ink(&lit, 0));
     }
@@ -24127,7 +24127,7 @@ fn squeezed(text: &str) -> String {
         // The reader's own ink, on the reader's own ground.
         assert_eq!(ink(&lit, 0), ratatui::style::Color::Reset);
 
-        editor.execute(":view-focus on").unwrap();
+        editor.execute(":view-focus").unwrap();
         let focused = render_wrapped(&mut editor, &config, 30, 8);
         // The cursor's 段 is still the reader's ink — that is the promise the
         // setting makes — and the rest of the page is now a colour.
@@ -24146,7 +24146,7 @@ fn squeezed(text: &str) -> String {
         config.editor.command_line = false;
         // A one-cell gap, which the factory page no longer has (`:view-margin`, 2026-09-16).
         config.editor.zong_gap = 1;
-        editor.execute(":view-focus on").unwrap();
+        editor.execute(":view-focus").unwrap();
         let buffer = render_vertical(&mut editor, &config, 20, 8);
 
         // The cursor is in the first paragraph, which wraps: the rightmost two
@@ -24247,7 +24247,7 @@ fn squeezed(text: &str) -> String {
         config.editor.command_line = false;
 
         let lit = render_vertical(&mut editor, &config, 30, 12);
-        editor.execute(":view-focus on").unwrap();
+        editor.execute(":view-focus").unwrap();
         let focused = render_vertical(&mut editor, &config, 30, 12);
 
         // The band's rows are above the text; find the one carrying a digit on
@@ -24286,7 +24286,7 @@ fn squeezed(text: &str) -> String {
         let middle = 5;
         let mut seats = Seats::default();
 
-        editor.execute(":view-typewriter on").unwrap();
+        editor.execute(":view-typewriter").unwrap();
         editor.execute(":20").unwrap();
         assert_eq!(
             caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),
@@ -24302,7 +24302,7 @@ fn squeezed(text: &str) -> String {
             );
         }
         // Off again, and a step is a step.
-        editor.execute(":view-typewriter off").unwrap();
+        editor.execute(":view-typewriter").unwrap();
         editor.on_key(Key::Char('j'));
         assert_eq!(
             caret_over_time(&editor, &config, &mut seats, 30, rows).map(|p| p.y),
@@ -27031,7 +27031,7 @@ fn squeezed(text: &str) -> String {
         assert!(status.contains("[中"), "language tag missing: {status:?}");
     }
 
-    /// `:yume on` is an answer about the language, and the loop must see it
+    /// `:yume` (on) is an answer about the language, and the loop must see it
     /// as one (#412).
     ///
     /// It asked for `+` and `-` — the spelling from before there were three
@@ -27058,15 +27058,12 @@ fn squeezed(text: &str) -> String {
     #[test]
     fn the_language_requests_are_spelled_the_way_the_loop_reads_them() {
         let mut editor = Editor::new();
-        // `yume abc` 2026-10-10 拿掉了（那一根軸歸 Shift）；`空格 空格` 發的
-        // `lang:toggle` 走同一條路，所以它也在這裏。
-        for line in ["yume on", "yume off"] {
-            editor.execute(line).unwrap();
-            let tag = editor
-                .take_scheme_request()
-                .unwrap_or_else(|| panic!("{line} asked the front end nothing"));
-            assert!(answers_the_language(&tag), "{line} sent {tag:?}");
-        }
+        // `:yume` is a plain toggle (2026-11-07) and sends what `空格 空格`
+        // sends, `lang:toggle`.
+        editor.execute("yume").unwrap();
+        let tag = editor.take_scheme_request().expect("yume asked the front end nothing");
+        assert_eq!(tag, "lang:toggle");
+        assert!(answers_the_language(&tag), "yume sent {tag:?}");
         assert!(answers_the_language("lang:toggle"), "`空格 空格` 發的那一個");
         // …and the requests about the 碼表 are not answers about the
         // language: putting the borrow back after one of those is right.
@@ -27895,7 +27892,7 @@ fn squeezed(text: &str) -> String {
         assert!(!ime.engaged(), "{said}");
         assert!(!ime.is_chinese(), "handing it back is not a language answer");
 
-        // …and `:yume on` from there is 中文, not ABC: the way back in is
+        // …and `:yume` (on) from there is 中文, not ABC: the way back in is
         // the way you meant to type.
         let said = engage(&mut ime, Engagement::Chinese, &config);
         assert!(ime.engaged(), "{said}");

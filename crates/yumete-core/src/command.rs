@@ -22,7 +22,7 @@ use crate::zong::Layout;
 /// it-through and ASCII-because-yume-is-gone have to be told apart.
 ///
 /// The lone-Shift tap crosses between [`Self::Chinese`] and [`Self::Ascii`];
-/// [`Self::Off`] is reached by `:yume off` and left by `:yume on` — no key
+/// [`Self::Off`] is reached and left by `:yume` — no key
     /// of its own, settled (#290). The way out of [`Self::Off`] has
 /// to be pressable while a *system* input method holds the keyboard, and the
 /// two chords tried (`C-Space`, `Shift+Space`) are both spent there already.
@@ -311,22 +311,24 @@ pub enum Command {
     YumeAnnotation(Option<String>),
     /// `:scheme <tag>` — switch the input scheme (Feature #86).
     SetScheme(String),
-    /// `:view-hanging [on|off]` — 句讀 in the margin rather than a square each
-    /// (Feature #70). `None` is the bare word, which toggles.
+    /// `:view-hanging` — 句讀 in the margin rather than a square each
+    /// (Feature #70). The command flips it; [`setting`] names a state.
     SetHanging(Switch),
-    /// `:view-wrap` / `:view-wrap off` — whether a paragraph too wide for the terminal
-    /// continues on the next screen row (Feature #77).
-    SetSoftWrap(bool),
+    /// `:view-wrap` — whether a paragraph too wide for the terminal
+    /// continues on the next screen row (Feature #77). The command flips it.
+    SetSoftWrap(Switch),
     /// `:line-numbers [absolute|relative|none]`: how the gutter counts;
     /// bare says which is on (2026-10-31).
     LineNumbers(Option<crate::editor::LineNumbers>),
     /// `:which-wrap`——哪些鍵走得出一行的兩頭。`None` ＝ 裸寫，報現狀。
     WhichWrap(Option<String>),
-    /// `:view-wrap <n>` — write to a measure of `n` columns rather than to the
-    /// window; `:view-wrap 0` gives the window back (Feature #113).
-    SetMeasure(Option<usize>),
-    /// 竖排：一列寫幾個字。`None` ＝ 跟着窗口。
-    SetZongMeasure(Option<usize>),
+    /// `:view-wrap-width <n>` — write to a measure of `n` columns rather than
+    /// to the window; `0` gives the window back (Feature #113). `None` is the
+    /// bare command, which reports; `Some(None)` is `0`.
+    SetMeasure(Option<Option<usize>>),
+    /// `:view-wrap-height <n>` — characters per vertical column. `None`
+    /// reports; `Some(None)` is `0`, which follows the window.
+    SetZongMeasure(Option<Option<usize>>),
     /// `:version` —— 這一版是哪一版，以及東西都放在哪。
     Version,
     /// `:yuhao` — hand the 宇浩 input-method site to the system's browser.
@@ -369,22 +371,19 @@ pub enum Command {
     SayIn(Option<crate::messages::Language>),
     /// `:markdown …` — write a piece of Markdown at the cursor.
     Markdown(MarkdownBit),
-    /// `:view-typewriter [on|off]` — the cursor's row stays in the middle.
+    /// `:view-typewriter` — the cursor's row stays in the middle.
     SetTypewriter(Switch),
-    /// `:view-focus [on|off]` — everything but the 段 being written stands back.
+    /// `:view-focus` — everything but the 段 being written stands back.
     SetFocus(Switch),
-    /// `:view-meter [on|off]` — 平仄 and 韻腳 in the margin.
+    /// `:view-meter` — 平仄 and 韻腳 in the margin.
     SetMeter(Switch),
-    /// `:view-punct [on|off]` — the mark that is wrong, named on the page beside it.
+    /// `:view-punct` — the mark that is wrong, named on the page beside it.
     SetNote(Switch),
-    /// `:view-code [on|off|toggle]` — fenced code in its own grammar's colours
-    /// (#420). **Three answers, not two**: `None` is the bare word, which
-    /// reports rather than setting anything (2026-09-20); `Some(None)` is
-    /// `toggle`; `Some(Some(b))` is `on`/`off`.
+    /// `:view-code` — fenced code in its own grammar's colours (#420).
     SetCode(Switch),
     /// `:view-long-line`：一行長過多少列就不上色。`None` ＝裸的，報告現在多少。
     SetLongLine(Option<Option<usize>>),
-    /// `:table-numbers on|off` — the row of column numbers above the header.
+    /// `:table-numbers` — the row of column numbers above the header.
     SetTableNumbers(Switch),
     /// `:search` — open the search panel (#419).
     ///
@@ -416,8 +415,8 @@ pub enum Command {
     /// on the left, the info panel on the right. The five take the keys when
     /// they open; `:sidebar-info` leaves them in the text, as `空格 w i` does.
     SidebarToggle(crate::sidebar::Panel),
-    /// `:table-header [on|off]` — whether the grid's first row names the
-    /// columns or is a row like any other (Feature #217). `None` flips it.
+    /// `:table-header` — whether the grid's first row names the columns or
+    /// is a row like any other (Feature #217).
     SetTableHeader(Switch),
     /// `:table-schema` — how this table is read, on the status line; with
     /// `write`, this file's description into the `datapackage.json` beside
@@ -433,9 +432,8 @@ pub enum Command {
     /// it, the cursor typing in its first heading (Feature #276). `rows`
     /// counts the heading; the rule row is not a row.
     NewTable { rows: usize, columns: usize },
-    /// `:table-detail [on|off]` — the panel; `None` toggles.
+    /// `:table-detail` — the panel.
     ShowDetail(Switch),
-    /// `:table-detail 40` — how wide it is.
     /// `:table-sort 1 a 2 d` — put the rows in order by these columns, in this
     /// order. Empty sorts by the column the cursor is in.
     SortTable(Vec<(usize, bool)>),
@@ -471,9 +469,10 @@ pub enum Command {
         from: Option<crate::table::Shape>,
     },
     /// `:view-numbers-fill` — whether the line-number band has a ground of its
-    /// own. `None` toggles.
+    /// own.
     SetNumberFill(Switch),
-    /// `:view-diff` — 行號旁邊那一格說不說 git 的改動（#55）。`None` 是輪替。
+    /// `:view-diff` — whether the cell beside the line numbers shows git's
+    /// changes (#55).
     SetDiffGutter(Switch),
     /// `:view-diagnostics hint|info|warning|error|off` — helix's end-of-line
     /// diagnostics. `None` asks (2026-11-04).
@@ -551,8 +550,8 @@ pub enum Command {
     /// `:encoding [name]` — the encoding the file is saved in (helix's
     /// command, vim's `:set fenc`). `None` asks (2026-11-04).
     Encoding(Option<String>),
-    /// `:reload-auto on|off` — re-read a **clean** buffer by itself when the
-    /// file changes on disk. `None` asks which it is (Feature #214).
+    /// `:reload-auto` — re-read a **clean** buffer by itself when the file
+    /// changes on disk (Feature #214).
     ReloadAuto(Switch),
     /// **把配置檔重讀一遍，推進來** —— 改完 `config.toml` 不必重啓（2026-09-23）。
     ReloadConfig,
@@ -560,7 +559,7 @@ pub enum Command {
     /// `config.toml`, or this project's `.yumete/config.toml` (helix's two
     /// commands, 2026-11-06).
     ConfigOpen { workspace: bool },
-    /// `:readonly on|off` — lock this buffer against editing. `None` asks
+    /// `:readonly` — lock this buffer against editing, or unlock it
     /// (Feature #213).
     SetReadonly(Switch),
     /// `:yume-builtin` — use the 碼表 in the binary, whatever is installed.
@@ -598,11 +597,10 @@ pub enum Command {
     /// layout 和 inline-preedit」）。從前這兩件事焊在一個 `bare` 裏，於是「有面
     /// 板 ＋ 正文裏站着首選」這個組合按不出來。
     YumeInlinePreedit(Option<String>),
-    /// `:theme-fill [on|off]` — whether a 品色 run also gets a ground.
+    /// `:theme-fill` — whether a 品色 run also gets a ground.
     ///
     /// Off: the backtick and the `>` are drawn already, so the run's extent is
-    /// on the page and a ground behind it says it a second time. `None`
-    /// toggles.
+    /// on the page and a ground behind it says it a second time.
     ThemeFill(Switch),
     /// **`:rules 80 100 120`：在那幾欄上鋪一道底紋**（#424，2026-09-30）。
     ///
@@ -618,20 +616,20 @@ pub enum Command {
     /// 宇浩's own front ends ship **6**, and a reader who knows where 「第七個
     /// 候選」 is on one of them should find it in the same place here.
     YumeMenuSize(Option<usize>),
-    /// `:yume-autocompletion [on|off]` — 輸入預測: whether a code that is not
-    /// finished is answered with the candidates that would finish it. `None`
-    /// toggles.
+    /// `:yume-autocompletion` — 輸入預測: whether a code that is not
+    /// finished is answered with the candidates that would finish it.
     YumeAutocompletion(Switch),
-    /// `:yume on` / `:yume abc` / `:yume off` — which of the three states the
-    /// input method is in (#290).
+    /// `:yume` — yume takes the keyboard, or hands it back (#290). Which of
+    /// the two is the front end's to say: only it knows whether yume holds
+    /// the keys now, so the core asks it to turn round (`lang:toggle`, the
+    /// request `Space z z` sends).
     ///
-    /// **Two of them are yume holding the keyboard** and one is not, and the
-    /// difference is not cosmetic: the terminal flag that makes a bare Shift
-    /// visible is the same flag that stops the *system's* input method from
-    /// composing, so it can be held exactly while yume has the keys.
-    /// `on` also loads the 碼表 when it has not been loaded, which is the
-    /// whole of starting to write in Chinese.
-    YumeLanguage(Engagement),
+    /// **Two of the three [`Engagement`] states are yume holding the
+    /// keyboard** and one is not, and the difference is not cosmetic: the
+    /// terminal flag that makes a bare Shift visible is the same flag that
+    /// stops the *system's* input method from composing, so it can be held
+    /// exactly while yume has the keys.
+    YumeToggle,
     /// `:yume-installed` — the 碼表 the *system* has, which is `builtin`'s
     /// other half: one binary, two tables, and a way back from either.
     InstalledScheme,
@@ -742,8 +740,8 @@ pub enum Command {
     /// `:ruby` — open Ruby mode on the group or selection at the cursor
     /// (Feature #65).
     Ruby,
-    /// `:ruby <dialect> [off]` — one spelling of a reading, added to or taken
-    /// from the set being laid out.
+    /// `:ruby-html` / `:ruby-typst` — one spelling of a reading, added to or
+    /// taken from the set being laid out.
     ///
     /// **An override, not a level.** The three level words say how much of the
     /// reading dimension is drawn; this says *which spelling*, and naming one
@@ -1077,8 +1075,8 @@ impl ShotFormat {
 /// One parameter a command takes, in the order it is typed (#368).
 ///
 /// **A command's name is one word and its parameters follow it**, the way a
-/// function's name is one word and its arguments follow it — `:view-wrap on`
-/// is `view_wrap(on)`. The tree this replaced could not say that: `:view-wrap`
+/// function's name is one word and its arguments follow it — `:view-wrap-width
+/// 40` is `view_wrap_width(40)`. The tree this replaced could not say that: `:view-wrap`
 /// and `:write-all` were the same shape as `:write 第三章.md`, so a word list
 /// that swallowed a path had to be spelled `Args::PathOr` and 中文 file names
 /// were nearly lost to it (#225).
@@ -1098,9 +1096,9 @@ pub enum Param {
     /// One of these words, **or anything else** — `or` is the placeholder to
     /// show for the anything.
     ///
-    /// Not a mixture for its own sake: `:view-wrap` takes `on｜off｜0` and it
-    /// also takes a measure, and a reader who cannot see the three words has
-    /// to be told them. This is what `Args::PathOr` was, said once for every
+    /// Not a mixture for its own sake: `:view-wrap-width` takes `0` and it
+    /// also takes a measure, and a reader who cannot see the word has to be
+    /// told it. This is what `Args::PathOr` was, said once for every
     /// command that needs it rather than once for `:write`.
     WordsOr {
         of: &'static [Word],
@@ -1173,7 +1171,7 @@ impl Param {
 ///
 /// Handed to [`Entry::build`], which is the **only** place a command's meaning
 /// is written down. What a parameter may be is declared once, checked once,
-/// and refused once — so `:view-wrap sideways` is answered in the same words
+/// and refused once — so `:view-wrap-width sideways` is answered in the same words
 /// as `:render sideways`, which forty-four hand-written arms never managed.
 pub struct Parsed<'a> {
     /// The command's own name, as the table spells it.
@@ -1363,11 +1361,13 @@ impl Need {
     }
 }
 
-/// **What a switch was asked for** — one answer for all twenty-three of them.
+/// **What a switch was asked for.**
 ///
-/// 「裸的報告，帶參數的纔設」(2026-10-09 定). A bare `:view-focus` is a
-/// *question*; `on` and `off` are answers; `toggle` is 「I am not saying which,
-/// turn it round」.
+/// **A command without an argument toggles; a command that takes an argument
+/// reports its state when typed bare** (2026-11-07). So most switches are
+/// plain toggles now, built with [`Switch::Flip`] and no words at all, and
+/// [`setting`] is the one way to name a state (the session's kept view). The
+/// few that still take `on｜off｜toggle` read a bare command as a *question*.
 ///
 /// Warning: **this used to be `Option<bool>`, and that is one state short** — so the
 /// twenty-three of them each invented the missing one. An audit on 2026-10-19
@@ -1430,6 +1430,38 @@ fn switched(p: &Parsed) -> Switch {
         Some("toggle") => Switch::Flip,
         Some(word) => Switch::To(word == "on"),
     }
+}
+
+/// **A kept view line, `name on｜off`, as the command that sets it** (2026-11-07).
+///
+/// The switches below are plain toggles on the command line, and a toggle
+/// cannot say which state it wants. The session keeps how the page looked as
+/// lines (`view-focus on`), and those are replayed onto a page whose state is
+/// not known in advance — so they are read here, by the replay alone, not by
+/// [`parse`]. Only the switches a kept view writes; `None` for any other
+/// line.
+pub fn setting(line: &str) -> Option<Command> {
+    let line = line.trim().trim_start_matches(':');
+    let (name, word) = line.split_once(' ')?;
+    let to = Switch::To(match word.trim() {
+        "on" => true,
+        "off" => false,
+        _ => return None,
+    });
+    Some(match name {
+        "view-sentence" => Command::SetSentences(to),
+        "view-hanging" => Command::SetHanging(to),
+        "view-numbers-fill" => Command::SetNumberFill(to),
+        "view-typewriter" => Command::SetTypewriter(to),
+        "view-focus" => Command::SetFocus(to),
+        "view-meter" => Command::SetMeter(to),
+        "view-diff" => Command::SetDiffGutter(to),
+        "view-punct" => Command::SetNote(to),
+        "view-code" => Command::SetCode(to),
+        "view-wrap" => Command::SetSoftWrap(to),
+        "theme-fill" => Command::ThemeFill(to),
+        _ => return None,
+    })
 }
 
 /// A subcommand of this command, written with a space instead of a hyphen.
@@ -2155,9 +2187,8 @@ const RENDER: &[Word] = &[
     },
 ];
 
-/// What `:view-wrap` takes.
-/// `:view-wrap-vertical` 的那一個詞。没有 `on`/`off`——軟折行是橫排的事。
-const ZONG_WRAP: &[Word] = &[Word {
+/// `:view-wrap-height`'s one word: `0` follows the window.
+const WRAP_HEIGHT: &[Word] = &[Word {
     name: "0",
     help: "cmd.wrap.zong-0",
     needs: &[],
@@ -2170,23 +2201,12 @@ const LINE_NUMBER_WORDS: &[Word] = &[
     Word { name: "none", help: "label.line-numbers.none", needs: &[] },
 ];
 
-const WRAP: &[Word] = &[
-    Word {
-        name: "on",
-        help: "cmd.wrap.on",
-        needs: &[],
-    },
-    Word {
-        name: "off",
-        help: "cmd.wrap.off",
-        needs: &[],
-    },
-    Word {
-        name: "0",
-        help: "cmd.wrap.0",
-        needs: &[],
-    },
-];
+/// `:view-wrap-width`'s one word: `0` follows the window.
+const WRAP_WIDTH: &[Word] = &[Word {
+    name: "0",
+    help: "cmd.wrap.0",
+    needs: &[],
+}];
 
 /// The input schemes yume ships with.
 /// The three 上屏方式 — *when* a finished code goes to the page.
@@ -2202,11 +2222,6 @@ const WRAP: &[Word] = &[
 /// 字母——而那一根由 Shift 管（`press_modifier`），和「挂没挂上」是兩件事。一句
 /// 命令同時動兩根軸，於是 `:y abc` 既是「開」又是「別出中文」，說不清它關掉了什麼。
 /// 原話：「两者是解耦的，所以 :yume 中应该只有 on off 两个选项（引擎开关）」。
-const ENGAGEMENT: &[Word] = &[
-    Word { name: "on", help: "cmd.yume.on", needs: &[] },
-    Word { name: "off", help: "cmd.yume.off", needs: &[] },
-];
-
 /// `:yume-annotation`'s words: off, the next, and yume's two modes. A mode
 /// the config adds is typed by name.
 const ANNOTATIONS: &[Word] = &[
@@ -3206,17 +3221,17 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.reload.auto",
         needs: &[],
-        params: &[Param::Words { of: SWITCH, default: None }],
+        params: &[],
         build: Some(|p| {
             // The bang answers 「throw this buffer's changes away」, which is
-            // not a question `auto` asks — so `:reload-auto! on` is a typo,
+            // not a question `auto` asks — so `:reload-auto!` is a typo,
             // not a setting, and saying so beats obeying half of it.
             match p.force {
                 true => Err(CommandError::InvalidArgument {
                     command: "reload-auto",
                     value: "!".to_string(),
                 }),
-                false => Ok(Command::ReloadAuto(switched(p))),
+                false => Ok(Command::ReloadAuto(Switch::Flip)),
             }
         }),
     },
@@ -3226,11 +3241,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["ro"],
         help: "cmd.commands.readonly",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetReadonly(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetReadonly(Switch::Flip))),
     },
     Entry {
         name: "goto",
@@ -3979,8 +3991,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.theme-fill",
         needs: &[],
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| Ok(Command::ThemeFill(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::ThemeFill(Switch::Flip))),
     },
     Entry {
         name: "shot",
@@ -4035,17 +4047,11 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["y"],
         help: "cmd.commands.yume",
         needs: &[],
-        params: &[Param::Words { of: ENGAGEMENT, default: Some("on") }],
-        build: Some(|p| {
-            // **The bare word turns it on** (#368). It used to report which
-            // 靈明 was answering, which `:yume-which` says better; 「開中文」
-            // is what a hand reaching for this command nearly always means,
-            // and `:y` is then the whole of it.
-            Ok(Command::YumeLanguage(match p.need(0)? {
-                "on" => Engagement::Chinese,
-                _ => Engagement::Off,
-            }))
-        }),
+        params: &[],
+        // **A toggle with no words** (2026-11-07): a command without an
+        // argument flips. Turning on goes straight to 中文, as `Space z z`
+        // does; 中文 or ABC is the lone Shift's.
+        build: Some(|_| Ok(Command::YumeToggle)),
     },
     Entry {
         name: "yume-where",
@@ -4192,8 +4198,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.yume.autocompletion",
         needs: &[Need::Scheme],
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| Ok(Command::YumeAutocompletion(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::YumeAutocompletion(Switch::Flip))),
     },
     Entry {
         name: "yume-installed",
@@ -4317,31 +4323,43 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.wrap",
         needs: &[],
+        // **A toggle with no words** (2026-11-07); the width it used to take
+        // is `:view-wrap-width`'s.
+        params: &[],
+        build: Some(|_| Ok(Command::SetSoftWrap(Switch::Flip))),
+    },
+    Entry {
+        name: "view-wrap-width",
+        aliases: &[],
+        help: "cmd.view.wrap-width",
+        needs: &[],
         params: &[Param::WordsOr {
-            of: WRAP,
-            default: Some("on"),
+            of: WRAP_WIDTH,
+            default: None,
             or: "<幾欄>",
         }],
-        build: Some(|p| match p.need(0)? {
-            "on" => Ok(Command::SetSoftWrap(true)),
-            "off" => Ok(Command::SetSoftWrap(false)),
-            "0" => Ok(Command::SetMeasure(None)),
-            _ => Ok(Command::SetMeasure(Some(p.number(0)?))),
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::SetMeasure(None)),
+            Some("0") => Ok(Command::SetMeasure(Some(None))),
+            Some(_) => Ok(Command::SetMeasure(Some(Some(p.number(0)?)))),
         }),
     },
     Entry {
-        name: "view-wrap-vertical",
+        // Was `:view-wrap-vertical` (renamed 2026-11-07, no alias): the
+        // horizontal one is a width, this one a height.
+        name: "view-wrap-height",
         aliases: &[],
-        help: "cmd.view.wrap-vertical",
+        help: "cmd.view.wrap-height",
         needs: &[],
         params: &[Param::WordsOr {
-            of: ZONG_WRAP,
-            default: Some("0"),
+            of: WRAP_HEIGHT,
+            default: None,
             or: "<幾字>",
         }],
-        build: Some(|p| match p.need(0)? {
-            "0" => Ok(Command::SetZongMeasure(None)),
-            _ => Ok(Command::SetZongMeasure(Some(p.number(0)?))),
+        build: Some(|p| match p.arg(0) {
+            None => Ok(Command::SetZongMeasure(None)),
+            Some("0") => Ok(Command::SetZongMeasure(Some(None))),
+            Some(_) => Ok(Command::SetZongMeasure(Some(Some(p.number(0)?)))),
         }),
     },
     Entry {
@@ -4403,22 +4421,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.sentence",
         needs: &[Need::Vertical],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetSentences(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetSentences(Switch::Flip))),
     },
     Entry {
         name: "view-hanging",
         aliases: &[],
         help: "cmd.view.hanging",
         needs: &[Need::Vertical, Need::Margin],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetHanging(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetHanging(Switch::Flip))),
     },
     Entry {
         // `:view-numbers-fill` on its own said nothing about *what* of the numbers
@@ -4427,11 +4439,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.numbers.fill",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetNumberFill(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetNumberFill(Switch::Flip))),
     },
     Entry {
         name: "view-diagnostics",
@@ -4449,44 +4458,32 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.diff",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetDiffGutter(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetDiffGutter(Switch::Flip))),
     },
     Entry {
         name: "view-typewriter",
         aliases: &[],
         help: "cmd.view.typewriter",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetTypewriter(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetTypewriter(Switch::Flip))),
     },
     Entry {
         name: "view-focus",
         aliases: &[],
         help: "cmd.view.focus",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetFocus(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetFocus(Switch::Flip))),
     },
     Entry {
         name: "view-meter",
         aliases: &[],
         help: "cmd.view.meter",
         needs: &[Need::Margin],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetMeter(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetMeter(Switch::Flip))),
     },
     Entry {
         // Was `:note`, which was never about footnotes (§5.2.3 ④).
@@ -4494,28 +4491,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.punct",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetNote(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetNote(Switch::Flip))),
     },
     Entry {
-        // The bare word **reports** — the shape `:view-hud` and `:render`
-        // have. With a switch there are only two states, so a third spelling
-        // of `on` is worth less than 「which am I on, and why is this block
-        // not coloured」 (2026-09-20).
         name: "view-code",
         aliases: &[],
         help: "cmd.view.code",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| {
-            Ok(Command::SetCode(switched(p)))
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::SetCode(Switch::Flip))),
     },
     Entry {
         // **一行長過多少列就不上色**（2026-10-08 定）。vim 的 `synmaxcol`，同數
@@ -5131,36 +5116,24 @@ pub const COMMANDS: &[Entry] = &[
         // Warning: **`<寬>` 那個參數没了**（2026-09-26）：寬度歸側欄，面板說不上話
         // （原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
         // 要寬要窄按 `w`，三檔。
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| {
-            Ok(match p.arg(0) {
-                Some("off") => Command::ShowDetail(Switch::To(false)),
-                Some("on") => Command::ShowDetail(Switch::To(true)),
-                _ => Command::ShowDetail(switched(p)),
-            })
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::ShowDetail(Switch::Flip))),
     },
     Entry {
         name: "table-numbers",
         aliases: &[],
         help: "cmd.table.numbers",
         needs: &[Need::Table],
-        // **裸的報告，帶參數的纔設**（2026-10-09 作者定，三個表格開關一起）。從前
-        // `default: Some("on")` 讓裸形永遠報「欄號：開」——問不出它現在是哪一種。
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| Ok(Command::SetTableNumbers(switched(p)))),
+        params: &[],
+        build: Some(|_| Ok(Command::SetTableNumbers(Switch::Flip))),
     },
     Entry {
         name: "table-header",
         aliases: &[],
         help: "cmd.table.header",
         needs: &[Need::Table],
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| {
-            // 「這一行是欄名還是資料」 — on its own it flips, because that is
-            // the question a 碼表 asks once and never again (#217).
-            Ok(Command::SetTableHeader(switched(p)))
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::SetTableHeader(Switch::Flip))),
     },
     Entry {
         name: "table-schema",
@@ -5615,20 +5588,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.ruby.html",
         needs: &[],
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| {
-            Ok(Command::RenderRuby { dialect: Dialect::Html, on: switched(p) })
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::RenderRuby { dialect: Dialect::Html, on: Switch::Flip })),
     },
     Entry {
         name: "ruby-typst",
         aliases: &[],
         help: "cmd.ruby.typst",
         needs: &[],
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| {
-            Ok(Command::RenderRuby { dialect: Dialect::Typst, on: switched(p) })
-        }),
+        params: &[],
+        build: Some(|_| Ok(Command::RenderRuby { dialect: Dialect::Typst, on: Switch::Flip })),
     },
     Entry {
         name: "ruby-format",
@@ -5717,6 +5686,7 @@ const RENAMED: &[(&str, &str)] = &[
     ("markup", "render"),
     ("note", "view-punct"),
     ("nowrap", "view-wrap"),
+    ("view-wrap-vertical", "view-wrap-height"),
     // **The four that said which side** (2026-10-20). Where a panel lives is
     // yumete's to decide now, so `:panel-left` has nothing to point at but
     // the command that opens the thing.
@@ -6441,7 +6411,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     // 一個詞——`split_whitespace` 自己就不數它，於是 `:ruby ` 說的是裸 `:ruby`
     // 的事，`:ruby off` 纔說 `off` 的事。
     //
-    // 參數不是一張詞表的（`:view-wrap 10` 那個數目）就停下來，說命令自己的事：
+    // 參數不是一張詞表的（`:view-wrap-width 10` 那個數目）就停下來，說命令自己的事：
     // 那時候單子上一條都配不中，而那一句仍舊是按下 Enter 會發生的事。
     for (at, word) in line.split_whitespace().skip(1).enumerate() {
         let Some(param) = e.params.get(at) else { break };
@@ -6455,7 +6425,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
                 said.spelt = None;
             }
             // Warning: **`WordsOr` 的詞表配不中不是錯**（2026-10-09 審出來的）。那一種
-            // 參數的全部意思就是「詞表之外還收別的」——`:view-wrap 40` 的 40、
+            // 參數的全部意思就是「詞表之外還收別的」——`:view-wrap-width 40` 的 40、
             // `:indent 4` 的 4、`:theme 某個名字`——配不中就落到命令自己的解析器上。
             // 上面那一段的本意寫着「參數不是一張詞表的就停下來」，可 `Param::words()`
             // 對 `Words` 和 `WordsOr` 都交得出一張表，於是這一枝照樣走到了：面板上
@@ -7034,7 +7004,7 @@ mod tests {
                 paths.push(entry.name.to_string());
             }
         }
-        assert!(paths.len() > 8, "the walk found almost nothing: {paths:?}");
+        assert!(!paths.is_empty(), "the walk found nothing");
 
         for path in &paths {
             let on = parse(&format!(":{path} on"));
@@ -7203,28 +7173,13 @@ mod tests {
         // the editor's many parts it belonged to, and `:scheme` even less.
         assert_eq!(parse(":chaifen"), Err(CommandError::Unknown("chaifen".into())));
         assert_eq!(parse(":scheme x"), Err(CommandError::Unknown("scheme".into())));
-        // **On its own it turns it on** (#368). It used to be the question
-        // 「which one is answering」, which `:yume-which` asks better; 「開中文」
-        // is what a hand reaching for this command nearly always means.
-        assert_eq!(
-            parse(":yume"),
-            Ok(Command::YumeLanguage(Engagement::Chinese))
-        );
+        // **A toggle with no words** (2026-11-07): takes the keyboard or
+        // hands it back, and `on`/`off` are not words it takes.
+        assert_eq!(parse(":yume"), Ok(Command::YumeToggle));
         assert_eq!(parse(":yume-which"), Ok(Command::YumeStatus));
-        assert_eq!(
-            parse(":yume on"),
-            Ok(Command::YumeLanguage(Engagement::Chinese))
-        );
-        // **`abc` 2026-10-10 拿掉了**：它動的是另一根軸（引擎挂着而打字母），
-        // 那一根歸 Shift。一句命令同時動兩根，說不清它關掉了什麼。
-        assert_eq!(
-            parse(":yume abc"),
-            Err(CommandError::InvalidArgument {
-                command: "yume",
-                value: "abc".into()
-            })
-        );
-        assert_eq!(parse(":yume off"), Ok(Command::YumeLanguage(Engagement::Off)));
+        for word in ["on", "off", "abc"] {
+            assert!(parse(&format!(":yume {word}")).is_err(), "{word}");
+        }
         assert_eq!(parse(":yume-installed"), Ok(Command::InstalledScheme));
         assert_eq!(parse(":yume-builtin"), Ok(Command::BuiltinScheme));
         assert_eq!(parse(":yume-b"), Ok(Command::BuiltinScheme));
@@ -7656,7 +7611,7 @@ mod tests {
             (":theme mode", "theme", "mode"),
             (":indent tab", "indent", "tab"),
             (":pipe to wc -l", "pipe", "to"),
-            (":view-wrap vertical", "view-wrap", "vertical"),
+            (":view-wrap width 40", "view-wrap", "width"),
         ] {
             match parse(line) {
                 Err(CommandError::MeansTheHyphenatedOne { command, word: got }) => {
@@ -7682,8 +7637,8 @@ mod tests {
         assert!(parse(":search src/main.rs").is_ok());
         assert!(parse(":theme 墨香").is_ok());
         assert!(parse(":indent basic").is_ok(), "a level `:indent` declares");
-        assert!(parse(":view-wrap 24").is_ok());
-        assert!(parse(":view-wrap off").is_ok());
+        assert!(parse(":view-wrap-width 24").is_ok());
+        assert!(parse(":view-wrap-height 0").is_ok());
         assert!(parse(":table 3x4").is_ok());
     }
 
@@ -7757,9 +7712,8 @@ mod tests {
             Command::Theme { name: Some("solarized".into()), mood: None }
         );
         // And the ground behind 品色 is its own switch, off by default.
-        assert_eq!(parse(":theme-fill on"), Ok(Command::ThemeFill(Switch::To(true))));
-        assert_eq!(parse(":theme-fill"), Ok(Command::ThemeFill(Switch::Ask)));
-        assert_eq!(parse(":theme-fill toggle"), Ok(Command::ThemeFill(Switch::Flip)));
+        assert_eq!(parse(":theme-fill"), Ok(Command::ThemeFill(Switch::Flip)));
+        assert!(parse(":theme-fill on").is_err(), "a toggle takes no words");
     }
 
     /// What a menu row says, and what it leaves out (2026-09-10).
@@ -7785,7 +7739,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +19");
+        assert_eq!(row("", "view-"), ":view- +20");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
@@ -7956,11 +7910,11 @@ mod tests {
         // word of a command line, not only the words after it. And with the
         // family flattened, `y` still reaches the head rather than being torn
         // between it and the eight `yume-…` beside it (#368).
-        assert_eq!(parse(":y"), Ok(Command::YumeLanguage(Engagement::Chinese)));
+        assert_eq!(parse(":y"), Ok(Command::YumeToggle));
         // Warning: **`:yu` stopped working on 2026-10-06**, when `:yuhao` arrived and
         // made that prefix touch two commands. `:y` goes on reaching this one
         // because it is now a *declared* alias, and an alias beats a prefix.
-        assert_eq!(parse(":yum"), Ok(Command::YumeLanguage(Engagement::Chinese)));
+        assert_eq!(parse(":yum"), Ok(Command::YumeToggle));
         // `:ta` again: `:target` took the two-letter prefix away when it
         // arrived, and gave it back when the fold put it under `:count`
         // (§5.2.3 ③). Ten abbreviations got shorter that way.
@@ -8126,14 +8080,14 @@ mod tests {
         // A parent command is not a mechanism of its own — its subcommands are
         // simply the words it takes, and they go as deep as they like.
         assert_eq!(words("ruby-render "), ["off", "basic", "full"]);
-        assert_eq!(words("ruby-html "), ["on", "off", "toggle"]);
+        assert!(words("ruby-html ").is_empty(), "a toggle takes no words");
         // `:view-pages-*` take a count and no words (2026-10-28).
         assert!(!words("view-pages-vertical ").contains(&"on"));
 
         // Where the word being completed starts, so a completion replaces it
         // and not the whole line.
         assert_eq!(complete_at("ruby ht").0, 5);
-        assert_eq!(complete_at("ruby-html o").0, 10);
+        assert_eq!(complete_at("view-preview o").0, 13);
         // One word now, so the completion replaces the whole of it (#368).
         assert_eq!(complete_at("view-margin").0, 0);
 

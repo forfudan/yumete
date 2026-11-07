@@ -818,10 +818,10 @@ en = "open the Yuhao input method website"
 find = "宇浩 官網 官网 輸入法 输入法 website"
 
 [[message]]
-# : 命令選單裏 yume 那一項的説明(commands 組)
+# : 命令選單裏 yume 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.yume"
-zhs = "宇梦输入引擎开关：on 打开、off 关闭"
-en = "Yume input method: on or off"
+zhs = "宇梦输入引擎开关：接管键盘或交还系统"
+en = "Yume input method: take the keyboard or hand it back"
 find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin yo"
 
 [[message]]
@@ -1661,10 +1661,10 @@ en = "read this file as a table split on that delimiter, and remember it (tab, s
 find = "分隔符 分隔 delimiter separator tab space"
 
 [[message]]
-# : 命令選單裏 detail 那一項的説明(table 組)
+# : 命令選單裏 detail 那一項的説明(table 組)（草稿）
 key = "cmd.table.detail"
-zhs = "记录面板：开、关或指定宽度"
-en = "the record panel: on, off, or a width"
+zhs = "记录面板：显示或隐藏"
+en = "the record panel: show or hide it"
 find = "記錄 记录 數據 数据 詳情 详情 展開 展开 detail record"
 
 [[message]]
@@ -1947,17 +1947,24 @@ en = "typewriter: the cursor line stays centred"
 find = "打字機 打字机 居中 置中 centre center"
 
 [[message]]
-# : 命令選單裏 wrap 那一項的説明(view 組)
+# : 命令選單裏 wrap 那一項的説明(view 組)（草稿）
 key = "cmd.view.wrap"
-zhs = "自动换行；`:view-wrap 50` 设宽度，`off` 关闭"
-en = "soft wrap; `:view-wrap 50` sets the width, `off` turns it off"
+zhs = "自动换行开关；宽度用 `:view-wrap-width` 设"
+en = "soft wrap, on or off; `:view-wrap-width` sets the width"
 find = "折行 換行 换行 自動換行 自动换行 寬度 宽度 wrap width"
 
 [[message]]
-# 命令：:view-wrap-vertical —— 竖排一列寫幾個字
-key = "cmd.view.wrap-vertical"
-zhs = "竖排每列字数；`:view-wrap-vertical 30` 设长度，`0` 跟随窗口"
+# 命令：:view-wrap-height —— 竖排一列寫幾個字（草稿）
+key = "cmd.view.wrap-height"
+zhs = "竖排每列字数；`:view-wrap-height 30` 设长度，`0` 跟随窗口"
 en = "characters per vertical column; `0` follows the window"
+
+[[message]]
+# 命令：:view-wrap-width —— 橫排一行寫幾欄（草稿）
+key = "cmd.view.wrap-width"
+zhs = "正文宽度(列数)；`:view-wrap-width 50` 设宽度，`0` 跟随窗口"
+en = "text width in columns; `0` follows the window"
+find = "寬度 宽度 欄寬 栏宽 行寬 行宽 width measure"
 
 [[message]]
 # :which-wrap 收到不認得的字母
@@ -2149,28 +2156,16 @@ en = "word mark"
 find = "分詞 分词 標記 标记 著色 着色 mark"
 
 [[message]]
-# : 命令選單裏 0 那一項的説明(wrap 組)
+# :view-wrap-width 的 `0`（草稿）
 key = "cmd.wrap.0"
-zhs = "宽度跟随窗口(`:view-wrap 50` 固定为 50 列)"
-en = "use the window width (`:view-wrap 50` fixes it at 50)"
+zhs = "宽度跟随窗口(`:view-wrap-width 50` 固定为 50 列)"
+en = "use the window width (`:view-wrap-width 50` fixes it at 50)"
 find = "折行 換行 换行 寬度 宽度 窗口 width"
 
-[[message]]
-# : 命令選單裏 off 那一項的説明(wrap 組)
-key = "cmd.wrap.off"
-zhs = "不换行，超出右边"
-en = "no wrap; lines run off the edge"
-find = "折行 換行 换行 不折 關掉 关掉 off"
+
 
 [[message]]
-# : 命令選單裏 on 那一項的説明(wrap 組)
-key = "cmd.wrap.on"
-zhs = "过宽的段落自动换行"
-en = "wrap paragraphs wider than the window"
-find = "折行 換行 换行 自動 自动 on"
-
-[[message]]
-# 命令：:view-wrap-vertical 的 `0`
+# 命令：:view-wrap-height 的 `0`
 key = "cmd.wrap.zong-0"
 zhs = "跟随窗口高度"
 en = "follow the window height"
@@ -2266,19 +2261,7 @@ zhs = "每页候选数(1–9，默认 6)"
 en = "candidates per page (1-9, 6 by default)"
 find = "輸入法 输入法 候選 候选 面板 每頁 每页 menu size page"
 
-[[message]]
-# : 命令選單裏 off 那一項的説明(yume 組)
-key = "cmd.yume.off"
-zhs = "将键盘交还给系统(恢复系统输入法)"
-en = "hand the keyboard back to the system (its own input method works again)"
-find = "輸入法 输入法 關掉 关掉 交還 交还 system off"
 
-[[message]]
-# : 命令選單裏 on 那一項的説明(yume 組)
-key = "cmd.yume.on"
-zhs = "开始输入中文(未加载码表时自动加载)"
-en = "start typing Chinese (loading the table if needed)"
-find = "輸入法 输入法 中文 打字 on"
 
 [[message]]
 # : 命令選單裏 panel 那一項的説明(yume 組)

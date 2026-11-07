@@ -394,7 +394,7 @@ zhs = "竖线：第 {0} 列"
 en = "rules: column {0}"
 
 [[message]]
-# :view-sentence off——回到滿縱排
+# :view-sentence 關掉——回到滿縱排
 key = "sentence.off"
 zhs = "回到满纵(一纵写到底)"
 en = "back to full columns"
@@ -402,8 +402,8 @@ en = "back to full columns"
 [[message]]
 # :view-sentence——一句一縱
 key = "sentence.on"
-zhs = "一句一纵(文件未改动，:view-sentence off 恢复)"
-en = "one sentence per column (the file is untouched; :view-sentence off goes back)"
+zhs = "一句一纵(文件未改动，:view-sentence 恢复)"
+en = "one sentence per column (the file is untouched; :view-sentence goes back)"
 
 
 # ── 設置面板 ─────────────────────────────────────────────────────────
@@ -466,7 +466,7 @@ zhs = "自动换行：开"
 en = "soft wrap: on"
 
 [[message]]
-# :view-wrap on/off 用在竪排下
+# :view-wrap 用在竪排下（草稿）
 key = "wrap.vertical-has-no-wrap"
-zhs = "竖排不自动换行：一纵在窗口高度处断开。此项只用于横排(`:view-wrap 40` 两种都适用)"
-en = "vertical text does not soft-wrap: a column breaks at the window height. This setting is for horizontal text (`:view-wrap 40` applies to both)"
+zhs = "竖排不自动换行：一纵在窗口高度处断开。此项只用于横排(每纵字数用 `:view-wrap-height` 设)"
+en = "vertical text does not soft-wrap: a column breaks at the window height. This setting is for horizontal text (`:view-wrap-height` sets the column length)"

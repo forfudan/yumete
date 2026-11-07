@@ -84,10 +84,10 @@ h = { run = ":help", label = "Help Pages" }
 
 [keys.normal.space.u]
 label = "ui"
-D = { run = ":view-focus toggle", label = "Toggle Dimming" }
-z = { run = ":view-typewriter toggle", label = "Toggle Zen Mode" }
-G = { run = ":view-diff toggle", label = "Toggle Git Signs" }
-T = { run = ":view-code toggle", label = "Toggle Treesitter Highlight" }
+D = { run = ":view-focus", label = "Toggle Dimming" }
+z = { run = ":view-typewriter", label = "Toggle Zen Mode" }
+G = { run = ":view-diff", label = "Toggle Git Signs" }
+T = { run = ":view-code", label = "Toggle Treesitter Highlight" }
 L = { run = ":line-numbers relative", label = "Relative Numbers" }
 l = { run = ":line-numbers absolute", label = "Line Numbers" }
 

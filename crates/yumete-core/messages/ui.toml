@@ -836,7 +836,7 @@ zhs = "切开/"
 en = "split:"
 
 [[message]]
-# 狀態欄：這一份是只讀的(:readonly on，或磁盤上就不許寫)
+# 狀態欄：這一份是只讀的(:readonly，或磁盤上就不許寫)
 key = "ui.readonly-tag"
 zhs = " [只读]"
 en = " [read-only]"

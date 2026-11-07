@@ -98,20 +98,20 @@ fn the_mark_that_is_wrong_is_named_on_the_page() {
     assert!(!ed.notes());
     assert!(ed.drawn_on_line(0).is_empty());
 
-    ed.execute(":view-punct on").unwrap();
+    ed.execute(":view-punct").unwrap();
     assert!(ed.notes());
     // 他說 , 好 — the note stands *after* the comma, at the character it
     // should have been written as.
     assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
 
-    ed.execute(":view-punct off").unwrap();
+    ed.execute(":view-punct").unwrap();
     assert!(ed.drawn_on_line(0).is_empty());
 }
 
 #[test]
 fn a_page_that_got_its_marks_right_carries_no_notes() {
     let mut ed = typed("他說：「好。」\n");
-    ed.execute(":view-punct on").unwrap();
+    ed.execute(":view-punct").unwrap();
     assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
 }
 
@@ -121,7 +121,7 @@ fn a_note_is_a_note_and_not_a_character() {
     // that is not in the file. Walking right past the mark the note is
     // about lands on the file's own next character, and `x` deletes that.
     let mut ed = typed("他說,好\n");
-    ed.execute(":view-punct on").unwrap();
+    ed.execute(":view-punct").unwrap();
     assert_eq!(ed.drawn_on_line(0), vec![(3, "，".to_string())]);
     for _ in 0..3 {
         ed.on_key(Key::Char('l'));
@@ -135,7 +135,7 @@ fn a_note_is_a_note_and_not_a_character() {
 #[test]
 fn a_comma_inside_a_fence_is_code_and_is_left_alone() {
     let mut ed = typed("```rust\nlet a = (1,2);\n```\n他說,好\n");
-    ed.execute(":view-punct on").unwrap();
+    ed.execute(":view-punct").unwrap();
     assert!(ed.drawn_on_line(1).is_empty(), "{:?}", ed.drawn_on_line(1));
     assert_eq!(ed.drawn_on_line(3), vec![(3, "，".to_string())]);
 }
@@ -143,7 +143,7 @@ fn a_comma_inside_a_fence_is_code_and_is_left_alone() {
 #[test]
 fn render_off_asks_for_the_file_and_gets_the_file() {
     let mut ed = typed("他說,好\n");
-    ed.execute(":view-punct on").unwrap();
+    ed.execute(":view-punct").unwrap();
     assert!(!ed.drawn_on_line(0).is_empty());
     ed.execute(":render off").unwrap();
     assert!(ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
@@ -154,7 +154,7 @@ fn a_note_follows_the_line_as_it_is_written() {
     // The cache is a hash of the line, so an edit that fixes the mark
     // takes the note off the page without anybody clearing anything.
     let mut ed = typed("他說,好\n");
-    ed.execute(":view-punct on").unwrap();
+    ed.execute(":view-punct").unwrap();
     assert_eq!(ed.drawn_on_line(0).len(), 1);
     // Put the cursor on the comma and write the right mark over it.
     ed.on_key(Key::Char('l'));
@@ -2386,18 +2386,22 @@ fn ruby_rendering_is_set_per_dialect() {
     ed.execute(":ruby-render full").unwrap();
     assert!(ed.ruby().contains(Dialect::Html));
     ed.execute(":ruby-render basic").unwrap();
-    // 裸的問，不改（2026-10-19 作者定）：這一刻 HTML 是關着的，問完還是關着的。
+    // A plain toggle (2026-11-07): HTML is off here, and the bare word
+    // turns it on.
     ed.execute(":ruby-html").unwrap();
-    assert!(!ed.ruby().contains(Dialect::Html), "裸的只報告：{}", ed.status());
-    ed.execute(":ruby-html on").unwrap();
-    assert!(ed.ruby().contains(Dialect::Html));
+    assert!(ed.ruby().contains(Dialect::Html), "{}", ed.status());
 
     // Dialects add up rather than replacing one another: a document may mix
-    // them, so `:render-ruby-typst` does not turn HTML off.
-    ed.execute(":ruby-typst on").unwrap();
-    assert!(ed.ruby().contains(Dialect::Typst));
+    // them, so `:ruby-typst` turns only Typst round.
+    let typst = ed.ruby().contains(Dialect::Typst);
+    ed.execute(":ruby-typst").unwrap();
+    assert_eq!(ed.ruby().contains(Dialect::Typst), !typst);
     assert!(ed.ruby().contains(Dialect::Html));
-    ed.execute(":ruby-html off").unwrap();
+    if typst {
+        ed.execute(":ruby-typst").unwrap();
+    }
+    assert!(ed.ruby().contains(Dialect::Typst));
+    ed.execute(":ruby-html").unwrap();
     assert!(!ed.ruby().contains(Dialect::Html));
     assert!(ed.ruby().contains(Dialect::Typst));
 }
@@ -3639,20 +3643,20 @@ fn a_command_says_what_it_is_waiting_for() {
     // there was nowhere to find out why.
     let mut ed = Editor::new();
     ed.set_margin(yumete_cjk::Margin::Never);
-    ed.execute(":view-hanging on").unwrap();
+    ed.execute(":view-hanging").unwrap();
     assert!(!ed.hanging_punctuation(), "{}", ed.status());
     let said = ed.status().to_string();
     assert!(said.contains("never"), "{said}");
     assert!(said.contains('!'), "{said}");
 
     // …and the bang brings the prerequisites about, in one line.
-    ed.execute(":view-hanging! on").unwrap();
+    ed.execute(":view-hanging!").unwrap();
     assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
     assert!(ed.margin().shown());
     assert!(ed.hanging_punctuation(), "{}", ed.status());
 
     // A command whose needs are met says nothing about them.
-    ed.execute(":view-hanging off").unwrap();
+    ed.execute(":view-hanging").unwrap();
     assert!(!ed.hanging_punctuation());
     assert!(!ed.status().contains("需要"), "{}", ed.status());
 }
@@ -6568,7 +6572,7 @@ fn a_locked_session_does_not_export_either() {
 
     let mut ed = Editor::new();
     ed.execute(&format!(":open {}", path.display())).unwrap();
-    ed.execute(":readonly on").unwrap();
+    ed.execute(":readonly").unwrap();
     ed.execute(":export! html").unwrap();
     assert_eq!(
         std::fs::read_to_string(&bystander).unwrap(),
@@ -6578,7 +6582,7 @@ fn a_locked_session_does_not_export_either() {
     assert_eq!(ed.status(), say!("readonly.refused"));
 
     // 解開就照常導出。
-    ed.execute(":readonly off").unwrap();
+    ed.execute(":readonly").unwrap();
     ed.execute(":export! html").unwrap();
     assert!(std::fs::read_to_string(&bystander).unwrap().contains("第一章"));
 
@@ -9149,7 +9153,7 @@ fn a_locked_buffer_refuses_every_way_in() {
     );
 
     // …and unlocking gives it all back.
-    assert!(ed.execute("readonly off").is_ok());
+    assert!(ed.execute("readonly").is_ok());
     press(&mut ed, "ggi");
     assert_eq!(ed.mode(), Mode::Insert, "unlocked, the door opens again");
     ed.on_key(Key::Char('甲'));
@@ -9180,27 +9184,26 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
     // reason.
     assert!(ed.execute("vertical").is_ok());
     assert!(ed.execute("view-margin dense").is_ok());
-    for _ in 0..2 {
-        assert!(ed.execute("view-hanging off").is_ok());
-        assert!(!ed.hanging, "`:view-hanging off` turned it on: {}", ed.status());
-    }
-    for _ in 0..2 {
-        assert!(ed.execute("view-hanging on").is_ok());
-        assert!(ed.hanging, "`:view-hanging on` turned it off: {}", ed.status());
-    }
-    // **The bare word asks** (2026-10-19 作者定): it leaves the setting where
-    // it is, and `toggle` is the word for 「the other one」. `of` is `off`'s
-    // shortest spelling — the one the menu prints.
-    assert!(ed.hanging, "set up by the loop above");
+    // **A plain toggle** (2026-11-07): each bare word turns it round, and the
+    // status line says which way it went.
+    assert!(!ed.hanging);
     assert!(ed.execute("view-hanging").is_ok());
-    assert!(ed.hanging, "裸的只報告：{}", ed.status());
-    assert!(ed.execute("view-hanging toggle").is_ok());
-    assert!(!ed.hanging, "`toggle` 纔翻：{}", ed.status());
-    assert!(ed.execute("view-hanging toggle").is_ok());
-    assert!(ed.hanging);
-    assert!(ed.execute("view-hanging on").is_ok());
-    assert!(ed.execute("view-hanging of").is_ok());
-    assert!(!ed.hanging, "`:view-hanging of` is what the menu offers");
+    assert!(ed.hanging, "{}", ed.status());
+    assert!(ed.execute("view-hanging").is_ok());
+    assert!(!ed.hanging, "{}", ed.status());
+    // The words are gone, refused rather than read as a flip.
+    for word in ["on", "off", "toggle"] {
+        assert!(ed.execute(&format!("view-hanging {word}")).is_err(), "{word}");
+        assert!(!ed.hanging, "`{word}` moved it");
+    }
+    // A kept view names a state, and the replay alone reads it: twice is
+    // still the one state.
+    for _ in 0..2 {
+        ed.execute_quietly(":view-hanging on");
+        assert!(ed.hanging);
+    }
+    ed.execute_quietly(":view-hanging off");
+    assert!(!ed.hanging);
 }
 
 #[test]
@@ -9210,7 +9213,7 @@ fn the_markdown_grid_keys_say_so_on_a_locked_file() {
     // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
     ed.on_key(Key::Enter);
     ed.goto_line(3);
-    assert!(ed.execute("readonly on").is_ok());
+    assert!(ed.execute("readonly").is_ok());
     let before = ed.current_buffer().text();
     for keys in [" tr", " td", " tR", " tc", " tD"] {
         press(&mut ed, keys);
@@ -9285,7 +9288,7 @@ fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
     assert!(swap.exists(), "and the draft is still there to be recovered");
 
     // Unlock, and it is all still waiting.
-    assert!(ed.execute("readonly off").is_ok());
+    assert!(ed.execute("readonly").is_ok());
     ed.execute(":recover").unwrap();
     ed.on_key(Key::Char('y'));
     ed.on_key(Key::Char('y'));
@@ -9294,18 +9297,21 @@ fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// #213: `:readonly` with no word asks rather than sets.
+/// #213: `:readonly` is a plain toggle (2026-11-07), and says which way it
+/// went.
 #[test]
 fn readonly_says_which_way_it_is() {
     let mut ed = Editor::new();
     assert!(ed.execute("readonly").is_ok());
-    assert!(ed.status().contains("off"), "{}", ed.status());
-    assert!(ed.execute("ro on").is_ok());
     assert!(ed.is_readonly());
-    assert!(ed.execute("readonly").is_ok());
     assert!(ed.status().contains("on"), "{}", ed.status());
-    // A word that is neither is a mistake, not a toggle.
-    assert!(ed.execute("readonly 也許").is_err());
+    assert!(ed.execute("ro").is_ok());
+    assert!(!ed.is_readonly());
+    assert!(ed.status().contains("off"), "{}", ed.status());
+    // A word is a mistake, not a setting.
+    for word in ["on", "off", "也許"] {
+        assert!(ed.execute(&format!("readonly {word}")).is_err(), "{word}");
+    }
 }
 
 /// §5.2.3 ⑤: a refused edit does not move the state around the text.
@@ -9462,12 +9468,12 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     assert!(ed.status().contains("被外部修改"), "{}", ed.status());
 
     // 關得掉，關了就真的不動。
-    assert!(ed.execute("reload-auto off").is_ok());
+    assert!(ed.execute("reload-auto").is_ok());
     std::fs::write(&file, "第三版\n").unwrap();
     ed.disk_tick();
     assert_eq!(ed.current_buffer().text(), "第二版\n", "off, so it leaves it alone");
 
-    assert!(ed.execute("reload-auto on").is_ok());
+    assert!(ed.execute("reload-auto").is_ok());
     ed.disk_tick();
     assert_eq!(ed.current_buffer().text(), "第三版\n", "clean, so it reads");
     // 找「被外部修改」而不是整句：這一句是手改的，三種語言各一份，而
@@ -9479,9 +9485,11 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     ed.on_key(Key::Char('我'));
     ed.on_key(Key::Esc);
     std::fs::write(&file, "第四版\n").unwrap();
-    // Re-asking for the setting also resets the clock, which is what a
+    // Turning it off and on again also resets the clock, which is what a
     // writer who just turned it on means by turning it on.
-    assert!(ed.execute("reload-auto on").is_ok());
+    assert!(ed.execute("reload-auto").is_ok());
+    assert!(ed.execute("reload-auto").is_ok());
+    assert!(ed.reload_auto());
     ed.disk_tick();
     assert!(
         ed.current_buffer().text().contains('我'),
@@ -9493,10 +9501,10 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     // that is the same in all of them.
     assert!(ed.status().contains(":reload!"), "{}", ed.status());
 
-    assert!(ed.execute("reload-auto off").is_ok());
-    assert!(!ed.reload_auto());
     assert!(ed.execute("reload-auto").is_ok());
+    assert!(!ed.reload_auto());
     assert!(ed.status().contains("off"), "{}", ed.status());
+    assert!(ed.execute("reload-auto on").is_err(), "a toggle takes no words");
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -12555,8 +12563,8 @@ fn a_measure_is_a_width_to_write_to_and_a_column_has_its_own() {
     ed.set_wrap_width(120);
     assert_eq!(ed.wrap_width(), Some(120), "the window, to begin with");
 
-    // `:view-wrap 50` is a measure: rows fold at fifty however wide the window.
-    ed.execute("view-wrap 50").unwrap();
+    // `:view-wrap-width 50` is a measure: rows fold at fifty however wide the window.
+    ed.execute("view-wrap-width 50").unwrap();
     assert_eq!(ed.measure(), Some(50));
     ed.set_wrap_width(120);
     assert_eq!(ed.wrap_width(), Some(50));
@@ -12569,31 +12577,31 @@ fn a_measure_is_a_width_to_write_to_and_a_column_has_its_own() {
     // Setting one turns wrapping on, because fifty columns of text running
     // off the edge is not writing to a measure of fifty.
     ed.set_soft_wrap(false);
-    ed.execute("view-wrap 40").unwrap();
+    ed.execute("view-wrap-width 40").unwrap();
     assert!(ed.soft_wrap());
 
     // **竖排那一個是另一條命令，另一格數**（2026-10-09 作者定：「一个东西怎么能有
     // 两个命令……view-wrap 只在横排生效，view-wrap-vertical 只在竖排生效」）。從前
     // 這兩件事共用 `measure` 一格：橫排是行寬，一切到竖排同一個數就成了一列的長度。
     ed.execute("vertical").unwrap();
-    ed.execute("view-wrap-vertical 12").unwrap();
+    ed.execute("view-wrap-height 12").unwrap();
     assert_eq!(ed.zong_measure(), Some(12));
     assert_eq!(ed.measure(), Some(40), "橫排那一格一動没動");
-    ed.execute("view-wrap 20").unwrap();
+    ed.execute("view-wrap-width 20").unwrap();
     assert_eq!(ed.zong_measure(), Some(12), "橫排那條命令伸不進竖排");
 
     // 下界 8 兩頭同一個，比它窄會把一個全角字擠到自己那一行上。
-    ed.execute("view-wrap-vertical 2").unwrap();
+    ed.execute("view-wrap-height 2").unwrap();
     assert_eq!(ed.zong_measure(), Some(8), "夾到安全線上");
 
     // `0` 把窗口還回去。
-    ed.execute("view-wrap-vertical 0").unwrap();
+    ed.execute("view-wrap-height 0").unwrap();
     assert_eq!(ed.zong_measure(), None);
 
     // 平的 `:view-wrap` 照舊只是把折行打開，不動寬度。
     ed.execute("view-wrap").unwrap();
     assert_eq!(ed.measure(), Some(20), "`:view-wrap` is not `:view-wrap 0`");
-    ed.execute("view-wrap 0").unwrap();
+    ed.execute("view-wrap-width 0").unwrap();
     assert_eq!(ed.measure(), None);
     ed.set_wrap_width(120);
     assert_eq!(ed.wrap_width(), None, "vertical does not wrap");
@@ -12612,17 +12620,17 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
     ed.execute("vertical").unwrap();
     assert!(ed.soft_wrap(), "on, as it always is");
 
-    ed.execute("view-wrap off").unwrap();
+    ed.execute("view-wrap").unwrap();
     assert!(ed.soft_wrap(), "…and untouched: there was nothing to turn");
     assert!(ed.status().contains(&say!("wrap.vertical-has-no-wrap")), "{}", ed.status());
 
     // 一列幾個字是另一個問題，而且歸另一條命令（2026-10-09 起）。
-    ed.execute("view-wrap-vertical 12").unwrap();
+    ed.execute("view-wrap-height 12").unwrap();
     assert_eq!(ed.zong_measure(), Some(12));
 
     // Horizontally it works as it always did.
     ed.execute("horizontal").unwrap();
-    ed.execute("view-wrap off").unwrap();
+    ed.execute("view-wrap").unwrap();
     assert!(!ed.soft_wrap());
 }
 
@@ -15150,7 +15158,7 @@ fn a_readonly_run_cannot_throw_the_draft_away_either() {
 
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
-    ed.execute("readonly on").unwrap();
+    ed.execute("readonly").unwrap();
     // 離屏這一支不走 `announce_recovery`，`:recover` 擺的是同一問。
     ed.execute("recover").unwrap();
     assert!(ed.query().is_some(), "那一問該在：{}", ed.status());
@@ -15159,7 +15167,7 @@ fn a_readonly_run_cannot_throw_the_draft_away_either() {
     assert!(ed.status().contains("只讀"), "{}", ed.status());
 
     // 解開之後照舊刪得掉。
-    ed.execute("readonly off").unwrap();
+    ed.execute("readonly").unwrap();
     ed.execute("recover").unwrap();
     ed.answer_query(Key::Char('d'));
     assert!(!draft.exists(), "解開之後該刪得動");
@@ -15237,7 +15245,7 @@ fn committing_moves_head_so_the_gutter_catches_up() {
 
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
-    ed.execute("view-diff on").unwrap();
+    ed.execute("view-diff").unwrap();
     // 改一行（不存檔也算，改動條比的是緩衝區）。
     ed.goto_line(2);
     press(&mut ed, "A改\u{1b}");
@@ -21746,7 +21754,7 @@ fn forced_write_quit_all_keeps_what_it_could_not_save() {
     let mut ed = Editor::new();
     ed.open_file(&locked).unwrap();
     let _ = ed.buffers[0].insert(0, "改");
-    ed.execute(":readonly on").unwrap();
+    ed.execute(":readonly").unwrap();
     assert_eq!(ed.execute(":wqa!").unwrap(), CommandOutcome::Quit);
     assert_eq!(std::fs::read_to_string(&locked).unwrap(), "甲\n", "the lock held");
     let copy = ed.buffers[0].recovery_copy().expect("a copy was written");
@@ -22746,7 +22754,7 @@ fn a_reference_in_a_fence_is_offered_nothing() {
 
 
 /// A fence's body comes back in its grammar's runs; its fences, a language
-/// this build does not know, and `:view-code off` come back with none (#420).
+/// this build does not know, and `:view-code` (off) come back with none (#420).
 #[test]
 fn a_fence_is_coloured_by_its_own_grammar_and_nothing_else_is() {
     use crate::code::Token;
@@ -22772,7 +22780,7 @@ fn a_fence_is_coloured_by_its_own_grammar_and_nothing_else_is() {
 ///
 /// Parsing runs on every edit, so a pasted data file has a cap — but a cap
 /// that says nothing reads as a broken feature (「顏色到這裏就没了」).
-/// The bare `:view-code` reports, and that is where the answer lives.
+/// `:view-code` says so when it turns the colours on.
 ///
 /// Warning: **閘只剩給稿子裏貼的那一段**（#423，2026-09-30）。整份是代碼的檔走
 /// 另一條路——留樹、只查看得見的那一塊、改一個字走增量——多長都染得起，所以那
@@ -22808,21 +22816,21 @@ fn a_block_past_the_cap_keeps_one_colour_and_view_code_says_why() {
     ed.on_key(Key::Char('j'));
     ed.on_key(Key::Char('j'));
     ed.on_key(Key::Char('j'));
+    // A plain toggle (2026-11-07): off, then on again, and turning it on
+    // says why this block keeps one colour.
     ed.execute(":view-code").unwrap();
+    assert!(!ed.code_colours());
+    ed.execute(":view-code").unwrap();
+    assert!(ed.code_colours());
     let said = ed.status().to_string();
     assert!(said.contains("5100") || said.contains("5101"), "how long it is: {said}");
     assert!(said.contains("5000"), "and what the cap is: {said}");
-    // Warning: The bare word **reports**; it does not turn anything on or off.
-    assert!(ed.code_colours(), "a report is not a switch");
-    ed.execute(":view-code off").unwrap();
-    assert!(!ed.code_colours());
-    ed.execute(":view-code").unwrap();
-    assert!(!ed.code_colours(), "still off, and still a report");
 
     // A short one says nothing about length, and is coloured.
     let mut ed = typed("x = 1\n");
     ed.execute(":syntax python").unwrap();
-    ed.execute(":view-code on").unwrap();
+    ed.execute(":view-code").unwrap();
+    ed.execute(":view-code").unwrap();
     assert!(!ed.status().contains("5000"), "{}", ed.status());
     assert!(!tokens(&ed, 0).is_empty());
 }
@@ -26297,8 +26305,8 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
         ed.take_shell_request().map(|s| s.line)
     };
     assert_eq!(run(&mut ed, "!echo a"), Some("echo a".to_string()));
-    ed.execute(":view-focus on").unwrap();
-    press(&mut ed, ":view-focus off");
+    ed.execute(":view-focus").unwrap();
+    press(&mut ed, ":view-focus");
     ed.on_key(Key::Enter);
     assert_eq!(run(&mut ed, "pipe-after echo b"), Some("echo b".to_string()));
 
@@ -26332,7 +26340,7 @@ fn a_shell_line_has_its_label_ghost_history_and_bang() {
     press(&mut ed, ":");
     ed.on_key(Key::Ctrl('p'));
     ed.on_key(Key::Ctrl('p'));
-    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("view-focus off"));
+    assert_eq!(ed.prompt().map(|(_, t)| t.to_string()).as_deref(), Some("view-focus"));
     ed.on_key(Key::Esc);
 
     // `!` is the previous shell command, whichever verb ran it (2026-10-29),
@@ -29289,9 +29297,9 @@ fn the_word_force_belongs_to_the_argument_when_there_is_no_prerequisite() {
 
     // …而補前提那一路一個字都没變：橫排的頁面上，`force` 仍舊把竪排一併打開。
     let mut ed = typed("那年冬天。\n");
-    ed.execute("view-hanging on").unwrap();
+    ed.execute("view-hanging").unwrap();
     assert!(ed.status().contains('!'), "先報缺前提：{}", ed.status());
-    ed.execute("view-hanging! on").unwrap();
+    ed.execute("view-hanging!").unwrap();
     assert_eq!(ed.layout(), Layout::Vertical, "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -36829,7 +36837,7 @@ fn the_view_goes_sideways_with_wrapping_off() {
         ed.sel.head() - rope.line_to_char(rope.char_to_line(ed.sel.head()))
     };
     let mut ed = typed_vim(&text);
-    ed.execute(":view-wrap off").unwrap();
+    ed.execute(":view-wrap").unwrap();
     let run = |ed: &mut Editor, left: usize, keys: &str| {
         ed.note_sideways(left, 80);
         press(ed, keys);
@@ -36854,7 +36862,7 @@ fn the_view_goes_sideways_with_wrapping_off() {
     assert!(ed.pending == Pending::None);
 
     let mut ed = typed(&text);
-    ed.execute(":view-wrap off").unwrap();
+    ed.execute(":view-wrap").unwrap();
     ed.note_sideways(0, 80);
     press(&mut ed, "gg99lzm");
     assert_eq!(ed.take_side_aim(), Some(59), "helix: the cursor's column in the middle");
