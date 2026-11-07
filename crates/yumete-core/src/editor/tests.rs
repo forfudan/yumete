@@ -27871,6 +27871,35 @@ fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **A yank is lit for a moment** (2026-11-07, `[editor] yank_flash`, nvim's
+/// `vim.hl.on_yank`): what was copied, until the moment is up or the text
+/// changes; several cursors light together; a macro's replay does not.
+#[test]
+fn a_yank_lights_what_it_copied() {
+    let mut ed = typed_vim("alpha beta\ngamma\n");
+    assert!(ed.yank_flash().is_empty(), "nothing yet");
+    press(&mut ed, "yy");
+    assert_eq!(ed.yank_flash(), vec![(0, 11)], "the line and its break");
+    assert!(ed.yank_flash_due_in().is_some_and(|d| d <= super::edits::YANK_FLASH));
+    press(&mut ed, "x");
+    assert!(ed.yank_flash().is_empty(), "an edit puts it out");
+
+    // Several cursors, one round.
+    let mut ed = typed("alpha\nbeta\n");
+    press(&mut ed, "ggCy");
+    assert_eq!(ed.yank_flash().len(), 2, "both cursors: {:?}", ed.yank_flash());
+
+    // The moment passes; a replayed yank lights nothing.
+    let mut ed = typed_vim("alpha\nbeta\n");
+    press(&mut ed, "qayyq");
+    std::thread::sleep(super::edits::YANK_FLASH + std::time::Duration::from_millis(20));
+    assert!(ed.yank_flash().is_empty(), "out on time");
+    ed.yank_flash_tick();
+    assert_eq!(ed.yank_flash_due_in(), None, "and the loop stops waking for it");
+    press(&mut ed, "j@a");
+    assert!(ed.yank_flash().is_empty(), "not while a macro plays");
+}
+
 /// **五種信息共用一格，所以 `Tab` 的環上它只佔一格**（#426，2026-09-30）。
 ///
 /// 原話：「百科面板和绝对不能侵入程序文件。因此不可能出现同时有百科和文檔的事情。

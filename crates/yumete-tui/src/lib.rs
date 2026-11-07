@@ -1361,6 +1361,8 @@ pub fn run(
                 editor.autosave_due_in(),
                 editor.vcs_due_in(),
                 editor.status_due_in(),
+                // A lit yank goes out on time, with no key to wake the loop.
+                editor.yank_flash_due_in().filter(|_| config.editor.yank_flash),
                 // 跟着光標的那一問（`空格 K`）：光標停穩三百毫秒就該問一句。
                 editor.docs_due_in(),
                 // The signature asked again once the typing has been still.
@@ -1401,6 +1403,7 @@ pub fn run(
                         editor.vcs_tick();
                         editor.autosave_tick();
                         editor.status_tick();
+                        editor.yank_flash_tick();
                         // 自動重載那一眼從前在這一段上面自己睡自己醒；現在它和
                         // 別的鬧鐘一起排隊，所以也要在這裏問一句。自己節流，
                         // 所以不到兩秒按幾次都不花什麽。
@@ -12554,6 +12557,14 @@ fn draw_horizontal(
         None => editor.secondary_selections(),
         Some(_) => Vec::new(),
     };
+    // **What a yank just copied, lit for a moment** (`[editor] yank_flash`,
+    // 2026-11-07, nvim's `vim.hl.on_yank`): the selection's ground, under the
+    // selection as the secondaries are. It lights no line numbers: nothing
+    // is selected there.
+    let flashed = match peek.is_none() && config.editor.yank_flash {
+        true => editor.yank_flash(),
+        false => Vec::new(),
+    };
     // **The lines a selection touches** carry their number in the writing's
     // ink rather than the furniture's (2026-10-25, as Zed, VS Code and helix
     // light theirs). A run ending just past a line break does not light the
@@ -13275,7 +13286,7 @@ fn draw_horizontal(
         // The end of the file is such a place too, on its last row.
         let row_end_at = row.start + row_len;
         let ends_file = row_end_at == rope.len_chars();
-        for &(from, to) in &secondary {
+        for &(from, to) in secondary.iter().chain(&flashed) {
             if to > row.start && from < reach {
                 let a = from.saturating_sub(row.start).min(row_len);
                 let b = (to - row.start).min(row_len);
@@ -19337,6 +19348,28 @@ fn squeezed(text: &str) -> String {
     /// itself needed the live loop's settled page and was measured in a pty
     /// (`:keymap-actions`, 80x24: rows 24, 34, 24, 34 before the fix); this
     /// keeps the path covered.
+    /// **What a yank copied wears the selection's ground for a moment**, and
+    /// only with `[editor] yank_flash` on (2026-11-07).
+    #[test]
+    fn a_yank_is_lit_only_when_the_setting_is_on() {
+        let mut editor = editor_with("alpha beta\n");
+        editor.execute(":keymap vim").unwrap();
+        for c in "wyiw".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let lit = |on: bool| {
+            let mut config = Config::default();
+            config.editor.yank_flash = on;
+            let buffer = render_with(&editor, &config, no_ime(), 40, 6);
+            let row = row_text(&buffer, 0);
+            // `t`: in the word, off the cursor's own cell.
+            let x = row.find("beta").expect("drawn") as u16 + 2;
+            buffer[(x, 0)].style().bg == Some(ink(&config).selection())
+        };
+        assert!(lit(true), "lit with the setting on");
+        assert!(!lit(false), "dark with it off");
+    }
+
     /// **A float drawn whole gives `C-d` back to the text** (2026-11-07 report:
     /// a diagnostic floated over `config.imported.toml` and `C-d` stopped
     /// paging). Three lines of docs fit the float, so the frame says there is

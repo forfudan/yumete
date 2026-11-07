@@ -1145,6 +1145,12 @@ pub fn draw(
         None => editor.secondary_selections(),
         Some(_) => Vec::new(),
     };
+    // What a yank just copied, lit on the same ground for a moment
+    // (`[editor] yank_flash`, 2026-11-07), as the horizontal page does.
+    let flashed = match peek.is_none() && config.editor.yank_flash {
+        true => editor.yank_flash(),
+        false => Vec::new(),
+    };
     // **光標停在括號上的時候，另一半那一格塗成金的**（2026-10-08）——竪排這一頁
     // 也有，理由與規矩全在 `lib.rs` 的 `partner` 那一段：只畫遠那一半，金，不換
     // 底色。兩頁同形，不然同一份稿子換個版面就少一個記號。
@@ -1697,7 +1703,7 @@ pub fn draw(
 
             // 次選區墊在主選區之前。不變式保證不重疊，寫成這個次序是因為「主選區壓在
             // 最上面」是這一族唯一不許被推翻的次序。
-            for &(from, to) in &secondary {
+            for &(from, to) in secondary.iter().chain(&flashed) {
                 if at < to && at + len > from {
                     style = style.patch(sel_style);
                 }
@@ -1733,7 +1739,7 @@ pub fn draw(
         let foot = text_top + slots.len() as u16;
         if ends_line
             && foot < area.y + area.height
-            && secondary.iter().any(|&(from, to)| from <= zong.end && to > zong.end)
+            && secondary.iter().chain(&flashed).any(|&(from, to)| from <= zong.end && to > zong.end)
         {
             put_slot(buf, x, foot, " ", sel_style);
         }

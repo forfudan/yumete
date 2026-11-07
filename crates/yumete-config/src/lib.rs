@@ -134,6 +134,11 @@ pub struct EditorConfig {
     /// show a picture in its text (Ghostty, kitty), through the `typst`
     /// command. On; elsewhere it draws nothing either way.
     pub maths_preview: bool,
+    /// **What a yank copied, lit for a moment** (2026-11-07): nvim's
+    /// `vim.hl.on_yank`, 150 ms on the selection's ground. Off, as nvim has
+    /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
+    /// and `yis` copy what was never shown selected.
+    pub yank_flash: bool,
     /// The shell line `:shot` runs to photograph the screen.
     ///
     /// A command rather than a built-in: what「截圖」 means is the window
@@ -477,6 +482,7 @@ impl Default for EditorConfig {
             end_of_line_diagnostics: "hint".to_string(),
             modeline: true,
             maths_preview: true,
+            yank_flash: false,
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             auto_pairs: "basic".to_string(),
@@ -4557,6 +4563,7 @@ struct RawEditor {
     end_of_line_diagnostics: Option<String>,
     modeline: Option<bool>,
     maths_preview: Option<bool>,
+    yank_flash: Option<bool>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
     auto_pairs: Option<String>,
@@ -4756,6 +4763,9 @@ impl RawConfig {
         }
         if other.editor.modeline.is_some() {
             self.editor.modeline = other.editor.modeline;
+        }
+        if other.editor.yank_flash.is_some() {
+            self.editor.yank_flash = other.editor.yank_flash;
         }
         if other.editor.maths_preview.is_some() {
             self.editor.maths_preview = other.editor.maths_preview;
@@ -5162,6 +5172,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.modeline {
             config.editor.modeline = on;
+        }
+        if let Some(on) = self.editor.yank_flash {
+            config.editor.yank_flash = on;
         }
         if let Some(on) = self.editor.maths_preview {
             config.editor.maths_preview = on;

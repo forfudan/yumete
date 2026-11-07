@@ -11,6 +11,20 @@ use super::*;
 /// 遍是整份的——一份語料檔既不該進進度表，也不值那一趟。
 pub(super) const BIGGEST_TO_LOG: usize = 16 * 1024 * 1024;
 
+/// How long a yank stays lit: nvim's `vim.hl.on_yank` default.
+pub const YANK_FLASH: std::time::Duration = std::time::Duration::from_millis(150);
+
+/// What one yank lit, and until when ([`Editor::yank_flash`]).
+#[derive(Debug, Clone)]
+pub(super) struct YankFlash {
+    until: std::time::Instant,
+    buffer: u64,
+    revision: u64,
+    /// The several-cursor round it was lit in: a round's yanks light together.
+    round: u64,
+    ranges: Vec<(usize, usize)>,
+}
+
 impl Editor {
     // ---- Editing (Features #9 / #10) --------------------------------------
 
@@ -1775,6 +1789,63 @@ impl Editor {
             self.registers.insert('0', self.register_parts.clone());
         }
         self.status = say!("edit.yanked-characters", end - start);
+        self.light_the_yank((start, end));
+    }
+
+    /// **Light what a yank copied** (2026-11-07, `[editor] yank_flash`): the
+    /// front end draws [`Editor::yank_flash`] on the selection's ground until
+    /// [`YANK_FLASH`] is up, as nvim's `vim.hl.on_yank` does. Recorded
+    /// whatever the setting says: the front end is the one that reads it.
+    ///
+    /// Several cursors yank in one round and light together. Not while a
+    /// macro plays (nvim's `on_macro = false`): a flash for each pass of a
+    /// replay is noise.
+    fn light_the_yank(&mut self, range: (usize, usize)) {
+        if self.replaying || range.0 >= range.1 {
+            return;
+        }
+        let now = std::time::Instant::now();
+        let buffer = self.current_buffer().id();
+        let revision = self.current_buffer().revision();
+        match self.yank_lit.as_mut() {
+            Some(lit) if lit.round == self.edit_round && lit.buffer == buffer && lit.revision == revision && now < lit.until => {
+                lit.ranges.push(range);
+            }
+            _ => {
+                self.yank_lit = Some(YankFlash {
+                    until: now + YANK_FLASH,
+                    buffer,
+                    revision,
+                    round: self.edit_round,
+                    ranges: vec![range],
+                });
+            }
+        }
+    }
+
+    /// What is lit after a yank, as character ranges of the buffer on screen:
+    /// empty once the moment is up, the text has changed, or another buffer
+    /// is shown.
+    pub fn yank_flash(&self) -> Vec<(usize, usize)> {
+        let Some(lit) = self.yank_lit.as_ref() else { return Vec::new() };
+        let here = self.current_buffer();
+        match lit.buffer == here.id() && lit.revision == here.revision() && std::time::Instant::now() < lit.until {
+            true => lit.ranges.clone(),
+            false => Vec::new(),
+        }
+    }
+
+    /// How long until the lit yank goes out; `None` when nothing is lit.
+    pub fn yank_flash_due_in(&self) -> Option<std::time::Duration> {
+        let lit = self.yank_lit.as_ref()?;
+        Some(lit.until.saturating_duration_since(std::time::Instant::now()))
+    }
+
+    /// The moment is up: put the light out, so the loop stops waking for it.
+    pub fn yank_flash_tick(&mut self) {
+        if self.yank_lit.as_ref().is_some_and(|lit| std::time::Instant::now() >= lit.until) {
+            self.yank_lit = None;
+        }
     }
 
     /// Paste the register after (`p`) or before (`P`) the selection, and select

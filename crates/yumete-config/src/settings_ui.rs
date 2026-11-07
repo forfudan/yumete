@@ -606,6 +606,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "yank_flash",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.yank-flash",
+        hint: "settings.editor.yank-flash.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
         key: "word_level",
         group: Group::Marks,
         kind: Kind::Pick(EDITOR_WORD_LEVEL_WAYS),

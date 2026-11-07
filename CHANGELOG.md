@@ -9,6 +9,10 @@ in `docs/development.md` §5.2.
 
 ## Unreleased
 
+### Added
+
+- **What you yank lights up for a moment**, as nvim's `vim.hl.on_yank` does: `[editor] yank_flash = true`. It helps most under the vim keys, where `yap` or `yis` copies text you never saw selected. Off by default; `ye --import lazyvim` turns it on, as LazyVim does.
+
 ### Fixed
 
 - **The paging keys page when a float has nothing more to show**: with a diagnostic, docs or a wiki entry floating in the corner, `C-d`, `C-u`, `C-f`, `C-b`, `PageDown` and `PageUp` did nothing if the float already showed all of it. Such a float now leaves them to the text; one with more to show still scrolls. A long diagnostic that is cut now scrolls too.

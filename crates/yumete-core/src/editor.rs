@@ -2594,6 +2594,9 @@ pub struct Editor {
     last_played: Option<char>,
     /// Whether a macro is being replayed, so it cannot record or replay itself.
     replaying: bool,
+    /// What the last yank copied, lit until its moment is up
+    /// ([`Editor::yank_flash`]).
+    yank_lit: Option<edits::YankFlash>,
     /// How much of the buffer is on screen: lines, and 縱 across. Set by the
     /// renderer, which is the only part that knows, so `C-d` can mean "half of
     /// what you can see" rather than a fixed number.
@@ -4373,6 +4376,7 @@ impl Editor {
             last_recorded: None,
             last_played: None,
             replaying: false,
+            yank_lit: None,
             flavor: yumete_cjk::Flavor::default(),
             page_lines: 20,
             half_page: None,

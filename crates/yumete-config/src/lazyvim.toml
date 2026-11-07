@@ -116,3 +116,6 @@ L = ":buffer-next"
 "C-k" = "jump_view_up"
 "C-l" = "jump_view_right"
 "C-s" = ":write"
+
+[editor]
+yank_flash = true

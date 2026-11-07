@@ -803,6 +803,20 @@ zhs = "分词标记用哪一种画法"
 en = "how word boundaries are shown"
 
 [[message]]
+# 設置：複製高亮（草稿）
+key = "settings.editor.yank-flash"
+zhs = "复制高亮"
+zht = "複製高亮"
+en = "yank flash"
+
+[[message]]
+# 設置：複製高亮——一句話（草稿）
+key = "settings.editor.yank-flash.hint"
+zhs = "复制之后，复制的范围亮一下"
+zht = "複製之後，複製的範圍亮一下"
+en = "after a yank, what was copied lights up for a moment"
+
+[[message]]
 # 設置：縱間距
 key = "settings.editor.zong-gap"
 zht = "縱間距"
