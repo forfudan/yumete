@@ -414,7 +414,7 @@ pub const SETTINGS: &[Setting] = &[
         // 8 到 64」。寫 `low: 0` 的時候面板停得到 1/2/3，寫進檔裏而編輯器按下界
         // 排版。2026-09-24 審出來的。
         //
-        // Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-vertical` 對齊：那一頭
+        // Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-height` 對齊：那一頭
         // 用的是 `wrap::MIN_WRAP_WIDTH`，而比它窄會把一個全角字擠到自己那一行上。
         // 從前面板說 4、命令說 8、檔案說 4——同一個設置三個下界。
         kind: Kind::Count { low: 8, high: 64, zero: Some("settings.zero.as-tall-as-the-window") },

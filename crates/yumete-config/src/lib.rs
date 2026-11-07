@@ -223,7 +223,7 @@ pub struct EditorConfig {
     /// `0` — the default — means **as many as the window allows**, which is the
     /// same rule the horizontal `measure` follows: how long a column should be
     /// is a decision about the book, and the editor has no business making one
-    /// for you. A number here (or `:view-wrap n`) is that decision; it is clamped to
+    /// for you. A number here (or `:view-wrap-width n`) is that decision; it is clamped to
     /// 4–64, and the renderer lowers it further when the terminal is short.
     pub zong_length: usize,
     /// How many squares open a paragraph (首行縮進). 0 is none.
@@ -343,7 +343,7 @@ pub struct EditorConfig {
     ///
     /// A measure rather than a mark: unlike `ruler`, which only says where the
     /// line is, this folds the rows there and leaves the rest of the window as
-    /// margin. `:view-wrap 50` sets it for one session (Feature #113).
+    /// margin. `:view-wrap-width 50` sets it for one session (Feature #113).
     pub measure: usize,
     /// The width `:hard-wrap` fills to when given none, in cells; `0` for
     /// unset, which makes the bare command say so (2026-10-30).
@@ -5346,7 +5346,7 @@ impl RawConfig {
             // is tall enough and the eye loses the sweep anyway.
             // `0` is not a length, it is "as long as the window allows", so it
             // passes through rather than being clamped up to four.
-            // **下界 8，和 `:view-wrap-vertical` 同一個數**（2026-10-09）。從前這裏是 4
+            // **下界 8，和 `:view-wrap-height` 同一個數**（2026-10-09）。從前這裏是 4
             // 而命令那一頭是 `MIN_WRAP_WIDTH`（8）——同一個設置兩個下界。8 是安全線
             // 不是口味：比它窄，一個全角字會被擠到自己那一行上，没完没了。
             let kept = if length == 0 { 0 } else { length.clamp(8, 64) };

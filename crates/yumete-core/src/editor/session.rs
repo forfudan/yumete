@@ -255,7 +255,7 @@ impl Editor {
         true
     }
 
-    /// Notice a file that changed underneath, if `:reload-auto on` (Feature
+    /// Notice a file that changed underneath, if `:reload-auto` (on) (Feature
     /// #214).
     ///
     /// Throttled the way [`Editor::autosave_tick`] is, so this is a clock check

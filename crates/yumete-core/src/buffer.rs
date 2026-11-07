@@ -315,7 +315,7 @@ pub struct Buffer {
     ///
     /// Per buffer, not per editor: read-only is a property of the *document* —
     /// a reference 碼表 opened beside a chapter is not to be typed into, and
-    /// the chapter is. Set by `:readonly on`, by `--readonly`, and by the disk
+    /// the chapter is. Set by `:readonly` (on), by `--readonly`, and by the disk
     /// itself when the file's permissions say so — which until now was only
     /// discovered at `:w`, after an afternoon of typing.
     readonly: bool,
@@ -757,7 +757,7 @@ impl Buffer {
     ///
     /// Unlocking is allowed even for a file the disk calls read-only: the
     /// editor is not the permission system, and a writer who says
-    /// `:readonly off` is saying they will deal with the save when they get
+    /// `:readonly` (off) is saying they will deal with the save when they get
     /// there. [`write_file_atomically`] still refuses, and says why.
     ///
     /// The other way round is not symmetrical: this locks the **text**, and
@@ -1634,13 +1634,13 @@ impl Buffer {
         //
         // ① `--readonly` 開着、一個字没改，`:w` 照樣把檔重寫一遍（inode 都換了）
         //    ——而重寫那一下順手 `clear_swap()`，**把別人的救命稿刪了**。
-        // ② 先改、再 `:readonly on`、再 `:w`：改動照樣落盤。面板那一句
+        // ② 先改、再 `:readonly` (on)、再 `:w`：改動照樣落盤。面板那一句
         //    `readonly.on-with-unsaved` 明說「還有没存的改動」，然後放它過去。
         // ③ `--help` 上寫着「Open locked: nothing this run opens can be typed
         //    into」，而這一支讓它變成只對內存成立。
         //
         // `force`（`:w!`）不開這道鎖：那個驚嘆號說的是「外面改過了，用我的」，
-        // 和「這一份鎖着」是兩件事。解鎖的話屏幕上一直寫着——`:readonly off`。
+        // 和「這一份鎖着」是兩件事。解鎖的話屏幕上一直寫着——`:readonly` (off)。
         if self.readonly {
             return Err(io::Error::other(say!("readonly.refused")));
         }
@@ -2773,7 +2773,7 @@ fn write_bytes_with_model(
             // 提示只說一次（`swap_warned`），全屏編輯器裏下一個按鍵就蓋掉了，於是
             // 幾個鐘頭裏只有最初五秒那一幀是保過的。
             //
-            // 只讀的稿子照樣打得開、`:readonly off` 照樣寫得動（寫的時候另有一道
+            // 只讀的稿子照樣打得開、`:readonly` (off) 照樣寫得動（寫的時候另有一道
             // 閘問人），而副本是**我們自己**的東西，没有理由跟着只讀。
             // 2026-09-24 審出來的。
             // Warning: **只補「自己」那一位，不許用 `set_readonly(false)`。** 那一支在

@@ -287,7 +287,7 @@ impl Editor {
         }
         // Turning it *off* unlocks nothing on its own: a buffer the disk
         // itself calls read-only is locked for a reason of its own, and
-        // `:readonly off` is how one buffer says otherwise.
+        // `:readonly` (off) is how one buffer says otherwise.
     }
 
     /// Whether a clean buffer re-reads itself when the file changes underneath

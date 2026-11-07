@@ -38,7 +38,7 @@
 //! — and there the command *name* is ASCII, so `:w` had its `w` composed by
 //! the system's input method and the file was never written.
 //!
-//! So the bottom row — no marker, whether from `:yume off` or from a 碼表 that
+//! So the bottom row — no marker, whether from `:yume` (off) or from a 碼表 that
 //! was never loaded — is where the system's input method is exactly what is
 //! wanted, and somebody writing Japanese in yumete lives there.
 //!

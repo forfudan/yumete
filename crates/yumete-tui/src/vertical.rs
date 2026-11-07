@@ -698,12 +698,12 @@ pub struct Look {
     pub ruby: bool,
     /// Whether 句讀 hang in the margin.
     pub hanging: bool,
-    /// **一列寫幾個字**（`:view-wrap-vertical`），if the writer asked.
+    /// **一列寫幾個字**（`:view-wrap-height`），if the writer asked.
     ///
     /// Warning: **橫排那個 measure 不在這裏**（2026-10-09 作者定）。從前這一格就是
     /// `editor.measure()`，於是 `:view-wrap 40` 在橫排是行寬、切到竖排同一個 40 就
     /// 成了一列的長度——一條命令兩件事。現在各管各的，這一格只有
-    /// `:view-wrap-vertical` 填得出來。
+    /// `:view-wrap-height` 填得出來。
     pub zong: Option<usize>,
     /// The gap between 縱 the writer asked for, if any.
     pub gap: Option<usize>,

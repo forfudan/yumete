@@ -5234,7 +5234,7 @@ impl Editor {
     ///
     /// A 碼表 has no header — 「字⇥碼」 all the way down — so reading its first
     /// line as the column names loses that line to the frozen row at the top
-    /// and calls one column 「一」. `t H` and `:table-header off` say so: row
+    /// and calls one column 「一」. `t H` and `:table-header` (off) say so: row
     /// one becomes an ordinary row and the columns are named by number, which
     /// is what the row above them already draws (#184). `None` flips it,
     /// because a file is asked this once and never again.

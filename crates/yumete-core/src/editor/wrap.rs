@@ -58,7 +58,7 @@ impl Editor {
     /// Tell the editor how much room the renderer has, so `j` and `k` walk the
     /// same rows the reader sees. The renderer calls this once per frame.
     ///
-    /// A measure the writer has set wins, but only downwards: `:view-wrap 50` on a
+    /// A measure the writer has set wins, but only downwards: `:view-wrap-width 50` on a
     /// 40-column terminal still has to wrap at 40, because rows that do not fit
     /// cannot be read.
     /// Warning: **那道下限不許大過真有的地方**（2026-10-02 一輪掃查報來的）。
@@ -167,7 +167,7 @@ impl Editor {
         };
     }
 
-    /// **一列寫幾個字** —— `:view-wrap-vertical`。`None` ＝ 窗口有多高就寫多長。
+    /// **一列寫幾個字** —— `:view-wrap-height`。`None` ＝ 窗口有多高就寫多長。
     pub fn zong_measure(&self) -> Option<usize> {
         self.zong_measure
     }

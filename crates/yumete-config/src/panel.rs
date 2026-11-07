@@ -1242,7 +1242,7 @@ mod tests {
     /// 畫 2 而 `into_config` 按下界排版。`markers` 空的時候 `into_config` 留出廠那一
     /// 串，而面板畫的是空白，候選欄照舊 １２３。
     ///
-    /// Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-vertical` 對齊（那一頭用
+    /// Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-height` 對齊（那一頭用
     /// 的是 `wrap::MIN_WRAP_WIDTH`）。從前面板說 4、命令說 8、檔案說 4。
     #[test]
     fn the_panel_shows_what_the_editor_takes_not_what_the_file_says() {

@@ -465,7 +465,7 @@ fn line_text(rope: &Rope, line: usize) -> String {
 /// **How many characters are on `line`**, without building the line.
 ///
 /// Warning: **不要為了數一行有多長把它整個變成 `String`**（2026-10-03 量出來的）。一行
-/// 四十兆的檔上 `:view-wrap off` 比開着折行慢**七倍半**（14.4 秒對 1.9 秒），整個
+/// 四十兆的檔上 `:view-wrap` (off) 比開着折行慢**七倍半**（14.4 秒對 1.9 秒），整個
 /// 差額就是 [`rows_of_line`] 不折行那一支裏的 `line_text(...).chars().count()`——
 /// 它每一幀被叫很多次，每一次拷貝兩千萬個字符再數一遍。rope 自己數得出來。
 fn line_len_chars(rope: &Rope, line: usize) -> usize {

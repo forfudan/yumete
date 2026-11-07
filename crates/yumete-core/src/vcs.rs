@@ -14,7 +14,7 @@
 //! 子模組、worktree、`GIT_DIR`，全是 git 自己的答案，抄一份只會抄出第二種答案。
 //!
 //! 代價是一個子進程。所以**它一趟都不許落在畫面那條路上**：只在開檔、存檔，
-//! 和 `:view-diff on` 那一刻算一次，答案按 buffer 存着（[`crate::editor::Editor`]
+//! 和 `:view-diff` (on) 那一刻算一次，答案按 buffer 存着（[`crate::editor::Editor`]
 //! 那一份快取連着算它時的 revision，revision 沒動就不再喊第二次）。
 //!
 //! ## 跟誰比

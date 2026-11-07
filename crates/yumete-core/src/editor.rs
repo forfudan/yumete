@@ -2375,7 +2375,7 @@ const SWAP_BUDGET: std::time::Duration = std::time::Duration::from_millis(30);
 /// seconds of wall clock while the input thread stays free between rounds.
 const SWAP_BACKLOG_INTERVAL: std::time::Duration = std::time::Duration::from_millis(150);
 
-/// How often the disk is asked whether the file moved, under `:reload-auto on`
+/// How often the disk is asked whether the file moved, under `:reload-auto` (on)
 /// (Feature #214).
 ///
 /// Two seconds, not five: this one answers a question the writer is *waiting*
@@ -3806,7 +3806,7 @@ pub struct Editor {
     /// file.
     readonly_default: bool,
     /// Whether a clean buffer re-reads itself when the file changes on disk
-    /// (Feature #214). `:reload-auto on`.
+    /// (Feature #214). `:reload-auto` (on).
     reload_auto: bool,
     /// When the disk was last asked about it, so a held-down `j` does not
     /// `stat` the file a thousand times.
@@ -4073,7 +4073,7 @@ pub struct Editor {
     /// 改的是哪一件事要看當時是什麽排版。作者的話：「一个东西怎么能有两个命令」
     /// ——反過來也不成立，一個命令不該是兩件事。竖排那一個在 [`Self::zong_measure`]。
     measure: Option<usize>,
-    /// **一列寫幾個字**（竖排，`:view-wrap-vertical`）。`None` ＝ 窗口有多高就寫多長。
+    /// **一列寫幾個字**（竖排，`:view-wrap-height`）。`None` ＝ 窗口有多高就寫多長。
     ///
     /// 和 [`Self::measure`] 各管各的排版，所以在橫排裏設它、切過去就生效，不會被
     /// 橫排那個數蓋掉。
@@ -4777,7 +4777,7 @@ impl Editor {
     /// **`z` 那一層放在哪一行**。
     ///
     /// Warning: 屏幕上只有三個位置值得一個鍵：頂、中、底。helix 的 `z` 層還有 `zm`（橫向居
-    /// 中），而這個倉橫向滾動只在 `:view-wrap off` 下才動得起來，那時整段是一行——
+    /// 中），而這個倉橫向滾動只在 `:view-wrap` (off) 下才動得起來，那時整段是一行——
     /// 「橫向居中」在一行裏没有意義。
     pub fn aim_the_page(&mut self, aim: Aim) {
         self.aim = Some(aim);
@@ -5038,7 +5038,7 @@ impl Editor {
     ///
     /// The margin they go in is a **cell off every 縱 on the page**, bought
     /// before a line is asked for its marks. Bought on the setting alone, a
-    /// `:view-meter on` with no 拆分表 installed reflowed the whole page to make
+    /// `:view-meter` (on) with no 拆分表 installed reflowed the whole page to make
     /// room for a column that can never hold anything — while the status line
     /// was busy saying there is no reading table. The command says so
     /// *instead* of drawing an empty margin, which is what it always claimed.
