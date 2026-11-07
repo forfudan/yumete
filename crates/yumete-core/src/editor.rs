@@ -4943,9 +4943,14 @@ impl Editor {
         // ——按完 `zt` 隨便動一下，頁面自己往下跳三行。vim 的 `zt` 也是留 `scrolloff`
         // 的，同一個理由。
         if let Some(aim) = self.aim {
-            // With scrolloff over half the window vim's `zb` leaves the
-            // cursor on the upper middle row, as `zt` does (nvim 2026-11-04).
-            let pinned = self.vim_keymap() && self.scrolloff_asked.get().is_some_and(|asked| 2 * asked > last + 1);
+            // With scrolloff at least half the window, vim's `zt` `zz` `zb`
+            // land where its scrolling functions count them to, a line or
+            // two off any rule near the file's ends (see `vim_view`).
+            let asked = self.scrolloff_asked.get().filter(|&so| 2 * so > last);
+            if let (true, Some(so), Aim::Top | Aim::Middle | Aim::Bottom) = (self.vim_keymap(), asked, aim) {
+                let lines = crate::motion::last_line(self.current_buffer().rope()) + 1;
+                return Some(vim_view::z_row(aim, self.cursor_line(), lines, last + 1, so).min(last));
+            }
             return Some(match aim {
                 Aim::Top => scrolloff,
                 Aim::Middle => last / 2,
@@ -4955,12 +4960,8 @@ impl Editor {
                 Aim::Bottom if self.vim_keymap() => {
                     let rope = self.current_buffer().rope();
                     let after = crate::motion::last_line(rope).saturating_sub(self.cursor_line());
-                    match pinned {
-                        true => (last / 2).max(last.saturating_sub(after)),
-                        false => last.saturating_sub(scrolloff.min(after)),
-                    }
+                    last.saturating_sub(scrolloff.min(after))
                 }
-                Aim::Bottom if pinned => last / 2,
                 Aim::Bottom => last.saturating_sub(scrolloff),
                 // Warning: **夾在 `scrolloff` 裏頭**，同上面那一段說的理由：坐到邊上去
                 // 的話下一幀自己又被推開，滾一行變成跳三行。
@@ -6071,6 +6072,7 @@ mod sidebar;
 mod tables;
 mod undo;
 mod verbs;
+mod vim_view;
 mod refactor;
 mod wiki;
 pub use wiki::{WikiLine, WikiPart, WikiView};

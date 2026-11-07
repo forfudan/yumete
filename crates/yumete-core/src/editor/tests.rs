@@ -36680,6 +36680,38 @@ fn vims_zb_with_a_scrolloff_over_half_the_window() {
     assert_eq!(ed.page_inset(Some(2), false, 5, 2), Some(3), "scrolloff 3: the fourth, as before");
 }
 
+/// **vim's `zt` `zz` `zb` near the ends of the file with scrolloff at least
+/// half the window** (nvim 0.12, measured 2026-11-07 with
+/// `scripts/oracle/view_sweep.py`): they land where vim's scrolling
+/// functions count them to, which was a line or two off. `zt` on the
+/// second line from the end keeps scrolloff above, the lines below not
+/// being there; `zz` is corrected for scrolloff while the page is full.
+#[test]
+fn vims_z_near_the_ends_with_a_scrolloff_of_half_the_window() {
+    let text: String = (1..=200).map(|n| format!("line {n}\n")).collect();
+    // (keys, rows, scrolloff, nvim's top line)
+    for (keys, rows, so, top) in [
+        ("199Gzt", 8, 5, 194),
+        ("196Gzt", 10, 5, 191),
+        ("198Gzt", 5, 3, 196),
+        ("5Gzb", 8, 5, 1),
+        ("100Gzb", 6, 5, 98),
+        ("197Gzz", 6, 3, 194),
+        ("198Gzz", 6, 3, 196),
+        ("198Gzz", 4, 2, 196),
+    ] {
+        let mut ed = typed_vim(&text);
+        ed.note_scrolloff(so);
+        let last = rows - 1;
+        let (line, z) = keys.split_at(keys.len() - 2);
+        press(&mut ed, line);
+        ed.page_inset(None, false, last, so.min(last / 2));
+        press(&mut ed, z);
+        let row = ed.page_inset(Some(0), false, last, so.min(last / 2));
+        assert_eq!(row.map(|r| ed.cursor_line() + 1 - r), Some(top), "nvim: {keys}, {rows} rows, scrolloff {so}");
+    }
+}
+
 /// **vim's `z` is vim's** (2026-11-03): helix's view keys had leaked into
 /// it (`z␣` `z⌫` `z/` …), and `Z` with the flavour off went into helix's
 /// sticky view through the held `Z` of `ZZ`. With the flavour on, the
