@@ -72,7 +72,6 @@ impl Editor {
             // **The keys stay in the writing** (2026-09-17). Every other view
             // is a list to walk; this page is drawn from where the cursor is,
             // so putting the keys in it would freeze what it shows.
-            WikiCommand::Panel(want) => self.show_wiki_panel(want),
             WikiCommand::Mark(how) => match how {
                 Some(mark) => {
                     self.wiki_mark = mark;
@@ -302,30 +301,6 @@ impl WikiView<'_> {
 }
 
 impl Editor {
-    /// `:wiki panel` — put the 百科 page up (or take it down), and leave the
-    /// keys where they are.
-    /// `:wiki-panel [on|off]` — `None` 切換，和 `:word-mark` 同一套。
-    fn show_wiki_panel(&mut self, want: crate::command::Switch) {
-        let open = self.showing(crate::sidebar::View::Info);
-        let want = want.over(open.is_some());
-        // **It said nothing at all until 2026-10-19** — on, off and bare alike,
-        // while the panel plainly came and went. Every sibling switch names
-        // itself and its state; this one now does too.
-        self.status = match want {
-            true => say!("wiki.panel-on"),
-            false => say!("wiki.panel-off"),
-        };
-        match (want, open) {
-            (false, Some(side)) => self.close_panel(side),
-            (true, None) => {
-                self.show_sidebar(crate::sidebar::View::Info);
-                self.panel_focus = None;
-            }
-            // 已經是要的樣子了：什麼都不做，也不報錯。
-            _ => {}
-        }
-    }
-
     /// The entries of the word under the cursor, if it names any (#287).
     ///
     /// The word is the one the segmenter cut — which is exactly where a wiki

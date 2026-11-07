@@ -242,6 +242,11 @@ fn said() -> BTreeMap<String, String> {
         // `Err("table.no-further")` —— a pure function hands back the tag,
         // and the editor says it (`mdtable.rs`, 2026-10-30).
         tags.extend(literals(&text, "Err("));
+        // A tag a `match` arm hands back (`Panel::tag`, `Info::tag` in
+        // `sidebar.rs`): the panels' names lost their last other mention when
+        // `:sidebar <panel>` became one command a panel (2026-11-07).
+        // Only labels: a match arm hands back file names and key names too.
+        tags.extend(literals(&text, "=> ").into_iter().filter(|t| t.starts_with("label.")));
         for tag in tags.into_iter().filter(|t| is_tag(t)) {
             out.entry(tag).or_insert_with(|| file.to_string());
         }

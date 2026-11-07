@@ -6623,15 +6623,21 @@ fn the_outline_is_the_hashes_a_writer_already_types() {
     assert_eq!(headings[0], (0, 1, "第一章".to_string()));
     assert_eq!(headings[2], (4, 2, "二".to_string()));
 
-    ed.execute(":toc 3").unwrap();
-    assert_eq!(ed.cursor_line(), 4);
-
-    // A bare `:toc` opens the outline — a list, one heading a line — and
-    // says how many there are. It used to join every heading into the
-    // status line, which for a novel is 700 chapters on one row.
-    ed.execute(":toc").unwrap();
-    assert!(ed.panel(crate::sidebar::Side::Left).is_some(), "{}", ed.status());
-    assert!(ed.status().contains("4"), "{}", ed.status());
+    // `:outline 2` opens the outline down to level 2: 附記 is left out.
+    ed.execute(":outline 2").unwrap();
+    let rows = ed.panel(crate::sidebar::Side::Left).unwrap().rows().to_vec();
+    assert_eq!(rows.len(), 3, "{rows:?}");
+    assert!(!rows.last().unwrap().is_dir, "二 has nothing under it at this depth");
+    assert_eq!(ed.status(), say!("outline.open", say!("outline.down-to", 2), 3));
+    // `:outline 0` closes it, and a bare `:outline` only reports.
+    ed.execute(":outline 0").unwrap();
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none());
+    ed.execute(":outline").unwrap();
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "bare opens nothing");
+    assert_eq!(ed.status(), say!("outline.closed", say!("outline.down-to", 2), 3));
+    // The panel's own switch keeps the depth it was given.
+    ed.execute(":sidebar-outline").unwrap();
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().rows().len(), 3);
 }
 
 #[test]
@@ -6661,9 +6667,6 @@ fn a_novel_with_no_markup_still_has_chapters() {
     assert_eq!(titles, ["楔子", "第一卷", "第一章　風雪", "第二章"]);
     assert_eq!(headings[1].1, 1, "a 卷 holds 章, so it sits above them");
     assert_eq!(headings[2].1, 2);
-    // The third heading is 第一章　風雪, eight lines in.
-    ed.execute(":toc 3").unwrap();
-    assert_eq!(ed.cursor_line(), headings[2].0);
 
     // **資治通鑑 writes all 294 of its 卷 as 卷002** — the unit first and no
     // 第 at all, which is the book this was written for and the one the
@@ -12702,7 +12705,7 @@ fn one_key_moves_between_the_two_panes() {
     assert!(!ed.sidebar_focused());
 
     // With no sidebar open it does nothing at all.
-    ed.execute(":sidebar off").unwrap();
+    ed.close_panel(crate::sidebar::Side::Left);
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
@@ -12725,37 +12728,36 @@ fn a_key_that_names_a_view_opens_it_switches_to_it_and_closes_it() {
     assert!(ed.sidebar_focused());
 
     // A *different* view's door means 「show me the outline」, not 「close」 —
-    // `:toc`, since `空格 s` became helix's symbol picker (2026-10-31).
-    ed.execute(":toc").unwrap();
+    // `:sidebar-outline`, since `空格 s` became helix's symbol picker
+    // (2026-10-31).
+    ed.execute(":sidebar-outline").unwrap();
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Outline);
     assert!(ed.sidebar_focused());
 
     // The same door again closes it: a toggle that cannot undo itself is not
     // a toggle.
-    ed.execute(":toc").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
 
-    // `C-w` hands the keys back without putting it away, and the key takes
-    // them again rather than closing something the writer is not in.
-    ed.execute(":toc").unwrap();
+    // **A panel's command is its switch** (2026-11-07): the outline opens
+    // with the keys, and the same command puts it away wherever the keys are.
+    ed.execute(":sidebar-outline").unwrap();
+    assert!(ed.sidebar_focused(), "a list takes the keys");
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel(crate::sidebar::Side::Left).is_some() && !ed.sidebar_focused());
-    ed.execute(":toc").unwrap();
-    assert!(ed.sidebar_focused(), "the keys came back");
-    ed.execute(":toc").unwrap();
-    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "and now it closes");
+    ed.execute(":sidebar-outline").unwrap();
+    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "showing, so it closes");
 
-    // **The file tree in the sidebar has no key of its own** (2026-10-20 作者
-    // 定): `空格 e` browses on the picker, and the sidebar is named by the
-    // command. `off` closes it, and bare asks.
-    ed.execute(":sidebar explorer").unwrap();
+    // **The file tree in the sidebar has no key of its own** (2026-10-20):
+    // `空格 e` browses on the picker, and the sidebar is named by the command.
+    ed.execute(":sidebar-explorer").unwrap();
     assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Explorer);
-    ed.execute(":sidebar off").unwrap();
+    // Another list's command takes the same side over rather than closing it.
+    ed.execute(":sidebar-buffers").unwrap();
+    assert_eq!(ed.panel(crate::sidebar::Side::Left).unwrap().view(), crate::sidebar::View::Buffers);
+    ed.execute(":sidebar-buffers").unwrap();
     assert!(ed.panel(crate::sidebar::Side::Left).is_none());
-    ed.execute(":sidebar").unwrap();
-    assert!(ed.panel(crate::sidebar::Side::Left).is_none(), "a question opens nothing");
-    assert_eq!(ed.status(), say!("sidebar.nothing-open"));
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -24578,11 +24580,11 @@ fn a_wiki_entry_floats_until_its_sidebar_page_is_open_and_gd_goes_to_it() {
         "### under ## reads as ## under the entry"
     );
 
-    ed.execute(":wiki-panel on").unwrap();
+    ed.execute(":sidebar-info").unwrap();
     assert!(ed.wiki_here().is_some());
     assert!(ed.wiki_floating().is_none(), "the sidebar page has it: it does not float too");
 
-    ed.execute(":wiki-panel off").unwrap();
+    ed.execute(":sidebar-info").unwrap();
     ed.on_key(Key::Esc);
     ed.on_key(Key::Char('g'));
     ed.on_key(Key::Char('d'));
@@ -24747,16 +24749,15 @@ fn a_wiki_name_is_marked_where_the_segmenter_cut_it() {
     assert_eq!(ed.wiki_mark(), crate::wiki::Mark::Line);
     std::fs::remove_dir_all(&dir).ok();
 }
-/// `:wiki panel` leaves the keys in the writing — the page is drawn from where
-/// the cursor is — and the two doors in and out still work (2026-09-17).
+/// `:sidebar-info` leaves the keys in the writing — the panel is drawn from
+/// where the cursor is — and the two doors in and out still work (2026-09-17;
+/// the command was `:wiki-panel` until 2026-11-07).
 #[test]
-fn the_wiki_panel_leaves_the_keys_in_the_writing() {
+fn the_info_panel_leaves_the_keys_in_the_writing() {
     let mut ed = Editor::new();
-    ed.execute(":wiki-panel on").unwrap();
+    ed.execute(":sidebar-info").unwrap();
     assert!(ed.panel_focus().is_none(), "the keys stayed in the writing");
-    // 裸的只報告，不開不關（2026-10-19 作者定）。
-    ed.execute(":wiki-panel").unwrap();
-    assert!(ed.showing(crate::sidebar::View::Info).is_some(), "裸的只報告：{}", ed.status());
+    assert!(ed.showing(crate::sidebar::View::Info).is_some());
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel_focus().is_some(), "C-w walks into the panel");
@@ -24764,8 +24765,8 @@ fn the_wiki_panel_leaves_the_keys_in_the_writing() {
     ed.on_key(Key::Char('w'));
     ed.on_key(Key::Char('w'));
     assert!(ed.panel_focus().is_none(), "空格 w walks back out");
-    ed.execute(":wiki-panel off").unwrap();
-    assert!(ed.showing(crate::sidebar::View::Info).is_none(), "`off` puts it away");
+    ed.execute(":sidebar-info").unwrap();
+    assert!(ed.showing(crate::sidebar::View::Info).is_none(), "the same command puts it away");
 }
 
 /// **一扇挑選器一個狀態**（2026-10-08 定）：開門就在框裏打字，`Tab`/`S-Tab`、
@@ -25563,7 +25564,7 @@ fn space_shift_q_keeps_one_work_area_and_closes_the_rest() {
     // 檔案樹與大綱**同在左邊**，後一個把前一個頂掉了，前置條件又寫的是 `any`
     // ——`空格 S` 就算只收左邊，這一條照樣綠。出廠 `sides` 前四格全是左，右邊
     // 那一個是字典。
-    ed.execute(":sidebar outline").unwrap(); // 大綱：左
+    ed.execute(":sidebar-outline").unwrap(); // 大綱：左
     press(&mut ed, " N"); // 字典：右
     for side in Side::BOTH {
         // Warning: 別再寫 `panel(side).is_some() || info_in_this_sidebar(side)
@@ -27781,7 +27782,7 @@ fn space_k_uses_the_panel_when_it_is_open_and_floats_when_it_is_not() {
     assert!(ed.info_in_the_sidebar().is_none());
 
     // 開出那一格再問：不浮了，畫進去。
-    ed.execute(":sidebar info").unwrap();
+    ed.execute(":sidebar-info").unwrap();
     press(&mut ed, " k");
     ed.show_hover("fn compile_the_table()");
     assert_eq!(ed.hover_afloat(), None, "那一格開着就不浮");
@@ -28111,7 +28112,7 @@ fn the_five_kinds_share_one_slot_so_tab_only_sees_one() {
 
     // Warning: **換了稿子那一格不必跟着換**——它擺什麽是問出來的，所以屏幕上
     // 永遠不會留下一扇這份稿子裏根本不存在的面板。
-    ed.execute(":sidebar info").unwrap();
+    ed.execute(":sidebar-info").unwrap();
     assert_eq!(ed.showing(View::Info), Some(Side::Right));
     ed.open_file(dir.join("a.rs")).unwrap();
     assert_eq!(ed.showing(View::Info), Some(Side::Right), "那一格還在");
@@ -28234,7 +28235,7 @@ fn asking_and_showing_are_two_separate_things() {
     // 開一格出來：同一個開關，答案改走邊欄。
     // Warning: `:sidebar-*` 把鍵交給了那一格，`l` 就不再挪正文的光標了——要先
     // 把鍵拿回來，不然下面那一問看不出光標動過。
-    ed.execute(":sidebar info").unwrap();
+    ed.execute(":sidebar-info").unwrap();
     for _ in 0..4 {
         if ed.panel_focus().is_none() {
             break;
@@ -28492,8 +28493,8 @@ fn the_direction_keys_walk_between_regions_and_never_open_one() {
 fn the_region_group_toggles_a_bar_without_going_into_it() {
     use crate::sidebar::Side;
     let mut ed = typed("那年冬天。\n");
-    ed.execute(":sidebar explorer").unwrap();
-    ed.execute(":sidebar info").unwrap();
+    ed.execute(":sidebar-explorer").unwrap();
+    ed.execute(":sidebar-info").unwrap();
     assert!(ed.panel(Side::Left).is_some() && ed.panel(Side::Right).is_some());
     while ed.panel_focus().is_some() {
         ed.on_key(Key::Ctrl('w'));
@@ -29413,7 +29414,7 @@ fn closing_a_buffer_redraws_the_buffer_list() {
     let mut ed = Editor::new();
     ed.open_file(dir.join("one.md")).unwrap();
     ed.open_file(dir.join("two.md")).unwrap();
-    ed.execute(":sidebar buffers").unwrap();
+    ed.execute(":sidebar-buffers").unwrap();
     let names = |ed: &Editor| -> Vec<String> {
         ed.panel(Side::Left)
             .expect("那一扇開着")
@@ -29440,7 +29441,7 @@ fn closing_a_buffer_redraws_the_buffer_list() {
 fn the_outline_keeps_the_heading_it_was_standing_on() {
     use crate::sidebar::Side;
     let mut ed = typed("# 一\n\n# 二\n\n# 三\n");
-    ed.execute(":sidebar outline").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     let standing = |ed: &Editor| -> String {
         let panel = ed.panel(Side::Left).expect("那一扇開着");
         panel.rows()[panel.selected()].name.clone()
@@ -33767,7 +33768,7 @@ fn what_round_four_found_in_tonights_keys() {
     }
 
     let mut ed = typed("one\n");
-    ed.execute(":sidebar outline").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     assert!(ed.panel_focus().is_some(), "the sidebar has the keys");
     assert_eq!(ed.execute(":q!").expect(":q! answers"), CommandOutcome::Continue);
     assert!(ed.panel_focus().is_none(), "the sidebar closed");
@@ -34655,7 +34656,7 @@ fn the_three_places_take_their_own_bindings() {
 
     // A sidebar: `n` walks down, and `j` bound to `no_op` does nothing.
     let mut ed = typed("# 一\n\n# 二\n\n# 三\n");
-    ed.execute(":sidebar outline").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     ed.focus_slot(Side::Left);
     ed.set_place_bindings(Place::Sidebar, lines(&[("n", "move_line_down"), ("j", "no_op")]));
     let at = |ed: &Editor| ed.panel(Side::Left).map(|p| p.selected());
@@ -34675,7 +34676,7 @@ fn the_three_places_take_their_own_bindings() {
 fn h_in_the_other_sidebar_leaves_the_outline_alone() {
     use crate::sidebar::Side;
     let mut ed = typed("# 一\n\n## 甲\n\n# 二\n");
-    ed.execute(":sidebar outline").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     let rows = |ed: &Editor| ed.panel(Side::Left).map(|p| p.rows().len());
     assert_eq!(rows(&ed), Some(3));
     ed.on_key(Key::Char(' '));
@@ -34731,7 +34732,7 @@ fn the_readers_own_keys_follow_them_into_the_places() {
     normal.insert("e".to_string(), "move_line_up".to_string());
     normal.insert("J".to_string(), "no_op".to_string());
     ed.set_key_aliases(normal);
-    ed.execute(":sidebar outline").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     ed.focus_slot(Side::Left);
     let at = |ed: &Editor| ed.panel(Side::Left).map(|p| p.selected());
     ed.on_key(Key::Char('n'));
@@ -34774,7 +34775,7 @@ fn the_hint_row_follows_the_bindings() {
         other => panic!("{other:?}"),
     };
     let mut ed = typed("# 一\n\n# 二\n");
-    ed.execute(":sidebar outline").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     ed.focus_slot(Side::Left);
     assert_eq!(row(&ed)[0], "j k J K g G");
     assert!(row(&ed).contains(&"w".to_string()));
@@ -34822,7 +34823,7 @@ fn the_palette_shows_the_key_in_force() {
 fn the_sidebar_sentence_reads_as_before() {
     use crate::sidebar::Side;
     let mut ed = typed("# 一\n\n# 二\n");
-    ed.execute(":sidebar outline").unwrap();
+    ed.execute(":sidebar-outline").unwrap();
     ed.focus_slot(Side::Left);
     let want = format!(
         "j k {} · J K {} · g G {} · l {} · h {} · Tab {} · w {} · R {} · C-w {} · q {}",

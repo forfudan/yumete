@@ -2749,7 +2749,7 @@ KEYS (Normal mode, Helix-style):
               :42  :goto n    put the cursor on a line
               :recover         use or drop a crash-recovery draft
               :buffer  :buffer-next  :buffer-previous  :buffer-close
-              :search-project  :toc  across the project / this file's headings
+              :search-project  :outline  across the project / this file's headings
               :export html|typst|csv|tsv   write it out
               :vertical  :horizontal    :view-margin [never|dense|loose|always]
               :yume-annotation  the annotation beside candidates:

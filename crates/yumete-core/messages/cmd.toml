@@ -385,6 +385,13 @@ en = "open a file"
 find = "打開 打开 開檔 开档 edit file"
 
 [[message]]
+# : 命令選單裏 outline 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.outline"
+zhs = "大纲只列到第几级；`0` 关闭；不带参数报告状态"
+en = "how many heading levels the outline lists; `0` closes it; bare reports"
+find = "目錄 目录 標題 标题 大綱 大纲 級別 级别 toc headings levels"
+
+[[message]]
 # : 命令選單裏 pipe 那一項的説明(commands 組)
 key = "cmd.commands.pipe"
 zhs = "将选区传给终端命令，用输出替换选区"
@@ -696,13 +703,6 @@ key = "cmd.commands.theme-mode"
 zhs = "深色或浅色(system 跟随终端)"
 en = "dark or light (system follows the terminal)"
 find = "主題 主题 深色 淺色 浅色 明暗 dark light mode appearance"
-
-[[message]]
-# : 命令選單裏 toc 那一項的説明(commands 組)
-key = "cmd.commands.toc"
-zhs = "列出标题；`:toc 3` 跳到第三条"
-en = "list the headings; `:toc 3` goes to the third"
-find = "目錄 目录 標題 标题 大綱 大纲 outline headings"
 
 [[message]]
 # : 命令選單裏 tutor 那一項的説明(commands 組)
@@ -1549,10 +1549,40 @@ en = "save this page as plain text"
 find = "txt 純文字 纯文字 文本"
 
 [[message]]
-# :sidebar —— 邊欄：裸的報告，off 關掉，寫名字就開那一扇
-key = "cmd.sidebar.sidebar"
-zhs = "侧栏：不带参数列出已打开的面板，`off` 关闭，给出名称则打开该面板"
-en = "sidebar: no argument lists open panels; `off` closes it; a name opens that panel"
+# : 命令選單裏 sidebar-buffers 那一項的説明（草稿）
+key = "cmd.sidebar.buffers"
+zhs = "打开或关闭左侧栏的缓冲区列表，打开时光标移过去"
+en = "show or hide the open files in the left sidebar; the cursor goes into it"
+
+[[message]]
+# : 命令選單裏 sidebar-explorer 那一項的説明（草稿）
+key = "cmd.sidebar.explorer"
+zhs = "打开或关闭左侧栏的文件树，打开时光标移过去"
+en = "show or hide the file tree in the left sidebar; the cursor goes into it"
+
+[[message]]
+# : 命令選單裏 sidebar-info 那一項的説明（草稿）
+key = "cmd.sidebar.info"
+zhs = "打开或关闭右侧栏的信息面板，光标留在正文"
+en = "show or hide the info panel in the right sidebar; the cursor stays in the text"
+
+[[message]]
+# : 命令選單裏 sidebar-links 那一項的説明（草稿）
+key = "cmd.sidebar.links"
+zhs = "打开或关闭左侧栏的链接，打开时光标移过去"
+en = "show or hide the links in the left sidebar; the cursor goes into it"
+
+[[message]]
+# : 命令選單裏 sidebar-outline 那一項的説明（草稿）
+key = "cmd.sidebar.outline"
+zhs = "打开或关闭左侧栏的大纲，打开时光标移过去"
+en = "show or hide the outline in the left sidebar; the cursor goes into it"
+
+[[message]]
+# : 命令選單裏 sidebar-search 那一項的説明（草稿）
+key = "cmd.sidebar.search"
+zhs = "打开或关闭左侧栏的搜索，打开时光标移过去"
+en = "show or hide search in the left sidebar; the cursor goes into it"
 
 [[message]]
 # : 命令選單裏 dash 那一項的説明(strokes 組)
@@ -1984,13 +2014,6 @@ en = "a dotted underline in horizontal text, a background in vertical"
 key = "cmd.wikis.off"
 zhs = "正文里不给词条名做记号"
 en = "stop marking wiki names in the text"
-
-[[message]]
-# : 命令選單裏 panel 那一項的説明(wiki 組)
-key = "cmd.wikis.panel"
-zhs = "把词条固定在侧栏，打开时不再弹出浮窗"
-en = "pin the entry in the sidebar; no popup while it is open"
-find = "百科 詞條 词条 邊欄 边栏 固定 面板 wiki panel"
 
 [[message]]
 # : 命令選單裏 reload 那一項的説明(wiki 組)

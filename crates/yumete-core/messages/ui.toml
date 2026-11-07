@@ -574,22 +574,10 @@ en = "{0} · line {1} · {2}"
 # ── sidebar ───────────────────────────────────────────────────────────
 
 [[message]]
-# 邊欄：都關着(裸的 :sidebar)
-key = "sidebar.nothing-open"
-zhs = "侧栏：全部关闭"
-en = "sidebar: nothing open"
-
-[[message]]
 # 邊欄：這一邊只有這一格，Tab 没地方去
 key = "sidebar.only-view-on-this-side"
 zhs = "这一侧只有这一个面板"
 en = "the only panel on this side"
-
-[[message]]
-# 邊欄：現在開着哪幾扇(裸的 :sidebar)
-key = "sidebar.open"
-zhs = "侧栏：{0}"
-en = "sidebar: {0}"
 
 [[message]]
 # 窗口窄到畫不下側欄：鍵還給正文

@@ -166,7 +166,7 @@ What you edit is backed up every few seconds; after a crash
 yumete asks next time whether to `:recover` it.
 
 `空格 f` finds a file, `空格 e` browses, `空格 b` switches files,
-`:sidebar explorer` opens the sidebar. `:count` says how long the file is
+`:sidebar-explorer` opens the sidebar. `:count` says how long the file is
 (or the selection, when there is one).
 
 ────────────────────────────────────────────────────────────

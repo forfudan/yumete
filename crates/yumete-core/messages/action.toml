@@ -1867,13 +1867,6 @@ zhs = "把选区缩到整行"
 en = "shrink the selection to whole lines"
 
 [[message]]
-# :keymap-actions 那張表裏這一行寫什麽
-key = "action.sidebar"
-zhs = "左侧栏(开关)"
-en = "toggle the left sidebar"
-find = "邊欄 边栏 側欄 侧栏 左邊 左边 sidebar"
-
-[[message]]
 # 命令說明：normal_mode
 key = "action.sidebar-normal-mode"
 zhs = "让输入法再挂起一次"
@@ -2355,13 +2348,6 @@ en = "select a block (vim's C-v)"
 key = "action.vim-yank"
 zhs = "复制选区并退出可视模式(vim 的 y)"
 en = "yank the selection, leaving Visual mode (vim's y)"
-
-[[message]]
-# :keymap-actions 那張表裏這一行寫什麽
-key = "action.wiki-panel"
-zhs = "百科页"
-en = "wiki page"
-find = "百科 詞條 词条 人物 設定 设定 wiki"
 
 [[message]]
 # 命令說明：window_mode

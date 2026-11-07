@@ -766,32 +766,35 @@ impl Editor {
                 self.open_paste_picker();
                 Ok(CommandOutcome::Continue)
             }
-            Command::Outline(nth) => {
-                let headings = self.outline();
-                if headings.is_empty() {
+            Command::Outline(levels) => {
+                if self.outline().is_empty() {
                     self.status = say!("goto.no-headings");
                     return Ok(CommandOutcome::Continue);
                 }
-                match nth {
-                    // `:toc <n>` goes to the nth heading…
-                    // Warning: **`:toc 0` 不是第一條**（2026-10-02 一輪掃查報來的）。
-                    // `0usize.saturating_sub(1)` 還是 `0`，於是「第 0 條」悄悄走
-                    // 到了第一條——數是從 1 起的，第 0 條不存在，就該照「一共
-                    // 幾條」那一句說。
-                    Some(n) => match n.checked_sub(1).and_then(|i| headings.get(i)) {
-                        Some(&(line, _, _)) => self.goto_line(line + 1),
-                        None => self.status = say!("goto.only-n-headings", headings.len()),
-                    },
-                    // …and a bare `:toc` opens the outline, which is a *list*
-                    // — one heading a line, scrollable, with the keys. It used
-                    // to join all of them into the status line with three
-                    // spaces between, which for a novel is 700 chapters on one
-                    // row, of which the reader can see four.
-                    None => {
-                        self.show_sidebar(crate::sidebar::View::Outline);
-                        self.status = say!("toc.headings-found", headings.len());
+                match levels {
+                    // `:outline 0` closes it…
+                    Some(0) => {
+                        if let Some(side) = self.showing(crate::sidebar::View::Outline) {
+                            self.close_panel(side);
+                        }
                     }
+                    // …`:outline 2` shows headings down to level 2, and opens
+                    // the outline with the keys if it is not up…
+                    Some(n) => {
+                        self.outline_levels = Some(n);
+                        match self.showing(crate::sidebar::View::Outline) {
+                            Some(_) => self.refresh_sidebar(),
+                            None => self.open_side_showing(
+                                self.side_for(crate::sidebar::View::Outline),
+                                crate::sidebar::View::Outline,
+                            ),
+                        }
+                    }
+                    // …and bare reports, the rule for a command that takes an
+                    // argument (2026-11-07).
+                    None => {}
                 }
+                self.status = self.outline_report();
                 Ok(CommandOutcome::Continue)
             }
             // **`:resume` — 把這個目錄上次開着的那幾個加進來**（2026-10-18
@@ -1496,29 +1499,8 @@ impl Editor {
                 self.open_search_in(scope, true, reshape);
                 Ok(CommandOutcome::Continue)
             }
-            Command::Sidebar(ask) => {
-                use crate::command::SidebarAsk;
-                match ask {
-                    // **Bare is a question** (2026-10-19's rule for every
-                    // switch): it says which panels are up and moves nothing.
-                    SidebarAsk::Ask => self.status = self.sidebar_report(),
-                    // `off` closes the sidebar — both halves of it. With no
-                    // `left`/`right` to name, 「off」 can only mean all of it.
-                    SidebarAsk::Off => {
-                        for side in crate::sidebar::Side::BOTH {
-                            self.close_panel(side);
-                        }
-                    }
-                    // A name opens that panel **where yumete keeps it**. The
-                    // 字典 and 詳情 are worked out afresh under whichever slot
-                    // owns them, so they have no view to open.
-                    SidebarAsk::Show(panel) => {
-                        let side = self.side_of(panel);
-                        if let Some(view) = Editor::view_of(panel) {
-                            self.open_side_showing(side, view);
-                        }
-                    }
-                }
+            Command::SidebarToggle(panel) => {
+                self.toggle_panel(panel);
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableNumbers(want) => {

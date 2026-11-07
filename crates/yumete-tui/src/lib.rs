@@ -26351,8 +26351,8 @@ fn squeezed(text: &str) -> String {
         // 左大綱、右字典——出廠 `sides` 把這兩個分在兩邊。
         // （字典 2026-09-30 從 `空格 D` 搬到了 `空格 N`，`d`/`D` 讓給診斷。）
         // （大綱 2026-10-31 沒有鍵了：`空格 s` 是 helix 的符號挑選器，大綱走
-        // `:sidebar outline`。）
-        editor.execute(":sidebar outline").unwrap();
+        // `:sidebar-outline`。）
+        editor.execute(":sidebar-outline").unwrap();
         for key in " N".chars() {
             editor.on_key(Key::Char(key));
         }

@@ -960,7 +960,7 @@ pub const ALL: &[Action] = &[
     normal("action.prev-buffer", NormalCmd::GotoPreviousBuffer),
     // `空格 s` became helix's symbol picker on 2026-10-31; the outline
     // sidebar is a command now.
-    command("outline", "action.outline", "sidebar outline"),
+    command("outline", "action.outline", "sidebar-outline"),
     normal("action.dictionary", NormalCmd::Dictionary),
     normal("action.next-region", NormalCmd::RotateView),
     normal("action.search-panel", NormalCmd::GlobalSearch),
@@ -990,8 +990,6 @@ pub const ALL: &[Action] = &[
     normal("hint.space.last-picker", NormalCmd::LastPicker),
     normal("action.paste-from-clipboard", NormalCmd::PasteClipboardAfter),
     command("ruby", "action.ruby", "ruby"),
-    command("sidebar", "action.sidebar", "sidebar"),
-    command("wiki_panel", "action.wiki-panel", "wiki panel"),
     command("save_file", "action.save-file", "write"),
     command("save_and_quit", "action.save-and-quit", "wq"),
     command("count_progress", "action.count-progress", "count-progress"),

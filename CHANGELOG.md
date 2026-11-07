@@ -25,6 +25,8 @@ in `docs/development.md` §5.2.
 
 - **The interface wording, reviewed**: shorter, plainer messages in English and Chinese, mainland vocabulary in the Chinese, and common terms such as 选择器 for a picker. The Traditional interface now follows the mainland standard glyphs (説 内 吴 rather than 說 內 吳) and drops Taiwan wording such as 檔案 and 選單.
 - **`zht` is the name of the Traditional interface language**, beside `zhs` and `en`; `zh`, `tc` and `sc` still work.
+- **One command for each sidebar panel, and each one is a switch**: `:sidebar-explorer`, `:sidebar-buffers`, `:sidebar-outline`, `:sidebar-search` and `:sidebar-links` open their panel with the keys in it and close it when it is showing; `:sidebar-info` does the same for the right sidebar and leaves the keys in the text. `:sidebar <panel>` and `:wiki-panel` are gone.
+- **`:outline N` lists the headings down to level N**; `:outline 0` closes the outline, and `:outline` on its own says whether it is open, how deep it lists and how many headings that is. It replaces `:toc`, and going to the Nth heading by number is gone: pick it in the outline.
 
 ### Fixed
 

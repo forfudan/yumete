@@ -59,9 +59,6 @@ pub enum WikiCommand {
     Edit,
     /// `:wiki-global` — open the global one, what a whole series shares.
     Global,
-    /// `:wiki-panel [on|off]` — keep the entry in the sidebar rather than
-    /// letting it float. `None` flips it.
-    Panel(Switch),
     /// `:wiki-mark line|color|off` — how a wiki name is marked in the prose.
     /// `None` says which it is now.
     Mark(Option<crate::wiki::Mark>),
@@ -410,20 +407,15 @@ pub enum Command {
         /// named an escape (`:%s/…/…/gt`) that cannot be typed into a panel.
         reshape: bool,
     },
-    /// `:sidebar [off|panel]` — the sidebar, whichever side the panel asked
-    /// for lives on.
+    /// `:sidebar-explorer`, `:sidebar-info`, … — one panel's switch.
     ///
-    /// **One command, and no way to move a panel** (2026-10-20 作者定). It was
-    /// four: `:sidebar-left`, `:sidebar-right`, `:panel-left`, `:panel-right`,
-    /// and a `[sidebar]` table in the config to make a move stick. 原話：
-    /// 「the location of each type of panel is fixed by yumete and users
-    /// cannot change it to left and right themselves. This makes our model
-    /// concise and stable, and also makes it less buggy.」 It does: a panel
-    /// that could cross took whatever was in the far slot with it, handed the
-    /// displaced one back, and left `side_view` and `views_on` to agree about
-    /// the result — which is the machinery behind 「`空格 4` opens an empty
-    /// docs panel」.
-    Sidebar(SidebarAsk),
+    /// **One command a panel, each a toggle** (2026-11-07). It was one
+    /// `:sidebar <panel>`, and a command that takes an argument reports when
+    /// it is typed bare, so the sidebar had no switch of its own. Where a
+    /// panel lives is still yumete's to decide (2026-10-20): the five lists
+    /// on the left, the info panel on the right. The five take the keys when
+    /// they open; `:sidebar-info` leaves them in the text, as `空格 w i` does.
+    SidebarToggle(crate::sidebar::Panel),
     /// `:table-header [on|off]` — whether the grid's first row names the
     /// columns or is a row like any other (Feature #217). `None` flips it.
     SetTableHeader(Switch),
@@ -711,7 +703,9 @@ pub enum Command {
     /// `:changed-files` — the files git reports and the unsaved buffers
     /// (`空格 g`, 2026-10-31).
     ChangedFiles,
-    /// `:toc [n]` — list the headings, or go to the nth.
+    /// `:outline [n]` — the outline down to level `n`; `0` closes it, and
+    /// bare reports (2026-11-07, which replaced `:toc` and its 「go to the
+    /// nth heading」).
     Outline(Option<usize>),
     /// `:table-jump 木` — go to the row this table names by that character.
     GotoRow(String),
@@ -1937,9 +1931,9 @@ impl Choice {
     ///   at — `(w)` `(q)` `(th)` — because nobody wants to type the other
     ///   five letters and nothing else says they need not.
     /// * **A different word** is worth knowing at any length: `wc` is 「word
-    ///   count」, `ro` is not how `readonly` begins, `outline` is what `:toc`
-    ///   is called elsewhere, and `fmt` is a contraction somebody chose. None
-    ///   of these could be guessed from the name.
+    ///   count」, `ro` is not how `readonly` begins, and `fmt` is a
+    ///   contraction somebody chose. None of these could be guessed from the
+    ///   name.
     ///
     /// What that leaves out is a **clipped name** longer than two — `syn`,
     /// `red`, `rel` — which says only 「the first three letters work」, and the
@@ -2963,51 +2957,6 @@ const SWITCH: &[Word] = &[
     },
 ];
 
-/// Which panel a `:panel-left`/`:panel-right` names, or `None` for 「the one
-/// I am in」.
-///
-/// A word nobody knows is an error rather than 「the one I am in」: silently
-/// moving the wrong panel is worse than saying the name is not one.
-/// What a `:sidebar-left`/`:sidebar-right` was asked for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SidebarAsk {
-    /// No name: say which panels are open, and move nothing — the rule every
-    /// switch in this table keeps (2026-10-19).
-    Ask,
-    /// `off`: close both of them.
-    Off,
-    /// A panel's name: open it, wherever yumete keeps that one.
-    Show(crate::sidebar::Panel),
-}
-
-/// `off`, or one of the panels — [`SIDEBAR_PANELS`]'s words read back.
-fn sidebar_ask(command: &'static str, word: Option<&str>) -> Result<SidebarAsk, CommandError> {
-    match word {
-        None => Ok(SidebarAsk::Ask),
-        Some("off") => Ok(SidebarAsk::Off),
-        Some(word) => Ok(SidebarAsk::Show(
-            named_panel(command, Some(word))?.expect("a word was given"),
-        )),
-    }
-}
-
-fn named_panel(
-    command: &'static str,
-    word: Option<&str>,
-) -> Result<Option<crate::sidebar::Panel>, CommandError> {
-    match word {
-        None => Ok(None),
-        Some(word) => {
-            crate::sidebar::Panel::parse(word)
-                .map(Some)
-                .ok_or_else(|| CommandError::InvalidArgument {
-                    command,
-                    value: word.to_string(),
-                })
-        }
-    }
-}
-
 /// The two words every switch takes — read back by [`switch`].
 /// The four margins, tightest first (`:view-margin`).
 const MARGINS: &[Word] = &[
@@ -3025,25 +2974,6 @@ const OFF_ONLY: &[Word] = &[Word {
     help: "hint.close",
     needs: &[],
 }];
-
-/// What `:sidebar` takes: `off`, or a panel to open — Feature #293.
-///
-/// Warning: **`search` 開得出來，從前卻不在這張表上**（2026-09-23 審出來的）。
-/// `named_panel` 走的是 `Panel::parse`——於是 `:sidebar-left search` 真的執行
-/// 得了，命令選單卻從不列這個名字，而那條說明寫着「寫名字就開在那一格」。
-/// 以 `Panel::ALL` 為準。
-///
-/// Warning: **從前這是兩張幾乎一樣的表**（`SIDEBAR_SIDES` 多一個 `off`，
-/// `SIDEBAR_PANELS` 少一個），各給兩條命令用。四條併成一條之後只剩這一張。
-const SIDEBAR_PANELS: &[Word] = &[
-    Word { name: "off", help: "label.sidebar-off", needs: &[] },
-    Word { name: "explorer", help: "label.panel.files", needs: &[] },
-    Word { name: "buffers", help: "label.panel.buffers", needs: &[] },
-    Word { name: "outline", help: "label.panel.outline", needs: &[] },
-    Word { name: "search", help: "label.panel.search", needs: &[] },
-    Word { name: "links", help: "label.panel.links", needs: &[] },
-    Word { name: "info", help: "label.panel.info", needs: &[] },
-];
 
 /// **`:info` 收的那五個詞**（#426）。界面上的標題是中文，這裏是打得出來的名字。
 ///
@@ -3715,16 +3645,6 @@ pub const COMMANDS: &[Entry] = &[
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::Links(LinksCommand::Reindex))),
-    },
-    Entry {
-        name: "wiki-panel",
-        aliases: &[],
-        help: "cmd.wikis.panel",
-        needs: &[],
-        params: &[Param::Words { of: SWITCH, default: None }],
-        build: Some(|p| {
-            Ok(Command::Wiki(WikiCommand::Panel(switched(p))))
-        }),
     },
     Entry {
         name: "wiki-mark",
@@ -5156,12 +5076,52 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|_| Ok(Command::OpenSearch(crate::search_panel::Where::Project))),
     },
     Entry {
-        name: "sidebar",
+        name: "sidebar-explorer",
         aliases: &[],
-        help: "cmd.sidebar.sidebar",
+        help: "cmd.sidebar.explorer",
         needs: &[],
-        params: &[Param::Words { of: SIDEBAR_PANELS, default: None }],
-        build: Some(|p| Ok(Command::Sidebar(sidebar_ask(p.name, p.arg(0))?))),
+        params: &[],
+        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Files))),
+    },
+    Entry {
+        name: "sidebar-buffers",
+        aliases: &[],
+        help: "cmd.sidebar.buffers",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Buffers))),
+    },
+    Entry {
+        name: "sidebar-outline",
+        aliases: &[],
+        help: "cmd.sidebar.outline",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Outline))),
+    },
+    Entry {
+        name: "sidebar-search",
+        aliases: &[],
+        help: "cmd.sidebar.search",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Search))),
+    },
+    Entry {
+        name: "sidebar-links",
+        aliases: &[],
+        help: "cmd.sidebar.links",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Links))),
+    },
+    Entry {
+        name: "sidebar-info",
+        aliases: &[],
+        help: "cmd.sidebar.info",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Info))),
     },
     Entry {
         name: "table-detail",
@@ -5594,13 +5554,13 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::GitDiff(p.arg(0).map(|s| s.to_string())))),
     },
     Entry {
-        name: "toc",
-        aliases: &["outline"],
-        help: "cmd.commands.toc",
+        name: "outline",
+        aliases: &[],
+        help: "cmd.commands.outline",
         needs: &[],
-        params: &[Param::Free("<第幾條>")],
+        params: &[Param::Free("<級>")],
         build: Some(|p| {
-            // 同 `:goto`：`number` 的錯已經是對的那一句，別蓋掉它。
+            // As `:goto`: `number`'s error is already the right one.
             Ok(Command::Outline(match p.arg(0) {
                 None => None,
                 Some(_) => Some(p.number(0)?),
@@ -5760,12 +5720,16 @@ const RENAMED: &[(&str, &str)] = &[
     // **The four that said which side** (2026-10-20). Where a panel lives is
     // yumete's to decide now, so `:panel-left` has nothing to point at but
     // the command that opens the thing.
-    ("panel-left", "sidebar"),
-    ("panel-right", "sidebar"),
+    ("panel-left", "sidebar-explorer sidebar-info"),
+    ("panel-right", "sidebar-explorer sidebar-info"),
     ("registers", "clipboard"),
     ("row", "table-jump"),
-    ("sidebar-left", "sidebar"),
-    ("sidebar-right", "sidebar"),
+    ("sidebar", "sidebar-explorer sidebar-info"),
+    ("sidebar-left", "sidebar-explorer sidebar-info"),
+    ("sidebar-right", "sidebar-explorer sidebar-info"),
+    // One command a panel since 2026-11-07; `:toc` is `:outline`.
+    ("toc", "outline"),
+    ("wiki-panel", "sidebar-info"),
     ("sav", "write-as"),
     ("saveas", "write-as"),
     ("source", "render"),
@@ -7684,7 +7648,7 @@ mod tests {
             (":write all", "write", "all"),
             (":write as", "write", "as"),
             // The nine whose first parameter would otherwise have swallowed it.
-            (":wiki panel on", "wiki", "panel"),
+            (":wiki reload", "wiki", "reload"),
             (":wiki edit", "wiki", "edit"),
             (":search project", "search", "project"),
             (":replace buffers", "replace", "buffers"),
@@ -7839,7 +7803,6 @@ mod tests {
         // A **different word** is worth knowing at any length: none of these
         // could be read off the name.
         assert_eq!(row("", "open"), ":open (o e edit)");
-        assert_eq!(row("", "toc"), ":toc (outline)");
         assert_eq!(row("", "count"), ":count (wc) +2");
         assert_eq!(row("", "format"), ":format (fmt)");
         // A folded command's shortcut is not a row of its own (2026-10-26):
@@ -8318,7 +8281,7 @@ mod tests {
             "check-usage",
             "search",
             "diff",
-            "toc",
+            "outline",
             "export",
             "ruby",
             "yume",

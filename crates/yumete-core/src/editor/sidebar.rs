@@ -650,23 +650,43 @@ impl Editor {
         }
     }
 
-    /// **Which panels are open** — what bare `:sidebar` answers.
+    /// **`:sidebar-explorer`, `:sidebar-info`, …** (2026-11-07): the panel
+    /// put away when it is showing, opened where yumete keeps it when not.
     ///
-    /// Named in the order they are on the screen, left then right, by the same
-    /// words their own headers carry. Nothing open is an answer too, and it is
-    /// the one a reader who typed `:sidebar` expecting a toggle most needs.
-    pub(super) fn sidebar_report(&self) -> String {
-        let open: Vec<String> = crate::sidebar::Side::BOTH
-            .into_iter()
-            .filter_map(|side| self.panel(side))
-            .map(|panel| {
-                crate::messages::say(crate::sidebar::Panel::from(panel.view()).tag(), &[])
-            })
-            .collect();
-        match open.is_empty() {
-            true => say!("sidebar.nothing-open"),
-            false => say!("sidebar.open", open.join(&say!("label.comma"))),
+    /// The five lists take the keys, since a list is opened to pick from. The
+    /// info panel leaves them in the text, as `空格 w i` does: it is read
+    /// beside the text, and `空格 w I` is the way in.
+    pub(super) fn toggle_panel(&mut self, panel: crate::sidebar::Panel) {
+        let side = self.side_of(panel);
+        let Some(view) = Editor::view_of(panel) else { return };
+        if self.showing(view).is_some() {
+            self.close_panel(side);
+            return;
         }
+        match panel {
+            crate::sidebar::Panel::Info => self.open_panel_without_the_keys(side, view),
+            _ => self.open_side_showing(side, view),
+        }
+    }
+
+    /// **What bare `:outline` answers**: open or closed, how deep, and how
+    /// many headings that shows.
+    pub(super) fn outline_report(&self) -> String {
+        let all = self.outline();
+        let shown = all.iter().filter(|(_, level, _)| self.outline_shows(*level)).count();
+        let depth = match self.outline_levels {
+            Some(n) => say!("outline.down-to", n),
+            None => say!("outline.all-levels"),
+        };
+        match self.showing(crate::sidebar::View::Outline) {
+            Some(_) => say!("outline.open", depth, shown),
+            None => say!("outline.closed", depth, shown),
+        }
+    }
+
+    /// Whether `:outline N` lets a heading of this level into the list.
+    fn outline_shows(&self, level: usize) -> bool {
+        self.outline_levels.is_none_or(|n| level <= n)
     }
 
     /// Show the file tree rooted at `root` and give it the keys.
@@ -893,7 +913,11 @@ impl Editor {
     /// that something is showing — the two fields the tree already spends on
     /// the same question, so the front end draws one mark for both views.
     fn outline_rows(&self) -> Vec<crate::sidebar::Row> {
-        let headings = self.outline_headings();
+        let headings: Vec<crate::sidebar::Heading> = self
+            .outline_headings()
+            .into_iter()
+            .filter(|heading| self.outline_shows(heading.level))
+            .collect();
         let counts = self.section_counts(&headings);
         let folded = |key: &(PathBuf, usize)| {
             self.outline_panel()

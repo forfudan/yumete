@@ -1,4 +1,4 @@
-# prefixes: search find substitute seek lookfor goto jump toc
+# prefixes: search find substitute seek lookfor goto jump outline
 #
 # What the editor says, one block per tag; see README.md beside this file.
 
@@ -186,15 +186,6 @@ zhs = "本文件还没有改动"
 en = "nothing has been changed here yet"
 
 [[message]]
-# 按標題序號跳，序號超出標題數
-key = "goto.only-n-headings"
-zhs = "只有 {0} 个标题"
-en = "only {0} heading(s)"
-
-
-# ── help ──────────────────────────────────────────────────────────────
-
-[[message]]
 # gw：這一屏上没有可以跳的地方
 key = "jump.nowhere"
 zhs = "本屏没有可跳转的位置"
@@ -214,6 +205,30 @@ en = "no matching command; try other words, or backspace to `:`"
 
 
 # ── lsp ──────────────────────────────────────────────
+
+[[message]]
+# :outline 報告裏的級別，沒設過級數時（草稿）
+key = "outline.all-levels"
+zhs = "全部级别"
+en = "every level"
+
+[[message]]
+# :outline 報告，大綱關着：{0} 是列到哪一級，{1} 是會列出的標題數（草稿）
+key = "outline.closed"
+zhs = "大纲：已关闭，{0}，{1} 个标题"
+en = "outline: closed, {0}, {1} heading(s)"
+
+[[message]]
+# :outline 報告裏的級別，`:outline N` 設過之後（草稿）
+key = "outline.down-to"
+zhs = "列到第 {0} 级"
+en = "down to level {0}"
+
+[[message]]
+# :outline 報告，大綱開着：{0} 是列到哪一級，{1} 是列出的標題數（草稿）
+key = "outline.open"
+zhs = "大纲：已打开，{0}，{1} 个标题"
+en = "outline: open, {0}, {1} heading(s)"
 
 [[message]]
 # 跨檔替換做到一半按了 Esc：接着做下去的那一條
@@ -717,12 +732,3 @@ en = "unknown flag '{0}' (g every match on the line, i ignore case, f literal, c
 
 
 # ── table ─────────────────────────────────────────────────────────────
-
-[[message]]
-# :toc 報有幾條標題
-key = "toc.headings-found"
-zhs = "大纲：{0} 个标题(:toc 3 跳到第三个)"
-en = "outline: {0} heading(s) (:toc 3 goes straight to the third)"
-
-
-# ── tutor ─────────────────────────────────────────────────────────────

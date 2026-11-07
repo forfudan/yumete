@@ -421,18 +421,6 @@ zhs = "光标停在词条名上时，这里显示其内容"
 en = "put the cursor on a wiki name to see its entry here"
 
 [[message]]
-# :wiki-panel 報告：同上
-key = "wiki.panel-off"
-zhs = "词条面板：关"
-en = "entry panel: off"
-
-[[message]]
-# :wiki-panel 報告：從前這個命令開關都不出聲
-key = "wiki.panel-on"
-zhs = "词条面板：开"
-en = "entry panel: on"
-
-[[message]]
 # :wiki 報告裏：讀到的一個檔和它給的詞條數
 key = "wiki.read"
 zhs = "{0}：{1} 条"
