@@ -18,6 +18,7 @@ in `docs/development.md` §5.2.
 - **`gS` splits a pair of brackets into one item per line, and joins them back**, as mini.splitjoin does: `[a, b, c]` becomes three lines one indent in, and `gS` again puts it back on one line. Commas inside nested brackets and strings are left alone. A flavour key in both keymaps; `:split-join` does the same.
 - **`ye --import lazyvim` carries the mini.surround extra**: when `lazyvim.json` lists it, `gsa`, `gsd` and `gsr` become vim-surround's `ys`, `ds` and `cs`, and Visual `gsa` wraps the selection.
 - **Indent guides in code**, as helix draws them: `[editor] indent_guides = true` puts a rule at each level of a line's leading blanks, and the rule of the block the cursor is in is darker. Off by default; `--import helix` carries helix's `[editor.indent-guides]`, and `ye --import lazyvim` turns them on, as LazyVim draws them.
+- **A language server can be given settings**: `config = { … }` on an `[lsp.<language>]` entry, as helix's `[language-server]` `config`, sent as its initialization options and used to answer what it asks for. The CSS, HTML and JSON servers now start with formatting on, as in helix, and `--import helix` carries each server's `config` from `languages.toml`.
 - **`:align` lines up the selected lines on a sign**, `=` when none is given, as mini.align does: the parts before it padded to one width (a Chinese character counts two), and a run such as `+=` or `=>` taken as one sign. It is the way under the vim keys; under helix's, `s=` then `&` does it too.
 
 ### Changed
