@@ -8942,6 +8942,42 @@ pub(crate) fn typst_line_tokens(
     Some(out)
 }
 
+/// **The tags in a line's comments, in the diagnostics' colours**
+/// (2026-11-07): `TODO:`, `FIXME(ann):`, a bare `NOTE`, as helix marks them
+/// ([`yumete_core::code::comment_tags`]), as `(start, end, style)` in the
+/// line's chars. Comments only, code's and prose's alike (`//`, `<!-- -->`,
+/// `%%…%%`): a 「Note:」 in a sentence is a word. Both renderers ask this.
+pub(crate) fn comment_tag_styles(
+    line: impl FnOnce() -> Vec<char>,
+    runs: &[yumete_core::markdown::Span],
+    ink: crate::theme::Palette,
+) -> Vec<(usize, usize, Style)> {
+    use yumete_core::code::{Token, TagLevel};
+    use yumete_core::markdown::Kind;
+    let comment = |kind: Kind| matches!(kind, Kind::Comment | Kind::Token(Token::Comment));
+    if !runs.iter().any(|r| comment(r.kind)) {
+        return Vec::new();
+    }
+    let line = line();
+    let mut out = Vec::new();
+    for run in runs.iter().filter(|r| comment(r.kind)) {
+        let (a, b) = (run.start.min(line.len()), run.end.min(line.len()));
+        for tag in yumete_core::code::comment_tags(&line[a..b]) {
+            let colour = match tag.level {
+                TagLevel::Error => ink.mark(),
+                TagLevel::Warning => ink.amber(),
+                TagLevel::Info => ink.azure(),
+                TagLevel::Hint => ink.furniture(),
+            };
+            out.push((a + tag.name.start, a + tag.name.end, Style::default().fg(colour).add_modifier(Modifier::BOLD)));
+            if let Some(user) = tag.user {
+                out.push((a + user.start, a + user.end, markup_style(Kind::Token(Token::Constant), ink)));
+            }
+        }
+    }
+    out
+}
+
 /// **Typst's `#` code, read as code** (2026-11-04): one token per character
 /// of a call, so a string, a number, a comment and a call stop being one
 /// purple — a `// comment` after `#let` was drawn as code.
@@ -13038,6 +13074,12 @@ fn draw_horizontal(
                 for (i, style) in styles.iter_mut().enumerate().take(b).skip(a.min(b)) {
                     let ch = chars.get(i).copied();
                     *style = style.patch(markup_style_at(run, runs, i + start_in_line, ch, tokens.as_deref(), ink));
+                }
+            }
+            for (a, b, tag) in comment_tag_styles(|| rope.line(row.line).chars().collect(), runs, ink) {
+                let (a, b) = (a.saturating_sub(start_in_line), b.saturating_sub(start_in_line).min(chars.len()));
+                for style in styles.iter_mut().take(b).skip(a.min(b)) {
+                    *style = style.patch(tag);
                 }
             }
             // A list item's `-` or `3.` in the theme's colour: a borrowed
@@ -19348,6 +19390,31 @@ fn squeezed(text: &str) -> String {
     /// itself needed the live loop's settled page and was measured in a pty
     /// (`:keymap-actions`, 80x24: rows 24, 34, 24, 34 before the fix); this
     /// keeps the path covered.
+    /// **A tag in a comment takes the diagnostics' colours** (2026-11-07, as
+    /// helix's comment grammar): in code's comments and prose's, not in a
+    /// sentence.
+    #[test]
+    fn a_todo_in_a_comment_is_marked_and_a_note_in_a_sentence_is_not() {
+        let config = Config::default();
+        let palette = ink(&config);
+        let at = |buffer: &ratatui::buffer::Buffer, word: &str| {
+            let row = (0..buffer.area.height).find(|&y| row_text(buffer, y).contains(word)).expect("drawn");
+            let x = row_text(buffer, row).find(word).unwrap() as u16;
+            buffer[(x, row)].style()
+        };
+        let (editor, _path) = editor_on_disk("a.rs", "fn one() {} // TODO: later\n// FIXME(ann): now\n");
+        let buffer = render_with(&editor, &config, no_ime(), 60, 8);
+        assert_eq!(at(&buffer, "TODO").fg, Some(palette.azure()), "info");
+        assert!(at(&buffer, "TODO").add_modifier.contains(Modifier::BOLD));
+        assert_eq!(at(&buffer, "FIXME").fg, Some(palette.mark()), "error");
+        assert_ne!(at(&buffer, "later").fg, Some(palette.azure()), "only the tag");
+
+        let editor = editor_with("NOTE: a sentence.\n\nText %%TODO: check%% more.\n");
+        let buffer = render_with(&editor, &config, no_ime(), 60, 8);
+        assert_ne!(at(&buffer, "NOTE").fg, Some(palette.azure()), "a sentence's word");
+        assert_eq!(at(&buffer, "TODO").fg, Some(palette.azure()), "a note to oneself");
+    }
+
     /// **What a yank copied wears the selection's ground for a moment**, and
     /// only with `[editor] yank_flash` on (2026-11-07).
     #[test]

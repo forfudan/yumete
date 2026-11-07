@@ -1320,8 +1320,95 @@ fn inherited(cell: &'static OnceLock<String>, base: &str, own: &str) -> &'static
     cell.get_or_init(|| format!("{base}\n{own}")).as_str()
 }
 
+/// How loud a tag in a comment is: helix's four levels
+/// (`runtime/queries/comment/highlights.scm`), drawn in the diagnostics'
+/// colours.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TagLevel {
+    Hint,
+    Info,
+    Warning,
+    Error,
+}
+
+/// A tag found in a comment: the name's chars, how loud it is, and the
+/// `(user)` after it if there is one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommentTag {
+    pub name: std::ops::Range<usize>,
+    pub level: TagLevel,
+    pub user: Option<std::ops::Range<usize>>,
+}
+
+/// **The tags in a comment's text** (2026-11-07): `TODO:`, `FIXME(ann):`,
+/// a bare `NOTE`, as helix marks them through its comment grammar, with its
+/// word lists. A name is a whole word in capitals, matched exactly; a
+/// `(user)` before the colon is helix's `@constant`. helix's issue numbers,
+/// mentions and links are left out.
+pub fn comment_tags(text: &[char]) -> Vec<CommentTag> {
+    const HINT: &[&str] = &["HINT", "MARK", "PASSED", "STUB", "MOCK", "TIP"];
+    const INFO: &[&str] = &[
+        "INFO", "NOTE", "TODO", "TO-DO", "PERF", "OPTIMIZE", "PERFORMANCE", "QUESTION", "ASK", "REVIEW", "PR", "CR",
+    ];
+    const WARNING: &[&str] = &["HACK", "WARN", "WARNING", "TEST", "TEMP"];
+    const ERROR: &[&str] = &[
+        "BUG", "FIXME", "ISSUE", "XXX", "FIX", "SAFETY", "FIXIT", "FAILED", "DEBUG", "INVARIANT", "COMPLIANCE",
+        "PANIC", "SECURITY",
+    ];
+    let wordy = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-';
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < text.len() {
+        if !wordy(text[at]) || (at > 0 && wordy(text[at - 1])) {
+            at += 1;
+            continue;
+        }
+        let end = (at..text.len()).find(|&i| !wordy(text[i])).unwrap_or(text.len());
+        let word: String = text[at..end].iter().collect();
+        let level = [(HINT, TagLevel::Hint), (INFO, TagLevel::Info), (WARNING, TagLevel::Warning), (ERROR, TagLevel::Error)]
+            .into_iter()
+            .find(|(names, _)| names.contains(&word.as_str()))
+            .map(|(_, level)| level);
+        if let Some(level) = level {
+            let user = (text.get(end) == Some(&'('))
+                .then(|| (end + 1..text.len()).find(|&i| text[i] == ')' || text[i].is_whitespace()))
+                .flatten()
+                .filter(|&close| text[close] == ')' && close > end + 1 && text.get(close + 1) == Some(&':'))
+                .map(|close| end..close + 1);
+            out.push(CommentTag { name: at..end, level, user });
+        }
+        at = end;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_comment_s_tags_are_helix_s() {
+        let tags = |text: &str| -> Vec<(String, TagLevel, Option<String>)> {
+            let chars: Vec<char> = text.chars().collect();
+            comment_tags(&chars)
+                .into_iter()
+                .map(|t| {
+                    let take = |r: std::ops::Range<usize>| chars[r].iter().collect::<String>();
+                    (take(t.name), t.level, t.user.map(take))
+                })
+                .collect()
+        };
+        assert_eq!(tags("// TODO: 換行"), vec![("TODO".into(), TagLevel::Info, None)]);
+        assert_eq!(tags("// FIXME(ann): later"), vec![("FIXME".into(), TagLevel::Error, Some("(ann)".into()))]);
+        assert_eq!(tags("# HACK, WARN and NOTE"), vec![
+            ("HACK".into(), TagLevel::Warning, None),
+            ("WARN".into(), TagLevel::Warning, None),
+            ("NOTE".into(), TagLevel::Info, None),
+        ]);
+        assert_eq!(tags("/* TIP */"), vec![("TIP".into(), TagLevel::Hint, None)]);
+        assert!(tags("// todo: TODOS NOTED XTODO Note:").is_empty(), "whole words in capitals only");
+        assert_eq!(tags("// TO-DO"), vec![("TO-DO".into(), TagLevel::Info, None)]);
+        assert_eq!(tags("// BUG(a b): no"), vec![("BUG".into(), TagLevel::Error, None)], "a user has no space");
+    }
+
     use super::*;
 
     /// **自己寫的那份查詢，每一種語言各釘一格**（2026-10-06）。

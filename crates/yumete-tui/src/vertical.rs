@@ -1222,6 +1222,8 @@ pub fn draw(
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
     // The marked line's Typst code as tokens, kept beside it (2026-11-04).
     let mut tokens: Option<Vec<Option<yumete_core::code::Token>>> = None;
+    // The tags in the line's comments (`TODO:`), as the horizontal page draws them.
+    let mut tags: Vec<(usize, usize, Style)> = Vec::new();
     // And its 平仄, for the same reason: the editor caches the answer per line
     // too, but a page is forty 縱 and this saves the lookup as well as the walk.
     let mut metered: Option<(usize, Vec<yumete_core::meter::Mark>)> = None;
@@ -1386,6 +1388,7 @@ pub fn draw(
             if marked.as_ref().is_none_or(|(l, _)| *l != zong.line) {
                 let runs = markup.runs(zong.line);
                 tokens = crate::typst_line_tokens(|| rope.line(zong.line).chars().collect(), &runs, ink);
+                tags = crate::comment_tag_styles(|| rope.line(zong.line).chars().collect(), &runs, ink);
                 marked = Some((zong.line, runs));
             }
             let runs: &[yumete_core::markdown::Span] = match &marked {
@@ -1600,6 +1603,9 @@ pub fn draw(
                 let ch = symbol.chars().next();
                 let at = column.max(run.start);
                 style = style.patch(crate::markup_style_at(run, runs, at, ch, tokens.as_deref(), ink));
+            }
+            for &(_, _, tag) in tags.iter().filter(|&&(a, b, _)| b > column && a < column + len.max(1)) {
+                style = style.patch(tag);
             }
 
             // Warning: **Not `&& !has_selection`** (#450, and again here for #457).
