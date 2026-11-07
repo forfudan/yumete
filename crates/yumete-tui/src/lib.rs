@@ -26163,9 +26163,10 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char(':'));
 
         let tall = render_with(&editor, &config, no_ime(), 160, 60);
-        // Twenty-six rows: the shortest that holds all 79 (2026-11-04: with
-        // `:encoding` the list outgrew 24 rows, and on one it scrolls by a row).
-        let short = render_with(&editor, &config, no_ime(), 160, 26);
+        // Twenty-eight rows: the shortest that holds all 85 (2026-11-04: with
+        // `:encoding` the list outgrew 24 rows; 2026-11-07: with `:align`,
+        // `:split-join`, `:set`, `:setfiletype` and `:tabnew`, 26).
+        let short = render_with(&editor, &config, no_ime(), 160, 28);
         let (deep, wide) = menu_shape(&tall);
         assert_eq!(wide.len(), MENU_COLUMNS, "six columns at this width: {wide:?}");
         assert_eq!(
@@ -26539,7 +26540,7 @@ fn squeezed(text: &str) -> String {
         // with the rest of the page standing empty beside it.
         let mut wide = editor_with("那年冬天");
         wide.on_key(Key::Char(':'));
-        let buffer = render_with(&wide, &config, no_ime(), 140, 26);
+        let buffer = render_with(&wide, &config, no_ime(), 140, 28);
         let text = buffer_text(&buffer);
         assert!(text.contains(":open"), "{text:?}");
         assert!(text.contains(":render"), "a command from the far end of the list");
@@ -26550,7 +26551,7 @@ fn squeezed(text: &str) -> String {
         // a window this short — half of it, footer and rings included.
         let (rows, columns) = menu_shape(&buffer);
         assert!(
-            rows.len() <= 26 * 2 / 3 - 3,
+            rows.len() <= 28 * 2 / 3 - 3,
             "a menu is glanced at, not read: {rows:?}"
         );
         assert!(columns.len() >= 3, "several columns: {columns:?}");

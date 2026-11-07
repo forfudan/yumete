@@ -667,6 +667,23 @@ en = "search the working directory"
 find = "搜索 搜尋 搜寻 查找 尋找 寻找 全文 grep find search 工作 路徑 路径 目錄 目录 working cwd"
 
 [[message]]
+# : 命令選單裏 set 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.set"
+zhs = "vim 的 :set，只认 modeline 认的几项：ft、ts、sw、et、tw；不带参数打开设置面板"
+zht = "vim 的 :set，只認 modeline 認的幾項：ft、ts、sw、et、tw；不帶參數打開設置面板"
+en = "vim's :set, for what a modeline takes: ft, ts, sw, et, tw; bare, the settings panel"
+find = "set ft filetype tabstop shiftwidth expandtab textwidth 文件类型 文件類型"
+
+[[message]]
+# : 命令選單裏 setfiletype 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.setfiletype"
+zhs = "vim 的 :setf，同 :set ft="
+zht = "vim 的 :setf，同 :set ft="
+en = "vim's :setf, as :set ft="
+find = "setf filetype 文件类型 文件類型"
+
+
+[[message]]
 # : 命令選單裏 settings 那一項的説明(commands 組)
 key = "cmd.commands.settings"
 zht = "整頁一扇設置：每一項有名字有説明，改完 :w 存盤"
@@ -707,6 +724,7 @@ en = "put the items in the brackets round the cursor one per line, or back onto 
 find = "拆开 合并 拆分 括号 參數 参数 split join splitjoin arguments"
 
 
+
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的説明(commands 組)
 key = "cmd.commands.substitute"
@@ -739,6 +757,14 @@ zht = "表格渲染模式：源碼視圖、基本視圖、全窗視圖。無參�
 zhs = "表格渲染模式：源码视图、基本视图、全窗视图。无参数时，报告当前模式名"
 en = "how much of a table is drawn: the source, basic, or window view; bare says which it is now"
 find = "表格 視圖 视图 源碼 源码 基本 全窗 render 級别 级别"
+
+[[message]]
+# : 命令選單裏 tabnew 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.tabnew"
+zhs = "vim 的 :tabnew：新的草稿，给了文件名就打开那个文件"
+zht = "vim 的 :tabnew：新的草稿，給了文件名就打開那個文件"
+en = "vim's :tabnew: a new scratch, or the file it names"
+find = "tabnew tabe tabedit new 新建 标签 標籤"
 
 [[message]]
 # : 命令選單裏 theme 那一項的説明(commands 組)
@@ -1679,6 +1705,20 @@ zht = "星陳"
 zhs = "星陈"
 en = "星陳"
 find = "星陳 星陈 xingchen 形碼 形码"
+
+[[message]]
+# :set 給的一項都不認（草稿）
+key = "cmd.set-takes"
+zhs = ":set 只认 ft、ts、sw、et、tw；「{0}」不在其中"
+zht = ":set 只認 ft、ts、sw、et、tw；「{0}」不在其中"
+en = ":set takes ft, ts, sw, et and tw; {0} is none of them"
+
+[[message]]
+# :set 收下了哪幾項（草稿）
+key = "cmd.set-took"
+zhs = "已设：{0}"
+zht = "已設：{0}"
+en = "set: {0}"
 
 [[message]]
 # : 命令選單裏 html 那一項的説明(shot 組)

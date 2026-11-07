@@ -658,6 +658,8 @@ pub enum Command {
     /// `:syntax [markdown|typst]` — which markup this file is in
     /// (Feature #106). No argument says what it was guessed to be.
     SetSyntax(Option<String>),
+    /// vim's `:set`, as far as a modeline goes: `ft`, `ts`, `sw`, `et`, `tw`.
+    VimSet(String),
     /// `:keymap [helix|vim]` — lay a shipped keymap under the reader's own
     /// aliases; bare reports which (#428).
     SetKeymap(Option<yumete_cjk::KeyPreset>),
@@ -3144,11 +3146,26 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "new",
-        aliases: &["enew"],
+        aliases: &["enew", "ene"],
         help: "cmd.commands.new",
         needs: &[],
         params: &[],
         build: Some(|_| Ok(Command::NewBuffer)),
+    },
+    // vim's `:tabnew` (2026-11-07): a tab here is a file, so it is a new
+    // scratch, or the file it names.
+    Entry {
+        name: "tabnew",
+        aliases: &["tabe", "tabedit"],
+        help: "cmd.commands.tabnew",
+        needs: &[],
+        params: &[Param::Path],
+        build: Some(|p| {
+            Ok(match p.arg(0) {
+                Some(path) => Command::Open(path.to_string()),
+                None => Command::NewBuffer,
+            })
+        }),
     },
     Entry {
         name: "write",
@@ -4275,6 +4292,29 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::UserTable(p.need(0)?.to_string()))),
     },
     Entry {
+        name: "set",
+        aliases: &["se"],
+        help: "cmd.commands.set",
+        needs: &[],
+        params: &[Param::Free("<選項>")],
+        // Bare, the settings panel, as it has been; with options, vim's.
+        build: Some(|p| {
+            let options = format!("{} {}", p.arg(0).unwrap_or(""), p.rest).trim().to_string();
+            Ok(match options.is_empty() {
+                true => Command::Settings,
+                false => Command::VimSet(options),
+            })
+        }),
+    },
+    Entry {
+        name: "setfiletype",
+        aliases: &["setf"],
+        help: "cmd.commands.setfiletype",
+        needs: &[],
+        params: &[Param::Free("<文件類型>")],
+        build: Some(|p| Ok(Command::VimSet(format!("ft={}", p.arg(0).unwrap_or(""))))),
+    },
+    Entry {
         name: "syntax",
         aliases: &["syn"],
         help: "cmd.commands.syntax",
@@ -4791,7 +4831,9 @@ pub const COMMANDS: &[Entry] = &[
         // is `:table-render`'s — so walking in is what asking for a view does,
         // and the bare name was free for the thing a reader guesses it means.
         name: "table",
-        aliases: &[],
+        // Declared, so `:tabnew` (2026-11-07) leaves the short forms the
+        // menu teaches where they were.
+        aliases: &["ta", "tab"],
         help: "cmd.commands.table",
         needs: &[],
         params: &[Param::Free("<行>x<欄>")],
@@ -5435,7 +5477,7 @@ pub const COMMANDS: &[Entry] = &[
     },
     Entry {
         name: "settings",
-        aliases: &["set"],
+        aliases: &[],
         help: "cmd.commands.settings",
         needs: &[],
         params: &[],

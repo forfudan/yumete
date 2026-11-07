@@ -23,6 +23,7 @@ in `docs/development.md` §5.2.
 - **One `Esc` leaves Insert mode while the completion list is up**, as in helix and vim. It used to close the list and stay in Insert, so a second `Esc` was needed. Leaving Insert any other way (`C-c`, a `[keys.insert]` run) takes the list away too.
 - **vim's Visual `$` takes the line break**: `v$d` joins the next line on and `v$y` copies the break, as in vim; `p` puts such a copy inside the line, not on a line of its own. The file's last line break is never deleted.
 - **vim's `{count}%`** goes that far down the file: `50%` is the middle line. With an operator it takes the lines short of the far one, as vim does: on ten lines `d50%` deletes lines 1 to 4.
+- **vim's `:set`, `:setf`, `:tabnew` and `:ene`**: `:set ft=python ts=2 sw=2 et tw=80` takes what a modeline takes, for this file, and `:setf python` is `:set ft=python`; `:set` on its own still opens the settings panel. `:tabnew` opens a new empty buffer or the file it names, and `:ene` is `:new`.
 
 - **The paging keys page when a float has nothing more to show**: with a diagnostic, docs or a wiki entry floating in the corner, `C-d`, `C-u`, `C-f`, `C-b`, `PageDown` and `PageUp` did nothing if the float already showed all of it. Such a float now leaves them to the text; one with more to show still scrolls. A long diagnostic that is cut now scrolls too.
 

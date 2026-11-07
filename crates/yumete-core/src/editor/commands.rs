@@ -995,6 +995,27 @@ impl Editor {
                 self.show_listing(listing, say!("keys.actions-title"));
                 Ok(CommandOutcome::Continue)
             }
+            // **vim's `:set` and `:setf`** (2026-11-07, from the 0.20.0
+            // reviews): read as a modeline is read, so they take exactly what
+            // a modeline takes (`ft`, `ts`, `sw`, `et`, `tw`) into this
+            // buffer, and the file type as one set by hand.
+            Command::VimSet(options) => {
+                let read = crate::modeline::scan(&[&format!("vim: set {options}:")]);
+                if read.is_empty() {
+                    self.status = say!("cmd.set-takes", options.trim());
+                    return Ok(CommandOutcome::Continue);
+                }
+                let local = self.current_buffer_mut().local_mut();
+                local.tab_stop = read.tab_stop.or(local.tab_stop);
+                local.indent_width = read.indent_width.or(local.indent_width);
+                local.tab_spaces = read.tab_spaces.or(local.tab_spaces);
+                local.text_width = read.text_width.or(local.text_width);
+                if let Some(syntax) = read.syntax {
+                    self.set_syntax(syntax);
+                }
+                self.status = say!("cmd.set-took", read.said.join(" "));
+                Ok(CommandOutcome::Continue)
+            }
             Command::SetSyntax(name) => {
                 match name {
                     Some(name) => match crate::syntax::Syntax::parse(&name) {

@@ -27871,6 +27871,28 @@ fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **vim's `:set`, `:setf`, `:ene` and `:tabnew`** (2026-11-07, from the
+/// 0.20.0 reviews): `:set` takes what a modeline takes, into this buffer.
+#[test]
+fn vims_set_setf_ene_and_tabnew() {
+    let mut ed = typed_vim("x = 1\n");
+    ed.execute(":set ft=python ts=2 sw=2 et").unwrap();
+    assert_eq!(ed.syntax().name(), crate::syntax::Syntax::parse("python").unwrap().name());
+    assert_eq!((ed.tab_stop(), ed.indent_width(), ed.tab_spaces()), (2, 2, true));
+    ed.execute(":setf rust").unwrap();
+    assert_eq!(ed.syntax().name(), crate::syntax::Syntax::parse("rust").unwrap().name());
+    ed.execute(":set nu").unwrap();
+    assert!(ed.status().contains("nu"), "says what it does not take: {}", ed.status());
+    ed.execute(":se tw=60").unwrap();
+    assert_eq!(ed.current_buffer().local().text_width, Some(60));
+
+    let tabs = ed.buffer_count();
+    ed.execute(":tabnew").unwrap();
+    assert_eq!(ed.buffer_count(), tabs + 1, ":tabnew");
+    ed.execute(":ene").unwrap();
+    assert_eq!(ed.buffer_count(), tabs + 2, ":ene");
+}
+
 /// **vim's `{count}%`** (2026-11-07, measured in vim 9.1 and nvim 0.12 on
 /// ten lines): `50%` is line 5, `(count × lines + 99) / 100`; with an
 /// operator the far line is left out, so `d50%` takes lines 1 to 4.
