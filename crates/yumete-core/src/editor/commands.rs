@@ -697,6 +697,10 @@ impl Editor {
                 self.new_window(how);
                 Ok(CommandOutcome::Continue)
             }
+            Command::SplitJoin => {
+                self.edit_each(|e| e.split_join_here());
+                Ok(CommandOutcome::Continue)
+            }
             Command::Reflow(width) => {
                 let width = width.unwrap_or(super::verbs::HELIX_TEXT_WIDTH);
                 self.edit_each(|e| e.reflow_selection(width));

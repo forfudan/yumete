@@ -555,6 +555,68 @@ impl Editor {
         self.sel.set_head(motion::prev_grapheme(self.current_buffer().rope(), end).max(start));
     }
 
+    /// **mini.splitjoin's `gS`** (2026-11-07): the innermost `()` `[]` `{}`
+    /// around the cursor, one item per line if it is on one line, back onto
+    /// one line if it is not.
+    ///
+    /// As mini's: the items are split after each comma not inside a nested
+    /// bracket or a string, one indent in from the opener's line, the closer
+    /// on a line of its own at the opener's indent, no comma added. Joining
+    /// trims every line and puts one space between them, no padding inside
+    /// the brackets. Full-width （） are left alone: they are prose.
+    pub(super) fn split_join_here(&mut self) {
+        if self.refuse_readonly() {
+            return;
+        }
+        let rope = self.current_buffer().rope();
+        let caret = self.caret();
+        let Some((open, close)) = [('(', ')'), ('[', ']'), ('{', '}')]
+            .into_iter()
+            .filter_map(|(o, c)| super::surrounding(rope, caret, o, c))
+            .max_by_key(|&(start, _)| start)
+        else {
+            self.status = say!("edit.no-brackets-to-split");
+            return;
+        };
+        let inner: Vec<char> = rope.slice(open + 1..close).chars().collect();
+        let ending = self.current_buffer().ending().to_string();
+        let new = match rope.char_to_line(open) == rope.char_to_line(close) {
+            true => {
+                let pieces = split_items(&inner);
+                if pieces.is_empty() {
+                    self.status = say!("edit.no-brackets-to-split");
+                    return;
+                }
+                let line = rope.line(rope.char_to_line(open)).to_string();
+                let indent: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
+                let deeper = format!("{indent}{}", self.indent_unit(&indent));
+                let mut out = String::new();
+                for piece in pieces {
+                    out.push_str(&ending);
+                    out.push_str(&deeper);
+                    out.push_str(&piece);
+                }
+                out.push_str(&ending);
+                out.push_str(&indent);
+                out
+            }
+            false => {
+                let text: String = inner.iter().collect();
+                text.lines().map(str::trim).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ")
+            }
+        };
+        let was: String = inner.iter().collect();
+        if new == was {
+            return;
+        }
+        self.snapshot();
+        if !self.overwrite(open + 1, close, &new) {
+            return;
+        }
+        self.sel.set_anchor(open);
+        self.sel.set_head(open);
+    }
+
     /// Rewrite every character of the selection through `f` (`~`, `` ` ``).
     pub(super) fn map_selection(&mut self, f: impl Fn(char) -> String) {
         let (start, selected) = self.selection();
@@ -1047,4 +1109,38 @@ impl Editor {
         }
         self.clamp_cursor();
     }
+}
+
+/// The items between a pair of brackets, each trimmed and keeping its comma:
+/// split after every comma outside a nested bracket or a string (mini.splitjoin's
+/// `exclude_regions`). Empty when there is nothing but blanks.
+fn split_items(inner: &[char]) -> Vec<String> {
+    let mut pieces = Vec::new();
+    let mut piece = String::new();
+    let mut depth = 0usize;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for &c in inner {
+        piece.push(c);
+        match quote {
+            Some(q) => {
+                if escaped {
+                    escaped = false;
+                } else if c == '\\' {
+                    escaped = true;
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                '"' | '\'' | '`' => quote = Some(c),
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => depth = depth.saturating_sub(1),
+                ',' if depth == 0 => pieces.push(std::mem::take(&mut piece)),
+                _ => {}
+            },
+        }
+    }
+    pieces.push(piece);
+    pieces.into_iter().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect()
 }

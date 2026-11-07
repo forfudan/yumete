@@ -65,6 +65,7 @@ pub(super) const GROUP_COMMANDS: &[NormalCommand] = &[
     (NormalCmd::GotoLastModifiedFile, |e, _| e.goto_last_modified_file(), Key::Char('m')),
     (NormalCmd::GotoWord, |e, _| e.start_jump(), Key::Char('w')),
     (NormalCmd::GotoWordByLetters, |e, _| e.start_seek(false), Key::Char('x')),
+    (NormalCmd::SplitJoin, |e, _| e.edit_each(|e| e.split_join_here()), Key::Char('S')),
     (NormalCmd::GotoCharByPinyin, |e, _| e.start_seek(true), Key::Char('z')),
     (NormalCmd::GotoLastAccessedFile, |e, _| e.goto_last_file(), Key::Char('a')),
     (NormalCmd::GotoNextBuffer, |e, _| e.next_buffer(), Key::Char('n')),

@@ -265,6 +265,18 @@ flavor_items! {
         label: "keys.flavor.item.goto-extras",
         hint: "keys.flavor.item.goto-extras.hint",
     },
+    /// mini.splitjoin's `gS` (2026-11-07): the brackets round the cursor,
+    /// one item per line, or back onto one line. Free in helix and vim.
+    SplitJoin => ItemInfo {
+        id: "split_join",
+        level: FlavorLevel::Basic,
+        keymaps: &[KeyPreset::Helix, KeyPreset::Vim],
+        keys: &["gS"],
+        vim_keys: None,
+        insert: false,
+        label: "keys.flavor.item.split-join",
+        hint: "keys.flavor.item.split-join.hint",
+    },
     /// Insert mode's `C-a` and `C-e` to the line's ends, `C-n` for completion, `C-g` an undo checkpoint (helix's `C-s`, which a terminal takes).
     InsertExtras => ItemInfo {
         id: "insert_extras",

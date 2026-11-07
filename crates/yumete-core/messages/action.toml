@@ -3038,6 +3038,7 @@ zht = "開：gz 按頭兩個字母跳，gZ 按拼音跳，g/ 搜光標下的詞�
 zhs = "开：gz 按头两个字母跳，gZ 按拼音跳，g/ 搜光标下的词，gL 跟任何链接；helix 下 gx 用浏览器打开网址，vim 下 gW 是跳转标签。关：这些键空着。"
 en = "On: gz jumps by first letters, gZ by pinyin, g/ searches the word under the cursor, gL follows any link; under helix gx opens a web address, under vim gW is the jump labels. Off: unbound."
 
+
 [[message]]
 # 風味項：標題折疊（草稿）
 key = "keys.flavor.item.heading-folds"
@@ -3275,6 +3276,20 @@ key = "keys.flavor.item.space-paging.hint"
 zht = "開：空格 空格往下翻一頁，空格 退格往上翻一頁。關：這兩個鍵空着。"
 zhs = "开：空格 空格往下翻一页，空格 退格往上翻一页。关：这两个键空着。"
 en = "On: Space Space turns a page down and Space Backspace a page up. Off: both are unbound."
+
+[[message]]
+# 風味的一項：設置面板上的名字（草稿）
+key = "keys.flavor.item.split-join"
+zhs = "拆开/合并括号"
+zht = "拆開/合併括號"
+en = "split and join brackets"
+
+[[message]]
+# 風味的一項：設置面板上的說明（草稿）
+key = "keys.flavor.item.split-join.hint"
+zhs = "开：gS 把光标所在括号里的各项拆成每项一行，再按一次合回一行。关：gS 空着，命令 :split-join 照样能用。"
+zht = "開：gS 把光標所在括號裏的各項拆成每項一行，再按一次合回一行。關：gS 空着，命令 :split-join 照樣能用。"
+en = "On: gS puts the items in the brackets round the cursor one per line, and back onto one line when pressed again. Off: gS is unbound; :split-join still works."
 
 [[message]]
 # 風味的一項：設置面板上的名字（草稿）

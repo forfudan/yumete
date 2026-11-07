@@ -537,6 +537,7 @@ zhs = "选区按宽度重排（默认 80 栏）"
 en = "refill the selection to a width (80 columns by default)"
 find = "重排 換行 换行 硬換行 硬换行 reflow rewrap wrap fill gq"
 
+
 [[message]]
 # : 命令選單裏 reload 那一項的説明(commands 組)
 key = "cmd.commands.reload"
@@ -688,6 +689,14 @@ zht = "截圖：默認進剪貼板，png/html/txt 則存成文件(進下載文�
 zhs = "截图：默认进剪贴板，png/html/txt 则存成文件(进下载文件夹)"
 en = "a picture: the clipboard by default, or a file with `png`/`html`/`txt`"
 find = "截圖 截图 圖片 图片 存圖 存图 screenshot png html 剪貼簿 剪贴簿"
+
+[[message]]
+# : 命令選單裏 split-join 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.split-join"
+zhs = "光标所在括号里的各项拆成每项一行，或合回一行"
+zht = "光標所在括號裏的各項拆成每項一行，或合回一行"
+en = "put the items in the brackets round the cursor one per line, or back onto one line"
+find = "拆开 合并 拆分 括号 參數 参数 split join splitjoin arguments"
 
 [[message]]
 # : 命令選單裏 s/pat/rep/ 那一項的説明(commands 組)

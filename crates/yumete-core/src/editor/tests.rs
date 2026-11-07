@@ -27871,6 +27871,49 @@ fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **mini.splitjoin's `gS`** (2026-11-07): the brackets round the cursor
+/// onto lines and back, commas inside nested brackets and strings kept, one
+/// indent in from the opener's line, one undo, both keymaps, a flavour key.
+#[test]
+fn gs_splits_the_brackets_and_joins_them_back() {
+    let once = "    call(a, \"b, c\", [d, e], f(g, h))\n";
+    let split = "    call(\n        a,\n        \"b, c\",\n        [d, e],\n        f(g, h)\n    )\n";
+    for keymap in ["helix", "vim"] {
+        let mut ed = typed(once);
+        ed.set_indent_width(4);
+        ed.execute(&format!(":keymap {keymap}")).unwrap();
+        press(&mut ed, "gg");
+        press(&mut ed, "f(");
+        press(&mut ed, "gS");
+        assert_eq!(ed.current_buffer().text(), split, "{keymap}: split");
+        press(&mut ed, "jj");
+        press(&mut ed, "gS");
+        assert_eq!(ed.current_buffer().text(), once, "{keymap}: joined back");
+        press(&mut ed, "u");
+        assert_eq!(ed.current_buffer().text(), split, "{keymap}: one undo");
+    }
+
+    // The innermost pair: on `g`, the call's own brackets.
+    let mut ed = typed("x = [1, f(g, h), 2]\n");
+    press(&mut ed, "fg");
+    ed.execute(":split-join").unwrap();
+    assert_eq!(ed.current_buffer().text(), "x = [1, f(\n    g,\n    h\n), 2]\n");
+
+    // Nowhere to split, and nothing in the brackets.
+    let mut ed = typed("plain words ()\n");
+    press(&mut ed, "gS");
+    assert_eq!(ed.current_buffer().text(), "plain words ()\n");
+    assert!(!ed.status().is_empty(), "says why");
+    press(&mut ed, "$gS");
+    assert_eq!(ed.current_buffer().text(), "plain words ()\n", "empty brackets");
+
+    // A flavour key: off, `gS` does nothing.
+    let mut ed = typed("f(a, b)\n");
+    ed.execute(":keymap-yumete-flavor off").unwrap();
+    press(&mut ed, "fagS");
+    assert_eq!(ed.current_buffer().text(), "f(a, b)\n", "flavour off");
+}
+
 /// **A yank is lit for a moment** (2026-11-07, `[editor] yank_flash`, nvim's
 /// `vim.hl.on_yank`): what was copied, until the moment is up or the text
 /// changes; several cursors light together; a macro's replay does not.

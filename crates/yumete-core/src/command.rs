@@ -226,6 +226,8 @@ pub enum Command {
     Later(UndoSpan),
     /// `:reflow [width]` — helix's: each selection refilled to `width`
     /// columns, 80 when it is left off (2026-10-29).
+    /// mini.splitjoin's `gS`: the brackets round the cursor onto lines, or back.
+    SplitJoin,
     Reflow(Option<usize>),
     /// `:vsplit [file]` / `:hsplit [file]`: a new window beside or below the
     /// live one, showing `file` when one is named (2026-10-30).
@@ -4706,6 +4708,14 @@ pub const COMMANDS: &[Entry] = &[
             None => Ok(Command::HardWrap(None)),
             Some(_) => Ok(Command::HardWrap(Some(p.number(0)?))),
         }),
+    },
+    Entry {
+        name: "split-join",
+        aliases: &[],
+        help: "cmd.commands.split-join",
+        needs: &[],
+        params: &[],
+        build: Some(|_| Ok(Command::SplitJoin)),
     },
     Entry {
         name: "reflow",

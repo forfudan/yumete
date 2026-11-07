@@ -314,6 +314,13 @@ zhs = "复制了 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
+# gS 的時候光標不在任何括號裏，或者括號裏是空的（草稿）
+key = "edit.no-brackets-to-split"
+zhs = "光标不在可以拆开或合并的括号里"
+zht = "光標不在可以拆開或合併的括號裏"
+en = "the cursor is not in brackets with items to split or join"
+
+[[message]]
 # mi g / ma g，可是這個文件 git 管不着(helix 的 "Diff is not available")
 key = "edit.no-diff-here"
 zht = "這個文件不在 git 裏，没有改動可選"
@@ -441,6 +448,7 @@ en = "yanked {0} character(s)"
 
 
 # ── export ────────────────────────────────────────────────────────────
+
 
 [[message]]
 # 正在打的那一段的名字：正文里写编码

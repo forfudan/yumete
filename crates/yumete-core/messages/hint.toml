@@ -802,6 +802,14 @@ zht = "兩字母定位單詞"
 zhs = "两字母定位单词"
 en = "two letters to locate a word"
 
+
+[[message]]
+# `gS`：括號裏的各項拆成每項一行，或合回一行（草稿）
+key = "hint.goto.split-join"
+zhs = "拆开/合并括号里的各项"
+zht = "拆開/合併括號裏的各項"
+en = "split or join the brackets' items"
+
 [[message]]
 # goto: head of file
 key = "hint.goto.start-of-file"

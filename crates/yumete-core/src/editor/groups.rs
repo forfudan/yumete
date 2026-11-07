@@ -878,6 +878,8 @@ pub(super) static GOTO: Group = Group {
         // easymotion), `gZ` by pinyin (Z for 中). Both free in vim and helix.
         ch('z', NormalCmd::GotoWordByLetters, "hint.goto.seek-written").flavor(FlavorItem::GotoExtras),
         ch('Z', NormalCmd::GotoCharByPinyin, "hint.goto.seek-reading").flavor(FlavorItem::GotoExtras),
+        // mini.splitjoin's `gS` (2026-11-07), free in helix and vim.
+        ch('S', NormalCmd::SplitJoin, "hint.goto.split-join").flavor(FlavorItem::SplitJoin),
         // `ga` `gp` `gr` `gc` are vim's or Neovim's own (`index.txt`: ga, gp,
         // gr; Neovim's defaults: gc, gr*), so helix's are helix's alone.
         ch('a', NormalCmd::GotoLastAccessedFile, "hint.goto.last-file").when(Only::Helix),
