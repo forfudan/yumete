@@ -112,10 +112,16 @@ fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
 /// reStructuredText，`Main API` 底下那一行 `======` 就這麼原樣畫了出來
 /// （2026-09-30 報的）。排 `markdown` 在前，pylsp 就走 `docstring-to-markdown`
 /// 把 reST/numpydoc 譯成 Markdown 再送（譯不動的原樣退回，不會更差）。
-pub fn initialize(id: i64, root: &Path) -> String {
+///
+/// `options` is the server's `config` (`[lsp.<language>] config = {...}`),
+/// sent as `initializationOptions` the way helix sends it (2026-11-07); with
+/// none the key is left out. `workspace.configuration` is claimed because
+/// the same table now answers `workspace/configuration` ([`read_with`]).
+pub fn initialize(id: i64, root: &Path, options: Option<&serde_json::Value>) -> String {
     let root = uri_of(root);
+    let options = options.map(|o| format!(r#","initializationOptions":{o}"#)).unwrap_or_default();
     format!(
-        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}},"symbol":{{}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"documentHighlight":{{}},"rangeFormatting":{{}},"documentSymbol":{{"hierarchicalDocumentSymbolSupport":true}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"initialize","params":{{"processId":{pid},"rootUri":{root}{options},"capabilities":{{"window":{{"workDoneProgress":true}},"workspace":{{"applyEdit":true,"workspaceEdit":{{"documentChanges":true}},"symbol":{{}},"configuration":true,"didChangeConfiguration":{{"dynamicRegistration":false}}}},"textDocument":{{"publishDiagnostics":{{"relatedInformation":false}},"synchronization":{{"didSave":true}},"references":{{}},"documentHighlight":{{}},"rangeFormatting":{{}},"documentSymbol":{{"hierarchicalDocumentSymbolSupport":true}},"rename":{{"prepareSupport":false}},"codeAction":{{"codeActionLiteralSupport":{{"codeActionKind":{{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}}}}}},"hover":{{"contentFormat":["markdown","plaintext"]}},"completion":{{"completionItem":{{"snippetSupport":false}}}},"signatureHelp":{{"signatureInformation":{{"documentationFormat":["plaintext"]}}}}}}}}}}}}"#,
         pid = std::process::id(),
         root = json_string(&root),
     )
@@ -125,6 +131,13 @@ pub fn initialize(id: i64, root: &Path) -> String {
 /// [`initialize`] is in. Warning: A server that never gets it may never start work.
 pub fn initialized() -> String {
     r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#.to_string()
+}
+
+/// `workspace/didChangeConfiguration` with the server's whole `config`, sent
+/// right after [`initialized`] when it has one. helix does this (and says
+/// Neovim does too): some servers read their settings only from this push.
+pub fn did_change_configuration(settings: &serde_json::Value) -> String {
+    format!(r#"{{"jsonrpc":"2.0","method":"workspace/didChangeConfiguration","params":{{"settings":{settings}}}}}"#)
 }
 
 /// `textDocument/didOpen` — this file, this language, this text.
@@ -642,6 +655,14 @@ pub struct Replacing {
 /// to a message this does not understand is to carry on — a parse error that
 /// stopped the editor would make every server's quirk into a crash.
 pub fn read(message: &str, initialize_id: i64) -> Notice {
+    read_with(message, initialize_id, None)
+}
+
+/// [`read`], for a server that was given a `config`: a
+/// `workspace/configuration` request is answered from it, each item with
+/// the part its `section` names (`a.b` is `config.a.b`, no section is the
+/// whole table) and `null` where there is no such part, as helix answers.
+pub fn read_with(message: &str, initialize_id: i64, settings: Option<&serde_json::Value>) -> Notice {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(message) else {
         return Notice::Nothing;
     };
@@ -669,9 +690,9 @@ pub fn read(message: &str, initialize_id: i64) -> Notice {
             edits: workspace_edit(value.pointer("/params/edit")),
         },
         // A request from the server: it has both a method *and* an id.
-        (Some(method), Some(id)) => Notice::Asked { id: asked.unwrap_or_else(|| id.to_string()), result: nothing_for(method, &value) },
+        (Some(method), Some(id)) => Notice::Asked { id: asked.unwrap_or_else(|| id.to_string()), result: nothing_for(method, &value, settings) },
         // 號碼是字串的請求——同上一檔，只是號碼不是數字。
-        (Some(method), None) if asked.is_some() => Notice::Asked { id: asked.unwrap_or_default(), result: nothing_for(method, &value) },
+        (Some(method), None) if asked.is_some() => Notice::Asked { id: asked.unwrap_or_default(), result: nothing_for(method, &value, settings) },
         // An answer to something we sent: an id and no method.
         (None, Some(id)) => Notice::Answer {
             id,
@@ -1431,12 +1452,25 @@ fn signature(result: Option<&serde_json::Value>) -> Option<Signature> {
 /// The answer that says nothing to a request: `null`, except for
 /// `workspace/configuration`, which is answered item for item (review,
 /// 2026-11-06: a bare `null` broke the spec, and the factory now starts
-/// servers that ask).
-fn nothing_for(method: &str, value: &serde_json::Value) -> String {
+/// servers that ask). Each item is read from the server's `config` when it
+/// has one (see [`read_with`]).
+///
+/// Warning: **An empty `section` is the whole table**, as one with none:
+/// `vscode-eslint-language-server` sends `""` (helix's note on it).
+fn nothing_for(method: &str, value: &serde_json::Value, settings: Option<&serde_json::Value>) -> String {
     match method {
         "workspace/configuration" => {
-            let items = value.pointer("/params/items").and_then(|i| i.as_array()).map_or(0, Vec::len);
-            format!("[{}]", vec!["null"; items].join(","))
+            let items = value.pointer("/params/items").and_then(|i| i.as_array()).map(Vec::as_slice).unwrap_or(&[]);
+            let one = |item: &serde_json::Value| -> serde_json::Value {
+                let mut here = settings;
+                if let Some(section) = item.get("section").and_then(|s| s.as_str()).filter(|s| !s.is_empty()) {
+                    for part in section.split('.') {
+                        here = here.and_then(|h| h.get(part));
+                    }
+                }
+                here.cloned().unwrap_or(serde_json::Value::Null)
+            };
+            serde_json::Value::Array(items.iter().map(one).collect()).to_string()
         }
         _ => "null".to_string(),
     }
@@ -1765,6 +1799,37 @@ mod tests {
         assert_eq!(read(r#"{"jsonrpc":"2.0","method":"$/progress"}"#, 1), Notice::Nothing);
     }
 
+    /// **A server's `config`** goes out three ways, as helix sends it
+    /// (2026-11-07): `initializationOptions`, the push after `initialized`,
+    /// and the answer to `workspace/configuration`.
+    #[test]
+    fn a_server_s_config_is_its_initialization_options_and_its_settings() {
+        let config = serde_json::json!({ "provideFormatter": true, "json": { "validate": { "enable": true } } });
+        let hello: serde_json::Value =
+            serde_json::from_str(&initialize(1, Path::new("/tmp"), Some(&config))).expect("valid JSON");
+        assert_eq!(hello["params"]["initializationOptions"], config);
+        assert_eq!(hello["params"]["capabilities"]["workspace"]["configuration"], true);
+        let bare: serde_json::Value = serde_json::from_str(&initialize(1, Path::new("/tmp"), None)).expect("valid JSON");
+        assert!(bare["params"].get("initializationOptions").is_none(), "no config, no key");
+
+        let push: serde_json::Value = serde_json::from_str(&did_change_configuration(&config)).expect("valid JSON");
+        assert_eq!(push["method"], "workspace/didChangeConfiguration");
+        assert_eq!(push["params"]["settings"], config);
+
+        // Each item gets the part its section names; a dotted section walks
+        // in, an empty one is the whole table, and a missing part is `null`.
+        let asked = r#"{"jsonrpc":"2.0","id":7,"method":"workspace/configuration","params":{"items":[{"section":"json"},{"section":"json.validate.enable"},{"section":""},{},{"section":"css"}]}}"#;
+        let Notice::Asked { id, result } = read_with(asked, 1, Some(&config)) else { panic!("a request") };
+        assert_eq!(id, "7");
+        let result: serde_json::Value = serde_json::from_str(&result).expect("valid JSON");
+        assert_eq!(
+            result,
+            serde_json::json!([{ "validate": { "enable": true } }, true, config, config, null])
+        );
+        // Without a config it is still one `null` per item.
+        assert_eq!(read_with(asked, 1, None), Notice::Asked { id: "7".into(), result: "[null,null,null,null,null]".into() });
+    }
+
     #[test]
     fn nonsense_from_a_server_is_not_a_crash() {
         assert_eq!(read("not json at all", 1), Notice::Nothing);
@@ -2052,7 +2117,7 @@ mod tests {
         assert_eq!(parsed["params"]["contentChanges"][0]["text"], text);
         assert_eq!(parsed["params"]["textDocument"]["version"], 2);
         // …and the rest are JSON too.
-        for message in [initialize(1, Path::new("/tmp")), initialized(), shutdown(2), exit(), empty_answer("3")] {
+        for message in [initialize(1, Path::new("/tmp"), None), initialized(), shutdown(2), exit(), empty_answer("3")] {
             serde_json::from_str::<serde_json::Value>(&message).expect(&message);
         }
     }

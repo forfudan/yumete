@@ -3247,6 +3247,23 @@ pub struct Server {
     /// reader turns off one of the two that come filled in.
     pub command: String,
     pub args: Vec<String>,
+    /// **helix's `config`**: any table, sent to the server as
+    /// `initializationOptions` in `initialize`, pushed again in a
+    /// `workspace/didChangeConfiguration` once it is ready, and read for the
+    /// sections it asks about in `workspace/configuration` (2026-11-07, as
+    /// helix does all three). `None` when the entry has none.
+    ///
+    /// ```toml
+    /// [lsp.json]
+    /// command = "vscode-json-language-server"
+    /// args = ["--stdio"]
+    /// config = { provideFormatter = true, json = { validate = { enable = true } } }
+    /// ```
+    ///
+    /// Warning: **Replaced with its entry, never merged.** Naming a language
+    /// replaces its whole list, so an entry written without `config` has
+    /// none, even where the factory entry for the same program had one.
+    pub config: Option<serde_json::Value>,
 }
 
 /// The servers that come filled in: go and rust (2026-09-19), mojo, python,
@@ -3262,7 +3279,16 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
     let one = |command: &str, args: &[&str]| Server {
         command: command.to_string(),
         args: args.iter().map(|a| a.to_string()).collect(),
+        config: None,
     };
+    // **helix's `config`, where it changes what the server does here**
+    // (2026-11-07, helix `languages.toml` of 2026-07-23). Warning: **The
+    // vscode servers have no formatter without it**: they register one only
+    // when `provideFormatter` is in their initialization options. helix's
+    // tables for gopls, rust-analyzer, lua-language-server and
+    // typescript-language-server are left out: they set inlay hints, which
+    // yumete does not ask for, and typescript's names helix as the host.
+    let with = |server: Server, config: serde_json::Value| Server { config: Some(config), ..server };
     HashMap::from([
         // rust-analyzer comes with rustup and gopls is Go's own: one obvious
         // answer each.
@@ -3281,22 +3307,41 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         ("bash".to_string(), vec![one("bash-language-server", &["start"])]),
         ("c".to_string(), vec![one("clangd", &[])]),
         ("cpp".to_string(), vec![one("clangd", &[])]),
-        ("css".to_string(), vec![one("vscode-css-language-server", &["--stdio"])]),
+        (
+            "css".to_string(),
+            vec![with(
+                one("vscode-css-language-server", &["--stdio"]),
+                serde_json::json!({ "provideFormatter": true, "css": { "validate": { "enable": true } } }),
+            )],
+        ),
         ("gas".to_string(), vec![one("asm-lsp", &[])]),
         ("nasm".to_string(), vec![one("asm-lsp", &[])]),
         (
             "html".to_string(),
-            vec![one("vscode-html-language-server", &["--stdio"]), one("superhtml", &["lsp"])],
+            vec![
+                with(one("vscode-html-language-server", &["--stdio"]), serde_json::json!({ "provideFormatter": true })),
+                one("superhtml", &["lsp"]),
+            ],
         ),
         ("java".to_string(), vec![one("jdtls", &[])]),
         ("javascript".to_string(), vec![one("typescript-language-server", &["--stdio"])]),
         ("typescript".to_string(), vec![one("typescript-language-server", &["--stdio"])]),
         ("tsx".to_string(), vec![one("typescript-language-server", &["--stdio"])]),
-        ("json".to_string(), vec![one("vscode-json-language-server", &["--stdio"])]),
+        (
+            "json".to_string(),
+            vec![with(
+                one("vscode-json-language-server", &["--stdio"]),
+                serde_json::json!({ "provideFormatter": true, "json": { "validate": { "enable": true } } }),
+            )],
+        ),
         ("lua".to_string(), vec![one("lua-language-server", &[])]),
         ("pascal".to_string(), vec![one("pasls", &[])]),
         ("r".to_string(), vec![one("R", &["--vanilla", "--no-echo", "-e", "languageserver::run()"])]),
-        ("toml".to_string(), vec![one("taplo", &["lsp", "stdio"]), one("tombi", &["lsp"])]),
+        // taplo's empty table is helix's too.
+        (
+            "toml".to_string(),
+            vec![with(one("taplo", &["lsp", "stdio"]), serde_json::json!({})), one("tombi", &["lsp"])],
+        ),
         (
             "yaml".to_string(),
             vec![one("yaml-language-server", &["--stdio"]), one("ansible-language-server", &["--stdio"])],
@@ -4492,6 +4537,9 @@ struct RawServer {
     command: String,
     #[serde(default)]
     args: Vec<String>,
+    /// Any table; see [`Server::config`].
+    #[serde(default)]
+    config: Option<serde_json::Value>,
 }
 
 /// What `[lsp.<語言>]` may be: one server, or a list of candidates.
@@ -5468,7 +5516,7 @@ impl RawConfig {
             let named: Vec<Server> = raw
                 .into_list()
                 .into_iter()
-                .map(|one| Server { command: one.command, args: one.args })
+                .map(|one| Server { command: one.command, args: one.args, config: one.config })
                 .collect();
             config.lsp.insert(language, named);
         }
@@ -6230,6 +6278,66 @@ command = \"pylsp\"
 command = \"\"
 ");
         assert!(off.lsp["rust"][0].command.is_empty(), "關掉了");
+    }
+
+    /// **`config` is helix's** (2026-11-07): any table, kept as written to go
+    /// out as JSON; the factory entries carry helix's where it matters.
+    #[test]
+    fn a_language_server_takes_helix_s_config() {
+        let bare = Config::from_toml("");
+        // The vscode servers register no formatter without `provideFormatter`.
+        for language in ["css", "html", "json"] {
+            let first = &bare.lsp[language][0];
+            assert_eq!(first.config.as_ref().map(|c| &c["provideFormatter"]), Some(&serde_json::json!(true)), "{language}");
+        }
+        assert_eq!(bare.lsp["json"][0].config.as_ref().unwrap()["json"]["validate"]["enable"], true);
+        assert_eq!(bare.lsp["css"][0].config.as_ref().unwrap()["css"]["validate"]["enable"], true);
+        assert_eq!(bare.lsp["toml"][0].config, Some(serde_json::json!({})), "taplo's empty table, as helix's");
+        assert_eq!(bare.lsp["html"][1].config, None, "superhtml has none");
+        assert_eq!(bare.lsp["rust"][0].config, None);
+
+        // Inline, as a sub-table, nested and in a list: all of it is kept.
+        let config = Config::from_toml(
+            "[lsp.go]
+command = \"golangci-lint-langserver\"
+config = { command = [\"golangci-lint\", \"run\", \"--output.json.path=stdout\"] }
+
+[lsp.rust]
+command = \"rust-analyzer\"
+[lsp.rust.config]
+check.command = \"clippy\"
+cargo.features = \"all\"
+files = { watcher = \"server\", exclude = [] }
+",
+        );
+        assert_eq!(
+            config.lsp["go"][0].config,
+            Some(serde_json::json!({ "command": ["golangci-lint", "run", "--output.json.path=stdout"] }))
+        );
+        assert_eq!(
+            config.lsp["rust"][0].config,
+            Some(serde_json::json!({
+                "check": { "command": "clippy" },
+                "cargo": { "features": "all" },
+                "files": { "watcher": "server", "exclude": [] },
+            }))
+        );
+        let several = Config::from_toml(
+            "[[lsp.html]]
+command = \"vscode-html-language-server\"
+args = [\"--stdio\"]
+config = { provideFormatter = false, n = 2, x = 1.5 }
+
+[[lsp.html]]
+command = \"superhtml\"
+args = [\"lsp\"]
+",
+        );
+        assert_eq!(several.lsp["html"][0].config, Some(serde_json::json!({ "provideFormatter": false, "n": 2, "x": 1.5 })));
+        // Warning: **Named is replaced, not merged**: no `config`, none.
+        assert_eq!(several.lsp["html"][1].config, None);
+        let plain = Config::from_toml("[lsp.json]\ncommand = \"vscode-json-language-server\"\nargs = [\"--stdio\"]\n");
+        assert_eq!(plain.lsp["json"][0].config, None, "the factory's is not carried into a named entry");
     }
 
 }

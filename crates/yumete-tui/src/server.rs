@@ -158,6 +158,10 @@ struct Server {
     started: std::time::Instant,
     /// `working` 從空變成非空的那一刻，空了就清。
     working_since: Option<std::time::Instant>,
+    /// **The entry's `config` as a `workspace/didChangeConfiguration`**
+    /// (2026-11-07), said right after `initialized`, as helix does. The
+    /// `initialize` and the reader thread have the table itself.
+    configured: Option<String>,
 }
 
 /// **一個服務器是怎麼走的**（2026-10-11）——說出口的那一句不一樣。
@@ -1255,6 +1259,9 @@ impl Servers {
                         }
                         server.ready = true;
                         server.say_now(lsp::initialized());
+                        if let Some(configured) = server.configured.clone() {
+                            server.say_now(configured);
+                        }
                         for message in std::mem::take(&mut server.queued) {
                             server.say_now(message);
                         }
@@ -1798,6 +1805,8 @@ fn start(
 
     // The reader: bytes in, whole messages out.
     let stdout = child.stdout.take().expect("piped");
+    // `workspace/configuration` is answered on this thread, from the config.
+    let settings = named.config.clone();
     std::thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
         let mut buf: Vec<u8> = Vec::new();
@@ -1809,7 +1818,7 @@ fn start(
             }
             while let Some(message) = lsp::take_frame(&mut buf) {
                 trace("<<", &message);
-                let notice = lsp::read(&message, HELLO);
+                let notice = lsp::read_with(&message, HELLO, settings.as_ref());
                 let answer = matches!(notice, Notice::Answer { .. });
                 if incoming.send(notice).is_err() {
                     return;
@@ -1856,8 +1865,9 @@ fn start(
         started: std::time::Instant::now(),
         working_since: None,
         asked_next: None,
+        configured: named.config.as_ref().map(lsp::did_change_configuration),
     };
-    server.say_now(lsp::initialize(HELLO, &editor.lsp_root()));
+    server.say_now(lsp::initialize(HELLO, &editor.lsp_root(), named.config.as_ref()));
     Ok(server)
 }
 
@@ -1967,6 +1977,7 @@ mod tests {
                     started: std::time::Instant::now(),
                     working_since: None,
                     asked_next: None,
+                    configured: None,
                 },
             );
             (heard, tell)
@@ -2338,6 +2349,77 @@ mod tests {
         assert_eq!(answer["id"], 7, "Warning: 不答，服務器可能就在那兒等着");
     }
 
+    /// **A server's `config` is pushed once it is ready** (2026-11-07), right
+    /// after `initialized`, as helix does.
+    #[test]
+    fn a_server_s_config_is_pushed_once_it_is_ready() {
+        let (mut editor, _path) = editor_on("e.rs", "fn main() {}\n");
+        let (mut servers, heard, tell) = Servers::pretend("rust");
+        let server = servers.running.get_mut(&Servers::findable()).expect("the pretend one");
+        server.ready = false;
+        server.configured = Some(lsp::did_change_configuration(&serde_json::json!({ "provideFormatter": true })));
+        tell.send(Notice::Ready { signature_triggers: Vec::new() }).unwrap();
+        servers.collect(&mut editor);
+        let said: Vec<serde_json::Value> = heard.try_iter().map(|m| serde_json::from_str(&m).unwrap()).collect();
+        assert_eq!(said[0]["method"], "initialized");
+        assert_eq!(said[1]["method"], "workspace/didChangeConfiguration");
+        assert_eq!(said[1]["params"]["settings"], serde_json::json!({ "provideFormatter": true }));
+    }
+
+    /// **A started server is given its `config`** (2026-11-07): it is in the
+    /// `initialize` that goes down the pipe, and a `workspace/configuration`
+    /// it asks is answered from it. Unix only: the fake server is a shell
+    /// script, which says one request and keeps what it is sent.
+    #[cfg(unix)]
+    #[test]
+    fn a_started_server_is_given_its_config_and_asked_settings_come_from_it() {
+        let dir = tmp().join(format!("yumete-lsp-config-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let said = lsp::frame(
+            r#"{"jsonrpc":"2.0","id":3,"method":"workspace/configuration","params":{"items":[{"section":"json"},{"section":"css"}]}}"#,
+        );
+        std::fs::write(dir.join("said"), &said).unwrap();
+        let got = dir.join("got");
+        let program = dir.join("fake-server");
+        std::fs::write(
+            &program,
+            format!("#!/bin/sh\ncat '{}'\ncat > '{}'\n", dir.join("said").display(), got.display()),
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let config = serde_json::json!({ "provideFormatter": true, "json": { "validate": { "enable": true } } });
+        let named = yumete_config::Server { command: "fake-server".into(), config: Some(config.clone()), ..Default::default() };
+        let mut server = start(&named, &Editor::new(), &program, None).expect("the fake server starts");
+
+        let timeout = std::time::Duration::from_secs(5);
+        let Ok(Notice::Asked { id, result }) = server.from.recv_timeout(timeout) else { panic!("the request came") };
+        assert_eq!(id, "3");
+        let result: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(result, serde_json::json!([{ "validate": { "enable": true } }, null]));
+
+        let start_at = std::time::Instant::now();
+        let hello = loop {
+            let mut bytes = std::fs::read(&got).unwrap_or_default();
+            if let Some(message) = lsp::take_frame(&mut bytes) {
+                break message;
+            }
+            assert!(start_at.elapsed() < timeout, "the initialize reached the server");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        let hello: serde_json::Value = serde_json::from_str(&hello).unwrap();
+        assert_eq!(hello["method"], "initialize");
+        assert_eq!(hello["params"]["initializationOptions"], config);
+
+        if let Some(child) = server.child.as_mut() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// A reader turning one of the built-in servers off.
     #[test]
     fn an_empty_command_means_no_server_for_that_language() {
@@ -2361,7 +2443,7 @@ mod tests {
         let me = here.to_string_lossy().into_owned();
         let one = |command: &str| yumete_config::Server {
             command: command.to_string(),
-            args: Vec::new(),
+            ..Default::default()
         };
         let config = yumete_config::Config {
             lsp: std::collections::HashMap::from([(
@@ -2721,7 +2803,7 @@ mod tests {
         let bell: Doorbell = std::sync::Arc::new(move || {
             let _ = rang.lock().unwrap().send(());
         });
-        let named = yumete_config::Server { command: "fake-server".into(), args: Vec::new() };
+        let named = yumete_config::Server { command: "fake-server".into(), ..Default::default() };
         let mut server = start(&named, &Editor::new(), &program, Some(bell)).expect("the fake server starts");
 
         let timeout = std::time::Duration::from_secs(5);
