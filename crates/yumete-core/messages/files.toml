@@ -5,20 +5,20 @@
 [[message]]
 # 外面改了，你這裏也改了
 key = "autoreload.both-changed"
-zhs = "文件被外部修改，你也有所改动。可使用 :reload! 丢弃你的更改"
-en = "the file changed outside and you have changes too — `:reload!` throws yours away"
+zhs = "文件已被外部修改，你也有改动。:reload! 可丢弃你的改动"
+en = "the file changed on disk and you have changes too — `:reload!` discards yours"
 
 [[message]]
 # 外面改了，自動重讀完成
 key = "autoreload.reread"
-zhs = "文件被外部修改，已同步加载 {0}"
-en = "the file changed outside; re-read {0}"
+zhs = "文件已被外部修改，已重新加载 {0}"
+en = "the file changed on disk; reloaded {0}"
 
 [[message]]
 # 自動重讀開關換好了
 key = "autoreload.set"
-zhs = "文件被外部修改则自动同步加载：{0}"
-en = "auto re-read on outside change: {0}"
+zhs = "外部修改时自动重新加载：{0}"
+en = "auto-reload on outside change: {0}"
 
 
 # ── buffer ────────────────────────────────────────────────────────────
@@ -26,80 +26,80 @@ en = "auto re-read on outside change: {0}"
 [[message]]
 # 存成一個已經開着的檔名
 key = "buffer.already-open-elsewhere"
-zhs = "{0} 正开着——切过去存，或另取一个文件名"
-en = "{0} is open here — save from there, or pick another name"
+zhs = "{0} 已打开：切换过去保存，或换个文件名"
+en = "{0} is already open; save from there, or pick another name"
 
 [[message]]
 # 打不開一個檔案，帶系統給的理由
 key = "buffer.cannot-open"
-zhs = "打不开「{0}」：{1}"
+zhs = "无法打开「{0}」：{1}"
 en = "cannot open '{0}': {1}"
 
 [[message]]
 # :w 一個磁盤上已經被别人改過的檔案
 key = "buffer.changed-outside"
-zhs = "这个文件在外面被改过了——`:reload!` 读它的，`:w!` 用你的"
+zhs = "文件已被外部修改：`:reload!` 加载外部版本，`:w!` 保留你的"
 en = "the file changed on disk — `:reload!` takes its version, `:w!` keeps yours"
 
 [[message]]
 # 關掉最後一個緩衝區
 key = "buffer.closed"
-zhs = "关了"
+zhs = "已关闭"
 en = "closed"
 
 [[message]]
 # 關掉一個緩衝區，切到下一個
 key = "buffer.closed-now-showing"
-zhs = "关了 {0}——现在是 {1} [{2}/{3}]"
+zhs = "已关闭 {0}，当前为 {1} [{2}/{3}]"
 en = "closed {0} — now {1} [{2}/{3}]"
 
 [[message]]
 # :w 帶路徑，抄了一份出去
 key = "buffer.copied-to"
-zhs = "抄了一份到 {0}"
+zhs = "已另存一份到 {0}"
 en = "copied to {0}"
 
 [[message]]
 # 另存成一個已經存在的檔名
 key = "buffer.file-already-exists"
-zhs = "那个文件已经存在——`:w!` 才盖掉它"
-en = "that file is already there — `:w!` writes over it"
+zhs = "文件已存在，用 `:w!` 覆盖"
+en = "the file already exists; `:w!` overwrites it"
 
 [[message]]
 # 存檔時檔案本身是只讀的
 key = "buffer.file-is-read-only"
-zhs = "这个文件是只读的——先 chmod，或者换个文件名存"
+zhs = "此文件只读：先 chmod，或另存为其他文件名"
 en = "this file is read-only — chmod it, or save under another name"
 
 [[message]]
 # 帶硬連結的檔就地寫，寫壞了而原文又放不回去；{0} 是留着原文的那一份
 key = "buffer.in-place-lost"
-zhs = "没写进去，原来的内容也没能放回去——原来的那一份在 {0}"
-en = "not written, and the old contents could not be put back — they are in {0}"
+zhs = "写入失败，原内容也无法恢复；原内容保存在 {0}"
+en = "write failed and the old contents could not be restored; they are in {0}"
 
 [[message]]
 # 存檔時那個檔是一個指不到東西的符號連結
 key = "buffer.link-points-nowhere"
-zhs = "{0} 是一个链接，而它指的那一份不在了——`:write-as 别的路径` 存到别处"
-en = "{0} is a link and what it points at is gone — `:write-as <path>` saves it elsewhere"
+zhs = "{0} 是符号链接，但目标已不存在；用 `:write-as 别的路径` 存到别处"
+en = "{0} is a link to something that no longer exists; `:write-as <path>` saves elsewhere"
 
 [[message]]
 # gf 用在没有檔名的行上
 key = "buffer.no-file-named-on-this-line"
-zhs = "这一行没写文件名"
+zhs = "本行没有文件名"
 en = "no file named on this line"
 
 [[message]]
 # 存一份還没有名字的稿子
 key = "buffer.no-name-yet"
-zhs = "这个缓冲区还没有名字——:w 名字 存成新文件"
-en = "this file has no name yet — :w <name> writes it as a new file"
+zhs = "此缓冲区还没有文件名，用 :w <文件名> 保存为新文件"
+en = "this buffer has no name yet; :w <name> saves it as a new file"
 
 [[message]]
 # :w 到一個父目錄還不存在的路徑
 key = "buffer.no-such-path"
-zhs = "路径 {0} 不存在，使用 :w! 建立路径并储存文档"
-en = "there is no path {0} — :w! makes it and saves"
+zhs = "路径 {0} 不存在，:w! 会创建路径并保存"
+en = "path {0} does not exist; :w! creates it and saves"
 
 [[message]]
 # 只開了一個檔案時切換緩衝區
@@ -110,44 +110,44 @@ en = "only one file open"
 [[message]]
 # :reload 重讀完成
 key = "buffer.re-read"
-zhs = "重读了 {0}"
-en = "re-read {0}"
+zhs = "已重新加载 {0}"
+en = "reloaded {0}"
 
 [[message]]
 # 存好一個檔案
 key = "buffer.saved"
-zhs = "存了 {0}"
+zhs = "已保存 {0}"
 en = "saved {0}"
 
 [[message]]
 # :write all 存好多個檔案
 key = "buffer.saved-many"
-zhs = "存了 {0} 个"
+zhs = "已保存 {0} 个文件"
 en = "saved {0} file(s)"
 
 [[message]]
 # :write all 有幾份没存成
 key = "buffer.saved-some-not-all"
-zhs = "存了 {0} 个文件；{1} 个没存：{2}"
+zhs = "已保存 {0} 个文件；{1} 个未保存：{2}"
 en = "saved {0} file(s); {1} not saved: {2}"
 
 [[message]]
 # :w 到一個已經存在的文件夾上
 # 帶不帶 ! 都一樣
 key = "buffer.target-is-a-folder"
-zhs = "你输入的是已有文件夹名，本文件无法保存"
-en = "that name is a folder that is already there — the file cannot be saved onto it"
+zhs = "该名称是已有文件夹，无法保存"
+en = "that name is an existing folder; cannot save there"
 
 [[message]]
 # :update 與 :x 在檔案没改過時説的那句
 key = "buffer.unchanged-not-written"
-zhs = "没有改动，未写盘"
-en = "unchanged; nothing written"
+zhs = "没有改动，未写入"
+en = "no changes; nothing written"
 
 [[message]]
 # 要丟掉没存的改動，缺 !
 key = "buffer.unsaved-changes"
-zhs = "还有没存的改动(加 ! 强制)"
+zhs = "有未保存的改动(加 ! 强制)"
 en = "there are unsaved changes — add ! to override"
 
 
@@ -156,173 +156,173 @@ en = "there are unsaved changes — add ! to override"
 [[message]]
 # :cd - 而没有上一個
 key = "cd.no-previous"
-zhs = "没有上一个工作路径可回"
+zhs = "没有上一个工作目录"
 en = "no previous working directory to go back to"
 
 [[message]]
 # :pwd 印出來的那一句，:cd 改完也説它
 key = "cd.working-dir"
-zhs = "工作路径：{0}"
+zhs = "工作目录：{0}"
 en = "working directory: {0}"
 
 [[message]]
 # 另有幾個檔同樣没進去
 key = "data.and-more-failed"
-zhs = "{0}(另有 {1} 个文件同样没进去)"
+zhs = "{0}(另有 {1} 个文件也未加载)"
 en = "{0} ({1} more file(s) did not load either)"
 
 [[message]]
 # 核心不認這個檔
 key = "data.refused"
-zhs = "{0} 核心不认：{1}"
+zhs = "{0} 被核心拒绝：{1}"
 en = "{0} was refused by the core: {1}"
 
 [[message]]
 # 核心不認這個檔，魔數對不上
 key = "data.refused-magic"
-zhs = "{0} 核心不认：{1}(期望 {2}，文件头是 {3})"
-en = "{0} was refused by the core: {1} (expected {2}, the file says {3})"
+zhs = "{0} 被核心拒绝：{1}(应为 {2}，文件头为 {3})"
+en = "{0} was refused by the core: {1} (expected {2}, found {3})"
 
 [[message]]
 # 這個檔讀不了
 key = "data.unreadable"
-zhs = "{0} 读不了：{1}"
-en = "{0} could not be read: {1}"
+zhs = "无法读取 {0}：{1}"
+en = "cannot read {0}: {1}"
 
 
 # ── detail ────────────────────────────────────────────────────────────
 
 [[message]]
-# 同上，選項 w（草稿）
+# 同上，選項 w
 key = "encoding.ask-anyway"
-zhs = "照存，写成 &#31616; 这样"
-en = "write anyway, as &#31616; and so on"
+zhs = "仍然保存，写成 &#31616; 形式"
+en = "save anyway, as &#31616; entities"
 
 [[message]]
-# 同上，選項 n（草稿）
+# 同上，選項 n
 key = "encoding.ask-no"
-zhs = "不存"
+zhs = "取消"
 en = "cancel"
 
 [[message]]
-# 存盤時有字這個編碼存不下：中央窗口的標題。{0} 編碼名（草稿）
+# 存盤時有字這個編碼存不下：中央窗口的標題。{0} 編碼名
 key = "encoding.ask-title"
-zhs = "{0} 存不下"
+zhs = "无法以 {0} 保存"
 en = "cannot save as {0}"
 
 [[message]]
-# 同上，選項 u（草稿）
+# 同上，選項 u
 key = "encoding.ask-utf8"
 zhs = "改存为 UTF-8"
 en = "save as UTF-8"
 
 [[message]]
-# 同上，窗口正文。{0} 文件名，{1} 編碼名，{2} 一共幾處，{3} 第一個字，{4} 行，{5} 列，{6} 有哪幾個字（草稿）
+# 同上，窗口正文。{0} 文件名，{1} 編碼名，{2} 一共幾處，{3} 第一個字，{4} 行，{5} 列，{6} 有哪幾個字
 key = "encoding.ask-what"
-zhs = "{1} 存不下《{0}》里的 {2} 处字，第一处是第 {4} 行第 {5} 列的「{3}」。存不下的字：{6}"
-en = "{1} cannot hold {2} characters in 《{0}》; the first is {3} at line {4}, column {5}. They are: {6}"
+zhs = "{1} 无法保存《{0}》中的 {2} 个字，第一个是第 {4} 行第 {5} 列的「{3}」。无法保存的字：{6}"
+en = "{1} cannot encode {2} characters in '{0}'; the first is {3} at line {4}, column {5}. They are: {6}"
 
 [[message]]
-# 同上，只有一處的時候。{0} 文件名，{1} 編碼名，{3} 那個字，{4} 行，{5} 列（草稿）
+# 同上，只有一處的時候。{0} 文件名，{1} 編碼名，{3} 那個字，{4} 行，{5} 列
 key = "encoding.ask-what-one"
-zhs = "{1} 存不下《{0}》第 {4} 行第 {5} 列的「{3}」。"
-en = "{1} cannot hold {3} in 《{0}》, at line {4}, column {5}."
+zhs = "{1} 无法保存《{0}》第 {4} 行第 {5} 列的「{3}」。"
+en = "{1} cannot encode {3} in '{0}' at line {4}, column {5}."
 
 [[message]]
-# 存盤時有字這個編碼存不下。{0} 編碼名，{1} 第一個字，{2} 行，{3} 列，{4} 一共幾個（草稿）
+# 存盤時有字這個編碼存不下。{0} 編碼名，{1} 第一個字，{2} 行，{3} 列，{4} 一共幾個
 key = "encoding.cannot-hold"
-zhs = "{0} 存不下第 {2} 行第 {3} 列的「{1}」，共 {4} 处"
-en = "{0} cannot hold {1} at line {2}, column {3} ({4} in all)"
+zhs = "{0} 无法保存第 {2} 行第 {3} 列的「{1}」，共 {4} 处"
+en = "{0} cannot encode {1} at line {2}, column {3} ({4} in all)"
 
 [[message]]
-# 記住的編碼不再對得上（文件大小變了，或解不開了），忘掉。{0} 路徑，{1} 編碼名（草稿）
+# 記住的編碼不再對得上（文件大小變了，或解不開了），忘掉。{0} 路徑，{1} 編碼名
 key = "encoding.forgot"
 zhs = "{0} 变了，不再按 {1} 打开"
 en = "{0} has changed; no longer opened as {1}"
 
 [[message]]
-# `:encoding` 沒有參數：這個文件存盤時用什麼編碼。{0} 編碼名（草稿）
+# `:encoding` 沒有參數：這個文件存盤時用什麼編碼。{0} 編碼名
 key = "encoding.is"
 zhs = "编码：{0}"
 en = "encoding: {0}"
 
 [[message]]
-# `:open ++enc=X` 的 X 不是認得的編碼。{0} 那個詞（草稿）
+# `:open ++enc=X` 的 X 不是認得的編碼。{0} 那個詞
 key = "encoding.no-such"
-zhs = "不认得编码 {0}，可用 utf-8、gb18030、big5、shift-jis"
-en = "no encoding called {0}; utf-8, gb18030, big5 or shift-jis"
+zhs = "未知编码 {0}，可用 utf-8、gb18030、big5、shift-jis"
+en = "unknown encoding {0}; use utf-8, gb18030, big5 or shift-jis"
 
 [[message]]
-# 按指定的編碼讀，有字節解不開。{0} 是路徑，{1} 是編碼名（草稿）
+# 按指定的編碼讀，有字節解不開。{0} 是路徑，{1} 是編碼名
 key = "encoding.not-in"
 zhs = "{0} 不是 {1}"
 en = "{0} is not {1}"
 
 [[message]]
-# 同上，按了 n：没有寫盤（草稿）
+# 同上，按了 n：没有寫盤
 key = "encoding.not-saved"
-zhs = "没有存，磁盘上的文件没动"
+zhs = "未保存，磁盘上的文件未改动"
 en = "not saved; the file on disk is untouched"
 
 [[message]]
-# 打開一個分不出編碼的檔：挑編碼那扇面板的標題。{0} 文件名（草稿）
+# 打開一個分不出編碼的檔：挑編碼那扇面板的標題。{0} 文件名
 key = "encoding.picker-title"
 zhs = "用哪种编码打开《{0}》"
-en = "open 《{0}》 as"
+en = "open '{0}' as"
 
 [[message]]
-# `:open ++enc=X` 沒給文件：這一份按 X 重讀了。{0} 編碼名（草稿）
+# `:open ++enc=X` 沒給文件：這一份按 X 重讀了。{0} 編碼名
 key = "encoding.read-as"
-zhs = "按 {0} 重读了"
-en = "read again as {0}"
+zhs = "已按 {0} 重新加载"
+en = "reloaded as {0}"
 
 [[message]]
-# 打開一個既不是 UTF-8、也不是 GB18030／Big5／Shift-JIS 的檔。{0} 是路徑（草稿）
+# 打開一個既不是 UTF-8、也不是 GB18030／Big5／Shift-JIS 的檔。{0} 是路徑
 key = "encoding.refused"
 zhs = "{0} 不是 UTF-8，也不是 GB18030、Big5 或 Shift-JIS，打不开"
 en = "{0} is not UTF-8, nor GB18030, Big5 or Shift-JIS, so it cannot be opened"
 
 [[message]]
-# `:encoding X` 之後：下次存盤用 X。{0} 編碼名（草稿）
+# `:encoding X` 之後：下次存盤用 X。{0} 編碼名
 key = "encoding.set"
-zhs = "存盘时改用 {0}"
+zhs = "保存时使用 {0}"
 en = "will be saved as {0}"
 
 [[message]]
-# 打開一個分不出編碼的檔（太短）。{0} 是路徑，{1} 是解得開它的幾種編碼（草稿）
+# 打開一個分不出編碼的檔（太短）。{0} 是路徑，{1} 是解得開它的幾種編碼
 key = "encoding.undecided"
-zhs = "{0} 的编码分不出来，可能是 {1}"
-en = "cannot tell what {0} is written in; it could be {1}"
+zhs = "无法确定 {0} 的编码，可能是 {1}"
+en = "cannot tell the encoding of {0}; it could be {1}"
 
 [[message]]
 # :export 給了不認得的格式
 key = "export.no-such-format"
-zhs = "没有「{0}」这种格式——html、typst，或者 csv、tsv(光标所在的表格)"
-en = "no such format as '{0}' — html, typst, or csv/tsv for the table under the cursor"
+zhs = "没有「{0}」格式：可用 html、typst，或 csv、tsv(光标所在表格)"
+en = "no format '{0}': html, typst, or csv/tsv for the table under the cursor"
 
 [[message]]
 # 導出的檔名就是稿子本身
 key = "export.same-as-the-manuscript"
-zhs = "那是这个文件本身——导出要另一个文件名"
-en = "that is the file itself — an export needs another name"
+zhs = "这是当前文件本身，导出须用其他文件名"
+en = "that is this file itself; an export needs another name"
 
 [[message]]
 # 導出的目標已經存在，要 :export!
 key = "export.target-exists"
-zhs = "已经有 {0} 了——`:export!` 才盖掉它"
-en = "{0} is already there — `:export!` writes over it"
+zhs = "{0} 已存在，用 `:export!` 覆盖"
+en = "{0} already exists; `:export!` overwrites it"
 
 [[message]]
 # 導出的目標檔案正開着
 key = "export.target-is-open"
-zhs = "{0} 正开着——导出会盖掉它，请另取一个文件名"
-en = "{0} is open here — an export would write over it; pick another name"
+zhs = "{0} 已打开，导出会覆盖它，请换个文件名"
+en = "{0} is open; an export would overwrite it, so pick another name"
 
 [[message]]
 # 導出寫好了檔案
 key = "export.wrote"
-zhs = "写好了 {0}"
-en = "wrote {0}"
+zhs = "已导出 {0}"
+en = "exported {0}"
 
 
 # ── find ──────────────────────────────────────────────────────────────
@@ -334,7 +334,7 @@ zhs = "字数(不含空白)"
 en = "characters (no spaces)"
 
 [[message]]
-# `:info` 那一欄：編碼（草稿）
+# `:info` 那一欄：編碼
 key = "file.encoding"
 zhs = "编码"
 en = "encoding"
@@ -364,7 +364,7 @@ zhs = "行数"
 en = "lines"
 
 [[message]]
-# `:info` 那一欄：這個文件的 modeline 說了什麽（草稿）
+# `:info` 那一欄：這個文件的 modeline 說了什麽
 key = "file.modeline"
 zhs = "modeline"
 en = "modeline"
@@ -373,12 +373,12 @@ en = "modeline"
 # :info：修改時間(磁碟上那一份的)
 key = "file.modified-at"
 zhs = "修改时间"
-en = "last written"
+en = "modified"
 
 [[message]]
 # :info：還没存過的草稿，没有位置也没有大小
 key = "file.never-saved"
-zhs = "还没存过"
+zhs = "从未保存"
 en = "never saved"
 
 [[message]]
@@ -390,7 +390,7 @@ en = "no"
 [[message]]
 # :info 開在一個只讀的新緩衝區裏了
 key = "file.opened"
-zhs = "开在一个新缓冲区里了(只读)"
+zhs = "已在新缓冲区中打开(只读)"
 en = "opened in a new buffer (read-only)"
 
 [[message]]
@@ -402,19 +402,19 @@ en = "read-only"
 [[message]]
 # :info：項目根
 key = "file.root"
-zhs = "项目根"
+zhs = "项目根目录"
 en = "project root"
 
 [[message]]
 # :info：配置裏有這個服務器，可它還没起來(或者機器上没裝)
 key = "file.server-not-running"
-zhs = "{0}(没起来)"
+zhs = "{0}(未运行)"
 en = "{0} (not running)"
 
 [[message]]
 # :info：這一份起着的服務器，名字後面説它握完手没有
 key = "file.server-ready"
-zhs = "{0}(在跑)"
+zhs = "{0}(运行中)"
 en = "{0} (running)"
 
 [[message]]
@@ -432,20 +432,20 @@ en = "size"
 [[message]]
 # :info 這一頁的標題
 key = "file.title"
-zhs = "这份文档"
-en = "this file"
+zhs = "文件信息"
+en = "file info"
 
 [[message]]
 # :info：改過没存
 key = "file.unsaved"
-zhs = "改过没存"
-en = "unsaved changes"
+zhs = "未保存"
+en = "unsaved"
 
 [[message]]
 # :info：位置
 key = "file.where"
 zhs = "位置"
-en = "where"
+en = "location"
 
 [[message]]
 # :info 表格裏的「是」
@@ -456,38 +456,38 @@ en = "yes"
 [[message]]
 # :count-progress 但寫不進 .yumete/progress.tsv
 key = "progress.cannot-write"
-zhs = "写不进 {0}：{1}"
+zhs = "无法写入 {0}：{1}"
 en = "cannot write {0}: {1}"
 
 [[message]]
 # :count-progress 的列表裏一天一行：日期、字數、長條
 key = "progress.day"
 zhs = "{0}　{1} 字　{2}"
-en = "{0}  {1} 字  {2}"
+en = "{0}  {1} words  {2}"
 
 [[message]]
 # :count-progress 但這一份還没有檔名，記不進哪本書
 key = "progress.no-file"
-zhs = "这一份还没有名字，进度记不到哪个项目上——先存一次"
-en = "this one has no name yet, so there is nothing to record against — save it first"
+zhs = "此文件还没有名字，无法记录进度，请先保存"
+en = "this file has no name yet, so progress cannot be recorded; save it first"
 
 [[message]]
 # :count-progress 但 .yumete/progress.tsv 還一天都没有
 key = "progress.nothing-yet"
-zhs = "还没有记录：保存一次，今天就开始算"
-en = "nothing recorded yet: save once and today starts counting"
+zhs = "还没有记录：保存一次，今天就开始计数"
+en = "nothing recorded yet: save once to start counting today"
 
 [[message]]
 # :count-progress 的結果，没有設每日目標
 key = "progress.report"
 zhs = "今天 {0} 字，项目 {1} 字，连续 {2} 天"
-en = "{0} words today, {1} in the project, {2} day(s) running"
+en = "{0} words today, {1} in the project, {2}-day streak"
 
 [[message]]
 # :count-progress 的結果，設了每日目標
 key = "progress.report-target"
 zhs = "今天 {0}/{1} 字({2}%)，项目 {3} 字，连续 {4} 天"
-en = "{0}/{1} words today ({2}%), {3} in the project, {4} day(s) running"
+en = "{0}/{1} words today ({2}%), {3} in the project, {4}-day streak"
 
 [[message]]
 # :count-progress 開出來的那一頁的標題
@@ -498,27 +498,27 @@ en = "progress"
 [[message]]
 # :count-target off——不再對着目標算
 key = "progress.target-cleared"
-zhs = "每日目标撤了，字还是照记"
-en = "the daily target is off; the 字 are still counted"
+zhs = "已取消每日目标，字数照常统计"
+en = "daily target cleared; words are still counted"
 
 [[message]]
 # :count-target 2000
 key = "progress.target-set"
-zhs = "每日目标 {0} 字，记在 {1}"
-en = "a daily target of {0} 字, kept in {1}"
+zhs = "每日目标 {0} 字，保存在 {1}"
+en = "daily target {0} words, kept in {1}"
 
 # ── readonly ──────────────────────────────────────────────────────────
 
 [[message]]
 # 只讀開起來，但還有没存的改動
 key = "readonly.on-with-unsaved"
-zhs = "只读：on——这一份还有没存的改动，u 也用不了了"
-en = "read-only: on — this one has unsaved changes, and `u` is locked out too"
+zhs = "只读：开。本文件有未保存的改动，u 也无法使用"
+en = "read-only: on. This file has unsaved changes, and `u` is disabled too"
 
 [[message]]
 # 只讀擋下了一次改動
 key = "readonly.refused"
-zhs = "只读——:readonly off 解开"
+zhs = "只读：用 :readonly off 解除"
 en = "read-only — `:readonly off` unlocks it"
 
 [[message]]
@@ -533,7 +533,7 @@ en = "read-only: {0}"
 [[message]]
 # ␣o p 換項目，去不了
 key = "recent.cannot-go-there"
-zhs = "去不了 {0}：{1}"
+zhs = "无法进入 {0}：{1}"
 en = "cannot go to {0}: {1}"
 
 [[message]]
@@ -545,8 +545,8 @@ en = "no session there yet"
 [[message]]
 # 最近開過的檔／項目，接着上次
 key = "recent.nothing-to-resume"
-zhs = "这个目录没有上次"
-en = "no last session here"
+zhs = "此目录没有上次的会话"
+en = "no previous session here"
 
 [[message]]
 # 最近開過的檔／項目，接着上次
@@ -557,7 +557,7 @@ en = "nothing recorded yet"
 [[message]]
 # 開檔那一問的第二個選項：把草稿删掉
 key = "recover.ask-drop"
-zhs = "丢弃恢复文件"
+zhs = "丢弃草稿"
 en = "throw the draft away"
 
 [[message]]
@@ -575,20 +575,20 @@ en = "recover"
 [[message]]
 # 開檔時問「要不要恢復」那一面板的標題
 key = "recover.ask-title"
-zhs = "抢救文稿"
-en = "a draft was kept"
+zhs = "发现未保存的草稿"
+en = "unsaved draft found"
 
 [[message]]
 # 同一面板的正文，{0} 是檔名、{1} 是草稿的時間、{2} 是檔存檔的時間
 key = "recover.ask-what"
-zhs = "《{0}》有一份 {1} 的草稿，是上一次没存好就结束的那一回留下的；档本身是 {2} 存的。"
-en = "《{0}》 has a draft from {1}, left by a run that ended before it saved; the file itself was saved at {2}."
+zhs = "《{0}》有一份 {1} 的草稿，是上次未保存就退出时留下的；文件本身保存于 {2}。"
+en = "'{0}' has a draft from {1}, left when the last session ended without saving; the file itself was saved at {2}."
 
 [[message]]
 # 同上，可是盤上還没有這個檔
 key = "recover.ask-what-no-file"
-zhs = "《{0}》有一份 {1} 的草稿，是上一次没存好就结束的那一回留下的；这个档还没存过。"
-en = "《{0}》 has a draft from {1}, left by a run that ended before it saved; the file itself has never been saved."
+zhs = "《{0}》有一份 {1} 的草稿，是上次未保存就退出时留下的；此文件从未保存。"
+en = "'{0}' has a draft from {1}, left when the last session ended without saving; the file has never been saved."
 
 [[message]]
 # 第二問的第一個選項：真的換上去
@@ -600,7 +600,7 @@ en = "recover it"
 # 第二問的第二個選項：先逐詞比一遍再説
 key = "recover.confirm-look"
 zhs = "打开对比"
-en = "open the comparison"
+en = "compare"
 
 [[message]]
 # 第二問的第三個選項：什麽都不做
@@ -612,19 +612,19 @@ en = "cancel"
 # 選了「恢復」之後再問一次，面板的標題
 key = "recover.confirm-title"
 zhs = "再次确认"
-en = "one more time"
+en = "confirm"
 
 [[message]]
 # 同一面板的正文，{0} 是檔名
 key = "recover.confirm-what"
-zhs = "恢复会把现在的《{0}》整个换成那一份草稿。"
-en = "recovering replaces all of 《{0}》 as it stands with that draft."
+zhs = "恢复会用草稿替换当前《{0}》的全部内容。"
+en = "recovering replaces all of '{0}' with the draft."
 
 [[message]]
 # 丟掉本檔案的搶救稿
 key = "recover.draft-dropped"
-zhs = "抢救稿丢掉了"
-en = "threw the draft away"
+zhs = "已丢弃草稿"
+en = "draft discarded"
 
 [[message]]
 # 搶救回來的自動存檔副本，那一份緩衝區的名字
@@ -635,38 +635,38 @@ en = "draft {0}"
 [[message]]
 # 打開本檔案的搶救稿
 key = "recover.draft-opened"
-zhs = "抢救稿开好了——:w 留下它，u 回到原来那份"
-en = "the draft is open — :w keeps it, u goes back"
+zhs = "草稿已打开：:w 保留，u 回到原文"
+en = "draft opened: :w keeps it, u goes back"
 
 [[message]]
-# 啓動時救回没存的草稿
+# 啓動時救回没存的
 key = "recover.drafts-opened"
-zhs = "打开了 {0} 份没存的草稿——:w <名字> 留下它们"
+zhs = "已打开 {0} 份未保存的草稿，用 :w <文件名> 保存"
 en = "opened {0} unsaved draft(s) — :w <name> keeps them"
 
 [[message]]
-# 啓動時發現有没存的草稿
+# 啓動時發現有没存的
 key = "recover.drafts-waiting"
-zhs = "有 {0} 份没存的草稿——:recover 打开"
+zhs = "有 {0} 份未保存的草稿，:recover 打开"
 en = "{0} unsaved draft(s) — :recover opens them"
 
 [[message]]
 # 那一問上選了「暫時不管」或「取消」之後
 key = "recover.left-for-now"
-zhs = "你可以之后再次使用 :recover 命令来进行文档恢复"
-en = "you can run :recover later to recover the document"
+zhs = "之后可用 :recover 恢复"
+en = "run :recover later to recover it"
 
 [[message]]
 # 本檔案没有搶救稿
 key = "recover.no-draft-for-this-file"
-zhs = "这个文件没有抢救稿"
+zhs = "此文件没有草稿"
 en = "no draft for this file"
 
 [[message]]
 # 自動存搶救稿失敗，帶系統理由
 key = "recover.no-draft-kept"
-zhs = "没有留抢救稿——{0}"
-en = "no draft kept — {0}"
+zhs = "未保留草稿：{0}"
+en = "no draft kept: {0}"
 
 
 # ── register ──────────────────────────────────────────────────────────
@@ -674,8 +674,8 @@ en = "no draft kept — {0}"
 [[message]]
 # 重讀失敗
 key = "reload.failed"
-zhs = "重读不了：{0}"
-en = "cannot re-read: {0}"
+zhs = "无法重新加载：{0}"
+en = "cannot reload: {0}"
 
 
 # ── render ────────────────────────────────────────────────────────────
@@ -684,34 +684,34 @@ en = "cannot re-read: {0}"
 # 安全核驗的第一個選項：照存
 key = "write.oversize-go"
 zhs = "继续保存"
-en = "save it"
+en = "save anyway"
 
 [[message]]
 # 安全核驗的第二個選項：先看改了什麼(＝ :diff)，這一存不做
 key = "write.oversize-look"
-zhs = "查看区别"
+zhs = "查看差异"
 en = "see what changed"
 
 [[message]]
 # 安全核驗的第三個選項：不存
 key = "write.oversize-no"
-zhs = "取消保存"
+zhs = "取消"
 en = "cancel"
 
 [[message]]
 # 安全核驗答了「取消儲存」(或按 Esc)之後説的話
 key = "write.oversize-stopped"
-zhs = "没存——磁盘上那一份原封不动"
+zhs = "未保存，磁盘上的文件未改动"
 en = "not saved — the file on disk is untouched"
 
 [[message]]
 # 安全核驗那扇窗的標題(:write 發現這一存把檔案撐大了很多)
 key = "write.oversize-title"
-zhs = "安全核验"
+zhs = "安全检查"
 en = "safety check"
 
 [[message]]
 # 安全核驗的正文：説數字，不説「幅度較大」
 key = "write.oversize-what"
-zhs = "这一存会把《{0}》从 {1} 变成 {2}，{3} 倍。"
-en = "saving would take 《{0}》 from {1} to {2} — {3}× as big."
+zhs = "保存后《{0}》将从 {1} 变成 {2}，是原来的 {3} 倍。"
+en = "saving would grow '{0}' from {1} to {2}, {3}× its size."

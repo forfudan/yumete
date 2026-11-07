@@ -5,14 +5,14 @@
 [[message]]
 # 空格 x：光標那一行没改過
 key = "change.none-here"
-zhs = "本行无任何改动"
+zhs = "本行没有改动"
 en = "nothing changed on this line"
 
 [[message]]
 # 命令行語法壞了
 key = "command.broken-line"
-zhs = "命令写坏了：{0}"
-en = "that command line is broken: {0}"
+zhs = "命令有误：{0}"
+en = "invalid command line: {0}"
 
 
 # ── commit ────────────────────────────────────────────────────────────
@@ -24,40 +24,40 @@ zhs = "纯文本没有注释"
 en = "plain text has no comments"
 
 [[message]]
-# 這種注釋不能套另一個注釋：裏面的 --> 會提前結束它（草稿）
+# 這種注釋不能套另一個注釋：裏面的 --> 會提前結束它
 key = "comment.would-nest"
-zhs = "选中的地方已经有注释，HTML 注释不能套着写"
-en = "the selection already holds a comment, and <!-- --> comments do not nest"
+zhs = "选区内已有注释，HTML 注释不能嵌套"
+en = "the selection already has a comment, and <!-- --> comments cannot nest"
 
 [[message]]
 # 補全面板裏這一條的説明：這個號碼還没人用，選它就是開一條新註
 key = "complete.a-new-one"
-zhs = "新的一条"
-en = "a new one"
+zhs = "新建"
+en = "new"
 
 [[message]]
 # [@ 和 Typst 的 @ 那一格補全面板的名字
 key = "complete.citation"
 zhs = "文献"
-en = "bibliography"
+en = "citation"
 
 [[message]]
 # 補全：面板叫什麼——附近的檔案
 key = "complete.file"
 zhs = "附近的文件"
-en = "a file near here"
+en = "nearby file"
 
 [[message]]
 # 補全面板的名字：正在補一個腳注的標號(Insert 模式打了 `[^`)
 key = "complete.footnote"
-zhs = "脚注标号"
-en = "footnote tag"
+zhs = "脚注"
+en = "footnote"
 
 [[message]]
 # 補全面板的名字：正在補一個章節錨點(Insert 模式打了 `](#`)
 key = "complete.heading"
-zhs = "本文件章节"
-en = "a heading in this file"
+zhs = "本文件标题"
+en = "heading in this file"
 
 # ── convert ───────────────────────────────────────────────────────────
 
@@ -76,70 +76,70 @@ en = "  {0}  →  {1}"
 [[message]]
 # :convert 換完了，字數没變(除了 force，簡繁都是一個字換一個字)
 key = "convert.characters-changed"
-zhs = "换好了：{0} 个字换了样"
+zhs = "已转换：{0} 个字有变化"
 en = "converted: {0} character(s) changed"
 
 [[message]]
 # `` ` `` 那一組換完選區，{0} 是換了幾個字
 key = "convert.done-here"
-zhs = "换了 {0} 个字(u 撤回)"
+zhs = "转换了 {0} 个字(u 撤销)"
 en = "{0} character(s) changed (u to undo)"
 
 [[message]]
 # :convert 的説明頁最後一行，解釋 force 是什麼
 # tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.force-means"
-zht = "加 `!` ＝ 連詞一起換(内存 → 記憶體)。字數會變，也回不來，所以要自己寫出來。"
-zhs = "加 `!` ＝ 连词一起换(内存 → 記憶體)。字数会变，也回不来，所以要自己写出来。"
-en = "`!` converts words too (内存 → 記憶體): the length changes and nothing reverses it, so it has to be asked for"
+zht = "加 `!` 會連詞語一起轉換(内存 → 記憶體)。字數會變，且無法還原，所以須明確指定。"
+zhs = "加 `!` 会连词语一起转换(内存 → 記憶體)。字数会变，且无法还原，所以须明确指定。"
+en = "`!` converts words too (内存 → 記憶體); the length changes and cannot be reversed, so it must be asked for"
 
 [[message]]
 # :convert-opencc-install，這台機器不能替你跑，只把命令説出來
 key = "convert.install-it-yourself"
-zhs = "这台机器要你自己装：{0}"
-en = "install it yourself on this machine: {0}"
+zhs = "请手动安装：{0}"
+en = "install it manually: {0}"
 
 [[message]]
 # :convert-opencc-install 交出螢幕之前
 key = "convert.installing"
-zhs = "跑：{0}"
+zhs = "正在运行：{0}"
 en = "running: {0}"
 
 [[message]]
 # :convert 換完了，字數變了(force 那一檔連詞一起換)
 key = "convert.length-changed"
-zhs = "换好了：{0} 字 → {1} 字"
+zhs = "已转换：{0} 字 → {1} 字"
 en = "converted: {0} characters → {1}"
 
 [[message]]
 # :convert 加了 force，可這一對没有連詞一起換的那一檔
 key = "convert.no-force"
-zhs = "「{0} → {1}」没有连词一起换的那一档，force 去掉"
+zhs = "「{0} → {1}」不支持词语转换，请去掉 `!`"
 en = "{0} → {1} has no word-level variant; drop the `!`"
 
 [[message]]
 # :convert 這兩邊之間 opencc 没有這條路
 key = "convert.no-route"
-zhs = "opencc 没有「{0} → {1}」这条路；:convert 看有哪几条"
+zhs = "opencc 不支持「{0} → {1}」；用 :convert 查看可用的转换"
 en = "opencc has no {0} → {1}; `:convert` lists the pairs it has"
 
 [[message]]
 # :convert 換完發現一個字都不用換
 key = "convert.not-a-character"
-zhs = "一个字都不用换"
-en = "not one character needed changing"
+zhs = "没有需要转换的字"
+en = "nothing needed converting"
 
 [[message]]
 # :convert 跑成了，可 opencc 一個字都没交回來
 key = "convert.nothing-came-back"
-zhs = "opencc 什么都没交回来，没有动你的字"
+zhs = "opencc 没有返回内容，原文未改动"
 en = "opencc returned nothing; your text is untouched"
 
 [[message]]
 # `` ` `` 那一組按下去的時候什麽都没選上
 key = "convert.nothing-picked"
-zhs = "这里没有字可换"
-en = "nothing here to change"
+zhs = "这里没有可转换的字"
+en = "nothing to convert here"
 
 [[message]]
 # :convert 的説明頁裏，opencc 裝在哪
@@ -150,7 +150,7 @@ en = "opencc: {0}"
 [[message]]
 # :convert 要跑了才發現没裝 opencc
 key = "convert.opencc-needed"
-zhs = "没装 opencc。装它：{0}(macOS 上 :convert-opencc-install 就是这句)"
+zhs = "未安装 opencc。安装命令：{0}(macOS 上可直接运行 :convert-opencc-install)"
 en = "opencc is not installed. Install it with: {0} (on macOS, :convert-opencc-install runs it)"
 
 [[message]]
@@ -162,14 +162,14 @@ en = "opencc {0}: {1}"
 [[message]]
 # :convert 説明頁開出來之後的狀態行
 key = "convert.pick-two"
-zhs = "挑两个：:convert <现在> <要变成>"
-en = "pick two: :convert <from> <to>"
+zhs = "请指定两种：:convert <源> <目标>"
+en = "name two: :convert <from> <to>"
 
 [[message]]
 # :convert 兩邊寫的是同一邊
 key = "convert.same-side"
-zhs = "「{0}」和「{1}」是同一边，没什么可换的"
-en = "{0} and {1} are the same side"
+zhs = "「{0}」和「{1}」是同一种写法，无需转换"
+en = "{0} and {1} are the same form; nothing to convert"
 
 [[message]]
 # :convert 的説明頁裏 c 那一行——這一邊叫什麼，長什麼樣
@@ -207,8 +207,8 @@ en = "  jp  Japanese          説 為 内 呉 裏 髪 台"
 # :convert 的説明頁裏 s 那一行——這一邊叫什麼，長什麼樣
 # tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.side-s"
-zht = "  s   簡體　　　　　説 为 内 吴 里 发 台"
-zhs = "  s   简体　　　　　説 为 内 吴 里 发 台"
+zht = "  s   簡體　　　　　说 为 内 吴 里 发 台"
+zhs = "  s   简体　　　　　说 为 内 吴 里 发 台"
 en = "  s   simplified        説 为 内 吴 里 发 台"
 
 [[message]]
@@ -231,15 +231,15 @@ en = "  tw  Taiwan trad.      説 為 內 吳 裡 髮 臺"
 # :convert 的説明頁最後一行，説撤銷只有 u 這一條路
 # tc on purpose: it shows the character forms or names the scripts themselves
 key = "convert.undo-with-u"
-zht = "換錯了按 u。别靠反方向再跑一次——s2tw 之後 tw2s 不是原路返回，裏和裡都會變成里。"
-zhs = "换错了按 u。别靠反方向再跑一次——s2tw 之后 tw2s 不是原路返回，裏和裡都会变成里。"
-en = "undo with u. Never by running the reverse: `s2tw` then `tw2s` is not the identity — 裏 and 裡 both come back as 里."
+zht = "轉錯了請按 u 撤銷，不要反向再轉一次：s2tw 之後再 tw2s 回不到原文，裏和裡都會變成里。"
+zhs = "转错了请按 u 撤销，不要反向再转一次：s2tw 之后再 tw2s 回不到原文，裏和裡都会变成里。"
+en = "undo with u, not by converting back: `s2tw` then `tw2s` does not round-trip, and 裏 and 裡 both become 里."
 
 [[message]]
 # :convert 説明頁那個緩衝的名字
 key = "convert.what-it-can-do"
-zhs = "convert：能走哪几条路"
-en = "convert: the pairs it can do"
+zhs = "convert：可用的转换"
+en = "convert: available pairs"
 
 # ── count ─────────────────────────────────────────────────────────────
 
@@ -247,7 +247,7 @@ en = "convert: the pairs it can do"
 # 字數統計的範圍：選區
 key = "count.of-selection"
 zhs = "选区"
-en = "the selection"
+en = "selection"
 
 [[message]]
 # :count 報字數
@@ -258,14 +258,14 @@ en = "{0}  {1} words  {2} han  {3} characters (no spaces)  {4} paragraphs"
 [[message]]
 # :count 的範圍：全篇
 key = "count.whole-file"
-zhs = "全篇"
-en = "the whole file"
+zhs = "全文"
+en = "whole file"
 
 [[message]]
 # 改動類的 count 撞到上限
 key = "count.writing-ceiling"
-zhs = "重复最多 {0} 遍，多出来的不做"
-en = "repeated {0} times at most — the rest are not done"
+zhs = "最多重复 {0} 次，超出部分不执行"
+en = "repeated at most {0} times; the rest are skipped"
 
 
 # ── data ──────────────────────────────────────────────────────────────
@@ -285,11 +285,11 @@ en = "the clipboard is empty"
 [[message]]
 # 複製到系統剪貼簿
 key = "edit.copied-to-clipboard"
-zhs = "复制了 {0} 个字到系统剪贴板"
+zhs = "已复制 {0} 个字到系统剪贴板"
 en = "copied {0} character(s) to the system clipboard"
 
 [[message]]
-# gS 的時候光標不在任何括號裏，或者括號裏是空的（草稿）
+# gS 的時候光標不在任何括號裏，或者括號裏是空的
 key = "edit.no-brackets-to-split"
 zhs = "光标不在可以拆开或合并的括号里"
 en = "the cursor is not in brackets with items to split or join"
@@ -298,7 +298,7 @@ en = "the cursor is not in brackets with items to split or join"
 [[message]]
 # mi g / ma g，可是這個文件 git 管不着(helix 的 "Diff is not available")
 key = "edit.no-diff-here"
-zhs = "这个文件不在 git 里，没有改动可选"
+zhs = "此文件未被 git 跟踪，没有改动可选"
 en = "git does not track this file, so there is no change to select"
 
 [[message]]
@@ -310,14 +310,14 @@ en = "no markup here"
 [[message]]
 # mi/ma 之類，光標外面没有那一對符號
 key = "edit.no-pair-around"
-zhs = "外面没有 {0}{1}"
+zhs = "周围没有 {0}{1}"
 en = "no {0}{1} around this"
 
 [[message]]
 # md 删一對符號，外面没有成對的
 key = "edit.no-pair-to-delete"
-zhs = "外面没有成对的符号"
-en = "no pair around this"
+zhs = "周围没有成对的符号"
+en = "no surrounding pair"
 
 [[message]]
 # mi w/ma w(以及 vim 的 ciw daw)，光標没有停在一個詞上
@@ -328,14 +328,14 @@ en = "no word here"
 [[message]]
 # 複製到系統剪貼簿，但没選中東西
 key = "edit.nothing-selected"
-zhs = "没有选中东西"
+zhs = "未选中任何内容"
 en = "nothing selected"
 
 [[message]]
-# :align 的時候選中的行裏不到兩行有那個符號（草稿）
+# :align 的時候選中的行裏不到兩行有那個符號
 key = "edit.nothing-to-align"
-zhs = "选中的行里不到两行有 {0}，没有什么可对齐"
-en = "fewer than two selected lines have {0}: nothing to line up"
+zhs = "含 {0} 的选中行不足两行，无法对齐"
+en = "fewer than two selected lines contain {0}; nothing to align"
 
 [[message]]
 # . 重複，但還没有改過東西
@@ -346,43 +346,43 @@ en = "nothing to repeat yet"
 [[message]]
 # 貼上之前一次都没取過
 key = "edit.nothing-yanked-yet"
-zhs = "还没有取过东西"
+zhs = "还没有复制过内容"
 en = "nothing has been yanked yet"
 
 [[message]]
 # md/mr 有幾個光標，其中兩個在同一對符號裏(helix 的 CursorOverlap)：整條不做
 key = "edit.one-pair-for-two-cursors"
-zhs = "有两个光标共用一对符号，没有改动"
+zhs = "两个光标共用一对符号，未改动"
 en = "two cursors share one pair; nothing was changed"
 
 [[message]]
 # 從貼上選單貼了一條
 key = "edit.pasted"
-zhs = "贴了 {0}"
+zhs = "已粘贴 {0}"
 en = "pasted {0}"
 
 [[message]]
 # 貼上一段字
 key = "edit.pasted-characters"
-zhs = "贴了 {0} 个字"
+zhs = "已粘贴 {0} 个字"
 en = "pasted {0} character(s)"
 
 [[message]]
 # :! 用外部命令換掉了選中的字
 key = "edit.pipe-replaced-characters"
-zhs = "换掉了 {0} 个字"
+zhs = "已替换 {0} 个字"
 en = "replaced {0} character(s)"
 
 [[message]]
 # 重做，已經到最新
 key = "edit.redo-at-newest"
-zhs = "已经是最新的了"
+zhs = "已是最新改动"
 en = "already at the newest change"
 
 [[message]]
 # Insert 裏按了 C-r，可是接着按的不是一個寄存器名
 key = "edit.register-cancelled"
-zhs = "没插——C-r 后面要一个寄存器的名字，无名的是引号"
+zhs = "未插入：C-r 后要跟寄存器名，无名寄存器是引号"
 en = "nothing inserted: C-r wants a register name, or a quote for the unnamed one"
 
 [[message]]
@@ -394,19 +394,19 @@ en = "that register is empty"
 [[message]]
 # 撤銷，已經到最早
 key = "edit.undo-at-oldest"
-zhs = "已经是最早的了"
+zhs = "已是最早改动"
 en = "already at the oldest change"
 
 [[message]]
 # 插入模式按 C-g：主動切一刀撤銷
 key = "edit.undo-break"
-zhs = "从这里起算一次新的撤销"
-en = "a new undo starts here"
+zhs = "从此处开始新的撤销步骤"
+en = "a new undo step starts here"
 
 [[message]]
 # y 取了一段字
 key = "edit.yanked-characters"
-zhs = "取了 {0} 个字"
+zhs = "已复制 {0} 个字"
 en = "yanked {0} character(s)"
 
 
@@ -416,41 +416,41 @@ en = "yanked {0} character(s)"
 [[message]]
 # 正在打的那一段的名字：正文里写编码
 key = "inline-preedit.name.composition"
-zhs = "正文里写编码"
-en = "the code, in the text"
+zhs = "正文显示编码"
+en = "code in the text"
 
 [[message]]
 # 正在打的那一段的名字：候选栏里
 key = "inline-preedit.name.off"
-zhs = "候选栏里"
+zhs = "候选栏显示"
 en = "in the candidate bar"
 
 [[message]]
 # 正在打的那一段的名字：正文里写首选
 key = "inline-preedit.name.preview"
-zhs = "正文里写首选"
-en = "the first candidate, in the text"
+zhs = "正文显示首选"
+en = "first candidate in the text"
 
 [[message]]
 # 没有这种写法
 key = "inline-preedit.no-such"
-zhs = "没有「{0}」这种写法——off、composition、preview"
-en = "no inline preedit '{0}' — off, composition, preview"
+zhs = "无效值「{0}」，可选 off、composition、preview"
+en = "no inline preedit '{0}'; use off, composition or preview"
 
 [[message]]
 # 正在打的那一段写在哪，换好了
 key = "inline-preedit.set"
-zhs = "正在打的那一段：{0}"
-en = "preedit: {0}"
+zhs = "内嵌编码：{0}"
+en = "inline preedit: {0}"
 
 [[message]]
-# 寄存器裏的字讀不成按鍵：{0} 寄存器名，{1} 讀不懂的那一段（草稿）
+# 寄存器裏的字讀不成按鍵：{0} 寄存器名，{1} 讀不懂的那一段
 key = "macro.cannot-read"
-zhs = "寄存器 {0} 里的 {1} 读不成按键"
-en = "register {0}: {1} is not a key"
+zhs = "寄存器 {0} 中的 {1} 不是有效按键"
+en = "register {0}: {1} is not a valid key"
 
 [[message]]
-# vim 的 @@：還没有播放過宏（草稿）
+# vim 的 @@：還没有播放過宏
 key = "macro.nothing-played"
 zhs = "还没有播放过宏"
 en = "no macro played yet"
@@ -458,19 +458,19 @@ en = "no macro played yet"
 [[message]]
 # 還没錄過宏就按了播放
 key = "macro.nothing-recorded"
-zhs = "还没有录过——Q 开始录，再按 Q 停"
-en = "nothing recorded yet — Q starts recording, Q again stops"
+zhs = "还没有录制宏：按 Q 开始，再按 Q 停止"
+en = "no macro recorded yet: Q starts recording, Q again stops"
 
 [[message]]
 # 錄製結束，報鍵數
 key = "macro.recorded-keys"
-zhs = "录了 {0} 个键"
+zhs = "已录制 {0} 个键"
 en = "recorded {0} key(s)"
 
 [[message]]
 # 開始錄製
 key = "macro.recording"
-zhs = "正在录…"
+zhs = "正在录制…"
 en = "recording…"
 
 
@@ -479,14 +479,14 @@ en = "recording…"
 [[message]]
 # 指名的暫存器是空的
 key = "register.empty"
-zhs = "暂存器 {0} 是空的"
+zhs = "寄存器 {0} 为空"
 en = "register {0} is empty"
 
 [[message]]
 # 預設暫存器空着，還没複製過
 key = "register.nothing-yanked"
-zhs = "没有取过东西——先 y 复制，或者 ␣p 从系统剪贴板贴"
-en = "nothing has been yanked — y copies, or Space p pastes from the system clipboard"
+zhs = "还没有复制过内容：y 复制，␣p 从系统剪贴板粘贴"
+en = "nothing yanked yet: y copies, Space p pastes from the system clipboard"
 
 [[message]]
 # 空格 " 的貼上單，某一條取過的東西不止一行時的那一行摘要
@@ -506,56 +506,56 @@ en = "system clipboard"
 [[message]]
 # 注音已經是要換的那一種了
 key = "ruby.already-in-that-form"
-zhs = "已经是 {0} 的注音了"
+zhs = "注音已经是 {0} 格式"
 en = "the readings are already {0}"
 
 [[message]]
 # :ruby-auto 寫進去了幾條注音
 key = "ruby.auto-added"
-zhs = "注了 {0} 个词——不要就 u"
-en = "{0} word(s) annotated — `u` takes it back"
+zhs = "已为 {0} 个词注音(u 撤销)"
+en = "annotated {0} word(s) (`u` to undo)"
 
 [[message]]
 # :ruby-auto，但字料層没裝，讀音無從查起
 key = "ruby.auto-no-readings"
-zhs = "查不到读音：拆分表没装(`:yume-scheme` 载一次)"
+zhs = "查不到读音：拆分表未加载(用 `:yume-scheme` 加载)"
 en = "no readings here: the 拆分表 is not loaded (`:yume-scheme` loads it)"
 
 [[message]]
 # :ruby-auto，範圍裏没有一個字要注
 key = "ruby.auto-none"
-zhs = "没有要注的字"
+zhs = "没有需要注音的字"
 en = "nothing here to annotate"
 
 [[message]]
 # :ruby-render off，注音不排
 key = "ruby.layout-off"
-zhs = "注音：不排，标记留在画面上"
-en = "readings: not laid out, the markup stays on the page"
+zhs = "注音：不排版，显示标记"
+en = "readings: not laid out, markup shown"
 
 [[message]]
 # :ruby 排某一種注音
 key = "ruby.layout-on"
-zhs = "注音：排 {0}"
+zhs = "注音：排版 {0}"
 en = "readings: laying out {0}"
 
 [[message]]
 # :ruby-render basic — 認得注音，不排出來
 key = "ruby.level-basic"
-zhs = "注音：认得，不排，标记留在画面上"
-en = "readings: read, not laid out, and the markup stays on the page"
+zhs = "注音：识别但不排版，显示标记"
+en = "readings: recognized, not laid out, markup shown"
 
 [[message]]
 # :ruby-render full — 注音排在正文旁邊
 key = "ruby.level-full"
-zhs = "注音：排在正文旁边，标记拿掉"
-en = "readings: laid out beside the base, and the markup comes off"
+zhs = "注音：排在正文旁，隐藏标记"
+en = "readings: laid out beside the text, markup hidden"
 
 [[message]]
 # :ruby-render off — 注音當普通文字，字數也照原文算
 key = "ruby.level-off"
-zhs = "注音：当普通文字，不认得"
-en = "readings: ordinary text, and not read as readings"
+zhs = "注音：不识别，当作普通文字"
+en = "readings: off, treated as plain text"
 
 [[message]]
 # 進注音模式，光標不在注音上也没有選中
@@ -566,20 +566,20 @@ en = "put the cursor in a reading, or select what to annotate"
 [[message]]
 # 去掉一處注音
 key = "ruby.removed"
-zhs = "注音去掉了"
-en = "removed the reading"
+zhs = "已删除注音"
+en = "reading removed"
 
 [[message]]
 # 整份注音改寫成另一種
 key = "ruby.rewritten-as"
-zhs = "注音改写成 {0} 了"
-en = "rewrote the readings as {0}"
+zhs = "注音已改写为 {0}"
+en = "readings rewritten as {0}"
 
 [[message]]
 # :ruby-format：改寫完了，但有幾組讀不懂、原樣留着——不能只報「已改寫」
 key = "ruby.rewritten-but-some-left"
 zhs = "已改写为 {0}，但有 {1} 组读不出来，原样留着"
-en = "rewritten as {0}, and {1} left as they were — those could not be read"
+en = "rewritten as {0}; {1} could not be read and were left as is"
 
 [[message]]
 # 給選中的字寫上注音
@@ -593,26 +593,26 @@ en = "reading: {0}"
 [[message]]
 # 按 _ 去兩端空白，可是每一段都是純空白
 key = "selection.all-blank"
-zhs = "每一处都是空白，没动"
-en = "every selection is blank, nothing changed"
+zhs = "所有选区都是空白，未改动"
+en = "every selection is blank; nothing changed"
 
 [[message]]
 # 按 & 想對齊，可是每一段的開頭本來就在同一格上
 key = "selection.already-aligned"
-zhs = "本来就齐了"
+zhs = "已经对齐"
 en = "already aligned"
 
 [[message]]
 # 按 , 的時候本來就只有一段
 key = "selection.already-one"
-zhs = "本来就只有一处选区"
-en = "there is only one selection"
+zhs = "只有一个选区"
+en = "only one selection"
 
 [[message]]
 # 延伸模式下收回成一個字
 key = "selection.collapsed-in-extend"
-zhs = "收回成一个字——v 还开着，一走又跟着长"
-en = "collapsed to one character — v is still on, so the next move grows it again"
+zhs = "已收缩为一个字，v 仍开启，移动时会继续扩展"
+en = "collapsed to one character; v is still on, so moving extends it again"
 
 
 # ── sentence ──────────────────────────────────────────────────────────
@@ -620,104 +620,104 @@ en = "collapsed to one character — v is still on, so the next move grows it ag
 [[message]]
 # A-,：去掉主選區(`,` 的反面)
 key = "selection.dropped-the-primary"
-zhs = "去掉主选区，还剩 {0} 处"
-en = "dropped the primary, {0} left"
+zhs = "已去掉主选区，剩 {0} 个"
+en = "dropped the primary selection; {0} left"
 
 [[message]]
 # 按 , 只留主選區，去掉了幾段
 key = "selection.kept-one"
-zhs = "只留主选区，去掉 {0} 处"
-en = "kept the primary, dropped {0}"
+zhs = "只保留主选区，去掉 {0} 个"
+en = "kept the primary selection, dropped {0}"
 
 [[message]]
 # 兩處選區靠到一起被併成一處——helix 是靜默的，這裏説一句
 key = "selection.merged"
-zhs = "{0} 处并到一起了，还剩 {1} 处"
+zhs = "已合并 {0} 个选区，剩 {1} 个"
 en = "{0} selections merged, {1} left"
 
 [[message]]
 # 按 C/A-C 想再加一個選區，可是那個方向上没有一行夠長
 key = "selection.no-room"
-zhs = "那边没有一行到得了这一列"
-en = "no line that way reaches this column"
+zhs = "该方向没有能到达此列的行"
+en = "no line in that direction reaches this column"
 
 [[message]]
 # 在全窗表格裏想開多選區——格內光標只能有一個
 key = "selection.not-in-a-table"
 zhs = "表格里只能有一个光标"
-en = "a table view holds one cursor"
+en = "a table allows only one cursor"
 
 [[message]]
 # gv：這一趟還没選過東西，没有可重選的
 key = "selection.nothing-to-reselect"
-zhs = "还没选过东西"
+zhs = "还没有选择过内容"
 en = "nothing has been selected yet"
 
 [[message]]
 # 按 A-s 想按行切開，可是選區是空的
 key = "selection.nothing-to-split"
-zhs = "没有可切的"
+zhs = "没有可拆分的选区"
 en = "nothing to split"
 
 [[message]]
 # s/S/A-k/A-K 做完了，剩幾段
 key = "selection.sift-done"
-zhs = "{0} 处"
+zhs = "{0} 个选区"
 en = "{0} selection(s)"
 
 [[message]]
 # s/S/A-k/A-K 一段都没剩下
 key = "selection.sift-found-nothing"
-zhs = "一处都没有，选区没动"
+zhs = "没有匹配，选区未变"
 en = "nothing matched, the selections are unchanged"
 
 [[message]]
 # s/S/A-k/A-K 打完正則按 Enter，可是那一條規則編不出匹配器
 key = "selection.sift-needs-a-pattern"
-zhs = "这条规则读不懂"
-en = "that pattern does not parse"
+zhs = "正则无效"
+en = "bad pattern"
 
 [[message]]
 # 按 ( 或 ) 換了主選區，説一句「第幾段，共幾段」
 key = "selection.which-one"
-zhs = "第 {0} 处，共 {1} 处"
-en = "selection {0} of {1}"
+zhs = "选区 {0}/{1}"
+en = "selection {0}/{1}"
 
 [[message]]
 # :! :sh :| 起不了那個命令(找不到、没有執行權……)
 key = "shell.cannot-run"
-zhs = "跑不动：{0}"
+zhs = "无法运行：{0}"
 en = "cannot run: {0}"
 
 [[message]]
-# C-z：這個系統上不能暫停（草稿）
+# C-z：這個系統上不能暫停
 key = "shell.cannot-suspend"
-zhs = "这里不能暂停"
-en = "suspending is not available here"
+zhs = "此处无法挂起"
+en = "cannot suspend here"
 
 [[message]]
 # :! 或 :sh 跑完了
 key = "shell.done"
-zhs = "跑完了：{0}"
+zhs = "完成：{0}"
 en = "done: {0}"
 
 [[message]]
 # :| 或 :sh 的命令失敗了，而它一個字都没説
 key = "shell.failed"
-zhs = "命令失败了"
+zhs = "命令执行失败"
 en = "the command failed"
 
 [[message]]
 # :!命令 讓出螢幕跑完，回到編輯器
 key = "shell.finished"
-zhs = "跑完了：{0}"
+zhs = "完成：{0}"
 en = "finished: {0}"
 
 [[message]]
 # :| 交出去的命令跑失敗了——失敗的答案不許蓋掉稿子
 key = "shell.left-alone"
-zhs = "没有动你的字：{0}"
-en = "your text is untouched: {0}"
+zhs = "原文未改动：{0}"
+en = "text unchanged: {0}"
 
 [[message]]
 # :!命令 跑完了，可是一個字都没印出來(寫進那個 buffer 裏)
@@ -732,9 +732,9 @@ zhs = "没有上一条终端命令"
 en = "no previous shell command"
 
 [[message]]
-# $：命令在每一段選區上都失敗了，選區不動（草稿）
+# $：命令在每一段選區上都失敗了，選區不動
 key = "shell.none-kept"
-zhs = "命令在每一段上都没通过，选区不动"
+zhs = "命令在所有选区上都失败了，选区未改动"
 en = "the command failed on every selection; they are left as they were"
 
 [[message]]
@@ -746,8 +746,8 @@ en = "press any key to return to yumete…"
 [[message]]
 # :| 把選區交出去，命令跑成了卻還在 stderr 上説了話
 key = "shell.replaced-with-complaints"
-zhs = "换好了，但它说：{0}"
-en = "replaced, but it said: {0}"
+zhs = "已替换，但命令输出：{0}"
+en = "replaced, but the command said: {0}"
 
 
 # ── shot ──────────────────────────────────────────────────────────────
@@ -755,14 +755,14 @@ en = "replaced, but it said: {0}"
 [[message]]
 # 挖完了，名單寫出來給人看了(那個檔是覆蓋寫的，不會讀回來)
 key = "word.discover-found"
-zhs = "找到 {0} 个项目自己的词，已经按它们切了；名单在 {1}(每次覆盖，只给你看)"
-en = "{0} word(s) of this project's own, already used for segmenting; the list is in {1} (overwritten each time, for reading only)"
+zhs = "找到 {0} 个项目专有词，已用于分词；列表见 {1}(每次覆盖，仅供查看)"
+en = "found {0} project-specific word(s), now used for segmenting; list in {1} (overwritten each time, for reference only)"
 
 [[message]]
 # 那份名單檔的第一行抬頭(這一行進的是檔案，不是狀態欄)
 key = "word.discover-heading"
-zhs = "# 项目自己的词：扫了 {0} 个文件自动找出来的。每次 :word-discover 整份覆盖。"
-en = "# This project's own words, found over {0} file(s). :word-discover overwrites all of it."
+zhs = "# 项目专有词：从 {0} 个文件中自动找出。每次 :word-discover 会整体覆盖。"
+en = "# Project-specific words found in {0} file(s). Each :word-discover overwrites this file."
 
 [[message]]
 # 寫進詞表的一行：詞，還有它出現了幾次。中間那一個是**真的 tab**，不是 \t——
@@ -775,20 +775,20 @@ en = "{0}	# {1}×"
 [[message]]
 # 挖了，一個字典不認得的詞都没有
 key = "word.discover-none"
-zhs = "扫了 {0} 个文件，没有找到项目自己的词——项目里的词字典都认得"
-en = "{0} file(s) read, and no words of this project's own — the dictionary already knows them all"
+zhs = "扫描了 {0} 个文件，没有找到项目专有词：词典已全部收录"
+en = "scanned {0} file(s); no project-specific words, the dictionary knows them all"
 
 [[message]]
 # 那份名單檔的第二行：説清楚它是寫出來給人看的，改它不算數
 key = "word.discover-note"
-zhs = "# yumete 不读这个档——在这里删一行什么也不会发生。要永久留下某个词，抄进 .yumete/words.txt(那份只有你写)。"
+zhs = "# yumete 不会读取此文件，在这里删掉一行不起作用。要永久保留某个词，请抄进 .yumete/words.txt(该文件只由你编辑)。"
 en = "# yumete never reads this back. To keep a word for good, copy it into .yumete/words.txt (that file is yours)."
 
 [[message]]
 # 挖到的比寫進去的多，説一聲
 key = "word.discover-too-many"
-zhs = "最常见的 {0} 个(一共 {1} 个)，已经按它们切了；名单在 {2}(每次覆盖)"
-en = "the commonest {0} of {1}, segmenting already; the list is in {2} (overwritten each run)"
+zhs = "最常见的 {0} 个(共 {1} 个)，已用于分词；列表见 {2}(每次覆盖)"
+en = "the {0} most common of {1}, now used for segmenting; list in {2} (overwritten each run)"
 
 [[message]]
 # 分詞粒度設好了
@@ -799,20 +799,20 @@ en = "word level: {0}"
 [[message]]
 # 詞表開起來了，怎麼寫怎麼重讀
 key = "word.list-opened"
-zhs = "{0}——一行一个词，:w 存下就生效"
-en = "{0} — one word per line; :w and they are in force"
+zhs = "{0}：一行一个词，:w 保存后生效"
+en = "{0}: one word per line; :w to apply"
 
 [[message]]
 # 詞表存下了，同一下就重讀進來了
 key = "word.list-saved"
-zhs = "存了 {0}——{1} 个词在用了"
-en = "saved {0} — {1} word(s) now in force"
+zhs = "已保存 {0}，{1} 个词已生效"
+en = "saved {0}; {1} word(s) in effect"
 
 [[message]]
 # 詞表重讀完了
 key = "word.lists-reread"
-zhs = "词表已重读：{0}"
-en = "word lists reread: {0}"
+zhs = "已重新加载词表：{0}"
+en = "word lists reloaded: {0}"
 
 [[message]]
 # 分詞標記換成「色相」：明度一樣，換顏色
@@ -824,19 +824,19 @@ en = "word mark: hue difference"
 # 分詞標記改用字色：不動紙，隔一個詞換一種墨色
 key = "word.mark-ink"
 zhs = "分词标记：字色差异"
-en = "word mark: ink difference"
+en = "word mark: text colour difference"
 
 [[message]]
 # 分詞標記換成「線」：字本身不動，詞底下畫一道淡線
 key = "word.mark-line"
-zhs = "分词标记：底部横线"
-en = "word mark: a rule under the word"
+zhs = "分词标记：下划线"
+en = "word mark: underline"
 
 [[message]]
 # 竪排選了「線」：畫不了，因爲 Insert 的光標就是那條下橫線
 key = "word.mark-line-not-vertical"
-zhs = "竖排无法使用底部横线。分词标记关闭"
-en = "no word rule in vertical layout; word mark is off"
+zhs = "竖排无法使用下划线，分词标记已关闭"
+en = "no underline in vertical layout; word mark is off"
 
 [[message]]
 # 分詞標記改用底色：隔一個詞在紙上鋪一層淡色
@@ -847,8 +847,8 @@ en = "word mark: background colour difference"
 [[message]]
 # 没有資料目錄，没有全域詞表
 key = "word.no-data-directory"
-zhs = "不知道数据目录在哪里。本机没有探查到全局词表"
-en = "no data directory known — this machine has no global word list"
+zhs = "找不到数据目录，本机没有全局词表"
+en = "no data directory found; this machine has no global word list"
 
 [[message]]
 # 分詞的詞表：詞表 ＋ 這本書自己的詞
@@ -889,38 +889,38 @@ en = "word mark: off"
 [[message]]
 # :word-habit 一個詞都没有多説
 key = "words.clean"
-zhs = "{0}：没有哪个词说得特别多"
-en = "{0}: no word is leaned on"
+zhs = "{0}：没有用得过多的词"
+en = "{0}: no overused words"
 
 [[message]]
 # :word-habit 查出了幾個口頭禪
 key = "words.found"
-zhs = "{0} 个词说得特别多——gf 跳到那一行"
-en = "{0} word(s) leaned on — gf goes to the line"
+zhs = "{0} 个词用得过多，gf 跳到该行"
+en = "{0} overused word(s); gf jumps to the line"
 
 [[message]]
 # :word-habit 結果裏的一行：這個詞説了幾次，比尋常文章多幾倍
 key = "words.habit"
-zhs = "{0}: 「{1}」{2} 次——比寻常文章多 {3} 倍"
-en = "{0}: 「{1}」 {2}× — {3} times more often than ordinary text"
+zhs = "{0}: 「{1}」{2} 次，是一般文章的 {3} 倍"
+en = "{0}: 「{1}」 {2}×, {3}× as often as ordinary text"
 
 [[message]]
 # :word-habit 但手上這份分詞器没有詞頻表，問不了「尋常文章説幾次」
 key = "words.no-table"
-zhs = "这一份词表没有词频({0})，问不了「别人说几次」——装上宇浩字料层再试"
-en = "this word list carries no frequencies ({0}), so there is nothing to compare against — install 宇浩's data layer"
+zhs = "此词表没有词频({0})，无法与常见用法比较，请安装宇浩字料层"
+en = "this word list has no frequencies ({0}), so there is nothing to compare against; install 宇浩's data layer"
 
 [[message]]
 # :word-habit 的結果那一份緩衝區的名字
 key = "words.results"
 zhs = "[口头禅 {0}]"
-en = "[habit words {0}]"
+en = "[overused words {0}]"
 
 [[message]]
 # :word-habit 查出來的太多，只列了前面那些
 key = "words.too-many"
-zhs = "{0} 个以上(只列了前 {0} 个)——gf 跳到那一行"
-en = "{0}+ words leaned on (first {0} listed) — gf goes to the line"
+zhs = "{0} 个以上(只列出前 {0} 个)，gf 跳到该行"
+en = "{0}+ overused words (first {0} listed); gf jumps to the line"
 
 
 # ── wrap ──────────────────────────────────────────────────────────────

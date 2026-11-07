@@ -468,7 +468,7 @@ mod tests {
         press(&mut ed, "do");
         let han: Vec<char> = ed.seeking().unwrap().found.han.iter().map(|(c, _)| *c).collect();
         assert_eq!(han, ['東', '冬'], "兩處的排在一處的前面");
-        assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
+        assert_eq!(ed.seek_rows(), ["do".to_string(), format!("1. 東  {}", say!("seek.places", 2)), format!("2. 冬  {}", say!("seek.places", 1))]);
     }
 
     /// **打到一半，屏幕上有兩處在說話：HUD 和命令行。**
@@ -489,17 +489,17 @@ mod tests {
 
         let mut ed = on_screen("冬天東風都城", true);
         assert_eq!(ed.typed_so_far(), "gz", "還没打字母");
-        assert_eq!(says(&ed), "請輸入拼音");
+        assert_eq!(says(&ed), say!("seek.ask-reading", ""));
         press(&mut ed, "don");
         assert_eq!(ed.typed_so_far(), "gzdon", "整串按鍵");
-        assert_eq!(says(&ed), "請輸入拼音：don");
+        assert_eq!(says(&ed), say!("seek.ask-reading", "：don"));
 
         let mut ed = on_screen("在 dock 旁邊", false);
         assert_eq!(ed.typed_so_far(), "gx");
-        assert_eq!(says(&ed), "請輸入兩個字母");
+        assert_eq!(says(&ed), say!("seek.ask-letters", ""));
         press(&mut ed, "d");
         assert_eq!(ed.typed_so_far(), "gxd");
-        assert_eq!(says(&ed), "請輸入兩個字母：d");
+        assert_eq!(says(&ed), say!("seek.ask-letters", "：d"));
     }
 
     /// **標籤一亮，兩處都閉嘴**——那時屏幕上全是標籤，自己會說話。
@@ -569,7 +569,7 @@ mod tests {
     fn the_panel_lists_one_row_per_character() {
         let mut ed = on_screen("東邊冬天東風", true);
         press(&mut ed, "do");
-        assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
+        assert_eq!(ed.seek_rows(), ["do".to_string(), format!("1. 東  {}", say!("seek.places", 2)), format!("2. 冬  {}", say!("seek.places", 1))]);
     }
 
     /// 一個漢字都没配上，面板就是空的——畫不畫是前端的事，可行數是這裏答的。
@@ -643,7 +643,7 @@ mod tests {
     fn a_digit_picks_a_character_and_labels_every_place_it_sits() {
         let mut ed = on_screen("東邊冬天東風", true);
         press(&mut ed, "do");
-        assert_eq!(ed.seek_rows(), ["do", "1. 東  共2處", "2. 冬  共1處"]);
+        assert_eq!(ed.seek_rows(), ["do".to_string(), format!("1. 東  {}", say!("seek.places", 2)), format!("2. 冬  {}", say!("seek.places", 1))]);
         press(&mut ed, "1");
         assert!(ed.seek_rows().is_empty(), "挑完了，面板收掉");
         assert_eq!(ed.seek_labels(), [(0, "a"), (4, "b")], "東 的兩處");

@@ -2560,7 +2560,7 @@ fn diff_reports_the_word_that_changed_and_gf_goes_to_it() {
 
     // Nothing typed yet: the buffer and the file agree.
     ed.execute(":diff").unwrap();
-    assert!(ed.status().contains("一個字都不差"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("diff.same", "ch01.txt")), "{}", ed.status());
     assert_eq!(ed.buffer_tabs().len(), 1, "no results buffer for no changes");
 
     // One word, in the middle of a paragraph a line diff would call wholly
@@ -6153,11 +6153,11 @@ fn counting_separates_han_from_characters() {
     ed.execute(":count").unwrap();
     let report = ed.status().to_string();
     // 21 漢字, plus three marks; two paragraphs, the blank line not counted.
-    assert!(report.contains("字詞 21"), "{report}");
-    assert!(report.contains("漢字 21"), "{report}");
-    assert!(report.contains("字符 24"), "{report}");
-    assert!(report.contains("2 段"), "{report}");
-    assert!(report.starts_with("全篇"), "{report}");
+    assert_eq!(
+        report,
+        say!("count.report", say!("count.whole-file"), 21, 21, 24, 2),
+        "{report}"
+    );
 }
 
 #[test]
@@ -6313,14 +6313,14 @@ fn a_table_exports_as_a_file_without_being_converted_in_place() {
     // word, and whether the file on disk actually changed.
     std::fs::write(dir.join("人物.csv"), "別動我\n").unwrap();
     ed.execute(":export csv").unwrap();
-    assert!(ed.status.contains("已經有"), "{}", ed.status);
+    assert!(ed.status.contains(&say!("export.target-exists", dir.join("人物.csv").display())), "{}", ed.status);
     assert_eq!(
         std::fs::read_to_string(dir.join("人物.csv")).unwrap(),
         "別動我\n",
         "refused means the file is untouched"
     );
     ed.execute(":export! csv").unwrap();
-    assert!(ed.status.contains("寫好了"), "{}", ed.status);
+    assert!(ed.status.contains(&say!("export.wrote", dir.join("人物.csv").display())), "{}", ed.status);
     assert_eq!(
         std::fs::read_to_string(dir.join("人物.csv")).unwrap(),
         "名,字\n淵明,元亮\n"
@@ -6332,7 +6332,7 @@ fn a_table_exports_as_a_file_without_being_converted_in_place() {
     // so the test names it in full: `人物.md` alone would mean a file in
     // whatever directory the editor was started in.)
     ed.execute(&format!(":export csv {}", path.display())).unwrap();
-    assert!(ed.status.contains("這個文件本身"), "{}", ed.status);
+    assert!(ed.status.contains(&say!("export.same-as-the-manuscript")), "{}", ed.status);
     assert_eq!(ed.current_buffer().text(), before, "the manuscript stands");
     assert_eq!(
         std::fs::read_to_string(&path).unwrap(),
@@ -6347,7 +6347,7 @@ fn a_table_exports_as_a_file_without_being_converted_in_place() {
     ed.execute(&format!(":open {}", path.display())).unwrap();
     ed.execute(":5").unwrap();
     ed.execute(&format!(":export! csv {}", other.display())).unwrap();
-    assert!(ed.status.contains("正開着"), "{}", ed.status);
+    assert!(ed.status.contains(&say!("export.target-is-open", "地名.md")), "{}", ed.status);
     assert_eq!(std::fs::read_to_string(&other).unwrap(), "# 地名\n");
 
     // Away from any table there is nothing to export.
@@ -7206,7 +7206,7 @@ fn gd_goes_gw_shows_and_a_missing_note_gets_written() {
     press(&mut ed, "gd");
     let text = ed.current_buffer().text();
     assert!(text.ends_with("[^1]: "), "{text:?}");
-    assert!(ed.status().contains("寫下了"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("note.written-same-pane", "[^1]")), "{}", ed.status());
     assert_eq!(ed.cursor(), ed.current_buffer().rope().len_chars(), "at its end");
     ed.on_key(Key::Ctrl('o'));
     assert_eq!(ed.cursor(), was, "C-o comes back to the sentence");
@@ -8555,7 +8555,7 @@ fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
         assert!(!ed.status().contains(complaint), "{}", ed.status());
     }
     assert!(ed.enter_table());
-    assert!(ed.status().contains("照首行"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.header-from-first-row")), "{}", ed.status());
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -8667,7 +8667,7 @@ fn a_file_nobody_changed_is_not_written_again() {
     ed.on_key(Key::Char('甲'));
     ed.on_key(Key::Esc);
     assert!(ed.execute("up").is_ok());
-    assert!(ed.status().contains("存了"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("buffer.saved", "ch01.md")), "{}", ed.status());
     assert!(std::fs::read_to_string(&file).unwrap().contains('甲'));
     assert!(!ed.current_buffer().is_modified());
 
@@ -8719,7 +8719,7 @@ fn a_file_changed_underneath_is_not_written_over() {
     ed.on_key(Key::Char('甲'));
     ed.on_key(Key::Esc);
     assert!(ed.execute("w").is_ok());
-    assert!(ed.status().contains("存了"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("buffer.saved", "ch01.md")), "{}", ed.status());
 
     // Now somebody else writes it. A stamp is size *and* mtime, and a test
     // is fast enough to land in the same second, so the length differs too.
@@ -9951,7 +9951,7 @@ fn the_header_is_not_a_row_anyone_may_delete() {
     let before = ed.current_buffer().text();
     press(&mut ed, " td");
     assert_eq!(ed.current_buffer().text(), before);
-    assert!(ed.status().contains("標題行"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.heading-row-stays")), "{}", ed.status());
 }
 
 #[test]
@@ -10162,7 +10162,7 @@ fn the_rule_row_is_drawn_not_written() {
     ed.goto_line(3);
     press(&mut ed, " td");
     assert_eq!(ed.current_buffer().text(), before);
-    assert!(ed.status().contains("標題行"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.heading-row-stays")), "{}", ed.status());
     press(&mut ed, " tr");
     assert_eq!(ed.current_buffer().line_count(), 8, "a row was opened");
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3));
@@ -10343,7 +10343,7 @@ fn a_delimited_grid_can_lose_and_move_a_row() {
     ed.goto_line(1);
     press(&mut ed, " td");
     assert_eq!(ed.current_buffer().line_count(), rows - 1);
-    assert!(ed.status().contains("標題行"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.header-cannot-be-deleted")), "{}", ed.status());
     // Nor may a row be moved above it.
     ed.goto_line(2);
     press(&mut ed, " tk");
@@ -10450,7 +10450,7 @@ fn a_filter_over_whole_rows_is_a_table_operation() {
     press(&mut ed, "x");
     ed.provide_pipe_output("一個欄位\n", crate::editor::Put::Replace);
     assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
-    assert!(ed.status().contains("欄"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.filter-changed-shape", 1, 1, 3)), "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -10533,8 +10533,8 @@ fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     // No column is declared a link any more (2026-10-30), so a component
     // with no row is not a finding: the list opens on the wrong-width row.
     assert!(!out.contains("卵"), "{out}");
-    assert!(out.starts_with("3: ") && out.contains("欄"), "{out}");
-    assert!(out.contains("\n5: ") && out.contains("重了"), "{out}");
+    assert!(out.starts_with("3: ") && out.contains(&say!("chaifen.wrong-column-count", 3, 3, 2)), "{out}");
+    assert!(out.contains("\n5: ") && out.contains(&say!("chaifen.duplicate-row-name", 5, "木", 4)), "{out}");
     assert!(!out.contains("c.csv"), "檔名不該在行上：{out}");
     // ⿰ is grammar, so it is not reported as a missing component.
     // A clean table says so and opens nothing.
@@ -10543,7 +10543,7 @@ fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     ed.execute("reload!").ok();
     let buffers = ed.buffer_count();
     assert!(ed.execute("table-check").is_ok());
-    assert!(ed.status().contains("没查出問題"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.check-clean", "c.csv", 2)), "{}", ed.status());
     assert_eq!(ed.buffer_count(), buffers, "no buffer for no findings");
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -10790,7 +10790,7 @@ fn a_block_too_wide_for_a_schema_is_refused() {
     let before = ed.current_buffer().text();
     press(&mut ed, "R");
     assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
-    assert!(ed.status().contains("貼不下"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.paste-does-not-fit", width)), "{}", ed.status());
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -11392,7 +11392,7 @@ fn an_unnamed_buffer_leaves_a_crash_copy_too() {
     std::fs::rename(&draft, &orphan).unwrap();
     assert_eq!(next.orphan_drafts(), vec![orphan.clone()]);
     next.announce_recovery();
-    assert!(next.status().contains("没存的草稿"), "{}", next.status());
+    assert!(next.status().contains(&say!("recover.drafts-waiting", 1)), "{}", next.status());
 
     // `:recover` opens it as a buffer of its own, and takes the file away
     // so the next launch does not offer it again.
@@ -12159,7 +12159,7 @@ fn a_file_with_no_schema_is_read_by_its_own_header() {
     let view = ed.table().unwrap();
     assert_eq!(view.schema.columns.len(), 3);
     assert_eq!(view.schema.columns[1].heading(), "reading");
-    assert!(ed.status().contains("照首行"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.header-from-first-row")), "{}", ed.status());
 
     // A file with nothing to split is not a table, and says so.
     let prose = dir.join("prose.txt");
@@ -12611,7 +12611,7 @@ fn wrap_on_and_off_are_refused_in_vertical_and_say_why() {
 
     ed.execute("view-wrap off").unwrap();
     assert!(ed.soft_wrap(), "…and untouched: there was nothing to turn");
-    assert!(ed.status().contains("縱書不折行"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("wrap.vertical-has-no-wrap")), "{}", ed.status());
 
     // 一列幾個字是另一個問題，而且歸另一條命令（2026-10-09 起）。
     ed.execute("view-wrap-vertical 12").unwrap();
@@ -15682,7 +15682,7 @@ fn a_change_shows_what_head_said_and_u_puts_it_back() {
     ed.goto_line(1);
     assert!(ed.change_here().is_none());
     assert!(!ed.restore_the_change_here());
-    assert!(ed.status().contains("無任何改動"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("change.none-here")), "{}", ed.status());
 }
 
 #[test]
@@ -16640,7 +16640,7 @@ fn no_writer_changes_how_many_cells_a_row_has() {
     }
     assert!(ed.current_buffer().line(4).unwrap().starts_with("| 木"));
     press(&mut ed, "J");
-    assert!(ed.status().contains("欄數"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.join-would-change-columns")), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), table, "the grid is untouched");
 
     // …and one line *above* the table: joining a paragraph onto the header
@@ -16648,7 +16648,7 @@ fn no_writer_changes_how_many_cells_a_row_has() {
     press(&mut ed, "gg");
     press(&mut ed, "j");
     press(&mut ed, "J");
-    assert!(ed.status().contains("欄數"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.join-would-change-columns")), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), table);
 
     // `:s` and `:replace` put a bare `|` into a cell.
@@ -17239,7 +17239,7 @@ fn the_grid_refusal_names_a_way_through() {
     let table = "| 鍵 | 拆分 |\n| --- | --- |\n| 木 | 木 |\n";
     let mut ed = typed(table);
     ed.execute(":%s/拆分/拆分 | 註/").ok();
-    assert!(ed.status().contains("t 旗標"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("table.substitution-would-change-width", 1, 4, 5)), "{}", ed.status());
     assert_eq!(ed.current_buffer().text(), table);
     // …and with the flag it goes through.
     ed.execute(":%s/拆分/拆分 | 註/t").unwrap();
@@ -17536,7 +17536,7 @@ fn a_record_that_runs_on_is_named_by_the_check() {
     ed.execute(":table-check").unwrap();
     let listing = ed.current_buffer().text();
     assert!(listing.starts_with("3: "), "{listing:?}");
-    assert!(listing.contains("引號没關上"), "{listing:?}");
+    assert!(listing.contains(&say!("chaifen.field-runs-on", 3)), "{listing:?}");
     // …and the quoted name on line 2 is not reported at all: it is one field.
     assert!(!listing.contains("2: "), "{listing:?}");
     assert!(!listing.contains("people.csv"), "檔名不該在行上：{listing:?}");
@@ -17577,7 +17577,7 @@ fn one_cell_of_text_is_not_a_spreadsheet() {
     press(&mut ed, "i");
     ed.paste_text("大樹，很高");
     assert!(ed.current_buffer().text().contains("大樹，很高"), "{}", ed.status());
-    assert!(ed.status().contains("貼了"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("edit.pasted-characters", 5)), "{}", ed.status());
 }
 
 #[test]
@@ -17624,7 +17624,7 @@ fn no_writer_replaces_a_file_the_editor_is_holding() {
     assert_eq!(ed.current_buffer().path(), Some(book.as_path()));
     ed.execute(&format!(":export html {}", other.display()))
         .unwrap();
-    assert!(ed.status().contains("正開着"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("export.target-is-open", "ch2.md")), "{}", ed.status());
     assert_eq!(std::fs::read_to_string(&other).unwrap(), "第二章\n");
 
     // An export onto a file nobody is holding still asks before it
@@ -17633,12 +17633,12 @@ fn no_writer_replaces_a_file_the_editor_is_holding() {
     std::fs::write(&out, "早就有的東西\n").unwrap();
     ed.execute(&format!(":export html {}", out.display()))
         .unwrap();
-    assert!(ed.status().contains("已經有"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("export.target-exists", out.display())), "{}", ed.status());
     assert_eq!(std::fs::read_to_string(&out).unwrap(), "早就有的東西\n");
     // …and `:export!` is how you say you meant it.
     ed.execute(&format!(":export! html {}", out.display()))
         .unwrap();
-    assert!(ed.status().contains("寫好了"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("export.wrote", out.display())), "{}", ed.status());
     assert!(std::fs::read_to_string(&out).unwrap().contains("那年冬天"));
 
     std::fs::remove_dir_all(&dir).ok();
@@ -19140,7 +19140,7 @@ fn recover_loads_the_draft_and_undo_takes_it_back() {
     // Loading it takes it over: there is nothing left waiting — and with
     // no drafts from a crashed session either, it says so about this file.
     ed.execute(":recover").unwrap();
-    assert!(ed.status().contains("没有搶救稿"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("recover.no-draft-for-this-file")), "{}", ed.status());
     assert!(ed.query().is_none(), "没有草稿就没有那一問");
 
     // 丟掉草稿走的是面板那一格（2026-10-02 定，`:recover!` 取消了）。
@@ -22502,7 +22502,7 @@ fn a_footnote_tag_is_finished_from_what_the_file_already_holds() {
     let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
     assert_eq!(texts, ["舊註]", "7]", "1]"], "what is in the file, then the next free number");
     assert_eq!(choices[0].note.as_deref(), Some("從前的話"), "the note it points at");
-    assert_eq!(choices[2].note.as_deref(), Some("新的一條"));
+    assert_eq!(choices[2].note.as_deref(), Some(say!("complete.a-new-one").as_str()));
     assert_eq!(ed.current_buffer().text().lines().next(), Some("正文[^舊註]和[^7]。[^"));
 
     ed.on_key(Key::Tab);
@@ -22558,7 +22558,7 @@ fn a_link_is_finished_with_a_heading_of_this_file() {
         ed.on_key(Key::Char(c));
     }
     let (title, choices, _) = ed.reference_menu().expect("the headings are offered");
-    assert_eq!(title, "本文件章節");
+    assert_eq!(title, say!("complete.heading"));
     let texts: Vec<&str> = choices.iter().map(|c| c.text.as_str()).collect();
     assert_eq!(texts, ["卷一-開端)", "第三節雨)"], "the space becomes a hyphen, the colon is dropped");
     assert_eq!(choices[0].note, None, "「卷一-開端」 is the title; printing it twice says nothing");
@@ -25300,7 +25300,7 @@ fn the_diagnostics_listing_names_every_file_a_server_complained_about() {
     // 一句話都没有的時候，說的是「還没人說過話」——不是「乾淨」。這一步裏還分
     // 不出這兩件事（服務器根本没接上），所以只敢說前一句。
     ed.execute(":diagnostics-all").unwrap();
-    assert!(ed.status().contains("還没") || ed.status().contains("还没"), "{}", ed.status());
+    assert!(ed.status().contains(&say!("problem.none")), "{}", ed.status());
 
     ed.set_problems(
         std::path::PathBuf::from("src/zoo.rs"),
@@ -27515,7 +27515,7 @@ fn the_register_panel_shows_what_each_one_holds() {
     assert_eq!(title, "寄存器·剪貼板");
     assert_eq!(keys.len(), 1, "一個格子都没存過，表上只該有 # ：{keys:?}");
     assert_eq!(keys[0].0, "#");
-    assert_eq!(keys[0].1, "(該選區之序號)");
+    assert_eq!(keys[0].1, say!("hint.register.hash"));
     ed.on_key(Key::Esc);
 
     // 整行存進 a，第二行存進 k。
@@ -27528,7 +27528,7 @@ fn the_register_panel_shows_what_each_one_holds() {
     assert_eq!(rows.len(), 3, "a、k，然後 #：{rows:?}");
     assert_eq!(rows[0].0, "a");
     assert_eq!(rows[1].0, "k");
-    assert_eq!(rows[2], ("#", "(該選區之序號)"), "# 排在最後，而且是一句說明");
+    assert_eq!(rows[2], ("#", say!("hint.register.hash").as_str()), "# 排在最後，而且是一句說明");
     // 二十四格（十二個漢字）就截，截的那一頭補一個 `…`，`…` 自己也算在裏面。
     assert_eq!(rows[0].1, "這一段是要複製到 a 裏去…");
     assert!(

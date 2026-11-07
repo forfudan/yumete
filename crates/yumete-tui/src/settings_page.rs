@@ -1359,8 +1359,9 @@ mod tests {
         // 26 rows: the layout group holds both page counts since 2026-10-28,
         // and 24 rows cut its last row off.
         let page = shot(&Panel::open(None, None), 110, 26);
-        for group in ["版面", "標記", "界面", "配色", "輸入法", "編輯", "文件", "鍵盤"] {
-            assert!(page.contains(group), "少了組 {group}：\n{page}");
+        for key in ["layout", "marks", "interface", "colours", "ime", "editing", "files", "keys"] {
+            let group = yumete_core::messages::say(&format!("settings.group.{key}"), &[]);
+            assert!(page.contains(&group), "少了組 {group}：\n{page}");
         }
         for row in ["排版方向", "每縱字數", "豎排分頁", "横排分頁", "首行縮進", "標點旁置", "稿紙刻度"] {
             assert!(page.contains(row), "少了 {row}：\n{page}");
@@ -1408,8 +1409,8 @@ mod tests {
         assert!(page.contains("出廠    0"), "出廠那一層：\n{page}");
         assert!(page.contains("全局    4"), "全局那一層：\n{page}");
         assert!(page.contains("本項目  2"), "本項目那一層：\n{page}");
-        assert!(page.contains("← 現在用這一層"), "贏的那一層要標出來：\n{page}");
-        assert!(page.contains("改了還没存"), "頂上要說一句：\n{page}");
+        assert!(page.contains(&say!("settings.layer.in-force")), "贏的那一層要標出來：\n{page}");
+        assert!(page.contains(&say!("settings.unsaved")), "頂上要說一句：\n{page}");
     }
 
     /// **矮窗口上不畫到框外面去。** 24 行的表，12 行的窗。

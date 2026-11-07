@@ -11,66 +11,66 @@ en = "{0} lines → {1}, width {2}"
 [[message]]
 # :hard-wrap 0 做完了：幾行併成幾行
 key = "hard-wrap.joined"
-zhs = "{0} 行并成 {1} 行"
+zhs = "{0} 行合并为 {1} 行"
 en = "{0} lines joined into {1}"
 
 [[message]]
 # :hard-wrap 不選區時光標站在標題、代碼、空行上
 key = "hard-wrap.nothing"
-zhs = "光标这一行没有可以重排的段"
-en = "nothing on this line to re-fill"
+zhs = "本行没有可重排的段落"
+en = "nothing to reflow on this line"
 
 [[message]]
 # :hard-wrap 不帶數字，而設置裏也沒設
 key = "hard-wrap.unset"
-zhs = "没设宽度：写 :hard-wrap 50，或在设置里填 hard_wrap"
-en = "no width set: say :hard-wrap 50, or set hard_wrap in the settings"
+zhs = "未设宽度：输入 :hard-wrap 50，或在设置里填写 hard_wrap"
+en = "no width set: use :hard-wrap 50, or set hard_wrap in the settings"
 
 [[message]]
 # :vertical/-v 碰上一份程序文件——縮進是那門語言的語法，竪排讀不了
 key = "layout.code-is-horizontal"
-zhs = "程序文件一律横排；小说那一份的竖排照旧留着"
-en = "a program file is always laid out across; your text keeps its 縱書"
+zhs = "代码文件总是横排；其他文本的竖排不受影响"
+en = "code files are always horizontal; your text stays vertical"
 
 [[message]]
 # :view-code off — 圍欄裏的代碼回到一種顏色
 key = "layout.code-off"
-zhs = "代码上色：关(围栏里的代码一种颜色)"
-en = "code colours: off (a fence is one colour)"
+zhs = "代码高亮：关(代码块单色)"
+en = "code highlighting: off (code blocks in one colour)"
 
 [[message]]
 # :view-code on — 圍欄裏的代碼按語法上色；{0} 是認得的語言，從 Language::ALL 現數的
 key = "layout.code-on"
-zhs = "代码上色：开(认得 {0})"
-en = "code colours: on (knows {0})"
+zhs = "代码高亮：开(支持 {0})"
+en = "code highlighting: on (supports {0})"
 
 [[message]]
 # :view-code 報告裏：光標所在這一段代碼太長，超過上限所以只畫一種顏色
 key = "layout.code-too-long"
-zhs = "这一段 {0} 行，超过 {1} 行就只画一种颜色"
-en = "this block is {0} lines; past {1} it keeps a single colour"
+zhs = "此代码块 {0} 行，超过 {1} 行不高亮"
+en = "this block has {0} lines; over {1}, it is not highlighted"
 
 [[message]]
 # :view-diff on，可是這個文件不在 git 倉里，或者倉里还没有第一个提交——
 # 开了什么都不画，当场説出来，别让人以为是坏了
 key = "layout.diff-gutter-not-in-git"
-zhs = "改动条：开(这个文件 git 管不着，一笔都不会画)"
-en = "change bar: on (git has nothing to say about this file, so nothing is drawn)"
+zhs = "改动条：开(此文件不在 git 中，不会显示)"
+en = "diff gutter: on (file not in git; nothing shown)"
 
 [[message]]
 # :view-diff off
 key = "layout.diff-gutter-off"
 zhs = "改动条：关"
-en = "change bar: off"
+en = "diff gutter: off"
 
 [[message]]
 # :view-diff on——行號旁邊那一格開始用底色説 git 的改動
 key = "layout.diff-gutter-on"
-zhs = "改动条：开(绿＝新添，蓝＝改过，朱的细线＝那里剪掉了)"
-en = "change bar: on (green added, blue changed, a thin red edge where lines were cut)"
+zhs = "改动条：开(绿＝新增，蓝＝修改，红色细线＝删除)"
+en = "diff gutter: on (green added, blue changed, thin red line deleted)"
 
 [[message]]
-# `:view-diagnostics` 之後：行末診斷現在畫到哪一級。{0} 檔名（草稿）
+# `:view-diagnostics` 之後：行末診斷現在畫到哪一級。{0} 檔名
 key = "layout.eol-diagnostics"
 zhs = "行末诊断：{0}"
 en = "end-of-line diagnostics: {0}"
@@ -78,14 +78,14 @@ en = "end-of-line diagnostics: {0}"
 [[message]]
 # :indent full — 縮進畫出來，段間的空行也收起
 key = "layout.first-line-indent-folded"
-zhs = "首行缩进：{0} 格，段间空行收起"
-en = "first-line indent: {0} squares, and the blank lines folded away"
+zhs = "首行缩进：{0} 格，收起段间空行"
+en = "first-line indent: {0} cells, blank lines hidden"
 
 [[message]]
 # :indent basic — 縮進畫出來，段間的空行不收
 key = "layout.first-line-indent-kept"
-zhs = "首行缩进：{0} 格，段间空行留着"
-en = "first-line indent: {0} squares, and the blank lines stay"
+zhs = "首行缩进：{0} 格，保留段间空行"
+en = "first-line indent: {0} cells, blank lines kept"
 
 [[message]]
 # 首行縮進關掉
@@ -102,8 +102,8 @@ en = "focus: off"
 [[message]]
 # 焦點模式打開
 key = "layout.focus-on"
-zhs = "焦点：开(其余的退后一级)"
-en = "focus: on (the rest of the page stands back)"
+zhs = "焦点：开(其余内容变淡)"
+en = "focus: on (the rest dims)"
 
 [[message]]
 # 排版換成橫排
@@ -115,7 +115,7 @@ en = "layout: horizontal"
 # 標點旁置關掉
 key = "layout.hung-punctuation-off"
 zhs = "标点旁置：关(每个标点占一格)"
-en = "hanging punctuation: off — each mark takes a square"
+en = "hanging punctuation: off (each mark takes a cell)"
 
 [[message]]
 # 標點旁置打開
@@ -126,8 +126,8 @@ en = "hanging punctuation: on"
 [[message]]
 # 縮進標記換了畫法
 key = "layout.indent-hint"
-zhs = "缩进标记：{0}"
-en = "indent hint: {0}"
+zhs = "段首记号：{0}"
+en = "paragraph mark: {0}"
 
 [[message]]
 # :indent-width — 報告或改了縮進寬度
@@ -138,69 +138,68 @@ en = "indent width: {0}"
 [[message]]
 # 行號那一條有自己的底色
 key = "layout.line-numbers-on-a-band"
-zhs = "行号：有底"
-en = "line numbers: on a band"
+zhs = "行号：有底色"
+en = "line numbers: with background"
 
 [[message]]
 # 行號那一條没有底色
 key = "layout.line-numbers-on-the-page"
-zhs = "行号：无底"
-en = "line numbers: on the page"
+zhs = "行号：无底色"
+en = "line numbers: no background"
 
 [[message]]
 # `:view-long-line off`——没有上限(vim 的 `synmaxcol=0`)
 key = "layout.long-line-off"
-zhs = "不管多长的行都会上色"
-en = "every line is coloured, however long"
+zhs = "长行也高亮"
+en = "every line is highlighted, however long"
 
 [[message]]
 # `:view-long-line N` ——門槛開著的時候狀態欄那一句
 key = "layout.long-line-on"
-zhs = "字数超过 {0} 的行不会上色"
-en = "a line past {0} characters is left plain"
+zhs = "超过 {0} 字的行不高亮"
+en = "lines past {0} characters are not highlighted"
 
 [[message]]
 # `:view-margin always`
 key = "layout.margin-always"
-zhs = "边栏：总是——每一纵、每一行都留"
-en = "margin: always — every column and every row"
+zhs = "夹行：总是(每一纵、每一行都留)"
+en = "margin: always (every column and row)"
 
 [[message]]
 # `:view-margin dense`
 key = "layout.margin-dense"
-zhs = "边栏：按视觉纵——哪一纵(行)有东西，哪一纵(行)才留"
-zht = "邊欄：按視覺縱——哪一縱(行)有東西，哪一縱(行)纔留"
-en = "margin: dense — only a column or row that carries something"
+zhs = "夹行：按视觉纵(只在有内容的纵/行留)"
+en = "margin: dense (only columns or rows that carry something)"
 
 [[message]]
 # `:view-margin loose`
 key = "layout.margin-loose"
-zhs = "边栏：按逻辑行——一段里有一处，整段都留"
-en = "margin: loose — a whole paragraph, if any of it carries something"
+zhs = "夹行：按逻辑行(段内有一处，整段都留)"
+en = "margin: loose (a whole paragraph, if any of it carries something)"
 
 [[message]]
 # `:view-margin never`
 key = "layout.margin-never"
-zhs = "边栏：从不——注音、旁置标点、着重号、平仄都不摆"
-en = "margin: never — no readings, hanging marks, emphasis dots or 平仄"
+zhs = "夹行：从不(不显示注音、旁置标点、着重号、平仄)"
+en = "margin: never (no readings, hanging marks, emphasis dots or 平仄)"
 
 [[message]]
 # :measure 定了欄寬
 key = "layout.measure-columns"
-zhs = "写到 {0} 栏宽"
-en = "measure: {0} columns"
+zhs = "正文宽度：{0} 列"
+en = "text width: {0} columns"
 
 [[message]]
 # :measure 交回窗口寬
 key = "layout.measure-window"
-zhs = "写到窗口宽"
-en = "measure: whatever the window gives"
+zhs = "正文宽度：随窗口"
+en = "text width: follows the window"
 
 [[message]]
 # 平仄開了，可是没有讀音表
 key = "layout.meter-no-readings"
-zhs = "平仄：开——可是没有读音表，旁边会是空的"
-en = "平仄: on — but with no reading data the margin will be empty"
+zhs = "平仄：开，但没有读音表，夹行将为空"
+en = "平仄: on, but with no reading data the margin will be empty"
 
 [[message]]
 # 平仄關掉
@@ -217,20 +216,20 @@ en = "平仄: on (○ 平, ● 仄, △▲ 韻腳)"
 [[message]]
 # 標點提示打開了，可是 :render off 不畫任何檔案裏没有的東西
 key = "layout.note-no-render"
-zhs = "标点提示：开——可是 :render off，页面上不画文件里没有的字"
-en = "notes: on — but `:render off` draws nothing the file does not hold"
+zhs = "标点提示：开，但 :render off 时页面上不画文件里没有的字"
+en = "punctuation hints: on, but `:render off` shows nothing the file does not contain"
 
 [[message]]
 # 標點提示關掉
 key = "layout.note-off"
 zhs = "标点提示：关"
-en = "notes: off"
+en = "punctuation hints: off"
 
 [[message]]
 # 標點提示打開
 key = "layout.note-on"
-zhs = "标点提示：开(半角标点与 ... 旁边画出该用的那一个)"
-en = "notes: on (the mark a half-width one should have been, beside it)"
+zhs = "标点提示：开(在半角标点和 ... 旁显示应使用的标点)"
+en = "punctuation hints: on (the right mark shown beside half-width ones)"
 
 [[message]]
 # 橫排分成幾欄
@@ -254,18 +253,18 @@ en = "pages, vertical: {0}"
 # 段組設成一段
 key = "layout.pages-vertical-one"
 zhs = "段组：一段(整页一纵到底)"
-en = "pages, vertical: one — a 縱 runs the whole page"
+en = "pages, vertical: one (a column runs the whole page)"
 
 [[message]]
 # :indent-tab spaces — Tab 打空格
 key = "layout.tab-spaces"
-zhs = "Tab 键：{0} 个空格以内到下一个缩进位(Shift-Tab 打制表符)"
+zhs = "Tab 键：用空格补到下一个 {0} 的倍数(Shift-Tab 插入制表符)"
 en = "Tab: spaces to the next multiple of {0} (Shift-Tab types a tab)"
 
 [[message]]
 # :indent-tab tab — Tab 打製表符
 key = "layout.tab-tab"
-zhs = "Tab 键：制表符(Shift-Tab 打空格，缩进宽度 {0})"
+zhs = "Tab 键：制表符(Shift-Tab 插入空格，缩进宽度 {0})"
 en = "Tab: a tab (Shift-Tab types spaces, width {0})"
 
 [[message]]
@@ -277,8 +276,8 @@ en = "typewriter: off"
 [[message]]
 # 打字機模式打開
 key = "layout.typewriter-on"
-zhs = "打字机：开(纸走，字不走)"
-en = "typewriter: on (the paper moves, the line does not)"
+zhs = "打字机：开(光标行固定，页面滚动)"
+en = "typewriter: on (the cursor line stays put, the page scrolls)"
 
 [[message]]
 # 排版換成竪排
@@ -292,14 +291,14 @@ en = "layout: vertical"
 [[message]]
 # 竖排：定了一列幾個字
 key = "layout.zong-measure"
-zhs = "一列写 {0} 个字"
-en = "{0} characters to a column"
+zhs = "每纵 {0} 字"
+en = "{0} characters per column"
 
 [[message]]
 # 竖排：一列跟着窗口
 key = "layout.zong-measure-window"
-zhs = "一列跟着窗口"
-en = "a column is as long as the window is tall"
+zhs = "每纵字数随窗口高度"
+en = "column length follows the window"
 
 [[message]]
 # 級别名：基本(出廠)
@@ -319,7 +318,7 @@ en = "off"
 [[message]]
 # 插入了一條行內註
 key = "md.inline-note-inserted"
-zhs = "行内注：打在括号里"
+zhs = "行内注：在括号里输入"
 en = "inline note: type inside the brackets"
 
 
@@ -328,26 +327,26 @@ en = "inline note: type inside the brackets"
 [[message]]
 # 按 zb：挪到屏幕底下
 key = "page.aimed-bottom"
-zhs = "这一行挪到底下"
+zhs = "本行移到底部"
 en = "this line to the bottom"
 
 [[message]]
 # 按 zz：挪到屏幕中間
 key = "page.aimed-middle"
-zhs = "这一行挪到中间"
+zhs = "本行居中"
 en = "this line to the middle"
 
 [[message]]
 # 按 zt：把光標這一行挪到屏幕頂上
 key = "page.aimed-top"
-zhs = "这一行挪到顶上"
+zhs = "本行移到顶部"
 en = "this line to the top"
 
 [[message]]
 # :render full，標記留在畫面上
 key = "render.full"
-zhs = "著色：标记留在画面上"
-en = "coloured: the markup stays on the page"
+zhs = "着色：显示标记"
+en = "coloured: markup visible"
 
 [[message]]
 # :render 不帶參數：它寫的三個維度各在哪一級(首行縮進不歸它管，:indent 自己報)
@@ -364,20 +363,20 @@ en = "markup: {0}"
 [[message]]
 # :markup 給了不認得的語法
 key = "render.no-such-markup"
-zhs = "没有「{0}」这种语法——:syntax 按一下 Tab 看有哪些"
-en = "no such syntax as '{0}' — press Tab after :syntax to see them"
+zhs = "没有「{0}」这种语法，在 :syntax 后按 Tab 查看"
+en = "no such syntax as '{0}'; press Tab after :syntax to see them"
 
 [[message]]
 # :render off，原文照畫
 key = "render.source"
-zhs = "原文：不著色"
+zhs = "原文：不着色"
 en = "source: no colour"
 
 [[message]]
 # :render full，所見即所得
 key = "render.wysiwyg"
-zhs = "所见即所得：标记只在光标那一处展开"
-en = "WYSIWYG: the markup is shown only where the cursor is"
+zhs = "所见即所得：标记只在光标处展开"
+en = "WYSIWYG: markup shows only at the cursor"
 
 
 # ── ruby ──────────────────────────────────────────────────────────────
@@ -391,20 +390,20 @@ en = "rules: off"
 [[message]]
 # :rules 撥開了，説鋪在哪幾欄(#424)
 key = "rules.on"
-zhs = "竖线：第 {0} 栏"
-en = "rules at column {0}"
+zhs = "竖线：第 {0} 列"
+en = "rules: column {0}"
 
 [[message]]
 # :view-sentence off——回到滿縱排
 key = "sentence.off"
-zhs = "回到满纵——一纵写到底"
+zhs = "回到满纵(一纵写到底)"
 en = "back to full columns"
 
 [[message]]
 # :view-sentence——一句一縱
 key = "sentence.on"
-zhs = "一句一纵——文件没有动，:view-sentence off 回去"
-en = "one sentence to a column — the file is untouched; :view-sentence off goes back"
+zhs = "一句一纵(文件未改动，:view-sentence off 恢复)"
+en = "one sentence per column (the file is untouched; :view-sentence off goes back)"
 
 
 # ── 設置面板 ─────────────────────────────────────────────────────────
@@ -412,26 +411,26 @@ en = "one sentence to a column — the file is untouched; :view-sentence off goe
 [[message]]
 # `:vertical-keys logical` 撥好了，而且這一扇正在竪排
 key = "vertical-keys.logical"
-zhs = "竖排的 hjkl：h l 走字、j k 走行"
-en = "hjkl down the page: h l by character, j k by line"
+zhs = "竖排 hjkl：h l 按字、j k 按行"
+en = "hjkl in vertical text: h l by character, j k by line"
 
 [[message]]
 # 同上，而這一扇是橫排——撥是撥上了，看不見
 key = "vertical-keys.logical-later"
-zhs = "竖排的 hjkl 改成 h l 走字、j k 走行(这一扇是横排，转过去才看得见)"
-en = "hjkl down the page now go by character and line (this region runs across)"
+zhs = "竖排 hjkl 改为 h l 按字、j k 按行(当前是横排，切到竖排后生效)"
+en = "hjkl in vertical text now move by character and line (this region is horizontal)"
 
 [[message]]
 # `:vertical-keys visual` 撥好了，而且這一扇正在竪排
 key = "vertical-keys.visual"
-zhs = "竖排的 hjkl：指哪就走哪"
-en = "hjkl down the page: each key goes where it points"
+zhs = "竖排 hjkl：按方向移动"
+en = "hjkl in vertical text: each key goes where it points"
 
 [[message]]
 # 同上，而這一扇是橫排
 key = "vertical-keys.visual-later"
-zhs = "竖排的 hjkl 改成指哪就走哪(这一扇是横排，转过去才看得见)"
-en = "hjkl down the page now go where they point (this region runs across)"
+zhs = "竖排 hjkl 改为按方向移动(当前是横排，切到竖排后生效)"
+en = "hjkl in vertical text now go where they point (this region is horizontal)"
 
 [[message]]
 # :line-numbers 報現狀
@@ -442,32 +441,32 @@ en = "line numbers: {0}"
 [[message]]
 # 滾輪一格走多遠——問的時候
 key = "wheel.is"
-zhs = "滚轮：一格 {0} 行(`:wheel 1` 是终端自己的一格)"
-en = "wheel: {0} line(s) a notch (`:wheel 1` is the terminal's own)"
+zhs = "滚轮：每格 {0} 行(`:wheel 1` 为终端默认)"
+en = "wheel: {0} line(s) per notch (`:wheel 1` is the terminal's own)"
 
 [[message]]
 # 滾輪一格走多遠——設好了
 key = "wheel.set"
-zhs = "滚轮：一格 {0} 行"
-en = "wheel: {0} line(s) a notch"
+zhs = "滚轮：每格 {0} 行"
+en = "wheel: {0} line(s) per notch"
 
 
 # ── word ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 折行關掉（草稿）
+# 折行關掉
 key = "wrap.off"
-zhs = "换行：关(长段落成一行，视图跟着光标左右走)"
-en = "soft wrap: off; a long paragraph is one row and the view follows the caret"
+zhs = "自动换行：关(长行不换行，视图随光标横向滚动)"
+en = "soft wrap: off (long lines stay on one row; the view follows the cursor)"
 
 [[message]]
-# 折行打開（草稿）
+# 折行打開
 key = "wrap.on"
-zhs = "换行：开"
+zhs = "自动换行：开"
 en = "soft wrap: on"
 
 [[message]]
 # :view-wrap on/off 用在竪排下
 key = "wrap.vertical-has-no-wrap"
-zhs = "纵书不折行：一纵断在窗高上。这一项只管横排(`:view-wrap 40` 两边都算)"
-en = "vertical does not soft-wrap: a 縱 breaks at the height of the window. This is a horizontal setting (`:view-wrap 40` counts in both)"
+zhs = "竖排不自动换行：一纵在窗口高度处断开。此项只用于横排(`:view-wrap 40` 两种都适用)"
+en = "vertical text does not soft-wrap: a column breaks at the window height. This setting is for horizontal text (`:view-wrap 40` applies to both)"

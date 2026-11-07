@@ -3,67 +3,67 @@
 # What the editor says, one block per tag; see README.md beside this file.
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.chaifen"
 zhs = "拆分"
 en = "拆分"
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.charset"
 zhs = "字集"
 en = "character set"
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.code"
 zhs = "编码"
 en = "code"
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.full-chaifen"
 zhs = "全息拆分"
 en = "full 拆分"
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.note"
 zhs = "字义"
 en = "meaning"
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.reading"
 zhs = "拼音"
 en = "reading"
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.simp-trad"
 zhs = "简繁"
-en = "simplified and traditional"
+en = "simp./trad."
 
 [[message]]
-# 注解的一欄：設置面板注解模式那一頁的一行（草稿，取自 yume）
+# 注解的一欄：設置面板注解模式那一頁的一行（取自 yume）
 key = "annotation.field.unicode"
-zhs = "统一码"
-en = "code point"
+zhs = "Unicode"
+en = "Unicode"
 
 [[message]]
-# 注解模式的名字：yume 出廠的二重注解（草稿，取自 yume）
+# 注解模式的名字：yume 出廠的二重注解（取自 yume）
 key = "annotation.mode.double"
 zhs = "二重"
 en = "double"
 
 [[message]]
-# 注解模式的名字：yume 出廠的多重注解（草稿，取自 yume）
+# 注解模式的名字：yume 出廠的多重注解（取自 yume）
 key = "annotation.mode.multi"
 zhs = "多重"
 en = "multi"
 
 [[message]]
-# 注解模式的名字：關（草稿）
+# 注解模式的名字：關
 key = "annotation.mode.off"
 zhs = "关"
 en = "off"
@@ -75,7 +75,7 @@ zhs = "开"
 en = "on"
 
 [[message]]
-# 狀態欄：換了注解模式，或 :yume-annotation 問現在是哪一個（草稿）
+# 狀態欄：換了注解模式，或 :yume-annotation 問現在是哪一個
 key = "annotation.now"
 zhs = "注解：{0}"
 en = "annotation: {0}"
@@ -87,39 +87,39 @@ zhs = "拼音模式注解：{0}"
 en = "pinyin annotation: {0}"
 
 [[message]]
-# 狀態欄：這個方案没有注解可畫（草稿）
+# 狀態欄：這個方案没有注解可畫
 key = "annotation.unavailable"
-zhs = "这个方案没有注解"
-en = "this scheme has no annotation"
+zhs = "此方案没有注解"
+en = "this scheme has no annotations"
 
 [[message]]
-# 狀態欄：:yume-annotation 後面的名字不是一個模式（草稿）
+# 狀態欄：:yume-annotation 後面的名字不是一個模式
 key = "annotation.unknown"
-zhs = "没有叫 {0} 的注解模式；有 {1}"
-en = "no annotation mode called {0}; there is {1}"
+zhs = "没有 {0} 这种注解模式，可选：{1}"
+en = "no annotation mode {0}; available: {1}"
 
 [[message]]
 # :lint 查一張拆分表，兩行用了同一個行名
 key = "chaifen.duplicate-row-name"
-zhs = "{0}: 行名「{1}」和第 {2} 行重了"
-en = "{0}: the name 「{1}」 is already row {2}"
+zhs = "{0}: 行名「{1}」与第 {2} 行重复"
+en = "{0}: row name '{1}' duplicates row {2}"
 
 [[message]]
 # :check table 走到一行，它的引號没關上——下一行是同一條記錄
 key = "chaifen.field-runs-on"
-zhs = "{0}: 引号没关上——下一行还是同一条记录，这张表一行只读一条"
-en = "{0}: this quote is never closed — the next line is the same record, and this grid reads one to a line"
+zhs = "{0}: 引号未闭合，记录跨到了下一行；此表每行只能有一条记录"
+en = "{0}: unclosed quote; the record runs onto the next line, and this table takes one record per line"
 
 [[message]]
 # :lint 的結果那一份緩衝區的名字
 key = "chaifen.lint-results"
-zhs = "[查 {0}]"
+zhs = "[检查 {0}]"
 en = "[lint {0}]"
 
 [[message]]
 # :lint 查一張拆分表，某一行的欄數和表頭對不上
 key = "chaifen.wrong-column-count"
-zhs = "{0}: 这一行是 {1} 栏，该是 {2} 栏"
+zhs = "{0}: 此行有 {1} 列，应为 {2} 列"
 en = "{0}: {1} columns here, {2} expected"
 
 # ── check ─────────────────────────────────────────────────────────────
@@ -127,20 +127,20 @@ en = "{0}: {1} columns here, {2} expected"
 [[message]]
 # Shift 點一下切到 ABC：yume 還接着鍵盤，按鍵直通
 key = "ime.abc"
-zhs = "ABC：按键直通，Shift 点一下回中文"
-en = "ABC — the keys type what they say; a Shift tap goes back to 中文"
+zhs = "ABC：按键直接输入，按一下 Shift 回到中文"
+en = "ABC: keys type as is; tap Shift for Chinese"
 
 [[message]]
 # :yume-autocompletion ——輸入預測此刻開着還是關着
 key = "ime.autocompletion-is"
 zhs = "输入预测：{0}"
-en = "prediction (autocompletion): {0}"
+en = "prediction: {0}"
 
 [[message]]
 # :yume ! 切到編進二進制的那一份碼表(`! 方案名` 指定哪一家)
 key = "ime.builtin-scheme"
-zhs = "方案：{0}(出厂自带的码表)"
-en = "scheme: {0} (the built-in 碼表)"
+zhs = "方案：{0}(内置码表)"
+en = "scheme: {0} (built-in 碼表)"
 
 [[message]]
 # `:yume-charset` 撥了或問了之後：現在是哪一檔。{0} 是檔名（宇夢的字串「過濾：」）
@@ -151,7 +151,7 @@ en = "filter: {0}"
 [[message]]
 # `:yume-charset` 等三條後面跟了一個認不出的詞。{0} 是那個詞
 key = "ime.charset-no-such"
-zhs = "认不出 {0}"
+zhs = "无法识别 {0}"
 en = "no such value: {0}"
 
 [[message]]
@@ -253,74 +253,74 @@ en = "sentence lanes: {0}"
 [[message]]
 # 碼表載入要十分之幾秒，那一格畫在動手之前(#341)
 key = "ime.loading"
-zhs = "正在载入码表…"
+zhs = "正在加载码表…"
 en = "loading the 碼表…"
 
 [[message]]
 # :yume-menu-size ——候選面板一頁幾條
 key = "ime.menu-size-is"
-zhs = "候选面板一页 {0} 条"
-en = "{0} candidates to a page"
+zhs = "每页 {0} 个候选"
+en = "{0} candidates per page"
 
 [[message]]
 # :yume-menu-size：一頁只剩一條的時候（英文要單數）
 key = "ime.menu-size-is-one"
-zhs = "候选面板一页 {0} 条"
-en = "{0} candidate to a page"
+zhs = "每页 {0} 个候选"
+en = "{0} candidate per page"
 
 [[message]]
 # :yume ! 要出廠碼表，而這個二進制没編進去
 key = "ime.no-builtin-table"
-zhs = "这个二进制不带码表"
-en = "this build carries no 碼表"
+zhs = "此版本未内置码表"
+en = "this build has no built-in 碼表"
 
 [[message]]
-# :yume ! 日月 之類，二進制帶了別的方案的碼表而没帶這一個（草稿）
+# :yume ! 日月 之類，二進制帶了別的方案的碼表而没帶這一個
 key = "ime.no-builtin-table-for"
-zhs = "这个二进制不带{0}的码表"
-en = "this build carries no 碼表 for {0}"
+zhs = "此版本未内置{0}的码表"
+en = "this build has no built-in 碼表 for {0}"
 
 [[message]]
 # 啟動時認出終端機報不出單獨的 Shift，説一次備用鍵是哪一個(#339)
 key = "ime.no-lone-shift"
-zhs = "此终端报不出单独的 Shift，中/ABC 按 {0}(或 :yume on|off)"
+zhs = "此终端无法识别单独的 Shift，切换中/ABC 请按 {0}(或 :yume on|off)"
 en = "this terminal cannot report a lone Shift; {0} switches 中/ABC"
 
 [[message]]
 # 同上，而 language_key 關着，於是連備用鍵也没有
 key = "ime.no-lone-shift-off"
-zhs = "此终端报不出单独的 Shift，中/ABC 只能用 :yume on|off(language_key 可绑一个键)"
+zhs = "此终端无法识别单独的 Shift，只能用 :yume on|off 切换中/ABC(可用 language_key 绑定一个键)"
 en = "this terminal cannot report a lone Shift; bind [editor] language_key to switch 中/ABC"
 
 [[message]]
 # 要換的方案系統裏没有碼表
 key = "ime.no-table-installed"
-zhs = "系统里没有装 {0} 的码表"
+zhs = "系统中未安装 {0} 的码表"
 en = "no 碼表 for {0} is installed"
 
 [[message]]
 # :yume ?，而這一次還没有載過碼表
 key = "ime.not-started"
-zhs = "还没开始打字——`:yume-scheme` 载入码表"
-en = "not typing yet — `:yume-scheme` loads a 碼表"
+zhs = "输入法未启动：用 `:yume-scheme` 加载码表"
+en = "input method not started; `:yume-scheme` loads a 碼表"
 
 [[message]]
 # :yume ?，而這個二進制連出廠碼表都没編進去
 key = "ime.not-started-no-builtin"
-zhs = "还没开始打字，而且这个二进制不带码表——先装数据"
-en = "not typing yet, and this build carries no 碼表 — install the data first"
+zhs = "输入法未启动，且此版本未内置码表，请先安装数据"
+en = "input method not started, and this build has no 碼表; install the data first"
 
 [[message]]
 # :yume off 把鍵盤整個交還給系統(第三個狀態，不是 ABC)
 key = "ime.off"
-zhs = "宇梦输入引擎已关闭"
+zhs = "输入法已关闭"
 en = "input method off"
 
 [[message]]
 # 換到系統裝的那份碼表
 key = "ime.scheme-from-system"
-zhs = "方案：{0}(系统装的码表)"
-en = "scheme: {0} (the system's own 碼表)"
+zhs = "方案：{0}(系统安装的码表)"
+en = "scheme: {0} (system-installed 碼表)"
 
 [[message]]
 # :yume-scheme 換好了方案
@@ -332,13 +332,13 @@ en = "scheme: {0}"
 # 快捷符號面板的頭一行(分號開的那個特殊面板)
 key = "ime.shortcut"
 zhs = "快捷符号　按字母上屏"
-en = "quick symbols — press a letter to commit one"
+en = "quick symbols: press a letter to insert"
 
 [[message]]
 # `:yume-charset-sort` 撥在一個整句方案上：排序不起作用（宇夢的字串）
 key = "ime.sort-inert"
-zhs = "整句字集轨开着，字集排序不起作用"
-en = "the sentence lanes are on, so the charset sort does nothing"
+zhs = "整句字集轨已开启，字集排序不起作用"
+en = "sentence lanes are on, so charset sort has no effect"
 
 [[message]]
 # `:yume-charset-sort` 撥了或問了之後：現在是哪一檔。{0} 是檔名（宇夢的字串「排序：」）
@@ -361,7 +361,7 @@ en = "traditional first"
 [[message]]
 # 字集排序：原始排序（宇夢的字串）
 key = "ime.sort.original"
-zhs = "原始排序"
+zhs = "原始顺序"
 en = "original order"
 
 [[message]]
@@ -373,13 +373,13 @@ en = "simplified first"
 [[message]]
 # `:yume-which`：碼表是二進制自帶的
 key = "ime.source.builtin"
-zhs = "出厂自带"
+zhs = "内置"
 en = "built in"
 
 [[message]]
 # 同上，帶宇夢的版本。{0} 是版本
 key = "ime.source.builtin-version"
-zhs = "出厂自带 {0}"
+zhs = "内置 {0}"
 en = "built in, {0}"
 
 [[message]]
@@ -389,7 +389,7 @@ zhs = "已安装"
 en = "installed"
 
 [[message]]
-# :yume ? ——輸入法此刻的樣子（拆分改成注解：草稿）
+# :yume ? ——輸入法此刻的樣子（拆分改成注解）
 key = "ime.state"
 zhs = "{0} · 码表 {1} · 注解 {2} · 上屏 {3}"
 en = "{0} · 碼表 {1} · annotation {2} · commit {3}"
@@ -403,8 +403,8 @@ en = "碼表: {0}"
 [[message]]
 # :yume-table 裝上了，但檔案裏有幾條長得放不進碼表，跳過了
 key = "ime.table-skipped"
-zhs = "跳过 {0} 条过长的"
-en = "{0} over-long rows skipped"
+zhs = "跳过 {0} 条过长的条目"
+en = "skipped {0} over-long entries"
 
 
 # ── label ─────────────────────────────────────────────────────────────
@@ -412,44 +412,44 @@ en = "{0} over-long rows skipped"
 [[message]]
 # 外部命令起不來
 key = "language.cannot-run"
-zhs = "跑不动：{0}"
-en = "could not run it: {0}"
+zhs = "无法运行：{0}"
+en = "cannot run: {0}"
 
 [[message]]
 # 外部命令跑完，没有輸出
 key = "language.done"
-zhs = "{0}：跑完了"
+zhs = "{0}：完成"
 en = "{0}: done"
 
 [[message]]
 # 設定裏那條命令其實是服務器
 key = "language.is-a-server"
-zhs = "{0} 是个服务器——用 :view-preview 开它"
-en = "{0} is a server — :view-preview starts it"
+zhs = "{0} 是服务器，用 :view-preview 启动"
+en = "{0} is a server; start it with :view-preview"
 
 [[message]]
 # 設定裏没説這種檔要跑什麼
 key = "language.no-such-action"
-zhs = "{0} 没有说 {1} 要跑什么——在配置里写 [language.{0}] {1} = …"
-en = "{0} does not say what {1} runs — write [language.{0}] {1} = … in the config"
+zhs = "{0} 没有配置 {1} 要运行的命令，请在配置中写 [language.{0}] {1} = …"
+en = "{0} has no command for {1}; set [language.{0}] {1} = … in the config"
 
 [[message]]
 # 外部命令把正文換掉了
 key = "language.replaced"
-zhs = "{0}：换好了"
+zhs = "{0}：已替换"
 en = "{0}: replaced"
 
 [[message]]
 # 外部命令要先存檔
 key = "language.save-first"
-zhs = "先保存——外面的程序读的是文件"
-en = "save first — the program outside reads the file"
+zhs = "请先保存：外部程序读取的是文件"
+en = "save first: the external program reads the file"
 
 [[message]]
 # 外部命令失敗，正文没動
 key = "language.text-untouched"
-zhs = "没有动你的字：{0}"
-en = "your text was left alone: {0}"
+zhs = "原文未改动：{0}"
+en = "text unchanged: {0}"
 
 
 # ── layout ────────────────────────────────────────────────────────────
@@ -465,20 +465,20 @@ en = "panel {0}"
 [[message]]
 # 換方案時順帶報內嵌
 key = "scheme.preedit-is"
-zhs = "正在打的那一段 {0}"
-en = "preedit {0}"
+zhs = "内嵌编码 {0}"
+en = "inline preedit {0}"
 
 [[message]]
 # 這個方案的碼表没有裝——怎麼裝
 key = "scheme.table-not-installed"
-zhs = "{0} 的码表没有装——装一份宇浩输入法，或者在 `[ime] data_dirs` 里写上码表所在的目录"
-en = "no 碼表 installed for {0} — install the 宇浩 input method, or name the directory your tables are in under `[ime] data_dirs`"
+zhs = "未安装 {0} 的码表：请安装宇浩输入法，或在 `[ime] data_dirs` 中填写码表所在目录"
+en = "no 碼表 installed for {0}: install the 宇浩 input method, or add its directory to `[ime] data_dirs`"
 
 [[message]]
 # `:yume-where`：出廠自帶(前面都没有的時候)
 key = "yume.where.builtin"
-zhs = "出厂自带(前面都没有的时候)"
-en = "built in (when none of the above answered)"
+zhs = "内置(以上都没有时)"
+en = "built in (when none of the above has it)"
 
 [[message]]
 # `:yume-where`：二進制裏那張全息拆分表。它不分方案，所以不
@@ -515,20 +515,20 @@ en = "$YUMETE_DATA_DIR"
 [[message]]
 # `:yume-where`：裝在可執行文件的 prefix 裏(brew install yume-data)
 key = "yume.where.from.prefix"
-zhs = "装在可执行文件的 prefix 里(brew install yume-data)"
+zhs = "安装在程序的 prefix 目录中(brew install yume-data)"
 en = "installed into the binary's prefix (brew install yume-data)"
 
 [[message]]
 # `:yume-where`：系統安裝的宇夢輸入法自帶數據
 key = "yume.where.from.yume"
-zhs = "系统安装的宇梦输入法自带数据"
-en = "data kept by the installed Yume"
+zhs = "已安装的宇梦输入法的数据"
+en = "data from the installed Yume"
 
 [[message]]
 # `:yume-where`：碼表和字料到哪裏找的。先找到的先用；六層都没有，就用出廠自帶的那一份。
 key = "yume.where.head"
-zhs = "码表和字料到哪里找的。先找到的先用；都没有，就用出厂自带的那一份。"
-en = "Where 碼表 and 字料 are looked for. First one holding a file wins; when none do, the built-in tables answer."
+zhs = "码表和字料的查找顺序：先找到的先用；都没有时用内置的。"
+en = "Where 碼表 and 字料 are looked for, in order. The first one found is used; if none, the built-in tables."
 
 [[message]]
 # `:yume-where`：{0}. {1}
@@ -539,20 +539,20 @@ en = "{0}. {1}"
 [[message]]
 # `:yume-where`：數據在哪
 key = "yume.where.name"
-zhs = "数据在哪"
-en = "where the data is"
+zhs = "数据位置"
+en = "data location"
 
 [[message]]
 # `:yume-where`：一張碼表都没掛上的時候，「當前掛載的是」後面那一句
 key = "yume.where.no-table"
-zhs = "未挂载码表"
-en = "no 碼表 mounted"
+zhs = "未加载码表"
+en = "no 碼表 loaded"
 
 [[message]]
 # `:yume-where`：第一層空着——那一層只有自己寫配置纔有，所以順帶說怎麼寫
 key = "yume.where.not-named"
-zhs = "(没有写——要自己指一个目录，就在 `[ime] data_dirs` 里写)"
-en = "(not named — to point at a directory of your own, set `[ime] data_dirs`)"
+zhs = "(未设置；可在 `[ime] data_dirs` 中指定目录)"
+en = "(not set; set `[ime] data_dirs` to add a directory of your own)"
 
 [[message]]
 # `:yume-where`：(没有)
@@ -563,11 +563,11 @@ en = "(nothing)"
 [[message]]
 # `:yume-where`：現在答話的是：{0}
 key = "yume.where.now"
-zhs = "当前挂载的是：{0}"
-en = "mounted now: {0}"
+zhs = "当前加载：{0}"
+en = "loaded now: {0}"
 
 [[message]]
 # `:yume-where`：開在一個新緩衝區裏了
 key = "yume.where.opened"
-zhs = "开在一个新缓冲区里了"
-en = "opened in a buffer of its own"
+zhs = "已在新缓冲区中打开"
+en = "opened in a new buffer"

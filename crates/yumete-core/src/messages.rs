@@ -72,10 +72,10 @@ impl Language {
     /// `zh` is Traditional, which is what it has always meant here.
     pub fn parse(name: &str) -> Option<Language> {
         match name.trim().to_ascii_lowercase().as_str() {
-            "zh" | "zht" | "zh-hant" | "zh-tw" | "chinese" | "中文" | "繁體" | "繁体" => {
+            "zht" | "zh" | "tc" | "zh-hant" | "zh-tw" | "chinese" | "中文" | "繁體" | "繁体" => {
                 Some(Language::Traditional)
             }
-            "zhs" | "zh-hans" | "zh-cn" | "简体" | "簡體" => Some(Language::Simplified),
+            "zhs" | "sc" | "zh-hans" | "zh-cn" | "简体" | "簡體" => Some(Language::Simplified),
             "en" | "english" => Some(Language::English),
             _ => None,
         }

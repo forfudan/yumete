@@ -2806,7 +2806,7 @@ const MOODS: &[Word] = &[
 /// The three languages the editor speaks (#494).
 const LANGUAGES: &[Word] = &[
     Word {
-        name: "zh",
+        name: "zht",
         help: "cmd.languages.zh",
         needs: &[],
     },
@@ -3953,10 +3953,18 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["lang"],
         help: "cmd.commands.language",
         needs: &[],
-        params: &[Param::Words { of: LANGUAGES, default: None }],
+        // `zht`, `zhs`, `en` are the names shown (2026-11-07); `zh`, `tc`,
+        // `sc` and the other spellings `Language::parse` knows still work.
+        params: &[Param::WordsOr { of: LANGUAGES, default: None, or: "<語言>" }],
         build: Some(|p| {
             // Bare, it is the question — the status line says which is on.
-            Ok(Command::SayIn(p.arg(0).and_then(crate::messages::Language::parse)))
+            match p.arg(0) {
+                None => Ok(Command::SayIn(None)),
+                Some(word) => match crate::messages::Language::parse(word) {
+                    Some(language) => Ok(Command::SayIn(Some(language))),
+                    None => Err(CommandError::InvalidArgument { command: "language", value: word.to_string() }),
+                },
+            }
         }),
     },
     Entry {

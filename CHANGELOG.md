@@ -11,12 +11,19 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **The Simplified Chinese lesson**: `:tutor` in a Simplified interface opens the lesson in Simplified; the Traditional one is made from it.
+
 - **What you yank lights up for a moment**, as nvim's `vim.hl.on_yank` does: `[editor] yank_flash = true`. It helps most under the vim keys, where `yap` or `yis` copies text you never saw selected. Off by default; `ye --import lazyvim` turns it on, as LazyVim does.
 - **`TODO:`, `FIXME:` and `NOTE` stand out in comments**, in the diagnostics' colours and with helix's lists of words (blue for `TODO` and `NOTE`, amber for `HACK` and `WARN`, red for `FIXME` and `BUG`). In code comments, and in Markdown and Typst comments; never in body text.
 - **`gS` splits a pair of brackets into one item per line, and joins them back**, as mini.splitjoin does: `[a, b, c]` becomes three lines one indent in, and `gS` again puts it back on one line. Commas inside nested brackets and strings are left alone. A flavour key in both keymaps; `:split-join` does the same.
 - **`ye --import lazyvim` carries the mini.surround extra**: when `lazyvim.json` lists it, `gsa`, `gsd` and `gsr` become vim-surround's `ys`, `ds` and `cs`, and Visual `gsa` wraps the selection.
 - **Indent guides in code**, as helix draws them: `[editor] indent_guides = true` puts a rule at each level of a line's leading blanks, and the rule of the block the cursor is in is darker. Off by default; `--import helix` carries helix's `[editor.indent-guides]`, and `ye --import lazyvim` turns them on, as LazyVim draws them.
 - **`:align` lines up the selected lines on a sign**, `=` when none is given, as mini.align does: the parts before it padded to one width (a Chinese character counts two), and a run such as `+=` or `=>` taken as one sign. It is the way under the vim keys; under helix's, `s=` then `&` does it too.
+
+### Changed
+
+- **The interface wording, reviewed**: shorter, plainer messages in English and Chinese, mainland vocabulary in the Chinese, and common terms such as 选择器 for a picker. The Traditional interface now follows the mainland standard glyphs (説 内 吴 rather than 說 內 吳) and drops Taiwan wording such as 檔案 and 選單.
+- **`zht` is the name of the Traditional interface language**, beside `zhs` and `en`; `zh`, `tc` and `sc` still work.
 
 ### Fixed
 

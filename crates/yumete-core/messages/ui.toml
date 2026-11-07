@@ -11,8 +11,8 @@ en = "comment"
 [[message]]
 # 詳情欄裏那張部件表的抬頭，並説跟過去的鍵是哪一個
 key = "detail.components"
-zhs = "部件(gd 跟过去)"
-en = "components (gd follows one)"
+zhs = "部件(gd 跳转)"
+en = "components (gd jumps to one)"
 
 [[message]]
 # 腳註面板下緣那一句：這條註寫在第幾行
@@ -24,40 +24,40 @@ en = "line {0}"
 # ── diff ──────────────────────────────────────────────────────────────
 
 [[message]]
-# zm / zr 之後：現在開到第幾層（草稿）
+# zm / zr 之後：現在開到第幾層
 key = "fold.level"
 zhs = "折叠层级 {0}"
 en = "fold level {0}"
 
 [[message]]
-# 折疊鍵按在没有折疊的地方（草稿）
+# 折疊鍵按在没有折疊的地方
 key = "fold.none-here"
 zhs = "这里没有折叠"
 en = "no fold here"
 
 [[message]]
-# zd 按在標題折疊上：它不是 zf 做的，刪不掉（草稿）
+# zd 按在標題折疊上：它不是 zf 做的，刪不掉
 key = "fold.not-made-with-zf"
-zhs = "这个折叠来自标题，不是 zf 做的，删不掉"
+zhs = "此折叠来自标题，不是 zf 创建的，无法删除"
 en = "this fold comes from a heading; only folds made with zf can be deleted"
 
 [[message]]
 # :view-hud basic(出廠)——也是 :view-hud 不帶參數時的回答
 key = "hud.basic"
-zhs = "光标提示：药丸——找空白处，不盖字"
-en = "caret sign: a pill — it takes margin, never writing"
+zhs = "光标提示：胶囊，显示在空白处，不遮挡文字"
+en = "cursor hint: pill, in blank space, never over text"
 
 [[message]]
 # :view-hud full——也是 :view-hud 不帶參數時的回答
 key = "hud.full"
-zhs = "光标提示：面板——位置固定，会盖住正文"
-en = "caret sign: a panel — pinned, and it covers the writing"
+zhs = "光标提示：面板，位置固定，会遮挡正文"
+en = "cursor hint: panel, fixed, covers the text"
 
 [[message]]
 # :view-hud off——也是 :view-hud 不帶參數時的回答
 key = "hud.off"
-zhs = "光标提示：关——只剩状态行右端那一处"
-en = "caret sign: off — only the status line's right edge is left"
+zhs = "光标提示：关，只在状态行右端显示"
+en = "cursor hint: off, shown only at the right of the status line"
 
 
 # ── ime ───────────────────────────────────────────────────────────────
@@ -65,19 +65,19 @@ en = "caret sign: off — only the status line's right edge is left"
 [[message]]
 # 命令行空着的時候：把浮着的這一則送進邊欄(#426，2026-09-30 寫的字)
 key = "info.into-the-sidebar"
-zhs = "{0} 边栏显示信息"
+zhs = "{0} 在侧栏显示"
 en = "{0} shows it in the sidebar"
 
 [[message]]
 # `:info` 不帶名字：回到按稿子算
 key = "info.live-by-the-file"
-zhs = "即时显示：按文件算(这一份是{0})"
-en = "following the cursor: by the file (here, {0})"
+zhs = "跟随光标：按文件类型(当前为{0})"
+en = "following the cursor: by file type (here, {0})"
 
 [[message]]
 # `:info <名>` 撥完的回聲
 key = "info.live-is"
-zhs = "即时显示：{0}"
+zhs = "跟随光标：{0}"
 en = "following the cursor: {0}"
 
 [[message]]
@@ -113,13 +113,13 @@ en = "relative to the cursor"
 [[message]]
 # :links 的參數 graph 的説明
 key = "label.links.graph"
-zhs = "图：本文件居中，邻居在上下"
+zhs = "关系图：本文件居中，相邻文件在上下"
 en = "a graph: this file among its neighbours"
 
 [[message]]
 # :links 的參數 list 的説明
 key = "label.links.list"
-zhs = "列表：链入、链出、提及三段"
+zhs = "列表：链入、链出、提及"
 en = "a list: linked from, links to, mentions"
 
 [[message]]
@@ -137,14 +137,14 @@ en = "on"
 [[message]]
 # 標籤：緩衝區
 key = "label.panel.buffers"
-zhs = "缓冲"
+zhs = "缓冲区"
 en = "Buffers"
 
 [[message]]
 # 「改動」那一格的標題(空格 x / X)
 key = "label.panel.change"
 zhs = "改动"
-en = "Change"
+en = "Changes"
 
 [[message]]
 # 標籤：字典
@@ -215,8 +215,8 @@ en = "Wiki"
 [[message]]
 # :sidebar-left off 裏那個 off
 key = "label.sidebar-off"
-zhs = "关掉这一边"
-en = "put this side away"
+zhs = "关闭这一侧"
+en = "close this side"
 
 [[message]]
 # 欄名旁的順排箭頭
@@ -254,27 +254,27 @@ en = "registers"
 # ── need ──────────────────────────────────────────────────────────────
 
 [[message]]
-# 狀態欄：C-w r 那一排裏有窗口又分開了，輪不動（草稿）
+# 狀態欄：C-w r 那一排裏有窗口又分開了，輪不動
 key = "pane.cannot-rotate"
-zhs = "这一排里有窗口又分开了，轮不动"
+zhs = "无法轮换：这一排中有窗口被再次分割"
 en = "cannot rotate: a window in this row is split"
 
 [[message]]
-# 關掉了那一半（草稿）
+# 關掉了那一半
 key = "pane.closed"
-zhs = "关掉了一个窗口"
+zhs = "已关闭窗口"
 en = "window closed"
 
 [[message]]
-# 另一半顯示的檔案已經關掉了（草稿）
+# 另一半顯示的檔案已經關掉了
 key = "pane.file-was-closed"
-zhs = "那个窗口的文件已经关掉了"
+zhs = "该窗口的文件已关闭"
 en = "the file that window was showing is closed"
 
 [[message]]
-# 狀態欄：分窗會讓一個窗口小得放不下字，没有分（草稿）
+# 狀態欄：分窗會讓一個窗口小得放不下字，没有分
 key = "pane.no-room"
-zhs = "没有地方再分一个窗口了"
+zhs = "空间不足，无法再分割窗口"
 en = "no room for another window"
 
 [[message]]
@@ -287,19 +287,19 @@ en = "the bottom line"
 # 候選面板的名字：候選框
 key = "panel.name.box"
 zhs = "候选框"
-en = "the bordered list beside the caret"
+en = "the box beside the cursor"
 
 [[message]]
 # 候選面板的名字：行中
 key = "panel.name.inline"
 zhs = "行中"
-en = "the line under the caret"
+en = "the line under the cursor"
 
 [[message]]
 # 没有這種候選面板
 key = "panel.no-such-panel"
-zhs = "没有「{0}」这种候选面板——box、bottom、inline"
-en = "no candidate panel '{0}' — box, bottom, inline"
+zhs = "没有「{0}」这种候选面板，可用 box、bottom、inline"
+en = "no candidate panel '{0}'; use box, bottom or inline"
 
 [[message]]
 # 候選面板換好了
@@ -319,8 +319,8 @@ en = "code actions"
 [[message]]
 # gr 在 Markdown 裏開的挑選器的標題
 key = "picker.backlinks"
-zhs = "链到这里的（{0} 处）"
-en = "linked from ({0})"
+zhs = "反向链接（{0} 处）"
+en = "backlinks ({0})"
 
 [[message]]
 # 空格 b 開的換緩衝區那一格，標題
@@ -331,17 +331,17 @@ en = "buffers"
 [[message]]
 # 空格 g 那一扇挑選器的標題：git 報的改動文件與沒存的緩衝區
 key = "picker.changed-files"
-zhs = "存在改动文件"
+zhs = "改动过的文件"
 en = "changed files"
 
 [[message]]
-# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+# 挑選器標題：gd gD gy gi 找到不止一處時
 key = "picker.declarations"
 zhs = "声明（{0} 处）"
 en = "declarations ({0})"
 
 [[message]]
-# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+# 挑選器標題：gd gD gy gi 找到不止一處時
 key = "picker.definitions"
 zhs = "定义（{0} 处）"
 en = "definitions ({0})"
@@ -349,8 +349,8 @@ en = "definitions ({0})"
 [[message]]
 # 挑選器標題：這個文件的診斷
 key = "picker.diagnostics"
-zhs = "诊断挑选器"
-en = "diagnostics picker"
+zhs = "诊断"
+en = "diagnostics"
 
 [[message]]
 # 空格 f 開的挑檔案那一格，標題
@@ -359,13 +359,13 @@ zhs = "文件"
 en = "files"
 
 [[message]]
-# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+# 挑選器標題：gd gD gy gi 找到不止一處時
 key = "picker.implementations"
 zhs = "实现（{0} 处）"
 en = "implementations ({0})"
 
 [[message]]
-# 空格 j 挑選器的標題（草稿）
+# 空格 j 挑選器的標題
 key = "picker.jumplist"
 zhs = "跳转列表"
 en = "jump list"
@@ -377,21 +377,21 @@ zhs = "这里没有文件"
 en = "no files here"
 
 [[message]]
-# 空格 j：跳轉列表是空的（草稿）
+# 空格 j：跳轉列表是空的
 key = "picker.no-jumps"
 zhs = "还没有跳转"
 en = "no jumps yet"
 
 [[message]]
-# 空格 '：還没開過挑選器（草稿）
+# 空格 '：還没開過挑選器
 key = "picker.none-yet"
-zhs = "还没开过挑选器"
+zhs = "还没有打开过选择器"
 en = "no picker has been opened yet"
 
 [[message]]
 # 選擇面板裏篩不出東西
 key = "picker.nothing-matched"
-zhs = "没有符合的"
+zhs = "无匹配项"
 en = "nothing matched"
 
 [[message]]
@@ -406,47 +406,47 @@ en = "registers"
 [[message]]
 # 挑選器標題：項目裏每個文件的診斷
 key = "picker.project-diagnostics"
-zhs = "项目诊断挑选器"
-en = "project diagnostics picker"
+zhs = "项目诊断"
+en = "project diagnostics"
 
 [[message]]
 # 挑選器標題：項目裏的符號：隨查詢問語言服務器，沒有服務器時是各文件的標題
 key = "picker.project-symbols"
-zhs = "项目符号挑选器"
-en = "project symbol picker"
+zhs = "项目中的符号"
+en = "project symbols"
 
 [[message]]
 # 最近開過的檔／項目，接着上次
 key = "picker.recent-everywhere"
-zhs = "最近开过的档(全部项目)"
+zhs = "最近打开的文件(所有项目)"
 en = "recent files, everywhere"
 
 [[message]]
 # 最近開過的檔／項目，接着上次
 key = "picker.recent-here"
-zhs = "最近开过的档"
+zhs = "最近打开的文件"
 en = "recent files"
 
 [[message]]
 # 最近開過的檔／項目
 key = "picker.recent-projects"
-zhs = "最近开过的项目"
+zhs = "最近打开的项目"
 en = "recent projects"
 
 [[message]]
 # gr 的挑選器標題
 key = "picker.references"
 zhs = "引用（{0} 处）"
-en = "where it is used ({0})"
+en = "references ({0})"
 
 [[message]]
 # 挑選器標題：這個文件的符號：語言服務器說的，沒有服務器時是大綱
 key = "picker.symbols"
-zhs = "符号挑选器"
-en = "symbol picker"
+zhs = "符号"
+en = "symbols"
 
 [[message]]
-# 挑選器標題：gd gD gy gi 找到不止一處時（草稿）
+# 挑選器標題：gd gD gy gi 找到不止一處時
 key = "picker.type-definitions"
 zhs = "类型定义（{0} 处）"
 en = "type definitions ({0})"
@@ -460,14 +460,14 @@ en = "entries"
 [[message]]
 # 挑選器開不了：窗口窄過十欄
 key = "picker.window-too-narrow"
-zhs = "窗口太窄，开不了挑选器"
+zhs = "窗口太窄，无法打开选择器"
 en = "the window is too narrow for the picker"
 
 [[message]]
 # 挑選器開不了：窗口矮過六行。從前它照舊開着、照舊
 # 吃掉每一個鍵，而一格都不畫——打完查詢按 Enter 真會開一個檔。
 key = "picker.window-too-short"
-zhs = "窗口太矮，开不了挑选器"
+zhs = "窗口太矮，无法打开选择器"
 en = "the window is too short for the picker"
 
 [[message]]
@@ -486,76 +486,76 @@ en = "preview: {0}"
 # 裸的 :view-preview，而没有預覽在跑。帶地址的那幾則
 # 答不了這一句——它們都要一個地址。
 key = "preview.not-running"
-zhs = "预览：没开着"
+zhs = "预览未运行"
 en = "no preview is running"
 
 [[message]]
 # :view-preview 用在没有標記語法的檔案上
 key = "preview.nothing-to-preview"
-zhs = "这个文件没有标记，没有什么可以预览的"
+zhs = "此文件没有标记，无可预览"
 en = "this file has no markup, so there is nothing to preview"
 
 [[message]]
 # 啓動時停掉上次留下的預覽服務器
 key = "preview.orphan-stopped"
-zhs = "上次留下的预览服务器({0})停掉了"
+zhs = "已停止上次遗留的预览服务器({0})"
 en = "stopped the preview server left over from last time ({0})"
 
 [[message]]
 # 預覽服務器開啟了
 key = "preview.running"
-zhs = "预览：{0}(`:view-preview off` 停)"
+zhs = "预览：{0}(`:view-preview off` 停止)"
 en = "preview: {0} (`:view-preview off` stops it)"
 
 [[message]]
 # :view-preview 用在没存過的緩衝區上
 key = "preview.save-first"
-zhs = "先保存——排版器读的是文件"
-en = "save first — the typesetter reads the file"
+zhs = "请先保存，排版器读取的是文件"
+en = "save first: the typesetter reads the file"
 
 [[message]]
 # 預覽服務器開啟中
 key = "preview.starting"
-zhs = "预览：{0} 开启中……"
+zhs = "预览：{0} 启动中……"
 en = "preview: starting {0}…"
 
 [[message]]
 # 預覽服務器停了
 key = "preview.stopped"
-zhs = "预览：{0} 已停"
+zhs = "预览：{0} 已停止"
 en = "preview: {0} stopped"
 
 [[message]]
 # :view-preview 一份 Typst 稿子，排版器正在起來
 key = "preview.typst-starting"
-zhs = "预览：tinymist 开启中……"
+zhs = "预览：tinymist 启动中……"
 en = "preview: tinymist starting…"
 
 
 # ── problem ──────────────────────────────────────────
 
 [[message]]
-# 側欄裏打 :wq：沒有文件可寫（草稿）
+# 側欄裏打 :wq：沒有文件可寫
 key = "region.nothing-to-write"
-zhs = "侧栏没有文件可写；关掉它是 :q"
+zhs = "侧栏没有可保存的文件；用 :q 关闭"
 en = "a sidebar has no file to write; :q closes it"
 
 [[message]]
-# 只剩一個區域，關不動了（草稿）
+# 只剩一個區域，關不動了
 key = "region.only-one-left"
-zhs = "就剩这一个窗口了；要离开编辑器是 :q"
-en = "this is the only window left; :q leaves the editor"
+zhs = "只剩这一个窗口；退出编辑器请用 :q"
+en = "only one window left; :q quits the editor"
 
 [[message]]
-# 别的區域都收了（草稿）
+# 别的區域都收了
 key = "region.only-this-one"
-zhs = "别的区域都关掉了"
-en = "every other region is closed"
+zhs = "其他区域都已关闭"
+en = "closed every other region"
 
 [[message]]
 # 在另一半顯示某一行
 key = "show.row"
-zhs = "第 {0} 行(␣w 过去)"
+zhs = "第 {0} 行(␣w 跳转)"
 en = "line {0} (Space w w goes there)"
 
 [[message]]
@@ -576,19 +576,19 @@ en = "{0} · line {1} · {2}"
 [[message]]
 # 邊欄：都關着(裸的 :sidebar)
 key = "sidebar.nothing-open"
-zhs = "边栏：都关着"
+zhs = "侧栏：全部关闭"
 en = "sidebar: nothing open"
 
 [[message]]
 # 邊欄：這一邊只有這一格，Tab 没地方去
 key = "sidebar.only-view-on-this-side"
-zhs = "这一边只有这一格"
+zhs = "这一侧只有这一个面板"
 en = "the only panel on this side"
 
 [[message]]
 # 邊欄：現在開着哪幾扇(裸的 :sidebar)
 key = "sidebar.open"
-zhs = "边栏：{0}"
+zhs = "侧栏：{0}"
 en = "sidebar: {0}"
 
 [[message]]
@@ -600,26 +600,26 @@ en = "the window is too narrow for a sidebar"
 [[message]]
 # 邊欄換了一檔寬度——名字就是那個分數(1/4、1/3、2/5、1/2)
 key = "sidebar.width"
-zhs = "边栏：{0}/{1}"
+zhs = "侧栏：{0}/{1}"
 en = "sidebar: {0}/{1}"
 
 [[message]]
 # :theme-mode light，而眼下的主題只有深色
 key = "theme.dark-only"
-zhs = "{0} 只有深色，照旧用深色"
+zhs = "{0} 只有深色，保持深色"
 en = "{0} has no light mode; staying dark"
 
 [[message]]
 # :theme-fill off ——品色那幾樣不上底色
 key = "theme.fill-off"
-zhs = "代码与引用不上底色——`` ` `` 本身就是边界"
-en = "no ground behind code or quotations — the backtick is the boundary"
+zhs = "代码与引用不加底色，`` ` `` 本身即边界"
+en = "no background behind code or quotations; the backtick is the boundary"
 
 [[message]]
 # :theme-fill on ——品色的那幾樣現在坐在底色上
 key = "theme.fill-on"
-zhs = "代码与引用坐在底色上"
-en = "code and quotations sit on a ground"
+zhs = "代码与引用加底色"
+en = "code and quotations get a background"
 
 [[message]]
 # :theme 給了不認得的名字
@@ -676,7 +676,7 @@ en = "{0} word"
 # 空格 i：光標不在任何一行數據上(2026-09-30 報的：非表格的地方按下去，
 # 回的是字典那一句「光標下没有字可查」，説的是另一件事)
 key = "ui.cursor-is-not-in-a-table"
-zhs = "光标未在表格中"
+zhs = "光标不在表格中"
 en = "the cursor is not in a table"
 
 [[message]]
@@ -700,56 +700,56 @@ en = "interface language: {0}"
 [[message]]
 # `::` 面板的名字
 key = "ui.lookfor"
-zhs = "找命令"
-en = "look for"
+zhs = "查找命令"
+en = "find a command"
 
 [[message]]
 # `::` 剛打開，一個字都還没打
 key = "ui.lookfor-empty"
-zhs = "说一说它是做什么的——「竖排」「排序」「wrap」都算"
-en = "say what it does — 竖排, sort and wrap all count"
+zhs = "描述命令的作用，如「竖排」「排序」「wrap」"
+en = "describe what it does, such as 竖排, sort or wrap"
 
 [[message]]
 # `::` 打了字，可是一條都没找着
 key = "ui.lookfor-nothing"
-zhs = "没有命令答得上「{0}」"
-en = "no command answers 「{0}」"
+zhs = "没有与「{0}」匹配的命令"
+en = "no command matches '{0}'"
 
 [[message]]
 # `::` 面板的頁腳：第幾條，以及 ⇥ 會把哪一條寫回 `:` 那一行
 key = "ui.lookfor-take"
-zhs = "{0}　使用 Tab 选择搜索结果，Enter 采用"
-en = "{0}   Use Tab to cycle the results, Enter to take one"
+zhs = "{0}　Tab 切换结果，Enter 确认"
+en = "{0}   Tab cycles results, Enter picks one"
 
 [[message]]
 # 字典浮窗按不動鍵，長的去邊欄讀
 key = "ui.looking-it-up"
-zhs = "查着……"
+zhs = "查询中……"
 en = "looking it up…"
 
 [[message]]
 # 命令面板裏那一條的前提没開
 key = "ui.needs-these-first"
-zhs = "需要 {0}，句末加 force"
-en = "needs {0}; add `!` to the command name to set that up too"
+zhs = "需要 {0}；在命令名后加 `!` 一并开启"
+en = "needs {0}; add `!` to the command name to turn it on too"
 
 [[message]]
 # 這個平台上没有配截圖命令
 key = "ui.no-screenshot-command"
-zhs = "这个平台上没有截图命令——`[editor] screenshot` 写一条，或用 `:shot html`"
-en = "no screenshot command here — write one at `[editor] screenshot`, or `:shot html`"
+zhs = "此平台没有截图命令：可在 `[editor] screenshot` 中设置，或用 `:shot html`"
+en = "no screenshot command on this platform; set one in `[editor] screenshot`, or use `:shot html`"
 
 [[message]]
 # 字典欄：碼表根本没載，所以答不出來——和「表裏没有這個字」是兩件事
 key = "ui.no-table-yet"
-zhs = "码表没载——`:yume-scheme` 载一次"
-en = "no 碼表 loaded yet — `:yume-scheme` loads one"
+zhs = "未加载码表，请用 `:yume-scheme` 加载"
+en = "no table loaded; `:yume-scheme` loads one"
 
 [[message]]
 # 字典欄：拆分表裏没有這個字
 key = "ui.not-in-the-table"
 zhs = "拆分表里没有这个字"
-en = "not in the 拆分表"
+en = "not in the decomposition table"
 
 [[message]]
 # 空格 d：光標下没有字可查
@@ -814,13 +814,13 @@ en = "search: "
 [[message]]
 # `?` 倒着搜那一行的提示詞(helix 寫 rsearch:)
 key = "ui.prompt-search-back"
-zhs = "倒搜: "
+zhs = "反向搜索: "
 en = "rsearch: "
 
 [[message]]
 # `?` 的提示符，同上
 key = "ui.prompt-search-back-wild"
-zhs = "通配倒搜: "
+zhs = "通配反向搜索: "
 en = "wide rsearch: "
 
 [[message]]
@@ -857,60 +857,60 @@ en = " [read-only]"
 # 截圖失敗，帶理由
 key = "ui.screenshot-failed"
 zhs = "截图失败({0})"
-en = "no picture taken ({0})"
+en = "screenshot failed ({0})"
 
 [[message]]
 # 截圖進了剪貼簿
 key = "ui.screenshot-taken"
-zhs = "画面已放进剪贴板"
-en = "the screen is on the clipboard"
+zhs = "截图已复制到剪贴板"
+en = "screenshot copied to the clipboard"
 
 [[message]]
 # `/` 與 `?` 那一扇面板的第一行
 key = "ui.search-is-a-regex"
-zhs = "收的是正则式：`.` 任一字、`.*` 任一串、`^$` 行首行尾"
-en = "a regular expression: `.` any character, `.*` any run, `^$` the line's ends"
+zhs = "支持正则表达式：`.` 任意字符、`.*` 任意串、`^$` 行首行尾"
+en = "regex: `.` any character, `.*` any run, `^$` line start and end"
 
 [[message]]
 # `/` 與 `?` 那一扇面板的第二行
 key = "ui.search-smart-case"
-zhs = "全小写不分大小写；带一个大写就分"
-en = "all lower case ignores case; one capital makes it matter"
+zhs = "全小写则不区分大小写；含大写则区分"
+en = "all lowercase ignores case; any capital makes it case-sensitive"
 
 [[message]]
 # `/` 與 `?` 那一扇面板的第三行——那一行上 `A-j` 做什麼。{0} 是那個鍵(`[keys.prompt]` 改得動)
 key = "ui.search-wild"
-zhs = "{0} 繁简拼音通配开关"
+zhs = "{0} 切换繁简/拼音通配"
 en = "{0} matches across glyph variants and pinyin"
 
 [[message]]
 # `:shot` 把這一幀畫成檔案了
 key = "ui.shot-drawn"
-zhs = "这一页画成了 {0}"
-en = "drew this page to {0}"
+zhs = "已将本页导出为 {0}"
+en = "saved this page as {0}"
 
 [[message]]
 # `:shot` 寫不出那個檔
 key = "ui.shot-failed"
-zhs = "写不出这张图：{0}"
-en = "could not write the picture: {0}"
+zhs = "无法保存截图：{0}"
+en = "could not save the image: {0}"
 
 [[message]]
 # `:shot png` 的那條命令没把圖寫成檔案
 key = "ui.shot-kept-the-clipboard"
-zhs = "`[editor] screenshot` 那一条没有理会 $YUMETE_SHOT，图还是进了剪贴板"
-en = "the `[editor] screenshot` line ignored $YUMETE_SHOT — the picture is on the clipboard"
+zhs = "`[editor] screenshot` 命令未处理 $YUMETE_SHOT，截图仍在剪贴板中"
+en = "the `[editor] screenshot` command ignored $YUMETE_SHOT; the picture is on the clipboard"
 
 [[message]]
 # `:shot png` 把視窗拍成檔案了
 key = "ui.shot-photographed"
-zhs = "窗口拍成了 {0}"
-en = "photographed the window to {0}"
+zhs = "窗口截图已保存为 {0}"
+en = "saved a screenshot of the window as {0}"
 
 [[message]]
 # 邊欄有焦點，而提示行關着——狀態欄整條讓給邊欄的按鍵
 key = "ui.sidebar-mode"
-zhs = "-- 边栏 --  {0}"
+zhs = "-- 侧栏 --  {0}"
 en = "-- SIDEBAR --  {0}"
 
 

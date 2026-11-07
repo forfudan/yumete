@@ -6,25 +6,25 @@
 # :check-charset 查完，每個字都在某個字集裏
 key = "check.charset-clean"
 zhs = "{0}：每个字都在字集里"
-en = "{0}: every character is in a standard"
+en = "{0}: every character is in a character set"
 
 [[message]]
 # :check-charset 查出了不在任何字集裏的字
 key = "check.charset-found"
-zhs = "{0} 个字不在任何字集里——gf 跳到那一行"
-en = "{0} character(s) in no standard — gf goes to the line"
+zhs = "{0} 个字不在任何字集中，gf 跳到该行"
+en = "{0} character(s) in no character set; gf jumps to the line"
 
 [[message]]
 # :check-charset 没有字集資料可問(碼表没載)
 key = "check.charset-no-data"
-zhs = "没有字集数据——先 :yume-scheme 载一个方案"
+zhs = "没有字集数据，请先用 :yume-scheme 加载方案"
 en = "no character-set data — load a scheme first with :yume-scheme"
 
 [[message]]
 # :check-charset 結果裏的一行：這個字不在任何字集裏
 key = "check.charset-outside"
 zhs = "{0}: 「{1}」不在任何字集里({2})，全文 {3} 处"
-en = "{0}: 「{1}」 is in no standard ({2}); occurrences in the file: {3}"
+en = "{0}: 「{1}」 is in no character set ({2}); {3} times in the file"
 
 [[message]]
 # :check-charset 的結果那一份緩衝區的名字
@@ -35,8 +35,8 @@ en = "[charset {0}]"
 [[message]]
 # :check-charset 查出來的太多，只列了前面那些
 key = "check.charset-too-many"
-zhs = "{0} 个以上(只列了前 {0} 个)——gf 跳到那一行"
-en = "{0}+ characters in no standard (first {0} listed) — gf goes to the line"
+zhs = "{0} 个以上(只列出前 {0} 个)，gf 跳到该行"
+en = "{0}+ characters in no character set (first {0} listed); gf jumps to the line"
 
 [[message]]
 # :check-names 查完，稿子裏每一處專名都寫對了
@@ -47,21 +47,21 @@ en = "{0}: every name spelled as the wiki has it"
 [[message]]
 # :check-names 查出了寫錯一個字的專名
 key = "check.names-found"
-zhs = "{0} 处专名写错了一个字——gf 跳到那一行"
-en = "{0} name(s) one character out — gf goes to the line"
+zhs = "{0} 处专名错了一个字，gf 跳到该行"
+en = "{0} name(s) one character off; gf jumps to the line"
 
 [[message]]
 # :check-names 要讀音表纔分得出「同音寫錯」和「本來就是别的詞」，而它没裝
 key = "check.names-no-readings"
-zhs = "查不到读音：没有读音表就分不出「同音写错」和「本来就是别的词」(`:yume-scheme` 载一次)"
-en = "no readings: without them a name one character out is indistinguishable from another word (`:yume-scheme` loads them)"
+zhs = "查不到读音：没有读音表就分不出「同音错字」和「本来就是别的词」(用 `:yume-scheme` 加载)"
+en = "no readings: without them a misspelt name cannot be told from a different word (`:yume-scheme` loads them)"
 
 [[message]]
 # :check-names 這本書還没有百科，没有名字可比
 key = "check.names-no-wiki"
-zhs = "本项目还没有百科——:wiki-edit 起个头，专名才查得了"
-zht = "本項目還没有百科——:wiki-edit 起個頭，專名纔查得了"
-en = "this project has no wiki yet — :wiki-edit starts one, and then names can be checked"
+zhs = "本项目还没有百科，用 :wiki-edit 创建后才能检查专名"
+zht = "本項目還没有百科，用 :wiki-edit 創建後纔能檢查專名"
+en = "this project has no wiki yet; :wiki-edit starts one, then names can be checked"
 
 [[message]]
 # :check-names 的緩衝區標題
@@ -78,7 +78,7 @@ en = "{0}: 「{1}」 here, 「{2}」 in the wiki ({3} → {4}, same sound)"
 [[message]]
 # :check-names 查出來的太多，只列了前面那些
 key = "check.names-too-many"
-zhs = "太多了，只列前 {0} 处"
+zhs = "过多，只列出前 {0} 处"
 en = "too many; the first {0} are listed"
 
 [[message]]
@@ -96,8 +96,8 @@ en = "{0}: 「{1}」 should be 「……」"
 [[message]]
 # :check-punct 查出了要看一眼的標點
 key = "check.punct-found"
-zhs = "{0} 处标点要看一眼——gf 跳到那一行"
-en = "{0} mark(s) to look at again — gf goes to the line"
+zhs = "{0} 处标点需要检查，gf 跳到该行"
+en = "{0} mark(s) to check; gf jumps to the line"
 
 [[message]]
 # :check-punct 結果裏的一行：中文裏的半角標點
@@ -114,13 +114,13 @@ en = "[punctuation {0}]"
 [[message]]
 # :check-punct 查出來的太多，只列了前面那些
 key = "check.punct-too-many"
-zhs = "{0} 处以上(只列了前 {0} 处)——gf 跳到那一行"
-en = "{0}+ marks to look at (first {0} listed) — gf goes to the line"
+zhs = "{0} 处以上(只列出前 {0} 处)，gf 跳到该行"
+en = "{0}+ marks to check (first {0} listed); gf jumps to the line"
 
 [[message]]
 # :check-punct 結果裏的一行：開了口没有收尾的引號或括號
 key = "check.punct-unclosed"
-zhs = "{0}: 「{1}」没有收尾的「{2}」"
+zhs = "{0}: 「{1}」缺少配对的「{2}」"
 en = "{0}: 「{1}」 is never closed by 「{2}」"
 
 [[message]]
@@ -138,8 +138,8 @@ en = "{0}: one spelling throughout"
 [[message]]
 # :check-usage 查出了不一致的用字
 key = "check.usage-found"
-zhs = "{0} 处用字不一致——gf 跳到那一行"
-en = "{0} place(s) spelled the other way — gf goes to the line"
+zhs = "{0} 处用字不一致，gf 跳到该行"
+en = "{0} inconsistent spelling(s); gf jumps to the line"
 
 [[message]]
 # :check-usage 的結果那一份緩衝區的名字
@@ -156,8 +156,8 @@ en = "{0}: 「{1}」 here ({3}), 「{2}」 in the rest ({4})"
 [[message]]
 # :check-usage 查出來的太多，只列了前面那些
 key = "check.usage-too-many"
-zhs = "{0} 处以上(只列了前 {0} 处)——gf 跳到那一行"
-en = "{0}+ places spelled the other way (first {0} listed) — gf goes to the line"
+zhs = "{0} 处以上(只列出前 {0} 处)，gf 跳到该行"
+en = "{0}+ inconsistent spellings (first {0} listed); gf jumps to the line"
 
 
 # ── cli ───────────────────────────────────────────────────────────────
@@ -165,23 +165,23 @@ en = "{0}+ places spelled the other way (first {0} listed) — gf goes to the li
 [[message]]
 # gx：連結指的檔案不在
 key = "link.no-such-file"
-zhs = "找不到 {0}——链接是照它所在的那个目录算的"
-en = "no {0} — a link is read from the folder it is written in"
+zhs = "找不到 {0}(链接按其所在目录解析)"
+en = "no {0}; links are relative to the folder they are in"
 
 [[message]]
 # gx：檔案開了，可是那個 #標題 不在裏面
 key = "link.no-such-heading"
-zhs = "这一篇里没有标题叫「{0}」"
-en = "no heading here is called 「{0}」"
+zhs = "本文没有名为「{0}」的标题"
+en = "no heading called 「{0}」 here"
 
 [[message]]
 # gx 按在了没有連結的地方
 key = "link.none-here"
 zhs = "光标下面没有链接"
-en = "there is no link under the cursor"
+en = "no link under the cursor"
 
 [[message]]
-# gx 碰到的鏈接不是網址（草稿）
+# gx 碰到的鏈接不是網址
 key = "link.not-a-web-address"
 zhs = "这个链接不是网址"
 en = "this link is not a web address"
@@ -189,27 +189,27 @@ en = "this link is not a web address"
 [[message]]
 # gx 打開了本書的另一篇
 key = "link.opened"
-zhs = "开了 {0}"
+zhs = "已打开 {0}"
 en = "opened {0}"
 
 [[message]]
 # gx 把網址交給了瀏覽器
 key = "link.opening"
-zhs = "交给浏览器：{0}"
-en = "handed to the browser: {0}"
+zhs = "在浏览器中打开：{0}"
+en = "opening in browser: {0}"
 
 [[message]]
 # gx：http 與 https 以外的協議一律不交給系統
 key = "link.scheme-refused"
-zhs = "{0}: 这种链接不交给系统——只有 http 与 https 跟"
-en = "{0}: this kind of link is not handed to the machine — only http and https are followed"
+zhs = "{0}：只打开 http 和 https 链接"
+en = "{0}: only http and https links are opened"
 
 
 [[message]]
 # 雙鏈面板的一段：鏈到了不存在的頁
 key = "links.dangling"
-zhs = "链到了没有的页"
-en = "Pages not there"
+zhs = "指向不存在的页面"
+en = "Missing pages"
 
 [[message]]
 # :links-export 寫不了
@@ -220,8 +220,8 @@ en = "could not write {0}: {1}"
 [[message]]
 # :links-export 寫好了
 key = "links.exported"
-zhs = "图写到了 {0}，正在用浏览器打开"
-en = "the graph is at {0}, opening it in the browser"
+zhs = "图已写入 {0}，正在用浏览器打开"
+en = "graph written to {0}, opening in the browser"
 
 [[message]]
 # 雙鏈面板的一段：鏈到本文件的
@@ -232,7 +232,7 @@ en = "Linked from"
 [[message]]
 # 雙鏈面板的一段：寫了本文件的名字卻沒加 [[ ]] 的
 key = "links.mentions"
-zhs = "提到了但没加链接"
+zhs = "提到但未链接"
 en = "Unlinked mentions"
 
 [[message]]
@@ -250,7 +250,7 @@ en = "nothing links here"
 [[message]]
 # 雙鏈面板：這個文件一條鏈接都沒有
 key = "links.none"
-zhs = "还没有链接；写 [[ 就有了"
+zhs = "还没有链接；输入 [[ 即可创建"
 en = "No links yet; type [[ to make one"
 
 [[message]]
@@ -268,69 +268,69 @@ en = "Links to"
 [[message]]
 # 雙鏈面板：索引還在後臺讀
 key = "links.reading"
-zhs = "正在读整个项目的链接……"
+zhs = "正在读取项目链接……"
 en = "reading the project's links…"
 
 [[message]]
 # :links-reindex 讀完了
 key = "links.reindexed"
-zhs = "重读了 {0} 个文件的链接"
-en = "links of {0} files read again"
+zhs = "已重新读取 {0} 个文件的链接"
+en = "reread links in {0} files"
 
 [[message]]
-# 光標在公式裏，typst 排這個公式時報錯：公式浮窗裏寫的那一句，{0} 是 typst 自己說的（草稿）
+# 光標在公式裏，typst 排這個公式時報錯：公式浮窗裏寫的那一句，{0} 是 typst 自己說的
 key = "maths.failed"
-zhs = "typst 排不出这个公式：{0}"
-en = "typst could not set this formula: {0}"
+zhs = "typst 无法排版这个公式：{0}"
+en = "typst could not typeset this formula: {0}"
 
 [[message]]
-# 光標在公式裏、終端畫得出圖片，可是找不到 typst 命令：公式浮窗裏寫的那一句（草稿）
+# 光標在公式裏、終端畫得出圖片，可是找不到 typst 命令：公式浮窗裏寫的那一句
 key = "maths.no-typst"
-zhs = "要装了 typst 命令才画得出公式"
-zht = "要裝了 typst 命令纔畫得出公式"
-en = "drawing the formula needs the typst command"
+zhs = "需要安装 typst 命令才能显示公式"
+zht = "需要安裝 typst 命令纔能顯示公式"
+en = "showing formulas needs the typst command"
 
 [[message]]
 # 跟着註走，註就在本行
 key = "note.already-on-this-line"
-zhs = "注释就在本行"
+zhs = "脚注就在本行"
 en = "the note is on this line"
 
 [[message]]
 # 表格模式下不許寫腳注
 key = "note.not-in-a-grid"
-zhs = "表格里写不了脚注——先 :table-render off"
-en = "a grid holds no footnotes — :table-render off first"
+zhs = "表格里不能写脚注，请先 :table-render off"
+en = "no footnotes in a table; :table-render off first"
 
 [[message]]
 # 這個檔不是 Markdown，寫不了腳注
 key = "note.not-markdown"
-zhs = "这个文件不是 Markdown——脚注在这里只是四个字"
-en = "this file is not Markdown — a footnote here is just four characters"
+zhs = "这个文件不是 Markdown，脚注在这里只是普通文字"
+en = "this file is not Markdown; a footnote here is just plain text"
 
 [[message]]
 # gd 按在普通正文上——腳注、鏈接都不是，所以不動
 key = "note.nothing-to-go-to"
-zhs = "gd 跟着脚注与链接走；这里两样都不是(要找这个词还在哪里，用 g/)"
-en = "gd follows a footnote or a link, and this is neither (for 「where else does this word appear」, g/)"
+zhs = "gd 用于跳转脚注和链接，此处都不是(查找这个词的其他位置用 g/)"
+en = "gd follows a footnote or a link, and this is neither (to find where else this word appears, use g/)"
 
 [[message]]
 # 跟着註走，那條註没有寫在别處
 key = "note.points-nowhere"
-zhs = "这条注没有写在别处"
-en = "this note points nowhere else"
+zhs = "这条脚注还没有内容"
+en = "this footnote has no text yet"
 
 [[message]]
 # 寫下一條註，開在另一半
 key = "note.written-other-pane"
-zhs = "写下了 {0} 的注(␣w 过去写)"
-en = "wrote the note for {0} (Space w w goes there)"
+zhs = "已添加 {0} 的脚注(␣w 过去编辑)"
+en = "added the note for {0} (Space w w to go there)"
 
 [[message]]
 # 寫下一條註，就在這一半
 key = "note.written-same-pane"
-zhs = "写下了 {0} 的注(C-o 回去)"
-en = "wrote the note for {0} (C-o goes back)"
+zhs = "已添加 {0} 的脚注(C-o 返回)"
+en = "added the note for {0} (C-o to go back)"
 
 
 # ── pane ──────────────────────────────────────────────────────────────
@@ -338,14 +338,14 @@ en = "wrote the note for {0} (C-o goes back)"
 [[message]]
 # :wiki 報告裏：一個檔被引了第二次
 key = "wiki.again"
-zhs = "{0}：已经读过一次，这一次不再读"
-en = "{0}: already read once, not read again"
+zhs = "{0}：已读过，跳过"
+en = "{0}: already read, skipped"
 
 
 [[message]]
 # :wiki-where 報告裏：一個詞條文件夾(一檔一條)讀了幾個檔、幾條
 key = "wiki.folder"
-zhs = "{0}/：{1} 个档，{2} 条"
+zhs = "{0}/：{1} 个文件，{2} 条"
 en = "{0}/: {1} files, {2} entries"
 
 [[message]]
@@ -358,13 +358,13 @@ en = "global"
 # :wiki-mark color
 key = "wiki.marks-color"
 zhs = "百科记号：金色字"
-en = "wiki marks: gold ink"
+en = "wiki marks: gold text"
 
 [[message]]
 # :wiki-mark line
 key = "wiki.marks-line"
 zhs = "百科记号：横排虚线下划线，竖排底色"
-en = "wiki marks: a dotted underline across, a ground down a 縱"
+en = "wiki marks: dotted underline in horizontal text, background in vertical"
 
 [[message]]
 # :wiki-mark off
@@ -375,7 +375,7 @@ en = "wiki marks: off"
 [[message]]
 # :wiki 報告裏的一節標題：這些詞條的名字在打開的這一章裏出現了，可是没有標出來——分詞器把它切開了(「有身體」敗給「這裏有/身體」)，或者名字裏有空格、拉丁字母，根本成不了一個詞
 key = "wiki.missed"
-zhs = "在这一章里出现了，可是标不出来的"
+zhs = "本文中出现但未能标出的"
 en = "in this file but not marked"
 
 [[message]]
@@ -399,8 +399,8 @@ en = "the wiki has no entry called {0}"
 [[message]]
 # :wiki 報告裏：這本書還没有百科
 key = "wiki.none"
-zhs = "本项目还没有百科——:wiki-edit 会建 {0}"
-en = "this project has no wiki yet — :wiki-edit makes {0}"
+zhs = "本项目还没有百科，:wiki-edit 会创建 {0}"
+en = "this project has no wiki yet; :wiki-edit creates {0}"
 
 [[message]]
 # 引用那一行的面板底邊：怎麽打開它
@@ -411,26 +411,26 @@ en = "gf opens it"
 [[message]]
 # :wiki-edit 打開了一個空的百科
 key = "wiki.opened-empty"
-zhs = "{0}——## 开始一个词条，# 是分组；<!-- [yumete] 人物.md --> 引另一个文件"
-en = "{0} — ## starts an entry, # a group; <!-- [yumete] 人物.md --> pulls in another file"
+zhs = "{0}：## 开始一个词条，# 是分组；<!-- [yumete] 人物.md --> 引用另一个文件"
+en = "{0}: ## starts an entry, # a group; <!-- [yumete] 人物.md --> pulls in another file"
 
 [[message]]
 # 邊欄的百科頁：光標不在詞條名上
 key = "wiki.panel-empty"
-zhs = "光标停在一个词条名上，这里就是它的内容"
-en = "stand on a wiki name and its entry is shown here"
+zhs = "光标停在词条名上时，这里显示其内容"
+en = "put the cursor on a wiki name to see its entry here"
 
 [[message]]
 # :wiki-panel 報告：同上
 key = "wiki.panel-off"
 zhs = "词条面板：关"
-en = "the entry panel is closed"
+en = "entry panel: off"
 
 [[message]]
 # :wiki-panel 報告：從前這個命令開關都不出聲
 key = "wiki.panel-on"
 zhs = "词条面板：开"
-en = "the entry panel is open"
+en = "entry panel: on"
 
 [[message]]
 # :wiki 報告裏：讀到的一個檔和它給的詞條數
@@ -441,7 +441,7 @@ en = "{0}: {1} entries"
 [[message]]
 # :wiki 報告裏：引的路徑出了這本書(或是絕對路徑)，不讀
 key = "wiki.refused"
-zhs = "{0}(在 {1} 里引的)：不在本项目里，不读"
+zhs = "{0}(在 {1} 中引用)：不在本项目内，已跳过"
 en = "{0} (named in {1}): outside the project, not read"
 
 [[message]]
@@ -459,17 +459,17 @@ en = "wiki"
 [[message]]
 # :wiki 報告裏：超過檔數或層數上限
 key = "wiki.too-many"
-zhs = "{0}：引得太深或太多了(至多 8 层、64 个文件)，不读"
+zhs = "{0}：引用过深或过多(最多 8 层、64 个文件)，已跳过"
 en = "{0}: too deep or too many files (8 levels, 64 files at most), not read"
 
 [[message]]
 # :wiki 報告裏：只有一個字的詞條，進不了分詞、在正文裏標不出來
 key = "wiki.unmarkable"
-zhs = "只有一个字、正文里标不出来的词条"
+zhs = "单字词条(正文中无法标出)"
 en = "one-character entries, which cannot be marked in the text"
 
 [[message]]
 # :wiki 報告裏：檔在，可是讀不了(權限、或者不是 UTF-8)
 key = "wiki.unreadable"
-zhs = "{0}：读不了({1})"
+zhs = "{0}：无法读取({1})"
 en = "{0}: cannot be read ({1})"

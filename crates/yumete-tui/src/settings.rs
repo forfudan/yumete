@@ -737,7 +737,11 @@ mod config_watch_tests {
         assert_eq!(fatal.len(), 1);
         assert_eq!(fatal[0].severity, Severity::Error);
         assert_eq!(fatal[0].line, 3);
-        assert!(fatal[0].message.contains("出廠設置"), "{}", fatal[0].message);
+        assert!(
+            fatal[0].message.contains(&yumete_core::say!("config.whole-file-dropped")),
+            "{}",
+            fatal[0].message
+        );
         assert_eq!(fatal[0].source.as_deref(), Some("yumete-config"));
 
         // **一句都不說的那一種**：文件好好的。

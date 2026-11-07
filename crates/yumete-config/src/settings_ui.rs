@@ -354,7 +354,7 @@ const EDITOR_TAB_INSERTS_WAYS: &[Choice] = &[
 
 const EDITOR_LANGUAGE_WAYS: &[Choice] = &[
     Choice { word: "auto", label: "settings.pick.language.auto" },
-    Choice { word: "zh", label: "settings.pick.language.zh" },
+    Choice { word: "zht", label: "settings.pick.language.zh" },
     Choice { word: "zhs", label: "settings.pick.language.zhs" },
     Choice { word: "en", label: "settings.pick.language.en" },
 ];

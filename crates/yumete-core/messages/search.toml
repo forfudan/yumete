@@ -5,8 +5,8 @@
 [[message]]
 # :s 的模式是空的
 key = "find.empty-pattern"
-zhs = "模式是空的"
-en = "the pattern is empty"
+zhs = "搜索内容为空"
+en = "empty pattern"
 
 [[message]]
 # 把檔名與一句話連起來
@@ -17,32 +17,32 @@ en = "{0}: {1}"
 [[message]]
 # helix 的 f/t 跨行往後找，到文件尾都没有
 key = "find.no-such-character-ahead"
-zhs = "往后找不到「{0}」"
-en = "no '{0}' anywhere ahead"
+zhs = "后面没有「{0}」"
+en = "no '{0}' ahead"
 
 [[message]]
 # helix 的 F/T 跨行往前找，到文件頭都没有
 key = "find.no-such-character-behind"
-zhs = "往前找不到「{0}」"
-en = "no '{0}' anywhere behind"
+zhs = "前面没有「{0}」"
+en = "no '{0}' behind"
 
 [[message]]
 # f/F 在全窗表格的本格裏找不到那個字(全窗裏「這一行」是「這一格」)
 key = "find.no-such-character-in-this-cell"
-zhs = "这一格里没有「{0}」"
+zhs = "本单元格中没有「{0}」"
 en = "no '{0}' in this cell"
 
 [[message]]
 # f/F 在本行找不到那個字
 key = "find.no-such-character-on-this-line"
-zhs = "这一行上没有「{0}」"
+zhs = "本行没有「{0}」"
 en = "no '{0}' on this line"
 
 [[message]]
 # :s 的行號超出這一份的行數
 key = "find.no-such-line"
-zhs = "这一份只有 {1} 行，没有第 {0} 行"
-en = "this one has {1} lines, so there is no line {0}"
+zhs = "本文件只有 {1} 行，没有第 {0} 行"
+en = "this file has only {1} lines; there is no line {0}"
 
 [[message]]
 # 表格裏一欄一欄地找，没找到
@@ -53,44 +53,44 @@ en = "not found: {0}"
 [[message]]
 # 格視圖下搜不到：説清楚只搜了這張表(#354)
 key = "find.not-in-table"
-zhs = "这张表里没有「{0}」——`t q` 出去再搜全文"
-en = "「{0}」 is not in this table — ␣t q leaves the grid to search the rest"
+zhs = "本表中没有「{0}」，按 `t q` 退出后再搜全文"
+en = "'{0}' is not in this table; ␣t q leaves it to search the rest"
 
 [[message]]
 # 在本頁找，光標下没有字
 key = "find.nothing-here-to-look-for"
-zhs = "这里没有字可以找"
-en = "nothing here to look for"
+zhs = "这里没有可搜索的文字"
+en = "nothing here to search for"
 
 [[message]]
 # n/N 之前一次都没搜索過
 key = "find.nothing-searched-yet"
-zhs = "还没有搜索过——先用 / 搜索，或者选中一段按 g/"
-en = "nothing has been searched for yet — / searches, or select something and press g/"
+zhs = "还没有搜索过：用 / 搜索，或选中内容后按 g/"
+en = "no search yet: / searches, or select text and press g/"
 
 [[message]]
 # 在本頁找，只有光標這一處
 key = "find.only-here"
 zhs = "只有这一处：{0}"
-en = "only here: {0}"
+en = "only one match: {0}"
 
 [[message]]
 # :s 的範圍兩頭寫反了(照 vim，問一句再改)
 key = "find.range-runs-backwards"
-zhs = "范围数字是反向的：第 {0} 行到第 {1} 行——y 对调着改、n 不动"
-en = "the range runs backwards: line {0} to line {1} — y swaps and changes, n leaves it"
+zhs = "范围是反向的：第 {0} 行到第 {1} 行。y 对调后执行，n 取消"
+en = "the range runs backwards: line {0} to {1}; y swaps and runs, n cancels"
 
 [[message]]
 # :s 換好了，報處數
 key = "find.substitute-changed"
-zhs = "换了 {0} 处"
-en = "changed: {0}"
+zhs = "替换了 {0} 处"
+en = "replaced {0}"
 
 [[message]]
 # :s 找到了但一處也没改
 key = "find.substitute-nothing-changed"
-zhs = "{0} 处(没有改)"
-en = "found: {0}, nothing changed"
+zhs = "{0} 处(未替换)"
+en = "{0} found, nothing replaced"
 
 
 # ── goto ──────────────────────────────────────────────────────────────
@@ -104,14 +104,14 @@ en = "jump list {0}/{1}"
 [[message]]
 # 按了 ga 可是剛纔那一份已經關掉了
 key = "goto.last-file-was-closed"
-zhs = "刚才那一份已经关掉了"
-en = "that file has been closed"
+zhs = "上一个文件已关闭"
+en = "the last file has been closed"
 
 [[message]]
 # 標記所在的緩衝區已經關了
 key = "goto.mark-buffer-closed"
-zhs = "「{0}」在的那个缓冲区已经关了"
-en = "the file '{0}' was marked in is closed"
+zhs = "标记「{0}」所在的缓冲区已关闭"
+en = "the buffer holding mark '{0}' is closed"
 
 [[message]]
 # 跳到别的檔案裏的標記
@@ -128,19 +128,19 @@ en = "'{0}'"
 [[message]]
 # 設記號時給的名字不是單個字母或數字
 key = "goto.mark-name-one-character"
-zhs = "记号用一个字母或数字"
+zhs = "标记名须是一个字母或数字"
 en = "a mark is named by one letter or digit"
 
 [[message]]
 # 設下一個記號
 key = "goto.mark-set"
-zhs = "记住了「{0}」：{1} 第 {2} 行"
+zhs = "已标记「{0}」：{1} 第 {2} 行"
 en = "marked '{0}': {1} line {2}"
 
 [[message]]
 # g, 走到頭了：已經在最新那一處改動上
 key = "goto.newest-change"
-zhs = "已经是最新改的那一处了"
+zhs = "已是最新改动"
 en = "this is the newest change"
 
 [[message]]
@@ -158,8 +158,8 @@ en = "no headings in this file"
 [[message]]
 # 按了 ga 可是這一趟還没換過檔
 key = "goto.no-last-file"
-zhs = "还没看过别的文件"
-en = "no other file has been open yet"
+zhs = "还没打开过别的文件"
+en = "no other file opened yet"
 
 [[message]]
 # 跳轉表已經到最晚
@@ -168,7 +168,7 @@ zhs = "没有更晚的位置了"
 en = "no later jump"
 
 [[message]]
-# gm 找不到別的改過的檔（草稿）
+# gm 找不到別的改過的檔
 key = "goto.no-modified-file"
 zhs = "还没有改过别的文件"
 en = "no other file has been changed"
@@ -176,19 +176,19 @@ en = "no other file has been changed"
 [[message]]
 # 跳到一個没設過的記號
 key = "goto.no-such-mark"
-zhs = "没有记号「{0}」"
+zhs = "没有标记「{0}」"
 en = "no mark '{0}'"
 
 [[message]]
 # 按了 g. 可是這一份稿子這一趟還没改過
 key = "goto.nothing-changed-yet"
-zhs = "这一份还没改过"
+zhs = "本文件还没有改动"
 en = "nothing has been changed here yet"
 
 [[message]]
 # 按標題序號跳，序號超出標題數
 key = "goto.only-n-headings"
-zhs = "只有 {0} 条标题"
+zhs = "只有 {0} 个标题"
 en = "only {0} heading(s)"
 
 
@@ -197,20 +197,20 @@ en = "only {0} heading(s)"
 [[message]]
 # gw：這一屏上没有可以跳的地方
 key = "jump.nowhere"
-zhs = "这一屏上没有可以跳的地方"
+zhs = "本屏没有可跳转的位置"
 en = "nowhere on this screen to jump to"
 
 [[message]]
 # C-s：把這個選區記進跳轉表，C-o 回得來
 key = "jump.selection-saved"
-zhs = "已记下此处，C-o 可返回"
-en = "saved; C-o comes back"
+zhs = "已记下此处，C-o 返回"
+en = "saved; C-o returns here"
 
 [[message]]
 # `::` 那一行按了 ⇥/⏎，可是一條都没找着
 key = "lookfor.nothing-to-take"
-zhs = "没有找到相符的命令——换一个说法，或者退格回到 `:`"
-en = "no command answers that — say it another way, or backspace to `:`"
+zhs = "没有匹配的命令：换个说法，或退格回到 `:`"
+en = "no matching command; try other words, or backspace to `:`"
 
 
 # ── lsp ──────────────────────────────────────────────
@@ -224,20 +224,20 @@ en = "go on replacing"
 [[message]]
 # 同上：停在這裏，已經換掉的留着
 key = "search.abort-keep"
-zhs = "终止并保留当前替换结果"
+zhs = "停止并保留已替换的内容"
 en = "stop and keep what has been replaced"
 
 [[message]]
 # 同上：停在這裏，已經換掉的全撤回
 key = "search.abort-undo"
-zhs = "全部撤回"
-en = "stop and take it all back"
+zhs = "全部撤销"
+en = "stop and undo everything"
 
 [[message]]
 # 跨檔替換做到一半按了 Esc，問那一句
 key = "search.abort-what"
-zhs = "已替换 {0} 个文件，确定终止吗？"
-en = "{0} file(s) have been replaced — stop here?"
+zhs = "已替换 {0} 个文件，确定停止吗？"
+en = "replaced in {0} file(s) so far; stop here?"
 
 [[message]]
 # 搜索面板底下那一塊：這一處換完長什麼樣。寫在一道雙橫線的左端。
@@ -248,26 +248,26 @@ en = "preview"
 [[message]]
 # 空的位置框上那句灰字
 key = "search.ask.folder"
-zhs = "打一个文件夹的路径"
-en = "type a folder"
+zhs = "输入文件夹路径"
+en = "type a folder path"
 
 [[message]]
 # 空的搜索框上那句灰字
 key = "search.ask.query"
-zhs = "要找什么"
-en = "what to find"
+zhs = "搜索内容"
+en = "search for"
 
 [[message]]
 # 空的替換框上那句灰字
 key = "search.ask.replace"
-zhs = "换成什么"
+zhs = "替换为"
 en = "replace with"
 
 [[message]]
 # 搜索面板：包含/排除裏有一條寫錯了
 key = "search.bad-glob"
-zhs = "包含/排除中有错误写法，搜索未完成"
-en = "only: or except: holds a bad pattern — the search did not run"
+zhs = "包含/排除中有无效的通配符，搜索未执行"
+en = "only: or except: has a bad glob; search not run"
 
 [[message]]
 # 搜索：正則寫不通
@@ -278,19 +278,19 @@ en = "bad pattern"
 [[message]]
 # 搜索：大小寫那一格的名字
 key = "search.case"
-zhs = "大小写匹配"
+zhs = "大小写"
 en = "case"
 
 [[message]]
 # 搜索：大小寫——不敏感
 key = "search.case.insensitive"
-zhs = "不分"
+zhs = "忽略"
 en = "ignore"
 
 [[message]]
 # 搜索：大小寫——敏感
 key = "search.case.sensitive"
-zhs = "敏感"
+zhs = "区分"
 en = "match"
 
 [[message]]
@@ -309,7 +309,7 @@ en = "Chinese"
 # 中文匹配的一半：簡繁異體
 key = "search.chinese.glyphs"
 zhs = "繁简"
-en = "glyphs"
+en = "variants"
 
 [[message]]
 # 中文匹配的另一半：拼音
@@ -356,19 +356,19 @@ en = "nothing"
 [[message]]
 # 限定一欄搜到第一處
 key = "search.hit-in-column"
-zhs = "第 {0} 栏：第 1/{1} 处"
+zhs = "第 {0} 列：第 1/{1} 处"
 en = "column {0}: hit 1/{1}"
 
 [[message]]
 # 限定欄範圍搜到第一處
 key = "search.hit-in-column-range"
-zhs = "第 {0}–{1} 栏：第 1/{2} 处"
+zhs = "第 {0}–{1} 列：第 1/{2} 处"
 en = "columns {0}–{1}: hit 1/{2}"
 
 [[message]]
 # t1,5,9/ ——逐欄點名，不是一段範圍
 key = "search.hit-in-columns"
-zhs = "第 {0} 栏：第 1/{1} 处"
+zhs = "第 {0} 列：第 1/{1} 处"
 en = "columns {0}: hit 1/{1}"
 
 [[message]]
@@ -382,19 +382,19 @@ en = "hit {0} of {1} — n next, N previous"
 # 是「{0}+結果」，所以這一則的中間是**一個空格**，搜完的那一刻只有 `+` 變成空格，
 # 數字和「結果」兩個字一格都不動。
 key = "search.hits"
-zhs = "{0} 结果"
+zhs = "{0} 个结果"
 en = "{0} results"
 
 [[message]]
 # 搜索面板：没走完就停了，數目後面加一個加號
 key = "search.hits-more"
-zhs = "{0}+结果"
+zhs = "{0}+ 个结果"
 en = "{0}+ results"
 
 [[message]]
 # 只找到一處。中文不分單複數，英文分——「1 results」每搜一個獨一無二的詞就出現一次
 key = "search.hits-one"
-zhs = "{0} 结果"
+zhs = "{0} 个结果"
 en = "{0} result"
 
 [[message]]
@@ -454,14 +454,14 @@ en = "regex"
 [[message]]
 # 搜索：那一處已經不在那裏了(檔案後來被改過)
 key = "search.moved-on"
-zhs = "那一处已经不在那里了，再找一遍"
-en = "that one has moved; look again"
+zhs = "那一处已不在原位，请重新搜索"
+en = "that match has moved; search again"
 
 [[message]]
 # 表格没指定跳轉範圍，從第一欄起搜
 key = "search.no-jump-scope"
-zhs = "本表格文件未指定快速跳转之范围，从第一栏起搜索——第 1/{0} 处"
-en = "this table names no scope to jump within, so the search runs from the first column — hit 1 of {0}"
+zhs = "此表格文件未指定跳转范围，从第一列开始搜索：第 1/{0} 处"
+en = "this table sets no jump scope, so the search starts at the first column: hit 1 of {0}"
 
 
 # ── selection ─────────────────────────────────────────────────────────
@@ -493,37 +493,37 @@ en = "window too narrow — searching on the line instead"
 [[message]]
 # 搜索面板底下那一行：走查走到哪了(§5.101，2026-10-07 作者定的文案)
 key = "search.progress"
-zhs = "已搜 {0} 个文件, 搜索 {1}"
+zhs = "已搜索 {0} 个文件，正在搜索 {1}"
 en = "{0} files searched, searching {1}"
 
 [[message]]
 # 搜索：全部替換動得太多，中央那扇窗問一次——「繼續替換」
 key = "search.replace-all-go"
-zhs = "继续替换"
-en = "Replace them"
+zhs = "全部替换"
+en = "Replace all"
 
 [[message]]
 # 搜索：同上，「取消替換」
 key = "search.replace-all-no"
-zhs = "取消替换"
-en = "Leave them alone"
+zhs = "取消"
+en = "Cancel"
 
 [[message]]
 # 搜索：同上，取消之後説的那一句
 key = "search.replace-all-stopped"
-zhs = "没换——一个字都没动"
+zhs = "未替换任何内容"
 en = "Nothing was replaced"
 
 [[message]]
 # 搜索：同上，正文({0} 幾個檔、{1} 幾處)
 key = "search.replace-all-what"
-zhs = "本次操作会替换{0}个文件中的{1}处文字。"
+zhs = "将替换 {0} 个文件中的 {1} 处。"
 en = "this will replace {1} match(es) in {0} file(s)."
 
 [[message]]
 # 整個檔要不要全換，先問一句
 key = "search.replace-file-sure"
-zhs = "把 {1} 里的 {0} 处全部换掉？"
+zhs = "替换 {1} 中的全部 {0} 处？"
 en = "replace all {0} match(es) in {1}?"
 
 [[message]]
@@ -547,14 +547,14 @@ en = "keep case"
 [[message]]
 # 搜索：換掉了幾處
 key = "search.replaced"
-zhs = "共替换 {0} 处(使用 :wa 保存全部)"
+zhs = "共替换 {0} 处(:wa 保存全部)"
 en = "replaced {0} match(es) (:wa saves them all)"
 
 [[message]]
 # 搜索：換掉了幾處，有幾個只讀的檔没換
 key = "search.replaced-skipping"
-zhs = "共替换 {0} 处，跳过 {1} 个只读文件(使用 :wa 保存全部)"
-en = "Replaced {0} matches, skipped {1} read-only file(s) (:wa saves them all)"
+zhs = "共替换 {0} 处，跳过 {1} 个只读文件(:wa 保存全部)"
+en = "replaced {0} match(es), skipped {1} read-only file(s) (:wa saves them all)"
 
 [[message]]
 # 搜索面板那個開關：勾上就長出替換行
@@ -571,32 +571,32 @@ en = "replacing {0}/{1} files"
 [[message]]
 # 搜索：正在走磁盤
 key = "search.scanning"
-zhs = "正在找…"
+zhs = "正在搜索…"
 en = "searching…"
 
 [[message]]
 # 位置那一格是四選一，不是輸入框
 key = "search.scope-is-a-pick"
-zhs = "位置是四选一：按 6 或者左右换一档。要自己指一个文件夹，用 :search 某目录"
-en = "In: is a choice — press 6 or ← → to change it; `:search <folder>` names one"
+zhs = "位置为四选一：按 6 或 ← → 切换；要指定文件夹，用 :search <文件夹>"
+en = "In: is one of four: 6 or ← → changes it; `:search <folder>` names a folder"
 
 [[message]]
 # 站在結果上按了改字的鍵
 key = "search.that-edits-the-box"
-zhs = "这几个键改的是搜索框里的字。要去那一处改正文，按 Enter"
+zhs = "这些键编辑的是搜索框。要去该处编辑正文，按 Enter"
 en = "those keys edit the search box — press Enter to go and edit the text there"
 
 [[message]]
 # 搜索：同上，「全部撤銷」
 key = "search.undo-all-go"
 zhs = "全部撤销"
-en = "Undo all of them"
+en = "Undo all"
 
 [[message]]
 # 搜索：同上，「不撤銷」
 key = "search.undo-all-no"
-zhs = "不撤销"
-en = "Leave them undone"
+zhs = "取消"
+en = "Cancel"
 
 [[message]]
 # 搜索：同上，只撤名單上高亮那一行那一份({0} 它的名字)
@@ -607,27 +607,27 @@ en = "Undo {0} only"
 [[message]]
 # 搜索：撤回一次跨檔替換，中央那扇窗問一次——正文({0} 幾個檔、{1} 幾處)
 key = "search.undo-all-what"
-zhs = "撤销全部替换，涉及 {0} 个文件 {1} 处？"
-en = "Undo the whole replacement — {1} matches across {0} files?"
+zhs = "撤销全部替换(共 {0} 个文件 {1} 处)？"
+en = "Undo the whole replacement — {1} matches in {0} files?"
 
 [[message]]
 # 撤回了剛纔那一次替換
 key = "search.undone"
-zhs = "撤回了刚才那次替换"
-en = "that replacement is undone"
+zhs = "已撤销刚才的替换"
+en = "the replacement was undone"
 
 [[message]]
 # 搜索：撤回之後，有幾個檔因為後來又改過而没撤。名字由呼叫方接在後面，一行一個
 # ——這張表交出去的是檔案本身的切片，`\n` 不會解碼(見 tests/messages.rs)
 key = "search.undone-but-changed"
-zhs = "下列文件因存在后续改动而未撤销。其余文件都成功撤销批量替换。"
+zhs = "下列文件之后有改动，未撤销。其余文件已撤销替换。"
 en = "These files were changed afterwards and were left alone. The rest were undone."
 
 [[message]]
 # 撤回了剛纔那一次替換，動了好幾個檔
 key = "search.undone-files"
-zhs = "撤回了刚才那次替换，{0} 个档都复原了"
-en = "that replacement is undone in all {0} files"
+zhs = "已撤销刚才的替换，{0} 个文件均已复原"
+en = "replacement undone in all {0} files"
 
 [[message]]
 # 搜索：同上那扇窗唯一那顆按鈕
@@ -656,31 +656,31 @@ en = "a folder…"
 [[message]]
 # 搜索面板：範圍＝項目路徑
 key = "search.where.project"
-zhs = "项目路径"
+zhs = "项目"
 en = "the project"
 
 [[message]]
 # 搜索面板：範圍＝工作路徑
 key = "search.where.working"
-zhs = "工作路径"
+zhs = "工作目录"
 en = "working directory"
 
 [[message]]
 # 搜索：完整匹配那一格
 key = "search.whole"
-zhs = "西文整词匹配"
+zhs = "全词匹配"
 en = "whole word"
 
 [[message]]
 # `go` 開着、還在等那兩個字母時，命令行上那一句。{0} ＝ 已經打進去的，没打是空的。
 key = "seek.ask-letters"
-zhs = "请输入两个字母{0}"
+zhs = "输入两个字母{0}"
 en = "type two letters{0}"
 
 [[message]]
 # `gu` 開着、還在等讀音時，命令行上那一句。
 key = "seek.ask-reading"
-zhs = "请输入拼音{0}"
+zhs = "输入拼音{0}"
 en = "type a reading{0}"
 
 [[message]]
@@ -688,32 +688,32 @@ en = "type a reading{0}"
 # 不能只寫數字——行首的序號也是數字，兩個數並排讀者分不出哪個是哪個
 # 。
 key = "seek.places"
-zhs = "共{0}处"
+zhs = "共 {0} 处"
 en = "{0} place(s)"
 
 [[message]]
 # :s …c 走完之後的結語
 key = "substitute.confirm-done"
-zhs = "换了 {0} 处，跳过 {1} 处"
-en = "{0} replaced, {1} left alone"
+zhs = "替换了 {0} 处，跳过 {1} 处"
+en = "{0} replaced, {1} skipped"
 
 [[message]]
 # :s …c 停在一處匹配上問換不換({0} 是原文，{1} 是要寫進去的)
 key = "substitute.confirm-this-one"
-zhs = "「{0}」→「{1}」？y 换、n 跳过、a 后面全换、q 停手、l 换这处后停"
-en = "「{0}」→「{1}」? y replace  n skip  a all the rest  q stop  l this one then stop"
+zhs = "「{0}」→「{1}」？y 替换、n 跳过、a 替换其余、q 停止、l 替换后停止"
+en = "'{0}' → '{1}'? y replace  n skip  a all the rest  q stop  l this one then stop"
 
 [[message]]
 # :s 的行號範圍把兩種寫法混在了一起
 key = "substitute.range-not-one-thing"
-zhs = "范围要么是一段 1-40，要么是几行 1,5,9，不能混着写"
+zhs = "范围只能是一段(1-40)或几行(1,5,9)，不能混用"
 en = "a range is one span (1-40) or one list (1,5,9), not a mixture"
 
 [[message]]
 # :s 的旗標裏有一個不認得的字母
 key = "substitute.unknown-flag"
-zhs = "旗标 '{0}'(有 g 全行、i 不分大小写、f 照字面、c 逐处问、n 只数、t 连栏数一起改、y 拼音、j 繁简)"
-en = "flag '{0}' (g every match on the line, i ignore case, f literal, c ask at each one, n count only, t let the column count change, y pinyin, j glyph variants)"
+zhs = "未知标志 '{0}'(g 整行全部、i 忽略大小写、f 按字面、c 逐处确认、n 只计数、t 允许改列数、y 拼音、j 繁简)"
+en = "unknown flag '{0}' (g every match on the line, i ignore case, f literal, c ask at each one, n count only, t let the column count change, y pinyin, j glyph variants)"
 
 
 # ── table ─────────────────────────────────────────────────────────────
@@ -721,7 +721,7 @@ en = "flag '{0}' (g every match on the line, i ignore case, f literal, c ask at 
 [[message]]
 # :toc 報有幾條標題
 key = "toc.headings-found"
-zhs = "大纲：{0} 条标题(:toc 3 直接去第三条)"
+zhs = "大纲：{0} 个标题(:toc 3 跳到第三个)"
 en = "outline: {0} heading(s) (:toc 3 goes straight to the third)"
 
 

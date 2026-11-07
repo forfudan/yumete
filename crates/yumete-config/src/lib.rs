@@ -244,7 +244,7 @@ pub struct EditorConfig {
     /// copies are another matter and keep their own switch.
     pub remember: bool,
     /// What language the editor says things in: `"auto"` (the default:
-    /// the locale's, 2026-10-29), `"zh"` (繁體), `"zhs"` (简体) or `"en"`.
+    /// the locale's, 2026-10-29), `"zht"` (繁體), `"zhs"` (简体) or `"en"`.
     pub language: String,
     /// The gap between two 縱, in half-width cells (0–4).
     pub zong_gap: usize,
@@ -3184,8 +3184,8 @@ const AMBIGUOUS_WIDTH_NAMES: &[&str] = &["auto", "wide", "narrow"];
 /// `[editor] language`: the names, then every spelling each one is known by.
 const LANGUAGES: &[(&str, &[&str])] = &[
     ("auto", &[]),
-    ("zh", &["zht", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体"]),
-    ("zhs", &["zh-hans", "zh-cn", "简体", "簡體"]),
+    ("zht", &["zh", "tc", "zh-hant", "zh-tw", "chinese", "中文", "繁體", "繁体"]),
+    ("zhs", &["sc", "zh-hans", "zh-cn", "简体", "簡體"]),
     ("en", &["english"]),
 ];
 /// `[editor] tab_inserts`.

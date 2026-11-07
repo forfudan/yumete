@@ -54,6 +54,14 @@ fn main() {
         });
         write_if_changed(&out.join(&name), &made);
     }
+
+    // The Chinese lesson (`:tutor`) is written in Simplified too, and its
+    // Traditional made the same way (2026-11-07).
+    let lesson_path = root.join("src").join("tutor_zhs.md");
+    println!("cargo:rerun-if-changed={}", lesson_path.display());
+    let lesson = std::fs::read_to_string(&lesson_path).expect("tutor_zhs.md is there");
+    let made = fix_terms(&glyphs.forward(&s2t.convert(&lesson)), &terms);
+    write_if_changed(&out.parent().expect("OUT_DIR").join("tutor_zht.md"), &made);
 }
 
 /// One file: aliases spelled out, a `zht` made where none was written, and a

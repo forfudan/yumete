@@ -1358,7 +1358,7 @@ impl Editor {
                 self.status = say!(
                     "ui.language-now",
                     match crate::messages::language() {
-                        crate::messages::Language::Traditional => "zh",
+                        crate::messages::Language::Traditional => "zht",
                         crate::messages::Language::Simplified => "zhs",
                         crate::messages::Language::English => "en",
                     }

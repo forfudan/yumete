@@ -5,68 +5,68 @@
 [[message]]
 # mi c：光標不在任何一段註釋裏
 key = "code.no-comment-here"
-zhs = "光标不在任何注释里"
+zhs = "光标不在注释中"
 en = "the cursor is not inside a comment"
 
 [[message]]
 # ]c：這一份裏一段註釋都没有
 key = "code.no-comments"
-zhs = "这一份里找不到注释"
+zhs = "本文件没有注释"
 en = "no comments in this file"
 
 [[message]]
 # mi f/mi c：光標不在任何一個定義裏
 key = "code.no-definition-here"
-zhs = "光标不在任何函数或类里"
+zhs = "光标不在函数或类中"
 en = "the cursor is not inside a function or a class"
 
 [[message]]
 # ]f/]c：這一份裏一個定義都没有(或者不是代碼檔)
 key = "code.no-definitions"
-zhs = "这一份里找不到函数或类"
+zhs = "本文件没有函数或类"
 en = "no functions or classes in this file"
 
 [[message]]
 # mi x，可是光標不在 HTML 元素裏
 key = "code.no-element-here"
-zhs = "光标不在任何 HTML 元素里"
-en = "the cursor is in no HTML element"
+zhs = "光标不在 HTML 元素中"
+en = "the cursor is not inside an HTML element"
 
 [[message]]
 # mi e，可是光標不在鍵值對裏
 key = "code.no-entry-here"
-zhs = "光标不在任何键值对里"
+zhs = "光标不在键值对中"
 en = "the cursor is not inside a key–value pair"
 
 [[message]]
 # mi a：光標不在任何一個參數裏
 key = "code.no-parameter-here"
-zhs = "光标不在任何参数里"
+zhs = "光标不在参数中"
 en = "the cursor is not inside a parameter"
 
 [[message]]
 # ]d：這一份裏一個診斷都没有
 key = "code.no-problems"
-zhs = "这一份里没有诊断"
+zhs = "本文件没有诊断"
 en = "no diagnostics in this file"
 
 [[message]]
 # mi T，可是光標不在測試函數裏
 key = "code.no-test-here"
-zhs = "光标不在任何测试函数里"
-en = "the cursor is in no test function"
+zhs = "光标不在测试函数中"
+en = "the cursor is not inside a test function"
 
 [[message]]
-# A-o 那一族：這裏没有語法樹（草稿）
+# A-o 那一族：這裏没有語法樹
 key = "code.no-tree-here"
-zhs = "这里没有语法树：不是代码文件，也不在代码块里"
-en = "no syntax tree here: not a code file, nor in a fenced block"
+zhs = "这里没有语法树：不是代码文件，也不在代码块中"
+en = "no syntax tree here: not a code file or a code block"
 
 [[message]]
 # 上屏方式的名字：预设(由方案自己说了算)
 key = "commit.name.default"
-zhs = "预设"
-en = "the scheme's own"
+zhs = "方案默认"
+en = "scheme default"
 
 [[message]]
 # 上屏方式的名字：延遲
@@ -89,14 +89,14 @@ en = "unique"
 [[message]]
 # 没有這種上屏方式
 key = "commit.no-such-method"
-zhs = "没有「{0}」这种上屏方式——default、delayed、unique、fluency"
-en = "no commit method '{0}' — default, delayed, unique (or auto), fluency"
+zhs = "没有「{0}」这种上屏方式，可选 default、delayed、unique(或 auto)、fluency"
+en = "no commit method '{0}'; use default, delayed, unique (or auto) or fluency"
 
 [[message]]
 # 這個方案只能整句上屏
 key = "commit.scheme-is-sentence-only"
-zhs = "{0} 只能整句上屏(没有码表可以逐段查)，上屏方式仍然是{1}"
-en = "{0} can only be typed as whole sentences — no 碼表 to look a segment up in — so the commit method is still {1}"
+zhs = "{0} 只能整句上屏(没有可逐段查询的码表)，上屏方式仍为{1}"
+en = "{0} has no 碼表 to look segments up in, so it commits whole sentences only; the commit method stays {1}"
 
 [[message]]
 # 上屏方式換好了
@@ -110,20 +110,20 @@ en = "commit method: {0}"
 [[message]]
 # ]c/[c 跳到了第 {0} 行的衝突
 key = "conflict.at-line"
-zhs = "跳到第 {0} 行的冲突"
+zhs = "第 {0} 行的合并冲突"
 en = "merge conflict at line {0}"
 
 [[message]]
 # 空格 m 之後，衝突化解，留下了 {0} 行
 key = "conflict.kept"
-zhs = "化解冲突，留下 {0} 行"
+zhs = "冲突已解决，保留 {0} 行"
 en = "conflict resolved, {0} line(s) kept"
 
 [[message]]
 # 空格 m 想回到共同祖先，但檔案裏没有記下它(不是 diff3 樣式)
 key = "conflict.no-ancestor"
-zhs = "这个冲突没有记下共同祖先"
-en = "this conflict has no common ancestor written down"
+zhs = "此冲突没有记录共同祖先"
+en = "this conflict records no common ancestor"
 
 [[message]]
 # ]c 而後面没有衝突了
@@ -140,7 +140,7 @@ en = "no conflict before this one"
 [[message]]
 # ]c/[c/:check-merge 而整份文件裏一處衝突都没有
 key = "conflict.none"
-zhs = "这份文件里没有合并冲突"
+zhs = "本文件没有合并冲突"
 en = "no merge conflicts in this file"
 
 [[message]]
@@ -158,20 +158,20 @@ en = "{0} merge conflict(s)"
 [[message]]
 # :diff 找到了改動
 key = "diff.changed"
-zhs = "{0} 行和《{1}》不一样——gf 跳过去"
-en = "{0} line(s) differ from 《{1}》 — gf goes there"
+zhs = "{0} 行与《{1}》不同，gf 跳转"
+en = "{0} line(s) differ from '{1}'; gf jumps there"
 
 [[message]]
 # :git-diff 問不出答案：git 自己那一句話照搬
 key = "diff.git-said"
-zhs = "git 那边没有 {0} 的这一份：{1}"
-en = "git has no copy at {0}: {1}"
+zhs = "git 中没有 {0} 版本的此文件：{1}"
+en = "git has no version at {0}: {1}"
 
 [[message]]
 # :diff 而這個緩衝區没有檔案，也没説要比誰
 key = "diff.no-file"
-zhs = "这一份还没有文件，要比就说跟谁比：`:diff <文件名>`"
-en = "this buffer has no file yet — say what to compare with: `:diff <path>`"
+zhs = "此缓冲区还没有文件，请指定比较对象：`:diff <文件名>`"
+en = "this buffer has no file yet; name one to compare with: `:diff <path>`"
 
 [[message]]
 # :diff 的結果那一份緩衝區的名字
@@ -182,20 +182,20 @@ en = "[changes {0} ↔ {1}]"
 [[message]]
 # :diff 比下來一模一樣
 key = "diff.same"
-zhs = "和《{0}》一个字都不差"
-en = "not one character differs from 《{0}》"
+zhs = "与《{0}》完全相同"
+en = "identical to '{0}'"
 
 [[message]]
 # :diff 兩份差得太遠，逐詞列出來没有意義
 key = "diff.too-far"
-zhs = "和《{0}》差得太远，逐词比不出东西来"
-en = "too far from 《{0}》 to be worth comparing word by word"
+zhs = "与《{0}》差异太大，无法逐词比较"
+en = "too different from '{0}' to compare word by word"
 
 [[message]]
 # :diff 改動太多，只列了前面那些
 key = "diff.too-many"
-zhs = "和《{1}》有 {0} 行以上不一样(只列了前 {0} 行)——gf 跳过去"
-en = "{0}+ lines differ from 《{1}》 (first {0} listed) — gf goes there"
+zhs = "与《{1}》有 {0} 行以上不同(只列出前 {0} 行)，gf 跳转"
+en = "{0}+ lines differ from '{1}' (first {0} listed); gf jumps there"
 
 
 # ── edit ──────────────────────────────────────────────────────────────
@@ -203,169 +203,169 @@ en = "{0}+ lines differ from 《{1}》 (first {0} listed) — gf goes there"
 [[message]]
 # :git-show 之後狀態行的一句話
 key = "git.show"
-zhs = "{0} 那一稿开在另一个窗口，只读"
-en = "the draft at {0} is open in the other window, read-only"
+zhs = "{0} 版本已在另一个窗口中只读打开"
+en = "the version at {0} is open read-only in the other window"
 
 [[message]]
 # 代碼動作做完了：哪一個，幾處，幾個檔
 key = "lsp.action-done"
-zhs = "{0}：改了 {1} 处，在 {2} 个文件里"
-en = "{0}: {1} place(s) in {2} file(s)"
+zhs = "{0}：在 {2} 个文件中修改了 {1} 处"
+en = "{0}: changed {1} place(s) in {2} file(s)"
 
 [[message]]
 # 語言服務器要求改檔，改完了：幾處，幾個檔
 key = "lsp.applied"
-zhs = "语言服务器改了 {0} 处，在 {1} 个文件里"
+zhs = "语言服务器在 {1} 个文件中修改了 {0} 处"
 en = "the language server changed {0} place(s) in {1} file(s)"
 
 [[message]]
 # gd 問出去了，還没回話
 key = "lsp.asking"
-zhs = "向语言服务器询问定义位置"
-en = "asking the language server where this is defined"
+zhs = "正在查询定义…"
+en = "looking up the definition…"
 
 [[message]]
 # 空格 a 問出去了
 key = "lsp.asking-actions"
-zhs = "向语言服务器询问这里可做的事"
-en = "asking the language server what it can do here"
+zhs = "正在查询可用操作…"
+en = "looking up code actions…"
 
 [[message]]
-# =：請語言服務器排版選區（草稿）
+# =：請語言服務器排版選區
 key = "lsp.asking-format"
-zhs = "请语言服务器排版"
-en = "asking the language server to format it"
+zhs = "正在格式化…"
+en = "formatting…"
 
 [[message]]
 # gr 問出去了
 key = "lsp.asking-references"
-zhs = "向语言服务器询问用到它的地方"
-en = "asking the language server where it is used"
+zhs = "正在查询引用…"
+en = "looking up references…"
 
 [[message]]
 # :lsp-rename 問出去了
 key = "lsp.asking-rename"
-zhs = "请语言服务器改名"
-en = "asking the language server to rename it"
+zhs = "正在重命名…"
+en = "renaming…"
 
 [[message]]
 # 空格 k 問出去了，還没回話
 key = "lsp.asking-what"
-zhs = "查询文档中……"
-en = "asking for the docs…"
+zhs = "正在查询文档…"
+en = "looking up the docs…"
 
 [[message]]
 # 按 空格 k 的時候：稿子還没存盤，服務器答的是檔案
 key = "lsp.buffer-unsaved"
-zhs = "本缓冲区未保存，故而未绑定语言服务器"
-en = "this buffer has no file yet, so no language server is watching it"
+zhs = "此缓冲区未保存，未连接语言服务器"
+en = "this buffer has no file yet, so no language server is attached"
 
 [[message]]
 # 語言服務器起不來(機器上没裝)——只説一次
 key = "lsp.cannot-start"
-zhs = "{0} 起不来({1})——档照常开，只是没人查错"
-en = "{0} would not start ({1}) — the file opens as always, just with nobody checking it"
+zhs = "{0} 无法启动({1})：文件照常打开，但没有诊断"
+en = "{0} could not start ({1}); the file opens as usual, without diagnostics"
 
 [[message]]
-# =：服務器没有要改的（草稿）
+# =：服務器没有要改的
 key = "lsp.format-changed-nothing"
 zhs = "语言服务器没有要改的地方"
 en = "the language server had nothing to change"
 
 [[message]]
-# =：一次只排一段選區，同 helix（草稿）
+# =：一次只排一段選區，同 helix
 key = "lsp.format-one-selection"
-zhs = "一次只能排一段选区"
-en = "the server formats one selection at a time"
+zhs = "一次只能格式化一个选区"
+en = "only one selection can be formatted at a time"
 
 [[message]]
-# =：服務器不排，後面是它說的理由（草稿）
+# =：服務器不排，後面是它說的理由
 key = "lsp.format-refused"
-zhs = "语言服务器不排：{0}"
-en = "the language server would not format it: {0}"
+zhs = "语言服务器拒绝格式化：{0}"
+en = "the language server declined to format: {0}"
 
 [[message]]
-# =：排好了（草稿）
+# =：排好了
 key = "lsp.formatted"
-zhs = "排好了"
+zhs = "已格式化"
 en = "formatted"
 
 [[message]]
 # 起服務器用的是項目自己帶的那一個，不是 PATH 上的
 key = "lsp.from-the-project"
-zhs = "语言服务器：本项目路径中的 {0}"
-en = "language server: {0} from this project"
+zhs = "语言服务器：项目中的 {0}"
+en = "language server: {0} from the project"
 
 [[message]]
 # 語言服務器起來一下就没了(裝得不完整)
 key = "lsp.never-started"
-zhs = "{0} 的语言服务器起来就没了——这台机器上它可能没装好(此后不再试)"
-en = "the {0} language server started and was gone — it may not be properly installed here (not tried again)"
+zhs = "{0} 的语言服务器启动后立即退出，可能未正确安装(不再重试)"
+en = "the {0} language server exited right after starting; it may not be installed properly (will not retry)"
 
 [[message]]
 # 空格 a 問了，服務器說這裏沒什麼可做
 key = "lsp.no-actions"
-zhs = "语言服务器在这里没有可做的"
-en = "the language server has nothing to do here"
+zhs = "此处没有可用的代码操作"
+en = "no code actions here"
 
 [[message]]
 # 語言服務器起來了、進程活着，卻一直不回 initialize
 key = "lsp.no-answer"
-zhs = "{0} 的语言服务器已开启但{1}秒未响应"
-en = "the {0} language server started but has not answered in {1} seconds"
+zhs = "{0} 的语言服务器已启动，但 {1} 秒未响应"
+en = "the {0} language server started but has not responded in {1} seconds"
 
 [[message]]
-# 空格 h：服務器没找到這個符號（草稿）
+# 空格 h：服務器没找到這個符號
 key = "lsp.no-highlights"
-zhs = "服务器在这里没找到符号"
-en = "the server found no symbol here"
+zhs = "此处没有符号"
+en = "no symbol here"
 
 [[message]]
 # gr 問了，服務器說哪兒都沒用到
 key = "lsp.no-references"
-zhs = "语言服务器未查到别处用到它"
-en = "the language server found no other use of it"
+zhs = "语言服务器未找到其他引用"
+en = "the language server found no other references"
 
 [[message]]
 # 按 空格 k 的時候：這個語言在設置裏根本没寫服務器
 key = "lsp.no-server-configured"
-zhs = "未为{0}文件指定语言服务器，请在设置中填写"
+zhs = "没有为 {0} 配置语言服务器，请在 :settings 中设置"
 en = "no language server configured for {0} — set one in :settings"
 
 [[message]]
 # 空格 k 按在稿子上——那裏没有語言服務器
 key = "lsp.not-code"
-zhs = "非程序文件，无服务器可问"
-en = "not a program file — no server to ask"
+zhs = "不是代码文件，没有语言服务器"
+en = "not a code file; no language server"
 
 [[message]]
 # 按 空格 k 的時候：設置裏寫了，可這臺機器上没有那個程序
 key = "lsp.not-installed"
-zhs = "找不到 {0}，请在配置的 [lsp] 表中检查拼写，或安装它"
-en = "not on this machine: {0}. Check the spelling in the config's [lsp] table, or install it"
+zhs = "找不到 {0}：请检查配置 [lsp] 表中的拼写，或安装它"
+en = "{0} not found: check its spelling in the config's [lsp] table, or install it"
 
 [[message]]
-# 打開代碼檔時：出廠填好的服務器這臺機器上一個都没有（草稿）
+# 打開代碼檔時：出廠填好的服務器這臺機器上一個都没有
 key = "lsp.not-installed-factory"
-zhs = "未安装 {0}，装上即可使用"
-en = "not installed: {0}. Install one to use it here"
+zhs = "未安装 {0}，安装后即可使用"
+en = "{0} is not installed. Install it to use it here"
 
 [[message]]
 # gr、空格 r、空格 a 在沒接語言服務器的文件裏
 key = "lsp.not-served"
-zhs = "此文件未绑定语言服务器"
+zhs = "此文件没有语言服务器"
 en = "no language server serves this file"
 
 [[message]]
 # 服務器提不出任何候選
 key = "lsp.nothing-to-offer"
-zhs = "此处无候选"
-en = "nothing fits here"
+zhs = "此处没有补全"
+en = "no completions here"
 
 [[message]]
 # gd 問完了，服務器説不出它寫在哪
 key = "lsp.nowhere"
-zhs = "语言服务器未查到定义位置"
+zhs = "语言服务器未找到定义"
 en = "the language server found no definition"
 
 [[message]]
@@ -383,14 +383,14 @@ en = "the language server had nothing to change"
 [[message]]
 # :lsp-rename 後面沒寫新名
 key = "lsp.rename-needs-a-name"
-zhs = "要给一个新名：:lsp-rename <新名>"
+zhs = "请给出新名称：:lsp-rename <新名称>"
 en = "give it a new name: :lsp-rename <name>"
 
 [[message]]
 # 語言服務器不肯改名，後面是它自己的話
 key = "lsp.rename-refused"
-zhs = "语言服务器不改：{0}"
-en = "the language server would not rename it: {0}"
+zhs = "语言服务器拒绝重命名：{0}"
+en = "the language server declined to rename: {0}"
 
 [[message]]
 # 改名做完了：幾處，幾個檔
@@ -401,7 +401,7 @@ en = "renamed {0} place(s) in {1} file(s)"
 [[message]]
 # gd 問出去之前，服務器還在讀項目(#431，2026-10-01 寫的)
 key = "lsp.server-starting"
-zhs = "语言服务器启动中，请稍候"
+zhs = "语言服务器正在启动，请稍候"
 en = "the language server is starting; please wait"
 
 [[message]]
@@ -415,38 +415,38 @@ en = "Signature"
 [[message]]
 # 服務器對光標下那個東西無話可説
 key = "lsp.speechless"
-zhs = "此处未找到相关文档"
+zhs = "此处没有文档"
 en = "no documentation here"
 
 [[message]]
 # 按 空格 k 的時候：試過了，起不來，此後不再試
 key = "lsp.start-failed"
-zhs = "语言服务器开启失败"
-en = "the language server could not be started"
+zhs = "语言服务器启动失败"
+en = "the language server failed to start"
 
 [[message]]
 # 按 空格 k 的時候：服務器正在起
 key = "lsp.starting"
-zhs = "语言服务器开启中……"
+zhs = "正在启动语言服务器…"
 en = "the language server is starting…"
 
 [[message]]
 # 語言服務器死了
 key = "lsp.stopped"
-zhs = "{0} 的语言服务器已停止——其所言不再可信，下一文档会重开一个"
-en = "the {0} language server stopped — what it said no longer counts, and the next file starts a new one"
+zhs = "{0} 的语言服务器已停止，之前的结果不再可靠；打开下一个文件时会重新启动"
+en = "the {0} language server stopped; its results no longer count, and the next file starts a new one"
 
 [[message]]
 # 補全單子底下那一句：怎麽用
 key = "lsp.take-it"
-zhs = "Tab 补全 · C-n/C-p 换"
-en = "Tab completes · C-n/C-p to move"
+zhs = "Tab 补全 · C-n/C-p 选择"
+en = "Tab to complete · C-n/C-p to choose"
 
 [[message]]
 # gd 跳到了定義那一行
 key = "lsp.went"
 zhs = "{0} 第 {1} 行(C-o 返回)"
-en = "{0} line {1} (C-o comes back)"
+en = "{0} line {1} (C-o to go back)"
 
 
 # ── macro ─────────────────────────────────────────────────────────────
@@ -461,7 +461,7 @@ en = "{0}  {1}  {2}"
 # 補全單子底下：第幾條/一共幾條(單子露不全的時候)
 key = "lsp.which-of-them"
 zhs = "{0}/{1} · Tab 补全"
-en = "{0}/{1} · Tab completes"
+en = "{0}/{1} · Tab to complete"
 
 [[message]]
 # 語言服務器説的一句話有多響：最響的那一檔
@@ -472,25 +472,25 @@ en = "error"
 [[message]]
 # :diagnostics-all 列完了，一共幾處
 key = "problem.found"
-zhs = "{0} 处——gf 跳到那一行"
-en = "{0} problem(s) — gf goes to the line"
+zhs = "{0} 个问题，gf 跳到该行"
+en = "{0} problem(s); gf jumps to the line"
 
 [[message]]
 # 最輕的那一檔：「你也許想知道」
 key = "problem.hint"
-zhs = "建议"
+zhs = "提示"
 en = "hint"
 
 [[message]]
 # :diagnostics-all 但還没有任何服務器説過話
 key = "problem.none"
-zhs = "还没有语言服务器报过问题"
+zhs = "语言服务器尚未报告问题"
 en = "no language server has reported anything"
 
 [[message]]
 # 光標這一行上服務器一句話都没説(按 空格 i 的時候)
 key = "problem.none-here"
-zhs = "这一行没有诊断"
+zhs = "本行没有诊断"
 en = "nothing reported on this line"
 
 [[message]]
@@ -508,14 +508,14 @@ en = "{0}:{1}: {2} {3}"
 [[message]]
 # :diagnostics-all 的緩衝區標題
 key = "problem.results"
-zhs = "语言服务器说的"
-en = "what the language servers said"
+zhs = "诊断"
+en = "diagnostics"
 
 [[message]]
 # :diagnostics-all 的單子太長，只列了前面那些
 key = "problem.too-many"
-zhs = "太多了，只列前 {0} 处"
-en = "too many; the first {0} are listed"
+zhs = "问题过多，只列出前 {0} 个"
+en = "too many; showing the first {0}"
 
 [[message]]
 # 中間那兩檔之一：不至於錯，但值得看一眼
@@ -526,7 +526,7 @@ en = "warning"
 [[message]]
 # 診斷浮框脚下那一行：怎麽看全部
 key = "problem.whole-list"
-zhs = "␣I 进边栏"
+zhs = "␣I 打开侧栏"
 en = "␣I opens the sidebar"
 
 
@@ -535,5 +535,5 @@ en = "␣I opens the sidebar"
 [[message]]
 # ]g/[g：這一份根本没有改動
 key = "vcs.nothing-changed"
-zhs = "本文没有改动"
+zhs = "本文件没有改动"
 en = "nothing has changed in this file"

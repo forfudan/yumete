@@ -21344,9 +21344,9 @@ fn squeezed(text: &str) -> String {
             match ImeSession::builtin(want).is_some() {
                 true => {
                     assert_eq!(ime.scheme(), want, "{tag}: {said}");
-                    assert!(said.contains("出廠自帶"), "{tag}: {said}");
+                    assert!(said.contains(&say!("ime.builtin-scheme", ime.scheme_name())), "{tag}: {said}");
                 }
-                false => assert!(said.contains("不帶碼表"), "{tag}: {said}"),
+                false => assert!(said.contains(&say!("ime.no-builtin-table")), "{tag}: {said}"),
             }
         }
     }
@@ -21356,12 +21356,12 @@ fn squeezed(text: &str) -> String {
     fn the_preedit_says_where_it_is_writing() {
         let mut ime = ImeSession::from_table_text(Scheme::LINGMING, "a 啊\n");
         let said = inline_preedit_method(&mut ime, "");
-        assert!(said.contains("候選欄裏"), "{said}");
+        assert!(said.contains(&say!("inline-preedit.name.off")), "{said}");
         let said = inline_preedit_method(&mut ime, "preview");
-        assert!(said.contains("首選"), "{said}");
+        assert!(said.contains(&say!("inline-preedit.name.preview")), "{said}");
         assert_eq!(ime.inline_preedit(), InlinePreedit::Preview);
         let said = switch_scheme(&mut ime, "?", &Config::default());
-        assert!(said.contains("正在打的那一段"), "{said}");
+        assert!(said.contains(&say!("scheme.preedit-is", say!("inline-preedit.name.preview"))), "{said}");
         // 面板那一格沒被動過——這正是分成兩格的意思。
         assert_eq!(ime.panel_display(), PanelDisplay::Box);
         let said = inline_preedit_method(&mut ime, "inline");
@@ -23428,14 +23428,15 @@ fn squeezed(text: &str) -> String {
         };
 
         // Nothing pending: no panel.
-        assert!(!drawn(&editor).iter().any(|row| row.contains("配對")));
+        assert!(!drawn(&editor).iter().any(|row| row.contains(&say!("hint.match.pair"))));
 
         editor.on_key(Key::Char('m'));
         let page = drawn(&editor);
         let panel: Vec<&String> = page.iter().filter(|r| r.contains('│')).collect();
         assert!(!panel.is_empty(), "a bordered panel: {page:?}");
         assert!(
-            page.iter().any(|r| r.contains("配對")) && page.iter().any(|r| r.contains("包住")),
+            page.iter().any(|r| r.contains(&say!("hint.match.pair")))
+                && page.iter().any(|r| r.contains(&say!("hint.match.surround"))),
             "{page:?}"
         );
         // Its title is in its own border.
@@ -24700,9 +24701,9 @@ fn squeezed(text: &str) -> String {
             (0..20).map(|y| row_text(&buffer, y).trim_end().to_string()).collect();
         let page = rows.join("\n");
 
-        assert!(page.contains("安全核驗"), "the panel is named: {page}");
-        for answer in ["繼續保存", "查看區别", "取消保存"] {
-            assert!(page.contains(answer), "{answer} is offered: {page}");
+        assert!(page.contains(&say!("write.oversize-title")), "the panel is named: {page}");
+        for answer in [say!("write.oversize-go"), say!("write.oversize-look"), say!("write.oversize-no")] {
+            assert!(page.contains(&answer), "{answer} is offered: {page}");
         }
         assert!(page.contains("MB"), "the sizes are on the page: {page}");
         // Middle, not a corner: the top and bottom rows of the window are the
@@ -25144,10 +25145,10 @@ fn squeezed(text: &str) -> String {
         editor.on_key(Key::Char('y'));
         let buffer = render(&editor, &config, 100, 10);
         let hint = command_line(&buffer);
-        assert!(hint.contains("取"), "the message is below: {hint:?}");
+        assert!(hint.contains(&say!("edit.yanked-characters", 1)), "the message is below: {hint:?}");
         let status = row(&buffer, 100);
         assert!(squeezed(&status).contains("行 1, 列 3"), "position kept: {status:?}");
-        assert!(!status.contains("取"), "and not repeated: {status:?}");
+        assert!(!status.contains(&say!("edit.yanked-characters", 1)), "and not repeated: {status:?}");
 
         // With the command row off the message comes back to the status line —
         // a message nobody can see is not a message. And the status line is
@@ -25155,7 +25156,7 @@ fn squeezed(text: &str) -> String {
         let mut plain = config.clone();
         plain.editor.command_line = false;
         let status = row_text(&render(&editor, &plain, 100, 10), 9);
-        assert!(status.contains("取") && squeezed(&status).contains("行 1, 列 3"), "{status:?}");
+        assert!(status.contains(&say!("edit.yanked-characters", 1)) && squeezed(&status).contains("行 1, 列 3"), "{status:?}");
     }
 
     #[test]
@@ -25945,7 +25946,7 @@ fn squeezed(text: &str) -> String {
         // The keys go on the row below, so the status line can go on saying
         // which file you are in and where in it you are.
         let hint = command_line(&buffer);
-        assert!(hint.contains("邊欄"), "{hint:?}");
+        assert!(hint.contains(&say!("hint.sidebar")), "{hint:?}");
         // 2026-09-29 起那一格寫的是 `\u{2423}w`（空格記號＋w），`C-w` 不再印在
         // 屏幕上——同一件事兩種按法，而這一行是硬砍的。
         assert!(hint.contains("\u{2423}w"), "how to get back: {hint:?}");
@@ -26009,7 +26010,8 @@ fn squeezed(text: &str) -> String {
         // 鋪滿，29 條就得開第四欄，於是每一格窄了一截，「文件挑選器(項目路徑)」
         // 畫成「文件挑選…」。斷言問的是「這張表列得出它收的鍵」，不是哪一格有
         // 幾個字，所以問到鍵名為止。
-        assert!(text.contains("文件挑選"), "{text:?}");
+        let open_file: String = say!("hint.space.open-file").chars().take(4).collect();
+        assert!(text.contains(&open_file), "{text:?}");
         assert!(text.contains("緩衝區"), "{text:?}");
         // 新來的那兩個也要在上面——這張表是 which-key，列不出就等於没有。
         assert!(text.contains("下一頁") && text.contains("上一頁"), "{text:?}");
@@ -26020,7 +26022,7 @@ fn squeezed(text: &str) -> String {
         let buffer = render_with(&editor, &config, no_ime(), 60, 24);
         let text = page_text(&buffer);
         assert!(text.contains("緩衝區"), "{text:?}");
-        assert!(!text.contains("打開文件"), "the menu is gone: {text:?}");
+        assert!(!text.contains(&open_file), "the menu is gone: {text:?}");
         // And it is a box in the middle of the page, not the page: **three
         // quarters** of the window and three rows of furniture（2026-09-26 
         // 定：「现在高度不超过屏幕1/2，我觉得可以增加到3/4」；2026-09-18 之前是
@@ -26134,7 +26136,7 @@ fn squeezed(text: &str) -> String {
         // 原話：「我输入 :ruby 加空格的时候……描述区显示的是第一个参数的信息
         // （off）。但如果我按下回车，它其实触发的是裸命令」。
         let squashed = text.replace(' ', "");
-        assert!(squashed.contains("注音渲染模式"), "裸命令的事: {squashed:?}");
+        assert!(squashed.contains(&say!("cmd.commands.ruby-render").replace(' ', "")), "裸命令的事: {squashed:?}");
 
         // 挑中一個詞之後纔說那個詞的事。
         for c in "off".chars() {
@@ -26670,7 +26672,7 @@ fn squeezed(text: &str) -> String {
             .expect("a corner above the description");
         assert!(corner < top - 1, "說明塊夾在角和橫線之間");
         let said = buffer_text(&buffer).replace(" ", "");
-        assert!(said.contains("更改工作路徑"), "說的是 cd 的事: {said:?}");
+        assert!(said.contains(&say!("cmd.commands.cd").replace(' ', "")), "說的是 cd 的事: {said:?}");
     }
 
     /// A search prompt is not a command line and gets no menu.

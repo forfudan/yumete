@@ -5,61 +5,61 @@
 [[message]]
 # :check-config 查完了，兩個檔都没毛病({0} 是查了幾個檔)
 key = "config.check-clean"
-zhs = "配置档没毛病(查了 {0} 个)"
-en = "the config is clean ({0} file(s) checked)"
+zhs = "配置无误(检查了 {0} 个文件)"
+en = "config OK ({0} file(s) checked)"
 
 [[message]]
 # :check-config 查出來幾條
 key = "config.check-found"
-zhs = "配置档有 {0} 处"
-en = "{0} thing(s) wrong in the config"
+zhs = "配置有 {0} 处问题"
+en = "{0} problem(s) in the config"
 
 [[message]]
 # :check-config 查出來的那一頁的名字
 key = "config.check-name"
-zhs = "配置档的毛病"
+zhs = "配置问题"
 en = "config problems"
 
 [[message]]
-# :config-open 時前端没說配置檔在哪（草稿）
+# :config-open 時前端没說配置檔在哪
 key = "config.no-file"
-zhs = "不知道配置文件在哪"
-en = "where the config file is is not known"
+zhs = "找不到配置文件位置"
+en = "config file location unknown"
 
 [[message]]
 # :reload-config 讀到的設定檔有毛病
 key = "config.reload-said"
-zhs = "设置重读了，但有话说：{0}"
-en = "settings reloaded, with something to say: {0}"
+zhs = "已重新加载设置，但有提示：{0}"
+en = "settings reloaded, with a note: {0}"
 
 [[message]]
 # :reload-config 做完了
 key = "config.reloaded"
-zhs = "设置重读了"
+zhs = "已重新加载设置"
 en = "settings reloaded"
 
 [[message]]
 # 配置檔裏這一條讓整份都不生效(畫在那一行上的那條診斷)
 key = "config.whole-file-dropped"
-zhs = "这一条让整份配置都没生效，用的是出厂设置"
-en = "this one line stops the whole file applying; the factory settings are in use"
+zhs = "此行导致整个配置未生效，正在使用默认设置"
+en = "this line stops the whole file from applying; defaults are in use"
 
 [[message]]
-# 設置面板：注解模式那一行的值，有幾個模式（草稿）
+# 設置面板：注解模式那一行的值，有幾個模式
 key = "settings.annotation-modes.count"
 zhs = "{0} 个模式"
 en = "{0} modes"
 
 [[message]]
-# 設置面板：注解模式那一頁，一個模式一欄都没勾，打字時 / 跳過它（草稿）
+# 設置面板：注解模式那一頁，一個模式一欄都没勾，打字時 / 跳過它
 key = "settings.annotation-modes.empty"
-zhs = "一栏都没勾，/ 跳过它"
-en = "nothing ticked: / skips it"
+zhs = "一项都没勾选，/ 会跳过它"
+en = "nothing ticked; / skips it"
 
 [[message]]
 # 設置面板：存不下去({0} ＝ 為什麽)
 key = "settings.cannot-save"
-zhs = "存不下去：{0}"
+zhs = "无法保存：{0}"
 en = "cannot save: {0}"
 
 [[message]]
@@ -71,8 +71,8 @@ en = "ambiguous width"
 [[message]]
 # 設置：歧义宽度——一句話
 key = "settings.editor.ambiguous-width.hint"
-zhs = "「东亚歧义宽度」那些字符占一格还是两格。画歪了就改这里"
-en = "whether East Asian ambiguous-width characters such as — and … take one cell or two; change it if the caret sits off its character"
+zhs = "东亚歧义宽度字符占一格还是两格。显示错位时改这里"
+en = "whether East Asian ambiguous-width characters (— …) take one cell or two; change it if the cursor is misaligned"
 
 [[message]]
 # 設置面板：[editor] auto_pairs 那一行
@@ -83,63 +83,63 @@ en = "auto-pairs"
 [[message]]
 # 設置面板：[editor] auto_pairs 那一行底下的說明
 key = "settings.editor.auto-pairs.hint"
-zhs = "输入左括号或引号时自动补上右半边；再打右半边会跳过去"
+zhs = "输入左括号或引号时自动补上右半边；再输入右半边会跳过"
 en = "typing an opening bracket or quote adds its closer; typing the closer then steps over it"
 
 [[message]]
 # 設置：抢救副本
 key = "settings.editor.autosave"
-zhs = "抢救副本"
+zhs = "自动备份"
 en = "autosave"
 
 [[message]]
 # 設置：抢救副本——一句話
 key = "settings.editor.autosave.hint"
-zhs = "没保存的时候在文件旁边留一份副本，崩了还能捞回来"
-en = "while a file is unsaved, keep a copy beside it, so a crash loses nothing"
+zhs = "未保存时在文件旁保留副本，崩溃后可恢复"
+en = "keep a copy beside unsaved files to recover from a crash"
 
 
 
 [[message]]
 # 設置：字的码位
 key = "settings.editor.char-info"
-zhs = "字的码位"
-en = "char info"
+zhs = "字符信息"
+en = "character info"
 
 [[message]]
 # 設置：字的码位——一句話
 key = "settings.editor.char-info.hint"
-zhs = "状态栏右端说出光标下那个字的 Unicode 码位和区块名"
-en = "the right end of the status line names the character under the caret: its code point and Unicode block"
+zhs = "在状态栏右端显示光标处字符的 Unicode 码位和区块名"
+en = "show the code point and Unicode block of the character under the cursor at the right of the status line"
 
 [[message]]
 # 設置：代码上色
 key = "settings.editor.code-highlight"
-zhs = "代码上色"
+zhs = "代码高亮"
 en = "code highlight"
 
 [[message]]
 # 設置：代码上色——一句話
 key = "settings.editor.code-highlight.hint"
-zhs = "围栏里的代码按它自己的语法上色；关掉则整块一种紫"
-en = "code in a fence is coloured by its own language; off, the whole block is one colour"
+zhs = "代码块按其语言高亮；关闭则整块为紫色"
+en = "highlight fenced code by its language; off, the block is one colour"
 
 [[message]]
 # 設置：命令行那一行
 key = "settings.editor.command-line"
-zhs = "命令行那一行"
+zhs = "命令行"
 en = "command line"
 
 [[message]]
 # 設置：命令行那一行——一句話
 key = "settings.editor.command-line.hint"
-zhs = "状态栏底下再加一行：打命令、刚才怎么了、现在能按什么"
-en = "a line under the status line for commands, for what just happened, and for the keys you can press now"
+zhs = "状态栏下方加一行，用于输入命令、显示消息和按键提示"
+en = "a line under the status line for commands, messages and key hints"
 
 [[message]]
 # 設置面板：[editor] completion_page_size 那一行
 key = "settings.editor.completion-page-size"
-zhs = "补全一页几条"
+zhs = "补全每页条数"
 en = "completion page size"
 
 [[message]]
@@ -157,31 +157,31 @@ en = "diff gutter"
 [[message]]
 # 設置：改动条——一句話
 key = "settings.editor.diff-gutter.hint"
-zhs = "行号旁边那一格用底色说哪几行跟 git 里的不一样"
-en = "the cell beside the line number marks lines that differ from git, or from the saved file outside git"
+zhs = "在行号旁用底色标出与 git 不同的行(不在 git 中则对比已保存的文件)"
+en = "mark lines that differ from git (or from the saved file) beside the line numbers"
 
 [[message]]
-# 設置：行末診斷（草稿）
+# 設置：行末診斷
 key = "settings.editor.eol-diagnostics"
 zhs = "行末诊断"
 en = "end-of-line diagnostics"
 
 [[message]]
-# 設置：行末診斷——一句話（草稿）
+# 設置：行末診斷——一句話
 key = "settings.editor.eol-diagnostics.hint"
-zhs = "语言服务器的提示写在行末，从哪一级起写"
-en = "write the language server's message after its line, from which level up"
+zhs = "在行末显示语言服务器诊断，从哪一级起显示"
+en = "show language-server diagnostics at line end, from which level up"
 
 [[message]]
 # 設置：模糊搜索出厂开着
 key = "settings.editor.fuzzy-search"
-zhs = "模糊搜索出厂开着"
-en = "fuzzy search"
+zhs = "默认模糊搜索"
+en = "fuzzy search by default"
 
 [[message]]
 # 設置：模糊搜索出厂开着——一句話
 key = "settings.editor.fuzzy-search.hint"
-zhs = "搜索面板那个「模糊」开关一开始是开是关"
+zhs = "搜索面板的「模糊」开关默认是否打开"
 en = "whether the search panel's fuzzy switch starts on"
 
 [[message]]
@@ -193,7 +193,7 @@ en = "hanging punctuation"
 [[message]]
 # 設置：標點旁置——一句話
 key = "settings.editor.hanging-punctuation.hint"
-zhs = "。，、？！：；「」 挂在边栏上，不占正文那一格"
+zhs = "。，、？！：；「」 悬挂在页边，不占正文的格"
 en = "。，、？！：；「」 hang in the margin instead of taking a cell"
 
 [[message]]
@@ -212,109 +212,109 @@ en = "what a bare :hard-wrap fills to; it rewrites the file's line breaks, not t
 # 設置：首行縮進
 key = "settings.editor.indent"
 zhs = "首行缩进"
-en = "indent"
+en = "first-line indent"
 
 [[message]]
-# 設置：縮進參考線（草稿）
+# 設置：縮進參考線
 key = "settings.editor.indent-guides"
 zhs = "缩进参考线"
 en = "indent guides"
 
 [[message]]
-# 設置：縮進參考線用的字符（草稿）
+# 設置：縮進參考線用的字符
 key = "settings.editor.indent-guides-character"
 zhs = "参考线字符"
 en = "guide character"
 
 [[message]]
-# 設置：縮進參考線用的字符——一句話（草稿）
+# 設置：縮進參考線用的字符——一句話
 key = "settings.editor.indent-guides-character.hint"
 zhs = "画参考线用的字符，要占一格"
 en = "the character the guides are drawn with, one cell wide"
 
 [[message]]
-# 設置：光標所在那一塊的參考線加深（草稿）
+# 設置：光標所在那一塊的參考線加深
 key = "settings.editor.indent-guides-scope"
-zhs = "标出当前块"
-en = "mark the current block"
+zhs = "突出当前块"
+en = "highlight current block"
 
 [[message]]
-# 設置：光標所在那一塊的參考線加深——一句話（草稿）
+# 設置：光標所在那一塊的參考線加深——一句話
 key = "settings.editor.indent-guides-scope.hint"
-zhs = "光标所在那一块的参考线画得深一些"
-en = "the guide of the block the cursor is in is drawn darker"
+zhs = "光标所在块的参考线加深"
+en = "the guide of the cursor's block is drawn darker"
 
 [[message]]
-# 設置：外面幾級不畫參考線（草稿）
+# 設置：外面幾級不畫參考線
 key = "settings.editor.indent-guides-skip-levels"
 zhs = "跳过外层"
 en = "skip levels"
 
 [[message]]
-# 設置：外面幾級不畫參考線——一句話（草稿）
+# 設置：外面幾級不畫參考線——一句話
 key = "settings.editor.indent-guides-skip-levels.hint"
-zhs = "最外面几级缩进不画参考线"
+zhs = "最外几级缩进不画参考线"
 en = "how many outer levels go without a guide"
 
 [[message]]
-# 設置：縮進參考線——一句話（草稿）
+# 設置：縮進參考線——一句話
 key = "settings.editor.indent-guides.hint"
-zhs = "代码行首的空白里，每一级缩进画一条竖线，同 helix；只用于代码文件"
+zhs = "在代码行首每级缩进画一条竖线，同 helix；仅用于代码文件"
 en = "a rule at each level of a code line's leading blanks, as helix draws them; code files only"
 
 [[message]]
 # 設置：段首记号
 key = "settings.editor.indent-hint"
 zhs = "段首记号"
-en = "indent hint"
+en = "paragraph mark"
 
 [[message]]
 # 設置：段首记号——一句話
 key = "settings.editor.indent-hint.hint"
-zhs = "竖排时段落开头画一个记号，长段落里找得到分段在哪"
-en = "on a vertical page, a mark at the head of each paragraph, so the breaks in a long one are easy to find"
+zhs = "竖排时在段首画记号，便于在长文中找到分段"
+en = "on a vertical page, mark each paragraph start so breaks are easy to find"
 
 [[message]]
 # 設置：段首那个符号
 key = "settings.editor.indent-symbol"
-zhs = "段首那个符号"
-en = "indent symbol"
+zhs = "段首符号"
+en = "paragraph mark symbol"
 
 [[message]]
 # 設置：段首那个符号——一句話
 key = "settings.editor.indent-symbol.hint"
-zhs = "段首记号画成什么字。段首记号设成「画符号」时才用得上"
-en = "which character the paragraph mark is; used when the indent hint is set to a mark"
+zhs = "段首记号用的字符，仅在段首记号为「画符号」时生效"
+en = "the character for the paragraph mark; used when the indent hint is set to a mark"
 
 [[message]]
 # 設置：缩进几列
 key = "settings.editor.indent-width"
-zhs = "缩进几列"
+zhs = "缩进宽度"
 en = "indent width"
 
 [[message]]
 # 設置：缩进几列——一句話
 key = "settings.editor.indent-width.hint"
-zhs = "`>` 加、`<` 减的列数，也是 Tab 打出来的空格数"
+zhs = "`>`/`<` 增减的列数，也是 Tab 输入的空格数"
 en = "how many columns > adds and < takes away, and how many spaces Tab types"
 
 [[message]]
 # 設置：首行縮進——一句話
 key = "settings.editor.indent.hint"
-zhs = "每段开头空几格。中文的惯例是 2"
+zhs = "段首空几格，中文惯例为 2"
 en = "cells at the head of a paragraph; the Chinese convention is 2"
 
 [[message]]
 # 設置面板：存檔時文末缺的那個換行符添不添
 key = "settings.editor.insert-final-newline"
 zhs = "文末添加换行符"
-en = "add a final line ending"
+en = "add a final newline"
 
 [[message]]
 # 同上那一行的說明
 key = "settings.editor.insert-final-newline.hint"
-zhs = "存档时在文末添加缺少的换行符，用这个文件自己的行尾(CRLF 文件添 CRLF)。空文件不添"
-en = "on save, add the line ending this file's own lines use when the last one is missing it; an empty file stays empty"
+zhs = "保存时在文末补上缺少的换行符，使用该文件自己的行尾(CRLF 文件补 CRLF)。空文件不补"
+en = "on save, add a missing final newline in the file's own line ending; an empty file stays empty"
 
 [[message]]
 # 設置：界面语言
@@ -325,14 +325,14 @@ en = "language"
 [[message]]
 # 設置：切中英的键
 key = "settings.editor.language-key"
-zhs = "切中英的键"
+zhs = "中英切换键"
 en = "language key"
 
 [[message]]
 # 設置：切中英的键——一句話
 key = "settings.editor.language-key.hint"
-zhs = "报不出单独 Shift 的终端上，用这个键切中文/ABC"
-en = "the key that switches 中/ABC on a terminal that cannot report a lone Shift"
+zhs = "在无法识别单独 Shift 的终端上，用此键切换中文/ABC"
+en = "the key that switches Chinese/ABC on a terminal that cannot report a lone Shift"
 
 [[message]]
 # 設置：界面语言——一句話
@@ -349,20 +349,20 @@ en = "layout"
 [[message]]
 # 設置：排版方向——一句話
 key = "settings.editor.layout.hint"
-zhs = "整页的字是横着走还是竖着走"
-en = "whether the page runs across or down"
+zhs = "横排还是竖排"
+en = "horizontal or vertical text"
 
 [[message]]
 # 設置：行号铺底
 key = "settings.editor.line-number-fill"
-zhs = "行号铺底"
-en = "line number fill"
+zhs = "行号底色"
+en = "line number background"
 
 [[message]]
 # 設置：行号铺底——一句話
 key = "settings.editor.line-number-fill.hint"
-zhs = "行号那一格用淡底色铺满，而不是只写一个数"
-en = "fill the line-number column with a faint ground, not just the number"
+zhs = "行号栏铺满淡底色，而不是只显示数字"
+en = "fill the line-number column with a faint background, not just the number"
 
 [[message]]
 # 設置：行号
@@ -373,8 +373,8 @@ en = "line numbers"
 [[message]]
 # 設置：行号——一句話
 key = "settings.editor.line-numbers.hint"
-zhs = "左边那一栏画第几行。相对行号数的是「离光标几行」，跳行时好按"
-en = "the column on the left that numbers the lines; relative numbers count from the caret, which makes jumps easy to type"
+zhs = "左侧显示行号。相对行号显示与光标相隔几行，方便跳行"
+en = "line numbers on the left; relative numbers count from the cursor, making jumps easy"
 
 [[message]]
 # 設置：邊欄
@@ -385,43 +385,43 @@ en = "margin"
 [[message]]
 # 設置：邊欄——一句話
 key = "settings.editor.margin.hint"
-zhs = "何时显示夹行(注音、着重号、平仄等信息)"
-en = "when to show the lane that carries readings, emphasis and 平仄"
+zhs = "何时显示夹行(注音、着重号、平仄等)"
+en = "when to show the lane for readings, emphasis and 平仄"
 
 [[message]]
-# 設置：公式預覽（草稿）
+# 設置：公式預覽
 key = "settings.editor.maths-preview"
 zhs = "公式预览"
 en = "maths preview"
 
 [[message]]
-# 設置：公式預覽——一句話（草稿）
+# 設置：公式預覽——一句話
 key = "settings.editor.maths-preview.hint"
-zhs = "光标在公式里时，在下面浮出排好的公式；要 Ghostty 或 kitty，和 typst 命令"
-en = "while the cursor is in a formula, a float under it shows it typeset; needs Ghostty or kitty, and the typst command"
+zhs = "光标在公式中时，在下方浮窗显示排版结果；需要 Ghostty 或 kitty 以及 typst 命令"
+en = "while the cursor is in a formula, a popup below shows it typeset; needs Ghostty or kitty, and the typst command"
 
 [[message]]
 # 設置：正文寬度
 key = "settings.editor.measure"
 zhs = "正文宽度"
-en = "measure"
+en = "text width"
 
 [[message]]
 # 設置：正文寬度——一句話
 key = "settings.editor.measure.hint"
-zhs = "行在这里折叠，右边是页边距"
-en = "the line really breaks here; what is right of it is margin"
+zhs = "正文在此处换行，右侧是页边距"
+en = "lines wrap here; the rest is margin"
 
 [[message]]
-# 設置：讀 vim 的 modeline（草稿）
+# 設置：讀 vim 的 modeline
 key = "settings.editor.modeline"
 zhs = "读 vim 的 modeline"
 en = "read vim modelines"
 
 [[message]]
-# 設置：讀 modeline——一句話（草稿）
+# 設置：讀 modeline——一句話
 key = "settings.editor.modeline.hint"
-zhs = "文件头尾五行里的 vim: set ft=… ts=…: 定这个文件的类型、缩进和硬换行宽度"
+zhs = "文件首尾五行内的 vim: set ft=… ts=…: 可设置文件类型、缩进和硬换行宽度"
 en = "vim: set ft=… ts=…: in the first or last five lines of a file sets its type, indentation and hard-wrap width"
 
 [[message]]
@@ -445,8 +445,8 @@ en = "pages, vertical"
 [[message]]
 # 設置：段組——一句話
 key = "settings.editor.pages-vertical.hint"
-zhs = "竖排的页面横着分成几条，每一条各自从右往左排"
-en = "how many bands a set-down page is cut into across"
+zhs = "竖排页面横向分成几段，每段从右往左排"
+en = "how many bands a vertical page is split into"
 
 [[message]]
 # 設置：稿紙刻度
@@ -457,8 +457,8 @@ en = "paper ticks"
 [[message]]
 # 設置：稿紙刻度——一句話
 key = "settings.editor.paper-ticks.hint"
-zhs = "竖排时每几个字在边栏点一个淡刻度，像真的稿纸"
-en = "a faint tick in the margin every so many cells, the way squared paper does"
+zhs = "竖排时每隔几个字在页边画一个淡刻度，像稿纸一样"
+en = "a faint tick in the margin every few cells, like manuscript paper"
 
 [[message]]
 # 設置面板：盤上那一份變了就讀回來
@@ -469,7 +469,7 @@ en = "auto reload"
 [[message]]
 # 同上那一行底下的説明
 key = "settings.editor.reload-auto.hint"
-zhs = "自动重新加载文档以反映外部更改"
+zhs = "文件被外部修改时自动重新加载"
 en = "reload the file when something outside changes it"
 
 [[message]]
@@ -481,20 +481,20 @@ en = "remember files and places"
 [[message]]
 # 設置頁 [editor] remember 那一行的說明
 key = "settings.editor.remember.hint"
-zhs = "关掉后不记录也不读取：每个文件上次停在哪一行、最近的文件和项目、上次开着的文件"
-en = "off: nothing is written or read: the line each file was left on, recent files and projects, the last session"
+zhs = "关闭后不再记录或读取：各文件上次的位置、最近的文件和项目、上次的会话"
+en = "when off, none of this is saved or read: the line each file was left on, recent files and projects, the last session"
 
 [[message]]
 # 設置：想寫多長
 key = "settings.editor.ruler"
-zhs = "想写多长"
+zhs = "标尺"
 en = "ruler"
 
 [[message]]
 # 設置：想寫多長——一句話
 key = "settings.editor.ruler.hint"
-zhs = "只是一条线：超过这一栏的字变色，行照旧不折"
-en = "a line, not a break: what runs past it changes colour"
+zhs = "只画一条线：超出此列的字变色，不换行"
+en = "a guide, not a break: text past it changes colour"
 
 [[message]]
 # 設置：光标边距
@@ -505,55 +505,55 @@ en = "scrolloff"
 [[message]]
 # 設置：光标边距——一句話
 key = "settings.editor.scrolloff.hint"
-zhs = "光标周围至少留几行(竖排是几纵)不让它贴到边上"
-en = "how many lines (columns, on a vertical page) to keep between the caret and the edge"
+zhs = "光标与边缘之间至少保留几行(竖排为几纵)"
+en = "how many lines (columns, on a vertical page) to keep between the cursor and the edge"
 
 [[message]]
 # 設置：接着上次
 key = "settings.editor.session"
-zhs = "接着上次"
+zhs = "恢复会话"
 en = "session"
 
 [[message]]
 # 設置：接着上次——一句話
 key = "settings.editor.session.hint"
-zhs = "不带文件名启动时：开空白文档，还是接着上次那些文件"
+zhs = "不带文件名启动时：打开空白文档，还是恢复上次的文件"
 en = "when started with no file: a blank page, or the files that were open last time"
 
 [[message]]
 # 設置：排出注音
 key = "settings.editor.show-ruby"
-zhs = "排出注音"
+zhs = "显示注音"
 en = "show ruby"
 
 [[message]]
 # 設置：排出注音——一句話
 key = "settings.editor.show-ruby.hint"
-zhs = "把注音排在字的旁边。默认关：文件里是什么，画面上就是什么"
-en = "lay readings out beside their characters. Off by default: what is in the file is what is on the page"
+zhs = "在字旁显示注音。默认关闭，按文件原样显示"
+en = "show readings beside their characters. Off by default: the page shows the file as is"
 
 [[message]]
-# 設置：標籤欄兩端的側欄開關（草稿）
+# 設置：標籤欄兩端的側欄開關
 key = "settings.editor.sidebar-buttons"
 zhs = "侧栏开关"
 en = "sidebar buttons"
 
 [[message]]
-# 設置：標籤欄兩端的側欄開關——一句話（草稿）
+# 設置：標籤欄兩端的側欄開關——一句話
 key = "settings.editor.sidebar-buttons.hint"
-zhs = "标签栏两端各一个色块，点一下打开或关上那一侧的侧栏"
+zhs = "标签栏两端各有一个色块，点击可开关该侧的侧栏"
 en = "a block at each end of the tab line; a click opens or closes that side's sidebar"
 
 [[message]]
-# 設置：右下角的名字（草稿）
+# 設置：右下角的名字
 key = "settings.editor.signature"
-zhs = "右下角的名字"
+zhs = "右下角署名"
 en = "name in the corner"
 
 [[message]]
-# 設置：右下角的名字——一句話（草稿）
+# 設置：右下角的名字——一句話
 key = "settings.editor.signature.hint"
-zhs = "命令行空着的时候，右端淡淡地写着 yumete"
+zhs = "命令行为空时，右端淡色显示 yumete"
 en = "a quiet yumete at the right end of the command line while it is empty"
 
 [[message]]
@@ -565,20 +565,20 @@ en = "smart case"
 [[message]]
 # 設置：智能大小写——一句話
 key = "settings.editor.smart-case.hint"
-zhs = "搜索时：模式里没有大写就不分大小写，有一个大写就分"
-en = "searching: no capital in the pattern ignores case, one capital respects it"
+zhs = "搜索词全小写时不区分大小写，含大写字母时区分"
+en = "when searching, ignore case unless the pattern has a capital"
 
 [[message]]
 # 設置：長行折回來
 key = "settings.editor.soft-wrap"
-zhs = "长行折回来"
+zhs = "自动换行"
 en = "soft wrap"
 
 [[message]]
 # 設置：長行折回來——一句話
 key = "settings.editor.soft-wrap.hint"
-zhs = "横排时长段落折到下一行；关掉则跑出右边看不见"
-en = "long lines fold when set across; off, they run past the right edge"
+zhs = "横排时长行自动换行；关闭则超出右边界"
+en = "long lines wrap on a horizontal page; off, they run past the right edge"
 
 [[message]]
 # 設置面板：狀態欄字數
@@ -589,55 +589,55 @@ en = "count on the status line"
 [[message]]
 # 設置面板：狀態欄字數的說明
 key = "settings.editor.status-count.hint"
-zhs = "在状态栏显示全文的字数，有选区时也显示选区的"
-en = "how long the file is, on the status line, and the selection too when there is one"
+zhs = "在状态栏显示全文字数，有选区时也显示选区字数"
+en = "the file's character count on the status line, and the selection's when there is one"
 
 [[message]]
 # 設置：Tab 打什么
 key = "settings.editor.tab-inserts"
-zhs = "Tab 打什么"
-en = "tab inserts"
+zhs = "Tab 插入内容"
+en = "Tab inserts"
 
 [[message]]
 # 設置：Tab 打什么——一句話
 key = "settings.editor.tab-inserts.hint"
-zhs = "插入模式按 Tab 打出来的是什么。Shift-Tab 打另一种"
+zhs = "插入模式下按 Tab 插入的内容；Shift-Tab 插入另一种"
 en = "what Tab types in Insert mode; Shift-Tab types the other"
 
 [[message]]
 # 設置：TAB 有多宽
 key = "settings.editor.tab-width"
-zhs = "TAB 有多宽"
+zhs = "制表符宽度"
 en = "tab width"
 
 [[message]]
 # 設置：TAB 有多宽——一句話
 key = "settings.editor.tab-width.hint"
-zhs = "一个 TAB 推进到几的倍数。码表就是靠它对齐的"
-en = "how far a tab character reaches: to the next multiple of this. Code tables line up by it"
+zhs = "制表符对齐到此数的倍数，码表靠它对齐"
+en = "a tab reaches the next multiple of this; code tables line up by it"
 
 [[message]]
 # 設置：表格的栏线
 key = "settings.editor.table-rules"
-zhs = "表格的栏线"
+zhs = "表格竖线"
 en = "table rules"
 
 [[message]]
 # 設置：表格的栏线——一句話
 key = "settings.editor.table-rules.hint"
-zhs = "表格里那些竖线画成什么样"
+zhs = "表格竖线的样式"
 en = "how the column rules of a table are drawn"
 
 [[message]]
 # 設置：上方分页条
 key = "settings.editor.tabs"
-zhs = "上方分页条"
+zhs = "标签栏"
 en = "tabs"
 
 [[message]]
 # 設置：上方分页条——一句話
 key = "settings.editor.tabs.hint"
-zhs = "顶上那条列着打开了哪些文件的横条"
+zhs = "顶部列出已打开文件的横条"
 en = "the bar along the top that lists the open files"
 
 [[message]]
@@ -649,7 +649,7 @@ en = "tatechuyoko"
 [[message]]
 # 設置：縱中橫——一句話
 key = "settings.editor.tatechuyoko.hint"
-zhs = "竖排时一格里横着塞几个半角字，年份和页码就不会一位一行"
+zhs = "竖排时一格内横排几个半角字符，年份、页码就不会一位占一行"
 en = "half-width characters set across inside one cell, so a year is not one digit to a row"
 
 [[message]]
@@ -668,7 +668,7 @@ en = "tint the cell after a zero-width or bidi control, and any space that is no
 # 設置：竪排時 hjkl 怎麼走
 key = "settings.editor.vertical-keys"
 zhs = "竖排的 hjkl"
-en = "hjkl when the page runs down"
+en = "hjkl in vertical layout"
 
 [[message]]
 # 設置：竪排的 hjkl——一句話
@@ -679,26 +679,26 @@ en = "in vertical layout, whether hjkl follow the text or the screen"
 [[message]]
 # 設置：滚轮一格
 key = "settings.editor.wheel-step"
-zhs = "滚轮一格"
+zhs = "滚轮步长"
 en = "wheel step"
 
 [[message]]
 # 設置：滚轮一格——一句話
 key = "settings.editor.wheel-step.hint"
-zhs = "滚轮拨一下走几行。1 就是终端自己那一格"
+zhs = "滚轮每格滚动的行数，1 即终端默认"
 en = "how many lines one notch of the wheel moves; 1 is the terminal's own step"
 
 [[message]]
 # 設置頁：哪些鍵跨行
 key = "settings.editor.which-wrap"
 zhs = "哪些键跨行"
-en = "which wrap"
+en = "keys that cross lines"
 
 [[message]]
 # 設置頁：哪些鍵跨行，説明
 key = "settings.editor.which-wrap.hint"
-zhs = "哪些按键会跨越行尾(vim 功能)。只允许 b h l < > ~"
-en = "which keys cross a line end, spelled as in vim: b h l < > ~ — vim keys only"
+zhs = "哪些键可以跨越行尾(vim 键位)。只能是 b h l < > ~"
+en = "which keys cross a line end (vim keymap): b h l < > ~"
 
 [[message]]
 # 設置面板：編輯一組，[editor] word_completion
@@ -709,44 +709,44 @@ en = "word completion"
 [[message]]
 # 設置面板：[editor] word_completion 那一行底下的說明
 key = "settings.editor.word-completion.hint"
-zhs = "打几个西文字母后，列出打开的文件里出现过的词；汉字是这个数的一半（向上取整）。C-n 随时列出"
+zhs = "输入几个西文字母后列出已打开文件中出现过的词，汉字为一半(向上取整)。C-n 随时列出"
 en = "after this many Latin letters, list words that appear in the open files; for Chinese characters, half as many (rounded up). C-n lists them at any time"
 
 [[message]]
 # 設置：分词松紧
 key = "settings.editor.word-level"
 zhs = "分词松紧"
-en = "word level"
+en = "segmentation"
 
 [[message]]
 # 設置：分词松紧——一句話
 key = "settings.editor.word-level.hint"
-zhs = "多容易把几个字并成一个词。严：只认没争议的；松：词典说是就是"
-en = "how readily characters are joined into a word: strict takes only the certain ones, loose whatever the dictionary has"
+zhs = "把几个字合成一个词的倾向。严格：只认没有争议的；宽松：词典里有就算"
+en = "how readily characters join into words: strict takes only the certain ones, loose whatever the dictionary has"
 
 [[message]]
 # 設置：分词标记
 key = "settings.editor.word-mark"
 zhs = "分词标记"
-en = "word mark"
+en = "word boundaries"
 
 [[message]]
 # 設置：分词标记——一句話
 key = "settings.editor.word-mark.hint"
-zhs = "分词标记用哪一种画法"
+zhs = "分词标记的显示方式"
 en = "how word boundaries are shown"
 
 [[message]]
-# 設置：複製高亮（草稿）
+# 設置：複製高亮
 key = "settings.editor.yank-flash"
 zhs = "复制高亮"
 en = "yank flash"
 
 [[message]]
-# 設置：複製高亮——一句話（草稿）
+# 設置：複製高亮——一句話
 key = "settings.editor.yank-flash.hint"
-zhs = "复制之后，复制的范围亮一下"
-en = "after a yank, what was copied lights up for a moment"
+zhs = "复制后，被复制的范围闪一下"
+en = "flash the copied text after copying"
 
 [[message]]
 # 設置：縱間距
@@ -757,7 +757,7 @@ en = "column gap"
 [[message]]
 # 設置：縱間距——一句話
 key = "settings.editor.zong-gap.hint"
-zhs = "纵与纵之间空几个半角格。每一纵都有，跟有没有东西无关"
+zhs = "纵与纵之间空几个半角格。每一纵都留，与有无内容无关"
 en = "half-width cells between one column and the next"
 
 [[message]]
@@ -769,31 +769,31 @@ en = "column length"
 [[message]]
 # 設置：每縱字數——一句話
 key = "settings.editor.zong-length.hint"
-zhs = "竖排时一纵写几个字。散文舒服的上限在 32 字前后"
-en = "characters to a column when set down; text reads well up to about 32"
+zhs = "竖排时每纵几个字。散文读起来舒服的上限约 32 字"
+en = "characters per column in vertical layout; prose reads well up to about 32"
 
 [[message]]
-# 設置面板：開着幾項（草稿）
+# 設置面板：開着幾項
 key = "settings.flavor-items.count"
-zhs = "{0}/{1} 项开着"
+zhs = "已开 {0}/{1} 项"
 en = "{0} of {1} on"
 
 [[message]]
-# 設置面板：單獨設過幾項（草稿）
+# 設置面板：單獨設過幾項
 key = "settings.flavor-items.named"
-zhs = "{0} 项单独设过"
-en = "{0} set by name"
+zhs = "{0} 项单独设置"
+en = "{0} set individually"
 
 [[message]]
-# 設置面板：另一套鍵位的那幾項（草稿）
+# 設置面板：另一套鍵位的那幾項
 key = "settings.flavor.only-under"
 zhs = "只在 {0} 下"
 en = "only under {0}"
 
 [[message]]
-# 設置面板：這一項的鍵被配置佔了（草稿）
+# 設置面板：這一項的鍵被配置佔了
 key = "settings.flavor.taken"
-zhs = "{0} 被 {1} 占了"
+zhs = "{0} 已被 {1} 占用"
 en = "{0} taken by {1}"
 
 [[message]]
@@ -818,7 +818,7 @@ en = "files"
 # 設置面板：組——输入法
 key = "settings.group.ime"
 zhs = "输入法"
-en = "input"
+en = "input method"
 
 [[message]]
 # 設置面板：組——界面
@@ -829,7 +829,7 @@ en = "interface"
 [[message]]
 # 設置面板：組——键盘
 key = "settings.group.keys"
-zhs = "键盘"
+zhs = "键位"
 en = "keys"
 
 [[message]]
@@ -847,32 +847,32 @@ en = "marks"
 [[message]]
 # 設置面板：這一組還没填
 key = "settings.group.not-yet"
-zhs = "这一组还没填——先在 config.toml 里写"
-en = "not filled in yet — write it in config.toml for now"
+zhs = "这一组还没有内容，暂时请在 config.toml 中设置"
+en = "nothing here yet; set it in config.toml for now"
 
 [[message]]
-# 設置：候選旁的注解（草稿）
+# 設置：候選旁的注解
 key = "settings.ime.annotation"
-zhs = "候选旁的注解"
+zhs = "候选注解"
 en = "annotation"
 
 [[message]]
-# 設置：注解模式那一頁的入口（草稿）
+# 設置：注解模式那一頁的入口
 key = "settings.ime.annotation-modes"
 zhs = "注解模式"
 en = "annotation modes"
 
 [[message]]
-# 設置：注解模式那一行的說明（草稿）
+# 設置：注解模式那一行的說明
 key = "settings.ime.annotation-modes.hint"
-zhs = "每个模式写哪几栏。要加一个模式，在配置里写 [ime.annotation_modes.名字]"
+zhs = "每个模式显示哪些栏。新增模式请在配置中写 [ime.annotation_modes.名字]"
 en = "which fields each mode shows. To add a mode, write [ime.annotation_modes.name] in the config"
 
 [[message]]
-# 設置：候選旁的注解——一句話（草稿）
+# 設置：候選旁的注解——一句話
 key = "settings.ime.annotation.hint"
-zhs = "打字时候选旁写什么：关，或一个注解模式；打字时按 / 换下一个"
-en = "what is written beside each candidate: nothing, or an annotation mode; / while typing moves to the next"
+zhs = "候选旁显示的注解：关闭或某个注解模式；打字时按 / 切换"
+en = "what shows beside each candidate: nothing, or an annotation mode; / while typing switches"
 
 [[message]]
 # 設置：字集過濾（宇夢的字串）
@@ -887,39 +887,39 @@ zhs = "字集排序"
 en = "charset sort"
 
 [[message]]
-# 設置：字集排序——一句話（草稿）
+# 設置：字集排序——一句話
 key = "settings.ime.charset-sort.hint"
-zhs = "哪一个字集的字排在候选前面，整句方案不起作用"
+zhs = "哪个字集的字在候选中靠前，对整句方案无效"
 en = "which characters come first among the candidates; a whole-sentence scheme orders its own"
 
 [[message]]
-# 設置：字集過濾——一句話（草稿）
+# 設置：字集過濾——一句話
 key = "settings.ime.charset.hint"
-zhs = "候选里只留哪一个字集的汉字"
-en = "which characters the candidates may hold"
+zhs = "候选中只保留哪个字集的汉字"
+en = "which character set the candidates are limited to"
 
 [[message]]
 # 設置：上屏方式
 key = "settings.ime.commit"
 zhs = "上屏方式"
-en = "commit method"
+en = "commit mode"
 
 [[message]]
 # 設置：上屏方式——一句話
 key = "settings.ime.commit.hint"
-zhs = "码打完了什么时候上屏：等下一键、只有一个候选就上，还是攒成整句"
-en = "when a finished code goes to the page"
+zhs = "编码打完后何时上屏：等下一键、只剩一个候选时，或整句"
+en = "when a finished code commits: on the next key, when only one candidate is left, or as a whole sentence"
 
 [[message]]
-# 設置：Normal 模式下讓開其他輸入法（草稿）
+# 設置：Normal 模式下讓開其他輸入法
 key = "settings.ime.others"
 zhs = "Normal 模式下让开其他输入法"
 en = "move other input methods aside in Normal mode"
 
 [[message]]
-# 設置：讓開其他輸入法——一句話（草稿）
+# 設置：讓開其他輸入法——一句話
 key = "settings.ime.others.hint"
-zhs = "Normal 模式下把鼠须管、搜狗等切到英文；在 macOS 上切回来大约三次有一次不成"
+zhs = "Normal 模式下把鼠须管、搜狗等切到英文；macOS 上切回时约三次失败一次"
 en = "in Normal mode, switch other input methods (Squirrel, Sogou, fcitx) to English; on macOS switching back fails about one time in three"
 
 [[message]]
@@ -929,52 +929,52 @@ zhs = "输入方案"
 en = "scheme"
 
 [[message]]
-# 設置：输入方案——一句話（草稿）
+# 設置：输入方案——一句話
 key = "settings.ime.scheme.hint"
-zhs = "用哪一套输入方案（拼音、灵明、星陈自带），其他方案需安装"
-en = "which 碼表 to type with. 拼音, 靈明 and 星陳 come built in; the others need the data installed"
+zhs = "用哪套输入方案。拼音、灵明、星陈为内置，其他方案需安装"
+en = "which scheme to type with. Pinyin, Lingming and Xingchen are built in; the others need installing"
 
 [[message]]
 # 設置：启动就载入码表
 key = "settings.ime.start"
-zhs = "启动就载入码表"
-en = "load the 碼表 at start"
+zhs = "启动时加载码表"
+en = "load the code table at start"
 
 [[message]]
 # 設置：启动就载入码表——一句話
 key = "settings.ime.start.hint"
-zhs = "默认不载入——分词模型照常载入，码表等你第一次打字"
-en = "off by default: the word model loads as usual, and the 碼表 waits for the first Chinese you type"
+zhs = "默认关闭：分词模型照常加载，码表在第一次输入中文时加载"
+en = "off by default: the word model loads as usual, and the code table waits for the first Chinese you type"
 
 [[message]]
 # settings: suppress the system-level Yume IME in normal mode
 key = "settings.ime.system"
-zhs = "NORMAL模式下屏蔽系统版宇梦输入法"
+zhs = "Normal 模式下让开系统输入法"
 en = "move the system input method aside in Normal mode"
 
 [[message]]
 # 設置：让开系统输入法——一句話
 key = "settings.ime.system.hint"
-zhs = "Normal 模态下请系统输入法让开，免得按键被它吃掉"
+zhs = "Normal 模式下请系统输入法让开，以免按键被它拦截"
 en = "while yumete reads the keys itself (Normal mode, the command line), ask the system's input method to step aside, so it does not eat them"
 
 [[message]]
 # 設置面板：底下那一行鍵
 key = "settings.keys"
-zhs = "hl 换栏, jk 上下, ␣ 切换, i 改, c 重打, d 撤掉这一层, e 开这个档, Tab 切换全局/本地设置, :w 存, :q 退"
-en = "hl left/right, jk move, space toggle, i edit, c retype, d drop, e open it, Tab which file, :w save, :q leave"
+zhs = "hl 换栏, jk 上下, ␣ 切换, i 编辑, c 重输, d 清除本层, e 打开文件, Tab 全局/项目, :w 保存, :q 退出"
+en = "hl left/right, jk move, Space toggle, i edit, c retype, d drop, e open file, Tab global/project, :w save, :q quit"
 
 [[message]]
-# 設置面板：注解模式那一頁底下的鍵（草稿）
+# 設置面板：注解模式那一頁底下的鍵
 key = "settings.keys-annotation-page"
-zhs = "jk 上下, ␣ 切换, d 跟回下一层, h 回上一层, Tab 切换全局/本地设置, :w 存, :q 退"
-en = "jk move, space toggle, d follow the layer below, h back, Tab which file, :w save, :q leave"
+zhs = "jk 上下, ␣ 切换, d 跟随下一层, h 返回, Tab 全局/项目, :w 保存, :q 退出"
+en = "jk move, Space toggle, d follow the layer below, h back, Tab global/project, :w save, :q quit"
 
 [[message]]
-# 設置面板：風味各項那一頁的按鍵（草稿）
+# 設置面板：風味各項那一頁的按鍵
 key = "settings.keys-flavor-page"
-zhs = "jk 上下, ␣ 切换, d 跟回档位, h 回上一层, Tab 切换全局/本地设置, :w 存, :q 退"
-en = "jk move, space toggle, d follow the level, h back, Tab which file, :w save, :q leave"
+zhs = "jk 上下, ␣ 切换, d 跟随档位, h 返回, Tab 全局/项目, :w 保存, :q 退出"
+en = "jk move, Space toggle, d follow the level, h back, Tab global/project, :w save, :q quit"
 
 [[message]]
 # 設置面板正在改一項的值時的鍵位行
@@ -989,45 +989,45 @@ zhs = "Yumete 键位风味"
 en = "Yumete keymap flavour"
 
 [[message]]
-# 設置面板：風味各項那一行（草稿）
+# 設置面板：風味各項那一行
 key = "settings.keys.flavor-items"
 zhs = "风味各项"
 en = "flavour items"
 
 [[message]]
-# 設置面板：風味各項那一行的說明（草稿）
+# 設置面板：風味各項那一行的說明
 key = "settings.keys.flavor-items.hint"
-zhs = "Yumete 风味的每一项，一项一个勾。按 l 或空格进去。"
-en = "each item of the Yumete flavour, one tick each. l or Space goes in."
+zhs = "逐项开关 Yumete 风味。按 l 或空格进入"
+en = "each item of the Yumete flavour, one tick each. l or Space opens it"
 
 [[message]]
-# 設置：Yumete 鍵位風味——一句話（草稿）
+# 設置：Yumete 鍵位風味——一句話
 key = "settings.keys.flavor.hint"
-zhs = "在 helix/vim 键位之上的改动。基本：看得见的改动，如菜单、新键；完整：再加改了熟悉键行为的几项，如 `d` `c` 只删不剪、要剪按 `A-d` `A-c`。`[keys.normal]` 盖得过它"
-en = "what yumete changes over helix or vim. basic: the changes you can see, such as menus and new keys; full: also the items that change what a familiar key does, such as `d` and `c` deleting without cutting (`A-d` and `A-c` cut). `[keys.normal]` still wins"
+zhs = "在 helix/vim 键位之上的改动。基本：看得见的改动，如菜单、新键；完整：再加上改变熟悉键行为的几项，如 `d` `c` 只删不剪，剪切用 `A-d` `A-c`。`[keys.normal]` 优先于它"
+en = "what yumete changes over helix or vim. basic: the changes you can see, such as menus and new keys; full: also the items that change what a familiar key does, such as `d` and `c` deleting without cutting (`A-d` and `A-c` cut). `[keys.normal]` overrides it"
 
 [[message]]
 # 設置面板：鍵位那一組裏 [keys] inherit 那一格
 key = "settings.keys.inherit"
 zhs = "侧栏与命令行沿用我的改键"
-en = "Sidebars and prompts take my keys"
+en = "sidebars and prompts use my keys"
 
 [[message]]
 # 同上，那一格的說明
 key = "settings.keys.inherit.hint"
-zhs = "[keys.normal] 里单键绑的命令，侧栏也有就在侧栏生效；[keys.insert] 的同理进命令行与挑选器。[keys.sidebar] 与 [keys.prompt] 盖得过它"
-en = "a `[keys.normal]` line of one key whose command a sidebar has works in the sidebar, and a `[keys.insert]` one in the command line and the pickers. `[keys.sidebar]` and `[keys.prompt]` still win"
+zhs = "[keys.normal] 里单键绑定的命令，侧栏也有时在侧栏生效；[keys.insert] 同理用于命令行与选择器。[keys.sidebar] 与 [keys.prompt] 优先于它"
+en = "a one-key command bound in `[keys.normal]` also works in a sidebar that has it, and one in `[keys.insert]` in the command line and pickers. `[keys.sidebar]` and `[keys.prompt]` override it"
 
 [[message]]
 # 設置：鍵位那一套
 key = "settings.keys.preset"
-zhs = "键位那一套"
+zhs = "键位"
 en = "keymap"
 
 [[message]]
 # 設置：鍵位那一套——一句話
 key = "settings.keys.preset.hint"
-zhs = "整套键位照 helix 还是照 vim 的习惯"
+zhs = "键位沿用 helix 还是 vim"
 en = "whether the keys follow helix or vim"
 
 [[message]]
@@ -1045,11 +1045,11 @@ en = "global"
 [[message]]
 # 設置面板底下那一塊：三層裏現在算數的是這一層
 key = "settings.layer.in-force"
-zhs = "← 现在用这一层"
+zhs = "← 当前生效"
 en = "← in force"
 
 [[message]]
-# 設置面板：三層裏檔位給的那一層（草稿）
+# 設置面板：三層裏檔位給的那一層
 key = "settings.layer.level"
 zhs = "档位"
 en = "level"
@@ -1063,26 +1063,26 @@ en = "project"
 [[message]]
 # 設置面板底下那一塊：這一層沒有說話
 key = "settings.layer.unset"
-zhs = "未设"
+zhs = "未设置"
 en = "unset"
 
 [[message]]
 # 設置：排版方向——橫排
 key = "settings.layout.horizontal"
 zhs = "横排"
-en = "across"
+en = "horizontal"
 
 [[message]]
 # 設置：排版方向——竪排
 key = "settings.layout.vertical"
 zhs = "竖排"
-en = "down"
+en = "vertical"
 
 [[message]]
 # 設置面板：走的時候還有没存的
 key = "settings.leaving-unsaved"
-zhs = "有改动没存。:w 保存，再按一次 q 不存并退出"
-en = "unsaved changes — :w saves; q again leaves without saving"
+zhs = "有未保存的改动。:w 保存，再按 q 不保存并退出"
+en = "unsaved changes: :w saves; q again quits without saving"
 
 [[message]]
 # 設置：邊欄——总是
@@ -1111,8 +1111,8 @@ en = "never"
 [[message]]
 # 設置面板：這一層還没有那個檔(存盤時建)
 key = "settings.no-file"
-zhs = "还没有，存盘时建"
-en = "not there yet; saving makes it"
+zhs = "尚不存在，保存时创建"
+en = "not there yet; created on save"
 
 [[message]]
 # 設置面板：没有改動
@@ -1123,56 +1123,56 @@ en = "nothing changed"
 [[message]]
 # 設置：候选怎么画
 key = "settings.panel.display"
-zhs = "候选怎么画"
-en = "where candidates go"
+zhs = "候选位置"
+en = "candidate position"
 
 [[message]]
 # 設置：候选怎么画——一句話
 key = "settings.panel.display.hint"
-zhs = "打字的时候候选画在哪：光标旁边的候选框、窗口最下面那一行，还是光标的下一行"
-en = "where the candidates are drawn while you type: a box by the caret, the bottom line of the window, or the line under the caret"
+zhs = "打字时候选显示在哪：光标旁的候选框、窗口底行，还是光标下一行"
+en = "where candidates show while you type: a box by the cursor, the last line of the window, or the line below the cursor"
 
 [[message]]
 # 設置：正在打的那一段写在哪
 key = "settings.panel.inline-preedit"
-zhs = "正在打的那一段"
+zhs = "未上屏内容"
 en = "preedit"
 
 [[message]]
 # 設置：正在打的那一段写在哪——一句话
 key = "settings.panel.inline-preedit.hint"
-zhs = "正在打的那一段写在候选栏里，还是写进正文；写进正文的时候写编码还是写首选"
-en = "whether what you are typing is written in the candidate bar or in the text, and if in the text, the code or the first candidate"
+zhs = "未上屏的内容显示在候选栏里还是正文里；在正文里时显示编码还是首选"
+en = "whether text being typed shows in the candidate bar or in the text, and if in the text, the code or the first candidate"
 
 [[message]]
 # 設置：候选的序号
 key = "settings.panel.markers"
-zhs = "候选的序号"
-en = "markers"
+zhs = "候选序号"
+en = "candidate numbers"
 
 [[message]]
 # 設置：候选的序号——一句話
 key = "settings.panel.markers.hint"
-zhs = "候选前面那九个序号画成什么字"
-en = "the characters the nine candidate numbers are drawn as"
+zhs = "候选前九个序号用什么字符"
+en = "the characters used for the nine candidate numbers"
 
 [[message]]
 # 設置：候选一页几条
 key = "settings.panel.page-size"
-zhs = "候选一页几条"
-en = "page size"
+zhs = "每页候选数"
+en = "candidates per page"
 
 [[message]]
 # 設置：候选一页几条——一句話
 key = "settings.panel.page-size.hint"
-zhs = "候选框一页列几个字"
+zhs = "候选框每页显示几个候选"
 en = "how many candidates a page lists"
 
 [[message]]
 # 設置：面板圆角
 key = "settings.panel.rounded"
 zhs = "面板圆角"
-en = "rounded"
+en = "rounded corners"
 
 [[message]]
 # 設置：面板圆角——一句話
@@ -1183,8 +1183,8 @@ en = "whether panel corners are round or square"
 [[message]]
 # 設置面板：底下那一行——還没選中哪一項
 key = "settings.pick-a-group"
-zhs = "l 或 ␣ 进到右边那一栏"
-en = "l or space goes into the settings"
+zhs = "l 或 ␣ 进入右栏"
+en = "l or Space goes into the settings"
 
 [[message]]
 # 設置：歧义宽度——问终端
@@ -1237,35 +1237,35 @@ en = "box"
 [[message]]
 # 設置：候选怎么画——行中
 key = "settings.pick.display.inline"
-zhs = "行中"
-en = "in the line"
+zhs = "光标下一行"
+en = "below the cursor"
 
 [[message]]
-# 設置選項：行末診斷不畫（草稿）
+# 設置選項：行末診斷不畫
 key = "settings.pick.eol-diagnostics.disable"
 zhs = "不显示"
 en = "off"
 
 [[message]]
-# 設置選項：行末診斷只畫錯誤（草稿）
+# 設置選項：行末診斷只畫錯誤
 key = "settings.pick.eol-diagnostics.error"
 zhs = "只显示错误"
 en = "errors only"
 
 [[message]]
-# 設置選項：行末診斷從建議起（草稿）
+# 設置選項：行末診斷從建議起
 key = "settings.pick.eol-diagnostics.hint"
 zhs = "建议及以上"
 en = "hints and up"
 
 [[message]]
-# 設置選項：行末診斷從說明起（草稿）
+# 設置選項：行末診斷從說明起
 key = "settings.pick.eol-diagnostics.info"
 zhs = "说明及以上"
 en = "info and up"
 
 [[message]]
-# 設置選項：行末診斷從警告起（草稿）
+# 設置選項：行末診斷從警告起
 key = "settings.pick.eol-diagnostics.warning"
 zhs = "警告及以上"
 en = "warnings and up"
@@ -1273,14 +1273,14 @@ en = "warnings and up"
 [[message]]
 # 設置：纸面——自己画纸
 key = "settings.pick.ground.paint"
-zhs = "自己画纸"
-en = "paint the paper"
+zhs = "编辑器绘制"
+en = "editor"
 
 [[message]]
 # 設置：纸面——还给终端
 key = "settings.pick.ground.terminal"
-zhs = "还给终端"
-en = "the terminal's own"
+zhs = "终端背景"
+en = "terminal"
 
 [[message]]
 # 設置：段首记号——换颜色
@@ -1322,7 +1322,7 @@ en = "the first candidate in the text"
 # 設置面板：界面語言 auto
 key = "settings.pick.language.auto"
 zhs = "跟随系统"
-en = "the system's"
+en = "follow system"
 
 [[message]]
 # 設置：界面语言——English
@@ -1379,22 +1379,22 @@ zhs = "浅色"
 en = "light"
 
 [[message]]
-# 設置選項：其他輸入法切到英文（草稿）
+# 設置選項：其他輸入法切到英文
 key = "settings.pick.others.aside"
 zhs = "切到英文"
-en = "aside"
+en = "switch to English"
 
 [[message]]
-# 設置選項：其他輸入法切到英文再切回（草稿）
+# 設置選項：其他輸入法切到英文再切回
 key = "settings.pick.others.aside-and-back"
 zhs = "切到英文再切回"
-en = "aside and back"
+en = "switch to English and back"
 
 [[message]]
-# 設置選項：其他輸入法不動（草稿）
+# 設置選項：其他輸入法不動
 key = "settings.pick.others.off"
 zhs = "不动"
-en = "off"
+en = "leave alone"
 
 [[message]]
 # 設置：鍵位那一套——helix
@@ -1411,20 +1411,20 @@ en = "vim"
 [[message]]
 # 設置：状态栏的底——往墨抬一阶
 key = "settings.pick.status-bar.raised"
-zhs = "往墨抬一阶"
+zhs = "凸起"
 en = "raised"
 
 [[message]]
 # 設置：状态栏的底——比纸更沉
 key = "settings.pick.status-bar.sunken"
-zhs = "比纸更沉"
+zhs = "凹陷"
 en = "sunken"
 
 [[message]]
 # 設置面板：狀態欄字數 all
 key = "settings.pick.status-count.all"
 zhs = "所有文件"
-en = "every file"
+en = "all files"
 
 [[message]]
 # 設置面板：狀態欄字數 off
@@ -1447,7 +1447,7 @@ en = "auto"
 [[message]]
 # 設置：让开系统输入法——不管它
 key = "settings.pick.system.keep"
-zhs = "不管它"
+zhs = "不处理"
 en = "leave it"
 
 [[message]]
@@ -1460,18 +1460,18 @@ en = "spaces"
 # 設置：Tab 打什么——制表符
 key = "settings.pick.tab-inserts.tab"
 zhs = "制表符"
-en = "a tab"
+en = "tab"
 
 [[message]]
 # 設置：表格的栏线——靠颜色分
 key = "settings.pick.table-rules.color"
-zhs = "靠颜色分"
+zhs = "用颜色区分"
 en = "colour"
 
 [[message]]
 # 設置：表格的栏线——只有实线
 key = "settings.pick.table-rules.line"
-zhs = "只有实线"
+zhs = "实线"
 en = "lines"
 
 [[message]]
@@ -1495,19 +1495,19 @@ en = "none"
 [[message]]
 # 設置：上方分页条——总是画
 key = "settings.pick.tabs.always"
-zhs = "总是画"
+zhs = "总是显示"
 en = "always"
 
 [[message]]
 # 設置：上方分页条——有两个才画
 key = "settings.pick.tabs.auto"
-zhs = "有两个才画"
+zhs = "两个及以上时显示"
 en = "two or more"
 
 [[message]]
 # 設置：上方分页条——不画
 key = "settings.pick.tabs.never"
-zhs = "不画"
+zhs = "不显示"
 en = "never"
 
 [[message]]
@@ -1533,7 +1533,7 @@ en = "balanced"
 # less single-character words in identification
 key = "settings.pick.word-level.full"
 zhs = "宽松"
-en = "full (loose)"
+en = "loose"
 
 [[message]]
 # setting: word segmentation granularity - strict
@@ -1575,110 +1575,110 @@ en = "tint"
 [[message]]
 # 設置面板：存好了({0} ＝ 檔名)
 key = "settings.saved"
-zhs = "设置已存入 {0} 并生效"
-en = "settings written to {0} and applied"
+zhs = "设置已保存到 {0} 并生效"
+en = "settings saved to {0} and applied"
 
 [[message]]
 # 設置面板：存好了，而這期間那個檔被外面改過({0} 檔名)
 key = "settings.saved-moved"
-zhs = "设置存入 {0}。警告：这期间它被外面动过。当前显示可能已过时，:settings 重开一次"
-en = "written to {0}. Warning: it changed underneath meanwhile — this page may be stale; reopen with :settings"
+zhs = "设置已保存到 {0}。警告：期间该文件被外部修改，当前页面可能已过时，请用 :settings 重新打开"
+en = "saved to {0}. Warning: it was changed outside meanwhile, so this page may be stale; reopen with :settings"
 
 [[message]]
 # 設置面板：存好了，而有幾個鍵被註釋掉了({0} 檔名，{1} 鍵)
 key = "settings.saved-said"
-zhs = "设置存入 {0}。部分设置名 yumete 不认得，已注释掉：{1}"
-en = "written to {0}. Names yumete does not know were commented out: {1}"
+zhs = "设置已保存到 {0}。以下设置名 yumete 无法识别，已注释掉：{1}"
+en = "saved to {0}. Unknown names were commented out: {1}"
 
 [[message]]
 # 設置面板：改的那一層被上面蓋着，眼前那個值不會動
 key = "settings.shadowed"
-zhs = "警告: 你修改的是全局设置，项目设置正在生效中"
+zhs = "注意：你修改的是全局设置，当前生效的是项目设置"
 en = "note: you are editing the global setting; the project's is the one in force"
 
 [[message]]
 # 設置：代码坐底色
 key = "settings.theme.fill"
-zhs = "代码坐在底色上"
-en = "fill"
+zhs = "代码底色"
+en = "code background"
 
 [[message]]
 # 設置：代码坐底色——一句話
 key = "settings.theme.fill.hint"
-zhs = "代码块和引用要不要坐在一块淡底色上"
-en = "whether code blocks and quotes sit on a faint ground"
+zhs = "代码块和引用是否加淡底色"
+en = "whether code blocks and quotes get a faint background"
 
 [[message]]
-# 設置：焦點模式的墨色（草稿）
+# 設置：焦點模式的墨色
 key = "settings.theme.focus"
-zhs = "焦点模式的墨色"
+zhs = "焦点模式淡化"
 en = "focus mode"
 
 [[message]]
-# 設置：焦點模式的墨色——一句話（草稿）
+# 設置：焦點模式的墨色——一句話
 key = "settings.theme.focus.hint"
-zhs = "焦点模式下，没在写的段落留几成墨色(百分比)"
-en = "how much ink focus mode leaves the paragraphs you are not writing, in percent"
+zhs = "焦点模式下其他段落的不透明度(百分比)"
+en = "opacity of other paragraphs in focus mode, in percent"
 
 [[message]]
 # 設置：纸面
 key = "settings.theme.ground"
-zhs = "纸面"
-en = "ground"
+zhs = "背景"
+en = "background"
 
 [[message]]
 # 設置：纸面——一句話
 key = "settings.theme.ground.hint"
-zhs = "编辑器自己画出纸的底色，还是把底色还给终端(终端设了透明就用这个)"
-en = "the editor paints the paper itself, or leaves the background to the terminal (use this with a transparent terminal)"
+zhs = "背景由编辑器绘制，还是使用终端背景(终端设为透明时选后者)"
+en = "whether the editor paints the background or leaves it to the terminal (use the latter with a transparent terminal)"
 
 [[message]]
-# 設置：別的窗口的墨色（草稿）
+# 設置：別的窗口的墨色
 key = "settings.theme.inactive"
-zhs = "别的窗口的墨色"
+zhs = "非活动窗口淡化"
 en = "inactive windows"
 
 [[message]]
-# 設置：別的窗口的墨色——一句話（草稿）
+# 設置：別的窗口的墨色——一句話
 key = "settings.theme.inactive.hint"
-zhs = "你不在的窗口留几成墨色(百分比)：100 不变淡，同 vim 和 helix"
-en = "how much ink a window you are not in keeps, in percent: 100 does not dim, as vim and helix"
+zhs = "非活动窗口的不透明度(百分比)：100 即不变淡，同 vim 和 helix"
+en = "opacity of inactive windows, in percent: 100 does not dim, as in vim and helix"
 
 [[message]]
 # 設置：深色浅色
 key = "settings.theme.mode"
-zhs = "深色浅色"
-en = "mode"
+zhs = "深色/浅色"
+en = "dark / light"
 
 [[message]]
 # 設置：深色浅色——一句話
 key = "settings.theme.mode.hint"
-zhs = "用深色那一套还是浅色那一套。「问终端」是去问终端底色是什么"
-en = "the dark or the light half of the theme; ask the terminal checks what its background is"
+zhs = "用深色还是浅色主题；「问终端」按终端背景色决定"
+en = "dark or light theme; 'ask the terminal' follows its background"
 
 [[message]]
 # 設置：主题
 key = "settings.theme.name"
 zhs = "主题"
-en = "name"
+en = "theme"
 
 [[message]]
 # 設置：主题——一句話
 key = "settings.theme.name.hint"
-zhs = "用哪一套墨。十个内置主题，写名字就行(「墨香」和 moxiang 一样)"
-en = "which ink to use: ten built-in themes, named by their names (墨香 and moxiang are the same)"
+zhs = "用哪一套主题。内置十个，写名字即可(「墨香」与 moxiang 相同)"
+en = "which theme to use: ten are built in, chosen by name (墨香 and moxiang are the same)"
 
 [[message]]
 # 設置：状态栏的底
 key = "settings.theme.status-bar"
-zhs = "状态栏的底"
+zhs = "状态栏底色"
 en = "status bar"
 
 [[message]]
 # 設置：状态栏的底——一句話
 key = "settings.theme.status-bar.hint"
-zhs = "底下那两行比纸更沉，还是往墨的方向抬一阶"
-en = "whether the two bottom lines sit lower than the paper or one step towards the ink"
+zhs = "底部两行呈凹陷还是凸起"
+en = "whether the two bottom lines look sunken or raised"
 
 [[message]]
 # 設置面板：標題
@@ -1689,25 +1689,25 @@ en = "settings"
 [[message]]
 # 設置面板：改了還没存
 key = "settings.unsaved"
-zhs = "改了还没存"
-en = "changed, not saved"
+zhs = "未保存"
+en = "unsaved"
 
 [[message]]
 # 設置：0 的意思——窗口有多高就多長
 key = "settings.zero.as-tall-as-the-window"
-zhs = "0 = 窗口能给多长就多长"
+zhs = "0 = 与窗口等高"
 en = "0 = as tall as the window"
 
 [[message]]
 # 設置：0 的意思——窗口有多寬就多寬
 key = "settings.zero.as-wide-as-the-window"
-zhs = "0 = 用窗口的宽度"
+zhs = "0 = 与窗口等宽"
 en = "0 = as wide as the window"
 
 [[message]]
 # 設置面板：hard_wrap 為 0 時的字
 key = "settings.zero.hard-wrap-unset"
-zhs = "0 = 没设"
+zhs = "0 = 未设置"
 en = "0 = unset"
 
 [[message]]

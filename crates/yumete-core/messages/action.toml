@@ -3,34 +3,34 @@
 # What the editor says, one block per tag; see README.md beside this file.
 
 [[message]]
-# 命令說明：add_mark（草稿）
+# 命令說明：add_mark
 key = "action.add-mark"
 zhs = "设标记(再按一个字母)"
 en = "set a mark (then a letter)"
 
 [[message]]
-# 命令說明：align_selections（草稿）
+# 命令說明：align_selections
 key = "action.align-selections"
-zhs = "把各个选区对齐"
-en = "line the selections up"
+zhs = "对齐各选区"
+en = "align the selections"
 
 [[message]]
-# 命令說明：align_view_bottom（草稿）
+# 命令說明：align_view_bottom
 key = "action.align-view-bottom"
-zhs = "光标行挪到屏幕底下"
-en = "put the cursor's line at the bottom of the screen"
+zhs = "光标行移到底部"
+en = "cursor line to the bottom"
 
 [[message]]
-# 命令說明：align_view_center（草稿）
+# 命令說明：align_view_center
 key = "action.align-view-center"
-zhs = "光标行挪到屏幕中间"
-en = "put the cursor's line in the middle of the screen"
+zhs = "光标行移到中间"
+en = "cursor line to the middle"
 
 [[message]]
-# 命令說明：align_view_top（草稿）
+# 命令說明：align_view_top
 key = "action.align-view-top"
-zhs = "光标行挪到屏幕顶上"
-en = "put the cursor's line at the top of the screen"
+zhs = "光标行移到顶部"
+en = "cursor line to the top"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -47,10 +47,10 @@ en = "open the buffer picker"
 find = "緩衝 缓冲 稿子 切換 切换 開著的 开着的 buffer picker"
 
 [[message]]
-# 命令說明：case_mode（草稿）
+# 命令說明：case_mode
 key = "action.case-mode"
 zhs = "字形组：大小写、繁简"
-en = "the case group: upper and lower case, traditional and simplified"
+en = "case group: upper/lower, traditional/simplified"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -62,26 +62,26 @@ find = "改 改寫 改写 換 换 替換 替换 剪切 剪 change cut"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.change-selection-noyank"
-zhs = "改写选区(不动寄存器)"
-en = "change the selection, leaving the register"
+zhs = "改写选区(不进寄存器)"
+en = "change the selection without yanking"
 find = "改 改寫 改写 換 换 替換 替换 change"
 
 [[message]]
-# 命令說明：normal_mode（草稿）
+# 命令說明：normal_mode
 key = "action.close-prompt"
-zhs = "关掉这一行(命令行、搜索、挑选器)"
-en = "close the prompt, the search or the picker"
+zhs = "关闭命令行、搜索框或选择器"
+en = "close the prompt, search or picker"
 
 [[message]]
-# 命令說明：collapse_entry（草稿）
+# 命令說明：collapse_entry
 key = "action.collapse-entry"
-zhs = "收起"
-en = "fold the entry, or go out of it"
+zhs = "收起，或退到上一层"
+en = "collapse, or go up a level"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.collapse-selection"
-zhs = "选区收回光标"
+zhs = "选区收成光标"
 en = "collapse the selection to the cursor"
 find = "收 收回 取消選區 取消选区 collapse"
 
@@ -89,82 +89,82 @@ find = "收 收回 取消選區 取消选区 collapse"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.command-menu"
 zhs = "所有命令"
-en = "every command"
+en = "all commands"
 find = "命令 所有命令 列表 清單 清单 command menu palette"
 
 [[message]]
-# 命令說明：command_mode（草稿）
+# 命令說明：command_mode
 key = "action.command-mode"
 zhs = "命令行"
-en = "the command line"
+en = "command line"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.comment-block"
-zhs = "整段注释"
-en = "comment this block"
+zhs = "块注释"
+en = "block comment"
 find = "註釋 注释 整段 塊 块 comment block"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.comment-line"
-zhs = "注释这一行"
-en = "comment this line"
+zhs = "行注释"
+en = "line comment"
 find = "註釋 注释 一行 comment line"
 
 [[message]]
-# 命令說明：commit_undo_checkpoint（草稿）
+# 命令說明：commit_undo_checkpoint
 key = "action.commit-undo-checkpoint"
-zhs = "在这里断开撤销"
-en = "break the undo here"
+zhs = "新建撤销点"
+en = "start a new undo step"
 
 [[message]]
-# 命令說明：completion_next（草稿）
+# 命令說明：completion_next
 key = "action.completion-next"
 zhs = "补全：下一个"
-en = "the next completion"
+en = "next completion"
 
 [[message]]
-# 命令說明：completion_prev（草稿）
+# 命令說明：completion_prev
 key = "action.completion-prev"
 zhs = "补全：上一个"
-en = "the previous completion"
+en = "previous completion"
 
 [[message]]
-# 命令說明：confirm（草稿）
+# 命令說明：confirm
 key = "action.confirm"
-zhs = "执行这一行；挑选器里打开选中的那一项"
-en = "run the line; in a picker, open the highlighted entry"
+zhs = "执行；在选择器中打开选中项"
+en = "run the line; in a picker, open the selected entry"
 
 [[message]]
-# 命令說明：convert_table_to_csv（草稿）
+# 命令說明：convert_table_to_csv
 key = "action.convert-table-to-csv"
 zhs = "表格转成 csv"
 en = "convert the table to csv"
 
 [[message]]
-# 命令說明：convert_table_to_pipe（草稿）
+# 命令說明：convert_table_to_pipe
 key = "action.convert-table-to-pipe"
 zhs = "表格转成 pipe"
-en = "convert the table to pipe"
+en = "convert the table to a pipe table"
 
 [[message]]
-# 命令說明：convert_table_to_tsv（草稿）
+# 命令說明：convert_table_to_tsv
 key = "action.convert-table-to-tsv"
 zhs = "表格转成 tsv"
 en = "convert the table to tsv"
 
 [[message]]
-# 命令說明：copy_selection_on_next_line（草稿）
+# 命令說明：copy_selection_on_next_line
 key = "action.copy-selection-on-next-line"
-zhs = "在下一行复制一个选区"
-en = "copy the selection onto the next line"
+zhs = "在下一行加一个选区"
+en = "add a selection on the next line"
 
 [[message]]
-# 命令說明：copy_selection_on_prev_line（草稿）
+# 命令說明：copy_selection_on_prev_line
 key = "action.copy-selection-on-prev-line"
-zhs = "在上一行复制一个选区"
-en = "copy the selection onto the previous line"
+zhs = "在上一行加一个选区"
+en = "add a selection on the previous line"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -181,32 +181,32 @@ en = "writing progress"
 find = "字數 字数 進度 进度 今天 寫了多少 写了多少 count progress"
 
 [[message]]
-# 命令說明：cycle_hidden_files（草稿）
+# 命令說明：cycle_hidden_files
 key = "action.cycle-hidden-files"
-zhs = "换一种：跳过哪些文件(隐藏的、忽略的)"
+zhs = "切换跳过的文件：隐藏/忽略"
 en = "cycle which files are skipped: hidden, ignored"
 
 [[message]]
-# 命令說明：cycle_sidebar_width（草稿）
+# 命令說明：cycle_sidebar_width
 key = "action.cycle-sidebar-width"
-zhs = "宽窄"
-en = "the next width: narrow, middle, wide"
+zhs = "切换宽度：窄、中、宽"
+en = "cycle width: narrow, medium, wide"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.decrement"
 zhs = "光标处的数字减一"
-en = "the number under the cursor, minus one"
+en = "decrement the number under the cursor"
 find = "數字 数字 減 减 減一 减一 decrement"
 
 [[message]]
-# 命令說明：delete_char_backward（草稿）
+# 命令說明：delete_char_backward
 key = "action.delete-char-backward"
 zhs = "删除光标前的一个字"
 en = "delete the character before the cursor"
 
 [[message]]
-# 命令說明：delete_char_forward（草稿）
+# 命令說明：delete_char_forward
 key = "action.delete-char-forward"
 zhs = "删除光标后的一个字"
 en = "delete the character after the cursor"
@@ -216,37 +216,37 @@ en = "delete the character after the cursor"
 # Warning: **2026-10-08 這四句換了主人，一個字都没改。** 從前 `delete_selection`
 # 掛的是「不動寄存器」那一句，而它真按的是 `d`——`d` 自 2026-09-28 起進寄存器。
 key = "action.delete-selection"
-zhs = "剪切选区(进寄存器)"
-en = "cut the selection into the register"
+zhs = "剪切选区"
+en = "cut the selection"
 find = "剪切 剪 寄存器 删 delete cut"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.delete-selection-noyank"
-zhs = "删除选区(不动寄存器)"
-en = "delete the selection, leaving the register"
+zhs = "删除选区(不进寄存器)"
+en = "delete the selection without yanking"
 find = "删 删除 去掉 delete"
 
 [[message]]
-# 命令說明：delete_to_line_end（草稿）
+# 命令說明：delete_to_line_end
 key = "action.delete-to-line-end"
 zhs = "删到行尾"
 en = "delete to the end of the line"
 
 [[message]]
-# 命令說明：delete_to_line_end_noyank（草稿）
+# 命令說明：delete_to_line_end_noyank
 key = "action.delete-to-line-end-noyank"
-zhs = "删到行尾，不进寄存器"
-en = "delete to the end of the line, leaving the register as it is"
+zhs = "删到行尾(不进寄存器)"
+en = "delete to the end of the line without yanking"
 
 [[message]]
-# 命令說明：delete_word_backward（草稿）
+# 命令說明：delete_word_backward
 key = "action.delete-word-backward"
 zhs = "删除光标前的一个词"
 en = "delete the word before the cursor"
 
 [[message]]
-# 命令說明：delete_word_forward（草稿）
+# 命令說明：delete_word_forward
 key = "action.delete-word-forward"
 zhs = "删除光标后的一个词"
 en = "delete the word after the cursor"
@@ -254,169 +254,169 @@ en = "delete the word after the cursor"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.dictionary"
-zhs = "字典：光标下那个字的拆分"
-en = "the 拆分 of the character under the cursor"
+zhs = "字典：光标处汉字的拆分"
+en = "dictionary: the division of the character under the cursor"
 find = "字典 拆分 部件 查字 dictionary chaifen"
 
 [[message]]
-# 命令說明：earlier（草稿）
+# 命令說明：earlier
 key = "action.earlier"
-zhs = "撤销(和 u 一样)"
-en = "undo, as u does"
+zhs = "撤销(同 u)"
+en = "undo (same as u)"
 
 [[message]]
-# 命令說明：ensure_selections_forward（草稿）
+# 命令說明：ensure_selections_forward
 key = "action.ensure-selections-forward"
 zhs = "让每个选区都朝前"
 en = "make every selection face forward"
 
 [[message]]
-# 命令說明：expand_entry（草稿）
+# 命令說明：expand_entry
 key = "action.expand-entry"
-zhs = "展开；展开不了就进入"
-en = "unfold the entry, or go into it"
+zhs = "展开，或进入"
+en = "expand, or go into it"
 
 [[message]]
-# 命令說明：expand_selection，A-o（草稿）
+# 命令說明：expand_selection，A-o
 key = "action.expand-selection"
-zhs = "选区扩到外面那一层语法节点"
-en = "grow the selection to the syntax node around it"
+zhs = "选区扩到外层语法节点"
+en = "expand the selection to the parent syntax node"
 
 [[message]]
-# 命令說明：extend_char_left（草稿）
+# 命令說明：extend_char_left
 key = "action.extend-char-left"
-zhs = "选区向左撑一个字"
+zhs = "选区向左扩一个字"
 en = "extend the selection one character left"
 
 [[message]]
-# 命令說明：extend_char_right（草稿）
+# 命令說明：extend_char_right
 key = "action.extend-char-right"
-zhs = "选区向右撑一个字"
+zhs = "选区向右扩一个字"
 en = "extend the selection one character right"
 
 [[message]]
-# 命令說明：extend_line_above（草稿）
+# 命令說明：extend_line_above
 key = "action.extend-line-above"
 zhs = "往上选行"
 en = "select the line above, or one more line upward"
 
 [[message]]
-# 命令說明：extend_line_down（草稿）
+# 命令說明：extend_line_down
 key = "action.extend-line-down"
-zhs = "选区撑到下一行(文件里的)"
-en = "extend the selection one line down, in the file"
+zhs = "选区扩到下一行(文件里的)"
+en = "extend one line down, in the file"
 
 [[message]]
-# 命令說明：extend_line_up（草稿）
+# 命令說明：extend_line_up
 key = "action.extend-line-up"
-zhs = "选区撑到上一行(文件里的)"
-en = "extend the selection one line up, in the file"
+zhs = "选区扩到上一行(文件里的)"
+en = "extend one line up, in the file"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.extend-mode"
-zhs = "延伸模式：移动把选区撑大"
+zhs = "选择模式：移动时扩大选区"
 en = "Select mode: moving grows the selection"
 find = "延伸 選擇 选择 擴大 扩大 選區 选区 extend select visual"
 
 [[message]]
-# 命令說明：extend_next_char（草稿）
+# 命令說明：extend_next_char
 key = "action.extend-next-char"
-zhs = "选区往后撑到某个字"
-en = "extend the selection forward to a character"
+zhs = "选区向后扩到某个字"
+en = "extend forward to a character"
 
 [[message]]
-# 命令說明：extend_next_long_word_end（草稿）
+# 命令說明：extend_next_long_word_end
 key = "action.extend-next-long-word-end"
-zhs = "选区撑到下一个大词尾"
-en = "extend the selection to the next long word's end"
+zhs = "选区扩到下一个大词尾"
+en = "extend to the end of the next long word"
 
 [[message]]
-# 命令說明：extend_next_long_word_start（草稿）
+# 命令說明：extend_next_long_word_start
 key = "action.extend-next-long-word-start"
-zhs = "选区撑到下一个大词首"
-en = "extend the selection to the next long word's start"
+zhs = "选区扩到下一个大词首"
+en = "extend to the start of the next long word"
 
 [[message]]
-# 命令說明：extend_next_word_end（草稿）
+# 命令說明：extend_next_word_end
 key = "action.extend-next-word-end"
-zhs = "选区撑到下一个词尾"
-en = "extend the selection to the next word's end"
+zhs = "选区扩到下一个词尾"
+en = "extend to the end of the next word"
 
 [[message]]
-# 命令說明：extend_next_word_start（草稿）
+# 命令說明：extend_next_word_start
 key = "action.extend-next-word-start"
-zhs = "选区撑到下一个词首"
-en = "extend the selection to the next word's start"
+zhs = "选区扩到下一个词首"
+en = "extend to the start of the next word"
 
 [[message]]
-# 命令說明：extend_parent_node_end（草稿）
+# 命令說明：extend_parent_node_end
 key = "action.extend-parent-node-end"
-zhs = "选区延到所在节点的末尾"
-en = "extend the selection to the end of the node around the cursor"
+zhs = "选区扩到所在节点末尾"
+en = "extend to the end of the enclosing node"
 
 [[message]]
-# 命令說明：extend_parent_node_start（草稿）
+# 命令說明：extend_parent_node_start
 key = "action.extend-parent-node-start"
-zhs = "选区延到所在节点的开头"
-en = "extend the selection to the start of the node around the cursor"
+zhs = "选区扩到所在节点开头"
+en = "extend to the start of the enclosing node"
 
 [[message]]
-# 命令說明：extend_prev_char（草稿）
+# 命令說明：extend_prev_char
 key = "action.extend-prev-char"
-zhs = "选区往前撑到某个字"
-en = "extend the selection backward to a character"
+zhs = "选区向前扩到某个字"
+en = "extend backward to a character"
 
 [[message]]
-# 命令說明：extend_prev_long_word_start（草稿）
+# 命令說明：extend_prev_long_word_start
 key = "action.extend-prev-long-word-start"
-zhs = "选区撑到上一个大词首"
-en = "extend the selection to the previous long word's start"
+zhs = "选区扩到上一个大词首"
+en = "extend to the start of the previous long word"
 
 [[message]]
-# 命令說明：extend_prev_word_start（草稿）
+# 命令說明：extend_prev_word_start
 key = "action.extend-prev-word-start"
-zhs = "选区撑到上一个词首"
-en = "extend the selection to the previous word's start"
+zhs = "选区扩到上一个词首"
+en = "extend to the start of the previous word"
 
 [[message]]
-# 命令說明：extend_search_next（草稿）
+# 命令說明：extend_search_next
 key = "action.extend-search-next"
-zhs = "下一处也选上(多一个选区)"
+zhs = "加选下一处匹配"
 en = "add the next match as a selection"
 
 [[message]]
-# 命令說明：extend_search_prev（草稿）
+# 命令說明：extend_search_prev
 key = "action.extend-search-prev"
-zhs = "上一处也选上(多一个选区)"
+zhs = "加选上一处匹配"
 en = "add the previous match as a selection"
 
 [[message]]
-# 命令說明：extend_till_char（草稿）
+# 命令說明：extend_till_char
 key = "action.extend-till-char"
-zhs = "选区往后撑到某个字前面"
-en = "extend the selection forward to just before a character"
+zhs = "选区向后扩到某个字之前"
+en = "extend forward to just before a character"
 
 [[message]]
-# 命令說明：extend_till_prev_char（草稿）
+# 命令說明：extend_till_prev_char
 key = "action.extend-till-prev-char"
-zhs = "选区往前撑到某个字后面"
-en = "extend the selection backward to just after a character"
+zhs = "选区向前扩到某个字之后"
+en = "extend backward to just after a character"
 
 [[message]]
-# 命令說明：extend_to_file_end（草稿）
+# 命令說明：extend_to_file_end
 key = "action.extend-to-file-end"
-zhs = "选区撑到文件末尾"
-en = "extend the selection to the end of the file"
+zhs = "选区扩到文件末尾"
+en = "extend to the end of the file"
 
 [[message]]
-# 命令說明：extend_to_file_start（草稿）
+# 命令說明：extend_to_file_start
 key = "action.extend-to-file-start"
-zhs = "选区撑到文件开头"
-en = "extend the selection to the start of the file"
+zhs = "选区扩到文件开头"
+en = "extend to the start of the file"
 
 [[message]]
-# 命令說明：extend_to_last_line（草稿）
+# 命令說明：extend_to_last_line
 key = "action.extend-to-last-line"
 zhs = "选到最后一行"
 en = "extend to the last line"
@@ -424,91 +424,91 @@ en = "extend to the last line"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.extend-to-line-bounds"
-zhs = "把选区撑到整行边界"
-en = "grow the selection to whole lines"
+zhs = "选区扩到整行"
+en = "extend the selection to whole lines"
 find = "整行 行邊界 行边界 撑 extend line"
 
 [[message]]
-# 命令說明：extend_to_line_end（草稿）
+# 命令說明：extend_to_line_end
 key = "action.extend-to-line-end"
-zhs = "选区撑到行尾"
-en = "extend the selection to the line's end"
+zhs = "选区扩到行尾"
+en = "extend to the end of the line"
 
 [[message]]
-# 命令說明：extend_to_line_start（草稿）
+# 命令說明：extend_to_line_start
 key = "action.extend-to-line-start"
-zhs = "选区撑到行首"
-en = "extend the selection to the line's start"
+zhs = "选区扩到行首"
+en = "extend to the start of the line"
 
 [[message]]
-# 命令說明：extend_to_word（草稿）
+# 命令說明：extend_to_word
 key = "action.extend-to-word"
-zhs = "选区撑到屏幕上某个位置(标签)"
-en = "extend the selection to a place on screen, by its label"
+zhs = "选区扩到某个跳转标签"
+en = "extend to a jump label"
 
 [[message]]
-# 命令說明：extend_visual_line_down（草稿）
+# 命令說明：extend_visual_line_down
 key = "action.extend-visual-line-down"
-zhs = "选区撑到下一行(屏幕上的)"
-en = "extend the selection one line down, on screen"
+zhs = "选区扩到下一行(屏幕上的)"
+en = "extend one line down, on screen"
 
 [[message]]
-# 命令說明：extend_visual_line_up（草稿）
+# 命令說明：extend_visual_line_up
 key = "action.extend-visual-line-up"
-zhs = "选区撑到上一行(屏幕上的)"
-en = "extend the selection one line up, on screen"
+zhs = "选区扩到上一行(屏幕上的)"
+en = "extend one line up, on screen"
 
 [[message]]
-# 命令說明：move_line_up，面板輸入框裏的（草稿）
+# 命令說明：move_line_up，面板輸入框裏的
 key = "action.field-above"
 zhs = "上面那一格"
-en = "the box above"
+en = "field above"
 
 [[message]]
-# 命令說明：move_line_down，面板輸入框裏的（草稿）
+# 命令說明：move_line_down，面板輸入框裏的
 key = "action.field-below"
 zhs = "下面那一格"
-en = "the box below"
+en = "field below"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.file-picker"
-zhs = "打开文件挑选器"
+zhs = "打开文件选择器"
 en = "open the file picker"
 find = "打開 打开 文件 檔案 档案 挑 picker open file"
 
 [[message]]
-# 命令說明：find_next_char（草稿）
+# 命令說明：find_next_char
 key = "action.find-next-char"
 zhs = "往后找一个字，选到它"
 en = "find a character forward, selecting up to it"
 
 [[message]]
-# 命令說明：find_prev_char（草稿）
+# 命令說明：find_prev_char
 key = "action.find-prev-char"
 zhs = "往前找一个字，选到它"
 en = "find a character backward, selecting back to it"
 
 [[message]]
-# 命令說明：find_till_char（草稿）
+# 命令說明：find_till_char
 key = "action.find-till-char"
 zhs = "往后找一个字，选到它前面"
 en = "find a character forward, selecting up to just before it"
 
 [[message]]
-# 命令說明：first_entry（草稿）
+# 命令說明：first_entry
 key = "action.first-entry"
 zhs = "第一项"
-en = "the first entry"
+en = "first entry"
 
 [[message]]
-# 命令說明：goto_file_start（草稿）
+# 命令說明：goto_file_start
 key = "action.first-row"
 zhs = "第一行"
-en = "the first row"
+en = "first row"
 
 [[message]]
-# 命令說明：flip_selections（草稿）
+# 命令說明：flip_selections
 key = "action.flip-selections"
 zhs = "光标换到选区另一头"
 en = "move the cursor to the other end of the selection"
@@ -516,108 +516,108 @@ en = "move the cursor to the other end of the selection"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.follow-link"
-zhs = "前往光标下的链接位置"
+zhs = "跳到光标下的链接目标"
 en = "follow the link under the cursor"
 find = "鏈接 链接 跟着 跳過去 跳过去 link follow"
 
 [[message]]
-# 命令說明：format_selections，=（草稿）
+# 命令說明：format_selections，=
 key = "action.format-selections"
-zhs = "用语言服务器排版选区"
+zhs = "用语言服务器格式化选区"
 en = "format the selection with the language server"
 
 [[message]]
-# 命令說明：goto_column（草稿）
+# 命令說明：goto_column
 key = "action.goto-column"
-zhs = "到这一行的第几列(用计数)"
-en = "to column N of this line (the count)"
+zhs = "到本行第 N 列(用计数)"
+en = "go to column N of the line (count)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-definition"
-zhs = "前往定义位置"
-en = "go to where it is defined"
+zhs = "转到定义"
+en = "go to definition"
 find = "定義 定义 腳註 脚注 跳過去 跳过去 definition goto"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-file-end"
 zhs = "文件末尾"
-en = "the end of the file"
+en = "end of file"
 find = "末尾 最後 最后 檔尾 档尾 end bottom"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-file-start"
 zhs = "文件开头"
-en = "the start of the file"
+en = "start of file"
 find = "開頭 开头 檔頭 档头 最前 start top"
 
 [[message]]
-# 命令說明：goto_first_change（草稿）
+# 命令說明：goto_first_change
 key = "action.goto-first-change"
 zhs = "第一处改动"
-en = "the first change"
+en = "first change"
 
 [[message]]
-# 命令說明：goto_first_diag（草稿）
+# 命令說明：goto_first_diag
 key = "action.goto-first-diag"
 zhs = "第一条诊断"
-en = "the first diagnostic"
+en = "first diagnostic"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-first-nonwhitespace"
 zhs = "第一个非空白字符"
-en = "the first character that is not a space"
+en = "first non-blank character"
 find = "非空白 行首 第一個字 第一个字 nonblank first"
 
 [[message]]
-# 命令說明：goto_last_change（草稿）
+# 命令說明：goto_last_change
 key = "action.goto-last-change"
 zhs = "最后一处改动"
-en = "the last change"
+en = "last change"
 
 [[message]]
-# 命令說明：goto_last_diag（草稿）
+# 命令說明：goto_last_diag
 key = "action.goto-last-diag"
 zhs = "最后一条诊断"
-en = "the last diagnostic"
+en = "last diagnostic"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-last-line"
 zhs = "最后一行"
-en = "the last line"
+en = "last line"
 find = "最後一行 最后一行 末行 last line"
 
 [[message]]
-# 命令說明：goto_left_sidebar（草稿）
+# 命令說明：goto_left_sidebar
 key = "action.goto-left-sidebar"
-zhs = "进左栏"
-en = "into the left sidebar"
+zhs = "进入左侧栏"
+en = "go to the left sidebar"
 
 [[message]]
-# 命令說明：goto_line（草稿）
+# 命令說明：goto_line
 key = "action.goto-line"
-zhs = "到第几行(用计数)"
-en = "to line N (the count)"
+zhs = "到第 N 行(用计数)"
+en = "go to line N (count)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-line-end"
 zhs = "行尾"
-en = "the end of the line"
+en = "end of line"
 find = "行尾 末尾 end"
 
 [[message]]
-# 命令說明：goto_line_end_newline（草稿）
+# 命令說明：goto_line_end_newline
 key = "action.goto-line-end-newline"
 zhs = "到行尾(最后一个字后面)"
 en = "to the end of the line, after its last character"
 
 [[message]]
-# 命令說明：goto_line_or_last_line（草稿）
+# 命令說明：goto_line_or_last_line
 key = "action.goto-line-or-last-line"
 zhs = "到第 N 行，不带数字到末行"
 en = "go to line N, or with no count to the last line"
@@ -626,84 +626,84 @@ en = "go to line N, or with no count to the last line"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-line-start"
 zhs = "行首"
-en = "the start of the line"
+en = "start of line"
 find = "行首 開頭 开头 start"
 
 [[message]]
-# 命令說明：goto_mark（草稿）
+# 命令說明：goto_mark
 key = "action.goto-mark"
 zhs = "回到标记(再按一个字母)"
 en = "go to a mark (then a letter)"
 
 [[message]]
-# 命令說明：goto_mode（草稿）
+# 命令說明：goto_mode
 key = "action.goto-mode"
-zhs = "g 组：前往"
-en = "the g group: go to"
+zhs = "g 组：跳转"
+en = "g group: go to"
 
 [[message]]
-# 命令說明：goto_newer_change（草稿）
+# 命令說明：goto_newer_change
 key = "action.goto-newer-change"
-zhs = "往新走一处改动"
-en = "on to a newer change"
+zhs = "跳到较新的改动"
+en = "to a newer change"
 
 [[message]]
-# 命令說明：goto_next_change（草稿）
+# 命令說明：goto_next_change
 key = "action.goto-next-change"
 zhs = "下一处改动(git)"
-en = "the next change (git)"
+en = "next change (git)"
 
 [[message]]
-# 命令說明：goto_next_class（草稿）
+# 命令說明：goto_next_class
 key = "action.goto-next-class"
 zhs = "下一个类"
-en = "the next class"
+en = "next class"
 
 [[message]]
-# 命令說明：goto_next_comment（草稿）
+# 命令說明：goto_next_comment
 key = "action.goto-next-comment"
 zhs = "下一处注释"
-en = "the next comment"
+en = "next comment"
 
 [[message]]
-# 命令說明：goto_next_conflict（草稿）
+# 命令說明：goto_next_conflict
 key = "action.goto-next-conflict"
 zhs = "下一处合并冲突"
-en = "the next merge conflict"
+en = "next merge conflict"
 
 [[message]]
-# 命令說明：goto_next_diag（草稿）
+# 命令說明：goto_next_diag
 key = "action.goto-next-diag"
 zhs = "下一条诊断"
-en = "the next diagnostic"
+en = "next diagnostic"
 
 [[message]]
-# 命令說明：goto_next_entry（草稿）
+# 命令說明：goto_next_entry
 key = "action.goto-next-entry"
 zhs = "选中下一个条目"
 en = "select the next entry"
 
 [[message]]
-# 命令說明：goto_next_function（草稿）
+# 命令說明：goto_next_function
 key = "action.goto-next-function"
 zhs = "下一个函数"
-en = "the next function"
+en = "next function"
 
 [[message]]
-# 命令說明：goto_next_line_nonwhitespace（草稿）
+# 命令說明：goto_next_line_nonwhitespace
 key = "action.goto-next-line-nonwhitespace"
 zhs = "下一行的第一个非空白字符"
-en = "the next line's first character that is not a space"
+en = "next line's first non-blank character"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-next-paragraph"
 zhs = "下一段"
-en = "the next paragraph"
+en = "next paragraph"
 find = "下一段 段落 next paragraph"
 
 [[message]]
-# 命令說明：goto_next_parameter（草稿）
+# 命令說明：goto_next_parameter
 key = "action.goto-next-parameter"
 zhs = "选中下一个参数"
 en = "select the next parameter"
@@ -712,84 +712,84 @@ en = "select the next parameter"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-next-sentence"
 zhs = "下一句"
-en = "the next sentence"
+en = "next sentence"
 find = "下一句 句子 next sentence"
 
 [[message]]
-# 命令說明：goto_next_table（草稿）
+# 命令說明：goto_next_table
 key = "action.goto-next-table"
 zhs = "下一张表"
-en = "the next table"
+en = "next table"
 
 [[message]]
-# 命令說明：goto_next_test（草稿）
+# 命令說明：goto_next_test
 key = "action.goto-next-test"
 zhs = "选中下一个测试"
 en = "select the next test"
 
 [[message]]
-# 命令說明：goto_next_xml_element（草稿）
+# 命令說明：goto_next_xml_element
 key = "action.goto-next-xml-element"
 zhs = "选中下一个 XML 元素"
 en = "select the next XML element"
 
 [[message]]
-# 命令說明：goto_older_change（草稿）
+# 命令說明：goto_older_change
 key = "action.goto-older-change"
-zhs = "往旧走一处改动"
-en = "back to an older change"
+zhs = "跳到较旧的改动"
+en = "to an older change"
 
 [[message]]
-# 命令說明：goto_prev_change（草稿）
+# 命令說明：goto_prev_change
 key = "action.goto-prev-change"
 zhs = "上一处改动(git)"
-en = "the previous change (git)"
+en = "previous change (git)"
 
 [[message]]
-# 命令說明：goto_prev_class（草稿）
+# 命令說明：goto_prev_class
 key = "action.goto-prev-class"
 zhs = "上一个类"
-en = "the previous class"
+en = "previous class"
 
 [[message]]
-# 命令說明：goto_prev_comment（草稿）
+# 命令說明：goto_prev_comment
 key = "action.goto-prev-comment"
 zhs = "上一处注释"
-en = "the previous comment"
+en = "previous comment"
 
 [[message]]
-# 命令說明：goto_prev_conflict（草稿）
+# 命令說明：goto_prev_conflict
 key = "action.goto-prev-conflict"
 zhs = "上一处合并冲突"
-en = "the previous merge conflict"
+en = "previous merge conflict"
 
 [[message]]
-# 命令說明：goto_prev_diag（草稿）
+# 命令說明：goto_prev_diag
 key = "action.goto-prev-diag"
 zhs = "上一条诊断"
-en = "the previous diagnostic"
+en = "previous diagnostic"
 
 [[message]]
-# 命令說明：goto_prev_entry（草稿）
+# 命令說明：goto_prev_entry
 key = "action.goto-prev-entry"
 zhs = "选中上一个条目"
 en = "select the previous entry"
 
 [[message]]
-# 命令說明：goto_prev_function（草稿）
+# 命令說明：goto_prev_function
 key = "action.goto-prev-function"
 zhs = "上一个函数"
-en = "the previous function"
+en = "previous function"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-prev-paragraph"
 zhs = "上一段"
-en = "the previous paragraph"
+en = "previous paragraph"
 find = "上一段 段落 previous paragraph"
 
 [[message]]
-# 命令說明：goto_prev_parameter（草稿）
+# 命令說明：goto_prev_parameter
 key = "action.goto-prev-parameter"
 zhs = "选中上一个参数"
 en = "select the previous parameter"
@@ -798,82 +798,82 @@ en = "select the previous parameter"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.goto-prev-sentence"
 zhs = "上一句"
-en = "the previous sentence"
+en = "previous sentence"
 find = "上一句 句子 previous sentence"
 
 [[message]]
-# 命令說明：goto_prev_table（草稿）
+# 命令說明：goto_prev_table
 key = "action.goto-prev-table"
 zhs = "上一张表"
-en = "the previous table"
+en = "previous table"
 
 [[message]]
-# 命令說明：goto_prev_test（草稿）
+# 命令說明：goto_prev_test
 key = "action.goto-prev-test"
 zhs = "选中上一个测试"
 en = "select the previous test"
 
 [[message]]
-# 命令說明：goto_prev_xml_element（草稿）
+# 命令說明：goto_prev_xml_element
 key = "action.goto-prev-xml-element"
 zhs = "选中上一个 XML 元素"
 en = "select the previous XML element"
 
 [[message]]
-# 命令說明：goto_right_sidebar（草稿）
+# 命令說明：goto_right_sidebar
 key = "action.goto-right-sidebar"
-zhs = "进右栏"
-en = "into the right sidebar"
+zhs = "进入右侧栏"
+en = "go to the right sidebar"
 
 [[message]]
-# 命令說明：goto_window_bottom（草稿）
+# 命令說明：goto_window_bottom
 key = "action.goto-window-bottom"
 zhs = "屏幕最下面那一行"
-en = "the bottom line on screen"
+en = "bottom line on screen"
 
 [[message]]
-# 命令說明：goto_window_center（草稿）
+# 命令說明：goto_window_center
 key = "action.goto-window-center"
 zhs = "屏幕中间那一行"
-en = "the middle line on screen"
+en = "middle line on screen"
 
 [[message]]
-# 命令說明：goto_window_top（草稿）
+# 命令說明：goto_window_top
 key = "action.goto-window-top"
 zhs = "屏幕最上面那一行"
-en = "the top line on screen"
+en = "top line on screen"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.half-page-down"
-zhs = "前进半页"
+zhs = "向下翻半页"
 en = "half a page down"
 find = "半頁 半页 往下 翻頁 翻页 down half page"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.half-page-up"
-zhs = "后退半页"
+zhs = "向上翻半页"
 en = "half a page up"
 find = "半頁 半页 往上 翻頁 翻页 up half page"
 
 [[message]]
-# 命令說明：history_next（草稿）
+# 命令說明：history_next
 key = "action.history-next"
 zhs = "历史：下一条"
-en = "the next line in the history"
+en = "next in history"
 
 [[message]]
-# 命令說明：history_prev（草稿）
+# 命令說明：history_prev
 key = "action.history-prev"
 zhs = "历史：上一条"
-en = "the previous line in the history"
+en = "previous in history"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.increment"
 zhs = "光标处的数字加一"
-en = "the number under the cursor, plus one"
+en = "increment the number under the cursor"
 find = "數字 数字 加 加一 increment"
 
 [[message]]
@@ -898,16 +898,16 @@ en = "insert at the start of the line"
 find = "行首 插入 insert start"
 
 [[message]]
-# 命令說明：insert_char_above（草稿）
+# 命令說明：insert_char_above
 key = "action.insert-char-above"
-zhs = "打出上一行同一位置的字"
-en = "type the character above the cursor"
+zhs = "插入上一行同列的字"
+en = "insert the character above the cursor"
 
 [[message]]
-# 命令說明：insert_char_below（草稿）
+# 命令說明：insert_char_below
 key = "action.insert-char-below"
-zhs = "打出下一行同一位置的字"
-en = "type the character below the cursor"
+zhs = "插入下一行同列的字"
+en = "insert the character below the cursor"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -917,27 +917,27 @@ en = "insert before the selection"
 find = "插入 打字 輸入 输入 insert"
 
 [[message]]
-# 命令說明：insert_newline（草稿）
+# 命令說明：insert_newline
 key = "action.insert-newline"
-zhs = "换行(带上缩进、列表记号)"
-en = "a line break, carrying the indent and a list's marker"
+zhs = "换行(延续缩进和列表符号)"
+en = "new line, keeping the indent and list marker"
 
 [[message]]
-# 命令說明：insert_other_tab（草稿）
+# 命令說明：insert_other_tab
 key = "action.insert-other-tab"
 zhs = "插入另一种缩进(Tab 或空格)"
 en = "insert the other kind of indent, a tab or spaces"
 
 [[message]]
-# 命令說明：insert_register（草稿）
+# 命令說明：insert_register
 key = "action.insert-register"
-zhs = "插入寄存器的内容(再按一个字母)"
+zhs = "插入寄存器内容(再按一个字母)"
 en = "insert a register (then its letter)"
 
 [[message]]
-# 命令說明：insert_tab（草稿）
+# 命令說明：insert_tab
 key = "action.insert-tab"
-zhs = "插入缩进(文件用的那一种)"
+zhs = "插入缩进(与文件一致)"
 en = "insert an indent, the kind the file uses"
 
 [[message]]
@@ -948,191 +948,191 @@ en = "join with the next line"
 find = "合併 合并 併行 并行 連起來 连起来 焊 join merge"
 
 [[message]]
-# 命令說明：join_selections_space（草稿）
+# 命令說明：join_selections_space
 key = "action.join-selections-space"
-zhs = "合并行并选中接缝"
+zhs = "合并行并选中连接处"
 en = "join lines and select where they meet"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.jump-backward"
-zhs = "跳转表：回到刚才那个位置"
-en = "back to where you jumped from"
+zhs = "跳转表：后退"
+en = "jump back"
 find = "回去 返回 跳轉 跳转 剛纔 刚才 back jump"
 
 [[message]]
-# 命令說明：jump_forward（草稿）
+# 命令說明：jump_forward
 key = "action.jump-forward"
-zhs = "跳转表：再往前一处"
-en = "forward again in the jump list"
+zhs = "跳转表：前进"
+en = "jump forward"
 
 [[message]]
-# 命令說明：jump_next_long_word_end（草稿）
+# 命令說明：jump_next_long_word_end
 key = "action.jump-next-long-word-end"
-zhs = "光标跳到下一个大词尾(不选中)"
-en = "the cursor to the next long word's end, selecting nothing"
+zhs = "跳到下一个大词尾(不选中)"
+en = "to the end of the next long word, no selection"
 
 [[message]]
-# 命令說明：jump_next_long_word_start（草稿）
+# 命令說明：jump_next_long_word_start
 key = "action.jump-next-long-word-start"
-zhs = "光标跳到下一个大词首(不选中)"
-en = "the cursor to the next long word's start, selecting nothing"
+zhs = "跳到下一个大词首(不选中)"
+en = "to the start of the next long word, no selection"
 
 [[message]]
-# 命令說明：jump_next_paragraph（草稿）
+# 命令說明：jump_next_paragraph
 key = "action.jump-next-paragraph"
-zhs = "光标跳到下一段(不选中)"
-en = "the cursor to the next paragraph, selecting nothing"
+zhs = "跳到下一段(不选中)"
+en = "to the next paragraph, no selection"
 
 [[message]]
-# 命令說明：jump_next_sentence（草稿）
+# 命令說明：jump_next_sentence
 key = "action.jump-next-sentence"
-zhs = "光标跳到下一句(不选中)"
-en = "the cursor to the next sentence, selecting nothing"
+zhs = "跳到下一句(不选中)"
+en = "to the next sentence, no selection"
 
 [[message]]
-# 命令說明：jump_next_word_end（草稿）
+# 命令說明：jump_next_word_end
 key = "action.jump-next-word-end"
-zhs = "光标跳到下一个词尾(不选中)"
-en = "the cursor to the next word's end, selecting nothing"
+zhs = "跳到下一个词尾(不选中)"
+en = "to the end of the next word, no selection"
 
 [[message]]
-# 命令說明：jump_next_word_start（草稿）
+# 命令說明：jump_next_word_start
 key = "action.jump-next-word-start"
-zhs = "光标跳到下一个词首(不选中)"
-en = "the cursor to the next word's start, selecting nothing"
+zhs = "跳到下一个词首(不选中)"
+en = "to the start of the next word, no selection"
 
 [[message]]
-# 命令說明：jump_prev_long_word_end（草稿）
+# 命令說明：jump_prev_long_word_end
 key = "action.jump-prev-long-word-end"
-zhs = "光标跳到上一个大词尾(不选中)"
-en = "the cursor back to the previous long word's end, selecting nothing"
+zhs = "跳到上一个大词尾(不选中)"
+en = "to the end of the previous long word, no selection"
 
 [[message]]
-# 命令說明：jump_prev_long_word_start（草稿）
+# 命令說明：jump_prev_long_word_start
 key = "action.jump-prev-long-word-start"
-zhs = "光标跳到上一个大词首(不选中)"
-en = "the cursor to the previous long word's start, selecting nothing"
+zhs = "跳到上一个大词首(不选中)"
+en = "to the start of the previous long word, no selection"
 
 [[message]]
-# 命令說明：jump_prev_paragraph（草稿）
+# 命令說明：jump_prev_paragraph
 key = "action.jump-prev-paragraph"
-zhs = "光标跳到上一段(不选中)"
-en = "the cursor to the previous paragraph, selecting nothing"
+zhs = "跳到上一段(不选中)"
+en = "to the previous paragraph, no selection"
 
 [[message]]
-# 命令說明：jump_prev_sentence（草稿）
+# 命令說明：jump_prev_sentence
 key = "action.jump-prev-sentence"
-zhs = "光标跳到上一句(不选中)"
-en = "the cursor to the previous sentence, selecting nothing"
+zhs = "跳到上一句(不选中)"
+en = "to the previous sentence, no selection"
 
 [[message]]
-# 命令說明：jump_prev_word_end（草稿）
+# 命令說明：jump_prev_word_end
 key = "action.jump-prev-word-end"
-zhs = "光标跳到上一个词尾(不选中)"
-en = "the cursor back to the previous word's end, selecting nothing"
+zhs = "跳到上一个词尾(不选中)"
+en = "to the end of the previous word, no selection"
 
 [[message]]
-# 命令說明：jump_prev_word_start（草稿）
+# 命令說明：jump_prev_word_start
 key = "action.jump-prev-word-start"
-zhs = "光标跳到上一个词首(不选中)"
-en = "the cursor to the previous word's start, selecting nothing"
+zhs = "跳到上一个词首(不选中)"
+en = "to the start of the previous word, no selection"
 
 [[message]]
-# 命令說明：jump_view_down（草稿）
+# 命令說明：jump_view_down
 key = "action.jump-view-down"
 zhs = "去下面那一区"
 en = "to the region below"
 
 [[message]]
-# 命令說明：jump_view_left（草稿）
+# 命令說明：jump_view_left
 key = "action.jump-view-left"
 zhs = "去左边那一区"
 en = "to the region on the left"
 
 [[message]]
-# 命令說明：jump_view_right（草稿）
+# 命令說明：jump_view_right
 key = "action.jump-view-right"
 zhs = "去右边那一区"
 en = "to the region on the right"
 
 [[message]]
-# 命令說明：jump_view_up（草稿）
+# 命令說明：jump_view_up
 key = "action.jump-view-up"
 zhs = "去上面那一区"
 en = "to the region above"
 
 [[message]]
-# 命令說明：keep_primary_selection（草稿）
+# 命令說明：keep_primary_selection
 key = "action.keep-primary-selection"
 zhs = "只留主选区"
 en = "keep only the primary selection"
 
 [[message]]
-# 命令說明：keep_selections（草稿）
+# 命令說明：keep_selections
 key = "action.keep-selections"
-zhs = "只留配得上正则的选区"
-en = "keep the selections that match a pattern"
+zhs = "只保留匹配正则的选区"
+en = "keep selections matching a regex"
 
 [[message]]
-# 命令說明：kill_to_line_end（草稿）
+# 命令說明：kill_to_line_end
 key = "action.kill-to-line-end"
 zhs = "删到行尾(插入模式)"
 en = "delete to the end of the line, in Insert mode"
 
 [[message]]
-# 命令說明：kill_to_line_start（草稿）
+# 命令說明：kill_to_line_start
 key = "action.kill-to-line-start"
 zhs = "删到行首"
 en = "delete to the start of the line"
 
 [[message]]
-# 命令說明：last_entry（草稿）
+# 命令說明：last_entry
 key = "action.last-entry"
 zhs = "最后一项"
-en = "the last entry"
+en = "last entry"
 
 [[message]]
-# 命令說明：goto_last_line（草稿）
+# 命令說明：goto_last_line
 key = "action.last-row"
 zhs = "最后一行"
-en = "the last row"
+en = "last row"
 
 [[message]]
-# 命令說明：later（草稿）
+# 命令說明：later
 key = "action.later"
-zhs = "重做(和 U 一样)"
-en = "redo, as U does"
+zhs = "重做(同 U)"
+en = "redo (same as U)"
 
 [[message]]
-# 命令說明：leave_sidebar（草稿）
+# 命令說明：leave_sidebar
 key = "action.leave-sidebar"
-zhs = "回编辑区，面板留着"
-en = "back to the text, the panel stays"
+zhs = "回到编辑区(面板不关)"
+en = "back to the text, keeping the panel open"
 
 [[message]]
-# 命令說明：left_bracket_mode（草稿）
+# 命令說明：left_bracket_mode
 key = "action.left-bracket-mode"
-zhs = "[ 组：往前找上一处"
-en = "the [ group: the previous one of something"
+zhs = "[ 组：跳到上一个"
+en = "[ group: go to previous"
 
 [[message]]
-# 命令說明：match_mode（草稿）
+# 命令說明：match_mode
 key = "action.match-mode"
 zhs = "配对组：括号、引号、对象"
-en = "the match group: brackets, quotes, objects"
+en = "match group: brackets, quotes, objects"
 
 [[message]]
-# 命令說明：merge_consecutive_selections（草稿）
+# 命令說明：merge_consecutive_selections
 key = "action.merge-consecutive-selections"
-zhs = "把相连的选区合起来"
-en = "merge the selections that touch"
+zhs = "合并相邻的选区"
+en = "merge adjacent selections"
 
 [[message]]
-# 命令說明：merge_selections（草稿）
+# 命令說明：merge_selections
 key = "action.merge-selections"
-zhs = "把所有选区合成一个"
-en = "merge every selection into one"
+zhs = "合并所有选区"
+en = "merge all selections into one"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1149,13 +1149,13 @@ en = "one character right"
 find = "右 右邊 右边 一個字 一个字 right"
 
 [[message]]
-# 命令說明：move_line_down（草稿）
+# 命令說明：move_line_down
 key = "action.move-line-down"
 zhs = "下一行(文件里的)"
 en = "one line down, in the file"
 
 [[message]]
-# 命令說明：move_line_up（草稿）
+# 命令說明：move_line_up
 key = "action.move-line-up"
 zhs = "上一行(文件里的)"
 en = "one line up, in the file"
@@ -1164,18 +1164,18 @@ en = "one line up, in the file"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-long-word-end"
 zhs = "下一个大词尾"
-en = "the next long word's end"
+en = "end of the next long word"
 find = "大詞 大词 詞尾 词尾 空格 WORD end"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-long-word-start"
 zhs = "下一个大词首(按空格分)"
-en = "the next long word's start"
+en = "start of the next long word"
 find = "大詞 大词 詞首 词首 空格 WORD"
 
 [[message]]
-# 命令說明：move_next_paragraph（草稿）
+# 命令說明：move_next_paragraph
 key = "action.move-next-paragraph"
 zhs = "选到下一段"
 en = "select on to the next paragraph"
@@ -1184,43 +1184,43 @@ en = "select on to the next paragraph"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-word-end"
 zhs = "下一个词尾"
-en = "the next word's end"
+en = "end of the next word"
 find = "詞尾 词尾 詞 词 word end"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-next-word-start"
 zhs = "下一个词首"
-en = "the next word's start"
+en = "start of the next word"
 find = "詞首 词首 詞 词 下一個詞 下一个词 word"
 
 [[message]]
-# 命令說明：move_next_zong（草稿）
+# 命令說明：move_next_zong
 key = "action.move-next-zong"
 zhs = "竖排时到下一纵(文件里的)"
 en = "on a vertical page, on to the next line of the file"
 
 [[message]]
-# 命令說明：move_parent_node_end，A-e（草稿）
+# 命令說明：move_parent_node_end，A-e
 key = "action.move-parent-node-end"
-zhs = "到光标所在节点的末尾"
-en = "to the end of the node around the cursor"
+zhs = "到所在节点的末尾"
+en = "to the end of the enclosing node"
 
 [[message]]
-# 命令說明：move_parent_node_start，A-b（草稿）
+# 命令說明：move_parent_node_start，A-b
 key = "action.move-parent-node-start"
-zhs = "到光标所在节点的开头，再按到上一层的"
-en = "to the start of the node around the cursor, then of its parent"
+zhs = "到所在节点开头，再按到上一层"
+en = "to the start of the enclosing node, then of its parent"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-prev-long-word-start"
 zhs = "上一个大词首"
-en = "the previous long word's start"
+en = "start of the previous long word"
 find = "大詞 大词 上一個 上一个 WORD back"
 
 [[message]]
-# 命令說明：move_prev_paragraph（草稿）
+# 命令說明：move_prev_paragraph
 key = "action.move-prev-paragraph"
 zhs = "选到上一段"
 en = "select back to the previous paragraph"
@@ -1229,49 +1229,49 @@ en = "select back to the previous paragraph"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.move-prev-word-start"
 zhs = "上一个词首"
-en = "the previous word's start"
+en = "start of the previous word"
 find = "詞首 词首 上一個詞 上一个词 word back"
 
 [[message]]
-# 命令說明：move_prev_zong（草稿）
+# 命令說明：move_prev_zong
 key = "action.move-prev-zong"
 zhs = "竖排时到上一纵(文件里的)"
 en = "on a vertical page, back to the previous line of the file"
 
 [[message]]
-# 命令說明：move_selected_lines_down（草稿）
+# 命令說明：move_selected_lines_down
 key = "action.move-selected-lines-down"
 zhs = "把选中的行往下移"
 en = "move the selected lines down"
 
 [[message]]
-# 命令說明：move_selected_lines_up（草稿）
+# 命令說明：move_selected_lines_up
 key = "action.move-selected-lines-up"
 zhs = "把选中的行往上移"
 en = "move the selected lines up"
 
 [[message]]
-# 命令說明：move_view_far_down（草稿）
+# 命令說明：move_view_far_down
 key = "action.move-view-far-down"
-zhs = "挪到最下面"
+zhs = "移到最下方"
 en = "move this window to the very bottom"
 
 [[message]]
-# 命令說明：move_view_far_left（草稿）
+# 命令說明：move_view_far_left
 key = "action.move-view-far-left"
-zhs = "挪到最左边"
+zhs = "移到最左侧"
 en = "move this window to the far left"
 
 [[message]]
-# 命令說明：move_view_far_right（草稿）
+# 命令說明：move_view_far_right
 key = "action.move-view-far-right"
-zhs = "挪到最右边"
+zhs = "移到最右侧"
 en = "move this window to the far right"
 
 [[message]]
-# 命令說明：move_view_far_up（草稿）
+# 命令說明：move_view_far_up
 key = "action.move-view-far-up"
-zhs = "挪到最上面"
+zhs = "移到最上方"
 en = "move this window to the very top"
 
 [[message]]
@@ -1291,21 +1291,21 @@ find = "上 上一行 往上 up"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.next-buffer"
-zhs = "切换到下一个缓冲区"
-en = "the next buffer"
+zhs = "下一个缓冲区"
+en = "next buffer"
 find = "緩衝 缓冲 下一份 切換 切换 next buffer"
 
 [[message]]
-# 命令說明：next_entry（草稿）
+# 命令說明：next_entry
 key = "action.next-entry"
 zhs = "下一项"
-en = "the next entry"
+en = "next entry"
 
 [[message]]
-# 命令說明：next_field，面板輸入框裏的（草稿）
+# 命令說明：next_field，面板輸入框裏的
 key = "action.next-field"
-zhs = "下一格；有灰字时先收下灰字"
-en = "the next box (and a greyed-out word is taken first)"
+zhs = "下一格；有灰字时先接受灰字"
+en = "next field (takes a greyed-out suggestion first)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1315,34 +1315,34 @@ en = "the next region"
 find = "區域 区域 分屏 窗口 next region window"
 
 [[message]]
-# 命令說明：move_line_down（草稿）
+# 命令說明：move_line_down
 key = "action.next-row"
 zhs = "下一行"
 en = "one row down"
 
 [[message]]
-# 命令說明：next_sidebar_view（草稿）
+# 命令說明：next_sidebar_view
 key = "action.next-sidebar-view"
-zhs = "换面板"
-en = "the next panel in this sidebar"
+zhs = "下一个面板"
+en = "next panel"
 
 [[message]]
-# 命令說明：no_op（草稿）
+# 命令說明：no_op
 key = "action.no-op"
-zhs = "什么都不做(绑上它就是解绑那个键)"
-en = "nothing (bound to a key, it unbinds it)"
+zhs = "什么都不做(绑定它即解绑该键)"
+en = "do nothing (binding it unbinds the key)"
 
 [[message]]
-# 命令說明：normal_mode（草稿）
+# 命令說明：normal_mode
 key = "action.normal-mode"
-zhs = "退出延伸模式，收起临时显示的东西"
-en = "leave Select mode and put away what was shown for a moment"
+zhs = "退出选择模式，收起临时显示的内容"
+en = "leave Select mode and dismiss anything shown briefly"
 
 [[message]]
-# 命令說明：normal_mode_and_collapse（草稿）
+# 命令說明：normal_mode_and_collapse
 key = "action.normal-mode-and-collapse"
-zhs = "退出选择，或收成一个光标"
-en = "leave select mode, or collapse to one cursor"
+zhs = "退出选择模式，或收成一个光标"
+en = "leave Select mode, or collapse to one cursor"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1359,7 +1359,7 @@ en = "open a line below"
 find = "新行 下面 開行 开行 open below"
 
 [[message]]
-# 命令說明：open_entry（草稿）
+# 命令說明：open_entry
 key = "action.open-entry"
 zhs = "进入：打开文件、跳到那一行"
 en = "go to the entry: open the file, or jump to the line"
@@ -1367,72 +1367,72 @@ en = "go to the entry: open the file, or jump to the line"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.open-here"
-zhs = "打开本行写的文件名"
+zhs = "打开本行所写的文件"
 en = "open the file this line names"
 find = "打開 打开 檔名 档名 路徑 路径 open here"
 
 [[message]]
-# 命令說明：open_link（草稿）
+# 命令說明：open_link
 key = "action.open-link"
 zhs = "用浏览器打开光标下的网址"
-en = "open the web address under the cursor in the browser"
+en = "open the URL under the cursor in a browser"
 
 [[message]]
-# 命令說明：operator_change（草稿）
+# 命令說明：operator_change
 key = "action.operator-change"
 zhs = "改写(再按一个动作)"
 en = "change (then a motion)"
 
 [[message]]
-# 命令說明：operator_comment，vim 的 gc（草稿）
+# 命令說明：operator_comment，vim 的 gc
 key = "action.operator-comment"
-zhs = "注释（等一个动作）"
-en = "comment out (then a motion)"
+zhs = "注释(再按一个动作)"
+en = "comment (then a motion)"
 
 [[message]]
-# 命令說明：operator_delete（草稿）
+# 命令說明：operator_delete
 key = "action.operator-delete"
 zhs = "删除(再按一个动作)"
 en = "delete (then a motion)"
 
 [[message]]
-# 命令說明：operator_fill_keep_cursor（草稿）
+# 命令說明：operator_fill_keep_cursor
 key = "action.operator-fill-keep-cursor"
-zhs = "重新排版，光标不动（vim 的 gw）"
-en = "refill the lines, the cursor staying where it is (vim's gw)"
+zhs = "重排文本，光标不动(vim 的 gw)"
+en = "reflow lines, keeping the cursor (vim's gw)"
 
 [[message]]
-# 命令說明：operator_indent（草稿）
+# 命令說明：operator_indent
 key = "action.operator-indent"
 zhs = "增加缩进(再按一个动作)"
 en = "indent (then a motion)"
 
 [[message]]
-# 命令說明：operator_lowercase（草稿）
+# 命令說明：operator_lowercase
 key = "action.operator-lowercase"
 zhs = "转小写(再按一个动作)"
 en = "to lowercase (then a motion)"
 
 [[message]]
-# 命令說明：operator_switch_case（草稿）
+# 命令說明：operator_switch_case
 key = "action.operator-switch-case"
 zhs = "大小写互换(再按一个动作)"
 en = "switch case (then a motion)"
 
 [[message]]
-# 命令說明：operator_unindent（草稿）
+# 命令說明：operator_unindent
 key = "action.operator-unindent"
 zhs = "减少缩进(再按一个动作)"
 en = "unindent (then a motion)"
 
 [[message]]
-# 命令說明：operator_uppercase（草稿）
+# 命令說明：operator_uppercase
 key = "action.operator-uppercase"
 zhs = "转大写(再按一个动作)"
 en = "to uppercase (then a motion)"
 
 [[message]]
-# 命令說明：operator_yank（草稿）
+# 命令說明：operator_yank
 key = "action.operator-yank"
 zhs = "复制(再按一个动作)"
 en = "yank (then a motion)"
@@ -1440,20 +1440,20 @@ en = "yank (then a motion)"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.outline"
-zhs = "大纲边栏"
-en = "the outline"
+zhs = "大纲侧栏"
+en = "outline"
 find = "大綱 大纲 目錄 目录 標題 标题 outline symbols"
 
 [[message]]
-# 命令說明：page_down（草稿）
+# 命令說明：page_down
 key = "action.page-down"
-zhs = "前进一页"
+zhs = "向下翻页"
 en = "a page down"
 
 [[message]]
-# 命令說明：page_up（草稿）
+# 命令說明：page_up
 key = "action.page-up"
-zhs = "后退一页"
+zhs = "向上翻页"
 en = "a page up"
 
 [[message]]
@@ -1480,68 +1480,68 @@ find = "粘貼 粘贴 剪貼板 剪贴板 系統 系统 paste clipboard"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.paste-menu"
-zhs = "粘贴菜单：挑一个寄存器"
-en = "the paste menu"
+zhs = "粘贴菜单：选寄存器"
+en = "paste menu"
 find = "寄存器 粘貼 粘贴 選單 选单 register paste"
 
 [[message]]
-# 命令說明：paste_table_as_csv（草稿）
+# 命令說明：paste_table_as_csv
 key = "action.paste-table-as-csv"
-zhs = "剪贴板贴成 csv 表格"
+zhs = "从剪贴板粘贴为 csv 表格"
 en = "paste the clipboard as a csv table"
 
 [[message]]
-# 命令說明：paste_table_as_pipe（草稿）
+# 命令說明：paste_table_as_pipe
 key = "action.paste-table-as-pipe"
-zhs = "剪贴板贴成 pipe 表格"
+zhs = "从剪贴板粘贴为 pipe 表格"
 en = "paste the clipboard as a pipe table"
 
 [[message]]
-# 命令說明：paste_table_as_tsv（草稿）
+# 命令說明：paste_table_as_tsv
 key = "action.paste-table-as-tsv"
-zhs = "剪贴板贴成 tsv 表格"
+zhs = "从剪贴板粘贴为 tsv 表格"
 en = "paste the clipboard as a tsv table"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.prev-buffer"
-zhs = "切换到上一个缓冲区"
-en = "the previous buffer"
+zhs = "上一个缓冲区"
+en = "previous buffer"
 find = "緩衝 缓冲 上一份 切換 切换 previous buffer"
 
 [[message]]
-# 命令說明：prev_entry（草稿）
+# 命令說明：prev_entry
 key = "action.prev-entry"
 zhs = "上一项"
-en = "the previous entry"
+en = "previous entry"
 
 [[message]]
-# 命令說明：prev_field，面板輸入框裏的（草稿）
+# 命令說明：prev_field，面板輸入框裏的
 key = "action.prev-field"
 zhs = "上一格"
-en = "the previous box"
+en = "previous field"
 
 [[message]]
-# 命令說明：move_line_up（草稿）
+# 命令說明：move_line_up
 key = "action.prev-row"
 zhs = "上一行"
 en = "one row up"
 
 [[message]]
-# 命令說明：prev_sidebar_view（草稿）
+# 命令說明：prev_sidebar_view
 key = "action.prev-sidebar-view"
-zhs = "换面板(往回)"
-en = "the previous panel in this sidebar"
+zhs = "上一个面板"
+en = "previous panel"
 
 [[message]]
-# :keymap-actions 那張表裏這一行寫什麽（草稿）
+# :keymap-actions 那張表裏這一行寫什麽
 key = "action.quit"
-zhs = "关掉这一区；最后一个窗口就离开编辑器"
-en = "close this region; in the last window, leave the editor"
+zhs = "关闭此区；最后一个窗口则退出编辑器"
+en = "close this region; in the last window, quit"
 find = "關 关 退出 關掉 关掉 離開 离开 窗口 quit close window"
 
 [[message]]
-# 命令說明：record_macro（草稿）
+# 命令說明：record_macro
 key = "action.record-macro"
 zhs = "开始或停止录宏"
 en = "start or stop recording a macro"
@@ -1554,58 +1554,58 @@ en = "redo"
 find = "重做 恢復 恢复 redo"
 
 [[message]]
-# 命令說明：refresh_sidebar（草稿）
+# 命令說明：refresh_sidebar
 key = "action.refresh-sidebar"
-zhs = "重读"
-en = "read it again"
+zhs = "刷新"
+en = "refresh"
 
 [[message]]
-# 命令說明：remove_primary_selection（草稿）
+# 命令說明：remove_primary_selection
 key = "action.remove-primary-selection"
 zhs = "去掉主选区"
 en = "remove the primary selection"
 
 [[message]]
-# 命令說明：remove_selections（草稿）
+# 命令說明：remove_selections
 key = "action.remove-selections"
-zhs = "去掉配得上正则的选区"
-en = "remove the selections that match a pattern"
+zhs = "去掉匹配正则的选区"
+en = "remove selections matching a regex"
 
 [[message]]
-# 命令說明：repeat_find_char（草稿）
+# 命令說明：repeat_find_char
 key = "action.repeat-find-char"
 zhs = "再找一次刚才那个字"
 en = "find that character again"
 
 [[message]]
-# 命令說明：repeat_find_char_reverse（草稿）
+# 命令說明：repeat_find_char_reverse
 key = "action.repeat-find-char-reverse"
-zhs = "反方向再找一次刚才那个字"
-en = "find that character again, the other way"
+zhs = "反向再找一次刚才那个字"
+en = "find that character again, in reverse"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.repeat-last-change"
-zhs = "再做一次刚才那个改动"
+zhs = "重复上次输入(vim 键位：上次改动)"
 en = "repeat the last insert (vim keymap: the last change)"
 find = "重複 重复 再做一次 repeat"
 
 [[message]]
-# 命令說明：repeat_last_motion（草稿）
+# 命令說明：repeat_last_motion
 key = "action.repeat-last-motion"
-zhs = "再做一次刚才的 f 或 t"
+zhs = "重复上次的 f 或 t"
 en = "repeat the last f or t"
 
 [[message]]
-# 命令說明：replace（草稿）
+# 命令說明：replace
 key = "action.replace"
 zhs = "把选中的每个字换成另一个字"
 en = "replace each selected character with another"
 
 [[message]]
-# 命令說明：replace_mode（草稿）
+# 命令說明：replace_mode
 key = "action.replace-mode"
-zhs = "覆写模式：打字盖掉原文"
+zhs = "替换模式：输入覆盖原文"
 en = "Replace mode: typing writes over the text"
 
 [[message]]
@@ -1616,43 +1616,43 @@ en = "replace the selection with the register"
 find = "替換 替换 寄存器 粘貼 粘贴 replace register"
 
 [[message]]
-# 命令說明：replay_macro（草稿）
+# 命令說明：replay_macro
 key = "action.replay-macro"
 zhs = "回放宏"
-en = "replay the macro"
+en = "replay"
 
 [[message]]
-# 命令說明：restore_change（草稿）
+# 命令說明：restore_change
 key = "action.restore-change"
 zhs = "还原此处改动"
 en = "restore this change"
 
 [[message]]
-# 命令說明：right_bracket_mode（草稿）
+# 命令說明：right_bracket_mode
 key = "action.right-bracket-mode"
-zhs = "] 组：往后找下一处"
-en = "the ] group: the next one of something"
+zhs = "] 组：跳到下一个"
+en = "] group: go to next"
 
 [[message]]
-# 命令說明：rotate_selection_contents_backward（草稿）
+# 命令說明：rotate_selection_contents_backward
 key = "action.rotate-selection-contents-backward"
 zhs = "各选区的内容往前轮换"
 en = "rotate the selections' contents backward"
 
 [[message]]
-# 命令說明：rotate_selection_contents_forward（草稿）
+# 命令說明：rotate_selection_contents_forward
 key = "action.rotate-selection-contents-forward"
 zhs = "各选区的内容往后轮换"
 en = "rotate the selections' contents forward"
 
 [[message]]
-# 命令說明：rotate_selections_backward（草稿）
+# 命令說明：rotate_selections_backward
 key = "action.rotate-selections-backward"
 zhs = "主选区换成上一个"
 en = "make the previous selection the primary one"
 
 [[message]]
-# 命令說明：rotate_selections_forward（草稿）
+# 命令說明：rotate_selections_forward
 key = "action.rotate-selections-forward"
 zhs = "主选区换成下一个"
 en = "make the next selection the primary one"
@@ -1660,7 +1660,7 @@ en = "make the next selection the primary one"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.rsearch"
-zhs = "往后搜索"
+zhs = "反向搜索"
 en = "search backward"
 find = "搜索 搜尋 搜寻 查找 往後 往后 反向 search backward"
 
@@ -1672,47 +1672,47 @@ en = "ruby"
 find = "注音 旁註 旁注 拼音 讀音 读音 ruby"
 
 [[message]]
-# 命令說明：run_one_normal_command（草稿）
+# 命令說明：run_one_normal_command
 key = "action.run-one-normal-command"
-zhs = "临时回普通模式做一件事(vim 的 C-o)"
+zhs = "临时执行一条普通模式命令(vim 的 C-o)"
 en = "one Normal-mode command, then back to Insert mode (vim's C-o)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.save-and-quit"
-zhs = "存盘并关掉"
+zhs = "保存并关闭"
 en = "save and close"
 find = "存 存盤 存盘 保存 退出 關掉 关掉 save quit"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.save-file"
-zhs = "存盘"
+zhs = "保存"
 en = "save"
 find = "存 存盤 存盘 保存 寫入 写入 save write"
 
 [[message]]
-# 命令說明：save_selection（草稿）
+# 命令說明：save_selection
 key = "action.save-selection"
-zhs = "把这里记进跳转表"
-en = "save this place in the jump list"
+zhs = "把当前位置记入跳转表"
+en = "save this position to the jump list"
 
 [[message]]
-# 命令說明：scroll_down（草稿）
+# 命令說明：scroll_down
 key = "action.scroll-down"
-zhs = "屏幕往下滚一行(光标的字不动)"
-en = "scroll the view down a line, the cursor keeping its place in the text"
+zhs = "向下滚动一行(光标位置不变)"
+en = "scroll down a line, the cursor keeping its place"
 
 [[message]]
-# 命令說明：scroll_up（草稿）
+# 命令說明：scroll_up
 key = "action.scroll-up"
-zhs = "屏幕往上滚一行(光标的字不动)"
-en = "scroll the view up a line, the cursor keeping its place in the text"
+zhs = "向上滚动一行(光标位置不变)"
+en = "scroll up a line, the cursor keeping its place"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.search"
-zhs = "往前搜索"
+zhs = "搜索"
 en = "search forward"
 find = "搜索 搜尋 搜寻 查找 找 search find"
 
@@ -1720,78 +1720,78 @@ find = "搜索 搜尋 搜寻 查找 找 search find"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-next"
 zhs = "下一处"
-en = "the next match"
+en = "next match"
 find = "下一處 下一处 再找一次 next"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-panel"
 zhs = "高级搜索面板"
-en = "the search panel"
+en = "search panel"
 find = "搜索 搜尋 搜寻 面板 跨文件 替換 替换 panel replace"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-prev"
 zhs = "上一处"
-en = "the previous match"
+en = "previous match"
 find = "上一處 上一处 往回 previous"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.search-selection"
-zhs = "找选中的那段"
-en = "look for what is selected"
+zhs = "搜索选中内容"
+en = "search for the selection"
 find = "這個詞 这个词 還在哪 还在哪 選中 选中 search selection"
 
 [[message]]
-# 命令說明：search_selection_detect_word_boundaries（草稿）
+# 命令說明：search_selection_detect_word_boundaries
 key = "action.search-selection-detect-word-boundaries"
-zhs = "找选中的那段(整词)"
-en = "look for what is selected, as a whole word"
+zhs = "搜索选中内容(整词)"
+en = "search for the selection as a whole word"
 
 [[message]]
-# 命令說明：search_selection_exact（草稿）
+# 命令說明：search_selection_exact
 key = "action.search-selection-exact"
-zhs = "找选中的那段(原样)"
-en = "look for what is selected, exactly as written"
+zhs = "搜索选中内容(原样)"
+en = "search for the selection exactly"
 
 [[message]]
-# 命令說明：search_word_backward（草稿）
+# 命令說明：search_word_backward
 key = "action.search-word-backward"
-zhs = "往回找光标下的词"
+zhs = "反向搜索光标下的词"
 en = "search backward for the word under the cursor"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.select-all"
-zhs = "选中整个文件"
-en = "select the whole file"
+zhs = "全选"
+en = "select all"
 find = "全選 全选 整個文件 整个文件 all"
 
 [[message]]
-# 命令說明：select_all_children，A-I（草稿）
+# 命令說明：select_all_children，A-I
 key = "action.select-all-children"
-zhs = "选中里面的每一个节点"
-en = "select every node inside this one"
+zhs = "选中所有子节点"
+en = "select every child node"
 
 [[message]]
-# 命令說明：select_all_siblings，A-a（草稿）
+# 命令說明：select_all_siblings，A-a
 key = "action.select-all-siblings"
-zhs = "选中同一层的每一个节点"
-en = "select every node beside this one"
+zhs = "选中所有同级节点"
+en = "select every sibling node"
 
 [[message]]
-# 命令說明：select_around_object（草稿）
+# 命令說明：select_around_object
 key = "action.select-around-object"
-zhs = "选中整个对象(再按一个对象)"
-en = "select around an object (then which)"
+zhs = "选中整个对象(再按对象键)"
+en = "select around an object (then its key)"
 
 [[message]]
-# 命令說明：select_inner_object（草稿）
+# 命令說明：select_inner_object
 key = "action.select-inner-object"
-zhs = "选中对象的里面(再按一个对象)"
-en = "select inside an object (then which)"
+zhs = "选中对象内部(再按对象键)"
+en = "select inside an object (then its key)"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1801,67 +1801,67 @@ en = "select this line"
 find = "選行 选行 整行 當前行 当前行 line"
 
 [[message]]
-# 命令說明：select_line_mode（草稿）
+# 命令說明：select_line_mode
 key = "action.select-line-mode"
 zhs = "整行选择模式"
 en = "line-wise Select mode"
 
 [[message]]
-# 命令說明：select_next_sibling，A-n（草稿）
+# 命令說明：select_next_sibling，A-n
 key = "action.select-next-sibling"
-zhs = "选下一个语法节点"
-en = "select the next syntax node"
+zhs = "选中下一个同级节点"
+en = "select the next sibling node"
 
 [[message]]
-# 命令說明：select_prev_sibling，A-p（草稿）
+# 命令說明：select_prev_sibling，A-p
 key = "action.select-prev-sibling"
-zhs = "选上一个语法节点"
-en = "select the previous syntax node"
+zhs = "选中上一个同级节点"
+en = "select the previous sibling node"
 
 [[message]]
-# 命令說明：select_regex（草稿）
+# 命令說明：select_regex
 key = "action.select-regex"
-zhs = "在选区里按正则选出"
-en = "select what matches a pattern inside the selection"
+zhs = "在选区内按正则选择"
+en = "select regex matches inside the selection"
 
 [[message]]
-# 命令說明：select_register（草稿）
+# 命令說明：select_register
 key = "action.select-register"
 zhs = "选寄存器(再按一个字母)"
 en = "pick a register (then a letter)"
 
 [[message]]
-# 命令說明：shell_append_output（草稿）
+# 命令說明：shell_append_output
 key = "action.shell-append-output"
 zhs = "把外部命令的输出接在选区后"
 en = "append a command's output after the selection"
 
 [[message]]
-# 命令說明：shell_insert_output（草稿）
+# 命令說明：shell_insert_output
 key = "action.shell-insert-output"
 zhs = "把外部命令的输出插在选区前"
 en = "insert a command's output before the selection"
 
 [[message]]
-# 命令說明：shell_pipe（草稿）
+# 命令說明：shell_pipe
 key = "action.shell-pipe"
-zhs = "用外部命令处理选区，换掉它"
+zhs = "用外部命令处理选区并替换"
 en = "pipe the selection through a command, replacing it"
 
 [[message]]
-# 命令說明：shell_pipe_to（草稿）
+# 命令說明：shell_pipe_to
 key = "action.shell-pipe-to"
-zhs = "把选区交给外部命令，不改文本"
+zhs = "把选区传给外部命令，不改文本"
 en = "pipe the selection to a command, keeping the text"
 
 [[message]]
-# 命令說明：shrink_selection，A-i（草稿）
+# 命令說明：shrink_selection，A-i
 key = "action.shrink-selection"
-zhs = "选区缩回去，或缩到第一个子节点"
+zhs = "缩小选区，或缩到第一个子节点"
 en = "shrink the selection back, or to its first child node"
 
 [[message]]
-# 命令說明：shrink_to_line_bounds（草稿）
+# 命令說明：shrink_to_line_bounds
 key = "action.shrink-to-line-bounds"
 zhs = "把选区缩到整行"
 en = "shrink the selection to whole lines"
@@ -1869,69 +1869,69 @@ en = "shrink the selection to whole lines"
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.sidebar"
-zhs = "左边栏(开关)"
-en = "the left sidebar"
+zhs = "左侧栏(开关)"
+en = "toggle the left sidebar"
 find = "邊欄 边栏 側欄 侧栏 左邊 左边 sidebar"
 
 [[message]]
-# 命令說明：normal_mode（草稿）
+# 命令說明：normal_mode
 key = "action.sidebar-normal-mode"
 zhs = "让输入法再挂起一次"
 en = "suspend the input method again"
 
 [[message]]
-# 命令說明：space_mode（草稿）
+# 命令說明：space_mode
 key = "action.space-mode"
 zhs = "空格菜单"
-en = "the Space menu"
+en = "Space menu"
 
 [[message]]
-# 命令說明：split_selection（草稿）
+# 命令說明：split_selection
 key = "action.split-selection"
-zhs = "按正则把选区拆开"
-en = "split the selection on a pattern"
+zhs = "按正则拆分选区"
+en = "split the selection on a regex"
 
 [[message]]
-# 命令說明：split_selection_on_newline（草稿）
+# 命令說明：split_selection_on_newline
 key = "action.split-selection-on-newline"
-zhs = "按行把选区拆开"
+zhs = "按行拆分选区"
 en = "split the selection into its lines"
 
 [[message]]
-# 命令說明：sticky_view_mode（草稿）
+# 命令說明：sticky_view_mode
 key = "action.sticky-view-mode"
-zhs = "视图组(按完不收)"
-en = "the view group, staying open"
+zhs = "视图组(常驻)"
+en = "view group (sticky)"
 
 [[message]]
-# 命令說明：suspend，C-z（草稿）
+# 命令說明：suspend，C-z
 key = "action.suspend"
-zhs = "暂停，回到终端；fg 回来"
+zhs = "挂起到终端；fg 返回"
 en = "suspend to the shell; fg brings it back"
 
 [[message]]
-# 命令說明：swap_view_down（草稿）
+# 命令說明：swap_view_down
 key = "action.swap-view-down"
 zhs = "和下面那一区对调"
-en = "trade places with the region below"
+en = "swap with the region below"
 
 [[message]]
-# 命令說明：swap_view_left（草稿）
+# 命令說明：swap_view_left
 key = "action.swap-view-left"
 zhs = "和左边那一区对调"
-en = "trade places with the region on the left"
+en = "swap with the region on the left"
 
 [[message]]
-# 命令說明：swap_view_right（草稿）
+# 命令說明：swap_view_right
 key = "action.swap-view-right"
 zhs = "和右边那一区对调"
-en = "trade places with the region on the right"
+en = "swap with the region on the right"
 
 [[message]]
-# 命令說明：swap_view_up（草稿）
+# 命令說明：swap_view_up
 key = "action.swap-view-up"
 zhs = "和上面那一区对调"
-en = "trade places with the region above"
+en = "swap with the region above"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -1941,177 +1941,177 @@ en = "switch case"
 find = "大小寫 大小写 互換 互换 case swap"
 
 [[message]]
-# 命令說明：table_add_column_left（草稿）
+# 命令說明：table_add_column_left
 key = "action.table-add-column-left"
-zhs = "左边加一栏"
+zhs = "左边加一列"
 en = "add a column to the left"
 
 [[message]]
-# 命令說明：table_add_column_right（草稿）
+# 命令說明：table_add_column_right
 key = "action.table-add-column-right"
-zhs = "右边加一栏"
+zhs = "右边加一列"
 en = "add a column to the right"
 
 [[message]]
-# 命令說明：table_add_row_above（草稿）
+# 命令說明：table_add_row_above
 key = "action.table-add-row-above"
-zhs = "上面插入新行"
+zhs = "上方插入一行"
 en = "insert a new row above"
 
 [[message]]
-# 命令說明：table_add_row_below（草稿）
+# 命令說明：table_add_row_below
 key = "action.table-add-row-below"
-zhs = "下面插入新行"
+zhs = "下方插入一行"
 en = "insert a new row below"
 
 [[message]]
-# 命令說明：table_align_center（草稿）
+# 命令說明：table_align_center
 key = "action.table-align-center"
-zhs = "这栏居中"
-en = "this column to the centre"
+zhs = "本列居中"
+en = "centre this column"
 
 [[message]]
-# 命令說明：table_align_left（草稿）
+# 命令說明：table_align_left
 key = "action.table-align-left"
-zhs = "这栏靠左"
-en = "this column to the left"
+zhs = "本列左对齐"
+en = "align this column left"
 
 [[message]]
-# 命令說明：table_align_right（草稿）
+# 命令說明：table_align_right
 key = "action.table-align-right"
-zhs = "这栏靠右"
-en = "this column to the right"
+zhs = "本列右对齐"
+en = "align this column right"
 
 [[message]]
-# 命令說明：table_delete_column（草稿）
+# 命令說明：table_delete_column
 key = "action.table-delete-column"
-zhs = "删除这一栏"
+zhs = "删除本列"
 en = "delete this column"
 
 [[message]]
-# 命令說明：table_enter_cell（草稿）
+# 命令說明：table_enter_cell
 key = "action.table-enter-cell"
-zhs = "进格子里(按字走)"
+zhs = "进入单元格(按字移动)"
 en = "into the cell, to move by character"
 
 [[message]]
-# 命令說明：table_leave_cell（草稿）
+# 命令說明：table_leave_cell
 key = "action.table-leave-cell"
-zhs = "出格子(回到按格走)"
+zhs = "离开单元格(回到按格移动)"
 en = "out of the cell, to move by cell again"
 
 [[message]]
-# 命令說明：table_move_column_left（草稿）
+# 命令說明：table_move_column_left
 key = "action.table-move-column-left"
-zhs = "这栏左移"
+zhs = "本列左移"
 en = "move this column left"
 
 [[message]]
-# 命令說明：table_move_column_right（草稿）
+# 命令說明：table_move_column_right
 key = "action.table-move-column-right"
-zhs = "这栏右移"
+zhs = "本列右移"
 en = "move this column right"
 
 [[message]]
-# 命令說明：table_move_row_down（草稿）
+# 命令說明：table_move_row_down
 key = "action.table-move-row-down"
-zhs = "这行下移"
+zhs = "本行下移"
 en = "move this row down"
 
 [[message]]
-# 命令說明：table_move_row_up（草稿）
+# 命令說明：table_move_row_up
 key = "action.table-move-row-up"
-zhs = "这行上移"
+zhs = "本行上移"
 en = "move this row up"
 
 [[message]]
-# 命令說明：table_next_cell（草稿）
+# 命令說明：table_next_cell
 key = "action.table-next-cell"
-zhs = "下一格，行尾接下一行"
-en = "the next cell, on to the next record at the end of this one"
+zhs = "下一格，到行尾接下一行"
+en = "next cell, wrapping to the next row"
 
 [[message]]
-# 命令說明：table_paste_column_left（草稿）
+# 命令說明：table_paste_column_left
 key = "action.table-paste-column-left"
-zhs = "把复制的栏贴到左边"
+zhs = "把复制的列粘贴到左边"
 en = "paste the yanked column to the left"
 
 [[message]]
-# 命令說明：table_paste_column_right（草稿）
+# 命令說明：table_paste_column_right
 key = "action.table-paste-column-right"
-zhs = "把复制的栏贴到右边"
+zhs = "把复制的列粘贴到右边"
 en = "paste the yanked column to the right"
 
 [[message]]
-# 命令說明：table_prev_cell（草稿）
+# 命令說明：table_prev_cell
 key = "action.table-prev-cell"
 zhs = "上一格"
 en = "the previous cell"
 
 [[message]]
-# 命令說明：table_sort_ascending（草稿）
+# 命令說明：table_sort_ascending
 key = "action.table-sort-ascending"
 zhs = "按列升序排列(␣t1s)"
 en = "sort by column, ascending (␣t1s)"
 
 [[message]]
-# 命令說明：table_sort_descending（草稿）
+# 命令說明：table_sort_descending
 key = "action.table-sort-descending"
 zhs = "按列降序排列(␣t1S)"
 en = "sort by column, descending (␣t1S)"
 
 [[message]]
-# 命令說明：table_yank_column（草稿）
+# 命令說明：table_yank_column
 key = "action.table-yank-column"
-zhs = "复制这一栏"
+zhs = "复制本列"
 en = "yank this column"
 
 [[message]]
-# 命令說明：till_prev_char（草稿）
+# 命令說明：till_prev_char
 key = "action.till-prev-char"
 zhs = "往前找一个字，选到它后面"
 en = "find a character backward, selecting back to just after it"
 
 [[message]]
-# 命令說明：toggle_left_sidebar（草稿）
+# 命令說明：toggle_left_sidebar
 key = "action.toggle-left-sidebar"
-zhs = "开关左栏"
+zhs = "开关左侧栏"
 en = "open or close the left sidebar"
 
 [[message]]
-# 命令說明：toggle_links_graph（草稿）
+# 命令說明：toggle_links_graph
 key = "action.toggle-links-graph"
 zhs = "链接面板：列表/图"
-en = "the links panel as a list or a graph"
+en = "links panel: list or graph"
 
 [[message]]
-# 命令說明：toggle_right_sidebar（草稿）
+# 命令說明：toggle_right_sidebar
 key = "action.toggle-right-sidebar"
-zhs = "开关右栏"
+zhs = "开关右侧栏"
 en = "open or close the right sidebar"
 
 [[message]]
-# 命令說明：toggle_wide_search（草稿）
+# 命令說明：toggle_wide_search
 key = "action.toggle-wide-search"
-zhs = "繁简拼音通配开关"
-en = "match across glyph variants and pinyin, on or off"
+zhs = "繁简/拼音通配(开关)"
+en = "toggle traditional/simplified and pinyin matching"
 
 [[message]]
-# 命令說明：trim_selections（草稿）
+# 命令說明：trim_selections
 key = "action.trim-selections"
 zhs = "去掉每个选区两头的空白"
 en = "trim the spaces off both ends of each selection"
 
 [[message]]
-# 命令說明：two_thirds_page_down（草稿）
+# 命令說明：two_thirds_page_down
 key = "action.two-thirds-page-down"
-zhs = "前进三分之二页"
+zhs = "向下翻三分之二页"
 en = "two thirds of a page down"
 
 [[message]]
-# 命令說明：two_thirds_page_up（草稿）
+# 命令說明：two_thirds_page_up
 key = "action.two-thirds-page-up"
-zhs = "后退三分之二页"
+zhs = "向上翻三分之二页"
 en = "two thirds of a page up"
 
 [[message]]
@@ -2122,7 +2122,7 @@ en = "undo"
 find = "撤銷 撤销 回退 後悔 后悔 undo"
 
 [[message]]
-# 命令說明：undo_line（草稿）
+# 命令說明：undo_line
 key = "action.undo-line"
 zhs = "撤销这一行的所有改动"
 en = "undo every change on this line"
@@ -2135,223 +2135,223 @@ en = "unindent"
 find = "縮進 缩进 左移 減少 减少 unindent outdent"
 
 [[message]]
-# 命令說明：view_mode（草稿）
+# 命令說明：view_mode
 key = "action.view-mode"
-zhs = "视图组：放光标行、滚屏、折叠"
-en = "the view group: place the cursor line, scroll, fold"
+zhs = "视图组：定位光标行、滚屏、折叠"
+en = "view group: place the cursor line, scroll, fold"
 
 [[message]]
-# 命令說明：vim_append_mode（草稿）
+# 命令說明：vim_append_mode
 key = "action.vim-append-mode"
 zhs = "在光标后插入(vim 的 a)"
 en = "insert after the cursor (vim's a)"
 
 [[message]]
-# 命令說明：vim_decrement（草稿）
+# 命令說明：vim_decrement
 key = "action.vim-decrement"
 zhs = "光标处或其后的数字减一(vim 的 C-x)"
 en = "the number at or after the cursor, minus one (vim's C-x)"
 
 [[message]]
-# 命令說明：vim_delete_char_forward（草稿）
+# 命令說明：vim_delete_char_forward
 key = "action.vim-delete-char-forward"
 zhs = "删掉光标下的字，不删换行(vim 的 x)"
 en = "delete the character under the cursor, never the line break (vim's x)"
 
 [[message]]
-# 命令說明：vim_flip_selections（草稿）
+# 命令說明：vim_flip_selections
 key = "action.vim-flip-selections"
 zhs = "换到选区的另一头(vim 可视模式的 o)"
 en = "to the other end of the selection (vim's Visual o)"
 
 [[message]]
-# 命令說明：vim_goto_first_nonwhitespace（草稿）
+# 命令說明：vim_goto_first_nonwhitespace
 key = "action.vim-goto-first-nonwhitespace"
-zhs = "行首第一个非空字(带数字时往下数行)"
-en = "the first non-blank character, a count of lines down"
+zhs = "第一个非空白字符(带数字时下移几行)"
+en = "first non-blank character (a count moves that many lines down)"
 
 [[message]]
-# 命令說明：vim_goto_line（草稿）
+# 命令說明：vim_goto_line
 key = "action.vim-goto-line"
-zhs = "到第几行，不带计数到最后一行(vim 的 G)"
+zhs = "到第 N 行，不带计数到末行(vim 的 G)"
 en = "to line N, or to the last line without a count (vim's G)"
 
 [[message]]
-# 命令說明：vim_goto_line_end（草稿）
+# 命令說明：vim_goto_line_end
 key = "action.vim-goto-line-end"
 zhs = "行尾(vim 的 $：往下走也留在行尾)"
 en = "the end of the line (vim's $: moving down keeps to line ends)"
 
 [[message]]
-# 命令說明：vim_increment（草稿）
+# 命令說明：vim_increment
 key = "action.vim-increment"
 zhs = "光标处或其后的数字加一(vim 的 C-a)"
 en = "the number at or after the cursor, plus one (vim's C-a)"
 
 [[message]]
-# 命令說明：vim_indent（草稿）
+# 命令說明：vim_indent
 key = "action.vim-indent"
 zhs = "增加缩进，光标留在原列(vim)"
 en = "indent, the cursor keeping its column (vim)"
 
 [[message]]
-# 命令說明：vim_insert_at_line_end（草稿）
+# 命令說明：vim_insert_at_line_end
 key = "action.vim-insert-at-line-end"
 zhs = "在行尾插入(vim 的 A)"
 en = "insert at the end of the line (vim's A)"
 
 [[message]]
-# 命令說明：vim_insert_at_line_start（草稿）
+# 命令說明：vim_insert_at_line_start
 key = "action.vim-insert-at-line-start"
 zhs = "在第一个非空白字符前插入(vim 的 I)"
 en = "insert before the first non-blank (vim's I)"
 
 [[message]]
-# 命令說明：vim_insert_mode（草稿）
+# 命令說明：vim_insert_mode
 key = "action.vim-insert-mode"
 zhs = "在光标前插入(vim 的 i)"
 en = "insert before the cursor (vim's i)"
 
 [[message]]
-# 命令說明：vim_join_selections（草稿）
+# 命令說明：vim_join_selections
 key = "action.vim-join-selections"
 zhs = "与下一行合并(vim 的 J)"
 en = "join with the next line (vim's J)"
 
 [[message]]
-# 命令說明：vim_kill_to_line_end（草稿）
+# 命令說明：vim_kill_to_line_end
 key = "action.vim-kill-to-line-end"
 zhs = "删到行尾，不删换行(vim)"
 en = "delete to the end of the line, never the line break (vim)"
 
 [[message]]
-# 命令說明：vim_kill_to_line_start（草稿）
+# 命令說明：vim_kill_to_line_start
 key = "action.vim-kill-to-line-start"
 zhs = "删到这次插入开始的地方(vim 的 C-u)"
 en = "delete back to where this Insert began (vim's C-u)"
 
 [[message]]
-# 命令說明：vim_match_brackets（草稿）
+# 命令說明：vim_match_brackets
 key = "action.vim-match-brackets"
-zhs = "配对的括号，不在括号上就找本行的下一个(vim 的 %)"
+zhs = "跳到匹配的括号，不在括号上则找本行下一个(vim 的 %)"
 en = "the matching bracket, or the next one on the line (vim's %)"
 
 [[message]]
-# 命令說明：vim_normal_mode（草稿）
+# 命令說明：vim_normal_mode
 key = "action.vim-normal-mode"
-zhs = "回普通模式(vim：退出可视模式时选区收成一点)"
+zhs = "回到普通模式(退出可视模式时选区收成光标)"
 en = "back to Normal mode (vim: leaving Visual mode collapses the selection)"
 
 [[message]]
-# 命令說明：vim_open_above（草稿）
+# 命令說明：vim_open_above
 key = "action.vim-open-above"
 zhs = "在上方开新行(vim 的 O，计数重复)"
 en = "open a line above (vim's O; a count repeats it)"
 
 [[message]]
-# 命令說明：vim_open_below（草稿）
+# 命令說明：vim_open_below
 key = "action.vim-open-below"
 zhs = "在下方开新行(vim 的 o，计数重复)"
 en = "open a line below (vim's o; a count repeats it)"
 
 [[message]]
-# 命令說明：vim_paste_after（草稿）
+# 命令說明：vim_paste_after
 key = "action.vim-paste-after"
 zhs = "向后粘贴(vim 的 p)"
 en = "paste after (vim's p)"
 
 [[message]]
-# 命令說明：vim_paste_after_indented（草稿）
+# 命令說明：vim_paste_after_indented
 key = "action.vim-paste-after-indented"
 zhs = "向后粘贴，缩进对齐这一行(vim 的 ]p)"
 en = "paste after, indented like this line (vim's ]p)"
 
 [[message]]
-# 命令說明：vim_paste_before（草稿）
+# 命令說明：vim_paste_before
 key = "action.vim-paste-before"
 zhs = "向前粘贴(vim 的 P)"
 en = "paste before (vim's P)"
 
 [[message]]
-# 命令說明：vim_paste_before_indented（草稿）
+# 命令說明：vim_paste_before_indented
 key = "action.vim-paste-before-indented"
 zhs = "向前粘贴，缩进对齐这一行(vim 的 [p)"
 en = "paste before, indented like this line (vim's [p)"
 
 [[message]]
-# 命令說明：vim_record_macro（草稿）
+# 命令說明：vim_record_macro
 key = "action.vim-record-macro"
 zhs = "录宏(再按一个字母)"
 en = "record a macro (then a letter)"
 
 [[message]]
-# 命令說明：vim_redo（草稿）
+# 命令說明：vim_redo
 key = "action.vim-redo"
 zhs = "重做(vim 的 C-r)"
-en = "redo, vim's C-r"
+en = "redo (vim's C-r)"
 
 [[message]]
-# 命令說明：vim_repeat_last_change（草稿）
+# 命令說明：vim_repeat_last_change
 key = "action.vim-repeat-last-change"
 zhs = "用新的计数再做一次刚才的改动"
 en = "repeat the last change with a new count"
 
 [[message]]
-# 命令說明：vim_replay_last_macro（草稿）
+# 命令說明：vim_replay_last_macro
 key = "action.vim-replay-last-macro"
-zhs = "播放最近录的宏(vim 的 Q)"
-en = "play the macro recorded last (vim's Q)"
+zhs = "回放上次录的宏(vim 的 Q)"
+en = "replay the last recorded macro (vim's Q)"
 
 [[message]]
-# 命令說明：vim_replay_macro（草稿）
+# 命令說明：vim_replay_macro
 key = "action.vim-replay-macro"
 zhs = "回放宏(再按一个字母)"
-en = "replay the macro (then a letter)"
+en = "replay (then a letter)"
 
 [[message]]
-# 命令說明：vim_search_next（草稿）
+# 命令說明：vim_search_next
 key = "action.vim-search-next"
 zhs = "下一处(vim 的 n)"
 en = "the next match (vim's n)"
 
 [[message]]
-# 命令說明：vim_search_prev（草稿）
+# 命令說明：vim_search_prev
 key = "action.vim-search-prev"
 zhs = "上一处(vim 的 N)"
 en = "the previous match (vim's N)"
 
 [[message]]
-# 命令說明：vim_switch_case（草稿）
+# 命令說明：vim_switch_case
 key = "action.vim-switch-case"
-zhs = "大小写互换并往后走(vim 的 ~)"
+zhs = "切换大小写并后移(vim 的 ~)"
 en = "switch case and move on (vim's ~)"
 
 [[message]]
-# 命令說明：vim_switch_to_lowercase（草稿）
+# 命令說明：vim_switch_to_lowercase
 key = "action.vim-switch-to-lowercase"
 zhs = "选区转小写并退出可视模式(vim 的 u)"
 en = "the selection to lowercase, leaving Visual mode (vim's u)"
 
 [[message]]
-# 命令說明：vim_switch_to_uppercase（草稿）
+# 命令說明：vim_switch_to_uppercase
 key = "action.vim-switch-to-uppercase"
 zhs = "选区转大写并退出可视模式(vim 的 U)"
 en = "the selection to uppercase, leaving Visual mode (vim's U)"
 
 [[message]]
-# 命令說明：vim_unindent（草稿）
+# 命令說明：vim_unindent
 key = "action.vim-unindent"
 zhs = "减少缩进，光标留在原列(vim)"
 en = "unindent, the cursor keeping its column (vim)"
 
 [[message]]
-# 命令說明：vim_visual_block_mode（草稿）
+# 命令說明：vim_visual_block_mode
 key = "action.vim-visual-block-mode"
 zhs = "块选择(vim 的 C-v)"
 en = "select a block (vim's C-v)"
 
 [[message]]
-# 命令說明：vim_yank（草稿）
+# 命令說明：vim_yank
 key = "action.vim-yank"
 zhs = "复制选区并退出可视模式(vim 的 y)"
 en = "yank the selection, leaving Visual mode (vim's y)"
@@ -2360,20 +2360,20 @@ en = "yank the selection, leaving Visual mode (vim's y)"
 # :keymap-actions 那張表裏這一行寫什麽
 key = "action.wiki-panel"
 zhs = "百科页"
-en = "the wiki page"
+en = "wiki page"
 find = "百科 詞條 词条 人物 設定 设定 wiki"
 
 [[message]]
-# 命令說明：window_mode（草稿）
+# 命令說明：window_mode
 key = "action.window-mode"
 zhs = "窗口组"
-en = "the window group"
+en = "window group"
 
 [[message]]
-# 命令說明：window_new_mode（草稿）
+# 命令說明：window_new_mode
 key = "action.window-new-mode"
 zhs = "空白窗口组：s 下面，v 旁边"
-en = "the blank-window group: s below, v beside"
+en = "blank-window group: s below, v beside"
 
 [[message]]
 # :keymap-actions 那張表裏這一行寫什麽
@@ -2383,93 +2383,93 @@ en = "yank"
 find = "複製 复制 拷貝 拷贝 copy yank"
 
 [[message]]
-# 命令說明：yank_old_text（草稿）
+# 命令說明：yank_old_text
 key = "action.yank-old-text"
-zhs = "复制先前版本"
-en = "copy what was there before the change"
+zhs = "复制改动前的文本"
+en = "copy the old text"
 
 [[message]]
-# 命令說明：yume_menu_size_3（草稿）
+# 命令說明：yume_menu_size_3
 key = "action.yume-menu-size-3"
-zhs = "候选栏一页 3 条"
-en = "3 candidates on a page"
+zhs = "每页 3 个候选"
+en = "3 candidates per page"
 
 [[message]]
-# 命令說明：yume_menu_size_4（草稿）
+# 命令說明：yume_menu_size_4
 key = "action.yume-menu-size-4"
-zhs = "候选栏一页 4 条"
-en = "4 candidates on a page"
+zhs = "每页 4 个候选"
+en = "4 candidates per page"
 
 [[message]]
-# 命令說明：yume_menu_size_5（草稿）
+# 命令說明：yume_menu_size_5
 key = "action.yume-menu-size-5"
-zhs = "候选栏一页 5 条"
-en = "5 candidates on a page"
+zhs = "每页 5 个候选"
+en = "5 candidates per page"
 
 [[message]]
-# 命令說明：yume_menu_size_6（草稿）
+# 命令說明：yume_menu_size_6
 key = "action.yume-menu-size-6"
-zhs = "候选栏一页 6 条"
-en = "6 candidates on a page"
+zhs = "每页 6 个候选"
+en = "6 candidates per page"
 
 [[message]]
-# 命令說明：yume_menu_size_7（草稿）
+# 命令說明：yume_menu_size_7
 key = "action.yume-menu-size-7"
-zhs = "候选栏一页 7 条"
-en = "7 candidates on a page"
+zhs = "每页 7 个候选"
+en = "7 candidates per page"
 
 [[message]]
-# 命令說明：yume_menu_size_8（草稿）
+# 命令說明：yume_menu_size_8
 key = "action.yume-menu-size-8"
-zhs = "候选栏一页 8 条"
-en = "8 candidates on a page"
+zhs = "每页 8 个候选"
+en = "8 candidates per page"
 
 [[message]]
-# 命令說明：yume_menu_size_9（草稿）
+# 命令說明：yume_menu_size_9
 key = "action.yume-menu-size-9"
-zhs = "候选栏一页 9 条"
-en = "9 candidates on a page"
+zhs = "每页 9 个候选"
+en = "9 candidates per page"
 
 [[message]]
-# :keymap-actions 那張表底下：帶星號的鍵是什麽（草稿）
+# :keymap-actions 那張表底下：帶星號的鍵是什麽
 key = "keys.actions-flavour-note"
-zhs = "带 * 的键来自 yumete 风味；粗体那一栏是现在的键位。"
+zhs = "带 * 的键来自 yumete 风味；粗体列为当前键位。"
 en = "Keys marked * come from the yumete flavour; the column in bold is the keymap in force."
 
 [[message]]
 # :keymap-actions 那張清單的開頭一段
 key = "keys.actions-head"
-zhs = "把名字写在配置的 `[keys.normal]` 右边：`x = 'delete_selection'`。右边三种：动作名、`:命令`、`@一串键`。"
-en = "Write a name on the right of `[keys.normal]`: `x = 'delete_selection'`. Three kinds on the right: an action's name, a `:command`, or keys with an `@` in front."
+zhs = "在配置的 `[keys.normal]` 下这样绑定：`x = 'delete_selection'`。等号右边可以是动作名、`:命令` 或 `@一串键`。"
+en = "Bind under `[keys.normal]` in the config: `x = 'delete_selection'`. The right side can be an action name, a `:command`, or keys after an `@`."
 
 [[message]]
 # :keymap-actions 那張表的表頭：第三欄
 key = "keys.actions-key"
-zhs = "现在是哪个键"
-en = "key now"
+zhs = "当前按键"
+en = "current key"
 
 [[message]]
 # :keymap-actions 那張表的表頭：第一欄
 key = "keys.actions-name"
-zhs = "名字"
+zhs = "名称"
 en = "name"
 
 [[message]]
 # :keymap-actions 那個緩衝區的名字
 key = "keys.actions-title"
-zhs = "能绑定的动作"
+zhs = "可绑定的动作"
 en = "actions"
 
 [[message]]
 # :keymap-actions 那張表的表頭：第二欄
 key = "keys.actions-what"
-zhs = "做什么"
-en = "what it does"
+zhs = "作用"
+en = "description"
 
 [[message]]
-# :keymap-actions 那張表的表頭：讀者自己綁的那一欄（草稿）
+# :keymap-actions 那張表的表頭：讀者自己綁的那一欄
 key = "keys.actions-yours"
-zhs = "你绑的"
+zhs = "你的绑定"
 en = "yours"
 
 [[message]]
@@ -2479,19 +2479,19 @@ zhs = "Yumete 键位风味 · {0}"
 en = "Yumete keymap flavour · {0}"
 
 [[message]]
-# 風味的一檔：看得見的改動（菜單、新鍵）（草稿）
+# 風味的一檔：看得見的改動（菜單、新鍵）
 key = "keys.flavor.basic"
 zhs = "基本"
 en = "basic"
 
 [[message]]
-# 風味報告：開着幾項（草稿）
+# 風味報告：開着幾項
 key = "keys.flavor.count"
-zhs = "开着 {0}/{1} 项"
+zhs = "已开 {0}/{1} 项"
 en = "{0} of {1} items on"
 
 [[message]]
-# 風味的一檔：再加改了熟悉鍵行為的幾項（草稿）
+# 風味的一檔：再加改了熟悉鍵行為的幾項
 key = "keys.flavor.full"
 zhs = "完整"
 en = "full"
@@ -2505,392 +2505,392 @@ en = "{0}: {1}"
 [[message]]
 # 同上，但配置檔的 [keys.normal] 或 [keys.insert] 已經綁了它管的鍵——那一層在前面，說了算的是它
 key = "keys.flavor.item-taken"
-zhs = "{0}: {1}(`{3}` 绑了 {2}，此刻说了算的是它)"
+zhs = "{0}: {1}(`{3}` 绑定了 {2}，以它为准)"
 en = "{0}: {1} (`{3}` binds {2}, which wins)"
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.bare-g-last-line"
 zhs = "到末行"
 en = "to the last line"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.bare-g-last-line.hint"
-zhs = "开：不带数字的 G 到末行行首，带数字照旧到那一行。关：helix 的 G，不带数字不动。"
+zhs = "开：G 不带数字时到末行行首，带数字到该行。关：同 helix，G 不带数字时不动。"
 en = "On: G with no count goes to the start of the last line; with a count, to that line. Off: helix's G, which does nothing without a count."
 
 [[message]]
-# 風味項：整行塊注釋的標記各占一行（草稿）
+# 風味項：整行塊注釋的標記各占一行
 key = "keys.flavor.item.block-comment-lines"
 zhs = "块注释标记各占一行"
 en = "block comment marks on their own lines"
 
 [[message]]
-# 風味項說明（草稿）
+# 風味項說明
 key = "keys.flavor.item.block-comment-lines.hint"
-zhs = "开：在 Markdown、Typst、HTML 里用 空格 C 注释多整行时，<!-- 与 --> 各占一行。关：照 helix，标记写在首行开头与末行结尾。"
-en = "On: Space C over several whole lines in Markdown, Typst or HTML puts <!-- and --> on lines of their own. Off: helix's, the marks at the first line's start and the last line's end."
+zhs = "开：在 Markdown、Typst、HTML 中用 空格 C 注释多行时，<!-- 和 --> 各占一行。关：同 helix，标记放在首行开头和末行结尾。"
+en = "On: Space C over several whole lines in Markdown, Typst or HTML puts <!-- and --> on lines of their own. Off: as in helix, the marks go at the first line's start and the last line's end."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.case-menu"
 zhs = "大小写与繁简菜单"
 en = "case and conversion menu"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.case-menu.hint"
 zhs = "开：反引号打开大小写与繁简转换菜单，vim 下是 g 加反引号。关：helix 的反引号转小写、A 加反引号转大写；vim 的 g 加反引号跳到标记。"
 en = "On: the backtick opens the case and conversion menu (g then the backtick under vim). Off: helix's backtick lowercases and Alt-backtick uppercases; vim's g then the backtick goes to a mark."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.d-to-line-end"
 zhs = "删到行尾"
 en = "delete to the line's end"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.d-to-line-end.hint"
-zhs = "开：D 删到行尾并放进寄存器，A-D 删到行尾不进寄存器。关：这两个键空着。"
+zhs = "开：D 删到行尾并放进寄存器，A-D 删到行尾不进寄存器。关：未绑定。"
 en = "On: D deletes to the end of the line into the register, A-D without filling it. Off: both are unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.delete-keeps-register"
 zhs = "删除不进寄存器"
-en = "deleting keeps the register"
+en = "delete without yanking"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.delete-keeps-register.hint"
-zhs = "开：d、c 删除时不进寄存器，A-d、A-c 才剪。关：helix 的 d、c 剪。"
+zhs = "开：d、c 删除时不进寄存器，A-d、A-c 才剪切。关：同 helix，d、c 剪切。"
 en = "On: d and c delete without filling the register, and A-d and A-c cut. Off: helix's d and c cut."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.dictionary"
 zhs = "词典"
 en = "dictionary"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.dictionary.hint"
-zhs = "开：空格 n 在浮窗里查光标下的字，空格 N 在侧栏里查。关：这两个键空着。"
+zhs = "开：空格 n 在浮窗里查光标处的字，空格 N 在侧栏里查。关：未绑定。"
 en = "On: Space n looks up the character under the cursor in a popup, Space N in the sidebar. Off: both are unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.esc-collapses"
 zhs = "收成一个光标"
 en = "collapse to one cursor"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.esc-collapses.hint"
-zhs = "开：普通态按 Esc 也把多个光标收成一个。关：helix 的 Esc 只退出选择态。"
-en = "On: in Normal mode Esc also collapses the selections to one cursor. Off: helix's Esc only leaves select mode."
+zhs = "开：普通模式下按 Esc 也把多个光标收成一个。关：同 helix，Esc 只退出选择模式。"
+en = "On: in Normal mode Esc also collapses the selections to one cursor. Off: as in helix, Esc only leaves Select mode."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.explorer-here"
 zhs = "从当前文件的目录浏览"
-en = "explorer from this file's folder"
+en = "browse from this file's folder"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.explorer-here.hint"
-zhs = "开：空格 E 从当前文件所在的目录浏览文件。关：这个键空着。"
+zhs = "开：空格 E 从当前文件所在目录浏览文件。关：未绑定。"
 en = "On: Space E browses files from this file's folder. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.goto-extras"
-zhs = "跳转、搜这个词、链接"
+zhs = "跳转、搜索当前词、链接"
 en = "jumps, word search, links"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.goto-extras.hint"
-zhs = "开：gz 按头两个字母跳，gZ 按拼音跳，g/ 搜光标下的词，gL 跟任何链接；helix 下 gx 用浏览器打开网址，vim 下 gW 是跳转标签。关：这些键空着。"
+zhs = "开：gz 按前两个字母跳转，gZ 按拼音跳转，g/ 搜索光标处的词，gL 打开任意链接；helix 下 gx 用浏览器打开网址，vim 下 gW 显示跳转标签。关：未绑定。"
 en = "On: gz jumps by first letters, gZ by pinyin, g/ searches the word under the cursor, gL follows any link; under helix gx opens a web address, under vim gW is the jump labels. Off: unbound."
 
 
 [[message]]
-# 風味項：標題折疊（草稿）
+# 風味項：標題折疊
 key = "keys.flavor.item.heading-folds"
 zhs = "按标题折叠"
 en = "folds by heading"
 
 [[message]]
-# 風味項：標題折疊的說明（草稿）
+# 風味項：標題折疊的說明
 key = "keys.flavor.item.heading-folds.hint"
-zhs = "开：Markdown 与 Typst 每个标题下的那一节是一个折叠，开始时全开着。关：照 vim，只有 zf 做的折叠。"
+zhs = "开：Markdown 和 Typst 每个标题下的一节可以折叠，初始全部展开。关：同 vim，只有 zf 建的折叠。"
 en = "On: each Markdown or Typst heading folds its section; all start open. Off: vim's, only folds made with zf."
 
 [[message]]
-# 風味項：helix 下的折疊鍵（草稿）
+# 風味項：helix 下的折疊鍵
 key = "keys.flavor.item.helix-fold-keys"
 zhs = "helix 下的折叠键"
 en = "fold keys under helix"
 
 [[message]]
-# 風味項：helix 下的折疊鍵的說明（草稿）
+# 風味項：helix 下的折疊鍵的說明
 key = "keys.flavor.item.helix-fold-keys.hint"
-zhs = "开：helix 下也有 vim 的 za 开合折叠、zR 全开、zM 全合；zf 把选中的行做成折叠。关：这几个键空着，只能用命令折叠。"
+zhs = "开：helix 下也能用 vim 的 za 开合折叠、zR 全部展开、zM 全部折叠，zf 把选中的行折叠。关：未绑定，只能用命令折叠。"
 en = "On: vim's za, zR and zM under helix (open or close a fold, open all, close all); zf makes a fold of the selected lines. Off: unbound; folds by command only."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.helix-keys-under-vim"
 zhs = "借用 helix 的键"
 en = "helix's keys"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.helix-keys-under-vim.hint"
-zhs = "开：vim 下借用 helix 的键，只用 vim 空着的键：Alt 键、C-s、Z、gb、gy 等。关：这些键什么都不做，同 vim。"
+zhs = "开：vim 下在 vim 没用的键上借用 helix 的键：Alt 键、C-s、Z、gb、gy 等。关：同 vim，这些键不起作用。"
 en = "On: under vim, helix's keys on the keys vim leaves free: the Alt keys, C-s, Z, gb, gy and more. Off: they do nothing, as in vim."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.input-method-menu"
 zhs = "输入法菜单"
 en = "input method menu"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.input-method-menu.hint"
 zhs = "开：空格 z 打开输入法菜单。关：切中英的键照常能用。"
 en = "On: Space z opens the input method menu. Off: the key that switches between Chinese and English still works."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.insert-ctrl-c"
-zhs = "插入态退出"
+zhs = "插入模式：退出"
 en = "Insert: leave"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.insert-ctrl-c.hint"
-zhs = "开：插入态 C-c 回到普通态，同 Esc。关：这个键空着。"
+zhs = "开：插入模式下 C-c 回到普通模式，同 Esc。关：未绑定。"
 en = "On: in Insert mode C-c goes back to Normal mode, as Esc does. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.insert-extras"
-zhs = "插入态的行首行尾、补全、断撤销点"
+zhs = "插入模式：行首行尾、补全、撤销点"
 en = "Insert: line ends, completion, undo step"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.insert-extras.hint"
-zhs = "开：插入态 C-a、C-e 到行首、行尾，C-n 补全，C-g 断一个撤销点。关：这些键空着。"
+zhs = "开：插入模式下 C-a、C-e 到行首、行尾，C-n 补全，C-g 新建撤销点。关：未绑定。"
 en = "On: in Insert mode C-a and C-e go to the line's start and end, C-n completes, C-g starts a new undo step. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.line-start-keys"
 zhs = "行首、首字"
 en = "line start, first character"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.line-start-keys.hint"
-zhs = "开：0、^ 到行首、行首第一个字，同 vim；行尾是 gl。关：这两个键空着。"
+zhs = "开：0、^ 到行首、行首第一个字，同 vim；行尾是 gl。关：未绑定。"
 en = "On: 0 and ^ go to the line's start and its first character, as in vim; the line's end is gl. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.marks-on-m-quote"
 zhs = "设标记、跳标记"
 en = "set and go to marks"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.marks-on-m-quote.hint"
-zhs = "开：M 加一个标记，' 跳回去，可以跨文件。关：这两个键空着。"
+zhs = "开：M 设标记，' 跳回标记，可以跨文件。关：未绑定。"
 en = "On: M sets a mark and ' goes back to it, across files. Off: both are unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.merge-conflicts"
 zhs = "合并冲突"
 en = "merge conflicts"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.merge-conflicts.hint"
-zhs = "开：空格 m 处理合并冲突，helix 下 ]m、[m 跳到下一处、上一处。关：这几个键空着。"
+zhs = "开：空格 m 处理合并冲突，helix 下 ]m、[m 跳到下一处、上一处。关：未绑定。"
 en = "On: Space m resolves a merge conflict, and under helix ]m and [m go to the next and the previous. Off: they are unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.move-lines"
 zhs = "上下移动行"
-en = "move lines down and up"
+en = "move lines up and down"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.move-lines.hint"
-zhs = "开：A-j、A-k 把选中的行往下、往上移，写文章时一行就是一段。关：这两个键空着。"
+zhs = "开：A-j、A-k 把选中的行下移、上移，写文章时一行就是一段。关：未绑定。"
 en = "On: A-j and A-k move the selected lines down and up; in prose a line is a paragraph. Off: both are unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.popup-panel-pairs"
 zhs = "浮窗与侧栏"
 en = "popups and their sidebars"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.popup-panel-pairs.hint"
-zhs = "开：空格 K 把说明放进侧栏；空格 l、x、i 在浮窗里看诊断、改动、表格记录，大写在侧栏里看。关：这些键空着。"
+zhs = "开：空格 K 把说明放进侧栏；空格 l、x、i 在浮窗里看诊断、改动、表格记录，大写在侧栏里看。关：未绑定。"
 en = "On: Space K puts the hover in the sidebar; Space l, x and i show a diagnostic, a change or a table record in a popup, the capitals in the sidebar. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.recent-files"
 zhs = "最近的文件和项目"
 en = "recent files and projects"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.recent-files.hint"
-zhs = "开：空格 o 打开最近的文件和项目。关：这个键空着。"
+zhs = "开：空格 o 打开最近的文件和项目。关：未绑定。"
 en = "On: Space o lists recent files and projects. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.registers-menu"
 zhs = "寄存器菜单"
 en = "registers menu"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.registers-menu.hint"
-zhs = "开：空格加双引号打开寄存器菜单。关：这个键空着。"
+zhs = "开：空格加双引号打开寄存器菜单。关：未绑定。"
 en = "On: Space then the double quote opens the registers menu. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.sentences-on-h-l"
-zhs = "按句子走"
-en = "walk sentences"
+zhs = "按句移动"
+en = "move by sentence"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.sentences-on-h-l.hint"
-zhs = "开：H、L 到上一句、下一句。关：helix 没有绑这两个键。"
+zhs = "开：H、L 到上一句、下一句。关：同 helix，未绑定。"
 en = "On: H and L go to the previous and the next sentence. Off: helix leaves both unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.shift-tab-other-indent"
-zhs = "插另一种缩进"
+zhs = "插入另一种缩进"
 en = "the other kind of indent"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.shift-tab-other-indent.hint"
-zhs = "开：插入态 S-Tab 插另一种缩进，文件用空格时插 Tab。关：S-Tab 插文件自己的那种缩进。"
+zhs = "开：插入模式下 S-Tab 插入另一种缩进，文件用空格时插入 Tab。关：S-Tab 插入文件本身的缩进。"
 en = "On: in Insert mode S-Tab types the other kind of indent (a tab where the file uses spaces). Off: S-Tab types the file's own."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.sidebars"
 zhs = "侧栏"
 en = "sidebars"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.sidebars.hint"
-zhs = "开：C-w e、C-w i 显示或隐藏左右侧栏，C-w E、C-w I 进到侧栏里。关：这些键空着。"
-en = "On: C-w e and C-w i show or hide the left and right sidebar, C-w E and C-w I go into it. Off: unbound."
+zhs = "开：C-w e、C-w i 显示或隐藏左右侧栏，C-w E、C-w I 进入侧栏。关：未绑定。"
+en = "On: C-w e and C-w i show or hide the left and right sidebars, C-w E and C-w I go into them. Off: unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.space-paging"
 zhs = "翻页"
 en = "turn a page"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.space-paging.hint"
-zhs = "开：空格 空格往下翻一页，空格 退格往上翻一页。关：这两个键空着。"
+zhs = "开：空格 空格向下翻页，空格 退格向上翻页。关：未绑定。"
 en = "On: Space Space turns a page down and Space Backspace a page up. Off: both are unbound."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.split-join"
 zhs = "拆开/合并括号"
 en = "split and join brackets"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.split-join.hint"
-zhs = "开：gS 把光标所在括号里的各项拆成每项一行，再按一次合回一行。关：gS 空着，命令 :split-join 照样能用。"
-en = "On: gS puts the items in the brackets round the cursor one per line, and back onto one line when pressed again. Off: gS is unbound; :split-join still works."
+zhs = "开：gS 把光标所在括号里的各项拆成每项一行，再按一次合回一行。关：gS 未绑定，:split-join 命令照样可用。"
+en = "On: gS puts the items in the brackets around the cursor one per line, and back onto one line when pressed again. Off: gS is unbound; :split-join still works."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.tables"
 zhs = "表格菜单"
 en = "table menu"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.tables.hint"
-zhs = "开：空格 t 打开表格菜单。关：表格命令照样可以在 : 里输入。"
+zhs = "开：空格 t 打开表格菜单。关：表格命令仍可在 : 命令行输入。"
 en = "On: Space t opens the table menu. Off: the table commands are still on the : line."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.two-thirds-page"
 zhs = "翻三分之二页"
 en = "two-thirds of a page"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.two-thirds-page.hint"
-zhs = "开：C-n、C-p 往下、往上翻三分之二页。关：这两个键空着。"
+zhs = "开：C-n、C-p 向下、向上翻三分之二页。关：未绑定。"
 en = "On: C-n and C-p turn two-thirds of a page down and up. Off: both are unbound."
 
 [[message]]
-# 風味項：vim 的 gc（草稿）
+# 風味項：vim 的 gc
 key = "keys.flavor.item.vim-comment-keys"
 zhs = "vim 的 gc 注释"
 en = "vim's gc comments"
 
 [[message]]
-# 風味項說明（草稿）
+# 風味項說明
 key = "keys.flavor.item.vim-comment-keys.hint"
-zhs = "开：vim 键位下 gc 接动作、gcc、可视模式的 gc 注释所在的行，同 vim 9.1 自带的包与 Neovim。关：只有空格菜单里的 c。"
+zhs = "开：vim 键位下 gc 接动作、gcc、可视模式的 gc 注释所在行，同 vim 9.1 自带插件和 Neovim。关：只能用空格菜单里的 c。"
 en = "On: under the vim keymap gc with a motion, gcc and Visual gc comment the lines, as vim 9.1's package and Neovim do. Off: only c in the Space menu."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.vim-space-menu"
 zhs = "空格菜单"
 en = "the Space menu"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.vim-space-menu.hint"
-zhs = "开：vim 下空格打开空格菜单。关：空格同 vim 往右走一格，空格菜单改用反斜线打开。"
+zhs = "开：vim 下空格打开空格菜单。关：空格同 vim 右移一格，空格菜单改用反斜杠打开。"
 en = "On: under vim, Space opens the Space menu. Off: Space moves right as in vim, and the backslash opens the menu."
 
 [[message]]
-# 風味的一項：設置面板上的名字（草稿）
+# 風味的一項：設置面板上的名字
 key = "keys.flavor.item.x-selects-upward"
 zhs = "往上选行"
 en = "select the line above"
 
 [[message]]
-# 風味的一項：設置面板上的說明（草稿）
+# 風味的一項：設置面板上的說明
 key = "keys.flavor.item.x-selects-upward.hint"
-zhs = "开：X 往上选一行，再按再多选一行，同 x 往下。关：helix 的 X，把选区扩到整行。"
+zhs = "开：X 向上选一行，每按一次多选一行，与 x 向下相对。关：同 helix，X 把选区扩到整行。"
 en = "On: X selects the line above, one more each press, as x does downward. Off: helix's X, which extends the selection to whole lines."
 
 [[message]]
@@ -2906,10 +2906,10 @@ zhs = "开启"
 en = "on"
 
 [[message]]
-# 配置裏的一張鍵表裏一個鍵都没有（只寫了 label），啓動時說一次（草稿）
+# 配置裏的一張鍵表裏一個鍵都没有（只寫了 label），啓動時說一次
 key = "keys.group-has-no-keys"
 zhs = "{0} 是空的键组，什么都不做"
-en = "{0} is a group with no keys, so it does nothing"
+en = "{0} is an empty key group; it does nothing"
 
 [[message]]
 # 按出來的那一串在這一層裏没有綁任何東西
@@ -2920,23 +2920,23 @@ en = "{0} is not a key combination here — try again"
 [[message]]
 # vim 預設下，`d` `c` `y` 等的是一個動作，而按下的那個鍵不是
 key = "keys.not-a-motion"
-zhs = "`{0}` 不是一个动作——d、c、y 等的是动作(w、e、$、G、f、i…)"
-en = "`{0}` is not a motion — d, c and y are waiting for one"
+zhs = "`{0}` 不是动作。d、c、y 后面要接动作(w、e、$、G、f、i…)"
+en = "`{0}` is not a motion; d, c and y need one"
 
 [[message]]
 # :keymap — 現在是 helix
 key = "keys.preset-helix"
-zhs = "键位：helix(出厂)"
+zhs = "键位：helix(默认)"
 en = "keymap: helix (default)"
 
 [[message]]
 # :keymap — 現在是 vim
 key = "keys.preset-vim"
-zhs = "键位：vim——x X 剪字、s 改一个字、V 选行、dd yy cc dw cw、^ $ 0"
+zhs = "键位：vim(x X 剪切字符、s 改一个字、V 选行、dd yy cc dw cw、^ $ 0)"
 en = "keymap: vim — x X cut a character, s changes one, V selects the line, dd yy cc dw cw, ^ $ 0"
 
 [[message]]
-# 配置裏兩種寫法落到同一個鍵上，後寫的那一條算數，啓動時說一次（草稿）
+# 配置裏兩種寫法落到同一個鍵上，後寫的那一條算數，啓動時說一次
 key = "keys.spelt-twice"
 zhs = "{0} 替换了 {1}"
 en = "{0} replaces {1}"
