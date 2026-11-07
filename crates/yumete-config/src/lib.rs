@@ -3294,9 +3294,10 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
         // answer each.
         ("rust".to_string(), vec![one("rust-analyzer", &[])]),
         // Warning: **Not helix's `golangci-lint-langserver`** (review, 2026-11-06):
-        // it needs its `command` in initialization options, which a server
-        // here cannot be given, and without it golangci-lint 2 reports
-        // nothing.
+        // it needs its `command` in initialization options, and without it
+        // golangci-lint 2 reports nothing. A server here can be given them
+        // since 2026-11-07 (`config`), so it could now come with helix's
+        // `config`; not added yet.
         ("go".to_string(), vec![one("gopls", &[])]),
         // **Every language yumete colours takes helix's list** (2026-11-06,
         // helix `languages.toml` of 2026-07-23). Only what is installed
