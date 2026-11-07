@@ -283,13 +283,13 @@ en = "this build has no built-in 碼表 for {0}"
 [[message]]
 # 啟動時認出終端機報不出單獨的 Shift，説一次備用鍵是哪一個(#339)
 key = "ime.no-lone-shift"
-zhs = "此终端无法识别单独的 Shift，切换中/ABC 请按 {0}(或 :yume)"
+zhs = "此终端无法识别单独的 Shift，切换中/ABC 请按 {0}(或 :yume on|off)"
 en = "this terminal cannot report a lone Shift; {0} switches 中/ABC"
 
 [[message]]
 # 同上，而 language_key 關着，於是連備用鍵也没有
 key = "ime.no-lone-shift-off"
-zhs = "此终端无法识别单独的 Shift，只能用 :yume 切换中/ABC(可用 language_key 绑定一个键)"
+zhs = "此终端无法识别单独的 Shift，只能用 :yume on|off 切换中/ABC(可用 language_key 绑定一个键)"
 en = "this terminal cannot report a lone Shift; bind [editor] language_key to switch 中/ABC"
 
 [[message]]
@@ -311,7 +311,7 @@ zhs = "输入法未启动，且此版本未内置码表，请先安装数据"
 en = "input method not started, and this build has no 碼表; install the data first"
 
 [[message]]
-# :yume 把鍵盤整個交還給系統(第三個狀態，不是 ABC)
+# :yume off 把鍵盤整個交還給系統(第三個狀態，不是 ABC)
 key = "ime.off"
 zhs = "输入法已关闭"
 en = "input method off"

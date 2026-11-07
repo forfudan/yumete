@@ -363,8 +363,10 @@ fn option_command(helix: &str, rest: &str) -> Result<String, String> {
         (true, None, Some(how @ ("relative" | "absolute"))) if option == "line-number" => {
             format!(":line-numbers {how}")
         }
-        // `:view-wrap` is a plain toggle (2026-11-07), so helix's toggle is
-        // the one that has a yumete command, and setting it has none.
+        // `:view-wrap` takes `on｜off` and flips when bare (2026-11-07), so
+        // both of helix's verbs have a yumete spelling.
+        (true, Some(("soft-wrap", "enable")), Some("true")) => ":view-wrap on".to_string(),
+        (true, Some(("soft-wrap", "enable")), Some("false")) => ":view-wrap off".to_string(),
         (false, Some(("soft-wrap", "enable")), None) => ":view-wrap".to_string(),
         _ => return Err(format!("yumete has no command for :{helix} {rest}")),
     };
@@ -1387,7 +1389,8 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         }
         assert_eq!(typable(":toggle soft-wrap.enable").as_deref(), Ok(":view-wrap"));
         assert!(typable(":buffer-close-others").is_err());
-        assert!(typable(":set soft-wrap.enable false").is_err());
+        assert_eq!(typable(":set soft-wrap.enable false").as_deref(), Ok(":view-wrap off"));
+        assert_eq!(typable(":set soft-wrap.enable true").as_deref(), Ok(":view-wrap on"));
     }
 
     #[test]

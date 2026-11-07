@@ -406,7 +406,7 @@ pub enum Command {
         /// named an escape (`:%s/…/…/gt`) that cannot be typed into a panel.
         reshape: bool,
     },
-    /// `:sidebar-explorer`, `:sidebar-info`, … — one panel's switch.
+    /// `:sidebar-explorer [on|off]`, `:sidebar-info`, … — one panel's switch.
     ///
     /// **One command a panel, each a toggle** (2026-11-07). It was one
     /// `:sidebar <panel>`, and a command that takes an argument reports when
@@ -414,7 +414,7 @@ pub enum Command {
     /// panel lives is still yumete's to decide (2026-10-20): the five lists
     /// on the left, the info panel on the right. The five take the keys when
     /// they open; `:sidebar-info` leaves them in the text, as `空格 w i` does.
-    SidebarToggle(crate::sidebar::Panel),
+    Sidebar(crate::sidebar::Panel, Switch),
     /// `:table-header` — whether the grid's first row names the columns or
     /// is a row like any other (Feature #217).
     SetTableHeader(Switch),
@@ -629,7 +629,7 @@ pub enum Command {
     /// terminal flag that makes a bare Shift visible is the same flag that
     /// stops the *system's* input method from composing, so it can be held
     /// exactly while yume has the keys.
-    YumeToggle,
+    Yume(Switch),
     /// `:yume-installed` — the 碼表 the *system* has, which is `builtin`'s
     /// other half: one binary, two tables, and a way back from either.
     InstalledScheme,
@@ -1363,11 +1363,13 @@ impl Need {
 
 /// **What a switch was asked for.**
 ///
-/// **A command without an argument toggles; a command that takes an argument
-/// reports its state when typed bare** (2026-11-07). So most switches are
-/// plain toggles now, built with [`Switch::Flip`] and no words at all, and
-/// [`setting`] is the one way to name a state (the session's kept view). The
-/// few that still take `on｜off｜toggle` read a bare command as a *question*.
+/// **A switch takes `on｜off`, and flips when it is typed bare; a command
+/// whose argument is a value reports when typed bare** (2026-11-07, revised
+/// the same evening). A key, an import or a kept session has to name the
+/// state it wants, since it cannot look at the screen first; a hand typing
+/// wants the shortest way to turn it round. Emacs's minor modes, vim's `:set
+/// wrap`/`:set wrap!` and helix's `:set`/`:toggle` all keep both. 原話：
+/// 「改用我的模型，也是其他編輯器的共識」.
 ///
 /// Warning: **this used to be `Option<bool>`, and that is one state short** — so the
 /// twenty-three of them each invented the missing one. An audit on 2026-10-19
@@ -1379,9 +1381,7 @@ impl Need {
 /// and one word list is what makes the rule sayable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Switch {
-    /// The bare command: say what it is now, change nothing.
-    Ask,
-    /// `toggle`: whatever it is, the other one.
+    /// The bare command: whatever it is, the other one.
     Flip,
     /// `on` or `off`.
     To(bool),
@@ -1391,22 +1391,15 @@ impl Switch {
     /// What the setting becomes, given what it is now.
     pub fn over(self, now: bool) -> bool {
         match self {
-            Switch::Ask => now,
             Switch::Flip => !now,
             Switch::To(want) => want,
         }
     }
 
-    /// Whether this was a question. A question moves nothing.
-    pub fn is_a_question(self) -> bool {
-        self == Switch::Ask
-    }
-
     /// The word it was asked with — for the requests the core hands the front
-    /// end as text (`predict:on`), where the empty string is the question.
+    /// end as text (`predict:on`).
     pub fn word(self) -> &'static str {
         match self {
-            Switch::Ask => "",
             Switch::Flip => "toggle",
             Switch::To(true) => "on",
             Switch::To(false) => "off",
@@ -1423,45 +1416,12 @@ impl Switch {
 /// menu printed `check (ch)` beside words `:table ch` did not accept, and had
 /// done for a year.
 ///
-/// Read `on｜off｜toggle`, or the bare command, as one of [`Switch`]'s three.
+/// Read `on｜off`, or the bare command, which flips.
 fn switched(p: &Parsed) -> Switch {
     match p.arg(0) {
-        None => Switch::Ask,
-        Some("toggle") => Switch::Flip,
+        None => Switch::Flip,
         Some(word) => Switch::To(word == "on"),
     }
-}
-
-/// **A kept view line, `name on｜off`, as the command that sets it** (2026-11-07).
-///
-/// The switches below are plain toggles on the command line, and a toggle
-/// cannot say which state it wants. The session keeps how the page looked as
-/// lines (`view-focus on`), and those are replayed onto a page whose state is
-/// not known in advance — so they are read here, by the replay alone, not by
-/// [`parse`]. Only the switches a kept view writes; `None` for any other
-/// line.
-pub fn setting(line: &str) -> Option<Command> {
-    let line = line.trim().trim_start_matches(':');
-    let (name, word) = line.split_once(' ')?;
-    let to = Switch::To(match word.trim() {
-        "on" => true,
-        "off" => false,
-        _ => return None,
-    });
-    Some(match name {
-        "view-sentence" => Command::SetSentences(to),
-        "view-hanging" => Command::SetHanging(to),
-        "view-numbers-fill" => Command::SetNumberFill(to),
-        "view-typewriter" => Command::SetTypewriter(to),
-        "view-focus" => Command::SetFocus(to),
-        "view-meter" => Command::SetMeter(to),
-        "view-diff" => Command::SetDiffGutter(to),
-        "view-punct" => Command::SetNote(to),
-        "view-code" => Command::SetCode(to),
-        "view-wrap" => Command::SetSoftWrap(to),
-        "theme-fill" => Command::ThemeFill(to),
-        _ => return None,
-    })
 }
 
 /// A subcommand of this command, written with a space instead of a hyphen.
@@ -2954,6 +2914,19 @@ const WRITE: &[Word] = &[Word {
     needs: &[Need::Table],
 }];
 
+/// `:view-wrap`'s two words, said for what they do to a paragraph.
+const WRAP_WORDS: &[Word] = &[
+    Word { name: "on", help: "cmd.wrap.on", needs: &[] },
+    Word { name: "off", help: "cmd.wrap.off", needs: &[] },
+];
+
+/// `:yume`'s two words: 中文 at once, or the keyboard handed back.
+const YUME_WORDS: &[Word] = &[
+    Word { name: "on", help: "cmd.yume.on", needs: &[] },
+    Word { name: "off", help: "cmd.yume.off", needs: &[] },
+];
+
+/// The two words every switch takes — read back by [`switched`].
 const SWITCH: &[Word] = &[
     Word {
         name: "on",
@@ -2963,11 +2936,6 @@ const SWITCH: &[Word] = &[
     Word {
         name: "off",
         help: "hint.close",
-        needs: &[],
-    },
-    Word {
-        name: "toggle",
-        help: "cmd.on-off.toggle",
         needs: &[],
     },
 ];
@@ -3221,7 +3189,7 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.reload.auto",
         needs: &[],
-        params: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
         build: Some(|p| {
             // The bang answers 「throw this buffer's changes away」, which is
             // not a question `auto` asks — so `:reload-auto!` is a typo,
@@ -3231,7 +3199,7 @@ pub const COMMANDS: &[Entry] = &[
                     command: "reload-auto",
                     value: "!".to_string(),
                 }),
-                false => Ok(Command::ReloadAuto(Switch::Flip)),
+                false => Ok(Command::ReloadAuto(switched(p))),
             }
         }),
     },
@@ -3241,8 +3209,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["ro"],
         help: "cmd.commands.readonly",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetReadonly(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetReadonly(switched(p)))),
     },
     Entry {
         name: "goto",
@@ -3991,8 +3959,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.theme-fill",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::ThemeFill(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::ThemeFill(switched(p)))),
     },
     Entry {
         name: "shot",
@@ -4047,11 +4015,11 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["y"],
         help: "cmd.commands.yume",
         needs: &[],
-        params: &[],
-        // **A toggle with no words** (2026-11-07): a command without an
-        // argument flips. Turning on goes straight to 中文, as `Space z z`
-        // does; 中文 or ABC is the lone Shift's.
-        build: Some(|_| Ok(Command::YumeToggle)),
+        params: &[Param::Words { of: YUME_WORDS, default: None }],
+        // **A switch** (2026-11-07): `on` goes straight to 中文, `off` hands
+        // the keyboard back, and bare turns it round as `Space z z` does;
+        // 中文 or ABC is the lone Shift's.
+        build: Some(|p| Ok(Command::Yume(switched(p)))),
     },
     Entry {
         name: "yume-where",
@@ -4198,8 +4166,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.yume.autocompletion",
         needs: &[Need::Scheme],
-        params: &[],
-        build: Some(|_| Ok(Command::YumeAutocompletion(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::YumeAutocompletion(switched(p)))),
     },
     Entry {
         name: "yume-installed",
@@ -4323,10 +4291,10 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.wrap",
         needs: &[],
-        // **A toggle with no words** (2026-11-07); the width it used to take
-        // is `:view-wrap-width`'s.
-        params: &[],
-        build: Some(|_| Ok(Command::SetSoftWrap(Switch::Flip))),
+        // A switch (2026-11-07); the width it used to take is
+        // `:view-wrap-width`'s.
+        params: &[Param::Words { of: WRAP_WORDS, default: None }],
+        build: Some(|p| Ok(Command::SetSoftWrap(switched(p)))),
     },
     Entry {
         name: "view-wrap-width",
@@ -4421,16 +4389,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.sentence",
         needs: &[Need::Vertical],
-        params: &[],
-        build: Some(|_| Ok(Command::SetSentences(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetSentences(switched(p)))),
     },
     Entry {
         name: "view-hanging",
         aliases: &[],
         help: "cmd.view.hanging",
         needs: &[Need::Vertical, Need::Margin],
-        params: &[],
-        build: Some(|_| Ok(Command::SetHanging(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetHanging(switched(p)))),
     },
     Entry {
         // `:view-numbers-fill` on its own said nothing about *what* of the numbers
@@ -4439,8 +4407,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.numbers.fill",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetNumberFill(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetNumberFill(switched(p)))),
     },
     Entry {
         name: "view-diagnostics",
@@ -4458,32 +4426,32 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.diff",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetDiffGutter(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetDiffGutter(switched(p)))),
     },
     Entry {
         name: "view-typewriter",
         aliases: &[],
         help: "cmd.view.typewriter",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetTypewriter(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetTypewriter(switched(p)))),
     },
     Entry {
         name: "view-focus",
         aliases: &[],
         help: "cmd.view.focus",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetFocus(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetFocus(switched(p)))),
     },
     Entry {
         name: "view-meter",
         aliases: &[],
         help: "cmd.view.meter",
         needs: &[Need::Margin],
-        params: &[],
-        build: Some(|_| Ok(Command::SetMeter(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetMeter(switched(p)))),
     },
     Entry {
         // Was `:note`, which was never about footnotes (§5.2.3 ④).
@@ -4491,16 +4459,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.punct",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetNote(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetNote(switched(p)))),
     },
     Entry {
         name: "view-code",
         aliases: &[],
         help: "cmd.view.code",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SetCode(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetCode(switched(p)))),
     },
     Entry {
         // **一行長過多少列就不上色**（2026-10-08 定）。vim 的 `synmaxcol`，同數
@@ -5065,48 +5033,48 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.sidebar.explorer",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Files))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Sidebar(crate::sidebar::Panel::Files, switched(p)))),
     },
     Entry {
         name: "sidebar-buffers",
         aliases: &[],
         help: "cmd.sidebar.buffers",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Buffers))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Sidebar(crate::sidebar::Panel::Buffers, switched(p)))),
     },
     Entry {
         name: "sidebar-outline",
         aliases: &[],
         help: "cmd.sidebar.outline",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Outline))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Sidebar(crate::sidebar::Panel::Outline, switched(p)))),
     },
     Entry {
         name: "sidebar-search",
         aliases: &[],
         help: "cmd.sidebar.search",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Search))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Sidebar(crate::sidebar::Panel::Search, switched(p)))),
     },
     Entry {
         name: "sidebar-links",
         aliases: &[],
         help: "cmd.sidebar.links",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Links))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Sidebar(crate::sidebar::Panel::Links, switched(p)))),
     },
     Entry {
         name: "sidebar-info",
         aliases: &[],
         help: "cmd.sidebar.info",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::SidebarToggle(crate::sidebar::Panel::Info))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Sidebar(crate::sidebar::Panel::Info, switched(p)))),
     },
     Entry {
         name: "table-detail",
@@ -5116,24 +5084,24 @@ pub const COMMANDS: &[Entry] = &[
         // Warning: **`<寬>` 那個參數没了**（2026-09-26）：寬度歸側欄，面板說不上話
         // （原話：「面板自身不能改变侧栏的宽度，它只是借用了侧栏这个容器」）。
         // 要寬要窄按 `w`，三檔。
-        params: &[],
-        build: Some(|_| Ok(Command::ShowDetail(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::ShowDetail(switched(p)))),
     },
     Entry {
         name: "table-numbers",
         aliases: &[],
         help: "cmd.table.numbers",
         needs: &[Need::Table],
-        params: &[],
-        build: Some(|_| Ok(Command::SetTableNumbers(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetTableNumbers(switched(p)))),
     },
     Entry {
         name: "table-header",
         aliases: &[],
         help: "cmd.table.header",
         needs: &[Need::Table],
-        params: &[],
-        build: Some(|_| Ok(Command::SetTableHeader(Switch::Flip))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::SetTableHeader(switched(p)))),
     },
     Entry {
         name: "table-schema",
@@ -5588,16 +5556,16 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.ruby.html",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::RenderRuby { dialect: Dialect::Html, on: Switch::Flip })),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::RenderRuby { dialect: Dialect::Html, on: switched(p) })),
     },
     Entry {
         name: "ruby-typst",
         aliases: &[],
         help: "cmd.ruby.typst",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::RenderRuby { dialect: Dialect::Typst, on: Switch::Flip })),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::RenderRuby { dialect: Dialect::Typst, on: switched(p) })),
     },
     Entry {
         name: "ruby-format",
@@ -7173,13 +7141,13 @@ mod tests {
         // the editor's many parts it belonged to, and `:scheme` even less.
         assert_eq!(parse(":chaifen"), Err(CommandError::Unknown("chaifen".into())));
         assert_eq!(parse(":scheme x"), Err(CommandError::Unknown("scheme".into())));
-        // **A toggle with no words** (2026-11-07): takes the keyboard or
-        // hands it back, and `on`/`off` are not words it takes.
-        assert_eq!(parse(":yume"), Ok(Command::YumeToggle));
+        // **A switch** (2026-11-07): bare turns it round, `on` and `off`
+        // name the state; ABC is the lone Shift's, not a word here.
+        assert_eq!(parse(":yume"), Ok(Command::Yume(Switch::Flip)));
+        assert_eq!(parse(":yume on"), Ok(Command::Yume(Switch::To(true))));
+        assert_eq!(parse(":yume off"), Ok(Command::Yume(Switch::To(false))));
         assert_eq!(parse(":yume-which"), Ok(Command::YumeStatus));
-        for word in ["on", "off", "abc"] {
-            assert!(parse(&format!(":yume {word}")).is_err(), "{word}");
-        }
+        assert!(parse(":yume abc").is_err());
         assert_eq!(parse(":yume-installed"), Ok(Command::InstalledScheme));
         assert_eq!(parse(":yume-builtin"), Ok(Command::BuiltinScheme));
         assert_eq!(parse(":yume-b"), Ok(Command::BuiltinScheme));
@@ -7713,7 +7681,7 @@ mod tests {
         );
         // And the ground behind 品色 is its own switch, off by default.
         assert_eq!(parse(":theme-fill"), Ok(Command::ThemeFill(Switch::Flip)));
-        assert!(parse(":theme-fill on").is_err(), "a toggle takes no words");
+        assert_eq!(parse(":theme-fill on"), Ok(Command::ThemeFill(Switch::To(true))));
     }
 
     /// What a menu row says, and what it leaves out (2026-09-10).
@@ -7910,11 +7878,11 @@ mod tests {
         // word of a command line, not only the words after it. And with the
         // family flattened, `y` still reaches the head rather than being torn
         // between it and the eight `yume-…` beside it (#368).
-        assert_eq!(parse(":y"), Ok(Command::YumeToggle));
+        assert_eq!(parse(":y"), Ok(Command::Yume(Switch::Flip)));
         // Warning: **`:yu` stopped working on 2026-10-06**, when `:yuhao` arrived and
         // made that prefix touch two commands. `:y` goes on reaching this one
         // because it is now a *declared* alias, and an alias beats a prefix.
-        assert_eq!(parse(":yum"), Ok(Command::YumeToggle));
+        assert_eq!(parse(":yum"), Ok(Command::Yume(Switch::Flip)));
         // `:ta` again: `:target` took the two-letter prefix away when it
         // arrived, and gave it back when the fold put it under `:count`
         // (§5.2.3 ③). Ten abbreviations got shorter that way.
@@ -8080,7 +8048,7 @@ mod tests {
         // A parent command is not a mechanism of its own — its subcommands are
         // simply the words it takes, and they go as deep as they like.
         assert_eq!(words("ruby-render "), ["off", "basic", "full"]);
-        assert!(words("ruby-html ").is_empty(), "a toggle takes no words");
+        assert_eq!(words("ruby-html "), ["on", "off"], "a switch takes its two words");
         // `:view-pages-*` take a count and no words (2026-10-28).
         assert!(!words("view-pages-vertical ").contains(&"on"));
 

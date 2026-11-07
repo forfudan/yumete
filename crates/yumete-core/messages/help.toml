@@ -90,10 +90,10 @@ zhs = "中文"
 en = "Chinese"
 
 [[message]]
-# 中文幫助：開/關輸入法（草稿）
+# 中文幫助：開/關輸入法
 key = "help.chinese.toggle-ime"
-zhs = "接管键盘或交还系统；接管时单按 Shift 切换 中/ABC"
-en = "take the keyboard or hand it back; while yume has it, a lone Shift tap switches 中/ABC"
+zhs = "接管键盘(`:yume off` 交还系统)；接管时单按 Shift 切换 中/ABC"
+en = "take the keyboard (`:yume off` hands it back); a lone Shift tap switches 中/ABC"
 
 [[message]]
 # 中文幫助：注音寫法統一

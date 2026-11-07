@@ -518,8 +518,8 @@ en = "read-only: on. This file has unsaved changes, and `u` is disabled too"
 [[message]]
 # 只讀擋下了一次改動
 key = "readonly.refused"
-zhs = "只读：用 :readonly 解除"
-en = "read-only — `:readonly` unlocks it"
+zhs = "只读：用 :readonly off 解除"
+en = "read-only — `:readonly off` unlocks it"
 
 [[message]]
 # 只讀開關換好了

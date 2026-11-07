@@ -118,9 +118,9 @@ Replacing: `:s/old/new/` on this line, `:%s/old/new/g` in the whole file.
 
 ## 6. Chinese, if you write it
 
-yumete has a Chinese input method built in. Writing only English? `:yume`
-hands the keyboard back to your system, and it stays that way. `:yume` again
-takes it back; then a lone tap of **Shift** switches between Chinese and
+yumete has a Chinese input method built in. Writing only English? `:yume off`
+hands the keyboard back to your system, and it stays that way. `:yume on`
+takes it again; then a lone tap of **Shift** switches between Chinese and
 English.
 
 ────────────────────────────────────────────────────────────
@@ -128,9 +128,9 @@ English.
 ## 7. The page
 
   ⇒ `:view-wrap-width 60`, Enter: lines wrap at sixty columns.
-  ⇒ `:view-focus`, Enter: everything but this paragraph fades.
-     `:view-focus` again brings it back.
-  ⇒ `:view-typewriter`: the line you write stays in the middle of the
+  ⇒ `:view-focus on`, Enter: everything but this paragraph fades.
+     `:view-focus off` brings it back.
+  ⇒ `:view-typewriter on`: the line you write stays in the middle of the
      screen.
 
 `:vertical` sets the page vertically, the way a Chinese book is set;

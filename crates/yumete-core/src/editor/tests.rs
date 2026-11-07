@@ -9184,20 +9184,23 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
     // reason.
     assert!(ed.execute("vertical").is_ok());
     assert!(ed.execute("view-margin dense").is_ok());
-    // **A plain toggle** (2026-11-07): each bare word turns it round, and the
+    // **A switch** (2026-11-07): each bare word turns it round, and the
     // status line says which way it went.
     assert!(!ed.hanging);
     assert!(ed.execute("view-hanging").is_ok());
     assert!(ed.hanging, "{}", ed.status());
     assert!(ed.execute("view-hanging").is_ok());
     assert!(!ed.hanging, "{}", ed.status());
-    // The words are gone, refused rather than read as a flip.
-    for word in ["on", "off", "toggle"] {
-        assert!(ed.execute(&format!("view-hanging {word}")).is_err(), "{word}");
-        assert!(!ed.hanging, "`{word}` moved it");
+    // `on` and `off` name the state: twice is still the one state.
+    for _ in 0..2 {
+        assert!(ed.execute("view-hanging on").is_ok());
+        assert!(ed.hanging);
     }
-    // A kept view names a state, and the replay alone reads it: twice is
-    // still the one state.
+    assert!(ed.execute("view-hanging off").is_ok());
+    assert!(!ed.hanging);
+    // `toggle` is not a word: bare is the flip.
+    assert!(ed.execute("view-hanging toggle").is_err());
+    // A kept view is replayed the same way.
     for _ in 0..2 {
         ed.execute_quietly(":view-hanging on");
         assert!(ed.hanging);
@@ -9297,8 +9300,8 @@ fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// #213: `:readonly` is a plain toggle (2026-11-07), and says which way it
-/// went.
+/// #213: `:readonly` is a switch (2026-11-07): bare turns it round, `on` and
+/// `off` name the state, and it says which way it went.
 #[test]
 fn readonly_says_which_way_it_is() {
     let mut ed = Editor::new();
@@ -9308,10 +9311,11 @@ fn readonly_says_which_way_it_is() {
     assert!(ed.execute("ro").is_ok());
     assert!(!ed.is_readonly());
     assert!(ed.status().contains("off"), "{}", ed.status());
-    // A word is a mistake, not a setting.
-    for word in ["on", "off", "也許"] {
-        assert!(ed.execute(&format!("readonly {word}")).is_err(), "{word}");
-    }
+    assert!(ed.execute("readonly on").is_ok());
+    assert!(ed.is_readonly());
+    assert!(ed.execute("readonly off").is_ok());
+    assert!(!ed.is_readonly());
+    assert!(ed.execute("readonly 也許").is_err());
 }
 
 /// §5.2.3 ⑤: a refused edit does not move the state around the text.
@@ -9504,7 +9508,10 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
     assert!(ed.execute("reload-auto").is_ok());
     assert!(!ed.reload_auto());
     assert!(ed.status().contains("off"), "{}", ed.status());
-    assert!(ed.execute("reload-auto on").is_err(), "a toggle takes no words");
+    assert!(ed.execute("reload-auto on").is_ok());
+    assert!(ed.reload_auto());
+    assert!(ed.execute("reload-auto on").is_ok(), "naming the state it is in is no error");
+    assert!(ed.reload_auto());
 
     std::fs::remove_dir_all(&dir).ok();
 }
@@ -16909,12 +16916,8 @@ fn a_second_preview_asks_where_the_first_one_is() {
 
     let mut ed = Editor::new();
     ed.open_file(&book).unwrap();
-    // **裸的問，`on` 纔開**（2026-10-19 作者定）：没有預覽在跑的時候那一問
-    // 答的是「沒開著」，而不是順手起一個排版器。
+    // **A switch** (2026-11-07): bare starts it when none runs.
     ed.execute(":view-preview").unwrap();
-    assert_eq!(ed.take_preview_request(), None, "{}", ed.status());
-    assert!(ed.status().contains("預覽"), "{}", ed.status());
-    ed.execute(":view-preview on").unwrap();
     assert!(
         matches!(ed.take_preview_request(), Some(Preview::Start { .. })),
         "the first one starts a typesetter"
@@ -16923,14 +16926,14 @@ fn a_second_preview_asks_where_the_first_one_is() {
     ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
     assert_eq!(ed.preview_at(), Some("http://127.0.0.1:23625"));
 
-    ed.execute(":view-preview").unwrap();
+    ed.execute(":view-preview on").unwrap();
     assert!(
         matches!(ed.take_preview_request(), Some(Preview::Show)),
-        "the second one asks for the address, not for another server"
+        "`on` while it runs asks for the address, not for another server"
     );
 
-    ed.execute(":view-preview off").unwrap();
-    assert!(matches!(ed.take_preview_request(), Some(Preview::Stop)));
+    ed.execute(":view-preview").unwrap();
+    assert!(matches!(ed.take_preview_request(), Some(Preview::Stop)), "bare turns it off");
     std::fs::remove_dir_all(&dir).ok();
 }
 

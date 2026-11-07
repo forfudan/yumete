@@ -818,10 +818,10 @@ en = "open the Yuhao input method website"
 find = "宇浩 官網 官网 輸入法 输入法 website"
 
 [[message]]
-# : 命令選單裏 yume 那一項的説明(commands 組)（草稿）
+# : 命令選單裏 yume 那一項的説明(commands 組)
 key = "cmd.commands.yume"
-zhs = "宇梦输入引擎开关：接管键盘或交还系统"
-en = "Yume input method: take the keyboard or hand it back"
+zhs = "宇梦输入引擎开关：on 打开、off 关闭"
+en = "Yume input method: on or off"
 find = "輸入法 输入法 宇浩 方案 拆分 注解 ime scheme pinyin yo"
 
 [[message]]
@@ -1288,13 +1288,6 @@ find = "行號 行号 底色 gutter"
 key = "cmd.on-off.on"
 zhs = "开"
 en = "on"
-
-[[message]]
-# : 命令選單裏 toggle 那一項的説明——不説開或關，只説「反過來」
-key = "cmd.on-off.toggle"
-zhs = "切换：开则关，关则开"
-en = "toggle: on if off, off if on"
-find = "切換 切换 反轉 反转 toggle flip"
 
 [[message]]
 # : 命令選單裏 install 那一項(convert opencc 組)
@@ -2165,6 +2158,20 @@ find = "折行 換行 换行 寬度 宽度 窗口 width"
 
 
 [[message]]
+# : 命令選單裏 off 那一項的説明(wrap 組)
+key = "cmd.wrap.off"
+zhs = "不换行，超出右边"
+en = "no wrap; lines run off the edge"
+find = "折行 換行 换行 不折 關掉 关掉 off"
+
+[[message]]
+# : 命令選單裏 on 那一項的説明(wrap 組)
+key = "cmd.wrap.on"
+zhs = "过宽的段落自动换行"
+en = "wrap paragraphs wider than the window"
+find = "折行 換行 换行 自動 自动 on"
+
+[[message]]
 # 命令：:view-wrap-height 的 `0`
 key = "cmd.wrap.zong-0"
 zhs = "跟随窗口高度"
@@ -2262,6 +2269,20 @@ en = "candidates per page (1-9, 6 by default)"
 find = "輸入法 输入法 候選 候选 面板 每頁 每页 menu size page"
 
 
+
+[[message]]
+# : 命令選單裏 off 那一項的説明(yume 組)
+key = "cmd.yume.off"
+zhs = "将键盘交还给系统(恢复系统输入法)"
+en = "hand the keyboard back to the system (its own input method works again)"
+find = "輸入法 输入法 關掉 关掉 交還 交还 system off"
+
+[[message]]
+# : 命令選單裏 on 那一項的説明(yume 組)
+key = "cmd.yume.on"
+zhs = "开始输入中文(未加载码表时自动加载)"
+en = "start typing Chinese (loading the table if needed)"
+find = "輸入法 输入法 中文 打字 on"
 
 [[message]]
 # : 命令選單裏 panel 那一項的説明(yume 組)

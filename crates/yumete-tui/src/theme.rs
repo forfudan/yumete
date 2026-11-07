@@ -103,15 +103,11 @@ static FILL: AtomicU8 = AtomicU8::new(0);
 
 /// Say whether a coloured run gets a ground, and answer what is in force now.
 ///
-/// A question moves nothing: `:theme-fill` on its own reports, the way every
-/// other switch does (2026-10-19). It used to *flip*, which left no way to ask
-/// — and `toggle`, the word for flipping, it did not take.
+/// `:theme-fill` on its own flips it, as every switch does (2026-11-07).
 pub fn set_fill(how: yumete_core::command::Switch, config: &Config) -> bool {
     let now = in_force(config).fill;
     let want = how.over(now);
-    if !how.is_a_question() {
-        FILL.store(1 + u8::from(want), Ordering::Relaxed);
-    }
+    FILL.store(1 + u8::from(want), Ordering::Relaxed);
     want
 }
 

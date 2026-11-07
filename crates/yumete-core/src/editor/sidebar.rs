@@ -650,18 +650,21 @@ impl Editor {
         }
     }
 
-    /// **`:sidebar-explorer`, `:sidebar-info`, …** (2026-11-07): the panel
-    /// put away when it is showing, opened where yumete keeps it when not.
+    /// **`:sidebar-explorer`, `:sidebar-info`, …** (2026-11-07): `on` opens
+    /// the panel where yumete keeps it, `off` puts it away, and bare does
+    /// whichever it is not.
     ///
     /// The five lists take the keys, since a list is opened to pick from. The
     /// info panel leaves them in the text, as `空格 w i` does: it is read
     /// beside the text, and `空格 w I` is the way in.
-    pub(super) fn toggle_panel(&mut self, panel: crate::sidebar::Panel) {
+    pub(super) fn switch_panel(&mut self, panel: crate::sidebar::Panel, want: crate::command::Switch) {
         let side = self.side_of(panel);
         let Some(view) = Editor::view_of(panel) else { return };
-        if self.showing(view).is_some() {
-            self.close_panel(side);
-            return;
+        let showing = self.showing(view).is_some();
+        match (want.over(showing), showing) {
+            (false, true) => return self.close_panel(side),
+            (false, false) | (true, true) => return,
+            (true, false) => {}
         }
         match panel {
             crate::sidebar::Panel::Info => self.open_panel_without_the_keys(side, view),

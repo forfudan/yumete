@@ -99,13 +99,7 @@ impl Editor {
                 }
             }
         }
-        // A kept view line names a state (`view-focus on`), which the
-        // toggles themselves cannot: read by the replay, never typed.
-        let asked = match self.quiet_view.then(|| command::setting(line)).flatten() {
-            Some(set) => set,
-            None => command::parse(line)?,
-        };
-        match asked {
+        match command::parse(line)? {
             // `:open` with nothing to open is the picker — the command line
             // takes no 中文, and a chapter's name is 中文 (2026-09-16).
             Command::OpenPicker => {
@@ -282,37 +276,30 @@ impl Editor {
             }
             Command::ReloadAuto(how) => {
                 let on = how.over(self.reload_auto);
-                if !how.is_a_question() {
-                    self.reload_auto = on;
-                    // Asked now, not at the next keystroke: turning it on
-                    // is usually a writer who already suspects the file
-                    // moved.
-                    self.last_disk_check = None;
-                    self.reload_warned = false;
-                }
+                self.reload_auto = on;
+                // Asked now, not at the next keystroke: turning it on
+                // is usually a writer who already suspects the file
+                // moved.
+                self.last_disk_check = None;
+                self.reload_warned = false;
                 self.status = say!("autoreload.set", if on { "on" } else { "off" });
                 Ok(CommandOutcome::Continue)
             }
             Command::SetReadonly(how) => {
                 let on = how.over(self.current_buffer().is_readonly());
-                if !how.is_a_question() {
-                    self.current_buffer_mut().set_readonly(on);
-                    // **`off` lifts `-R` too.** The flag locks every file
-                    // the session opens, and a writer who has just said
-                    // 「no, I do mean to edit this」 should not find the
-                    // next `:open` locked again with no way to say it.
-                    if !on {
-                        self.readonly_default = false;
-                    }
+                self.current_buffer_mut().set_readonly(on);
+                // **`off` lifts `-R` too.** The flag locks every file
+                // the session opens, and a writer who has just said
+                // 「no, I do mean to edit this」 should not find the
+                // next `:open` locked again with no way to say it.
+                if !on {
+                    self.readonly_default = false;
                 }
                 let word = if on { "on" } else { "off" };
                 // Locking a buffer that has unsaved changes takes `u` away
                 // with everything else, so say so once rather than let it be
                 // discovered at the worst moment.
-                self.status = match !how.is_a_question()
-                    && on
-                    && self.current_buffer().is_modified()
-                {
+                self.status = match on && self.current_buffer().is_modified() {
                     true => say!("readonly.on-with-unsaved"),
                     false => say!("readonly.set", word),
                 };
@@ -449,9 +436,7 @@ impl Editor {
             Command::RenderRuby { dialect, on } => {
                 // Turned round from what the page draws, not what was asked
                 // for: at 中階 nothing is drawn, so the toggle shows it.
-                if !on.is_a_question() {
-                    self.render_ruby(dialect, on.over(self.ruby().contains(dialect)));
-                }
+                self.render_ruby(dialect, on.over(self.ruby().contains(dialect)));
                 let listed_names: Vec<String> =
                     self.ruby.iter().map(|d| d.name().to_string()).collect();
                 self.status = if listed_names.is_empty() {
@@ -589,9 +574,7 @@ impl Editor {
             Command::SetDiffGutter(on) => {
                 // Asking must not call the setter: turning the bands on walks
                 // git, and turning them off throws the answer away.
-                if !on.is_a_question() {
-                    self.set_diff_gutter(on.over(self.diff_gutter));
-                }
+                self.set_diff_gutter(on.over(self.diff_gutter));
                 self.status = match self.diff_gutter {
                     // 開了卻什麼都没有的情形太容易被當成「壞了」：這個檔不在
                     // git 倉裏，或者倉裏還没有第一個提交，當場說出來。
@@ -845,9 +828,7 @@ impl Editor {
             }
             Command::SetHanging(want) => {
                 let on = want.over(self.hanging);
-                if !want.is_a_question() {
-                    self.set_hanging_punctuation(on);
-                }
+                self.set_hanging_punctuation(on);
                 self.status = if on {
                     say!("layout.hung-punctuation-on")
                 } else {
@@ -1119,11 +1100,16 @@ impl Editor {
                 self.scheme_request = Some(String::from("~"));
                 Ok(CommandOutcome::Continue)
             }
-            Command::YumeToggle => {
+            Command::Yume(want) => {
                 // `lang:` for the same reason `commit:` and `panel:` have a
                 // prefix: the front end holds the session, and only it knows
-                // whether yume holds the keys now (#290).
-                self.scheme_request = Some(String::from("lang:toggle"));
+                // whether yume holds the keys now (#290), so turning it round
+                // is its to do too.
+                self.scheme_request = Some(String::from(match want {
+                    command::Switch::To(true) => "lang:chinese",
+                    command::Switch::To(false) => "lang:off",
+                    _ => "lang:toggle",
+                }));
                 Ok(CommandOutcome::Continue)
             }
             Command::UserTable(path) => {
@@ -1240,13 +1226,6 @@ impl Editor {
                 // A bare `:view-preview` is exactly that question.
                 if on && running {
                     self.preview_request = Some(Preview::Show);
-                    return Ok(CommandOutcome::Continue);
-                }
-                // A question moves nothing. With no preview up there is no
-                // address to hand back, so it says so rather than stopping a
-                // typesetter that was never started.
-                if how.is_a_question() {
-                    self.status = say!("preview.not-running");
                     return Ok(CommandOutcome::Continue);
                 }
                 self.preview_request = Some(if on {
@@ -1491,8 +1470,8 @@ impl Editor {
                 self.open_search_in(scope, true, reshape);
                 Ok(CommandOutcome::Continue)
             }
-            Command::SidebarToggle(panel) => {
-                self.toggle_panel(panel);
+            Command::Sidebar(panel, want) => {
+                self.switch_panel(panel, want);
                 Ok(CommandOutcome::Continue)
             }
             Command::SetTableNumbers(want) => {

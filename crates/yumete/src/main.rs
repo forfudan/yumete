@@ -2523,7 +2523,7 @@ OPTIONS:
         --vertical   Lay the text out vertically for this run (縱書), overriding
                      the config. --horizontal forces the ordinary layout.
         --readonly   Open locked: nothing this run opens can be typed into.
-                     `:readonly` unlocks the one you are looking at.
+                     `:readonly off` unlocks the one you are looking at.
     -r, --resume     Reopen the files that were open last time here, each at
                      the line it was left on. `:resume` does it from inside.
         --new        Start on an empty buffer even when `[editor] session` is
@@ -2744,7 +2744,7 @@ KEYS (Normal mode, Helix-style):
               (:w  :w <path>  :q  :q!  :o <path>  :new
               :word  :wq  :count
               :yume-scheme <tag>   {schemes}
-              :view-wrap       soft-wrap on or off
+              :view-wrap [on|off]  soft-wrap; bare flips it
               :view-wrap-width <n>  a fixed measure; 0 follows the window
               :wq [path]       save (optionally save-as) and quit
               :42  :goto n    put the cursor on a line
@@ -2779,7 +2779,7 @@ KEYS (Normal mode, Helix-style):
               :ruby-render off|basic|full   full lays the readings out,
                           basic keeps the markup on the page and still counts
                           a reading as no 字, off is the source
-              :ruby-html   :ruby-typst   which is drawn, each a toggle)
+              :ruby-html on|off   :ruby-typst on|off   which is drawn)
 
 In Insert mode C-w takes back a word and C-u the line. The `:` and `/` prompts
 are editable: arrows, Home/End, C-w, C-u, and Up/Down through what you typed
