@@ -502,6 +502,8 @@ struct Gathered {
     editor: Vec<String>,
     theme: Vec<String>,
     keys: String,
+    /// `[[lsp.<language>]]` tables from `languages.toml`, ready to write.
+    lsp: String,
     skipped: Vec<String>,
     carried: usize,
     macros: bool,
@@ -760,10 +762,9 @@ fn theme(value: &toml::Value, got: &mut Gathered) {
 
 /// **helix's `config.toml` as yumete's**, or the reason it cannot be read.
 ///
-/// `languages` says whether a `languages.toml` sits beside it, which this
-/// does not read: yumete's language servers are a candidate list each
-/// (`[lsp.<language>]`), and helix's are written for all of them at once.
-pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: bool) -> Result<Imported, String> {
+/// `languages` is the `languages.toml` beside it, when there is one: only
+/// its servers' `config` is carried ([`helix_languages`]).
+pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: Option<&str>) -> Result<Imported, String> {
     let table: toml::Table = toml::from_str(source).map_err(|e| e.message().to_string())?;
     let mut got = Gathered::default();
     for (key, value) in &table {
@@ -783,11 +784,8 @@ pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: boo
             _ => got.skipped.push(format!("{key}: no counterpart in yumete")),
         }
     }
-    if languages {
-        got.skipped.push(
-            "languages.toml: not read; a language server is set under [lsp.<language>] (see Language servers)"
-                .to_string(),
-        );
+    if let Some(languages) = languages {
+        helix_languages(languages, &mut got);
     }
     let mut text = header("helix", from, when, beside);
     if got.macros {
@@ -812,8 +810,103 @@ pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: boo
         }
     }
     text.push_str(&got.keys);
+    text.push_str(&got.lsp);
     text.push_str(&not_carried(&got.skipped));
     Ok(Imported { text, carried: got.carried, skipped: got.skipped.len() })
+}
+
+/// helix's names for the servers yumete starts, where the name is not the
+/// program (helix `languages.toml` of 2026-07-23).
+const HELIX_SERVER_COMMANDS: &[(&str, &str)] =
+    &[("jedi", "jedi-language-server"), ("r", "R"), ("ada-language-server", "ada_language_server")];
+
+/// **helix's `languages.toml`: each server's `config`** (2026-11-07), for
+/// the servers yumete starts. Nothing else in it is carried, and each thing
+/// left is listed.
+///
+/// Warning: **The whole list is written, not the one entry.** A language
+/// named under `[lsp.…]` replaces its list, so `[language-server.superhtml]
+/// config` becomes both of `html`'s entries, the first with the factory's
+/// own `config`. A server several languages start (`clangd` for `c` and
+/// `cpp`) is written for each.
+///
+/// Warning: **The reader's `config` replaces helix's, it does not merge
+/// into it.** That is what helix does: its `languages.toml` is merged three
+/// tables deep, and `config` is the fourth.
+fn helix_languages(source: &str, got: &mut Gathered) {
+    let table: toml::Table = match toml::from_str(source) {
+        Ok(table) => table,
+        Err(e) => {
+            got.skipped.push(format!("languages.toml: does not parse: {}", e.message()));
+            return;
+        }
+    };
+    let factory = yumete_config::factory_servers();
+    // Language → (entry, config), in the language's own order.
+    let mut given: std::collections::BTreeMap<&str, Vec<(usize, serde_json::Value)>> = Default::default();
+    for (key, value) in &table {
+        match (key.as_str(), value) {
+            ("language-server", toml::Value::Table(servers)) => {
+                for (name, server) in servers {
+                    let toml::Value::Table(server) = server else {
+                        got.skipped.push(format!("languages.toml [language-server.{name}]: not a table"));
+                        continue;
+                    };
+                    for key in server.keys().filter(|k| *k != "config") {
+                        got.skipped.push(format!(
+                            "languages.toml [language-server.{name}] {key}: only config is carried over"
+                        ));
+                    }
+                    let Some(config) = server.get("config") else { continue };
+                    let command = HELIX_SERVER_COMMANDS
+                        .iter()
+                        .find(|(helix, _)| helix == name)
+                        .map_or(name.as_str(), |(_, command)| command);
+                    let Ok(config) = serde_json::to_value(config) else { continue };
+                    let mut found = false;
+                    for (language, list) in &factory {
+                        for (at, _) in list.iter().enumerate().filter(|(_, s)| s.command == command) {
+                            given.entry(language.as_str()).or_default().push((at, config.clone()));
+                            found = true;
+                        }
+                    }
+                    match found {
+                        true => got.carried += 1,
+                        false => got.skipped.push(format!(
+                            "languages.toml [language-server.{name}] config: yumete starts no {command} for any language; \
+                             name it under [lsp.<language>] with this config"
+                        )),
+                    }
+                }
+            }
+            ("language", _) => got.skipped.push(
+                "languages.toml [[language]]: not read; which servers a language runs is set under \
+                 [lsp.<language>] (see Language servers)"
+                    .to_string(),
+            ),
+            _ => got.skipped.push(format!("languages.toml {key}: no counterpart in yumete")),
+        }
+    }
+    if given.is_empty() {
+        return;
+    }
+    got.lsp.push_str(
+        "\n# Language servers' config, from helix's languages.toml. A language\n\
+         # named here replaces its whole list, so each list is written out.\n",
+    );
+    for (language, configs) in given {
+        for (at, server) in factory[language].iter().enumerate() {
+            got.lsp.push_str(&format!("\n[[lsp.{}]]\ncommand = {}\n", toml_key(language), quote(&server.command)));
+            if !server.args.is_empty() {
+                let args: Vec<String> = server.args.iter().map(|a| quote(a)).collect();
+                got.lsp.push_str(&format!("args = [{}]\n", args.join(", ")));
+            }
+            let config = configs.iter().rev().find(|(i, _)| *i == at).map(|(_, c)| c).or(server.config.as_ref());
+            if let Some(config) = config {
+                got.lsp.push_str(&format!("config = {}\n", inline_json(config)));
+            }
+        }
+    }
 }
 
 // ---- LazyVim -------------------------------------------------------------
@@ -925,6 +1018,32 @@ fn toml_key(key: &str) -> String {
     }
 }
 
+/// **A JSON value as an inline TOML value**: a server's `config` on one
+/// line. TOML has no `null`, and a TOML file never gives one, so one is left
+/// out (and is an empty table at the top).
+fn inline_json(value: &serde_json::Value) -> String {
+    use serde_json::Value;
+    match value {
+        Value::Null => "{}".to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => quote(s),
+        Value::Array(items) => {
+            let items: Vec<String> = items.iter().filter(|v| !v.is_null()).map(inline_json).collect();
+            format!("[{}]", items.join(", "))
+        }
+        Value::Object(map) if map.is_empty() => "{}".to_string(),
+        Value::Object(map) => {
+            let pairs: Vec<String> = map
+                .iter()
+                .filter(|(_, v)| !v.is_null())
+                .map(|(k, v)| format!("{} = {}", toml_key(k), inline_json(v)))
+                .collect();
+            format!("{{ {} }}", pairs.join(", "))
+        }
+    }
+}
+
 /// A value on one line, for the list of what was not carried over.
 fn inline(value: &toml::Value) -> String {
     match value {
@@ -962,8 +1081,8 @@ pub fn run(which: &str) -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            let languages = from.with_file_name("languages.toml").is_file();
-            match helix(&source, &from, &when, beside, languages) {
+            let languages = std::fs::read_to_string(from.with_file_name("languages.toml")).ok();
+            match helix(&source, &from, &when, beside, languages.as_deref()) {
                 Ok(imported) => imported,
                 Err(why) => {
                     eprintln!("yumete: {} does not parse: {why}", from.display());
@@ -1080,7 +1199,7 @@ j = { k = "normal_mode" }
 "#;
 
     fn sample() -> Imported {
-        helix(SAMPLE, Path::new("/home/me/.config/helix/config.toml"), "2026-11-06 17:30", false, true).unwrap()
+        helix(SAMPLE, Path::new("/home/me/.config/helix/config.toml"), "2026-11-06 17:30", false, Some("[[language]]\nname = \"rust\"\n")).unwrap()
     }
 
     #[test]
@@ -1117,7 +1236,7 @@ j = { k = "normal_mode" }
         assert!(list.contains("[editor.soft-wrap] max-wrap: no counterpart in yumete"), "{list}");
         assert!(list.contains("[editor.lsp]: no counterpart in yumete"), "{list}");
         assert!(list.contains("rulers after the first"), "{list}");
-        assert!(list.contains("languages.toml: not read"), "{list}");
+        assert!(list.contains("languages.toml [[language]]: not read"), "{list}");
         assert!(list.lines().all(|l| l.starts_with("#   ")), "{list}");
         assert_eq!(imported.skipped, list.lines().count());
         // Nothing skipped is written as a binding.
@@ -1148,7 +1267,7 @@ j = { k = "normal_mode" }
         assert_eq!(helix_theme("onedark"), Some(("one-dark", None)));
         assert_eq!(helix_theme("gruvbox_material_dark_hard"), None);
         assert_eq!(helix_theme("rose_pine"), None);
-        let two = helix("theme = { light = \"github_light\", dark = \"github_dark\" }\n", Path::new("x"), "t", false, false)
+        let two = helix("theme = { light = \"github_light\", dark = \"github_dark\" }\n", Path::new("x"), "t", false, None)
             .unwrap()
             .text;
         assert!(two.contains("name = \"github\"\nmode = \"auto\""), "{two}");
@@ -1161,12 +1280,12 @@ j = { k = "normal_mode" }
         // Ten settings, the theme, and nine bindings.
         assert_eq!(imported.carried, 20);
         // An empty helix config is still a clean one.
-        let empty = helix("", Path::new("x"), "t", false, false).unwrap();
+        let empty = helix("", Path::new("x"), "t", false, None).unwrap();
         assert_eq!(complaints(&empty.text), Vec::<String>::new(), "{}", empty.text);
         // Every key table: nothing yumete reports, whatever is skipped.
         let gutters = "[editor]\ngutters = [\"diagnostics\", \"spacer\"]\nline-number = \"relative\"\nscrolloff = 99\n\
                        [editor.word-completion]\nenable = false\n[keys.normal.g]\nx = \"no_such_thing\"\n";
-        let out = helix(gutters, Path::new("x"), "t", true, false).unwrap().text;
+        let out = helix(gutters, Path::new("x"), "t", true, None).unwrap().text;
         assert_eq!(complaints(&out), Vec::<String>::new(), "{out}");
         assert!(out.contains("line_numbers = \"none\""), "{out}");
         assert!(out.contains("diff_gutter = false"), "{out}");
@@ -1178,13 +1297,75 @@ j = { k = "normal_mode" }
         // The note on `@` runs only when one was written.
         assert!(!out.contains("A run written with @"), "{out}");
         assert!(sample().text.contains("A run written with @"));
-        let skipped_run = helix("[keys.normal]\nA-x = \"@<esc>x\"\n", Path::new("x"), "t", false, false).unwrap().text;
+        let skipped_run = helix("[keys.normal]\nA-x = \"@<esc>x\"\n", Path::new("x"), "t", false, None).unwrap().text;
         assert!(!skipped_run.contains("A run written with @"), "{skipped_run}");
     }
 
     #[test]
     fn a_helix_config_that_does_not_parse_is_refused() {
-        assert!(helix("[editor\nscrolloff = 3", Path::new("x"), "t", false, false).is_err());
+        assert!(helix("[editor\nscrolloff = 3", Path::new("x"), "t", false, None).is_err());
+    }
+
+    /// **helix's `languages.toml` gives its servers' `config`** (2026-11-07),
+    /// written as whole `[[lsp.<language>]]` lists the editor takes as they
+    /// are; everything else in it is listed.
+    #[test]
+    fn a_helix_server_s_config_comes_over_as_a_whole_list() {
+        let languages = r#"
+[language-server.rust-analyzer.config]
+check.command = "clippy"
+
+[language-server.superhtml]
+config = { lint = false }
+
+[language-server.clangd]
+command = "/opt/llvm/bin/clangd"
+config = { fallbackFlags = ["-std=c++20"] }
+
+[language-server.jedi.config]
+diagnostics = { enable = true }
+
+[language-server.golangci-lint-lsp]
+command = "golangci-lint-langserver"
+config = { command = ["golangci-lint", "run"] }
+
+[[language]]
+name = "go"
+language-servers = ["gopls", "golangci-lint-lsp"]
+"#;
+        let imported = helix("", Path::new("x"), "t", false, Some(languages)).unwrap();
+        let out = &imported.text;
+        assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
+        assert_eq!(imported.carried, 4, "rust-analyzer, superhtml, clangd, jedi");
+        let config = yumete_config::Config::from_toml(out);
+        assert_eq!(config.lsp["rust"].len(), 1);
+        assert_eq!(config.lsp["rust"][0].config, Some(serde_json::json!({ "check": { "command": "clippy" } })));
+        // Both of html's, the first keeping the factory's own `config`.
+        let html = &config.lsp["html"];
+        assert_eq!(html.iter().map(|s| s.command.as_str()).collect::<Vec<_>>(), ["vscode-html-language-server", "superhtml"]);
+        assert_eq!(html[0].args, ["--stdio"]);
+        assert_eq!(html[0].config, Some(serde_json::json!({ "provideFormatter": true })));
+        assert_eq!(html[1].config, Some(serde_json::json!({ "lint": false })));
+        // One server, two languages; its own command is not carried.
+        for language in ["c", "cpp"] {
+            assert_eq!(config.lsp[language][0].command, "clangd", "{language}");
+            assert_eq!(config.lsp[language][0].config, Some(serde_json::json!({ "fallbackFlags": ["-std=c++20"] })));
+        }
+        // helix's `jedi` is the program `jedi-language-server`, third of four.
+        assert_eq!(config.lsp["python"].len(), 4);
+        assert_eq!(config.lsp["python"][2].config, Some(serde_json::json!({ "diagnostics": { "enable": true } })));
+        assert_eq!(config.lsp["python"][0].config, None);
+        // A language nobody configured keeps the factory's list.
+        assert_eq!(config.lsp["json"], yumete_config::factory_servers()["json"]);
+        let (_, list) = out.split_once("# Not carried over:\n").expect("the list");
+        assert!(list.contains("[language-server.clangd] command: only config is carried over"), "{list}");
+        assert!(list.contains("[language-server.golangci-lint-lsp] config: yumete starts no golangci-lint-lsp"), "{list}");
+        assert!(list.contains("languages.toml [[language]]: not read"), "{list}");
+        assert_eq!(imported.skipped, list.lines().count());
+        // A languages.toml that does not parse is said, and the rest still comes.
+        let broken = helix("[editor]\nscrolloff = 3\n", Path::new("x"), "t", false, Some("[language-server")).unwrap();
+        assert!(broken.text.contains("languages.toml: does not parse"), "{}", broken.text);
+        assert!(broken.text.contains("scrolloff = 3"), "{}", broken.text);
     }
 
     /// **Every name the tables translate to is yumete's** — the renames go
