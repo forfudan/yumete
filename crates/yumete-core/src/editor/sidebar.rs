@@ -1631,7 +1631,8 @@ impl Editor {
                     ".." => here.parent().map(Path::to_path_buf)?,
                     one => here.join(one),
                 };
-                let (dirs, files) = crate::editor::list_one_level(&full, &crate::editor::Sieve::default());
+                let sieve = self.picker.as_ref().and_then(|p| p.sieve.clone()).unwrap_or_default();
+                let (dirs, files) = crate::editor::list_one_level(&full, &sieve);
                 let shown: Vec<String> = dirs
                     .into_iter()
                     .map(|d| d + "/")
@@ -1735,8 +1736,10 @@ impl Editor {
             self.status = say!("picker.nothing-matched");
             return;
         }
-        // **根要在關掉挑選器之前取**：關掉就連根一起没了。
+        // **根要在關掉挑選器之前取**：關掉就連根一起没了。The sieve too: the
+        // explorer keeps what `A-h` set as it walks.
         let root = self.picker.as_ref().and_then(|p| p.root.clone());
+        let sieve = self.picker.as_ref().and_then(|p| p.sieve.clone()).unwrap_or_else(Self::explorer_sieve);
         // helix's jump list picker centres a place off the page; its other
         // pickers centre it wherever it is (`align_view`).
         let jumps = self.picker.as_ref().is_some_and(|p| p.title == say!("picker.jumplist"));
@@ -1764,7 +1767,7 @@ impl Editor {
                     ".." => here.parent().map(Path::to_path_buf).unwrap_or(here),
                     name => here.join(name),
                 };
-                self.browse(&there);
+                self.browse(&there, sieve);
             }
             Some(crate::picker::Item::Buffer(i, _)) => self.show_buffer(i),
             Some(crate::picker::Item::Paste(Some(which), _)) => self.paste_from_menu(which),
@@ -1888,7 +1891,15 @@ impl Editor {
     /// can say.
     pub(super) fn open_explorer(&mut self) {
         let root = self.root();
-        self.browse(&root);
+        self.browse(&root, Self::explorer_sieve());
+    }
+
+    /// **The explorer shows everything at first** (2026-11-08), hidden and
+    /// ignored entries included, as helix's file explorer does (its own
+    /// `[editor.file-explorer]` filters all default to off, unlike the file
+    /// picker's). It lists one directory, so showing more costs nothing.
+    fn explorer_sieve() -> crate::editor::Sieve {
+        crate::editor::Sieve { hidden: true, ignored: true, ..Default::default() }
     }
 
     /// `空格 E` — the same, at the directory this file is in (helix's
@@ -1903,19 +1914,18 @@ impl Editor {
             .and_then(|p| p.parent())
             .map(Path::to_path_buf)
             .unwrap_or_else(|| self.working_dir());
-        self.browse(&here);
+        self.browse(&here, Self::explorer_sieve());
     }
 
     /// List one directory on the picker — the explorer, and every step of it.
     ///
     /// Re-entered on every Enter over a directory, which is what makes
     /// browsing one picker rather than a stack of them.
-    pub(super) fn browse(&mut self, dir: &Path) {
+    pub(super) fn browse(&mut self, dir: &Path, sieve: crate::editor::Sieve) {
         // Nothing is walking: a directory is read in one breath, so the
         // explorer has no streaming half and must not leave the file picker's
         // thread running underneath it.
         self.stop_filling_the_picker();
-        let sieve = crate::editor::Sieve::default();
         let (dirs, files) = crate::editor::list_one_level(dir, &sieve);
         let mut items = Vec::with_capacity(dirs.len() + files.len() + 1);
         // **`..` is a row, not a key.** It is the row a reader's eye lands on
@@ -1928,6 +1938,7 @@ impl Editor {
         let mut picker = crate::picker::Picker::new(&self.browsing_title(dir), items);
         picker.root = Some(dir.to_path_buf());
         picker.sieve = Some(sieve);
+        picker.browsing = true;
         self.show_the_picker(picker);
     }
 
@@ -2017,6 +2028,7 @@ impl Editor {
             return;
         };
         let query = picker.query().to_string();
+        let browsing = picker.browsing;
         let mut sieve = sieve;
         (sieve.hidden, sieve.ignored) = match (sieve.hidden, sieve.ignored) {
             (false, false) => (false, true),
@@ -2024,6 +2036,18 @@ impl Editor {
             (true, false) => (true, true),
             (true, true) => (false, false),
         };
+        // **The explorer stays the explorer** (2026-11-08): it lists the same
+        // directory again with the new sieve. It used to become the project's
+        // file picker.
+        if browsing {
+            self.browse(&root, sieve);
+            if let Some(picker) = self.picker.as_mut() {
+                for c in query.chars() {
+                    picker.push(c);
+                }
+            }
+            return;
+        }
         self.open_file_picker_with(&query, root, sieve);
     }
 

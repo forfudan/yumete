@@ -24856,10 +24856,9 @@ fn the_explorer_lists_one_directory_and_walks_into_it() {
     let rows = |ed: &Editor| -> Vec<String> {
         ed.picker().unwrap().matches().iter().map(|i| i.label().to_string()).collect()
     };
-    // Directories first, `..` at the head, and the build tree left out — the
-    // same rules `空格 f` walks by, because it is the same walker one level
-    // deep.
-    assert_eq!(rows(&ed), vec!["../", "卷一/", "序.md"], "listed once, in that order");
+    // Directories first, `..` at the head, and everything shown, the build
+    // tree included, as helix's explorer shows it (2026-11-08).
+    assert_eq!(rows(&ed), vec!["../", "target/", "卷一/", "序.md"], "listed once, in that order");
 
     // **Enter on a directory does not choose anything**: the picker stays up,
     // one level down, with the query cleared.
@@ -24877,11 +24876,56 @@ fn the_explorer_lists_one_directory_and_walks_into_it() {
 
     // `..` climbs, and a file opens and closes the picker, as `空格 f` does.
     ed.on_key(Key::Enter);
-    assert_eq!(rows(&ed), vec!["../", "卷一/", "序.md"], "back up");
+    assert_eq!(rows(&ed), vec!["../", "target/", "卷一/", "序.md"], "back up");
     ed.on_key(Key::Char('序'));
     ed.on_key(Key::Enter);
     assert!(ed.picker().is_none(), "a file is a choice, and a choice closes it");
     assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("序.md")));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`A-h` in the explorer keeps it the explorer** (2026-11-08): it lists the
+/// same directory again with the new sieve, and the sieve lasts as it walks.
+/// It used to turn into the project's file picker.
+#[test]
+fn alt_h_in_the_explorer_lists_the_same_directory_again() {
+    let dir = tmp().join(format!("yumete-explorer-sieve-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("子倉")).unwrap();
+    std::fs::write(dir.join("子倉").join("章.md"), "章。\n").unwrap();
+    std::fs::write(dir.join(".點.md"), "點。\n").unwrap();
+    std::fs::write(dir.join(".gitignore"), "子倉/\n").unwrap();
+    std::fs::write(dir.join("序.md"), "序。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.set_root(&dir);
+    ed.open_file(dir.join("序.md")).unwrap();
+    let rows = |ed: &Editor| -> Vec<String> {
+        let mut rows: Vec<String> =
+            ed.picker().unwrap().matches().iter().map(|i| i.label().to_string()).collect();
+        rows.sort();
+        rows
+    };
+    type_keys(&mut ed, " e");
+    let title = ed.picker().unwrap().title.clone();
+    assert_eq!(rows(&ed), vec!["../", ".gitignore", ".點.md", "子倉/", "序.md"], "everything at first");
+    // One press hides both; the title is still the directory, one level only.
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(ed.picker().unwrap().title, title, "still the explorer");
+    assert_eq!(rows(&ed), vec!["../", "序.md"]);
+    // Then the ignored half comes back, and the sieve lasts into a directory.
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(rows(&ed), vec!["../", "子倉/", "序.md"]);
+    for c in "子倉".chars() {
+        ed.on_key(Key::Char(c));
+    }
+    ed.on_key(Key::Enter);
+    assert_eq!(rows(&ed), vec!["../", "章.md"]);
+    let sieve = ed.picker().unwrap().sieve.clone().unwrap();
+    assert_eq!((sieve.hidden, sieve.ignored), (false, true), "kept on the way down");
+    // A typed query survives the press.
+    ed.on_key(Key::Char('章'));
+    ed.on_key(Key::Alt('h'));
+    assert_eq!(ed.picker().unwrap().query(), "章");
     std::fs::remove_dir_all(&dir).ok();
 }
 

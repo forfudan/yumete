@@ -24,6 +24,7 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The `Space e` explorer shows hidden and ignored files at first**, as helix's file explorer does; `Space f` still skips them. `A-h` steps what is skipped.
 - **The interface wording, reviewed**: shorter, plainer messages in English and Chinese, mainland vocabulary in the Chinese, and common terms such as 选择器 for a picker. The Traditional interface now follows the mainland standard glyphs (説 内 吴 rather than 說 內 吳) and drops Taiwan wording such as 檔案 and 選單.
 - **`zht` is the name of the Traditional interface language**, beside `zhs` and `en`; `zh`, `tc` and `sc` still work.
 - **A switch typed on its own turns its setting round**, as in Emacs: `:view-focus`, `:readonly`, `:yume` and every other command that takes `on` or `off` flips with no word after it, and says which way it went; `on` and `off` still name the state. Commands that take a value, such as `:view-margin` or `:outline`, still say the current value when typed on their own. `toggle` is no longer a word.
@@ -33,6 +34,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **`A-h` in the `Space e` explorer keeps it the explorer.** It used to turn the explorer into the project's file picker; it now lists the same folder again, and what it skips lasts as you move between folders and in the preview.
 - **The browser preview follows the caret again.** tinymist 0.15.2 stopped reading the message yumete sent; it now sends the one tinymist scrolls by.
 - **One `Esc` leaves Insert mode while the completion list is up**, as in helix and vim. It used to close the list and stay in Insert, so a second `Esc` was needed. Leaving Insert any other way (`C-c`, a `[keys.insert]` run) takes the list away too.
 - **vim's Visual `$` takes the line break**: `v$d` joins the next line on and `v$y` copies the break, as in vim; `p` puts such a copy inside the line, not on a line of its own. The file's last line break is never deleted.

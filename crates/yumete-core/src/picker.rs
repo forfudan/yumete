@@ -129,6 +129,9 @@ pub struct Picker {
     /// 裏現成的東西，篩子對它們没有意思，`A-h` 在那裏什麼都不做，提示行上也就不
     /// 寫它——没綁的鍵不許寫進提示。只有 `Editor::open_file_picker_in` 那一支填得出它。
     pub sieve: Option<crate::editor::Sieve>,
+    /// Whether this is the explorer (`空格 e`), which lists one directory:
+    /// `A-h` re-lists that directory instead of walking the project.
+    pub browsing: bool,
     /// **What to put near the top before anything is typed**, one number per
     /// item (2026-09-18).
     ///
@@ -193,6 +196,7 @@ impl Picker {
             caret: 0,
             root: None,
             sieve: None,
+            browsing: false,
             bonus: vec![0; count],
             prose: vec![false; count],
             loose: true,
