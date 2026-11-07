@@ -14,6 +14,7 @@ in `docs/development.md` §5.2.
 - **What you yank lights up for a moment**, as nvim's `vim.hl.on_yank` does: `[editor] yank_flash = true`. It helps most under the vim keys, where `yap` or `yis` copies text you never saw selected. Off by default; `ye --import lazyvim` turns it on, as LazyVim does.
 - **`TODO:`, `FIXME:` and `NOTE` stand out in comments**, in the diagnostics' colours and with helix's lists of words (blue for `TODO` and `NOTE`, amber for `HACK` and `WARN`, red for `FIXME` and `BUG`). In code comments, and in Markdown and Typst comments; never in body text.
 - **`gS` splits a pair of brackets into one item per line, and joins them back**, as mini.splitjoin does: `[a, b, c]` becomes three lines one indent in, and `gS` again puts it back on one line. Commas inside nested brackets and strings are left alone. A flavour key in both keymaps; `:split-join` does the same.
+- **`ye --import lazyvim` carries the mini.surround extra**: when `lazyvim.json` lists it, `gsa`, `gsd` and `gsr` become vim-surround's `ys`, `ds` and `cs`, and Visual `gsa` wraps the selection.
 
 ### Fixed
 

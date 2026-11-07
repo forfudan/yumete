@@ -819,7 +819,17 @@ pub fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool) -> Imported {
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
         .and_then(|json| json.get("extras").and_then(|e| e.as_array()).cloned())
         .unwrap_or_default();
+    // **mini.surround's extra lands on yumete's own surround** (2026-11-07):
+    // its `gsa` `gsd` `gsr` are vim-surround's `ys` `ds` `cs` with another
+    // prefix, and visual `gsa` is helix's `ms`. nvim's `gs` sleeps and
+    // yumete's does nothing, so nothing is taken.
+    let mut surround = false;
     for extra in extras.iter().filter_map(|e| e.as_str()) {
+        if extra == "lazyvim.plugins.extras.coding.mini-surround" {
+            surround = true;
+            skipped.push(format!("LazyVim extra {extra} (lazyvim.json): gsf, gsF, gsh and gsn have no counterpart"));
+            continue;
+        }
         skipped.push(format!("LazyVim extra {extra} (lazyvim.json): yumete has no plugins"));
     }
     skipped.push(
@@ -832,15 +842,36 @@ pub fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool) -> Imported {
         "# The config on the Coming from LazyVim page: {LAZYVIM_PAGE}\n\
          # Nothing in your Neovim config was run.\n\n"
     ));
-    text.push_str(LAZYVIM);
+    let config = match surround {
+        true => with_mini_surround(LAZYVIM),
+        false => LAZYVIM.to_string(),
+    };
+    text.push_str(&config);
     text.push_str(&not_carried(&skipped));
     // Every line that binds or sets something; a group's `label` names one.
-    let carried = LAZYVIM
+    let carried = config
         .lines()
         .map(str::trim_start)
         .filter(|l| !l.starts_with('#') && !l.starts_with('[') && l.contains(" = ") && !l.starts_with("label "))
         .count();
     Imported { text, carried, skipped: skipped.len() }
+}
+
+/// The LazyVim config with the mini.surround extra's keys: three lines at
+/// the end of its `[keys.normal]` (TOML has one table of a name) and a
+/// `[keys.select]` of its own.
+fn with_mini_surround(config: &str) -> String {
+    let normal = "# The mini.surround extra (lazyvim.json), on yumete's ys, ds and cs\n\
+                  gsa = \"@ys\"\n\
+                  gsd = \"@ds\"\n\
+                  gsr = \"@cs\"\n";
+    let select = "\n# Visual gsa wraps the selection, as the extra's does\n\
+                  [keys.select]\n\
+                  gsa = \"surround_add\"\n";
+    // The `[keys.normal]` table runs to the blank line before `[editor]`.
+    let at = config.find("\n[editor]").unwrap_or(config.len());
+    let (keys, rest) = config.split_at(at);
+    format!("{keys}{normal}{rest}{select}")
 }
 
 // ---- TOML spelling ---------------------------------------------------------
@@ -1202,6 +1233,17 @@ j = { k = "normal_mode" }
         assert!(out.contains("LazyVim extra lazyvim.plugins.extras.lang.python"), "{out}");
         assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
         assert!(imported.carried > 80, "{}", imported.carried);
+
+        // The mini.surround extra lands on yumete's own surround keys, and the
+        // file still reads as one config.
+        std::fs::write(nvim.join("lazyvim.json"), "{ \"extras\": [\"lazyvim.plugins.extras.coding.mini-surround\"] }").unwrap();
+        let with = lazyvim(&nvim, &sign, "2026-11-07 17:30", false);
+        let out = &with.text;
+        assert!(out.contains("gsa = \"@ys\"\ngsd = \"@ds\"\ngsr = \"@cs\"\n"), "{out}");
+        assert!(out.contains("[keys.select]\ngsa = \"surround_add\"\n"), "{out}");
+        assert!(out.contains("gsf, gsF, gsh and gsn have no counterpart"), "{out}");
+        assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
+        assert_eq!(with.carried, imported.carried + 4);
         let _ = std::fs::remove_dir_all(&home);
         let _ = std::fs::remove_dir_all(&xdg);
     }
