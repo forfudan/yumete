@@ -162,6 +162,17 @@ struct Server {
     /// (2026-11-07), said right after `initialized`, as helix does. The
     /// `initialize` and the reader thread have the table itself.
     configured: Option<String>,
+    /// **What it said it is** (`serverInfo`, 2026-11-07): `None` until the
+    /// handshake, then its name and version, either of which it may leave
+    /// out. The page window asks this of tinymist.
+    said_it_is: Option<(Option<String>, Option<String>)>,
+    /// The commands asked for the page window whose answers are still out
+    /// (`workspace/executeCommand`, 2026-11-07).
+    asked_exec: HashSet<i64>,
+    /// **How many times it has been handed a buffer's text** (`didOpen` and
+    /// `didChange`), so a new count is new text in its hands: the page window
+    /// asks for the page again when this moves.
+    told: u64,
 }
 
 /// **一個服務器是怎麼走的**（2026-10-11）——說出口的那一句不一樣。
@@ -438,7 +449,10 @@ pub struct Servers {
     /// Only answers ring: `$/progress` and diagnostics can come by the hundred
     /// a second, and those still wait for the next look.
     doorbell: Option<Doorbell>,
-
+    /// **The page window's answers**, by the id it asked under, until it
+    /// takes them ([`Servers::take_executed`]): what the command answered,
+    /// or what the server said in refusing.
+    executed: HashMap<i64, Result<Option<lsp::Executed>, String>>,
 }
 
 /// See [`Servers::ring_on_answers`].
@@ -464,6 +478,7 @@ impl Default for Servers {
             settle: SETTLE,
             says: None,
             filled: false,
+            executed: HashMap::new(),
         }
     }
 }
@@ -730,6 +745,7 @@ impl Servers {
                 true => lsp::did_change(&path, server.version, &text),
             };
             server.say(message);
+            server.told += 1;
             server.waiting = true;
         }
         // 第一次告訴它們這個檔，就開始等；答過一次之後不再說（見 `waiting_on`）。
@@ -1250,7 +1266,8 @@ impl Servers {
         for (whose, server) in self.running.iter_mut() {
             loop {
                 match server.from.try_recv() {
-                    Ok(Notice::Ready { signature_triggers }) => {
+                    Ok(Notice::Ready { signature_triggers, name, version }) => {
+                        server.said_it_is = Some((name, version));
                         if !signature_triggers.is_empty() {
                             let languages = self.serving.iter().filter(|(_, them)| them.contains(whose));
                             for (language, _) in languages {
@@ -1296,8 +1313,16 @@ impl Servers {
                     // 問題現在發給了這種語言的每一個服務器，所以「沒什麽可說
                     // 的」這句話要等**全都**答完了纔說得出口——而在迴圈裏借着
                     // 一個 server，動不了別人的 `asked_*`。
-                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols, spans }) => {
-                        if server.asked_symbols == Some(id) {
+                    Ok(Notice::Answer { id, places, told, offers, incomplete, signature, edits, actions, error, symbols, spans, executed }) => {
+                        // A command asked for the page window (2026-11-07),
+                        // kept for it to take ([`Servers::take_executed`]).
+                        if server.asked_exec.remove(&id) {
+                            self.executed.insert(id, match error {
+                                Some(why) => Err(why),
+                                None => Ok(executed),
+                            });
+                            anything = true;
+                        } else if server.asked_symbols == Some(id) {
                             server.asked_symbols = None;
                             anything = true;
                             heard.symbols(symbols);
@@ -1528,6 +1553,7 @@ impl Server {
             // 已經改了。回退那一句（`asked_signature_doc`）更是永遠排不上。
             || self.asked_signature.is_some()
             || self.asked_signature_doc.is_some()
+            || !self.asked_exec.is_empty()
     }
 }
 
@@ -1584,6 +1610,102 @@ impl Server {
         // A closed channel is a dead server, which `collect` will notice on
         // its own round; there is nothing useful to do here.
         let _ = self.to.send(message);
+    }
+}
+
+/// **Where the Typst server stands, for the page window** (2026-11-07).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Typesetter {
+    /// No tinymist here: not installed, not configured, or it would not start.
+    Missing,
+    /// Configured and found, and not through its handshake yet (or not
+    /// started yet: it starts when a Typst file is opened).
+    Starting,
+    /// Running, and too old to hand a page over in memory: what to call it
+    /// (`tinymist 0.13.10`, or `tinymist` when it named no version).
+    TooOld(String),
+    Ready,
+}
+
+impl Servers {
+    /// **The tinymist among the Typst servers**: the one whose `serverInfo`
+    /// says so, or whose command is called so — a Typst server can be another
+    /// program (harper-ls reads Typst too).
+    fn tinymist_name(&self) -> Option<String> {
+        self.serving("typst").into_iter().find(|name| {
+            let Some(server) = self.running.get(name) else { return false };
+            match server.said_it_is.as_ref().and_then(|(n, _)| n.as_deref()) {
+                Some(said) => said == "tinymist",
+                None => Path::new(name).file_name().is_some_and(|f| f.to_string_lossy().contains("tinymist")),
+            }
+        })
+    }
+
+    fn tinymist(&self) -> Option<&Server> {
+        self.running.get(&self.tinymist_name()?)
+    }
+
+    fn tinymist_mut(&mut self) -> Option<&mut Server> {
+        let name = self.tinymist_name()?;
+        self.running.get_mut(&name)
+    }
+
+    /// **Can tinymist draw the page window**, from what it said in its
+    /// handshake (the version gate is [`yumete_core::preview::new_enough`]).
+    pub fn typesetter(&self, config: &yumete_config::Config, editor: &Editor) -> Typesetter {
+        match self.tinymist() {
+            Some(server) if !server.ready => Typesetter::Starting,
+            Some(server) => {
+                let version = server.said_it_is.as_ref().and_then(|(_, v)| v.as_deref());
+                match yumete_core::preview::new_enough(version) {
+                    true => Typesetter::Ready,
+                    false => Typesetter::TooOld(match version {
+                        Some(version) => format!("tinymist {version}"),
+                        None => "tinymist".to_string(),
+                    }),
+                }
+            }
+            None if self.failed.contains("typst") => Typesetter::Missing,
+            None => match Self::all_named(config, "typst", Some(&Self::look_from(editor)))
+                .iter()
+                .any(|s| Path::new(&s.command).file_name().is_some_and(|f| f.to_string_lossy().contains("tinymist")))
+            {
+                true => Typesetter::Starting,
+                false => Typesetter::Missing,
+            },
+        }
+    }
+
+    /// **Ask tinymist to run a command** (`workspace/executeCommand`), with
+    /// `arguments` as a JSON array. With `keep` the answer is kept for
+    /// [`Servers::take_executed`] under the id this returns; without it, it
+    /// is let go. `None` when no tinymist is through its handshake.
+    pub fn execute(&mut self, command: &str, arguments: &str, keep: bool) -> Option<i64> {
+        let server = self.tinymist_mut().filter(|s| s.ready)?;
+        let id = server.next_ask;
+        server.next_ask += 1;
+        if keep {
+            server.asked_exec.insert(id);
+        }
+        server.say_now(lsp::execute_command(id, command, arguments));
+        Some(id)
+    }
+
+    /// **The answer to the command asked under `id`**, once, when it has
+    /// come: what it answered, or what tinymist said in refusing.
+    pub fn take_executed(&mut self, id: i64) -> Option<Result<Option<lsp::Executed>, String>> {
+        self.executed.remove(&id)
+    }
+
+    /// How many times tinymist has been handed a buffer's text — a new count
+    /// is new text in its hands. 0 with no tinymist.
+    pub fn typst_told(&self) -> u64 {
+        self.tinymist().map_or(0, |s| s.told)
+    }
+
+    /// Whether the servers hold the text the current buffer holds.
+    pub fn have_the_latest(&self, editor: &Editor) -> bool {
+        self.told_the_latest(editor)
     }
 }
 
@@ -1866,6 +1988,9 @@ fn start(
         working_since: None,
         asked_next: None,
         configured: named.config.as_ref().map(lsp::did_change_configuration),
+        said_it_is: None,
+        asked_exec: HashSet::new(),
+        told: 0,
     };
     server.say_now(lsp::initialize(HELLO, &editor.lsp_root(), named.config.as_ref()));
     Ok(server)
@@ -1978,6 +2103,9 @@ mod tests {
                     working_since: None,
                     asked_next: None,
                     configured: None,
+                    said_it_is: Some((None, None)),
+                    asked_exec: HashSet::new(),
+                    told: 0,
                 },
             );
             (heard, tell)
@@ -2358,7 +2486,7 @@ mod tests {
         let server = servers.running.get_mut(&Servers::findable()).expect("the pretend one");
         server.ready = false;
         server.configured = Some(lsp::did_change_configuration(&serde_json::json!({ "provideFormatter": true })));
-        tell.send(Notice::Ready { signature_triggers: Vec::new() }).unwrap();
+        tell.send(Notice::Ready { signature_triggers: Vec::new(), name: None, version: None }).unwrap();
         servers.collect(&mut editor);
         let said: Vec<serde_json::Value> = heard.try_iter().map(|m| serde_json::from_str(&m).unwrap()).collect();
         assert_eq!(said[0]["method"], "initialized");
@@ -2680,7 +2808,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None, executed: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2700,7 +2828,7 @@ mod tests {
                 told: Some("fn main()".into()),
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None, executed: None
             })
             .unwrap();
         servers.collect(&mut editor);
@@ -2730,7 +2858,7 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None, executed: None
             })
             .unwrap();
         }
@@ -2848,6 +2976,7 @@ mod tests {
             symbols: Vec::new(),
             spans: Vec::new(),
             error: None,
+            executed: None,
         };
         let place = |line: usize| lsp::Place { path: path.clone(), line, utf16_column: 0 };
         let ask = |servers: &mut Servers, editor: &mut Editor| {
@@ -2885,7 +3014,7 @@ mod tests {
             servers.running.values().find_map(pick).expect("asked")
         };
         let answer = |id: i64, places: Vec<lsp::Place>, edits: Vec<lsp::TextEdit>, actions: Vec<lsp::Action>| {
-            Notice::Answer { id, places, told: None, offers: Vec::new(), incomplete: false, signature: None, edits, actions, symbols: Vec::new(), spans: Vec::new(), error: None }
+            Notice::Answer { id, places, told: None, offers: Vec::new(), incomplete: false, signature: None, edits, actions, symbols: Vec::new(), spans: Vec::new(), error: None, executed: None }
         };
         let place = |line: usize| lsp::Place { path: path.clone(), line, utf16_column: 4 };
 
@@ -3010,5 +3139,90 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&plain);
+    }
+
+    /// **The page window's half of the Typst server** (2026-11-07): whether
+    /// tinymist can draw it, from what it said it is; a command out and its
+    /// answer kept by id; the text handed over counted.
+    #[test]
+    fn tinymist_is_asked_for_the_page_window_and_its_answers_are_kept() {
+        let (mut servers, heard, tell) = Servers::pretend("typst");
+        let (mut editor, path) = editor_on("book.typ", "= 第一章\n");
+        let config = Servers::stocked("typst");
+        assert_eq!(servers.tinymist_name(), None, "a Typst server that is not tinymist");
+        // Says it is tinymist and gives no version: too old (the tinymist
+        // before 0.13.30 sent no `serverInfo` at all).
+        tell.send(Notice::Ready { signature_triggers: Vec::new(), name: Some("tinymist".into()), version: None }).unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(servers.typesetter(&config, &editor), Typesetter::TooOld("tinymist".into()));
+        tell.send(Notice::Ready { signature_triggers: Vec::new(), name: Some("tinymist".into()), version: Some("0.13.10".into()) })
+            .unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(servers.typesetter(&config, &editor), Typesetter::TooOld("tinymist 0.13.10".into()));
+        tell.send(Notice::Ready { signature_triggers: Vec::new(), name: Some("tinymist".into()), version: Some("0.15.12".into()) })
+            .unwrap();
+        servers.collect(&mut editor);
+        assert_eq!(servers.typesetter(&config, &editor), Typesetter::Ready);
+        let _: Vec<String> = std::iter::from_fn(|| heard.try_recv().ok()).collect();
+
+        let id = servers.execute("tinymist.exportPng", r#"["/a.typ"]"#, true).expect("asked");
+        let sent = heard.try_recv().unwrap();
+        assert!(sent.contains(r#""method":"workspace/executeCommand""#) && sent.contains(r#""command":"tinymist.exportPng""#), "{sent}");
+        assert!(servers.due_in().is_some(), "an answer owed keeps the loop looking");
+        let page = lsp::Executed::Pages { total: Some(2), pages: vec![(0, "iVBO".into())] };
+        tell.send(Notice::Answer {
+            id,
+            places: Vec::new(),
+            told: None,
+            offers: Vec::new(),
+            incomplete: false,
+            signature: None,
+            edits: Vec::new(),
+            actions: Vec::new(),
+            symbols: Vec::new(),
+            spans: Vec::new(),
+            error: None,
+            executed: Some(page.clone()),
+        })
+        .unwrap();
+        assert!(servers.collect(&mut editor), "an answer is news");
+        assert_eq!(servers.take_executed(id), Some(Ok(Some(page))));
+        assert_eq!(servers.take_executed(id), None, "taken once");
+        // One not kept is let go; a refusal is kept as what was said.
+        let quiet = servers.execute("tinymist.scrollPreview", "[]", false).unwrap();
+        let refused = servers.execute("tinymist.exportPng", "[]", true).unwrap();
+        for (id, error) in [(quiet, None), (refused, Some("failed to compile".to_string()))] {
+            tell.send(Notice::Answer {
+                id,
+                places: Vec::new(),
+                told: None,
+                offers: Vec::new(),
+                incomplete: false,
+                signature: None,
+                edits: Vec::new(),
+                actions: Vec::new(),
+                symbols: Vec::new(),
+                spans: Vec::new(),
+                error,
+                executed: None,
+            })
+            .unwrap();
+        }
+        servers.collect(&mut editor);
+        assert_eq!(servers.take_executed(quiet), None);
+        assert_eq!(servers.take_executed(refused), Some(Err("failed to compile".into())));
+
+        // Each text handed over counts.
+        let before = servers.typst_told();
+        servers.follow(&mut editor, &config);
+        assert_eq!(servers.typst_told(), before + 1, "didOpen");
+        assert!(servers.have_the_latest(&editor));
+        let _ = std::fs::remove_file(&path);
+
+        // No tinymist at all.
+        let empty = Servers::default();
+        let mut bare = yumete_config::Config::default();
+        bare.lsp.insert("typst".into(), Vec::new());
+        assert_eq!(empty.typesetter(&bare, &editor), Typesetter::Missing);
     }
 }

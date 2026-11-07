@@ -497,7 +497,11 @@ pub enum Notice {
     /// `signature_triggers`: the characters it wants a `signatureHelp` asked
     /// on (`signatureHelpProvider.triggerCharacters`, 2026-10-28), empty when
     /// it named none.
-    Ready { signature_triggers: Vec<String> },
+    ///
+    /// `name` and `version`: what its `serverInfo` says it is (2026-11-07),
+    /// `None` when it says nothing. The page window needs a tinymist new
+    /// enough to hand a page over in memory, and an old one says nothing.
+    Ready { signature_triggers: Vec<String>, name: Option<String>, version: Option<String> },
     /// `textDocument/publishDiagnostics` — everything now true about one file.
     /// `raw` keeps each diagnostic as the server wrote it, with the lines it
     /// spans: a code action is asked with the ones it is about.
@@ -551,6 +555,9 @@ pub enum Notice {
         /// What the server said when it refused (`error.message`), as a
         /// rename refuses a keyword.
         error: Option<String>,
+        /// A tinymist command's answer, read for the page window
+        /// (2026-11-07).
+        executed: Option<Executed>,
     },
     /// **The server asks us to change files** (`workspace/applyEdit`), the way
     /// a code action that is a command finishes.
@@ -682,6 +689,8 @@ pub fn read_with(message: &str, initialize_id: i64, settings: Option<&serde_json
                 .and_then(|t| t.as_array())
                 .map(|all| all.iter().filter_map(|t| t.as_str().map(str::to_string)).collect())
                 .unwrap_or_default(),
+            name: value.pointer("/result/serverInfo/name").and_then(|n| n.as_str()).map(str::to_string),
+            version: value.pointer("/result/serverInfo/version").and_then(|v| v.as_str()).map(str::to_string),
         },
         (Some("textDocument/publishDiagnostics"), _) => said(&value),
         (Some("$/progress"), _) => working(&value),
@@ -716,6 +725,7 @@ pub fn read_with(message: &str, initialize_id: i64, settings: Option<&serde_json
                 .pointer("/error/message")
                 .and_then(|m| m.as_str())
                 .map(|m| m.trim().to_string()),
+            executed: executed(value.get("result")),
         },
         _ => Notice::Nothing,
     }
@@ -842,6 +852,44 @@ fn working(value: &serde_json::Value) -> Notice {
 pub struct Span {
     pub from: (usize, usize),
     pub to: (usize, usize),
+}
+
+/// **What a tinymist command answered**, read for the page window
+/// (2026-11-07). Typed here for the reason [`Notice::Answer`] is: the shape
+/// is this crate's business.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Executed {
+    /// `tinymist.exportPng` with `write: false`: each page made, by its index
+    /// from 0, with the PNG still in base64; and how many pages the document
+    /// has, when it says. A page past the end comes back as no pages.
+    Pages { total: Option<usize>, pages: Vec<(usize, String)> },
+    /// `tinymist.doStartPreview`: the loopback port of the task's data plane.
+    Preview { data_plane: u16 },
+}
+
+/// Read [`Executed`] off an answer's `result`, if it is one of the two.
+fn executed(result: Option<&serde_json::Value>) -> Option<Executed> {
+    let result = result?;
+    if let Some(port) = result.get("dataPlanePort").and_then(|p| p.as_u64()) {
+        return u16::try_from(port).ok().map(|data_plane| Executed::Preview { data_plane });
+    }
+    // `total_pages` as tinymist writes it today (an untagged enum's fields
+    // keep their Rust names), `totalPages` should it ever be renamed.
+    let total = result
+        .get("total_pages")
+        .or_else(|| result.get("totalPages"))
+        .and_then(|n| n.as_u64())
+        .map(|n| n as usize);
+    if let Some(items) = result.get("items").and_then(|i| i.as_array()) {
+        let pages = items
+            .iter()
+            .filter_map(|item| Some((item.get("page")?.as_u64()? as usize, item.get("data")?.as_str()?.to_string())))
+            .collect();
+        return Some(Executed::Pages { total, pages });
+    }
+    // A document exported as one piece: the data at the top.
+    let data = result.get("data")?.as_str()?;
+    Some(Executed::Pages { total, pages: vec![(0, data.to_string())] })
 }
 
 /// **A `DocumentHighlight[]`**: ranges with no file named, which is what
@@ -1734,14 +1782,22 @@ mod tests {
 
     #[test]
     fn the_answer_to_initialize_is_the_handshake_and_a_server_request_is_not() {
-        assert_eq!(read(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, 1), Notice::Ready { signature_triggers: Vec::new() });
+        assert_eq!(
+            read(r#"{"jsonrpc":"2.0","id":1,"result":{}}"#, 1),
+            Notice::Ready { signature_triggers: Vec::new(), name: None, version: None }
+        );
         assert_eq!(
             read(
                 r#"{"jsonrpc":"2.0","id":1,"result":{"capabilities":{"signatureHelpProvider":{"triggerCharacters":["(",",","<"]}}}}"#,
                 1
             ),
-            Notice::Ready { signature_triggers: vec!["(".into(), ",".into(), "<".into()] },
+            Notice::Ready { signature_triggers: vec!["(".into(), ",".into(), "<".into()], name: None, version: None },
             "the server's own trigger characters",
+        );
+        // What it says it is (tinymist 0.15.12's own words).
+        assert_eq!(
+            read(r#"{"jsonrpc":"2.0","id":1,"result":{"capabilities":{},"serverInfo":{"name":"tinymist","version":"0.15.12"}}}"#, 1),
+            Notice::Ready { signature_triggers: Vec::new(), name: Some("tinymist".into()), version: Some("0.15.12".into()) }
         );
         // Warning: **Every other answer comes back with its id** (#53 ②), because
         // only the front end knows which id it sent for what. It used to be
@@ -1754,7 +1810,8 @@ mod tests {
                 told: None,
                 offers: Vec::new(),
                 incomplete: false,
-                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None
+                signature: None, edits: Vec::new(), actions: Vec::new(), symbols: Vec::new(), spans: Vec::new(), error: None,
+                executed: None,
             }
         );
         // A formatting answer is a `TextEdit[]`, with no file named (`=`).
@@ -2224,5 +2281,27 @@ mod tests {
         assert!(raw[0].2.contains(r#""code":"E1""#));
         let asked = code_action(5, Path::new("/a/b.rs"), (2, 0), (2, 4), &[raw[0].2.clone()]);
         assert!(asked.contains(r#""diagnostics":[{"#) && asked.contains("unused"), "{asked}");
+    }
+
+    /// **tinymist's two answers the page window reads** (2026-11-07), in the
+    /// shapes 0.15.12 sent them: a page in memory, a page past the end, and
+    /// the preview task's data plane. A compile error is an `error`.
+    #[test]
+    fn a_page_and_a_preview_task_are_read_off_tinymist_s_answers() {
+        let page = r#"{"jsonrpc":"2.0","id":9,"result":{"items":[{"page":20,"data":"iVBORw0K"}],"total_pages":49}}"#;
+        let Notice::Answer { executed, .. } = read(page, 1) else { panic!() };
+        assert_eq!(executed, Some(Executed::Pages { total: Some(49), pages: vec![(20, "iVBORw0K".into())] }));
+        let past = r#"{"jsonrpc":"2.0","id":9,"result":{"items":[],"total_pages":49}}"#;
+        let Notice::Answer { executed, .. } = read(past, 1) else { panic!() };
+        assert_eq!(executed, Some(Executed::Pages { total: Some(49), pages: Vec::new() }));
+        let started = r#"{"jsonrpc":"2.0","id":3,"result":{"staticServerPort":null,"staticServerAddr":null,"dataPlanePort":57960,"isPrimary":false}}"#;
+        let Notice::Answer { executed, .. } = read(started, 1) else { panic!() };
+        assert_eq!(executed, Some(Executed::Preview { data_plane: 57960 }));
+        let failed = r#"{"jsonrpc":"2.0","id":9,"error":{"code":-32603,"message":"failed to compile: unknown variable"}}"#;
+        let Notice::Answer { executed, error, .. } = read(failed, 1) else { panic!() };
+        assert_eq!((executed, error.as_deref()), (None, Some("failed to compile: unknown variable")));
+        // Anybody else's answer is none of this.
+        let Notice::Answer { executed, .. } = read(r#"{"jsonrpc":"2.0","id":4,"result":null}"#, 1) else { panic!() };
+        assert_eq!(executed, None);
     }
 }
