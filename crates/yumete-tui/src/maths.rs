@@ -466,7 +466,12 @@ pub fn float(
     vertical: bool,
     composing: bool,
 ) -> Option<Option<ratatui::layout::Rect>> {
-    if !config.editor.maths_preview || composing || crate::graphics::support() == crate::graphics::Support::None {
+    // A page window has no text to stand in (2026-11-07).
+    if !config.editor.maths_preview
+        || composing
+        || crate::graphics::support() == crate::graphics::Support::None
+        || editor.page_window_has_the_keys()
+    {
         return None;
     }
     let maths = editor.maths_here()?;

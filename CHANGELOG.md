@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **The typeset page in a window beside the text**, as VS Code, Zed and Emacs show a preview: `:view-preview on` opens it to the right in Ghostty or kitty, drawn by tinymist from the unsaved text and following the cursor to its place on the page. It is a window: `C-w` walks into it, its `j`, `k`, `C-d`, `C-u`, `g` and `G` scroll the page, and `:q` closes it. The page is as wide as the window; `:view-preview-fit page` or `[editor] preview_fit = "page"` shows the whole page. It needs tinymist 0.13.30 or later; elsewhere `:view-preview on` opens the browser's preview, which `:view-preview-browser` always opens, and `:view-preview-window` says why the window cannot be drawn.
 - **The Simplified Chinese lesson**: `:tutor` in a Simplified interface opens the lesson in Simplified; the Traditional one is made from it.
 
 - **What you yank lights up for a moment**, as nvim's `vim.hl.on_yank` does: `[editor] yank_flash = true`. It helps most under the vim keys, where `yap` or `yis` copies text you never saw selected. Off by default; `ye --import lazyvim` turns it on, as LazyVim does.
@@ -32,6 +33,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **The browser preview follows the caret again.** tinymist 0.15.2 stopped reading the message yumete sent; it now sends the one tinymist scrolls by.
 - **One `Esc` leaves Insert mode while the completion list is up**, as in helix and vim. It used to close the list and stay in Insert, so a second `Esc` was needed. Leaving Insert any other way (`C-c`, a `[keys.insert]` run) takes the list away too.
 - **vim's Visual `$` takes the line break**: `v$d` joins the next line on and `v$y` copies the break, as in vim; `p` puts such a copy inside the line, not on a line of its own. The file's last line break is never deleted.
 - **vim's `{count}%`** goes that far down the file: `50%` is the middle line. With an operator it takes the lines short of the far one, as vim does: on ten lines `d50%` deletes lines 1 to 4.

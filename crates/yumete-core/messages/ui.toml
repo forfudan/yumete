@@ -489,16 +489,40 @@ zhs = "页面窗口：页宽适应窗口"
 en = "page window: the page as wide as the window"
 
 [[message]]
+# :view-preview 打不开页面窗口，改在浏览器中预览了。{0} 是原因（草稿）
+key = "preview.in-the-browser"
+zhs = "{0}；已改在浏览器中预览"
+en = "{0}; previewing in a browser instead"
+
+[[message]]
 # :view-preview 一份 Markdown 稿子，導出的那一頁交給瀏覽器了
 key = "preview.made"
 zhs = "预览：{0}"
 en = "preview: {0}"
 
 [[message]]
+# 打不开页面窗口的原因之一：终端画不了图片(只认 Ghostty、kitty)（草稿）
+key = "preview.no-pictures"
+zhs = "此终端无法显示图片(Ghostty 和 kitty 可以)"
+en = "this terminal cannot draw pictures (Ghostty and kitty can)"
+
+[[message]]
+# 打不开页面窗口的原因之一：没有 tinymist（草稿）
+key = "preview.no-tinymist"
+zhs = "页面窗口需要 tinymist，但没有找到"
+en = "the page window needs tinymist, which is not installed"
+
+[[message]]
 # :view-preview 用在没有標記語法的檔案上
 key = "preview.nothing-to-preview"
 zhs = "此文件没有标记，无可预览"
 en = "this file has no markup, so there is nothing to preview"
+
+[[message]]
+# :view-preview-window 打不开页面窗口，{0} 是原因，后面提示可以用浏览器（草稿）
+key = "preview.or-the-browser"
+zhs = "{0}；`:view-preview-browser` 可在浏览器中预览"
+en = "{0}; `:view-preview-browser` previews it in a browser"
 
 [[message]]
 # 啓動時停掉上次留下的預覽服務器
@@ -529,6 +553,24 @@ en = "preview: starting {0}…"
 key = "preview.stopped"
 zhs = "预览：{0} 已停止"
 en = "preview: {0} stopped"
+
+[[message]]
+# 打不开页面窗口的原因之一：tinymist 版本太旧(低于 0.13.30 或不报版本)。{0} 是 tinymist 及其版本号（草稿）
+key = "preview.tinymist-too-old"
+zhs = "{0} 太旧，无法显示页面窗口；把 tinymist 升级到 0.13.30 或更新即可"
+en = "{0} is too old for the page window; upgrading tinymist to 0.13.30 or later fixes it"
+
+[[message]]
+# 页面窗口里，第一页还没排出来的时候（草稿）
+key = "preview.typesetting"
+zhs = "排版中……"
+en = "typesetting…"
+
+[[message]]
+# 打不开页面窗口的原因之一：这份文件不是 Typst（草稿）
+key = "preview.typst-only"
+zhs = "页面窗口只能显示 Typst"
+en = "the page window shows Typst only"
 
 [[message]]
 # :view-preview 一份 Typst 稿子，排版器正在起來

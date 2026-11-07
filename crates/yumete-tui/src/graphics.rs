@@ -1,6 +1,7 @@
 //! **Pictures in the text, through the kitty graphics protocol** (2026-11-06).
 //!
-//! One use for now — the formula float ([`crate::maths`]) — and one route,
+//! Two uses — the formula float ([`crate::maths`]) and, since 2026-11-07,
+//! the page window ([`crate::page_window`], two slots of its own) — and one route,
 //! the protocol's **Unicode placeholders**: the PNG goes to the terminal once
 //! (`a=T,U=1`, a *virtual placement*), and after that the picture is ordinary
 //! text. Each of its cells holds U+10EEEE with two combining marks that say
@@ -257,11 +258,18 @@ pub fn id_colour(id: u32) -> Color {
 /// The cells keep their ground; only the symbol and the ink change, and no
 /// modifier is left on them — an underline under a picture would be drawn.
 pub fn put_picture(buf: &mut Buffer, area: Rect, id: u32) {
+    put_picture_from(buf, area, id, 0, 0);
+}
+
+/// [`put_picture`], starting at the picture's row `first_row` and column
+/// `first_column` (2026-11-07): the part of a tall picture a window scrolled
+/// down shows. The terminal draws only the part whose cells are there.
+pub fn put_picture_from(buf: &mut Buffer, area: Rect, id: u32, first_row: u16, first_column: u16) {
     let area = area.intersection(buf.area);
-    for row in 0..area.height.min(MOST_CELLS) {
-        for column in 0..area.width.min(MOST_CELLS) {
+    for row in 0..area.height.min(MOST_CELLS.saturating_sub(first_row)) {
+        for column in 0..area.width.min(MOST_CELLS.saturating_sub(first_column)) {
             if let Some(cell) = buf.cell_mut((area.x + column, area.y + row)) {
-                cell.set_symbol(&placeholder(row, column));
+                cell.set_symbol(&placeholder(first_row + row, first_column + column));
                 cell.fg = id_colour(id);
                 cell.modifier = Modifier::empty();
                 cell.skip = false;
@@ -390,6 +398,7 @@ pub fn take_pending() -> Vec<u8> {
 /// shell and back, when the pictures may have gone with the screen they were
 /// on. The next frame that wants one uploads it again.
 pub fn forget() {
+    PAGES.lock().unwrap_or_else(|e| e.into_inner()).held = [None, None];
     SHELF.lock().unwrap_or_else(|e| e.into_inner()).held.clear();
 }
 
@@ -397,12 +406,70 @@ pub fn forget() {
 /// the way out.
 pub fn release_all() -> Vec<u8> {
     let tmux = support() == Support::KittyInTmux;
+    drop_pages();
     let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
     let mut out = std::mem::take(&mut shelf.pending);
     for (_, id, _, _) in std::mem::take(&mut shelf.held) {
         out.extend(delete(id, tmux));
     }
     out
+}
+
+/// **The page window's two pictures** (2026-11-07), apart from the formulas'
+/// shelf: a page is megabytes in the terminal (an A5 page at 144 ppi is 4 MB
+/// of pixels), so it does not take sixteen places, and it is not dropped to
+/// make room for a formula. Two ids in turn: a new page goes into the one not
+/// on screen, the cells move over to it in the same frame, and the next page
+/// overwrites the one left behind — no frame shows half a page.
+struct Pages {
+    /// What each slot holds: the picture's hash and the cells it was placed
+    /// at.
+    held: [Option<(u64, u16, u16)>; 2],
+    /// The slot on screen.
+    showing: usize,
+}
+
+static PAGES: Mutex<Pages> = Mutex::new(Pages { held: [None, None], showing: 0 });
+
+/// The id of page slot `slot`: bit 23 set, which no formula's id has
+/// ([`id_for`] stays under 2^23), the process in the bits below.
+fn page_id(slot: usize) -> u32 {
+    (1 << 23) | ((std::process::id() & 0x7FFF) << 8) | (slot as u32 + 1)
+}
+
+/// **The id the page `hash` is shown under**, `columns` × `rows` cells big:
+/// the slot that already holds it, or the other slot, uploaded into. An
+/// unchanged page is never sent twice.
+pub fn show_page(hash: u64, png: &[u8], columns: u16, rows: u16) -> u32 {
+    let tmux = support() == Support::KittyInTmux;
+    let mut pages = PAGES.lock().unwrap_or_else(|e| e.into_inner());
+    let want = Some((hash, columns, rows));
+    let showing = pages.showing;
+    if pages.held[showing] == want {
+        return page_id(showing);
+    }
+    let other = 1 - showing;
+    pages.showing = other;
+    if pages.held[other] == want {
+        return page_id(other);
+    }
+    pages.held[other] = want;
+    let bytes = upload(page_id(other), png, columns, rows, tmux);
+    SHELF.lock().unwrap_or_else(|e| e.into_inner()).pending.extend(bytes);
+    page_id(other)
+}
+
+/// **Free both page pictures** — the page window closed.
+pub fn drop_pages() {
+    let tmux = support() == Support::KittyInTmux;
+    let held = std::mem::take(&mut PAGES.lock().unwrap_or_else(|e| e.into_inner()).held);
+    let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
+    for (slot, was) in held.iter().enumerate() {
+        if was.is_some() {
+            let bytes = delete(page_id(slot), tmux);
+            shelf.pending.extend(bytes);
+        }
+    }
 }
 
 /// A PNG's size in pixels, read off its header, or `None` for anything that

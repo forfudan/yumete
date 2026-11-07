@@ -72,6 +72,8 @@ pub struct PageTarget {
     pub syntax: crate::syntax::Syntax,
     pub line: usize,
     pub character: usize,
+    /// How many characters the line has, its line break not counted.
+    pub line_length: usize,
     /// The buffer and its revision, so a new edit is told from an old one.
     pub buffer: u64,
     pub revision: u64,
@@ -214,11 +216,14 @@ impl Editor {
         let rope = buffer.rope();
         let at = cursor.min(rope.len_chars());
         let line = rope.char_to_line(at);
+        let text = rope.line(line);
+        let line_length = text.chars().take_while(|c| *c != '\n' && *c != '\r').count();
         Some(PageTarget {
             path: buffer.path().map(absolute),
             syntax: buffer.syntax(),
             line,
             character: at - rope.line_to_char(line),
+            line_length,
             buffer: buffer.id(),
             revision: buffer.revision(),
         })

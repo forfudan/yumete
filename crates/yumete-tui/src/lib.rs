@@ -19,6 +19,7 @@ pub mod ambiguous;
 pub mod backend;
 pub mod graphics;
 pub mod maths;
+pub mod page_window;
 pub mod server;
 pub mod settings;
 pub mod settings_page;
@@ -757,6 +758,10 @@ pub fn run(
     // and whether this terminal can show one at all, asked once.
     crate::maths::ring_on_answers(doorbell.clone());
     crate::graphics::set_support(crate::graphics::detect());
+    // **The page window** (2026-11-07): its talk with tinymist, and the same
+    // bell for where the cursor is on the page.
+    let mut pages = crate::page_window::PagePreview::default();
+    crate::page_window::ring_on_news(doorbell.clone());
     servers.ring_on_answers(doorbell);
     // **配置檔開着的時候，現查現說**（2026-10-20 作者定）。和上面那一行一樣是
     // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
@@ -1303,6 +1308,21 @@ pub fn run(
         // 簽名」落地的地方（`show_signature(None)`），而排在它前面的話那一句要等下一輪
         // 循環——下一輪往往是下一次按鍵，而那時候正文已經改了。
         servers.ask_signature_doc(editor, config);
+        // **The page window** (2026-11-07): after `collect`, where tinymist's
+        // answers land. A window that cannot be drawn after all, opened by
+        // `:view-preview`, becomes the browser's preview.
+        match pages.follow(editor, &mut servers, config) {
+            crate::page_window::Outcome::Nothing => {}
+            crate::page_window::Outcome::Redraw => server_said_something = true,
+            crate::page_window::Outcome::Browser { path, why } => {
+                editor.close_page_windows();
+                if job.is_none() {
+                    start_the_browser_preview(editor, config, &mut job, &path, yumete_core::syntax::Syntax::Typst);
+                }
+                editor.set_status(say!("preview.in-the-browser", why));
+                server_said_something = true;
+            }
+        }
         // **在等回話就讓那八個點轉起來**（#426）。`Servers` 住在前端這一側，核心
         // 看不見它，所以每一輪說一聲——同 `note_the_server` 那一條。
         let spinning = editor.server_busy_since().is_some();
@@ -1379,6 +1399,9 @@ pub fn run(
                 // 密，所以腳注那個圈靠它就轉得起來，不必另加一個鬧鐘。
                 editor.filling_due_in(),
                 servers.due_in(),
+                // The page window: the typing still long enough, the cursor
+                // settled long enough to be followed.
+                pages.due_in(),
                 // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
                 // 了一個不動的點（同上面那幾個鬧鐘）。
                 spinner::due_in(editor.server_busy_since()),
@@ -1643,17 +1666,37 @@ pub fn run(
                     show(&url);
                 }
                 if let Some(want) = editor.take_preview_request() {
-                    // The page window is not drawn here yet: the browser's.
-                    let want = match want {
-                        yumete_core::editor::Preview::Window { path, syntax, .. } => {
-                            yumete_core::editor::Preview::Start { path, syntax }
+                    use yumete_core::editor::Preview;
+                    // **The page window** (2026-11-07): opened when this
+                    // terminal draws pictures and tinymist is new enough;
+                    // otherwise said why, or, from `:view-preview`, the
+                    // browser's preview instead.
+                    let (want, why) = match want {
+                        Preview::Window { path, syntax, fallback } => {
+                            match crate::page_window::why_not(syntax, &servers, config, editor) {
+                                None => {
+                                    let main = crate::page_window::absolute(&path);
+                                    if let Some(id) = editor.open_page_window(main) {
+                                        pages.opened(id, fallback);
+                                    }
+                                    continue;
+                                }
+                                Some(why) if fallback => {
+                                    let why = (syntax == yumete_core::syntax::Syntax::Typst).then_some(why);
+                                    (Preview::Start { path, syntax }, why)
+                                }
+                                Some(why) => {
+                                    editor.set_status(say!("preview.or-the-browser", why));
+                                    continue;
+                                }
+                            }
                         }
-                        other => other,
+                        other => (other, None),
                     };
                     // Already running: hand back the address and open the page
                     // again. Killing it and starting another is a fresh compile
                     // of the whole book to answer 「where was that page?」.
-                    if let yumete_core::editor::Preview::Show = want {
+                    if let Preview::Show = want {
                         if let Some(url) = editor.preview_at().map(str::to_string) {
                             show(&url);
                             editor.set_status(say!("preview.running", url));
@@ -1667,69 +1710,10 @@ pub fn run(
                         editor.set_preview_at(None);
                         editor.set_status(say!("preview.stopped", running.what));
                     }
-                    if let yumete_core::editor::Preview::Start { path, syntax } = want {
-                        // **What the config says, if it says anything.** The
-                        // typesetter for a language is a fact about the
-                        // reader's machine, not about the editor — see
-                        // `yumete_config::Runner`. The built-in tinymist below
-                        // is what happens when nobody has said otherwise.
-                        let declared = config
-                            .language
-                            .get(syntax.name())
-                            .and_then(|verbs| verbs.get("preview"))
-                            .filter(|r| r.kind == yumete_config::RunKind::Server);
-                        if let Some(runner) = declared {
-                            let file = path.display().to_string();
-                            match runner.argv(&file).and_then(|argv| {
-                                argv.split_first().map(|(p, a)| (p.clone(), a.to_vec()))
-                            }) {
-                                Some((program, args)) => match Job::server(&program, &args, &path) {
-                                    Ok(started) => {
-                                        editor.set_status(say!("preview.starting", program));
-                                        job = Some(started);
-                                    }
-                                    Err(why) => editor.set_status(why),
-                                },
-                                None => editor.set_status(say!("command.broken-line", runner.run)),
-                            }
-                            continue;
-                        }
-                        match syntax {
-                            yumete_core::syntax::Syntax::Typst => match Job::typst(&path) {
-                                Ok(started) => {
-                                    editor.set_status(say!("preview.typst-starting"));
-                                    job = Some(started);
-                                }
-                                Err(why) => editor.set_status(why),
-                            },
-                            // Markdown has no server to run: the export *is*
-                            // the preview, made once and handed to the browser.
-                            yumete_core::syntax::Syntax::Markdown => {
-                                let out = std::env::temp_dir().join("yumete-preview.html");
-                                // `export!`, not `export`: the plain form
-                                // refuses to overwrite a file that is already
-                                // there, which is right for a manuscript and
-                                // wrong for the scratch page this rewrites
-                                // every time. Without the `!` the *second*
-                                // `:view-preview` of a Markdown file failed, and
-                                // said so in the language of a command the
-                                // reader had not typed.
-                                match editor.execute(&format!("export! html {}", out.display())) {
-                                    Ok(_) => {
-                                        show(&out.to_string_lossy());
-                                        editor.set_status(say!("preview.made", out.display()));
-                                    }
-                                    Err(err) => editor.set_status(say!("preview.failed", err)),
-                                }
-                            }
-                            // Nothing to typeset: a file with no markup is
-                            // already what it is going to look like, and a
-                            // `:diff` listing is a report about two of them.
-                            yumete_core::syntax::Syntax::Text
-                            | yumete_core::syntax::Syntax::Diff
-                            | yumete_core::syntax::Syntax::Code(_) => {
-                                editor.set_status(say!("preview.nothing-to-preview"))
-                            }
+                    if let Preview::Start { path, syntax } = want {
+                        start_the_browser_preview(editor, config, &mut job, &path, syntax);
+                        if let Some(why) = why {
+                            editor.set_status(say!("preview.in-the-browser", why));
                         }
                     }
                 }
@@ -3748,6 +3732,78 @@ fn run_program(
     })
 }
 
+/// **The browser's preview of `path`** (`:view-preview-browser`, and
+/// `:view-preview` where the page window cannot be drawn): the typesetter in
+/// the background for Typst, its address arriving on a later turn of the
+/// loop; the export, made once and handed to the browser, for Markdown.
+fn start_the_browser_preview(
+    editor: &mut Editor,
+    config: &Config,
+    job: &mut Option<Job>,
+    path: &std::path::Path,
+    syntax: yumete_core::syntax::Syntax,
+) {
+    // **What the config says, if it says anything.** The
+    // typesetter for a language is a fact about the
+    // reader's machine, not about the editor — see
+    // `yumete_config::Runner`. The built-in tinymist below
+    // is what happens when nobody has said otherwise.
+    let declared = config
+        .language
+        .get(syntax.name())
+        .and_then(|verbs| verbs.get("preview"))
+        .filter(|r| r.kind == yumete_config::RunKind::Server);
+    if let Some(runner) = declared {
+        let file = path.display().to_string();
+        match runner.argv(&file).and_then(|argv| argv.split_first().map(|(p, a)| (p.clone(), a.to_vec()))) {
+            Some((program, args)) => match Job::server(&program, &args, path) {
+                Ok(started) => {
+                    editor.set_status(say!("preview.starting", program));
+                    *job = Some(started);
+                }
+                Err(why) => editor.set_status(why),
+            },
+            None => editor.set_status(say!("command.broken-line", runner.run)),
+        }
+        return;
+    }
+    match syntax {
+        yumete_core::syntax::Syntax::Typst => match Job::typst(path) {
+            Ok(started) => {
+                editor.set_status(say!("preview.typst-starting"));
+                *job = Some(started);
+            }
+            Err(why) => editor.set_status(why),
+        },
+        // Markdown has no server to run: the export *is*
+        // the preview, made once and handed to the browser.
+        yumete_core::syntax::Syntax::Markdown => {
+            let out = std::env::temp_dir().join("yumete-preview.html");
+            // `export!`, not `export`: the plain form
+            // refuses to overwrite a file that is already
+            // there, which is right for a manuscript and
+            // wrong for the scratch page this rewrites
+            // every time. Without the `!` the *second*
+            // `:view-preview` of a Markdown file failed, and
+            // said so in the language of a command the
+            // reader had not typed.
+            match editor.execute(&format!("export! html {}", out.display())) {
+                Ok(_) => {
+                    show(&out.to_string_lossy());
+                    editor.set_status(say!("preview.made", out.display()));
+                }
+                Err(err) => editor.set_status(say!("preview.failed", err)),
+            }
+        }
+        // Nothing to typeset: a file with no markup is
+        // already what it is going to look like, and a
+        // `:diff` listing is a report about two of them.
+        yumete_core::syntax::Syntax::Text | yumete_core::syntax::Syntax::Diff | yumete_core::syntax::Syntax::Code(_) => {
+            editor.set_status(say!("preview.nothing-to-preview"))
+        }
+    }
+}
+
 /// Open a URL or a file the way the platform opens things.
 fn show(target: &str) {
     let opener = if cfg!(target_os = "macos") {
@@ -5533,6 +5589,14 @@ fn draw(
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
+        // **A page window draws the page, not text** (2026-11-07).
+        if let Some(&id) = leaves.get(which).filter(|&&id| editor.is_page_window(id)) {
+            crate::page_window::draw(frame, editor, config, *rect, id);
+            if which == live {
+                cursor = (rect.x, rect.y);
+            }
+            continue;
+        }
         let seat = &mut viewport[which];
         let peek = (which != live)
             .then(|| leaves.get(which).and_then(|&id| editor.pane_of(id)))
@@ -5809,6 +5873,9 @@ fn draw(
         // 「设置」左侧有个光标呢？」）。這一支什麼都不做，於是這一幀沒人設光標，
         // ratatui 就把它藏起來（`Terminal::draw` 裏 `None => hide_cursor()`）。
         // 打字的時候由下面那一段設回來。
+    } else if editor.page_window_has_the_keys() {
+        // **A page window holds no text, so it has no caret** (2026-11-07):
+        // nobody sets the cursor, and ratatui hides it.
     } else if editor.caret_is_the_cell() {
         // **The whole cell is the unit, so the cell is the mark** (2026-10-21).
         // At a grid's top layer there is no character to stand on: `hjkl` walk

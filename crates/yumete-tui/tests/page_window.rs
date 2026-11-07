@@ -1,0 +1,94 @@
+//! **The page window, drawn** (2026-11-07): a page beside the text in
+//! placeholder cells, its picture uploaded once, the page number under it;
+//! and words instead where no picture can be drawn.
+//!
+//! A binary of its own: whether pictures can be shown is process-wide
+//! (`graphics::set_support`), and a neighbour drawing a frame while this one
+//! has it on would find a picture it never asked for.
+
+use yumete_config::Config;
+use yumete_core::editor::Editor;
+use yumete_core::preview::Jump;
+use yumete_ime::{ImeSession, Scheme};
+use yumete_tui::graphics::{self, Support, PLACEHOLDER};
+use yumete_tui::page_window::{self, Page};
+
+/// A PNG header saying `width` × `height` pixels — all the window reads of it.
+fn a_png(width: u32, height: u32) -> Vec<u8> {
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    png.extend(width.to_be_bytes());
+    png.extend(height.to_be_bytes());
+    png.extend([8, 6, 0, 0, 0]);
+    png
+}
+
+fn frame(editor: &mut Editor, config: &Config) -> String {
+    let ime = ImeSession::empty(Scheme::LINGMING);
+    yumete_tui::frame_to_text(editor, config, &ime, 80, 24, None)
+}
+
+/// The column of the first placeholder on a row, counted in cells.
+fn first_placeholder(row: &str) -> Option<usize> {
+    let at = row.find(PLACEHOLDER)?;
+    Some(yumete_cjk::str_width(&row[..at]))
+}
+
+#[test]
+fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
+    let dir = std::env::temp_dir().join(format!("yumete-page-window-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = dir.join("main.typ");
+    std::fs::write(&main, "= 第一章\n\n那年冬天。\n").unwrap();
+    let mut editor = Editor::new();
+    editor.open_file(&main).unwrap();
+    let config = Config::default();
+    let text = editor.live_window();
+    let page = editor.open_page_window(main.clone()).expect("room");
+    assert_ne!(page, text);
+
+    // No picture can be drawn here: the window says so, in words.
+    graphics::set_support(Support::None);
+    let plain = frame(&mut editor, &config);
+    assert!(!plain.contains(PLACEHOLDER), "{plain}");
+    assert!(plain.contains(&yumete_core::say!("preview.no-pictures")[..6]), "{plain}");
+
+    // A terminal that can, and a page made (840 × 1188 px at 144 ppi, page 1
+    // of 2), the cursor's text a third of the way down it.
+    graphics::set_support(Support::Kitty);
+    let _ = graphics::take_pending();
+    page_window::preload(
+        Page::from_png(a_png(840, 1188), 144, 1, Some(2)).unwrap(),
+        Some(Jump { page: 1, x: 72.0, y: 200.0 }),
+    );
+    let shown = frame(&mut editor, &config);
+    let rows: Vec<&str> = shown.lines().filter(|r| r.contains(PLACEHOLDER)).collect();
+    assert!(rows.len() > 10, "the page fills the window's height: {shown}");
+    let column = first_placeholder(rows[0]).unwrap();
+    assert!(column >= 40, "in the right half, beside the text: column {column}\n{shown}");
+    assert!(shown.contains("1/2"), "the page number under it: {shown}");
+    let owed = String::from_utf8(graphics::take_pending()).unwrap();
+    assert!(owed.contains("a=T,U=1,f=100"), "uploaded: {owed:?}");
+    let id: u32 = owed.split("i=").nth(1).and_then(|s| s.split(',').next()).and_then(|s| s.parse().ok()).unwrap();
+    assert!(id & (1 << 23) != 0, "a page's id, not a formula's: {id:#x}");
+
+    // The same page again: nothing sent.
+    assert_eq!(frame(&mut editor, &config), shown);
+    assert!(graphics::take_pending().is_empty(), "an unchanged page is not uploaded again");
+
+    // The whole page instead: smaller, and the picture placed again.
+    editor.execute(":view-preview-fit page").unwrap();
+    let whole = frame(&mut editor, &config);
+    let whole_rows = whole.lines().filter(|r| r.contains(PLACEHOLDER)).count();
+    assert!(whole_rows <= 22 && whole_rows > 5, "{whole}");
+    assert!(!graphics::take_pending().is_empty(), "another size is another upload");
+
+    // Closed: the window goes, and the pictures are freed.
+    editor.execute(":view-preview off").unwrap();
+    page_window::clear();
+    graphics::drop_pages();
+    let owed = String::from_utf8(graphics::take_pending()).unwrap();
+    assert!(owed.contains("a=d,d=I"), "{owed:?}");
+    assert!(!frame(&mut editor, &config).contains(PLACEHOLDER));
+    std::fs::remove_dir_all(&dir).ok();
+}
