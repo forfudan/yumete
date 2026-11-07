@@ -24362,6 +24362,9 @@ fn squeezed(text: &str) -> String {
             crate::theme::settle(&config, None);
             let mut seats = Seats::default();
             editor.set_page(h as usize, 58);
+            // The width rows fold at, as `fit_the_page` gives the loop: the
+            // sixty columns nvim gets, with no gutter.
+            editor.set_wrap_width(60);
             let frame = |editor: &mut Editor, seats: &mut Seats| {
                 caret_over_time(editor, &config, seats, 60, h + 1);
                 if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
@@ -24433,6 +24436,50 @@ fn squeezed(text: &str) -> String {
         assert_eq!(after(8, 5, 5, &[b]), (4, Some(1)), "pulled in by scrolloff");
         assert_eq!(after(8, 5, 3, &[b]), (3, Some(1)));
         assert_eq!(after(8, 0, 5, &[b]), (5, Some(1)), "no scrolloff, no pull");
+    }
+
+    /// **A `C-f` that leaves the last line at the top takes the cursor to
+    /// its end** when scrolloff is at least half an even window (nvim 0.12,
+    /// measured 2026-11-07 with `scripts/oracle/view_sweep.py`): nvim's
+    /// `cursor_correct_sms` pushes a cursor on the top line scrolloff rows'
+    /// worth of columns in, past the end of a short line, and `k` keeps
+    /// wanting that column.
+    #[test]
+    fn under_vim_a_page_to_the_last_line_can_take_the_cursor_to_its_end() {
+        let after = |height: u16, so: usize, keys: &str| {
+            let mut editor = Editor::new();
+            editor.execute(":syntax text").unwrap();
+            editor.replace_everything(&(1..=200).map(|n| format!("line {n}\n")).collect::<String>());
+            editor.execute(":keymap vim").unwrap();
+            let mut config = Config::default();
+            config.editor.line_numbers = yumete_config::LineNumbers::None;
+            config.editor.command_line = false;
+            config.editor.scrolloff = so;
+            crate::theme::settle(&config, None);
+            editor.set_page(height as usize, 58);
+            editor.set_wrap_width(60);
+            let mut seats = Seats::default();
+            let frame = |editor: &mut Editor, seats: &mut Seats| {
+                caret_over_time(editor, &config, seats, 60, height + 1);
+                if let Some((a, b)) = seats[editor.live_pane()].drawn_span {
+                    editor.set_page_span(a, b);
+                }
+            };
+            frame(&mut editor, &mut seats);
+            for key in keys.chars().map(|c| if c == 'F' { Key::Ctrl('f') } else { Key::Char(c) }) {
+                editor.on_key(key);
+                frame(&mut editor, &mut seats);
+            }
+            (editor.cursor_line() + 1, editor.cursor_column() + 1)
+        };
+        assert_eq!(after(6, 5, "200GF"), (200, 8), "the line's end");
+        assert_eq!(after(6, 5, "200GFk"), (199, 8), "still wanted");
+        assert_eq!(after(8, 5, "196G4lF"), (200, 8));
+        assert_eq!(after(4, 2, "200GF"), (200, 8), "scrolloff half the window");
+        assert_eq!(after(4, 1, "200GF"), (200, 1), "less than half");
+        assert_eq!(after(5, 5, "200GF"), (200, 1), "an odd window");
+        assert_eq!(after(6, 5, "50F"), (200, 8), "a count");
+        assert_eq!(after(6, 5, "100GF"), (104, 1), "not on the top line");
     }
 
     /// **helix centres a search hit off the page; a goto scrolls as little

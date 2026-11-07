@@ -704,11 +704,57 @@ impl Editor {
         let Some((row, shown, span, from_the_start, goal)) = moved else { return };
         let ends_here = shown < height || span.1 >= self.last_row_end();
         let row = self.kept_off_the_edges(row, shown, height, from_the_start, ends_here);
-        let to = self.on_page_row(span.0, row, goal);
+        let mut to = self.on_page_row(span.0, row, goal);
+        let mut goal = goal;
+        // nvim pages with 'smoothscroll' on for the length of the scroll
+        // (`scroll_with_sms`), and a cursor left on the top line is then
+        // pushed scrolloff rows' worth of columns in (`cursor_correct_sms`).
+        // With scrolloff at least half an even window that is past the end
+        // of a short line, so a `C-f` that leaves the file's last line at
+        // the top takes the cursor to its end, wanting that column after
+        // (nvim 0.12, measured 2026-11-07).
+        if let (0, false, Some(w)) = (row, from_the_start, self.wrap_width()) {
+            let so = self.scrolloff_asked.get().unwrap_or(self.scrolloff_seen.get());
+            let rope = self.current_buffer().rope();
+            let size = self.line_column(motion::line_end(rope, to));
+            let col = self.with_page_measure(w, |rope, m| crate::wrap::column_of(rope, to, m));
+            if let Some(col) = Self::column_past_scrolloff(col, size, so, height, w) {
+                goal = col;
+                to = self.on_page_row(span.0, row, goal);
+            }
+        }
         self.move_head(to);
         self.sel.set_goal(Some(goal));
         self.page_span = span;
         self.aim = Some(crate::editor::Aim::Row(row));
+    }
+
+    /// **nvim's `cursor_correct_sms`** for a cursor at column `col` of the
+    /// top line, `size` columns wide, in a window `height` rows of `width`
+    /// columns: scrolloff counts columns, a row's worth each, no more than
+    /// half the window and less what the line lacks; a cursor short of
+    /// that moves on a row's width at a time. `None` where it stays. (The
+    /// rule's other half, for a column past the window's last row, has
+    /// nothing to do here: a column here is one row's.)
+    fn column_past_scrolloff(col: usize, size: usize, so: usize, height: usize, width: usize) -> Option<usize> {
+        if so == 0 || width == 0 {
+            return None;
+        }
+        let mut so_cols = so.saturating_mul(width).min(height.saturating_sub(1) * width / 2);
+        while so_cols > size && so_cols >= 2 * width {
+            so_cols -= width;
+        }
+        if so_cols >= width && so_cols > size {
+            so_cols -= width;
+        }
+        if col >= so_cols {
+            return None;
+        }
+        let mut col = if col < width { col + width } else { col };
+        while col < so_cols {
+            col += width;
+        }
+        Some(col)
     }
 
     /// **vim's `CTRL-D` and `CTRL-U`** (nvim's `pagescroll` with `half`,
