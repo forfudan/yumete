@@ -38201,6 +38201,37 @@ fn the_page_window_opens_beside_follows_the_cursor_and_closes_with_q() {
         vec![PageStep::Rows(1), PageStep::Halves(1), PageStep::Rows(-1), PageStep::Bottom]
     );
     assert_eq!(ed.take_page_steps(), Vec::new(), "taken once");
+    // A PDF reader's keys under vim (2026-11-07): `gg`, `J` and `K` a whole
+    // page, and a count before `G` or `gg` the page of that number. `0` on
+    // its own is no count.
+    for key in "gg5GJ2K12gg0G".chars() {
+        ed.on_key(Key::Char(key));
+    }
+    assert_eq!(
+        ed.take_page_steps(),
+        vec![
+            PageStep::Top,
+            PageStep::Goto(5),
+            PageStep::Pages(1),
+            PageStep::Pages(-2),
+            PageStep::Goto(12),
+            PageStep::Bottom
+        ]
+    );
+    // A `g` not followed by another is dropped with its count.
+    for key in "3gj".chars() {
+        ed.on_key(Key::Char(key));
+    }
+    assert_eq!(ed.take_page_steps(), vec![PageStep::Rows(1)]);
+    // `Space` goes on to the key groups: `Space w w` walks out, and back.
+    for key in " ww".chars() {
+        ed.on_key(Key::Char(key));
+    }
+    assert_eq!(ed.live_window(), text, "Space w w walked out");
+    for key in " ww".chars() {
+        ed.on_key(Key::Char(key));
+    }
+    assert_eq!(ed.live_window(), page);
     // Still following the text window, whose cursor stayed where it was.
     assert_eq!(ed.page_target(page).map(|t| (t.line, t.character)), Some((4, 2)));
     // `C-w` still walks out, and back.

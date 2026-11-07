@@ -84,6 +84,9 @@ struct Board {
     jump: Option<Jump>,
     /// Rows scrolled by hand since the cursor last moved.
     nudge: i32,
+    /// The page turned to by hand (`J`, `K`, `5G`) since the cursor last
+    /// moved; `None` shows the cursor's.
+    turned: Option<usize>,
     /// Where the scroll stood before the hand moved it: the cursor's row less
     /// a third of the window, or what it was when the cursor's page is not
     /// the one drawn.
@@ -92,7 +95,26 @@ struct Board {
     cells: Option<(u16, u16)>,
 }
 
-static BOARD: Mutex<Board> = Mutex::new(Board { page: None, note: None, jump: None, nudge: 0, base: 0, cells: None });
+static BOARD: Mutex<Board> =
+    Mutex::new(Board { page: None, note: None, jump: None, nudge: 0, turned: None, base: 0, cells: None });
+
+/// **The page `J`, `K` or `5G` turns to** from page `now`: never before
+/// the first, nor past the last when the total is known.
+pub fn turn(now: usize, total: Option<usize>, step: PageStep) -> usize {
+    let to = match step {
+        PageStep::Goto(n) => n,
+        PageStep::Pages(n) => now.saturating_add_signed(n as isize),
+        _ => now,
+    };
+    total.map_or(to, |t| to.min(t.max(1))).max(1)
+}
+
+impl Board {
+    /// The page being shown: the one turned to by hand, else the cursor's.
+    fn shown(&self) -> usize {
+        self.turned.or(self.jump.map(|j| j.page)).unwrap_or(1)
+    }
+}
 
 fn board() -> std::sync::MutexGuard<'static, Board> {
     BOARD.lock().unwrap_or_else(|e| e.into_inner())
@@ -105,6 +127,7 @@ pub fn preload(page: Page, jump: Option<Jump>) {
     board.jump = jump;
     board.note = None;
     board.nudge = 0;
+    board.turned = None;
 }
 
 /// Clear the board — a test's, and the window's when it closes.
@@ -226,6 +249,14 @@ impl PagePreview {
                     PageStep::Screens(n) => board.nudge.saturating_add(n * rows),
                     PageStep::Top => i32::MIN / 4,
                     PageStep::Bottom => i32::MAX / 4,
+                    // **Another page, from its top.** The cursor stays where
+                    // it is; the page it is on comes back when it moves.
+                    PageStep::Pages(_) | PageStep::Goto(_) => {
+                        let total = board.page.as_ref().and_then(|p| p.total);
+                        board.turned = Some(turn(board.shown(), total, step));
+                        board.base = 0;
+                        i32::MIN / 4
+                    }
                 };
             }
             redraw = true;
@@ -301,6 +332,7 @@ impl PagePreview {
                 if board.jump != Some(jump) {
                     board.jump = Some(jump);
                     board.nudge = 0;
+                    board.turned = None;
                     redraw = true;
                 }
             }
@@ -335,7 +367,7 @@ impl PagePreview {
         let want = {
             let board = board();
             let total = board.page.as_ref().and_then(|p| p.total);
-            let number = board.jump.map_or(1, |j| j.page);
+            let number = board.shown();
             let number = total.map_or(number, |t| number.min(t.max(1)));
             let inches = board.page.as_ref().map_or(A4, |p| p.inches());
             let ppi = ppi_for(editor.preview_fit(), board.cells, crate::graphics::cell_pixels(), inches);
@@ -812,5 +844,18 @@ mod tests {
         assert!(board().page.is_none());
         servers.stop();
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **`J`, `K` and `5G` turn pages** (2026-11-07): never before the first,
+    /// nor past the last once the total is known.
+    #[test]
+    fn a_page_turns_within_the_book() {
+        assert_eq!(turn(3, Some(10), PageStep::Pages(1)), 4);
+        assert_eq!(turn(3, Some(10), PageStep::Pages(-2)), 1);
+        assert_eq!(turn(1, Some(10), PageStep::Pages(-1)), 1, "not before the first");
+        assert_eq!(turn(10, Some(10), PageStep::Pages(1)), 10, "nor past the last");
+        assert_eq!(turn(3, Some(10), PageStep::Goto(5)), 5);
+        assert_eq!(turn(3, Some(10), PageStep::Goto(50)), 10);
+        assert_eq!(turn(3, None, PageStep::Goto(50)), 50, "the total is not known yet");
     }
 }

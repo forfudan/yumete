@@ -61,6 +61,11 @@ pub enum PageStep {
     Screens(i32),
     Top,
     Bottom,
+    /// Whole pages, on when positive: `J` and `K`, as Zathura and Emacs's
+    /// evil-collection turn them (2026-11-07).
+    Pages(i32),
+    /// The page of that number, from 1: `5G`, `5gg`.
+    Goto(usize),
 }
 
 /// **What a page window is showing the page of**: the followed window's file
@@ -243,21 +248,49 @@ impl Editor {
         self.preview_fit = fit;
     }
 
-    /// **A key in a page window**: the scroll keys move the page, `:` and
-    /// `C-w` go on to the command line and the window keys, and nothing else
-    /// does anything — there is no text here to move in or edit. `true` when
-    /// the key was taken here.
+    /// **A key in a page window**: the scroll keys move the page, `:`,
+    /// `C-w` and `Space` go on to the command line and the key groups, and
+    /// nothing else does anything — there is no text here to move in or
+    /// edit. `true` when the key was taken here.
+    ///
+    /// The keys are a PDF reader's under vim (2026-11-07, as Zathura and
+    /// evil-collection have them): `gg` and `G` the top and bottom, `J` and
+    /// `K` a whole page, and a count before `G` or `gg` the page of that
+    /// number.
     pub(super) fn on_page_window_key(&mut self, key: Key) -> bool {
+        let mut count = self.page_count.take();
+        if std::mem::take(&mut self.page_g) {
+            if key == Key::Char('g') {
+                self.page_steps.push(count.map_or(PageStep::Top, PageStep::Goto));
+                return true;
+            }
+            // A `g` that is not `gg` is nothing here, and takes its count.
+            count = None;
+        }
+        let times = count.unwrap_or(1) as i32;
         let step = match key {
-            Key::Char(':') | Key::Ctrl('w') => return false,
-            Key::Char('j') | Key::Down | Key::Enter => PageStep::Rows(1),
-            Key::Char('k') | Key::Up => PageStep::Rows(-1),
-            Key::Ctrl('d') => PageStep::Halves(1),
-            Key::Ctrl('u') => PageStep::Halves(-1),
-            Key::Ctrl('f') | Key::PageDown => PageStep::Screens(1),
-            Key::Ctrl('b') | Key::PageUp => PageStep::Screens(-1),
-            Key::Char('g') | Key::Home => PageStep::Top,
-            Key::Char('G') | Key::End => PageStep::Bottom,
+            Key::Char(':') | Key::Ctrl('w') | Key::Char(' ') => return false,
+            Key::Char(digit @ '0'..='9') if digit != '0' || count.is_some() => {
+                let digit = digit.to_digit(10).unwrap_or(0) as usize;
+                self.page_count = Some(count.unwrap_or(0).saturating_mul(10).saturating_add(digit));
+                return true;
+            }
+            Key::Char('g') => {
+                self.page_g = true;
+                self.page_count = count;
+                return true;
+            }
+            Key::Char('j') | Key::Down | Key::Enter => PageStep::Rows(times),
+            Key::Char('k') | Key::Up => PageStep::Rows(-times),
+            Key::Ctrl('d') => PageStep::Halves(times),
+            Key::Ctrl('u') => PageStep::Halves(-times),
+            Key::Ctrl('f') | Key::PageDown => PageStep::Screens(times),
+            Key::Ctrl('b') | Key::PageUp => PageStep::Screens(-times),
+            Key::Char('J') => PageStep::Pages(times),
+            Key::Char('K') => PageStep::Pages(-times),
+            Key::Home => PageStep::Top,
+            Key::Char('G') => count.map_or(PageStep::Bottom, PageStep::Goto),
+            Key::End => PageStep::Bottom,
             _ => return true,
         };
         self.page_steps.push(step);

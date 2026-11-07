@@ -3393,6 +3393,10 @@ pub struct Editor {
     preview_fit: PreviewFit,
     /// The scroll keys pressed in a page window, for the front end.
     page_steps: Vec<PageStep>,
+    /// A count typed in a page window, for `G` and `gg` (`5G`).
+    page_count: Option<usize>,
+    /// The first `g` of a `gg` in a page window.
+    page_g: bool,
     /// A link the reader followed to a page on the web (`gL`), waiting for
     /// the front end — only it can hand a URL to the machine, and only ever as
     /// one argument to `open`/`xdg-open`.
@@ -4628,6 +4632,8 @@ impl Editor {
             page_windows: std::collections::HashMap::new(),
             preview_fit: PreviewFit::default(),
             page_steps: Vec::new(),
+            page_count: None,
+            page_g: false,
             shell_request: None,
             suspend_request: false,
             last_bang: None,
