@@ -15,6 +15,7 @@ in `docs/development.md` §5.2.
 - **`TODO:`, `FIXME:` and `NOTE` stand out in comments**, in the diagnostics' colours and with helix's lists of words (blue for `TODO` and `NOTE`, amber for `HACK` and `WARN`, red for `FIXME` and `BUG`). In code comments, and in Markdown and Typst comments; never in body text.
 - **`gS` splits a pair of brackets into one item per line, and joins them back**, as mini.splitjoin does: `[a, b, c]` becomes three lines one indent in, and `gS` again puts it back on one line. Commas inside nested brackets and strings are left alone. A flavour key in both keymaps; `:split-join` does the same.
 - **`ye --import lazyvim` carries the mini.surround extra**: when `lazyvim.json` lists it, `gsa`, `gsd` and `gsr` become vim-surround's `ys`, `ds` and `cs`, and Visual `gsa` wraps the selection.
+- **Indent guides in code**, as helix draws them: `[editor] indent_guides = true` puts a rule at each level of a line's leading blanks, and the rule of the block the cursor is in is darker. Off by default; `--import helix` carries helix's `[editor.indent-guides]`.
 
 ### Fixed
 

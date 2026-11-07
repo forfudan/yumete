@@ -139,6 +139,18 @@ pub struct EditorConfig {
     /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
     /// and `yis` copy what was never shown selected.
     pub yank_flash: bool,
+    /// **helix's indent guides** (2026-11-07, `[editor.indent-guides]`
+    /// there, flattened as `soft_wrap` is): a rule at each level of a code
+    /// line's leading blanks. Off, as helix has it. Code files only; never
+    /// in body text or the vertical layout.
+    pub indent_guides: bool,
+    /// The guide's character, one cell wide (helix's `character`).
+    pub indent_guides_character: String,
+    /// How many outer levels go undrawn (helix's `skip-levels`).
+    pub indent_guides_skip_levels: usize,
+    /// The guide of the block the cursor is in, a rung darker (2026-11-07,
+    /// as LazyVim's snacks.indent and mini.indentscope draw it).
+    pub indent_guides_scope: bool,
     /// The shell line `:shot` runs to photograph the screen.
     ///
     /// A command rather than a built-in: what「截圖」 means is the window
@@ -483,6 +495,10 @@ impl Default for EditorConfig {
             modeline: true,
             maths_preview: true,
             yank_flash: false,
+            indent_guides: false,
+            indent_guides_character: "│".to_string(),
+            indent_guides_skip_levels: 0,
+            indent_guides_scope: true,
             screenshot: screenshot_command(),
             indent_hint: "none".to_string(),
             auto_pairs: "basic".to_string(),
@@ -4564,6 +4580,10 @@ struct RawEditor {
     modeline: Option<bool>,
     maths_preview: Option<bool>,
     yank_flash: Option<bool>,
+    indent_guides: Option<bool>,
+    indent_guides_character: Option<String>,
+    indent_guides_skip_levels: Option<usize>,
+    indent_guides_scope: Option<bool>,
     screenshot: Option<String>,
     indent_hint: Option<String>,
     auto_pairs: Option<String>,
@@ -4766,6 +4786,18 @@ impl RawConfig {
         }
         if other.editor.yank_flash.is_some() {
             self.editor.yank_flash = other.editor.yank_flash;
+        }
+        if other.editor.indent_guides.is_some() {
+            self.editor.indent_guides = other.editor.indent_guides;
+        }
+        if other.editor.indent_guides_character.is_some() {
+            self.editor.indent_guides_character = other.editor.indent_guides_character.clone();
+        }
+        if other.editor.indent_guides_skip_levels.is_some() {
+            self.editor.indent_guides_skip_levels = other.editor.indent_guides_skip_levels;
+        }
+        if other.editor.indent_guides_scope.is_some() {
+            self.editor.indent_guides_scope = other.editor.indent_guides_scope;
         }
         if other.editor.maths_preview.is_some() {
             self.editor.maths_preview = other.editor.maths_preview;
@@ -5175,6 +5207,19 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.yank_flash {
             config.editor.yank_flash = on;
+        }
+        if let Some(on) = self.editor.indent_guides {
+            config.editor.indent_guides = on;
+        }
+        if let Some(character) = self.editor.indent_guides_character {
+            config.editor.indent_guides_character = character;
+        }
+        if let Some(skip) = self.editor.indent_guides_skip_levels {
+            config.editor.indent_guides_skip_levels =
+                held(problems, "[editor] indent_guides_skip_levels", skip, skip.min(8), &span(0, 8));
+        }
+        if let Some(on) = self.editor.indent_guides_scope {
+            config.editor.indent_guides_scope = on;
         }
         if let Some(on) = self.editor.maths_preview {
             config.editor.maths_preview = on;

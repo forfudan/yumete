@@ -634,6 +634,30 @@ fn editor_table(table: &toml::Table, got: &mut Gathered) {
                 }
                 _ => false,
             }),
+            "indent-guides" => sub_table(got, key, value, &mut |got, sub, v| match sub {
+                "render" => match v.as_bool() {
+                    Some(on) => {
+                        set(got, "indent_guides", on.to_string());
+                        true
+                    }
+                    None => false,
+                },
+                "character" => match v.as_str() {
+                    Some(c) => {
+                        set(got, "indent_guides_character", quote(c));
+                        true
+                    }
+                    None => false,
+                },
+                "skip-levels" => match v.as_integer() {
+                    Some(n) if (0..=8).contains(&n) => {
+                        set(got, "indent_guides_skip_levels", n.to_string());
+                        true
+                    }
+                    _ => false,
+                },
+                _ => false,
+            }),
             "search" => sub_table(got, key, value, &mut |got, sub, v| match (sub, v.as_bool()) {
                 ("smart-case", Some(on)) => {
                     set(got, "smart_case", on.to_string());
@@ -1024,6 +1048,11 @@ text-width = 72
 enable = true
 max-wrap = 25
 
+[editor.indent-guides]
+render = true
+character = "╎"
+skip-levels = 1
+
 [editor.search]
 smart-case = false
 
@@ -1107,6 +1136,9 @@ j = { k = "normal_mode" }
             "ruler = 80",
             "hard_wrap = 72",
             "soft_wrap = true",
+            "indent_guides = true",
+            "indent_guides_character = \"╎\"",
+            "indent_guides_skip_levels = 1",
             "smart_case = false",
         ] {
             assert!(editor.lines().any(|l| l == line), "{line} missing from:\n{editor}");
@@ -1126,8 +1158,8 @@ j = { k = "normal_mode" }
     fn a_helix_import_is_a_config_the_editor_takes_without_a_word() {
         let imported = sample();
         assert_eq!(complaints(&imported.text), Vec::<String>::new(), "{}", imported.text);
-        // Seven settings, the theme, and nine bindings.
-        assert_eq!(imported.carried, 17);
+        // Ten settings, the theme, and nine bindings.
+        assert_eq!(imported.carried, 20);
         // An empty helix config is still a clean one.
         let empty = helix("", Path::new("x"), "t", false, false).unwrap();
         assert_eq!(complaints(&empty.text), Vec::<String>::new(), "{}", empty.text);

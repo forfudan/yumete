@@ -250,6 +250,62 @@ zhs = "首行缩进"
 en = "indent"
 
 [[message]]
+# 設置：縮進參考線（草稿）
+key = "settings.editor.indent-guides"
+zhs = "缩进参考线"
+zht = "縮進參考線"
+en = "indent guides"
+
+[[message]]
+# 設置：縮進參考線用的字符（草稿）
+key = "settings.editor.indent-guides-character"
+zhs = "参考线字符"
+zht = "參考線字符"
+en = "guide character"
+
+[[message]]
+# 設置：縮進參考線用的字符——一句話（草稿）
+key = "settings.editor.indent-guides-character.hint"
+zhs = "画参考线用的字符，要占一格"
+zht = "畫參考線用的字符，要佔一格"
+en = "the character the guides are drawn with, one cell wide"
+
+[[message]]
+# 設置：光標所在那一塊的參考線加深（草稿）
+key = "settings.editor.indent-guides-scope"
+zhs = "标出当前块"
+zht = "標出當前塊"
+en = "mark the current block"
+
+[[message]]
+# 設置：光標所在那一塊的參考線加深——一句話（草稿）
+key = "settings.editor.indent-guides-scope.hint"
+zhs = "光标所在那一块的参考线画得深一些"
+zht = "光標所在那一塊的參考線畫得深一些"
+en = "the guide of the block the cursor is in is drawn darker"
+
+[[message]]
+# 設置：外面幾級不畫參考線（草稿）
+key = "settings.editor.indent-guides-skip-levels"
+zhs = "跳过外层"
+zht = "跳過外層"
+en = "skip levels"
+
+[[message]]
+# 設置：外面幾級不畫參考線——一句話（草稿）
+key = "settings.editor.indent-guides-skip-levels.hint"
+zhs = "最外面几级缩进不画参考线"
+zht = "最外面幾級縮進不畫參考線"
+en = "how many outer levels go without a guide"
+
+[[message]]
+# 設置：縮進參考線——一句話（草稿）
+key = "settings.editor.indent-guides.hint"
+zhs = "代码行首的空白里，每一级缩进画一条竖线，同 helix；只用于代码文件"
+zht = "代碼行首的空白裏，每一級縮進畫一條豎線，同 helix；只用於代碼文件"
+en = "a rule at each level of a code line's leading blanks, as helix draws them; code files only"
+
+[[message]]
 # 設置：段首记号
 key = "settings.editor.indent-hint"
 zht = "段首記號"

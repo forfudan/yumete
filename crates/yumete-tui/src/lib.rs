@@ -9284,6 +9284,109 @@ pub(crate) fn markup_style(kind: yumete_core::markdown::Kind, ink: crate::theme:
     }
 }
 
+/// Where [`draw_indent_guides`] draws: the text area, the gutter beside it,
+/// the columns scrolled off the left, and the cursor's line for its block.
+struct Guides {
+    area: Rect,
+    gutter: usize,
+    left: usize,
+    cursor_line: Option<usize>,
+}
+
+/// The columns of a line's leading blanks, tabs to their stops; `None` for a
+/// line with nothing else on it.
+fn leading_columns(rope: &yumete_core::Rope, line: usize, tab: usize) -> Option<usize> {
+    let mut columns = 0;
+    for c in rope.line(line).chars() {
+        match c {
+            ' ' => columns += 1,
+            '\t' => columns += tab - columns % tab,
+            '\n' | '\r' => return None,
+            _ => return Some(columns),
+        }
+    }
+    None
+}
+
+/// **helix's indent guides** (2026-11-07, `[editor] indent_guides`): a rule
+/// at each level of a code line's leading blanks, `skip_levels` outer ones
+/// left out, as helix's `draw_indent_guides` places them: a line indented
+/// two levels has rules at columns 0 and one level. A blank line takes the
+/// line above's, as helix's does. Only into blank cells, as the ruler is.
+///
+/// **The cursor's block a rung darker** (`indent_guides_scope`, LazyVim's
+/// snacks.indent and mini.indentscope): the rule just inside the cursor
+/// line's indent, on the lines around it indented at least as far, blank
+/// lines included. Read off the rows on screen only.
+fn draw_indent_guides(
+    frame: &mut Frame,
+    editor: &Editor,
+    config: &Config,
+    rope: &yumete_core::Rope,
+    rows: &[(usize, usize)],
+    at: Guides,
+    ink: crate::theme::Palette,
+) {
+    let tab = editor.tab_stop().max(1);
+    let width = editor.indent_width().max(1);
+    let skip = config.editor.indent_guides_skip_levels;
+    let glyph = match yumete_cjk::str_width(&config.editor.indent_guides_character) {
+        1 => config.editor.indent_guides_character.as_str(),
+        _ => "│",
+    };
+    // A blank line at the top takes the indent of the line above the page.
+    let above = |line: usize| (line.saturating_sub(200)..line).rev().find_map(|l| leading_columns(rope, l, tab));
+    let mut carried = rows.first().map_or(0, |&(_, line)| above(line).unwrap_or(0));
+    let mut levels: Vec<(usize, usize, usize)> = Vec::with_capacity(rows.len());
+    for &(y, line) in rows {
+        if let Some(columns) = leading_columns(rope, line, tab) {
+            carried = columns;
+        }
+        levels.push((y, line, carried));
+    }
+    // The cursor's block: its line's indent (a blank line's, the nearer of
+    // the lines round it), and the lines on screen it runs over.
+    let scope = at.cursor_line.filter(|_| config.editor.indent_guides_scope).and_then(|cursor| {
+        let deep = leading_columns(rope, cursor, tab).or_else(|| {
+            let below = (cursor + 1..rope.len_lines().min(cursor + 200)).find_map(|l| leading_columns(rope, l, tab));
+            above(cursor).max(below)
+        })?;
+        let column = deep.checked_sub(width)? / width * width;
+        let inside = |line: usize| leading_columns(rope, line, tab).is_none_or(|c| c >= deep);
+        let first = levels.first()?.1;
+        let last = levels.last()?.1;
+        let from = (first..=cursor).rev().take_while(|&l| inside(l)).last().unwrap_or(cursor);
+        let to = (cursor..=last).take_while(|&l| inside(l)).last().unwrap_or(cursor);
+        Some((column, from, to))
+    });
+    let plain = Style::default().fg(ink.rule());
+    let dark = Style::default().fg(ink.furniture());
+    let buf = frame.buffer_mut();
+    for (y, line, columns) in levels {
+        let y = at.area.y + y as u16;
+        for level in skip..columns / width {
+            let column = level * width;
+            if column < at.left {
+                continue;
+            }
+            let x = at.area.x as usize + at.gutter + column - at.left;
+            if x >= (at.area.x + at.area.width) as usize {
+                break;
+            }
+            let Some(cell) = buf.cell_mut((x as u16, y)) else { continue };
+            if !cell.symbol().trim().is_empty() {
+                continue;
+            }
+            let style = match scope {
+                Some((c, from, to)) if c == column && (from..=to).contains(&line) => dark,
+                _ => plain,
+            };
+            cell.set_symbol(glyph);
+            cell.fg = style.fg.unwrap_or(cell.fg);
+        }
+    }
+}
+
 /// **The ground a table's row `nth` sits on** — the one answer, for every way
 /// a table is drawn (#458).
 ///
@@ -12745,6 +12848,14 @@ fn draw_horizontal(
         })
         .or_else(|| on_screen.last())
         .map_or(0, |&(y, _)| y);
+    // The lines the indent guides go on, by screen row (`[editor]
+    // indent_guides`, code files only), read before the rows are spent:
+    // a line's first row only.
+    let guide_rows: Vec<(usize, usize)> = match config.editor.indent_guides && editor.writes_code() {
+        // A wrapped line's later rows hold its words, not its indent.
+        true => on_screen.iter().filter(|(_, row)| row.starts_line()).map(|(y, row)| (*y, row.line)).collect(),
+        false => Vec::new(),
+    };
     for (_, row) in on_screen {
         // Which palette this row is drawn off. Everything below asks `ink`, so
         // the whole of 焦點模式 is this one decision. The gutter goes with the
@@ -13736,6 +13847,11 @@ fn draw_horizontal(
                 }
             }
         }
+    }
+
+    if !guide_rows.is_empty() {
+        let at = Guides { area: text_area, gutter, left, cursor_line: peek.is_none().then_some(cursor_line) };
+        draw_indent_guides(frame, editor, config, rope, &guide_rows, at, ink);
     }
 
     tint_the_rules(frame, editor, config, text_area, gutter, left);
@@ -19390,6 +19506,44 @@ fn squeezed(text: &str) -> String {
     /// itself needed the live loop's settled page and was measured in a pty
     /// (`:keymap-actions`, 80x24: rows 24, 34, 24, 34 before the fix); this
     /// keeps the path covered.
+    /// **helix's indent guides** (2026-11-07): a rule at each level of the
+    /// leading blanks, a blank line taking the line above's, the cursor's
+    /// block a rung darker, and only in code, only with the setting on.
+    #[test]
+    fn indent_guides_stand_at_each_level_and_mark_the_cursor_s_block() {
+        let text = "fn a() {\n    if x {\n        one();\n\n        two();\n    }\n}\n";
+        let (mut editor, _path) = editor_on_disk("a.rs", text);
+        editor.set_indent_width(4);
+        for c in "jjj".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let mut config = Config::default();
+        config.editor.indent_guides = true;
+        config.editor.line_numbers = yumete_config::LineNumbers::None;
+        let palette = ink(&config);
+        let buffer = render_with(&editor, &config, no_ime(), 40, 10);
+        let row = |y: u16| row_text(&buffer, y);
+        let x0 = row(0).find("fn").unwrap() as u16;
+        let glyph = |x: u16, y: u16| buffer[(x, y)].symbol().to_string();
+        assert_eq!((glyph(x0, 1), glyph(x0 + 4, 1)), ("│".into(), "i".into()), "one level: a rule at 0\n{}", row(1));
+        assert_eq!((glyph(x0, 2), glyph(x0 + 4, 2)), ("│".into(), "│".into()), "two levels\n{}", row(2));
+        assert_eq!(glyph(x0 + 4, 3), "│", "a blank line takes the line above's");
+        assert_eq!(glyph(x0, 0), "f", "no indent, no rule");
+        // The cursor is on the blank line inside `if`: that block's rule is darker.
+        assert_eq!(buffer[(x0 + 4, 2)].fg, palette.furniture(), "the block's rule");
+        assert_eq!(buffer[(x0, 2)].fg, palette.rule(), "the outer one");
+
+        config.editor.indent_guides = false;
+        let buffer = render_with(&editor, &config, no_ime(), 40, 10);
+        assert_eq!(buffer[(x0, 2)].symbol(), " ", "off");
+
+        let mut prose = editor_with("    an indented paragraph\n");
+        prose.execute(":syntax markdown").unwrap();
+        config.editor.indent_guides = true;
+        let buffer = render_with(&prose, &config, no_ime(), 40, 6);
+        assert!(!row_text(&buffer, 0).contains('│'), "not in prose: {}", row_text(&buffer, 0));
+    }
+
     /// **A tag in a comment takes the diagnostics' colours** (2026-11-07, as
     /// helix's comment grammar): in code's comments and prose's, not in a
     /// sentence.
