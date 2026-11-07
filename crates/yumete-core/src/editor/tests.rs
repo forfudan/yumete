@@ -38101,38 +38101,52 @@ fn a_typst_book(name: &str) -> (Editor, std::path::PathBuf) {
     (ed, dir)
 }
 
-/// **`:view-preview` and its two siblings** (2026-11-07): `on` asks for the
-/// window with the browser as the fallback, `-window` for the window alone,
-/// `-browser` for the browser; bare asks; `off` closes whichever is open.
+/// **`:view-preview` and its two siblings are switches** (2026-11-07):
+/// `:view-preview` asks for the window with the browser as the fallback,
+/// `-window` for the window alone, `-browser` for the browser. `on` while one
+/// is up says where it is; `off`, or a bare one while it is up, puts away what
+/// it would open, and `:view-preview` whichever is up.
 #[test]
 fn the_preview_commands_ask_for_the_window_or_the_browser() {
     let (mut ed, dir) = a_typst_book("commands");
     let main = dir.join("main.typ");
     ed.execute(":view-preview").unwrap();
-    assert_eq!(ed.take_preview_request(), None, "bare asks: {}", ed.status());
-    ed.execute(":view-preview on").unwrap();
     assert_eq!(
         ed.take_preview_request(),
         Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true })
     );
-    ed.execute(":view-preview-window").unwrap();
+    ed.execute(":view-preview-window on").unwrap();
     assert_eq!(
         ed.take_preview_request(),
         Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: false })
     );
     ed.execute(":view-preview-browser").unwrap();
     assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: main.clone(), syntax: crate::syntax::Syntax::Typst }));
-    // The front end opened the window: asking again says it is open.
+    // The front end opened the window: `on` says it is open…
     assert!(ed.open_page_window(main.clone()).is_some());
-    for asked in [":view-preview", ":view-preview on", ":view-preview-window"] {
+    for asked in [":view-preview on", ":view-preview-window on"] {
         ed.execute(asked).unwrap();
         assert_eq!(ed.take_preview_request(), None, "{asked}");
         assert_eq!(ed.status(), say!("preview.window-open"), "{asked}");
     }
+    // …and a bare `-window` closes it.
+    ed.execute(":view-preview-window").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
+    assert_eq!(ed.status(), say!("preview.window-closed"));
+    assert!(!ed.has_a_page_window());
+    // `:view-preview off` closes the window and stops the browser's too.
+    assert!(ed.open_page_window(main.clone()).is_some());
+    ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
     ed.execute(":view-preview off").unwrap();
-    assert_eq!(ed.take_preview_request(), Some(Preview::Stop), "the browser's goes too, if one runs");
+    assert_eq!(ed.take_preview_request(), Some(Preview::Stop), "the browser's goes too");
     assert!(!ed.has_a_page_window());
     assert_eq!(ed.windows().len(), 1);
+    // `-browser off` stops only the browser's; with none running it is quiet.
+    ed.execute(":view-preview-browser off").unwrap();
+    assert_eq!(ed.take_preview_request(), Some(Preview::Stop));
+    ed.set_preview_at(None);
+    ed.execute(":view-preview-browser off").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
     // A buffer never saved has nothing to typeset.
     let mut scratch = Editor::new();
     scratch.execute(":view-preview-window").unwrap();

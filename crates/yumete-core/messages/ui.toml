@@ -533,8 +533,8 @@ en = "stopped the preview server left over from last time ({0})"
 [[message]]
 # 預覽服務器開啟了
 key = "preview.running"
-zhs = "预览：{0}(`:view-preview off` 停止)"
-en = "preview: {0} (`:view-preview off` stops it)"
+zhs = "预览：{0}(`:view-preview` 停止)"
+en = "preview: {0} (`:view-preview` stops it)"
 
 [[message]]
 # :view-preview 用在没存過的緩衝區上
@@ -582,16 +582,16 @@ en = "preview: tinymist starting…"
 # ── problem ──────────────────────────────────────────
 
 [[message]]
-# :view-preview off 关掉了页面窗口（草稿）
+# :view-preview 或 :view-preview-window 关掉了页面窗口（草稿）
 key = "preview.window-closed"
 zhs = "已关闭页面窗口"
 en = "closed the page window"
 
 [[message]]
-# :view-preview on 或 :view-preview-window，而页面窗口已经开着；裸的 :view-preview 问到它开着（草稿）
+# 要打开页面窗口，而这个窗口已经有一个页面窗口跟着（草稿）
 key = "preview.window-open"
-zhs = "页面窗口已打开(`:view-preview off` 关闭)"
-en = "the page window is open (`:view-preview off` closes it)"
+zhs = "页面窗口已打开(`:view-preview` 关闭)"
+en = "the page window is open (`:view-preview` closes it)"
 
 [[message]]
 # 側欄裏打 :wq：沒有文件可寫

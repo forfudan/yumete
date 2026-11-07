@@ -1218,49 +1218,52 @@ impl Editor {
                 self.convert(ask);
                 Ok(CommandOutcome::Continue)
             }
-            Command::SetPreview(how) => {
-                // **Either preview counts as running** (2026-11-07): the
-                // window beside the text, or the browser's.
+            // **Three switches** (2026-11-07): `:view-preview` is either
+            // preview, the window beside the text or the browser's; turned
+            // on it opens the window, falling back to the browser when a
+            // window cannot be drawn, and turned off it puts away whichever
+            // is up.
+            Command::Preview(how) => {
                 let window = self.has_a_page_window();
                 let running = self.preview_at.is_some();
-                let on = how.over(window || running);
-                // Already running: the question 「where is it?」 is the one a
-                // writer actually asks, and the address was said once and lost.
-                // A bare `:view-preview` is exactly that question.
-                if on && window {
-                    self.status = say!("preview.window-open");
-                    return Ok(CommandOutcome::Continue);
+                match how.over(window || running) {
+                    // Already up: `on` is 「where is it?」, and the address
+                    // was said once and lost.
+                    true if window => self.status = say!("preview.window-open"),
+                    true if running => self.preview_request = Some(Preview::Show),
+                    true => self.ask_for_a_preview(true, true),
+                    false => {
+                        if self.close_page_windows() {
+                            self.status = say!("preview.window-closed");
+                        }
+                        if running {
+                            self.preview_request = Some(Preview::Stop);
+                        }
+                    }
                 }
-                if on && running {
-                    self.preview_request = Some(Preview::Show);
-                    return Ok(CommandOutcome::Continue);
-                }
-                if on {
-                    // The window when it can be drawn, the browser when not.
-                    self.ask_for_a_preview(true, true);
-                    return Ok(CommandOutcome::Continue);
-                }
-                // `off` closes whichever is open.
-                if self.close_page_windows() {
-                    self.status = say!("preview.window-closed");
-                }
-                self.preview_request = Some(Preview::Stop);
                 Ok(CommandOutcome::Continue)
             }
-            Command::PreviewWindow => {
-                if self.has_a_page_window() {
-                    self.status = say!("preview.window-open");
-                    return Ok(CommandOutcome::Continue);
+            Command::PreviewWindow(how) => {
+                let window = self.has_a_page_window();
+                match how.over(window) {
+                    true if window => self.status = say!("preview.window-open"),
+                    true => self.ask_for_a_preview(true, false),
+                    false => {
+                        if self.close_page_windows() {
+                            self.status = say!("preview.window-closed");
+                        }
+                    }
                 }
-                self.ask_for_a_preview(true, false);
                 Ok(CommandOutcome::Continue)
             }
-            Command::PreviewBrowser => {
-                if self.preview_at.is_some() {
-                    self.preview_request = Some(Preview::Show);
-                    return Ok(CommandOutcome::Continue);
+            Command::PreviewBrowser(how) => {
+                let running = self.preview_at.is_some();
+                match how.over(running) {
+                    true if running => self.preview_request = Some(Preview::Show),
+                    true => self.ask_for_a_preview(false, false),
+                    false if running => self.preview_request = Some(Preview::Stop),
+                    false => {}
                 }
-                self.ask_for_a_preview(false, false);
                 Ok(CommandOutcome::Continue)
             }
             Command::PreviewFit(fit) => {

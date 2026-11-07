@@ -1924,10 +1924,10 @@ en = "pages, vertical: divide the vertical page across — top right to top left
 find = "段組 段组 分頁 分页 pages bands"
 
 [[message]]
-# : 命令選單裏 preview 那一項的説明(view 組)
+# : 命令選單裏 preview 那一項的説明(view 組)（草稿）
 key = "cmd.view.preview"
-zhs = "交给排版器排版，在浏览器中查看"
-en = "typeset with a real typesetter and preview in a browser"
+zhs = "打开或关闭排版后的页面：先在旁边开页面窗口，开不了就用浏览器"
+en = "show or hide the typeset page: in a window beside the text, or in a browser when a window cannot be drawn"
 find = "預覽 预览 瀏覽器 浏览器 排版 browser"
 
 [[message]]

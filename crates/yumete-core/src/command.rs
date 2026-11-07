@@ -539,15 +539,16 @@ pub enum Command {
     SetHud(crate::editor::Hud),
     /// `:view-hud` with no argument — say which of the three it is on.
     ReportHud,
-    /// `:view-preview` / `:view-preview off` — hand the file to the real typesetter and
-    /// show what it makes (Feature #128).
-    SetPreview(Switch),
-    /// `:view-preview-window` — the page beside the text, never the browser
-    /// (2026-11-07).
-    PreviewWindow,
-    /// `:view-preview-browser` — the page in the browser, as `:view-preview`
-    /// was before the window.
-    PreviewBrowser,
+    /// `:view-preview [on|off]` — hand the file to the real typesetter and
+    /// show what it makes (Feature #128): on, the window, or the browser when
+    /// a window cannot be drawn; off, whichever is up (2026-11-07).
+    Preview(Switch),
+    /// `:view-preview-window [on|off]` — the page beside the text, never the
+    /// browser (2026-11-07).
+    PreviewWindow(Switch),
+    /// `:view-preview-browser [on|off]` — the page in the browser, as
+    /// `:view-preview` was before the window.
+    PreviewBrowser(Switch),
     /// `:view-preview-fit width|page` — how big the page window draws the
     /// page; bare, which it is.
     PreviewFit(Option<crate::editor::PreviewFit>),
@@ -4534,27 +4535,24 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.view.preview",
         needs: &[],
-        params: &[Param::Words {
-            of: SWITCH,
-            default: None,
-        }],
-        build: Some(|p| Ok(Command::SetPreview(switched(p)))),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::Preview(switched(p)))),
     },
     Entry {
         name: "view-preview-window",
         aliases: &[],
         help: "cmd.view.preview-window",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::PreviewWindow)),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::PreviewWindow(switched(p)))),
     },
     Entry {
         name: "view-preview-browser",
         aliases: &[],
         help: "cmd.view.preview-browser",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::PreviewBrowser)),
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::PreviewBrowser(switched(p)))),
     },
     Entry {
         name: "view-preview-fit",
@@ -7753,7 +7751,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +20");
+        assert_eq!(row("", "view-"), ":view- +23");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");
@@ -8101,7 +8099,7 @@ mod tests {
         // Where the word being completed starts, so a completion replaces it
         // and not the whole line.
         assert_eq!(complete_at("ruby ht").0, 5);
-        assert_eq!(complete_at("view-preview o").0, 13);
+        assert_eq!(complete_at("view-preview-fit p").0, 17);
         // One word now, so the completion replaces the whole of it (#368).
         assert_eq!(complete_at("view-margin").0, 0);
 

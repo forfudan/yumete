@@ -858,7 +858,7 @@ pub enum Preview {
     /// page again?」.
     Show,
     Stop,
-    /// **The page beside the text** (`:view-preview on`, `:view-preview-window`,
+    /// **The page beside the text** (`:view-preview`, `:view-preview-window`,
     /// 2026-11-07): a window drawn by tinymist, opened by the front end, which
     /// knows whether this terminal draws pictures and how old the tinymist is.
     /// With `fallback`, a window that cannot be drawn becomes the browser's
