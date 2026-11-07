@@ -1778,7 +1778,7 @@ pub fn run(
                                 let text = buffer.rope().to_string();
                                 running.push(&here, &text, version);
                             }
-                            // 光標也告訴它，預覽就跟着走（`preview::change_cursor`）。
+                            // 光標也告訴它，預覽就跟着走（`preview::panel_scroll_to`）。
                             let rope = buffer.rope();
                             let at = editor.cursor().min(rope.len_chars());
                             let line = rope.char_to_line(at);
@@ -3480,7 +3480,7 @@ impl Job {
 
     /// **光標在這裏** —— 預覽跟着走。
     ///
-    /// Warning: **這一支 2026-09-23 就寫好了（`preview::change_cursor`，連測試帶文檔），
+    /// Warning: **這一支 2026-09-23 就寫好了（當時叫 `preview::change_cursor`，連測試帶文檔），
     /// 而一次都沒有人叫它**——「開這條 socket 的理由」寫在那支函數的文檔裏，卻是
     /// 死代碼。2026-09-24 接上。
     ///
@@ -3491,7 +3491,7 @@ impl Job {
             return;
         }
         let (_, line, character) = where_to;
-        let said = yumete_core::preview::change_cursor(path, line, character);
+        let said = yumete_core::preview::panel_scroll_to(path, line, character);
         let frame = yumete_core::preview::frame(&said, mask());
         if let Some(socket) = self.control.as_mut() {
             match socket.write_all(&frame) {

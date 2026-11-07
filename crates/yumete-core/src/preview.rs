@@ -112,13 +112,21 @@ pub fn update_memory_files(path: &Path, text: &str) -> String {
 /// Free with the socket, and the reason the socket is worth opening even for a
 /// document that is not being typed into.
 ///
+/// Warning: **`panelScrollTo`, not `changeCursorPosition`** (2026-11-07). The
+/// second only ever drew a caret mark on the page, and tinymist has ignored
+/// it since 0.15.2 (#2586: 「cursor indicator … temporarily disabled. Request
+/// ignored」), so the browser preview had stopped following the caret.
+/// Scrolling was always `panelScrollTo`, and the page window sends the same
+/// message through the language server (`tinymist.scrollPreview`).
+///
 /// Warning: **`line` and `character` are 0-based**, and tinymist's own comment says
 /// 「fixme: character is 0-based, UTF-16 code unit. We treat it as UTF-8 now」 —
-/// so this passes characters, not UTF-16 units, deliberately matching what it
-/// does rather than what it says it means to do one day.
-pub fn change_cursor(path: &Path, line: usize, character: usize) -> String {
+/// it counts characters (`line_column_to_byte`), so this passes characters,
+/// not UTF-16 units, matching what it does rather than what it says it means
+/// to do one day.
+pub fn panel_scroll_to(path: &Path, line: usize, character: usize) -> String {
     format!(
-        r#"{{"event":"changeCursorPosition","filepath":{path},"line":{line},"character":{character}}}"#,
+        r#"{{"event":"panelScrollTo","filepath":{path},"line":{line},"character":{character}}}"#,
         path = json_string(&path.to_string_lossy()),
     )
 }
@@ -277,10 +285,10 @@ mod tests {
     }
 
     #[test]
-    fn the_cursor_message_is_zero_based() {
+    fn the_cursor_message_scrolls_the_panel_and_is_zero_based() {
         assert_eq!(
-            change_cursor(Path::new("/a.typ"), 0, 0),
-            r#"{"event":"changeCursorPosition","filepath":"/a.typ","line":0,"character":0}"#
+            panel_scroll_to(Path::new("/a.typ"), 0, 0),
+            r#"{"event":"panelScrollTo","filepath":"/a.typ","line":0,"character":0}"#
         );
     }
 }
