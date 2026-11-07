@@ -15,6 +15,17 @@ use yumete_core::say;
 
 use crate::put_text;
 
+thread_local! {
+    /// How many rows the last panel drawn could still scroll, for
+    /// [`take_room`]; unset when it could not be counted (vertical text).
+    static ROOM: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+/// How many rows the panel just drawn could still scroll, and forget it.
+pub fn take_room() -> Option<usize> {
+    ROOM.with(std::cell::Cell::take)
+}
+
 /// What a panel holds. Two shapes, because there are two things to say: a
 /// paragraph to read, or a list of keys to glance down.
 pub enum Body {
@@ -988,6 +999,16 @@ pub fn draw(
             let from = panel.scroll.min(rows.len().saturating_sub(count));
             read = Some((from + count, rows.len()));
         }
+    }
+    // What the four paging keys can still move, said back to the editor so a
+    // float that shows whole gives them back to the text (2026-11-07).
+    if !panel.vertical_text {
+        let room = match &panel.body {
+            Body::Tinted(rows) => rows.len().saturating_sub(count),
+            Body::Prose(_) if cap > 0 => count.saturating_sub(cap),
+            _ => 0,
+        };
+        ROOM.with(|r| r.set(Some(room)));
     }
     let (count, lines) = match &panel.body {
         Body::Prose(_) if panel.vertical_text => (count, lines),

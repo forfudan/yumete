@@ -2297,14 +2297,28 @@ impl Editor {
     /// Warning: **那一格開着的時候翻的是那一格**。五種共用一個容器，那就該共用
     /// 一套翻頁鍵——而「光標就在編輯區」正是這四個鍵的全部價值：讀完一條長詞
     /// 條不必先把光標挪進邊欄。
+    ///
+    /// Warning: **A float that cannot move gives the key back** (2026-11-07
+    /// report: a one-line diagnostic floated over `config.imported.toml` and
+    /// `C-d` stopped paging). This used to answer `true` whenever a float was
+    /// up, so a float that showed all it had ate the key and nothing moved.
+    /// How far the float can go is the drawing's count when there is one
+    /// (`note_float_room`): it counts wrapped rows, so a long diagnostic that
+    /// is cut pages too, and a short hover that shows whole does not. One
+    /// that does scroll keeps the keys at its end, as helix's popup does, so
+    /// a reader paging through it is not thrown into the text.
     pub(super) fn scroll_the_float(&mut self, by: isize) -> bool {
         let Some(lines) = self.how_tall_the_info_is() else { return false };
         // 最多翻到最後一行，不翻到空白裏去。
         let last = lines.saturating_sub(1);
-        match self.info_in_the_sidebar() {
-            Some(_) => self.panel_scroll = self.panel_scroll.saturating_add_signed(by).min(last),
-            None => self.info_scroll = self.info_scroll.saturating_add_signed(by).min(last),
+        let (at, last) = match self.info_in_the_sidebar() {
+            Some(_) => (&mut self.panel_scroll, last),
+            None => (&mut self.info_scroll, self.float_room.get().unwrap_or(last)),
+        };
+        if last == 0 {
+            return false;
         }
+        *at = (*at).min(last).saturating_add_signed(by).min(last);
         true
     }
 

@@ -3328,6 +3328,9 @@ pub struct Editor {
     /// The page's sideways scroll as last drawn: the columns off its left
     /// and the columns of text it shows (`note_sideways`).
     side_seen: std::cell::Cell<(usize, usize)>,
+    /// How many rows the float on screen can still scroll, as last drawn:
+    /// `None` when the front end could not measure it (`note_float_room`).
+    float_room: std::cell::Cell<Option<usize>>,
     /// The gutter's columns beside the page: vim's `zH` `zL` halve the
     /// window with them.
     side_gutter: std::cell::Cell<usize>,
@@ -4580,6 +4583,7 @@ impl Editor {
             scrolloff_asked: std::cell::Cell::new(None),
             scrolled_at: std::cell::Cell::new(None),
             side_seen: std::cell::Cell::new((0, 0)),
+            float_room: std::cell::Cell::new(None),
             side_gutter: std::cell::Cell::new(0),
             side_aim: std::cell::Cell::new(None),
             aim: None,
@@ -4865,6 +4869,13 @@ impl Editor {
     /// off its left and the columns of text it shows.
     pub fn note_sideways(&self, left: usize, page: usize) {
         self.side_seen.set((left, page));
+    }
+
+    /// The front end says how many rows the float it drew can still scroll:
+    /// `Some(0)` when it all shows, or when no float is drawn; `None` when it
+    /// could not count them (vertical text), and the text's own lines count.
+    pub fn note_float_room(&self, room: Option<usize>) {
+        self.float_room.set(room);
     }
 
     /// The columns of text the page shows and the gutter's beside them,

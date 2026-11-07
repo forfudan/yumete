@@ -5714,10 +5714,16 @@ fn draw(
     // its menu **and put a 百科 entry there instead**. What the reader is in
     // the middle of is the question, and `pending_menu` is the one that
     // answers it.
+    panel::take_room();
     let note_panel = match taken || editor.pending_menu().is_some() {
         true => None,
         false => draw_note(frame, editor, config, text_area, footer.y, spot, ime.is_composing()),
     };
+    // How far the float on screen can scroll; nothing drawn, nothing to page.
+    editor.note_float_room(match note_panel {
+        Some(_) => panel::take_room(),
+        None => Some(0),
+    });
     panels.extend(keys_panel);
     panels.extend(note_panel);
     // 面板關着就不畫——要看的東西在正文裏，或者在光標下那一格浮窗裏。除非根本沒
@@ -19331,6 +19337,27 @@ fn squeezed(text: &str) -> String {
     /// itself needed the live loop's settled page and was measured in a pty
     /// (`:keymap-actions`, 80x24: rows 24, 34, 24, 34 before the fix); this
     /// keeps the path covered.
+    /// **A float drawn whole gives `C-d` back to the text** (2026-11-07 report:
+    /// a diagnostic floated over `config.imported.toml` and `C-d` stopped
+    /// paging). Three lines of docs fit the float, so the frame says there is
+    /// nothing to scroll, and the key pages.
+    #[test]
+    fn a_float_drawn_whole_lets_the_page_turn() {
+        let (mut editor, _path) = editor_on_disk("a.rs", &"fn one() {}\n".repeat(200));
+        editor.execute(":keymap vim").unwrap();
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+        let mut seats = Seats::default();
+        editor.on_key(yumete_core::input::Key::Char(' '));
+        editor.on_key(yumete_core::input::Key::Char('k'));
+        editor.show_hover("fn one()\n\nThe first.");
+        assert!(editor.hover_afloat().is_some(), "afloat");
+        terminal.draw(|frame| draw(frame, &editor, &config, no_ime(), &mut seats, None)).unwrap();
+        editor.on_key(yumete_core::input::Key::Ctrl('d'));
+        assert!(editor.cursor_line() > 0, "C-d pages the text: {}", editor.cursor_line());
+    }
+
     #[test]
     fn vims_half_page_walks_down_a_markdown_table() {
         let mut text = String::from("A line before the table, as on the keymap-actions page.\n\n| name | what |\n| --- | --- |\n");

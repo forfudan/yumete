@@ -7,6 +7,12 @@ Written for people who use it to write, not for the commit log: each line says
 what you can *do*, and what changed under you. The numbers are the feature table
 in `docs/development.md` §5.2.
 
+## Unreleased
+
+### Fixed
+
+- **The paging keys page when a float has nothing more to show**: with a diagnostic, docs or a wiki entry floating in the corner, `C-d`, `C-u`, `C-f`, `C-b`, `PageDown` and `PageUp` did nothing if the float already showed all of it. Such a float now leaves them to the text; one with more to show still scrolls. A long diagnostic that is cut now scrolls too.
+
 ## 0.20.0 · 2026-11-07
 
 ### Added

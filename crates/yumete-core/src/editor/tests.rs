@@ -27824,6 +27824,53 @@ fn the_floating_docs_take_the_four_paging_keys_and_nothing_else() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// **A float that shows all it has gives the paging keys back** (2026-11-07
+/// report: a one-line diagnostic floated over `config.imported.toml` and
+/// `C-d` no longer paged).
+#[test]
+fn a_float_with_nothing_more_to_show_lets_the_page_turn() {
+    let dir = tmp().join("yumete-float-gives-way");
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("a.rs");
+    std::fs::write(&file, "fn one() {}\n".repeat(200)).unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(&file).unwrap();
+    ed.set_page(20, 80);
+    for keymap in ["helix", "vim"] {
+        ed.execute(&format!(":keymap {keymap}")).unwrap();
+        // One line: nothing to scroll, so the page turns.
+        press(&mut ed, "gg");
+        press(&mut ed, " k");
+        ed.show_hover("fn one()");
+        assert!(ed.hover_afloat().is_some(), "{keymap}: afloat");
+        ed.on_key(Key::Ctrl('d'));
+        assert!(ed.cursor_line() > 0, "{keymap}: C-d pages the text");
+
+        // Forty lines the drawing showed whole: the page turns as well.
+        press(&mut ed, "gg");
+        press(&mut ed, " k");
+        ed.show_hover((1..=40).map(|i| format!("第{i}行\n")).collect::<String>());
+        ed.note_float_room(Some(0));
+        ed.on_key(Key::Ctrl('d'));
+        assert!(ed.cursor_line() > 0, "{keymap}: it all showed");
+
+        // One long line the drawing cut into rows: those rows scroll.
+        press(&mut ed, "gg");
+        press(&mut ed, " k");
+        ed.show_hover("一句很長的話".repeat(40));
+        ed.note_float_room(Some(3));
+        ed.on_key(Key::Ctrl('d'));
+        assert_eq!((ed.info_scroll(), ed.cursor_line()), (3, 0), "{keymap}: the float's rows");
+        // At its end it keeps the key, as helix's popup does.
+        ed.on_key(Key::Ctrl('d'));
+        assert_eq!((ed.info_scroll(), ed.cursor_line()), (3, 0), "{keymap}: stays at its end");
+        ed.note_float_room(None);
+        press(&mut ed, "l");
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// **五種信息共用一格，所以 `Tab` 的環上它只佔一格**（#426，2026-09-30）。
 ///
 /// 原話：「百科面板和绝对不能侵入程序文件。因此不可能出现同时有百科和文檔的事情。
