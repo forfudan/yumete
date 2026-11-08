@@ -280,6 +280,17 @@ impl Drop for Away {
     }
 }
 
+/// **Formulas for the rendered Markdown preview** (2026-11-08): RaTeX, as
+/// the formula float draws them, with where each one's baseline is.
+pub struct Ratex;
+
+impl yumete_mdview::Formulas for Ratex {
+    fn draw(&self, tex: &str, display: bool, ink: [u8; 3], size: f32) -> Result<yumete_mdview::Formula, String> {
+        let (picture, baseline) = render_on_baseline(tex, display, (ink[0], ink[1], ink[2]), size)?;
+        Ok(yumete_mdview::Formula { png: picture.png, baseline })
+    }
+}
+
 // ── Kept pictures ──────────────────────────────────────────────────────────
 
 /// What a picture is a picture of: the formula, how it is set, its ink and

@@ -5,9 +5,13 @@
 //!
 //! ```text
 //! ye --md-render <file.md> [--width 1000] [--scale 2] [--height 1400]
-//!                [--theme light|dark] [--screens 3 | --all] [--at-line N]
-//!                [--out DIR] [--bench]
+//!                [--theme light|dark] [--palette ink|github|<theme>]
+//!                [--screens 3 | --all] [--at-line N] [--out DIR] [--bench]
 //! ```
+//!
+//! `--palette` names an editor theme (`ink`, 墨香, the default, or any name
+//! `[theme] name` takes) whose colours the page is drawn in, in the mood
+//! `--theme` says; `github` is GitHub's own Markdown colours.
 //!
 //! `--width` and `--height` are the picture's, in device pixels; `--scale`
 //! is device pixels to a CSS pixel. `--at-line` starts the first screen at
@@ -18,17 +22,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
-use yumete_mdview::{Formula, Formulas, Options, Preview, Theme};
-
-/// Formulas drawn by RaTeX, as the formula float draws them.
-struct Tex;
-
-impl Formulas for Tex {
-    fn draw(&self, tex: &str, display: bool, ink: [u8; 3], size: f32) -> Result<Formula, String> {
-        let (picture, baseline) = yumete_tui::tex::render_on_baseline(tex, display, (ink[0], ink[1], ink[2]), size)?;
-        Ok(Formula { png: picture.png, baseline })
-    }
-}
+use yumete_mdview::{Options, Preview, Theme};
+use yumete_tui::tex::Ratex as Tex;
 
 fn ms(t: Instant) -> f64 {
     t.elapsed().as_secs_f64() * 1000.0
@@ -39,6 +34,7 @@ pub fn run(args: &[String]) -> ExitCode {
     let (mut width, mut scale, mut height) = (1000u32, 2.0f32, None::<u32>);
     let (mut dark, mut screens, mut all, mut bench) = (false, 3usize, false, false);
     let mut at_line: Option<usize> = None;
+    let mut palette = String::from("ink");
     let mut out = PathBuf::from(".");
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -57,6 +53,7 @@ pub fn run(args: &[String]) -> ExitCode {
             "--at-line" => at_line = value("--at-line").and_then(|v| v.parse().ok()),
             "--out" => out = value("--out").map(PathBuf::from).unwrap_or(out),
             "--theme" => dark = value("--theme").is_some_and(|v| v == "dark"),
+            "--palette" => palette = value("--palette").unwrap_or(palette),
             "--all" => all = true,
             "--bench" => bench = true,
             other if !other.starts_with("--") && file.is_none() => file = Some(PathBuf::from(other)),
@@ -67,7 +64,7 @@ pub fn run(args: &[String]) -> ExitCode {
         }
     }
     let Some(file) = file else {
-        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--screens N | --all] [--at-line N] [--out DIR] [--bench]");
+        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--screens N | --all] [--at-line N] [--out DIR] [--bench]");
         return ExitCode::from(2);
     };
     let text = match std::fs::read_to_string(&file) {
@@ -82,7 +79,17 @@ pub fn run(args: &[String]) -> ExitCode {
         return ExitCode::FAILURE;
     }
     let height = height.unwrap_or(width * 7 / 5);
-    let theme = if dark { Theme::dark() } else { Theme::light() };
+    let theme = match (palette.as_str(), dark) {
+        ("github", true) => Theme::dark(),
+        ("github", false) => Theme::light(),
+        (name, dark) => match yumete_config::ThemeConfig::named(name) {
+            Some(theme) => yumete_tui::preview_theme::theme(yumete_tui::theme::Palette::of_theme(&theme, dark)),
+            None => {
+                eprintln!("yumete: --md-render: no theme {name:?}");
+                return ExitCode::from(2);
+            }
+        },
+    };
     let base_dir = std::fs::canonicalize(&file).ok().and_then(|p| p.parent().map(|d| d.to_path_buf())).unwrap_or_default();
     let options = Options { width, scale, theme, base_dir };
 

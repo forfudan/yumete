@@ -3105,6 +3105,7 @@ dependencies = [
  "yumete-config",
  "yumete-core",
  "yumete-ime",
+ "yumete-mdview",
 ]
 
 [[package]]

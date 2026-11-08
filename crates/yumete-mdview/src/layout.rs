@@ -19,7 +19,7 @@ use vello_cpu::kurbo::Rect;
 use vello_cpu::Pixmap;
 
 use crate::parse::{Align, Block, BlockKind, Callout, Inline, InlineKind, Item as ListItem, Marks};
-use crate::theme::{tint, Rgba, Theme};
+use crate::theme::{Rgba, Theme};
 use crate::Formulas;
 
 /// A picture, shared between layouts.
@@ -258,7 +258,7 @@ impl Engine {
                 InlineKind::NoteRef(n) => {
                     let a = text.len();
                     text.push_str(&n.to_string());
-                    ranges.push((a..text.len(), Marks::default(), Some(self.theme.link), true));
+                    ranges.push((a..text.len(), Marks::default(), Some(self.theme.footnote), true));
                 }
                 InlineKind::Formula { tex, display } => {
                     let size = st.size * 1.05;
@@ -342,11 +342,24 @@ impl Engine {
         b.push_default(StyleProperty::Brush(Ink { color: st.color, ..Ink::default() }));
         let theme_ink = |marks: &Marks, color: Rgba| {
             let mut ink = Ink { color, ..Ink::default() };
-            if marks.link || marks.wiki {
-                ink.color = self.theme.link;
+            // Bold and italic take the theme's colours in the writing only:
+            // a heading or a quotation keeps its own.
+            if color == self.theme.text {
+                if let (true, Some(c)) = (marks.emph, self.theme.emphasis) {
+                    ink.color = c;
+                }
+                if let (true, Some(c)) = (marks.strong, self.theme.strong) {
+                    ink.color = c;
+                }
             }
             if marks.code || marks.kbd {
                 ink.ground = Some(self.theme.code_inline);
+                if color == self.theme.text {
+                    ink.color = self.theme.code_text;
+                }
+            }
+            if marks.link || marks.wiki {
+                ink.color = self.theme.link;
             }
             ink.frame = marks.kbd;
             if marks.highlight {
@@ -486,7 +499,7 @@ impl Engine {
                     5 => (0.875, false),
                     _ => (0.85, false),
                 };
-                let color = if *level == 6 { self.theme.muted } else { self.theme.heading };
+                let color = self.theme.headings[(*level as usize).clamp(1, 6) - 1];
                 let st = Style { size: cx.size * k, weight: 600.0, color, mono: false, line_height: 1.25, italic: false };
                 let t = self.text(text, st, Some(w), Alignment::Start);
                 *y += self.put_text(t, x, *y, out, first);
@@ -527,7 +540,7 @@ impl Engine {
                 let y0 = *y;
                 let bar = 0.25 * self.base();
                 let pad = self.base();
-                let inner = Ctx { color: self.theme.muted, ..cx };
+                let inner = Ctx { color: self.theme.quote, ..cx };
                 self.stack(body, x + bar + pad, w - bar - pad, y, out, inner);
                 out.items.push(Item::Rect { r: rect(x, y0, bar, *y - y0), fill: self.theme.quote_bar, radius: 0.0 });
             }
@@ -606,7 +619,7 @@ impl Engine {
             if item.body.is_empty() {
                 *y += cx.size * 1.6;
             }
-            let st = self.body(&cx);
+            let st = Style { color: self.theme.list_marker, ..self.body(&cx) };
             match item.task {
                 Some(done) => {
                     let baseline = first_baseline(&out.items[from..]).unwrap_or(y0 + cx.size * 1.2);
@@ -632,9 +645,9 @@ impl Engine {
                     let r = rect(bx, by, d, d);
                     let px = self.px();
                     match cx.depth {
-                        0 => out.items.push(Item::Rect { r, fill: cx.color, radius: d / 2.0 }),
-                        1 => out.items.push(Item::Frame { r: rect(bx + 0.5 * px, by + 0.5 * px, d - px, d - px), color: cx.color, width: px, radius: d / 2.0 }),
-                        _ => out.items.push(Item::Rect { r: rect(bx + 0.1 * d, by + 0.1 * d, 0.8 * d, 0.8 * d), fill: cx.color, radius: 0.0 }),
+                        0 => out.items.push(Item::Rect { r, fill: st.color, radius: d / 2.0 }),
+                        1 => out.items.push(Item::Frame { r: rect(bx + 0.5 * px, by + 0.5 * px, d - px, d - px), color: st.color, width: px, radius: d / 2.0 }),
+                        _ => out.items.push(Item::Rect { r: rect(bx + 0.1 * d, by + 0.1 * d, 0.8 * d, 0.8 * d), fill: st.color, radius: 0.0 }),
                     }
                 }
             }
@@ -765,10 +778,7 @@ impl Engine {
         if fenced {
             // VitePress: a tinted, rounded box; the title bold over the body.
             let pad = 16.0 * px;
-            let ground = match kind {
-                Callout::Details => self.theme.code_block,
-                _ => tint(colour, self.theme.background, if self.theme.is_dark() { 0.16 } else { 0.10 }),
-            };
+            let ground = self.theme.callout_ground(kind);
             let at = out.items.len();
             *y += pad;
             let st = Style { size: cx.size * 0.95, weight: 600.0, color: if kind == Callout::Details { cx.color } else { colour }, mono: false, line_height: 1.6, italic: false };
@@ -839,7 +849,10 @@ impl Engine {
                 let mut laid = Vec::with_capacity(ncol);
                 for c in 0..ncol {
                     let runs = row.get(c).unwrap_or(&empty);
-                    let st = Style { weight: if ri == 0 { 600.0 } else { 400.0 }, ..body };
+                    let st = match ri {
+                        0 => Style { weight: 600.0, color: self.theme.table_head, ..body },
+                        _ => body,
+                    };
                     let t = self.text(runs, st, None, Alignment::Start);
                     let cw = t.layout.calculate_content_widths();
                     min_w[c] = min_w[c].max(cw.min);
