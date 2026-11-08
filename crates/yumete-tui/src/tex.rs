@@ -88,7 +88,7 @@ pub type Ink = (u8, u8, u8);
 /// `display`: a PNG with a clear ground, or what was wrong with it. Never
 /// panics, and writes nothing to the screen.
 pub fn render(tex: &str, display: bool, ink: Ink, size: f32) -> Result<Picture, String> {
-    let (png, _, _) = draw(tex, display, ink, size.max(4.0), (size / 8.0).clamp(1.0, 4.0), 1.0)?;
+    let (png, _) = draw(tex, display, ink, size.max(4.0), (size / 8.0).clamp(1.0, 4.0), 1.0)?;
     let (width, height) = crate::graphics::png_size(&png).ok_or_else(|| "no picture came back".to_string())?;
     Ok(Picture { png, width, height })
 }
@@ -102,18 +102,20 @@ pub fn for_export(tex: &str, display: bool) -> Result<yumete_core::export::Formu
     const SIZE: f32 = 40.0;
     const PAD: f32 = 1.0;
     const SCALE: f64 = 1.1;
-    let (png, height, depth) = draw(tex, display, (0, 0, 0), SIZE, PAD, 3.0)?;
+    let (png, [width, height, depth]) = draw(tex, display, (0, 0, 0), SIZE, PAD, 3.0)?;
     let pad = f64::from(PAD / SIZE);
     Ok(yumete_core::export::Formula {
         png,
+        width: (width + 2.0 * pad) * SCALE,
         height: (height + depth + 2.0 * pad) * SCALE,
         depth: (depth + pad) * SCALE,
     })
 }
 
-/// The PNG, and how far the formula reaches above and below its baseline in
-/// `em`; `padding` pixels of clear ground round it, all of it `dpr` times.
-fn draw(tex: &str, display: bool, ink: Ink, size: f32, padding: f32, dpr: f32) -> Result<(Vec<u8>, f64, f64), String> {
+/// The PNG, and the formula's width and how far it reaches above and below
+/// its baseline, in `em`; `padding` pixels of clear ground round it, all of
+/// it `dpr` times.
+fn draw(tex: &str, display: bool, ink: Ink, size: f32, padding: f32, dpr: f32) -> Result<(Vec<u8>, [f64; 3]), String> {
     use ratex_types::color::Color;
     use ratex_types::math_style::MathStyle;
     let tex = tex.trim();
@@ -137,7 +139,7 @@ fn draw(tex: &str, display: bool, ink: Ink, size: f32, padding: f32, dpr: f32) -
             let laid = ratex_layout::layout(&ast, &layout);
             ratex_layout::validate_layout(&laid)?;
             let list = ratex_layout::to_display_list(&laid);
-            ratex_render::render_to_png(&list, &options).map(|png| (png, list.height, list.depth))
+            ratex_render::render_to_png(&list, &options).map(|png| (png, [list.width, list.height, list.depth]))
         }));
         QUIET_PANIC.with(|q| q.set(false));
         made

@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn a_horizontal_book_with_a_formula() {
         fn drawn(_: &str, _: bool) -> Result<crate::export::Formula, String> {
-            Ok(crate::export::Formula { png: vec![1, 2, 3], height: 1.0, depth: 0.2 })
+            Ok(crate::export::Formula { png: vec![1, 2, 3], width: 2.0, height: 1.0, depth: 0.2 })
         }
         let mut s = style();
         s.vertical = false;

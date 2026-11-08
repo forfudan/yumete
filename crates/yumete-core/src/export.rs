@@ -182,6 +182,8 @@ pub struct Style {
 #[derive(Debug, Clone)]
 pub struct Formula {
     pub png: Vec<u8>,
+    /// From the picture's left edge to its right.
+    pub width: f64,
     /// From the top of the picture to its foot.
     pub height: f64,
     /// How far the picture reaches below the baseline.
@@ -199,6 +201,42 @@ pub type Painter = fn(&str, bool) -> Result<Formula, String>;
 /// 行間 instead, which a browser cannot be asked to do; past four the run is
 /// turned on its side with the Latin around it, as print sets a long number.
 pub const TCY_MAX: usize = 4;
+
+/// **Whether a wide formula in a vertical line is turned on its side**
+/// (2026-11-08, not decided). `false`: every formula stands upright, and a
+/// wide one widens its whole 縱 to its own width. `true`: one wider than
+/// [`TURN_WIDER_THAN`] is turned 90° and runs down the 縱 like a Latin word,
+/// and a narrow one (`½`, `x^2`) stays upright. A formula on a line of its
+/// own (`$$`) stands upright either way.
+const TURN_WIDE_FORMULAS: bool = false;
+
+/// How wide, in `em`, an inline formula may be and still stand upright when
+/// [`TURN_WIDE_FORMULAS`] is on.
+const TURN_WIDER_THAN: f64 = 1.2;
+
+/// **Whether letters that belong to a Latin word are left out of 縱中橫**
+/// (2026-11-08, not decided). `false`: the terminal's rule exactly — any run
+/// of letters and digits up to the setting is squeezed into one square, so
+/// in `Old Books` the `Old` stands upright and `Books` lies on its side, and
+/// `don’t` is `don`, `’`, `t`. `true`: a run of letters joined to more Latin
+/// by a space, an apostrophe, a hyphen or a full stop is left to lie on its
+/// side with the rest of the phrase; digits, and a letter standing alone
+/// (`A股`), are still squeezed.
+const LATIN_WORDS_WHOLE: bool = false;
+
+/// What draws a formula into this page, and whether a wide one is turned.
+#[derive(Clone, Copy)]
+struct Drawing {
+    painter: Painter,
+    turn: bool,
+}
+
+impl Drawing {
+    fn of(style: &Style) -> Option<Drawing> {
+        let turn = TURN_WIDE_FORMULAS && style.vertical;
+        style.painter.map(|painter| Drawing { painter, turn })
+    }
+}
 
 /// Write `text` out as `format`. An EPUB is a zip, so what comes back for one
 /// is the book's text alone, the XHTML page inside it; [`export_file`] is the
@@ -556,7 +594,7 @@ fn line_into(
     dialect: Dialect,
     escape: fn(&str) -> String,
     source: crate::syntax::Syntax,
-    painter: Option<Painter>,
+    painter: Option<Drawing>,
 ) -> String {
     use crate::syntax::Syntax;
     let chars: Vec<char> = line.chars().collect();
@@ -609,7 +647,7 @@ fn render(
     dialect: Dialect,
     escape: fn(&str) -> String,
     // Set only for Markdown going to HTML: what draws its TeX.
-    paint: Option<Painter>,
+    paint: Option<Drawing>,
 ) -> String {
     use crate::markdown::Kind;
     let mut out = String::new();
@@ -661,12 +699,15 @@ fn render(
                 out.push_str(&escape(&std::mem::take(&mut plain)));
                 let start = at.max(span.start);
                 let end = span.end.min(to);
-                if let (Kind::Math, Some(paint)) = (span.kind, paint) {
+                if let (Kind::Math, Some(drawing)) = (span.kind, paint) {
                     let tex: String = chars[start..end].iter().collect();
                     // `$$` on both sides is a formula set on its own line.
                     let display = start >= 2 && chars[start - 2..start] == ['$', '$'];
-                    out.push_str(&match paint(&tex, display) {
-                        Ok(drawn) => formula_img(&drawn, &tex, display),
+                    out.push_str(&match (drawing.painter)(&tex, display) {
+                        Ok(drawn) => {
+                            let turn = drawing.turn && !display && drawn.width > TURN_WIDER_THAN;
+                            formula_img(&drawn, &tex, display, turn)
+                        }
                         // What will not draw is left as it was written, `$`s
                         // and all, which is what a reader of the source sees.
                         Err(_) => {
@@ -775,15 +816,28 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
 /// with the text — the print stylesheet changes the type size, and a size in
 /// pixels would not follow it. `--depth` puts its baseline on the line's
 /// across the page; down a 縱 it is centred instead (see [`html`]).
-fn formula_img(drawn: &Formula, tex: &str, display: bool) -> String {
+///
+/// **Turned** ([`TURN_WIDE_FORMULAS`]), the picture is set in a box as tall as
+/// it is wide and as wide as it is tall, and drawn rotated a quarter turn
+/// clockwise inside it, as a browser turns a Latin word in a 縱: a rotated
+/// picture alone would take up the room it had upright.
+fn formula_img(drawn: &Formula, tex: &str, display: bool, turn: bool) -> String {
     let class = if display { "math display" } else { "math" };
-    format!(
-        "<img class=\"{class}\" alt=\"{}\" style=\"height: {:.3}em; --depth: {:.3}em\" src=\"data:image/png;base64,{}\">",
-        escape_html(tex).replace('"', "&quot;"),
-        drawn.height,
-        -drawn.depth,
-        crate::preview::base64(&drawn.png),
-    )
+    let alt = escape_html(tex).replace('"', "&quot;");
+    let png = crate::preview::base64(&drawn.png);
+    match turn {
+        false => format!(
+            "<img class=\"{class}\" alt=\"{alt}\" style=\"height: {:.3}em; --depth: {:.3}em\" src=\"data:image/png;base64,{png}\">",
+            drawn.height, -drawn.depth,
+        ),
+        true => format!(
+            "<span class=\"math turned\" style=\"width: {h:.3}em; height: {w:.3}em\">\
+             <img class=\"math\" alt=\"{alt}\" style=\"width: {w:.3}em; height: {h:.3}em; transform: translateX({h:.3}em) rotate(90deg)\" src=\"data:image/png;base64,{png}\">\
+             </span>",
+            w = drawn.width,
+            h = drawn.height,
+        ),
+    }
 }
 
 /// **What a vertical page does to its text that CSS cannot be asked to**
@@ -807,7 +861,8 @@ fn formula_img(drawn: &Formula, tex: &str, display: bool) -> String {
 ///
 /// Nothing inside a tag is touched, nor what is in `<code>`, `<pre>`, a
 /// reading (`<rt>`), a table — set across, so it has no 縱 — or a script.
-fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool) -> String {
+/// `words_whole` is [`LATIN_WORDS_WHOLE`].
+fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool, words_whole: bool) -> String {
     const SKIP: &[&str] = &["code", "pre", "rt", "rp", "table", "script", "style", "svg", "math", "kbd", "samp"];
     let at_most = tatechuyoko.min(TCY_MAX);
     let mut out = String::with_capacity(body.len() + body.len() / 8);
@@ -826,7 +881,7 @@ fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool) -> String {
         };
         let held = std::mem::take(&mut text);
         out.push_str(&match skipping.is_empty() {
-            true => turned(&held, at_most, quotes),
+            true => turned(&held, at_most, quotes, words_whole),
             false => held,
         });
         out.push_str(tag);
@@ -847,7 +902,7 @@ fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool) -> String {
         rest = &rest[tag.len()..];
     }
     out.push_str(&match skipping.is_empty() {
-        true => turned(&text, at_most, quotes),
+        true => turned(&text, at_most, quotes, words_whole),
         false => text,
     });
     out
@@ -855,7 +910,12 @@ fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool) -> String {
 
 /// One run of text between tags, done as [`vertical_text`] says. An entity
 /// (`&amp;`) is passed over whole: its letters are not a word.
-fn turned(text: &str, at_most: usize, quotes: bool) -> String {
+///
+/// **An apostrophe is turned with the Latin** (`<span class="apos">`,
+/// 2026-11-08): left to the font, `’` down a 縱 is a closing quote, and a CJK
+/// font's vertical form for it is a corner bracket — KingHwa OldSong drew
+/// `don’t` as `don」t`.
+fn turned(text: &str, at_most: usize, quotes: bool, words_whole: bool) -> String {
     let latin = |c: Option<&char>| c.is_some_and(|&c| c.is_alphanumeric() && yumete_cjk::char_width(c) == 1);
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
@@ -880,19 +940,46 @@ fn turned(text: &str, at_most: usize, quotes: bool) -> String {
                 }
             })
             .collect();
+        let apostrophe =
+            |k: usize| chars[k] == '’' && latin(k.checked_sub(1).and_then(|b| chars.get(b))) && latin(chars.get(k + 1));
+        let plain_run = |out: &mut String, from: usize, to: usize| {
+            for (k, &c) in chars.iter().enumerate().take(to).skip(from) {
+                match apostrophe(k) {
+                    true => out.push_str("<span class=\"apos\">’</span>"),
+                    false => out.push(c),
+                }
+            }
+        };
         let mut at = 0;
-        for run in crate::zong::packed_runs(&chars.iter().collect::<String>(), at_most) {
-            out.extend(&chars[at..run.start]);
+        let runs = crate::zong::packed_runs(&chars.iter().collect::<String>(), at_most);
+        for run in runs.into_iter().filter(|run| !(words_whole && in_a_latin_word(&chars, run))) {
+            plain_run(&mut out, at, run.start);
             out.push_str("<span class=\"tcy\">");
             out.extend(&chars[run.clone()]);
             out.push_str("</span>");
             at = run.end;
         }
-        out.extend(&chars[at..]);
+        plain_run(&mut out, at, chars.len());
         out.push_str(entity);
         rest = &rest[plain.len() + entity.len()..];
     }
     out
+}
+
+/// Whether the run of letters at `run` belongs to a longer piece of Latin —
+/// joined to a letter or digit beyond it by a space, an apostrophe, a hyphen
+/// or a full stop — and so is not a 縱中橫 of its own under
+/// [`LATIN_WORDS_WHOLE`]. A run of digits never is: `1997` is squeezed
+/// whatever stands beside it.
+fn in_a_latin_word(chars: &[char], run: &std::ops::Range<usize>) -> bool {
+    if chars[run.clone()].iter().all(|c| c.is_numeric()) {
+        return false;
+    }
+    let latin = |at: Option<&char>| at.is_some_and(|&c| c.is_alphanumeric() && yumete_cjk::char_width(c) == 1);
+    let joins = |c: Option<&char>| c.is_some_and(|c| matches!(c, ' ' | '\'' | '’' | '-' | '‐' | '.'));
+    let before = run.start.checked_sub(1).and_then(|at| chars.get(at));
+    let before_that = run.start.checked_sub(2).and_then(|at| chars.get(at));
+    (joins(before) && latin(before_that)) || (joins(chars.get(run.end)) && latin(chars.get(run.end + 1)))
 }
 
 /// `&`, `<` and `>` as a browser needs them.
@@ -1039,6 +1126,9 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
              table { margin: 0 1em; }\n\
              pre { margin: 0 1em; max-block-size: 100%; overflow: auto; }\n\
              img.math { vertical-align: middle; }\n\
+             span.math.turned { display: inline-block; position: relative; vertical-align: middle; }\n\
+             span.math.turned img { position: absolute; left: 0; top: 0; transform-origin: 0 0; }\n\
+             .apos { text-orientation: sideways; }\n\
              sup.fn a { text-decoration: none; }\n",
         );
     }
@@ -1066,14 +1156,14 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
         body.push_str("</ol>\n</section>\n");
     }
     match style.vertical && lang != "en" {
-        true => vertical_text(&body, style.tatechuyoko, lang == "zh"),
+        true => vertical_text(&body, style.tatechuyoko, lang == "zh", LATIN_WORDS_WHOLE),
         false => body,
     }
 }
 
 /// The blocks as HTML.
 fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.dialects, Dialect::Html, escape_html, style.source, style.painter);
+    let line = |text: &str| line_into(text, style.dialects, Dialect::Html, escape_html, style.source, Drawing::of(style));
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -1100,7 +1190,7 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 let tex_source = !matches!(style.source, crate::syntax::Syntax::Typst | crate::syntax::Syntax::Text);
                 match style.painter.filter(|_| tex_source).map(|paint| paint(tex, true)) {
                     Some(Ok(drawn)) => {
-                        out.push_str(&format!("<p class=\"math\">{}</p>\n", formula_img(&drawn, tex, true)));
+                        out.push_str(&format!("<p class=\"math\">{}</p>\n", formula_img(&drawn, tex, true, false)));
                     }
                     _ => out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style))),
                 }
@@ -1177,7 +1267,7 @@ fn html_lines(lines: &[String], style: &Style) -> String {
                 false => "<br>\n",
             });
         }
-        out.push_str(&line_into(raw.trim(), style.dialects, Dialect::Html, escape_html, style.source, style.painter));
+        out.push_str(&line_into(raw.trim(), style.dialects, Dialect::Html, escape_html, style.source, Drawing::of(style)));
     }
     out
 }
@@ -1956,7 +2046,7 @@ mod tests {
 
     /// A formula that always draws: three bytes, a size anyone can check.
     fn drawn(_: &str, _: bool) -> Result<Formula, String> {
-        Ok(Formula { png: vec![1, 2, 3], height: 1.5, depth: 0.25 })
+        Ok(Formula { png: vec![1, 2, 3], width: 3.0, height: 1.5, depth: 0.25 })
     }
 
     fn refused(_: &str, _: bool) -> Result<Formula, String> {
@@ -2021,7 +2111,7 @@ mod tests {
         let out = export("他说：“走吧，‘快’。”\n", Format::Html, &style());
         assert!(out.contains("他说：『走吧，「快」。』"), "{out}");
         let out = export("他说 don’t 了。\n", Format::Html, &style());
-        assert!(out.contains("don</span>’<span") && !out.contains("」"), "{out}");
+        assert!(out.contains("don</span><span class=\"apos\">’</span><span") && !out.contains("」"), "{out}");
         let mut flat = style();
         flat.vertical = false;
         let out = export("他说：“走吧。”\n", Format::Html, &flat);
@@ -2099,5 +2189,26 @@ mod tests {
         s.source = crate::syntax::Syntax::Markdown;
         let out = export("写下：\n\n$$\nx_1\n$$\n", Format::Typst, &s);
         assert!(out.contains("\\$\\$\nx\\_1\n\\$\\$"), "{out}");
+    }
+
+    /// **Both answers to a question not yet decided** (2026-11-08): a wide
+    /// formula turned on its side, and Latin words kept whole. The switches
+    /// are off; these hold the other side ready.
+    #[test]
+    fn the_undecided_variants_are_ready() {
+        let drawn = Formula { png: vec![1, 2, 3], width: 3.0, height: 1.5, depth: 0.25 };
+        let turned = formula_img(&drawn, "x^2", false, true);
+        assert!(turned.starts_with("<span class=\"math turned\" style=\"width: 1.500em; height: 3.000em\">"), "{turned}");
+        assert!(turned.contains("transform: translateX(1.500em) rotate(90deg)"), "{turned}");
+        let whole = |text: &str| vertical_text(text, 4, true, true);
+        assert_eq!(whole("书店叫 Old Books。"), "书店叫 Old Books。");
+        assert_eq!(whole("e.g. 和 OK，A股"), "e.g. 和 <span class=\"tcy\">OK</span>，<span class=\"tcy\">A</span>股");
+        assert_eq!(whole("Win 10 与 1997年"), "Win <span class=\"tcy\">10</span> 与 <span class=\"tcy\">1997</span>年");
+        assert_eq!(whole("他说 don’t 了"), "他说 don<span class=\"apos\">’</span>t 了");
+        // The editor's rule, for comparison.
+        assert_eq!(
+            vertical_text("书店叫 Old Books。", 4, true, false),
+            "书店叫 <span class=\"tcy\">Old</span> Books。"
+        );
     }
 }
