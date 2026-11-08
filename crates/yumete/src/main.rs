@@ -197,8 +197,9 @@ fn main() -> ExitCode {
     // `ye --files jia` 列出名字配得上的檔——走檔是 fd 那一半，配名字是 fzf 那一半，
     // 而它也認拼音。
     let mut listing: Option<String> = None;
-    // `--import helix` or `--import lazyvim` (2026-11-06): another editor's
-    // config written once into ours, then exit. See `import.rs`.
+    // `--import helix` or `--import lazyvim` (2026-11-06), `vim` and `nvim`
+    // (2026-11-08): another editor's config written once into ours, then
+    // exit. See `import.rs`.
     let mut import: Option<String> = None;
     let mut g = Grep::default();
     // **還欠着一個值的那個旗標**（2026-10-03 一輪審查報來的）。
@@ -2584,11 +2585,18 @@ OPTIONS:
         --import EDITOR
                      Write another editor's config into yumete's, once, and
                      exit. helix: its config.toml, the keys, the settings
-                     yumete has and the theme. lazyvim: LazyVim's Space menu,
-                     the config the docs site shows. Nothing of the other
-                     editor runs. With no config.toml yet it writes one; with
-                     one, config.imported.toml beside it. What did not carry
-                     over is listed at the end of the file.
+                     yumete has and the theme. vim, nvim (or neovim): the
+                     settings, theme and maps yumete can take for certain.
+                     lazyvim: LazyVim's Space menu, the config the docs site
+                     shows, with your own maps and options on top.
+                     helix's import runs nothing. vim, nvim and lazyvim start
+                     your own editor headless, on a copy of its config in a
+                     temporary directory, and read what it set: any code in
+                     your config runs there, as each time you open that
+                     editor, but nothing of yours is written to. With no
+                     config.toml yet it writes one; with one,
+                     config.imported.toml beside it. What did not carry over
+                     is listed at the end of the file.
 
 SEARCHING FROM THE SHELL:
     -G, --grep PAT   Print every place PAT is, as `file:line:column:text`, and

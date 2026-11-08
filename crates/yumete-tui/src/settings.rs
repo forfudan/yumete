@@ -1347,6 +1347,26 @@ q = ":quit"
         assert!(ed.key_notes().is_empty(), "{:?}", ed.key_notes());
     }
 
+    /// **A `[keys.vim.normal]` line holds in Visual mode too** (2026-11-08):
+    /// `ye --import vim` writes a vim reader's Normal-mode maps there, and
+    /// says so. Not under helix's keys.
+    #[test]
+    fn a_vim_normal_line_holds_in_visual_mode() {
+        let line = "[keys.vim.normal]\nQ = \"goto_line_end\"\n";
+        let mut ed = laid(&format!("[keys]\npreset = \"vim\"\n{line}"));
+        press(&mut ed, "vQ");
+        assert!(ed.is_extending(), "still in Visual mode");
+        assert!(ed.cursor() > 10, "Q went to the line's end: {}", ed.cursor());
+        // Without the line, vim's Visual Q does not move.
+        let mut ed = laid("[keys]\npreset = \"vim\"\n");
+        press(&mut ed, "vQ");
+        assert_eq!(ed.cursor(), 0);
+        // Under helix's keys the vim table is not read.
+        let mut ed = laid(line);
+        press(&mut ed, "vQ");
+        assert!(ed.cursor() < 10, "{}", ed.cursor());
+    }
+
     /// **The sign shows the whole run held** (`␣b` of `Space bd`), and
     /// Backspace takes a digit typed in a group back before the level.
     #[test]
