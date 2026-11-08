@@ -190,7 +190,27 @@ const NOISE: &[&str] = &[
     "scroll", "helplang", "grepformat", "grepprg", "backupdir", "directory", "viewdir", "undodir", "maxmem",
     "maxmemtot", "syntax", "filetype", "modified", "buftype", "background", "encoding", "compatible", "cpoptions",
     "lines", "columns", "window", "term", "ttytype", "termencoding", "fileformat", "modelineexpr",
+    // Drawn by plugins (lualine, bufferline) on a timer of their own, so two
+    // runs of one config can differ (seen on a real LazyVim, 2026-11-08).
+    "statusline", "tabline", "winbar", "statuscolumn",
 ];
+
+/// Options whose value is a set of one-letter flags: `shortmess` came back
+/// `WTlOoCtFIc` from one run and `tlTWcFoIOC` from the other (real LazyVim).
+const FLAGS: &[&str] = &["shortmess", "cpoptions", "formatoptions", "mouse", "guioptions", "complete"];
+
+/// Whether two values of `name` say the same: lists compared as sets.
+fn same(name: &str, a: &Value, b: &Value) -> bool {
+    match (a.as_str(), b.as_str()) {
+        (Some(a), Some(b)) if FLAGS.contains(&name) => {
+            a.chars().collect::<BTreeSet<_>>() == b.chars().collect::<BTreeSet<_>>()
+        }
+        (Some(a), Some(b)) if a.contains(',') || b.contains(',') => {
+            a.split(',').collect::<BTreeSet<_>>() == b.split(',').collect::<BTreeSet<_>>()
+        }
+        _ => a == b,
+    }
+}
 
 /// **The options yumete has**, from what the reader changed.
 fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
@@ -199,7 +219,7 @@ fn options(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
         if from == Source::Vim && user.vims_own(script.as_deref()) {
             return false;
         }
-        base.value(name) != Some(value)
+        !base.value(name).is_some_and(|b| same(name, value, b))
     };
     let mut handled: BTreeSet<&str> = BTreeSet::new();
     let set = |own: &mut Own, line: String| {

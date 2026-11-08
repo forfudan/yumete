@@ -1877,13 +1877,13 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         assert!(LAZYVIM.trim_end().ends_with("indent_guides = true"), "the page's config ends inside [editor]");
         let base = nvim_dump(
             " ",
-            r#", "scrolloff": { "value": 4 }"#,
+            r#", "scrolloff": { "value": 4 }, "shortmess": { "value": "tlTWcFoIOC" }, "statusline": { "value": " " }"#,
             r#", { "mode": "n", "lhs": " bd", "rhs": "<Cmd>bd<CR>", "desc": "Delete Buffer" }"#,
             r#", "colorscheme": "tokyonight", "autocmds": [ { "event": "TextYankPost", "group": "lazyvim_highlight_yank" } ]"#,
         );
         let user = nvim_dump(
             " ",
-            r#", "scrolloff": { "value": 10 }"#,
+            r#", "scrolloff": { "value": 10 }, "shortmess": { "value": "WTlOoCtFIc" }, "statusline": { "value": "%!v:lua.x()" }"#,
             r#", { "mode": "n", "lhs": " fz", "rhs": "<Cmd>Telescope oldfiles<CR>", "desc": "Old files" }"#,
             r#", "colorscheme": "catppuccin-mocha", "autocmds": [ { "event": "TextYankPost", "group": "lazyvim_highlight_yank" } ]"#,
         );
@@ -1901,6 +1901,10 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         assert!(!out.contains("yank_flash = true  #"), "the page sets it already: {out}");
         assert!(!out.contains("lua/config/keymaps.lua: not read"), "{out}");
         assert!(out.contains("read by running your Neovim"), "{out}");
+        // Two runs of a real LazyVim gave `shortmess`'s flags in another
+        // order and lualine's statusline at another moment: neither is the
+        // reader's.
+        assert!(!out.contains("no counterpart in yumete: "), "{out}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
