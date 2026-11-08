@@ -147,6 +147,26 @@ fn a_wide_table_is_set_smaller_to_fit() {
     assert!(p.placed[0].laid.right <= 700.5, "reaches {}", p.placed[0].laid.right);
 }
 
+/// **A table is never cut off**: when even the smallest type cannot fit its
+/// longest words, the words break.
+#[test]
+fn a_table_too_wide_for_any_type_breaks_its_words() {
+    let n = 8;
+    let head = (0..n).map(|k| format!("Column{k}")).collect::<Vec<_>>().join(" | ");
+    let rule = vec!["---"; n].join(" | ");
+    let row = (0..n).map(|k| format!("https://example.org/a/very/long/path/{k}")).collect::<Vec<_>>().join(" | ");
+    let text = format!("| {head} |\n| {rule} |\n| {row} |\n");
+    let p = preview(&text, 500);
+    let laid = &p.placed[0].laid;
+    assert!(laid.right <= 500.5, "reaches {}", laid.right);
+    // The addresses wrap onto several lines rather than run out of the page.
+    let tallest = laid.items.iter().filter_map(|it| match it {
+        Item::Text { text, .. } => Some(text.layout.len()),
+        _ => None,
+    });
+    assert!(tallest.max().unwrap() > 2);
+}
+
 #[test]
 fn an_edit_lays_out_only_the_block_it_touched() {
     let mut text = String::new();

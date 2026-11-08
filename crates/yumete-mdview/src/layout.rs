@@ -90,6 +90,8 @@ pub(crate) struct Style {
     pub mono: bool,
     pub line_height: f32,
     pub italic: bool,
+    /// A word too long for its line may break anywhere: a table's last resort.
+    pub anywhere: bool,
 }
 
 /// Where a block is being laid: inherited by what is inside it.
@@ -176,7 +178,7 @@ impl Engine {
     }
 
     fn body(&self, cx: &Ctx) -> Style {
-        Style { size: cx.size, weight: 400.0, color: cx.color, mono: false, line_height: 1.6, italic: false }
+        Style { size: cx.size, weight: 400.0, color: cx.color, mono: false, line_height: 1.6, italic: false, anywhere: false }
     }
 
     // ── Pictures ────────────────────────────────────────────────────────────
@@ -358,6 +360,9 @@ impl Engine {
         b.push_default(StyleProperty::WhiteSpaceCollapse(if st.mono { WhiteSpaceCollapse::Preserve } else { WhiteSpaceCollapse::PreserveBreaks }));
         if st.italic {
             b.push_default(StyleProperty::FontStyle(FontStyle::Italic));
+        }
+        if st.anywhere {
+            b.push_default(StyleProperty::OverflowWrap(parley::OverflowWrap::Anywhere));
         }
         b.push_default(StyleProperty::Brush(Ink { color: st.color, ..Ink::default() }));
         let theme_ink = |marks: &Marks, color: Rgba| {
@@ -546,7 +551,7 @@ impl Engine {
                     _ => (0.85, false),
                 };
                 let color = self.theme.headings[(*level as usize).clamp(1, 6) - 1];
-                let st = Style { size: cx.size * k, weight: 600.0, color, mono: false, line_height: 1.25, italic: false };
+                let st = Style { size: cx.size * k, weight: 600.0, color, mono: false, line_height: 1.25, italic: false, anywhere: false };
                 let t = self.text(text, st, Some(w), Alignment::Start);
                 *y += self.put_text(t, x, *y, out, first);
                 if rule {
@@ -704,7 +709,7 @@ impl Engine {
     fn code(&mut self, info: &str, lines: &[String], span: (usize, usize), x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
         let px = self.px();
         let pad = 16.0 * px;
-        let st = Style { size: cx.size * 0.85, weight: 400.0, color: self.theme.text, mono: true, line_height: 1.45, italic: false };
+        let st = Style { size: cx.size * 0.85, weight: 400.0, color: self.theme.text, mono: true, line_height: 1.45, italic: false, anywhere: false };
         // The first line of code: under the opening fence, if there is one.
         let fenced = span.1 + 1 - span.0 > lines.len();
         let first = span.0 + usize::from(fenced);
@@ -828,7 +833,7 @@ impl Engine {
             let ground = self.theme.callout_ground(kind);
             let at = out.items.len();
             *y += pad;
-            let st = Style { size: cx.size * 0.95, weight: 600.0, color: if kind == Callout::Details { cx.color } else { colour }, mono: false, line_height: 1.6, italic: false };
+            let st = Style { size: cx.size * 0.95, weight: 600.0, color: if kind == Callout::Details { cx.color } else { colour }, mono: false, line_height: 1.6, italic: false, anywhere: false };
             let t = self.text(&title_runs, st, Some(w - 2.0 * pad), Alignment::Start);
             *y += self.put_text(t, x + pad, *y, out, span.0);
             if !body.is_empty() {
@@ -842,7 +847,7 @@ impl Engine {
             let bar = 0.25 * self.base();
             let pad = self.base();
             *y += 8.0 * px;
-            let st = Style { size: cx.size, weight: 600.0, color: colour, mono: false, line_height: 1.6, italic: false };
+            let st = Style { size: cx.size, weight: 600.0, color: colour, mono: false, line_height: 1.6, italic: false, anywhere: false };
             let t = self.text(&title_runs, st, Some(w - bar - pad), Alignment::Start);
             *y += self.put_text(t, x + bar + pad, *y, out, span.0);
             if !body.is_empty() {
@@ -861,8 +866,10 @@ impl Engine {
     /// **A short cell is never broken** (the 「城市」 that came out one
     /// character a line): a cell whose whole text is at most six ems wide
     /// counts that width as its narrowest, not one 漢字's. A table that still
-    /// does not fit is set smaller, down to three quarters, before cells
-    /// break anywhere they can.
+    /// does not fit is set smaller, down to 0.65 of the body, its short cells
+    /// still whole; and if its longest words do not fit even then, a word too
+    /// long for its column breaks inside itself. **A table is never cut off at
+    /// the page's edge**: a picture cannot be scrolled sideways.
     #[allow(clippy::too_many_arguments)]
     fn table(
         &mut self,
@@ -879,14 +886,16 @@ impl Engine {
         let px = self.px();
         let ncol = align.len().max(head.len()).max(rows.iter().map(|r| r.1.len()).max().unwrap_or(0)).max(1);
         let empty: Vec<Inline> = Vec::new();
-        let sizes = [1.0f32, 0.875, 0.75, 0.65];
+        // Smaller type first; then, at the smallest, words broken anywhere.
+        let attempts = [(1.0f32, false), (0.875, false), (0.75, false), (0.65, false), (0.65, true)];
         let sum = |v: &[f32]| v.iter().sum::<f32>();
-        for (attempt, k) in sizes.iter().enumerate() {
+        for (attempt, &(k, anywhere)) in attempts.iter().enumerate() {
+            let k = &k;
             let size = cx.size * k;
             // Smaller type, tighter cells.
             let pad_x = if *k >= 0.875 { 13.0 * px * k } else { 7.0 * px };
             let pad_y = 6.0 * px * k;
-            let body = Style { size, ..self.body(&cx) };
+            let body = Style { size, anywhere, ..self.body(&cx) };
             let mut cells: Vec<Vec<Text>> = Vec::new();
             let mut min_w = vec![0f32; ncol];
             let mut keep_w = vec![0f32; ncol];
@@ -904,14 +913,19 @@ impl Engine {
                     let cw = t.layout.calculate_content_widths();
                     min_w[c] = min_w[c].max(cw.min);
                     max_w[c] = max_w[c].max(cw.max);
-                    keep_w[c] = keep_w[c].max(if cw.max <= 6.0 * size { cw.max } else { cw.min });
+                    // A short cell is kept whole; a long one asks for four ems at least,
+                    // so a column of sentences is not squeezed to its longest word.
+                    keep_w[c] = keep_w[c].max(if cw.max <= 6.0 * size { cw.max } else { cw.min.max(4.0 * size) });
                     laid.push(t);
                 }
                 cells.push(laid);
             }
             let furniture = ncol as f32 * 2.0 * pad_x + (ncol + 1) as f32 * px;
             let room = w - furniture;
-            if sum(&keep_w) > room && attempt + 1 < sizes.len() {
+            let last = attempt + 1 == attempts.len();
+            // Keep every short cell whole while type can still shrink; at the
+            // smallest, break words only if the narrowest cells cannot fit.
+            if !last && ((attempt + 2 < attempts.len() && sum(&keep_w) > room) || sum(&min_w) > room) {
                 continue;
             }
             // From `low` towards `high`, the room there is shared by how much
@@ -928,7 +942,10 @@ impl Engine {
             } else if sum(&min_w) <= room {
                 share(&min_w, &keep_w)
             } else {
-                min_w.clone()
+                // Not even a character a column fits: the columns share what
+                // there is, in proportion, and the cells overflow their own
+                // column rather than the page.
+                min_w.iter().map(|m| m * room.max(0.0) / sum(&min_w).max(1e-3)).collect()
             };
             let table_w = sum(&colw) + furniture;
             let ty0 = *y;
