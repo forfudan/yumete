@@ -88,6 +88,32 @@ pub type Ink = (u8, u8, u8);
 /// `display`: a PNG with a clear ground, or what was wrong with it. Never
 /// panics, and writes nothing to the screen.
 pub fn render(tex: &str, display: bool, ink: Ink, size: f32) -> Result<Picture, String> {
+    let (png, _, _) = draw(tex, display, ink, size.max(4.0), (size / 8.0).clamp(1.0, 4.0), 1.0)?;
+    let (width, height) = crate::graphics::png_size(&png).ok_or_else(|| "no picture came back".to_string())?;
+    Ok(Picture { png, width, height })
+}
+
+/// **A formula for `:export html`** (2026-11-08): black on clear, drawn at
+/// three times a 40-pixel em so it stays sharp when printed, and measured in
+/// `em` of the text around it — 1.1 of it, a little larger than the text as
+/// KaTeX sets it (1.21), since a CJK line is already a full square tall.
+/// Handed to the editor by `main` ([`yumete_core::Editor::set_formula_painter`]).
+pub fn for_export(tex: &str, display: bool) -> Result<yumete_core::export::Formula, String> {
+    const SIZE: f32 = 40.0;
+    const PAD: f32 = 1.0;
+    const SCALE: f64 = 1.1;
+    let (png, height, depth) = draw(tex, display, (0, 0, 0), SIZE, PAD, 3.0)?;
+    let pad = f64::from(PAD / SIZE);
+    Ok(yumete_core::export::Formula {
+        png,
+        height: (height + depth + 2.0 * pad) * SCALE,
+        depth: (depth + pad) * SCALE,
+    })
+}
+
+/// The PNG, and how far the formula reaches above and below its baseline in
+/// `em`; `padding` pixels of clear ground round it, all of it `dpr` times.
+fn draw(tex: &str, display: bool, ink: Ink, size: f32, padding: f32, dpr: f32) -> Result<(Vec<u8>, f64, f64), String> {
     use ratex_types::color::Color;
     use ratex_types::math_style::MathStyle;
     let tex = tex.trim();
@@ -97,11 +123,11 @@ pub fn render(tex: &str, display: bool, ink: Ink, size: f32) -> Result<Picture, 
     let colour = Color { r: ink.0 as f32 / 255.0, g: ink.1 as f32 / 255.0, b: ink.2 as f32 / 255.0, a: 1.0 };
     let style = if display { MathStyle::Display } else { MathStyle::Text };
     let options = ratex_render::RenderOptions {
-        font_size: size.max(4.0),
-        padding: (size / 8.0).clamp(1.0, 4.0),
+        font_size: size,
+        padding,
         background_color: Color { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
         font_dir: String::new(),
-        device_pixel_ratio: 1.0,
+        device_pixel_ratio: dpr,
     };
     let made = quietly(|| {
         QUIET_PANIC.with(|q| q.set(true));
@@ -111,17 +137,15 @@ pub fn render(tex: &str, display: bool, ink: Ink, size: f32) -> Result<Picture, 
             let laid = ratex_layout::layout(&ast, &layout);
             ratex_layout::validate_layout(&laid)?;
             let list = ratex_layout::to_display_list(&laid);
-            ratex_render::render_to_png(&list, &options)
+            ratex_render::render_to_png(&list, &options).map(|png| (png, list.height, list.depth))
         }));
         QUIET_PANIC.with(|q| q.set(false));
         made
     });
-    let png = match made {
-        Ok(result) => result.map_err(|e| tidy(&e))?,
-        Err(_) => return Err("RaTeX could not lay this formula out".to_string()),
-    };
-    let (width, height) = crate::graphics::png_size(&png).ok_or_else(|| "no picture came back".to_string())?;
-    Ok(Picture { png, width, height })
+    match made {
+        Ok(result) => result.map_err(|e| tidy(&e)),
+        Err(_) => Err("RaTeX could not lay this formula out".to_string()),
+    }
 }
 
 /// RaTeX's message, without the type name it opens with.
@@ -343,6 +367,23 @@ mod tests {
         // Bigger type, a bigger picture.
         let big = render(r"x^2", false, INK, 40.0).unwrap();
         assert!(big.width > inline.width && big.height > inline.height);
+    }
+
+    /// **A formula for an HTML export** (2026-11-08) is measured in `em` of
+    /// the text: about a line tall for `x^2`, reaching below the baseline
+    /// for a fraction, and drawn three times finer than it is shown.
+    #[test]
+    fn a_formula_for_a_page_is_measured_in_em() {
+        let x = for_export(r"x^2", false).expect("x^2");
+        assert!(x.height > 0.8 && x.height < 1.6, "{}", x.height);
+        assert!(x.depth >= 0.0 && x.depth < x.height, "{}", x.depth);
+        let (_, tall) = crate::graphics::png_size(&x.png).expect("a PNG");
+        // 1.1 of an em of text is one em of the 40-pixel drawing, three times.
+        let shown = x.height / 1.1 * 40.0 * 3.0;
+        assert!((f64::from(tall) - shown).abs() <= 2.0, "{tall} pixels for {shown}");
+        let frac = for_export(r"\frac{a}{b}", true).unwrap();
+        assert!(frac.height > x.height && frac.depth > x.depth);
+        assert!(for_export(r"\frac{a", false).is_err());
     }
 
     /// **A broken formula is said, never a panic**: an unknown command, an

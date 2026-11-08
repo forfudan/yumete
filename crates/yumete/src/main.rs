@@ -633,6 +633,10 @@ fn main() -> ExitCode {
     }
 
     let mut editor = Editor::new();
+    // **Formulas in an HTML export are drawn by RaTeX** (2026-11-08), which
+    // lives in the front end: `:export html`, `ye --export html` and the
+    // browser preview all go through the editor's export.
+    editor.set_formula_painter(yumete_tui::tex::for_export);
     let launch = std::time::Instant::now();
     let mut marks: Vec<(&str, std::time::Duration)> = Vec::new();
     // Each mark is the time *since the launch*; the deltas are worked out
