@@ -3,11 +3,15 @@
 //!
 //! Decided that day, after the survey in `local/survey-0.20/import.md`:
 //!
-//! - **Nothing runs.** helix's `config.toml` is read as TOML; LazyVim is only
+//! - **helix runs nothing.** Its `config.toml` is read as TOML. LazyVim is
 //!   *recognised* (`lazyvim.json`, `lazy-lock.json`, `lua/config/lazy.lua`),
-//!   and what is written is the config on the docs site's LazyVim page. The
-//!   reader's own Lua is not read: importing vim and Neovim settings needs
-//!   Neovim itself to say what they are, and that is a later version's work.
+//!   and what is written is the config on the docs site's LazyVim page.
+//! - **vim, Neovim and LazyVim run the reader's own editor, headless**
+//!   (2026-11-08, `--import vim` and `nvim` new, `lazyvim` reading the
+//!   reader's own keys and options on top of the page's config): only the
+//!   editor can say what a config sets. It runs on a copy of the config, in
+//!   a home of its own, and never writes to the reader's files ([`dump`]);
+//!   what it says is translated in [`vim`], only where that is certain.
 //! - **Once, on request.** yumete never reads another editor's files on its
 //!   own (see `write_the_first_config` in `main.rs`): this is a command the
 //!   reader types, and its result is an ordinary config file.
@@ -21,6 +25,9 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+mod dump;
+mod vim;
 
 // **The LazyVim config, one copy** (2026-11-06), kept in `yumete-config`.
 // The docs site's `from/lazyvim.md` shows the same TOML, and a test below
@@ -139,16 +146,16 @@ pub struct Imported {
     pub skipped: usize,
 }
 
-/// The header's first lines, shared by both imports. `from` is the file
-/// read (helix) or the file that showed LazyVim is there.
-fn header(what: &str, from: &Path, when: &str, beside: bool) -> String {
+/// The header's first lines, shared by the imports. `word` is what was
+/// typed after `--import`; `from` is the file read (helix), the file that
+/// showed LazyVim is there, or the config the editor was run with.
+fn header(what: &str, word: &str, from: &Path, when: &str, beside: bool) -> String {
     let label = match what {
         "LazyVim" => "LazyVim found in",
         _ => "Source",
     };
     let mut out = format!(
-        "# Imported from {what} by `yumete --import {}` on {when}.\n# {label}: {}\n",
-        what.to_ascii_lowercase(),
+        "# Imported from {what} by `yumete --import {word}` on {when}.\n# {label}: {}\n",
         one_line(&from.display().to_string())
     );
     if beside {
@@ -790,7 +797,7 @@ pub fn helix(source: &str, from: &Path, when: &str, beside: bool, languages: Opt
     if let Some(languages) = languages {
         helix_languages(languages, &mut got);
     }
-    let mut text = header("helix", from, when, beside);
+    let mut text = header("helix", "helix", from, when, beside);
     if got.macros {
         text.push_str(
             "# A run written with @ presses yumete's keys: helix's, with the\n\
@@ -914,15 +921,17 @@ fn helix_languages(source: &str, got: &mut Gathered) {
 
 // ---- LazyVim -------------------------------------------------------------
 
-/// **LazyVim's keys**: the shared config, and the list of what in `nvim` it
-/// leaves alone. `sign` is the file that said LazyVim is there.
-pub fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool) -> Imported {
+/// **LazyVim's keys**: the shared config, the reader's own keys and options
+/// on top when their Neovim could be run (decision 2), and the list of what
+/// in `nvim` it leaves alone. `sign` is the file that said LazyVim is
+/// there; `own` is what the run read, or why there was none.
+fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool, own: Result<&vim::Own, &str>) -> Imported {
     let mut skipped = Vec::new();
-    for file in ["lua/config/keymaps.lua", "lua/config/options.lua", "lua/config/autocmds.lua"] {
-        if nvim.join(file).is_file() {
-            skipped.push(format!(
-                "{file}: not read; yumete runs no Lua, and reading Neovim's own settings is for a later version"
-            ));
+    if own.is_err() {
+        for file in ["lua/config/keymaps.lua", "lua/config/options.lua", "lua/config/autocmds.lua"] {
+            if nvim.join(file).is_file() {
+                skipped.push(format!("{file}: not read, as Neovim could not be run"));
+            }
         }
     }
     let plugins = std::fs::read_dir(nvim.join("lua").join("plugins"))
@@ -957,24 +966,98 @@ pub fn lazyvim(nvim: &Path, sign: &Path, when: &str, beside: bool) -> Imported {
          yumete has none of these"
             .to_string(),
     );
-    let mut text = header("LazyVim", sign, when, beside);
-    text.push_str(&format!(
-        "# The config on the Coming from LazyVim page: {LAZYVIM_PAGE}\n\
-         # Nothing in your Neovim config was run.\n\n"
-    ));
+    let mut text = header("LazyVim", "lazyvim", sign, when, beside);
+    text.push_str(&format!("# The config on the Coming from LazyVim page: {LAZYVIM_PAGE}\n"));
+    match own {
+        Ok(own) => {
+            text.push_str("# Your own keys and options come after it, read by running your Neovim\n# headless on a copy of its config.\n");
+            text.push_str(&said_lines("Neovim", own));
+        }
+        Err(why) => text.push_str(&format!("# Your own keys and options were not read: {}.\n", one_line(why))),
+    }
+    text.push('\n');
+    // **The reader's `[editor]` lines go inside the page's**, which ends the
+    // config (a test holds it there): TOML has one table of a name.
+    let mut config = LAZYVIM.to_string();
+    let mut carried_own = 0;
+    if let Ok(own) = own {
+        for line in &own.editor {
+            let key = line.split(" = ").next().unwrap_or("");
+            if !LAZYVIM.lines().any(|l| l.split(" = ").next() == Some(key)) {
+                config.push_str(line);
+                config.push('\n');
+            }
+        }
+        carried_own = own.carried;
+    }
     let config = match surround {
-        true => with_mini_surround(LAZYVIM),
-        false => LAZYVIM.to_string(),
+        true => with_mini_surround(&config),
+        false => config,
     };
-    text.push_str(&config);
-    text.push_str(&not_carried(&skipped));
-    // Every line that binds or sets something; a group's `label` names one.
-    let carried = config
+    // Every line of the page that binds or sets something; a group's
+    // `label` names one.
+    let carried = LAZYVIM
         .lines()
         .map(str::trim_start)
         .filter(|l| !l.starts_with('#') && !l.starts_with('[') && l.contains(" = ") && !l.starts_with("label "))
-        .count();
-    Imported { text, carried, skipped: skipped.len() }
+        .count()
+        + if surround { 4 } else { 0 };
+    text.push_str(&config);
+    if let Ok(own) = own {
+        text.push_str(&theme_and_keys(own));
+        skipped.extend(own.skipped.iter().cloned());
+    }
+    text.push_str(&not_carried(&skipped));
+    Imported { text, carried: carried + carried_own, skipped: skipped.len() }
+}
+
+/// What the editor said while starting, and the note on `@` runs, as
+/// header lines.
+fn said_lines(editor: &str, own: &vim::Own) -> String {
+    let mut out = String::new();
+    if let Some(said) = &own.said {
+        out.push_str(&format!("# {editor} said while starting: {}\n", one_line(said)));
+    }
+    if own.runs {
+        out.push_str(
+            "# A run written with @ presses yumete's vim keys, not your own maps\n\
+             # (a map that relied on another map of yours loses it).\n",
+        );
+    }
+    out
+}
+
+/// The `[theme]` and `[keys.vim.…]` tables of a vim or Neovim import.
+fn theme_and_keys(own: &vim::Own) -> String {
+    let mut out = String::new();
+    if !own.theme.is_empty() {
+        out.push_str("\n[theme]\n");
+        for line in &own.theme {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out.push_str(&own.keys);
+    out
+}
+
+/// **A vim or Neovim import's file**: the vim keymap, the reader's
+/// settings, theme and keys, and the list.
+fn vim_file(what: &str, word: &str, from: &Path, version: &str, when: &str, beside: bool, own: &vim::Own) -> Imported {
+    let mut text = header(what, word, from, when, beside);
+    text.push_str(&format!("# Read by running {what} {version} headless on a copy of your config.\n"));
+    text.push_str(&said_lines(what, own));
+    text.push_str("\n[keys]\npreset = \"vim\"\n");
+    if !own.editor.is_empty() {
+        text.push_str("\n[editor]\n");
+        for line in &own.editor {
+            text.push_str(line);
+            text.push('\n');
+        }
+    }
+    text.push_str(&theme_and_keys(own));
+    text.push_str(&not_carried(&own.skipped));
+    Imported { text, carried: own.carried, skipped: own.skipped.len() }
 }
 
 /// The LazyVim config with the mini.surround extra's keys: three lines at
@@ -1055,6 +1138,128 @@ fn inline(value: &toml::Value) -> String {
     }
 }
 
+// ---- vim and Neovim --------------------------------------------------------
+
+/// `$NVIM_APPNAME`, or `nvim`.
+fn nvim_app(env: Env) -> String {
+    env("NVIM_APPNAME").filter(|v| !v.is_empty()).unwrap_or_else(|| "nvim".to_string())
+}
+
+/// The name of Neovim's data directory: Windows adds `-data`, so that it is
+/// not the config directory beside it in `%LOCALAPPDATA%`.
+fn nvim_data_name(app: &str) -> String {
+    match cfg!(windows) {
+        true => format!("{app}-data"),
+        false => app.to_string(),
+    }
+}
+
+/// **Neovim's data directory**, where lazy.nvim keeps the plugins:
+/// `$XDG_DATA_HOME`, `%LOCALAPPDATA%` on Windows, or `~/.local/share`.
+fn nvim_data_dir(env: Env) -> Option<PathBuf> {
+    let name = nvim_data_name(&nvim_app(env));
+    if let Some(dir) = dir_of(env, "XDG_DATA_HOME") {
+        return Some(dir.join(name));
+    }
+    if cfg!(windows) {
+        if let Some(dir) = dir_of(env, "LOCALAPPDATA") {
+            return Some(dir.join(name));
+        }
+    }
+    let home = dir_of(env, "HOME").or_else(|| dir_of(env, "USERPROFILE"))?;
+    Some(home.join(".local").join("share").join(name))
+}
+
+/// **Run the reader's Neovim and a baseline**, each on the same copy:
+/// `--clean` for `--import nvim`, LazyVim alone for `--import lazyvim`.
+fn read_nvim(program: &str, env: Env, lazyvim: bool, timeout: std::time::Duration) -> Result<(vim::Dump, vim::Dump, Option<String>), dump::Failed> {
+    let mut sandbox = dump::Sandbox::new()?;
+    let app = nvim_app(env);
+    if let Some(config) = nvim_dir(env) {
+        let to = sandbox.config().join(&app);
+        sandbox.copy(&config, &to, &[])?;
+    }
+    if let Some(data) = nvim_data_dir(env) {
+        let to = sandbox.data().join(nvim_data_name(&app));
+        sandbox.copy(&data, &to, dump::DATA_LEFT_OUT)?;
+    }
+    let script = ("dump.lua", dump::DUMP_LUA);
+    let user = sandbox.run(program, &dump::nvim_args(dump::Nvim::Own, &sandbox), script, timeout)?;
+    let how = if lazyvim { dump::Nvim::LazyVimBase } else { dump::Nvim::Clean };
+    let base = sandbox.run(program, &dump::nvim_args(how, &sandbox), script, timeout)?;
+    Ok((vim::Dump::from_json(&user.json), vim::Dump::from_json(&base.json), user.said))
+}
+
+/// The places vim may keep a vimrc, in `:h vimrc`'s order.
+fn vimrc_places(env: Env) -> Vec<PathBuf> {
+    let Some(home) = dir_of(env, "HOME").or_else(|| dir_of(env, "USERPROFILE")) else { return Vec::new() };
+    let xdg = dir_of(env, "XDG_CONFIG_HOME").unwrap_or_else(|| home.join(".config"));
+    let mut places = vec![home.join(".vimrc"), home.join(".vim").join("vimrc"), xdg.join("vim").join("vimrc")];
+    if cfg!(windows) {
+        places.extend([home.join("_vimrc"), home.join("vimfiles").join("vimrc")]);
+    }
+    places
+}
+
+/// **The reader's vimrc**, or `None`. `$VIMINIT` is a config in a variable,
+/// which this import does not read.
+pub fn vimrc_path(env: Env) -> Result<Option<PathBuf>, String> {
+    if env("VIMINIT").is_some_and(|v| !v.is_empty()) {
+        return Err("$VIMINIT is set; --import vim reads a vimrc file".to_string());
+    }
+    Ok(vimrc_places(env).into_iter().find(|p| p.is_file()))
+}
+
+/// **Run the reader's Vim and a baseline** (`-u NONE`) on a copy of the
+/// vimrc and the directories beside it.
+fn read_vim(program: &str, env: Env, vimrc: &Path, timeout: std::time::Duration) -> Result<(vim::Dump, vim::Dump, Option<String>), dump::Failed> {
+    let mut sandbox = dump::Sandbox::new()?;
+    let home = sandbox.home.clone();
+    let config = sandbox.config();
+    let sandboxed = |name: &str| -> Option<String> {
+        match name {
+            "HOME" | "USERPROFILE" => Some(home.display().to_string()),
+            "XDG_CONFIG_HOME" => Some(config.display().to_string()),
+            _ => env(name),
+        }
+    };
+    let (from, to) = (vimrc_places(env), vimrc_places(&sandboxed));
+    let Some(at) = from.iter().position(|p| p == vimrc) else {
+        return Err(dump::Failed::Copy(format!("{} is not where vim looks", vimrc.display())));
+    };
+    // The vimrc, and the directory each place is in when it is a
+    // directory of vim's own (`~/.vim`, `~/.config/vim`, `vimfiles`).
+    let left_out = &["undo", "swap", "backup", "view", "sessions"];
+    for (a, b) in from.iter().zip(&to) {
+        match a.file_name().is_some_and(|n| n == "vimrc") {
+            true => sandbox.copy(a.parent().unwrap_or(a), b.parent().unwrap_or(b), left_out)?,
+            false => sandbox.copy(a, b, &[])?,
+        }
+    }
+    let script = ("dump.vim", dump::DUMP_VIM);
+    let user = sandbox.run(program, &dump::vim_args(Some(&to[at])), script, timeout)?;
+    let base = sandbox.run(program, &dump::vim_args(None), script, timeout)?;
+    Ok((vim::Dump::from_json(&user.json), vim::Dump::from_json(&base.json), user.said))
+}
+
+/// **The LazyVim import**: the page's config, and the reader's own keys and
+/// options when their Neovim runs; the page's config alone, and why, when
+/// it does not (decision 2).
+fn import_lazyvim(env: Env, nvim: &Path, sign: &Path, when: &str, beside: bool) -> Imported {
+    match read_nvim("nvim", env, true, dump::TIMEOUT) {
+        Ok((user, base, said)) => {
+            let mut own = vim::translate(&user, &base, vim::Source::LazyVim);
+            own.said = said;
+            lazyvim(nvim, sign, when, beside, Ok(&own))
+        }
+        Err(failed) => {
+            let why = failed.said(false);
+            println!("yumete: your own keys and options were not read: {why}");
+            lazyvim(nvim, sign, when, beside, Err(&why))
+        }
+    }
+}
+
 // ---- the command ---------------------------------------------------------
 
 /// The wall clock for the header: `2026-11-06 17:30`.
@@ -1103,14 +1308,67 @@ pub fn run(which: &str) -> ExitCode {
                 eprintln!("looked for lazyvim.json, and LazyVim in lazy-lock.json and lua/config/lazy.lua");
                 return ExitCode::FAILURE;
             };
-            lazyvim(&nvim, &sign, &when, beside)
+            import_lazyvim(&env, &nvim, &sign, &when, beside)
         }
-        "vim" | "nvim" | "neovim" => {
-            eprintln!("yumete: importing vim and Neovim settings is not there yet; --import takes helix or lazyvim");
-            return ExitCode::from(2);
+        "nvim" | "neovim" => {
+            let Some(nvim) = nvim_dir(&env) else {
+                eprintln!("yumete: cannot tell where Neovim's config is (no HOME)");
+                return ExitCode::FAILURE;
+            };
+            // **A LazyVim config gets the LazyVim import** (decision 3).
+            if let Some(sign) = lazyvim_sign(&nvim) {
+                println!("yumete: this Neovim is LazyVim, so its Space menu comes too (as --import lazyvim)");
+                import_lazyvim(&env, &nvim, &sign, &when, beside)
+            } else {
+                if !nvim.is_dir() {
+                    eprintln!("yumete: no Neovim config at {}", nvim.display());
+                    return ExitCode::FAILURE;
+                }
+                match read_nvim("nvim", &env, false, dump::TIMEOUT) {
+                    Ok((user, base, said)) => {
+                        let mut own = vim::translate(&user, &base, vim::Source::Neovim);
+                        own.said = said;
+                        vim_file("Neovim", which, &nvim, &user.version, &when, beside, &own)
+                    }
+                    Err(failed) => {
+                        eprintln!(
+                            "yumete: --import {which} runs your Neovim to read its settings, and {}. Nothing was written.",
+                            failed.said(false)
+                        );
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
+        }
+        "vim" => {
+            let vimrc = match vimrc_path(&env) {
+                Ok(Some(vimrc)) => vimrc,
+                Ok(None) => {
+                    eprintln!("yumete: no vimrc found; looked for ~/.vimrc, ~/.vim/vimrc and ~/.config/vim/vimrc");
+                    return ExitCode::FAILURE;
+                }
+                Err(why) => {
+                    eprintln!("yumete: {why}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            match read_vim("vim", &env, &vimrc, dump::TIMEOUT) {
+                Ok((user, base, said)) => {
+                    let mut own = vim::translate(&user, &base, vim::Source::Vim);
+                    own.said = said;
+                    vim_file("Vim", "vim", &vimrc, &user.version, &when, beside, &own)
+                }
+                Err(failed) => {
+                    eprintln!(
+                        "yumete: --import vim runs your Vim to read its settings, and {}. Nothing was written.",
+                        failed.said(true)
+                    );
+                    return ExitCode::FAILURE;
+                }
+            }
         }
         other => {
-            eprintln!("yumete: --import takes helix or lazyvim, not '{other}'");
+            eprintln!("yumete: --import takes helix, vim, nvim or lazyvim, not '{other}'");
             return ExitCode::from(2);
         }
     };
@@ -1442,7 +1700,7 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         let sign = lazyvim_sign(&nvim).unwrap();
         assert_eq!(sign, nvim.join("lazyvim.json"));
 
-        let imported = lazyvim(&nvim, &sign, "2026-11-06 17:30", false);
+        let imported = lazyvim(&nvim, &sign, "2026-11-06 17:30", false, Err("there is no `nvim` on PATH"));
         let out = &imported.text;
         assert!(out.contains(LAZYVIM), "{out}");
         assert!(out.contains("lua/config/keymaps.lua: not read"), "{out}");
@@ -1454,7 +1712,7 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         // The mini.surround extra lands on yumete's own surround keys, and the
         // file still reads as one config.
         std::fs::write(nvim.join("lazyvim.json"), "{ \"extras\": [\"lazyvim.plugins.extras.coding.mini-surround\"] }").unwrap();
-        let with = lazyvim(&nvim, &sign, "2026-11-07 17:30", false);
+        let with = lazyvim(&nvim, &sign, "2026-11-07 17:30", false, Err("there is no `nvim` on PATH"));
         let out = &with.text;
         assert!(out.contains("gsa = \"@ys\"\ngsd = \"@ds\"\ngsr = \"@cs\"\n"), "{out}");
         assert!(out.contains("[keys.select]\ngsa = \"surround_add\"\n"), "{out}");
@@ -1511,5 +1769,279 @@ language-servers = ["gopls", "golangci-lint-lsp"]
             }
         }
         assert_eq!(blocks.join("\n"), LAZYVIM, "{} has drifted from crates/yumete-config/src/lazyvim.toml", page.display());
+    }
+
+    // ---- vim and Neovim ----------------------------------------------------
+
+    /// A Neovim dump with these options and maps, the rest as `--clean`.
+    fn nvim_dump(leader: &str, options: &str, maps: &str, extra: &str) -> vim::Dump {
+        let json = format!(
+            r#"{{ "nvim": "0.12.6", "leader": "{leader}", "options": {{ "number": {{ "value": false }},
+               "relativenumber": {{ "value": false }}, "tabstop": {{ "value": 8 }}, "shiftwidth": {{ "value": 8 }},
+               "expandtab": {{ "value": false }}, "clipboard": {{ "value": "" }}, "runtimepath": {{ "value": "a" }}
+               {options} }}, "keymaps": [ {{ "mode": "n", "lhs": "Y", "rhs": "y$" }},
+               {{ "mode": "n", "lhs": "grn", "rhs": "", "callback": true }} {maps} ] {extra} }}"#
+        );
+        vim::Dump::from_json(&serde_json::from_str(&json).unwrap())
+    }
+
+    #[test]
+    fn a_neovim_import_carries_what_the_reader_changed_and_lists_the_rest() {
+        let base = nvim_dump(" ", "", "", r#", "keymaps2": {}"#);
+        let user = nvim_dump(
+            " ",
+            r#", "number": { "value": true }, "relativenumber": { "value": true }, "tabstop": { "value": 4 },
+               "shiftwidth": { "value": 0 }, "clipboard": { "value": "unnamedplus" }, "runtimepath": { "value": "b" }"#,
+            r#", { "mode": "n", "lhs": " ", "rhs": "" },
+               { "mode": "n", "lhs": " w", "rhs": "<Cmd>write<CR>", "desc": "Save file" },
+               { "mode": "n", "lhs": " ff", "rhs": "", "callback": "telescope.builtin.find_files", "desc": "Find files" },
+               { "mode": "n", "lhs": " x", "rhs": "", "callback": true, "desc": "Say hi" },
+               { "mode": "n", "lhs": "<C-S>", "rhs": "<Cmd>w<CR><Esc>" },
+               { "mode": "n", "lhs": "K", "rhs": "", "callback": "vim.lsp.buf.hover" },
+               { "mode": "v", "lhs": "<lt>", "rhs": "<lt>gv" },
+               { "mode": "i", "lhs": "jk", "rhs": "<Esc>" },
+               { "mode": "o", "lhs": "ie", "rhs": ":<C-U>normal! ggVG<CR>" },
+               { "mode": "n", "lhs": "grn", "rhs": "", "callback": true }"#,
+            r#", "colorscheme": "tokyonight-night",
+               "autocmds": [ { "event": "TextYankPost", "desc": "Highlight when yanking" } ]"#,
+        );
+        let mut own = vim::translate(&user, &base, vim::Source::Neovim);
+        own.said = Some("E5113: Error while calling lua chunk".to_string());
+        let imported = vim_file("Neovim", "nvim", Path::new("/home/me/.config/nvim"), "0.12.6", "2026-11-08 12:00", false, &own);
+        let out = &imported.text;
+        assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
+        assert!(out.contains("\n[keys]\npreset = \"vim\"\n"), "{out}");
+        for line in ["line_numbers = \"relative\"", "tab_width = 4", "indent_width = 4", "yank_flash = true"] {
+            assert!(out.contains(line), "{line}: {out}");
+        }
+        assert!(out.contains("[theme]\nname = \"tokyo-night\"\nmode = \"dark\"\n"), "{out}");
+        assert!(out.contains("[keys.vim.normal.space]\nw = { run = \":write\", label = \"Save file\" }\n"), "{out}");
+        assert!(out.contains("[keys.vim.normal.space.f]\nf = { run = \"file_picker\", label = \"Find files\" }\n"), "{out}");
+        assert!(out.contains("C-s = \":write\"\n"), "{out}");
+        assert!(out.contains("[keys.vim.select]\n\"<\" = \"@<gv\"\n"), "{out}");
+        assert!(out.contains("[keys.vim.insert]\njk = \"normal_mode\"\n"), "{out}");
+        assert!(out.contains("# Neovim said while starting: E5113"), "{out}");
+        assert!(out.contains("# A run written with @ presses yumete's vim keys"), "{out}");
+        let (_, list) = out.split_once("# Not carried over:\n").expect("the list");
+        assert!(list.contains("n <leader>x (Say hi): a Lua function"), "{list}");
+        assert!(list.contains("o ie: yumete has no Operator-pending table"), "{list}");
+        assert!(list.contains("<leader>w: takes yumete's Space w"), "{list}");
+        assert!(list.contains("options with no counterpart in yumete: clipboard\n"), "{list}");
+        assert!(list.contains("1 map already does the same in yumete: n K"), "{list}");
+        // The leader on <Nop> is left without a word (decision 13), and so is
+        // what the baseline has too.
+        assert!(!list.contains("Space key itself") && !list.contains("grn") && !list.contains("runtimepath"), "{list}");
+        assert_eq!(imported.skipped, list.lines().count());
+    }
+
+    #[test]
+    fn a_deleted_neovim_y_is_vim_s_again() {
+        let base = nvim_dump(" ", "", "", "");
+        let json = r#"{ "nvim": "0.12.6", "options": {}, "keymaps": [ { "mode": "n", "lhs": "grn", "rhs": "", "callback": true } ] }"#;
+        let user = vim::Dump::from_json(&serde_json::from_str(json).unwrap());
+        let own = vim::translate(&user, &base, vim::Source::Neovim);
+        assert!(own.keys.contains("[keys.vim.normal]\nY = \"@yy\"\n"), "{}", own.keys);
+        assert!(own.skipped.is_empty(), "{:?}", own.skipped);
+        // Lua's empty table is `{}`, Vim's booleans are numbers.
+        let lenient = r#"{ "vim": "9.1", "options": { "number": { "value": 1, "script": "~/.vimrc" } }, "keymaps": {} }"#;
+        let dump = vim::Dump::from_json(&serde_json::from_str(lenient).unwrap());
+        let none = vim::Dump::from_json(&serde_json::from_str(r#"{ "options": { "number": { "value": 0 } } }"#).unwrap());
+        let own = vim::translate(&dump, &none, vim::Source::Vim);
+        assert_eq!(own.editor, ["line_numbers = \"absolute\""]);
+    }
+
+    /// **The reader's LazyVim keys and options go on the page's config**
+    /// (decision 2): `[editor]` lines inside the page's own, the keys under
+    /// `[keys.vim]`, and a LazyVim key the reader deleted taken away.
+    #[test]
+    fn lazyvim_carries_the_reader_s_own_on_top() {
+        assert!(LAZYVIM.trim_end().ends_with("indent_guides = true"), "the page's config ends inside [editor]");
+        let base = nvim_dump(
+            " ",
+            r#", "scrolloff": { "value": 4 }"#,
+            r#", { "mode": "n", "lhs": " bd", "rhs": "<Cmd>bd<CR>", "desc": "Delete Buffer" }"#,
+            r#", "colorscheme": "tokyonight", "autocmds": [ { "event": "TextYankPost", "group": "lazyvim_highlight_yank" } ]"#,
+        );
+        let user = nvim_dump(
+            " ",
+            r#", "scrolloff": { "value": 10 }"#,
+            r#", { "mode": "n", "lhs": " fz", "rhs": "<Cmd>Telescope oldfiles<CR>", "desc": "Old files" }"#,
+            r#", "colorscheme": "catppuccin-mocha", "autocmds": [ { "event": "TextYankPost", "group": "lazyvim_highlight_yank" } ]"#,
+        );
+        let own = vim::translate(&user, &base, vim::Source::LazyVim);
+        let dir = scratch("lazy-own");
+        std::fs::write(dir.join("lazyvim.json"), "{ \"extras\": [\"lazyvim.plugins.extras.coding.mini-surround\"] }").unwrap();
+        let imported = lazyvim(&dir, &dir.join("lazyvim.json"), "t", false, Ok(&own));
+        let out = &imported.text;
+        assert_eq!(complaints(out), Vec::<String>::new(), "{out}");
+        assert!(out.contains("indent_guides = true\nscrolloff = 10\n"), "{out}");
+        assert!(out.contains("\n[theme]\nname = \"catppuccin\"\nmode = \"dark\"\n"), "{out}");
+        assert!(out.contains("[keys.vim.normal.space.b]\nd = \"no_op\"\n"), "{out}");
+        assert!(out.contains("[keys.vim.normal.space.f]\nz = { run = \"global_recent_file_picker\", label = \"Old files\" }\n"), "{out}");
+        assert!(out.contains("[keys.select]\ngsa = \"surround_add\""), "{out}");
+        assert!(!out.contains("yank_flash = true  #"), "the page sets it already: {out}");
+        assert!(!out.contains("lua/config/keymaps.lua: not read"), "{out}");
+        assert!(out.contains("read by running your Neovim"), "{out}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every file under `dir`, with its bytes and when it was written.
+    fn snapshot(dir: &Path) -> Vec<(PathBuf, Vec<u8>, Option<std::time::SystemTime>)> {
+        let mut out = Vec::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(at) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&at) else { continue };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let meta = std::fs::symlink_metadata(&path).unwrap();
+                if meta.is_dir() {
+                    stack.push(path.clone());
+                }
+                let bytes = if meta.is_file() { std::fs::read(&path).unwrap() } else { Vec::new() };
+                out.push((path, bytes, meta.modified().ok()));
+            }
+        }
+        out.sort();
+        out
+    }
+
+    /// Whether a program runs here; the tests that need it say so and pass.
+    fn installed(program: &str) -> bool {
+        let found = std::process::Command::new(program).arg("--version").output().is_ok();
+        if !found {
+            eprintln!("skipped: no {program}");
+        }
+        found
+    }
+
+    /// A home with a Neovim config in it, and the environment that names it.
+    fn nvim_home(name: &str, init: &str) -> PathBuf {
+        let home = scratch(name);
+        let config = home.join(".config").join("nvim");
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(config.join("init.lua"), init).unwrap();
+        home
+    }
+
+    fn env_of(home: &Path) -> impl Fn(&str) -> Option<String> + '_ {
+        move |name: &str| (name == "HOME").then(|| home.display().to_string())
+    }
+
+    /// **The author's hard rule** (decision 2): an import writes nothing
+    /// to the reader's Neovim config, data or state, though their config
+    /// and its plugins write to all three, and to `~`, as they start.
+    #[test]
+    fn running_neovim_never_writes_to_the_reader_s_files() {
+        if !installed("nvim") {
+            return;
+        }
+        let home = nvim_home(
+            "nvim-run",
+            r#"vim.g.mapleader = " "
+vim.opt.number = true
+vim.opt.relativenumber = true
+vim.opt.tabstop = 4
+vim.opt.expandtab = true
+vim.keymap.set("n", "<leader>w", "<cmd>write<cr>", { desc = "Save file" })
+vim.keymap.set("n", "<C-h>", "<C-w>h")
+vim.keymap.del("n", "Y")
+vim.api.nvim_create_autocmd("VimEnter", { callback = function()
+  vim.keymap.set("n", "<leader>sd", vim.lsp.buf.definition, { desc = "Definition" })
+end })
+local function put(path, text)
+  vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
+  local f = io.open(path, "w"); f:write(text); f:close()
+end
+put(vim.fn.stdpath("config") .. "/lazy-lock.json", "{ \"rewritten\": true }")
+put(vim.fn.stdpath("data") .. "/lazy/old-plugin/plugin/x.lua", "-- changed")
+put(vim.fn.stdpath("data") .. "/lazy/new-plugin/x.lua", "")
+put(vim.fn.stdpath("state") .. "/nvim/log", "x")
+put(vim.fn.expand("~/written-by-the-config"), "x")
+"#,
+        );
+        std::fs::write(home.join(".config/nvim/lazy-lock.json"), "{ \"lazy.nvim\": { \"commit\": \"abc\" } }\n").unwrap();
+        let plugin = home.join(".local/share/nvim/lazy/old-plugin/plugin");
+        std::fs::create_dir_all(&plugin).unwrap();
+        std::fs::write(plugin.join("x.lua"), "-- as installed\n").unwrap();
+        let before = snapshot(&home);
+        let (user, base, said) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
+        assert_eq!(snapshot(&home), before, "the reader's files are as they were");
+        assert_eq!(said, None);
+        let own = vim::translate(&user, &base, vim::Source::Neovim);
+        let out = vim_file("Neovim", "nvim", &home, &user.version, "t", false, &own).text;
+        assert_eq!(complaints(&out), Vec::<String>::new(), "{out}");
+        for line in [
+            "line_numbers = \"relative\"",
+            "tab_width = 4",
+            "tab_inserts = \"spaces\"",
+            "w = { run = \":write\", label = \"Save file\" }",
+            "d = { run = \"goto_definition\", label = \"Definition\" }",
+            "C-h = \"jump_view_left\"",
+            "Y = \"@yy\"",
+        ] {
+            assert!(out.contains(line), "{line}: {out}");
+        }
+        let _ = std::fs::remove_dir_all(&home);
+    }
+
+    /// A config that waits for input is killed; one that fails part way is
+    /// read as far as it got, and what Neovim said is kept.
+    #[test]
+    fn a_neovim_that_hangs_or_fails_is_handled() {
+        if !installed("nvim") {
+            return;
+        }
+        let home = nvim_home("nvim-hang", "vim.opt.tabstop = 3\nlocal name = vim.fn.input(\"name? \")\n");
+        let started = std::time::Instant::now();
+        let failed = read_nvim("nvim", &env_of(&home), false, std::time::Duration::from_secs(2)).unwrap_err();
+        assert!(matches!(failed, dump::Failed::TimedOut(_)), "{failed:?}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(8));
+        let home = nvim_home("nvim-error", "vim.opt.tabstop = 3\nrequire(\"no.such.module\")\nvim.opt.shiftwidth = 5\n");
+        let (user, base, said) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
+        assert!(said.as_deref().is_some_and(|s| s.contains("E5113") || s.contains("no.such.module")), "{said:?}");
+        let own = vim::translate(&user, &base, vim::Source::Neovim);
+        assert!(own.editor.contains(&"tab_width = 3".to_string()), "{:?}", own.editor);
+        assert!(matches!(
+            read_nvim("yumete-no-such-editor", &env_of(&home), false, dump::TIMEOUT),
+            Err(dump::Failed::NotInstalled)
+        ));
+        let _ = std::fs::remove_dir_all(&home);
+        let _ = std::fs::remove_dir_all(scratch("nvim-hang"));
+    }
+
+    #[test]
+    fn running_vim_never_writes_to_the_reader_s_files() {
+        if !installed("vim") {
+            return;
+        }
+        let home = scratch("vim-run");
+        std::fs::write(
+            home.join(".vimrc"),
+            "let mapleader = \",\"\nset number tabstop=4 shiftwidth=2 expandtab\nnnoremap <leader>w :w<CR>\n\
+             nnoremap Y y$\ninoremap jk <Esc>\ncall writefile(['x'], expand('~/.vim/written-by-the-vimrc'))\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(home.join(".vim/plugin")).unwrap();
+        std::fs::write(home.join(".vim/plugin/p.vim"), "nnoremap <leader>p :echo 'p'<CR>\n").unwrap();
+        let env = env_of(&home);
+        let vimrc = vimrc_path(&env).unwrap().unwrap();
+        assert_eq!(vimrc, home.join(".vimrc"));
+        let before = snapshot(&home);
+        let (user, base, _) = read_vim("vim", &env, &vimrc, dump::TIMEOUT).unwrap();
+        assert_eq!(snapshot(&home), before, "the reader's files are as they were");
+        let own = vim::translate(&user, &base, vim::Source::Vim);
+        let out = vim_file("Vim", "vim", &vimrc, &user.version, "t", false, &own).text;
+        assert_eq!(complaints(&out), Vec::<String>::new(), "{out}");
+        for line in ["line_numbers = \"absolute\"", "indent_width = 2", "\",w\" = \":write\"", "jk = \"normal_mode\""] {
+            assert!(out.contains(line), "{line}: {out}");
+        }
+        assert!(out.contains("n <leader>p, p.vim:1: yumete has no :echo 'p'"), "{out}");
+        assert!(out.contains("already does the same in yumete: n Y"), "{out}");
+        let viminit = |name: &str| match name {
+            "VIMINIT" => Some("set nu".to_string()),
+            _ => env(name),
+        };
+        assert!(vimrc_path(&viminit).is_err());
+        let _ = std::fs::remove_dir_all(&home);
     }
 }
