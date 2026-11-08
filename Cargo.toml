@@ -5,6 +5,7 @@ members = [
   "crates/yumete-config",
   "crates/yumete-ime",
   "crates/yumete-tui",
+  "crates/yumete-mdview",
   "crates/yumete-tables",
   "crates/yumete",
 ]
