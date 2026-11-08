@@ -1384,6 +1384,11 @@ mod tests {
         assert_eq!(plain(&para("山顶的{气象站|qìxiàngzhàn}。")), "山顶的气象站(qìxiàngzhàn)。");
         assert_eq!(plain(&para("{气象|qì|xiàng}站")), "气(qì)象(xiàng)站");
         assert_eq!(plain(&para("写 `{雨|yǔ}` 即可")), "写 {雨|yǔ} 即可");
+        // In a table cell the reading's bar is the cell's.
+        match &parse("| 月份 | 雨量 |\n| --- | --- |\n| 七月 | {雨|yǔ}多 |\n")[0].kind {
+            BlockKind::Table { rows, .. } => assert_eq!(plain(&rows[0].1[1]), "雨(yǔ)多"),
+            other => panic!("not a table: {other:?}"),
+        }
         let mut cache = Cache::default();
         cache.set_ruby(yumete_core::ruby::Dialects::only(yumete_core::ruby::Dialect::Html));
         let blocks = parse_with("{雨|yǔ}", &mut cache);

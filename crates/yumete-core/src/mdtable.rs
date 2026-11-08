@@ -314,9 +314,23 @@ impl Wall {
 /// The flag is what lets the editor decide whether a `|` about to be typed is
 /// escaped: the backslash that escapes it is already in the buffer, not in the
 /// text being inserted.
+///
+/// **Nor is the bar of a reading in braces** (2026-11-08): `{雨|yǔ}` in a
+/// cell is ruby (YFM's brace form, [`crate::ruby::Dialect::Markdown`]), and
+/// its bar belongs to it. Always, not only while `:ruby-markdown` reads the
+/// form: which cell a character is in is the file's grammar, and a table
+/// whose columns moved when a view was switched would be edited in the wrong
+/// cells. The editor, the export and the preview all split rows here.
 pub fn pipes_from(text: &str, escaped: bool) -> Vec<usize> {
     let mut out = Vec::new();
     let mut escaped = escaped;
+    let readings = match text.contains('{') {
+        true => {
+            let chars: Vec<char> = text.chars().collect();
+            crate::ruby::groups(&chars, crate::ruby::Dialects::only(crate::ruby::Dialect::Markdown))
+        }
+        false => Vec::new(),
+    };
     for (i, c) in text.chars().enumerate() {
         if escaped {
             escaped = false;
@@ -324,6 +338,7 @@ pub fn pipes_from(text: &str, escaped: bool) -> Vec<usize> {
         }
         match c {
             '\\' => escaped = true,
+            '|' if readings.iter().any(|g| g.start < i && i < g.end) => {}
             '|' => out.push(i),
             _ => {}
         }
@@ -1485,6 +1500,19 @@ mod tests {
     }
 
     use super::*;
+
+    /// **A reading in braces keeps its bar in its cell** (2026-11-08), as
+    /// an escaped bar does; a bar in a code span is still a wall, as GFM has
+    /// it, and so is one in braces that are not a reading.
+    #[test]
+    fn a_reading_in_braces_is_one_cell() {
+        assert_eq!(split("| {雨量|yǔ|liàng} | 76 |"), ["{雨量|yǔ|liàng}", "76"]);
+        assert_eq!(split("| a\\|b | {雪|xuě} |"), ["a\\|b", "{雪|xuě}"]);
+        assert_eq!(split("| `{a|b}` | c |"), ["`{a", "b}`", "c"]);
+        assert_eq!(split("| {|x} | y |"), ["{", "x}", "y"]);
+        // A sentence holding only a reading is not a pipeless row.
+        assert!(!has_bar("山顶的{气象站|qìxiàngzhàn}。"));
+    }
 
     fn lines(text: &str) -> Vec<String> {
         text.lines().map(str::to_string).collect()

@@ -7087,12 +7087,31 @@ impl Editor {
         }
         if view.separator == Separator::Pipe {
             let escaped = at.is_some_and(|a| self.backslash_before(a));
-            if crate::mdtable::has_bare_pipe(text, escaped) {
+            let walls = match at {
+                Some(at) => self.walls_change(at..at, text),
+                None => crate::mdtable::has_bare_pipe(text, escaped),
+            };
+            if walls {
                 return Some("'|' 分隔格子——格子裏要寫，寫成 \\|".to_string());
             }
             return text.chars().find_map(|c| self.cell_refuses_shape(c));
         }
         text.chars().find_map(|c| self.cell_refuses(c))
+    }
+
+    /// **Whether writing `text` over `range` moves a wall of the row it is
+    /// on** (2026-11-08): the row read again as it would then stand, so a
+    /// `|` that a backslash or a reading in braces (`{雨|yǔ}`) holds is the
+    /// cell's, as [`crate::mdtable::pipes_from`] reads the row everywhere.
+    fn walls_change(&self, range: std::ops::Range<usize>, text: &str) -> bool {
+        let rope = self.current_buffer().rope();
+        let line = rope.char_to_line(range.start.min(rope.len_chars()));
+        let start = rope.line_to_char(line);
+        let row: String = crate::zong::line_chars(rope, line).into_iter().collect();
+        let (from, to) = (range.start - start, (range.end - start).min(row.chars().count()));
+        let cut = |at: usize| row.char_indices().nth(at).map_or(row.len(), |(i, _)| i);
+        let after = format!("{}{text}{}", &row[..cut(from)], &row[cut(to)..]);
+        crate::mdtable::pipes_from(&row, false).len() != crate::mdtable::pipes_from(&after, false).len()
     }
 
     /// Whether an odd run of backslashes sits immediately before `at`, so the
@@ -7366,11 +7385,9 @@ impl Editor {
         // The escape again: `\|` inside a cell is not a boundary, so taking it
         // out is not taking a boundary out.
         if self.table.as_ref().map(|v| v.separator) == Some(Separator::Pipe) {
-            let escaped = self.backslash_before(range.start);
-            let text = rope.slice(range).to_string();
-            return (crate::mdtable::has_bare_pipe(&text, escaped)
-                || text.contains(['\n', '\r']))
-            .then(|| say!("table.divider-cannot-be-deleted"));
+            let text = rope.slice(range.clone()).to_string();
+            return (text.contains(['\n', '\r']) || self.walls_change(range, ""))
+                .then(|| say!("table.divider-cannot-be-deleted"));
         }
         rope.slice(range)
             .chars()

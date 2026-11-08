@@ -529,6 +529,26 @@ mod brace_tests {
         assert!(ed.readings_on_line(0).is_empty());
     }
 
+    /// **A reading in braces may be written into a table cell** (2026-11-08):
+    /// its bar is the cell's, as everywhere a row is split, and a bare bar is
+    /// still refused; cutting the closing brace, which would leave the bar a
+    /// wall, is refused too.
+    #[test]
+    fn a_reading_in_braces_goes_into_a_table_cell() {
+        let mut ed = with("| 月份 | 备注 |\n| --- | --- |\n| 七月 | 雨多 |\n", crate::syntax::Syntax::Markdown);
+        ed.sel.set_anchor(26);
+        ed.sel.set_head(26);
+        assert!(ed.enter_table(), "{}", ed.status());
+        let at = ed.current_buffer().text().find("雨多").map(|b| ed.current_buffer().text()[..b].chars().count()).unwrap();
+        assert_eq!(ed.cell_refuses_text_at(Some(at), "{雨|yǔ}"), None);
+        assert!(ed.cell_refuses_text_at(Some(at), "|").is_some());
+        let _ = ed.current_buffer_mut().replace(at..at + 1, "{雨|yǔ}");
+        let close = at + 5;
+        assert!(ed.cell_refuses_cut(close..close + 1).is_some(), "the bar would open a cell");
+        assert_eq!(ed.cell_refuses_cut(at + 2..at + 3), None, "without its bar the reading is the cell's text");
+        assert_eq!(ed.cell_refuses_cut(at..at + 6), None, "the whole reading goes");
+    }
+
     /// `:ruby-format markdown` writes every reading as braces, and back; the
     /// reading under the cursor opens as it reads.
     #[test]

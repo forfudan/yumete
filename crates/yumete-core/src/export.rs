@@ -2655,6 +2655,10 @@ mod tests {
         s.settings.ruby_markdown = true;
         s.source = crate::syntax::Syntax::Typst;
         assert!(!export("{雨|yǔ}\n", Format::Html, &s).contains("<ruby>"));
+        // In a table cell the reading's bar is the cell's.
+        s.source = crate::syntax::Syntax::Markdown;
+        let out = export("| 月份 | 雨量 |\n| --- | --- |\n| 七月 | {雨量|yǔ|liàng}多 |\n", Format::Html, &s);
+        assert!(out.contains("<td><ruby>雨<rt>yǔ</rt></ruby><ruby>量<rt>liàng</rt></ruby>多</td>"), "{out}");
         let mut words = Settings::default();
         assert_eq!(words.read_line("no-ruby-markdown").unwrap(), None);
         assert!(!words.ruby_markdown && !words.dialects().contains(Dialect::Markdown));
