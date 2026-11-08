@@ -54,7 +54,7 @@ tree-sitter-mojo = { git = "https://github.com/forfudan/tree-sitter-mojo", tag =
 # Typst's own lexer and parser and Apache-2.0 like this repository. It colours
 # the tokens of a Typst manuscript; telling prose from code stays with the
 # block scanner in `markdown::typst`.
-tree-sitter-typst = { git = "https://github.com/forfudan/tree-sitter-typst", tag = "v0.1.1" }
+tree-sitter-typst = { git = "https://github.com/forfudan/tree-sitter-typst", tag = "v0.1.2" }
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-toml-ng = "0.7"
