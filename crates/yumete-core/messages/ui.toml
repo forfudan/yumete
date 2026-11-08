@@ -543,6 +543,18 @@ zhs = "{0} 排版后的页面"
 en = "the typeset page of {0}"
 
 [[message]]
+# 缓冲区选择器的预览栏里，选中的是一个 Markdown 预览标签时的那一行说明。{0} 是它渲染的那份 Markdown 文件的路径（草稿）
+key = "preview.picker-note-markdown"
+zhs = "{0} 渲染后的页面"
+en = "the rendered page of {0}"
+
+[[message]]
+# Markdown 预览标签里，第一屏还没画出来的时候（草稿）
+key = "preview.rendering"
+zhs = "渲染中……"
+en = "rendering…"
+
+[[message]]
 # 預覽服務器開啟了
 key = "preview.running"
 zhs = "预览：{0}(`:view-preview` 停止)"

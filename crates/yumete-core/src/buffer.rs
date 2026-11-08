@@ -359,12 +359,13 @@ pub struct Buffer {
 
 }
 
-/// **What a preview tab shows** (2026-11-08): one kind for now, with room
-/// for a Markdown preview beside it.
+/// **What a preview tab shows** (2026-11-08).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewKind {
     /// tinymist's page of a Typst file.
     Typst,
+    /// A Markdown file rendered by `yumete-mdview`, drawn by the front end.
+    Markdown,
 }
 
 impl PreviewKind {
@@ -372,12 +373,41 @@ impl PreviewKind {
     pub fn name(self) -> &'static str {
         match self {
             PreviewKind::Typst => "typst",
+            PreviewKind::Markdown => "markdown",
+        }
+    }
+
+    /// The kind of preview a file of `syntax` gets: Markdown's own, else
+    /// the typeset page.
+    pub fn for_syntax(syntax: crate::syntax::Syntax) -> PreviewKind {
+        match syntax {
+            crate::syntax::Syntax::Markdown => PreviewKind::Markdown,
+            _ => PreviewKind::Typst,
+        }
+    }
+
+    /// The kind of preview a file gets by its name: Markdown's own for a
+    /// `.md`, the typeset page otherwise.
+    pub fn for_path(path: &Path) -> PreviewKind {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        match crate::syntax::from_extension(&name) {
+            Some(crate::syntax::Syntax::Markdown) => PreviewKind::Markdown,
+            _ => PreviewKind::Typst,
+        }
+    }
+
+    /// The syntax of the files this kind previews.
+    pub fn syntax(self) -> crate::syntax::Syntax {
+        match self {
+            PreviewKind::Typst => crate::syntax::Syntax::Typst,
+            PreviewKind::Markdown => crate::syntax::Syntax::Markdown,
         }
     }
 
     pub fn parse(word: &str) -> Option<PreviewKind> {
         match word {
             "typst" => Some(PreviewKind::Typst),
+            "markdown" => Some(PreviewKind::Markdown),
             _ => None,
         }
     }

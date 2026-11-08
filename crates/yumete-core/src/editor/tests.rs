@@ -38670,3 +38670,194 @@ fn a_session_keeps_the_preview_tabs() {
     assert!(!again.has_a_page_window());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// A Markdown file of its own, opened, in a folder of its own.
+fn a_markdown_note(name: &str) -> (Editor, std::path::PathBuf) {
+    let dir = tmp().join(format!("yumete-md-preview-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("notes.md"), "# 筆記\n\n那年冬天。\n\n## 第二節\n\n雪。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("notes.md")).unwrap();
+    (ed, dir)
+}
+
+/// **A Markdown file's preview is a tab of its own** (2026-11-08):
+/// `:view-preview` asks for it beside the text, a Markdown preview and not
+/// a typeset page; on the screen `on` says so, bare and `off` close the tab,
+/// `:q` in its window closes only the window; the picker says what it is.
+#[test]
+fn a_markdown_file_has_a_preview_tab_of_its_own() {
+    let (mut ed, dir) = a_markdown_note("tab");
+    let main = dir.join("notes.md");
+    ed.execute(":view-preview").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: true })
+    );
+    ed.execute(":view-preview-window").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: false })
+    );
+    // The front end opened it.
+    let text = ed.live_window();
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
+    let id = ed.preview_in(page).unwrap();
+    assert_eq!(ed.preview_kind_of(id), Some(crate::buffer::PreviewKind::Markdown));
+    assert_eq!(ed.live_window(), text, "the keys stay in the text");
+    assert_eq!(ed.buffers[ed.buffer_with(id).unwrap()].display_name(), say!("preview.tab", "notes.md"));
+    ed.execute(":view-preview on").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
+    assert_eq!(ed.status(), say!("preview.window-open"));
+    // It follows this file's cursor, by line.
+    press(&mut ed, "jjjj");
+    assert_eq!(ed.page_target(id).map(|t| t.line), Some(4));
+    // `:q` in its window closes the window and leaves the tab.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.page_window_has_the_keys());
+    ed.execute(":q").unwrap();
+    assert_eq!(ed.previews().len(), 1);
+    assert!(!ed.has_a_page_window());
+    // Bare shows it again; `off` closes the tab.
+    ed.execute(":view-preview").unwrap();
+    assert!(ed.take_preview_request().is_some(), "bare is `on` while it is off the screen");
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    assert_eq!(ed.previews().len(), 1, "the same tab");
+    ed.execute(":view-preview off").unwrap();
+    assert!(ed.previews().is_empty());
+    assert_eq!(ed.status(), say!("preview.window-closed"));
+    // `:bc` in it closes it too, and the picker says what it is.
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    ed.execute(":buffer").unwrap();
+    ed.on_key(Key::Down);
+    let (name, lines) = ed.picker_preview(10).expect("a preview pane");
+    assert_eq!(name, say!("preview.tab", "notes.md"));
+    let real = std::fs::canonicalize(&main).unwrap();
+    assert_eq!(lines, vec![say!("preview.picker-note-markdown", real.display())]);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    ed.execute(":bc").unwrap();
+    assert!(ed.previews().is_empty());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Its keys scroll, and `J`, `K` and `5G` are the page reader's**: the
+/// scroll keys reach the front end as steps; `:` goes on to the command
+/// line; writing writes nothing.
+#[test]
+fn a_markdown_preview_s_keys_scroll_and_nothing_is_text() {
+    let (mut ed, dir) = a_markdown_note("keys");
+    let main = dir.join("notes.md");
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    press(&mut ed, "jk");
+    ed.on_key(Key::Ctrl('d'));
+    ed.on_key(Key::Ctrl('u'));
+    ed.on_key(Key::Ctrl('f'));
+    ed.on_key(Key::Ctrl('b'));
+    ed.on_key(Key::PageDown);
+    ed.on_key(Key::PageUp);
+    press(&mut ed, "ggG");
+    assert_eq!(
+        ed.take_page_steps(),
+        vec![
+            PageStep::Rows(1),
+            PageStep::Rows(-1),
+            PageStep::Halves(1),
+            PageStep::Halves(-1),
+            PageStep::Screens(1),
+            PageStep::Screens(-1),
+            PageStep::Screens(1),
+            PageStep::Screens(-1),
+            PageStep::Top,
+            PageStep::Bottom,
+        ]
+    );
+    // Nothing here is text: `x`, `i` and `dd` do nothing, and `:w` writes
+    // nothing.
+    press(&mut ed, "xidd");
+    ed.on_key(Key::Esc);
+    assert!(ed.page_window_has_the_keys());
+    ed.execute(":w").unwrap();
+    assert_eq!(ed.status(), say!("preview.nothing-to-write"));
+    assert_eq!(std::fs::read_to_string(&main).unwrap(), "# 筆記\n\n那年冬天。\n\n## 第二節\n\n雪。\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A Typst preview and a Markdown one at once** (2026-11-08): each a tab
+/// of its own kind, each following only its own file; a Typst chapter
+/// beside a Markdown file is not the Markdown file's.
+#[test]
+fn a_typst_preview_and_a_markdown_one_side_by_side() {
+    let (mut ed, dir) = a_typst_book("with-md");
+    let main = dir.join("main.typ");
+    let notes = dir.join("notes.md");
+    std::fs::write(&notes, "# 筆記\n").unwrap();
+    ed.open_page_window(main.clone()).unwrap();
+    ed.execute(&format!(":open {}", notes.display())).unwrap();
+    ed.open_page_window(notes.clone()).unwrap();
+    let typst = ed.preview_of(&main).unwrap();
+    let markdown = ed.preview_of(&notes).unwrap();
+    assert_ne!(typst, markdown);
+    assert_eq!(ed.preview_kind_of(typst), Some(crate::buffer::PreviewKind::Typst));
+    assert_eq!(ed.preview_kind_of(markdown), Some(crate::buffer::PreviewKind::Markdown), "by its name");
+    assert_eq!(ed.page_windows().len(), 2);
+    assert!(ed.page_target(markdown).is_some());
+    assert!(ed.page_target(typst).is_none(), "the cursor is in the Markdown file");
+    ed.execute(&format!(":open {}", dir.join("two.typ").display())).unwrap();
+    assert!(ed.page_target(typst).is_some(), "a chapter of the book");
+    assert!(ed.page_target(markdown).is_none(), "nothing is a chapter of a Markdown file");
+    // `off` from the Markdown file closes only its own.
+    ed.execute(&format!(":open {}", notes.display())).unwrap();
+    ed.execute(":view-preview off").unwrap();
+    assert_eq!(ed.previews().len(), 1);
+    assert_eq!(ed.previews()[0].0, typst);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A session keeps a Markdown preview** (2026-11-08), by its kind, tab
+/// and window alike.
+#[test]
+fn a_session_keeps_a_markdown_preview() {
+    let (mut ed, dir) = a_markdown_note("session");
+    let main = dir.join("notes.md");
+    let data = dir.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    ed.knows_its_paths(dir.join("config"), data.clone());
+    ed.keep_session_in(data.join("sessions"), &dir);
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    let kept = ed.windows_to_keep();
+    assert!(kept.contains(&format!("window\t{}\t0\t0\tpreview:markdown", main.display())), "{kept:?}");
+    ed.save_session();
+    let mut back = Editor::new();
+    back.knows_its_paths(dir.join("config"), data.clone());
+    back.keep_session_in(data.join("sessions"), &dir);
+    assert_eq!(back.restore_session(), 1);
+    back.restore_windows();
+    assert_eq!(back.previews().len(), 1);
+    let id = back.previews()[0].0;
+    assert_eq!(back.preview_kind_of(id), Some(crate::buffer::PreviewKind::Markdown));
+    assert!(back.has_a_page_window());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The text a Markdown preview renders** is the open buffer's, unsaved
+/// edits and all, with a revision that moves with each edit.
+#[test]
+fn a_markdown_preview_reads_the_open_buffer() {
+    let (mut ed, dir) = a_markdown_note("text");
+    let main = dir.join("notes.md");
+    let (_, before, _) = ed.text_of(&main).unwrap();
+    press(&mut ed, "ggA改");
+    ed.on_key(Key::Esc);
+    let (_, after, text) = ed.text_of(&main).unwrap();
+    assert_ne!(before, after);
+    assert!(text.starts_with("# 筆記改"), "{text}");
+    assert_eq!(ed.revision_of(&main).map(|r| r.1), Some(after));
+    assert!(ed.text_of(&dir.join("other.md")).is_none());
+    std::fs::remove_dir_all(&dir).ok();
+}

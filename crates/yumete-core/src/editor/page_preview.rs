@@ -1,5 +1,6 @@
-//! **The preview tab** (2026-11-08): the typeset page of a Typst file, as
-//! VS Code, Zed and Emacs show a preview, in a tab of its own.
+//! **The preview tab** (2026-11-08): the typeset page of a Typst file, or a
+//! Markdown file rendered, as VS Code, Zed and Emacs show a preview, in a
+//! tab of its own.
 //!
 //! A preview is a tab like an open file — in the tab line, `:b`, the buffer
 //! picker, `gn` and `gp` — whose buffer holds no text: it names the Typst
@@ -29,7 +30,9 @@ pub struct PageWindow {
 /// or a Typst file under its folder — a book is one main file that includes
 /// its chapters, and the cursor spends the day in a chapter.
 pub fn in_the_book(main: &Path, path: &Path, syntax: crate::syntax::Syntax) -> bool {
-    path == main || (syntax == crate::syntax::Syntax::Typst && main.parent().is_some_and(|book| path.starts_with(book)))
+    // A Markdown file is its own document: nothing is a chapter of it.
+    let book = crate::buffer::PreviewKind::for_path(main) == crate::buffer::PreviewKind::Typst;
+    path == main || (book && syntax == crate::syntax::Syntax::Typst && main.parent().is_some_and(|book| path.starts_with(book)))
 }
 
 /// **How big the page is drawn** (`:view-preview-fit`, `[editor] preview_fit`).
@@ -155,14 +158,39 @@ impl Editor {
         self.page_windows().iter().any(|(_, page)| page.preview == id)
     }
 
-    /// The preview tab of `main`, by its id.
+    /// The preview tab of `main`, by its id, of whichever kind.
     pub fn preview_of(&self, main: &Path) -> Option<u64> {
         let main = self.real(main);
-        self.buffers
-            .iter()
-            .filter(|b| b.preview_kind() == Some(crate::buffer::PreviewKind::Typst))
-            .find(|b| b.preview_main().is_some_and(|m| self.real(m) == main))
-            .map(Buffer::id)
+        self.buffers.iter().find(|b| b.preview_main().is_some_and(|m| self.real(m) == main)).map(Buffer::id)
+    }
+
+    /// **The text of the open buffer holding `path`**, with the buffer's id
+    /// and revision so a new edit is told from an old one; `None` when no
+    /// buffer holds the file. A Markdown preview renders this, unsaved
+    /// edits and all.
+    pub fn text_of(&self, path: &Path) -> Option<(u64, u64, String)> {
+        let b = &self.buffers[self.buffer_of_file(path)?];
+        Some((b.id(), b.revision(), b.rope().to_string()))
+    }
+
+    /// [`Self::text_of`] without the text: asked every turn, to know when
+    /// the text is worth taking.
+    pub fn revision_of(&self, path: &Path) -> Option<(u64, u64)> {
+        let b = &self.buffers[self.buffer_of_file(path)?];
+        Some((b.id(), b.revision()))
+    }
+
+    /// The buffer holding `path`, by its spelling first, by the disk's after.
+    fn buffer_of_file(&self, path: &Path) -> Option<usize> {
+        self.buffers.iter().position(|b| b.path() == Some(path)).or_else(|| {
+            let want = self.real(path);
+            self.buffers.iter().position(|b| !b.is_preview() && b.path().is_some_and(|p| self.real(p) == want))
+        })
+    }
+
+    /// What kind of preview tab `id` is.
+    pub fn preview_kind_of(&self, id: u64) -> Option<crate::buffer::PreviewKind> {
+        self.buffer_with(id).and_then(|i| self.buffers[i].preview_kind())
     }
 
     /// A path as the disk spells it, for telling two spellings of one file
@@ -180,6 +208,12 @@ impl Editor {
     /// **Open the preview tab of `main`** without showing it, or find the
     /// one open. Its id.
     pub(super) fn add_preview_tab(&mut self, main: PathBuf) -> u64 {
+        let kind = crate::buffer::PreviewKind::for_path(&main);
+        self.add_preview_tab_of(main, kind)
+    }
+
+    /// [`Self::add_preview_tab`], of `kind`.
+    pub(super) fn add_preview_tab_of(&mut self, main: PathBuf, kind: crate::buffer::PreviewKind) -> u64 {
         if let Some(id) = self.preview_of(&main) {
             return id;
         }
@@ -188,7 +222,7 @@ impl Editor {
         // `/var/…` finds nothing at `/private/var/…`.
         let main = self.real(&main);
         let label = Self::preview_label(&main);
-        let buffer = Buffer::preview_of(crate::buffer::PreviewKind::Typst, main, &label);
+        let buffer = Buffer::preview_of(kind, main, &label);
         let id = buffer.id();
         self.buffers.push(buffer);
         self.refresh_sidebar();
@@ -246,8 +280,15 @@ impl Editor {
     /// on the screen is said to be open instead. The window, or `None` when
     /// there is no room.
     pub fn open_page_window(&mut self, main: PathBuf) -> Option<WindowId> {
+        let kind = crate::buffer::PreviewKind::for_path(&main);
+        self.open_page_window_of(main, kind)
+    }
+
+    /// [`Self::open_page_window`], a preview of `kind`: Markdown's own for a
+    /// Markdown file, the typeset page for a Typst one.
+    pub fn open_page_window_of(&mut self, main: PathBuf, kind: crate::buffer::PreviewKind) -> Option<WindowId> {
         let fresh_tab = self.preview_of(&main).is_none();
-        let preview = self.add_preview_tab(main);
+        let preview = self.add_preview_tab_of(main, kind);
         if let Some((id, _)) = self.page_windows().into_iter().find(|(_, page)| page.preview == preview) {
             self.status = say!("preview.window-open");
             return Some(id);
@@ -296,9 +337,12 @@ impl Editor {
     /// be drawn), or the browser's. The window of a document with a preview
     /// tab is that tab's; a buffer never saved has no file to typeset.
     pub(super) fn ask_for_a_preview(&mut self, window: bool, fallback: bool) {
-        let tab = self.preview_here().and_then(|i| self.buffers[i].preview_main()).map(Path::to_path_buf);
+        let tab = self.preview_here().and_then(|i| {
+            let b = &self.buffers[i];
+            Some((b.preview_main()?.to_path_buf(), b.preview_kind()?.syntax()))
+        });
         let (path, syntax) = match (tab, self.current_buffer().path()) {
-            (Some(main), _) if window || self.buffers[self.current].is_preview() => (main, crate::syntax::Syntax::Typst),
+            (Some((main, syntax)), _) if window || self.buffers[self.current].is_preview() => (main, syntax),
             (_, Some(path)) => match self.includer_of_here().filter(|_| window) {
                 Some(book) => (book, crate::syntax::Syntax::Typst),
                 None => (path.to_path_buf(), self.current_buffer().syntax()),

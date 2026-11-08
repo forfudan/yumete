@@ -1101,8 +1101,8 @@ impl Editor {
         for line in text.lines().filter_map(|line| line.strip_prefix("preview\t")) {
             let Some((kind, main)) = line.split_once('\t') else { continue };
             let main = PathBuf::from(main);
-            if crate::buffer::PreviewKind::parse(kind) == Some(crate::buffer::PreviewKind::Typst) && main.is_file() {
-                self.add_preview_tab(main);
+            if let Some(kind) = crate::buffer::PreviewKind::parse(kind).filter(|_| main.is_file()) {
+                self.add_preview_tab_of(main, kind);
             }
         }
         if let Some(i) = first {
@@ -1734,7 +1734,7 @@ impl Shape {
                 let preview = match parts.next() {
                     None => false,
                     Some(word) => match word.strip_prefix("preview:").and_then(crate::buffer::PreviewKind::parse) {
-                        Some(crate::buffer::PreviewKind::Typst) => true,
+                        Some(crate::buffer::PreviewKind::Typst | crate::buffer::PreviewKind::Markdown) => true,
                         None => return Some(Shape::Leaf(Leaf { path: PathBuf::new(), preview: false, cursor: 0, anchor: 0, keys: false, nth: 0 })),
                     },
                 };

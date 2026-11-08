@@ -1675,7 +1675,11 @@ impl Editor {
                     let root = self.project_root();
                     let root = self.real_path(&root).unwrap_or(root);
                     let shown = main.strip_prefix(&root).unwrap_or(main);
-                    return Some((name, vec![say!("preview.picker-note", shown.display())]));
+                    let note = match buffer.preview_kind() {
+                        Some(crate::buffer::PreviewKind::Markdown) => say!("preview.picker-note-markdown", shown.display()),
+                        _ => say!("preview.picker-note", shown.display()),
+                    };
+                    return Some((name, vec![note]));
                 }
                 Some((name, head(&buffer.text())))
             }
