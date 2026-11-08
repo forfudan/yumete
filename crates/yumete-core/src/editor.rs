@@ -3397,6 +3397,8 @@ pub struct Editor {
     page_count: Option<usize>,
     /// The first `g` of a `gg` in a page window.
     page_g: bool,
+    /// The first `Z` of vim's `ZZ` or `ZQ` in a preview.
+    page_z: bool,
     /// A link the reader followed to a page on the web (`gL`), waiting for
     /// the front end — only it can hand a URL to the machine, and only ever as
     /// one argument to `open`/`xdg-open`.
@@ -4634,6 +4636,7 @@ impl Editor {
             page_steps: Vec::new(),
             page_count: None,
             page_g: false,
+            page_z: false,
             shell_request: None,
             suspend_request: false,
             last_bang: None,

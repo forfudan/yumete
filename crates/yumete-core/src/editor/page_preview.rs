@@ -158,7 +158,11 @@ impl Editor {
     /// The preview tab of `main`, by its id.
     pub fn preview_of(&self, main: &Path) -> Option<u64> {
         let main = self.real(main);
-        self.buffers.iter().find(|b| b.preview_main().is_some_and(|m| self.real(m) == main)).map(Buffer::id)
+        self.buffers
+            .iter()
+            .filter(|b| b.preview_kind() == Some(crate::buffer::PreviewKind::Typst))
+            .find(|b| b.preview_main().is_some_and(|m| self.real(m) == main))
+            .map(Buffer::id)
     }
 
     /// A path as the disk spells it, for telling two spellings of one file
@@ -184,7 +188,7 @@ impl Editor {
         // `/var/…` finds nothing at `/private/var/…`.
         let main = self.real(&main);
         let label = Self::preview_label(&main);
-        let buffer = Buffer::preview_of(main, &label);
+        let buffer = Buffer::preview_of(crate::buffer::PreviewKind::Typst, main, &label);
         let id = buffer.id();
         self.buffers.push(buffer);
         self.refresh_sidebar();
@@ -209,6 +213,25 @@ impl Editor {
                 .filter(|(_, main)| in_the_book(main, &path, syntax))
                 .max_by_key(|(_, main)| main.components().count())
                 .map(|(i, _)| *i)
+        })
+    }
+
+    /// **The open Typst file that pulls this one in** (2026-11-08), by
+    /// `#include` or `#import`: a chapter typeset on its own lacks what its
+    /// book sets up, so the book is what a chapter's new preview typesets.
+    /// Only open files are read, and only one step up; `None` when no open
+    /// file names this one.
+    fn includer_of_here(&self) -> Option<PathBuf> {
+        let here = &self.buffers[self.current];
+        if here.syntax() != crate::syntax::Syntax::Typst {
+            return None;
+        }
+        let me = self.real(here.path()?);
+        self.buffers.iter().enumerate().filter(|(i, _)| *i != self.current).find_map(|(_, b)| {
+            let path = b.path().filter(|_| b.syntax() == crate::syntax::Syntax::Typst)?;
+            let dir = path.parent()?;
+            let names = b.rope().lines().filter_map(|line| quoted_path(&line.to_string()));
+            names.into_iter().any(|name| self.real(&dir.join(name)) == me).then(|| path.to_path_buf())
         })
     }
 
@@ -276,7 +299,10 @@ impl Editor {
         let tab = self.preview_here().and_then(|i| self.buffers[i].preview_main()).map(Path::to_path_buf);
         let (path, syntax) = match (tab, self.current_buffer().path()) {
             (Some(main), _) if window || self.buffers[self.current].is_preview() => (main, crate::syntax::Syntax::Typst),
-            (_, Some(path)) => (path.to_path_buf(), self.current_buffer().syntax()),
+            (_, Some(path)) => match self.includer_of_here().filter(|_| window) {
+                Some(book) => (book, crate::syntax::Syntax::Typst),
+                None => (path.to_path_buf(), self.current_buffer().syntax()),
+            },
             _ => {
                 self.status = say!("preview.save-first");
                 return;
@@ -422,7 +448,8 @@ impl Editor {
     /// The keys are a PDF reader's under vim (2026-11-07, as Zathura and
     /// evil-collection have them): `gg` and `G` the top and bottom, `J` and
     /// `K` a whole page, and a count before `G` or `gg` the page of that
-    /// number. `gn`, `gp`, `ga`, `gt` and `gT` go to another tab.
+    /// number. `gn`, `gp`, `ga`, `gt` and `gT` go to another tab; under vim,
+    /// `ZZ` and `ZQ` close the window as anywhere.
     pub(super) fn on_page_window_key(&mut self, key: Key) -> bool {
         let mut count = self.page_count.take();
         if std::mem::take(&mut self.page_g) {
@@ -442,6 +469,20 @@ impl Editor {
             }
             // Any other key after a `g` is its own key, without the count.
             count = None;
+        }
+        // **vim's way out** (2026-11-08): `ZZ` is `:x` and `ZQ` is `:q!`,
+        // which in a preview close its window, or leave from the last one.
+        if std::mem::take(&mut self.page_z) {
+            match key {
+                Key::Char('Z') => self.run_bound_command("x"),
+                Key::Char('Q') => self.run_bound_command("quit!"),
+                _ => {}
+            }
+            return true;
+        }
+        if key == Key::Char('Z') && self.vim_keymap() {
+            self.page_z = true;
+            return true;
         }
         let times = count.unwrap_or(1) as i32;
         let step = match key {

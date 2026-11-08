@@ -197,6 +197,14 @@ impl Editor {
                 self.new_buffer();
                 Ok(CommandOutcome::Continue)
             }
+            // **A preview has no file** (2026-11-08): the saves say so and
+            // write nothing, as in a sidebar; `:x` and `ZZ` are `:q` there.
+            Command::Write(_) | Command::WriteForce(_) | Command::Update | Command::SaveAs { .. }
+                if !self.settings_open && self.page_window_has_the_keys() =>
+            {
+                self.status = say!("preview.nothing-to-write");
+                Ok(CommandOutcome::Continue)
+            }
             Command::Write(path) => {
                 // **設置面板開着的時候，`:w` 說的是它。** 不分這一下，面板上按
                 // 存盤會把眼前那一章寫一遍——看起來像没反應，而動的是別的東西。
@@ -2043,6 +2051,15 @@ impl Editor {
             } else {
                 self.status = say!("region.nothing-to-write");
             }
+            return Ok(CommandOutcome::Continue);
+        }
+        // A preview likewise, except that `:x` is `:q` there, and so leaves
+        // when no text window is left (2026-11-08).
+        if self.page_window_has_the_keys() {
+            if only_if_changed && path.is_none() {
+                return self.quit(false);
+            }
+            self.status = say!("preview.nothing-to-write");
             return Ok(CommandOutcome::Continue);
         }
         match path.as_deref() {

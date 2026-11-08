@@ -519,6 +519,12 @@ zhs = "此文件没有标记，无可预览"
 en = "this file has no markup, so there is nothing to preview"
 
 [[message]]
+# 键在预览标签里时打 :w、:wq、:up、:write-as 之类：预览没有文件可写，什么也不写（草稿）
+key = "preview.nothing-to-write"
+zhs = "预览没有可保存的文件；用 :q 关闭窗口"
+en = "a preview has no file to write; :q closes its window"
+
+[[message]]
 # :view-preview-window 打不开页面窗口，{0} 是原因，后面提示可以用浏览器（草稿）
 key = "preview.or-the-browser"
 zhs = "{0}；`:view-preview-browser` 可在浏览器中预览"
@@ -529,6 +535,12 @@ en = "{0}; `:view-preview-browser` previews it in a browser"
 key = "preview.orphan-stopped"
 zhs = "已停止上次遗留的预览服务器({0})"
 en = "stopped the preview server left over from last time ({0})"
+
+[[message]]
+# 缓冲区选择器的预览栏里，选中的是一个预览标签时的那一行说明。{0} 是它排版的那份 Typst 文件的路径（草稿）
+key = "preview.picker-note"
+zhs = "{0} 排版后的页面"
+en = "the typeset page of {0}"
 
 [[message]]
 # 預覽服務器開啟了

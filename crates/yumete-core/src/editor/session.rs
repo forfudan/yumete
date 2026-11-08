@@ -688,8 +688,10 @@ impl Editor {
         }
         // **The preview tabs** (2026-11-08), by the file each typesets: the
         // page is made again when one is shown.
-        for (_, main) in self.previews() {
-            out.push_str(&format!("preview\t{}\n", main.display()));
+        for buffer in &self.buffers {
+            if let (Some(kind), Some(main)) = (buffer.preview_kind(), buffer.preview_main()) {
+                out.push_str(&format!("preview\t{}\t{}\n", kind.name(), main.display()));
+            }
         }
         // **No file open, so the last session stays** (2026-10-28). A run that
         // only typed into a scratch buffer and left with `:q!` used to delete
@@ -774,8 +776,8 @@ impl Editor {
                             None => (None, 0, 0),
                         },
                     };
-                    match buffer.and_then(|b| b.preview_main()) {
-                        Some(main) => out.push(format!("window\t{}\t0\t0\tpreview", main.display())),
+                    match buffer.and_then(|b| Some((b.preview_kind()?, b.preview_main()?))) {
+                        Some((kind, main)) => out.push(format!("window\t{}\t0\t0\tpreview:{}", main.display(), kind.name())),
                         None => {
                             let path = buffer.and_then(|b| b.path()).map(|p| p.display().to_string()).unwrap_or_default();
                             out.push(format!("window\t{path}\t{cursor}\t{anchor}"));
@@ -1096,9 +1098,10 @@ impl Editor {
         }
         // The preview tabs after the files, so the empty buffer the editor
         // starts with is the first file's to take (2026-11-08).
-        for main in text.lines().filter_map(|line| line.strip_prefix("preview\t")) {
+        for line in text.lines().filter_map(|line| line.strip_prefix("preview\t")) {
+            let Some((kind, main)) = line.split_once('\t') else { continue };
             let main = PathBuf::from(main);
-            if main.is_file() {
+            if crate::buffer::PreviewKind::parse(kind) == Some(crate::buffer::PreviewKind::Typst) && main.is_file() {
                 self.add_preview_tab(main);
             }
         }
@@ -1727,7 +1730,14 @@ impl Shape {
                 let path = PathBuf::from(parts.next()?);
                 let cursor = parts.next()?.parse().ok()?;
                 let anchor = parts.next()?.parse().ok()?;
-                let preview = parts.next() == Some("preview");
+                // Only the kind there is yet; another is a window on nothing.
+                let preview = match parts.next() {
+                    None => false,
+                    Some(word) => match word.strip_prefix("preview:").and_then(crate::buffer::PreviewKind::parse) {
+                        Some(crate::buffer::PreviewKind::Typst) => true,
+                        None => return Some(Shape::Leaf(Leaf { path: PathBuf::new(), preview: false, cursor: 0, anchor: 0, keys: false, nth: 0 })),
+                    },
+                };
                 Some(Shape::Leaf(Leaf { path, preview, cursor, anchor, keys: false, nth: 0 }))
             }
         }

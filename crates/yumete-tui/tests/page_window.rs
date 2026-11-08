@@ -54,6 +54,21 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     assert!(!plain.contains(PLACEHOLDER), "{plain}");
     assert!(plain.contains(&yumete_core::say!("preview.no-pictures")[..6]), "{plain}");
 
+    // **The tab line and the status line** (2026-11-08): the preview's tab
+    // by its name; with the keys in it, the status line says that name and
+    // nothing of a place, a count or a lock its empty buffer has no use for.
+    let label = yumete_core::say!("preview.tab", "main.typ");
+    assert!(plain.lines().next().unwrap().contains(&label), "{plain}");
+    editor.on_key(yumete_core::input::Key::Ctrl('w'));
+    editor.on_key(yumete_core::input::Key::Char('w'));
+    let inside = frame(&mut editor, &config);
+    let status = inside.lines().rev().nth(1).unwrap();
+    assert!(status.trim_end().ends_with(&label), "only the name: {status:?}\n{inside}");
+    assert!(!status.contains(yumete_core::say!("ui.readonly-tag").trim()), "{status:?}");
+    editor.on_key(yumete_core::input::Key::Ctrl('w'));
+    editor.on_key(yumete_core::input::Key::Char('w'));
+    assert_eq!(editor.live_window(), text);
+
     // A terminal that can, and a page made (840 × 1188 px at 144 ppi, page 1
     // of 2), the cursor's text a third of the way down it.
     graphics::set_support(Support::Kitty);

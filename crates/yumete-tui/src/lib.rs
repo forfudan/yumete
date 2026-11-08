@@ -13981,7 +13981,13 @@ fn draw_status(
     command_row: bool,
 ) {
     let buffer = editor.current_buffer();
-    let count = status_count_of(editor, config);
+    // **A preview has no text** (2026-11-08): no place in it, no count, and
+    // no lock to mention — its name is all the line says of it.
+    let page = editor.page_window_has_the_keys();
+    let count = match page {
+        true => String::new(),
+        false => status_count_of(editor, config),
+    };
     let ink = crate::theme::Palette::of(config);
     // **A raised strip, or a sunken one — never a reversal.** Reversing gave a
     // white bar under a dark page: the loudest thing on the screen, saying the
@@ -14046,7 +14052,7 @@ fn draw_status(
         // Locked, and said so standing (Feature #213). A writer who cannot type
         // needs to know that from the screen and not from the status line's
         // memory of a refusal three keystrokes ago.
-        let locked = match buffer.is_readonly() {
+        let locked = match buffer.is_readonly() && !page {
             true => say!("ui.readonly-tag"),
             false => String::new(),
         };
@@ -14082,8 +14088,10 @@ fn draw_status(
         // Where you are, and nothing else. What just happened is the row
         // below's question — and with no command row it comes back here, because
         // a message nobody can see is not a message.
-        let where_bare = position_of(editor);
-        let where_short = position_short(editor);
+        let (where_bare, where_short) = match page {
+            true => (String::new(), String::new()),
+            false => (position_of(editor), position_short(editor)),
+        };
         // **The live count rides after the position** (2026-10-29) and is the
         // first thing to give way: it says how long the file is, and the
         // position says where you are, which is what this line is for.

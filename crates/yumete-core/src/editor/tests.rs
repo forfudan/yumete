@@ -38512,6 +38512,101 @@ fn two_documents_have_two_previews() {
     std::fs::remove_dir_all(&dir_b).ok();
 }
 
+/// **A chapter's new preview typesets its book** (2026-11-08): from a
+/// chapter, the open file that `#include`s it is the preview's main file,
+/// since a chapter alone lacks what its book sets up. With no such file
+/// open it is the chapter, as it always was.
+#[test]
+fn a_chapter_s_preview_typesets_the_book_that_includes_it() {
+    let (mut ed, dir) = a_typst_book("chapter");
+    let main = dir.join("main.typ");
+    let two = dir.join("two.typ");
+    ed.execute(&format!(":open {}", two.display())).unwrap();
+    ed.execute(":view-preview").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true }),
+        "the book that includes it"
+    );
+    // The browser's preview is still of the file itself.
+    ed.execute(":view-preview-browser").unwrap();
+    assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: two.clone(), syntax: crate::syntax::Syntax::Typst }));
+    // The book not open: the chapter.
+    let mut alone = Editor::new();
+    alone.open_file(&two).unwrap();
+    alone.execute(":view-preview-window").unwrap();
+    assert_eq!(
+        alone.take_preview_request(),
+        Some(Preview::Window { path: two.clone(), syntax: crate::syntax::Syntax::Typst, fallback: false })
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Saving and leaving from a preview** (2026-11-08): `:w`, `:wq`, `:up`
+/// and `:write-as` write nothing and say why; `:x` and vim's `ZZ` are `:q`,
+/// closing the window or, from the last one, leaving. A preview tab off the
+/// screen changes nothing for `:w`, `:wa` and `:qa`.
+#[test]
+fn saving_in_a_preview_writes_nothing_and_leaving_works() {
+    let (mut ed, dir) = a_typst_book("save");
+    let main = dir.join("main.typ");
+    let text = ed.live_window();
+    ed.open_page_window(main.clone()).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    let copy = dir.join("copy.typ");
+    for line in [":w".to_string(), ":wq".to_string(), ":up".to_string(), ":w!".to_string(), format!(":write-as {}", copy.display())] {
+        assert_eq!(ed.execute(&line).unwrap(), CommandOutcome::Continue, "{line}");
+        assert_eq!(ed.status(), say!("preview.nothing-to-write"), "{line}");
+    }
+    assert!(!copy.exists());
+    assert!(ed.page_window_has_the_keys(), "still there");
+    // `:x` closes the window and keeps the tab.
+    assert_eq!(ed.execute(":x").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.windows().leaves(), [text]);
+    assert_eq!(ed.previews().len(), 1);
+    // A tab off the screen: `:w` writes the file, `:wa` and `:qa` pass it by.
+    press(&mut ed, "ggix");
+    ed.on_key(Key::Esc);
+    ed.execute(":w").unwrap();
+    assert!(std::fs::read_to_string(&main).unwrap().starts_with('x'));
+    ed.execute(":wa").unwrap();
+    assert_eq!(ed.status(), say!("buffer.saved-many", 0));
+    assert_eq!(ed.execute(":qa").unwrap(), CommandOutcome::Quit, "nothing unsaved, nothing asked");
+    // vim's `ZZ` in a preview window closes it; in the last window it leaves.
+    let (mut ed, dir2) = a_typst_book("save-zz");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.open_page_window(dir2.join("main.typ")).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.on_key(Key::Char('Z')), KeyOutcome::Continue);
+    assert_eq!(ed.on_key(Key::Char('Z')), KeyOutcome::Continue);
+    assert_eq!(ed.windows().len(), 1, "ZZ closed the preview's window");
+    assert!(!ed.page_window_has_the_keys());
+    ed.show_buffer_at(1);
+    assert!(ed.page_window_has_the_keys());
+    ed.on_key(Key::Char('Z'));
+    assert_eq!(ed.on_key(Key::Char('Z')), KeyOutcome::Quit, "ZZ from the last window leaves");
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&dir2).ok();
+}
+
+/// **The buffer picker says what a preview is** (2026-11-08) rather than
+/// showing its empty text.
+#[test]
+fn the_buffer_picker_says_what_a_preview_is() {
+    let (mut ed, dir) = a_typst_book("picker");
+    let main = dir.join("main.typ");
+    ed.open_page_window(main.clone()).unwrap();
+    ed.execute(":buffer").unwrap();
+    ed.on_key(Key::Down);
+    let (name, lines) = ed.picker_preview(10).expect("a preview pane");
+    assert_eq!(name, say!("preview.tab", "main.typ"));
+    let real = std::fs::canonicalize(&main).unwrap();
+    assert_eq!(lines, vec![say!("preview.picker-note", real.display())]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 /// **`:view-preview-theme` is a switch** (2026-11-08): the page in the
 /// theme's colours or as printed; bare flips it, and each says which.
 #[test]
@@ -38550,7 +38645,7 @@ fn a_session_keeps_the_preview_tabs() {
     ed.keep_session_in(data.join("sessions"), &dir);
     ed.open_page_window(main.clone()).unwrap();
     let kept = ed.windows_to_keep();
-    assert!(kept.contains(&format!("window\t{}\t0\t0\tpreview", main.display())), "{kept:?}");
+    assert!(kept.contains(&format!("window\t{}\t0\t0\tpreview:typst", main.display())), "{kept:?}");
     assert!(kept.contains(&"keys\t0".to_string()), "{kept:?}");
     ed.save_session();
 
