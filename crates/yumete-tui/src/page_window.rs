@@ -369,6 +369,8 @@ impl PagePreview {
                         PageStep::Screens(n) => board.nudge.saturating_add(n * rows),
                         PageStep::Top => i32::MIN / 4,
                         PageStep::Bottom => i32::MAX / 4,
+                        // A page set across does not move sideways.
+                        PageStep::Across(_) => board.nudge,
                         // **Another page, from its top.** The cursor stays
                         // where it is; the page it is on comes back when it
                         // moves.

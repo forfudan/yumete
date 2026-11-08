@@ -79,6 +79,9 @@ pub enum PageStep {
     Pages(i32),
     /// The page of that number, from 1: `5G`, `5gg`.
     Goto(usize),
+    /// Columns sideways, leftwards when positive: `h` and `l`, which move
+    /// along a vertical page the way it reads (2026-11-08).
+    Across(i32),
 }
 
 /// **Where a preview's cursor is**: the file the keys are in (absolute, as
@@ -486,6 +489,24 @@ impl Editor {
         self.preview_theme = on;
     }
 
+    /// Whether the Markdown preview follows the text window into vertical
+    /// (`:view-preview-vertical`).
+    pub fn preview_vertical(&self) -> bool {
+        self.preview_vertical
+    }
+
+    pub fn set_preview_vertical(&mut self, on: bool) {
+        self.preview_vertical = on;
+    }
+
+    /// **Whether the Markdown preview is set vertically now** (2026-11-08):
+    /// `:view-preview-vertical` is on and the page the writer chose is
+    /// vertical. Only the direction is read from the editing window; how the
+    /// page is set is the export's.
+    pub fn markdown_preview_vertical(&self) -> bool {
+        self.preview_vertical && self.layout_chosen() == crate::zong::Layout::Vertical
+    }
+
     /// **A key in a preview**: the scroll keys move the page, `:`, `C-w`,
     /// `Space`, `C-o` and `C-i` go on to the command line, the key groups
     /// and the jump list, and nothing else does anything — there is no text
@@ -545,6 +566,8 @@ impl Editor {
             }
             Key::Char('j') | Key::Down | Key::Enter => PageStep::Rows(times),
             Key::Char('k') | Key::Up => PageStep::Rows(-times),
+            Key::Char('h') | Key::Left => PageStep::Across(times),
+            Key::Char('l') | Key::Right => PageStep::Across(-times),
             Key::Ctrl('d') => PageStep::Halves(times),
             Key::Ctrl('u') => PageStep::Halves(-times),
             Key::Ctrl('f') | Key::PageDown => PageStep::Screens(times),

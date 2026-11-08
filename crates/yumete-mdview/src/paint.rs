@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use parley::{Layout, PositionedLayoutItem};
-use vello_cpu::kurbo::{Affine, BezPath, Rect, RoundedRect, Shape, Stroke};
+use vello_cpu::kurbo::{Affine, BezPath, Rect, RoundedRect, Shape, Stroke, Vec2};
 use vello_cpu::peniko::color::AlphaColor;
 use vello_cpu::{Image, ImageSource, Pixmap, RenderContext, Resources};
 
@@ -27,9 +27,10 @@ impl Painter {
         Painter { ctx: RenderContext::new(1, 1), res: Resources::new() }
     }
 
-    /// **Draw `blocks` (each with its top) from `top` down, `w` × `h`**:
-    /// straight (not premultiplied) RGBA, row by row.
-    pub fn paint(&mut self, blocks: &[(f32, &Laid)], ground: Rgba, top: f32, w: u16, h: u16) -> Vec<u8> {
+    /// **Draw `blocks`, each moved by its offset, into `w` × `h`**:
+    /// straight (not premultiplied) RGBA, row by row. What falls outside is
+    /// passed over.
+    pub fn paint(&mut self, blocks: &[(Vec2, &Laid)], ground: Rgba, w: u16, h: u16) -> Vec<u8> {
         if self.ctx.width() != w || self.ctx.height() != h {
             self.ctx = RenderContext::new(w, h);
         }
@@ -38,13 +39,10 @@ impl Painter {
         ctx.set_transform(Affine::IDENTITY);
         ctx.set_paint(colour(ground));
         ctx.fill_rect(&Rect::new(0.0, 0.0, w as f64, h as f64));
-        for (y, laid) in blocks {
-            if y + laid.height < top - 64.0 || *y > top + h as f32 + 64.0 {
-                continue;
-            }
-            let oy = (y - top) as f64;
+        let view = Rect::new(-64.0, -64.0, w as f64 + 64.0, h as f64 + 64.0);
+        for (off, laid) in blocks {
             for item in &laid.items {
-                draw_item(ctx, &mut self.res, item, oy, h as f64);
+                draw_item(ctx, &mut self.res, item, *off, view);
             }
         }
         ctx.flush();
@@ -55,11 +53,17 @@ impl Painter {
     }
 }
 
-fn draw_item(ctx: &mut RenderContext, res: &mut Resources, item: &Item, oy: f64, h: f64) {
+/// Whether `r` reaches into `view`.
+fn meets(r: Rect, view: Rect) -> bool {
+    r.x1 >= view.x0 && r.x0 <= view.x1 && r.y1 >= view.y0 && r.y0 <= view.y1
+}
+
+fn draw_item(ctx: &mut RenderContext, res: &mut Resources, item: &Item, off: Vec2, view: Rect) {
+    let (oy, h) = (off.y, view.y1 - 64.0);
     match item {
         Item::Rect { r, fill, radius } => {
-            let r = *r + vello_cpu::kurbo::Vec2::new(0.0, oy);
-            if r.y1 < 0.0 || r.y0 > h {
+            let r = *r + off;
+            if !meets(r, view) {
                 return;
             }
             ctx.set_transform(Affine::IDENTITY);
@@ -71,8 +75,8 @@ fn draw_item(ctx: &mut RenderContext, res: &mut Resources, item: &Item, oy: f64,
             }
         }
         Item::Frame { r, color, width, radius } => {
-            let r = *r + vello_cpu::kurbo::Vec2::new(0.0, oy);
-            if r.y1 < 0.0 || r.y0 > h {
+            let r = *r + off;
+            if !meets(r, view) {
                 return;
             }
             let half = *width as f64 / 2.0;
@@ -83,16 +87,39 @@ fn draw_item(ctx: &mut RenderContext, res: &mut Resources, item: &Item, oy: f64,
             ctx.stroke_path(&RoundedRect::from_rect(r, *radius as f64).to_path(0.1));
         }
         Item::Pic { r, pix } => {
-            let r = *r + vello_cpu::kurbo::Vec2::new(0.0, oy);
-            if r.y1 < 0.0 || r.y0 > h {
+            let r = *r + off;
+            if !meets(r, view) {
                 return;
             }
             draw_pic(ctx, pix, r.x0, r.y0, r.width(), r.height());
         }
+        Item::Turned { r, pix } => {
+            let r = *r + off;
+            if !meets(r, view) {
+                return;
+            }
+            // A quarter turn clockwise: the picture's top runs down the
+            // box's right edge.
+            let (iw, ih) = (pix.width() as f64, pix.height() as f64);
+            let (x, y) = (r.x0.round(), r.y0.round());
+            ctx.set_transform(
+                Affine::translate((x + r.width(), y)) * Affine::rotate(std::f64::consts::FRAC_PI_2) * Affine::scale_non_uniform(r.height() / iw, r.width() / ih),
+            );
+            ctx.set_paint(Image { image: ImageSource::Pixmap(pix.clone()), sampler: Default::default() });
+            ctx.fill_rect(&Rect::new(0.0, 0.0, iw, ih));
+        }
+        Item::Glyphs(run) => {
+            if !meets(run.bounds + off, view) {
+                return;
+            }
+            ctx.set_transform(Affine::translate(off) * run.transform);
+            ctx.set_paint(colour(run.color));
+            let _ = ctx.glyph_run(res, &run.font).font_size(run.size).hint(false).normalized_coords(&run.coords).fill_glyphs(run.glyphs.iter().copied());
+        }
         Item::Lines { points, color, width } => {
             let mut path = BezPath::new();
             for (k, (x, y)) in points.iter().enumerate() {
-                let p = (*x as f64, *y as f64 + oy);
+                let p = (*x as f64 + off.x, *y as f64 + oy);
                 if k == 0 {
                     path.move_to(p);
                 } else {
@@ -106,10 +133,11 @@ fn draw_item(ctx: &mut RenderContext, res: &mut Resources, item: &Item, oy: f64,
         }
         Item::Text { x, y, text } => {
             let top = *y as f64 + oy;
-            if top + text.layout.height() as f64 + 64.0 < 0.0 || top - 64.0 > h {
+            let left = *x as f64 + off.x;
+            if top + text.layout.height() as f64 + 64.0 < 0.0 || top - 64.0 > h || left > view.x1 || left + (text.layout.width() as f64) < view.x0 {
                 return;
             }
-            draw_text(ctx, res, text, *x as f64, top, h);
+            draw_text(ctx, res, text, left, top, h);
         }
     }
 }

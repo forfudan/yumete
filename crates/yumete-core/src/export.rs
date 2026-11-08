@@ -495,8 +495,9 @@ impl Drawing {
     }
 }
 
-/// `x`, `2`, `\frac12`, `\tfrac{3}{4}`, `½`: a formula one square holds.
-fn stands_upright(tex: &str) -> bool {
+/// `x`, `2`, `\frac12`, `\tfrac{3}{4}`, `½`: a formula one square holds,
+/// which under [`Latin::Jlreq`] stands upright down a vertical page.
+pub fn stands_upright(tex: &str) -> bool {
     static FRACTION: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let tex = tex.trim();
     let mut chars = tex.chars();
@@ -1247,8 +1248,31 @@ fn half_width(c: char) -> bool {
     (c as u32) < 0x1100 && !c.is_whitespace() && !c.is_control()
 }
 
-/// **How one run of Latin is set under [`Latin::Jlreq`]** (2026-11-08):
-/// the class of its `<span>`.
+/// **How a run of half-width letters and digits stands down a vertical
+/// page** (2026-11-08): what [`latin_runs`] says of each run, the HTML
+/// export's `<span>` classes and the Markdown preview's drawing alike.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Orientation {
+    /// Turned a quarter turn clockwise, as a whole (`yoko`).
+    Turned,
+    /// Across in one square, 縱中橫 (`tcy`).
+    Across,
+    /// Upright, one character to a square (`tate`).
+    Upright,
+}
+
+impl Orientation {
+    /// The class of the export's `<span>`.
+    fn class(self) -> &'static str {
+        match self {
+            Orientation::Turned => "yoko",
+            Orientation::Across => "tcy",
+            Orientation::Upright => "tate",
+        }
+    }
+}
+
+/// **How one run of Latin is set under [`Latin::Jlreq`]** (2026-11-08).
 ///
 /// - A phrase (it holds a space) or a word with a small letter in it: turned.
 /// - Digits alone: one upright, two across in one square, more turned.
@@ -1259,23 +1283,86 @@ fn half_width(c: char) -> bool {
 ///   if it is two characters, turned otherwise — one way as a whole, never
 ///   the `5` upright and the `%` lying.
 /// - Anything else with a mark in it (`U.S.`, `C++`): turned.
-fn jlreq_class(run: &[char]) -> &'static str {
+fn jlreq_orientation(run: &[char]) -> Orientation {
+    use Orientation::*;
     let letters = run.iter().filter(|c| c.is_alphabetic()).count();
     let digits = run.iter().filter(|c| c.is_numeric()).count();
     let marks = run.len() - letters - digits;
     if run.contains(&' ') || run.iter().any(|c| c.is_lowercase()) {
-        return "yoko";
+        return Turned;
     }
     match (letters, digits, marks) {
-        (0, 1, 0) => "tate",
-        (0, 2, 0) => "tcy",
-        (0, _, 0) => "yoko",
-        (_, 0, 0) => "tate",
-        (_, _, 0) if run.len() == 2 => "tcy",
-        (_, _, 0) => "tate",
-        (0, _, _) if run.len() <= 2 => "tcy",
-        _ => "yoko",
+        (0, 1, 0) => Upright,
+        (0, 2, 0) => Across,
+        (0, _, 0) => Turned,
+        (_, 0, 0) => Upright,
+        (_, _, 0) if run.len() == 2 => Across,
+        (_, _, 0) => Upright,
+        (0, _, _) if run.len() <= 2 => Across,
+        _ => Turned,
     }
+}
+
+/// **Curly quotes as corner brackets** (2026-11-08), `“”` as `『』` and `‘’`
+/// as `「」`, the way a vertical Chinese page sets them; a single quote
+/// between two Latin letters is an apostrophe and is left alone.
+pub fn corner_quotes(chars: &[char]) -> Vec<char> {
+    let latin_at = |k: Option<usize>| k.and_then(|k| chars.get(k)).is_some_and(|&c| latin_letter(c));
+    let apostrophe = |k: usize| latin_at(k.checked_sub(1)) && latin_at(Some(k + 1));
+    (0..chars.len())
+        .map(|k| match chars[k] {
+            '“' => '『',
+            '”' => '』',
+            '‘' if !apostrophe(k) => '「',
+            '’' if !apostrophe(k) => '」',
+            c => c,
+        })
+        .collect()
+}
+
+/// **The runs of Latin in `chars` and how each stands** (2026-11-08): runs
+/// of half-width characters with a letter or digit in them, the half-width
+/// marks joined to them (`5%`, `don’t`, `’` taken only between two letters),
+/// and words with one space between them joined into one phrase. Under
+/// [`Latin::Turn`] every run is turned; under [`Latin::Jlreq`] as
+/// [`jlreq_orientation`] says.
+pub fn latin_runs(chars: &[char], latin: Latin) -> Vec<(std::ops::Range<usize>, Orientation)> {
+    let latin_at = |k: Option<usize>| k.and_then(|k| chars.get(k)).is_some_and(|&c| latin_letter(c));
+    let apostrophe = |k: usize| latin_at(k.checked_sub(1)) && latin_at(Some(k + 1));
+    let joins = |k: usize| half_width(chars[k]) || (chars[k] == '’' && apostrophe(k));
+    // The words: runs of half-width characters with a letter or digit in
+    // them. Then the phrases: words with one space between.
+    let mut words: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut k = 0;
+    while k < chars.len() {
+        if !joins(k) {
+            k += 1;
+            continue;
+        }
+        let from = k;
+        while k < chars.len() && joins(k) {
+            k += 1;
+        }
+        if chars[from..k].iter().any(|&c| latin_letter(c)) {
+            words.push(from..k);
+        }
+    }
+    let mut runs: Vec<std::ops::Range<usize>> = Vec::new();
+    for word in words {
+        match runs.last_mut() {
+            Some(last) if last.end + 1 == word.start && chars[last.end] == ' ' => last.end = word.end,
+            _ => runs.push(word),
+        }
+    }
+    runs.into_iter()
+        .map(|run| {
+            let how = match latin {
+                Latin::Turn => Orientation::Turned,
+                Latin::Jlreq => jlreq_orientation(&chars[run.clone()]),
+            };
+            (run, how)
+        })
+        .collect()
 }
 
 /// One run of text between tags, done as [`vertical_text`] says. An entity
@@ -1303,57 +1390,22 @@ fn turned(text: &str, latin: Latin, quotes: bool) -> String {
         written.push(piece);
         rest = &rest[piece.len()..];
     }
-    let latin_at = |k: Option<usize>| k.and_then(|k| typed.get(k)).is_some_and(|&c| latin_letter(c));
-    let apostrophe = |k: usize| latin_at(k.checked_sub(1)) && latin_at(Some(k + 1));
-    let chars: Vec<char> = (0..typed.len())
-        .map(|k| match typed[k] {
-            '“' if quotes => '『',
-            '”' if quotes => '』',
-            '‘' if quotes && !apostrophe(k) => '「',
-            '’' if quotes && !apostrophe(k) => '」',
-            c => c,
-        })
-        .collect();
+    let chars = match quotes {
+        true => corner_quotes(&typed),
+        false => typed.clone(),
+    };
     let piece = |k: usize| -> String {
         match chars[k] == typed[k] {
             true => written[k].to_string(),
             false => chars[k].to_string(),
         }
     };
-    let joins = |k: usize| half_width(chars[k]) || (chars[k] == '’' && apostrophe(k));
-    // The words: runs of half-width characters with a letter or digit in
-    // them. Then the phrases: words with one space between.
-    let mut words: Vec<std::ops::Range<usize>> = Vec::new();
-    let mut k = 0;
-    while k < chars.len() {
-        if !joins(k) {
-            k += 1;
-            continue;
-        }
-        let from = k;
-        while k < chars.len() && joins(k) {
-            k += 1;
-        }
-        if chars[from..k].iter().any(|&c| latin_letter(c)) {
-            words.push(from..k);
-        }
-    }
-    let mut runs: Vec<std::ops::Range<usize>> = Vec::new();
-    for word in words {
-        match runs.last_mut() {
-            Some(last) if last.end + 1 == word.start && chars[last.end] == ' ' => last.end = word.end,
-            _ => runs.push(word),
-        }
-    }
+    let runs = latin_runs(&chars, latin);
     let mut out = String::with_capacity(text.len() + runs.len() * 28);
     let mut at = 0;
-    for run in runs {
+    for (run, how) in runs {
         (at..run.start).for_each(|k| out.push_str(&piece(k)));
-        let class = match latin {
-            Latin::Turn => "yoko",
-            Latin::Jlreq => jlreq_class(&chars[run.clone()]),
-        };
-        out.push_str(&format!("<span class=\"{class}\">"));
+        out.push_str(&format!("<span class=\"{}\">", how.class()));
         run.clone().for_each(|k| out.push_str(&piece(k)));
         out.push_str("</span>");
         at = run.end;

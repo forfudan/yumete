@@ -3397,6 +3397,9 @@ pub struct Editor {
     /// Whether the page is drawn in the theme's colours rather than as
     /// printed (`:view-preview-theme`, `[editor] preview_theme`).
     preview_theme: bool,
+    /// Whether the Markdown preview is set vertically while the text window
+    /// is (`:view-preview-vertical`, `[editor] preview_vertical`).
+    preview_vertical: bool,
     /// The scroll keys pressed in a page window, for the front end.
     page_steps: Vec<PageStep>,
     /// A count typed in a page window, for `G` and `gg` (`5G`).
@@ -4649,6 +4652,7 @@ impl Editor {
             formula_painter: None,
             preview_fit: PreviewFit::default(),
             preview_theme: false,
+            preview_vertical: true,
             page_steps: Vec::new(),
             page_count: None,
             page_g: false,

@@ -29,5 +29,11 @@ vello_cpu = "0.3"
 icu_provider = { version = "2", default-features = false, features = ["logging"] }
 # Local pictures in a document: PNG and JPEG only.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# **Characters shaped down a column** (2026-11-08) for the vertical
+# preview: parley lays text across only, so the 漢字 of a vertical page are
+# shaped top to bottom here, in the face parley chose, which brings each
+# font's vertical forms and metrics (`vert`, `vmtx`, `VORG`). Already under
+# parley, at this version. Apache-2.0 / MIT.
+harfrust = "0.12"
 yumete-cjk = {path = "../yumete-cjk"}
 yumete-core = {path = "../yumete-core"}

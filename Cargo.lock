@@ -3074,6 +3074,7 @@ name = "yumete-mdview"
 version = "0.20.0"
 dependencies = [
  "fontique",
+ "harfrust",
  "icu_provider",
  "image",
  "parley",

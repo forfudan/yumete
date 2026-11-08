@@ -1271,6 +1271,14 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::PreviewVertical(how) => {
+                self.preview_vertical = how.over(self.preview_vertical);
+                self.status = match self.preview_vertical {
+                    true => say!("preview.vertical-on"),
+                    false => say!("preview.vertical-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::PreviewTheme(how) => {
                 self.preview_theme = how.over(self.preview_theme);
                 self.status = match self.preview_theme {
