@@ -23,8 +23,9 @@
 //! - **Formulas** turn with the text (a display formula on a column of its
 //!   own, two squares in from its head); **tables** are vertical, as a 年表 in
 //!   史記 is: each source row a column, the head row on the right; a
-//!   **figure's** picture stays upright beside its caption; **code** stays
-//!   across, read line by line, as the export keeps it.
+//!   **figure's** picture stays upright beside its caption; **code** is
+//!   turned whole, a block and a span alike, 漢字 with it, as the export
+//!   turns it.
 //!
 //! A vertical block's coordinates: `x` from the block's right edge, so
 //! negative; `y` from the page's top. Its marks and columns count how far
@@ -35,7 +36,7 @@ use std::ops::Range;
 use harfrust::{Direction, ShapeOptions, ShaperData, UnicodeBuffer};
 use parley::{FontData, FontFamily, FontStyle, FontWeight, LineHeight, StyleProperty, WhiteSpaceCollapse};
 use vello_cpu::kurbo::Affine;
-use yumete_core::export::{Latin, Orientation};
+use yumete_core::export::{Latin, Orientation, CODE_HANG, CODE_HOOK};
 
 use crate::fonts::Han;
 use crate::layout::{closing_mark, ink_of, opening_mark, push_marks, rect, Ctx, Engine, Ink, Item, Laid, Out, Pix, Run, Style};
@@ -353,6 +354,8 @@ impl Engine {
         }
         let code_at = |at: usize| ranges.iter().any(|(r, m, ..)| r.contains(&at) && (m.code || m.kbd));
         let small_at = |at: usize| ranges.iter().any(|(r, _, _, small)| r.contains(&at) && *small);
+        // Code is verbatim: turned whole, 漢字 and all (2026-11-08).
+        let verbatim_at = |at: usize| st.mono || ranges.iter().any(|(r, m, ..)| r.contains(&at) && m.code);
 
         // **The text as shown**: curly quotes as corner brackets in Chinese,
         // never in code. Each is three bytes, as its bracket is.
@@ -369,7 +372,9 @@ impl Engine {
         let chars: Vec<(usize, char)> = shown.char_indices().collect();
 
         // **How each character stands.** Latin runs as `vertical_latin`
-        // says, outside code and small type; code's half-width runs turned
+        // says, outside code and small type; code turned whole, whatever it
+        // says, under either `vertical_latin`, as a turned Latin word is (it
+        // is never set upright or 縱中橫); a key's half-width runs turned
         // whole; small type across, or turned when long; a lone half-width
         // mark turned, as `text-orientation: mixed` sets it.
         let masked: Vec<char> = chars.iter().map(|&(at, c)| if code_at(at) || small_at(at) || st.mono { '\u{3000}' } else { c }).collect();
@@ -397,15 +402,17 @@ impl Engine {
             let small = small_at(at);
             let code = code_at(at) || st.mono;
             if small || code {
-                // A run of half-width characters (spaces too, in code), or of
-                // small type, set one way.
-                let joins = |c: char| if small { c != '\n' } else { half_width(c) || c == ' ' };
+                // A run of code, of half-width characters in a key (spaces
+                // too), or of small type, set one way.
+                let whole = small || verbatim_at(at);
+                let joins = |c: char| if whole { c != '\n' } else { half_width(c) || c == ' ' };
                 if !joins(c) {
                     k += 1;
                     continue;
                 }
                 let from = k;
-                while k < chars.len() && seg[k] == Seg::Up && joins(chars[k].1) && small_at(chars[k].0) == small && (code_at(chars[k].0) || st.mono) == code {
+                let same = |at: usize| small_at(at) == small && (code_at(at) || st.mono) == code && verbatim_at(at) == verbatim_at(chars[from].0);
+                while k < chars.len() && seg[k] == Seg::Up && joins(chars[k].1) && same(chars[k].0) {
                     k += 1;
                 }
                 let n = k - from;
@@ -1342,62 +1349,153 @@ impl Engine {
         vt
     }
 
-    /// **Something set across on a vertical page**: code, front matter, HTML.
-    /// Code too long for a column goes on in the next box to the left.
+    /// **Something set across on a vertical page**: front matter, HTML.
     #[allow(clippy::too_many_arguments)]
     fn island(&mut self, block: &Block, u: &mut f32, top: f32, len: f32, out: &mut Out, cx: Ctx, page: Page) {
+        if let BlockKind::Code { info, lines } = &block.kind {
+            return self.vcode(info, lines, block.lines, u, top, len, out, cx);
+        }
         let em = self.base();
-        let px = self.scale;
         let room = (page.width * 0.75).min(48.0 * em).max(8.0 * em);
-        let mut boxes: Vec<(Out, f32, usize)> = Vec::new();
-        match &block.kind {
-            BlockKind::Code { info, lines } => {
-                let pad = 16.0 * px;
-                let line = cx.size * 0.85 * 1.45;
-                let per = (((len - 2.0 * pad) / line).floor() as usize).max(1);
-                let fenced = block.lines.1 + 1 - block.lines.0 > lines.len();
-                let code0 = block.lines.0 + usize::from(fenced);
-                let chunks: Vec<&[String]> = if lines.is_empty() { vec![&lines[..]] } else { lines.chunks(per).collect() };
-                for (n, chunk) in chunks.into_iter().enumerate() {
-                    let from = code0 + n * per;
-                    let mut b = Out::default();
-                    let mut y = 0.0;
-                    let span = (from, from + chunk.len().max(1) - 1);
-                    self.code(info, chunk, span, 0.0, room, &mut y, &mut b, cx);
-                    // The box as wide as its longest line.
-                    let text_w = b.items.iter().find_map(|i| match i {
-                        Item::Text { text, .. } => Some(text.layout.width()),
-                        _ => None,
-                    });
-                    let w = text_w.map_or(room, |t| (t + 2.0 * pad).min(room));
-                    if let Some(Item::Rect { r, .. }) = b.items.first_mut() {
-                        r.x1 = r.x0 + w as f64;
+        let mut b = Out::default();
+        let mut y = 0.0;
+        self.block(block, 0.0, room, &mut y, &mut b, cx);
+        let w = b.items.iter().map(|i| match i {
+            Item::Text { x, text, .. } => x + text.layout.width(),
+            Item::Rect { r, .. } | Item::Frame { r, .. } => r.x1 as f32,
+            _ => 0.0,
+        }).fold(0.0, f32::max).max(em);
+        shift(&mut b.items, -*u - w, top);
+        out.items.extend(b.items);
+        out.marks.push((*u, block.lines.0));
+        *u += w;
+    }
+
+    /// **A code block down the page** (2026-11-08): the block as it is set
+    /// across — its colours, its ground — turned a quarter turn clockwise
+    /// whole, every character with its line, 漢字 too: code is verbatim, and
+    /// its columns line up only if nothing in it stands up. Each line runs
+    /// down the page as a turned Latin word does, the next on its left.
+    ///
+    /// A line longer than the column wraps at the column's foot, wherever
+    /// that falls, as a terminal wraps; what goes on hangs [`CODE_HANG`]
+    /// cells in, the cells keeping their places, with [`CODE_HOOK`] in the
+    /// hang in the dim colour. The export's `pre` does the same in CSS.
+    #[allow(clippy::too_many_arguments)]
+    fn vcode(&mut self, info: &str, lines: &[String], span: (usize, usize), u: &mut f32, top: f32, len: f32, out: &mut Out, cx: Ctx) {
+        let px = self.scale;
+        let pad = 16.0 * px;
+        let st = self.code_style(&cx);
+        let fenced = span.1 + 1 - span.0 > lines.len();
+        let first = span.0 + usize::from(fenced);
+        let code = self.code_text(info, lines, first);
+        let mut layout = self.code_layout(&code.text, &code.colours, st);
+        layout.break_all_lines(None);
+
+        // Every cluster, by source line: its face, colour, glyphs, advance.
+        struct Cl {
+            at: Range<usize>,
+            font: FontData,
+            coords: Vec<i16>,
+            size: f32,
+            color: Rgba,
+            glyphs: Vec<(u32, f32, f32)>,
+            adv: f32,
+        }
+        let mut rows: Vec<Vec<Cl>> = Vec::new();
+        let mut metrics: Option<(f32, f32)> = None;
+        for line in layout.lines() {
+            let mut row = Vec::new();
+            for run in line.runs() {
+                let m = run.font_metrics();
+                metrics.get_or_insert((m.ascent, m.descent));
+                let coords: Vec<i16> = run.normalized_coords().iter().map(|c| c.to_bits()).collect();
+                for c in run.clusters() {
+                    if code.text[c.text_range()].chars().all(|ch| ch == '\n' || ch == '\r') {
+                        continue;
                     }
-                    let mark = if n == 0 { block.lines.0 } else { from };
-                    boxes.push((b, w, mark));
+                    let mut pen = 0.0;
+                    let glyphs = c.glyphs().map(|g| {
+                        let at = (g.id, pen + g.x, g.y);
+                        pen += g.advance;
+                        at
+                    }).collect();
+                    row.push(Cl { at: c.text_range(), font: run.font().clone(), coords: coords.clone(), size: run.font_size(), color: c.style().brush.color, glyphs, adv: c.advance() });
                 }
             }
-            _ => {
-                let mut b = Out::default();
-                let mut y = 0.0;
-                self.block(block, 0.0, room, &mut y, &mut b, cx);
-                let w = b.items.iter().map(|i| match i {
-                    Item::Text { x, text, .. } => x + text.layout.width(),
-                    Item::Rect { r, .. } | Item::Frame { r, .. } => r.x1 as f32,
-                    _ => 0.0,
-                }).fold(0.0, f32::max);
-                boxes.push((b, w.max(em), block.lines.0));
-            }
+            rows.push(row);
         }
-        for (k, (mut b, w, mark)) in boxes.into_iter().enumerate() {
-            if k > 0 {
-                *u += 0.5 * em;
+        let (asc, desc) = metrics.unwrap_or((0.8 * st.size, 0.2 * st.size));
+        let lh = st.size * st.line_height;
+        let base = (lh - (asc + desc)) / 2.0 + asc;
+        // One cell: what a half-width character is wide in the code face.
+        let cell = rows.iter().flatten().find(|c| code.text[c.at.clone()].chars().all(|ch| ch.is_ascii_graphic() || ch == ' ')).map_or(0.6 * st.size, |c| c.adv);
+        let hang = f32::from(CODE_HANG) * cell;
+        let room = (len - 2.0 * pad).max(4.0 * cell);
+
+        // **Wrapped at the column's foot**: each line a source line's run of
+        // clusters, and whether it goes on from the line before.
+        let mut wrapped: Vec<(usize, bool, Vec<usize>)> = Vec::new();
+        for (k, row) in rows.iter().enumerate() {
+            let mut line = (k, false, Vec::new());
+            let mut pen = 0.0;
+            for (n, c) in row.iter().enumerate() {
+                let limit = if line.1 { room - hang } else { room };
+                if pen > 0.0 && pen + c.adv > limit + 0.01 {
+                    wrapped.push(std::mem::replace(&mut line, (k, true, Vec::new())));
+                    pen = 0.0;
+                }
+                line.2.push(n);
+                pen += c.adv;
             }
-            shift(&mut b.items, -*u - w, top);
-            out.items.extend(b.items);
-            out.marks.push((*u, mark));
-            *u += w;
+            wrapped.push(line);
         }
+        let longest = wrapped.iter().map(|(k, on, cl)| cl.iter().map(|&n| rows[*k][n].adv).sum::<f32>() + if *on { hang } else { 0.0 }).fold(0.0, f32::max);
+        let thick = wrapped.len() as f32 * lh + 2.0 * pad;
+        let along = (longest + 2.0 * pad).min(len).max(2.0 * pad + cell);
+
+        // Across, the box's top left at the origin; down the page, turned
+        // about its top right corner.
+        let right = -*u;
+        let turn = Affine::translate((right as f64, top as f64)) * Affine::rotate(std::f64::consts::FRAC_PI_2);
+        let down = |hx: f32, hy: f32| (right - hy, top + hx);
+        out.items.push(Item::Rect { r: rect(right - thick, top, thick, along), fill: self.theme.code_block, radius: 6.0 * px });
+        if fenced {
+            out.marks.push((*u, span.0));
+        }
+        let mut batch: Option<Run> = None;
+        let flush = |batch: &mut Option<Run>, out: &mut Out| {
+            if let Some(run) = batch.take() {
+                out.items.push(Item::Glyphs(Box::new(run)));
+            }
+        };
+        for (v, (k, on, cl)) in wrapped.iter().enumerate() {
+            let y0 = pad + v as f32 * lh;
+            let mut x = pad + if *on { hang } else { 0.0 };
+            out.marks.push((*u + y0, first + k));
+            out.cols.push((*u + y0, cl.iter().map(|&n| &code.text[rows[*k][n].at.clone()]).collect()));
+            if *on {
+                let hook: Vec<(f32, f32)> = CODE_HOOK.iter().map(|&(a, b)| down(pad + a * hang, y0 + b * lh)).collect();
+                let w = (0.07 * st.size).max(px);
+                out.items.push(Item::Lines { points: hook[..3].to_vec(), color: self.theme.muted, width: w });
+                out.items.push(Item::Lines { points: hook[3..].to_vec(), color: self.theme.muted, width: w });
+            }
+            for &n in cl {
+                let c = &rows[*k][n];
+                let same = batch.as_ref().is_some_and(|b| b.font == c.font && b.size == c.size && b.color == c.color && b.coords == c.coords);
+                if !same {
+                    flush(&mut batch, out);
+                    batch = Some(Run { font: c.font.clone(), size: c.size, coords: c.coords.clone(), color: c.color, transform: turn, glyphs: Vec::new(), bounds: rect(right - y0 - lh, top + x, lh, 0.0) });
+                }
+                if let Some(b) = batch.as_mut() {
+                    b.glyphs.extend(c.glyphs.iter().map(|&(id, gx, gy)| vello_cpu::Glyph { id, x: x + gx, y: y0 + base + gy }));
+                    b.bounds = b.bounds.union(rect(right - y0 - lh, top + x, lh, c.adv));
+                }
+                x += c.adv;
+            }
+            flush(&mut batch, out);
+        }
+        *u += thick;
     }
 
     /// **A figure**: its picture upright, as large as the column allows and
@@ -1861,19 +1959,42 @@ mod tests {
         assert!(glyphs >= 2, "the base and the reading: {glyphs}");
     }
 
-    /// **Code stays across** (2026-11-08), and code longer than a column
-    /// goes on in another box to the left.
+    /// **A code block is turned whole** (2026-11-08): no text set across,
+    /// every glyph turned a quarter turn clockwise, a line to a column, 漢字
+    /// too; a line longer than the column wraps at its foot onto the next,
+    /// with nothing lost, and the hook in its hang.
     #[test]
-    fn code_stays_across_in_boxes_a_column_long() {
-        let mut text = String::from("```\n");
-        for k in 0..40 {
-            text.push_str(&format!("let x{k} = {k};\n"));
-        }
-        text.push_str("```\n");
+    fn a_code_block_is_turned_whole_and_wraps_at_the_foot() {
+        let long = "x".repeat(30) + "# 很长的注释" + &"y".repeat(30);
+        let text = format!("```\nlet 甲 = 1;\n{long}\n```\n");
         let p = page(&text, Latin::Turn, 300);
-        let boxes = p.placed[0].laid.items.iter().filter(|i| matches!(i, Item::Rect { .. })).count();
-        let texts = p.placed[0].laid.items.iter().filter(|i| matches!(i, Item::Text { .. })).count();
-        assert!(boxes >= 3 && boxes == texts, "{boxes} boxes, {texts} texts");
+        let items = &p.placed[0].laid.items;
+        assert!(!items.iter().any(|i| matches!(i, Item::Text { .. })), "nothing set across");
+        let turned = |i: &Item| matches!(i, Item::Glyphs(r) if r.transform.as_coeffs()[1] > 0.99);
+        assert!(items.iter().any(turned), "turned glyphs");
+        assert!(items.iter().all(|i| !matches!(i, Item::Glyphs(_)) || turned(i)), "every glyph turned");
+        let hooks = items.iter().filter(|i| matches!(i, Item::Lines { .. })).count();
+        let cols = &p.placed[0].laid.cols;
+        let words: Vec<&str> = cols.iter().map(|c| c.1.as_str()).collect();
+        assert_eq!(words[0], "let 甲 = 1;", "{words:?}");
+        assert!(words.len() >= 3, "the long line wraps: {words:?}");
+        assert_eq!(hooks, 2 * (words.len() - 2), "a hook of two strokes a wrap: {words:?}");
+        assert_eq!(words[1..].concat(), long, "nothing lost: {words:?}");
+        // Each line on the left of the one before, a line's pitch apart.
+        assert!(cols.windows(2).all(|w| w[1].0 > w[0].0), "{cols:?}");
+    }
+
+    /// **Inline code is turned whole** (2026-11-08), 漢字 in it too, under
+    /// either `vertical_latin`: never upright, never across in one square.
+    #[test]
+    fn inline_code_is_turned_whole_under_both_latins() {
+        for latin in [Latin::Turn, Latin::Jlreq] {
+            let mut e = engine(latin, false);
+            let l = looks(&mut e, "写 `取值(x, 12)` 和 `N` 吧。");
+            let code: Vec<&(String, &str)> = l.iter().filter(|x| "取值(x,12)N".contains(x.0.trim()) && !x.0.trim().is_empty()).collect();
+            assert!(!code.is_empty() && code.iter().all(|x| x.1 == "turned"), "{latin:?}: {l:?}");
+            assert_eq!(how(&l, "写"), ["up"], "{latin:?}: {l:?}");
+        }
     }
 
     /// **Across again** (2026-11-08): the page is the horizontal one.

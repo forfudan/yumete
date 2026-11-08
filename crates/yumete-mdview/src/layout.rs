@@ -57,6 +57,14 @@ pub(crate) struct Text {
     pub string: String,
 }
 
+/// **A code block's text**: its lines joined, each token's colour, and
+/// where each source line begins (byte, line).
+pub(crate) struct CodeText {
+    pub text: String,
+    pub colours: Vec<(std::ops::Range<usize>, Rgba)>,
+    pub src: Vec<(usize, usize)>,
+}
+
 /// **One thing drawn**, at a place within its top-level block.
 pub(crate) enum Item {
     Text { x: f32, y: f32, text: Box<Text> },
@@ -710,14 +718,10 @@ impl Engine {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn code(&mut self, info: &str, lines: &[String], span: (usize, usize), x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
-        let px = self.px();
-        let pad = 16.0 * px;
-        let st = Style { size: cx.size * 0.85, weight: 400.0, color: self.theme.text, mono: true, line_height: 1.45, italic: false, anywhere: false };
-        // The first line of code: under the opening fence, if there is one.
-        let fenced = span.1 + 1 - span.0 > lines.len();
-        let first = span.0 + usize::from(fenced);
+    /// **A code block's text** as it is set: its lines joined, a tab as four
+    /// spaces, each token's colour, and where each source line begins.
+    /// The first line of code is source line `first`.
+    pub(crate) fn code_text(&self, info: &str, lines: &[String], first: usize) -> CodeText {
         let language = info.split_whitespace().next().and_then(yumete_core::code::Language::from_info);
         let painted = language.map(|lang| yumete_core::code::highlight(lang, lines));
         let mut runs = Vec::new();
@@ -766,7 +770,18 @@ impl Engine {
             text.push(' ');
             src.push((0, first));
         }
-        let mut b = self.lcx.ranged_builder(&mut self.fonts, &text, 1.0, true);
+        CodeText { text, colours, src }
+    }
+
+    /// The style code is set in.
+    pub(crate) fn code_style(&self, cx: &Ctx) -> Style {
+        Style { size: cx.size * 0.85, weight: 400.0, color: self.theme.text, mono: true, line_height: 1.45, italic: false, anywhere: false }
+    }
+
+    /// **`text` laid out in the code face**, its tokens in their colours;
+    /// not yet broken into lines.
+    pub(crate) fn code_layout(&mut self, text: &str, colours: &[(std::ops::Range<usize>, Rgba)], st: Style) -> Layout<Ink> {
+        let mut b = self.lcx.ranged_builder(&mut self.fonts, text, 1.0, true);
         let mono = self.families[self.han.index()].mono.clone();
         b.push_default(StyleProperty::FontFamily(FontFamily::from(mono.as_str())));
         b.push_default(StyleProperty::FontSize(st.size));
@@ -774,9 +789,21 @@ impl Engine {
         b.push_default(StyleProperty::WhiteSpaceCollapse(WhiteSpaceCollapse::Preserve));
         b.push_default(StyleProperty::Brush(Ink { color: st.color, ..Ink::default() }));
         for (r, c) in colours {
-            b.push(StyleProperty::Brush(Ink { color: c, ..Ink::default() }), r);
+            b.push(StyleProperty::Brush(Ink { color: *c, ..Ink::default() }), r.clone());
         }
-        let mut layout = b.build(&text);
+        b.build(text)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn code(&mut self, info: &str, lines: &[String], span: (usize, usize), x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
+        let px = self.px();
+        let pad = 16.0 * px;
+        let st = self.code_style(&cx);
+        // The first line of code: under the opening fence, if there is one.
+        let fenced = span.1 + 1 - span.0 > lines.len();
+        let first = span.0 + usize::from(fenced);
+        let CodeText { text, colours, src } = self.code_text(info, lines, first);
+        let mut layout = self.code_layout(&text, &colours, st);
         layout.break_all_lines(Some((w - 2.0 * pad).max(1.0)));
         layout.align(Alignment::Start, AlignmentOptions::default());
         let h = layout.height() + 2.0 * pad;
