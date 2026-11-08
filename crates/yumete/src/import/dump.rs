@@ -13,7 +13,8 @@
 //!   and the copy is removed afterwards.
 //! - **No shada or viminfo, no swap file**: `-i NONE -n`.
 //! - **It is killed after 10 s** (decision 9): a config that waits for input,
-//!   or a plugin manager that starts downloading, would never end.
+//!   or a plugin manager that starts downloading, would never end. What it
+//!   started goes with it, then or when it quits ([`kill_group`]).
 //!
 //! What is read comes back as JSON from `dump.lua` or `dump.vim`, written
 //! into the same directory.
@@ -189,6 +190,13 @@ impl Sandbox {
             .stdout(Stdio::null())
             // A file, not a pipe: a full pipe would stop the editor.
             .stderr(stderr);
+        // A process group of its own, so that what it starts can be killed
+        // with it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(Failed::NotInstalled),
@@ -197,8 +205,19 @@ impl Sandbox {
         let start = Instant::now();
         loop {
             match child.try_wait() {
-                Ok(Some(_)) => break,
+                Ok(Some(_)) => {
+                    kill_group(&child);
+                    break;
+                }
                 Ok(None) if start.elapsed() >= timeout => {
+                    // Asked first: Neovim's own jobs run in sessions of their
+                    // own, and only Neovim, leaving, stops them.
+                    signal_group(&child, Signal::Term);
+                    let asked = Instant::now();
+                    while asked.elapsed() < Duration::from_secs(1) && matches!(child.try_wait(), Ok(None)) {
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    kill_group(&child);
                     let _ = child.kill();
                     let _ = child.wait();
                     return Err(Failed::TimedOut(timeout));
@@ -226,6 +245,44 @@ impl Sandbox {
         }
         Ok(Dumped { json, said })
     }
+}
+
+/// **Kill whatever the editor started** — a plugin manager's `git fetch`, a
+/// language server — with it: the editor led a process group of its own.
+/// Also once it has quit, as a job it left would write into a copy about to
+/// be removed, or run on for ever.
+///
+/// Warning: **Windows has no process group to kill**; only the editor itself
+/// is killed there, and what it started may run on (a job object would close
+/// that gap, and needs a crate this one does not have).
+fn kill_group(child: &std::process::Child) {
+    signal_group(child, Signal::Kill);
+}
+
+/// The two signals a run is sent.
+#[derive(Clone, Copy)]
+enum Signal {
+    /// Leave, stopping your own jobs.
+    Term,
+    Kill,
+}
+
+/// Send `signal` to the process group `child` leads.
+fn signal_group(child: &std::process::Child, signal: Signal) {
+    #[cfg(unix)]
+    if let Ok(group) = libc::pid_t::try_from(child.id()) {
+        let signal = match signal {
+            Signal::Term => libc::SIGTERM,
+            Signal::Kill => libc::SIGKILL,
+        };
+        // SAFETY: `kill` takes two integers and touches no memory of ours;
+        // a negative pid names the group the child leads.
+        unsafe {
+            libc::kill(-group, signal);
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = (child, signal);
 }
 
 impl Drop for Sandbox {

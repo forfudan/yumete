@@ -172,6 +172,8 @@ pub(super) struct Own {
     /// The `[keys.vim.…]` sections, ready to write.
     pub keys: String,
     pub skipped: Vec<String>,
+    /// Keys of yumete's that an imported map took, with what they did.
+    pub takes: Vec<String>,
     pub carried: usize,
     /// A run written with `@`.
     pub runs: bool,
@@ -790,18 +792,23 @@ struct Keymap {
     commands: Vec<yumete_core::editor::DocCommand>,
     normal: Vec<(Vec<String>, String)>,
     select: Vec<(Vec<String>, String)>,
-    /// The keys of yumete's Space menu, as its rows spell them.
-    space: Vec<String>,
+    /// The keys of yumete's Space menu, as its rows spell them, and what
+    /// the row says, in English as the file is.
+    space: Vec<(String, String)>,
 }
 
 impl Keymap {
     fn new() -> Keymap {
         let docs = yumete_core::Editor::keymap_for_docs(yumete_config::KeyPreset::Vim, yumete_config::Flavor::default());
+        let english = |tag: &str| {
+            yumete_core::messages::table().get(tag).map(|e| e.en).filter(|en| !en.is_empty()).unwrap_or(tag).to_string()
+        };
         let space = docs
             .menus
             .iter()
             .filter(|m| m.title == "hint.space.title")
-            .flat_map(|m| m.rows.iter().flat_map(|(keys, _)| keys.split(" / ").map(str::to_string)))
+            .flat_map(|m| m.rows.iter())
+            .flat_map(|(keys, says)| keys.split(" / ").map(|k| (k.to_string(), english(says))).collect::<Vec<_>>())
             .collect();
         Keymap {
             commands: yumete_core::Editor::commands_for_docs(),
@@ -1071,8 +1078,14 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
                         Some(desc) => format!("{{ run = {value}, label = {} }}", quote(desc)),
                         None => value,
                     };
-                    if from != Source::LazyVim && keymap.space.contains(&spelt[1]) && taken.insert(spelt[1].clone()) {
-                        own.skipped.push(format!("<leader>{}: takes yumete's Space {}", spelt[1], spelt[1]));
+                    // A key of yumete's Space menu, taken (decision 16): said
+                    // once, with what yumete had there.
+                    let had = keymap.space.iter().find(|(k, _)| *k == spelt[1]);
+                    if let (true, Some((key, says))) = (from != Source::LazyVim, had) {
+                        if taken.insert(key.clone()) {
+                            let still = if key == "w" { "; the group is still on C-w" } else { "" };
+                            own.takes.push(format!("<leader>{key}: yumete's Space {key} ({says}{still})"));
+                        }
                     }
                     written.put(path, spelt[spelt.len() - 1].clone(), line)
                 }

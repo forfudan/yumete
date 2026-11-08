@@ -1056,8 +1056,24 @@ fn vim_file(what: &str, word: &str, from: &Path, version: &str, when: &str, besi
         }
     }
     text.push_str(&theme_and_keys(own));
+    text.push_str(&takes_over(&own.takes));
     text.push_str(&not_carried(&own.skipped));
     Imported { text, carried: own.carried, skipped: own.skipped.len() }
+}
+
+/// **The keys of yumete's that imported maps took**, before the list of
+/// what did not come over: these did, and replaced something.
+fn takes_over(takes: &[String]) -> String {
+    let mut out = String::new();
+    if !takes.is_empty() {
+        out.push_str("\n# Takes over yumete's keys:\n");
+        for line in takes {
+            out.push_str("#   ");
+            out.push_str(&one_line(line));
+            out.push('\n');
+        }
+    }
+    out
 }
 
 /// The LazyVim config with the mini.surround extra's keys: three lines at
@@ -1825,7 +1841,10 @@ language-servers = ["gopls", "golangci-lint-lsp"]
         let (_, list) = out.split_once("# Not carried over:\n").expect("the list");
         assert!(list.contains("n <leader>x (Say hi): a Lua function"), "{list}");
         assert!(list.contains("o ie: yumete has no Operator-pending table"), "{list}");
-        assert!(list.contains("<leader>w: takes yumete's Space w"), "{list}");
+        assert!(!list.contains("<leader>w"), "it was carried: {list}");
+        let (_, takes) = out.split_once("# Takes over yumete's keys:\n").expect("the keys taken");
+        let takes = takes.split("\n\n").next().unwrap();
+        assert_eq!(takes, "#   <leader>f: yumete's Space f (file picker (project))\n#   <leader>w: yumete's Space w (region; the group is still on C-w)");
         assert!(list.contains("options with no counterpart in yumete: clipboard\n"), "{list}");
         assert!(list.contains("1 map already does the same in yumete: n K"), "{list}");
         // The leader on <Nop> is left without a word (decision 13), and so is
@@ -1991,11 +2010,35 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         if !installed("nvim") {
             return;
         }
-        let home = nvim_home("nvim-hang", "vim.opt.tabstop = 3\nlocal name = vim.fn.input(\"name? \")\n");
+        // It starts a job first, and a process as lazy.nvim starts git, in
+        // its own session and in Neovim's group: both go with it.
+        let pids = scratch("nvim-hang-pid");
+        let home = nvim_home(
+            "nvim-hang",
+            &format!(
+                "vim.opt.tabstop = 3\nvim.fn.jobstart({{ \"sh\", \"-c\", \"echo $$ > {0}/job && exec sleep 300\" }})\n\
+                 vim.uv.spawn(\"sh\", {{ args = {{ \"-c\", \"echo $$ > {0}/spawned && exec sleep 300\" }} }})\n\
+                 vim.uv.spawn(\"sh\", {{ args = {{ \"-c\", \"trap '' TERM; echo $$ > {0}/deaf; while true; do sleep 1; done\" }} }})\n\
+                 local name = vim.fn.input(\"name? \")\n",
+                pids.display()
+            ),
+        );
         let started = std::time::Instant::now();
         let failed = read_nvim("nvim", &env_of(&home), false, std::time::Duration::from_secs(2)).unwrap_err();
         assert!(matches!(failed, dump::Failed::TimedOut(_)), "{failed:?}");
         assert!(started.elapsed() < std::time::Duration::from_secs(8));
+        #[cfg(unix)]
+        for name in ["job", "spawned", "deaf"] {
+            let pid: libc::pid_t = std::fs::read_to_string(pids.join(name)).unwrap().trim().parse().unwrap();
+            // Gone, once whoever adopted it has reaped it.
+            let gone = (0..100).any(|_| {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                // SAFETY: signal 0 only asks whether the process is there.
+                unsafe { libc::kill(pid, 0) != 0 }
+            });
+            assert!(gone, "the {name} nvim started outlived it");
+        }
+        let _ = std::fs::remove_dir_all(&pids);
         let home = nvim_home("nvim-error", "vim.opt.tabstop = 3\nrequire(\"no.such.module\")\nvim.opt.shiftwidth = 5\n");
         let (user, base, said) = read_nvim("nvim", &env_of(&home), false, dump::TIMEOUT).unwrap();
         assert!(said.as_deref().is_some_and(|s| s.contains("E5113") || s.contains("no.such.module")), "{said:?}");
