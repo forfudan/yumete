@@ -1667,7 +1667,21 @@ impl Editor {
                 cached.as_ref().map(|(_, lines)| (path, lines.clone()))
             }
             crate::picker::Item::Buffer(i, name) => {
-                Some((name, head(&self.buffers.get(i)?.text())))
+                let buffer = self.buffers.get(i)?;
+                // A preview has no text to show: one line says what it is
+                // (2026-11-08).
+                if let Some(main) = buffer.preview_main() {
+                    // Inside the project, from its top.
+                    let root = self.project_root();
+                    let root = self.real_path(&root).unwrap_or(root);
+                    let shown = main.strip_prefix(&root).unwrap_or(main);
+                    let note = match buffer.preview_kind() {
+                        Some(crate::buffer::PreviewKind::Markdown) => say!("preview.picker-note-markdown", shown.display()),
+                        _ => say!("preview.picker-note", shown.display()),
+                    };
+                    return Some((name, vec![note]));
+                }
+                Some((name, head(&buffer.text())))
             }
             // A clipboard entry is already the whole of what it is.
             // **寄存器那一扇也有預覽**（2026-10-11 報的）。從前這裏一律回 `None`，

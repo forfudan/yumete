@@ -38145,45 +38145,65 @@ fn a_typst_book(name: &str) -> (Editor, std::path::PathBuf) {
     (ed, dir)
 }
 
-/// **`:view-preview` and its two siblings are switches** (2026-11-07):
-/// `:view-preview` asks for the window with the browser as the fallback,
-/// `-window` for the window alone, `-browser` for the browser. `on` while one
-/// is up says where it is; `off`, or a bare one while it is up, puts away what
-/// it would open, and `:view-preview` whichever is up.
+/// **`:view-preview` and its two siblings are switches** (2026-11-07; on the
+/// preview tab since 2026-11-08): `:view-preview` asks for this document's
+/// preview beside the text with the browser as the fallback, `-window` for
+/// the preview alone, `-browser` for the browser. `on` while this document's
+/// preview is on the screen says so; `off` closes its tab; bare is `on`
+/// unless it is on the screen.
 #[test]
 fn the_preview_commands_ask_for_the_window_or_the_browser() {
     let (mut ed, dir) = a_typst_book("commands");
     let main = dir.join("main.typ");
+    let window = |path: &std::path::Path, fallback: bool| {
+        Some(Preview::Window { path: path.to_path_buf(), syntax: crate::syntax::Syntax::Typst, fallback })
+    };
     ed.execute(":view-preview").unwrap();
-    assert_eq!(
-        ed.take_preview_request(),
-        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true })
-    );
+    assert_eq!(ed.take_preview_request(), window(&main, true));
     ed.execute(":view-preview-window on").unwrap();
-    assert_eq!(
-        ed.take_preview_request(),
-        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: false })
-    );
+    assert_eq!(ed.take_preview_request(), window(&main, false));
     ed.execute(":view-preview-browser").unwrap();
     assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: main.clone(), syntax: crate::syntax::Syntax::Typst }));
-    // The front end opened the window: `on` says it is open…
+    // The front end opened it: `on` says it is open…
     assert!(ed.open_page_window(main.clone()).is_some());
     for asked in [":view-preview on", ":view-preview-window on"] {
         ed.execute(asked).unwrap();
         assert_eq!(ed.take_preview_request(), None, "{asked}");
         assert_eq!(ed.status(), say!("preview.window-open"), "{asked}");
     }
-    // …and a bare `-window` closes it.
+    // …from a chapter of the book too, whose preview it is.
+    ed.execute(&format!(":e {}", dir.join("two.typ").display())).unwrap();
+    ed.execute(":view-preview on").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
+    assert_eq!(ed.status(), say!("preview.window-open"));
+    ed.show_buffer_at(0);
+    // A bare `-window` closes the tab: off the screen and out of the list.
     ed.execute(":view-preview-window").unwrap();
     assert_eq!(ed.take_preview_request(), None);
     assert_eq!(ed.status(), say!("preview.window-closed"));
     assert!(!ed.has_a_page_window());
-    // `:view-preview off` closes the window and stops the browser's too.
+    assert!(ed.previews().is_empty());
+    assert_eq!(ed.windows().len(), 1);
+    // **A tab off the screen**: bare shows it again (it is the same tab),
+    // and `off` closes it all the same.
+    ed.open_page_window(main.clone()).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.page_window_has_the_keys());
+    ed.execute(":q").unwrap();
+    assert_eq!(ed.previews().len(), 1, "`:q` closed the window, not the tab");
+    assert!(!ed.has_a_page_window());
+    ed.execute(":view-preview").unwrap();
+    assert_eq!(ed.take_preview_request(), window(&main, true), "bare is `on` while it is off the screen");
+    ed.execute(":view-preview off").unwrap();
+    assert!(ed.previews().is_empty(), "`off` closes a tab off the screen too");
+    // `:view-preview off` closes the tab and stops the browser's too.
     assert!(ed.open_page_window(main.clone()).is_some());
     ed.set_preview_at(Some("http://127.0.0.1:23625".to_string()));
     ed.execute(":view-preview off").unwrap();
     assert_eq!(ed.take_preview_request(), Some(Preview::Stop), "the browser's goes too");
     assert!(!ed.has_a_page_window());
+    assert!(ed.previews().is_empty());
     assert_eq!(ed.windows().len(), 1);
     // `-browser off` stops only the browser's; with none running it is quiet.
     ed.execute(":view-preview-browser off").unwrap();
@@ -38206,27 +38226,41 @@ fn the_preview_commands_ask_for_the_window_or_the_browser() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **The page window is a window** (2026-11-07): it opens to the right of the
-/// text and leaves the keys there, `C-w w` walks into it, it follows the text
-/// window's cursor, its keys scroll and edit nothing, and `:q` closes it.
+/// **A preview is a tab** (2026-11-08): opened beside the text with the keys
+/// left there, it is in the tab line under its own name, in the buffer
+/// picker, and `gn` and `gp` reach it like any file. `C-w w` walks into it,
+/// its keys scroll the page, and `:q` in it closes the window and leaves the
+/// tab.
 #[test]
-fn the_page_window_opens_beside_follows_the_cursor_and_closes_with_q() {
-    let (mut ed, dir) = a_typst_book("window");
+fn a_preview_is_a_tab_shown_in_a_window() {
+    let (mut ed, dir) = a_typst_book("tab");
     let main = dir.join("main.typ");
     let text = ed.live_window();
     press(&mut ed, "jj");
     let page = ed.open_page_window(main.clone()).expect("room enough");
+    let preview = ed.preview_of(&main).expect("a tab");
     assert_eq!(ed.live_window(), text, "the keys stay in the text");
     assert_eq!(ed.windows().leaves(), [text, page], "to the right");
     let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20), false);
     assert!(placed[1].area.x > placed[0].area.x, "beside: {placed:?}");
-    assert_eq!(ed.page_windows(), vec![(page, PageWindow { follows: text, main: main.clone() })]);
+    assert_eq!(ed.page_windows(), vec![(page, PageWindow { preview, main: main.clone() })]);
     assert!(ed.is_page_window(page) && !ed.is_page_window(text));
-    // It shows the text window's file and cursor, and moves with it.
-    let target = ed.page_target(page).unwrap();
+    assert_eq!(ed.preview_in(page), Some(preview));
+    // In the tab line, under its own name, after the file; shown elsewhere.
+    let label = say!("preview.tab", "main.typ");
+    assert_eq!(ed.buffer_tabs(), vec![("main.typ".to_string(), false), (label.clone(), false)]);
+    assert_eq!(ed.tabs_shown_elsewhere(), vec![false, true]);
+    assert_eq!(ed.buffer_position(), (1, 2), "the tab line says the keys are in the file");
+    // In the buffer picker.
+    ed.execute(":buffer").unwrap();
+    let listed: Vec<String> = ed.picker().expect("the buffer picker").items().iter().map(|i| i.label().to_string()).collect();
+    assert!(listed.contains(&label), "{listed:?}");
+    ed.on_key(Key::Esc);
+    // It follows the text window's cursor, and moves with it.
+    let target = ed.page_target(preview).unwrap();
     assert_eq!((target.path.as_deref(), target.line, target.character), (Some(main.as_path()), 2, 0));
     press(&mut ed, "jjll");
-    let moved = ed.page_target(page).unwrap();
+    let moved = ed.page_target(preview).unwrap();
     assert_eq!((moved.line, moved.character), (4, 2));
 
     // `C-w w` walks in; the keys scroll the page and touch no text.
@@ -38234,12 +38268,13 @@ fn the_page_window_opens_beside_follows_the_cursor_and_closes_with_q() {
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.live_window(), page);
     assert!(ed.page_window_has_the_keys());
-    let before = ed.current_buffer().text();
+    assert_eq!(ed.preview_with_the_keys(), Some(preview));
+    assert_eq!(ed.buffer_position(), (2, 2), "the tab line says the keys are in the preview");
+    assert_eq!(ed.page_target(preview), None, "keys in the preview: it keeps its place");
     for key in [Key::Char('j'), Key::Ctrl('d'), Key::Char('k'), Key::Char('x'), Key::Char('i'), Key::Char('d'), Key::Char('G')] {
         ed.on_key(key);
     }
     assert_eq!(ed.mode(), Mode::Normal, "`i` opens no Insert here");
-    assert_eq!(ed.current_buffer().text(), before, "nothing edited");
     assert_eq!(
         ed.take_page_steps(),
         vec![PageStep::Rows(1), PageStep::Halves(1), PageStep::Rows(-1), PageStep::Bottom]
@@ -38268,76 +38303,561 @@ fn the_page_window_opens_beside_follows_the_cursor_and_closes_with_q() {
     }
     assert_eq!(ed.take_page_steps(), vec![PageStep::Rows(1)]);
     // `Space` goes on to the key groups: `Space w w` walks out, and back.
-    for key in " ww".chars() {
-        ed.on_key(Key::Char(key));
-    }
+    press(&mut ed, " ww");
     assert_eq!(ed.live_window(), text, "Space w w walked out");
-    for key in " ww".chars() {
-        ed.on_key(Key::Char(key));
-    }
+    press(&mut ed, " ww");
     assert_eq!(ed.live_window(), page);
-    // Still following the text window, whose cursor stayed where it was.
-    assert_eq!(ed.page_target(page).map(|t| (t.line, t.character)), Some((4, 2)));
-    // `C-w` still walks out, and back.
+    // The text window's cursor stayed where it was.
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.live_window(), text);
+    assert_eq!(ed.page_target(preview).map(|t| (t.line, t.character)), Some((4, 2)));
+    // `gn` from the file reaches the preview, `gp` comes back.
+    press(&mut ed, "gn");
+    assert!(ed.page_window_has_the_keys(), "gn shows the preview in this window");
+    press(&mut ed, "gp");
+    assert_eq!(ed.current_buffer().path(), Some(main.as_path()));
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.live_window(), page);
 
-    // `:q` in it closes it, and the keys go back to the text.
+    // `:q` in it closes the window, the keys go back to the text, and the
+    // tab stays.
     assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Continue);
     assert_eq!(ed.windows().leaves(), [text]);
     assert_eq!(ed.live_window(), text);
     assert!(!ed.has_a_page_window());
-
-    // **`:q` in the last text window leaves**: a page window does not count.
-    ed.open_page_window(main.clone()).unwrap();
-    assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
+    assert_eq!(ed.previews(), vec![(preview, main.clone())]);
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **What happens to a page window when the windows around it change**: the
-/// text window it follows closes and it follows another; `C-w o` from it
-/// keeps the text; a session keeps no page window; a closed tab does not
-/// close it.
+/// **Nothing in a preview is text** (2026-11-08): no Insert, no edit, no
+/// save, no draft, no file for a language server, nothing for `:wa` or
+/// `:q` to stop on, and `:readonly off` does not unlock it.
 #[test]
-fn a_page_window_follows_another_window_and_is_not_kept_by_a_session() {
-    let (mut ed, dir) = a_typst_book("rebind");
+fn a_preview_cannot_be_edited_or_written() {
+    let (mut ed, dir) = a_typst_book("locked");
     let main = dir.join("main.typ");
-    let first = ed.live_window();
+    ed.open_page_window(main.clone()).unwrap();
     ed.on_key(Key::Ctrl('w'));
-    ed.on_key(Key::Char('s'));
-    let second = ed.live_window();
-    ed.execute(&format!(":e {}", dir.join("two.typ").display())).unwrap();
+    ed.on_key(Key::Char('w'));
+    assert!(ed.page_window_has_the_keys());
+    press(&mut ed, "iabc");
+    ed.on_key(Key::Esc);
+    press(&mut ed, "ox");
+    ed.on_key(Key::Esc);
+    let _ = ed.execute(":readonly off");
+    assert!(ed.current_buffer().is_readonly(), "a preview has no text to unlock");
+    let _ = ed.execute(":normal ihello");
+    let _ = ed.execute(":s/^/x/");
+    assert_eq!(ed.current_buffer().text(), "", "nothing written into it");
+    assert!(!ed.current_buffer().is_modified());
+    let copy = dir.join("copy.typ");
+    let _ = ed.execute(&format!(":w {}", copy.display()));
+    let _ = ed.execute(&format!(":write-as {}", copy.display()));
+    assert!(!copy.exists(), "a preview is never written");
+    assert_eq!(ed.current_buffer().path(), None);
+    assert!(ed.current_buffer().is_computed());
+    // No file for the language servers, and nothing unsaved.
+    assert_eq!(ed.buffer_paths(), vec![main.clone()]);
+    assert!(ed.unsaved_paths().is_empty());
+    ed.execute(":wa").unwrap();
+    assert_eq!(ed.status(), say!("buffer.saved-many", 0));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Opening a file in a preview's window shows the file there** (2026-11-08):
+/// the preview stays a tab, off the screen, and `ga`, `C-o`, `:b` and
+/// `:view-preview` bring it back. The tab line tells the truth throughout.
+#[test]
+fn a_file_opened_in_a_preview_window_shows_there() {
+    let (mut ed, dir) = a_typst_book("open-in");
+    let main = dir.join("main.typ");
+    let two = dir.join("two.typ");
     let page = ed.open_page_window(main.clone()).unwrap();
-    assert_eq!(ed.page_windows()[0].1.follows, second);
-    assert_eq!(ed.page_target(page).and_then(|t| t.path), Some(dir.join("two.typ")));
-    // The session: two windows and no page window, the keys in the second.
-    let kept = ed.windows_to_keep();
-    assert_eq!(kept.iter().filter(|l| l.starts_with("window\t")).count(), 2, "{kept:?}");
-    assert!(kept.contains(&"keys\t1".to_string()), "{kept:?}");
-    // Its text window closes: it follows the one with the keys now.
-    assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Continue);
-    assert_eq!(ed.live_window(), first, "the keys never go into a page window");
-    assert_eq!(ed.page_windows()[0].1.follows, first);
-    assert_eq!(ed.page_target(page).and_then(|t| t.path), Some(main.clone()));
-    // From inside it, `C-w o` keeps the text window, not the page.
+    let preview = ed.preview_of(&main).unwrap();
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('w'));
     assert_eq!(ed.live_window(), page);
-    let kept = ed.windows_to_keep();
-    assert!(kept.is_empty(), "one text window and a page: nothing to keep, {kept:?}");
+    ed.execute(&format!(":open {}", two.display())).unwrap();
+    assert_eq!(ed.live_window(), page, "the same window");
+    assert_eq!(ed.current_buffer().path(), Some(two.as_path()), "shows the file");
+    assert!(!ed.is_page_window(page));
+    assert!(!ed.has_a_page_window(), "the preview is off the screen");
+    assert_eq!(ed.previews(), vec![(preview, main.clone())], "and still a tab");
+    let (at, total) = ed.buffer_position();
+    assert_eq!(ed.buffer_tabs()[at - 1].0, "two.typ", "the tab line names what the keys are in");
+    assert_eq!(total, 3);
+    // `ga` brings it back, and the file again.
+    press(&mut ed, "ga");
+    assert!(ed.is_page_window(page) && ed.page_window_has_the_keys(), "ga");
+    ed.on_key(Key::Esc);
+    ed.execute(&format!(":open {}", two.display())).unwrap();
+    // `C-o` too.
+    ed.on_key(Key::Ctrl('o'));
+    assert!(ed.page_window_has_the_keys(), "C-o back to the preview");
+    // `C-o` goes on out of it to the file before.
+    ed.on_key(Key::Ctrl('i'));
+    assert_eq!(ed.current_buffer().path(), Some(two.as_path()), "C-i forward again");
+    // `:view-preview` shows it beside, being off the screen.
+    ed.execute(":view-preview").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true })
+    );
+    ed.open_page_window(main.clone()).unwrap();
+    assert!(ed.has_a_page_window());
+    assert_eq!(ed.previews().len(), 1, "the same tab, not a second");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`:bc` on a preview closes the preview** (2026-11-08), not the file it
+/// followed: with one file open the keys go back to it, never into a
+/// preview following nothing. `:q` closes only the window; `:q` in the last
+/// text window leaves, and so does `:q` in a preview with no text window
+/// left.
+#[test]
+fn bc_closes_the_preview_and_q_closes_its_window() {
+    let (mut ed, dir) = a_typst_book("close");
+    let main = dir.join("main.typ");
+    let text = ed.live_window();
+    ed.open_page_window(main.clone()).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    ed.execute(":bc").unwrap();
+    assert!(ed.previews().is_empty(), "the preview is closed");
+    assert_eq!(ed.status(), say!("preview.window-closed"));
+    assert_eq!(ed.windows().leaves(), [text], "its window showed nothing else and went");
+    assert_eq!(ed.live_window(), text);
+    assert_eq!(ed.current_buffer().path(), Some(main.as_path()), "the file stays open");
+    assert_eq!(ed.buffer_count(), 1);
+    // In the only window, by `gn`: `:bc` shows the file again.
+    ed.open_page_window(main.clone()).unwrap();
     ed.on_key(Key::Ctrl('w'));
     ed.on_key(Key::Char('o'));
-    assert_eq!(ed.windows().leaves(), [first]);
-    assert_eq!(ed.live_window(), first);
-    assert!(!ed.has_a_page_window());
-    // A tab closed under it: the page window stays.
-    ed.execute(&format!(":e {}", dir.join("two.typ").display())).unwrap();
-    let page = ed.open_page_window(main.clone()).unwrap();
+    assert_eq!(ed.windows().len(), 1);
+    press(&mut ed, "gn");
+    assert!(ed.page_window_has_the_keys());
     ed.execute(":bc").unwrap();
-    assert!(ed.is_page_window(page), "a tab is not a window");
+    assert!(!ed.page_window_has_the_keys());
+    assert_eq!(ed.current_buffer().path(), Some(main.as_path()));
+    assert!(ed.previews().is_empty());
+    // `:q` in the last text window leaves, a preview beside it or not.
+    ed.open_page_window(main.clone()).unwrap();
+    assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
+    // `:q` in a preview with no text window left leaves too.
+    let (mut ed, dir2) = a_typst_book("close-last");
+    ed.open_page_window(dir2.join("main.typ")).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('o'));
+    assert_eq!(ed.windows().len(), 1);
+    press(&mut ed, "gn");
+    assert!(ed.page_window_has_the_keys());
+    assert_eq!(ed.execute(":q").unwrap(), CommandOutcome::Quit);
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&dir2).ok();
+}
+
+/// **A preview follows its own book only** (2026-11-08): the cursor in the
+/// main file or a chapter under its folder; not in a Typst file elsewhere,
+/// which never becomes its main file.
+#[test]
+fn a_preview_follows_its_own_book_only() {
+    let (mut ed, dir) = a_typst_book("book");
+    let main = dir.join("main.typ");
+    let elsewhere = tmp().join(format!("yumete-page-elsewhere-{}", std::process::id()));
+    std::fs::create_dir_all(&elsewhere).unwrap();
+    std::fs::write(elsewhere.join("other.typ"), "= 別處\n").unwrap();
+    ed.open_page_window(main.clone()).unwrap();
+    let preview = ed.preview_of(&main).unwrap();
+    assert!(ed.page_target(preview).is_some(), "the main file");
+    ed.execute(&format!(":open {}", dir.join("two.typ").display())).unwrap();
+    assert_eq!(ed.page_target(preview).and_then(|t| t.path), Some(dir.join("two.typ")), "a chapter");
+    ed.execute(&format!(":open {}", elsewhere.join("other.typ").display())).unwrap();
+    assert_eq!(ed.page_target(preview), None, "another book: it keeps its place");
+    assert_eq!(ed.previews(), vec![(preview, main.clone())], "and its main file");
+    assert!(crate::editor::in_the_book(&main, &dir.join("two.typ"), crate::syntax::Syntax::Typst));
+    assert!(!crate::editor::in_the_book(&main, &dir.join("notes.md"), crate::syntax::Syntax::Markdown));
+    assert!(!crate::editor::in_the_book(&main, &elsewhere.join("other.typ"), crate::syntax::Syntax::Typst));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&elsewhere).ok();
+}
+
+/// **Two previews at once** (2026-11-08), one a document, each a tab of its
+/// own with a task of its own in tinymist.
+#[test]
+fn two_documents_have_two_previews() {
+    let (mut ed, dir) = a_typst_book("two-a");
+    let a = dir.join("main.typ");
+    let (_, dir_b) = a_typst_book("two-b");
+    let b = dir_b.join("main.typ");
+    ed.open_page_window(a.clone()).unwrap();
+    ed.execute(&format!(":open {}", b.display())).unwrap();
+    ed.execute(":view-preview").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: b.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true }),
+        "the other document's own, though one is on the screen"
+    );
+    ed.open_page_window(b.clone()).unwrap();
+    let previews = ed.previews();
+    assert_eq!(previews.iter().map(|(_, m)| m.clone()).collect::<Vec<_>>(), vec![a.clone(), b.clone()]);
+    assert_eq!(ed.page_windows().len(), 2, "both on the screen");
+    let tasks: Vec<String> = previews.iter().map(|(id, _)| crate::preview::task_id(*id)).collect();
+    assert_ne!(tasks[0], tasks[1]);
+    // `off` from b closes b's, and a's stays.
+    ed.execute(":view-preview off").unwrap();
+    assert_eq!(ed.previews(), vec![previews[0].clone()]);
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&dir_b).ok();
+}
+
+/// **A chapter's new preview typesets its book** (2026-11-08): from a
+/// chapter, the open file that `#include`s it is the preview's main file,
+/// since a chapter alone lacks what its book sets up. With no such file
+/// open it is the chapter, as it always was.
+#[test]
+fn a_chapter_s_preview_typesets_the_book_that_includes_it() {
+    let (mut ed, dir) = a_typst_book("chapter");
+    let main = dir.join("main.typ");
+    let two = dir.join("two.typ");
+    ed.execute(&format!(":open {}", two.display())).unwrap();
+    ed.execute(":view-preview").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Typst, fallback: true }),
+        "the book that includes it"
+    );
+    // The browser's preview is still of the file itself.
+    ed.execute(":view-preview-browser").unwrap();
+    assert_eq!(ed.take_preview_request(), Some(Preview::Start { path: two.clone(), syntax: crate::syntax::Syntax::Typst }));
+    // The book not open: the chapter.
+    let mut alone = Editor::new();
+    alone.open_file(&two).unwrap();
+    alone.execute(":view-preview-window").unwrap();
+    assert_eq!(
+        alone.take_preview_request(),
+        Some(Preview::Window { path: two.clone(), syntax: crate::syntax::Syntax::Typst, fallback: false })
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Saving and leaving from a preview** (2026-11-08): `:w`, `:wq`, `:up`
+/// and `:write-as` write nothing and say why; `:x` and vim's `ZZ` are `:q`,
+/// closing the window or, from the last one, leaving. A preview tab off the
+/// screen changes nothing for `:w`, `:wa` and `:qa`.
+#[test]
+fn saving_in_a_preview_writes_nothing_and_leaving_works() {
+    let (mut ed, dir) = a_typst_book("save");
+    let main = dir.join("main.typ");
+    let text = ed.live_window();
+    ed.open_page_window(main.clone()).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    let copy = dir.join("copy.typ");
+    for line in [":w".to_string(), ":wq".to_string(), ":up".to_string(), ":w!".to_string(), format!(":write-as {}", copy.display())] {
+        assert_eq!(ed.execute(&line).unwrap(), CommandOutcome::Continue, "{line}");
+        assert_eq!(ed.status(), say!("preview.nothing-to-write"), "{line}");
+    }
+    assert!(!copy.exists());
+    assert!(ed.page_window_has_the_keys(), "still there");
+    // `:x` closes the window and keeps the tab.
+    assert_eq!(ed.execute(":x").unwrap(), CommandOutcome::Continue);
+    assert_eq!(ed.windows().leaves(), [text]);
+    assert_eq!(ed.previews().len(), 1);
+    // A tab off the screen: `:w` writes the file, `:wa` and `:qa` pass it by.
+    press(&mut ed, "ggix");
+    ed.on_key(Key::Esc);
+    ed.execute(":w").unwrap();
+    assert!(std::fs::read_to_string(&main).unwrap().starts_with('x'));
+    ed.execute(":wa").unwrap();
+    assert_eq!(ed.status(), say!("buffer.saved-many", 0));
+    assert_eq!(ed.execute(":qa").unwrap(), CommandOutcome::Quit, "nothing unsaved, nothing asked");
+    // vim's `ZZ` in a preview window closes it; in the last window it leaves.
+    let (mut ed, dir2) = a_typst_book("save-zz");
+    ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
+    ed.open_page_window(dir2.join("main.typ")).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert_eq!(ed.on_key(Key::Char('Z')), KeyOutcome::Continue);
+    assert_eq!(ed.on_key(Key::Char('Z')), KeyOutcome::Continue);
+    assert_eq!(ed.windows().len(), 1, "ZZ closed the preview's window");
+    assert!(!ed.page_window_has_the_keys());
+    ed.show_buffer_at(1);
+    assert!(ed.page_window_has_the_keys());
+    ed.on_key(Key::Char('Z'));
+    assert_eq!(ed.on_key(Key::Char('Z')), KeyOutcome::Quit, "ZZ from the last window leaves");
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::remove_dir_all(&dir2).ok();
+}
+
+/// **The buffer picker says what a preview is** (2026-11-08) rather than
+/// showing its empty text.
+#[test]
+fn the_buffer_picker_says_what_a_preview_is() {
+    let (mut ed, dir) = a_typst_book("picker");
+    let main = dir.join("main.typ");
+    ed.open_page_window(main.clone()).unwrap();
+    ed.execute(":buffer").unwrap();
+    ed.on_key(Key::Down);
+    let (name, lines) = ed.picker_preview(10).expect("a preview pane");
+    assert_eq!(name, say!("preview.tab", "main.typ"));
+    let real = std::fs::canonicalize(&main).unwrap();
+    assert_eq!(lines, vec![say!("preview.picker-note", real.display())]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **`:view-preview-theme` is a switch** (2026-11-08): the page in the
+/// theme's colours or as printed; bare flips it, and each says which.
+#[test]
+fn the_preview_theme_is_a_switch() {
+    let mut ed = Editor::new();
+    assert!(!ed.preview_theme(), "as printed at first");
+    ed.execute(":view-preview-theme").unwrap();
+    assert!(ed.preview_theme());
+    assert_eq!(ed.status(), say!("preview.theme-on"));
+    ed.execute(":view-preview-theme").unwrap();
+    assert!(!ed.preview_theme());
+    assert_eq!(ed.status(), say!("preview.theme-off"));
+    ed.execute(":view-preview-theme on").unwrap();
+    ed.execute(":view-preview-theme on").unwrap();
+    assert!(ed.preview_theme(), "`on` stays on");
+    ed.execute(":view-preview-theme off").unwrap();
+    assert!(!ed.preview_theme());
+    assert!(ed.execute(":view-preview-theme dark").is_err());
+}
+
+/// **A session keeps the preview tabs** (2026-11-08), and which window
+/// showed one; the page is made again when it is shown.
+#[test]
+fn a_session_keeps_the_preview_tabs() {
+    let (mut ed, dir) = a_typst_book("session");
+    let main = dir.join("main.typ");
+    let data = dir.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config"), data.clone());
+        ed.keep_session_in(data.join("sessions"), &dir);
+        ed
+    };
+    ed.knows_its_paths(dir.join("config"), data.clone());
+    ed.keep_session_in(data.join("sessions"), &dir);
+    ed.open_page_window(main.clone()).unwrap();
+    let kept = ed.windows_to_keep();
+    assert!(kept.contains(&format!("window\t{}\t0\t0\tpreview:typst", main.display())), "{kept:?}");
+    assert!(kept.contains(&"keys\t0".to_string()), "{kept:?}");
+    ed.save_session();
+
+    let mut back = fresh();
+    assert_eq!(back.restore_session(), 1);
+    back.restore_windows();
+    assert_eq!(back.previews().len(), 1, "the tab");
+    assert_eq!(back.previews()[0].1, main);
+    assert_eq!(back.windows().len(), 2);
+    assert!(back.has_a_page_window(), "and the window that showed it");
+    assert!(!back.page_window_has_the_keys(), "the keys where they were");
+    assert_eq!(back.current_buffer().path(), Some(main.as_path()));
+    // A tab off the screen is kept too.
+    back.on_key(Key::Ctrl('w'));
+    back.on_key(Key::Char('w'));
+    back.execute(":q").unwrap();
+    back.save_session();
+    let mut again = fresh();
+    again.restore_session();
+    again.restore_windows();
+    assert_eq!(again.previews().len(), 1);
+    assert!(!again.has_a_page_window());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A Markdown file of its own, opened, in a folder of its own.
+fn a_markdown_note(name: &str) -> (Editor, std::path::PathBuf) {
+    let dir = tmp().join(format!("yumete-md-preview-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("notes.md"), "# 筆記\n\n那年冬天。\n\n## 第二節\n\n雪。\n").unwrap();
+    let mut ed = Editor::new();
+    ed.open_file(dir.join("notes.md")).unwrap();
+    (ed, dir)
+}
+
+/// **A Markdown file's preview is a tab of its own** (2026-11-08):
+/// `:view-preview` asks for it beside the text, a Markdown preview and not
+/// a typeset page; on the screen `on` says so, bare and `off` close the tab,
+/// `:q` in its window closes only the window; the picker says what it is.
+#[test]
+fn a_markdown_file_has_a_preview_tab_of_its_own() {
+    let (mut ed, dir) = a_markdown_note("tab");
+    let main = dir.join("notes.md");
+    ed.execute(":view-preview").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: true })
+    );
+    ed.execute(":view-preview-window").unwrap();
+    assert_eq!(
+        ed.take_preview_request(),
+        Some(Preview::Window { path: main.clone(), syntax: crate::syntax::Syntax::Markdown, fallback: false })
+    );
+    // The front end opened it.
+    let text = ed.live_window();
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
+    let id = ed.preview_in(page).unwrap();
+    assert_eq!(ed.preview_kind_of(id), Some(crate::buffer::PreviewKind::Markdown));
+    assert_eq!(ed.live_window(), text, "the keys stay in the text");
+    assert_eq!(ed.buffers[ed.buffer_with(id).unwrap()].display_name(), say!("preview.tab", "notes.md"));
+    ed.execute(":view-preview on").unwrap();
+    assert_eq!(ed.take_preview_request(), None);
+    assert_eq!(ed.status(), say!("preview.window-open"));
+    // It follows this file's cursor, by line.
+    press(&mut ed, "jjjj");
+    assert_eq!(ed.page_target(id).map(|t| t.line), Some(4));
+    // `:q` in its window closes the window and leaves the tab.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    assert!(ed.page_window_has_the_keys());
+    ed.execute(":q").unwrap();
+    assert_eq!(ed.previews().len(), 1);
+    assert!(!ed.has_a_page_window());
+    // Bare shows it again; `off` closes the tab.
+    ed.execute(":view-preview").unwrap();
+    assert!(ed.take_preview_request().is_some(), "bare is `on` while it is off the screen");
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    assert_eq!(ed.previews().len(), 1, "the same tab");
+    ed.execute(":view-preview off").unwrap();
+    assert!(ed.previews().is_empty());
+    assert_eq!(ed.status(), say!("preview.window-closed"));
+    // `:bc` in it closes it too, and the picker says what it is.
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    ed.execute(":buffer").unwrap();
+    ed.on_key(Key::Down);
+    let (name, lines) = ed.picker_preview(10).expect("a preview pane");
+    assert_eq!(name, say!("preview.tab", "notes.md"));
+    let real = std::fs::canonicalize(&main).unwrap();
+    assert_eq!(lines, vec![say!("preview.picker-note-markdown", real.display())]);
+    ed.on_key(Key::Esc);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    ed.execute(":bc").unwrap();
+    assert!(ed.previews().is_empty());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **Its keys scroll, and `J`, `K` and `5G` are the page reader's**: the
+/// scroll keys reach the front end as steps; `:` goes on to the command
+/// line; writing writes nothing.
+#[test]
+fn a_markdown_preview_s_keys_scroll_and_nothing_is_text() {
+    let (mut ed, dir) = a_markdown_note("keys");
+    let main = dir.join("notes.md");
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('w'));
+    press(&mut ed, "jk");
+    ed.on_key(Key::Ctrl('d'));
+    ed.on_key(Key::Ctrl('u'));
+    ed.on_key(Key::Ctrl('f'));
+    ed.on_key(Key::Ctrl('b'));
+    ed.on_key(Key::PageDown);
+    ed.on_key(Key::PageUp);
+    press(&mut ed, "ggG");
+    assert_eq!(
+        ed.take_page_steps(),
+        vec![
+            PageStep::Rows(1),
+            PageStep::Rows(-1),
+            PageStep::Halves(1),
+            PageStep::Halves(-1),
+            PageStep::Screens(1),
+            PageStep::Screens(-1),
+            PageStep::Screens(1),
+            PageStep::Screens(-1),
+            PageStep::Top,
+            PageStep::Bottom,
+        ]
+    );
+    // Nothing here is text: `x`, `i` and `dd` do nothing, and `:w` writes
+    // nothing.
+    press(&mut ed, "xidd");
+    ed.on_key(Key::Esc);
+    assert!(ed.page_window_has_the_keys());
+    ed.execute(":w").unwrap();
+    assert_eq!(ed.status(), say!("preview.nothing-to-write"));
+    assert_eq!(std::fs::read_to_string(&main).unwrap(), "# 筆記\n\n那年冬天。\n\n## 第二節\n\n雪。\n");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A Typst preview and a Markdown one at once** (2026-11-08): each a tab
+/// of its own kind, each following only its own file; a Typst chapter
+/// beside a Markdown file is not the Markdown file's.
+#[test]
+fn a_typst_preview_and_a_markdown_one_side_by_side() {
+    let (mut ed, dir) = a_typst_book("with-md");
+    let main = dir.join("main.typ");
+    let notes = dir.join("notes.md");
+    std::fs::write(&notes, "# 筆記\n").unwrap();
+    ed.open_page_window(main.clone()).unwrap();
+    ed.execute(&format!(":open {}", notes.display())).unwrap();
+    ed.open_page_window(notes.clone()).unwrap();
+    let typst = ed.preview_of(&main).unwrap();
+    let markdown = ed.preview_of(&notes).unwrap();
+    assert_ne!(typst, markdown);
+    assert_eq!(ed.preview_kind_of(typst), Some(crate::buffer::PreviewKind::Typst));
+    assert_eq!(ed.preview_kind_of(markdown), Some(crate::buffer::PreviewKind::Markdown), "by its name");
+    assert_eq!(ed.page_windows().len(), 2);
+    assert!(ed.page_target(markdown).is_some());
+    assert!(ed.page_target(typst).is_none(), "the cursor is in the Markdown file");
+    ed.execute(&format!(":open {}", dir.join("two.typ").display())).unwrap();
+    assert!(ed.page_target(typst).is_some(), "a chapter of the book");
+    assert!(ed.page_target(markdown).is_none(), "nothing is a chapter of a Markdown file");
+    // `off` from the Markdown file closes only its own.
+    ed.execute(&format!(":open {}", notes.display())).unwrap();
+    ed.execute(":view-preview off").unwrap();
+    assert_eq!(ed.previews().len(), 1);
+    assert_eq!(ed.previews()[0].0, typst);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **A session keeps a Markdown preview** (2026-11-08), by its kind, tab
+/// and window alike.
+#[test]
+fn a_session_keeps_a_markdown_preview() {
+    let (mut ed, dir) = a_markdown_note("session");
+    let main = dir.join("notes.md");
+    let data = dir.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    ed.knows_its_paths(dir.join("config"), data.clone());
+    ed.keep_session_in(data.join("sessions"), &dir);
+    ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).unwrap();
+    let kept = ed.windows_to_keep();
+    assert!(kept.contains(&format!("window\t{}\t0\t0\tpreview:markdown", main.display())), "{kept:?}");
+    ed.save_session();
+    let mut back = Editor::new();
+    back.knows_its_paths(dir.join("config"), data.clone());
+    back.keep_session_in(data.join("sessions"), &dir);
+    assert_eq!(back.restore_session(), 1);
+    back.restore_windows();
+    assert_eq!(back.previews().len(), 1);
+    let id = back.previews()[0].0;
+    assert_eq!(back.preview_kind_of(id), Some(crate::buffer::PreviewKind::Markdown));
+    assert!(back.has_a_page_window());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// **The text a Markdown preview renders** is the open buffer's, unsaved
+/// edits and all, with a revision that moves with each edit.
+#[test]
+fn a_markdown_preview_reads_the_open_buffer() {
+    let (mut ed, dir) = a_markdown_note("text");
+    let main = dir.join("notes.md");
+    let (_, before, _) = ed.text_of(&main).unwrap();
+    press(&mut ed, "ggA改");
+    ed.on_key(Key::Esc);
+    let (_, after, text) = ed.text_of(&main).unwrap();
+    assert_ne!(before, after);
+    assert!(text.starts_with("# 筆記改"), "{text}");
+    assert_eq!(ed.revision_of(&main).map(|r| r.1), Some(after));
+    assert!(ed.text_of(&dir.join("other.md")).is_none());
     std::fs::remove_dir_all(&dir).ok();
 }

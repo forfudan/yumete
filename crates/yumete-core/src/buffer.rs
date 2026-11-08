@@ -330,6 +330,12 @@ pub struct Buffer {
     /// 原話（2026-10-16）：「It just be a rendered, readonly, fixed, clean
     /// buffer for checking diffs. Anything beyond this would become noise.」
     computed: bool,
+    /// **The file this tab shows the typeset page of, and how** (2026-11-08):
+    /// a preview is a tab like a file, listed and switched to like one, and
+    /// drawn by the front end as the page instead of as text. The path is
+    /// absolute, as the typesetter knows it. A preview holds no text, is
+    /// locked for good and is never written.
+    preview: Option<(PreviewKind, PathBuf)>,
     /// …and a hash of the text that was there.
     ///
     /// The stamp above is the fast question — "might this have changed?" — and
@@ -351,6 +357,60 @@ pub struct Buffer {
     /// `saved_depth` 作廢，可只有分叉那一種還回得到「乾淨」。
     beyond_the_file: bool,
 
+}
+
+/// **What a preview tab shows** (2026-11-08).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewKind {
+    /// tinymist's page of a Typst file.
+    Typst,
+    /// A Markdown file rendered by `yumete-mdview`, drawn by the front end.
+    Markdown,
+}
+
+impl PreviewKind {
+    /// The word a session keeps it under.
+    pub fn name(self) -> &'static str {
+        match self {
+            PreviewKind::Typst => "typst",
+            PreviewKind::Markdown => "markdown",
+        }
+    }
+
+    /// The kind of preview a file of `syntax` gets: Markdown's own, else
+    /// the typeset page.
+    pub fn for_syntax(syntax: crate::syntax::Syntax) -> PreviewKind {
+        match syntax {
+            crate::syntax::Syntax::Markdown => PreviewKind::Markdown,
+            _ => PreviewKind::Typst,
+        }
+    }
+
+    /// The kind of preview a file gets by its name: Markdown's own for a
+    /// `.md`, the typeset page otherwise.
+    pub fn for_path(path: &Path) -> PreviewKind {
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        match crate::syntax::from_extension(&name) {
+            Some(crate::syntax::Syntax::Markdown) => PreviewKind::Markdown,
+            _ => PreviewKind::Typst,
+        }
+    }
+
+    /// The syntax of the files this kind previews.
+    pub fn syntax(self) -> crate::syntax::Syntax {
+        match self {
+            PreviewKind::Typst => crate::syntax::Syntax::Typst,
+            PreviewKind::Markdown => crate::syntax::Syntax::Markdown,
+        }
+    }
+
+    pub fn parse(word: &str) -> Option<PreviewKind> {
+        match word {
+            "typst" => Some(PreviewKind::Typst),
+            "markdown" => Some(PreviewKind::Markdown),
+            _ => None,
+        }
+    }
 }
 
 /// One point in a buffer's edit history.
@@ -478,6 +538,7 @@ impl Buffer {
             scratch_swap: None,
             readonly: false,
             computed: false,
+            preview: None,
         }
     }
 
@@ -552,6 +613,7 @@ impl Buffer {
             scratch_swap: None,
             readonly: false,
             computed: false,
+            preview: None,
         }
     }
 
@@ -735,6 +797,7 @@ impl Buffer {
             // says so at `:w`.
             readonly: fs::metadata(path).is_ok_and(|m| m.permissions().readonly()),
             computed: false,
+            preview: None,
         })
     }
 
@@ -753,6 +816,33 @@ impl Buffer {
         self.computed = on;
     }
 
+    /// **A preview tab of `main`** (2026-11-08), of `kind`, under `label`:
+    /// no text, no file, locked, computed.
+    pub fn preview_of(kind: PreviewKind, main: PathBuf, label: &str) -> Self {
+        let mut buffer = Buffer::from_text("");
+        buffer.label = Some(label.to_string());
+        buffer.readonly = true;
+        buffer.computed = true;
+        buffer.from_nothing = false;
+        buffer.preview = Some((kind, main));
+        buffer
+    }
+
+    /// The file this tab shows the page of, when it is a preview.
+    pub fn preview_main(&self) -> Option<&Path> {
+        self.preview.as_ref().map(|(_, main)| main.as_path())
+    }
+
+    /// What kind of preview this tab is, when it is one.
+    pub fn preview_kind(&self) -> Option<PreviewKind> {
+        self.preview.as_ref().map(|(kind, _)| *kind)
+    }
+
+    /// Whether this tab is a preview rather than text.
+    pub fn is_preview(&self) -> bool {
+        self.preview.is_some()
+    }
+
     /// Lock the buffer against editing, or unlock it.
     ///
     /// Unlocking is allowed even for a file the disk calls read-only: the
@@ -765,7 +855,8 @@ impl Buffer {
     /// a writer who locks a buffer they had already changed still owns those
     /// changes and may still save them.
     pub fn set_readonly(&mut self, on: bool) {
-        self.readonly = on;
+        // A preview has no text to unlock (2026-11-08).
+        self.readonly = on || self.preview.is_some();
     }
 
     /// Whether the file has changed since this buffer last read or wrote it.

@@ -88,9 +88,18 @@ pub type Ink = (u8, u8, u8);
 /// `display`: a PNG with a clear ground, or what was wrong with it. Never
 /// panics, and writes nothing to the screen.
 pub fn render(tex: &str, display: bool, ink: Ink, size: f32) -> Result<Picture, String> {
-    let (png, _) = draw(tex, display, ink, size.max(4.0), (size / 8.0).clamp(1.0, 4.0), 1.0)?;
+    render_on_baseline(tex, display, ink, size).map(|(picture, _)| picture)
+}
+
+/// **[`render`], and where the formula's baseline is**: pixels from the
+/// picture's top, so a formula in a line of proportional type can sit on
+/// the line's baseline (the rendered Markdown preview, `yumete-mdview`).
+pub fn render_on_baseline(tex: &str, display: bool, ink: Ink, size: f32) -> Result<(Picture, f32), String> {
+    let (size, padding) = (size.max(4.0), (size / 8.0).clamp(1.0, 4.0));
+    let (png, [_, height, _]) = draw(tex, display, ink, size, padding, 1.0)?;
+    let baseline = padding + height as f32 * size;
     let (width, height) = crate::graphics::png_size(&png).ok_or_else(|| "no picture came back".to_string())?;
-    Ok(Picture { png, width, height })
+    Ok((Picture { png, width, height }, baseline))
 }
 
 /// **A formula for `:export html`** (2026-11-08): black on clear, drawn at
@@ -298,6 +307,17 @@ impl Drop for Away {
     }
 }
 
+/// **Formulas for the rendered Markdown preview** (2026-11-08): RaTeX, as
+/// the formula float draws them, with where each one's baseline is.
+pub struct Ratex;
+
+impl yumete_mdview::Formulas for Ratex {
+    fn draw(&self, tex: &str, display: bool, ink: [u8; 3], size: f32) -> Result<yumete_mdview::Formula, String> {
+        let (picture, baseline) = render_on_baseline(tex, display, (ink[0], ink[1], ink[2]), size)?;
+        Ok(yumete_mdview::Formula { png: picture.png, baseline })
+    }
+}
+
 // ── Kept pictures ──────────────────────────────────────────────────────────
 
 /// What a picture is a picture of: the formula, how it is set, its ink and
@@ -369,6 +389,17 @@ mod tests {
         // Bigger type, a bigger picture.
         let big = render(r"x^2", false, INK, 40.0).unwrap();
         assert!(big.width > inline.width && big.height > inline.height);
+    }
+
+    /// **The baseline comes back with the picture**: inside it, below the
+    /// middle of a formula that only rises (`x^2`), above the bottom of one
+    /// that also descends (`y_1`).
+    #[test]
+    fn a_formula_says_where_its_baseline_is() {
+        let (up, base_up) = render_on_baseline(r"x^2", false, INK, 20.0).unwrap();
+        assert!(base_up > up.height as f32 / 2.0 && base_up <= up.height as f32, "{base_up} in {}", up.height);
+        let (down, base_down) = render_on_baseline(r"y_1", false, INK, 20.0).unwrap();
+        assert!(base_down < down.height as f32 - 2.0, "{base_down} in {}", down.height);
     }
 
     /// **A formula for an HTML export** (2026-11-08) is measured in `em` of

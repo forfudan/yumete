@@ -110,12 +110,19 @@ fn reopen_in(there: &std::path::Path) -> std::io::Result<()> {
 
 mod docgen;
 mod import;
+mod md_render;
 
 fn main() -> ExitCode {
     // **The font 漢字 in a TeX formula are set in** (2026-11-08): RaTeX reads
     // it from the environment, which may only be changed while this is the
     // one thread — so first, before anything starts another.
     yumete_tui::tex::choose_cjk_font();
+    // **The rendered Markdown preview, without the editor** (2026-11-08): a
+    // developer's door, not in `--help`.
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--md-render") {
+        return md_render::run(&args[2..]);
+    }
     // **The tables this binary carries** (2026-11-04): handed to the IME
     // before anything asks it for a scheme, so the scan and every load see
     // them behind whatever is installed.

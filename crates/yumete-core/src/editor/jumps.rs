@@ -144,8 +144,9 @@ impl Editor {
     /// `C-o` 照樣回得來——那一半兩種跳法都要。
     pub(super) fn note_where_we_came_from(&mut self) {
         // The place a buffer switch just opened at is where the switch put
-        // the cursor, not a place anyone jumped from.
-        if self.just_switched {
+        // the cursor, not a place anyone jumped from. A preview has no place
+        // but itself, and `C-o` comes back to it (2026-11-08).
+        if self.just_switched && !self.buffers[self.current].is_preview() {
             return;
         }
         let here = self.jump_here();

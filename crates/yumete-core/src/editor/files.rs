@@ -1142,6 +1142,14 @@ impl Editor {
     /// The last buffer is not closed but emptied: an editor with no buffer has
     /// nowhere to put the cursor.
     pub(super) fn close_buffer(&mut self, force: bool) -> Result<CommandOutcome, EditorError> {
+        // **A preview closes as a preview** (2026-11-08): its window goes
+        // back to what it showed before, and the front end stops its task.
+        if self.buffers[self.current].is_preview() {
+            let id = self.buffers[self.current].id();
+            self.close_preview(id);
+            self.status = say!("preview.window-closed");
+            return Ok(CommandOutcome::Continue);
+        }
         if !force && self.current_buffer().is_modified() {
             return Err(EditorError::UnsavedChanges);
         }

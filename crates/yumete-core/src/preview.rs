@@ -224,9 +224,13 @@ pub fn new_enough(version: Option<&str>) -> bool {
     version.and_then(version_of).is_some_and(|v| v >= LEAST_TINYMIST)
 }
 
-/// The name of yumete's preview task inside tinymist. One a process: the
-/// server is the editor's own, and so is the one preview in it.
-pub const TASK: &str = "yumete";
+/// **The name of a preview's task inside tinymist** (2026-11-08): one task
+/// a preview tab, named by the tab's id, since several may be open and
+/// tinymist keeps its tasks by name. The server is the editor's own, so the
+/// names need only differ within this process.
+pub fn task_id(preview: u64) -> String {
+    format!("yumete-{preview}")
+}
 
 /// **`tinymist.exportPng`'s arguments for page `page` (from 1) of `main`, at
 /// `ppi` pixels to the inch**, kept in memory: the answer carries the PNG as
@@ -241,9 +245,10 @@ pub fn export_png_arguments(main: &Path, page: usize, ppi: u32) -> String {
 /// **`tinymist.doStartPreview`'s arguments**: the task, a data plane on a
 /// loopback port the system picks, no browser, and not the server's primary
 /// preview (that one follows whichever file the server thinks is main).
-pub fn start_preview_arguments(main: &Path) -> String {
+pub fn start_preview_arguments(task: &str, main: &Path) -> String {
     format!(
-        r#"[["--task-id","{TASK}","--data-plane-host","127.0.0.1:0","--no-open","--not-primary",{main}]]"#,
+        r#"[["--task-id",{task},"--data-plane-host","127.0.0.1:0","--no-open","--not-primary",{main}]]"#,
+        task = json_string(task),
         main = json_string(&main.to_string_lossy()),
     )
 }
@@ -251,13 +256,13 @@ pub fn start_preview_arguments(main: &Path) -> String {
 /// **`tinymist.scrollPreview`'s arguments**: the cursor's place, which the
 /// task answers on its data plane with where that text is on the page. The
 /// numbers count as [`panel_scroll_to`]'s do.
-pub fn scroll_preview_arguments(path: &Path, line: usize, character: usize) -> String {
-    format!(r#"["{TASK}",{}]"#, panel_scroll_to(path, line, character))
+pub fn scroll_preview_arguments(task: &str, path: &Path, line: usize, character: usize) -> String {
+    format!(r#"[{},{}]"#, json_string(task), panel_scroll_to(path, line, character))
 }
 
-/// **`tinymist.doKillPreview`'s arguments**: this process's task.
-pub fn kill_preview_arguments() -> String {
-    format!(r#"["{TASK}"]"#)
+/// **`tinymist.doKillPreview`'s arguments**: the task to stop.
+pub fn kill_preview_arguments(task: &str) -> String {
+    format!(r#"[{}]"#, json_string(task))
 }
 
 /// **Where a piece of text is on the page**: the page from 1, and the point
@@ -520,16 +525,25 @@ mod tests {
             export_png_arguments(main, 21, 144),
             r#"["/書/main.typ",{"pages":["21"],"ppi":144},{"write":false}]"#
         );
+        let task = task_id(7);
+        assert_eq!(task, "yumete-7");
         assert_eq!(
-            start_preview_arguments(main),
-            r#"[["--task-id","yumete","--data-plane-host","127.0.0.1:0","--no-open","--not-primary","/書/main.typ"]]"#
+            start_preview_arguments(&task, main),
+            r#"[["--task-id","yumete-7","--data-plane-host","127.0.0.1:0","--no-open","--not-primary","/書/main.typ"]]"#
         );
         assert_eq!(
-            scroll_preview_arguments(Path::new("/書/第一章.typ"), 100, 5),
-            r#"["yumete",{"event":"panelScrollTo","filepath":"/書/第一章.typ","line":100,"character":5}]"#
+            scroll_preview_arguments(&task, Path::new("/書/第一章.typ"), 100, 5),
+            r#"["yumete-7",{"event":"panelScrollTo","filepath":"/書/第一章.typ","line":100,"character":5}]"#
         );
-        assert_eq!(kill_preview_arguments(), r#"["yumete"]"#);
-        for made in [export_png_arguments(main, 1, 72), start_preview_arguments(main), scroll_preview_arguments(main, 0, 0)] {
+        assert_eq!(kill_preview_arguments(&task), r#"["yumete-7"]"#);
+        // **Two previews, two tasks** (2026-11-08): each tab names its own.
+        assert_ne!(start_preview_arguments(&task_id(7), main), start_preview_arguments(&task_id(8), main));
+        for made in [
+            export_png_arguments(main, 1, 72),
+            start_preview_arguments(&task, main),
+            scroll_preview_arguments(&task, main, 0, 0),
+            kill_preview_arguments(&task),
+        ] {
             assert!(serde_json::from_str::<serde_json::Value>(&made).is_ok(), "{made}");
         }
     }

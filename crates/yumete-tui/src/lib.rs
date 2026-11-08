@@ -20,6 +20,8 @@ pub mod backend;
 pub mod graphics;
 pub mod maths;
 pub mod page_window;
+pub mod md_window;
+pub mod preview_theme;
 pub mod tex;
 pub mod server;
 pub mod settings;
@@ -767,6 +769,10 @@ pub fn run(
     // bell for where the cursor is on the page.
     let mut pages = crate::page_window::PagePreview::default();
     crate::page_window::ring_on_news(doorbell.clone());
+    // **The Markdown preview** (2026-11-08): a worker a tab, which rings the
+    // same bell when a picture is ready.
+    let mut markdown = crate::md_window::MdPreviews::default();
+    crate::md_window::ring_on_news(doorbell.clone());
     servers.ring_on_answers(doorbell);
     // **配置檔開着的時候，現查現說**（2026-10-20 作者定）。和上面那一行一樣是
     // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
@@ -1316,11 +1322,14 @@ pub fn run(
         // **The page window** (2026-11-07): after `collect`, where tinymist's
         // answers land. A window that cannot be drawn after all, opened by
         // `:view-preview`, becomes the browser's preview.
+        if markdown.follow(editor, config) {
+            server_said_something = true;
+        }
         match pages.follow(editor, &mut servers, config) {
             crate::page_window::Outcome::Nothing => {}
             crate::page_window::Outcome::Redraw => server_said_something = true,
-            crate::page_window::Outcome::Browser { path, why } => {
-                editor.close_page_windows();
+            crate::page_window::Outcome::Browser { preview, path, why } => {
+                editor.close_preview(preview);
                 if job.is_none() {
                     start_the_browser_preview(editor, config, &mut job, &path, yumete_core::syntax::Syntax::Typst);
                 }
@@ -1407,6 +1416,8 @@ pub fn run(
                 // The page window: the typing still long enough, the cursor
                 // settled long enough to be followed.
                 pages.due_in(),
+                // The Markdown preview: the typing still long enough.
+                markdown.due_in(),
                 // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
                 // 了一個不動的點（同上面那幾個鬧鐘）。
                 spinner::due_in(editor.server_busy_since()),
@@ -1678,17 +1689,27 @@ pub fn run(
                     // browser's preview instead.
                     let (want, why) = match want {
                         Preview::Window { path, syntax, fallback } => {
-                            match crate::page_window::why_not(syntax, &servers, config, editor) {
+                            // A Markdown file's own preview (2026-11-08):
+                            // drawn here, so only the terminal can refuse it.
+                            let markdown = syntax == yumete_core::syntax::Syntax::Markdown;
+                            let why = match markdown {
+                                true => crate::md_window::why_not(),
+                                false => crate::page_window::why_not(syntax, &servers, config, editor),
+                            };
+                            match why {
                                 None => {
                                     let main = crate::page_window::absolute(&path);
-                                    if let Some(id) = editor.open_page_window(main) {
-                                        pages.opened(id, fallback);
+                                    let kind = yumete_core::buffer::PreviewKind::for_syntax(syntax);
+                                    if editor.open_page_window_of(main.clone(), kind).is_some() && !markdown {
+                                        if let Some(id) = editor.preview_of(&main) {
+                                            pages.opened(id, fallback);
+                                        }
                                     }
                                     continue;
                                 }
                                 Some(why) if fallback => {
-                                    let why = (syntax == yumete_core::syntax::Syntax::Typst).then_some(why);
-                                    (Preview::Start { path, syntax }, why)
+                                    let said = matches!(syntax, yumete_core::syntax::Syntax::Typst | yumete_core::syntax::Syntax::Markdown);
+                                    (Preview::Start { path, syntax }, said.then_some(why))
                                 }
                                 Some(why) => {
                                     editor.set_status(say!("preview.or-the-browser", why));
@@ -5594,9 +5615,14 @@ fn draw(
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
-        // **A page window draws the page, not text** (2026-11-07).
+        // **A window showing a preview draws the page, not text**
+        // (2026-11-07).
         if let Some(&id) = leaves.get(which).filter(|&&id| editor.is_page_window(id)) {
-            crate::page_window::draw(frame, editor, config, *rect, id);
+            let kind = editor.preview_in(id).and_then(|p| editor.preview_kind_of(p));
+            match kind {
+                Some(yumete_core::buffer::PreviewKind::Markdown) => crate::md_window::draw(frame, editor, config, *rect, id),
+                _ => crate::page_window::draw(frame, editor, config, *rect, id),
+            }
             if which == live {
                 cursor = (rect.x, rect.y);
             }
@@ -13978,7 +14004,13 @@ fn draw_status(
     command_row: bool,
 ) {
     let buffer = editor.current_buffer();
-    let count = status_count_of(editor, config);
+    // **A preview has no text** (2026-11-08): no place in it, no count, and
+    // no lock to mention — its name is all the line says of it.
+    let page = editor.page_window_has_the_keys();
+    let count = match page {
+        true => String::new(),
+        false => status_count_of(editor, config),
+    };
     let ink = crate::theme::Palette::of(config);
     // **A raised strip, or a sunken one — never a reversal.** Reversing gave a
     // white bar under a dark page: the loudest thing on the screen, saying the
@@ -14043,7 +14075,7 @@ fn draw_status(
         // Locked, and said so standing (Feature #213). A writer who cannot type
         // needs to know that from the screen and not from the status line's
         // memory of a refusal three keystrokes ago.
-        let locked = match buffer.is_readonly() {
+        let locked = match buffer.is_readonly() && !page {
             true => say!("ui.readonly-tag"),
             false => String::new(),
         };
@@ -14079,8 +14111,10 @@ fn draw_status(
         // Where you are, and nothing else. What just happened is the row
         // below's question — and with no command row it comes back here, because
         // a message nobody can see is not a message.
-        let where_bare = position_of(editor);
-        let where_short = position_short(editor);
+        let (where_bare, where_short) = match page {
+            true => (String::new(), String::new()),
+            false => (position_of(editor), position_short(editor)),
+        };
         // **The live count rides after the position** (2026-10-29) and is the
         // first thing to give way: it says how long the file is, and the
         // position says where you are, which is what this line is for.

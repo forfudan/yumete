@@ -26,5 +26,8 @@ toml = {version = "0.8", features = ["preserve_order"]}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
+# `--md-render` (2026-11-08), the rendered Markdown preview drawn to PNG files
+# without the editor.
+yumete-mdview = {path = "../yumete-mdview"}
 yumete-tables = {path = "../yumete-tables"}
 yumete-tui = {path = "../yumete-tui"}

@@ -3390,17 +3390,19 @@ pub struct Editor {
     /// over by the front end, where RaTeX lives. `None` leaves `$…$` as
     /// written.
     formula_painter: Option<crate::export::Painter>,
-    /// **The windows that show a page instead of text** (2026-11-07), and
-    /// what each follows ([`PageWindow`]). See `editor/page_preview.rs`.
-    page_windows: std::collections::HashMap<crate::window::WindowId, PageWindow>,
     /// How big a page window draws the page (`:view-preview-fit`).
     preview_fit: PreviewFit,
+    /// Whether the page is drawn in the theme's colours rather than as
+    /// printed (`:view-preview-theme`, `[editor] preview_theme`).
+    preview_theme: bool,
     /// The scroll keys pressed in a page window, for the front end.
     page_steps: Vec<PageStep>,
     /// A count typed in a page window, for `G` and `gg` (`5G`).
     page_count: Option<usize>,
     /// The first `g` of a `gg` in a page window.
     page_g: bool,
+    /// The first `Z` of vim's `ZZ` or `ZQ` in a preview.
+    page_z: bool,
     /// A link the reader followed to a page on the web (`gL`), waiting for
     /// the front end — only it can hand a URL to the machine, and only ever as
     /// one argument to `open`/`xdg-open`.
@@ -4634,11 +4636,12 @@ impl Editor {
             open_request: None,
             preview_at: None,
             formula_painter: None,
-            page_windows: std::collections::HashMap::new(),
             preview_fit: PreviewFit::default(),
+            preview_theme: false,
             page_steps: Vec::new(),
             page_count: None,
             page_g: false,
+            page_z: false,
             shell_request: None,
             suspend_request: false,
             last_bang: None,
@@ -6099,7 +6102,7 @@ mod normal;
 pub(crate) use normal::default_key_written;
 mod page;
 mod page_preview;
-pub use page_preview::{PageStep, PageTarget, PageWindow, PreviewFit};
+pub use page_preview::{in_the_book, PageStep, PageTarget, PageWindow, PreviewFit};
 mod pairing;
 mod places;
 pub use pairing::AutoPairs;

@@ -14,6 +14,9 @@ yumete-cjk = {path = "../yumete-cjk"}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
+# The rendered Markdown preview (2026-11-08): its colours come from the
+# editor's palette (`preview_theme`) and its formulas from `tex`.
+yumete-mdview = {path = "../yumete-mdview"}
 
 # **TeX formulas as pictures** (2026-11-08): KaTeX's layout in Rust, with
 # KaTeX's fonts built in (`embed-fonts`), for Markdown's formulas in the
@@ -25,6 +28,12 @@ ratex-layout = "0.1.15"
 ratex-parser = "0.1.15"
 ratex-render = { version = "0.1.15", features = ["embed-fonts"] }
 ratex-types = "0.1.15"
+
+# **The preview's page in the theme's colours** (2026-11-08,
+# `:view-preview-theme`): the PNG tinymist hands over is read, each pixel
+# mapped from paper and ink to the theme's, and written again. Already in
+# the tree under `ratex-render`; MIT or Apache-2.0.
+png = "0.17"
 
 # Only the tests read JSON here: what this crate *sends* is built by
 # `yumete_core::lsp` out of literals, and the tests check that what came out

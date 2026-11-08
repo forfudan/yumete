@@ -197,6 +197,14 @@ impl Editor {
                 self.new_buffer();
                 Ok(CommandOutcome::Continue)
             }
+            // **A preview has no file** (2026-11-08): the saves say so and
+            // write nothing, as in a sidebar; `:x` and `ZZ` are `:q` there.
+            Command::Write(_) | Command::WriteForce(_) | Command::Update | Command::SaveAs { .. }
+                if !self.settings_open && self.page_window_has_the_keys() =>
+            {
+                self.status = say!("preview.nothing-to-write");
+                Ok(CommandOutcome::Continue)
+            }
             Command::Write(path) => {
                 // **設置面板開着的時候，`:w` 說的是它。** 不分這一下，面板上按
                 // 存盤會把眼前那一章寫一遍——看起來像没反應，而動的是別的東西。
@@ -1219,12 +1227,13 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             // **Three switches** (2026-11-07): `:view-preview` is either
-            // preview, the window beside the text or the browser's; turned
-            // on it opens the window, falling back to the browser when a
-            // window cannot be drawn, and turned off it puts away whichever
-            // is up.
+            // preview, the tab beside the text or the browser's; turned on it
+            // shows this document's tab beside the text, falling back to the
+            // browser when a picture cannot be drawn, and turned off it closes
+            // the tab and stops the browser's. Bare is `on` unless this
+            // document's preview is on the screen (2026-11-08).
             Command::Preview(how) => {
-                let window = self.has_a_page_window();
+                let window = self.preview_here_on_screen();
                 let running = self.preview_at.is_some();
                 match how.over(window || running) {
                     // Already up: `on` is 「where is it?」, and the address
@@ -1233,7 +1242,7 @@ impl Editor {
                     true if running => self.preview_request = Some(Preview::Show),
                     true => self.ask_for_a_preview(true, true),
                     false => {
-                        if self.close_page_windows() {
+                        if self.close_preview_here() {
                             self.status = say!("preview.window-closed");
                         }
                         if running {
@@ -1244,12 +1253,12 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::PreviewWindow(how) => {
-                let window = self.has_a_page_window();
+                let window = self.preview_here_on_screen();
                 match how.over(window) {
                     true if window => self.status = say!("preview.window-open"),
                     true => self.ask_for_a_preview(true, false),
                     false => {
-                        if self.close_page_windows() {
+                        if self.close_preview_here() {
                             self.status = say!("preview.window-closed");
                         }
                     }
@@ -1264,6 +1273,14 @@ impl Editor {
                     false if running => self.preview_request = Some(Preview::Stop),
                     false => {}
                 }
+                Ok(CommandOutcome::Continue)
+            }
+            Command::PreviewTheme(how) => {
+                self.preview_theme = how.over(self.preview_theme);
+                self.status = match self.preview_theme {
+                    true => say!("preview.theme-on"),
+                    false => say!("preview.theme-off"),
+                };
                 Ok(CommandOutcome::Continue)
             }
             Command::PreviewFit(fit) => {
@@ -2034,6 +2051,15 @@ impl Editor {
             } else {
                 self.status = say!("region.nothing-to-write");
             }
+            return Ok(CommandOutcome::Continue);
+        }
+        // A preview likewise, except that `:x` is `:q` there, and so leaves
+        // when no text window is left (2026-11-08).
+        if self.page_window_has_the_keys() {
+            if only_if_changed && path.is_none() {
+                return self.quit(false);
+            }
+            self.status = say!("preview.nothing-to-write");
             return Ok(CommandOutcome::Continue);
         }
         match path.as_deref() {

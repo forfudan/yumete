@@ -473,6 +473,18 @@ zhs = "页面窗口中页面的大小：页宽适应窗口并随光标滚动，�
 en = "how the page window draws the page: as wide as the window and scrolled to the cursor, or the whole page"
 
 [[message]]
+# 设置面板：预览页面用主题配色（草稿）
+key = "settings.editor.preview-theme"
+zhs = "页面窗口用主题配色"
+en = "page window in theme colours"
+
+[[message]]
+# 设置面板：预览页面用主题配色——一句话（草稿）
+key = "settings.editor.preview-theme.hint"
+zhs = "预览页面的纸用背景色、黑字用文字色，深色主题下也一样；关闭则按印刷原样"
+en = "the preview's paper in the background colour and its black in the text colour, in dark themes too; off, the page as printed"
+
+[[message]]
 # 設置面板：盤上那一份變了就讀回來
 key = "settings.editor.reload-auto"
 zhs = "自动重载"

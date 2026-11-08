@@ -319,6 +319,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
             None => "view-long-line off".to_string(),
         },
         format!("view-preview-fit {}", editor.preview_fit().name()),
+        format!("view-preview-theme {}", on(editor.preview_theme())),
     ]
 }
 
@@ -573,6 +574,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     if let Some(fit) = yumete_core::editor::PreviewFit::parse(&config.editor.preview_fit) {
         editor.set_preview_fit(fit);
     }
+    editor.set_preview_theme(config.editor.preview_theme);
     editor.set_usage_groups(config.editor.usage_groups.clone());
 }
 
