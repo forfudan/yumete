@@ -76,6 +76,96 @@ struct Held {
     tree: tree_sitter::Tree,
 }
 
+/// **How much of a Typst manuscript is parsed as one** (2026-11-08).
+///
+/// tree-sitter reparses an edit in time that grows with how many nodes sit
+/// side by side under the root, wherever the edit is — and a manuscript is
+/// thousands of paragraphs side by side: 3.3 ms a keystroke on a 1.6 MB book,
+/// the same at its head and at its foot (a flat Rust file of 40,000 functions
+/// is 12.6 ms). So the manuscript is cut at paragraph breaks into pieces of
+/// about this size, each with a tree of its own, parsed when its lines are
+/// first drawn.
+const PIECE: usize = 64 * 1024;
+
+/// One stretch of a Typst manuscript with a tree of its own ([`PIECE`]).
+struct Piece {
+    first: usize,
+    lines: usize,
+    tree: Option<tree_sitter::Tree>,
+    /// The tree was `Tree::edit`ed for the text and wants reparsing.
+    stale: bool,
+    /// Its first reading has been looked at for something left open.
+    checked: bool,
+}
+
+/// A Typst manuscript as [`Piece`]s, for its colours.
+struct Pieces {
+    buffer: u64,
+    revision: u64,
+    /// The whole text, as the rope holds it.
+    text: String,
+    /// Where each line of `text` begins ([`crate::code::line_starts`]).
+    starts: Vec<usize>,
+    /// In order, covering lines `0..` as far as anything has been drawn.
+    pieces: Vec<Piece>,
+}
+
+impl Pieces {
+    /// A piece's bytes in `text`.
+    fn bytes(&self, piece: &Piece) -> (usize, usize) {
+        let from = self.starts[piece.first];
+        let to = self.starts.get(piece.first + piece.lines).copied().unwrap_or(self.text.len());
+        (from, to)
+    }
+
+    /// **The text was edited** — `edit` in this text's bytes, before `text`
+    /// and `starts` are replaced — and now has `lines_now` lines. The piece
+    /// it lands in takes it into its tree and reparses when next drawn; an
+    /// edit over several pieces joins them, to be read afresh; the pieces
+    /// after it move; an edit past the end of what is cut drops what it
+    /// reaches, to be cut again.
+    fn edited(&mut self, edit: &tree_sitter::InputEdit, lines_now: usize) {
+        let delta = lines_now as isize - self.starts.len() as isize;
+        let line_of = |byte: usize| self.starts.partition_point(|&s| s <= byte).saturating_sub(1);
+        let (top, bottom) = (line_of(edit.start_byte), line_of(edit.old_end_byte));
+        let covered = self.pieces.last().map_or(0, |p| p.first + p.lines);
+        let Some(a) = self.pieces.iter().position(|p| p.first + p.lines > top) else {
+            return;
+        };
+        let b = self.pieces.iter().rposition(|p| p.first <= bottom).unwrap_or(a).max(a);
+        let first = self.pieces[a].first;
+        let end = (self.pieces[b].first + self.pieces[b].lines) as isize + delta;
+        if bottom >= covered || end <= first as isize {
+            self.pieces.truncate(a);
+            return;
+        }
+        let tree = match a == b {
+            true => {
+                let from = self.starts[first];
+                let local = tree_sitter::InputEdit {
+                    start_byte: edit.start_byte - from,
+                    old_end_byte: edit.old_end_byte - from,
+                    new_end_byte: edit.new_end_byte - from,
+                    start_position: tree_sitter::Point::new(edit.start_position.row - first, edit.start_position.column),
+                    old_end_position: tree_sitter::Point::new(edit.old_end_position.row - first, edit.old_end_position.column),
+                    new_end_position: tree_sitter::Point::new(edit.new_end_position.row - first, edit.new_end_position.column),
+                };
+                self.pieces[a].tree.take().map(|mut tree| {
+                    tree.edit(&local);
+                    tree
+                })
+            }
+            false => None,
+        };
+        let stale = tree.is_some();
+        let joined = Piece { first, lines: end as usize - first, tree, stale, checked: true };
+        self.pieces.splice(a..=b, [joined]);
+        for piece in &mut self.pieces[a + 1..] {
+            piece.first = (piece.first as isize + delta) as usize;
+        }
+    }
+}
+
 /// 一次畫多少行。
 ///
 /// 一屏撐死幾十行，所以一塊蓋得住一屏；而塊越大，跨過邊界重查的次數越少。量過
@@ -97,6 +187,10 @@ pub(super) struct CodeCache {
     whole: Option<Held>,
     /// 這一版已經畫過的那幾塊，按塊號（#423）。換一版就清。
     by_chunk: HashMap<usize, Lines>,
+    /// A Typst manuscript's pieces and their trees (2026-11-08).
+    typst: Option<Pieces>,
+    /// This revision's Typst colours, by chunk.
+    typst_chunks: HashMap<usize, Lines>,
 }
 
 impl Editor {
@@ -150,6 +244,7 @@ impl Editor {
         self.segment_memo.forget();
         self.note_memo.forget();
         self.code_cache.borrow_mut().by_chunk.clear();
+        self.code_cache.borrow_mut().typst_chunks.clear();
     }
 
     /// **這一行長得超過門槛了嗎**——超了就一個記號都不算。
@@ -264,32 +359,252 @@ impl Editor {
     /// questions stay with [`Editor::markup_line_in`]: a manuscript is still
     /// read as one, and the tree only says what each token is.
     ///
-    /// The tree is held and reparsed on each edit as a code file's is
-    /// ([`Self::hold_the_tree`]), and painted a chunk at a time.
+    /// The manuscript is parsed in [`Piece`]s, each when its lines are first
+    /// drawn and again, incrementally, when an edit lands in it.
     pub fn typst_colours(&self, line: usize) -> Option<Vec<Span>> {
         if self.current_buffer().syntax() != crate::syntax::Syntax::Typst
             || !self.code_colours
             || !self.markup_visible()
+            || self.current_buffer().rope().len_bytes() > BIGGEST
         {
             return None;
         }
         let chunk = line / CHUNK;
+        // A chunk painted this revision passed the gate below when it was.
+        self.hold_the_pieces();
+        if let Some(found) = self.code_cache.borrow().typst_chunks.get(&chunk) {
+            return Some(found.get(line - chunk * CHUNK).cloned().unwrap_or_default());
+        }
         let gated = self.long_line.is_some()
             && (chunk * CHUNK..(chunk + 1) * CHUNK).any(|row| self.line_is_too_long(row));
         if gated {
             return None;
         }
-        self.hold_the_tree(Language::Typst);
-        if let Some(found) = self.code_cache.borrow().by_chunk.get(&chunk) {
-            return Some(found.get(line - chunk * CHUNK).cloned().unwrap_or_default());
+        let total = self.current_buffer().rope().len_lines();
+        let rows = chunk * CHUNK..((chunk + 1) * CHUNK).min(total);
+        let mut painted: Vec<Vec<Span>> = Vec::with_capacity(rows.len());
+        let mut row = rows.start;
+        while row < rows.end {
+            let at = self.ready_piece(row)?;
+            let cache = self.code_cache.borrow();
+            let pieces = cache.typst.as_ref()?;
+            let piece = &pieces.pieces[at];
+            let tree = piece.tree.as_ref()?;
+            let (from, to) = pieces.bytes(piece);
+            let local: Vec<usize> = pieces.starts[piece.first..piece.first + piece.lines]
+                .iter()
+                .map(|&start| start - from)
+                .collect();
+            let upto = rows.end.min(piece.first + piece.lines);
+            painted.extend(crate::code::paint_typst(
+                &pieces.text[from..to],
+                tree,
+                &local,
+                row - piece.first..upto - piece.first,
+            ));
+            row = upto;
         }
-        let id = self.current_buffer().id();
-        let mut cache = self.code_cache.borrow_mut();
-        let held = cache.whole.as_ref().filter(|h| h.language == Language::Typst && h.buffer == id)?;
-        let rows = chunk * CHUNK..(chunk + 1) * CHUNK;
-        let painted: Lines = Rc::new(crate::code::paint_typst(&held.source, &held.tree, &held.lines, rows));
-        cache.by_chunk.insert(chunk, painted.clone());
+        let painted: Lines = Rc::new(painted);
+        self.code_cache.borrow_mut().typst_chunks.insert(chunk, painted.clone());
         Some(painted.get(line - chunk * CHUNK).cloned().unwrap_or_default())
+    }
+
+    /// **Bring the pieces up to this revision**: the same buffer edited is the
+    /// same pieces, with the one the edit landed in marked for reparsing and
+    /// the ones after it moved; another buffer starts over.
+    ///
+    /// Warning: **the whole text is copied once an edit, the lines never.** The
+    /// copy is what finds the edit ([`crate::code::what_changed`]) and what the
+    /// pieces are read from; building a `String` per line, as the code files'
+    /// tree does, was a millisecond and a half of every keystroke on a 1.6 MB
+    /// book.
+    fn hold_the_pieces(&self) {
+        let buffer = self.current_buffer();
+        let (id, revision) = (buffer.id(), buffer.revision());
+        {
+            let cache = self.code_cache.borrow();
+            if cache.typst.as_ref().is_some_and(|p| p.buffer == id && p.revision == revision) {
+                return;
+            }
+        }
+        let rope = buffer.rope();
+        let mut text = String::with_capacity(rope.len_bytes());
+        for chunk in rope.chunks() {
+            text.push_str(chunk);
+        }
+        let starts = crate::code::line_starts(&text);
+        let mut cache = self.code_cache.borrow_mut();
+        cache.typst_chunks.clear();
+        let was = cache.typst.take().filter(|p| p.buffer == id);
+        let pieces = match was {
+            Some(mut was) => {
+                if let Some(edit) = crate::code::what_changed(&was.text, &text) {
+                    was.edited(&edit, starts.len());
+                }
+                was.text = text;
+                was.starts = starts;
+                was.revision = revision;
+                was
+            }
+            None => Pieces { buffer: id, revision, text, starts, pieces: Vec::new() },
+        };
+        cache.typst = Some(pieces);
+    }
+
+    /// **The piece `row` is in, cut, checked and parsed** — `None` when the
+    /// manuscript has no such row or does not parse at all.
+    ///
+    /// Cut where [`Self::typst_cut_before`] allows, about [`PIECE`] bytes
+    /// apart. A cut the scanner no longer allows, because an edit opened a
+    /// raw block or a comment across it, joins the pieces on either side. A
+    /// piece whose first reading ends inside something unclosed is read again
+    /// joined to the next, where what it opened may close; after an edit it is
+    /// not — a `#emph[` half typed is not a reason to reread the chapter.
+    fn ready_piece(&self, row: usize) -> Option<usize> {
+        let total = self.current_buffer().rope().len_lines();
+        if row >= total {
+            return None;
+        }
+        loop {
+            self.cut_through(row + 1, total);
+            let at = self.piece_index(row)?;
+            // Every cut on either side the scanner no longer allows, joined
+            // at once: one at a time would reread the growing piece each time.
+            let firsts: Vec<usize> = {
+                let cache = self.code_cache.borrow();
+                cache.typst.as_ref()?.pieces.iter().map(|p| p.first).collect()
+            };
+            let mut lo = at;
+            while lo > 0 && !self.typst_cut_before(firsts[lo]) {
+                lo -= 1;
+            }
+            let mut hi = at;
+            while hi + 1 < firsts.len() && !self.typst_cut_before(firsts[hi + 1]) {
+                hi += 1;
+            }
+            if lo < hi {
+                self.join_pieces(lo, hi, true);
+                continue;
+            }
+            let end = {
+                let cache = self.code_cache.borrow();
+                let piece = &cache.typst.as_ref()?.pieces[at];
+                piece.first + piece.lines
+            };
+            let open_at_end = {
+                let mut cache = self.code_cache.borrow_mut();
+                let pieces = cache.typst.as_mut()?;
+                let (from, to) = pieces.bytes(&pieces.pieces[at]);
+                let source = &pieces.text[from..to];
+                let piece = &mut pieces.pieces[at];
+                let tree = match (piece.tree.take(), piece.stale) {
+                    (Some(edited), true) => crate::code::parse(Language::Typst, source, Some(&edited)),
+                    (Some(tree), false) => Some(tree),
+                    (None, _) => crate::code::parse(Language::Typst, source, None),
+                };
+                piece.stale = false;
+                let open = !piece.checked && tree.as_ref().is_some_and(|t| crate::code::open_at_end(t, source.len()));
+                piece.checked = true;
+                piece.tree = tree;
+                piece.tree.as_ref()?;
+                open
+            };
+            if open_at_end && end < total {
+                self.cut_through(end + 1, total);
+                self.join_pieces(at, at + 1, false);
+                continue;
+            }
+            return Some(at);
+        }
+    }
+
+    /// Cut pieces until they cover the first `rows` rows.
+    fn cut_through(&self, rows: usize, total: usize) {
+        loop {
+            let covered = self.covered();
+            if covered >= rows.min(total) {
+                return;
+            }
+            let end = self.next_cut(covered, total);
+            let mut cache = self.code_cache.borrow_mut();
+            let Some(pieces) = cache.typst.as_mut() else { return };
+            pieces.pieces.push(Piece { first: covered, lines: end - covered, tree: None, stale: false, checked: false });
+        }
+    }
+
+    /// How many pieces the manuscript is cut into so far.
+    #[cfg(test)]
+    pub(super) fn typst_pieces(&self) -> usize {
+        self.code_cache.borrow().typst.as_ref().map_or(0, |p| p.pieces.len())
+    }
+
+    fn covered(&self) -> usize {
+        self.code_cache
+            .borrow()
+            .typst
+            .as_ref()
+            .and_then(|p| p.pieces.last().map(|l| l.first + l.lines))
+            .unwrap_or(0)
+    }
+
+    fn piece_index(&self, row: usize) -> Option<usize> {
+        let cache = self.code_cache.borrow();
+        let pieces = &cache.typst.as_ref()?.pieces;
+        let at = pieces.partition_point(|p| p.first + p.lines <= row);
+        (at < pieces.len()).then_some(at)
+    }
+
+    /// Pieces `lo..=hi` become one, to be read afresh; a join for something
+    /// left open is `checked: false`, so that one is read for it again.
+    fn join_pieces(&self, lo: usize, hi: usize, checked: bool) {
+        let mut cache = self.code_cache.borrow_mut();
+        let Some(pieces) = cache.typst.as_mut() else { return };
+        if hi >= pieces.pieces.len() || lo >= hi {
+            return;
+        }
+        let end = pieces.pieces[hi].first + pieces.pieces[hi].lines;
+        pieces.pieces.drain(lo + 1..=hi);
+        let piece = &mut pieces.pieces[lo];
+        piece.lines = end - piece.first;
+        piece.tree = None;
+        piece.stale = false;
+        piece.checked = checked;
+        cache.typst_chunks.clear();
+    }
+
+    /// Where the piece that starts at `from` ends: the first line at least
+    /// [`PIECE`] bytes on that may begin a piece, or the end of the file.
+    fn next_cut(&self, from: usize, total: usize) -> usize {
+        let rope = self.current_buffer().rope();
+        let start = rope.line_to_byte(from);
+        let mut line = from + 1;
+        while line < total && rope.line_to_byte(line) - start < PIECE {
+            line += 1;
+        }
+        while line < total && !self.typst_cut_before(line) {
+            line += 1;
+        }
+        line.min(total)
+    }
+
+    /// **Whether a piece may begin at `line`**: after a blank line of prose,
+    /// on a line the block scanner calls prose or a heading, outside any code
+    /// body, at the margin, and not closing a bracket. Typst reads what comes
+    /// after such a break as it reads the top of a file, so a piece parsed on
+    /// its own is the document's own reading of those lines.
+    pub(super) fn typst_cut_before(&self, line: usize) -> bool {
+        use crate::markdown::Block;
+        let rope = self.current_buffer().rope();
+        if line == 0 || line >= rope.len_lines() {
+            return line == 0;
+        }
+        let blank = rope.line(line - 1).chars().all(char::is_whitespace);
+        let opens = rope.line(line).chars().next();
+        blank
+            && matches!(self.block_of(line - 1), Block::Prose)
+            && matches!(self.block_of(line), Block::Prose | Block::Heading(_))
+            && self.typst_frames(line).is_none_or(|frames| frames.is_empty())
+            && opens.is_some_and(|c| !c.is_whitespace() && !matches!(c, ']' | ')' | '}'))
     }
 
     /// **這一份裏每一個定義**，位置是**字符**（`]f`/`]c`/`mi f`，2026-10-06）。

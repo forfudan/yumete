@@ -322,7 +322,10 @@ impl Language {
             // scanner drew it (Typst gives it a colour of its own, which no theme
             // here has); the `*` and `_` of strong and
             // emphasis are the markers 所見即所得 hides; a `$` is the maths', and a
-            // raw block's tag is the raw block's, as Typst draws it.
+            // raw block's tag is the raw block's, as Typst draws it. In maths,
+            // as Typst's highlighter has it (the author chose its look,
+            // 2026-11-08): a number is text, and `^` `_` `/` `'` `√` `&` are
+            // operators.
             Language::Typst => {
                 "
 (code \"#\" @keyword [(let_binding) (set_rule) (show_rule) (module_import)
@@ -334,6 +337,11 @@ impl Language {
 (emph \"_\" @markup.marker)
 (equation \"$\" @markup.math)
 (raw_block (raw_lang) @markup.raw.block)
+(math_number) @variable
+(math_attach [\"_\" \"^\"] @markup.math.operator)
+(math_frac \"/\" @markup.math.operator)
+[(primes) (root_sign) (align_point)] @markup.math.operator
+(math_shorthand) @constant.character.escape
 "
             }
             _ => "",
@@ -1045,10 +1053,12 @@ fn typst_paint(capture: &str) -> Paint {
         "markup.italic" => Some(Kind::Emphasis),
         "markup.marker" => Some(Kind::Marker),
         "markup.math" => Some(Kind::Math),
+        // Typst draws its maths operators in its escapes' colour (`typ-math-op`
+        // and `typ-escape` are one teal in its own theme).
+        "markup.math.operator" => kind(Token::Escape),
         "markup.link.url" => Some(Kind::Link),
         "markup.link.label" => Some(Kind::Ref),
         "label" => Some(Kind::Label),
-        "variable.other.member" => kind(Token::Property),
         "punctuation.special" => kind(Token::Punctuation),
         _ if capture.starts_with("markup.heading") => Some(Kind::Heading),
         _ if capture.starts_with("markup.raw") => Some(Kind::Code),
@@ -1187,7 +1197,16 @@ pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
         return None;
     }
     let (a, b) = (was.as_bytes(), now.as_bytes());
-    let mut head = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    // **A block at a time, then a byte at a time** (2026-11-08): comparing
+    // slices is a `memcmp`, comparing bytes in a loop is not, and on a 1.6 MB
+    // book the loop was 0.7 ms of every keystroke.
+    const BLOCK: usize = 4096;
+    let shorter = a.len().min(b.len());
+    let mut head = 0;
+    while head + BLOCK <= shorter && a[head..head + BLOCK] == b[head..head + BLOCK] {
+        head += BLOCK;
+    }
+    head += a[head..shorter].iter().zip(&b[head..shorter]).take_while(|(x, y)| x == y).count();
     // Warning: **數的是字節，而一個字的中間也可以對得上**（2026-10-06 按 `d` 删
     // 到「名」當場崩的那一下）。「的名字」删成「的字」：名 是 `E5 90 8D`、
     // 字 是 `E5 AD 97`，兩個都以 `E5` 開頭，於是前綴數到 4 個字節——正落在那個
@@ -1201,7 +1220,11 @@ pub fn what_changed(was: &str, now: &str) -> Option<tree_sitter::InputEdit> {
     }
     // 從後面數，兩頭不許越過已經對上的那一段。
     let most = a.len().min(b.len()) - head;
-    let mut tail = (0..most)
+    let mut tail = 0;
+    while tail + BLOCK <= most && a[a.len() - tail - BLOCK..a.len() - tail] == b[b.len() - tail - BLOCK..b.len() - tail] {
+        tail += BLOCK;
+    }
+    tail += (tail..most)
         .take_while(|i| a[a.len() - 1 - i] == b[b.len() - 1 - i])
         .count();
     // 尾巴同理，而這一頭兩邊的位置不同，所以兩邊都要問。
@@ -1315,13 +1338,16 @@ fn captured(
 /// **A raw block is coloured by the language its tag names** — the grammar's
 /// injection query finds the tag and the text, and the text is parsed on its
 /// own, as a fence is.
+///
+/// `starts` says where each line of `source` begins ([`line_starts`]): the
+/// lines are read where they lie, never copied out one by one.
 pub fn paint_typst(
     source: &str,
     tree: &Tree,
-    lines: &[String],
+    starts: &[usize],
     rows: std::ops::Range<usize>,
 ) -> Vec<Vec<Span>> {
-    let rows = rows.start.min(lines.len())..rows.end.min(lines.len());
+    let rows = rows.start.min(starts.len())..rows.end.min(starts.len());
     let mut out = vec![Vec::new(); rows.len()];
     let Some((query, kinds)) = Language::Typst.query() else {
         return out;
@@ -1329,14 +1355,9 @@ pub fn paint_typst(
     if rows.is_empty() {
         return out;
     }
-    let mut starts = Vec::with_capacity(lines.len());
-    let mut at = 0usize;
-    for line in lines {
-        starts.push(at);
-        at += line.len() + 1;
-    }
+    let line_of = |n: usize| line_in(source, starts, n);
     let from = starts[rows.start];
-    let to = starts[rows.end - 1] + lines[rows.end - 1].len();
+    let to = starts[rows.end - 1] + line_of(rows.end - 1).len();
     let mut found = captured(query, kinds, source, tree, from..to);
     // The last pattern that names a node wins: sort the later ones first and
     // keep the first of each node.
@@ -1347,7 +1368,7 @@ pub fn paint_typst(
     let mut next = 0usize;
     let mut live: Vec<(usize, usize, Kind)> = Vec::new();
     for n in rows.clone() {
-        let line = &lines[n];
+        let line = line_of(n);
         let (head, tail) = (starts[n], starts[n] + line.len());
         while next < found.len() && found[next].0 < tail.max(head + 1) {
             let (start, end, _, kind) = found[next];
@@ -1379,8 +1400,69 @@ pub fn paint_typst(
             }
         }
     }
-    inject(source, tree, lines, &starts, rows, from..to, &mut out);
+    inject(source, tree, starts, rows, from..to, &mut out);
     out
+}
+
+/// **Whether `tree` ends inside something it could not close** — an error or
+/// a missing token that runs to the last byte, as an unclosed `[`, raw block
+/// or comment leaves it. A stray `)` mid-paragraph is not.
+pub fn open_at_end(tree: &Tree, len: usize) -> bool {
+    let root = tree.root_node();
+    if !root.has_error() || len == 0 {
+        return false;
+    }
+    let last = root.child(root.child_count().saturating_sub(1));
+    if last.is_some_and(|n| n.is_error() || n.is_missing() || (n.has_error() && n.end_byte() + 1 >= len)) {
+        return true;
+    }
+    let mut node = root.descendant_for_byte_range(len - 1, len);
+    while let Some(here) = node {
+        if here.is_error() || here.is_missing() {
+            return true;
+        }
+        node = here.parent();
+    }
+    false
+}
+
+/// **Where each line of `source` begins**, in bytes: one entry a line, as the
+/// rope counts them — a source ending in a newline has an empty last line.
+pub fn line_starts(source: &str) -> Vec<usize> {
+    let mut starts = Vec::with_capacity(source.len() / 40 + 1);
+    starts.push(0);
+    starts.extend(source.match_indices('\n').map(|(at, _)| at + 1));
+    starts
+}
+
+/// Line `n` of `source`, without its line break.
+fn line_in<'s>(source: &'s str, starts: &[usize], n: usize) -> &'s str {
+    let end = starts.get(n + 1).map_or(source.len(), |&next| next);
+    let line = &source[starts[n].min(end)..end];
+    let line = line.strip_suffix('\n').unwrap_or(line);
+    line.strip_suffix('\r').unwrap_or(line)
+}
+
+/// **Compile `language`'s queries on a thread of their own**, once a process
+/// (2026-11-08): a query is built from its source text, and Typst's takes
+/// milliseconds — time the first page need not wait for if the file was
+/// opened a moment before it is drawn. Whoever asks for the query meanwhile
+/// waits for that thread rather than compiling it twice.
+pub fn warm(language: Language) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static STARTED: [AtomicBool; Language::ALL.len()] = [const { AtomicBool::new(false) }; Language::ALL.len()];
+    let Some(at) = Language::ALL.iter().position(|&l| l == language) else {
+        return;
+    };
+    if STARTED[at].swap(true, Ordering::Relaxed) {
+        return;
+    }
+    std::thread::spawn(move || {
+        let _ = language.query();
+        if language == Language::Typst {
+            let _ = injections();
+        }
+    });
 }
 
 /// The grammar's injection query, compiled once, with the indices of its
@@ -1405,7 +1487,6 @@ fn injections() -> Option<&'static (Query, u32, u32)> {
 fn inject(
     source: &str,
     tree: &Tree,
-    lines: &[String],
     starts: &[usize],
     rows: std::ops::Range<usize>,
     bytes: std::ops::Range<usize>,
@@ -1434,7 +1515,7 @@ fn inject(
             .map_or(0, |&head| source[head..body.start_byte()].chars().count());
         for (i, runs) in highlight(spoken, &pieces).into_iter().enumerate() {
             let row = first + i;
-            if !rows.contains(&row) || row >= lines.len() {
+            if !rows.contains(&row) || row >= starts.len() {
                 continue;
             }
             let shift = if i == 0 { indent } else { 0 };
@@ -2088,7 +2169,7 @@ mod tests {
         let lines: Vec<String> = text.lines().map(str::to_string).collect();
         let source = joined(&lines);
         let tree = parse(Language::Typst, &source, None).expect("parses");
-        let painted = paint_typst(&source, &tree, &lines, 0..lines.len());
+        let painted = paint_typst(&source, &tree, &line_starts(&source), 0..lines.len());
         let at = |row: usize, needle: &str| typst_kind_at(&painted, &lines, row, needle);
         let token = |t: Token| Some(Kind::Token(t));
         assert_eq!(at(0, "="), Some(Kind::HeadingMark));
@@ -2110,7 +2191,8 @@ mod tests {
         assert_eq!(at(3, "很"), Some(Kind::Emphasis), "emphasis nests inside strong");
         assert_eq!(at(3, "@ch1"), Some(Kind::Ref));
         assert_eq!(at(3, "$x"), Some(Kind::Math));
-        assert_eq!(at(3, "2 +"), token(Token::Number));
+        assert_eq!(at(3, "2 +"), token(Token::Plain), "a number in maths is text, as Typst draws it");
+        assert_eq!(at(3, "^"), token(Token::Escape), "and `^` an operator");
         assert_eq!(at(3, "pi"), token(Token::Constant));
         assert_eq!(at(3, "#emph"), token(Token::Function), "a call's `#` is the call's");
         assert_eq!(at(3, "#title"), token(Token::Function), "and so is a name's");
@@ -2120,7 +2202,7 @@ mod tests {
         assert_eq!(at(5, "main"), token(Token::Function));
         assert_eq!(at(5, "\"字\""), token(Token::String));
         assert_eq!(at(7, "heading"), token(Token::Function), "a show rule's selector");
-        assert_eq!(at(7, "body"), token(Token::Property));
+        assert_eq!(at(7, "body"), token(Token::Plain), "a field in its object's colour");
     }
 
     /// The window the page asks for paints what the whole file would, and an
@@ -2137,10 +2219,11 @@ mod tests {
         let lines: Vec<String> = text.lines().map(str::to_string).collect();
         let source = joined(&lines);
         let tree = parse(Language::Typst, &source, None).expect("parses");
-        let whole = paint_typst(&source, &tree, &lines, 0..lines.len());
+        let starts = line_starts(&source);
+        let whole = paint_typst(&source, &tree, &starts, 0..lines.len());
         for from in [0usize, 5, 127, 128, 1000, 2047] {
             let rows = from..(from + 128).min(lines.len());
-            let win = paint_typst(&source, &tree, &lines, rows.clone());
+            let win = paint_typst(&source, &tree, &starts, rows.clone());
             assert_eq!(win, whole[rows.clone()].to_vec(), "the window from row {from}");
         }
         // Make a word strong in the middle, as a keystroke would.
@@ -2154,11 +2237,12 @@ mod tests {
         let again = parse(Language::Typst, &after, Some(&edited)).expect("reparses");
         let fresh = parse(Language::Typst, &after, None).expect("parses");
         let rows = 1280..1408;
+        let after_starts = line_starts(&after);
         assert_eq!(
-            paint_typst(&after, &again, &after_lines, rows.clone()),
-            paint_typst(&after, &fresh, &after_lines, rows),
+            paint_typst(&after, &again, &after_starts, rows.clone()),
+            paint_typst(&after, &fresh, &after_starts, rows),
         );
-        let painted = paint_typst(&after, &again, &after_lines, row..row + 1);
+        let painted = paint_typst(&after, &again, &after_starts, row..row + 1);
         assert!(painted[0].iter().any(|s| s.kind == Kind::Strong && s.end - s.start == 4), "{:?}", painted[0]);
     }
 
@@ -2184,21 +2268,23 @@ mod tests {
         let middle = lines.len() / 2;
         for round in ["first, with the queries compiled", "again"] {
             let began = Instant::now();
-            let _ = paint_typst(&source, &tree, &lines, middle..middle + 128);
+            let _ = paint_typst(&source, &tree, &line_starts(&source), middle..middle + 128);
             println!("paint 128 rows ({round}) {:?}", began.elapsed());
         }
-        let at = source.len() / 2;
-        let at = (at..source.len()).find(|&i| source.is_char_boundary(i)).unwrap();
-        let mut after = source.clone();
-        after.insert_str(at, "#emph[字]");
-        let began = Instant::now();
-        let edit = what_changed(&source, &after).unwrap();
-        println!("one edit, found by diffing {:?}", began.elapsed());
-        let mut edited = tree.clone();
-        edited.edit(&edit);
-        let began = Instant::now();
-        let _ = parse(Language::Typst, &after, Some(&edited)).unwrap();
-        println!("one edit, reparsed {:?}", began.elapsed());
+        for (share, typed) in [(0.1, "字"), (0.5, "字"), (0.9, "字"), (0.5, "#emph[字]")] {
+            let at = (source.len() as f64 * share) as usize;
+            let at = (at..source.len()).find(|&i| source.is_char_boundary(i)).unwrap();
+            let mut after = source.clone();
+            after.insert_str(at, typed);
+            let began = Instant::now();
+            let edit = what_changed(&source, &after).unwrap();
+            let diffed = began.elapsed();
+            let mut edited = tree.clone();
+            edited.edit(&edit);
+            let began = Instant::now();
+            let _ = parse(Language::Typst, &after, Some(&edited)).unwrap();
+            println!("{typed:?} at {share}: found by diffing {diffed:?}, reparsed {:?}", began.elapsed());
+        }
     }
 }
 
