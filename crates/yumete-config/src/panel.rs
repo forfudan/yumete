@@ -5,8 +5,10 @@
 //! > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道他們
 //! > 都是幹啥的，也不需要查詢到底有哪些 key 可以用。
 //!
-//! 整頁一扇，左邊八組、右邊那一組的項；`hl` 換欄、`jk` 上下、空格切換、`i` 改、
-//! `d` 撤掉、`Tab` 換存到哪一份、`:w` 存盤、`q` 走。
+//! 整頁一扇：一張單子，八組的名字是單子裏的分隔標題，左邊那一欄是它們的目録。
+//! 鍵在每一行上只有一個意思（2026-11-08 作者定）：`jk` `gg` `G` 走、`/` 搜、
+//! `Enter` 改、空格撥、`r` 回到下一層、`u` / `C-r` 撤銷與重做、`Tab` 換寫哪一份、
+//! `q` 關。
 //!
 //! # 為什麽在 `yumete-config` 而不是 `yumete-core`
 //!
@@ -22,11 +24,13 @@
 //! 再後面跟着**被蓋掉的那一個值**——不寫出來的話，一個讀者看見「首行縮進 2」而
 //! 他記得自己全局設的是 0，就只能去翻檔案。
 //!
-//! # `:w`，不是即時生效
+//! # 即改即存，`u` 反悔
 //!
-//! 2026-09-23 定，原話：「需要 :w，即時生效不好，改錯了都没辦法反悔。」所以改動
-//! 攢在 [`Sheet::edits`] 裏，存盤那一下纔落到檔上，落完由 `:reload-config` 那條
-//! 同一支推進編輯器。
+//! 2026-09-23 定的是 `:w`（「即時生效不好，改錯了都没辦法反悔」）；2026-11-08 改成
+//! **每一次確認的改動當場寫進檔裏並生效**，而反悔是 `u`：撤銷把檔寫回去。「改了」
+//! 和「存了」從此是同一件事，没有「未保存」，也没有走的時候那一問——審出來的毛病
+//! 有一半是那兩個狀態分不清。改動先落在 [`Sheet::edits`]，[`Panel::flush`] 隨即
+//! 寫下去，落完由 `:reload-config` 那條同一支推進編輯器。
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -102,14 +106,6 @@ impl Which {
             Which::Local => Layer::Local,
         }
     }
-}
-
-/// 鍵在左邊那張組單子上，還是右邊那些項上。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Pane {
-    #[default]
-    Groups,
-    Settings,
 }
 
 /// **一份配置檔**：它在哪、正文長什麽樣、以及改了還没存的那幾項。
@@ -252,6 +248,7 @@ fn written(change: &Change) -> String {
         Change::Text(s) => toml_edit::Value::from(s.as_str()).to_string().trim().to_string(),
         // 撤掉那一項的人看見的不是一個值，[`Sheet::says`] 先接住了。
         Change::Drop => String::new(),
+        Change::Written(repr) => repr.clone(),
     }
 }
 
@@ -302,42 +299,6 @@ pub fn unwritten(repr: &str) -> String {
         .unwrap_or_else(|| repr.trim_matches('"').to_string())
 }
 
-/// Where a paste goes in a value that is not being typed yet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Pasting {
-    /// `p`: after the value.
-    After,
-    /// `P`: before it.
-    Before,
-    /// A paste from the terminal: in place of it.
-    Replace,
-}
-
-/// Pasted text made one line: see [`Panel::paste`].
-fn one_line(text: &str) -> String {
-    // A terminal hands a pasted break over as `\r` as often as `\n`.
-    let lines: Vec<&str> = text.split(['\n', '\r']).collect();
-    let last = lines.len() - 1;
-    let joined = lines
-        .iter()
-        .enumerate()
-        .map(|(i, line)| {
-            let line = if i > 0 { line.trim_start() } else { line };
-            if i < last { line.trim_end() } else { line }
-        })
-        .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-    joined
-        .chars()
-        .map(|c| match c {
-            '\t' => ' ',
-            c => c,
-        })
-        .filter(|c| !c.is_control())
-        .collect()
-}
-
 /// **一項此刻長什麽樣** —— 面板一行畫的就是這個。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shown {
@@ -356,30 +317,57 @@ pub struct Panel {
     pub local: Sheet,
     /// 改動落到哪一份上。
     pub into: Which,
-    pub pane: Pane,
-    /// 左邊那張單子上的第幾組（[`GROUPS`] 的下標）。
-    pub group: usize,
-    /// 右邊那一組裏的第幾項。
+    /// **The rows a search left**, as places in [`Panel::all_rows`]: `None`
+    /// is every row (2026-11-08). The front end works it out, because the
+    /// names a search reads are in the reader's language.
+    pub found: Option<Vec<usize>>,
+    /// The row the cursor is on, of [`Panel::rows`].
     pub row: usize,
-    /// `i` 進來改的那一段字；`None` ＝ 不在改。
-    pub typing: Option<String>,
-    /// **How many characters of [`Panel::typing`] stand after the caret**
-    /// (2026-11-08). Counted from the end, so `0` is the end of the text
-    /// and a value set whole (`typing = Some(..)`) has its caret after it,
-    /// where `i` puts it. A paste lands at the caret, and `P` puts it
-    /// before the value.
-    pub tail: usize,
     /// **A page is open**, on this row of it (2026-11-02). Which page is the
     /// row it was opened from ([`Panel::subpage`]). `None` is the ordinary
     /// list.
     pub page: Option<usize>,
+    /// **The list a choice is picked from** (2026-11-08): `Enter` on a choice
+    /// opens it, each value with what it means.
+    pub popup: Option<Popup>,
     /// **Why the value typed was not taken** (2026-11-08): `Enter` on a value
-    /// the config would refuse leaves it in the field, and this is drawn
-    /// under the row.
+    /// the config would refuse writes nothing, and this is drawn under the
+    /// row while the value is typed again.
     pub refusal: Option<Refusal>,
     /// The schemes there are, from the input method, which this crate cannot
     /// see: `None` takes any name.
     pub schemes: Option<Names>,
+    /// **What is being typed on the command row for the panel**, if anything:
+    /// a value, or the search (2026-11-08). The front end opens the line and
+    /// says so here, so the page can draw what goes with it.
+    pub typing: Option<Typing>,
+    /// The search in force, or being typed: empty is none.
+    pub search: String,
+    /// What `u` takes back, the last first; what `C-r` puts back.
+    undo: Vec<Step>,
+    redo: Vec<Step>,
+}
+
+/// **One change as written**, for `u` and `C-r`: which file, which key,
+/// what it said before (`None` ＝ not there) and after.
+type Step = Vec<(Which, String, Option<String>, Option<String>)>;
+
+/// What the command row is typing for the panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Typing {
+    /// The value of the row under the cursor.
+    Value,
+    /// The search: the list narrows as it is typed.
+    Search,
+}
+
+/// The list `Enter` opens on a choice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Popup {
+    /// The values, as the config writes them.
+    pub words: Vec<String>,
+    /// The one the cursor is on.
+    pub at: usize,
 }
 
 /// **Names a row takes that only the front end knows**: the schemes.
@@ -411,19 +399,19 @@ pub enum Refusal {
     Loader(String),
 }
 
-/// **What `:w` did** (2026-11-08): every file it wrote, and which of them
-/// had been changed outside while the panel was open.
+/// **What a write did**: every file written, and which of them had been
+/// changed outside since the panel read it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Saved {
     pub wrote: Vec<PathBuf>,
     pub changed_underneath: Vec<PathBuf>,
 }
 
-/// **Why `:w` wrote nothing.**
+/// **Why a change was not written.**
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SaveError {
     /// The file is one the loader cannot read (a TOML error, or a name it
-    /// does not take): saving over it would claim settings that are not in
+    /// does not take): writing into it would claim settings that are not in
     /// force. The line is 0 起算; the message is the parser's.
     Unread { path: PathBuf, line: usize, said: String },
     /// The disk said no.
@@ -434,13 +422,13 @@ pub enum SaveError {
 /// (2026-11-08): a message about a row goes stale when this changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Spot {
-    pane: Pane,
-    group: usize,
     row: usize,
     page: Option<usize>,
     into: Which,
-    typing: Option<String>,
-    edits: (BTreeMap<String, Change>, BTreeMap<String, Change>),
+    popup: Option<Popup>,
+    found: Option<Vec<usize>>,
+    typing: Option<Typing>,
+    texts: (String, String),
 }
 
 /// The pages a row can open.
@@ -490,11 +478,19 @@ pub enum ItemFrom {
 
 /// **本項目那一份在哪** —— 找得到就是它，找不到就是「要建的話建在這裏」。
 ///
-/// Warning: **不回 `None`。** 面板明寫着「存盤時建」，而 `save()` 自己會
-/// `create_dir_all`；少了這一支，那句承諾就是空頭的。要建哪一個看得見：頂上那
-/// 一行寫的就是它。
+/// Warning: **不回 `None`。** 頂上那一行寫着要建的那一個，而寫的時候
+/// `create_dir_all`；少了這一支，那句承諾就是空頭的。
 pub fn local_sheet_path(cwd: &std::path::Path) -> PathBuf {
     crate::local_config_path(cwd).unwrap_or_else(|| cwd.join(".yumete").join("config.toml"))
+}
+
+/// **Every row, in the order the list draws them**: the groups in their
+/// order, and in each its settings in [`SETTINGS`]'s order.
+pub fn all_rows() -> Vec<&'static Setting> {
+    GROUPS
+        .iter()
+        .flat_map(|named| SETTINGS.iter().filter(move |s| s.group == named.group))
+        .collect()
 }
 
 impl Panel {
@@ -506,33 +502,37 @@ impl Panel {
             // 而它在不在寫在 `Sheet::there` 上，面板照着說。
             local: Sheet::read(local),
             into: Which::Global,
-            pane: Pane::Groups,
-            group: 0,
+            found: None,
             row: 0,
-            typing: None,
-            tail: 0,
             page: None,
+            popup: None,
             refusal: None,
             schemes: None,
+            typing: None,
+            search: String::new(),
+            undo: Vec::new(),
+            redo: Vec::new(),
         }
     }
 
     /// Where the panel stands now: see [`Spot`].
     pub fn spot(&self) -> Spot {
         Spot {
-            pane: self.pane,
-            group: self.group,
             row: self.row,
             page: self.page,
             into: self.into,
-            typing: self.typing.clone(),
-            edits: (self.global.edits.clone(), self.local.edits.clone()),
+            popup: self.popup.clone(),
+            found: self.found.clone(),
+            typing: self.typing,
+            texts: (self.global.text.clone(), self.local.text.clone()),
         }
     }
 
-    /// Whether `path` has an unsaved edit in either file: the row gets a mark.
-    pub fn edited(&self, path: &str) -> bool {
-        self.global.edited(path) || self.local.edited(path)
+    /// Whether the file switched to sets `path`, or a key under it (a page's
+    /// row): the row gets a mark.
+    pub fn set_here(&self, path: &str) -> bool {
+        let under = format!("{path}.");
+        self.sheet().declared.keys().any(|k| k == path || k.starts_with(&under))
     }
 
     /// The files that cannot be read, global first: the panel says so at the
@@ -544,12 +544,13 @@ impl Panel {
             .collect()
     }
 
-    /// 這一組底下的那些項，畫出來的次序就是 [`SETTINGS`] 的次序。
+    /// The rows shown: every row, or what a search left.
     pub fn rows(&self) -> Vec<&'static Setting> {
-        let Some(named) = GROUPS.get(self.group) else {
-            return Vec::new();
-        };
-        SETTINGS.iter().filter(|s| s.group == named.group).collect()
+        let all = all_rows();
+        match &self.found {
+            None => all,
+            Some(found) => found.iter().filter_map(|i| all.get(*i).copied()).collect(),
+        }
     }
 
     /// 光標此刻站的那一項。
@@ -557,22 +558,45 @@ impl Panel {
         self.rows().get(self.row).copied()
     }
 
-    /// **The row a change goes to: none on the group list** (2026-11-08).
-    /// There no row is highlighted, and [`Panel::here`] is only the group's
-    /// first: reported, `i` on 版面 flipped 排版方向 unseen and `c` opened a
-    /// field nobody could see, its Enter setting 光標邊距.
-    fn chosen(&self) -> Option<&'static Setting> {
-        self.here().filter(|_| self.pane == Pane::Settings)
+    /// **A search's rows** (indices into [`all_rows`]), or every row again
+    /// with `None`. The cursor stays on the row it was on when that row is
+    /// still there, and goes to the first otherwise.
+    pub fn narrow(&mut self, found: Option<Vec<usize>>) {
+        let was = self.here().map(|s| s.path());
+        self.found = found;
+        self.row = was
+            .and_then(|path| self.rows().iter().position(|s| s.path() == path))
+            .unwrap_or(0);
     }
 
-    /// 一項此刻長什麽樣。
+    /// **Go to a setting by name** (`:settings editor.scrolloff`): its TOML
+    /// path, its key alone when only one setting has it, or its name as the
+    /// panel shows it (`label`, the front end translates). Gives whether it
+    /// was found; a search in force is let go.
+    pub fn go_to(&mut self, name: &str, label: impl Fn(&Setting) -> String) -> bool {
+        let name = name.trim();
+        let all = all_rows();
+        let by_path = all.iter().position(|s| s.path() == name);
+        let by_key = || {
+            let keyed: Vec<usize> = (0..all.len()).filter(|i| all[*i].key == name).collect();
+            (keyed.len() == 1).then(|| keyed[0])
+        };
+        let by_label = || all.iter().position(|s| label(s) == name);
+        match by_path.or_else(by_key).or_else(by_label) {
+            Some(at) => {
+                self.found = None;
+                self.page = None;
+                self.popup = None;
+                self.row = at;
+                true
+            }
+            None => false,
+        }
+    }
+
     /// **三層各自說了什麼** —— 出廠、全局、本項目，照面板上那一塊的次序（2026-10-13）。
     ///
     /// `None` ＝ 那一層沒有說話。出廠那一層永遠有話說，所以它那一格永遠是 `Some`。
-    ///
-    /// Warning: **和 [`Panel::shown`] 問的是同一份東西，答的是不同的問題**：那一支答
-    /// 「贏的是誰」，這一支答「三個人各說了什麼」——面板底下那一塊要的是後者，而從前
-    /// 只有前者，於是「全局設了但被本項目蓋住」這件事看不見。
     pub fn layers(&self, setting: &Setting) -> [(Layer, Option<String>); 3] {
         let path = setting.path();
         let said = |raw: Option<String>| raw.map(|v| Self::as_the_editor_takes_it(setting, v));
@@ -583,6 +607,7 @@ impl Panel {
         ]
     }
 
+    /// 一項此刻長什麽樣：贏的那一層，和被它蓋掉的那一個。
     pub fn shown(&self, setting: &Setting) -> Shown {
         let path = setting.path();
         let factory = (Layer::Factory, setting.factory.to_string());
@@ -606,17 +631,10 @@ impl Panel {
 
     /// **面板顯示的要是編輯器真用的那個值**（2026-10-09 作者定）。
     ///
-    /// 面板**撥**不到域外的數（`Kind::Count` 的 `low`／`high` 就是為這個寫的，
-    /// `tests/settings_ui.rs::every_value_the_panel_can_set_is_its_own` 盯着），可
-    /// 檔是人手改的：`zong_length = 2` 寫進去，面板畫 2 而 `into_config` 按 4 排版
-    /// ——**面板顯示的值不是編輯器用的值**，而這扇面板存在的理由就是終結這件事。
-    ///
-    /// 鉗的依據是這一項**自己declare 的域**，不是另抄一份數字，所以它不會和
-    /// `into_config` 分岔。`zero` 那一格的意思是「0 另有意思」，所以 0 照過。
-    ///
-    /// ⚠ 非數字那一族只有一個：`[panel] markers` 空的時候 `into_config` 留出廠那一
-    /// 串（它那一句註釋寫着「keep the default rather than silently taking the
-    /// numbers away」），所以空的就畫出廠那一串。
+    /// 檔是人手改的：`zong_length = 2` 寫進去，`into_config` 按下界排版——面板顯示
+    /// 的值不是編輯器用的值，而這扇面板存在的理由就是終結這件事。鉗的依據是這一項
+    /// **自己 declare 的域**，所以它不會和 `into_config` 分岔。`[panel] markers`
+    /// 空的時候 `into_config` 留出廠那一串，所以空的就畫出廠那一串。
     fn as_the_editor_takes_it(setting: &Setting, value: String) -> String {
         if setting.table == "panel" && setting.key == "markers" {
             let bare = value.trim().trim_matches('"');
@@ -647,7 +665,7 @@ impl Panel {
     }
 
     /// 指名那一份。
-    fn sheet_of(&self, which: Which) -> &Sheet {
+    pub fn sheet_of(&self, which: Which) -> &Sheet {
         match which {
             Which::Global => &self.global,
             Which::Local => &self.local,
@@ -655,49 +673,35 @@ impl Panel {
     }
 
     /// **切着的那一份此刻替這一項出的是什麽** —— 檔裏寫着的，没寫就是它**下面**
-    /// 那幾層給的。
-    ///
-    /// Warning: **看的是下面，不是「畫出來的那個值」。** 編輯全局而本項目蓋着它的時候，
-    /// 畫出來的是本項目那個值——拿它作比，「把全局設成和本項目一樣」就被判成「没
-    /// 改」，而那明明改變了**別的項目**裏的行為。全局底下只有出廠；本項目底下是
-    /// 全局，再底下纔是出廠。
+    /// 那幾層給的（全局底下只有出廠；本項目底下是全局，再底下纔是出廠）。
     fn without_mine(&self, setting: &Setting) -> String {
         let path = setting.path();
         let mine = self.sheet().declared.get(&path).cloned();
         let under = match self.into {
-            // 全局底下只有出廠。
             Which::Global => None,
-            // 本項目底下是全局（連它没存的改動一起算：那是同一次存盤落下去的）。
             Which::Local => self.global.says(&path),
         };
         mine.or(under).unwrap_or_else(|| setting.factory.to_string())
     }
 
-    /// **切着的那一份此刻替這一項出的是什麽，連没存的改動一起算。**
+    /// **切着的那一份此刻替這一項出的是什麽**：按空格與編輯的起點。
     ///
-    /// Warning: **按空格與 `i` 的起點是這個，不是畫出來的那個值。** 畫出來的是三層裏
-    /// **贏**的那一個；本項目蓋着全局的時候你編輯全局，起點要是全局自己那個值。
-    /// 拿畫出來的值當起點，「空格」會從別人的值往下數——按一下 1 變 3。
-    /// 2026-09-24 一條測試逮到的。
+    /// Warning: **不是畫出來的那個值。** 本項目蓋着全局的時候你編輯全局，起點要是全局
+    /// 自己那個值，不然「空格」會從別人的值往下數。
     pub fn mine_now(&self, setting: &Setting) -> String {
         self.sheet()
             .says(&setting.path())
             .unwrap_or_else(|| self.without_mine(setting))
     }
 
-    /// **切着的那一份被上面那一層蓋着嗎。**
-    ///
-    /// Warning: 蓋着的時候改這一項，**螢幕上那一行不會動**（贏的還是上面那個），看起來
-    /// 像按了没反應。所以底下那一行要說一句。
+    /// **切着的那一份被上面那一層蓋着嗎**：蓋着的時候改這一項，螢幕上那一行不會
+    /// 動，所以底下那一行要說一句。
     pub fn shadowed(&self, setting: &Setting) -> bool {
         self.into == Which::Global && self.local.says(&setting.path()).is_some()
     }
 
-    /// **攢一筆改動 —— 除非改完和不改一樣。**
-    ///
-    /// Warning: 不問這一句，按空格轉一圈回到原來那個值**還算「改了」**：面板頂上寫着
-    /// 「改了還没存」，而 `:w` 會往檔裏寫一行跟原來一模一樣的東西。同一族的還有
-    /// 「把一項設成和出廠一樣」——那一行寫進去純屬噪音。2026-09-24 拍圖看出來的。
+    /// **攢一筆改動 —— 除非改完和不改一樣**：轉一圈回到原來那個值，或者把一項設成
+    /// 下面那幾層本來就給的，都不寫。
     fn settle(&mut self, setting: &Setting, change: Change) {
         let path = setting.path();
         match same_value(&written(&change), &self.without_mine(setting)) {
@@ -712,262 +716,164 @@ impl Panel {
 
     // ---- 走 -------------------------------------------------------------
 
-    /// `j` / `k`。
+    /// `j` / `k`: one row, across groups — a group's name is a heading, not a
+    /// stop.
     pub fn step(&mut self, down: bool) {
-        let deep = self.rows().len();
-        let (at, many) = match self.pane {
-            Pane::Groups => (&mut self.group, GROUPS.len()),
-            Pane::Settings => (&mut self.row, deep),
-        };
+        let many = self.rows().len();
         if many == 0 {
             return;
         }
-        *at = match down {
-            true => (*at + 1).min(many - 1),
-            false => at.saturating_sub(1),
+        self.row = match down {
+            true => (self.row + 1).min(many - 1),
+            false => self.row.saturating_sub(1),
         };
-        // 換了組，右邊那一欄要從頭數。
-        if self.pane == Pane::Groups {
-            self.row = 0;
+    }
+
+    /// `gg`.
+    pub fn first(&mut self) {
+        self.row = 0;
+    }
+
+    /// `G`.
+    pub fn last(&mut self) {
+        self.row = self.rows().len().saturating_sub(1);
+    }
+
+    /// The group's first row: a click on its name in the left column.
+    pub fn to_group(&mut self, group: usize) {
+        let Some(named) = GROUPS.get(group) else { return };
+        if let Some(at) = self.rows().iter().position(|s| s.group == named.group) {
+            self.row = at;
+            self.page = None;
+            self.popup = None;
         }
     }
 
-    /// `h` / `l`。
-    ///
-    /// Warning: **空的那一組進不去**：七組還没填，`l` 進去會停在一張空表上，而那一刻
-    /// `j`/`k`/空格全部没有反應——看起來像面板卡住了。
-    pub fn across(&mut self, right: bool) {
-        self.cancel_typing();
-        self.pane = match (right, self.rows().is_empty()) {
-            (true, false) => Pane::Settings,
-            (true, true) => Pane::Groups,
-            (false, _) => Pane::Groups,
-        };
+    /// The group the cursor is in, as a place in [`GROUPS`].
+    pub fn group(&self) -> usize {
+        self.here()
+            .and_then(|s| GROUPS.iter().position(|n| n.group == s.group))
+            .unwrap_or(0)
     }
 
-    /// `Tab` —— 換存到哪一份。
+    /// `Tab` —— 換寫到哪一份。
     pub fn flip_into(&mut self) {
-        self.cancel_typing();
+        self.popup = None;
+        self.refusal = None;
         self.into = self.into.other();
     }
 
     // ---- 改 -------------------------------------------------------------
 
-    /// 空格 —— 打勾翻面、幾選一走下一個、數字加一（到頂回到底）。
-    ///
-    /// Warning: **一段自己打的字没有「下一個」**，空格對它就是 `i`。
+    /// **Whether this row's value is typed**: a number or a piece of text.
+    /// `Enter`, Space and `p` open the one-line editor on it.
+    pub fn types_here(&self) -> bool {
+        self.here().is_some_and(|s| matches!(s.kind, Kind::Count { .. } | Kind::Text))
+    }
+
+    /// What the one-line editor starts from: this file's value, or what the
+    /// layers below give.
+    pub fn typing_from(&self) -> String {
+        self.here().map(|s| unwritten(&self.mine_now(s))).unwrap_or_default()
+    }
+
+    /// **Space**: a tick flips, a choice moves to the next, a page opens. A
+    /// value that is typed is the front end's ([`Panel::types_here`]).
     pub fn press(&mut self) {
-        let Some(setting) = self.chosen() else { return };
-        if setting.kind == Kind::Page {
-            return self.open_page();
-        }
+        let Some(setting) = self.here() else { return };
         let now = self.mine_now(setting);
         let next = match setting.kind {
+            Kind::Page => return self.open_page(),
             Kind::Tick => Change::Tick(now != "true"),
-            // Warning: **`0` 另算一檔，而 `low` 是「最小的非零值」。** `zong_length` 真
-            // 正的域是「0，或者 4 到 64」（`into_config` 寫着
-            // `if length == 0 {0} else {length.clamp(4,64)}`），`tatechuyoko` 是
-            // 「0，或者 2 到 8」。從前 `low` 寫 0，於是面板停得到 1/2/3，寫進
-            // 檔裏而**編輯器按 4 排版**——面板顯示的值不是編輯器用的值，這個倉最
-            // 怕的那一族。2026-09-24 審出來的。
-            Kind::Count { low, high, zero } => {
-                let n: usize = now.parse().unwrap_or(low);
-                // Warning: **`0` 只在 `low > 0` 的時候是域外那一檔。** `indent` 的
-                // `zero` 只是替域裏的 0 取了個名字（「不縮進」，域是 0..8）；
-                // 不分這一下，`indent` 在 0 上按空格會回到 `low` ＝ 0，那一格死住。
-                let apart = zero.is_some() && low > 0;
-                let next = match () {
-                    _ if apart && n == 0 => low,
-                    _ if n >= high && apart => 0,
-                    _ if n >= high => low,
-                    _ => (n + 1).max(low),
-                };
-                Change::Count(next as i64)
-            }
-            Kind::Pick(choices) | Kind::PickOr(choices) => {
-                let word = unwritten(now.as_str());
-                let word = word.as_str();
-                let next = match choices.iter().position(|c| c.word == word) {
-                    Some(at) => (at + 1) % choices.len(),
-                    // **一個不認得的名字撥到第一個，不是第二個。** `PickOr` 裝
-                    // 得下讀者自己的主題或碼表，而從那裏邁出一步該落在一個名字
-                    // 上，不該跳過一個。檔裏拼錯了的 `Pick` 同理。
+            Kind::Pick(_) | Kind::PickOr(_) => {
+                let words = self.choices(setting);
+                if words.is_empty() {
+                    return;
+                }
+                let word = unwritten(&now);
+                // **一個不認得的名字撥到第一個，不是第二個。**
+                let next = match words.iter().position(|w| *w == word) {
+                    Some(at) => (at + 1) % words.len(),
                     None => 0,
                 };
-                Change::Text(choices[next].word.to_string())
+                Change::Text(words[next].clone())
             }
-            Kind::Text => {
-                self.typing = Some(unwritten(now.as_str()));
-                self.tail = 0;
-                return;
-            }
-            // Gone in above.
-            Kind::Page => return,
+            Kind::Count { .. } | Kind::Text => return,
         };
         self.settle(setting, next);
     }
 
-    /// `i` —— 進去打字。數字與一段字纔有得打。
-    /// **`Enter`：改這一項，按這一項自己的改法**（2026-10-09 作者定）。
-    ///
-    /// 從前改一項要看它是哪一種：撥的用空格，打字的用 `i`，而兩個鍵各自在另一種
-    /// 上**一聲不吭地什麽都不做**——`i` 停在一個勾上没有反應，看起來像面板壞了。
-    /// 原話：「the way to use it is a little bit fuzzy」。兩個鍵都留着，`Enter` 是
-    /// 那個不必先判斷種類的。
-    pub fn change_here(&mut self) {
-        let Some(setting) = self.chosen() else { return };
+    /// **Enter**: a tick flips, a choice opens its list, a page opens. A value
+    /// that is typed is the front end's ([`Panel::types_here`]).
+    pub fn change(&mut self) {
+        let Some(setting) = self.here() else { return };
         match setting.kind {
-            // 撥得動的：撥一格。
-            Kind::Tick | Kind::Pick(_) | Kind::Page => self.press(),
-            // **`PickOr` 走打字那一支**（2026-10-10）。這一種兩條路都有，所以
-            // 兩個鍵各守各的本義：空格是「撥一格」，`i` 是「我自己打」——讀者
-            // 自己裝的主題或碼表只有這一條路進得來。`Tick` 和 `Pick` 没得打，
-            // 那時 `i` 纔替人撥（2026-10-09 定的那一條，原話「`i` 停在一個勾上
-            // 一聲不吭」）。
-            // 數和字：打進去。數也打字而不是一格一格撥——`zong_length` 的域是 4 到
-            // 64，按空格按到 40 不是一個人會做的事。
-            _ => self.begin_typing(),
-        }
-    }
-
-    pub fn begin_typing(&mut self) {
-        let Some(setting) = self.chosen() else { return };
-        // **`PickOr` 不在這裏**：它收得下表外的名字，而 `i` 就是打那個名字用的。
-        if matches!(setting.kind, Kind::Tick | Kind::Pick(_) | Kind::Page) {
-            return;
-        }
-        // Warning: **`PickOr` 從空的開始**（2026-10-10 報的）。從前這裏一律把現在
-        // 那個值放進去、光標擺在末尾，於是在主題那一行按 `i` 再打字得到的是
-        // `ink我的主題`——要先按三下退格纔打得出自己的名字。`Count` 和 `Text` 照舊
-        // 帶着現在那個值（把 16 改成 12 是改，不是重打），而 `PickOr` 的本意就是
-        // 「打一個表裏没有的名字」，現在那個名字永遠不是你要的那一個。
-        self.typing = Some(match setting.kind {
-            Kind::PickOr(_) => String::new(),
-            _ => unwritten(&self.mine_now(setting)),
-        });
-        self.tail = 0;
-    }
-
-    /// Whether this row takes typed text: a number, a piece of text, or a
-    /// name of one's own. A tick, a choice and a page have nothing to type.
-    pub fn takes_text(&self) -> bool {
-        self.pane == Pane::Settings
-            && self.here().is_some_and(|s| !matches!(s.kind, Kind::Tick | Kind::Pick(_) | Kind::Page))
-    }
-
-    /// The caret, as a count of characters from the start of the text.
-    pub fn caret(&self) -> usize {
-        let many = self.typing.as_ref().map_or(0, |t| t.chars().count());
-        many - self.tail.min(many)
-    }
-
-    /// The byte where the caret stands in the text being typed.
-    fn caret_byte(&self) -> usize {
-        let at = self.caret();
-        let typed = self.typing.as_deref().unwrap_or("");
-        typed.char_indices().nth(at).map_or(typed.len(), |(i, _)| i)
-    }
-
-    /// A character typed at the caret.
-    pub fn type_char(&mut self, c: char) {
-        let at = self.caret_byte();
-        self.tail = self.tail.min(self.typing.as_ref().map_or(0, |t| t.chars().count()));
-        if let Some(typed) = self.typing.as_mut() {
-            typed.insert(at, c);
-        }
-    }
-
-    /// `Backspace`: the character before the caret.
-    pub fn delete_back(&mut self) {
-        let at = self.caret();
-        if at == 0 {
-            return;
-        }
-        self.tail = self.typing.as_ref().map_or(0, |t| t.chars().count()) - at;
-        if let Some(typed) = self.typing.as_mut() {
-            let (i, _) = typed.char_indices().nth(at - 1).expect("a character before the caret");
-            typed.remove(i);
-        }
-    }
-
-    /// `Delete`: the character after the caret.
-    pub fn delete_forward(&mut self) {
-        let at = self.caret_byte();
-        let typed = self.typing.as_deref().unwrap_or("");
-        if at >= typed.len() {
-            return;
-        }
-        self.tail = typed[at..].chars().count() - 1;
-        if let Some(typed) = self.typing.as_mut() {
-            typed.remove(at);
-        }
-    }
-
-    /// `←` / `→`, one character; `Home` / `End`, the whole way.
-    pub fn move_caret(&mut self, to: usize) {
-        let many = self.typing.as_ref().map_or(0, |t| t.chars().count());
-        self.tail = many - to.min(many);
-    }
-
-    /// **Text arriving whole** (2026-11-08): a paste from the terminal, or a
-    /// register by `p` / `P`. Typing, it lands at the caret. Not typing, on
-    /// a row that takes text, the row opens as `i` opens it, and the text
-    /// goes after the value (`p`), before it (`P`), or in place of it (a
-    /// paste, which in Normal mode replaces what is selected, and the value
-    /// is drawn selected). The row stays open, so `Enter` keeps what it
-    /// shows and `Esc` leaves the value as it was.
-    ///
-    /// The value is one line. **A line break becomes one space**, with the
-    /// spaces either side of it, and the breaks at either end go: a font
-    /// list or a page copied over two lines reads `a, b`, and a whole line
-    /// copied with its break (what an editor puts on the clipboard for a
-    /// copy with nothing selected) is the line. Other control characters
-    /// go, as they do from a paste into the `:` line.
-    ///
-    /// Gives how many characters went in, or `None` when there is nowhere
-    /// for them to go: a tick, a choice, a page, the group list.
-    pub fn paste(&mut self, text: &str, how: Pasting) -> Option<usize> {
-        if self.typing.is_none() {
-            if !self.takes_text() {
-                return None;
-            }
-            self.begin_typing();
-            match how {
-                Pasting::Replace => {
-                    self.typing = Some(String::new());
-                    self.tail = 0;
+            Kind::Pick(_) | Kind::PickOr(_) => {
+                let words = self.choices(setting);
+                let now = unwritten(&self.mine_now(setting));
+                let at = words.iter().position(|w| *w == now).unwrap_or(0);
+                if !words.is_empty() {
+                    self.popup = Some(Popup { words, at });
                 }
-                Pasting::After => self.tail = 0,
-                Pasting::Before => self.move_caret(0),
             }
+            _ => self.press(),
         }
-        let text = one_line(text);
-        for c in text.chars() {
-            self.type_char(c);
-        }
-        Some(text.chars().count())
     }
 
-    /// 打完了 —— `Enter`。
-    ///
-    /// **A value the config would refuse is not taken** (2026-11-08): it
-    /// stays in the field, and [`Panel::refusal`] says why, naming what is
-    /// taken. A number out of range is refused, not pulled into it — the
-    /// one typed is not the one that would be saved — and a word that is
-    /// not a number is refused, not dropped. Gives whether it was taken.
-    pub fn finish_typing(&mut self) -> bool {
-        let Some(typed) = self.typing.clone() else { return false };
-        let Some(setting) = self.chosen() else { return false };
-        let change = match self.check(setting, &typed) {
-            Ok(change) => change,
+    /// **The values a choice takes**, as the config writes them: its own
+    /// list; for a scheme, the ones installed when the front end said; for
+    /// an annotation mode, `off` and every mode either file writes.
+    pub fn choices(&self, setting: &Setting) -> Vec<String> {
+        let (Kind::Pick(choices) | Kind::PickOr(choices)) = setting.kind else { return Vec::new() };
+        match (setting.path().as_str(), &self.schemes) {
+            ("ime.scheme", Some(schemes)) => schemes.names.clone(),
+            ("ime.annotation", _) => std::iter::once("off".to_string()).chain(self.annotation_modes()).collect(),
+            _ => choices.iter().map(|c| c.word.to_string()).collect(),
+        }
+    }
+
+    /// `j` / `k` in the list a choice opened.
+    pub fn popup_step(&mut self, down: bool) {
+        if let Some(popup) = self.popup.as_mut() {
+            let last = popup.words.len().saturating_sub(1);
+            popup.at = match down {
+                true => (popup.at + 1).min(last),
+                false => popup.at.saturating_sub(1),
+            };
+        }
+    }
+
+    /// The value the list's cursor is on.
+    pub fn popup_word(&self) -> Option<&str> {
+        let popup = self.popup.as_ref()?;
+        popup.words.get(popup.at).map(String::as_str)
+    }
+
+    /// `Enter` in the list: that value, for the row.
+    pub fn popup_choose(&mut self) {
+        let Some(popup) = self.popup.take() else { return };
+        let (Some(setting), Some(word)) = (self.here(), popup.words.get(popup.at)) else { return };
+        self.settle(setting, Change::Text(word.clone()));
+    }
+
+    /// **The value typed, on `Enter`** (2026-11-08): taken when the config
+    /// would take it; otherwise nothing is set and [`Panel::refusal`] says
+    /// why, naming what is taken. A number out of range is refused, not
+    /// pulled into it, and a word that is not a number is refused, not
+    /// dropped. Gives whether it was taken.
+    pub fn commit_value(&mut self, typed: &str) -> bool {
+        let Some(setting) = self.here() else { return false };
+        match self.check(setting, typed) {
+            Ok(change) => {
+                self.refusal = None;
+                self.settle(setting, change);
+                true
+            }
             Err(refusal) => {
                 self.refusal = Some(refusal);
-                return false;
+                false
             }
-        };
-        self.cancel_typing();
-        self.settle(setting, change);
-        true
+        }
     }
 
     /// **The value `typed` would be for `setting`, by the config's rules** —
@@ -988,22 +894,12 @@ impl Panel {
                     false => Err(Refusal::OutOfRange { low, high, zero: apart }),
                 }
             }
-            Kind::PickOr(choices) => {
-                let mut names: Vec<String> = choices.iter().map(|c| c.word.to_string()).collect();
+            Kind::PickOr(_) | Kind::Pick(_) => {
+                let names = self.choices(setting);
                 let takes = match setting.path().as_str() {
                     "theme.name" => crate::ThemeConfig::named(word).is_some(),
-                    "ime.scheme" => match &self.schemes {
-                        Some(schemes) => {
-                            names = schemes.names.clone();
-                            (schemes.takes)(word)
-                        }
-                        None => true,
-                    },
-                    "ime.annotation" => {
-                        names = std::iter::once("off".to_string()).chain(self.annotation_modes()).collect();
-                        names.iter().any(|n| n == word)
-                    }
-                    _ => true,
+                    "ime.scheme" => self.schemes.as_ref().is_none_or(|s| (s.takes)(word)),
+                    _ => names.iter().any(|n| n == word),
                 };
                 match (word.is_empty(), takes) {
                     (true, _) => Err(Refusal::Empty { names }),
@@ -1011,7 +907,12 @@ impl Panel {
                     (false, true) => Ok(Change::Text(word.to_string())),
                 }
             }
-            _ => {
+            Kind::Tick => match word {
+                "true" => Ok(Change::Tick(true)),
+                "false" => Ok(Change::Tick(false)),
+                _ => Err(Refusal::NotOneOf { word: word.to_string(), names: vec!["true".into(), "false".into()] }),
+            },
+            Kind::Text | Kind::Page => {
                 // An empty list the loader quietly takes as no list at all,
                 // the factory one standing: setting it would change nothing.
                 let wants_some = matches!(setting.path().as_str(), "export.font_family" | "panel.markers");
@@ -1027,24 +928,15 @@ impl Panel {
         }
     }
 
-    /// `Esc` —— 不改了。
-    pub fn cancel_typing(&mut self) {
-        self.typing = None;
-        self.tail = 0;
-        self.refusal = None;
-    }
-
-    /// `d` —— 把這一項從**切着的那一份**裏撤掉，回去跟下面那一層。
+    /// **`r` —— 把這一項從切着的那一份裏拿掉，回去跟下面那一層**（2026-11-08：
+    /// 從前叫 `d`，而它有三個名字）。
     ///
-    /// Gives whether anything was there to drop (2026-11-08). On a row this
-    /// file does not set, the row already follows the layer below and `d`
-    /// has nothing to do — the front end says so, rather than leaving a key
-    /// the hint line names to do nothing on screen. Not on the group list:
-    /// no row is chosen there, and the one `here()` gives is only the
-    /// group's first.
-    pub fn drop_here(&mut self) -> Option<bool> {
-        if self.pane != Pane::Settings {
-            return None;
+    /// Gives whether anything was there to take (2026-11-08). On a row this
+    /// file does not set, the row already follows the layer below, and the
+    /// front end says so rather than leaving a key to do nothing on screen.
+    pub fn reset(&mut self) -> Option<bool> {
+        if self.page.is_some() {
+            return self.page_drop();
         }
         let setting = self.here().filter(|s| s.kind != Kind::Page)?;
         Some(self.drop_path(setting.path()))
@@ -1054,15 +946,39 @@ impl Panel {
     fn drop_path(&mut self, path: String) -> bool {
         let sheet = self.sheet_mut();
         let was = sheet.edits.get(&path).cloned();
-        // Warning: **問的是「檔裏寫了没有」，不是「這一份此刻說什麽」。** 後者把還没存
-        // 的改動也算進去，於是「改了一項，又按 `d` 反悔」會攢下一條刪一個根本不
-        // 存在的鍵的指令——面板頂上從此寫着「改了還没存」，而其實什麽都不用存。
-        // 2026-09-24 拍圖看出來的。
+        // Warning: **問的是「檔裏寫了没有」，不是「這一份此刻說什麽」**：没寫的鍵拿不掉。
         match sheet.declared.contains_key(&path) {
             true => sheet.edits.insert(path.clone(), Change::Drop),
             false => sheet.edits.remove(&path),
         };
         was != sheet.edits.get(&path).cloned()
+    }
+
+    /// The value of the row as the editor takes it, for `y`.
+    pub fn value_here(&self) -> Option<String> {
+        let setting = self.here().filter(|s| s.kind != Kind::Page)?;
+        Some(unwritten(&self.shown(setting).value))
+    }
+
+    /// **Where this row's key is in the file switched to**, 0 起算: its line,
+    /// or its table's header, or the top (`e` opens the file there).
+    pub fn line_here(&self) -> usize {
+        let path = match (self.page, self.subpage()) {
+            (Some(_), Some(Subpage::Flavor)) => match self.flavor_here() {
+                Some(FlavorRow::Item(item)) => Self::item_path(item),
+                _ => "keys.flavor".to_string(),
+            },
+            (Some(_), Some(Subpage::Annotation)) => match self.annotation_here() {
+                Some(row) => Self::field_path(&row),
+                None => "ime.annotation_modes".to_string(),
+            },
+            _ => match self.here() {
+                Some(s) => s.path(),
+                None => return 0,
+            },
+        };
+        let (table, key) = path.rsplit_once('.').unwrap_or((path.as_str(), ""));
+        crate::faults::line_for(&self.sheet().text, &format!("[{table}] {key}"))
     }
 
     // ---- The flavour's page (2026-11-02) ---------------------------------
@@ -1232,7 +1148,8 @@ impl Panel {
 
     /// Go in (`l`, Space, Enter, `i` on the entry row).
     pub fn open_page(&mut self) {
-        self.cancel_typing();
+        self.popup = None;
+        self.refusal = None;
         self.page = Some(0);
     }
 
@@ -1408,23 +1325,133 @@ impl Panel {
         }
     }
 
-    // ---- 存 -------------------------------------------------------------
+    // ---- 寫 -------------------------------------------------------------
 
-    /// 有没有改了還没存的。
+    /// Whether a change is waiting to be written.
     pub fn dirty(&self) -> bool {
         self.global.dirty() || self.local.dirty()
     }
 
-    /// **`:w`** —— 兩份各寫各的，寫完把改動清掉。
-    ///
-    /// 回來的是寫了哪幾個檔，和其中哪幾個在面板開着的時候被外面改過。
+    /// **Write what was just changed** (2026-11-08, the save model the
+    /// author chose: every confirmed change is written at once and takes
+    /// effect; `u` takes it back). `Ok(None)` when there was nothing to
+    /// write. A change that cannot be written is let go, so the panel shows
+    /// the files as they are.
+    pub fn flush(&mut self) -> Result<Option<Saved>, SaveError> {
+        self.write(true)
+    }
+
+    /// **`u`**: the last change written, written back. `Ok(None)` when
+    /// nothing is left to take back.
+    pub fn undo(&mut self) -> Result<Option<Saved>, SaveError> {
+        self.replay(true)
+    }
+
+    /// **`C-r`**: the last change `u` took back, written again.
+    pub fn redo(&mut self) -> Result<Option<Saved>, SaveError> {
+        self.replay(false)
+    }
+
+    /// One step of `u` (`back`) or `C-r`, staged and written, and handed to
+    /// the other stack.
+    fn replay(&mut self, back: bool) -> Result<Option<Saved>, SaveError> {
+        let step = match back {
+            true => self.undo.pop(),
+            false => self.redo.pop(),
+        };
+        let Some(step) = step else { return Ok(None) };
+        for (which, path, before, after) in &step {
+            let want = match back {
+                true => before,
+                false => after,
+            };
+            let sheet = match which {
+                Which::Global => &mut self.global,
+                Which::Local => &mut self.local,
+            };
+            let change = match want {
+                Some(repr) => Change::Written(repr.clone()),
+                None => Change::Drop,
+            };
+            sheet.edits.insert(path.clone(), change);
+        }
+        let wrote = self.write(false);
+        match (&wrote, back) {
+            (Ok(_), true) => self.redo.push(step),
+            (Ok(_), false) => self.undo.push(step),
+            // Not written: the step stays where it was, to be tried again.
+            (Err(_), true) => self.undo.push(step),
+            (Err(_), false) => self.redo.push(step),
+        }
+        wrote
+    }
+
+    /// **兩份各寫各的，寫完把改動清掉**；`record` 記下這一步給 `u`。
     ///
     /// Warning: **A file the loader cannot read is not written** (2026-11-08),
-    /// and then nothing is: both are asked before either is touched. Saving
+    /// and then nothing is: both are asked before either is touched. Writing
     /// into it would leave it as unread as before and say the settings were
-    /// in force (reported: a TOML error came back as a raw, truncated
-    /// English line inside the Chinese panel).
-    pub fn save(&mut self) -> Result<Saved, SaveError> {
+    /// in force (reported: a TOML error came back as a raw, truncated English
+    /// line inside the Chinese panel).
+    fn write(&mut self, record: bool) -> Result<Option<Saved>, SaveError> {
+        if !self.dirty() {
+            return Ok(None);
+        }
+        let planned = self.plan();
+        let plan = match planned {
+            Ok(plan) => plan,
+            Err(err) => {
+                self.global.edits.clear();
+                self.local.edits.clear();
+                return Err(err);
+            }
+        };
+        let mut saved = Saved::default();
+        let mut step: Step = Vec::new();
+        for (which, path, moved, fresh) in plan {
+            if let Some(parent) = path.parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    self.global.edits.clear();
+                    self.local.edits.clear();
+                    return Err(SaveError::Io(format!("{}: {e}", parent.display())));
+                }
+            }
+            if let Err(e) = write_atomically(&path, &fresh) {
+                self.global.edits.clear();
+                self.local.edits.clear();
+                return Err(SaveError::Io(format!("{}: {e}", path.display())));
+            }
+            let sheet = match which {
+                Which::Global => &mut self.global,
+                Which::Local => &mut self.local,
+            };
+            for (key, change) in std::mem::take(&mut sheet.edits) {
+                let before = sheet.declared.get(&key).cloned();
+                let after = match change {
+                    Change::Drop => None,
+                    other => Some(written(&other)),
+                };
+                if before != after {
+                    step.push((which, key, before, after));
+                }
+            }
+            sheet.text = fresh;
+            sheet.declared = declared_in(&sheet.text);
+            sheet.there = true;
+            if moved {
+                saved.changed_underneath.push(path.clone());
+            }
+            saved.wrote.push(path);
+        }
+        if record && !step.is_empty() {
+            self.undo.push(step);
+            self.redo.clear();
+        }
+        Ok(Some(saved))
+    }
+
+    /// What each file with a change will say, read afresh from the disk.
+    fn plan(&self) -> Result<Vec<(Which, PathBuf, bool, String)>, SaveError> {
         let mut plan = Vec::new();
         for which in [Which::Global, Which::Local] {
             let sheet = self.sheet_of(which);
@@ -1434,15 +1461,12 @@ impl Panel {
             let Some(path) = sheet.path.clone() else {
                 return Err(SaveError::Io(format!("{which:?}")));
             };
-            // Warning: **照磁碟上此刻那一份改，不是照開面板那一刻那一份。**
+            // Warning: **照磁碟上此刻那一份改，不是照開面板那一刻那一份。** 面板開着的
+            // 這段時間裏那個檔可能被外面改了，拿舊正文改完整份寫回去會把人家改的
+            // 別的鍵一起頂掉。改的那幾項是「鍵 → 新值」，套在哪一份正文上都成立。
             //
-            // `sheet.text` 是開面板時讀的。面板開着的這段時間裏那個檔可能被外面
-            // 改了——另一個 yumete、另一臺機器上同步下來的、`git checkout` ——而
-            // 拿舊正文改完整份寫回去，**會把人家改的別的鍵一起頂掉**。改的那幾項
-            // 是「鍵 → 新值」，套在哪一份正文上都成立，所以重讀一次就没有這件事。
-            //
-            // Warning: 讀不到就用手上這一份（檔剛被刪掉/權限没了）：那時 `write_atomically`
-            // 自己會報，不必在這裏先攔一道。
+            // Warning: 讀不到就用手上這一份（檔剛被刪掉/權限没了）：那時
+            // `write_atomically` 自己會報。
             let now = std::fs::read_to_string(&path).unwrap_or_else(|_| sheet.text.clone());
             if let Some((line, said)) = crate::faults::unread(&now) {
                 return Err(SaveError::Unread { path, line, said });
@@ -1452,26 +1476,16 @@ impl Panel {
             let fresh = rewrite(&now, &changes).map_err(SaveError::Io)?;
             plan.push((which, path, now != sheet.text, fresh));
         }
-        let mut saved = Saved::default();
-        for (which, path, moved, fresh) in plan {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| SaveError::Io(format!("{}: {e}", parent.display())))?;
-            }
-            write_atomically(&path, &fresh).map_err(|e| SaveError::Io(format!("{}: {e}", path.display())))?;
-            let sheet = match which {
-                Which::Global => &mut self.global,
-                Which::Local => &mut self.local,
-            };
-            sheet.text = fresh;
-            sheet.declared = declared_in(&sheet.text);
-            sheet.there = true;
-            sheet.edits.clear();
-            if moved {
-                saved.changed_underneath.push(path.clone());
-            }
-            saved.wrote.push(path);
-        }
-        Ok(saved)
+        Ok(plan)
+    }
+
+    /// Whether `u` / `C-r` have anything to do.
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
     }
 }
 
@@ -1555,6 +1569,20 @@ mod tests {
         SETTINGS.iter().find(|s| s.path() == path).expect(path)
     }
 
+    /// A panel on `path`, the cursor on it.
+    fn on(mut p: Panel, path: &str) -> Panel {
+        assert!(p.go_to(path, |_| String::new()), "{path}");
+        p
+    }
+
+    /// A fresh directory under the temporary one, for files the test writes.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("yumete-set-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
     /// 三層，後面的蓋前面的，**而被蓋掉的那一個說得出來**。
     #[test]
     fn the_layer_that_wins_is_named_and_so_is_the_one_under_it() {
@@ -1563,342 +1591,314 @@ mod tests {
         assert_eq!(shown.value, "2");
         assert_eq!(shown.from, Layer::Local);
         assert_eq!(shown.under, Some((Layer::Global, "4".to_string())));
-
-        // 誰都没說 —— 出廠那一層贏，下面没有東西了。
         let bare = panel("", "");
         let shown = bare.shown(find("editor.indent"));
         assert_eq!((shown.value.as_str(), shown.from, shown.under), ("0", Layer::Factory, None));
     }
 
     /// **面板顯示的要是編輯器真用的那個值**（2026-10-09 作者定）。
-    ///
-    /// 面板自己撥不到域外的數，可檔是人手改的——`zong_length = 2` 寫進去，從前面板
-    /// 畫 2 而 `into_config` 按下界排版。`markers` 空的時候 `into_config` 留出廠那一
-    /// 串，而面板畫的是空白，候選欄照舊 １２３。
-    ///
-    /// Warning: **下界 2026-10-09 從 4 擡到 8**，和 `:view-wrap-height` 對齊（那一頭用
-    /// 的是 `wrap::MIN_WRAP_WIDTH`）。從前面板說 4、命令說 8、檔案說 4。
     #[test]
     fn the_panel_shows_what_the_editor_takes_not_what_the_file_says() {
         let p = panel("[editor]\nzong_length = 2\npages_vertical = 99\n\n[panel]\nmarkers = \"\"\n", "");
         assert_eq!(p.shown(find("editor.zong_length")).value, "8", "域是「0，或者 8 到 64」");
         assert_eq!(p.shown(find("editor.pages_vertical")).value, "4", "上限夾住");
-        assert_eq!(
-            p.shown(find("panel.markers")).value,
-            find("panel.markers").factory,
-            "空的留出廠那一串"
-        );
-        // `0` 另有意思的那幾項照過，不許夾到 `low`。
+        assert_eq!(p.shown(find("panel.markers")).value, find("panel.markers").factory, "空的留出廠那一串");
         let zero = panel("[editor]\nzong_length = 0\n", "");
         assert_eq!(zero.shown(find("editor.zong_length")).value, "0", "0 ＝與窗口同高");
     }
 
-    /// 空格：打勾翻面、幾選一走下一個、數字加一。
+    /// **One list, the groups its headings** (2026-11-08): `j` walks from
+    /// the last row of a group to the first of the next, `gg` and `G` go to
+    /// the ends, and a click on a group's name goes to its first row.
+    #[test]
+    fn the_rows_are_one_list_across_the_groups() {
+        let mut p = panel("", "");
+        let all = all_rows();
+        assert_eq!(all.len(), SETTINGS.len(), "every setting, once");
+        let first_of_marks = all.iter().position(|s| s.group == crate::settings_ui::Group::Marks).unwrap();
+        p.row = first_of_marks - 1;
+        assert_eq!(p.group(), 0);
+        p.step(true);
+        assert_eq!((p.row, p.group()), (first_of_marks, 1), "into the next group");
+        p.last();
+        assert_eq!(p.row, all.len() - 1);
+        p.step(true);
+        assert_eq!(p.row, all.len() - 1, "stops at the end");
+        p.first();
+        p.step(false);
+        assert_eq!(p.row, 0);
+        p.to_group(4);
+        assert_eq!(p.group(), 4);
+        assert_eq!(p.here().map(|s| s.group), Some(GROUPS[4].group));
+    }
+
+    /// **A search narrows the list and keeps the cursor on its row** when
+    /// that row is left; with no search every row is back.
+    #[test]
+    fn a_search_narrows_the_rows() {
+        let mut p = on(panel("", ""), "editor.scrolloff");
+        let all = all_rows();
+        let scrolloff = all.iter().position(|s| s.key == "scrolloff").unwrap();
+        let wheel = all.iter().position(|s| s.key == "wheel_step").unwrap();
+        p.narrow(Some(vec![wheel, scrolloff]));
+        assert_eq!(p.rows().len(), 2);
+        assert_eq!(p.here().map(|s| s.key), Some("scrolloff"), "still on it");
+        p.narrow(Some(vec![wheel]));
+        assert_eq!((p.row, p.here().map(|s| s.key)), (0, Some("wheel_step")));
+        p.narrow(None);
+        assert_eq!(p.rows().len(), all.len());
+        assert_eq!(p.here().map(|s| s.key), Some("wheel_step"));
+    }
+
+    /// **`:settings <name>`** goes to a setting by its TOML path, by its key
+    /// when only one setting has that key, or by its shown name.
+    #[test]
+    fn go_to_finds_a_setting_by_path_key_or_name() {
+        let mut p = panel("", "");
+        assert!(p.go_to("export.page", |_| String::new()));
+        assert_eq!(p.here().map(|s| s.path()), Some("export.page".into()));
+        assert!(p.go_to("scrolloff", |_| String::new()));
+        assert_eq!(p.here().map(|s| s.key), Some("scrolloff"));
+        assert!(!p.go_to("editor", |_| String::new()), "a table is not a setting");
+        assert!(p.go_to("光標邊距", |s| if s.key == "scrolloff" { "光標邊距".into() } else { String::new() }));
+        assert!(!p.go_to("nosuch", |_| String::new()));
+    }
+
+    /// Space: a tick flips, a choice moves on; a number waits for the editor.
     #[test]
     fn a_press_moves_each_kind_the_way_that_kind_moves() {
-        let mut p = panel("", "");
-        p.pane = Pane::Settings;
-
-        // 打勾（soft_wrap 出廠 true）。
-        p.row = p.rows().iter().position(|s| s.key == "soft_wrap").unwrap();
+        let mut p = on(panel("", ""), "editor.soft_wrap");
         p.press();
         assert_eq!(p.shown(find("editor.soft_wrap")).value, "false");
-
-        // 幾選一（layout 出廠 "horizontal"）。
-        p.row = p.rows().iter().position(|s| s.key == "layout").unwrap();
+        let mut p = on(p, "editor.layout");
         p.press();
         assert_eq!(p.shown(find("editor.layout")).value, "\"vertical\"");
         p.press();
         assert_eq!(p.shown(find("editor.layout")).value, "\"horizontal\"", "轉回來");
-
-        // 數字（pages_vertical 出廠 1，範圍 1..4）。
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
+        let mut p = on(p, "editor.pages_vertical");
+        assert!(p.types_here());
         p.press();
-        assert_eq!(p.shown(find("editor.pages_vertical")).value, "2");
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "1", "typed, not stepped");
+        assert_eq!(p.typing_from(), "1");
     }
 
-    /// 數字到頂回到底 —— 不然按到 4 之後那一格就死了。
+    /// **Enter on a choice opens its list**, on the value in force; `j` and
+    /// `Enter` pick another.
     #[test]
-    fn a_count_at_its_ceiling_comes_back_to_the_floor() {
-        let mut p = panel("[editor]\npages_vertical = 4\n", "");
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-        p.press();
-        assert_eq!(p.shown(find("editor.pages_vertical")).value, "1");
+    fn enter_on_a_choice_opens_its_list() {
+        let mut p = on(panel("[editor]\nmargin = \"loose\"\n", ""), "editor.margin");
+        p.change();
+        let popup = p.popup.clone().expect("a list");
+        assert_eq!(popup.words, ["never", "dense", "loose", "always"]);
+        assert_eq!(p.popup_word(), Some("loose"));
+        p.popup_step(true);
+        p.popup_step(true);
+        assert_eq!(p.popup_word(), Some("always"), "stops at the end");
+        p.popup_choose();
+        assert!(p.popup.is_none());
+        assert_eq!(p.shown(find("editor.margin")).value, "\"always\"");
+        // The theme's list is the themes; a tick has none.
+        let mut p = on(p, "theme.name");
+        p.change();
+        assert_eq!(p.popup.as_ref().map(|l| l.words.len()), Some(10));
+        let mut p = on(p, "editor.soft_wrap");
+        p.popup = None;
+        p.change();
+        assert!(p.popup.is_none(), "a tick flips instead");
+        assert_eq!(p.shown(find("editor.soft_wrap")).value, "false");
     }
 
-    /// `d` 撤掉這一層，回去跟下面那一層。
+    /// **`r` takes this file's line away**, back to the layer below, and
+    /// says when there was none.
     #[test]
-    fn dropping_this_layer_falls_back_to_the_one_under_it() {
-        let mut p = panel("[editor]\nindent = 4\n", "[editor]\nindent = 2\n");
+    fn reset_falls_back_to_the_layer_below() {
+        let mut p = on(panel("[editor]\nindent = 4\n", "[editor]\nindent = 2\n"), "editor.indent");
         p.into = Which::Local;
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "indent").unwrap();
-        p.drop_here();
+        assert_eq!(p.reset(), Some(true));
         let shown = p.shown(find("editor.indent"));
         assert_eq!((shown.value.as_str(), shown.from), ("4", Layer::Global));
-    }
-
-    /// **改了一項又按 `d` 反悔，該乾乾淨淨**——不是攢一條刪一個不存在的鍵的指令。
-    ///
-    /// Warning: 攢下來的話，面板頂上從此寫着「改了還没存」而其實什麽都不用存，走的時候
-    /// 還要多問一句「有改動没存」。2026-09-24 拍圖看出來的。
-    #[test]
-    fn changing_a_row_and_then_dropping_it_leaves_nothing_behind() {
-        let mut p = panel("", "");
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "measure").unwrap();
-        p.begin_typing();
-        p.typing = Some("36".to_string());
-        p.finish_typing();
-        assert!(p.dirty(), "改過了");
-        p.drop_here();
-        assert!(!p.dirty(), "反悔之後乾淨了：{:?}", p.global.edits);
-        assert_eq!(p.shown(find("editor.measure")).value, "0");
+        let mut p = on(panel("[editor]\nindent = 4\n", ""), "editor.indent");
+        p.into = Which::Local;
+        assert_eq!(p.reset(), Some(false), "this file never said it");
+        assert!(!p.dirty());
     }
 
     /// **檔裏帶引號或反斜線的一段字，來回一趟要一個字不差**（2026-10-01）。
-    ///
-    /// Warning: 從前這一頭用 `trim_matches('"')` 還原，而 [`declared_in`] 交出來的是
-    /// `toml_edit` 的原樣寫法（轉義過的）。於是 `"a\"b"` 進面板成了 `a\"b`，寫
-    /// 回去成了 `"a\\\"b"`——反斜線每存一次多一根，而 `settle` 從此判不出
-    /// 「改回原值」，那一行永遠掛着「改了還没存」。
     #[test]
     fn a_quote_in_a_setting_survives_the_round_trip() {
-        // 檔裏是 toml 的寫法：值本身是 `a"b\c`。
-        let mut p = panel("[editor]\nindent_symbol = \"a\\\"b\\\\c\"\n", "");
-        p.pane = Pane::Settings;
-        // `indent_symbol` 在「標記」那一組，不是默認那一組。
-        p.group = GROUPS.iter().position(|n| n.group == crate::settings_ui::Group::Marks).unwrap();
-        p.row = p.rows().iter().position(|s| s.key == "indent_symbol").unwrap();
-        // 進去打字，一個字不改就出來——這不是一次改動。
-        p.begin_typing();
-        assert_eq!(p.typing.as_deref(), Some("a\"b\\c"), "還原成值本身，不是它的寫法");
-        p.finish_typing();
+        let mut p = on(panel("[editor]\nindent_symbol = \"a\\\"b\\\\c\"\n", ""), "editor.indent_symbol");
+        assert_eq!(p.typing_from(), "a\"b\\c", "還原成值本身，不是它的寫法");
+        assert!(p.commit_value("a\"b\\c"));
         assert!(!p.dirty(), "一個字没改，不算改過：{:?}", p.global.edits);
     }
 
-    /// **轉一圈回到原來那個值，就不算改過。**
-    ///
-    /// Warning: 算的話，`:w` 會往檔裏寫一行跟原來一模一樣的東西，而面板頂上一直亮着
-    /// 「改了還没存」。
+    /// **轉一圈回到原來那個值，就不算改過**；檔裏寫着的值撥回來也不算。
     #[test]
     fn cycling_all_the_way_back_is_not_a_change() {
-        let mut p = panel("", "");
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
+        let mut p = on(panel("", ""), "editor.margin");
         for _ in 0..4 {
             p.press();
         }
-        assert_eq!(p.shown(find("editor.pages_vertical")).value, "1", "1→2→3→4→1");
-        assert!(!p.dirty(), "轉回來就不算改過：{:?}", p.global.edits);
+        assert!(!p.dirty(), "{:?}", p.global.edits);
+        let mut p = on(panel("[editor]\nmargin = \"loose\"\n", ""), "editor.margin");
+        p.press();
+        assert!(p.dirty());
+        for _ in 0..3 {
+            p.press();
+        }
+        assert!(!p.dirty(), "{:?}", p.global.edits);
     }
 
-    /// 檔裏寫着 3，改成別的再改回 3 —— 同理，不算改過。
-    #[test]
-    fn setting_a_row_back_to_what_the_file_says_is_not_a_change() {
-        let mut p = panel("[editor]\npages_vertical = 3\n", "");
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-        p.press();
-        assert!(p.dirty(), "3→4");
-        p.press();
-        p.press();
-        p.press();
-        assert_eq!(p.shown(find("editor.pages_vertical")).value, "3", "4→1→2→3");
-        assert!(!p.dirty(), "回到檔裏那個值：{:?}", p.global.edits);
-    }
-
-    /// **「把全局設成和本項目一樣」是一次真的改動**，不是「没改」。
-    ///
-    /// Warning: 判成没改的話，一個想「以後每個項目都這樣」的人按了空格、看見值對了、
-    /// `:w` 存了，而全局那個檔一個字没動——換一個目録打開就打回原形。
+    /// **「把全局設成和本項目一樣」是一次真的改動**，而被本項目蓋着說得出來。
     #[test]
     fn matching_what_the_project_says_still_changes_the_global_file() {
-        let mut p = panel("", "[editor]\npages_vertical = 2\n");
-        p.into = Which::Global;
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-        // 出廠 1 → 按一下是 2，和本項目那個值一樣。
+        let mut p = on(panel("", "[editor]\nlayout = \"vertical\"\n"), "editor.layout");
+        assert!(p.shadowed(find("editor.layout")));
         p.press();
-        assert!(p.dirty(), "全局那一份真的改了：{:?}", p.global.edits);
-        assert_eq!(p.global.says("editor.pages_vertical").as_deref(), Some("2"));
-    }
-
-    /// **被上面那一層蓋着的時候，說得出來。**
-    #[test]
-    fn editing_a_layer_that_is_covered_says_so() {
-        let mut p = panel("", "[editor]\npages_vertical = 2\n");
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-        p.into = Which::Global;
-        assert!(p.shadowed(find("editor.pages_vertical")), "本項目蓋着全局");
+        assert_eq!(p.global.says("editor.layout").as_deref(), Some("\"vertical\""));
         p.into = Which::Local;
-        assert!(!p.shadowed(find("editor.pages_vertical")), "本項目自己在最上面");
+        assert!(!p.shadowed(find("editor.layout")));
     }
 
-    /// **存盤是原子的**：換的是目録項，寫到一半的東西不會出現在那個路徑上。
-    ///
-    /// Warning: 直接 `fs::write` 先把檔截成 0 再寫——斷電或被殺就剩半份，而半份 toml
-    /// 多半讀不通，於是整份設定作廢。一個人只是想把縮進改成 2。
+    /// **Every change is written at once**, a byte-for-byte edit of its own
+    /// line: comments, order and keys the panel does not know stay, and no
+    /// temporary file is left (2026-11-08).
     #[test]
-    fn saving_replaces_the_file_whole_and_leaves_no_litter() {
-        let dir = std::env::temp_dir().join(format!("yumete-set-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+    fn a_change_is_written_at_once_and_only_its_line() {
+        let dir = scratch("write");
         let path = dir.join("config.toml");
-        std::fs::write(&path, "# 我寫的\n[editor]\nindent = 4    # 理由\n").unwrap();
-
-        let mut p = Panel::open(Some(path.clone()), None);
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-        p.press();
-        p.save().expect("存得下去");
-
+        let before = "# my config\n[editor]\nscrolloff = 8  # I like 8\nindent = 4\n\n[keys.normal]\n\"C-s\" = \":w\"\n";
+        std::fs::write(&path, before).unwrap();
+        // A key the config does not take makes the file unread, so this one
+        // is known; the test of an unknown key is below.
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.scrolloff");
+        assert!(p.commit_value("9"));
+        let saved = p.flush().expect("written").expect("something");
+        assert_eq!(saved.wrote, vec![path.clone()]);
         let after = std::fs::read_to_string(&path).unwrap();
-        assert!(after.contains("# 我寫的") && after.contains("# 理由"), "{after}");
-        assert!(after.contains("pages_vertical = 2"), "{after}");
-        // 暫存檔不許留在人家的目録裏。
+        assert_eq!(after, before.replace("scrolloff = 8", "scrolloff = 9"));
+        assert!(!p.dirty());
+        assert_eq!(p.flush(), Ok(None), "nothing left to write");
         let litter: Vec<_> = std::fs::read_dir(&dir)
             .unwrap()
             .flatten()
             .map(|e| e.file_name().to_string_lossy().to_string())
             .filter(|n| n != "config.toml")
             .collect();
-        assert!(litter.is_empty(), "留了垃圾：{litter:?}");
+        assert!(litter.is_empty(), "{litter:?}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **面板開着的時候檔被外面改了，`:w` 不許把人家改的頂掉。**
-    ///
-    /// Warning: 拿開面板那一刻的正文改完整份寫回去，別人改的**別的鍵**就没了。改的那
-    /// 幾項是「鍵 → 新值」，套在哪一份正文上都成立，所以存盤前重讀一次。
+    /// **A file changed outside meanwhile keeps that change**: the line is
+    /// set on the disk's text, not the one read at opening.
     #[test]
-    fn saving_keeps_what_somebody_else_changed_meanwhile() {
-        let dir = std::env::temp_dir().join(format!("yumete-set-2-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+    fn writing_keeps_what_somebody_else_changed_meanwhile() {
+        let dir = scratch("moved");
         let path = dir.join("config.toml");
         std::fs::write(&path, "[editor]\nindent = 4\n").unwrap();
-
-        let mut p = Panel::open(Some(path.clone()), None);
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.soft_wrap");
+        std::fs::write(&path, "[editor]\nindent = 4\nmeasure = 30\n").unwrap();
         p.press();
-
-        // 面板開着的這段時間裏，外面動了**別的**鍵。
-        std::fs::write(&path, "[editor]\nindent = 4\nsoft_wrap = false\n").unwrap();
-
-        let said = p.save().expect("存得下去");
+        let saved = p.flush().unwrap().unwrap();
         let after = std::fs::read_to_string(&path).unwrap();
-        assert!(after.contains("pages_vertical = 2"), "我改的那一項落地了：\n{after}");
-        assert!(after.contains("soft_wrap = false"), "人家改的那一項没被頂掉：\n{after}");
-        assert_eq!(said.changed_underneath.len(), 1, "而且說了一句：{said:?}");
+        assert!(after.contains("soft_wrap = false") && after.contains("measure = 30"), "{after}");
+        assert_eq!(saved.changed_underneath, vec![path]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// 這一份本來就没說過的，`d` 什麽都不做——而不是攢一條「刪掉」。
+    /// **`u` writes the file back, `C-r` writes the change again**, in the
+    /// spelling the file had; a new change forgets what `C-r` held.
     #[test]
-    fn dropping_what_this_layer_never_said_writes_nothing() {
-        let mut p = panel("[editor]\nindent = 4\n", "");
-        p.into = Which::Local;
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "indent").unwrap();
-        p.drop_here();
-        assert!(!p.dirty(), "空的改動表：{:?}", p.local.edits);
+    fn undo_writes_the_file_back_and_redo_again() {
+        let dir = scratch("undo");
+        let path = dir.join("config.toml");
+        let before = "[editor]\nlayout = 'vertical'   # mine\nindent = 4\n";
+        std::fs::write(&path, before).unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.layout");
+        assert!(!p.can_undo());
+        p.press();
+        p.flush().unwrap();
+        let mut p = on(p, "editor.indent");
+        assert_eq!(p.reset(), Some(true));
+        p.flush().unwrap();
+        let changed = std::fs::read_to_string(&path).unwrap();
+        assert!(changed.contains("layout = \"horizontal\"") && !changed.contains("indent"), "{changed}");
+
+        assert!(p.undo().unwrap().is_some());
+        assert!(std::fs::read_to_string(&path).unwrap().contains("indent = 4"));
+        assert!(p.undo().unwrap().is_some());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before, "back as it was, quotes and note");
+        assert_eq!(p.undo(), Ok(None), "nothing more");
+
+        assert!(p.redo().unwrap().is_some());
+        assert!(std::fs::read_to_string(&path).unwrap().contains("layout = \"horizontal\""));
+        assert!(p.can_redo());
+        let mut p = on(p, "editor.soft_wrap");
+        p.press();
+        p.flush().unwrap();
+        assert!(!p.can_redo(), "a new change forgets the rest");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// 打了個不是數的東西 —— **不收，留在框裏說為什麽**（2026-11-08；從前是
-    /// 一聲不吭地當没改），不是撥成 0。
+    /// 打了個不是數的東西 —— **不收，說為什麽**（2026-11-08；從前是一聲不吭地
+    /// 當没改），不是撥成 0。
     #[test]
-    fn typing_something_that_is_not_a_number_is_refused_and_kept() {
-        let mut p = panel("[editor]\nindent = 4\n", "");
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "indent").unwrap();
-        p.begin_typing();
-        p.typing = Some("兩格".to_string());
-        assert!(!p.finish_typing());
+    fn typing_something_that_is_not_a_number_is_refused() {
+        let mut p = on(panel("[editor]\nindent = 4\n", ""), "editor.indent");
+        assert!(!p.commit_value("兩格"));
         assert!(!p.dirty());
-        assert_eq!(p.typing.as_deref(), Some("兩格"), "still in the field");
         assert_eq!(p.refusal, Some(Refusal::NotANumber { low: 0, high: 8, zero: false }));
-        assert_eq!(p.shown(find("editor.indent")).value, "4");
-        // Empty is not a number either.
-        p.typing = Some(String::new());
-        assert!(!p.finish_typing());
-        // Fixed, it is taken, and the word goes.
-        p.typing = Some("2".to_string());
-        assert!(p.finish_typing());
-        assert_eq!((p.typing.as_deref(), p.refusal.as_ref()), (None, None));
+        assert!(!p.commit_value(""), "empty is not a number either");
+        assert!(p.commit_value("2"));
+        assert_eq!(p.refusal, None, "taken, the word goes");
         assert_eq!(p.shown(find("editor.indent")).value, "2");
     }
 
     /// **A number out of range is refused, not pulled in** (2026-11-08,
-    /// reported: `99` became `64` without a word) — and a `0` that means
+    /// reported: `99` became `64` without a word); a `0` that means
     /// something of its own is taken.
     #[test]
     fn a_number_out_of_range_is_refused_not_pulled_in() {
-        let mut p = panel("", "");
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-        p.begin_typing();
-        p.typing = Some("99".to_string());
-        assert!(!p.finish_typing());
+        let mut p = on(panel("", ""), "editor.pages_vertical");
+        assert!(!p.commit_value("99"));
         assert_eq!(p.refusal, Some(Refusal::OutOfRange { low: 1, high: 4, zero: false }));
-        assert_eq!(p.shown(find("editor.pages_vertical")).value, "1", "nothing set");
-        p.typing = Some("-1".to_string());
-        assert!(!p.finish_typing());
-        assert!(matches!(p.refusal, Some(Refusal::OutOfRange { .. })), "a number, out of range");
-        p.cancel_typing();
-        assert_eq!(p.refusal, None, "Esc takes the word away with the field");
-
-        p.row = p.rows().iter().position(|s| s.key == "zong_length").unwrap();
+        assert!(!p.commit_value("-1"));
+        let p = on(p, "editor.zong_length");
         for (typed, ok) in [("0", true), ("4", false), ("8", true), ("64", true), ("65", false)] {
-            p.begin_typing();
-            p.typing = Some(typed.to_string());
-            assert_eq!(p.finish_typing(), ok, "{typed}");
-            p.cancel_typing();
+            assert_eq!(p.check(find("editor.zong_length"), typed).is_ok(), ok, "{typed}");
         }
-        assert_eq!(
-            p.check(find("editor.zong_length"), "4"),
-            Err(Refusal::OutOfRange { low: 8, high: 64, zero: true })
-        );
+        assert_eq!(p.check(find("editor.zong_length"), "4"), Err(Refusal::OutOfRange { low: 8, high: 64, zero: true }));
     }
 
     /// **A name is one the config takes** (2026-11-08, reported: `nosuch`
-    /// as a theme was saved and said to be in force). Empty is no name; a
-    /// scheme is asked of the front end when it says which there are.
+    /// as a theme was saved and said to be in force).
     #[test]
     fn a_theme_a_scheme_and_an_annotation_mode_must_be_ones_there_are() {
         let mut p = panel("[ime.annotation_modes.mine]\nunicode = true\n", "");
         let theme = find("theme.name");
         assert_eq!(p.check(theme, "bw"), Ok(Change::Text("bw".into())));
         assert_eq!(p.check(theme, "墨香"), Ok(Change::Text("墨香".into())), "the loader takes it");
-        assert!(matches!(p.check(theme, "nosuch"), Err(Refusal::NotOneOf { ref word, ref names }) if word == "nosuch" && names.contains(&"ink".to_string())));
+        assert!(matches!(p.check(theme, "nosuch"), Err(Refusal::NotOneOf { ref names, .. }) if names.contains(&"ink".to_string())));
         assert!(matches!(p.check(theme, "  "), Err(Refusal::Empty { .. })));
-
         let scheme = find("ime.scheme");
         assert!(p.check(scheme, "custom").is_ok(), "no list, any name");
-        assert!(matches!(p.check(scheme, ""), Err(Refusal::Empty { .. })));
         p.schemes = Some(Names { takes: |w| w == "lingming", names: vec!["lingming".into()] });
         assert!(p.check(scheme, "lingming").is_ok());
-        assert!(matches!(p.check(scheme, "custom"), Err(Refusal::NotOneOf { ref names, .. }) if names == &["lingming"]));
-
+        assert!(matches!(p.check(scheme, "custom"), Err(Refusal::NotOneOf { .. })));
+        assert_eq!(p.choices(scheme), ["lingming"]);
         let annotation = find("ime.annotation");
         assert!(p.check(annotation, "mine").is_ok(), "a mode the file adds");
-        assert!(p.check(annotation, "off").is_ok());
         assert!(matches!(p.check(annotation, "nosuch"), Err(Refusal::NotOneOf { .. })));
+        assert_eq!(p.choices(annotation), ["off", "multi", "double", "mine"]);
     }
 
     /// **A piece of text is what the loader takes** (2026-11-08, reported:
-    /// a page of `ZZZ` and an empty one were saved): the loader's own
-    /// sentence is the reason, and an empty font list — which the loader
-    /// takes as no list — is refused.
+    /// a page of `ZZZ` and an empty one were saved).
     #[test]
     fn a_piece_of_text_is_checked_by_the_loader_itself() {
         let p = panel("", "");
         let page = find("export.page");
-        assert!(p.check(page, "a5").is_ok());
-        assert!(p.check(page, "137x195").is_ok());
+        assert!(p.check(page, "a5").is_ok() && p.check(page, "137x195").is_ok());
         for bad in ["ZZZ", ""] {
             match p.check(page, bad) {
                 Err(Refusal::Loader(said)) => assert!(said.contains("a4") && said.contains("[export] page"), "{said}"),
@@ -1913,27 +1913,12 @@ mod tests {
         assert!(matches!(p.check(find("editor.language_key"), "C-"), Err(Refusal::Loader(_))));
     }
 
-    /// **On the group list nothing is edited** (2026-11-08, reported: `i` on
-    /// 版面 flipped 排版方向, which was not highlighted).
-    #[test]
-    fn nothing_is_changed_from_the_group_list() {
-        let mut p = panel("", "");
-        assert_eq!(p.pane, Pane::Groups);
-        p.press();
-        p.change_here();
-        p.begin_typing();
-        assert!(p.typing.is_none() && !p.dirty(), "{:?}", p.global.edits);
-        assert_eq!(p.drop_here(), None);
-    }
-
     /// **A file the loader cannot read**: what it says is not shown as in
-    /// force, `:w` writes nothing and says why — a TOML error, or a name the
-    /// config does not take (2026-11-08).
+    /// force, and a change to either file writes nothing and says why — a
+    /// TOML error, or a name the config does not take (2026-11-08).
     #[test]
     fn a_file_the_loader_cannot_read_is_not_written() {
-        let dir = std::env::temp_dir().join(format!("yumete-set-unread-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = scratch("unread");
         let global = dir.join("config.toml");
         let local = dir.join("local.toml");
         for (text, line) in [("[editor]\nscrolloff = 8\nindent 2\n", 2), ("[editor]\nscrolloff = 8\ntypo_key = true\n", 2)] {
@@ -1944,111 +1929,80 @@ mod tests {
             assert_eq!(unread.len(), 1, "{text}");
             assert_eq!(unread[0].1 .0, line, "{:?}", unread[0]);
             assert_eq!(p.shown(find("editor.scrolloff")).from, Layer::Factory, "not in force");
-            // An edit to the other file goes in, and the unread one blocks
-            // the save of both.
-            p.into = Which::Local;
-            p.pane = Pane::Settings;
-            p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-            p.press();
-            p.into = Which::Global;
-            p.press();
-            match p.save() {
+            let mut p2 = on(p.clone(), "editor.soft_wrap");
+            p2.press();
+            match p2.flush() {
                 Err(SaveError::Unread { path, line: at, said }) => {
                     assert_eq!((path, at), (global.clone(), line));
                     assert!(!said.is_empty());
                 }
                 other => panic!("{other:?}"),
             }
+            assert!(!p2.dirty(), "the change is let go");
             assert_eq!(std::fs::read_to_string(&global).unwrap(), text, "not touched");
-            assert_eq!(std::fs::read_to_string(&local).unwrap(), "", "nor the other one");
+            // The other file is written as ever.
+            p = on(p, "editor.soft_wrap");
+            p.into = Which::Local;
+            p.press();
+            assert!(p.flush().is_ok());
+            assert!(std::fs::read_to_string(&local).unwrap().contains("soft_wrap = false"));
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **`:w` names every file it wrote** (2026-11-08, reported: it wrote
-    /// both and named one).
+    /// **The project file is made when its first line is written**, and its
+    /// last line taken away takes the table with it.
     #[test]
-    fn saving_names_every_file_it_wrote() {
-        let dir = std::env::temp_dir().join(format!("yumete-set-both-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let global = dir.join("config.toml");
+    fn the_project_file_is_made_and_emptied() {
+        let dir = scratch("local");
         let local = dir.join("p").join(".yumete").join("config.toml");
-        let mut p = Panel::open(Some(global.clone()), Some(local.clone()));
-        p.pane = Pane::Settings;
-        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
-        p.press();
+        let mut p = on(Panel::open(None, Some(local.clone())), "editor.soft_wrap");
         p.flip_into();
+        assert!(!p.local.there);
         p.press();
-        let saved = p.save().expect("saved");
-        assert_eq!(saved.wrote, vec![global.clone(), local.clone()]);
-        assert!(saved.changed_underneath.is_empty());
-        assert!(p.local.there, "the file is there now");
+        assert_eq!(p.flush().unwrap().map(|s| s.wrote), Some(vec![local.clone()]));
+        assert!(p.local.there && p.set_here("editor.soft_wrap"));
+        p.reset();
+        p.flush().unwrap();
+        assert_eq!(std::fs::read_to_string(&local).unwrap().trim(), "", "no `[editor]` left alone");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **The state a stale message is measured against** moves with the
-    /// cursor and with the values, and not otherwise.
+    /// cursor and with the files, and not otherwise.
     #[test]
     fn the_spot_moves_with_the_cursor_and_the_values() {
-        let mut p = panel("", "");
+        let dir = scratch("spot");
+        let mut p = Panel::open(Some(dir.join("config.toml")), None);
         let here = p.spot();
         assert_eq!(p.spot(), here);
-        p.across(true);
+        p.step(true);
         assert_ne!(p.spot(), here);
         let here = p.spot();
         p.press();
+        assert_eq!(p.spot(), here, "staged, not yet written");
+        p.flush().unwrap();
         assert_ne!(p.spot(), here, "a value moved");
-        assert!(p.edited("editor.layout") && !p.edited("editor.zong_length"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **空的那一組進不去。**
-    ///
-    /// Warning: `l` 進去會停在一張空表上，而那一刻 `j`/`k`/空格全部没有反應——看起來
-    /// 像面板卡住了。
-    ///
-    /// Warning: **這一條不許挑「碰巧空着的那一組」。** 從前它挑的是鍵盤組（那時那一組
-    /// 還没填），2026-09-24 那一組填上之後測試當場紅——而它守的規矩一個字没變，
-    /// 變的只是「哪一組是空的」。八組現在都有東西（3～14 項），所以造一個：把
-    /// 下標指到 `GROUPS` 外面去，`rows()` 回空，走的是同一條路。
-    #[test]
-    fn a_group_with_nothing_in_it_cannot_be_walked_into() {
-        let mut p = panel("", "");
-        p.group = GROUPS.len();
-        assert!(p.rows().is_empty(), "指到單子外面，那一組什麽都没有");
-        p.across(true);
-        assert_eq!(p.pane, Pane::Groups, "進不去");
-    }
-
-    /// **八組都有東西** —— 上面那一條不再有現成的空組可挑，而這一條說出為什麽。
-    ///
-    /// Warning: 順帶守一件事：一組空着的話，面板上那一格點進去是一張白表，而讀者不知道
-    /// 是「没有這一類設定」還是「壞了」。要麽填，要麽別列。
+    /// **八組都有東西**：一組空着的話，單子裏只剩一個標題。
     #[test]
     fn no_group_is_empty() {
-        let p = panel("", "");
-        let empty: Vec<&str> = GROUPS
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| {
-                let mut q = p.clone();
-                q.group = *i;
-                q.rows().is_empty()
-            })
-            .map(|(_, n)| n.label)
-            .collect();
-        assert!(empty.is_empty(), "這幾組是空的：{empty:?}");
+        for named in GROUPS {
+            assert!(SETTINGS.iter().any(|s| s.group == named.group), "{}", named.label);
+        }
     }
 
-    /// 換組之後光標從頭數起 —— 不然停在一個不存在的行號上。
+    /// **`e` opens the file at the row's line**, or its table's header.
     #[test]
-    fn moving_to_another_group_starts_at_its_first_row() {
-        let mut p = panel("", "");
-        p.across(true);
-        p.row = 5;
-        p.across(false);
-        p.step(true);
-        assert_eq!(p.row, 0);
+    fn the_line_of_a_row_is_found_in_the_file() {
+        let p = on(panel("# top\n[editor]\nindent = 4\nscrolloff = 8\n\n[theme]\nname = \"bw\"\n", ""), "editor.scrolloff");
+        assert_eq!(p.line_here(), 3);
+        let p = on(p, "theme.mode");
+        assert_eq!(p.line_here(), 5, "the table's header");
+        let p = on(p, "export.page");
+        assert_eq!(p.line_here(), 0, "not in the file");
     }
 
     /// **The flavour's page** (2026-11-02): a tick written into
@@ -2057,110 +2011,71 @@ mod tests {
     #[test]
     fn the_flavor_page_writes_items_by_name_and_takes_them_back() {
         use yumete_cjk::FlavorItem;
-        let dir = std::env::temp_dir().join(format!("yumete-set-flavor-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = scratch("flavor");
         let path = dir.join("config.toml");
         std::fs::write(&path, "[keys]\npreset = \"helix\"\n\n[keys.normal]\n\"A-j\" = \"page_down\"\n").unwrap();
-
-        let mut p = Panel::open(Some(path.clone()), None);
-        p.pane = Pane::Settings;
-        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Keys).unwrap();
-        p.row = p.rows().iter().position(|s| s.key == "flavor_items").unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "keys.flavor_items");
         p.press();
         assert_eq!(p.page, Some(0), "Space on the row goes in");
         assert_eq!(p.flavor_here(), Some(FlavorRow::Level));
-        let at = |p: &Panel, item: FlavorItem| {
-            p.flavor_rows().iter().position(|(_, r)| *r == FlavorRow::Item(item)).unwrap()
-        };
-
-        // Off by name: a basic item at the basic level.
+        let at = |p: &Panel, item: FlavorItem| p.flavor_rows().iter().position(|(_, r)| *r == FlavorRow::Item(item)).unwrap();
         p.page = Some(at(&p, FlavorItem::Tables));
         assert_eq!(p.item_shown(FlavorItem::Tables), (true, ItemFrom::Level));
-        p.flavor_press();
+        p.page_press();
         assert_eq!(p.item_shown(FlavorItem::Tables), (false, ItemFrom::Layer(Layer::Global)));
-        // A binding of `A-j` has taken one of `move_lines`'s keys.
         assert_eq!(p.item_taken(FlavorItem::MoveLines), vec!["A-j"]);
-        p.save().expect("saved");
+        p.flush().expect("written");
         let after = std::fs::read_to_string(&path).unwrap();
         assert!(after.contains("[keys.flavor_items]") && after.contains("tables = false"), "{after}");
-
-        // Flipped back to what the level gives: the line goes, and the
-        // table with it.
-        let mut p = Panel::open(Some(path.clone()), None);
-        p.pane = Pane::Settings;
-        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Keys).unwrap();
-        p.row = p.rows().iter().position(|s| s.key == "flavor_items").unwrap();
-        p.page = Some(at(&p, FlavorItem::Tables));
-        p.flavor_press();
-        assert_eq!(p.item_shown(FlavorItem::Tables), (true, ItemFrom::Level));
-        p.save().expect("saved");
+        assert!(p.set_here("keys.flavor_items"), "the row is marked as set here");
+        p.page_press();
+        p.flush().expect("written");
         let after = std::fs::read_to_string(&path).unwrap();
         assert!(!after.contains("flavor_items"), "{after}");
         assert!(after.contains("\"A-j\" = \"page_down\""), "the binding stays: {after}");
-
-        // A full item at the basic level: on by name, then the level moves
-        // to full and the line is only the level's own answer; `d` drops it.
-        let mut p = Panel::open(Some(path.clone()), None);
-        p.pane = Pane::Settings;
-        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Keys).unwrap();
-        p.row = p.rows().iter().position(|s| s.key == "flavor_items").unwrap();
         p.page = Some(at(&p, FlavorItem::EscCollapses));
-        p.flavor_press();
+        p.page_press();
         assert_eq!(p.item_shown(FlavorItem::EscCollapses), (true, ItemFrom::Layer(Layer::Global)));
         p.page = Some(0);
-        p.flavor_press();
+        p.page_press();
         assert_eq!(p.flavor_level(), yumete_cjk::FlavorLevel::Full);
         p.page = Some(at(&p, FlavorItem::EscCollapses));
-        p.page_drop();
+        p.reset();
         assert_eq!(p.item_shown(FlavorItem::EscCollapses), (true, ItemFrom::Level));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **The annotation modes' page** (2026-11-02): a field ticked is written
-    /// under `[ime.annotation_modes.<mode>]`, ticked back to the factory the
-    /// line goes and the emptied table with it, and a mode the file adds
-    /// gets its own fields.
+    /// under `[ime.annotation_modes.<mode>]`, ticked back the line goes and
+    /// the emptied table with it, and a mode the file adds has its fields.
     #[test]
     fn the_annotation_page_writes_fields_by_mode_and_takes_them_back() {
-        let dir = std::env::temp_dir().join(format!("yumete-set-annotation-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = scratch("annotation");
         let path = dir.join("config.toml");
         std::fs::write(&path, "[ime.annotation_modes.mine]\nunicode = true\n").unwrap();
-
-        let mut p = Panel::open(Some(path.clone()), None);
-        p.pane = Pane::Settings;
-        p.group = GROUPS.iter().position(|g| g.group == crate::settings_ui::Group::Ime).unwrap();
-        p.row = p.rows().iter().position(|s| s.key == "annotation_modes").unwrap();
-        p.press();
-        assert_eq!(p.page, Some(0), "Space on the row goes in");
+        let mut p = on(Panel::open(Some(path.clone()), None), "ime.annotation_modes");
+        p.change();
+        assert_eq!(p.page, Some(0), "Enter on the row goes in");
         assert_eq!(p.annotation_modes(), ["multi", "double", "mine"]);
-        assert_eq!(p.mode_fields("mine"), ["unicode"]);
         assert_eq!(p.mode_fields("double"), ["chaifen", "code"]);
-
         let at = |p: &Panel, mode: &str, field: &str| {
             p.annotation_rows().iter().position(|(_, r)| r.mode == mode && r.field == field).unwrap()
         };
         p.page = Some(at(&p, "double", "reading"));
         p.page_press();
-        p.save().unwrap();
+        p.flush().unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("[ime.annotation_modes.double]\nreading = true"), "{text}");
-        assert_eq!(p.mode_fields("double"), ["chaifen", "code", "reading"]);
         assert_eq!(crate::Config::from_toml(&text).ime.annotation_modes[1].fields, ["chaifen", "code", "reading"]);
-
-        // Back to the factory's: the line goes, and the table it was in.
         p.page_press();
-        p.save().unwrap();
+        p.flush().unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(!text.contains("double"), "{text}");
-        assert!(text.contains("[ime.annotation_modes.mine]"), "{text}");
+        assert!(!text.contains("double") && text.contains("[ime.annotation_modes.mine]"), "{text}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Found in review (2026-11-02): an item written in an inline table, or
-    /// with a comment after it, is what the file says, and saving works.
+    /// with a comment after it, is what the file says, and writing works.
     #[test]
     fn an_inline_table_and_a_trailing_comment_are_read_as_written() {
         use yumete_cjk::FlavorItem;
@@ -2178,48 +2093,20 @@ mod tests {
         assert_eq!(config.keys.flavor.items.get(&FlavorItem::MoveLines), Some(&false), "{text}");
     }
 
-    /// **A font list with quotes in it is written to the file and read back
-    /// as it was typed** (2026-11-08): typed, pasted over two lines into the
-    /// middle, saved, and read by the config and by a new panel.
+    /// **A font list with quotes in it is written and read back as typed.**
     #[test]
-    fn a_font_list_typed_and_pasted_is_saved_and_read_back_whole() {
-        let dir = std::env::temp_dir().join(format!("yumete-setfont-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
+    fn a_font_list_is_written_and_read_back_whole() {
+        let dir = scratch("font");
         let path = dir.join("config.toml");
-        let mut p = Panel::open(Some(path.clone()), None);
-        p.pane = Pane::Settings;
-        p.group = GROUPS.iter().position(|n| n.group == crate::settings_ui::Group::Files).unwrap();
-        p.row = p.rows().iter().position(|s| s.table == "export" && s.key == "font_family").unwrap();
-        p.begin_typing();
-        p.typing = Some("\"Iowan Old Style\", serif".into());
-        p.move_caret("\"Iowan Old Style\", ".chars().count());
-        assert_eq!(p.paste("'Songti SC',\n\t\"Noto \\ Serif\",\n", Pasting::After), Some(28));
-        p.type_char(' ');
+        let mut p = on(Panel::open(Some(path.clone()), None), "export.font_family");
         let typed = "\"Iowan Old Style\", 'Songti SC', \"Noto \\ Serif\", serif";
-        assert_eq!(p.typing.as_deref(), Some(typed));
-        p.finish_typing();
-        p.save().expect("saved");
-
+        assert!(p.commit_value(typed));
+        p.flush().unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert_eq!(crate::Config::from_toml(&text).export.font_family, typed, "{text}");
         let again = Panel::open(Some(path.clone()), None);
-        let setting = p.here().unwrap();
-        assert_eq!(unwritten(&again.shown(setting).value), typed);
-        assert!(!again.dirty());
+        assert_eq!(unwritten(&again.shown(find("export.font_family")).value), typed);
+        assert_eq!(p.value_here().as_deref(), Some(typed), "what `y` copies");
         let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// Pasted text made one line: a break is one space, with the spaces
-    /// beside it, and a break at either end goes, with the spaces beside it.
-    #[test]
-    fn a_paste_is_made_one_line() {
-        assert_eq!(one_line("a,\n  b"), "a, b");
-        assert_eq!(one_line("a5\n"), "a5");
-        assert_eq!(one_line("a5\r"), "a5");
-        assert_eq!(one_line("\r\n a, \r\n\r\n b \n"), "a, b");
-        assert_eq!(one_line("  a"), "  a");
-        assert_eq!(one_line("a\tb\u{7}"), "a b");
-        assert_eq!(one_line(""), "");
     }
 }

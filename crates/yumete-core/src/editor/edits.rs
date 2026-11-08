@@ -1724,6 +1724,21 @@ impl Editor {
         self.register_text(name)
     }
 
+    /// **Copy `text` as `y` copies**, into the register a pending `"`
+    /// named or the unnamed one, for a front end's panel: the settings
+    /// panel's `y` copies a value (2026-11-08).
+    pub fn yank_text(&mut self, text: &str) {
+        let named = self.pending_register;
+        let whole = std::mem::replace(&mut self.yank_whole_lines, false);
+        self.storing_a_yank = true;
+        self.store(text.to_string());
+        self.storing_a_yank = false;
+        self.yank_whole_lines = whole;
+        if named.is_none() && self.keymap_rules().numbered_registers {
+            self.registers.insert('0', self.register_parts.clone());
+        }
+    }
+
     fn register_text(&self, name: Option<char>) -> String {
         match name {
             // **`#` 是選區的序號**（#405 Phase 3，helix 也是這個名字）。它不是一個存東

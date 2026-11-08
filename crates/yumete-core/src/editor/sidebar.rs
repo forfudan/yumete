@@ -2568,6 +2568,14 @@ impl Editor {
                 let text: String = text.chars().filter(|c| !c.is_control()).collect();
                 self.type_into_field(&text);
             }
+            // A value lands at the caret (2026-11-08), as committed 中文 does:
+            // a font list is pasted into the middle of one.
+            Mode::Value => {
+                // A break is a space: a list copied over two lines reads `a, b`.
+                let lines: Vec<&str> = text.split(['\n', '\r']).map(str::trim).filter(|l| !l.is_empty()).collect();
+                let text: String = lines.join(" ").chars().filter(|c| !c.is_control()).collect();
+                self.insert_committed_now_in_prompt(&text);
+            }
             mode => {
                 if mode.types_into_command_line() {
                     for c in text.chars().filter(|c| !c.is_control()) {

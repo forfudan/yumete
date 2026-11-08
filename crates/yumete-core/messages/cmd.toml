@@ -37,6 +37,12 @@ zhs = "<路径>"
 en = "<path>"
 
 [[message]]
+# : 命令菜单里，:settings 后面画的占位：一项设置的名字（草稿）
+key = "cmd.arg.setting"
+zhs = "<设置项>"
+en = "<setting>"
+
+[[message]]
 # : 命令選單裏 column 那一項的説明(axis 組)
 key = "cmd.axis.column"
 zhs = "逐列查找，从第一列顶端开始；表格里的 t/ t? 用的就是它"
@@ -618,10 +624,10 @@ find = "setf filetype 文件类型 文件類型"
 
 
 [[message]]
-# : 命令選單裏 settings 那一項的説明(commands 組)
+# : 命令選單裏 settings 那一項的説明(commands 組)（草稿）
 key = "cmd.commands.settings"
-zhs = "设置页：每项附有说明，改完 :w 保存"
-en = "settings page, each item explained; :w saves"
+zhs = "设置页：每项附有说明，改了就写入并生效，u 撤销"
+en = "settings page, each item explained; a change is written at once, u undoes it"
 find = "設置 设置 配置 選項 选项 偏好 首選項 首选项 settings preferences config options"
 
 [[message]]

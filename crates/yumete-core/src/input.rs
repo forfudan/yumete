@@ -39,6 +39,12 @@ pub enum Mode {
     /// every exhaustive `match` below has to answer for it — that is what this
     /// enum is for — and so the IME lights up there without a special case.
     Field,
+    /// Typing **a value for a front end's panel** on the command row: the
+    /// settings panel's one-line editor and its search (2026-11-08). The `:`
+    /// line's own keys, the IME after `C-^`, a paste at the caret; Enter hands
+    /// the text back ([`crate::Editor::take_value_answer`]) instead of
+    /// running it, and Esc hands back nothing.
+    Value,
 }
 
 impl Mode {
@@ -69,7 +75,7 @@ impl Mode {
             Mode::Normal => Some("NOR"),
             Mode::Insert => Some("INS"),
             Mode::Field => Some("PAN.INS"),
-            Mode::Command | Mode::Search | Mode::Ruby | Mode::Picker | Mode::Lookfor => None,
+            Mode::Command | Mode::Search | Mode::Ruby | Mode::Picker | Mode::Lookfor | Mode::Value => None,
         }
     }
 
@@ -90,7 +96,8 @@ impl Mode {
             | Mode::Search
             | Mode::Ruby
             | Mode::Picker
-            | Mode::Field => true,
+            | Mode::Field
+            | Mode::Value => true,
         }
     }
 
@@ -104,7 +111,7 @@ impl Mode {
     /// the way in, which is [`Self::is_prompt`]'s business, not this one's.
     pub fn prompt_opens_in_english(self) -> bool {
         match self {
-            Mode::Command | Mode::Lookfor => true,
+            Mode::Command | Mode::Lookfor | Mode::Value => true,
             // A search pattern is Chinese as often as not — the same answer
             // `/` gives, and for the same reason.
             Mode::Normal
@@ -137,7 +144,8 @@ impl Mode {
             | Mode::Ruby
             | Mode::Lookfor
             | Mode::Picker
-            | Mode::Field => true,
+            | Mode::Field
+            | Mode::Value => true,
             Mode::Normal | Mode::Command => false,
         }
     }
@@ -148,7 +156,7 @@ impl Mode {
     /// own, on the picker itself. Committed 中文 and a paste both ask this.
     pub fn types_into_command_line(self) -> bool {
         match self {
-            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby => true,
+            Mode::Command | Mode::Lookfor | Mode::Search | Mode::Ruby | Mode::Value => true,
             // Like the picker, a panel's field has a store of its own.
             Mode::Normal | Mode::Insert | Mode::Picker | Mode::Field => false,
         }
@@ -361,6 +369,7 @@ mod tests {
             (Mode::Search, true, false, true, true),
             (Mode::Ruby, true, false, true, true),
             (Mode::Picker, true, false, false, true),
+            (Mode::Value, true, true, true, true),
         ];
         for (mode, prompt, english, line, composes) in table {
             assert_eq!(mode.is_prompt(), prompt, "{mode:?} is_prompt");

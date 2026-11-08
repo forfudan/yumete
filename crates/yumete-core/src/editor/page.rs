@@ -2179,6 +2179,11 @@ impl Editor {
         std::mem::take(&mut self.settings_request)
     }
 
+    /// The setting `:settings <name>` named, if one was (2026-11-08).
+    pub fn take_settings_target(&mut self) -> Option<String> {
+        self.settings_target.take()
+    }
+
     /// 前端進出那扇面板時說一聲。
     ///
     /// Warning: **核心要知道它開着**，因為 `:w` 與 `:q` 在那時說的是面板，不是緩衝區。

@@ -39,6 +39,10 @@ pub enum Change {
     /// Warning: 這件事**整份重寫做不到**：刪一個鍵還要留着它周圍的註釋，只有保留格式
     /// 的那條路走得通。這是 `toml_edit` 的第二個硬理由。
     Drop,
+    /// …the value **as it was written**, a TOML value such as `"dense"`,
+    /// `8` or `'Songti SC'` (2026-11-08): what `u` puts back, in the very
+    /// spelling the file had.
+    Written(String),
 }
 
 /// The table `tables` names, one inside the next, if the file has it.
@@ -127,6 +131,7 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
                     Change::Tick(on) => (*on).into(),
                     Change::Count(n) => (*n).into(),
                     Change::Text(s) => s.as_str().into(),
+                    Change::Written(repr) => repr.parse::<Value>().unwrap_or_else(|_| repr.as_str().into()),
                     Change::Drop => unreachable!("上面那一支接住了"),
                 };
                 match t.get_mut(key) {
