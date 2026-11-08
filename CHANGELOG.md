@@ -11,6 +11,7 @@ in `docs/development.md` §5.2.
 
 ### Added
 
+- **`:export epub` writes an EPUB book**: the HTML export's text and look packed as EPUB 3, set vertically and turning pages from right to left when the page is vertical. Formulas go in as pictures, and the headings make the table of contents. `ye --export epub` does the same from the command line.
 - **The typeset page in a window beside the text**, as VS Code, Zed and Emacs show a preview: `:view-preview on` opens it to the right in Ghostty or kitty, drawn by tinymist from the unsaved text and following the cursor to its place on the page. It is a window: `C-w` walks into it, and its keys are a PDF reader's under vim, as in Zathura: `j`, `k`, `C-d`, `C-u`, `gg` and `G` scroll the page, `J` and `K` turn to the next and previous page, `5G` turns to page 5, and `:q` closes it. The page is as wide as the window; `:view-preview-fit page` or `[editor] preview_fit = "page"` shows the whole page. It needs tinymist 0.13.30 or later; elsewhere `:view-preview on` opens the browser's preview, which `:view-preview-browser` always opens, and `:view-preview-window` says why the window cannot be drawn.
 - **The Simplified Chinese lesson**: `:tutor` in a Simplified interface opens the lesson in Simplified; the Traditional one is made from it.
 
@@ -24,6 +25,8 @@ in `docs/development.md` §5.2.
 
 ### Changed
 
+- **The vertical HTML export looks like a printed vertical page**: short runs of digits and letters such as `1997` stand upright in one square, the runs `tatechuyoko` packs on screen, up to four characters (a longer run lies on its side, as in print); on a Chinese page curly quotes become corner brackets, `“”` as `『』` and `‘’` as `「」`; tables and code blocks stay horizontal and are not split between printed pages; and the page asks for fonts that turn punctuation for vertical text (Source Han and Noto Serif CJK, then Songti, SimSun, LXGW WenKai, Hiragino Sans GB and others), so `，` and `——` sit right whichever one is installed.
+- **TeX formulas in an HTML export are drawn**: Markdown's `$…$` and `$$…$$` come out as pictures drawn by RaTeX and sized to the text, upright in vertical text, instead of as raw TeX. A `$$` block on lines of its own is one formula. A formula that cannot be drawn stays as written.
 - **Markdown formulas in the float under the cursor no longer need the `typst` command**: TeX such as `$\frac{a}{b}$` is now drawn inside yumete by RaTeX, with KaTeX's fonts built in, in well under a millisecond, and Chinese inside `\text{}` is set in the same CJK font Typst formulas use. Typst formulas still go through `typst`. On Linux without any CJK font, Chinese in a TeX formula shows as empty boxes.
 - **The `Space e` explorer shows hidden and ignored files at first**, as helix's file explorer does; `Space f` still skips them. `A-h` steps what is skipped.
 - **The interface wording, reviewed**: shorter, plainer messages in English and Chinese, mainland vocabulary in the Chinese, and common terms such as 选择器 for a picker. The Traditional interface now follows the mainland standard glyphs (説 内 吴 rather than 說 內 吳) and drops Taiwan wording such as 檔案 and 選單.
