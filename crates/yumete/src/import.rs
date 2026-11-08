@@ -2037,6 +2037,8 @@ put(vim.fn.expand("~/written-by-the-config"), "x")
         }
         assert!(out.contains("n <leader>p, p.vim:1: yumete has no :echo 'p'"), "{out}");
         assert!(out.contains("already does the same in yumete: n Y"), "{out}");
+        // `Y` was a run, but not one written.
+        assert!(!out.contains("A run written with @"), "{out}");
         let viminit = |name: &str| match name {
             "VIMINIT" => Some("set nu".to_string()),
             _ => env(name),

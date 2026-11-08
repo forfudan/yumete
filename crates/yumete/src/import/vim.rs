@@ -843,7 +843,7 @@ impl Keymap {
 }
 
 /// **A right side as yumete's**: one command, or a list of them.
-fn vim_rhs(map: &Map, table: Table, keymap: &Keymap, runs: &mut bool) -> Result<Vec<String>, String> {
+fn vim_rhs(map: &Map, table: Table, keymap: &Keymap) -> Result<Vec<String>, String> {
     if let Some(name) = &map.callback {
         return KNOWN_FUNCTIONS
             .iter()
@@ -881,7 +881,6 @@ fn vim_rhs(map: &Map, table: Table, keymap: &Keymap, runs: &mut bool) -> Result<
     if table == Table::Insert {
         return Err("keys in Insert mode, which yumete types rather than presses".to_string());
     }
-    *runs = true;
     Ok(vec![format!("@{}", spelt.concat())])
 }
 
@@ -1049,7 +1048,7 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
             continue;
         }
         for &table in targets {
-            let run = match vim_rhs(map, table, &keymap, &mut own.runs) {
+            let run = match vim_rhs(map, table, &keymap) {
                 Ok(run) => run,
                 Err(why) => {
                     say(own, &why);
@@ -1135,6 +1134,8 @@ fn keys(user: &Dump, base: &Dump, from: Source, own: &mut Own) {
         ));
     }
     own.keys = written.text();
+    // Only a run that was written, not one that was already so.
+    own.runs = own.keys.contains("\"@");
 }
 
 /// **The reader's own settings and keys**: `user` less `base`.
@@ -1163,7 +1164,7 @@ mod tests {
     }
 
     fn rhs(table: Table, side: &str) -> Result<Vec<String>, String> {
-        vim_rhs(&map("n", "x", side), table, &Keymap::new(), &mut false)
+        vim_rhs(&map("n", "x", side), table, &Keymap::new())
     }
 
     fn ok(one: &str) -> Result<Vec<String>, String> {
@@ -1198,12 +1199,12 @@ mod tests {
         assert!(rhs(Table::Normal, "<Plug>(x)").is_err());
         let mut function = map("n", "x", "");
         function.callback = Some("vim.lsp.buf.definition".to_string());
-        assert_eq!(vim_rhs(&function, Table::Normal, &Keymap::new(), &mut false), ok("goto_definition"));
+        assert_eq!(vim_rhs(&function, Table::Normal, &Keymap::new()), ok("goto_definition"));
         function.callback = Some(String::new());
-        assert!(vim_rhs(&function, Table::Normal, &Keymap::new(), &mut false).is_err());
+        assert!(vim_rhs(&function, Table::Normal, &Keymap::new()).is_err());
         let mut expr = map("n", "j", "v:count == 0 ? 'gj' : 'j'");
         expr.expr = true;
-        assert!(vim_rhs(&expr, Table::Normal, &Keymap::new(), &mut false).is_err());
+        assert!(vim_rhs(&expr, Table::Normal, &Keymap::new()).is_err());
     }
 
     #[test]
