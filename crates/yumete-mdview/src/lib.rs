@@ -192,6 +192,16 @@ impl Preview {
         (self.width, self.height)
     }
 
+    /// **The fonts the writing is set in** (2026-11-08): `[export]
+    /// font_family`, the list the HTML and EPUB exports ask for, so the
+    /// preview and the page agree. A new list lays every block out again.
+    pub fn set_fonts(&mut self, list: &str) -> Stats {
+        if self.engine.set_font_list(list) {
+            self.cache.clear();
+        }
+        self.relayout()
+    }
+
     /// Set every document in `han` (or, with `None`, in its own again);
     /// takes effect at the next [`set_text`](Preview::set_text).
     pub fn set_han(&mut self, han: Option<fonts::Han>) {

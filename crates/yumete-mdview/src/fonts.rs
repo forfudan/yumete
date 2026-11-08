@@ -125,7 +125,38 @@ fn kai(han: Han) -> &'static str {
     }
 }
 
-pub(crate) fn families(han: Han) -> Families {
+/// **The writing's own fonts, split from the generic ones** (2026-11-08):
+/// `[export] font_family`, the list the HTML and EPUB exports ask for,
+/// written as VS Code's `markdown.preview.fontFamily` is. The named faces
+/// (and `system-ui`, which `-apple-system` and `BlinkMacSystemFont` are
+/// Safari's and Chrome's names for) come before the CJK face of the
+/// writing system; a generic family such as `sans-serif` comes after it,
+/// since on Linux it may be a CJK face of the wrong hand. `None` for a list
+/// that names nothing.
+fn split_list(list: &str) -> Option<(String, String)> {
+    const GENERIC: &[&str] = &["serif", "sans-serif", "monospace", "cursive", "fantasy", "math", "emoji", "fangsong", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded"];
+    let (mut named, mut generic): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
+    for item in list.split(',').map(str::trim).filter(|i| !i.is_empty()) {
+        let bare = item.to_ascii_lowercase();
+        let item = match bare.as_str() {
+            "-apple-system" | "blinkmacsystemfont" => "system-ui".to_string(),
+            _ => item.to_string(),
+        };
+        let pile = match GENERIC.contains(&bare.as_str()) {
+            true => &mut generic,
+            false => &mut named,
+        };
+        if !pile.contains(&item) {
+            pile.push(item);
+        }
+    }
+    (!named.is_empty() || !generic.is_empty()).then(|| (named.join(", "), generic.join(", ")))
+}
+
+/// The faces a writing system is set in. `list` is `[export] font_family`;
+/// with an empty one the system's own faces are asked for, as before there
+/// was a setting.
+pub(crate) fn families(han: Han, list: &str) -> Families {
     let (latin, latin_mono, emoji) = if cfg!(target_os = "macos") {
         ("system-ui", "'SF Mono', Menlo, Monaco", "'Apple Color Emoji'")
     } else if cfg!(target_os = "windows") {
@@ -134,11 +165,13 @@ pub(crate) fn families(han: Han) -> Families {
         ("system-ui, 'Noto Sans', 'DejaVu Sans'", "'DejaVu Sans Mono', 'Noto Sans Mono', 'Liberation Mono'", "'Noto Color Emoji'")
     };
     let cjk = cjk(han);
+    let (named, generic) = split_list(list).unwrap_or_else(|| (latin.to_string(), String::new()));
+    let join = |parts: &[&str]| parts.iter().filter(|p| !p.is_empty()).copied().collect::<Vec<_>>().join(", ");
     Families {
-        sans: format!("{latin}, {cjk}, {emoji}, sans-serif"),
+        sans: join(&[&named, cjk, &generic, emoji, "sans-serif"]),
         mono: format!("{latin_mono}, {cjk}, {emoji}, monospace"),
-        emphasis: format!("{latin}, {}{cjk}, {emoji}, sans-serif", kai(han)),
-        cjk_first: format!("{cjk}, {latin}, sans-serif"),
+        emphasis: join(&[&named, kai(han).trim_end_matches([',', ' ']), cjk, &generic, emoji, "sans-serif"]),
+        cjk_first: join(&[cjk, &named, &generic, "sans-serif"]),
     }
 }
 
@@ -169,9 +202,26 @@ mod tests {
 
     #[test]
     fn each_hand_has_its_own_faces() {
-        let (s, t, j) = (families(Han::Simplified), families(Han::Traditional), families(Han::Japanese));
+        let (s, t, j) = (families(Han::Simplified, ""), families(Han::Traditional, ""), families(Han::Japanese, ""));
         assert_ne!(s.sans, t.sans);
         assert_ne!(t.sans, j.sans);
         assert!(s.emphasis.contains("Kai") && !j.emphasis.contains("Kai"));
+    }
+
+    /// **The export's font list sets the writing** (2026-11-08): its named
+    /// faces first, the writing system's CJK face next, its generic families
+    /// after that; Safari's and Chrome's names for the system face are read
+    /// as `system-ui`.
+    #[test]
+    fn the_font_list_comes_first_and_its_generics_after_the_cjk_face() {
+        let list = "-apple-system, BlinkMacSystemFont, \"Segoe WPC\", \"Segoe UI\", system-ui, \"Ubuntu\", \"Droid Sans\", sans-serif";
+        let t = families(Han::Traditional, list);
+        assert!(t.sans.starts_with("system-ui, \"Segoe WPC\", \"Segoe UI\", \"Ubuntu\", \"Droid Sans\", "), "{}", t.sans);
+        let at = |name: &str| t.sans.find(name).unwrap_or_else(|| panic!("{name} in {}", t.sans));
+        assert!(at("Droid Sans") < at(cjk(Han::Traditional)) && at(cjk(Han::Traditional)) < at("sans-serif"));
+        assert!(t.emphasis.starts_with("system-ui") && t.emphasis.contains("Kai"), "{}", t.emphasis);
+        let serif = families(Han::Simplified, "'LXGW WenKai', serif");
+        assert!(serif.sans.starts_with("'LXGW WenKai', ") && serif.sans.contains(", serif, "), "{}", serif.sans);
+        assert_eq!(families(Han::Simplified, " ").sans, families(Han::Simplified, "").sans);
     }
 }

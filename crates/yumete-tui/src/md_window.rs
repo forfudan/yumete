@@ -60,6 +60,9 @@ pub struct Want {
     pub cell: (u16, u16),
     pub theme: Theme,
     pub top: Top,
+    /// `[export] font_family`: the preview is set in the fonts the export
+    /// asks for.
+    pub fonts: String,
 }
 
 impl Want {
@@ -177,6 +180,7 @@ impl Tab {
 fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
     let mut preview: Option<(u32, Preview)> = None; // the scale's bits, the preview
     let mut theme: Option<Theme> = None;
+    let mut fonts: Option<String> = None;
     let mut width = 0u32;
     let mut text: Arc<String> = Arc::new(String::new());
     let mut base_dir = PathBuf::new();
@@ -201,6 +205,7 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
             let options = Options { width: w, scale, theme: want.theme.clone(), base_dir: base_dir.clone() };
             preview = Some((scale.to_bits(), Preview::new(options, Box::new(crate::tex::Ratex))));
             theme = Some(want.theme.clone());
+            fonts = None;
             width = w;
             relay = true;
         }
@@ -208,6 +213,10 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
         if theme.as_ref() != Some(&want.theme) {
             theme = Some(want.theme.clone());
             p.set_theme(want.theme.clone());
+        }
+        if fonts.as_ref() != Some(&want.fonts) {
+            fonts = Some(want.fonts.clone());
+            p.set_fonts(&want.fonts);
         }
         if width != w {
             width = w;
@@ -342,7 +351,7 @@ impl MdPreviews {
                 tab.top = y.clamp(0.0, (tab.page - screen).max(0.0)).round();
                 top = Top::At(tab.top as i64);
             }
-            let want = Want { columns, rows, cell, theme: theme.clone(), top };
+            let want = Want { columns, rows, cell, theme: theme.clone(), top, fonts: config.export.font_family.clone() };
             if text.is_some() || tab.sent.as_ref() != Some(&want) {
                 let base_dir = tab.main.parent().map(PathBuf::from).unwrap_or_default();
                 if tab.jobs.send(Job { text, base_dir, want: want.clone() }).is_ok() {

@@ -139,6 +139,9 @@ pub(crate) struct Engine {
     /// The document's writing system, and the faces of each.
     pub han: Han,
     families: [Arc<Families>; 3],
+    /// `[export] font_family`, which the faces of each writing system begin
+    /// with.
+    font_list: String,
     /// Whether adjacent full-width marks are squeezed.
     pub squeeze: bool,
     /// Formulas drawn, at most [`FORMULAS_KEPT`] of them.
@@ -160,11 +163,22 @@ impl Engine {
             formulas,
             han: Han::default(),
             squeeze: true,
-            families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h))),
+            families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h, ""))),
+            font_list: String::new(),
             formula_cache: Lru::new(FORMULAS_KEPT),
             images: Lru::new(IMAGE_BYTES_KEPT / 3 * 2),
             scaled: Lru::new(IMAGE_BYTES_KEPT / 3),
         }
+    }
+
+    /// Set the font list the writing is set in; `true` when it changed.
+    pub fn set_font_list(&mut self, list: &str) -> bool {
+        if self.font_list == list {
+            return false;
+        }
+        self.font_list = list.to_string();
+        self.families = [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h, list)));
+        true
     }
 
     /// One CSS pixel.
