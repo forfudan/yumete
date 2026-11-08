@@ -1319,8 +1319,8 @@ pub fn run(
         match pages.follow(editor, &mut servers, config) {
             crate::page_window::Outcome::Nothing => {}
             crate::page_window::Outcome::Redraw => server_said_something = true,
-            crate::page_window::Outcome::Browser { path, why } => {
-                editor.close_page_windows();
+            crate::page_window::Outcome::Browser { preview, path, why } => {
+                editor.close_preview(preview);
                 if job.is_none() {
                     start_the_browser_preview(editor, config, &mut job, &path, yumete_core::syntax::Syntax::Typst);
                 }
@@ -1681,8 +1681,10 @@ pub fn run(
                             match crate::page_window::why_not(syntax, &servers, config, editor) {
                                 None => {
                                     let main = crate::page_window::absolute(&path);
-                                    if let Some(id) = editor.open_page_window(main) {
-                                        pages.opened(id, fallback);
+                                    if editor.open_page_window(main.clone()).is_some() {
+                                        if let Some(id) = editor.preview_of(&main) {
+                                            pages.opened(id, fallback);
+                                        }
                                     }
                                     continue;
                                 }
@@ -5594,7 +5596,8 @@ fn draw(
         if rect.width == 0 || rect.height == 0 {
             continue;
         }
-        // **A page window draws the page, not text** (2026-11-07).
+        // **A window showing a preview draws the page, not text**
+        // (2026-11-07).
         if let Some(&id) = leaves.get(which).filter(|&&id| editor.is_page_window(id)) {
             crate::page_window::draw(frame, editor, config, *rect, id);
             if which == live {

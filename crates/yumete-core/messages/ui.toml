@@ -555,6 +555,12 @@ zhs = "预览：{0} 已停止"
 en = "preview: {0} stopped"
 
 [[message]]
+# 预览标签在标签栏、:b 和缓冲区挑选器里的名字。{0} 是它排版的那份 Typst 文件的文件名，如 main.typ（草稿）
+key = "preview.tab"
+zhs = "预览 {0}"
+en = "Preview {0}"
+
+[[message]]
 # 打不开页面窗口的原因之一：tinymist 版本太旧(低于 0.13.30 或不报版本)。{0} 是 tinymist 及其版本号（草稿）
 key = "preview.tinymist-too-old"
 zhs = "{0} 太旧，无法显示页面窗口；把 tinymist 升级到 0.13.30 或更新即可"
@@ -582,10 +588,10 @@ en = "preview: tinymist starting…"
 # ── problem ──────────────────────────────────────────
 
 [[message]]
-# :view-preview 或 :view-preview-window 关掉了页面窗口（草稿）
+# :view-preview off、:view-preview-window off，或在预览标签上 :bc，关掉了这份文件的预览标签（草稿）
 key = "preview.window-closed"
-zhs = "已关闭页面窗口"
-en = "closed the page window"
+zhs = "已关闭预览"
+en = "closed the preview"
 
 [[message]]
 # 要打开页面窗口，而这个窗口已经有一个页面窗口跟着（草稿）

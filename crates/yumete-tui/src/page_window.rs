@@ -1,27 +1,31 @@
-//! **The page window, drawn** (2026-11-07).
+//! **The preview, drawn** (2026-11-07; a tab of its own since 2026-11-08).
 //!
-//! The editor keeps which windows are page windows (`editor/page_preview.rs`);
-//! this asks tinymist for the page and draws it. Two halves, as the formula
-//! float has ([`crate::maths`]):
+//! The editor keeps the preview tabs and which windows show them
+//! (`editor/page_preview.rs`); this asks tinymist for each one's page and
+//! draws it. Two halves, as the formula float has ([`crate::maths`]):
 //!
 //! - [`PagePreview`], owned by the loop, talks to the tinymist the editor
 //!   already runs as its Typst language server ([`crate::server::Servers`]):
 //!   `tinymist.exportPng` with `write: false` for the page, made from the
-//!   unsaved text; a preview task whose data plane says where the cursor's
-//!   text is on the page (`jump,<page> <x> <y>`), asked with
-//!   `tinymist.scrollPreview`. When to ask again is
+//!   unsaved text; and, for each preview tab, a preview task of its own whose
+//!   data plane says where the cursor's text is on the page (`jump,<page>
+//!   <x> <y>`), asked with `tinymist.scrollPreview`. When to ask again is
 //!   [`yumete_core::preview::Refresh`]: one question out at a time, new text
-//!   once the typing has been still for 300 ms.
-//! - [`draw`], called by the frame for each page window, lays the page into
-//!   the window as placeholder cells ([`crate::graphics`]), scrolled to the
-//!   cursor's place when the page is as wide as the window.
+//!   once the typing has been still for 300 ms. **Only previews on the
+//!   screen are asked anything**; a task, once started, runs until its tab
+//!   closes.
+//! - [`draw`], called by the frame for each window showing a preview, lays
+//!   that preview's page into the window as placeholder cells
+//!   ([`crate::graphics`]), scrolled to the cursor's place when the page is
+//!   as wide as the window.
 //!
-//! **Shown as printed**, in dark themes too: the page is the book's, not the
-//! editor's. **Only tinymist** draws it, and only one new enough to hand the
-//! page over in memory ([`yumete_core::preview::LEAST_TINYMIST`]); otherwise
-//! the window says so and `:view-preview` opens the browser's preview
-//! instead. The research is `local/survey-0.20/graphics.md` and its follow-up.
+//! **Shown as printed** unless `:view-preview-theme` says otherwise. **Only
+//! tinymist** draws it, and only one new enough to hand the page over in
+//! memory ([`yumete_core::preview::LEAST_TINYMIST`]); otherwise the window
+//! says so and `:view-preview` opens the browser's preview instead. The
+//! research is `local/survey-0.20/graphics.md` and its follow-up.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -71,9 +75,9 @@ impl Page {
     }
 }
 
-/// **What the window draws**, shared by the loop that fetches it and the
-/// frame that draws it — the frame is drawn from places that know nothing of
-/// the loop (`--shot`, the tests), as the formula float's is.
+/// **What a preview's window draws**, shared by the loop that fetches it
+/// and the frame that draws it — the frame is drawn from places that know
+/// nothing of the loop (`--shot`, the tests), as the formula float's is.
 #[derive(Debug, Default)]
 struct Board {
     page: Option<Arc<Page>>,
@@ -95,8 +99,9 @@ struct Board {
     cells: Option<(u16, u16)>,
 }
 
-static BOARD: Mutex<Board> =
-    Mutex::new(Board { page: None, note: None, jump: None, nudge: 0, turned: None, base: 0, cells: None });
+/// **Every preview's board**, by its tab's id (2026-11-08: one a preview,
+/// where there was one for the editor).
+static BOARDS: Mutex<Option<HashMap<u64, Board>>> = Mutex::new(None);
 
 /// **The page `J`, `K` or `5G` turns to** from page `now`: never before
 /// the first, nor past the last when the total is known.
@@ -116,23 +121,37 @@ impl Board {
     }
 }
 
-fn board() -> std::sync::MutexGuard<'static, Board> {
-    BOARD.lock().unwrap_or_else(|e| e.into_inner())
+/// Every board, locked.
+fn boards() -> std::sync::MutexGuard<'static, Option<HashMap<u64, Board>>> {
+    BOARDS.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// **Put a page on the board by hand** — for a test, which has no tinymist.
-pub fn preload(page: Page, jump: Option<Jump>) {
-    let mut board = board();
-    board.page = Some(Arc::new(page));
-    board.jump = jump;
-    board.note = None;
-    board.nudge = 0;
-    board.turned = None;
+/// **Preview `id`'s board**, made empty when it has none yet, for `work`.
+fn with_board<T>(id: u64, work: impl FnOnce(&mut Board) -> T) -> T {
+    let mut all = boards();
+    work(all.get_or_insert_with(HashMap::new).entry(id).or_default())
 }
 
-/// Clear the board — a test's, and the window's when it closes.
+/// **Put a page on preview `id`'s board by hand** — for a test, which has no
+/// tinymist.
+pub fn preload(id: u64, page: Page, jump: Option<Jump>) {
+    with_board(id, |board| {
+        board.page = Some(Arc::new(page));
+        board.jump = jump;
+        board.note = None;
+        board.nudge = 0;
+        board.turned = None;
+    });
+}
+
+/// Clear every board — a test's.
 pub fn clear() {
-    *board() = Board::default();
+    *boards() = None;
+}
+
+/// Whether preview `id` has a board — what a closed tab leaves none of.
+pub fn has_a_board(id: u64) -> bool {
+    boards().as_ref().is_some_and(|all| all.contains_key(&id))
 }
 
 static BELL: OnceLock<Doorbell> = OnceLock::new();
@@ -156,9 +175,10 @@ pub enum Outcome {
     Nothing,
     /// Something new to draw.
     Redraw,
-    /// **The window cannot be drawn**, and it was opened by `:view-preview`:
-    /// close it and open the browser's preview of `path`, saying `why`.
-    Browser { path: PathBuf, why: String },
+    /// **Preview `preview` cannot be drawn**, and it was opened by
+    /// `:view-preview`: close it and open the browser's preview of `path`,
+    /// saying `why`.
+    Browser { preview: u64, path: PathBuf, why: String },
 }
 
 /// The preview task inside tinymist: asked for, running, or not to be had.
@@ -186,14 +206,25 @@ impl Drop for Plane {
     }
 }
 
-/// **The page window's conversation with tinymist**, owned by the loop.
+/// **The previews' conversations with tinymist**, owned by the loop: one a
+/// preview tab, by its id.
 #[derive(Default)]
 pub struct PagePreview {
-    /// The page window being served.
-    window: Option<WindowId>,
-    /// Whether that window was opened by `:view-preview`, which goes to the
-    /// browser when the window cannot be drawn.
+    talks: HashMap<u64, Talk>,
+}
+
+/// **One preview's conversation with tinymist.**
+#[derive(Default)]
+struct Talk {
+    /// The task's name in tinymist ([`preview::task_id`]).
+    task_id: String,
+    /// The file it typesets.
+    main: PathBuf,
+    /// Whether it was opened by `:view-preview`, which goes to the browser
+    /// when the window cannot be drawn.
     fallback: bool,
+    /// Whether it was on the screen at the last turn.
+    shown: bool,
     refresh: Refresh,
     /// The page asked for and not yet answered: its id and what it was.
     asked: Option<(i64, Want)>,
@@ -208,59 +239,102 @@ pub struct PagePreview {
 }
 
 impl PagePreview {
-    /// **The window `id` was just opened**, by `:view-preview` (`fallback`)
-    /// or by `:view-preview-window`.
-    pub fn opened(&mut self, id: WindowId, fallback: bool) {
-        if self.window != Some(id) {
-            self.window = None;
-        }
-        self.fallback = fallback;
+    /// **Preview `id` was just opened beside the text**, by `:view-preview`
+    /// (`fallback`) or by `:view-preview-window`.
+    pub fn opened(&mut self, id: u64, fallback: bool) {
+        self.talks.entry(id).or_default().fallback = fallback;
     }
 
-    /// **One turn**: start the task, take the answers, follow the cursor, ask
+    /// **One turn**: let the closed previews go, then for each preview on
+    /// the screen start its task, take the answers, follow the cursor, ask
     /// for the page when it is due. Never waits.
     pub fn follow(&mut self, editor: &mut Editor, servers: &mut Servers, config: &yumete_config::Config) -> Outcome {
-        let now = Instant::now();
-        let Some((id, page)) = editor.page_windows().into_iter().next() else {
-            return match self.window.is_some() {
-                true => {
-                    self.close(servers);
-                    Outcome::Redraw
-                }
-                false => Outcome::Nothing,
-            };
-        };
+        let previews = editor.previews();
         let mut redraw = false;
-        if self.window != Some(id) {
-            let fallback = self.fallback;
-            self.close(servers);
-            self.window = Some(id);
-            self.fallback = fallback;
-            redraw = true;
-        }
-        let steps = editor.take_page_steps();
-        if !steps.is_empty() {
-            let mut board = board();
-            let rows = board.cells.map_or(1, |(_, rows)| rows.max(1) as i32);
-            for step in steps {
-                board.nudge = match step {
-                    PageStep::Rows(n) => board.nudge.saturating_add(n),
-                    PageStep::Halves(n) => board.nudge.saturating_add(n * (rows / 2).max(1)),
-                    PageStep::Screens(n) => board.nudge.saturating_add(n * rows),
-                    PageStep::Top => i32::MIN / 4,
-                    PageStep::Bottom => i32::MAX / 4,
-                    // **Another page, from its top.** The cursor stays where
-                    // it is; the page it is on comes back when it moves.
-                    PageStep::Pages(_) | PageStep::Goto(_) => {
-                        let total = board.page.as_ref().and_then(|p| p.total);
-                        board.turned = Some(turn(board.shown(), total, step));
-                        board.base = 0;
-                        i32::MIN / 4
-                    }
-                };
+        let gone: Vec<u64> = self.talks.keys().copied().filter(|id| !previews.iter().any(|(p, _)| p == id)).collect();
+        for id in gone {
+            if let Some(mut talk) = self.talks.remove(&id) {
+                talk.stop_the_task(servers);
+            }
+            crate::graphics::drop_pages_of(id);
+            if let Some(all) = boards().as_mut() {
+                all.remove(&id);
             }
             redraw = true;
         }
+        // The scroll keys move the preview the keys are in.
+        let steps = editor.take_page_steps();
+        if let Some(id) = editor.preview_with_the_keys().filter(|_| !steps.is_empty()) {
+            with_board(id, |board| {
+                let rows = board.cells.map_or(1, |(_, rows)| rows.max(1) as i32);
+                for step in steps {
+                    board.nudge = match step {
+                        PageStep::Rows(n) => board.nudge.saturating_add(n),
+                        PageStep::Halves(n) => board.nudge.saturating_add(n * (rows / 2).max(1)),
+                        PageStep::Screens(n) => board.nudge.saturating_add(n * rows),
+                        PageStep::Top => i32::MIN / 4,
+                        PageStep::Bottom => i32::MAX / 4,
+                        // **Another page, from its top.** The cursor stays
+                        // where it is; the page it is on comes back when it
+                        // moves.
+                        PageStep::Pages(_) | PageStep::Goto(_) => {
+                            let total = board.page.as_ref().and_then(|p| p.total);
+                            board.turned = Some(turn(board.shown(), total, step));
+                            board.base = 0;
+                            i32::MIN / 4
+                        }
+                    };
+                }
+            });
+            redraw = true;
+        }
+        for (id, main) in previews {
+            let shown = editor.preview_on_screen(id);
+            let talk = self.talks.entry(id).or_default();
+            if talk.task_id.is_empty() {
+                talk.task_id = preview::task_id(id);
+            }
+            talk.main = main;
+            talk.shown = shown;
+            if !shown {
+                continue;
+            }
+            match talk.follow(id, editor, servers, config) {
+                Outcome::Nothing => {}
+                Outcome::Redraw => redraw = true,
+                browser => return browser,
+            }
+        }
+        match redraw {
+            true => Outcome::Redraw,
+            false => Outcome::Nothing,
+        }
+    }
+
+    /// **How long the loop may sleep**: until the typing has been still long
+    /// enough, or the cursor has stayed put long enough to be followed, in
+    /// any preview on the screen. Past that it waits on others: the server's
+    /// own wake while it is being handed the text, or the bell when an
+    /// answer comes — never a spin.
+    pub fn due_in(&self) -> Option<Duration> {
+        self.talks.values().filter(|t| t.shown).filter_map(Talk::due_in).min()
+    }
+
+    /// The task names of the previews whose task tinymist was asked to
+    /// start — for a test.
+    pub fn tasks(&self) -> Vec<String> {
+        let mut out: Vec<String> =
+            self.talks.values().filter(|t| t.task != Task::Off).map(|t| t.task_id.clone()).collect();
+        out.sort();
+        out
+    }
+}
+
+impl Talk {
+    /// **One turn for preview `id`**, on the screen.
+    fn follow(&mut self, id: u64, editor: &mut Editor, servers: &mut Servers, config: &yumete_config::Config) -> Outcome {
+        let now = Instant::now();
+        let mut redraw = false;
         // **Whether tinymist can draw it.** A server that went takes its
         // answers with it: what was asked is asked again once one is back.
         let why = match servers.typesetter(config, editor) {
@@ -276,34 +350,20 @@ impl PagePreview {
             self.task = Task::Off;
             self.plane = None;
             if for_good && self.fallback {
-                return Outcome::Browser { path: page.main, why };
+                return Outcome::Browser { preview: id, path: self.main.clone(), why };
             }
             let why = match for_good {
                 true => say!("preview.or-the-browser", why),
                 false => why,
             };
-            return match self.note(Some(why)) || redraw {
+            return match self.note(id, Some(why)) {
                 true => Outcome::Redraw,
                 false => Outcome::Nothing,
             };
         }
-        let Some(target) = editor.page_target(id) else {
-            return if redraw { Outcome::Redraw } else { Outcome::Nothing };
-        };
-        // **Another book**: the followed window went over to a Typst file
-        // that is not under the one being typeset, so that file is main now.
-        let mut main = page.main.clone();
-        if let (Some(path), Syntax::Typst) = (&target.path, target.syntax) {
-            if !main.parent().is_some_and(|book| path.starts_with(book)) {
-                editor.set_page_main(id, path.clone());
-                main = path.clone();
-                self.stop_the_task(servers);
-                self.refresh.forget();
-                board().jump = None;
-            }
-        }
         if self.task == Task::Off {
-            if let Some(ask) = servers.execute("tinymist.doStartPreview", &preview::start_preview_arguments(&main), true) {
+            let arguments = preview::start_preview_arguments(&self.task_id, &self.main);
+            if let Some(ask) = servers.execute("tinymist.doStartPreview", &arguments, true) {
                 self.task = Task::Asked(ask);
             }
         }
@@ -323,24 +383,29 @@ impl PagePreview {
                 self.asked = None;
                 self.refresh.answered();
                 redraw = true;
-                self.landed(answer, &want);
+                self.landed(id, answer, &want);
             }
         }
         if let Some(plane) = &self.plane {
-            let mut board = board();
-            while let Ok(jump) = plane.jumps.try_recv() {
-                if board.jump != Some(jump) {
-                    board.jump = Some(jump);
-                    board.nudge = 0;
-                    board.turned = None;
-                    redraw = true;
+            with_board(id, |board| {
+                while let Ok(jump) = plane.jumps.try_recv() {
+                    if board.jump != Some(jump) {
+                        board.jump = Some(jump);
+                        board.nudge = 0;
+                        board.turned = None;
+                        redraw = true;
+                    }
                 }
-            }
+            });
         }
         // **Follow the cursor**: where its text is on the page, asked once it
-        // has stayed put a moment and the server has the text it stands in.
+        // has stayed put a moment and the server has the text it stands in —
+        // only while the keys are on this preview's book; otherwise the
+        // preview keeps its place.
+        let target = editor.page_target(id);
         if self.task == Task::Running {
-            if let Some(path) = &target.path {
+            if let Some(path) = target.as_ref().and_then(|t| t.path.as_ref()) {
+                let target = target.as_ref().expect("a target with a path");
                 // **The place after the character the cursor stands on**:
                 // tinymist looks at what comes before the place it is given,
                 // and at the start of a line that is the line break, which is
@@ -350,8 +415,8 @@ impl PagePreview {
                 match &self.seen {
                     Some((seen, at)) if *seen == place => {
                         let settled = now.saturating_duration_since(*at) >= FOLLOW_AFTER;
-                        if settled && self.told.as_ref() != Some(&place) && self.server_has_it(editor, servers) {
-                            let arguments = preview::scroll_preview_arguments(path, target.line, character);
+                        if settled && self.told.as_ref() != Some(&place) && server_has_it(editor, servers) {
+                            let arguments = preview::scroll_preview_arguments(&self.task_id, path, target.line, character);
                             if servers.execute("tinymist.scrollPreview", &arguments, false).is_some() {
                                 self.told = Some(place);
                             }
@@ -364,23 +429,22 @@ impl PagePreview {
         // **The page, when it is due.**
         let buffer = editor.current_buffer();
         self.refresh.edited(buffer.id().wrapping_mul(1_000_003) ^ buffer.revision(), now);
-        let want = {
-            let board = board();
+        let want = with_board(id, |board| {
             let total = board.page.as_ref().and_then(|p| p.total);
             let number = board.shown();
             let number = total.map_or(number, |t| number.min(t.max(1)));
             let inches = board.page.as_ref().map_or(A4, |p| p.inches());
             let shown = board.page.as_ref().filter(|p| p.number == number).map(|p| p.ppi);
             let ppi = ppi_to_ask(editor.preview_fit(), board.cells, crate::graphics::cell_pixels(), inches, shown);
-            Want { main: main.clone(), page: number, ppi, text: servers.typst_told() }
-        };
-        if self.refresh.due(&want, now) && self.server_has_it(editor, servers) {
+            Want { main: self.main.clone(), page: number, ppi, text: servers.typst_told() }
+        });
+        if self.refresh.due(&want, now) && server_has_it(editor, servers) {
             let arguments = preview::export_png_arguments(&want.main, want.page, want.ppi);
             if let Some(ask) = servers.execute("tinymist.exportPng", &arguments, true) {
                 self.refresh.ask(want.clone());
                 self.asked = Some((ask, want.clone()));
-                if board().page.is_none() {
-                    redraw |= self.note(Some(say!("preview.typesetting")));
+                if with_board(id, |board| board.page.is_none()) {
+                    redraw |= self.note(id, Some(say!("preview.typesetting")));
                 }
             }
         }
@@ -391,15 +455,8 @@ impl PagePreview {
         }
     }
 
-    /// Whether tinymist holds the text being typed: a page or a place asked
-    /// before the edit reaches it is about the text before the edit.
-    fn server_has_it(&self, editor: &Editor, servers: &Servers) -> bool {
-        let buffer = editor.current_buffer();
-        buffer.syntax() != Syntax::Typst || buffer.path().is_none() || servers.have_the_latest(editor)
-    }
-
     /// What came back for `want`: the page, or what went wrong.
-    fn landed(&mut self, answer: Result<Option<Executed>, String>, want: &Want) {
+    fn landed(&mut self, id: u64, answer: Result<Option<Executed>, String>, want: &Want) {
         let page = match answer {
             Ok(Some(Executed::Pages { total, pages })) => match pages.into_iter().next() {
                 Some((_, data)) => preview::decode_base64(&data)
@@ -408,10 +465,11 @@ impl PagePreview {
                 // Past the end (the last page went): the next want asks for
                 // the last one, which the total now bounds.
                 None => {
-                    let mut board = board();
-                    if let (Some(total), Some(jump)) = (total, board.jump.as_mut()) {
-                        jump.page = jump.page.min(total.max(1));
-                    }
+                    with_board(id, |board| {
+                        if let (Some(total), Some(jump)) = (total, board.jump.as_mut()) {
+                            jump.page = jump.page.min(total.max(1));
+                        }
+                    });
                     return;
                 }
             },
@@ -419,49 +477,37 @@ impl PagePreview {
             Err(why) => Err(say!("preview.failed", why.lines().next().unwrap_or(&why).trim())),
         };
         match page {
-            Ok(page) => {
-                let mut board = board();
+            Ok(page) => with_board(id, |board| {
                 board.page = Some(Arc::new(page));
                 board.note = None;
-            }
+            }),
             Err(why) => {
-                self.note(Some(why));
+                self.note(id, Some(why));
             }
         }
     }
 
-    /// Say `note` in the window; whether that changed anything.
-    fn note(&mut self, note: Option<String>) -> bool {
-        let mut board = board();
-        let changed = board.note != note;
-        board.note = note;
-        changed
+    /// Say `note` in preview `id`'s window; whether that changed anything.
+    fn note(&mut self, id: u64, note: Option<String>) -> bool {
+        with_board(id, |board| {
+            let changed = board.note != note;
+            board.note = note;
+            changed
+        })
     }
 
     fn stop_the_task(&mut self, servers: &mut Servers) {
         if matches!(self.task, Task::Asked(_) | Task::Running) {
-            servers.execute("tinymist.doKillPreview", &preview::kill_preview_arguments(), false);
+            servers.execute("tinymist.doKillPreview", &preview::kill_preview_arguments(&self.task_id), false);
         }
         self.task = Task::Off;
         self.plane = None;
         self.told = None;
     }
 
-    /// **The window closed**: the task stopped, the pictures freed, the board
-    /// cleared.
-    fn close(&mut self, servers: &mut Servers) {
-        self.stop_the_task(servers);
-        crate::graphics::drop_pages();
-        clear();
-        *self = PagePreview::default();
-    }
-
-    /// **How long the loop may sleep**: until the typing has been still long
-    /// enough, or the cursor has stayed put long enough to be followed. Past
-    /// that it waits on others: the server's own wake while it is being
-    /// handed the text, or the bell when an answer comes — never a spin.
-    pub fn due_in(&self) -> Option<Duration> {
-        self.window?;
+    /// How long the loop may sleep for this preview — see
+    /// [`PagePreview::due_in`].
+    fn due_in(&self) -> Option<Duration> {
         let now = Instant::now();
         let refresh = self.want.as_ref().and_then(|want| self.refresh.wake_in(want, now));
         let follow = match (&self.seen, self.task == Task::Running) {
@@ -472,6 +518,13 @@ impl PagePreview {
         };
         [refresh, follow].into_iter().flatten().min()
     }
+}
+
+/// Whether tinymist holds the text being typed: a page or a place asked
+/// before the edit reaches it is about the text before the edit.
+fn server_has_it(editor: &Editor, servers: &Servers) -> bool {
+    let buffer = editor.current_buffer();
+    buffer.syntax() != Syntax::Typst || buffer.path().is_none() || servers.have_the_latest(editor)
 }
 
 /// **Dial the data plane** on `port` and listen to it on a thread of its own:
@@ -602,9 +655,9 @@ pub fn scroll_top(cursor_row: Option<i32>, base: i32, nudge: i32, rows: u16, win
     (top as u16, base)
 }
 
-/// **Draw page window `id` into `area`.**
+/// **Draw the preview window `id` shows into `area`.**
 pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config::Config, area: Rect, id: WindowId) {
-    let _ = id;
+    let Some(preview) = editor.preview_in(id) else { return };
     let ink = crate::theme::Palette::of(config);
     frame.render_widget(Paragraph::new("").style(ink.page()), area);
     // The last row says which page; the rest is the picture's.
@@ -615,7 +668,8 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
         ),
         false => (area, None),
     };
-    let mut board = board();
+    let mut all = boards();
+    let board = all.get_or_insert_with(HashMap::new).entry(preview).or_default();
     board.cells = Some((room.width, room.height));
     let can = crate::graphics::support() != crate::graphics::Support::None;
     let page = board.page.clone().filter(|_| can);
@@ -646,7 +700,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
                 board.nudge = top as i32 - base;
             }
             board.base = base;
-            let picture = crate::graphics::show_page(page.hash, &page.png, columns, rows);
+            let picture = crate::graphics::show_page(preview, page.hash, &page.png, columns, rows);
             let spot = Rect {
                 x: room.x + room.width.saturating_sub(columns) / 2,
                 y: room.y,
@@ -657,7 +711,7 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
         }
         PreviewFit::Page => {
             let (columns, rows) = crate::maths::cells_for((page.width, page.height), cell, (room.width, room.height));
-            let picture = crate::graphics::show_page(page.hash, &page.png, columns, rows);
+            let picture = crate::graphics::show_page(preview, page.hash, &page.png, columns, rows);
             let spot = Rect { x: room.x + room.width.saturating_sub(columns) / 2, y: room.y, width: columns, height: rows };
             crate::graphics::put_picture(frame.buffer_mut(), spot, picture);
         }
@@ -793,9 +847,11 @@ mod tests {
     }
 
     /// **The real thing**, when this machine has a new enough tinymist: the
-    /// language server started for a Typst file hands the page window its
-    /// page from the unsaved text, and the data plane says where the cursor
-    /// is. Skipped where there is none.
+    /// language server started for a Typst file hands the preview its page
+    /// from the unsaved text, and the data plane says where the cursor is. A
+    /// second document's preview runs a task of its own beside it, and a
+    /// closed tab takes its task and board with it. Skipped where there is
+    /// none.
     #[test]
     fn tinymist_draws_the_page_and_follows_the_cursor() {
         let Some(tinymist) = a_new_tinymist() else {
@@ -805,12 +861,18 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("yumete-page-live-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
+        // Another book, beside this one rather than under it.
+        let elsewhere = std::env::temp_dir().join(format!("yumete-page-live-other-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&elsewhere);
+        std::fs::create_dir_all(&elsewhere).unwrap();
         let main = dir.join("main.typ");
         let mut text = String::from("#set page(width: 10cm, height: 8cm)\n= One\n\nFirst page.\n#pagebreak()\n= Two\n\n");
         for n in 0..12 {
             text.push_str(&format!("Line {n} of the second page.\n\n"));
         }
         std::fs::write(&main, &text).unwrap();
+        let other = elsewhere.join("note.typ");
+        std::fs::write(&other, "#set page(width: 8cm, height: 6cm)\n= A note\n\nOne page.\n").unwrap();
         let mut editor = Editor::new();
         editor.open_file(&main).unwrap();
         let mut config = yumete_config::Config::default();
@@ -820,7 +882,7 @@ mod tests {
         );
         let mut servers = Servers::default();
         let mut pages = PagePreview::default();
-        let deadline = Instant::now() + Duration::from_secs(40);
+        let deadline = Instant::now() + Duration::from_secs(60);
         let turn = |editor: &mut Editor, servers: &mut Servers, pages: &mut PagePreview| {
             servers.follow(editor, &config);
             servers.collect(editor);
@@ -838,38 +900,59 @@ mod tests {
         }
         editor.on_key(yumete_core::input::Key::Esc);
         assert!(editor.current_buffer().is_modified());
-        let id = editor.open_page_window(main.clone()).expect("a page window");
-        pages.opened(id, false);
-        board().cells = Some((60, 30));
-        while board().page.is_none() {
-            assert!(Instant::now() < deadline, "no page came: {:?}", board().note);
+        let window = editor.open_page_window(main.clone()).expect("a page window");
+        let first = editor.preview_in(window).expect("a preview tab");
+        pages.opened(first, false);
+        with_board(first, |b| b.cells = Some((60, 30)));
+        while with_board(first, |b| b.page.is_none()) {
+            assert!(Instant::now() < deadline, "no page came: {:?}", with_board(first, |b| b.note.clone()));
             turn(&mut editor, &mut servers, &mut pages);
         }
-        {
-            let board = board();
+        with_board(first, |board| {
             let page = board.page.as_ref().unwrap();
             assert_eq!(page.number, 1);
             assert!(page.total.is_some_and(|t| t >= 2), "{:?}", page.total);
             assert!(page.width > 100 && page.height > 50, "{}×{}", page.width, page.height);
-        }
+        });
         // The cursor past the first page: the data plane says which, and that
         // is asked for.
         editor.execute(":12").unwrap();
         loop {
-            assert!(Instant::now() < deadline, "the cursor was never followed: {:?}", board().jump);
+            assert!(Instant::now() < deadline, "the cursor was never followed: {:?}", with_board(first, |b| b.jump));
             turn(&mut editor, &mut servers, &mut pages);
-            let board = board();
-            let followed = board.jump.filter(|j| j.page >= 2);
-            if followed.is_some_and(|j| board.page.as_ref().is_some_and(|p| p.number == j.page)) {
+            let followed = with_board(first, |board| {
+                let jump = board.jump.filter(|j| j.page >= 2);
+                jump.is_some_and(|j| board.page.as_ref().is_some_and(|p| p.number == j.page))
+            });
+            if followed {
                 break;
             }
         }
-        // Closed: the task stopped, the board cleared.
-        editor.close_page_windows();
+        // **A second document, a second preview and a second task**: the
+        // first keeps its page, the cursor being in another book now.
+        editor.open_file(&other).unwrap();
+        let window = editor.open_page_window(other.clone()).expect("a second page window");
+        let second = editor.preview_in(window).expect("a second preview tab");
+        assert_ne!(first, second);
+        with_board(second, |b| b.cells = Some((60, 30)));
+        while with_board(second, |b| b.page.is_none()) || pages.tasks().len() < 2 {
+            assert!(Instant::now() < deadline, "no second page: {:?}", with_board(second, |b| b.note.clone()));
+            turn(&mut editor, &mut servers, &mut pages);
+        }
+        assert_eq!(pages.tasks(), {
+            let mut both = vec![preview::task_id(first), preview::task_id(second)];
+            both.sort();
+            both
+        });
+        assert!(with_board(first, |b| b.jump.is_some_and(|j| j.page >= 2)), "the first kept its place");
+        // Closed: its task stopped, its board gone; the other runs on.
+        assert!(editor.close_preview(first));
         turn(&mut editor, &mut servers, &mut pages);
-        assert!(board().page.is_none());
+        assert!(!has_a_board(first));
+        assert_eq!(pages.tasks(), vec![preview::task_id(second)]);
         servers.stop();
         std::fs::remove_dir_all(&dir).ok();
+        std::fs::remove_dir_all(&elsewhere).ok();
     }
 
     /// **`J`, `K` and `5G` turn pages** (2026-11-07): never before the first,

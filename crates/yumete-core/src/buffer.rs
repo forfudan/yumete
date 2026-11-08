@@ -330,6 +330,12 @@ pub struct Buffer {
     /// 原話（2026-10-16）：「It just be a rendered, readonly, fixed, clean
     /// buffer for checking diffs. Anything beyond this would become noise.」
     computed: bool,
+    /// **The Typst file this tab shows the typeset page of** (2026-11-08): a
+    /// preview is a tab like a file, listed and switched to like one, and
+    /// drawn by the front end as the page instead of as text. Absolute, as
+    /// tinymist knows it. A preview holds no text, is locked for good and is
+    /// never written.
+    preview: Option<PathBuf>,
     /// …and a hash of the text that was there.
     ///
     /// The stamp above is the fast question — "might this have changed?" — and
@@ -478,6 +484,7 @@ impl Buffer {
             scratch_swap: None,
             readonly: false,
             computed: false,
+            preview: None,
         }
     }
 
@@ -552,6 +559,7 @@ impl Buffer {
             scratch_swap: None,
             readonly: false,
             computed: false,
+            preview: None,
         }
     }
 
@@ -735,6 +743,7 @@ impl Buffer {
             // says so at `:w`.
             readonly: fs::metadata(path).is_ok_and(|m| m.permissions().readonly()),
             computed: false,
+            preview: None,
         })
     }
 
@@ -753,6 +762,28 @@ impl Buffer {
         self.computed = on;
     }
 
+    /// **A preview tab of `main`** (2026-11-08), under `label`: no text, no
+    /// file, locked, computed.
+    pub fn preview_of(main: PathBuf, label: &str) -> Self {
+        let mut buffer = Buffer::from_text("");
+        buffer.label = Some(label.to_string());
+        buffer.readonly = true;
+        buffer.computed = true;
+        buffer.from_nothing = false;
+        buffer.preview = Some(main);
+        buffer
+    }
+
+    /// The Typst file this tab shows the page of, when it is a preview.
+    pub fn preview_main(&self) -> Option<&Path> {
+        self.preview.as_deref()
+    }
+
+    /// Whether this tab is a preview rather than text.
+    pub fn is_preview(&self) -> bool {
+        self.preview.is_some()
+    }
+
     /// Lock the buffer against editing, or unlock it.
     ///
     /// Unlocking is allowed even for a file the disk calls read-only: the
@@ -765,7 +796,8 @@ impl Buffer {
     /// a writer who locks a buffer they had already changed still owns those
     /// changes and may still save them.
     pub fn set_readonly(&mut self, on: bool) {
-        self.readonly = on;
+        // A preview has no text to unlock (2026-11-08).
+        self.readonly = on || self.preview.is_some();
     }
 
     /// Whether the file has changed since this buffer last read or wrote it.

@@ -1219,12 +1219,13 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             // **Three switches** (2026-11-07): `:view-preview` is either
-            // preview, the window beside the text or the browser's; turned
-            // on it opens the window, falling back to the browser when a
-            // window cannot be drawn, and turned off it puts away whichever
-            // is up.
+            // preview, the tab beside the text or the browser's; turned on it
+            // shows this document's tab beside the text, falling back to the
+            // browser when a picture cannot be drawn, and turned off it closes
+            // the tab and stops the browser's. Bare is `on` unless this
+            // document's preview is on the screen (2026-11-08).
             Command::Preview(how) => {
-                let window = self.has_a_page_window();
+                let window = self.preview_here_on_screen();
                 let running = self.preview_at.is_some();
                 match how.over(window || running) {
                     // Already up: `on` is 「where is it?」, and the address
@@ -1233,7 +1234,7 @@ impl Editor {
                     true if running => self.preview_request = Some(Preview::Show),
                     true => self.ask_for_a_preview(true, true),
                     false => {
-                        if self.close_page_windows() {
+                        if self.close_preview_here() {
                             self.status = say!("preview.window-closed");
                         }
                         if running {
@@ -1244,12 +1245,12 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::PreviewWindow(how) => {
-                let window = self.has_a_page_window();
+                let window = self.preview_here_on_screen();
                 match how.over(window) {
                     true if window => self.status = say!("preview.window-open"),
                     true => self.ask_for_a_preview(true, false),
                     false => {
-                        if self.close_page_windows() {
+                        if self.close_preview_here() {
                             self.status = say!("preview.window-closed");
                         }
                     }

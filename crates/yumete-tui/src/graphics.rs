@@ -1,7 +1,7 @@
 //! **Pictures in the text, through the kitty graphics protocol** (2026-11-06).
 //!
 //! Two uses — the formula float ([`crate::maths`]) and, since 2026-11-07,
-//! the page window ([`crate::page_window`], two slots of its own) — and one route,
+//! the preview ([`crate::page_window`], two slots a preview) — and one route,
 //! the protocol's **Unicode placeholders**: the PNG goes to the terminal once
 //! (`a=T,U=1`, a *virtual placement*), and after that the picture is ordinary
 //! text. Each of its cells holds U+10EEEE with two combining marks that say
@@ -398,7 +398,9 @@ pub fn take_pending() -> Vec<u8> {
 /// shell and back, when the pictures may have gone with the screen they were
 /// on. The next frame that wants one uploads it again.
 pub fn forget() {
-    PAGES.lock().unwrap_or_else(|e| e.into_inner()).held = [None, None];
+    for slots in PAGES.lock().unwrap_or_else(|e| e.into_inner()).iter_mut() {
+        slots.held = [None, None];
+    }
     SHELF.lock().unwrap_or_else(|e| e.into_inner()).held.clear();
 }
 
@@ -415,13 +417,21 @@ pub fn release_all() -> Vec<u8> {
     out
 }
 
-/// **The page window's two pictures** (2026-11-07), apart from the formulas'
+/// **A preview's two pictures** (2026-11-07), apart from the formulas'
 /// shelf: a page is megabytes in the terminal (an A5 page at 144 ppi is 4 MB
 /// of pixels), so it does not take sixteen places, and it is not dropped to
 /// make room for a formula. Two ids in turn: a new page goes into the one not
 /// on screen, the cells move over to it in the same frame, and the next page
 /// overwrites the one left behind — no frame shows half a page.
-struct Pages {
+///
+/// **Two a preview** (2026-11-08): several previews may be on the screen at
+/// once, each with its page, and each holds a pair of its own, numbered
+/// `n` in the ids.
+struct Slots {
+    /// The preview these are for, by its tab's id.
+    owner: u64,
+    /// Which pair this is, for the ids: the lowest free when it was taken.
+    n: u32,
     /// What each slot holds: the picture's hash and the cells it was placed
     /// at.
     held: [Option<(u64, u16, u16)>; 2],
@@ -429,46 +439,69 @@ struct Pages {
     showing: usize,
 }
 
-static PAGES: Mutex<Pages> = Mutex::new(Pages { held: [None, None], showing: 0 });
+static PAGES: Mutex<Vec<Slots>> = Mutex::new(Vec::new());
 
-/// The id of page slot `slot`: bit 23 set, which no formula's id has
+/// How many previews' pictures fit in the ids: two a preview under the low
+/// eight bits.
+const MOST_PREVIEWS: u32 = 127;
+
+/// The id of slot `slot` of pair `n`: bit 23 set, which no formula's id has
 /// ([`id_for`] stays under 2^23), the process in the bits below.
-fn page_id(slot: usize) -> u32 {
-    (1 << 23) | ((std::process::id() & 0x7FFF) << 8) | (slot as u32 + 1)
+fn page_id(n: u32, slot: usize) -> u32 {
+    (1 << 23) | ((std::process::id() & 0x7FFF) << 8) | ((n % MOST_PREVIEWS) * 2 + slot as u32 + 1)
 }
 
-/// **The id the page `hash` is shown under**, `columns` × `rows` cells big:
-/// the slot that already holds it, or the other slot, uploaded into. An
-/// unchanged page is never sent twice.
-pub fn show_page(hash: u64, png: &[u8], columns: u16, rows: u16) -> u32 {
+/// **The id preview `owner`'s page `hash` is shown under**, `columns` ×
+/// `rows` cells big: the slot that already holds it, or the other slot,
+/// uploaded into. An unchanged page is never sent twice.
+pub fn show_page(owner: u64, hash: u64, png: &[u8], columns: u16, rows: u16) -> u32 {
     let tmux = support() == Support::KittyInTmux;
     let mut pages = PAGES.lock().unwrap_or_else(|e| e.into_inner());
+    let at = match pages.iter().position(|s| s.owner == owner) {
+        Some(at) => at,
+        None => {
+            let n = (0..).find(|n| !pages.iter().any(|s| s.n == *n)).unwrap_or(0);
+            pages.push(Slots { owner, n, held: [None, None], showing: 0 });
+            pages.len() - 1
+        }
+    };
+    let slots = &mut pages[at];
     let want = Some((hash, columns, rows));
-    let showing = pages.showing;
-    if pages.held[showing] == want {
-        return page_id(showing);
+    let showing = slots.showing;
+    if slots.held[showing] == want {
+        return page_id(slots.n, showing);
     }
     let other = 1 - showing;
-    pages.showing = other;
-    if pages.held[other] == want {
-        return page_id(other);
+    slots.showing = other;
+    if slots.held[other] == want {
+        return page_id(slots.n, other);
     }
-    pages.held[other] = want;
-    let bytes = upload(page_id(other), png, columns, rows, tmux);
+    slots.held[other] = want;
+    let id = page_id(slots.n, other);
+    let bytes = upload(id, png, columns, rows, tmux);
     SHELF.lock().unwrap_or_else(|e| e.into_inner()).pending.extend(bytes);
-    page_id(other)
+    id
 }
 
-/// **Free both page pictures** — the page window closed.
-pub fn drop_pages() {
+/// **Free preview `owner`'s pictures** — its tab closed.
+pub fn drop_pages_of(owner: u64) {
     let tmux = support() == Support::KittyInTmux;
-    let held = std::mem::take(&mut PAGES.lock().unwrap_or_else(|e| e.into_inner()).held);
+    let mut pages = PAGES.lock().unwrap_or_else(|e| e.into_inner());
+    let Some(at) = pages.iter().position(|s| s.owner == owner) else { return };
+    let slots = pages.remove(at);
     let mut shelf = SHELF.lock().unwrap_or_else(|e| e.into_inner());
-    for (slot, was) in held.iter().enumerate() {
+    for (slot, was) in slots.held.iter().enumerate() {
         if was.is_some() {
-            let bytes = delete(page_id(slot), tmux);
-            shelf.pending.extend(bytes);
+            shelf.pending.extend(delete(page_id(slots.n, slot), tmux));
         }
+    }
+}
+
+/// **Free every preview's pictures** — on the way out.
+pub fn drop_pages() {
+    let owners: Vec<u64> = PAGES.lock().unwrap_or_else(|e| e.into_inner()).iter().map(|s| s.owner).collect();
+    for owner in owners {
+        drop_pages_of(owner);
     }
 }
 

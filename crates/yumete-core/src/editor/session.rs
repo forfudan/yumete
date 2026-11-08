@@ -373,6 +373,7 @@ impl Editor {
     pub fn intro(&self) -> bool {
         self.opened_empty
             && self.current_buffer().path().is_none()
+            && !self.current_buffer().is_preview()
             && self.current_buffer().char_count() == 0
             && self.current_buffer().revision() == 0
     }
@@ -685,6 +686,11 @@ impl Editor {
             let Some(path) = buffer.path() else { continue };
             out.push_str(&format!("{}\n", path.display()));
         }
+        // **The preview tabs** (2026-11-08), by the file each typesets: the
+        // page is made again when one is shown.
+        for (_, main) in self.previews() {
+            out.push_str(&format!("preview\t{}\n", main.display()));
+        }
         // **No file open, so the last session stays** (2026-10-28). A run that
         // only typed into a scratch buffer and left with `:q!` used to delete
         // it, and the next `ye -r` had nothing to bring back. persistence.nvim
@@ -739,15 +745,15 @@ impl Editor {
     ///
     /// One line a node, first half first: `below` or `beside` for a split,
     /// then its two halves; `window⇥path⇥cursor⇥anchor` for a window, the
-    /// path empty for a buffer with no file. Then `keys⇥n` (the n-th
+    /// path empty for a buffer with no file, and `⇥preview` after it for a
+    /// window showing the preview of that file. Then `keys⇥n` (the n-th
     /// window) or `keys⇥left`/`keys⇥right`, and `sidebar⇥panel` for each
     /// sidebar open.
     pub(super) fn windows_to_keep(&self) -> Vec<String> {
         use crate::sidebar::Side;
         use crate::window::{Split, Step};
         let sidebars: Vec<_> = Side::BOTH.into_iter().filter_map(|side| self.panel(side)).collect();
-        // Without the page windows (2026-11-07): see `windows_kept`.
-        let windows = self.windows_kept();
+        let windows = &self.windows;
         if windows.len() < 2 && sidebars.is_empty() {
             return Vec::new();
         }
@@ -768,15 +774,20 @@ impl Editor {
                             None => (None, 0, 0),
                         },
                     };
-                    let path = buffer.and_then(|b| b.path()).map(|p| p.display().to_string()).unwrap_or_default();
-                    out.push(format!("window\t{path}\t{cursor}\t{anchor}"));
+                    match buffer.and_then(|b| b.preview_main()) {
+                        Some(main) => out.push(format!("window\t{}\t0\t0\tpreview", main.display())),
+                        None => {
+                            let path = buffer.and_then(|b| b.path()).map(|p| p.display().to_string()).unwrap_or_default();
+                            out.push(format!("window\t{path}\t{cursor}\t{anchor}"));
+                        }
+                    }
                 }
             }
         }
         match self.panel_focus() {
             Some(Side::Left) => out.push("keys\tleft".to_string()),
             Some(Side::Right) => out.push("keys\tright".to_string()),
-            None => out.push(format!("keys\t{}", windows.index_of(self.keys_window_kept()).unwrap_or(0))),
+            None => out.push(format!("keys\t{}", windows.index_of(self.live).unwrap_or(0))),
         }
         for panel in sidebars {
             out.push(format!("sidebar\t{}", crate::sidebar::Panel::from(panel.view()).key()));
@@ -790,7 +801,7 @@ impl Editor {
     /// from 0), `heading⇥n⇥path⇥nth⇥text` for a closed heading fold (found
     /// again by its text), `off⇥n⇥path` for folds switched off with `zn`.
     fn folds_to_keep(&self) -> Vec<String> {
-        let windows = self.windows_kept().leaves();
+        let windows = self.windows.leaves();
         let mut out = Vec::new();
         for buffer in &self.buffers {
             let Some(path) = buffer.path() else { continue };
@@ -918,20 +929,27 @@ impl Editor {
         let mut shape = shape;
         let n = keys.as_deref().and_then(|k| k.parse::<usize>().ok()).unwrap_or(usize::MAX);
         shape.mark(n, &mut 0);
-        // Every file a window showed, open; the windows on nothing dropped.
+        // Every file a window showed, open, and every preview it showed;
+        // the windows on nothing dropped.
         let mut found = std::collections::HashMap::new();
-        for path in shape.paths() {
-            let open = self.buffers.iter().position(|b| b.path() == Some(path.as_path()));
-            let index = match open {
-                Some(i) => Some(i),
-                None if path.is_file() => self.open_file(&path).ok().map(|_| self.current),
-                None => None,
+        for (path, preview) in shape.paths() {
+            let index = match preview {
+                true if path.is_file() => {
+                    let id = self.add_preview_tab(path.clone());
+                    self.buffer_with(id)
+                }
+                true => None,
+                false => match self.buffers.iter().position(|b| b.path() == Some(path.as_path())) {
+                    Some(i) => Some(i),
+                    None if path.is_file() => self.open_file(&path).ok().map(|_| self.current),
+                    None => None,
+                },
             };
             if let Some(i) = index {
-                found.insert(path, self.buffers[i].id());
+                found.insert((path, preview), self.buffers[i].id());
             }
         }
-        if let Some(shape) = shape.prune(&|path| found.contains_key(path)) {
+        if let Some(shape) = shape.prune(&|leaf| found.contains_key(&(leaf.path.clone(), leaf.preview))) {
             let mut placed = Vec::new();
             self.grow(self.live, shape, &mut placed);
             let mut keys_in = None;
@@ -940,7 +958,9 @@ impl Editor {
             // 2026-11-03).
             self.windows_restored = placed.iter().map(|(id, leaf)| (leaf.nth, *id)).collect();
             for (id, leaf) in placed {
-                let Some(index) = found.get(&leaf.path).and_then(|&b| self.buffer_with(b)) else { continue };
+                let Some(index) = found.get(&(leaf.path.clone(), leaf.preview)).and_then(|&b| self.buffer_with(b)) else {
+                    continue;
+                };
                 let len = self.buffers[index].rope().len_chars();
                 if leaf.keys {
                     keys_in = Some(id);
@@ -1073,6 +1093,14 @@ impl Editor {
             }
             first.get_or_insert(self.current);
             opened += 1;
+        }
+        // The preview tabs after the files, so the empty buffer the editor
+        // starts with is the first file's to take (2026-11-08).
+        for main in text.lines().filter_map(|line| line.strip_prefix("preview\t")) {
+            let main = PathBuf::from(main);
+            if main.is_file() {
+                self.add_preview_tab(main);
+            }
         }
         if let Some(i) = first {
             self.show_buffer(i);
@@ -1672,6 +1700,8 @@ enum Shape {
 /// whether it had the keys.
 struct Leaf {
     path: PathBuf,
+    /// Whether it showed the preview of `path` rather than the file.
+    preview: bool,
     cursor: usize,
     anchor: usize,
     keys: bool,
@@ -1697,7 +1727,8 @@ impl Shape {
                 let path = PathBuf::from(parts.next()?);
                 let cursor = parts.next()?.parse().ok()?;
                 let anchor = parts.next()?.parse().ok()?;
-                Some(Shape::Leaf(Leaf { path, cursor, anchor, keys: false, nth: 0 }))
+                let preview = parts.next() == Some("preview");
+                Some(Shape::Leaf(Leaf { path, preview, cursor, anchor, keys: false, nth: 0 }))
             }
         }
     }
@@ -1717,24 +1748,25 @@ impl Shape {
         }
     }
 
-    /// Every file the windows name, empty paths left out.
-    fn paths(&self) -> Vec<PathBuf> {
+    /// Every file the windows name, and whether as a preview, empty paths
+    /// left out.
+    fn paths(&self) -> Vec<(PathBuf, bool)> {
         match self {
             Shape::Split(_, first, second) => [first.paths(), second.paths()].concat(),
             Shape::Leaf(leaf) if leaf.path.as_os_str().is_empty() => Vec::new(),
-            Shape::Leaf(leaf) => vec![leaf.path.clone()],
+            Shape::Leaf(leaf) => vec![(leaf.path.clone(), leaf.preview)],
         }
     }
 
     /// The tree without the windows whose file is not `kept`; a split that
     /// loses one half becomes the other.
-    fn prune(self, kept: &dyn Fn(&PathBuf) -> bool) -> Option<Shape> {
+    fn prune(self, kept: &dyn Fn(&Leaf) -> bool) -> Option<Shape> {
         match self {
             Shape::Split(how, first, second) => match (first.prune(kept), second.prune(kept)) {
                 (Some(a), Some(b)) => Some(Shape::Split(how, Box::new(a), Box::new(b))),
                 (one, other) => one.or(other),
             },
-            Shape::Leaf(leaf) => kept(&leaf.path).then_some(Shape::Leaf(leaf)),
+            Shape::Leaf(leaf) => kept(&leaf).then_some(Shape::Leaf(leaf)),
         }
     }
 }

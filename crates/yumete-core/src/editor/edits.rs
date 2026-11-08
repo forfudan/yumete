@@ -2141,18 +2141,16 @@ impl Editor {
         // [`Editor::show_buffer`] 都要記——Warning: 那一支只收「已經開着的」，開新檔走的是
         // 這裏，兩條路都記上 `ga` 纔一直有答案。
         let leaving = self.current_buffer().id();
+        // A preview is no empty scratch to be taken over (2026-11-08).
         let pristine = replace_pristine
             && self.buffers.len() == 1
             && self.buffers[0].path().is_none()
+            && !self.buffers[0].is_preview()
             && self.buffers[0].char_count() == 0;
         if !pristine && !self.walking_jumps {
             self.note_where_we_came_from();
         }
-        if replace_pristine
-            && self.buffers.len() == 1
-            && self.buffers[0].path().is_none()
-            && self.buffers[0].char_count() == 0
-        {
+        if pristine {
             // 被頂掉的那一份不存在了，回不去。
             self.buffers[0] = buffer;
             self.current = 0;

@@ -1,25 +1,35 @@
-//! **The page window** (2026-11-07): a window beside the text that shows the
-//! page the cursor is on, typeset, as VS Code, Zed and Emacs show a preview.
+//! **The preview tab** (2026-11-08): the typeset page of a Typst file, as
+//! VS Code, Zed and Emacs show a preview, in a tab of its own.
 //!
-//! It is a window like any other — `C-w` walks into it, `:q` closes it — that
-//! holds no text to edit. The editor keeps which windows are page windows,
-//! which text window each follows and which file it typesets; the front end
-//! asks tinymist for the page and draws it (`yumete_tui::page_window`).
+//! A preview is a tab like an open file — in the tab line, `:b`, the buffer
+//! picker, `gn` and `gp` — whose buffer holds no text: it names the Typst
+//! file it typesets (its *main* file), and a window showing it draws that
+//! file's page (`yumete_tui::page_window`). It is **bound to that file**: it
+//! follows the cursor while the keys are in a window on that file or on a
+//! chapter of its book (a Typst file under the main file's folder), and
+//! otherwise keeps its place. Several may be open, one a document.
 //!
-//! **Page windows do not count as windows when the last one goes**: `:q` in
-//! the last text window leaves the editor, as it would with no preview open,
-//! and the keys never land in a page window because a text window closed.
+//! `:bc` on it, and `:view-preview off`, close it; `:q` in a window showing
+//! it closes the window and leaves the tab. **Windows showing a preview do
+//! not count as windows when the last one goes**: `:q` in the last text
+//! window leaves the editor, as it would with no preview open.
 
 use super::*;
 use crate::window::WindowId;
 
-/// One page window: the text window it shows the page of, and the file it
-/// typesets — the one it was opened on, for a book is one main file that
-/// includes its chapters, and the cursor spends the day in a chapter.
+/// **A window showing a preview**: the preview's tab (its buffer's id) and
+/// the file it typesets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageWindow {
-    pub follows: WindowId,
+    pub preview: u64,
     pub main: PathBuf,
+}
+
+/// **Whether `path` belongs to the book `main` typesets**: the file itself,
+/// or a Typst file under its folder — a book is one main file that includes
+/// its chapters, and the cursor spends the day in a chapter.
+pub fn in_the_book(main: &Path, path: &Path, syntax: crate::syntax::Syntax) -> bool {
+    path == main || (syntax == crate::syntax::Syntax::Typst && main.parent().is_some_and(|book| path.starts_with(book)))
 }
 
 /// **How big the page is drawn** (`:view-preview-fit`, `[editor] preview_fit`).
@@ -49,7 +59,7 @@ impl PreviewFit {
     }
 }
 
-/// A scroll key pressed in a page window, for the front end, which knows how
+/// A scroll key pressed in a preview, for the front end, which knows how
 /// tall the page is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageStep {
@@ -68,9 +78,9 @@ pub enum PageStep {
     Goto(usize),
 }
 
-/// **What a page window is showing the page of**: the followed window's file
-/// (absolute, as tinymist knows it), what kind of file it is, and the
-/// cursor's line and character on it, from 0.
+/// **Where a preview's cursor is**: the file the keys are in (absolute, as
+/// tinymist knows it), what kind of file it is, and the cursor's line and
+/// character on it, from 0.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageTarget {
     pub path: Option<PathBuf>,
@@ -93,33 +103,129 @@ pub(super) fn absolute(path: &Path) -> PathBuf {
 }
 
 impl Editor {
-    /// **The page windows still standing**, in screen order.
+    /// The buffer window `id` shows: the current one for the window with the
+    /// keys, the pane's for any other.
+    fn buffer_in_window(&self, id: WindowId) -> Option<&Buffer> {
+        match id == self.live {
+            true => Some(&self.buffers[self.current]),
+            false => self.panes.get(&id).and_then(|pane| self.buffer_with(pane.buffer)).map(|i| &self.buffers[i]),
+        }
+    }
+
+    /// **The windows showing a preview**, in screen order.
     pub fn page_windows(&self) -> Vec<(WindowId, PageWindow)> {
         self.windows
             .leaves()
             .into_iter()
-            .filter_map(|id| Some((id, self.page_windows.get(&id)?.clone())))
+            .filter_map(|id| {
+                let buffer = self.buffer_in_window(id)?;
+                let main = buffer.preview_main()?.to_path_buf();
+                Some((id, PageWindow { preview: buffer.id(), main }))
+            })
             .collect()
     }
 
     /// Whether window `id` shows a page rather than text.
     pub fn is_page_window(&self, id: WindowId) -> bool {
-        self.page_windows.contains_key(&id) && self.windows.has(id)
+        self.windows.has(id) && self.buffer_in_window(id).is_some_and(Buffer::is_preview)
     }
 
-    /// Whether the keys are in a page window.
+    /// Whether the keys are in a window showing a preview.
     pub fn page_window_has_the_keys(&self) -> bool {
-        self.panel_focus.is_none() && self.is_page_window(self.live)
+        self.panel_focus.is_none() && self.buffers[self.current].is_preview()
     }
 
-    /// **Open a page window beside the live one**, to its right, showing the
-    /// page of `main`; the keys stay where they are, as a preview opened to
-    /// the side leaves them in VS Code. One that already follows this window
-    /// is said to be open instead. The window, or `None` when there is no
-    /// room.
+    /// The preview the keys are in, by its tab's id.
+    pub fn preview_with_the_keys(&self) -> Option<u64> {
+        self.page_window_has_the_keys().then(|| self.buffers[self.current].id())
+    }
+
+    /// **Every preview tab**: its id and the file it typesets, in tab order.
+    pub fn previews(&self) -> Vec<(u64, PathBuf)> {
+        self.buffers.iter().filter_map(|b| Some((b.id(), b.preview_main()?.to_path_buf()))).collect()
+    }
+
+    /// The preview window `id` shows, by its tab's id.
+    pub fn preview_in(&self, id: WindowId) -> Option<u64> {
+        self.buffer_in_window(id).filter(|b| b.is_preview()).map(Buffer::id)
+    }
+
+    /// Whether preview `id` is on the screen, in some window.
+    pub fn preview_on_screen(&self, id: u64) -> bool {
+        self.page_windows().iter().any(|(_, page)| page.preview == id)
+    }
+
+    /// The preview tab of `main`, by its id.
+    pub fn preview_of(&self, main: &Path) -> Option<u64> {
+        let main = self.real(main);
+        self.buffers.iter().find(|b| b.preview_main().is_some_and(|m| self.real(m) == main)).map(Buffer::id)
+    }
+
+    /// A path as the disk spells it, for telling two spellings of one file
+    /// apart from two files: `/var/…` and `/private/var/…` on macOS.
+    fn real(&self, path: &Path) -> PathBuf {
+        self.real_path(path).unwrap_or_else(|| absolute(path))
+    }
+
+    /// The name a preview of `main` goes by in the tab line.
+    fn preview_label(main: &Path) -> String {
+        let name = main.file_name().map_or_else(|| main.display().to_string(), |n| n.to_string_lossy().into_owned());
+        say!("preview.tab", name)
+    }
+
+    /// **Open the preview tab of `main`** without showing it, or find the
+    /// one open. Its id.
+    pub(super) fn add_preview_tab(&mut self, main: PathBuf) -> u64 {
+        if let Some(id) = self.preview_of(&main) {
+            return id;
+        }
+        // As the disk spells it, which is how the buffers spell their files
+        // and so how tinymist is told where the cursor is: a task started on
+        // `/var/…` finds nothing at `/private/var/…`.
+        let main = self.real(&main);
+        let label = Self::preview_label(&main);
+        let buffer = Buffer::preview_of(main, &label);
+        let id = buffer.id();
+        self.buffers.push(buffer);
+        self.refresh_sidebar();
+        id
+    }
+
+    /// **The preview of the document the keys are in**, by its index: the
+    /// preview itself when the keys are in one; else the one typesetting
+    /// this file, or, failing that, the book it is a chapter of.
+    fn preview_here(&self) -> Option<usize> {
+        let here = &self.buffers[self.current];
+        if here.is_preview() {
+            return Some(self.current);
+        }
+        let path = self.real(here.path()?);
+        let syntax = here.syntax();
+        let mains: Vec<(usize, PathBuf)> =
+            self.buffers.iter().enumerate().filter_map(|(i, b)| Some((i, self.real(b.preview_main()?)))).collect();
+        mains.iter().find(|(_, main)| *main == path).map(|(i, _)| *i).or_else(|| {
+            mains
+                .iter()
+                .filter(|(_, main)| in_the_book(main, &path, syntax))
+                .max_by_key(|(_, main)| main.components().count())
+                .map(|(i, _)| *i)
+        })
+    }
+
+    /// Whether the preview of this document is on the screen.
+    pub(super) fn preview_here_on_screen(&self) -> bool {
+        self.preview_here().is_some_and(|i| self.preview_on_screen(self.buffers[i].id()))
+    }
+
+    /// **Open the preview of `main` beside the live window**, to its right,
+    /// opening its tab first if need be; the keys stay where they are, as a
+    /// preview opened to the side leaves them in VS Code. A preview already
+    /// on the screen is said to be open instead. The window, or `None` when
+    /// there is no room.
     pub fn open_page_window(&mut self, main: PathBuf) -> Option<WindowId> {
-        let open = self.page_windows().into_iter().find(|(id, page)| page.follows == self.live || *id == self.live);
-        if let Some((id, _)) = open {
+        let fresh_tab = self.preview_of(&main).is_none();
+        let preview = self.add_preview_tab(main);
+        if let Some((id, _)) = self.page_windows().into_iter().find(|(_, page)| page.preview == preview) {
             self.status = say!("preview.window-open");
             return Some(id);
         }
@@ -134,97 +240,146 @@ impl Editor {
                     .all(|p| p.area.height >= Self::WINDOW_MIN_ROWS && p.area.width >= Self::WINDOW_MIN_COLUMNS)
             });
             if !room {
+                // Nothing was opened, so neither is the tab.
+                if fresh_tab {
+                    self.drop_preview_tab(preview);
+                }
                 self.status = say!("pane.no-room");
                 return None;
             }
         }
         let fresh = self.windows.split_on(from, crate::window::Split::Beside, false)?;
-        let at = self.sel.head();
+        let caption = self.buffer_with(preview).map(|i| self.buffers[i].display_name()).unwrap_or_default();
         self.panes.insert(fresh, Pane {
-            buffer: self.current_buffer().id(),
-            cursor: at,
-            anchor: at,
+            buffer: preview,
+            cursor: 0,
+            anchor: 0,
             goal_column: None,
             goal_slot: None,
             extend: false,
             highlight: None,
-            caption: self.current_buffer().display_name().to_string(),
+            caption,
             jumps: Vec::new(),
             jump_at: 0,
-            seen: Vec::new(),
+            seen: vec![preview],
             preview: false,
             half_page: None,
         });
-        self.page_windows.insert(fresh, PageWindow { follows: from, main });
         Some(fresh)
     }
 
-    /// **Hand the front end a preview to open** for this buffer: the window
-    /// (with the browser's as the `fallback` when the window cannot be drawn),
-    /// or the browser's. A buffer never saved has no file to typeset.
+    /// **Hand the front end a preview to open** for this document: the
+    /// window (with the browser's as the `fallback` when the window cannot
+    /// be drawn), or the browser's. The window of a document with a preview
+    /// tab is that tab's; a buffer never saved has no file to typeset.
     pub(super) fn ask_for_a_preview(&mut self, window: bool, fallback: bool) {
-        let Some(path) = self.current_buffer().path().map(Path::to_path_buf) else {
-            self.status = say!("preview.save-first");
-            return;
+        let tab = self.preview_here().and_then(|i| self.buffers[i].preview_main()).map(Path::to_path_buf);
+        let (path, syntax) = match (tab, self.current_buffer().path()) {
+            (Some(main), _) if window || self.buffers[self.current].is_preview() => (main, crate::syntax::Syntax::Typst),
+            (_, Some(path)) => (path.to_path_buf(), self.current_buffer().syntax()),
+            _ => {
+                self.status = say!("preview.save-first");
+                return;
+            }
         };
-        let syntax = self.current_buffer().syntax();
         self.preview_request = Some(match window {
             true => Preview::Window { path, syntax, fallback },
             false => Preview::Start { path, syntax },
         });
     }
 
-    /// Whether any page window is open.
+    /// Whether any preview is on the screen.
     pub fn has_a_page_window(&self) -> bool {
         !self.page_windows().is_empty()
     }
 
-    /// **Close every page window**; the keys, if one had them, go back to
-    /// the window it followed. `false` when there was none.
-    pub fn close_page_windows(&mut self) -> bool {
-        let pages = self.page_windows();
-        if pages.is_empty() {
-            self.page_windows.clear();
-            return false;
+    /// **Close the preview of this document**: its tab, and every window
+    /// that showed nothing else. `false` when there was none.
+    pub(super) fn close_preview_here(&mut self) -> bool {
+        match self.preview_here() {
+            Some(i) => {
+                let id = self.buffers[i].id();
+                self.close_preview(id)
+            }
+            None => false,
         }
-        if self.page_window_has_the_keys() {
-            let back = self.page_windows.get(&self.live).map(|p| p.follows).filter(|&w| self.windows.has(w));
-            if let Some(back) = back.or_else(|| self.window_after_closing()) {
-                self.switch_to(back);
+    }
+
+    /// **Close preview `id`** — its tab, as `:bc` closes a file's. A window
+    /// that showed it goes back to the tab it showed before, and closes
+    /// when it showed nothing else; the window with the keys likewise, the
+    /// keys going to the window they were in last. `false` when there is no
+    /// such preview.
+    pub fn close_preview(&mut self, id: u64) -> bool {
+        let Some(index) = self.buffer_with(id).filter(|&i| self.buffers[i].is_preview()) else {
+            return false;
+        };
+        if index == self.current {
+            let back = self.seen_here.iter().rev().copied().find(|&b| b != id && self.buffer_with(b).is_some());
+            match back.and_then(|b| self.buffer_with(b)) {
+                Some(i) => self.show_buffer(i),
+                None => {
+                    if let Some(target) = self.window_after_closing() {
+                        let leaving = self.live;
+                        if self.switch_to(target) {
+                            self.close_window(leaving);
+                        }
+                    }
+                }
             }
         }
-        for (id, _) in pages {
-            self.close_window(id);
-        }
+        self.drop_preview_tab(id);
         true
     }
 
-    /// The file page window `id` typesets now: the front end moves it when
-    /// the followed window has gone over to another book.
-    pub fn set_page_main(&mut self, id: WindowId, main: PathBuf) {
-        if let Some(page) = self.page_windows.get_mut(&id) {
-            page.main = main;
+    /// Take tab `id` out of the list. When the keys are still in it — the
+    /// last window, with no other tab seen in it — the one beside it shows,
+    /// as `:bc` leaves it, or an empty scratch when it was the only tab.
+    fn drop_preview_tab(&mut self, id: u64) {
+        let Some(index) = self.buffer_with(id) else { return };
+        if self.buffers.len() == 1 {
+            self.buffers[0] = Buffer::scratch();
+            self.set_cursor(0);
+        } else {
+            let was_here = index == self.current;
+            self.buffers.remove(index);
+            if self.current > index {
+                self.current -= 1;
+            }
+            self.current = self.current.min(self.buffers.len() - 1);
+            if was_here {
+                let restored = self.current_buffer().saved_cursor();
+                self.set_cursor(restored);
+            }
         }
+        if self.last_file == Some(id) {
+            self.last_file = None;
+        }
+        self.forget_the_document();
+        self.refresh_sidebar();
     }
 
-    /// **What page window `id` shows the page of** — see [`PageTarget`].
-    pub fn page_target(&self, id: WindowId) -> Option<PageTarget> {
-        let page = self.page_windows.get(&id)?;
-        let (index, cursor) = match page.follows == self.live {
-            true => (self.current, self.sel.head()),
-            false => {
-                let pane = self.panes.get(&page.follows)?;
-                (self.buffer_with(pane.buffer)?, pane.cursor)
-            }
-        };
-        let buffer = &self.buffers[index];
+    /// **Where preview `id`'s cursor is** — see [`PageTarget`]: the cursor
+    /// of the window with the keys, while that window shows the preview's
+    /// file or a chapter of its book; `None` otherwise, and the preview
+    /// keeps its place.
+    pub fn page_target(&self, id: u64) -> Option<PageTarget> {
+        let main = self.buffer_with(id).and_then(|i| self.buffers[i].preview_main())?;
+        if self.panel_focus.is_some() {
+            return None;
+        }
+        let buffer = &self.buffers[self.current];
+        let path = absolute(buffer.path()?);
+        if !in_the_book(&self.real(main), &self.real(&path), buffer.syntax()) {
+            return None;
+        }
         let rope = buffer.rope();
-        let at = cursor.min(rope.len_chars());
+        let at = self.sel.head().min(rope.len_chars());
         let line = rope.char_to_line(at);
         let text = rope.line(line);
         let line_length = text.chars().take_while(|c| *c != '\n' && *c != '\r').count();
         Some(PageTarget {
-            path: buffer.path().map(absolute),
+            path: Some(path),
             syntax: buffer.syntax(),
             line,
             character: at - rope.line_to_char(line),
@@ -234,7 +389,8 @@ impl Editor {
         })
     }
 
-    /// The scroll keys pressed in a page window since the last look, taken.
+    /// The scroll keys pressed in a preview since the last look, taken: they
+    /// move [`Self::preview_with_the_keys`].
     pub fn take_page_steps(&mut self) -> Vec<PageStep> {
         std::mem::take(&mut self.page_steps)
     }
@@ -248,28 +404,38 @@ impl Editor {
         self.preview_fit = fit;
     }
 
-    /// **A key in a page window**: the scroll keys move the page, `:`,
-    /// `C-w` and `Space` go on to the command line and the key groups, and
-    /// nothing else does anything — there is no text here to move in or
-    /// edit. `true` when the key was taken here.
+    /// **A key in a preview**: the scroll keys move the page, `:`, `C-w`,
+    /// `Space`, `C-o` and `C-i` go on to the command line, the key groups
+    /// and the jump list, and nothing else does anything — there is no text
+    /// here to move in or edit. `true` when the key was taken here.
     ///
     /// The keys are a PDF reader's under vim (2026-11-07, as Zathura and
     /// evil-collection have them): `gg` and `G` the top and bottom, `J` and
     /// `K` a whole page, and a count before `G` or `gg` the page of that
-    /// number.
+    /// number. `gn`, `gp`, `ga`, `gt` and `gT` go to another tab.
     pub(super) fn on_page_window_key(&mut self, key: Key) -> bool {
         let mut count = self.page_count.take();
         if std::mem::take(&mut self.page_g) {
-            if key == Key::Char('g') {
-                self.page_steps.push(count.map_or(PageStep::Top, PageStep::Goto));
+            match key {
+                Key::Char('g') => self.page_steps.push(count.map_or(PageStep::Top, PageStep::Goto)),
+                // **The tabs from a preview** (2026-11-08): helix's `gn`,
+                // `gp` and `ga`, and vim's `gt` and `gT`, whatever the keymap
+                // — a preview is a tab, and this is how a tab is left.
+                Key::Char('n' | 't') => self.next_buffer(),
+                Key::Char('p' | 'T') => self.prev_buffer(),
+                Key::Char('a') => self.goto_last_file(),
+                // A `g` that is nothing else here takes its count.
+                _ => {}
+            }
+            if matches!(key, Key::Char('g' | 'n' | 't' | 'p' | 'T' | 'a')) {
                 return true;
             }
-            // A `g` that is not `gg` is nothing here, and takes its count.
+            // Any other key after a `g` is its own key, without the count.
             count = None;
         }
         let times = count.unwrap_or(1) as i32;
         let step = match key {
-            Key::Char(':') | Key::Ctrl('w') | Key::Char(' ') => return false,
+            Key::Char(':') | Key::Ctrl('w') | Key::Char(' ') | Key::Ctrl('o') | Key::Ctrl('i') => return false,
             Key::Char(digit @ '0'..='9') if digit != '0' || count.is_some() => {
                 let digit = digit.to_digit(10).unwrap_or(0) as usize;
                 self.page_count = Some(count.unwrap_or(0).saturating_mul(10).saturating_add(digit));
@@ -295,69 +461,5 @@ impl Editor {
         };
         self.page_steps.push(step);
         true
-    }
-
-    /// **Point page window `id`'s own place at what it follows**, before the
-    /// keys go into it: the editor's cursor lives in the buffer of the window
-    /// with the keys, and this one shows the followed window's.
-    pub(super) fn aim_the_page_pane(&mut self, id: WindowId) {
-        let Some(follows) = self.page_windows.get(&id).map(|p| p.follows) else { return };
-        let (buffer, at) = match follows == self.live {
-            true => (self.current_buffer().id(), self.sel.head()),
-            false => match self.panes.get(&follows) {
-                Some(pane) => (pane.buffer, pane.cursor),
-                None => return,
-            },
-        };
-        if let Some(pane) = self.panes.get_mut(&id) {
-            pane.buffer = buffer;
-            pane.cursor = at;
-            pane.anchor = at;
-        }
-    }
-
-    /// **Window `closed` is gone**: a page window that followed it follows
-    /// the window with the keys, or the first text window, and closes when
-    /// there is none.
-    pub(super) fn page_windows_lose(&mut self, closed: WindowId) {
-        self.page_windows.remove(&closed);
-        let orphans: Vec<WindowId> =
-            self.page_windows.iter().filter(|(_, p)| p.follows == closed).map(|(&id, _)| id).collect();
-        for id in orphans {
-            let heir = Some(self.live)
-                .filter(|&w| w != id && !self.page_windows.contains_key(&w))
-                .or_else(|| self.windows.leaves().into_iter().find(|w| !self.page_windows.contains_key(w)));
-            match heir {
-                Some(heir) => {
-                    if let Some(page) = self.page_windows.get_mut(&id) {
-                        page.follows = heir;
-                    }
-                }
-                None if id != self.live => {
-                    self.close_window(id);
-                }
-                None => {}
-            }
-        }
-    }
-
-    /// **The windows without the page windows** — what a session keeps: a
-    /// page is made again by asking, and a window of one with no tinymist
-    /// to draw it would come back empty.
-    pub(super) fn windows_kept(&self) -> crate::window::Windows {
-        let mut kept = self.windows.clone();
-        for id in self.page_windows.keys() {
-            kept.close(*id);
-        }
-        kept
-    }
-
-    /// The window a session says the keys are in: a page window's own text
-    /// window when they are in a page window.
-    pub(super) fn keys_window_kept(&self) -> WindowId {
-        match self.page_windows.get(&self.live) {
-            Some(page) if self.windows.has(page.follows) => page.follows,
-            _ => self.live,
-        }
     }
 }

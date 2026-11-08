@@ -46,6 +46,7 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     let text = editor.live_window();
     let page = editor.open_page_window(main.clone()).expect("room");
     assert_ne!(page, text);
+    let preview = editor.preview_in(page).expect("a preview tab");
 
     // No picture can be drawn here: the window says so, in words.
     graphics::set_support(Support::None);
@@ -58,6 +59,7 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     graphics::set_support(Support::Kitty);
     let _ = graphics::take_pending();
     page_window::preload(
+        preview,
         Page::from_png(a_png(840, 1188), 144, 1, Some(2)).unwrap(),
         Some(Jump { page: 1, x: 72.0, y: 200.0 }),
     );
@@ -90,5 +92,41 @@ fn the_page_is_drawn_beside_the_text_and_uploaded_once() {
     let owed = String::from_utf8(graphics::take_pending()).unwrap();
     assert!(owed.contains("a=d,d=I"), "{owed:?}");
     assert!(!frame(&mut editor, &config).contains(PLACEHOLDER));
+
+    // **Two previews on the screen at once** (2026-11-08): two documents,
+    // each page under picture ids of its own; closing one frees its pair
+    // and no more.
+    editor.execute(":view-preview-fit width").unwrap();
+    let other = dir.join("other");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("note.typ"), "= 附記\n").unwrap();
+    let window = editor.open_page_window(main.clone()).expect("room");
+    let one = editor.preview_in(window).unwrap();
+    editor.open_file(other.join("note.typ")).unwrap();
+    let window = editor.open_page_window(other.join("note.typ")).expect("room");
+    let two = editor.preview_in(window).unwrap();
+    assert_ne!(one, two);
+    assert_eq!(editor.page_windows().len(), 2, "both on the screen");
+    let _ = graphics::take_pending();
+    page_window::preload(one, Page::from_png(a_png(840, 1188), 144, 1, Some(2)).unwrap(), None);
+    page_window::preload(two, Page::from_png(a_png(600, 848), 144, 1, Some(1)).unwrap(), None);
+    let both = frame(&mut editor, &config);
+    let owed = String::from_utf8(graphics::take_pending()).unwrap();
+    let mut ids: Vec<u32> = owed
+        .split("a=T,")
+        .skip(1)
+        .filter_map(|s| s.split("i=").nth(1)?.split(',').next()?.parse().ok())
+        .collect();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), 2, "two pictures, two ids: {owed:?}\n{both}");
+    assert!(ids.iter().all(|id| id & (1 << 23) != 0), "{ids:?}");
+    editor.close_preview(one);
+    graphics::drop_pages_of(one);
+    let owed = String::from_utf8(graphics::take_pending()).unwrap();
+    assert_eq!(owed.matches("a=d,d=I").count(), 1, "only the closed one's: {owed:?}");
+    assert!(frame(&mut editor, &config).contains(PLACEHOLDER), "the other still drawn");
+    page_window::clear();
+    graphics::drop_pages();
     std::fs::remove_dir_all(&dir).ok();
 }
