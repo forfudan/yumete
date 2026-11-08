@@ -57,16 +57,23 @@ const TRADITIONAL: &str = "們這個說為來時國會對過還學發問開麼�
 /// outnumber its 简体-only ones (and there are a few of them: one 過 typed
 /// into a page does not turn it), else 简体.
 pub fn han_of(text: &str) -> Han {
+    // Looked up in a set, and only the first 20,000 漢字 read: the answer is
+    // settled long before that, and this runs on every edit.
+    static SETS: std::sync::OnceLock<(std::collections::HashSet<char>, std::collections::HashSet<char>)> = std::sync::OnceLock::new();
+    let (s_only, t_only) = SETS.get_or_init(|| (SIMPLIFIED.chars().collect(), TRADITIONAL.chars().collect()));
     let (mut kana, mut han, mut simplified, mut traditional) = (0usize, 0usize, 0usize, 0usize);
     for c in text.chars() {
         match c {
             '\u{3041}'..='\u{309F}' | '\u{30A0}'..='\u{30FF}' => kana += 1,
             '\u{4E00}'..='\u{9FFF}' | '\u{3400}'..='\u{4DBF}' => {
                 han += 1;
-                if SIMPLIFIED.contains(c) {
+                if s_only.contains(&c) {
                     simplified += 1;
-                } else if TRADITIONAL.contains(c) {
+                } else if t_only.contains(&c) {
                     traditional += 1;
+                }
+                if han >= 20_000 {
+                    break;
                 }
             }
             _ => {}
