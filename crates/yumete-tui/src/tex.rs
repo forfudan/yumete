@@ -107,18 +107,72 @@ pub fn render_on_baseline(tex: &str, display: bool, ink: Ink, size: f32) -> Resu
 /// `em` of the text around it — 1.1 of it, a little larger than the text as
 /// KaTeX sets it (1.21), since a CJK line is already a full square tall.
 /// Handed to the editor by `main` ([`yumete_core::Editor::set_formula_painter`]).
-pub fn for_export(tex: &str, display: bool) -> Result<yumete_core::export::Formula, String> {
+///
+/// **`turned`** (2026-11-08), for a formula down a vertical page: the
+/// picture is turned a quarter turn clockwise in the bitmap, and measured as
+/// it is then shown — as wide as it was tall and as tall as it was wide —
+/// so the page shows an ordinary picture and turns nothing itself, which
+/// every browser and reader app does alike.
+pub fn for_export(tex: &str, display: bool, turned: bool) -> Result<yumete_core::export::Formula, String> {
     const SIZE: f32 = 40.0;
     const PAD: f32 = 1.0;
     const SCALE: f64 = 1.1;
     let (png, [width, height, depth]) = draw(tex, display, (0, 0, 0), SIZE, PAD, 3.0)?;
     let pad = f64::from(PAD / SIZE);
-    Ok(yumete_core::export::Formula {
-        png,
-        width: (width + 2.0 * pad) * SCALE,
-        height: (height + depth + 2.0 * pad) * SCALE,
-        depth: (depth + pad) * SCALE,
+    let (width, height, depth) = ((width + 2.0 * pad) * SCALE, (height + depth + 2.0 * pad) * SCALE, (depth + pad) * SCALE);
+    Ok(match turned {
+        false => yumete_core::export::Formula { png, width, height, depth },
+        true => yumete_core::export::Formula {
+            png: turn_clockwise(&png).ok_or_else(|| "the picture could not be turned".to_string())?,
+            width: height,
+            height: width,
+            depth,
+        },
     })
+}
+
+/// A PNG turned a quarter turn clockwise, as RGBA; `None` for bytes that are
+/// not a PNG.
+fn turn_clockwise(png: &[u8]) -> Option<Vec<u8>> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut buf).ok()?;
+    let channels = match reader.output_color_type().0 {
+        png::ColorType::Grayscale => 1,
+        png::ColorType::GrayscaleAlpha => 2,
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        png::ColorType::Indexed => return None,
+    };
+    let (w, h) = (frame.width as usize, frame.height as usize);
+    let rgba = |x: usize, y: usize| -> [u8; 4] {
+        let p = &buf[(y * w + x) * channels..][..channels];
+        match channels {
+            1 => [p[0], p[0], p[0], 255],
+            2 => [p[0], p[0], p[0], p[1]],
+            3 => [p[0], p[1], p[2], 255],
+            _ => [p[0], p[1], p[2], p[3]],
+        }
+    };
+    // Row `y` of the turned picture is column `y` of the upright one, read
+    // from its foot up.
+    let mut turned = Vec::with_capacity(w * h * 4);
+    for y in 0..w {
+        for x in 0..h {
+            turned.extend_from_slice(&rgba(y, h - 1 - x));
+        }
+    }
+    let mut out = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut out, h as u32, w as u32);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().ok()?;
+        writer.write_image_data(&turned).ok()?;
+    }
+    Some(out)
 }
 
 /// The PNG, and the formula's width and how far it reaches above and below
@@ -407,16 +461,42 @@ mod tests {
     /// for a fraction, and drawn three times finer than it is shown.
     #[test]
     fn a_formula_for_a_page_is_measured_in_em() {
-        let x = for_export(r"x^2", false).expect("x^2");
+        let x = for_export(r"x^2", false, false).expect("x^2");
         assert!(x.height > 0.8 && x.height < 1.6, "{}", x.height);
         assert!(x.depth >= 0.0 && x.depth < x.height, "{}", x.depth);
         let (_, tall) = crate::graphics::png_size(&x.png).expect("a PNG");
         // 1.1 of an em of text is one em of the 40-pixel drawing, three times.
         let shown = x.height / 1.1 * 40.0 * 3.0;
         assert!((f64::from(tall) - shown).abs() <= 2.0, "{tall} pixels for {shown}");
-        let frac = for_export(r"\frac{a}{b}", true).unwrap();
+        let frac = for_export(r"\frac{a}{b}", true, false).unwrap();
         assert!(frac.height > x.height && frac.depth > x.depth);
-        assert!(for_export(r"\frac{a", false).is_err());
+        assert!(for_export(r"\frac{a", false, false).is_err());
+    }
+
+    /// **A formula turned for a vertical page** (2026-11-08) is turned in
+    /// the bitmap, clockwise: the picture as tall as the upright one is wide,
+    /// and what was its top row its right-hand column.
+    #[test]
+    fn a_formula_for_a_vertical_page_is_turned_in_the_bitmap() {
+        let up = for_export(r"x^2+y^2", false, false).unwrap();
+        let down = for_export(r"x^2+y^2", false, true).unwrap();
+        assert_eq!((down.width, down.height), (up.height, up.width));
+        let (w, h) = crate::graphics::png_size(&up.png).unwrap();
+        assert_eq!(crate::graphics::png_size(&down.png), Some((h, w)));
+        // Two pixels, red over blue, become blue beside red.
+        let mut made = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut made, 1, 2);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.write_header().unwrap().write_image_data(&[255, 0, 0, 0, 0, 255]).unwrap();
+        }
+        let turned = turn_clockwise(&made).unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(&turned)).read_info().unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let frame = reader.next_frame(&mut buf).unwrap();
+        assert_eq!((frame.width, frame.height), (2, 1));
+        assert_eq!(&buf[..8], &[0, 0, 255, 255, 255, 0, 0, 255]);
     }
 
     /// **A broken formula is said, never a panic**: an unknown command, an

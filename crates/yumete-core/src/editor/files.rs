@@ -1885,7 +1885,9 @@ impl Editor {
             paper: self.paper,
             // Warning: **讀的是這一份稿子的語法**，不是要寫成的格式（2026-09-28）。
             source: self.current_buffer().syntax(),
-            tatechuyoko: self.tatechuyoko,
+            latin: self.export_latin,
+            fonts: self.export_fonts.clone(),
+            base: self.current_buffer().path().and_then(|p| p.parent()).map(std::path::Path::to_path_buf),
             painter: self.formula_painter,
         };
         if self.refuse_to_overwrite(&target, force) {

@@ -222,6 +222,16 @@ impl Editor {
         }
     }
 
+    /// Set how a vertical export sets half-width letters and digits.
+    pub fn set_export_latin(&mut self, latin: crate::export::Latin) {
+        self.export_latin = latin;
+    }
+
+    /// Set the fonts an HTML or EPUB export asks for, a CSS font list.
+    pub fn set_export_fonts(&mut self, fonts: &str) {
+        self.export_fonts = fonts.to_string();
+    }
+
     /// Set the 縱 wrap length. The renderer calls this once the terminal size is
     /// known, so motion and drawing agree on where the 縱 break.
     pub fn set_zong_length(&mut self, length: usize) {

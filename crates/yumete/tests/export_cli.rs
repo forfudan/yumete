@@ -62,8 +62,9 @@ fn epub_is_a_book_and_html_draws_formulas() {
     let out = ye().args(["--vertical", "--export", "html"]).arg(&md).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let page = std::fs::read_to_string(md.with_extension("html")).unwrap();
-    assert!(page.contains("<span class=\"tcy\">1997</span>年"), "{page}");
-    assert!(page.contains("<img class=\"math\" alt=\"x^2\""), "{page}");
+    // Turned down the page under either `[export] vertical_latin`.
+    assert!(page.contains("<span class=\"yoko\">1997</span>年"), "{page}");
+    assert!(page.contains("<img class=\"math turned\" alt=\"x^2\""), "{page}");
     let _ = std::fs::remove_dir_all(&root);
 }
 

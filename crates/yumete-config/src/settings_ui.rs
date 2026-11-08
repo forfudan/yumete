@@ -188,6 +188,11 @@ const LAYOUT_WAYS: &[Choice] = &[
     Choice { word: "vertical", label: "settings.layout.vertical" },
 ];
 
+const EXPORT_VERTICAL_LATIN_WAYS: &[Choice] = &[
+    Choice { word: "turn", label: "settings.pick.vertical-latin.turn" },
+    Choice { word: "jlreq", label: "settings.pick.vertical-latin.jlreq" },
+];
+
 const MARGIN_WAYS: &[Choice] = &[
     Choice { word: "never", label: "settings.margin.never" },
     Choice { word: "dense", label: "settings.margin.dense" },
@@ -1127,6 +1132,25 @@ pub const SETTINGS: &[Setting] = &[
         label: "settings.editor.remember",
         hint: "settings.editor.remember.hint",
         factory: "true",
+    },
+    // The export (2026-11-08): what only shows once a file is written out.
+    Setting {
+        table: "export",
+        key: "vertical_latin",
+        group: Group::Files,
+        kind: Kind::Pick(EXPORT_VERTICAL_LATIN_WAYS),
+        label: "settings.export.vertical-latin",
+        hint: "settings.export.vertical-latin.hint",
+        factory: r#""turn""#,
+    },
+    Setting {
+        table: "export",
+        key: "font_family",
+        group: Group::Files,
+        kind: Kind::Text,
+        label: "settings.export.font-family",
+        hint: "settings.export.font-family.hint",
+        factory: r#"'-apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", system-ui, "Ubuntu", "Droid Sans", sans-serif'"#,
     },
     Setting {
         table: "editor",

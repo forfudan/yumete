@@ -797,6 +797,30 @@ zhs = "竖排时每纵几个字。散文读起来舒服的上限约 32 字"
 en = "characters per column in vertical layout; prose reads well up to about 32"
 
 [[message]]
+# 設置：导出用的字体（草稿）
+key = "settings.export.font-family"
+zhs = "导出字体"
+en = "export fonts"
+
+[[message]]
+# 設置：导出用的字体——一句话（草稿）
+key = "settings.export.font-family.hint"
+zhs = "HTML 与 EPUB 导出要的字体，写法同 VS Code 的 markdown.preview.fontFamily"
+en = "the fonts an HTML or EPUB export asks for, written as VS Code's markdown.preview.fontFamily"
+
+[[message]]
+# 設置：竖排导出里的西文（草稿）
+key = "settings.export.vertical-latin"
+zhs = "竖排导出的西文"
+en = "Latin in vertical export"
+
+[[message]]
+# 設置：竖排导出里的西文——一句话（草稿）
+key = "settings.export.vertical-latin.hint"
+zhs = "竖排的 HTML 与 EPUB 里，半角字母与数字怎么排；不影响终端里的竖排"
+en = "how half-width letters and digits are set in a vertical HTML or EPUB export; the terminal's vertical page is not affected"
+
+[[message]]
 # 設置面板：開着幾項
 key = "settings.flavor-items.count"
 zhs = "已开 {0}/{1} 项"
@@ -1557,6 +1581,18 @@ en = "logical: h l by character, j k by line"
 key = "settings.pick.vertical-keys.visual"
 zhs = "视觉方向：j k 下上、h l 左右"
 en = "visual: j k down/up, h l left/right"
+
+[[message]]
+# 設置：竖排导出里的西文——照日文与中文排版需求（草稿）
+key = "settings.pick.vertical-latin.jlreq"
+zhs = "照 JLREQ 与 clreq"
+en = "as JLREQ and clreq"
+
+[[message]]
+# 設置：竖排导出里的西文——一律转向（草稿）
+key = "settings.pick.vertical-latin.turn"
+zhs = "一律转向"
+en = "all turned"
 
 [[message]]
 # 設置：分词松紧——适中

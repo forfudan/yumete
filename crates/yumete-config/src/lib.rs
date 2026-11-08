@@ -3402,19 +3402,60 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
 
 /// What `:export` cannot work out for itself.
 ///
-/// One key so far, and it is here rather than in `[editor]` because it is not a
-/// screen setting: nothing about it is visible until a file is written out.
+/// Here rather than in `[editor]` because none of it is a screen setting:
+/// nothing about it is visible until a file is written out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportConfig {
     /// The paper a printed copy is set on, in whole millimetres — the trim the
     /// `@media print` half of an HTML export is written for. 開本 is decided
     /// once for a book, so this is a configuration line and not a command.
     pub page: (u32, u32),
+    /// How half-width letters and digits are set down a vertical HTML or
+    /// EPUB page. The terminal's vertical page keeps `[editor] tatechuyoko`.
+    pub vertical_latin: VerticalLatin,
+    /// **The fonts an HTML or EPUB export asks for** (2026-11-08), a CSS font
+    /// list written as VS Code's `markdown.preview.fontFamily` is, so a line
+    /// copied from there works here. The default is VS Code's: the system's
+    /// own faces, and no third-party font named.
+    pub font_family: String,
 }
+
+/// VS Code's default `markdown.preview.fontFamily`.
+pub const DEFAULT_FONT_FAMILY: &str =
+    "-apple-system, BlinkMacSystemFont, \"Segoe WPC\", \"Segoe UI\", system-ui, \"Ubuntu\", \"Droid Sans\", sans-serif";
 
 impl Default for ExportConfig {
     fn default() -> ExportConfig {
-        ExportConfig { page: (148, 210) }
+        ExportConfig { page: (148, 210), vertical_latin: VerticalLatin::default(), font_family: DEFAULT_FONT_FAMILY.to_string() }
+    }
+}
+
+/// **`[export] vertical_latin`** (2026-11-08): how a vertical export sets
+/// half-width letters and digits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VerticalLatin {
+    /// Every run of letters and digits, with the half-width marks joined to
+    /// it, turned a quarter turn clockwise, and every inline formula too.
+    #[default]
+    Turn,
+    /// As JLREQ and clreq set them: words turned, capitals and single letters
+    /// upright one to a square, two digits across in one square (縱中橫),
+    /// longer numbers turned; a one-character formula or a numeric fraction
+    /// upright.
+    Jlreq,
+}
+
+impl VerticalLatin {
+    /// The names the config writes, in the order a complaint lists them.
+    pub const NAMES: &'static [&'static str] = &["turn", "jlreq"];
+
+    /// Read a name, or `None` for a typo.
+    pub fn parse(word: &str) -> Option<VerticalLatin> {
+        match word {
+            "turn" => Some(VerticalLatin::Turn),
+            "jlreq" => Some(VerticalLatin::Jlreq),
+            _ => None,
+        }
     }
 }
 
@@ -3883,6 +3924,11 @@ impl Config {
     if let Some(word) = raw.panel.inline_preedit.as_deref() {
         if InlinePreedit::parse(word).is_none() {
             problems.push(one_of("[panel] inline_preedit", word, InlinePreedit::NAMES));
+        }
+    }
+    if let Some(word) = raw.export.vertical_latin.as_deref() {
+        if VerticalLatin::parse(word).is_none() {
+            problems.push(one_of("[export] vertical_latin", word, VerticalLatin::NAMES));
         }
     }
 
@@ -4580,6 +4626,8 @@ impl RawServers {
 #[serde(deny_unknown_fields)]
 struct RawExport {
     page: Option<String>,
+    vertical_latin: Option<String>,
+    font_family: Option<String>,
 }
 
 /// One command a language declares, as it is written in the file.
@@ -5091,6 +5139,12 @@ impl RawConfig {
         }
         if other.export.page.is_some() {
             self.export.page = other.export.page;
+        }
+        if other.export.vertical_latin.is_some() {
+            self.export.vertical_latin = other.export.vertical_latin;
+        }
+        if other.export.font_family.is_some() {
+            self.export.font_family = other.export.font_family;
         }
         if other.theme.name.is_some() {
             self.theme.name = other.theme.name.clone();
@@ -5735,6 +5789,14 @@ impl RawConfig {
         }
         if let Some(page) = self.export.page.as_deref().and_then(parse_page) {
             config.export.page = page;
+        }
+        if let Some(latin) = self.export.vertical_latin.as_deref().and_then(VerticalLatin::parse) {
+            config.export.vertical_latin = latin;
+        }
+        // An empty list is no list: the default stands rather than a page
+        // with no font named at all.
+        if let Some(fonts) = self.export.font_family.as_deref().filter(|f| !f.trim().is_empty()) {
+            config.export.font_family = fonts.trim().to_string();
         }
         // Warning: **Named and dropped in one place.** A right-hand side that is
         // none of the three kinds is left out — keys used to be the
@@ -6719,6 +6781,22 @@ mod tests {
         assert_eq!(c.export.page, (137, 195));
     }
 
+    /// **`[export] vertical_latin` and `font_family`** (2026-11-08): two
+    /// names for the one, a font list as VS Code writes it for the other, and
+    /// a typo or an empty list leaves the default standing.
+    #[test]
+    fn the_vertical_latin_and_the_fonts_of_an_export() {
+        let c = Config::from_toml("");
+        assert_eq!(c.export.vertical_latin, VerticalLatin::Turn);
+        assert_eq!(c.export.font_family, DEFAULT_FONT_FAMILY);
+        let c = Config::from_toml("[export]\nvertical_latin = \"jlreq\"\nfont_family = \"'Songti SC', serif\"\n");
+        assert_eq!(c.export.vertical_latin, VerticalLatin::Jlreq);
+        assert_eq!(c.export.font_family, "'Songti SC', serif");
+        let c = Config::from_toml("[export]\nvertical_latin = \"sideways\"\nfont_family = \" \"\n");
+        assert_eq!(c.export.vertical_latin, VerticalLatin::Turn);
+        assert_eq!(c.export.font_family, DEFAULT_FONT_FAMILY);
+    }
+
     #[test]
     fn an_unreadable_trim_leaves_a5_standing() {
         // The same rule the rest of the file follows: a typo must not print
@@ -7019,6 +7097,7 @@ mod a_typo_is_said_out_loud {
             ("[editor]\nlanguage = \"zhh\"\n", "language"),
             ("[panel]\ndisplay = \"ful\"\n", "[panel] display"),
             ("[panel]\ninline_preedit = \"nowhere\"\n", "[panel] inline_preedit"),
+            ("[export]\nvertical_latin = \"tunr\"\n", "[export] vertical_latin"),
         ] {
             let problems = said(text);
             assert!(

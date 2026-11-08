@@ -3,8 +3,9 @@
 //! left when the editor is.
 //!
 //! The text and the stylesheet are the HTML page's ([`crate::export`]): the
-//! same 縱中橫, corner brackets, tables kept across and drawn formulas. What
-//! is the book's own is the packaging, EPUB 3 at its smallest:
+//! same Latin set down the page, corner brackets, vertical tables, figures and
+//! drawn formulas. What is the book's own is the packaging, EPUB 3 at its
+//! smallest:
 //!
 //! - `mimetype`, first and stored, as the format requires, so a program can
 //!   tell what the zip is from its first bytes;
@@ -15,8 +16,9 @@
 //!   pages the way a Chinese book turns;
 //! - `OEBPS/nav.xhtml`, the table of contents, from the headings;
 //! - `OEBPS/text.xhtml` and `OEBPS/style.css`, the page;
-//! - `OEBPS/images/`, each drawn formula as a file of its own: a data URL is
-//!   not a resource a package can list.
+//! - `OEBPS/images/`, each drawn formula and each figure's picture as a
+//!   file of its own: a data URL is not a resource a package can list, and a
+//!   book cannot reach outside itself for a picture.
 //!
 //! Everything is stored, not deflated: the formulas are PNGs already, a
 //! chapter is a few tens of kilobytes, and a zip writer with no compressor is
@@ -44,7 +46,8 @@ pub fn book(text: &str, style: &Style) -> Vec<u8> {
          <item id=\"css\" href=\"style.css\" media-type=\"text/css\"/>\n",
     );
     for (n, (name, _)) in images.iter().enumerate() {
-        let _ = writeln!(manifest, "<item id=\"f{}\" href=\"{name}\" media-type=\"image/png\"/>", n + 1);
+        let kind = media_type(name).unwrap_or("image/png");
+        let _ = writeln!(manifest, "<item id=\"f{}\" href=\"{name}\" media-type=\"{kind}\"/>", n + 1);
     }
     let (direction, mode) = match style.vertical && lang != "en" {
         true => (" page-progression-direction=\"rtl\"", "\n<meta name=\"primary-writing-mode\" content=\"vertical-rl\"/>"),
@@ -113,6 +116,7 @@ fn parts(text: &str, style: &Style) -> Parts {
     let lang = crate::export::language_of(&text);
     let css = crate::export::stylesheet(style, lang, true);
     let body = crate::export::html_body(&text, style, lang);
+    let body = pictures_in(&body, style.base.as_deref());
     let (body, images) = pictures_out(&body);
     let (body, headings) = anchored(&xhtml(&body));
     let title = headings
@@ -129,10 +133,61 @@ fn parts(text: &str, style: &Style) -> Parts {
     Parts { lang, title, page, css, images, headings }
 }
 
-/// Each `data:` PNG of a drawn formula taken out into a file of its own, and
-/// the page pointing at it.
+/// The picture types a book may hold, by the extension a file is named
+/// with.
+const PICTURES: &[(&str, &str)] = &[
+    ("png", "image/png"),
+    ("jpg", "image/jpeg"),
+    ("jpeg", "image/jpeg"),
+    ("gif", "image/gif"),
+    ("webp", "image/webp"),
+    ("svg", "image/svg+xml"),
+];
+
+/// The media type of a picture named `name`, by its extension.
+fn media_type(name: &str) -> Option<&'static str> {
+    let (_, extension) = name.rsplit_once('.')?;
+    PICTURES.iter().find(|(e, _)| extension.eq_ignore_ascii_case(e)).map(|(_, kind)| *kind)
+}
+
+/// **Each figure's picture taken into the book** (2026-11-08): read from
+/// beside the source and written into the page as a `data:` URL, for
+/// [`pictures_out`] to file. A picture that cannot be read — not there, on
+/// the web, of a type a book does not hold, or a buffer never saved — is
+/// left out, its caption kept: a book that points outside itself does not
+/// open in a reader that checks.
+fn pictures_in(body: &str, base: Option<&std::path::Path>) -> String {
+    const FIGURE: &str = "<img class=\"figure\" src=\"";
+    let mut out = String::with_capacity(body.len());
+    let mut rest = body;
+    while let Some(at) = rest.find(FIGURE) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + FIGURE.len()..];
+        let (Some(end), Some(close)) = (after.find('"'), after.find('>')) else {
+            out.push_str(&rest[at..]);
+            return out;
+        };
+        let src = after[..end].replace("&amp;", "&").replace("&quot;", "\"");
+        let read = base
+            .filter(|_| !src.contains("://"))
+            .and_then(|base| Some((media_type(&src)?, std::fs::read(base.join(&src)).ok()?)));
+        if let Some((kind, bytes)) = &read {
+            let _ = write!(out, "{FIGURE}data:{kind};base64,{}{}", crate::preview::base64(bytes), &after[end..=close]);
+        }
+        rest = &after[close + 1..];
+        // The line the picture stood on goes with it.
+        if read.is_none() {
+            rest = rest.strip_prefix('\n').unwrap_or(rest);
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Each `data:` picture — a drawn formula, a figure taken in — written out
+/// into a file of its own, and the page pointing at it.
 fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
-    const DATA: &str = "src=\"data:image/png;base64,";
+    const DATA: &str = "src=\"data:";
     let mut out = String::with_capacity(body.len());
     let mut images = Vec::new();
     let mut rest = body;
@@ -144,11 +199,16 @@ fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
             rest = "";
             break;
         };
-        match crate::preview::decode_base64(&after[..end]) {
-            Some(png) => {
-                let name = format!("images/f{}.png", images.len() + 1);
+        let url = &after[..end];
+        let picture = url.split_once(";base64,").and_then(|(kind, data)| {
+            let (extension, _) = PICTURES.iter().find(|(_, k)| *k == kind)?;
+            Some((*extension, crate::preview::decode_base64(data)?))
+        });
+        match picture {
+            Some((extension, bytes)) => {
+                let name = format!("images/f{}.{extension}", images.len() + 1);
                 let _ = write!(out, "src=\"{name}\"");
-                images.push((name, png));
+                images.push((name, bytes));
             }
             None => out.push_str(&rest[at..at + DATA.len() + end + 1]),
         }
@@ -361,7 +421,9 @@ mod tests {
             title: "第一章.md".to_string(),
             paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            tatechuyoko: 4,
+            latin: crate::export::Latin::Turn,
+            fonts: crate::export::DEFAULT_FONTS.to_string(),
+            base: None,
             painter: None,
         }
     }
@@ -425,7 +487,7 @@ mod tests {
         assert!(nav.contains("<a href=\"text.xhtml#h2\">第2节</a>"), "{nav}");
         let page = read(4);
         assert!(page.contains("<h1 id=\"h1\">第一章</h1>"), "{page}");
-        assert!(page.contains("<span class=\"tcy\">1997</span>年"), "{page}");
+        assert!(page.contains("<span class=\"yoko\">1997</span>年"), "{page}");
         assert!(page.contains("『走吧。』<br/>"), "{page}");
         assert!(read(5).contains("-epub-writing-mode: vertical-rl"));
         assert!(!read(5).contains("block-size: 32em"));
@@ -435,7 +497,7 @@ mod tests {
     /// own, listed in the package.
     #[test]
     fn a_horizontal_book_with_a_formula() {
-        fn drawn(_: &str, _: bool) -> Result<crate::export::Formula, String> {
+        fn drawn(_: &str, _: bool, _: bool) -> Result<crate::export::Formula, String> {
             Ok(crate::export::Formula { png: vec![1, 2, 3], width: 2.0, height: 1.0, depth: 0.2 })
         }
         let mut s = style();
@@ -451,5 +513,25 @@ mod tests {
         let page = String::from_utf8(files[4].1.clone()).unwrap();
         assert!(page.contains("src=\"images/f1.png\"/>"), "{page}");
         assert_eq!(files[6], ("OEBPS/images/f1.png".to_string(), vec![1, 2, 3]));
+    }
+
+    /// **A figure's picture goes into the book** (2026-11-08), read from
+    /// beside the source and listed with its own type; one that cannot be
+    /// read is left out and its caption kept.
+    #[test]
+    fn a_figure_takes_its_picture_into_the_book() {
+        let dir = std::env::temp_dir().join(format!("yumete-epub-figure-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.jpg"), [9u8, 8, 7]).unwrap();
+        let mut s = style();
+        s.base = Some(dir.clone());
+        let files = entries(&book("看图。\n\n![一棵树](a.jpg)\n\n![不在](gone.png)\n", &s));
+        let _ = std::fs::remove_dir_all(&dir);
+        let opf = String::from_utf8(files[2].1.clone()).unwrap();
+        assert!(opf.contains("href=\"images/f1.jpg\" media-type=\"image/jpeg\""), "{opf}");
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("<img class=\"figure\" src=\"images/f1.jpg\" alt=\"一棵树\"/>"), "{page}");
+        assert!(!page.contains("gone.png") && page.contains("<figcaption>不在</figcaption>"), "{page}");
+        assert!(files.contains(&("OEBPS/images/f1.jpg".to_string(), vec![9, 8, 7])));
     }
 }

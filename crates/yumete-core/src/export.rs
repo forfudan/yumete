@@ -152,7 +152,7 @@ pub struct Style {
     /// Whether 句讀 hang in the margin (標點旁置).
     pub hanging: bool,
     /// How many characters a 縱 holds — the measure, which in a browser is what
-    /// `max-block-size` means.
+    /// `max-inline-size` means down the page.
     pub zong_len: usize,
     /// Which ruby dialects the source is written in.
     pub dialects: Dialects,
@@ -166,11 +166,18 @@ pub struct Style {
     /// `*粗*`、`$a+b$`、`@引用` 一個都認不出來，原樣（並且轉義）寫進導出的檔。
     /// `Format` 說的是**寫成什麼**，這一格說的是**讀的是什麼**，兩件事。
     pub source: crate::syntax::Syntax,
-    /// **The `tatechuyoko` setting** (2026-11-08): how long a run of half-width
-    /// letters and digits the page sets across in one slot, `0` for none. A
-    /// vertical HTML page wraps the same runs in `text-combine-upright`, up to
-    /// four — see [`TCY_MAX`].
-    pub tatechuyoko: usize,
+    /// **How half-width letters and digits are set down a vertical page**
+    /// (2026-11-08), `[export] vertical_latin`. A page is publication: the
+    /// terminal's `tatechuyoko` and `:render` are how the writer sees the
+    /// draft, and nothing of theirs is read here.
+    pub latin: Latin,
+    /// **The fonts the page asks for** (2026-11-08), `[export] font_family`,
+    /// a CSS font list as VS Code's Markdown preview writes it.
+    pub fonts: String,
+    /// The folder the source file sits in, which a picture's path is read
+    /// from: an EPUB carries its pictures inside it. `None` for a buffer
+    /// never saved.
+    pub base: Option<std::path::PathBuf>,
     /// **What draws a TeX formula** (2026-11-08), or `None` to leave Markdown's
     /// `$…$` as written. The front end hands it over: RaTeX lives there, so
     /// that this crate and its tests do not carry KaTeX's fonts.
@@ -186,56 +193,75 @@ pub struct Formula {
     pub width: f64,
     /// From the top of the picture to its foot.
     pub height: f64,
-    /// How far the picture reaches below the baseline.
+    /// How far the picture reaches below the baseline — left of it, for a
+    /// picture turned clockwise.
     pub depth: f64,
 }
 
-/// Draws `tex`, on its own line when the flag says so (`$$…$$`), or says what
-/// was wrong with it.
-pub type Painter = fn(&str, bool) -> Result<Formula, String>;
+/// Draws `tex`, on its own line when the first flag says so (`$$…$$`), and
+/// turned a quarter turn clockwise when the second does — a formula down a
+/// 縱, its picture turned in the bitmap and measured as it is shown — or
+/// says what was wrong with it.
+pub type Painter = fn(&str, bool, bool) -> Result<Formula, String>;
 
-/// **The longest run a browser sets across** (2026-11-08). CSS writes the
-/// automatic form as `digits <integer [2,4]>`, and `text-combine-upright: all`
-/// squeezes whatever it is given into one `em` — eight digits there are an
-/// eighth of a character each. The terminal lets a longer group hang into the
-/// 行間 instead, which a browser cannot be asked to do; past four the run is
-/// turned on its side with the Latin around it, as print sets a long number.
-pub const TCY_MAX: usize = 4;
+/// **How half-width letters and digits are set down a vertical page**
+/// (2026-11-08), `[export] vertical_latin`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Latin {
+    /// Every run of letters and digits turned a quarter turn clockwise, the
+    /// half-width marks joined to it turned with it (`5%`, `don’t`), and
+    /// every inline formula turned. No 縱中橫.
+    #[default]
+    Turn,
+    /// As JLREQ §2.3.2 and clreq set them: a word turned whole; capitals and
+    /// a single letter upright, one to a square; one digit upright, two
+    /// across in one square (縱中橫), three or more turned; a number with its
+    /// unit (`5%`) set one way as a whole. A formula is turned, unless it is
+    /// one letter or digit or a numeric fraction, which stands upright.
+    Jlreq,
+}
 
-/// **Whether a wide formula in a vertical line is turned on its side**
-/// (2026-11-08, not decided). `false`: every formula stands upright, and a
-/// wide one widens its whole 縱 to its own width. `true`: one wider than
-/// [`TURN_WIDER_THAN`] is turned 90° and runs down the 縱 like a Latin word,
-/// and a narrow one (`½`, `x^2`) stays upright. A formula on a line of its
-/// own (`$$`) stands upright either way.
-const TURN_WIDE_FORMULAS: bool = false;
+/// The fonts a page asks for unless `[export] font_family` says otherwise:
+/// VS Code's Markdown preview's, the system's own faces.
+pub const DEFAULT_FONTS: &str =
+    "-apple-system, BlinkMacSystemFont, \"Segoe WPC\", \"Segoe UI\", system-ui, \"Ubuntu\", \"Droid Sans\", sans-serif";
 
-/// How wide, in `em`, an inline formula may be and still stand upright when
-/// [`TURN_WIDE_FORMULAS`] is on.
-const TURN_WIDER_THAN: f64 = 1.2;
-
-/// **Whether letters that belong to a Latin word are left out of 縱中橫**
-/// (2026-11-08, not decided). `false`: the terminal's rule exactly — any run
-/// of letters and digits up to the setting is squeezed into one square, so
-/// in `Old Books` the `Old` stands upright and `Books` lies on its side, and
-/// `don’t` is `don`, `’`, `t`. `true`: a run of letters joined to more Latin
-/// by a space, an apostrophe, a hyphen or a full stop is left to lie on its
-/// side with the rest of the phrase; digits, and a letter standing alone
-/// (`A股`), are still squeezed.
-const LATIN_WORDS_WHOLE: bool = false;
-
-/// What draws a formula into this page, and whether a wide one is turned.
+/// What draws a formula into this page, and how the page sets one.
 #[derive(Clone, Copy)]
 struct Drawing {
     painter: Painter,
-    turn: bool,
+    /// Down the page, and so turning what [`Drawing::turns`] says.
+    vertical: bool,
+    latin: Latin,
 }
 
 impl Drawing {
     fn of(style: &Style) -> Option<Drawing> {
-        let turn = TURN_WIDE_FORMULAS && style.vertical;
-        style.painter.map(|painter| Drawing { painter, turn })
+        style.painter.map(|painter| Drawing { painter, vertical: style.vertical, latin: style.latin })
     }
+
+    /// **Whether `tex` is turned on its side** (2026-11-08). Across the page
+    /// nothing is. Down it a formula on a line of its own always is, as
+    /// JLREQ §3.7.4 sets one, and an inline one under [`Latin::Turn`]; under
+    /// [`Latin::Jlreq`] one letter or digit and a numeric fraction stand
+    /// upright in their square, as the same letter or digit would.
+    fn turns(&self, tex: &str, display: bool) -> bool {
+        self.vertical && (display || self.latin == Latin::Turn || !stands_upright(tex))
+    }
+}
+
+/// `x`, `2`, `\frac12`, `\tfrac{3}{4}`, `½`: a formula one square holds.
+fn stands_upright(tex: &str) -> bool {
+    static FRACTION: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let tex = tex.trim();
+    let mut chars = tex.chars();
+    let one = match (chars.next(), chars.next()) {
+        (Some(c), None) => c.is_ascii_alphanumeric() || matches!(c as u32, 0xBC..=0xBE | 0x2150..=0x215E),
+        _ => false,
+    };
+    one || FRACTION
+        .get_or_init(|| regex::Regex::new(r"^\\[dt]?frac\s*(\d|\{\s*\d+\s*\})\s*(\d|\{\s*\d+\s*\})$").expect("a pattern"))
+        .is_match(tex)
 }
 
 /// Write `text` out as `format`. An EPUB is a zip, so what comes back for one
@@ -275,8 +301,13 @@ enum Block {
     Quote(Vec<Block>),
     /// Items with one kind of marker, each item blocks of its own.
     List { ordered: bool, start: usize, items: Vec<Vec<Block>> },
-    /// A pipe table: its heading row, how each column aligns, its rows.
-    Table { head: Vec<String>, align: Vec<crate::mdtable::Align>, rows: Vec<Vec<String>> },
+    /// A pipe table: its heading row, how each column aligns, its rows, and
+    /// its caption — Pandoc's `Table: …` (or `: …`) paragraph just above or
+    /// below it (2026-11-08).
+    Table { head: Vec<String>, align: Vec<crate::mdtable::Align>, rows: Vec<Vec<String>>, caption: Option<String> },
+    /// **A picture alone in its paragraph** (2026-11-08), `![說明](a.png)`:
+    /// a figure, its text the caption, as Pandoc reads it.
+    Figure { caption: String, src: String },
     /// **A display formula on lines of its own** (2026-11-08): Markdown's
     /// `$$`, the formula, `$$`, delimiters and all. Read as a paragraph, the
     /// three lines came out joined by spaces and no line could be drawn: each
@@ -417,8 +448,36 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
                 rows.push(crate::mdtable::split(&lines[i]));
                 i += 1;
             }
-            out.push(Block::Table { head, align, rows });
+            // The caption: the paragraph just above, if it was one, or the
+            // one just below, a blank line between or not.
+            let mut caption = match out.last() {
+                Some(Block::Paragraph(held)) if caption_of(&held.join(" ")).is_some() => {
+                    let Some(Block::Paragraph(held)) = out.pop() else { unreachable!() };
+                    caption_of(&held.join(" ")).map(str::to_string)
+                }
+                _ => None,
+            };
+            if caption.is_none() {
+                let at = i + usize::from(lines.get(i).is_some_and(|l| l.trim().is_empty()));
+                if let Some(first) = lines.get(at).and_then(|l| caption_of(l.trim())) {
+                    let mut held = vec![first.to_string()];
+                    i = at + 1;
+                    while i < lines.len() && !lines[i].trim().is_empty() {
+                        held.push(lines[i].trim().to_string());
+                        i += 1;
+                    }
+                    caption = Some(held.join(" "));
+                }
+            }
+            out.push(Block::Table { head, align, rows, caption });
             continue;
+        }
+        if markdown && para.is_empty() && indent < 4 && lines.get(i + 1).is_none_or(|l| l.trim().is_empty()) {
+            if let Some((caption, src)) = figure_of(body) {
+                out.push(Block::Figure { caption: caption.to_string(), src: src.to_string() });
+                i += 1;
+                continue;
+            }
         }
         let opened = match lists {
             true => list_item(line, source),
@@ -508,6 +567,22 @@ fn display_maths_end(lines: &[String], at: usize) -> Option<usize> {
         }
     }
     None
+}
+
+/// The text of a table's caption line, Pandoc's `Table: …` or `: …`.
+fn caption_of(line: &str) -> Option<&str> {
+    let text = line.strip_prefix("Table:").or_else(|| line.strip_prefix(": "))?;
+    Some(text.trim()).filter(|t| !t.is_empty())
+}
+
+/// A line that is one picture and nothing else, `![caption](src "title")`:
+/// its caption and where the picture is.
+fn figure_of(line: &str) -> Option<(&str, &str)> {
+    static FIGURE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let found = FIGURE
+        .get_or_init(|| regex::Regex::new(r#"^!\[(.*)\]\(\s*<?([^\s>]+)>?(?:\s+"[^"]*")?\s*\)$"#).expect("a pattern"))
+        .captures(line)?;
+    Some((found.get(1)?.as_str(), found.get(2)?.as_str()))
 }
 
 /// `[^name]: text` — a footnote's name and the start of its text.
@@ -703,11 +778,9 @@ fn render(
                     let tex: String = chars[start..end].iter().collect();
                     // `$$` on both sides is a formula set on its own line.
                     let display = start >= 2 && chars[start - 2..start] == ['$', '$'];
-                    out.push_str(&match (drawing.painter)(&tex, display) {
-                        Ok(drawn) => {
-                            let turn = drawing.turn && !display && drawn.width > TURN_WIDER_THAN;
-                            formula_img(&drawn, &tex, display, turn)
-                        }
+                    let turn = drawing.turns(&tex, display);
+                    out.push_str(&match (drawing.painter)(&tex, display, turn) {
+                        Ok(drawn) => formula_img(&drawn, &tex, display, turn),
                         // What will not draw is left as it was written, `$`s
                         // and all, which is what a reader of the source sees.
                         Err(_) => {
@@ -817,36 +890,40 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
 /// pixels would not follow it. `--depth` puts its baseline on the line's
 /// across the page; down a 縱 it is centred instead (see [`html`]).
 ///
-/// **Turned** ([`TURN_WIDE_FORMULAS`]), the picture is set in a box as tall as
-/// it is wide and as wide as it is tall, and drawn rotated a quarter turn
-/// clockwise inside it, as a browser turns a Latin word in a 縱: a rotated
-/// picture alone would take up the room it had upright.
+/// **Turned**, the picture came from the painter already turned in the
+/// bitmap and measured as it is shown, so it is an ordinary picture with
+/// nothing to rotate: of the ways to turn a formula, the one every engine
+/// and every reader app shows the same (2026-11-08, Chrome, Firefox, WebKit
+/// and Readium's stylesheets tried). Only its height is given, so a long one
+/// that a page cannot hold shrinks whole rather than squeezed.
 fn formula_img(drawn: &Formula, tex: &str, display: bool, turn: bool) -> String {
-    let class = if display { "math display" } else { "math" };
+    let class = match (display, turn) {
+        (false, false) => "math",
+        (true, false) => "math display",
+        (false, true) => "math turned",
+        (true, true) => "math display turned",
+    };
     let alt = escape_html(tex).replace('"', "&quot;");
     let png = crate::preview::base64(&drawn.png);
-    match turn {
-        false => format!(
-            "<img class=\"{class}\" alt=\"{alt}\" style=\"height: {:.3}em; --depth: {:.3}em\" src=\"data:image/png;base64,{png}\">",
-            drawn.height, -drawn.depth,
-        ),
-        true => format!(
-            "<span class=\"math turned\" style=\"width: {h:.3}em; height: {w:.3}em\">\
-             <img class=\"math\" alt=\"{alt}\" style=\"width: {w:.3}em; height: {h:.3}em; transform: translateX({h:.3}em) rotate(90deg)\" src=\"data:image/png;base64,{png}\">\
-             </span>",
-            w = drawn.width,
-            h = drawn.height,
-        ),
-    }
+    format!(
+        "<img class=\"{class}\" alt=\"{alt}\" style=\"height: {:.3}em; --depth: {:.3}em\" src=\"data:image/png;base64,{png}\">",
+        drawn.height, -drawn.depth,
+    )
 }
 
 /// **What a vertical page does to its text that CSS cannot be asked to**
 /// (2026-11-08), done to the HTML `body` once it is written.
 ///
-/// - **縱中橫.** The runs the terminal page packs into one slot
-///   ([`crate::zong::packed_runs`]) are wrapped in `<span class="tcy">`, up to
-///   [`TCY_MAX`] long: `1997` stands upright in one square instead of lying on
-///   its side. Longer runs are left to `text-orientation: mixed`.
+/// - **Half-width letters and digits** are set as `latin` says
+///   ([`Latin`]), each run of them with the half-width marks joined to it
+///   taken as one: `<span class="yoko">` turns it a quarter turn clockwise,
+///   `<span class="tcy">` sets it across in one square (縱中橫), and
+///   `<span class="tate">` stands its letters upright one to a square.
+///   Spelling it out rather than leaving it to `text-orientation: mixed`
+///   keeps a run whole: left to the font, `’` down a 縱 is a closing quote,
+///   and a CJK font's vertical form for it is a corner bracket — KingHwa
+///   OldSong drew `don’t` as `don」t` — and `%` may stand while the `5`
+///   beside it lies.
 /// - **Curly quotes become corner brackets**, `“”` as `『』` and `‘’` as
 ///   `「」`, when `quotes` — the page is Chinese. That is what the terminal's
 ///   `:render full` draws, and an export is the page with its markup taken
@@ -860,11 +937,10 @@ fn formula_img(drawn: &Formula, tex: &str, display: bool, turn: bool) -> String 
 ///   quote between two Latin letters is an apostrophe and is left alone.
 ///
 /// Nothing inside a tag is touched, nor what is in `<code>`, `<pre>`, a
-/// reading (`<rt>`), a table — set across, so it has no 縱 — or a script.
-/// `words_whole` is [`LATIN_WORDS_WHOLE`].
-fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool, words_whole: bool) -> String {
-    const SKIP: &[&str] = &["code", "pre", "rt", "rp", "table", "script", "style", "svg", "math", "kbd", "samp"];
-    let at_most = tatechuyoko.min(TCY_MAX);
+/// reading (`<rt>`) or a script. A table's cells are running text: a table
+/// down the page is a vertical one (see [`stylesheet`]).
+fn vertical_text(body: &str, latin: Latin, quotes: bool) -> String {
+    const SKIP: &[&str] = &["code", "pre", "rt", "rp", "script", "style", "svg", "math", "kbd", "samp"];
     let mut out = String::with_capacity(body.len() + body.len() / 8);
     let mut skipping: Vec<String> = Vec::new();
     let mut text = String::new();
@@ -881,7 +957,7 @@ fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool, words_whole: bool
         };
         let held = std::mem::take(&mut text);
         out.push_str(&match skipping.is_empty() {
-            true => turned(&held, at_most, quotes, words_whole),
+            true => turned(&held, latin, quotes),
             false => held,
         });
         out.push_str(tag);
@@ -902,84 +978,139 @@ fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool, words_whole: bool
         rest = &rest[tag.len()..];
     }
     out.push_str(&match skipping.is_empty() {
-        true => turned(&text, at_most, quotes, words_whole),
+        true => turned(&text, latin, quotes),
         false => text,
     });
     out
 }
 
-/// One run of text between tags, done as [`vertical_text`] says. An entity
-/// (`&amp;`) is passed over whole: its letters are not a word.
-///
-/// **An apostrophe is turned with the Latin** (`<span class="apos">`,
-/// 2026-11-08): left to the font, `’` down a 縱 is a closing quote, and a CJK
-/// font's vertical form for it is a corner bracket — KingHwa OldSong drew
-/// `don’t` as `don」t`.
-fn turned(text: &str, at_most: usize, quotes: bool, words_whole: bool) -> String {
-    let latin = |c: Option<&char>| c.is_some_and(|&c| c.is_alphanumeric() && yumete_cjk::char_width(c) == 1);
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while !rest.is_empty() {
-        let entity = rest
-            .find('&')
-            .and_then(|at| rest[at..].find(';').filter(|&n| n <= 12).map(|n| (at, at + n + 1)));
-        let (plain, entity) = match entity {
-            Some((from, to)) => (&rest[..from], &rest[from..to]),
-            None => (rest, ""),
-        };
-        let typed: Vec<char> = plain.chars().collect();
-        let chars: Vec<char> = (0..typed.len())
-            .map(|k| {
-                let apostrophe = latin(k.checked_sub(1).and_then(|b| typed.get(b))) && latin(typed.get(k + 1));
-                match typed[k] {
-                    '“' if quotes => '『',
-                    '”' if quotes => '』',
-                    '‘' if quotes && !apostrophe => '「',
-                    '’' if quotes && !apostrophe => '」',
-                    c => c,
-                }
-            })
-            .collect();
-        let apostrophe =
-            |k: usize| chars[k] == '’' && latin(k.checked_sub(1).and_then(|b| chars.get(b))) && latin(chars.get(k + 1));
-        let plain_run = |out: &mut String, from: usize, to: usize| {
-            for (k, &c) in chars.iter().enumerate().take(to).skip(from) {
-                match apostrophe(k) {
-                    true => out.push_str("<span class=\"apos\">’</span>"),
-                    false => out.push(c),
-                }
-            }
-        };
-        let mut at = 0;
-        let runs = crate::zong::packed_runs(&chars.iter().collect::<String>(), at_most);
-        for run in runs.into_iter().filter(|run| !(words_whole && in_a_latin_word(&chars, run))) {
-            plain_run(&mut out, at, run.start);
-            out.push_str("<span class=\"tcy\">");
-            out.extend(&chars[run.clone()]);
-            out.push_str("</span>");
-            at = run.end;
-        }
-        plain_run(&mut out, at, chars.len());
-        out.push_str(entity);
-        rest = &rest[plain.len() + entity.len()..];
-    }
-    out
+/// A Latin letter or digit: alphanumeric, and from a script set across —
+/// below U+1100, where the CJK blocks begin.
+fn latin_letter(c: char) -> bool {
+    c.is_alphanumeric() && (c as u32) < 0x1100
 }
 
-/// Whether the run of letters at `run` belongs to a longer piece of Latin —
-/// joined to a letter or digit beyond it by a space, an apostrophe, a hyphen
-/// or a full stop — and so is not a 縱中橫 of its own under
-/// [`LATIN_WORDS_WHOLE`]. A run of digits never is: `1997` is squeezed
-/// whatever stands beside it.
-fn in_a_latin_word(chars: &[char], run: &std::ops::Range<usize>) -> bool {
-    if chars[run.clone()].iter().all(|c| c.is_numeric()) {
-        return false;
+/// A half-width character a run of Latin may hold: a letter or digit, or a
+/// mark from the same blocks (`%`, `.`, `-`, `(`, `°`). Not a space, and not
+/// the punctuation of U+2000 on, which CJK text shares — except `’` between
+/// two letters, which is an apostrophe ([`turned`]).
+fn half_width(c: char) -> bool {
+    (c as u32) < 0x1100 && !c.is_whitespace() && !c.is_control()
+}
+
+/// **How one run of Latin is set under [`Latin::Jlreq`]** (2026-11-08):
+/// the class of its `<span>`.
+///
+/// - A phrase (it holds a space) or a word with a small letter in it: turned.
+/// - Digits alone: one upright, two across in one square, more turned.
+/// - Capitals, with digits or not: upright, one to a square (`A`, `NHK`,
+///   `MP3`), except two characters with a digit among them (`A4`, `3D`),
+///   which go across in one square as two digits do.
+/// - A number with a mark joined to it (`5%`, `3.14`): across in one square
+///   if it is two characters, turned otherwise — one way as a whole, never
+///   the `5` upright and the `%` lying.
+/// - Anything else with a mark in it (`U.S.`, `C++`): turned.
+fn jlreq_class(run: &[char]) -> &'static str {
+    let letters = run.iter().filter(|c| c.is_alphabetic()).count();
+    let digits = run.iter().filter(|c| c.is_numeric()).count();
+    let marks = run.len() - letters - digits;
+    if run.contains(&' ') || run.iter().any(|c| c.is_lowercase()) {
+        return "yoko";
     }
-    let latin = |at: Option<&char>| at.is_some_and(|&c| c.is_alphanumeric() && yumete_cjk::char_width(c) == 1);
-    let joins = |c: Option<&char>| c.is_some_and(|c| matches!(c, ' ' | '\'' | '’' | '-' | '‐' | '.'));
-    let before = run.start.checked_sub(1).and_then(|at| chars.get(at));
-    let before_that = run.start.checked_sub(2).and_then(|at| chars.get(at));
-    (joins(before) && latin(before_that)) || (joins(chars.get(run.end)) && latin(chars.get(run.end + 1)))
+    match (letters, digits, marks) {
+        (0, 1, 0) => "tate",
+        (0, 2, 0) => "tcy",
+        (0, _, 0) => "yoko",
+        (_, 0, 0) => "tate",
+        (_, _, 0) if run.len() == 2 => "tcy",
+        (_, _, 0) => "tate",
+        (0, _, _) if run.len() <= 2 => "tcy",
+        _ => "yoko",
+    }
+}
+
+/// One run of text between tags, done as [`vertical_text`] says. An entity
+/// (`&amp;`) is one character, the one it stands for: `R&amp;D` is one run.
+fn turned(text: &str, latin: Latin, quotes: bool) -> String {
+    // What each piece is written as, and the character it stands for.
+    let mut written: Vec<&str> = Vec::new();
+    let mut typed: Vec<char> = Vec::new();
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        let entity = match c {
+            '&' => rest.find(';').filter(|&n| (2..=12).contains(&n)).map(|n| &rest[..=n]),
+            _ => None,
+        };
+        let piece = entity.unwrap_or(&rest[..c.len_utf8()]);
+        typed.push(match piece {
+            "&amp;" => '&',
+            "&lt;" => '<',
+            "&gt;" => '>',
+            "&quot;" => '"',
+            "&nbsp;" => '\u{a0}',
+            _ if entity.is_some() => '&',
+            _ => c,
+        });
+        written.push(piece);
+        rest = &rest[piece.len()..];
+    }
+    let latin_at = |k: Option<usize>| k.and_then(|k| typed.get(k)).is_some_and(|&c| latin_letter(c));
+    let apostrophe = |k: usize| latin_at(k.checked_sub(1)) && latin_at(Some(k + 1));
+    let chars: Vec<char> = (0..typed.len())
+        .map(|k| match typed[k] {
+            '“' if quotes => '『',
+            '”' if quotes => '』',
+            '‘' if quotes && !apostrophe(k) => '「',
+            '’' if quotes && !apostrophe(k) => '」',
+            c => c,
+        })
+        .collect();
+    let piece = |k: usize| -> String {
+        match chars[k] == typed[k] {
+            true => written[k].to_string(),
+            false => chars[k].to_string(),
+        }
+    };
+    let joins = |k: usize| half_width(chars[k]) || (chars[k] == '’' && apostrophe(k));
+    // The words: runs of half-width characters with a letter or digit in
+    // them. Then the phrases: words with one space between.
+    let mut words: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut k = 0;
+    while k < chars.len() {
+        if !joins(k) {
+            k += 1;
+            continue;
+        }
+        let from = k;
+        while k < chars.len() && joins(k) {
+            k += 1;
+        }
+        if chars[from..k].iter().any(|&c| latin_letter(c)) {
+            words.push(from..k);
+        }
+    }
+    let mut runs: Vec<std::ops::Range<usize>> = Vec::new();
+    for word in words {
+        match runs.last_mut() {
+            Some(last) if last.end + 1 == word.start && chars[last.end] == ' ' => last.end = word.end,
+            _ => runs.push(word),
+        }
+    }
+    let mut out = String::with_capacity(text.len() + runs.len() * 28);
+    let mut at = 0;
+    for run in runs {
+        (at..run.start).for_each(|k| out.push_str(&piece(k)));
+        let class = match latin {
+            Latin::Turn => "yoko",
+            Latin::Jlreq => jlreq_class(&chars[run.clone()]),
+        };
+        out.push_str(&format!("<span class=\"{class}\">"));
+        run.clone().for_each(|k| out.push_str(&piece(k)));
+        out.push_str("</span>");
+        at = run.end;
+    }
+    (at..chars.len()).for_each(|k| out.push_str(&piece(k)));
+    out
 }
 
 /// `&`, `<` and `>` as a browser needs them.
@@ -1011,24 +1142,18 @@ fn escape_typst(text: &str) -> String {
     out
 }
 
-/// **The fonts a Chinese page asks for, in order** (2026-11-08).
-///
-/// A serif first, and only faces that turn punctuation for a vertical page —
-/// an OpenType `vert` table, or (Songti, STSong) Apple's own `morx` — so
-/// `，` sits in the corner of its square and `（` turns, whichever is the one
-/// installed: Source Han and Noto Serif CJK anywhere, KingHwa OldSong and
-/// Songti on a Mac, SimSun on Windows, AR PL UMing on Linux. Then the others
-/// that do the same, LXGW WenKai, Hiragino Sans GB, MiSans, Microsoft YaHei,
-/// WenQuanYi. The generic `serif` comes last because it may be a Latin face:
-/// `——` taken from Times is two short dashes with a gap between.
-const CJK_FONTS: &str = "\"Source Han Serif SC\", \"Source Han Serif TC\", \"Source Han Serif\", \
-     \"Noto Serif CJK SC\", \"Noto Serif CJK TC\", \"Noto Serif CJK\", \"KingHwa_OldSong\", \
-     \"Songti SC\", \"STSong\", \"SimSun\", \"AR PL UMing CN\", \"LXGW WenKai GB\", \"LXGW WenKai\", \
-     \"Hiragino Sans GB\", \"MiSans\", \"Microsoft YaHei\", \"WenQuanYi Micro Hei\", serif";
-
-/// The same for a Japanese page: its own 明朝 first, then the Chinese faces.
-const JA_FONTS: &str = "\"Source Han Serif JP\", \"Noto Serif CJK JP\", \"Hiragino Mincho ProN\", \
-     \"YuMincho\", \"Yu Mincho\", \"MS Mincho\"";
+/// **The font list a page asks for** (2026-11-08): `[export] font_family`,
+/// whatever the language, with nothing in it that could end the rule or the
+/// `<style>` it is written in. No third-party font is named unless the
+/// writer names it: the default is the system's own faces, as VS Code's
+/// Markdown preview asks for them.
+fn font_list(style: &Style) -> String {
+    let fonts: String = style.fonts.chars().filter(|c| !matches!(c, ';' | '{' | '}' | '<' | '>')).collect();
+    match fonts.trim() {
+        "" => DEFAULT_FONTS.to_string(),
+        fonts => fonts.to_string(),
+    }
+}
 
 /// A standalone HTML page — the export that reproduces what is on screen.
 fn html(text: &str, style: &Style) -> String {
@@ -1054,11 +1179,7 @@ fn html(text: &str, style: &Style) -> String {
 pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
     let mut out = String::new();
     let cjk = lang != "en";
-    let fonts = match lang {
-        "en" => "Georgia, \"Times New Roman\", serif".to_string(),
-        "ja" => format!("{JA_FONTS}, {CJK_FONTS}"),
-        _ => CJK_FONTS.to_string(),
-    };
+    let fonts = font_list(style);
     if book {
         out.push_str(&format!("body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; }}\n"));
         if style.vertical {
@@ -1076,6 +1197,16 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
     if style.vertical && !book {
         // The one place outside a terminal where 縱書 costs a line of CSS. The
         // measure is the 縱 length, so a page here holds what a page there did.
+        //
+        // Warning: **the writing mode goes on `html`, and the measure is an
+        // inline size** (2026-11-08). It was on `body` alone, with the
+        // measure as `block-size`: a size is read in the element's own
+        // writing mode, so that made the body 32em *wide*, each 縱 as long as
+        // the window, and the 縱 past the body's left edge overflowed where a
+        // horizontal page cannot scroll to — a window narrower than the text
+        // cut off its opening. On the root, the page opens at its right edge
+        // and scrolls left, and a 縱 is never longer than the window.
+        out.push_str("html { writing-mode: vertical-rl; }\n");
         out.push_str(&format!(
             // `mixed`, not `upright`: upright sets every Latin letter on its
             // own row, so a pinyin reading comes out one letter at a time and a
@@ -1085,8 +1216,8 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
             // `vertical_text`); `line-break: strict` is 禁則, as the
             // terminal page keeps it.
             "body {{ writing-mode: vertical-rl; text-orientation: mixed; line-break: strict; \
-             max-block-size: {}em; block-size: {}em; }}\n",
-            style.zong_len, style.zong_len
+             max-inline-size: {}em; margin: 4rem; }}\n",
+            style.zong_len
         ));
     } else if !book {
         out.push_str("body { max-width: 32em; }\n");
@@ -1109,26 +1240,46 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
         "blockquote { margin: 1em 2em; }\n\
          table { border-collapse: collapse; margin: 1em 0; }\n\
          th, td { border: 1px solid #999; padding: 0.2em 0.6em; }\n\
+         caption { padding: 0.3em; }\n\
+         figure { margin: 1em 0; }\n\
+         figure img { display: block; max-inline-size: 100%; }\n\
+         figcaption { font-size: 0.9em; }\n\
          .footnotes { font-size: 0.9em; }\n\
          img.math { vertical-align: var(--depth); }\n\
          img.math.display { display: block; margin-block: 0.5em; margin-inline: auto; }\n\
          p.math { text-indent: 0; }\n",
     );
     if style.vertical {
-        // **A table and a code block stay across** (2026-11-08): a grid turned
-        // on its side reads its rows as columns, and code is indented and read
-        // line by line — the terminal page keeps a program file horizontal for
-        // the same reason. A formula stands upright, centred on its 縱, as a
-        // picture of something written across.
+        // How a run of Latin is set ([`vertical_text`]): turned, across in
+        // one square, or upright one to a square. `sideways` rather than
+        // `mixed` for the turned ones, so a mark in the run turns with it.
+        //
+        // **A table is a vertical one** (2026-11-08), as a 年表 in 史記 is:
+        // nothing overrides its writing mode, so each row of the source is a
+        // column read from the right, the head row on the right, and its
+        // caption runs down beside it. No nested writing mode, which DPFJ
+        // advises against and Apple Books does not promise to show. A short
+        // cell keeps its line (`.short`): Chrome sizes a vertical table's
+        // cells as though anything could break, and wrapped `甲城` into two
+        // lines with room to spare; a long cell may wrap, so the table is
+        // never longer than the 縱. Code stays across, read line by line —
+        // the terminal page keeps a program file horizontal for the same
+        // reason.
+        //
+        // **A formula on a line of its own** is turned, as JLREQ §3.7.4 sets
+        // one, and stands two squares in from the head of its line rather
+        // than centred. A figure's picture stays upright; its caption runs
+        // down beside it.
         out.push_str(
-            ".tcy { -epub-text-combine: horizontal; -webkit-text-combine: horizontal; text-combine-upright: all; }\n\
-             table, pre { writing-mode: horizontal-tb; }\n\
+            ".yoko { -webkit-text-orientation: sideways; text-orientation: sideways; }\n\
+             .tate { -webkit-text-orientation: upright; text-orientation: upright; }\n\
+             .tcy { -epub-text-combine: horizontal; -webkit-text-combine: horizontal; text-combine-upright: all; }\n\
              table { margin: 0 1em; }\n\
-             pre { margin: 0 1em; max-block-size: 100%; overflow: auto; }\n\
+             .short { white-space: nowrap; }\n\
+             pre { writing-mode: horizontal-tb; margin: 0 1em; max-block-size: 100%; overflow: auto; }\n\
              img.math { vertical-align: middle; }\n\
-             span.math.turned { display: inline-block; position: relative; vertical-align: middle; }\n\
-             span.math.turned img { position: absolute; left: 0; top: 0; transform-origin: 0 0; }\n\
-             .apos { text-orientation: sideways; }\n\
+             img.math.display { margin-block: 0.5em; margin-inline: 2em 0; max-inline-size: calc(100% - 2em); }\n\
+             figure { margin: 0 1em; }\n\
              sup.fn a { text-decoration: none; }\n",
         );
     }
@@ -1156,7 +1307,7 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
         body.push_str("</ol>\n</section>\n");
     }
     match style.vertical && lang != "en" {
-        true => vertical_text(&body, style.tatechuyoko, lang == "zh", LATIN_WORDS_WHOLE),
+        true => vertical_text(&body, style.latin, lang == "zh"),
         false => body,
     }
 }
@@ -1188,9 +1339,9 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 let tex = lines.join("\n");
                 let tex = tex.trim().trim_start_matches("$$").trim_end_matches("$$").trim();
                 let tex_source = !matches!(style.source, crate::syntax::Syntax::Typst | crate::syntax::Syntax::Text);
-                match style.painter.filter(|_| tex_source).map(|paint| paint(tex, true)) {
+                match style.painter.filter(|_| tex_source).map(|paint| paint(tex, true, style.vertical)) {
                     Some(Ok(drawn)) => {
-                        out.push_str(&format!("<p class=\"math\">{}</p>\n", formula_img(&drawn, tex, true, false)));
+                        out.push_str(&format!("<p class=\"math\">{}</p>\n", formula_img(&drawn, tex, true, style.vertical)));
                     }
                     _ => out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style))),
                 }
@@ -1224,16 +1375,28 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 }
                 out.push_str(if *ordered { "</ol>\n" } else { "</ul>\n" });
             }
-            Block::Table { head, align, rows } => {
+            Block::Table { head, align, rows, caption } => {
+                // Down the page, a cell that fits its share of the 縱 keeps
+                // its line (see `stylesheet`).
+                let share = style.zong_len.max(1) as f64 / head.len().max(1) as f64;
                 let cell = |tag: &str, n: usize, text: &str| {
                     let side = match align.get(n) {
                         Some(crate::mdtable::Align::Center) => " style=\"text-align: center\"",
                         Some(crate::mdtable::Align::Right) => " style=\"text-align: right\"",
                         _ => "",
                     };
-                    format!("<{tag}{side}>{}</{tag}>", line(text))
+                    let long: f64 = text.chars().map(|c| if half_width(c) || c == ' ' { 0.5 } else { 1.0 }).sum();
+                    let short = match style.vertical && long <= share {
+                        true => " class=\"short\"",
+                        false => "",
+                    };
+                    format!("<{tag}{short}{side}>{}</{tag}>", line(text))
                 };
-                out.push_str("<table>\n<thead>\n<tr>");
+                out.push_str("<table>\n");
+                if let Some(caption) = caption {
+                    out.push_str(&format!("<caption>{}</caption>\n", line(caption)));
+                }
+                out.push_str("<thead>\n<tr>");
                 for (n, text) in head.iter().enumerate() {
                     out.push_str(&cell("th", n, text));
                 }
@@ -1246,6 +1409,18 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                     out.push_str("</tr>\n");
                 }
                 out.push_str("</tbody>\n</table>\n");
+            }
+            // The path as written: the page is written beside its source, so
+            // it finds the picture where the source does. An EPUB takes the
+            // picture in (`epub::pictures_in`).
+            Block::Figure { caption, src } => {
+                let alt = escape_html(caption).replace('"', "&quot;");
+                let src = escape_html(src).replace('"', "&quot;");
+                out.push_str(&format!("<figure>\n<img class=\"figure\" src=\"{src}\" alt=\"{alt}\">\n"));
+                if !caption.trim().is_empty() {
+                    out.push_str(&format!("<figcaption>{}</figcaption>\n", line(caption)));
+                }
+                out.push_str("</figure>\n");
             }
         }
     }
@@ -1384,19 +1559,19 @@ fn print_rules(style: &Style) -> String {
         top = f64::from(style.paper.height) * MARGIN_TOP,
         bottom = f64::from(style.paper.height) * MARGIN_BOTTOM,
     ));
-    // `block-size: auto` because the page box is the measure now: the screen
+    // `max-inline-size: none` because the page box is the measure now: the screen
     // rule pinned the 縱 to a length in `em`, and leaving it pinned would let
     // it disagree with the paper by whatever the rounding came to and spill a
     // second, nearly empty 縱 onto every page.
     out.push_str(&format!(
         "@media print {{\n  \
          html, body {{ margin: 0; }}\n  \
-         body {{ font-size: {size:.2}mm; block-size: auto; max-block-size: none; }}\n  \
+         body {{ font-size: {size:.2}mm; max-inline-size: none; }}\n  \
          h1, h2 {{ break-before: page; }}\n  \
          body > :first-child {{ break-before: auto; }}\n  \
          h1, h2, h3, h4, h5, h6 {{ break-after: avoid; }}\n  \
          p {{ orphans: 2; widows: 2; }}\n  \
-         table, pre, img.math {{ break-inside: avoid; }}\n\
+         table, pre, figure, img.math {{ break-inside: avoid; }}\n\
          }}\n"
     ));
     out
@@ -1510,7 +1685,14 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 }
                 out.push('\n');
             }
-            Block::Table { head, align, rows } => {
+            // A picture is the caption's words, as it was before figures were
+            // read: the PDF is compiled where a missing or remote picture
+            // would stop it.
+            Block::Figure { caption, .. } => {
+                out.push_str(&line(caption));
+                out.push_str("\n\n");
+            }
+            Block::Table { head, align, rows, caption } => {
                 let side = |a: &crate::mdtable::Align| match a {
                     crate::mdtable::Align::Center => "center",
                     crate::mdtable::Align::Right => "right",
@@ -1519,8 +1701,12 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 let cells = |row: &[String]| -> String {
                     row.iter().map(|c| format!("[{}]", line(c))).collect::<Vec<_>>().join(", ")
                 };
+                let (open, close) = match caption {
+                    Some(caption) => ("#figure(table(".to_string(), format!("), caption: [{}])\n\n", line(caption))),
+                    None => ("#table(".to_string(), ")\n\n".to_string()),
+                };
                 out.push_str(&format!(
-                    "#table(\n  columns: {},\n  align: ({},),\n  table.header({}),\n",
+                    "{open}\n  columns: {},\n  align: ({},),\n  table.header({}),\n",
                     head.len(),
                     align.iter().map(side).collect::<Vec<_>>().join(", "),
                     cells(head),
@@ -1528,7 +1714,7 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 for row in rows {
                     out.push_str(&format!("  {},\n", cells(row)));
                 }
-                out.push_str(")\n\n");
+                out.push_str(&close);
             }
         }
     }
@@ -1547,7 +1733,9 @@ mod tests {
             title: "第一章".to_string(),
             paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            tatechuyoko: 4,
+            latin: Latin::Turn,
+            fonts: DEFAULT_FONTS.to_string(),
+            base: None,
             painter: None,
         }
     }
@@ -1653,15 +1841,14 @@ mod tests {
 
     #[test]
     fn the_measure_pinned_for_the_screen_is_let_go_of_for_the_paper() {
-        // `block-size: 32em` is how the screen page holds a 縱 of 32; on paper
-        // the page box holds it, and leaving both in disagreed by the rounding
-        // and spilled a second, nearly empty 縱 onto every page.
+        // `max-inline-size: 32em` is how the screen page holds a 縱 of 32;
+        // on paper the page box holds it, and leaving both in disagreed by
+        // the rounding and spilled a second, nearly empty 縱 onto every page.
         let out = export("句", Format::Html, &style());
-        assert!(out.contains("block-size: 32em;"), "{out}");
-        assert!(
-            out.contains("block-size: auto; max-block-size: none;"),
-            "{out}"
-        );
+        assert!(out.contains("html { writing-mode: vertical-rl; }"), "{out}");
+        assert!(out.contains("max-inline-size: 32em; margin: 4rem; }"), "{out}");
+        assert!(out.contains("max-inline-size: none; }"), "{out}");
+        assert!(!out.contains("block-size: 32em"), "{out}");
     }
 
     #[test]
@@ -1693,7 +1880,9 @@ mod tests {
             title: "t".to_string(),
             paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            tatechuyoko: 4,
+            latin: Latin::Turn,
+            fonts: DEFAULT_FONTS.to_string(),
+            base: None,
             painter: None,
         };
         let out = export("他**很好**，%%這裏要改%%不過還行。\n", Format::Html, &style);
@@ -1725,7 +1914,9 @@ mod tests {
             title: "t".to_string(),
             paper: Paper::A5,
             source,
-            tatechuyoko: 4,
+            latin: Latin::Turn,
+            fonts: DEFAULT_FONTS.to_string(),
+            base: None,
             painter: None,
         };
         let md = style(crate::syntax::Syntax::Markdown);
@@ -1783,14 +1974,16 @@ mod tests {
             title: "t".to_string(),
             paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            tatechuyoko: 4,
+            latin: Latin::Turn,
+            fonts: DEFAULT_FONTS.to_string(),
+            base: None,
             painter: None,
         };
         let out = export("一二三\n", Format::Html, &style);
         // `upright` sets every Latin letter on its own row — a pinyin reading
         // one letter at a time, a year as four.
-        assert!(out.contains("text-orientation: mixed"), "{out}");
-        assert!(!out.contains("text-orientation: upright"), "{out}");
+        assert!(out.contains("body { writing-mode: vertical-rl; text-orientation: mixed;"), "{out}");
+        assert!(!out.contains("body { writing-mode: vertical-rl; text-orientation: upright"), "{out}");
         // `last` narrows the hang to the block's final line, which is not what
         // 標點旁置 means.
         assert!(out.contains("hanging-punctuation: allow-end;"), "{out}");
@@ -2045,62 +2238,77 @@ mod tests {
     }
 
     /// A formula that always draws: three bytes, a size anyone can check.
-    fn drawn(_: &str, _: bool) -> Result<Formula, String> {
+    fn drawn(_: &str, _: bool, _: bool) -> Result<Formula, String> {
         Ok(Formula { png: vec![1, 2, 3], width: 3.0, height: 1.5, depth: 0.25 })
     }
 
-    fn refused(_: &str, _: bool) -> Result<Formula, String> {
+    fn refused(_: &str, _: bool, _: bool) -> Result<Formula, String> {
         Err("no".to_string())
     }
 
-    /// **縱中橫 on the vertical page** (2026-11-08): the runs the terminal
-    /// packs into one slot stand upright in one square, by the same rule —
-    /// a whole run of half-width letters and digits, a lone one included.
-    #[test]
-    fn a_vertical_page_sets_short_runs_across() {
-        let out = export("1997年3月12日，A股。\n", Format::Html, &style());
-        assert!(
-            out.contains("<span class=\"tcy\">1997</span>年<span class=\"tcy\">3</span>月<span class=\"tcy\">12</span>日，<span class=\"tcy\">A</span>股"),
-            "{out}"
-        );
-        assert!(out.contains("text-combine-upright: all"), "{out}");
+    /// The same, saying in its size whether it was asked to turn: a turned
+    /// picture is as tall as the upright one is wide.
+    fn drawn_turning(_: &str, _: bool, turned: bool) -> Result<Formula, String> {
+        let (width, height) = if turned { (1.5, 3.0) } else { (3.0, 1.5) };
+        Ok(Formula { png: vec![1, 2, 3], width, height, depth: 0.25 })
     }
 
-    /// Past the setting, and past four whatever the setting, a run is turned
-    /// with the Latin around it: `all` would squeeze eight digits into one
-    /// square.
+    fn jlreq() -> Style {
+        Style { latin: Latin::Jlreq, ..style() }
+    }
+
+    /// **`turn`, the default** (2026-11-08): every run of half-width letters
+    /// and digits turned, the marks joined to it turned with it, words with
+    /// one space between turned as one; nothing set across.
     #[test]
-    fn a_long_run_is_turned_and_the_setting_is_followed() {
-        let mut s = style();
-        s.tatechuyoko = 8;
-        let out = export("12345年，Python。\n", Format::Html, &s);
-        assert!(!out.contains("<span class=\"tcy\">12345</span>"), "{out}");
-        assert!(!out.contains("<span class=\"tcy\">Python</span>"), "{out}");
-        s.tatechuyoko = 2;
-        let out = export("1997年12月\n", Format::Html, &s);
-        assert!(out.contains("1997年<span class=\"tcy\">12</span>月"), "{out}");
-        s.tatechuyoko = 0;
-        let out = export("1997年12月\n", Format::Html, &s);
-        assert!(!out.contains("class=\"tcy\""), "{out}");
-        // Across the page nothing is set across.
+    fn turn_turns_every_run_of_latin() {
+        let out = export("1997年3月12日，A股跌了5%。他说 don’t worry，书店叫 Old Books。\n", Format::Html, &style());
+        assert!(
+            out.contains("<span class=\"yoko\">1997</span>年<span class=\"yoko\">3</span>月<span class=\"yoko\">12</span>日，<span class=\"yoko\">A</span>股跌了<span class=\"yoko\">5%</span>。"),
+            "{out}"
+        );
+        assert!(out.contains("他说 <span class=\"yoko\">don’t worry</span>，"), "{out}");
+        assert!(out.contains("书店叫 <span class=\"yoko\">Old Books</span>。"), "{out}");
+        assert!(!out.contains("class=\"tcy\"") && !out.contains("class=\"tate\""), "{out}");
+        assert!(out.contains(".yoko { -webkit-text-orientation: sideways; text-orientation: sideways; }"), "{out}");
+        // A mark on its own is left to the font.
+        let out = export("甲·乙 / 丙\n", Format::Html, &style());
+        assert!(out.contains("甲·乙 / 丙"), "{out}");
+        // Across the page nothing is wrapped.
         let mut flat = style();
         flat.vertical = false;
         let out = export("1997年12月\n", Format::Html, &flat);
-        assert!(!out.contains("class=\"tcy\""), "{out}");
-        assert!(!out.contains("text-combine-upright"), "{out}");
+        assert!(!out.contains("class=\"yoko\"") && !out.contains("text-orientation: sideways"), "{out}");
+    }
+
+    /// **`jlreq`** (2026-11-08): JLREQ §2.3.2 and clreq. A word turned whole,
+    /// capitals and single letters upright, one digit upright, two across,
+    /// more turned, and a number with its unit one way as a whole.
+    #[test]
+    fn jlreq_sets_latin_as_the_requirements_do() {
+        let set = |text: &str| vertical_text(text, Latin::Jlreq, true);
+        assert_eq!(set("3月12日"), "<span class=\"tate\">3</span>月<span class=\"tcy\">12</span>日");
+        assert_eq!(set("1997年"), "<span class=\"yoko\">1997</span>年");
+        assert_eq!(set("A股跌了5%"), "<span class=\"tate\">A</span>股跌了<span class=\"tcy\">5%</span>");
+        assert_eq!(set("涨了50%"), "涨了<span class=\"yoko\">50%</span>");
+        assert_eq!(set("叫 NHK 的"), "叫 <span class=\"tate\">NHK</span> 的");
+        assert_eq!(set("A4纸与MP3"), "<span class=\"tcy\">A4</span>纸与<span class=\"tate\">MP3</span>");
+        assert_eq!(set("用 Python 写"), "用 <span class=\"yoko\">Python</span> 写");
+        assert_eq!(set("说 don’t worry 了"), "说 <span class=\"yoko\">don’t worry</span> 了");
+        assert_eq!(set("即 U.S. 的"), "即 <span class=\"yoko\">U.S.</span> 的");
+        assert_eq!(set("和 Win10"), "和 <span class=\"yoko\">Win10</span>");
     }
 
     /// Only the text is touched: not a tag, not an entity's letters, and not
-    /// code, a reading or a table, which is set across.
+    /// code or a reading. An entity is the one character it stands for.
     #[test]
     fn what_is_not_running_text_is_left_alone() {
-        let text = "那年冬天镇上下了一场很长的雨。甲 `x12` 乙 <ruby>漢<rt>han4</rt></ruby> a&b <span title=\"12\">丙</span>\n\n| 年 |\n| --- |\n| 1997 |\n";
+        let text = "那年冬天镇上下了一场很长的雨。甲 `x12` 乙 <ruby>漢<rt>han4</rt></ruby> R&D <span title=\"12\">丙</span>\n";
         let out = export(text, Format::Html, &style());
         assert!(out.contains("<code>x12</code>"), "{out}");
         assert!(out.contains("<rt>han4</rt>"), "{out}");
-        assert!(out.contains("<span class=\"tcy\">a</span>&amp;<span class=\"tcy\">b</span>"), "{out}");
+        assert!(out.contains("<span class=\"yoko\">R&amp;D</span>"), "{out}");
         assert!(out.contains("<span title=\"12\">丙</span>"), "{out}");
-        assert!(out.contains("<td>1997</td>"), "{out}");
     }
 
     /// **Curly quotes become corner brackets down a Chinese 縱** (2026-11-08):
@@ -2111,44 +2319,70 @@ mod tests {
         let out = export("他说：“走吧，‘快’。”\n", Format::Html, &style());
         assert!(out.contains("他说：『走吧，「快」。』"), "{out}");
         let out = export("他说 don’t 了。\n", Format::Html, &style());
-        assert!(out.contains("don</span><span class=\"apos\">’</span><span") && !out.contains("」"), "{out}");
+        assert!(out.contains("<span class=\"yoko\">don’t</span>") && !out.contains("」"), "{out}");
         let mut flat = style();
         flat.vertical = false;
         let out = export("他说：“走吧。”\n", Format::Html, &flat);
         assert!(out.contains("“走吧。”"), "{out}");
         let out = export("He said “go” and ‘stay’, the end of it.\n", Format::Html, &style());
-        // Nor are its words squeezed into squares.
+        // Nor are its words wrapped.
         assert!(out.contains("He said “go” and ‘stay’"), "{out}");
     }
 
-    /// **A table and a code block stay across on a vertical page**, and a
-    /// printer does not cut one in two.
+    /// **A table down the page is a vertical one** (2026-11-08): no writing
+    /// mode of its own, its cells set by the same rules as the text, a short
+    /// cell kept on one line, its caption with it; a printer does not cut it
+    /// in two.
     #[test]
-    fn tables_stay_across_and_whole() {
-        let out = export("| 年 |\n| --- |\n| 1997 |\n", Format::Html, &style());
-        assert!(out.contains("table, pre { writing-mode: horizontal-tb; }"), "{out}");
-        assert!(out.contains("table, pre, img.math { break-inside: avoid; }"), "{out}");
+    fn a_table_down_the_page_is_a_vertical_table() {
+        let text = "| 城 | 年 | 备注 |\n| --- | --- | --- |\n| 甲 | 1997 | 这一格写得很长很长，比它分到的那一段长 |\n\nTable: 表一　雨量\n";
+        let out = export(text, Format::Html, &style());
+        assert!(!out.contains("horizontal-tb; }\ntable") && !out.contains("table, pre { writing-mode"), "{out}");
+        assert!(out.contains("<table>\n<caption>表一　雨量</caption>\n<thead>"), "{out}");
+        assert!(out.contains("<td class=\"short\"><span class=\"yoko\">1997</span></td>"), "{out}");
+        assert!(out.contains("<td>这一格写得很长很长"), "{out}");
+        assert!(out.contains(".short { white-space: nowrap; }"), "{out}");
+        assert!(out.contains("table, pre, figure, img.math { break-inside: avoid; }"), "{out}");
+        assert!(!out.contains("<p>Table:"), "{out}");
+        // Above the table is the same, and Typst writes it as a figure.
+        let above = "Table: 表一　雨量\n\n| 城 |\n| --- |\n| 甲 |\n";
+        assert!(export(above, Format::Html, &style()).contains("<caption>表一　雨量</caption>"));
+        let typ = export(above, Format::Typst, &style());
+        assert!(typ.contains("#figure(table(\n") && typ.contains("), caption: [表一　雨量])"), "{typ}");
         let mut flat = style();
         flat.vertical = false;
-        let out = export("| 年 |\n| --- |\n| 1997 |\n", Format::Html, &flat);
-        assert!(!out.contains("horizontal-tb"), "{out}");
+        let out = export(text, Format::Html, &flat);
+        assert!(!out.contains("class=\"short\""), "{out}");
     }
 
-    /// The fonts: Source Han and Noto first, then faces that turn punctuation
-    /// for a vertical page, and the generic serif last.
+    /// **A picture alone in its paragraph is a figure** (2026-11-08): the
+    /// picture where the source finds it, its text the caption.
     #[test]
-    fn the_fonts_turn_punctuation_and_serif_comes_last() {
-        let out = export("中文。\n", Format::Html, &style());
-        let at = |name: &str| out.find(name).unwrap_or_else(|| panic!("{name} missing: {out}"));
-        assert!(at("\"Source Han Serif SC\"") < at("\"Noto Serif CJK SC\""));
-        assert!(at("\"Noto Serif CJK SC\"") < at("\"Songti SC\""));
-        assert!(at("\"Songti SC\"") < at("\"LXGW WenKai GB\""));
-        assert!(at("\"LXGW WenKai GB\"") < at("\"Hiragino Sans GB\""));
-        assert!(out.contains("\"WenQuanYi Micro Hei\", serif;"), "{out}");
-        let out = export("かなの文。\n", Format::Html, &style());
-        assert!(out.contains("font-family: \"Source Han Serif JP\""), "{out}");
-        let out = export("Plain English words only here.\n", Format::Html, &style());
-        assert!(out.contains("font-family: Georgia"), "{out}");
+    fn a_picture_alone_is_a_figure() {
+        let out = export("看图。\n\n![一棵树，1997年](pics/tree.png)\n\n完。\n", Format::Html, &style());
+        assert!(
+            out.contains("<figure>\n<img class=\"figure\" src=\"pics/tree.png\" alt=\"一棵树，1997年\">\n<figcaption>一棵树，<span class=\"yoko\">1997</span>年</figcaption>\n</figure>"),
+            "{out}"
+        );
+        assert!(out.contains("figure img { display: block; max-inline-size: 100%; }"), "{out}");
+        let typ = export("![一棵树](tree.png)\n", Format::Typst, &style());
+        assert!(typ.contains("一棵树") && !typ.contains("tree.png"), "{typ}");
+    }
+
+    /// **The fonts are the writer's** (2026-11-08): `[export] font_family`
+    /// for every language, VS Code's default list when it is not set, and
+    /// nothing in it can end the rule.
+    #[test]
+    fn the_fonts_are_the_ones_the_setting_names() {
+        for text in ["中文。\n", "かなの文。\n", "Plain English words only here.\n"] {
+            let out = export(text, Format::Html, &style());
+            assert!(out.contains(&format!("body {{ font-family: {DEFAULT_FONTS}; ")), "{out}");
+        }
+        let mut s = style();
+        s.fonts = "\"LXGW WenKai\", serif; } body { color: red".to_string();
+        let out = export("中文。\n", Format::Html, &s);
+        assert!(out.contains("font-family: \"LXGW WenKai\", serif  body  color: red;"), "{out}");
+        assert!(!out.contains("Source Han") && !out.contains("Georgia"), "{out}");
     }
 
     /// **A TeX formula is drawn** when the front end hands over a painter
@@ -2156,19 +2390,42 @@ mod tests {
     #[test]
     fn a_formula_is_drawn_into_the_page() {
         let mut s = style();
+        s.vertical = false;
         s.painter = Some(drawn);
         let out = export("从 $x^2 + y^2 = 1$ 起。\n", Format::Html, &s);
         assert!(
             out.contains("从 <img class=\"math\" alt=\"x^2 + y^2 = 1\" style=\"height: 1.500em; --depth: -0.250em\" src=\"data:image/png;base64,AQID\"> 起。"),
             "{out}"
         );
-        // Not a `tcy` inside the picture's attributes either.
-        assert!(!out.contains("alt=\"x^<span"), "{out}");
-        assert!(out.contains("img.math { vertical-align: middle; }"), "{out}");
         let out = export("写下：\n\n$$\n\\frac{a}{b}\n$$\n\n完。\n", Format::Html, &s);
         assert!(out.contains("<p class=\"math\"><img class=\"math display\" alt=\"\\frac{a}{b}\""), "{out}");
         let out = export("写下 $$E=mc^2$$ 完。\n", Format::Html, &s);
         assert!(out.contains("<img class=\"math display\" alt=\"E=mc^2\""), "{out}");
+    }
+
+    /// **Down the page a formula is turned** (2026-11-08), in the bitmap by
+    /// the painter: every one under `turn`; under `jlreq` all but one letter
+    /// or digit and a numeric fraction; one on a line of its own always, set
+    /// two squares in from the head of its line.
+    #[test]
+    fn a_formula_down_the_page_is_turned() {
+        let mut s = style();
+        s.painter = Some(drawn_turning);
+        let out = export("从 $x$ 到 $\\frac12$ 再到 $x^2+1$。\n", Format::Html, &s);
+        assert_eq!(out.matches("<img class=\"math turned\"").count(), 3, "{out}");
+        assert!(out.contains("style=\"height: 3.000em;"), "{out}");
+        // Not a run of Latin inside the picture's attributes either.
+        assert!(!out.contains("alt=\"<span") && !out.contains("x^<span"), "{out}");
+        let out = export("写下：\n\n$$\nE=mc^2\n$$\n", Format::Html, &s);
+        assert!(out.contains("<p class=\"math\"><img class=\"math display turned\""), "{out}");
+        assert!(out.contains("img.math.display { margin-block: 0.5em; margin-inline: 2em 0;"), "{out}");
+        let mut j = jlreq();
+        j.painter = Some(drawn_turning);
+        let out = export("从 $x$ 到 $\\frac12$、$\\tfrac{3}{4}$、$½$ 再到 $x^2+1$ 和 $\\frac{a}{2}$。\n", Format::Html, &j);
+        assert_eq!(out.matches("<img class=\"math\" ").count(), 4, "{out}");
+        assert_eq!(out.matches("<img class=\"math turned\"").count(), 2, "{out}");
+        let out = export("写下：\n\n$$\nx\n$$\n", Format::Html, &j);
+        assert!(out.contains("<img class=\"math display turned\""), "{out}");
     }
 
     /// What does not draw stays as written, and nothing is drawn where the
@@ -2189,26 +2446,5 @@ mod tests {
         s.source = crate::syntax::Syntax::Markdown;
         let out = export("写下：\n\n$$\nx_1\n$$\n", Format::Typst, &s);
         assert!(out.contains("\\$\\$\nx\\_1\n\\$\\$"), "{out}");
-    }
-
-    /// **Both answers to a question not yet decided** (2026-11-08): a wide
-    /// formula turned on its side, and Latin words kept whole. The switches
-    /// are off; these hold the other side ready.
-    #[test]
-    fn the_undecided_variants_are_ready() {
-        let drawn = Formula { png: vec![1, 2, 3], width: 3.0, height: 1.5, depth: 0.25 };
-        let turned = formula_img(&drawn, "x^2", false, true);
-        assert!(turned.starts_with("<span class=\"math turned\" style=\"width: 1.500em; height: 3.000em\">"), "{turned}");
-        assert!(turned.contains("transform: translateX(1.500em) rotate(90deg)"), "{turned}");
-        let whole = |text: &str| vertical_text(text, 4, true, true);
-        assert_eq!(whole("书店叫 Old Books。"), "书店叫 Old Books。");
-        assert_eq!(whole("e.g. 和 OK，A股"), "e.g. 和 <span class=\"tcy\">OK</span>，<span class=\"tcy\">A</span>股");
-        assert_eq!(whole("Win 10 与 1997年"), "Win <span class=\"tcy\">10</span> 与 <span class=\"tcy\">1997</span>年");
-        assert_eq!(whole("他说 don’t 了"), "他说 don<span class=\"apos\">’</span>t 了");
-        // The editor's rule, for comparison.
-        assert_eq!(
-            vertical_text("书店叫 Old Books。", 4, true, false),
-            "书店叫 <span class=\"tcy\">Old</span> Books。"
-        );
     }
 }

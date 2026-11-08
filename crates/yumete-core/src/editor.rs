@@ -3601,6 +3601,11 @@ pub struct Editor {
     /// setting and not a command: the trim a book is printed at is decided once
     /// for the book, so it is read from the configuration and left alone.
     paper: crate::export::Paper,
+    /// How a vertical export sets half-width letters and digits, `[export]
+    /// vertical_latin`. Not `tatechuyoko`: that is how the draft is seen.
+    export_latin: crate::export::Latin,
+    /// The fonts an HTML or EPUB export asks for, `[export] font_family`.
+    export_fonts: String,
     /// The other work area, while it is being drawn (#281). See [`Viewing`].
     viewing: Cell<Option<Viewing>>,
     /// The wrap width a window being peeked at should fold to — its own
@@ -4687,6 +4692,8 @@ impl Editor {
             tatechuyoko: 0,
             hanging: false,
             paper: crate::export::Paper::A5,
+            export_latin: crate::export::Latin::Turn,
+            export_fonts: crate::export::DEFAULT_FONTS.to_string(),
             viewing: Cell::new(None),
             viewing_wrap: Cell::new(None),
             query: None,
