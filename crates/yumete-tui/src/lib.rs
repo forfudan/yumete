@@ -8970,6 +8970,16 @@ pub(crate) fn markup_style_in(
             return Style::default().fg(colour).add_modifier(Modifier::BOLD);
         }
     }
+    // **Inline code's backticks are the code's** (2026-11-08, the author's
+    // choice): Typst's highlighter draws a raw span whole, delimiters and
+    // all, and Markdown's inline code follows the same rule. A borrowed theme
+    // keeps its own colour for them (`code_mark`, below).
+    if span.kind == Kind::Marker
+        && !ink.borrowed()
+        && all.iter().any(|s| s.construct == span.construct && s.kind == Kind::Code)
+    {
+        return markup_style(Kind::Code, ink);
+    }
     if span.kind != Kind::Marker || !ink.borrowed() {
         return markup_style(span.kind, ink);
     }
@@ -29590,6 +29600,30 @@ fn squeezed(text: &str) -> String {
         assert_eq!(number(1), Some(ink.text()), "line 2 is");
         assert_eq!(number(2), Some(ink.text()), "and line 3");
         assert_eq!(number(3), Some(ink.furniture()), "line 4 is past the break `x` took");
+    }
+
+    /// **Inline code's backticks take the code's colour** (2026-11-08), in
+    /// Markdown as Typst's highlighter draws a raw span; bold's stars stay
+    /// markers, and a borrowed theme keeps its own colour for backticks.
+    #[test]
+    fn inline_code_s_backticks_are_the_code_s_colour() {
+        use yumete_core::markdown::Kind;
+        let line = "那 `x` 與 **重**";
+        let all = yumete_core::markdown::spans(line);
+        let fg = |ink: crate::theme::Palette, at: usize| {
+            let span = all.iter().filter(|s| s.start <= at && at < s.end).max_by_key(|s| s.start).unwrap();
+            markup_style_at(span, &all, at, line.chars().nth(at), ink).fg
+        };
+        for dark in [true, false] {
+            let ink = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::default(), dark);
+            assert_eq!(fg(ink, 2), markup_style(Kind::Code, ink).fg, "the opening backtick");
+            assert_eq!(fg(ink, 4), markup_style(Kind::Code, ink).fg, "the closing one");
+            assert_eq!(fg(ink, 3), markup_style(Kind::Code, ink).fg, "and the code");
+            assert_eq!(fg(ink, 8), Some(ink.marker()), "a star is still a marker");
+        }
+        let theme = yumete_config::ThemeConfig::named("one-dark").expect("one-dark");
+        let ink = crate::theme::Palette::of_theme(&theme, true);
+        assert_eq!(fg(ink, 2), ink.pinned(|p| p.code_mark), "a borrowed theme's own colour");
     }
 
     /// `#(1 + 2)` reads as code and a `/* note */` inside a call as a comment
