@@ -8099,7 +8099,7 @@ pub(crate) fn put_marked_text(
     for span in &spans {
         let (lo, hi) = (span.start.min(chars.len()), span.end.min(chars.len()));
         for (i, one) in styles.iter_mut().enumerate().take(hi).skip(lo) {
-            *one = one.patch(markup_style_at(span, &spans, i, chars.get(i).copied(), None, ink));
+            *one = one.patch(markup_style_at(span, &spans, i, chars.get(i).copied(), ink));
         }
     }
     // 相鄰同樣式的併成一段再畫，省掉逐格一次 `put_text`。
@@ -8994,24 +8994,17 @@ pub(crate) fn markup_style_in(
 }
 
 /// [`markup_style_in`] for the character at `at` (a char index in its line),
-/// with the two answers that need the position (2026-11-04): a character both
+/// with the answer that needs the position (2026-11-04): a character both
 /// bold and italic takes the theme's colour for both, whichever run is laid
-/// last; and a Typst `#` call takes its tokens' colours (`tokens`, from
-/// [`typst_line_tokens`]). Both renderers ask this, so 橫書 and 縱書 agree.
+/// last. Both renderers ask this, so 橫書 and 縱書 agree.
 pub(crate) fn markup_style_at(
     span: &yumete_core::markdown::Span,
     all: &[yumete_core::markdown::Span],
     at: usize,
     ch: Option<char>,
-    tokens: Option<&[Option<yumete_core::code::Token>]>,
     ink: crate::theme::Palette,
 ) -> Style {
     use yumete_core::markdown::Kind;
-    if span.kind == Kind::Code2 {
-        if let Some(token) = tokens.and_then(|t| t.get(at)).copied().flatten() {
-            return markup_style(Kind::Token(token), ink);
-        }
-    }
     let style = markup_style_in(span, all, ch, ink);
     let other = match span.kind {
         Kind::Strong => Kind::Emphasis,
@@ -9024,27 +9017,17 @@ pub(crate) fn markup_style_at(
     }
 }
 
-/// One token per character of `line` wherever a Typst `#` call
-/// ([`Kind::Code2`](yumete_core::markdown::Kind::Code2)) runs, or `None` when
-/// the line has none or the theme leaves them one colour (2026-11-04).
-pub(crate) fn typst_line_tokens(
-    line: impl FnOnce() -> Vec<char>,
-    runs: &[yumete_core::markdown::Span],
+/// **The runs a line is coloured by, from its syntax tree** (2026-11-08): a
+/// Typst manuscript's, where the editor holds a tree for it, or `None`, and
+/// the markup runs colour the line as they always have. A theme that sets no
+/// prose colours leaves Typst as it was (2026-11-04): `None` there too.
+pub(crate) fn tree_colours(
+    editor: &Editor,
+    line: usize,
     ink: crate::theme::Palette,
-) -> Option<Vec<Option<yumete_core::code::Token>>> {
-    let calls = runs.iter().filter(|r| r.kind == yumete_core::markdown::Kind::Code2);
-    if ink.prose(|p| p.bold).is_none() || calls.clone().next().is_none() {
-        return None;
-    }
-    let line = line();
-    let mut out = vec![None; line.len()];
-    for run in calls {
-        let (a, b) = (run.start.min(line.len()), run.end.min(line.len()));
-        for (slot, token) in out[a..b].iter_mut().zip(typst_code_tokens(&line[a..b])) {
-            *slot = token;
-        }
-    }
-    Some(out)
+) -> Option<Vec<yumete_core::markdown::Span>> {
+    ink.prose(|p| p.bold)?;
+    editor.typst_colours(line)
 }
 
 /// **The tags in a line's comments, in the diagnostics' colours**
@@ -9078,82 +9061,6 @@ pub(crate) fn comment_tag_styles(
             if let Some(user) = tag.user {
                 out.push((a + user.start, a + user.end, markup_style(Kind::Token(Token::Constant), ink)));
             }
-        }
-    }
-    out
-}
-
-/// **Typst's `#` code, read as code** (2026-11-04): one token per character
-/// of a call, so a string, a number, a comment and a call stop being one
-/// purple — a `// comment` after `#let` was drawn as code.
-///
-/// A scanner, not a grammar: `//` to the end, `"…"`, a number with its unit
-/// (`2cm`, `11pt`, `0.0.8`), a keyword, a name followed by `(` or `[` (or
-/// after `#`) as a call, a name before `:` as an argument, brackets and
-/// commas as punctuation.
-pub(crate) fn typst_code_tokens(text: &[char]) -> Vec<Option<yumete_core::code::Token>> {
-    use yumete_core::code::Token;
-    const KEYWORDS: &[&str] = &[
-        "let", "set", "show", "import", "include", "if", "else", "for", "in", "while", "return",
-        "break", "continue", "context", "as", "and", "or", "not",
-    ];
-    const CONSTANTS: &[&str] = &["none", "auto", "true", "false"];
-    let mut out = vec![None; text.len()];
-    let mut i = 0;
-    while i < text.len() {
-        let c = text[i];
-        let start = i;
-        let token = if c == '/' && text.get(i + 1) == Some(&'/') {
-            i = text.len();
-            Some(Token::Comment)
-        } else if c == '/' && text.get(i + 1) == Some(&'*') {
-            i = (i + 2..text.len().saturating_sub(1))
-                .find(|&j| text[j] == '*' && text[j + 1] == '/')
-                .map_or(text.len(), |j| j + 2);
-            Some(Token::Comment)
-        } else if c == '"' {
-            i += 1;
-            while i < text.len() && text[i] != '"' {
-                i += if text[i] == '\\' { 2 } else { 1 };
-            }
-            i = (i + 1).min(text.len());
-            Some(Token::String)
-        } else if c.is_ascii_digit() {
-            while i < text.len() && (text[i].is_ascii_alphanumeric() || text[i] == '.' || text[i] == '%') {
-                i += 1;
-            }
-            Some(Token::Number)
-        } else if c == '#' || c.is_alphabetic() || c == '_' {
-            let hash = c == '#';
-            i += 1;
-            while i < text.len() && (text[i].is_alphanumeric() || text[i] == '_' || text[i] == '-' || text[i] == '.') {
-                i += 1;
-            }
-            let word: String = text[start + usize::from(hash)..i].iter().collect();
-            let next = text.get(i).copied();
-            if word.is_empty() {
-                // `#(1 + 2)`, `#{…}`: the `#` alone.
-                Some(Token::Punctuation)
-            } else if KEYWORDS.contains(&word.as_str()) {
-                Some(Token::Keyword)
-            } else if CONSTANTS.contains(&word.as_str()) {
-                Some(Token::Constant)
-            } else if hash || matches!(next, Some('(' | '[')) {
-                Some(Token::Function)
-            } else if next == Some(':') {
-                Some(Token::Parameter)
-            } else {
-                Some(Token::Plain)
-            }
-        } else if "()[]{},:;".contains(c) {
-            i += 1;
-            Some(Token::Punctuation)
-        } else {
-            i += 1;
-            (!c.is_whitespace()).then_some(Token::Operator)
-        };
-        for slot in &mut out[start..i] {
-            *slot = token;
         }
     }
     out
@@ -13278,21 +13185,35 @@ fn draw_horizontal(
                     &marked.as_ref().unwrap().1
                 }
             };
-            let tokens = typst_line_tokens(|| rope.line(row.line).chars().collect(), runs, ink);
-            for run in runs {
+            for run in runs.iter().filter(|r| r.kind == yumete_core::markdown::Kind::Highlight) {
+                let a = run.start.saturating_sub(start_in_line);
+                let b = run.end.saturating_sub(start_in_line).min(chars.len());
+                highlighted.push((a.min(b), b));
+            }
+            // A Typst manuscript takes its colours from its syntax tree
+            // (2026-11-08); everything else, and Typst where the tree does
+            // not speak, from the markup runs.
+            let colours = tree_colours(editor, row.line, ink);
+            let painted = colours.as_deref().unwrap_or(runs);
+            // A line of a code body has the block's code ink under it, and
+            // what the tree leaves uncoloured there is writing — the `第` of
+            // `[第#n卷]` — so it starts from the page's ink.
+            if colours.is_some() && matches!(blocks.get(row.line), Some(yumete_core::markdown::Block::Code { .. })) {
+                for style in styles.iter_mut() {
+                    *style = style.fg(ink.text());
+                }
+            }
+            for run in painted {
                 let a = run.start.saturating_sub(start_in_line);
                 let b = run.end.saturating_sub(start_in_line).min(chars.len());
                 // Patched onto the block's ground rather than replacing it, so
                 // a bold word inside a `::: warning` keeps both.
-                if run.kind == yumete_core::markdown::Kind::Highlight {
-                    highlighted.push((a.min(b), b));
-                }
                 for (i, style) in styles.iter_mut().enumerate().take(b).skip(a.min(b)) {
                     let ch = chars.get(i).copied();
-                    *style = style.patch(markup_style_at(run, runs, i + start_in_line, ch, tokens.as_deref(), ink));
+                    *style = style.patch(markup_style_at(run, painted, i + start_in_line, ch, ink));
                 }
             }
-            for (a, b, tag) in comment_tag_styles(|| rope.line(row.line).chars().collect(), runs, ink) {
+            for (a, b, tag) in comment_tag_styles(|| rope.line(row.line).chars().collect(), painted, ink) {
                 let (a, b) = (a.saturating_sub(start_in_line), b.saturating_sub(start_in_line).min(chars.len()));
                 for style in styles.iter_mut().take(b).skip(a.min(b)) {
                     *style = style.patch(tag);
@@ -17886,6 +17807,60 @@ fn squeezed(text: &str) -> String {
                 }
             }
         }
+    }
+
+    /// **What colouring a long Typst file costs** (2026-11-08): opening it
+    /// and drawing the first page, then a keystroke and the page after it, in
+    /// the middle of the file. A stopwatch, not a test.
+    ///
+    /// ```text
+    /// YUMETE_TYPST_BENCH=book.typ cargo test -p yumete-tui --release \
+    ///     the_cost_of_typst_colours -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore]
+    fn the_cost_of_typst_colours() {
+        use std::time::Instant;
+        let Ok(file) = std::env::var("YUMETE_TYPST_BENCH") else {
+            return;
+        };
+        let ime = no_ime();
+        let config = Config::default();
+        let (w, h) = (120u16, 50u16);
+        let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+        let began = Instant::now();
+        let mut ed = Editor::new();
+        ed.open_file(&file).unwrap();
+        ed.set_wrap_width(w as usize);
+        ed.set_page(h as usize, w as usize);
+        let opened = began.elapsed();
+        let _ = render_with(&ed, &config, ime, w, h);
+        let first = began.elapsed();
+        let lines = ed.current_buffer().line_count();
+        ed.execute(&format!(":{}", lines / 2)).unwrap();
+        let began = Instant::now();
+        let _ = render_with(&ed, &config, ime, w, h);
+        let jumped = began.elapsed();
+        ed.on_key(Key::Char('A'));
+        let mut typed = Vec::new();
+        for c in "宇夢#emph[字]".chars().cycle().take(60) {
+            let began = Instant::now();
+            ed.on_key(Key::Char(c));
+            let _ = render_with(&ed, &config, ime, w, h);
+            typed.push(ms(began.elapsed()));
+        }
+        ed.on_key(Key::Esc);
+        let mut sorted = typed.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        println!(
+            "\nopen {:.1} ms  first page {:.1} ms  jump+draw {:.1} ms  key+draw median {:.2} ms  p90 {:.2} ms  max {:.2} ms  ({lines} lines)",
+            ms(opened),
+            ms(first),
+            ms(jumped),
+            sorted[sorted.len() / 2],
+            sorted[sorted.len() * 9 / 10],
+            sorted[sorted.len() - 1],
+        );
     }
 
     /// The symbol at a cell, for grid assertions.
@@ -29288,7 +29263,7 @@ fn squeezed(text: &str) -> String {
     fn prose_fg(line: &str, i: usize, ink: crate::theme::Palette) -> Option<Color> {
         let all = yumete_core::markdown::spans(line);
         let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start)?;
-        markup_style_at(span, &all, i, line.chars().nth(i), None, ink).fg
+        markup_style_at(span, &all, i, line.chars().nth(i), ink).fg
     }
 
     /// OKLab, for asking how far apart two colours look.
@@ -29363,41 +29338,40 @@ fn squeezed(text: &str) -> String {
         }
     }
 
-    /// **Typst's `#` code is read as code** (2026-11-04): a keyword, a call, a
-    /// string, a number with its unit, a comment — not one purple.
-    #[test]
-    fn typst_code_is_read_as_tokens() {
-        use yumete_core::code::Token;
-        use yumete_core::markdown::{Kind, Span};
-        let tokens = |text: &str| typst_code_tokens(&text.chars().collect::<Vec<_>>());
-        let line = r#"#set page(paper: "a5", margin: 2cm) // 版心"#;
-        let got = tokens(line);
-        let at = |needle: &str| got[line[..line.find(needle).unwrap()].chars().count()];
-        assert_eq!(at("#set"), Some(Token::Keyword));
-        assert_eq!(at("page"), Some(Token::Function));
-        assert_eq!(at("paper"), Some(Token::Parameter));
-        assert_eq!(at("\"a5\""), Some(Token::String));
-        assert_eq!(at("2cm"), Some(Token::Number));
-        assert_eq!(at("("), Some(Token::Punctuation));
-        assert_eq!(at("// 版心"), Some(Token::Comment));
-        assert_eq!(got.last().copied().flatten(), Some(Token::Comment), "to the end of the line");
-        let got = tokens("#link(\"x\")[潮汐表]");
-        assert_eq!(got[0], Some(Token::Function), "`#name` is a call");
-        assert_eq!(got[1], Some(Token::Function));
-        let got = tokens("#let n = none");
-        assert_eq!(got[0], Some(Token::Keyword));
-        assert_eq!(got[9], Some(Token::Constant));
+    /// A Typst manuscript with `text` in it, for its colours.
+    fn typst_editor(text: &str) -> Editor {
+        let mut editor = Editor::new();
+        editor.current_buffer_mut().insert(0, text).expect("the fixture buffer is writable");
+        editor.set_syntax(yumete_core::syntax::Syntax::Typst);
+        editor
+    }
 
-        // And the page draws them so under 墨香: the call's tokens, not purple.
-        let line = "#let price = 42 // 每斤";
-        let call = Span { start: 0, end: line.chars().count(), kind: Kind::Code2, construct: 0, depth: 0 };
-        let runs = [call];
+    /// The ink of char `at` when `runs` are laid on in order, as the page does.
+    fn laid_ink(runs: &[yumete_core::markdown::Span], at: usize, ink: crate::theme::Palette) -> Option<Color> {
+        runs.iter()
+            .filter(|r| r.start <= at && at < r.end)
+            .fold(Style::default(), |style, r| style.patch(markup_style_at(r, runs, at, None, ink)))
+            .fg
+    }
+
+    /// **Typst's code is read as code, by its grammar** (2026-11-04, from the
+    /// tree since 2026-11-08): a keyword, a call, a string, a number with its
+    /// unit, a comment — not one purple.
+    #[test]
+    fn typst_code_is_coloured_by_its_tree() {
+        use yumete_core::code::Token;
+        use yumete_core::markdown::Kind;
+        let editor = typst_editor("#let price = 42 // 每斤\n#set page(paper: \"a5\", margin: 2cm)\n");
         let ink = crate::theme::Palette::of_theme(&yumete_config::ThemeConfig::default(), true);
-        let tokens = typst_line_tokens(|| line.chars().collect(), &runs, ink).expect("ink reads them");
-        let fg = |i: usize| markup_style_at(&runs[0], &runs, i, line.chars().nth(i), Some(&tokens), ink).fg;
-        assert_eq!(fg(0), Some(ink.purple()), "#let is a keyword");
-        assert_eq!(fg(13), Some(ink.orange()), "42 is a number");
-        assert_eq!(fg(16), markup_style(Kind::Token(Token::Comment), ink).fg, "the comment is grey");
+        let runs = tree_colours(&editor, 0, ink).expect("墨香 reads the tree");
+        assert_eq!(laid_ink(&runs, 0, ink), Some(ink.purple()), "#let is a keyword");
+        assert_eq!(laid_ink(&runs, 13, ink), Some(ink.orange()), "42 is a number");
+        assert_eq!(laid_ink(&runs, 16, ink), markup_style(Kind::Token(Token::Comment), ink).fg, "the comment is grey");
+        let runs = tree_colours(&editor, 1, ink).expect("墨香 reads the tree");
+        assert_eq!(laid_ink(&runs, 5, ink), Some(ink.azure()), "page is called");
+        assert_eq!(laid_ink(&runs, 10, ink), Some(ink.text()), "paper names an argument");
+        assert_eq!(laid_ink(&runs, 17, ink), Some(ink.green()), "the string");
+        assert_eq!(laid_ink(&runs, 31, ink), Some(ink.orange()), "2cm, with its unit");
     }
 
     /// **A theme that sets no prose colours is as it was** (2026-11-04): the
@@ -29405,13 +29379,14 @@ fn squeezed(text: &str) -> String {
     /// and none of them reads Typst code as tokens.
     #[test]
     fn themes_without_prose_colours_are_unchanged() {
-        use yumete_core::markdown::{Kind, Span};
+        use yumete_core::markdown::Kind;
         let names = [
             "one-dark", "github", "monokai", "dracula", "tokyo-night", "catppuccin", "gruvbox", "bw", "morandi",
         ];
         for name in names {
             let theme = yumete_config::ThemeConfig::named(name).expect(name);
             assert_eq!((theme.prose_dark, theme.prose_light), (None, None), "{name}");
+            let typst = typst_editor("#let x = 1\n");
             for dark in [true, false] {
                 let ink = crate::theme::Palette::of_theme(&theme, dark);
                 let line = "**b** *i* ***x***";
@@ -29419,13 +29394,12 @@ fn squeezed(text: &str) -> String {
                 for i in [2, 7, 13] {
                     let span = all.iter().filter(|s| s.start <= i && i < s.end).max_by_key(|s| s.start).unwrap();
                     assert_eq!(
-                        markup_style_at(span, &all, i, line.chars().nth(i), None, ink),
+                        markup_style_at(span, &all, i, line.chars().nth(i), ink),
                         markup_style_in(span, &all, line.chars().nth(i), ink),
                         "{name}, dark={dark}, char {i}"
                     );
                 }
-                let call = [Span { start: 0, end: 4, kind: Kind::Code2, construct: 0, depth: 0 }];
-                assert!(typst_line_tokens(|| "#let".chars().collect(), &call, ink).is_none(), "{name}");
+                assert!(tree_colours(&typst, 0, ink).is_none(), "{name}");
             }
         }
         // bw and morandi still mark bold by weight alone.
@@ -29619,18 +29593,20 @@ fn squeezed(text: &str) -> String {
     }
 
     /// `#(1 + 2)` reads as code and a `/* note */` inside a call as a comment
-    /// (2026-11-05).
+    /// (2026-11-05, from the tree since 2026-11-08).
     #[test]
     fn typst_tokens_take_an_expression_and_a_block_comment() {
         use yumete_core::code::Token;
-        let tokens = |text: &str| typst_code_tokens(&text.chars().collect::<Vec<_>>());
-        let got = tokens("#(1 + 2)");
-        assert_eq!(got[0], Some(Token::Punctuation), "the `#` alone");
-        assert_eq!(got[2], Some(Token::Number));
-        let got = tokens("#let x = 1 /* 註 */ + 2");
-        assert_eq!(got[11], Some(Token::Comment));
-        assert_eq!(got[17], Some(Token::Comment), "to its `*/`");
-        assert_eq!(got[21], Some(Token::Number), "and code after it");
+        use yumete_core::markdown::Kind;
+        let editor = typst_editor("#(1 + 2)\n#let x = 1 /* 註 */ + 2\n");
+        let innermost = |line: usize, at: usize| {
+            editor.typst_colours(line).unwrap().into_iter().rfind(|r| r.start <= at && at < r.end).map(|r| r.kind)
+        };
+        assert_eq!(innermost(0, 0), Some(Kind::Token(Token::Punctuation)), "the `#` alone");
+        assert_eq!(innermost(0, 2), Some(Kind::Token(Token::Number)));
+        assert_eq!(innermost(1, 11), Some(Kind::Token(Token::Comment)));
+        assert_eq!(innermost(1, 17), Some(Kind::Token(Token::Comment)), "to its `*/`");
+        assert_eq!(innermost(1, 21), Some(Kind::Token(Token::Number)), "and code after it");
     }
 }
 

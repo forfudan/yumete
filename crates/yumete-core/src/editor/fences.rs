@@ -254,6 +254,44 @@ impl Editor {
         painted.get(line - chunk * CHUNK).cloned().unwrap_or_default()
     }
 
+    /// **The colours of a line of a Typst manuscript, from its syntax tree**
+    /// (2026-11-08), or `None` where the tree does not speak and the block
+    /// scanner's runs keep the colour: `:view-code` off, `:markup off`, a
+    /// file past [`BIGGEST`], a chunk with a line past `:view-long-line`.
+    ///
+    /// Only the colour comes from here. Which lines are prose and which are
+    /// code, what 所見即所得 hides, `:render`, ruby, the wrap and the cursor's
+    /// questions stay with [`Editor::markup_line_in`]: a manuscript is still
+    /// read as one, and the tree only says what each token is.
+    ///
+    /// The tree is held and reparsed on each edit as a code file's is
+    /// ([`Self::hold_the_tree`]), and painted a chunk at a time.
+    pub fn typst_colours(&self, line: usize) -> Option<Vec<Span>> {
+        if self.current_buffer().syntax() != crate::syntax::Syntax::Typst
+            || !self.code_colours
+            || !self.markup_visible()
+        {
+            return None;
+        }
+        let chunk = line / CHUNK;
+        let gated = self.long_line.is_some()
+            && (chunk * CHUNK..(chunk + 1) * CHUNK).any(|row| self.line_is_too_long(row));
+        if gated {
+            return None;
+        }
+        self.hold_the_tree(Language::Typst);
+        if let Some(found) = self.code_cache.borrow().by_chunk.get(&chunk) {
+            return Some(found.get(line - chunk * CHUNK).cloned().unwrap_or_default());
+        }
+        let id = self.current_buffer().id();
+        let mut cache = self.code_cache.borrow_mut();
+        let held = cache.whole.as_ref().filter(|h| h.language == Language::Typst && h.buffer == id)?;
+        let rows = chunk * CHUNK..(chunk + 1) * CHUNK;
+        let painted: Lines = Rc::new(crate::code::paint_typst(&held.source, &held.tree, &held.lines, rows));
+        cache.by_chunk.insert(chunk, painted.clone());
+        Some(painted.get(line - chunk * CHUNK).cloned().unwrap_or_default())
+    }
+
     /// **這一份裏每一個定義**，位置是**字符**（`]f`/`]c`/`mi f`，2026-10-06）。
     ///
     /// 只在「整份是代碼」的檔上回得出東西：markdown 裏的圍欄各有各的樹，而一段

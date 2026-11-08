@@ -1220,8 +1220,9 @@ pub fn draw(
     // The wiki names of the line last asked about (#287), for the same reason.
     let mut wiki_names: Option<(usize, Vec<(usize, usize)>)> = None;
     let mut marked: Option<(usize, Vec<yumete_core::markdown::Span>)> = None;
-    // The marked line's Typst code as tokens, kept beside it (2026-11-04).
-    let mut tokens: Option<Vec<Option<yumete_core::code::Token>>> = None;
+    // The marked line's colours from its syntax tree, kept beside it: a Typst
+    // manuscript's (2026-11-08), `None` where the runs colour themselves.
+    let mut colours: Option<Vec<yumete_core::markdown::Span>> = None;
     // The tags in the line's comments (`TODO:`), as the horizontal page draws them.
     let mut tags: Vec<(usize, usize, Style)> = Vec::new();
     // And its 平仄, for the same reason: the editor caches the answer per line
@@ -1387,8 +1388,9 @@ pub fn draw(
             // block decides before the line is scanned at all.
             if marked.as_ref().is_none_or(|(l, _)| *l != zong.line) {
                 let runs = markup.runs(zong.line);
-                tokens = crate::typst_line_tokens(|| rope.line(zong.line).chars().collect(), &runs, ink);
-                tags = crate::comment_tag_styles(|| rope.line(zong.line).chars().collect(), &runs, ink);
+                colours = crate::tree_colours(editor, zong.line, ink);
+                let painted = colours.as_deref().unwrap_or(&runs);
+                tags = crate::comment_tag_styles(|| rope.line(zong.line).chars().collect(), painted, ink);
                 marked = Some((zong.line, runs));
             }
             let runs: &[yumete_core::markdown::Span] = match &marked {
@@ -1592,6 +1594,11 @@ pub fn draw(
             // never coloured — half of 所見即所得.
             let column = at - line_start;
             let mut style = crate::block_style(markup.block(zong.line), ink).unwrap_or_default();
+            // What the tree leaves uncoloured in a code body is writing, as on
+            // the horizontal page.
+            if colours.is_some() && matches!(markup.block(zong.line), yumete_core::markdown::Block::Code { .. }) {
+                style = style.fg(ink.text());
+            }
 
             // A slot is one display unit and may hold several characters — a
             // ruby group, or a 緃中横 pair — so it takes the style of any run it
@@ -1599,10 +1606,11 @@ pub fn draw(
             //
             // 從前這裏還記一格「這一格上有沒有 `==標記==`」，給格子的底色讓
             // 路；格子沒有底色了（見上面那一段），讓路的那一方也就沒有了。
-            for run in runs.iter().filter(|r| r.end > column && r.start < column + len) {
+            let painted = colours.as_deref().unwrap_or(runs);
+            for run in painted.iter().filter(|r| r.end > column && r.start < column + len) {
                 let ch = symbol.chars().next();
                 let at = column.max(run.start);
-                style = style.patch(crate::markup_style_at(run, runs, at, ch, tokens.as_deref(), ink));
+                style = style.patch(crate::markup_style_at(run, painted, at, ch, ink));
             }
             for &(_, _, tag) in tags.iter().filter(|&&(a, b, _)| b > column && a < column + len.max(1)) {
                 style = style.patch(tag);

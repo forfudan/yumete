@@ -96,12 +96,18 @@ pub enum Language {
     /// TypeScript, and TSX, which is TypeScript with JSX in it (2026-10-29).
     Tsx,
     TypeScript,
+    /// Typst (2026-11-08) — a raw block tagged ```` ```typ ````, and the
+    /// colours of a Typst manuscript itself. Never a file's syntax: a `.typ`
+    /// is [`crate::syntax::Syntax::Typst`], whose prose the block scanner
+    /// reads. Grammar by this repository's author:
+    /// <https://github.com/forfudan/tree-sitter-typst>.
+    Typst,
     Yaml,
 }
 
 impl Language {
     /// Every language, for `:view-code`'s report and the tests.
-    pub const ALL: [Language; 22] = [
+    pub const ALL: [Language; 23] = [
         Language::Ada,
         Language::Bash,
         Language::C,
@@ -123,6 +129,7 @@ impl Language {
         Language::Toml,
         Language::Tsx,
         Language::TypeScript,
+        Language::Typst,
         Language::Yaml,
     ];
 
@@ -159,6 +166,11 @@ impl Language {
             "toml" => Language::Toml,
             "typescript" | "ts" => Language::TypeScript,
             "tsx" => Language::Tsx,
+            // Typst's own tags: `typ` for markup, `typc` for code. The grammar
+            // has no entry point for code, so a `typc` block is read as
+            // markup, which its upstream README says reads the same for one
+            // expression.
+            "typst" | "typ" | "typc" => Language::Typst,
             "yaml" | "yml" => Language::Yaml,
             _ => return None,
         })
@@ -239,6 +251,7 @@ impl Language {
             Language::Toml => "toml",
             Language::Tsx => "tsx",
             Language::TypeScript => "typescript",
+            Language::Typst => "typst",
             Language::Yaml => "yaml",
         }
     }
@@ -268,6 +281,7 @@ impl Language {
             Language::Toml => tree_sitter_toml_ng::LANGUAGE.into(),
             Language::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
             Language::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            Language::Typst => tree_sitter_typst::LANGUAGE.into(),
             Language::Yaml => tree_sitter_yaml::LANGUAGE.into(),
         }
     }
@@ -300,6 +314,27 @@ impl Language {
             // `os.getcwd()` 的 `getcwd` 同理：Python 的查詢把它兜底成了 `@attribute`。
             Language::Python => {
                 "\n(call (attribute attribute: (identifier) @function.method))\n"
+            }
+            // **What the page already said, kept** (2026-11-08). The
+            // `#` before code takes the colour of what follows it — Typst's
+            // own highlighter does this (`highlight_hash`), and so did the
+            // scanner this grammar replaced; `#name` is drawn as a call, as that
+            // scanner drew it (Typst gives it a colour of its own, which no theme
+            // here has); the `*` and `_` of strong and
+            // emphasis are the markers 所見即所得 hides; a `$` is the maths', and a
+            // raw block's tag is the raw block's, as Typst draws it.
+            Language::Typst => {
+                "
+(code \"#\" @keyword [(let_binding) (set_rule) (show_rule) (module_import)
+  (module_include) (conditional) (for_loop) (while_loop) (contextual)
+  (return_statement) (break_statement) (continue_statement)])
+(code \"#\" @function (call))
+(code \"#\" @function (identifier) @function)
+(strong \"*\" @markup.marker)
+(emph \"_\" @markup.marker)
+(equation \"$\" @markup.math)
+(raw_block (raw_lang) @markup.raw.block)
+"
             }
             _ => "",
         }
@@ -464,6 +499,9 @@ impl Language {
             Language::R => tree_sitter_r::HIGHLIGHTS_QUERY,
             Language::Rust => tree_sitter_rust::HIGHLIGHTS_QUERY,
             Language::Toml => tree_sitter_toml_ng::HIGHLIGHTS_QUERY,
+            // Ours, so read as it ships; its capture names are helix's, which
+            // [`typst_paint`] reads.
+            Language::Typst => tree_sitter_typst::HIGHLIGHTS_QUERY,
             Language::Yaml => tree_sitter_yaml::HIGHLIGHTS_QUERY,
         }
     }
@@ -495,6 +533,8 @@ impl Language {
             // 作者的，所以没有別人的可用，也没有授權那一層事。函數、結構、特徵、
             // 擴展四種；`alias` 捕不到，那是語法那一頭的事（見那個檔的註釋）。
             Language::Mojo => tree_sitter_mojo::TAGS_QUERY,
+            // Headings and `#let` bindings, ours too.
+            Language::Typst => tree_sitter_typst::TAGS_QUERY,
             Language::R => tree_sitter_r::TAGS_QUERY,
             Language::Rust => tree_sitter_rust::TAGS_QUERY,
             // 這幾種没有定義可言，語法 crate 也不帶 tags。
@@ -627,6 +667,11 @@ impl Language {
 "
             }
             Language::Json => "(pair) @entry\n",
+            Language::Typst => {
+                "(line_comment) @comment
+                 (block_comment) @comment
+"
+            }
             Language::Toml => {
                 "(pair) @entry
                  (comment) @comment
@@ -649,7 +694,7 @@ impl Language {
 
     /// 編好的那份，連着每一格捕獲算哪一種對象。
     fn object_query(self) -> Option<&'static Objects> {
-        static CELLS: [OnceLock<Option<Objects>>; 22] = [const { OnceLock::new() }; 22];
+        static CELLS: [OnceLock<Option<Objects>>; Language::ALL.len()] = [const { OnceLock::new() }; Language::ALL.len()];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -673,7 +718,7 @@ impl Language {
 
     /// 編好的 tags 查詢，連着每一格捕獲算哪一種定義。
     fn defines(self) -> Option<&'static Defines> {
-        static CELLS: [OnceLock<Option<Defines>>; 22] = [const { OnceLock::new() }; 22];
+        static CELLS: [OnceLock<Option<Defines>>; Language::ALL.len()] = [const { OnceLock::new() }; Language::ALL.len()];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
@@ -805,6 +850,8 @@ impl Language {
             | Language::Yaml
             | Language::Gas
             | Language::Nasm
+            // A Typst manuscript is prose; its code is indented by hand.
+            | Language::Typst
             // Ada 與 Pascal 的塊是 `begin`／`end` 這種詞，不是括號——第一期那一套
             // （`@indent` 配 `["}" "]" ")"]` 退一級）在這裏不是同一件事。留給下一期。
             | Language::Ada
@@ -814,7 +861,7 @@ impl Language {
 
     /// 編譯過的那一份，和 [`Language::query`] 同一套緩存。
     fn indent_query(self) -> Option<&'static Query> {
-        static CELLS: [OnceLock<Option<Query>>; 22] = [const { OnceLock::new() }; 22];
+        static CELLS: [OnceLock<Option<Query>>; Language::ALL.len()] = [const { OnceLock::new() }; Language::ALL.len()];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         let text = self.indents();
         if text.is_empty() {
@@ -824,13 +871,20 @@ impl Language {
     }
 
     fn query(self) -> Option<&'static Compiled> {
-        static CELLS: [OnceLock<Option<Compiled>>; 22] = [const { OnceLock::new() }; 22];
+        static CELLS: [OnceLock<Option<Compiled>>; Language::ALL.len()] = [const { OnceLock::new() }; Language::ALL.len()];
         let at = Language::ALL.iter().position(|&l| l == self)?;
         CELLS[at]
             .get_or_init(|| {
                 let source = format!("{}{}", self.highlights(), self.extra_highlights());
                 let query = Query::new(&self.grammar(), &source).ok()?;
-                let tokens = query.capture_names().iter().map(|n| token_of(n)).collect();
+                let tokens = query
+                    .capture_names()
+                    .iter()
+                    .map(|n| match self {
+                        Language::Typst => typst_paint(n),
+                        _ => token_of(n).map(Kind::Token),
+                    })
+                    .collect();
                 Some((query, tokens))
             })
             .as_ref()
@@ -927,8 +981,9 @@ pub fn definitions(language: Language, source: &str, tree: &Tree) -> Vec<(usize,
 }
 
 /// What a capture does to the characters it covers: `None` leaves them to
-/// whatever else names them.
-type Paint = Option<Token>;
+/// whatever else names them. A token for code; for Typst's markup the run it
+/// is, a heading or an emphasis (2026-11-08).
+type Paint = Option<Kind>;
 
 /// 一套語法編好的查詢，連着它每一格捕獲上什麼色——按捕獲的次序。
 ///
@@ -943,7 +998,7 @@ type Defines = (Query, Vec<Option<Define>>);
 type Objects = (Query, Vec<Option<Object>>);
 
 /// What a grammar's capture name is, in this page's colours.
-fn token_of(capture: &str) -> Paint {
+fn token_of(capture: &str) -> Option<Token> {
     let mut parts = capture.split('.');
     let head = parts.next().unwrap_or(capture);
     let second = parts.next().unwrap_or("");
@@ -974,6 +1029,37 @@ fn token_of(capture: &str) -> Paint {
         ("punctuation", _) => Token::Punctuation,
         _ => return None,
     })
+}
+
+/// **What a Typst capture is, in this page's colours** (2026-11-08).
+///
+/// The grammar names its captures as helix does (`constant.numeric.integer`,
+/// `variable.other.member`, `markup.heading.2`), which [`token_of`] reads
+/// for the code; markup becomes the run the block scanner would have called
+/// it, so a heading is drawn as a heading, in its level's colour.
+fn typst_paint(capture: &str) -> Paint {
+    let kind = |token| Some(Kind::Token(token));
+    match capture {
+        "markup.heading.marker" => Some(Kind::HeadingMark),
+        "markup.bold" => Some(Kind::Strong),
+        "markup.italic" => Some(Kind::Emphasis),
+        "markup.marker" => Some(Kind::Marker),
+        "markup.math" => Some(Kind::Math),
+        "markup.link.url" => Some(Kind::Link),
+        "markup.link.label" => Some(Kind::Ref),
+        "label" => Some(Kind::Label),
+        "variable.other.member" => kind(Token::Property),
+        "punctuation.special" => kind(Token::Punctuation),
+        _ if capture.starts_with("markup.heading") => Some(Kind::Heading),
+        _ if capture.starts_with("markup.raw") => Some(Kind::Code),
+        // A list's marker has its own colour on the page (`list_mark`).
+        _ if capture.starts_with("markup.list") => None,
+        _ if capture.starts_with("constant.numeric") => kind(Token::Number),
+        // Typst's highlighter calls an escape, a shorthand and a line break
+        // one thing (`Tag::Escape`).
+        _ if capture.starts_with("constant.character") => kind(Token::Escape),
+        _ => token_of(capture).map(Kind::Token),
+    }
 }
 
 /// The coloured runs of each line of `lines`, parsed as `language` — one entry
@@ -1189,25 +1275,180 @@ pub fn paint(
     let from = starts[rows.start];
     let to = starts[rows.end - 1] + lines[rows.end - 1].len();
 
-    // (start, end, pattern, token) in bytes of `source`.
-    let mut found: Vec<(usize, usize, usize, Token)> = Vec::new();
-    let mut cursor = QueryCursor::new();
-    cursor.set_byte_range(from..to);
-    let mut matches = cursor.matches(query, tree.root_node(), source.as_bytes());
-    while let Some(m) = matches.next() {
-        for capture in m.captures {
-            if let Some(Some(token)) = tokens.get(capture.index as usize) {
-                let node = capture.node;
-                found.push((node.start_byte(), node.end_byte(), m.pattern_index, *token));
-            }
-        }
-    }
+    let found = captured(query, tokens, source, tree, from..to);
     paint_the_rows(found, lines, &starts, rows, &mut out);
     out
 }
 
+/// Every capture of `query` that meets `bytes`, as (start, end, pattern,
+/// kind) in bytes of `source`.
+fn captured(
+    query: &Query,
+    kinds: &[Paint],
+    source: &str,
+    tree: &Tree,
+    bytes: std::ops::Range<usize>,
+) -> Vec<(usize, usize, usize, Kind)> {
+    let mut found = Vec::new();
+    let mut cursor = QueryCursor::new();
+    cursor.set_byte_range(bytes);
+    let mut matches = cursor.matches(query, tree.root_node(), source.as_bytes());
+    while let Some(m) = matches.next() {
+        for capture in m.captures {
+            if let Some(Some(kind)) = kinds.get(capture.index as usize) {
+                let node = capture.node;
+                found.push((node.start_byte(), node.end_byte(), m.pattern_index, *kind));
+            }
+        }
+    }
+    found
+}
+
+/// **A Typst manuscript's colours, one line at a time, nested** (2026-11-08).
+///
+/// [`paint`] flattens, one token a byte, which is right for code and wrong
+/// for markup: a `*strong*` word in a heading is both, and `*_both_*` is
+/// what the theme's bold-italic colour is for. So each capture stays a run
+/// of its own, outer before inner, and the page lays them on in that order.
+/// Where two patterns name the same node the last one wins, as in [`paint`].
+///
+/// **A raw block is coloured by the language its tag names** — the grammar's
+/// injection query finds the tag and the text, and the text is parsed on its
+/// own, as a fence is.
+pub fn paint_typst(
+    source: &str,
+    tree: &Tree,
+    lines: &[String],
+    rows: std::ops::Range<usize>,
+) -> Vec<Vec<Span>> {
+    let rows = rows.start.min(lines.len())..rows.end.min(lines.len());
+    let mut out = vec![Vec::new(); rows.len()];
+    let Some((query, kinds)) = Language::Typst.query() else {
+        return out;
+    };
+    if rows.is_empty() {
+        return out;
+    }
+    let mut starts = Vec::with_capacity(lines.len());
+    let mut at = 0usize;
+    for line in lines {
+        starts.push(at);
+        at += line.len() + 1;
+    }
+    let from = starts[rows.start];
+    let to = starts[rows.end - 1] + lines[rows.end - 1].len();
+    let mut found = captured(query, kinds, source, tree, from..to);
+    // The last pattern that names a node wins: sort the later ones first and
+    // keep the first of each node.
+    found.retain(|f| f.0 < f.1);
+    found.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(b.2.cmp(&a.2)));
+    found.dedup_by_key(|f| (f.0, f.1));
+
+    let mut next = 0usize;
+    let mut live: Vec<(usize, usize, Kind)> = Vec::new();
+    for n in rows.clone() {
+        let line = &lines[n];
+        let (head, tail) = (starts[n], starts[n] + line.len());
+        while next < found.len() && found[next].0 < tail.max(head + 1) {
+            let (start, end, _, kind) = found[next];
+            if end > head {
+                live.push((start, end, kind));
+            }
+            next += 1;
+        }
+        live.retain(|&(_, end, _)| end > head);
+        if line.is_empty() {
+            continue;
+        }
+        // Byte to char, for this line.
+        let mut char_at = vec![0usize; line.len() + 1];
+        for (count, (byte, c)) in line.char_indices().enumerate() {
+            for slot in &mut char_at[byte..byte + c.len_utf8()] {
+                *slot = count;
+            }
+        }
+        char_at[line.len()] = line.chars().count();
+        let row = &mut out[n - rows.start];
+        for &(start, end, kind) in &live {
+            if start >= tail {
+                continue;
+            }
+            let (a, b) = (char_at[start.max(head) - head], char_at[end.min(tail) - head]);
+            if a < b {
+                row.push(Span { start: a, end: b, kind, depth: 0, construct: usize::MAX - start });
+            }
+        }
+    }
+    inject(source, tree, lines, &starts, rows, from..to, &mut out);
+    out
+}
+
+/// The grammar's injection query, compiled once, with the indices of its
+/// language and content captures.
+fn injections() -> Option<&'static (Query, u32, u32)> {
+    static CELL: OnceLock<Option<(Query, u32, u32)>> = OnceLock::new();
+    CELL.get_or_init(|| {
+        let query = Query::new(&Language::Typst.grammar(), tree_sitter_typst::INJECTIONS_QUERY).ok()?;
+        let language = query.capture_index_for_name("injection.language")?;
+        let content = query.capture_index_for_name("injection.content")?;
+        Some((query, language, content))
+    })
+    .as_ref()
+}
+
+/// Each raw block in `bytes` whose tag names a language this build can parse,
+/// coloured by that grammar on top of the block's own runs.
+///
+/// Warning: **only the raw blocks** — the same query injects `comment` into
+/// every comment, which helix reads for `TODO:`; the page finds those itself
+/// (`comment_tags`).
+fn inject(
+    source: &str,
+    tree: &Tree,
+    lines: &[String],
+    starts: &[usize],
+    rows: std::ops::Range<usize>,
+    bytes: std::ops::Range<usize>,
+    out: &mut [Vec<Span>],
+) {
+    let Some((query, language, content)) = injections() else {
+        return;
+    };
+    let mut cursor = QueryCursor::new();
+    cursor.set_byte_range(bytes);
+    let mut matches = cursor.matches(query, tree.root_node(), source.as_bytes());
+    while let Some(m) = matches.next() {
+        let named = |index: u32| m.captures.iter().find(|c| c.index == index).map(|c| c.node);
+        let (Some(tag), Some(body)) = (named(*language), named(*content)) else {
+            continue;
+        };
+        let Some(spoken) = tag.utf8_text(source.as_bytes()).ok().and_then(Language::from_info) else {
+            continue;
+        };
+        let text = &source[body.start_byte()..body.end_byte()];
+        let pieces: Vec<String> = text.split('\n').map(str::to_string).collect();
+        let first = body.start_position().row;
+        // The body starts after the tag, partway along its line.
+        let indent = starts
+            .get(first)
+            .map_or(0, |&head| source[head..body.start_byte()].chars().count());
+        for (i, runs) in highlight(spoken, &pieces).into_iter().enumerate() {
+            let row = first + i;
+            if !rows.contains(&row) || row >= lines.len() {
+                continue;
+            }
+            let shift = if i == 0 { indent } else { 0 };
+            out[row - rows.start].extend(runs.into_iter().map(|s| Span {
+                start: s.start + shift,
+                end: s.end + shift,
+                ..s
+            }));
+        }
+    }
+}
+
 fn paint_the_rows(
-    mut found: Vec<(usize, usize, usize, Token)>,
+    mut found: Vec<(usize, usize, usize, Kind)>,
     lines: &[String],
     starts: &[usize],
     rows: std::ops::Range<usize>,
@@ -1218,10 +1459,10 @@ fn paint_the_rows(
     // above `(string) @string` — so a key came out the green of its value.
     let named: std::collections::HashSet<(usize, usize)> = found
         .iter()
-        .filter(|f| f.3 == Token::Property)
+        .filter(|f| f.3 == Kind::Token(Token::Property))
         .map(|f| (f.0, f.1))
         .collect();
-    found.retain(|f| !(f.3 == Token::String && named.contains(&(f.0, f.1))));
+    found.retain(|f| !(f.3 == Kind::Token(Token::String) && named.contains(&(f.0, f.1))));
     found.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
 
     // Warning: **A window over the captures, not a pass over them** (2026-09-20).
@@ -1243,7 +1484,7 @@ fn paint_the_rows(
     // `O(窗口在第幾行)`：同一份 `lib.rs`，第 9,000 行那一塊 2.7 毫秒，第
     // 15,000 行那一塊 6.4 毫秒——愈往下愈慢，而那正是讀長檔的人待的地方。
     let mut next = 0usize;
-    let mut live: Vec<(usize, usize, Token)> = Vec::new();
+    let mut live: Vec<(usize, usize, Kind)> = Vec::new();
     let head = starts[rows.start];
     while next < found.len() && found[next].0 < head {
         let (start, end, _, token) = found[next];
@@ -1265,7 +1506,7 @@ fn paint_the_rows(
         }
         live.retain(|&(_, end, _)| end > from);
         // One token per byte of this line, painted in the order above.
-        let mut paint: Vec<Token> = vec![Token::Plain; line.len()];
+        let mut paint: Vec<Kind> = vec![Kind::Token(Token::Plain); line.len()];
         for &(start, end, token) in &live {
             if start >= to {
                 continue;
@@ -1276,7 +1517,7 @@ fn paint_the_rows(
         }
         // Bytes to runs of chars.
         let spans = &mut out[n - rows.start];
-        let mut run: Option<(usize, Token)> = None;
+        let mut run: Option<(usize, Kind)> = None;
         let mut index = 0;
         for (byte, _) in line.char_indices() {
             let here = paint[byte];
@@ -1297,11 +1538,11 @@ fn paint_the_rows(
     }
 }
 
-fn span(start: usize, end: usize, token: Token) -> Span {
+fn span(start: usize, end: usize, kind: Kind) -> Span {
     Span {
         start,
         end,
-        kind: Kind::Token(token),
+        kind,
         // 代碼裏没有嵌套的標記，全在頂層。
         depth: 0,
         // Every run its own construct: none of this is markup, so none of it
@@ -1821,8 +2062,146 @@ mod tests {
         }
     }
 
+    /// The kind of the innermost run over char `at` of row `row` — the one
+    /// the page lays on last.
+    fn typst_kind_at(painted: &[Vec<Span>], lines: &[String], row: usize, needle: &str) -> Option<Kind> {
+        let byte = lines[row].find(needle).unwrap_or_else(|| panic!("{needle:?} on row {row}"));
+        let at = lines[row][..byte].chars().count();
+        painted[row].iter().rfind(|s| s.start <= at && at < s.end).map(|s| s.kind)
+    }
 
+    /// **A Typst manuscript is coloured by its grammar** (2026-11-08): code
+    /// as code, markup as the runs the page already draws, the `#` in the
+    /// colour of what follows it, and a raw block in its tag's language.
+    #[test]
+    fn typst_paints_its_code_and_its_markup() {
+        let text = concat!(
+            "= 第一章 *重* <ch1>\n",
+            "#let price = 42 // 每斤\n",
+            "#set page(paper: \"a5\", margin: 2cm)\n",
+            "那年*冬天 _很_ 冷*，見 @ch1 與 $x^2 + pi$。#emph[雪] #title\n",
+            "```rust\n",
+            "fn main() { let s = \"字\"; }\n",
+            "```\n",
+            "#show heading: it => it.body\n",
+        );
+        let lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let source = joined(&lines);
+        let tree = parse(Language::Typst, &source, None).expect("parses");
+        let painted = paint_typst(&source, &tree, &lines, 0..lines.len());
+        let at = |row: usize, needle: &str| typst_kind_at(&painted, &lines, row, needle);
+        let token = |t: Token| Some(Kind::Token(t));
+        assert_eq!(at(0, "="), Some(Kind::HeadingMark));
+        assert_eq!(at(0, "第一章"), Some(Kind::Heading));
+        assert_eq!(at(0, "重"), Some(Kind::Strong), "strong inside the heading");
+        assert!(painted[0].iter().any(|s| s.kind == Kind::Heading && s.start == 0), "and the heading under it");
+        assert_eq!(at(0, "<ch1>"), Some(Kind::Label));
+        assert_eq!(at(1, "#let"), token(Token::Keyword), "the `#` takes its keyword's colour");
+        assert_eq!(at(1, "let"), token(Token::Keyword));
+        assert_eq!(at(1, "price"), token(Token::Plain), "a value, not a function");
+        assert_eq!(at(1, "42"), token(Token::Number));
+        assert_eq!(at(1, "// 每斤"), token(Token::Comment));
+        assert_eq!(at(2, "page"), token(Token::Function));
+        assert_eq!(at(2, "paper"), token(Token::Parameter));
+        assert_eq!(at(2, "\"a5\""), token(Token::String));
+        assert_eq!(at(2, "2cm"), token(Token::Number));
+        assert_eq!(at(3, "*冬"), Some(Kind::Marker), "strong's star is a marker");
+        assert_eq!(at(3, "冬天"), Some(Kind::Strong));
+        assert_eq!(at(3, "很"), Some(Kind::Emphasis), "emphasis nests inside strong");
+        assert_eq!(at(3, "@ch1"), Some(Kind::Ref));
+        assert_eq!(at(3, "$x"), Some(Kind::Math));
+        assert_eq!(at(3, "2 +"), token(Token::Number));
+        assert_eq!(at(3, "pi"), token(Token::Constant));
+        assert_eq!(at(3, "#emph"), token(Token::Function), "a call's `#` is the call's");
+        assert_eq!(at(3, "#title"), token(Token::Function), "and so is a name's");
+        assert_eq!(at(3, "年"), None, "prose is the page's own ink");
+        assert_eq!(at(4, "rust"), Some(Kind::Code), "the tag is the raw block's");
+        assert_eq!(at(5, "fn"), token(Token::Keyword), "the block is Rust");
+        assert_eq!(at(5, "main"), token(Token::Function));
+        assert_eq!(at(5, "\"字\""), token(Token::String));
+        assert_eq!(at(7, "heading"), token(Token::Function), "a show rule's selector");
+        assert_eq!(at(7, "body"), token(Token::Property));
+    }
+
+    /// The window the page asks for paints what the whole file would, and an
+    /// edited tree what a fresh one would — Typst's runs nest, so this is
+    /// asked of them apart from [`a_window_paints_exactly_what_the_whole_file_would`].
+    #[test]
+    fn a_typst_window_and_an_edited_tree_paint_what_the_whole_would() {
+        let mut text = String::new();
+        for n in 0..300 {
+            text.push_str(&format!(
+                "= 第{n}章\n\n那年*冬天*很冷，#emph[雪]下得早。$a_{n}$\n\n#let x{n} = (a: 1, b: \"字\")\n/* 一段\n註 */\n"
+            ));
+        }
+        let lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let source = joined(&lines);
+        let tree = parse(Language::Typst, &source, None).expect("parses");
+        let whole = paint_typst(&source, &tree, &lines, 0..lines.len());
+        for from in [0usize, 5, 127, 128, 1000, 2047] {
+            let rows = from..(from + 128).min(lines.len());
+            let win = paint_typst(&source, &tree, &lines, rows.clone());
+            assert_eq!(win, whole[rows.clone()].to_vec(), "the window from row {from}");
+        }
+        // Make a word strong in the middle, as a keystroke would.
+        let mut after_lines = lines.clone();
+        let row = 1402;
+        after_lines[row] = after_lines[row].replacen("很冷", "*很冷*", 1);
+        let after = joined(&after_lines);
+        let edit = what_changed(&source, &after).expect("it changed");
+        let mut edited = tree.clone();
+        edited.edit(&edit);
+        let again = parse(Language::Typst, &after, Some(&edited)).expect("reparses");
+        let fresh = parse(Language::Typst, &after, None).expect("parses");
+        let rows = 1280..1408;
+        assert_eq!(
+            paint_typst(&after, &again, &after_lines, rows.clone()),
+            paint_typst(&after, &fresh, &after_lines, rows),
+        );
+        let painted = paint_typst(&after, &again, &after_lines, row..row + 1);
+        assert!(painted[0].iter().any(|s| s.kind == Kind::Strong && s.end - s.start == 4), "{:?}", painted[0]);
+    }
+
+    /// **What the grammar costs on a long book** — a stopwatch, not a test.
+    ///
+    /// ```text
+    /// YUMETE_TYPST_BENCH=book.typ cargo test -p yumete-core --release --lib \
+    ///     what_typst_parsing_costs -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore]
+    fn what_typst_parsing_costs() {
+        use std::time::Instant;
+        let Ok(file) = std::env::var("YUMETE_TYPST_BENCH") else {
+            return;
+        };
+        let text = std::fs::read_to_string(file).unwrap();
+        let lines: Vec<String> = text.lines().map(str::to_string).collect();
+        let source = joined(&lines);
+        let began = Instant::now();
+        let tree = parse(Language::Typst, &source, None).unwrap();
+        println!("\nwhole parse {:?} ({} bytes, {} lines)", began.elapsed(), source.len(), lines.len());
+        let middle = lines.len() / 2;
+        for round in ["first, with the queries compiled", "again"] {
+            let began = Instant::now();
+            let _ = paint_typst(&source, &tree, &lines, middle..middle + 128);
+            println!("paint 128 rows ({round}) {:?}", began.elapsed());
+        }
+        let at = source.len() / 2;
+        let at = (at..source.len()).find(|&i| source.is_char_boundary(i)).unwrap();
+        let mut after = source.clone();
+        after.insert_str(at, "#emph[字]");
+        let began = Instant::now();
+        let edit = what_changed(&source, &after).unwrap();
+        println!("one edit, found by diffing {:?}", began.elapsed());
+        let mut edited = tree.clone();
+        edited.edit(&edit);
+        let began = Instant::now();
+        let _ = parse(Language::Typst, &after, Some(&edited)).unwrap();
+        println!("one edit, reparsed {:?}", began.elapsed());
+    }
 }
+
 #[cfg(test)]
 mod how_long_does_it_take {
     use super::*;

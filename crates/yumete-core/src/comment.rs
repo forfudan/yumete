@@ -56,7 +56,8 @@ pub fn marks(syntax: Syntax) -> Marks {
                 | Language::Rust
                 | Language::C
                 | Language::Cpp
-                | Language::Java => Marks { line: Some("//"), block: Some(("/*", "*/")) },
+                | Language::Java
+                | Language::Typst => Marks { line: Some("//"), block: Some(("/*", "*/")) },
                 Language::Bash => Marks { line: Some("#"), block: None },
                 Language::Lua => Marks { line: Some("--"), block: Some(("--[[", "]]")) },
                 Language::Css => Marks { line: None, block: Some(("/*", "*/")) },

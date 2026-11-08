@@ -39047,3 +39047,37 @@ fn a_session_keeps_the_side_of_a_split() {
     assert_eq!(window_columns(&old), [(leaves[0], 0), (leaves[1], 41)]);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A Typst manuscript's colours come from its tree, reparsed on each edit**
+/// (2026-11-08), and only its colours: the runs the page hides and shows are
+/// the block scanner's, as before.
+#[test]
+fn a_typst_manuscript_is_coloured_by_its_tree() {
+    use crate::markdown::Kind;
+    let mut ed = Editor::new();
+    ed.current_buffer_mut()
+        .insert(0, "= 第一章\n\n那年冬天很冷。\n\n#let n = 1 // 註\n")
+        .expect("the fixture buffer is writable");
+    ed.set_syntax(crate::syntax::Syntax::Typst);
+    let kinds = |ed: &Editor, line: usize| -> Vec<Kind> {
+        ed.typst_colours(line).expect("a tree for it").into_iter().map(|s| s.kind).collect()
+    };
+    assert!(kinds(&ed, 0).contains(&Kind::Heading));
+    assert!(kinds(&ed, 2).is_empty(), "prose has no runs");
+    assert!(kinds(&ed, 4).contains(&Kind::Token(crate::code::Token::Comment)));
+    // A keystroke: `很冷` made strong. The tree is the edited one.
+    let at = ed.current_buffer().rope().line_to_char(2) + 4;
+    ed.current_buffer_mut().insert(at, "*").unwrap();
+    ed.current_buffer_mut().insert(at + 3, "*").unwrap();
+    assert!(kinds(&ed, 2).contains(&Kind::Strong), "{:?}", kinds(&ed, 2));
+    assert!(
+        ed.markup_line(2).iter().any(|s| s.kind == Kind::Strong),
+        "and the scanner still reads it, for what the page hides"
+    );
+    // Where the tree does not speak, the runs colour the line.
+    ed.set_code_colours(false);
+    assert!(ed.typst_colours(2).is_none(), ":view-code off");
+    ed.set_code_colours(true);
+    ed.set_syntax(crate::syntax::Syntax::Markdown);
+    assert!(ed.typst_colours(0).is_none(), "not Typst");
+}
