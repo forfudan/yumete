@@ -524,12 +524,19 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         yumete_config::LineNumbers::Relative => yumete_core::editor::LineNumbers::Relative,
         yumete_config::LineNumbers::None => yumete_core::editor::LineNumbers::None,
     });
-    editor.set_paper(config.export.page.0, config.export.page.1);
-    editor.set_export_latin(match config.export.vertical_latin {
-        yumete_config::VerticalLatin::Turn => yumete_core::export::Latin::Turn,
-        yumete_config::VerticalLatin::Jlreq => yumete_core::export::Latin::Jlreq,
+    let export = &config.export;
+    editor.set_export_settings(yumete_core::export::Settings {
+        vertical: export.vertical,
+        hanging: export.hanging,
+        ruby_html: export.ruby_html,
+        ruby_typst: export.ruby_typst,
+        latin: match export.vertical_latin {
+            yumete_config::VerticalLatin::Turn => yumete_core::export::Latin::Turn,
+            yumete_config::VerticalLatin::Jlreq => yumete_core::export::Latin::Jlreq,
+        },
+        paper: yumete_core::export::Paper { width: export.page.0, height: export.page.1 },
+        fonts: export.font_family.clone(),
     });
-    editor.set_export_fonts(&config.export.font_family);
     editor.set_indent_width(config.editor.indent_width);
     editor.set_tab_spaces(config.editor.tab_spaces);
     editor.set_tab_stop(config.editor.tab_width);

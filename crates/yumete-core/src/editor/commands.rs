@@ -732,11 +732,7 @@ impl Editor {
                 Ok(CommandOutcome::Continue)
             }
             Command::CloseBuffer { force } => self.close_buffer(force),
-            Command::Export {
-                format,
-                path,
-                force,
-            } => self.export(&format, path.as_deref(), force),
+            Command::Export { format, words, force } => self.export(&format, &words, force),
             Command::Conflicts => {
                 self.list_conflicts();
                 Ok(CommandOutcome::Continue)

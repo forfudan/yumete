@@ -1133,7 +1133,53 @@ pub const SETTINGS: &[Setting] = &[
         hint: "settings.editor.remember.hint",
         factory: "true",
     },
-    // The export (2026-11-08): what only shows once a file is written out.
+    // The export (2026-11-08): what only shows once a file is written out,
+    // and nothing of the editing window's.
+    Setting {
+        table: "export",
+        key: "vertical",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "settings.export.vertical",
+        hint: "settings.export.vertical.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "export",
+        key: "hanging",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "settings.export.hanging",
+        hint: "settings.export.hanging.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "export",
+        key: "ruby_html",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "settings.export.ruby-html",
+        hint: "settings.export.ruby-html.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "export",
+        key: "ruby_typst",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "settings.export.ruby-typst",
+        hint: "settings.export.ruby-typst.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "export",
+        key: "page",
+        group: Group::Files,
+        kind: Kind::Text,
+        label: "settings.export.page",
+        hint: "settings.export.page.hint",
+        factory: r#""a5""#,
+    },
     Setting {
         table: "export",
         key: "vertical_latin",
@@ -1261,7 +1307,6 @@ pub const LATER: &[&str] = &[
     "panel.ink",
     "panel.paper",
     "ime.data_dirs",
-    "export.page",
 ];
 
 /// **有理由不進面板的那幾個。**

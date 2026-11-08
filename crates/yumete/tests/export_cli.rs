@@ -45,7 +45,9 @@ fn html_and_typst_land_beside_the_file_and_the_path_is_printed() {
 
 /// **`--export epub` writes a book** (2026-11-08): a zip whose first entry is
 /// the stored `mimetype`, and a vertical one that turns right to left; and
-/// the HTML of a vertical page draws its formula with RaTeX.
+/// the HTML of a vertical page draws its formula with RaTeX. Vertical is the
+/// export's word, not the editor's `--vertical`, which is how the draft is
+/// shown.
 #[test]
 fn epub_is_a_book_and_html_draws_formulas() {
     let root = fixture("epub");
@@ -53,17 +55,21 @@ fn epub_is_a_book_and_html_draws_formulas() {
     std::fs::write(&md, "# 第一章\n\n1997年，从 $x^2$ 起。\n").unwrap();
     let out = ye().args(["--vertical", "--export", "epub"]).arg(&md).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let text = String::from_utf8_lossy(&std::fs::read(md.with_extension("epub")).unwrap()).to_string();
+    assert!(!text.contains("page-progression-direction"), "the editor's layout is not the export's");
+    let out = ye().args(["--export", "epub", "vertical"]).arg(&md).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let book = std::fs::read(md.with_extension("epub")).unwrap();
     assert_eq!(&book[..4], b"PK\x03\x04");
     assert_eq!(&book[30..58], b"mimetypeapplication/epub+zip");
     let text = String::from_utf8_lossy(&book);
     assert!(text.contains("page-progression-direction=\"rtl\""));
     assert!(text.contains("images/f1.png"));
-    let out = ye().args(["--vertical", "--export", "html"]).arg(&md).output().unwrap();
+    let out = ye().args(["--export", "html", "jlreq", "page=A4", "vertical"]).arg(&md).output().unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     let page = std::fs::read_to_string(md.with_extension("html")).unwrap();
-    // Turned down the page under either `[export] vertical_latin`.
     assert!(page.contains("<span class=\"yoko\">1997</span>年"), "{page}");
+    assert!(page.contains("@page { size: 210mm 297mm;"), "{page}");
     assert!(page.contains("<img class=\"math turned\" alt=\"x^2\""), "{page}");
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -88,6 +94,10 @@ fn a_bad_format_and_a_missing_file_say_so() {
     let out = ye().args(["--export", "html"]).arg(root.join("nope.md")).output().unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("not a file"));
+    // A word misspelt is said, not looked for as a file.
+    let out = ye().args(["--export", "html", "verticle", "x.md"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("verticle"));
     let _ = std::fs::remove_dir_all(&root);
 }
 

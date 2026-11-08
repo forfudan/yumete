@@ -809,6 +809,60 @@ zhs = "HTML 与 EPUB 导出要的字体，写法同 VS Code 的 markdown.preview
 en = "the fonts an HTML or EPUB export asks for, written as VS Code's markdown.preview.fontFamily"
 
 [[message]]
+# 設置：导出标点悬挂（草稿）
+key = "settings.export.hanging"
+zhs = "导出标点悬挂"
+en = "hanging punctuation in export"
+
+[[message]]
+# 設置：导出标点悬挂——一句话（草稿）
+key = "settings.export.hanging.hint"
+zhs = "句读落在行末时挂到版心外"
+en = "a stop at the end of a line hangs outside the text block"
+
+[[message]]
+# 設置：导出的纸张（草稿）
+key = "settings.export.page"
+zhs = "导出纸张"
+en = "export paper"
+
+[[message]]
+# 設置：导出的纸张——一句话（草稿）
+key = "settings.export.page.hint"
+zhs = "打印用的纸：a4 a5 a6 b5 b6 letter 16开 32开 大32开，或 130x184 这样的毫米数"
+en = "the paper a print is set on: a4 a5 a6 b5 b6 letter 16開 32開 大32開, or millimetres such as 130x184"
+
+[[message]]
+# 設置：导出时读 HTML 注音（草稿）
+key = "settings.export.ruby-html"
+zhs = "导出 HTML 注音"
+en = "HTML ruby in export"
+
+[[message]]
+# 設置：导出时读 HTML 注音——一句话（草稿）
+key = "settings.export.ruby-html.hint"
+zhs = "稿子里的 <ruby> 注音导出为注音"
+en = "<ruby> in the source is exported as ruby"
+
+[[message]]
+# 設置：导出时读 Typst 注音（草稿）
+key = "settings.export.ruby-typst"
+zhs = "导出 Typst 注音"
+en = "Typst ruby in export"
+
+[[message]]
+# 設置：导出时读 Typst 注音——一句话（草稿）
+key = "settings.export.ruby-typst.hint"
+zhs = "稿子里的 #ruby 注音导出为注音"
+en = "#ruby in the source is exported as ruby"
+
+[[message]]
+# 設置：导出竖排（草稿）
+key = "settings.export.vertical"
+zhs = "竖排导出"
+en = "vertical export"
+
+[[message]]
 # 設置：竖排导出里的西文（草稿）
 key = "settings.export.vertical-latin"
 zhs = "竖排导出的西文"
@@ -819,6 +873,12 @@ en = "Latin in vertical export"
 key = "settings.export.vertical-latin.hint"
 zhs = "竖排的 HTML 与 EPUB 里，半角字母与数字怎么排；不影响终端里的竖排"
 en = "how half-width letters and digits are set in a vertical HTML or EPUB export; the terminal's vertical page is not affected"
+
+[[message]]
+# 設置：导出竖排——一句话（草稿）
+key = "settings.export.vertical.hint"
+zhs = "HTML 与 EPUB 竖排，从右往左；与编辑区是否竖排无关"
+en = "HTML and EPUB set vertically, right to left, whatever the editing window shows"
 
 [[message]]
 # 設置面板：開着幾項

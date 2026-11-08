@@ -29,6 +29,7 @@
 //! Chinese book (`lang="zh"`, a 2em indent, CJK serif fonts).
 
 use crate::ruby::{self, Dialect, Dialects};
+use crate::say;
 
 /// **The Typst compiler** (2026-11-06): the `typst` on `PATH`, which
 /// `--export pdf` runs and the formula float under the cursor runs too. One
@@ -130,6 +131,256 @@ impl Default for Paper {
     }
 }
 
+impl Paper {
+    /// **The paper a name or a `寬x高` names** — `a5`, `32開`, `130x184` —
+    /// or `None`.
+    ///
+    /// Warning: **the same names as `[export] page`**, which yumete-config
+    /// reads with its own `parse_page`: that crate cannot see this one, nor
+    /// this one that. `yumete-tui/tests/page_names.rs` holds the two to one
+    /// answer.
+    pub fn named(value: &str) -> Option<Paper> {
+        let name = value.trim().to_ascii_lowercase();
+        let (width, height) = match name.as_str() {
+            "a4" => (210, 297),
+            "a5" => (148, 210),
+            "a6" => (105, 148),
+            "b5" => (176, 250),
+            "b6" => (125, 176),
+            "letter" => (216, 279),
+            "16k" | "16開" | "16开" => (185, 260),
+            "32k" | "32開" | "32开" => (130, 184),
+            "d32k" | "大32開" | "大32开" => (140, 203),
+            _ => {
+                let (w, h) = name.split_once(['x', '*', '×'])?;
+                (w.trim().parse().ok()?, h.trim().parse().ok()?)
+            }
+        };
+        (width > 0 && height > 0).then_some(Paper { width, height })
+    }
+}
+
+/// **How a page is set** (2026-11-08): the `[export]` settings, and the words
+/// one `:export` or `ye --export` gives for itself.
+///
+/// Nothing here comes from the editing window. An export is publication, and
+/// how the writer sees the draft — `:vertical`, `:view-hanging`, the 縱
+/// length, `:ruby-html`, `tatechuyoko`, `:render` — is theirs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Settings {
+    /// Whether the text runs in 縱 from the right edge.
+    pub vertical: bool,
+    /// Whether 句讀 hang in the margin (標點旁置).
+    pub hanging: bool,
+    /// Whether `<ruby>` in the source is read as ruby.
+    pub ruby_html: bool,
+    /// Whether Typst's `#ruby` in the source is read as ruby.
+    pub ruby_typst: bool,
+    /// How half-width letters and digits are set down a vertical page.
+    pub latin: Latin,
+    /// The paper a printed copy is set on.
+    pub paper: Paper,
+    /// The fonts the page asks for, a CSS font list as VS Code's Markdown
+    /// preview writes it.
+    pub fonts: String,
+}
+
+impl Default for Settings {
+    fn default() -> Settings {
+        Settings {
+            vertical: false,
+            hanging: false,
+            ruby_html: true,
+            ruby_typst: true,
+            latin: Latin::Turn,
+            paper: Paper::A5,
+            fonts: DEFAULT_FONTS.to_string(),
+        }
+    }
+}
+
+/// **The words `:export` and `ye --export` take** (2026-11-08), each the
+/// setting of the same name for one export. `page=` and `font=` take a value.
+pub const WORDS: &[&str] = &[
+    "vertical", "horizontal", "hanging", "no-hanging", "ruby-html", "no-ruby-html", "ruby-typst", "no-ruby-typst",
+    "turn", "jlreq", "page=", "font=",
+];
+
+impl Settings {
+    /// The ruby syntaxes the source is read in.
+    pub fn dialects(&self) -> Dialects {
+        let mut set = Dialects::NONE;
+        if self.ruby_html {
+            set.insert(Dialect::Html);
+        }
+        if self.ruby_typst {
+            set.insert(Dialect::Typst);
+        }
+        set
+    }
+
+    /// **Take one word** — `vertical`, `jlreq`, `page=A5`, `font="Songti SC",
+    /// serif` — into these settings. `None` when `word` is none of
+    /// [`WORDS`], so the caller can take it for a path; `Some(Err(why))` when
+    /// it is one of them with a value that is not.
+    pub fn take(&mut self, word: &str) -> Option<Result<(), String>> {
+        let set = |flag: &mut bool, on: bool| {
+            *flag = on;
+            Some(Ok(()))
+        };
+        match word {
+            "vertical" => set(&mut self.vertical, true),
+            "horizontal" => set(&mut self.vertical, false),
+            "hanging" => set(&mut self.hanging, true),
+            "no-hanging" => set(&mut self.hanging, false),
+            "ruby-html" => set(&mut self.ruby_html, true),
+            "no-ruby-html" => set(&mut self.ruby_html, false),
+            "ruby-typst" => set(&mut self.ruby_typst, true),
+            "no-ruby-typst" => set(&mut self.ruby_typst, false),
+            "turn" => {
+                self.latin = Latin::Turn;
+                Some(Ok(()))
+            }
+            "jlreq" => {
+                self.latin = Latin::Jlreq;
+                Some(Ok(()))
+            }
+            _ => {
+                if let Some(name) = word.strip_prefix("page=") {
+                    return Some(match Paper::named(name) {
+                        Some(paper) => {
+                            self.paper = paper;
+                            Ok(())
+                        }
+                        None => Err(say!("export.no-such-page", name)),
+                    });
+                }
+                let list = word.strip_prefix("font=")?;
+                // `font='"A B", serif'`: the list inside single quotes, as a
+                // shell would want it written.
+                let list = match list.len() > 1 && list.starts_with('\'') && list.ends_with('\'') {
+                    true => &list[1..list.len() - 1],
+                    false => list,
+                };
+                Some(match list.trim().is_empty() {
+                    true => Err(say!("export.no-fonts")),
+                    false => {
+                        self.fonts = list.trim().to_string();
+                        Ok(())
+                    }
+                })
+            }
+        }
+    }
+
+    /// **The words of one `:export` line, and the path after them**
+    /// (2026-11-08): `vertical jlreq page=A5 out/book.epub`. The words come
+    /// in any order and the path last, if there is one.
+    ///
+    /// A word is split at a space, except inside quotes and after a comma, so
+    /// a font list holds its spaces: `font="PingFang SC", serif` is one word.
+    /// What is not a word is a path when it looks like one — a `/`, an
+    /// extension, a quote — and otherwise a word misspelt, said so rather
+    /// than written to a file of that name: a file really called `vertical`
+    /// is `./vertical`.
+    pub fn read_line(&mut self, line: &str) -> Result<Option<String>, String> {
+        let pieces = split_words(line)?;
+        let mut path = None;
+        for (n, piece) in pieces.iter().enumerate() {
+            if let Some(taken) = self.take(piece) {
+                taken?;
+                continue;
+            }
+            if !looks_like_a_path(piece) {
+                return Err(say!("export.no-such-word", piece));
+            }
+            if n + 1 < pieces.len() {
+                return Err(say!("export.words-after-path", piece));
+            }
+            path = Some(unquoted(piece));
+        }
+        Ok(path)
+    }
+}
+
+/// `line` cut into words: at a space, except inside `"…"` or `'…'` and after
+/// a comma (a font list goes on). A backslash keeps the next character
+/// (`a\ b.md`) where the system's paths do not use it themselves.
+fn split_words(line: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut word = String::new();
+    let mut quote: Option<char> = None;
+    let mut chars = line.trim().chars();
+    while let Some(c) = chars.next() {
+        match (quote, c) {
+            (Some(q), c) if c == q => {
+                quote = None;
+                word.push(c);
+            }
+            (Some(_), c) => word.push(c),
+            (None, '"' | '\'') => {
+                quote = Some(c);
+                word.push(c);
+            }
+            (None, '\\') if !cfg!(windows) => {
+                word.push(c);
+                if let Some(next) = chars.next() {
+                    word.push(next);
+                }
+            }
+            (None, c) if c.is_whitespace() => {
+                if word.trim_end().ends_with(',') {
+                    if !word.ends_with(' ') {
+                        word.push(' ');
+                    }
+                } else if !word.is_empty() {
+                    out.push(std::mem::take(&mut word));
+                }
+            }
+            (None, c) => word.push(c),
+        }
+    }
+    if quote.is_some() {
+        return Err(say!("export.open-quote", line.trim()));
+    }
+    if !word.is_empty() {
+        out.push(word);
+    }
+    Ok(out)
+}
+
+/// Whether a piece of an `:export` line that is not a word names a file: it
+/// holds a `/` (or `\` on Windows), has an extension, starts at `~` or `.`,
+/// or is quoted.
+pub fn looks_like_a_path(piece: &str) -> bool {
+    let name = piece.rsplit(['/', '\\']).next().unwrap_or(piece);
+    piece.contains('/')
+        || (cfg!(windows) && piece.contains('\\'))
+        || piece.starts_with(['~', '.', '"', '\''])
+        || name.rsplit_once('.').is_some_and(|(stem, ext)| !stem.is_empty() && !ext.is_empty())
+}
+
+/// A path as it was meant: its quotes taken off, or its backslashes read.
+fn unquoted(piece: &str) -> String {
+    if let Some(q @ ('"' | '\'')) = piece.chars().next() {
+        if piece.len() > 1 && piece.ends_with(q) {
+            return piece[1..piece.len() - 1].to_string();
+        }
+    }
+    if cfg!(windows) {
+        return piece.to_string();
+    }
+    let mut out = String::with_capacity(piece.len());
+    let mut chars = piece.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => out.push(chars.next().unwrap_or('\\')),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// 天頭 — the margin above the 版心, as a fraction of the page height.
 const MARGIN_TOP: f64 = 0.12;
 /// 地腳 — below it. Narrower than 天頭 on purpose: a 版心 set a little above
@@ -137,43 +388,28 @@ const MARGIN_TOP: f64 = 0.12;
 const MARGIN_BOTTOM: f64 = 0.09;
 /// Each of the two side margins, as a fraction of the page width.
 const MARGIN_SIDE: f64 = 0.10;
-/// How many characters a horizontal measure holds — the same 32 the screen
-/// stylesheet gives `max-width`, so the two agree about what a line is.
-const HENG_LEN: f64 = 32.0;
+/// **The type size of a printed page** (2026-11-08): 五號, 10.5 point, what
+/// a Chinese book is set in. The screen page has no measure at all — its
+/// lines fill the window across, its 縱 fill it down — so the paper alone
+/// says how long a line is in print.
+const PRINT_SIZE_PT: f64 = 10.5;
 /// The 行距, as a multiple of the character. One number, used both to set
 /// `line-height` and to say how many 行 the paper then holds.
 const LINE_HEIGHT: f64 = 1.8;
 
-/// How the page is set, so the export can carry it over.
+/// What one export is given: how to set the page, and what it is setting.
 #[derive(Debug, Clone)]
 pub struct Style {
-    /// Whether the text runs in 縱 from the right edge.
-    pub vertical: bool,
-    /// Whether 句讀 hang in the margin (標點旁置).
-    pub hanging: bool,
-    /// How many characters a 縱 holds — the measure, which in a browser is what
-    /// `max-inline-size` means down the page.
-    pub zong_len: usize,
-    /// Which ruby dialects the source is written in.
-    pub dialects: Dialects,
+    /// How the page is set: the `[export]` settings and this export's words.
+    pub settings: Settings,
     /// The document's title, for the HTML `<title>`.
     pub title: String,
-    /// The paper a printed copy is set on.
-    pub paper: Paper,
     /// **源檔是什麼語法**（2026-09-28）。
     ///
     /// Warning: **這一格從前没有，於是導出永遠按 Markdown 解析源檔**——一份 Typst 稿子裏的
     /// `*粗*`、`$a+b$`、`@引用` 一個都認不出來，原樣（並且轉義）寫進導出的檔。
     /// `Format` 說的是**寫成什麼**，這一格說的是**讀的是什麼**，兩件事。
     pub source: crate::syntax::Syntax,
-    /// **How half-width letters and digits are set down a vertical page**
-    /// (2026-11-08), `[export] vertical_latin`. A page is publication: the
-    /// terminal's `tatechuyoko` and `:render` are how the writer sees the
-    /// draft, and nothing of theirs is read here.
-    pub latin: Latin,
-    /// **The fonts the page asks for** (2026-11-08), `[export] font_family`,
-    /// a CSS font list as VS Code's Markdown preview writes it.
-    pub fonts: String,
     /// The folder the source file sits in, which a picture's path is read
     /// from: an EPUB carries its pictures inside it. `None` for a buffer
     /// never saved.
@@ -237,7 +473,7 @@ struct Drawing {
 
 impl Drawing {
     fn of(style: &Style) -> Option<Drawing> {
-        style.painter.map(|painter| Drawing { painter, vertical: style.vertical, latin: style.latin })
+        style.painter.map(|painter| Drawing { painter, vertical: style.settings.vertical, latin: style.settings.latin })
     }
 
     /// **Whether `tex` is turned on its side** (2026-11-08). Across the page
@@ -1148,7 +1384,7 @@ fn escape_typst(text: &str) -> String {
 /// writer names it: the default is the system's own faces, as VS Code's
 /// Markdown preview asks for them.
 fn font_list(style: &Style) -> String {
-    let fonts: String = style.fonts.chars().filter(|c| !matches!(c, ';' | '{' | '}' | '<' | '>')).collect();
+    let fonts: String = style.settings.fonts.chars().filter(|c| !matches!(c, ';' | '{' | '}' | '<' | '>')).collect();
     match fonts.trim() {
         "" => DEFAULT_FONTS.to_string(),
         fonts => fonts.to_string(),
@@ -1182,7 +1418,7 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
     let fonts = font_list(style);
     if book {
         out.push_str(&format!("body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; }}\n"));
-        if style.vertical {
+        if style.settings.vertical {
             out.push_str(
                 "html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }\n\
                  body { -epub-text-orientation: mixed; text-orientation: mixed; line-break: strict; }\n",
@@ -1191,38 +1427,34 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
         out.push_str("h1, h2 { break-before: page; }\nbody > :first-child { break-before: auto; }\n");
     } else {
         out.push_str(&format!(
-            "body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; margin: 4rem auto; }}\n"
+            "body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; margin: 4rem; }}\n"
         ));
     }
-    if style.vertical && !book {
-        // The one place outside a terminal where 縱書 costs a line of CSS. The
-        // measure is the 縱 length, so a page here holds what a page there did.
+    if style.settings.vertical && !book {
+        // The one place outside a terminal where 縱書 costs a line of CSS.
         //
-        // Warning: **the writing mode goes on `html`, and the measure is an
-        // inline size** (2026-11-08). It was on `body` alone, with the
-        // measure as `block-size`: a size is read in the element's own
-        // writing mode, so that made the body 32em *wide*, each 縱 as long as
-        // the window, and the 縱 past the body's left edge overflowed where a
-        // horizontal page cannot scroll to — a window narrower than the text
-        // cut off its opening. On the root, the page opens at its right edge
-        // and scrolls left, and a 縱 is never longer than the window.
+        // **No measure** (2026-11-08): a 縱 is as long as the window is tall,
+        // as a line across is as long as the window is wide. A page is
+        // publication, and the 縱 length the editing window wraps at is how
+        // the writer sees the draft; the paper sets the printed one.
+        //
+        // Warning: **the writing mode goes on `html`** (2026-11-08). It was on
+        // `body` alone, and the 縱 past the body's left edge overflowed where
+        // a horizontal page cannot scroll to — a window narrower than the
+        // text cut off its opening. On the root, the page opens at its right
+        // edge and scrolls left.
         out.push_str("html { writing-mode: vertical-rl; }\n");
-        out.push_str(&format!(
+        out.push_str(
             // `mixed`, not `upright`: upright sets every Latin letter on its
             // own row, so a pinyin reading comes out one letter at a time and a
             // year comes out as four. `mixed` is what 縱書 means — 漢字 upright,
-            // Latin turned — and it is the property's own default. The short
-            // runs the page sets across are wrapped in `.tcy` (see
-            // `vertical_text`); `line-break: strict` is 禁則, as the
-            // terminal page keeps it.
-            "body {{ writing-mode: vertical-rl; text-orientation: mixed; line-break: strict; \
-             max-inline-size: {}em; margin: 4rem; }}\n",
-            style.zong_len
-        ));
-    } else if !book {
-        out.push_str("body { max-width: 32em; }\n");
+            // Latin turned — and it is the property's own default. How a run
+            // of Latin is set is `vertical_text`'s; `line-break: strict` is
+            // 禁則, as the terminal page keeps it.
+            "body { writing-mode: vertical-rl; text-orientation: mixed; line-break: strict; }\n",
+        );
     }
-    if style.hanging {
+    if style.settings.hanging {
         // What `:view-hanging` means, said in the way a browser understands it.
         // `allow-end`, not `allow-end last`: `last` narrows it to the final
         // line of the block, which is not what 標點旁置 means — a stop hangs
@@ -1249,7 +1481,7 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
          img.math.display { display: block; margin-block: 0.5em; margin-inline: auto; }\n\
          p.math { text-indent: 0; }\n",
     );
-    if style.vertical {
+    if style.settings.vertical {
         // How a run of Latin is set ([`vertical_text`]): turned, across in
         // one square, or upright one to a square. `sideways` rather than
         // `mixed` for the turned ones, so a mark in the run turns with it.
@@ -1306,15 +1538,32 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
         }
         body.push_str("</ol>\n</section>\n");
     }
-    match style.vertical && lang != "en" {
-        true => vertical_text(&body, style.latin, lang == "zh"),
+    match style.settings.vertical && lang != "en" {
+        true => vertical_text(&body, style.settings.latin, lang == "zh"),
         false => body,
     }
 }
 
+/// How long a table cell is, in squares: a half-width character is half one.
+fn cell_length(text: &str) -> f64 {
+    text.chars().map(|c| if half_width(c) || c == ' ' { 0.5 } else { 1.0 }).sum()
+}
+
+/// **Whether a cell of a vertical table keeps its line** (2026-11-08): up to
+/// six squares, or up to half the table's longest cell, and never past
+/// twelve. Chrome sizes a vertical table's cells as though anything could
+/// break, so a cell left to wrap is cut short with room to spare — `甲城` in
+/// two lines; a long cell must still wrap, or the table runs past the foot
+/// of the page. The page has no length of its own to measure a cell against
+/// (it is as tall as the window), so the cells are measured against each
+/// other.
+fn short_cell(length: f64, longest: f64) -> bool {
+    length <= (longest / 2.0).clamp(6.0, 12.0)
+}
+
 /// The blocks as HTML.
 fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.dialects, Dialect::Html, escape_html, style.source, Drawing::of(style));
+    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style));
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -1339,9 +1588,9 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 let tex = lines.join("\n");
                 let tex = tex.trim().trim_start_matches("$$").trim_end_matches("$$").trim();
                 let tex_source = !matches!(style.source, crate::syntax::Syntax::Typst | crate::syntax::Syntax::Text);
-                match style.painter.filter(|_| tex_source).map(|paint| paint(tex, true, style.vertical)) {
+                match style.painter.filter(|_| tex_source).map(|paint| paint(tex, true, style.settings.vertical)) {
                     Some(Ok(drawn)) => {
-                        out.push_str(&format!("<p class=\"math\">{}</p>\n", formula_img(&drawn, tex, true, style.vertical)));
+                        out.push_str(&format!("<p class=\"math\">{}</p>\n", formula_img(&drawn, tex, true, style.settings.vertical)));
                     }
                     _ => out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style))),
                 }
@@ -1376,17 +1625,16 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 out.push_str(if *ordered { "</ol>\n" } else { "</ul>\n" });
             }
             Block::Table { head, align, rows, caption } => {
-                // Down the page, a cell that fits its share of the 縱 keeps
-                // its line (see `stylesheet`).
-                let share = style.zong_len.max(1) as f64 / head.len().max(1) as f64;
+                // Down the page, a short cell keeps its line (see
+                // `stylesheet` and `short_cell`).
+                let longest = std::iter::once(head).chain(rows).flatten().map(|c| cell_length(c)).fold(0.0, f64::max);
                 let cell = |tag: &str, n: usize, text: &str| {
                     let side = match align.get(n) {
                         Some(crate::mdtable::Align::Center) => " style=\"text-align: center\"",
                         Some(crate::mdtable::Align::Right) => " style=\"text-align: right\"",
                         _ => "",
                     };
-                    let long: f64 = text.chars().map(|c| if half_width(c) || c == ' ' { 0.5 } else { 1.0 }).sum();
-                    let short = match style.vertical && long <= share {
+                    let short = match style.settings.vertical && short_cell(cell_length(text), longest) {
                         true => " class=\"short\"",
                         false => "",
                     };
@@ -1442,7 +1690,7 @@ fn html_lines(lines: &[String], style: &Style) -> String {
                 false => "<br>\n",
             });
         }
-        out.push_str(&line_into(raw.trim(), style.dialects, Dialect::Html, escape_html, style.source, Drawing::of(style)));
+        out.push_str(&line_into(raw.trim(), style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style)));
     }
     out
 }
@@ -1527,23 +1775,22 @@ pub(crate) fn language_of(text: &str) -> &'static str {
 /// what makes it one. Without this the print is the screen page cut wherever
 /// the paper happens to end: one endless 縱, sliced.
 ///
-/// **The type size is derived, not chosen.** In 縱書 the line runs *down* the
-/// page, so the 版心 is 字數 × 字身 measured down it — the writer has already
-/// said how many characters a 縱 holds, and the paper says how far that has to
-/// reach, which leaves the size of a character with nothing left to be. Ask for
-/// a long 縱 on small paper and the type is small, exactly as it would be in a
-/// book. Set horizontally the same argument runs across the page instead.
+/// **The type is 五號, 10.5 point** (2026-11-08), and the paper says how
+/// many characters a line or a 縱 then holds. It used to be worked out the
+/// other way, from the 縱 length the editing window wraps at; a page is
+/// publication, and nothing of the editing window's reaches it.
 fn print_rules(style: &Style) -> String {
-    let across = f64::from(style.paper.width) * (1.0 - 2.0 * MARGIN_SIDE);
-    let down = f64::from(style.paper.height) * (1.0 - MARGIN_TOP - MARGIN_BOTTOM);
-    let (measure, along, athwart) = if style.vertical {
-        (style.zong_len.max(1) as f64, down, across)
-    } else {
-        (HENG_LEN, across, down)
+    let paper = style.settings.paper;
+    let across = f64::from(paper.width) * (1.0 - 2.0 * MARGIN_SIDE);
+    let down = f64::from(paper.height) * (1.0 - MARGIN_TOP - MARGIN_BOTTOM);
+    let (along, athwart) = match style.settings.vertical {
+        true => (down, across),
+        false => (across, down),
     };
-    let size = along / measure;
+    let size = PRINT_SIZE_PT * 25.4 / 72.0;
+    let measure = (along / size).floor().max(1.0);
     let rows = (athwart / (size * LINE_HEIGHT)).floor().max(1.0);
-    let side = f64::from(style.paper.width) * MARGIN_SIDE;
+    let side = f64::from(paper.width) * MARGIN_SIDE;
 
     let mut out = String::new();
     out.push_str(&format!(
@@ -1554,19 +1801,15 @@ fn print_rules(style: &Style) -> String {
     ));
     out.push_str(&format!(
         "@page {{ size: {w}mm {h}mm; margin: {top:.1}mm {side:.1}mm {bottom:.1}mm {side:.1}mm; }}\n",
-        w = style.paper.width,
-        h = style.paper.height,
-        top = f64::from(style.paper.height) * MARGIN_TOP,
-        bottom = f64::from(style.paper.height) * MARGIN_BOTTOM,
+        w = paper.width,
+        h = paper.height,
+        top = f64::from(paper.height) * MARGIN_TOP,
+        bottom = f64::from(paper.height) * MARGIN_BOTTOM,
     ));
-    // `max-inline-size: none` because the page box is the measure now: the screen
-    // rule pinned the 縱 to a length in `em`, and leaving it pinned would let
-    // it disagree with the paper by whatever the rounding came to and spill a
-    // second, nearly empty 縱 onto every page.
     out.push_str(&format!(
         "@media print {{\n  \
          html, body {{ margin: 0; }}\n  \
-         body {{ font-size: {size:.2}mm; max-inline-size: none; }}\n  \
+         body {{ font-size: {PRINT_SIZE_PT}pt; }}\n  \
          h1, h2 {{ break-before: page; }}\n  \
          body > :first-child {{ break-before: auto; }}\n  \
          h1, h2, h3, h4, h5, h6 {{ break-after: avoid; }}\n  \
@@ -1582,7 +1825,7 @@ fn print_rules(style: &Style) -> String {
 fn typst(text: &str, style: &Style) -> String {
     let mut out = String::new();
     out.push_str("// Written out by yumete.\n");
-    if style.vertical {
+    if style.settings.vertical {
         out.push_str(
             "// Set horizontally: Typst has no vertical writing mode yet, so a
 // 縱書 draft is exported as ordinary lines rather than as something
@@ -1616,7 +1859,7 @@ fn typst(text: &str, style: &Style) -> String {
     let (body, _) = number_the_notes(&body, &notes, |_, text| {
         let lines: Vec<String> = text
             .iter()
-            .map(|l| line_into(l, style.dialects, Dialect::Typst, escape_typst, style.source, None))
+            .map(|l| line_into(l, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None))
             .collect();
         format!("#footnote[{}]", lines.join(" "))
     });
@@ -1626,7 +1869,7 @@ fn typst(text: &str, style: &Style) -> String {
 
 /// The blocks as Typst markup.
 fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.dialects, Dialect::Typst, escape_typst, style.source, None);
+    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None);
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -1726,15 +1969,9 @@ mod tests {
 
     fn style() -> Style {
         Style {
-            vertical: true,
-            hanging: true,
-            zong_len: 32,
-            dialects: Dialects::only(Dialect::Html),
+            settings: Settings { vertical: true, hanging: true, ruby_html: true, ruby_typst: false, ..Settings::default() },
             title: "第一章".to_string(),
-            paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            latin: Latin::Turn,
-            fonts: DEFAULT_FONTS.to_string(),
             base: None,
             painter: None,
         }
@@ -1750,7 +1987,7 @@ mod tests {
         // 它開公式）。A Markdown formula is LaTeX, which Typst cannot read, so
         // it goes over as written, escaped.
         let mut md = style();
-        md.vertical = false;
+        md.settings.vertical = false;
         let out = export("$3 and $5\n", Format::Typst, &md);
         assert!(out.contains(r"\$3 and \$5"), "Markdown 源裏它是字面：{out}");
         let out = export("$a_b$\n", Format::Typst, &md);
@@ -1758,7 +1995,7 @@ mod tests {
 
         // Typst 源：那是一條公式，原樣過去。
         let mut ts = style();
-        ts.vertical = false;
+        ts.settings.vertical = false;
         ts.source = crate::syntax::Syntax::Typst;
         let out = export("$a + b$\n", Format::Typst, &ts);
         assert!(out.contains("$a + b$"), "公式原樣：{out}");
@@ -1774,53 +2011,26 @@ mod tests {
         assert!(!out.contains("<h1"), "Markdown 源裏它是一行字：{out}");
     }
 
+    /// **Print is 五號 on the paper asked for** (2026-11-08): 10.5 point,
+    /// whatever the editing window wraps at, and the paper says how many
+    /// characters a 縱 or a line then holds.
     #[test]
-    fn the_type_size_is_what_the_paper_and_the_measure_leave_it() {
-        // A5 is 210 mm down, of which the 版心 is 79% — 165.9 mm — and the
-        // writer asked for a 縱 of 32 characters. That is 5.18 mm a character
-        // and there is nothing left to choose.
-        let mut style = style();
-        style.zong_len = 32;
-        let out = export("句", Format::Html, &style);
+    fn print_is_ten_and_a_half_point_on_the_paper() {
+        // A5 is 210 mm down, of which the 版心 is 79% — 165.9 mm — or 44
+        // characters of 3.70 mm; across, 118.4 mm at 1.8 line heights is 17 行.
+        let out = export("句", Format::Html, &style());
         assert!(out.contains("@page { size: 148mm 210mm;"), "{out}");
-        assert!(out.contains("font-size: 5.18mm;"), "{out}");
-        // and across the 版心, 118.4 mm at 1.8 line heights: twelve 行.
-        assert!(out.contains("版心 32 字 × 12 行"), "{out}");
-    }
-
-    #[test]
-    fn a_longer_zong_on_the_same_paper_is_smaller_type() {
-        // The opposite of what a naive export does, which is to keep the type
-        // and let the 縱 run off the page.
-        let mut style = style();
-        style.zong_len = 64;
-        let out = export("句", Format::Html, &style);
-        assert!(out.contains("font-size: 2.59mm;"), "{out}");
-    }
-
-    #[test]
-    fn the_paper_the_writer_asked_for_is_the_paper() {
-        let mut style = style();
-        style.paper = Paper {
-            width: 210,
-            height: 297,
-        };
-        style.zong_len = 32;
-        let out = export("句", Format::Html, &style);
-        assert!(out.contains("@page { size: 210mm 297mm;"), "{out}");
-        // 297 × 0.79 ÷ 32.
-        assert!(out.contains("font-size: 7.33mm;"), "{out}");
-    }
-
-    #[test]
-    fn set_horizontally_it_is_the_width_that_decides() {
-        // 148 × 0.8 = 118.4 mm across, over the same 32 characters the screen
-        // stylesheet gives `max-width`.
-        let mut style = style();
-        style.vertical = false;
-        let out = export("句", Format::Html, &style);
-        assert!(out.contains("font-size: 3.70mm;"), "{out}");
-        assert!(out.contains("版心 32 字 × 24 行"), "{out}");
+        assert!(out.contains("body { font-size: 10.5pt; }"), "{out}");
+        assert!(out.contains("版心 44 字 × 17 行"), "{out}");
+        let mut a4 = style();
+        a4.settings.paper = Paper { width: 210, height: 297 };
+        let out = export("句", Format::Html, &a4);
+        assert!(out.contains("@page { size: 210mm 297mm;") && out.contains("版心 63 字 × 25 行"), "{out}");
+        // Across the page it is the width that holds the line.
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let out = export("句", Format::Html, &flat);
+        assert!(out.contains("body { font-size: 10.5pt; }") && out.contains("版心 31 字 × 24 行"), "{out}");
     }
 
     #[test]
@@ -1839,16 +2049,20 @@ mod tests {
         );
     }
 
+    /// **The screen page has no measure** (2026-11-08): a line fills the
+    /// window across, a 縱 fills it down, and the vertical page's writing
+    /// mode is the root's, so it opens at its right edge.
     #[test]
-    fn the_measure_pinned_for_the_screen_is_let_go_of_for_the_paper() {
-        // `max-inline-size: 32em` is how the screen page holds a 縱 of 32;
-        // on paper the page box holds it, and leaving both in disagreed by
-        // the rounding and spilled a second, nearly empty 縱 onto every page.
+    fn the_screen_page_has_no_measure() {
         let out = export("句", Format::Html, &style());
         assert!(out.contains("html { writing-mode: vertical-rl; }"), "{out}");
-        assert!(out.contains("max-inline-size: 32em; margin: 4rem; }"), "{out}");
-        assert!(out.contains("max-inline-size: none; }"), "{out}");
-        assert!(!out.contains("block-size: 32em"), "{out}");
+        assert!(out.contains("body { writing-mode: vertical-rl; text-orientation: mixed; line-break: strict; }"), "{out}");
+        let mut flat = style();
+        flat.settings.vertical = false;
+        for out in [out, export("句", Format::Html, &flat)] {
+            assert!(!out.contains("max-width") && !out.contains("block-size: 32em") && !out.contains("32em"), "{out}");
+            assert!(!out.contains("body { max-inline-size"), "{out}");
+        }
     }
 
     #[test]
@@ -1857,7 +2071,7 @@ mod tests {
         // not be able to tell that any of this is in the file.
         let a5 = export("# 第一章\n\n句\n", Format::Html, &style());
         let mut big = style();
-        big.paper = Paper {
+        big.settings.paper = Paper {
             width: 210,
             height: 297,
         };
@@ -1873,15 +2087,9 @@ mod tests {
         // says is not part of the book. It was going into the file handed to a
         // publisher.
         let style = Style {
-            vertical: false,
-            hanging: false,
-            zong_len: 32,
-            dialects: Dialects::NONE,
+            settings: Settings { vertical: false, hanging: false, ruby_html: false, ruby_typst: false, ..Settings::default() },
             title: "t".to_string(),
-            paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            latin: Latin::Turn,
-            fonts: DEFAULT_FONTS.to_string(),
             base: None,
             painter: None,
         };
@@ -1907,15 +2115,9 @@ mod tests {
     #[test]
     fn markup_inside_markup_is_exported_all_the_way_down() {
         let style = |source| Style {
-            vertical: false,
-            hanging: false,
-            zong_len: 32,
-            dialects: Dialects::NONE,
+            settings: Settings { vertical: false, hanging: false, ruby_html: false, ruby_typst: false, ..Settings::default() },
             title: "t".to_string(),
-            paper: Paper::A5,
             source,
-            latin: Latin::Turn,
-            fonts: DEFAULT_FONTS.to_string(),
             base: None,
             painter: None,
         };
@@ -1967,15 +2169,9 @@ mod tests {
     #[test]
     fn a_vertical_page_sets_latin_the_way_縱書_does() {
         let style = Style {
-            vertical: true,
-            hanging: true,
-            zong_len: 32,
-            dialects: Dialects::NONE,
+            settings: Settings { vertical: true, hanging: true, ruby_html: false, ruby_typst: false, ..Settings::default() },
             title: "t".to_string(),
-            paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            latin: Latin::Turn,
-            fonts: DEFAULT_FONTS.to_string(),
             base: None,
             painter: None,
         };
@@ -2059,7 +2255,7 @@ mod tests {
     #[test]
     fn a_reading_is_rewritten_into_the_target_dialect() {
         let mut s = style();
-        s.vertical = false;
+        s.settings.vertical = false;
         let out = export(
             "<ruby>永和<rt>えいわ</rt></ruby>九年。\n",
             Format::Typst,
@@ -2074,7 +2270,7 @@ mod tests {
     #[test]
     fn a_reading_exported_to_typst_is_escaped_as_a_string_not_as_markup() {
         let mut s = style();
-        s.vertical = false;
+        s.settings.vertical = false;
         // A star, a hash and an underscore are ordinary characters in a
         // string. Escaped as markup they were `\*`, which the compiler
         // refuses as an unknown escape sequence.
@@ -2098,8 +2294,8 @@ mod tests {
         // Coming the other way, the escaping comes back off: a Typst source
         // exported as HTML shows the quote, not the backslash.
         let mut s = style();
-        s.vertical = false;
-        s.dialects = Dialects::only(Dialect::Typst);
+        s.settings.vertical = false;
+        (s.settings.ruby_html, s.settings.ruby_typst) = (false, true);
         let out = export("#ruby(\"桜\", \"say \\\"hi\\\"\")\n", Format::Html, &s);
         assert!(out.contains("<rt>say \"hi\"</rt>"), "{out}");
     }
@@ -2107,7 +2303,7 @@ mod tests {
     #[test]
     fn the_writers_own_angle_brackets_survive() {
         let mut s = style();
-        s.dialects = Dialects::NONE;
+        (s.settings.ruby_html, s.settings.ruby_typst) = (false, false);
         let out = export("他說「a < b」。\n", Format::Html, &s);
         assert!(out.contains(" &lt; "), "{out}");
     }
@@ -2115,7 +2311,7 @@ mod tests {
     #[test]
     fn blank_lines_separate_paragraphs_and_line_breaks_are_kept() {
         let mut s = style();
-        s.dialects = Dialects::NONE;
+        (s.settings.ruby_html, s.settings.ruby_typst) = (false, false);
         let out = export("一\n二\n\n三\n", Format::Html, &s);
         assert!(out.contains("<p>一<br>\n二</p>"), "{out}");
         assert!(out.contains("<p>三</p>"), "{out}");
@@ -2126,7 +2322,7 @@ mod tests {
     #[test]
     fn markdown_structure_reaches_both_formats() {
         let mut flat = style();
-        flat.vertical = false;
+        flat.settings.vertical = false;
         let text = "# A Title\n\nWrapped at\nthe source.[^a]\n\n- one\n- two\n  1. inner\n\n> quoted\n> on\n\n---\n\n| N | C |\n| :- | -: |\n| x | 3 |\n\n[^a]: The note.\n";
         let html = export(text, Format::Html, &flat);
         assert!(html.contains("<html lang=\"en\">"), "{html}");
@@ -2154,7 +2350,7 @@ mod tests {
     #[test]
     fn line_breaks_and_the_language_follow_the_text() {
         let mut flat = style();
-        flat.vertical = false;
+        flat.settings.vertical = false;
         let html = export("一\n二\n", Format::Html, &flat);
         assert!(html.contains("<p>一<br>\n二</p>") && html.contains("lang=\"zh\""), "{html}");
         assert!(html.contains("text-indent: 2em"), "{html}");
@@ -2171,7 +2367,7 @@ mod tests {
     #[test]
     fn footnotes_are_numbered_by_where_they_are_met() {
         let mut flat = style();
-        flat.vertical = false;
+        flat.settings.vertical = false;
         let html = export("a[^x] b[^y] c[^x]\n\n[^y]: Why.\n[^x]: Ex.\n[^z]: Zed.\n", Format::Html, &flat);
         assert!(html.contains("a<sup class=\"fn\"><a href=\"#fn-1\""), "{html}");
         assert!(html.contains("b<sup class=\"fn\"><a href=\"#fn-2\""), "{html}");
@@ -2188,7 +2384,7 @@ mod tests {
     #[test]
     fn what_the_night_review_found_in_export() {
         let mut flat = style();
-        flat.vertical = false;
+        flat.settings.vertical = false;
         let html = export("- 第一點\n\u{3000}\u{3000}續寫的一行\n", Format::Html, &flat);
         assert!(html.contains("第一點"), "{html}");
         let html = export("Roses are red,  \nviolets are blue.\n", Format::Html, &flat);
@@ -2204,7 +2400,7 @@ mod tests {
     #[test]
     fn inline_html_goes_through_to_html_and_not_to_typst() {
         let mut md = style();
-        md.vertical = false;
+        md.settings.vertical = false;
         let out = export("按 <kbd>Esc</kbd> 退出\n", Format::Html, &md);
         assert!(out.contains("按 <kbd>Esc</kbd> 退出"), "{out}");
         let out = export("按 <kbd>Esc</kbd> 退出\n", Format::Typst, &md);
@@ -2216,7 +2412,7 @@ mod tests {
     #[test]
     fn markdown_maths_goes_over_as_written() {
         let mut md = style();
-        md.vertical = false;
+        md.settings.vertical = false;
         let out = export("Area $\\frac{a}{b}$ and $$E=mc^2$$\n", Format::Typst, &md);
         assert!(out.contains(r"Area \$\\frac{a}{b}\$ and \$\$E=mc^2\$\$"), "{out}");
         let out = export("Area $\\frac{a}{b}$ and $$E=mc^2$$\n", Format::Html, &md);
@@ -2230,7 +2426,7 @@ mod tests {
     #[test]
     fn angle_brackets_that_are_not_a_tag_stay_prose() {
         let mut md = style();
-        md.vertical = false;
+        md.settings.vertical = false;
         let out = export("Vec<String> and a<b and c>d\n", Format::Typst, &md);
         assert!(out.contains(r"Vec\<String\> and a\<b and c\>d"), "{out}");
         let out = export("Vec<String> and a<b and c>d\n", Format::Html, &md);
@@ -2254,7 +2450,9 @@ mod tests {
     }
 
     fn jlreq() -> Style {
-        Style { latin: Latin::Jlreq, ..style() }
+        let mut s = style();
+        s.settings.latin = Latin::Jlreq;
+        s
     }
 
     /// **`turn`, the default** (2026-11-08): every run of half-width letters
@@ -2276,7 +2474,7 @@ mod tests {
         assert!(out.contains("甲·乙 / 丙"), "{out}");
         // Across the page nothing is wrapped.
         let mut flat = style();
-        flat.vertical = false;
+        flat.settings.vertical = false;
         let out = export("1997年12月\n", Format::Html, &flat);
         assert!(!out.contains("class=\"yoko\"") && !out.contains("text-orientation: sideways"), "{out}");
     }
@@ -2321,7 +2519,7 @@ mod tests {
         let out = export("他说 don’t 了。\n", Format::Html, &style());
         assert!(out.contains("<span class=\"yoko\">don’t</span>") && !out.contains("」"), "{out}");
         let mut flat = style();
-        flat.vertical = false;
+        flat.settings.vertical = false;
         let out = export("他说：“走吧。”\n", Format::Html, &flat);
         assert!(out.contains("“走吧。”"), "{out}");
         let out = export("He said “go” and ‘stay’, the end of it.\n", Format::Html, &style());
@@ -2350,7 +2548,7 @@ mod tests {
         let typ = export(above, Format::Typst, &style());
         assert!(typ.contains("#figure(table(\n") && typ.contains("), caption: [表一　雨量])"), "{typ}");
         let mut flat = style();
-        flat.vertical = false;
+        flat.settings.vertical = false;
         let out = export(text, Format::Html, &flat);
         assert!(!out.contains("class=\"short\""), "{out}");
     }
@@ -2379,7 +2577,7 @@ mod tests {
             assert!(out.contains(&format!("body {{ font-family: {DEFAULT_FONTS}; ")), "{out}");
         }
         let mut s = style();
-        s.fonts = "\"LXGW WenKai\", serif; } body { color: red".to_string();
+        s.settings.fonts = "\"LXGW WenKai\", serif; } body { color: red".to_string();
         let out = export("中文。\n", Format::Html, &s);
         assert!(out.contains("font-family: \"LXGW WenKai\", serif  body  color: red;"), "{out}");
         assert!(!out.contains("Source Han") && !out.contains("Georgia"), "{out}");
@@ -2390,7 +2588,7 @@ mod tests {
     #[test]
     fn a_formula_is_drawn_into_the_page() {
         let mut s = style();
-        s.vertical = false;
+        s.settings.vertical = false;
         s.painter = Some(drawn);
         let out = export("从 $x^2 + y^2 = 1$ 起。\n", Format::Html, &s);
         assert!(
@@ -2428,12 +2626,41 @@ mod tests {
         assert!(out.contains("<img class=\"math display turned\""), "{out}");
     }
 
+    /// **The words of an `:export` line** (2026-11-08): any order, the path
+    /// last, a font list held whole by its quotes and commas, and a word
+    /// misspelt said rather than taken for a file.
+    #[test]
+    fn an_export_line_reads_its_words_and_its_path() {
+        let mut s = Settings::default();
+        let path = s.read_line("vertical jlreq page=32開 hanging no-ruby-typst out/book.epub").unwrap();
+        assert_eq!(path.as_deref(), Some("out/book.epub"));
+        assert!(s.vertical && s.hanging && s.ruby_html && !s.ruby_typst && s.latin == Latin::Jlreq);
+        assert_eq!(s.paper, Paper { width: 130, height: 184 });
+        let mut s = Settings::default();
+        assert_eq!(s.read_line(r#"font="PingFang SC", "Noto Sans CJK SC", sans-serif turn"#).unwrap(), None);
+        assert_eq!(s.fonts, r#""PingFang SC", "Noto Sans CJK SC", sans-serif"#);
+        assert_eq!(s.read_line(r#"font='"Songti SC", serif' "my book.html""#).unwrap().as_deref(), Some("my book.html"));
+        assert_eq!(s.fonts, r#""Songti SC", serif"#);
+        let mut s = Settings::default();
+        assert_eq!(s.read_line("").unwrap(), None);
+        assert_eq!(s.read_line("chapter.html vertical").unwrap_err(), say!("export.words-after-path", "chapter.html"));
+        assert_eq!(s.read_line("verticle").unwrap_err(), say!("export.no-such-word", "verticle"));
+        assert_eq!(s.read_line("./vertical").unwrap().as_deref(), Some("./vertical"));
+        assert_eq!(s.read_line("page=quarto").unwrap_err(), say!("export.no-such-page", "quarto"));
+        assert!(s.read_line("font=").is_err() && s.read_line(r#"font="Songti"#).is_err());
+        assert_eq!(s, Settings::default(), "nothing is taken from a line that is refused");
+        // The menu's short spellings are written out by the parser, and a
+        // quoted path is left alone.
+        let parsed = crate::command::parse(r#":export html v jl "my v.html""#).unwrap();
+        assert!(matches!(parsed, crate::command::Command::Export { ref words, .. } if words == r#"vertical jlreq "my v.html""#), "{parsed:?}");
+    }
+
     /// What does not draw stays as written, and nothing is drawn where the
     /// formula is not TeX, or the page cannot show a picture.
     #[test]
     fn a_formula_that_cannot_be_drawn_stays_as_written() {
         let mut s = style();
-        s.vertical = false;
+        s.settings.vertical = false;
         s.painter = Some(refused);
         let out = export("Area $\\frac{a}{b}$ and $$E=mc^2$$\n", Format::Html, &s);
         assert!(out.contains(r"Area $\frac{a}{b}$ and $$E=mc^2$$"), "{out}");

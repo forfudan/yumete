@@ -295,10 +295,34 @@ zhs = "无法确定 {0} 的编码，可能是 {1}"
 en = "cannot tell the encoding of {0}; it could be {1}"
 
 [[message]]
+# :export 的 font= 后面是空的（草稿）
+key = "export.no-fonts"
+zhs = "font= 后面要写字体，例如 font='Songti SC', serif"
+en = "font= wants a font list, such as font='Songti SC', serif"
+
+[[message]]
 # :export 給了不認得的格式（草稿：加了 epub）
 key = "export.no-such-format"
 zhs = "没有「{0}」格式：可用 html、typst、epub，或 csv、tsv(光标所在表格)"
 en = "no format '{0}': html, typst, epub, or csv/tsv for the table under the cursor"
+
+[[message]]
+# :export 的 page= 后面不是纸张（草稿）
+key = "export.no-such-page"
+zhs = "page=「{0}」不是纸张：可用 a4 a5 a6 b5 b6 letter 16开 32开 大32开，或 130x184 这样的毫米数"
+en = "page='{0}' is not a paper size: a4 a5 a6 b5 b6 letter 16開 32開 大32開, or millimetres such as 130x184"
+
+[[message]]
+# :export 后面有一个既不是选项、也不像文件名的词（草稿）
+key = "export.no-such-word"
+zhs = "不认得「{0}」：可用 vertical、horizontal、hanging、no-hanging、ruby-html、no-ruby-html、ruby-typst、no-ruby-typst、turn、jlreq、page=、font=；文件名请写成 ./{0}"
+en = "no such word '{0}': vertical, horizontal, hanging, no-hanging, ruby-html, no-ruby-html, ruby-typst, no-ruby-typst, turn, jlreq, page= or font=; for a file, write ./{0}"
+
+[[message]]
+# :export 的一行里有个引号没有收尾（草稿）
+key = "export.open-quote"
+zhs = "引号没有收尾：{0}"
+en = "a quote is left open: {0}"
 
 [[message]]
 # 導出的檔名就是稿子本身
@@ -317,6 +341,12 @@ en = "{0} already exists; `:export!` overwrites it"
 key = "export.target-is-open"
 zhs = "{0} 已打开，导出会覆盖它，请换个文件名"
 en = "{0} is open; an export would overwrite it, so pick another name"
+
+[[message]]
+# :export 的路径后面还有别的词（草稿）
+key = "export.words-after-path"
+zhs = "路径「{0}」要放在最后"
+en = "the path '{0}' goes last"
 
 [[message]]
 # 導出寫好了檔案

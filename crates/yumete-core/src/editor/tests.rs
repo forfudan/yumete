@@ -6540,11 +6540,18 @@ fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
     ed.set_hanging_punctuation(true);
     ed.execute(":export html").unwrap();
 
-    // Named after the chapter, not after the format.
+    // Named after the chapter, not after the format — and set by the
+    // export's settings, not by how the editing window shows the draft
+    // (2026-11-08).
+    let out = std::fs::read_to_string(dir.join("chapter.html")).unwrap();
+    assert!(!out.contains("writing-mode: vertical-rl"), "{out}");
+    assert!(!out.contains("hanging-punctuation"), "{out}");
+    assert!(out.contains("<h1>第一章</h1>"), "{out}");
+    // The export's own words carry it.
+    ed.execute(":export! html vertical hanging").unwrap();
     let out = std::fs::read_to_string(dir.join("chapter.html")).unwrap();
     assert!(out.contains("writing-mode: vertical-rl"), "{out}");
     assert!(out.contains("hanging-punctuation"), "{out}");
-    assert!(out.contains("<h1>第一章</h1>"), "{out}");
 
     // A scratch buffer has no name to derive one from.
     let mut ed = Editor::new();

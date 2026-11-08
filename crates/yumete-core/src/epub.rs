@@ -49,7 +49,7 @@ pub fn book(text: &str, style: &Style) -> Vec<u8> {
         let kind = media_type(name).unwrap_or("image/png");
         let _ = writeln!(manifest, "<item id=\"f{}\" href=\"{name}\" media-type=\"{kind}\"/>", n + 1);
     }
-    let (direction, mode) = match style.vertical && lang != "en" {
+    let (direction, mode) = match style.settings.vertical && lang != "en" {
         true => (" page-progression-direction=\"rtl\"", "\n<meta name=\"primary-writing-mode\" content=\"vertical-rl\"/>"),
         false => ("", ""),
     };
@@ -409,20 +409,13 @@ fn crc32(data: &[u8]) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::export::{Format, Paper};
-    use crate::ruby::{Dialect, Dialects};
+    use crate::export::Format;
 
     fn style() -> Style {
         Style {
-            vertical: true,
-            hanging: false,
-            zong_len: 32,
-            dialects: Dialects::only(Dialect::Html),
+            settings: crate::export::Settings { vertical: true, ruby_typst: false, ..Default::default() },
             title: "第一章.md".to_string(),
-            paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
-            latin: crate::export::Latin::Turn,
-            fonts: crate::export::DEFAULT_FONTS.to_string(),
             base: None,
             painter: None,
         }
@@ -490,7 +483,7 @@ mod tests {
         assert!(page.contains("<span class=\"yoko\">1997</span>年"), "{page}");
         assert!(page.contains("『走吧。』<br/>"), "{page}");
         assert!(read(5).contains("-epub-writing-mode: vertical-rl"));
-        assert!(!read(5).contains("block-size: 32em"));
+        assert!(!read(5).contains("32em"));
     }
 
     /// Across the page, no direction is claimed; a formula is a file of its
@@ -501,7 +494,7 @@ mod tests {
             Ok(crate::export::Formula { png: vec![1, 2, 3], width: 2.0, height: 1.0, depth: 0.2 })
         }
         let mut s = style();
-        s.vertical = false;
+        s.settings.vertical = false;
         s.painter = Some(drawn);
         let book = book("从 $x^2$ 起，到 $y$ 止。\n", &s);
         let files = entries(&book);

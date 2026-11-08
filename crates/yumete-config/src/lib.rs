@@ -3400,12 +3400,24 @@ pub fn factory_servers() -> HashMap<String, Vec<Server>> {
 }
 
 
-/// What `:export` cannot work out for itself.
+/// **How `:export` sets a page** (2026-11-08): all of it, and nothing from
+/// the editing window.
 ///
-/// Here rather than in `[editor]` because none of it is a screen setting:
-/// nothing about it is visible until a file is written out.
+/// An export is publication, so how the draft is shown — `:vertical`,
+/// `:view-hanging`, the 縱 length, `:ruby-html` — does not reach it. Each key
+/// here is also a word on `:export` and `ye --export`, for one export
+/// (`:export epub vertical jlreq page=A5`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExportConfig {
+    /// Whether the page is set vertically, in 縱 from the right edge.
+    pub vertical: bool,
+    /// Whether 句讀 hang in the margin (標點旁置).
+    pub hanging: bool,
+    /// Whether HTML ruby in the source (`<ruby>漢<rt>han</rt></ruby>`) is
+    /// read as ruby.
+    pub ruby_html: bool,
+    /// Whether Typst ruby in the source (`#ruby[漢][han]`) is read as ruby.
+    pub ruby_typst: bool,
     /// The paper a printed copy is set on, in whole millimetres — the trim the
     /// `@media print` half of an HTML export is written for. 開本 is decided
     /// once for a book, so this is a configuration line and not a command.
@@ -3426,7 +3438,15 @@ pub const DEFAULT_FONT_FAMILY: &str =
 
 impl Default for ExportConfig {
     fn default() -> ExportConfig {
-        ExportConfig { page: (148, 210), vertical_latin: VerticalLatin::default(), font_family: DEFAULT_FONT_FAMILY.to_string() }
+        ExportConfig {
+            vertical: false,
+            hanging: false,
+            ruby_html: true,
+            ruby_typst: true,
+            page: (148, 210),
+            vertical_latin: VerticalLatin::default(),
+            font_family: DEFAULT_FONT_FAMILY.to_string(),
+        }
     }
 }
 
@@ -3515,7 +3535,12 @@ impl LanguageKey {
     }
 }
 
-fn parse_page(value: &str) -> Option<(u32, u32)> {
+/// The trim a page name or a `寬x高` names, in millimetres.
+///
+/// Warning: **`yumete_core::export::Paper::named` reads the same names** for
+/// `:export page=…`, and `yumete-tui/tests/page_names.rs` holds the two
+/// to one answer: this crate cannot see that one.
+pub fn parse_page(value: &str) -> Option<(u32, u32)> {
     let name = value.trim().to_ascii_lowercase();
     let named = match name.as_str() {
         "a4" => (210, 297),
@@ -4625,6 +4650,10 @@ impl RawServers {
 #[derive(Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 struct RawExport {
+    vertical: Option<bool>,
+    hanging: Option<bool>,
+    ruby_html: Option<bool>,
+    ruby_typst: Option<bool>,
     page: Option<String>,
     vertical_latin: Option<String>,
     font_family: Option<String>,
@@ -5139,6 +5168,16 @@ impl RawConfig {
         }
         if other.export.page.is_some() {
             self.export.page = other.export.page;
+        }
+        for (mine, theirs) in [
+            (&mut self.export.vertical, other.export.vertical),
+            (&mut self.export.hanging, other.export.hanging),
+            (&mut self.export.ruby_html, other.export.ruby_html),
+            (&mut self.export.ruby_typst, other.export.ruby_typst),
+        ] {
+            if theirs.is_some() {
+                *mine = theirs;
+            }
         }
         if other.export.vertical_latin.is_some() {
             self.export.vertical_latin = other.export.vertical_latin;
@@ -5789,6 +5828,17 @@ impl RawConfig {
         }
         if let Some(page) = self.export.page.as_deref().and_then(parse_page) {
             config.export.page = page;
+        }
+        let export = &mut config.export;
+        for (to, from) in [
+            (&mut export.vertical, self.export.vertical),
+            (&mut export.hanging, self.export.hanging),
+            (&mut export.ruby_html, self.export.ruby_html),
+            (&mut export.ruby_typst, self.export.ruby_typst),
+        ] {
+            if let Some(on) = from {
+                *to = on;
+            }
         }
         if let Some(latin) = self.export.vertical_latin.as_deref().and_then(VerticalLatin::parse) {
             config.export.vertical_latin = latin;
@@ -6787,6 +6837,9 @@ mod tests {
     #[test]
     fn the_vertical_latin_and_the_fonts_of_an_export() {
         let c = Config::from_toml("");
+        assert!(!c.export.vertical && !c.export.hanging && c.export.ruby_html && c.export.ruby_typst);
+        let c2 = Config::from_toml("[export]\nvertical = true\nhanging = true\nruby_html = false\n");
+        assert!(c2.export.vertical && c2.export.hanging && !c2.export.ruby_html && c2.export.ruby_typst);
         assert_eq!(c.export.vertical_latin, VerticalLatin::Turn);
         assert_eq!(c.export.font_family, DEFAULT_FONT_FAMILY);
         let c = Config::from_toml("[export]\nvertical_latin = \"jlreq\"\nfont_family = \"'Songti SC', serif\"\n");

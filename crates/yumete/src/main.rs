@@ -1957,7 +1957,7 @@ fn what_was_not_looked_at(editor: &Editor, what: &str) -> bool {
     incomplete
 }
 
-/// `ye --export FMT FILE…`: each file written out beside itself with the new
+/// `ye --export FMT [WORD…] FILE…`: each file written out beside itself with the new
 /// extension, or at `--out` when one file is named. The path written goes to
 /// stdout, one a line, so a script can pick it up; anything wrong goes to
 /// stderr with a non-zero exit.
@@ -1978,6 +1978,26 @@ fn run_export(
         eprintln!("yumete: --export takes html, typst, epub, csv, tsv or pdf, not '{format}'");
         return ExitCode::from(2);
     }
+    // **The export's words** (2026-11-08), as `:export` takes them:
+    // `ye --export epub vertical jlreq page=A5 book.md`. A word misspelt is
+    // said, not opened as a file; a file really named `vertical` is
+    // `./vertical`.
+    let mut named: Vec<String> = Vec::new();
+    for arg in files {
+        match editor.take_export_word(arg) {
+            Some(Ok(())) => {}
+            Some(Err(why)) => {
+                eprintln!("yumete: {why}");
+                return ExitCode::from(2);
+            }
+            None if yumete_core::export::looks_like_a_path(arg) => named.push(arg.clone()),
+            None => {
+                eprintln!("yumete: {}", yumete_core::say!("export.no-such-word", arg));
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let files = &named[..];
     if files.is_empty() {
         eprintln!("yumete: --export wants a file to export");
         return ExitCode::from(2);
@@ -2606,9 +2626,17 @@ SEARCHING FROM THE SHELL:
                      pdf and exit: beside the file with the new extension,
                      or at --out PATH when one file is named. An existing
                      file is written over, as a compiler's would be. The
-                     paper, layout and ruby settings of your config apply, as
-                     with :export in the editor; csv and tsv take the file's
-                     table.
+                     [export] settings of your config apply, as with :export
+                     in the editor; csv and tsv take the file's table.
+
+                     The words :export takes go among the files, each over
+                     its setting for this run: vertical, horizontal, hanging,
+                     no-hanging, ruby-html, no-ruby-html, ruby-typst,
+                     no-ruby-typst, turn, jlreq, page=A5 (or page=130x184)
+                     and font='\"Songti SC\", serif'. A file with no
+                     extension is written ./name.
+
+                         ye --export epub vertical jlreq page=A5 book.md
 
                      pdf needs the `typst` compiler on the PATH (brew install
                      typst). A .typ file is compiled as it is, #include and

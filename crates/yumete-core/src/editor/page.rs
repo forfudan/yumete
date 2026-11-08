@@ -206,30 +206,29 @@ impl Editor {
         self.zong_length
     }
 
-    /// The paper a printed copy is set on, in whole millimetres.
-    pub fn paper(&self) -> crate::export::Paper {
-        self.paper
+    /// How `:export` sets a page: the `[export]` settings.
+    pub fn export_settings(&self) -> &crate::export::Settings {
+        &self.export
     }
 
-    /// Set the paper `:export html` writes its print stylesheet for.
+    /// Set how `:export` sets a page, from the `[export]` settings.
     ///
     /// A degenerate trim is refused rather than clamped: it can only come from
     /// a configuration line, and silently printing a book on paper the writer
     /// did not ask for is worse than printing it on A5.
-    pub fn set_paper(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.paper = crate::export::Paper { width, height };
+    pub fn set_export_settings(&mut self, mut settings: crate::export::Settings) {
+        if settings.paper.width == 0 || settings.paper.height == 0 {
+            settings.paper = self.export.paper;
         }
+        self.export = settings;
     }
 
-    /// Set how a vertical export sets half-width letters and digits.
-    pub fn set_export_latin(&mut self, latin: crate::export::Latin) {
-        self.export_latin = latin;
-    }
-
-    /// Set the fonts an HTML or EPUB export asks for, a CSS font list.
-    pub fn set_export_fonts(&mut self, fonts: &str) {
-        self.export_fonts = fonts.to_string();
+    /// **One `ye --export` word** (2026-11-08) — `vertical`, `page=A5` —
+    /// over the `[export]` settings for the rest of the run; `None` when it is
+    /// not one of [`crate::export::WORDS`]. The same reading `:export` gives
+    /// its words.
+    pub fn take_export_word(&mut self, word: &str) -> Option<Result<(), String>> {
+        self.export.take(word)
     }
 
     /// Set the 縱 wrap length. The renderer calls this once the terminal size is

@@ -1843,9 +1843,23 @@ impl Editor {
     /// The default name is the document's own with the extension swapped, which
     /// is what a writer means by "export this chapter"; a path given explicitly
     /// wins. A scratch buffer has no name to derive one from and must be told.
-    pub(super) fn export(
+    /// `:export FORMAT [WORDS…] [PATH]`: the `[export]` settings, with the
+    /// words given for this one export over them (2026-11-08).
+    pub(super) fn export(&mut self, format: &str, words: &str, force: bool) -> Result<CommandOutcome, EditorError> {
+        let mut settings = self.export.clone();
+        match settings.read_line(words) {
+            Ok(path) => self.export_with(format, settings, path.as_deref(), force),
+            Err(why) => {
+                self.status = why;
+                Ok(CommandOutcome::Continue)
+            }
+        }
+    }
+
+    fn export_with(
         &mut self,
         format: &str,
+        settings: crate::export::Settings,
         path: Option<&str>,
         force: bool,
     ) -> Result<CommandOutcome, EditorError> {
@@ -1876,17 +1890,14 @@ impl Editor {
                 None => return Err(EditorError::NoFileName),
             },
         };
+        // Warning: **nothing of the editing window's** (2026-11-08): not
+        // `:vertical`, `:view-hanging`, the 縱 length nor `:ruby-html`. An
+        // export is publication; how the writer sees the draft is theirs.
         let style = crate::export::Style {
-            vertical: self.layout() == Layout::Vertical,
-            hanging: self.hanging,
-            zong_len: self.zong_length,
-            dialects: self.ruby,
+            settings,
             title: self.current_buffer().display_name(),
-            paper: self.paper,
             // Warning: **讀的是這一份稿子的語法**，不是要寫成的格式（2026-09-28）。
             source: self.current_buffer().syntax(),
-            latin: self.export_latin,
-            fonts: self.export_fonts.clone(),
             base: self.current_buffer().path().and_then(|p| p.parent()).map(std::path::Path::to_path_buf),
             painter: self.formula_painter,
         };
@@ -1934,7 +1945,8 @@ impl Editor {
         // Cleared first: two files in one run say the same words, and the
         // second must not read as silence.
         self.status.clear();
-        match self.export(format, target, true) {
+        let settings = self.export.clone();
+        match self.export_with(format, settings, target, true) {
             Ok(_) => {
                 let said = self.status.clone();
                 match !said.is_empty() {

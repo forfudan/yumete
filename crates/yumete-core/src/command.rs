@@ -742,7 +742,9 @@ pub enum Command {
     /// already there — write the manuscript out for a typesetter.
     Export {
         format: String,
-        path: Option<String>,
+        /// What follows the format, as typed: the export's words and the
+        /// path, read by [`crate::export::Settings::read_line`].
+        words: String,
         force: bool,
     },
     /// `:ruby-auto` — write the readings in by word; `rare` keeps only the
@@ -1120,6 +1122,13 @@ pub enum Param {
     },
     /// A path, completed from the file system by the caller.
     Path,
+    /// **Words in any number and order, then a path** (2026-11-08): what
+    /// `:export` takes after its format, `vertical jlreq page=A5 out.epub`.
+    /// It takes the whole of what is left, as a path does, and hands it on as
+    /// typed, quotes and all: the command reads it, words and path alike
+    /// ([`crate::export::Settings::read_line`]). Each slot after it offers the
+    /// words again.
+    Options(&'static [Word]),
     /// One of the input schemes — **whichever ones are installed** (#169).
     Schemes,
     /// Anything at all; the string is the placeholder to show while typing.
@@ -1137,7 +1146,7 @@ impl Param {
     /// it means a scheme that is installed does not appear.
     pub fn words(&self) -> Option<&'static [Word]> {
         match self {
-            Param::Words { of, .. } | Param::WordsOr { of, .. } => Some(of),
+            Param::Words { of, .. } | Param::WordsOr { of, .. } | Param::Options(of) => Some(of),
             Param::Schemes => Some(schemes()),
             _ => None,
         }
@@ -1153,11 +1162,23 @@ impl Param {
 
     /// Whether it takes the whole of what is left rather than one word.
     fn takes_the_rest(&self) -> bool {
-        matches!(self, Param::Path | Param::Free(_))
+        matches!(self, Param::Path | Param::Free(_) | Param::Options(_))
+    }
+
+    /// Whether a word this parameter does not list is still taken — the
+    /// text of a `WordsOr`, the path after an `Options`.
+    fn takes_others(&self) -> bool {
+        matches!(self, Param::WordsOr { .. } | Param::Options(_))
     }
 
     /// What may follow, for a listing: `<檔名>`, `on|off`, or a placeholder.
     pub fn hint(&self) -> String {
+        if let Param::Options(of) = self {
+            let mut out: String = of.iter().map(|w| w.name).collect::<Vec<_>>().join("｜");
+            out.push('｜');
+            out.push_str(&say!("cmd.arg.path"));
+            return out;
+        }
         if let Param::WordsOr { of, or, .. } = self {
             let mut out: String = of.iter().map(|w| w.name).collect::<Vec<_>>().join("｜");
             out.push('｜');
@@ -1487,6 +1508,7 @@ fn read_params(
             // to a shell, which does its own quoting, and stripping the quotes
             // here would hand it a different command.
             args.push(match matches!(param, Param::Path) {
+                false if matches!(param, Param::Options(_)) => spelt_out(left, param.words().unwrap_or_default()),
                 true => match unquote(left) {
                     Some(path) => path,
                     None => {
@@ -1619,6 +1641,41 @@ fn unquote(raw: &str) -> Option<String> {
         }
     }
     Some(out)
+}
+
+/// **An `Options` parameter with its words written out** (2026-11-08): each
+/// piece between spaces that the prefix rule turns into one of `list`'s words
+/// becomes that word, as the menu's short spellings promise (`:export html v`
+/// is `vertical`); the rest — a path, a value, a quoted font list — is left
+/// exactly as typed.
+fn spelt_out(rest: &str, list: &[Word]) -> String {
+    let mut out = String::with_capacity(rest.len());
+    let mut piece = String::new();
+    let flush = |piece: &mut String, out: &mut String| {
+        let plain = !piece.contains(['=', '/', '\\', '.', '"', '\'', ',']);
+        match pick(piece, list).filter(|_| plain && !piece.is_empty()) {
+            Some(word) => out.push_str(word.name),
+            None => out.push_str(piece),
+        }
+        piece.clear();
+    };
+    // Inside quotes a space does not end the piece: `"my v.html"` is a path.
+    let mut quote: Option<char> = None;
+    for c in rest.chars() {
+        match (quote, c) {
+            (None, c) if c.is_whitespace() => {
+                flush(&mut piece, &mut out);
+                out.push(c);
+                continue;
+            }
+            (None, '"' | '\'') => quote = Some(c),
+            (Some(q), c) if c == q => quote = None,
+            _ => {}
+        }
+        piece.push(c);
+    }
+    flush(&mut piece, &mut out);
+    out
 }
 
 /// The command a typed word names, by prefix when it is not a whole name.
@@ -2776,6 +2833,24 @@ const EXPORT_FORMATS: &[Word] = &[
         help: "cmd.export.tsv",
         needs: &[],
     },
+];
+
+/// **The words `:export` takes after its format** (2026-11-08), each the
+/// `[export]` setting of the same name for this one export; the same list
+/// `ye --export` reads ([`crate::export::WORDS`]).
+const EXPORT_WORDS: &[Word] = &[
+    Word { name: "vertical", help: "cmd.export.vertical", needs: &[] },
+    Word { name: "horizontal", help: "cmd.export.horizontal", needs: &[] },
+    Word { name: "hanging", help: "cmd.export.hanging", needs: &[] },
+    Word { name: "no-hanging", help: "cmd.export.no-hanging", needs: &[] },
+    Word { name: "ruby-html", help: "cmd.export.ruby-html", needs: &[] },
+    Word { name: "no-ruby-html", help: "cmd.export.no-ruby-html", needs: &[] },
+    Word { name: "ruby-typst", help: "cmd.export.ruby-typst", needs: &[] },
+    Word { name: "no-ruby-typst", help: "cmd.export.no-ruby-typst", needs: &[] },
+    Word { name: "turn", help: "cmd.export.turn", needs: &[] },
+    Word { name: "jlreq", help: "cmd.export.jlreq", needs: &[] },
+    Word { name: "page=", help: "cmd.export.page", needs: &[] },
+    Word { name: "font=", help: "cmd.export.font", needs: &[] },
 ];
 
 const MOODS: &[Word] = &[
@@ -5506,11 +5581,11 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &["ex"],
         help: "cmd.commands.export",
         needs: &[],
-        params: &[Param::Words { of: EXPORT_FORMATS, default: None }, Param::Path],
+        params: &[Param::Words { of: EXPORT_FORMATS, default: None }, Param::Options(EXPORT_WORDS)],
         build: Some(|p| {
             Ok(Command::Export {
                 format: p.need(0)?.to_string(),
-                path: p.arg(1).map(|s| s.to_string()),
+                words: p.arg(1).unwrap_or("").to_string(),
                 force: p.force,
             })
         }),
@@ -6329,7 +6404,13 @@ fn walk(words: &[(usize, &str)]) -> Option<&'static Param> {
     // **A command's parameters are read by position** (#368): the words after
     // `:theme` are its first and its second, not a path down a tree, so what
     // may stand in the next slot is what the next slot declares.
-    entry.params.get(words.len() - 1)
+    param_at(entry, words.len() - 1)
+}
+
+/// The parameter in slot `at`: by position, and past the last an `Options`
+/// one again, since it takes words in any number.
+fn param_at(entry: &'static Entry, at: usize) -> Option<&'static Param> {
+    entry.params.get(at).or_else(|| entry.params.last().filter(|p| matches!(p, Param::Options(_))))
 }
 
 /// Does a line the **documents** print name something the editor has?
@@ -6442,7 +6523,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
     // 參數不是一張詞表的（`:view-wrap-width 10` 那個數目）就停下來，說命令自己的事：
     // 那時候單子上一條都配不中，而那一句仍舊是按下 Enter 會發生的事。
     for (at, word) in line.split_whitespace().skip(1).enumerate() {
-        let Some(param) = e.params.get(at) else { break };
+        let Some(param) = param_at(e, at) else { break };
         let Some(list) = param.words() else { break };
         match pick(word.trim_end_matches('!'), list) {
             // **命令的說明留着，參數的說明加在它下面**：一支函數和它的一個參數
@@ -6459,7 +6540,7 @@ pub fn about_the_line(line: &str) -> Result<Described, Option<String>> {
             // 對 `Words` 和 `WordsOr` 都交得出一張表，於是這一枝照樣走到了：面板上
             // 寫着「view-wrap：不認得『40』」，而按下 Enter 是「寫到 40 欄寬」。
             // **說的和做的不是一回事，而這一行存在的理由就是提前說出做的那件事。**
-            None if matches!(param, Param::WordsOr { .. }) => break,
+            None if param.takes_others() => break,
             // 這張表不認得這個詞——按下 Enter 報的就是這一句，提前說出來。
             None => {
                 said.wrong = Some(say!("cmd.not-one-of-its-values", e.name, word));
@@ -6529,7 +6610,7 @@ pub fn names_something(line: &str) -> Result<(), String> {
         if entry.params.is_empty() {
             return Err(format!("{} {word}", entry.name));
         }
-        let Some(list) = entry.params.get(at).and_then(Param::words) else {
+        let Some(list) = param_at(entry, at).and_then(Param::words) else {
             return Ok(());
         };
         // A bang ends a **line**, not a word, so it is looked for where the
@@ -6543,7 +6624,7 @@ pub fn names_something(line: &str) -> Result<(), String> {
             // A parameter that also takes anything lets its own text through:
             // `:theme 墨香` names a theme this table has never heard of, and
             // the front end is the one holding the colours.
-            return match matches!(entry.params.get(at), Some(Param::WordsOr { .. })) {
+            return match param_at(entry, at).is_some_and(Param::takes_others) {
                 true => Ok(()),
                 false => Err(word.to_string()),
             };
@@ -8315,7 +8396,7 @@ mod tests {
                         _ => "1",
                     }
                     .to_string(),
-                    Param::Words { .. } | Param::WordsOr { .. } => String::new(),
+                    Param::Words { .. } | Param::WordsOr { .. } | Param::Options(_) => String::new(),
                 };
                 if word.is_empty() {
                     break;
@@ -8422,7 +8503,8 @@ mod tests {
     #[test]
     fn a_word_that_moved_under_a_parent_says_where_it_went() {
         for (word, sent_to) in [
-            ("hanging", "`:view-hanging`"),
+            // Two owners since 2026-11-08: `:export` takes it for one page.
+            ("hanging", "`:view-hanging` `:export hanging`"),
             // Two owners since 2026-10-16: `preview` is also the word that
             // puts the first candidate in the text.
             ("preview", "`:yume-inline-preedit preview` `:view-preview`"),
