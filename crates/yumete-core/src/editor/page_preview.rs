@@ -296,8 +296,8 @@ impl Editor {
         let from = self.live;
         if let Some(area) = self.text_area.get() {
             let mut tried = self.windows.clone();
-            let room = tried.split_on(from, crate::window::Split::Beside, false).is_some_and(|fresh| {
-                let (placed, _) = tried.place(area, self.splits_right_to_left());
+            let room = tried.split_on(from, crate::window::Split::Beside, false, false).is_some_and(|fresh| {
+                let (placed, _) = tried.place(area);
                 placed
                     .iter()
                     .filter(|p| p.id == fresh || p.id == from)
@@ -312,7 +312,9 @@ impl Editor {
                 return None;
             }
         }
-        let fresh = self.windows.split_on(from, crate::window::Split::Beside, false)?;
+        // **To the right on a 縱書 page too** (2026-11-08): a preview is a
+        // window beside the text, not a column of it.
+        let fresh = self.windows.split_on(from, crate::window::Split::Beside, false, false)?;
         let caption = self.buffer_with(preview).map(|i| self.buffers[i].display_name()).unwrap_or_default();
         self.panes.insert(fresh, Pane {
             buffer: preview,

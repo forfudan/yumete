@@ -612,13 +612,13 @@ impl Editor {
     /// The windows laid on a nominal screen — the tree splits by halves, so
     /// which window is where does not depend on the real size.
     fn window_neighbour(&self, id: crate::window::WindowId, direction: crate::window::Direction) -> Option<crate::window::WindowId> {
-        self.windows.neighbour(id, direction, Self::NOMINAL_SCREEN, self.splits_right_to_left())
+        self.windows.neighbour(id, direction, Self::NOMINAL_SCREEN)
     }
 
     /// The window touching the left or right edge of the screen, nearest the
     /// top; the live one when it does.
     fn window_at_edge(&self, edge: crate::window::Direction) -> crate::window::WindowId {
-        let (placed, _) = self.windows.place(Self::NOMINAL_SCREEN, self.splits_right_to_left());
+        let (placed, _) = self.windows.place(Self::NOMINAL_SCREEN);
         let at_edge = |p: &crate::window::Placed| match edge {
             crate::window::Direction::Left => p.area.x == 0,
             _ => p.area.x + p.area.width == Self::NOMINAL_SCREEN.width,

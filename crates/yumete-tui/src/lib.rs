@@ -5502,12 +5502,12 @@ fn page_areas(editor: &Editor, config: &Config, area: Rect, head_rows: u16) -> A
     // 橫排 and the full height in 縱書, so not one row rewraps and not one 縱
     // is shortened. A divider carries the boundary and the caption.
     // **The windows, laid out by the editor's tree** (2026-10-30). Two
-    // slots still, until the viewports follow the tree (stage 2); a 縱書
-    // page puts the second half on the left.
-    let rtl = editor.splits_right_to_left();
+    // slots still, until the viewports follow the tree (stage 2); a split
+    // opened from a 縱書 page puts its second half on the left, and keeps
+    // it there whatever page the keys are on (2026-11-08).
     let text_area = yumete_core::window::Area::new(text.x, text.y, text.width, text.height);
     editor.note_text_area(text_area);
-    let (placed, rules) = editor.windows().place(text_area, rtl);
+    let (placed, rules) = editor.windows().place(text_area);
     let rect = |a: yumete_core::window::Area| Rect::new(a.x, a.y, a.width, a.height);
     let mut panes: Vec<Rect> = placed.iter().map(|p| rect(p.area)).collect();
     if panes.is_empty() {

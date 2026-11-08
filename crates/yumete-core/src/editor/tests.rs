@@ -12664,7 +12664,7 @@ fn helix_window_keys_turn_swap_and_open_a_file_in_a_split() {
         ed.on_key(Key::Char(key));
     };
     let area = crate::window::Area::new(0, 0, 81, 25);
-    let right_of = |ed: &Editor, id| ed.windows().neighbour(id, crate::window::Direction::Right, area, false);
+    let right_of = |ed: &Editor, id| ed.windows().neighbour(id, crate::window::Direction::Right, area);
 
     cw(&mut ed, 'v');
     let (left, right) = (ed.windows().leaves()[0], ed.windows().leaves()[1]);
@@ -34158,7 +34158,7 @@ fn windows_open_beside_and_below_and_close_one_at_a_time() {
     assert_eq!(ed.windows().leaves(), [one, two]);
     assert_eq!(ed.live_pane(), 1);
     assert!(ed.current_buffer().path().is_some_and(|p| p.ends_with("a.md")));
-    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20), false);
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20));
     assert_eq!(placed[0].area.x, 0, "{placed:?}");
     assert_eq!(placed[1].area.x, 41, "beside: the second half on the right");
 
@@ -34264,7 +34264,7 @@ fn a_session_brings_the_windows_back() {
             .into_iter()
             .map(|s| match s {
                 Step::Window(_) => None,
-                Step::Split(how) => Some(how),
+                Step::Split(how, _) => Some(how),
             })
             .collect::<Vec<_>>()
     };
@@ -34393,7 +34393,7 @@ fn a_blank_window_opens_below_or_beside_on_a_buffer_of_its_own() {
     assert!(ed.current_buffer().path().is_none() && ed.current_buffer().char_count() == 0);
     assert_eq!(ed.buffer_count(), 2, "the pristine buffer was not replaced");
     assert_eq!(ed.pane_of(one).map(|p| p.buffer), Some(first));
-    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20), false);
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20));
     assert_eq!(placed[1].area.x, 41, "v: beside");
 
     ed.on_key(Key::Ctrl('w'));
@@ -34417,7 +34417,7 @@ fn a_blank_window_opens_below_or_beside_on_a_buffer_of_its_own() {
     vim.on_key(Key::Ctrl('w'));
     vim.on_key(Key::Ctrl('n'));
     assert_eq!(vim.windows().len(), 2, "vim: C-w C-n opens it at once");
-    let (placed, _) = vim.windows().place(crate::window::Area::new(0, 0, 80, 21), false);
+    let (placed, _) = vim.windows().place(crate::window::Area::new(0, 0, 80, 21));
     assert_eq!(placed[1].area.y, 11, "below");
 }
 
@@ -35457,7 +35457,7 @@ fn a_split_with_no_room_is_refused() {
         press(&mut ed, "s");
     }
     assert_eq!(ed.status(), say!("pane.no-room"));
-    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 40, 7), false);
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 40, 7));
     assert!(placed.iter().all(|p| p.area.height >= 2), "{placed:?}");
     assert!(placed.iter().any(|p| p.id == ed.live_window()));
 }
@@ -38248,7 +38248,7 @@ fn a_preview_is_a_tab_shown_in_a_window() {
     let preview = ed.preview_of(&main).expect("a tab");
     assert_eq!(ed.live_window(), text, "the keys stay in the text");
     assert_eq!(ed.windows().leaves(), [text, page], "to the right");
-    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20), false);
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20));
     assert!(placed[1].area.x > placed[0].area.x, "beside: {placed:?}");
     assert_eq!(ed.page_windows(), vec![(page, PageWindow { preview, main: main.clone() })]);
     assert!(ed.is_page_window(page) && !ed.is_page_window(text));
@@ -38897,4 +38897,132 @@ fn a_typst_code_block_is_coloured_as_code_on_every_line() {
     ed.execute(":syntax markdown").unwrap();
     assert!(!kinds(&ed, 1).contains(&Kind::Code2), "Markdown has no Typst code: {:?}", kinds(&ed, 1));
     assert_eq!(ed.block_of(3), Block::Prose);
+}
+
+/// Where each window is drawn on a nominal screen, left to right by id.
+fn window_columns(ed: &Editor) -> Vec<(crate::window::WindowId, u16)> {
+    let (placed, _) = ed.windows().place(crate::window::Area::new(0, 0, 81, 20));
+    placed.iter().map(|p| (p.id, p.area.x)).collect()
+}
+
+/// **Switching the layout moves no window** (2026-11-08, the author's
+/// report): a Markdown file with its preview on the right, `:vertical` in
+/// the text swapped the two, and `:horizontal` swapped them back — the
+/// screen was laid out by the page the keys were on. A preview opens to the
+/// right from a 縱書 page too, and `C-w h` `l` go to the window drawn there.
+#[test]
+fn switching_the_layout_moves_no_window() {
+    let (mut ed, dir) = a_markdown_note("sides");
+    let main = dir.join("notes.md");
+    let text = ed.live_window();
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "the preview on the right");
+    ed.execute(":vertical").unwrap();
+    assert_eq!(ed.layout(), crate::zong::Layout::Vertical);
+    assert_eq!(ed.live_window(), text);
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "`:vertical` moves neither");
+    ed.execute(":horizontal").unwrap();
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "nor `:horizontal`");
+    // Opened from a 縱書 page, the preview is on the right all the same.
+    ed.execute(":vertical").unwrap();
+    ed.execute(":view-preview-window").unwrap();
+    assert_eq!(ed.windows().len(), 1);
+    let page = ed.open_page_window_of(main.clone(), crate::buffer::PreviewKind::Markdown).expect("room");
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)], "a preview opens on the right on a 縱書 page");
+    // The keys go to the window that is there.
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.live_window(), page, "`C-w l` goes right, into the preview");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.live_window(), text, "`C-w h` comes back");
+    ed.execute(":horizontal").unwrap();
+    assert_eq!(window_columns(&ed), [(text, 0), (page, 41)]);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+/// A split made on a 縱書 page opens as it always has, its new window on
+/// the left, and **keeps that side** when the page turns horizontal; the
+/// keys follow what is drawn (2026-11-08).
+#[test]
+fn a_split_made_on_a_vertical_page_keeps_its_side() {
+    let mut ed = typed("那年冬天。\n");
+    ed.execute(":vertical").unwrap();
+    let one = ed.live_window();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    let two = ed.live_window();
+    assert_ne!(one, two);
+    assert_eq!(window_columns(&ed), [(one, 41), (two, 0)], "縱書: the new window on the left");
+    ed.execute(":horizontal").unwrap();
+    assert_eq!(window_columns(&ed), [(one, 41), (two, 0)], "`:horizontal` moves neither");
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('l'));
+    assert_eq!(ed.live_window(), one, "`C-w l` goes to the window on the right");
+    ed.execute(":vertical").unwrap();
+    assert_eq!(window_columns(&ed), [(one, 41), (two, 0)]);
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('h'));
+    assert_eq!(ed.live_window(), two, "`C-w h` to the one on the left");
+    // A split made on a horizontal page opens to the right, and stays.
+    ed.execute(":horizontal").unwrap();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    let three = ed.live_window();
+    let at = |ed: &Editor, id| window_columns(ed).into_iter().find(|&(w, _)| w == id).map(|(_, x)| x);
+    let x = at(&ed, three);
+    assert!(x > at(&ed, two), "to the right of the one it was split from");
+    ed.execute(":vertical").unwrap();
+    assert_eq!(at(&ed, three), x);
+}
+
+/// **A session keeps the side of a split** (2026-11-08): a split from the
+/// right is written `beside⇥rtl` and comes back on the same side; a session
+/// written before has plain `beside` lines, read left to right.
+#[test]
+fn a_session_keeps_the_side_of_a_split() {
+    let (mut ed, dir) = a_markdown_note("session-sides");
+    let data = dir.join("data");
+    std::fs::create_dir_all(&data).unwrap();
+    let fresh = || {
+        let mut ed = Editor::new();
+        ed.knows_its_paths(dir.join("config"), data.clone());
+        ed.keep_session_in(data.join("sessions"), &dir);
+        ed
+    };
+    ed.knows_its_paths(dir.join("config"), data.clone());
+    ed.keep_session_in(data.join("sessions"), &dir);
+    ed.execute(":vertical").unwrap();
+    let one = ed.live_window();
+    ed.on_key(Key::Ctrl('w'));
+    ed.on_key(Key::Char('v'));
+    assert_eq!(window_columns(&ed), [(one, 41), (ed.live_window(), 0)]);
+    let kept = ed.windows_to_keep();
+    assert_eq!(kept[0], "beside\trtl", "{kept:?}");
+    ed.save_session();
+
+    let mut back = fresh();
+    assert_eq!(back.restore_session(), 1);
+    back.restore_windows();
+    assert_eq!(back.windows().len(), 2);
+    let leaves = back.windows().leaves();
+    assert_eq!(window_columns(&back), [(leaves[0], 41), (leaves[1], 0)], "the same sides");
+    assert_eq!(back.live_window(), leaves[1], "the keys where they were");
+
+    // A session from before: `beside` alone is left to right.
+    let file = std::fs::read_dir(data.join("sessions"))
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.to_string_lossy().ends_with(".windows.txt"))
+        .expect("the windows file");
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.starts_with("beside\trtl\n"), "{text}");
+    std::fs::write(&file, text.replacen("beside\trtl\n", "beside\n", 1)).unwrap();
+    let mut old = fresh();
+    old.restore_session();
+    old.restore_windows();
+    assert_eq!(old.windows().len(), 2);
+    let leaves = old.windows().leaves();
+    assert_eq!(window_columns(&old), [(leaves[0], 0), (leaves[1], 41)]);
+    std::fs::remove_dir_all(&dir).ok();
 }
