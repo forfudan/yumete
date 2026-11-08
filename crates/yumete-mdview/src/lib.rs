@@ -21,6 +21,7 @@
 //! yumete's is `yumete_tui::tex`, RaTeX, and this crate does not depend on it
 //! so its tests and its other users need not carry it.
 
+mod cache;
 pub mod fonts;
 pub mod parse;
 pub mod theme;
@@ -205,6 +206,12 @@ impl Preview {
         self.relayout()
     }
 
+    /// How many formulas are kept drawn, and how many bytes of pictures:
+    /// both kept to a budget, the least recently used going first.
+    pub fn kept(&self) -> (usize, usize) {
+        self.engine.kept()
+    }
+
     /// The writing system the document is set in.
     pub fn han(&self) -> fonts::Han {
         self.engine.han
@@ -237,6 +244,10 @@ impl Preview {
             let mut h = std::collections::hash_map::DefaultHasher::new();
             moved.hash(&mut h);
             (column.to_bits(), self.engine.scale.to_bits()).hash(&mut h);
+            // A picture changed on disk lays its block out again.
+            for src in parse::images(&moved) {
+                self.engine.image_stamp(src).hash(&mut h);
+            }
             let key = h.finish();
             let laid = match self.cache.get(&key).or_else(|| fresh.get(&key)) {
                 Some(l) => {

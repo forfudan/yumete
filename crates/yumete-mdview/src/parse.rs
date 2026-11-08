@@ -1107,6 +1107,39 @@ fn alert(first: &str) -> Option<(Callout, String, Option<String>)> {
     Some((kind, word.to_string(), (!title.is_empty()).then(|| title.to_string())))
 }
 
+/// **The pictures `block` shows**, as written.
+pub fn images(block: &Block) -> Vec<&str> {
+    fn runs<'a>(rs: &'a [Inline], out: &mut Vec<&'a str>) {
+        for r in rs {
+            if let InlineKind::Image { src, .. } = &r.kind {
+                out.push(src);
+            }
+        }
+    }
+    fn walk<'a>(b: &'a Block, out: &mut Vec<&'a str>) {
+        match &b.kind {
+            BlockKind::Heading { text, .. } | BlockKind::Paragraph(text) => runs(text, out),
+            BlockKind::Quote(body) => body.iter().for_each(|c| walk(c, out)),
+            BlockKind::Callout { title, body, .. } => {
+                if let Some(t) = title {
+                    runs(t, out);
+                }
+                body.iter().for_each(|c| walk(c, out));
+            }
+            BlockKind::List { items, .. } => items.iter().flat_map(|i| &i.body).for_each(|c| walk(c, out)),
+            BlockKind::Table { head, rows, .. } => {
+                head.iter().for_each(|c| runs(c, out));
+                rows.iter().flat_map(|r| &r.1).for_each(|c| runs(c, out));
+            }
+            BlockKind::Footnotes(notes) => notes.iter().flat_map(|n| &n.body).for_each(|c| walk(c, out)),
+            BlockKind::Code { .. } | BlockKind::Maths(_) | BlockKind::Rule | BlockKind::FrontMatter(_) | BlockKind::Html(_) => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(block, &mut out);
+    out
+}
+
 /// **`block` with its lines counted from `base`**: what the layout cache keys
 /// on, so a block that only moved down the file is not laid out again.
 pub fn rebased(block: &Block, base: usize) -> Block {

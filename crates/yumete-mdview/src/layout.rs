@@ -7,7 +7,6 @@
 //! 0.25 em bar, code on a rounded ground. Every length here is that CSS pixel
 //! times the scale (`s`), so a layout is in device pixels.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -19,6 +18,7 @@ use vello_cpu::kurbo::Rect;
 use vello_cpu::Pixmap;
 
 use crate::parse::{Align, Block, BlockKind, Callout, Inline, InlineKind, Item as ListItem, Marks};
+use crate::cache::Lru;
 use crate::fonts::{families, Families, Han};
 use crate::theme::{Rgba, Theme};
 use crate::Formulas;
@@ -105,6 +105,15 @@ struct Ctx {
     size: f32,
 }
 
+/// How many formulas are kept drawn.
+pub(crate) const FORMULAS_KEPT: usize = 1024;
+/// How many bytes of pictures are kept: two thirds for the pictures as read,
+/// one third for them scaled to the column.
+pub(crate) const IMAGE_BYTES_KEPT: usize = 96 << 20;
+
+/// When a picture's file last changed.
+pub(crate) type Stamp = u64;
+
 /// A formula, drawn: its picture, size and baseline (from its top).
 #[derive(Clone)]
 pub(crate) struct FormulaPic {
@@ -130,9 +139,12 @@ pub(crate) struct Engine {
     families: [Arc<Families>; 3],
     /// Whether adjacent full-width marks are squeezed.
     pub squeeze: bool,
-    formula_cache: HashMap<(String, bool, Rgba, u32), Option<FormulaPic>>,
-    images: HashMap<String, Option<Arc<image::RgbaImage>>>,
-    scaled: HashMap<(String, u32), Pix>,
+    /// Formulas drawn, at most [`FORMULAS_KEPT`] of them.
+    formula_cache: Lru<(String, bool, Rgba, u32), Option<FormulaPic>>,
+    /// Pictures read from disk, with the file's stamp when read, and those
+    /// pictures scaled to the column: each kept to a budget in bytes.
+    images: Lru<String, (Stamp, Option<Arc<image::RgbaImage>>)>,
+    scaled: Lru<(String, u32, Stamp), Pix>,
 }
 
 impl Engine {
@@ -147,9 +159,9 @@ impl Engine {
             han: Han::default(),
             squeeze: true,
             families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h))),
-            formula_cache: HashMap::new(),
-            images: HashMap::new(),
-            scaled: HashMap::new(),
+            formula_cache: Lru::new(FORMULAS_KEPT),
+            images: Lru::new(IMAGE_BYTES_KEPT / 3 * 2),
+            scaled: Lru::new(IMAGE_BYTES_KEPT / 3),
         }
     }
 
@@ -173,14 +185,14 @@ impl Engine {
     fn formula(&mut self, tex: &str, display: bool, ink: Rgba, size: f32) -> Option<FormulaPic> {
         let key = (tex.to_string(), display, ink, (size * 10.0) as u32);
         if let Some(made) = self.formula_cache.get(&key) {
-            return made.clone();
+            return made;
         }
         let made = self.formulas.draw(tex, display, [ink[0], ink[1], ink[2]], size).ok().and_then(|f| {
             let pix = Pixmap::from_png(std::io::Cursor::new(&f.png)).ok()?;
             let (w, h) = (pix.width() as f32, pix.height() as f32);
             Some(FormulaPic { pix: Arc::new(pix), width: w, height: h, baseline: f.baseline })
         });
-        self.formula_cache.insert(key, made.clone());
+        self.formula_cache.put(key, made.clone(), 1);
         made
     }
 
@@ -190,12 +202,15 @@ impl Engine {
         if src.contains("://") || src.is_empty() {
             return None;
         }
-        let raw = match self.images.get(src) {
-            Some(made) => made.clone(),
-            None => {
+        // Read again when the file changed since it was read.
+        let stamp = self.image_stamp(src);
+        let raw = match self.images.get(&src.to_string()) {
+            Some((was, made)) if was == stamp => made,
+            _ => {
                 let path = self.base_dir.join(percent_decoded(src));
                 let made = image::open(&path).ok().map(|i| Arc::new(i.to_rgba8()));
-                self.images.insert(src.to_string(), made.clone());
+                let cost = made.as_ref().map_or(1, |i| i.as_raw().len());
+                self.images.put(src.to_string(), (stamp, made.clone()), cost);
                 made
             }
         }?;
@@ -205,9 +220,9 @@ impl Engine {
         if w > u16::MAX as u32 || h > u16::MAX as u32 {
             return None;
         }
-        let key = (src.to_string(), w);
+        let key = (src.to_string(), w, stamp);
         if let Some(p) = self.scaled.get(&key) {
-            return Some(p.clone());
+            return Some(p);
         }
         let resized = if (w, h) == (raw.width(), raw.height()) {
             (*raw).clone()
@@ -216,8 +231,24 @@ impl Engine {
         };
         let meta = vello_cpu::PixelMetadata { may_have_transparency: true, alpha_type: vello_cpu::peniko::ImageAlphaType::Alpha };
         let pix = Arc::new(Pixmap::from_parts(resized.into_raw(), w as u16, h as u16, meta));
-        self.scaled.insert(key, pix.clone());
+        self.scaled.put(key, pix.clone(), w as usize * h as usize * 4);
         Some(pix)
+    }
+
+    /// **When the picture at `src` last changed**: its file's modification
+    /// time and length, or zero for one that is not a local file.
+    pub(crate) fn image_stamp(&self, src: &str) -> Stamp {
+        if src.contains("://") || src.is_empty() {
+            return 0;
+        }
+        let Ok(meta) = std::fs::metadata(self.base_dir.join(percent_decoded(src))) else { return 0 };
+        let time = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_nanos() as u64);
+        time ^ meta.len().rotate_left(32)
+    }
+
+    /// How many formulas and how many bytes of pictures are kept.
+    pub(crate) fn kept(&self) -> (usize, usize) {
+        (self.formula_cache.len(), self.images.cost() + self.scaled.cost())
     }
 
     // ── Text ────────────────────────────────────────────────────────────────

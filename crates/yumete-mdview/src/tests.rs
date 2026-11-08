@@ -225,6 +225,42 @@ fn images_are_drawn_scaled_to_the_column() {
 }
 
 #[test]
+fn a_picture_changed_on_disk_is_drawn_again() {
+    let dir = std::env::temp_dir().join(format!("yumete-mdview-change-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("pic.png");
+    image::RgbaImage::from_pixel(100, 50, image::Rgba([0, 0, 0, 255])).save(&path).unwrap();
+    let mut p = Preview::new(Options { base_dir: dir.clone(), ..options(500) }, Box::new(NoFormulas));
+    let text = "![圖](pic.png)\n\n後面\n";
+    p.set_text(text);
+    let size = |p: &Preview| {
+        p.placed[0].laid.items.iter().find_map(|it| match it {
+            Item::Text { text, .. } => text.layout.inline_boxes().next().map(|b| (b.width, b.height)),
+            _ => None,
+        })
+    };
+    assert_eq!(size(&p), Some((100.0, 50.0)));
+    // A new picture, another size: the same text lays the block out again.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    image::RgbaImage::from_pixel(60, 60, image::Rgba([0, 0, 0, 255])).save(&path).unwrap();
+    let s = p.set_text(text);
+    assert_eq!(s.laid, 1, "only the picture's block");
+    assert_eq!(size(&p), Some((60.0, 60.0)));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn formulas_kept_are_bounded() {
+    let mut text = String::new();
+    for k in 0..(crate::layout::FORMULAS_KEPT + 100) {
+        text.push_str(&format!("$x_{{{k}}}$ "));
+    }
+    let mut p = Preview::new(options(800), Box::new(Boxes));
+    p.set_text(&text);
+    assert_eq!(p.kept().0, crate::layout::FORMULAS_KEPT);
+}
+
+#[test]
 fn every_block_kind_lays_out_and_draws() {
     let text = "---\ntitle: x\n---\n\n# H\n\npara **b** *i* `c` ==h== ~~s~~ [l](x) <kbd>K</kbd> <ruby>漢<rt>hàn</rt></ruby>[^1]\n\n\
 > q\n\n> [!TIP]\n> t\n\n::: warning W\nw\n:::\n\n::: details D\nd\n:::\n\n- [x] a\n- [ ] b\n\n1. o\n\n---\n\n\
