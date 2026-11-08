@@ -178,7 +178,7 @@ pub struct Cache {
 /// [`parse`], keeping what can be kept in `cache` for the next time.
 pub fn parse_with(text: &str, cache: &mut Cache) -> Vec<Block> {
     let lines = prepare(text);
-    let mut reader = Reader { old: std::mem::take(&mut cache.runs), ..Reader::default() };
+    let mut reader = Reader { old: std::mem::take(&mut cache.runs), refs: link_definitions(&lines), ..Reader::default() };
     let mut blocks = Vec::new();
     // Front matter: `---` on the first line, `key: value` under it, to a `---`.
     let mut from = 0;
@@ -310,6 +310,125 @@ fn is_link_definition(body: &str) -> bool {
     rest.find("]:").is_some_and(|close| close > 0 && !rest[close + 2..].trim().is_empty())
 }
 
+/// A link label as CommonMark matches it: case and runs of spaces folded.
+fn fold_label(label: &str) -> String {
+    label.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
+}
+
+/// **The link reference definitions** `[label]: address "title"` of a file.
+fn link_definitions(lines: &[Line]) -> std::collections::BTreeMap<String, String> {
+    let mut refs = std::collections::BTreeMap::new();
+    for (_, line) in lines {
+        let body = line.trim_start();
+        if lead(line) >= 4 || !is_link_definition(body) {
+            continue;
+        }
+        let close = body.find("]:").unwrap_or(0);
+        let label = fold_label(&body[1..close]);
+        let rest = body[close + 2..].trim();
+        let address = match rest.strip_prefix('<') {
+            Some(r) => r.split('>').next().unwrap_or_default(),
+            None => rest.split_whitespace().next().unwrap_or_default(),
+        };
+        refs.entry(label).or_insert_with(|| address.to_string());
+    }
+    refs
+}
+
+/// **Reference links written out as inline ones**: `[text][label]`,
+/// `[label][]` and `[label]`, with an image's `!` before any of them, become
+/// `[text](address)` when `label` is defined, so the one inline reader reads
+/// them. Code spans, wiki links and footnotes are left alone.
+fn resolve_references(line: &str, refs: &std::collections::BTreeMap<String, String>) -> String {
+    if refs.is_empty() || !line.contains('[') {
+        return line.to_string();
+    }
+    let chars: Vec<char> = line.chars().collect();
+    let close_of = |from: usize| -> Option<usize> {
+        let mut depth = 0;
+        for (k, &c) in chars.iter().enumerate().skip(from) {
+            match c {
+                '[' => depth += 1,
+                ']' if depth == 0 => return Some(k),
+                ']' => depth -= 1,
+                '`' => return None,
+                _ => {}
+            }
+        }
+        None
+    };
+    let address = |label: &str| -> Option<String> {
+        let a = refs.get(&fold_label(label))?;
+        Some(match a.contains([' ', '(', ')']) {
+            true => format!("<{a}>"),
+            false => a.clone(),
+        })
+    };
+    let mut out = String::with_capacity(line.len() + 16);
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        // A code span is copied as it stands.
+        if c == '`' {
+            let ticks = chars[i..].iter().take_while(|&&t| t == '`').count();
+            let shut = (i + ticks..chars.len()).find(|&k| chars[k..].iter().take_while(|&&t| t == '`').count() == ticks && (k == 0 || chars[k - 1] != '`'));
+            let end = shut.map_or(i + ticks, |k| k + ticks);
+            out.extend(&chars[i..end]);
+            i = end;
+            continue;
+        }
+        let escaped = i > 0 && chars[i - 1] == '\\';
+        if c != '[' || escaped || chars.get(i + 1).is_some_and(|&n| n == '[' || n == '^') {
+            // `[[wiki]]` is skipped whole, so its inner `[` is not read.
+            if c == '[' && chars.get(i + 1) == Some(&'[') {
+                if let Some(end) = (i + 2..chars.len().saturating_sub(1)).find(|&k| chars[k] == ']' && chars[k + 1] == ']') {
+                    out.extend(&chars[i..end + 2]);
+                    i = end + 2;
+                    continue;
+                }
+            }
+            out.push(c);
+            i += 1;
+            continue;
+        }
+        let Some(close) = close_of(i + 1) else {
+            out.push(c);
+            i += 1;
+            continue;
+        };
+        let text: String = chars[i + 1..close].iter().collect();
+        match chars.get(close + 1) {
+            Some('(') | Some(':') => {
+                out.extend(&chars[i..=close]);
+                i = close + 1;
+            }
+            Some('[') => match close_of(close + 2) {
+                Some(end) => {
+                    let label: String = chars[close + 2..end].iter().collect();
+                    let label = if label.trim().is_empty() { text.clone() } else { label };
+                    match address(&label) {
+                        Some(a) => out.push_str(&format!("[{text}]({a})")),
+                        None => out.extend(&chars[i..=end]),
+                    }
+                    i = end + 1;
+                }
+                None => {
+                    out.extend(&chars[i..=close]);
+                    i = close + 1;
+                }
+            },
+            _ => {
+                match address(&text) {
+                    Some(a) => out.push_str(&format!("[{text}]({a})")),
+                    None => out.extend(&chars[i..=close]),
+                }
+                i = close + 1;
+            }
+        }
+    }
+    out
+}
+
 /// Where a list item's marker is and what it says.
 #[derive(Clone, Copy)]
 struct Marker {
@@ -390,6 +509,8 @@ fn wrapper_line(body: &str) -> bool {
 struct Reader {
     cited: Vec<String>,
     notes: Vec<Note>,
+    /// The file's link reference definitions: label (folded) to address.
+    refs: std::collections::BTreeMap<String, String>,
     /// The runs kept from the last parse, and those kept for the next.
     old: std::collections::HashMap<u64, Vec<Inline>>,
     new: std::collections::HashMap<u64, Vec<Inline>>,
@@ -804,6 +925,10 @@ impl Reader {
         for (no, text) in lines {
             (no - base, text).hash(&mut h);
         }
+        // A reference link reads differently once its definition changes.
+        if lines.iter().any(|l| l.1.contains('[')) {
+            self.refs.hash(&mut h);
+        }
         let key = h.finish();
         let mut runs = match self.old.remove(&key).or_else(|| self.new.get(&key).cloned()) {
             Some(kept) => kept,
@@ -830,7 +955,7 @@ impl Reader {
         let mut count = 0;
         for (k, (no, raw)) in lines.iter().enumerate() {
             let hard = raw.ends_with("  ") || raw.trim_end().ends_with('\\');
-            let mut body = raw.trim().to_string();
+            let mut body = resolve_references(raw.trim(), &self.refs);
             if body.ends_with('\\') && k + 1 < lines.len() {
                 body.pop();
                 body.truncate(body.trim_end().len());
@@ -1387,6 +1512,23 @@ mod tests {
         assert_eq!(parse_with(&edited, &mut cache), parse(&edited));
         let moved = format!("\n\n{edited}");
         assert_eq!(parse_with(&moved, &mut cache), parse(&moved));
+    }
+
+    #[test]
+    fn reference_links_are_links() {
+        let text = "見 [文檔][docs]、[Docs][] 與 [docs]，圖 ![圖][pic]，`[docs]` 不是，[未定義][nope] 也不是。\n\n[docs]: https://example.org/docs\n[pic]: <a b.png> \"題\"\n";
+        let runs = para(text);
+        assert!(marks_of(&runs, "文檔").link);
+        assert!(marks_of(&runs, "Docs").link);
+        assert!(runs.iter().any(|r| matches!(&r.kind, InlineKind::Image { src, .. } if src == "a b.png")));
+        assert!(marks_of(&runs, "[docs]").code, "inside code it stays as written");
+        assert!(!marks_of(&runs, "未定義").link);
+        assert!(plain(&runs).contains("[未定義][nope]"));
+        // The shortcut form, and a definition that is not shown.
+        let blocks = parse("[docs]\n\n[docs]: x\n");
+        assert_eq!(blocks.len(), 1);
+        let BlockKind::Paragraph(runs) = &blocks[0].kind else { panic!() };
+        assert!(marks_of(runs, "docs").link);
     }
 
     #[test]
