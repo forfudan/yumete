@@ -22,7 +22,7 @@ use ratatui::style::Modifier;
 use ratatui::widgets::Clear;
 use ratatui::Frame;
 
-use yumete_config::panel::{FlavorRow, FlavorSection, ItemFrom, Layer, Pane, Panel, Subpage};
+use yumete_config::panel::{FlavorRow, FlavorSection, ItemFrom, Layer, Pane, Panel, Pasting, Subpage};
 use yumete_config::settings_ui::{Kind, Setting, GROUPS};
 use yumete_config::Config;
 use yumete_core::input::Key;
@@ -165,19 +165,31 @@ impl Columns {
 /// 行上打的（核心認得「面板開着」，於是那兩條說的是面板）。一扇面板自己再長一條
 /// 命令行出來，是第二套規矩。
 pub fn press(panel: &mut Panel, key: Key) -> bool {
+    answer(panel, key).0
+}
+
+/// [`press`], and what the status line is to say about the key, when it
+/// has something to say (2026-11-08: `d` on a row the file does not set).
+fn answer(panel: &mut Panel, key: Key) -> (bool, Option<String>) {
     // 正在打字：除了 Enter 與 Esc，都是字。
-    if let Some(typing) = panel.typing.as_mut() {
+    // The caret walks as in Insert mode (2026-11-08): a paste lands at it,
+    // and `P` puts it before the value, so it is not always at the end.
+    if panel.typing.is_some() {
         match key {
             Key::Enter => panel.finish_typing(),
             Key::Esc => panel.cancel_typing(),
-            Key::Backspace => {
-                typing.pop();
-            }
-            Key::Char(c) => typing.push(c),
+            Key::Backspace => panel.delete_back(),
+            Key::Delete => panel.delete_forward(),
+            Key::Left => panel.move_caret(panel.caret().saturating_sub(1)),
+            Key::Right => panel.move_caret(panel.caret() + 1),
+            Key::Home => panel.move_caret(0),
+            Key::End => panel.move_caret(usize::MAX),
+            Key::Char(c) => panel.type_char(c),
             _ => {}
         }
-        return true;
+        return (true, None);
     }
+    let nothing_to_drop = || Some(say!("settings.nothing-to-drop"));
     // **A page** (2026-11-02): its own rows, the panel's keys.
     if panel.page.is_some() {
         match key {
@@ -185,13 +197,13 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
             Key::Char('j') | Key::Down => panel.page_step(true),
             Key::Char('k') | Key::Up => panel.page_step(false),
             Key::Enter | Key::Char(' ') | Key::Char('i') | Key::Char('c') => panel.page_press(),
-            Key::Char('d') => panel.page_drop(),
+            Key::Char('d') if panel.page_drop() == Some(false) => return (true, nothing_to_drop()),
             Key::Tab => panel.flip_into(),
             Key::Char('g') => panel.page = Some(0),
             Key::Char('G') => panel.page = Some(panel.page_len().saturating_sub(1)),
             _ => {}
         }
-        return true;
+        return (true, None);
     }
     match key {
         // **`Esc` 退一步，走是 `:q`**（2026-10-09 作者報的：「a defensive esc to the
@@ -248,7 +260,11 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
                 None => {}
             }
         }
-        Key::Char('d') => panel.drop_here(),
+        // Warning: **A row this file does not set has nothing to drop**
+        // (2026-11-08, reported on 導出字體: the key did nothing). It already
+        // follows the layer below — the factory value, mostly — so the key
+        // can only say so; a silent key the hint line names reads as broken.
+        Key::Char('d') if panel.drop_here() == Some(false) => return (true, nothing_to_drop()),
         Key::Tab => panel.flip_into(),
         Key::Char('g') => {
             panel.row = 0;
@@ -272,7 +288,7 @@ pub fn press(panel: &mut Panel, key: Key) -> bool {
         }
         _ => {}
     }
-    true
+    (true, None)
 }
 
 
@@ -291,6 +307,12 @@ pub struct Seat {
     pub panel: Option<Panel>,
     /// 有改動沒存時按過一次「走」——再按一次纔算數。
     warned: bool,
+    /// **`"` and the register it named**, for the `p` after it, as in the
+    /// editor (2026-11-08): `Some(None)` is a `"` waiting for its name.
+    register: Option<Option<char>>,
+    /// Where `"+p` reads the system clipboard from; `None` is the machine's
+    /// own (`pbpaste` and its kin). A test hands in its own.
+    pub clipboard: Option<fn() -> Option<String>>,
 }
 
 impl Seat {
@@ -349,13 +371,97 @@ impl Seat {
         }
         // Warning: **認不出的鍵也算收下了**：面板開着的時候一個 F13 不該掉進正文。
         let Some(key) = key else { return true };
+        // **`p` / `P` paste a register into the value, and `"x` names it**
+        // (2026-11-08), the editor's own keys for it; `"+p` is the system
+        // clipboard, as there. They need the editor's registers, so they
+        // are answered here and not in [`press`].
+        if page.typing.is_none() {
+            match (self.register, key) {
+                (Some(None), Key::Char(name)) => {
+                    self.register = Some(Some(name));
+                    return true;
+                }
+                (_, Key::Char('"')) => {
+                    self.register = Some(None);
+                    return true;
+                }
+                (named, Key::Char(c @ ('p' | 'P'))) => {
+                    self.register = None;
+                    self.warned = false;
+                    let how = match c {
+                        'p' => Pasting::After,
+                        _ => Pasting::Before,
+                    };
+                    let said = self.paste_register(editor, named.flatten(), how);
+                    editor.set_status(said);
+                    return true;
+                }
+                _ => self.register = None,
+            }
+        }
+        let Some(page) = self.panel.as_mut() else { return true };
         let dirty = page.dirty();
-        match press(page, key) {
-            true => self.warned = false,
+        match answer(page, key) {
+            (true, said) => {
+                self.warned = false;
+                if let Some(said) = said {
+                    editor.set_status(said);
+                }
+            }
             // Warning: **有改動沒存就不許一下走掉**：面板上攢的東西一個鍵都沒落到磁碟
             // 上，走了就是全丟。第一下說一句，第二下纔算數。
-            false => self.leave(editor, dirty),
+            (false, _) => self.leave(editor, dirty),
         }
+        true
+    }
+
+    /// `p` / `P`: the register into the value, and what to say about it.
+    fn paste_register(&mut self, editor: &mut Editor, named: Option<char>, how: Pasting) -> String {
+        let Some(page) = self.panel.as_mut() else { return String::new() };
+        // Asked first: a row with nowhere to put text is the answer whatever
+        // the register holds.
+        if !page.takes_text() {
+            return say!("settings.paste-nowhere");
+        }
+        // `""p` is the unnamed register, as in vim.
+        let named = named.filter(|&name| name != '"');
+        let text = match named {
+            Some('+' | '*') => match self.clipboard.unwrap_or(crate::read_clipboard)() {
+                Some(text) => text,
+                None => return crate::clipboard_unreadable(),
+            },
+            name => editor.register_contents(name),
+        };
+        if text.is_empty() {
+            return match named {
+                Some('+' | '*') => say!("edit.clipboard-empty"),
+                Some(name) => say!("register.empty", name),
+                None => say!("register.nothing-yanked"),
+            };
+        }
+        match page.paste(&text, how) {
+            Some(n) => say!("edit.pasted-characters", n),
+            None => say!("settings.paste-nowhere"),
+        }
+    }
+
+    /// **Text pasted through the terminal** (bracketed paste, ⌘V): the
+    /// panel's, while it is open (2026-11-08). It used to go on to the
+    /// editor behind the panel, which pasted it into the document — over
+    /// whatever was selected there — and said 「已粘貼 170 個字」 while the
+    /// value on screen did not change. Gives whether it was taken; the `:`
+    /// line, open over the panel, takes its own.
+    pub fn pasted(&mut self, editor: &mut Editor, text: &str) -> bool {
+        let Some(page) = self.panel.as_mut() else { return false };
+        if editor.mode() == yumete_core::input::Mode::Command {
+            return false;
+        }
+        self.register = None;
+        self.warned = false;
+        editor.set_status(match page.paste(text, Pasting::Replace) {
+            Some(n) => say!("edit.pasted-characters", n),
+            None => say!("settings.paste-nowhere"),
+        });
         true
     }
 
@@ -826,12 +932,23 @@ pub fn draw(
         // 那九個全角字正好比值欄寬一格，畫出來是 `１２３４５６７８`，看着像設定
         // 裏只有八個。省略號說出「後面還有」。2026-09-24 拍圖看出來的。
         let room = col.value_ends().saturating_sub(col.value) as usize;
-        let value = crate::elide(&value, room);
+        // **While typing, the part of the value round the caret** (2026-11-08):
+        // the caret walks now, and a font list is longer than the column, so
+        // cutting the tail as below would put it out of sight. One cell is
+        // kept for the caret after the last character.
+        let (value, before) = match (here, panel.typing.is_some()) {
+            (true, true) => {
+                let (seen, at) = crate::window_on(&value, panel.caret(), room.saturating_sub(1), true);
+                let before: String = seen.chars().take(at).collect();
+                (seen, Some(yumete_cjk::str_width(&before) as u16))
+            }
+            _ => (crate::elide(&value, room), None),
+        };
         put_text(buf, col.value, y, col.value_ends(), &value, value_style);
-        // The terminal's own caret, after the last character: the cursor
-        // shape is a bar while typing (2026-10-31), so no bar is drawn.
-        if here && panel.typing.is_some() {
-            let at = col.value + yumete_cjk::str_width(&value) as u16;
+        // The terminal's own caret, at the caret: the cursor shape is a bar
+        // while typing (2026-10-31), so no bar is drawn.
+        if let Some(before) = before {
+            let at = col.value + before;
             caret =
                 Some(ratatui::layout::Position { x: at.min(col.value_ends().saturating_sub(1)), y });
         }
@@ -1684,5 +1801,205 @@ mod tests {
         press(&mut p, Key::Char('h'));
         assert_eq!(p.page, None);
         assert_eq!(p.here().map(|s| s.kind), Some(Kind::Page), "back on its row");
+    }
+
+    /// A panel on `[export] <key>`, a text row, with no files behind it.
+    fn on_export_row(key: &str) -> Panel {
+        let mut p = Panel::open(None, None);
+        p.group = GROUPS.iter().position(|g| g.group == yumete_config::settings_ui::Group::Files).unwrap();
+        p.across(true);
+        p.row = p.rows().iter().position(|s| s.table == "export" && s.key == key).unwrap();
+        assert_eq!(p.here().map(|s| s.kind), Some(Kind::Text));
+        p
+    }
+
+    /// An editor with a page of text, and a seat with the panel open on it.
+    fn seated(panel: Panel) -> (Editor, Seat) {
+        let mut ed = Editor::new();
+        ed.on_key(Key::Char('i'));
+        for c in "稿子上的一行".chars() {
+            ed.on_key(Key::Char(c));
+        }
+        ed.on_key(Key::Esc);
+        ed.set_settings_open(true);
+        (ed, Seat { panel: Some(panel), ..Default::default() })
+    }
+
+    fn page_text(ed: &Editor) -> String {
+        ed.current_buffer().rope().to_string()
+    }
+
+    fn feed(seat: &mut Seat, ed: &mut Editor, keys: &str) {
+        for c in keys.chars() {
+            assert!(seat.took(ed, Some(Key::Char(c))), "{c} is the panel's");
+        }
+    }
+
+    /// **`d` on a row this file does not set says so** (2026-11-08,
+    /// reported on 導出字體: the hint line names `d` and it did nothing). A
+    /// row it does set goes back to the layer below without a word, and on
+    /// the group list `d` drops nothing: no row is chosen there.
+    #[test]
+    fn d_on_a_row_this_file_does_not_set_says_so() {
+        let (mut ed, mut seat) = seated(on_export_row("font_family"));
+        feed(&mut seat, &mut ed, "d");
+        assert_eq!(ed.status(), say!("settings.nothing-to-drop"));
+        let page = seat.panel.as_mut().unwrap();
+        assert!(!page.dirty());
+
+        // Set it, and `d` takes it back.
+        page.begin_typing();
+        page.typing = Some("Georgia, serif".into());
+        page.finish_typing();
+        assert!(page.dirty());
+        ed.set_status(String::new());
+        feed(&mut seat, &mut ed, "d");
+        assert_eq!(ed.status(), "", "a drop that happened needs no word");
+        assert!(!seat.panel.as_ref().unwrap().dirty(), "back to what the file says");
+
+        // The group list: the group's first row is not touched.
+        let page = seat.panel.as_mut().unwrap();
+        page.row = 0;
+        page.begin_typing();
+        page.typing = Some("b6".into());
+        page.finish_typing();
+        page.across(false);
+        assert!(page.dirty());
+        feed(&mut seat, &mut ed, "d");
+        assert!(seat.panel.as_ref().unwrap().dirty(), "d on the group list drops nothing");
+    }
+
+    /// **A paste while a value is typed goes into the value, at the caret**
+    /// (2026-11-08, reported: ⌘V said 「已粘貼 170 個字」 and the value did
+    /// not change — the paste had gone to the page behind the panel). Line
+    /// breaks become one space; the page is not touched; `Enter` keeps it.
+    #[test]
+    fn a_paste_while_typing_lands_at_the_caret_and_not_on_the_page() {
+        let (mut ed, mut seat) = seated(on_export_row("font_family"));
+        let before = page_text(&ed);
+        feed(&mut seat, &mut ed, "c");
+        for c in "Georgia, serif".chars() {
+            assert!(seat.took(&mut ed, Some(Key::Char(c))));
+        }
+        // The caret back before `serif`.
+        for _ in 0.."serif".len() {
+            assert!(seat.took(&mut ed, Some(Key::Left)));
+        }
+        assert!(seat.pasted(&mut ed, "\"Noto Serif CJK\",\r\n  Songti,\n"));
+        let page = seat.panel.as_ref().unwrap();
+        assert_eq!(page.typing.as_deref(), Some("Georgia, \"Noto Serif CJK\", Songti,serif"));
+        assert_eq!(page.caret(), "Georgia, \"Noto Serif CJK\", Songti,".chars().count(), "after what went in");
+        assert_eq!(ed.status(), say!("edit.pasted-characters", 25), "what went in, counted");
+        assert_eq!(page_text(&ed), before, "the page behind the panel is not touched");
+        assert!(seat.took(&mut ed, Some(Key::Char(' '))));
+        assert!(seat.took(&mut ed, Some(Key::Enter)));
+        let page = seat.panel.as_ref().unwrap();
+        assert_eq!(
+            yumete_config::panel::unwritten(&page.shown(page.here().unwrap()).value),
+            "Georgia, \"Noto Serif CJK\", Songti, serif"
+        );
+    }
+
+    /// **A paste on a row that is not being typed opens it**, the paste in
+    /// place of the value — in Normal mode a paste replaces what is
+    /// selected, and the value is drawn selected — and `Esc` leaves the value
+    /// as it was. On a tick there is nowhere for it, and it says so.
+    #[test]
+    fn a_paste_opens_a_text_row_and_a_tick_takes_none() {
+        let (mut ed, mut seat) = seated(on_export_row("page"));
+        let before = page_text(&ed);
+        assert!(seat.pasted(&mut ed, "b6\n"));
+        let page = seat.panel.as_ref().unwrap();
+        assert_eq!(page.typing.as_deref(), Some("b6"));
+        assert!(seat.took(&mut ed, Some(Key::Esc)));
+        let page = seat.panel.as_ref().unwrap();
+        assert!(page.typing.is_none() && !page.dirty(), "Esc leaves it as it was");
+
+        let page = seat.panel.as_mut().unwrap();
+        page.row = page.rows().iter().position(|s| s.kind == Kind::Tick).unwrap();
+        assert!(seat.pasted(&mut ed, "b6"), "the panel's even so");
+        assert_eq!(ed.status(), say!("settings.paste-nowhere"));
+        assert!(seat.panel.as_ref().unwrap().typing.is_none());
+        assert_eq!(page_text(&ed), before);
+        // The `:` line over the panel takes its own.
+        ed.on_key(Key::Char(':'));
+        assert!(!seat.pasted(&mut ed, "w"));
+    }
+
+    /// **`p` / `P` paste the register into the value, after and before it,
+    /// and `"a` / `"+` name the register**, as the editor's keys do
+    /// (2026-11-08). A copied line comes with its break, which goes.
+    #[test]
+    fn p_and_shift_p_paste_a_register_into_the_value() {
+        let (mut ed, mut seat) = seated(on_export_row("font_family"));
+        // `x` takes the line, `y` copies it, break and all.
+        ed.set_settings_open(false);
+        ed.on_key(Key::Char('x'));
+        ed.on_key(Key::Char('y'));
+        ed.set_settings_open(true);
+        let page = seat.panel.as_mut().unwrap();
+        page.begin_typing();
+        page.typing = Some("serif".into());
+        page.finish_typing();
+
+        feed(&mut seat, &mut ed, "p");
+        assert_eq!(seat.panel.as_ref().unwrap().typing.as_deref(), Some("serif稿子上的一行"));
+        assert_eq!(ed.status(), say!("edit.pasted-characters", 6));
+        assert!(seat.took(&mut ed, Some(Key::Esc)));
+        feed(&mut seat, &mut ed, "P");
+        let page = seat.panel.as_ref().unwrap();
+        assert_eq!(page.typing.as_deref(), Some("稿子上的一行serif"));
+        assert_eq!(page.caret(), 6, "the caret after what went in");
+        assert!(seat.took(&mut ed, Some(Key::Esc)));
+
+        feed(&mut seat, &mut ed, "\"ap");
+        assert_eq!(ed.status(), say!("register.empty", 'a'));
+        assert!(seat.panel.as_ref().unwrap().typing.is_none(), "nothing opened for nothing");
+
+        seat.clipboard = Some(|| Some("Songti SC".into()));
+        feed(&mut seat, &mut ed, "\"+P");
+        assert_eq!(seat.panel.as_ref().unwrap().typing.as_deref(), Some("Songti SCserif"));
+        assert!(seat.took(&mut ed, Some(Key::Esc)));
+
+        // A `"` then another key lets the name go; `p` reads the unnamed one.
+        feed(&mut seat, &mut ed, "\"aj");
+        let page = seat.panel.as_mut().unwrap();
+        page.row = page.rows().iter().position(|s| s.kind == Kind::Tick).unwrap();
+        feed(&mut seat, &mut ed, "p");
+        assert_eq!(ed.status(), say!("settings.paste-nowhere"));
+    }
+
+    /// **The caret is drawn where it is, and a long value is shown round
+    /// it** (2026-11-08): the caret walks now, and the factory font list is
+    /// longer than the column.
+    #[test]
+    fn a_long_value_is_drawn_round_the_caret() {
+        let mut p = on_export_row("font_family");
+        press(&mut p, Key::Char('i'));
+        let config = Config::default();
+        crate::theme::settle(&config, None);
+        let backend = ratatui::backend::TestBackend::new(100, 30);
+        let mut terminal = ratatui::Terminal::new(backend).expect("a terminal");
+        let mut at_end = None;
+        terminal
+            .draw(|frame| at_end = draw(frame, &p, &config, Rect::new(0, 0, 100, 30)))
+            .expect("one frame");
+        let text = crate::buffer_to_text(terminal.backend().buffer());
+        let at_end = at_end.expect("a caret while typing");
+        assert!(text.contains("sans-serif"), "the end of the list, where the caret is:\n{text}");
+        press(&mut p, Key::Home);
+        let mut at_home = None;
+        terminal
+            .draw(|frame| at_home = draw(frame, &p, &config, Rect::new(0, 0, 100, 30)))
+            .expect("one frame");
+        let text = crate::buffer_to_text(terminal.backend().buffer());
+        let at_home = at_home.expect("a caret while typing");
+        assert!(text.contains("-apple-system"), "the start of it:\n{text}");
+        assert_eq!(at_home.y, at_end.y);
+        assert!(at_home.x < at_end.x, "the caret went to the start");
+        press(&mut p, Key::Delete);
+        press(&mut p, Key::End);
+        press(&mut p, Key::Backspace);
+        assert_eq!(p.typing.as_deref().map(|t| t.starts_with("apple") && t.ends_with("sans-seri")), Some(true));
     }
 }

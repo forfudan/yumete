@@ -856,17 +856,13 @@ pub fn run(
         // editor stays in Normal behind the panel, so its mode alone left a
         // block over the value being typed.
         let typing_a_setting = settings.panel.as_ref().is_some_and(|p| p.typing.is_some());
-        let shown = match typing_a_setting {
-            true => (Mode::Insert, false),
-            false => (editor.mode(), editor.is_extending()),
-        };
+        let (shown, shape) = caret_now(editor, typing_a_setting);
         if last_mode != Some(shown) {
-            let (mode, extending) = shown;
+            let (mode, _) = shown;
             // A block in Normal, a bar in Insert — the shape a modal editor is
             // read by. Only sent on a change, so the terminal is not asked to
             // reset its cursor on every keystroke.
-            let vertical = editor.layout() == WritingLayout::Vertical;
-            let _ = execute!(stdout(), caret_shape(mode, vertical, extending));
+            let _ = execute!(stdout(), shape);
 
             // Leaving the command line gives Insert its 中/英 back (#225) —
             // *its* state, not 中文 unconditionally. Forcing 中文 back on put
@@ -1570,10 +1566,7 @@ pub fn run(
                 if let Some(how) = editor.take_clipboard_read() {
                     match read_clipboard() {
                         Some(text) => editor.provide_clipboard(&text, how),
-                        None => editor.set_status(
-                            "cannot read the system clipboard here — ⌘V pastes into the terminal"
-                                .to_string(),
-                        ),
+                        None => editor.set_status(clipboard_unreadable()),
                     }
                 }
                         // `:view-preview` — the real typesetter, in the background. Its
@@ -1952,8 +1945,12 @@ pub fn run(
             }
             // Text arriving whole, from the system clipboard by way of the
             // terminal. It is inserted as writing, never run as keys.
+            // **…unless the settings panel is open** (2026-11-08): then it
+            // is the panel's, and the document behind it is not touched.
             Ok(Event::Paste(text)) => {
-                editor.paste_text(&text);
+                if !settings.pasted(editor, &text) {
+                    editor.paste_text(&text);
+                }
             }
             Ok(Event::Mouse(mouse)) => match mouse.kind {
                 // A notch moves `[editor] wheel_step` 縱 — three by default,
@@ -3867,6 +3864,11 @@ fn read_clipboard() -> Option<String> {
         }
     }
     None
+}
+
+/// What is said when [`read_clipboard`] finds nothing to ask.
+fn clipboard_unreadable() -> String {
+    "cannot read the system clipboard here — ⌘V pastes into the terminal".to_string()
 }
 
 /// Base64, for OSC 52. Twenty lines against a dependency for one escape
@@ -6099,6 +6101,9 @@ fn draw(
         // 可那一格正好在「設置」左邊，看着像頁面上多了一根豎槓。**藏起來纔是那個
         // 理由要的東西**；上面那一支負責讓正文不去設它。
         if let Some(at) = settings_page::draw(frame, page, config, page_area) {
+            // A vertical page in Insert keeps the terminal's cursor hidden
+            // (its caret is drawn into the page); the panel's bar is shown.
+            crate::backend::keep_the_cursor_hidden(false);
             frame.set_cursor_position(at);
         }
         if command_area.height == 1 {
@@ -15066,6 +15071,24 @@ fn paint_the_caret_block(
             cell.set_style(block);
         }
     }
+}
+
+/// **The mode the caret is read by this frame, and its shape**: the
+/// editor's, or Insert while a value in the settings panel is typed (the
+/// editor stays in Normal behind the panel, 2026-10-31).
+///
+/// Warning: **The panel's value is a line of horizontal text** (2026-11-08,
+/// reported: the caret was an underline, not the bar, while typing a
+/// value). Asked of the page's layout, a vertical page gave its own insert
+/// caret — the underline that sits under a column — to a field typed left
+/// to right, where Insert is the bar.
+fn caret_now(editor: &Editor, typing_a_setting: bool) -> ((Mode, bool), SetCursorStyle) {
+    let shown = match typing_a_setting {
+        true => (Mode::Insert, false),
+        false => (editor.mode(), editor.is_extending()),
+    };
+    let vertical = editor.layout() == WritingLayout::Vertical && !typing_a_setting;
+    (shown, caret_shape(shown.0, vertical, shown.1))
 }
 
 fn caret_shape(mode: Mode, vertical: bool, extending: bool) -> SetCursorStyle {
@@ -28708,6 +28731,27 @@ fn squeezed(text: &str) -> String {
         assert_eq!(shape(Mode::Insert, true, false), under, "竪排的槓要橫着");
         assert_eq!(shape(Mode::Normal, false, false), block);
         assert_eq!(shape(Mode::Normal, false, true), under, "v 開着");
+    }
+
+    /// **A value typed in the settings panel has the bar, on a vertical page
+    /// too** (2026-11-08, reported: the caret was an underline). The value is
+    /// a line of horizontal text, whatever way the page behind it runs.
+    #[test]
+    fn typing_a_setting_on_a_vertical_page_has_the_bar() {
+        let bar = format!("{}", SetCursorStyle::SteadyBar);
+        let block = format!("{}", SetCursorStyle::SteadyBlock);
+        let under = format!("{}", SetCursorStyle::SteadyUnderScore);
+        let mut editor = editor_with("那年冬天很冷。\n");
+        editor.set_layout(WritingLayout::Vertical);
+        let (shown, shape) = caret_now(&editor, true);
+        assert_eq!(shown, (Mode::Insert, false), "read as typing");
+        assert_eq!(format!("{shape}"), bar, "the bar, not the vertical page's underline");
+        assert_eq!(format!("{}", caret_now(&editor, false).1), block, "the page behind is in Normal");
+        editor.on_key(Key::Char('i'));
+        assert_eq!(format!("{}", caret_now(&editor, false).1), under, "the page's own Insert keeps its underline");
+        editor.on_key(Key::Esc);
+        editor.set_layout(WritingLayout::Horizontal);
+        assert_eq!(format!("{}", caret_now(&editor, true).1), bar, "and across");
     }
 
     /// **鍵在框裏的時候，正文上不許有光標**（2026-09-27）。

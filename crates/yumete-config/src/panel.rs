@@ -274,6 +274,42 @@ pub fn unwritten(repr: &str) -> String {
         .unwrap_or_else(|| repr.trim_matches('"').to_string())
 }
 
+/// Where a paste goes in a value that is not being typed yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pasting {
+    /// `p`: after the value.
+    After,
+    /// `P`: before it.
+    Before,
+    /// A paste from the terminal: in place of it.
+    Replace,
+}
+
+/// Pasted text made one line: see [`Panel::paste`].
+fn one_line(text: &str) -> String {
+    // A terminal hands a pasted break over as `\r` as often as `\n`.
+    let lines: Vec<&str> = text.split(['\n', '\r']).collect();
+    let last = lines.len() - 1;
+    let joined = lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| {
+            let line = if i > 0 { line.trim_start() } else { line };
+            if i < last { line.trim_end() } else { line }
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    joined
+        .chars()
+        .map(|c| match c {
+            '\t' => ' ',
+            c => c,
+        })
+        .filter(|c| !c.is_control())
+        .collect()
+}
+
 /// **一項此刻長什麽樣** —— 面板一行畫的就是這個。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shown {
@@ -299,6 +335,12 @@ pub struct Panel {
     pub row: usize,
     /// `i` 進來改的那一段字；`None` ＝ 不在改。
     pub typing: Option<String>,
+    /// **How many characters of [`Panel::typing`] stand after the caret**
+    /// (2026-11-08). Counted from the end, so `0` is the end of the text
+    /// and a value set whole (`typing = Some(..)`) has its caret after it,
+    /// where `i` puts it. A paste lands at the caret, and `P` puts it
+    /// before the value.
+    pub tail: usize,
     /// 上一次存盤說的話（哪幾個鍵被註釋掉了）。
     pub said: Option<Said>,
     /// **A page is open**, on this row of it (2026-11-02). Which page is the
@@ -374,6 +416,7 @@ impl Panel {
             group: 0,
             row: 0,
             typing: None,
+            tail: 0,
             said: None,
             page: None,
         }
@@ -625,6 +668,7 @@ impl Panel {
             }
             Kind::Text => {
                 self.typing = Some(unwritten(now.as_str()));
+                self.tail = 0;
                 return;
             }
             // Gone in above.
@@ -671,6 +715,107 @@ impl Panel {
             Kind::PickOr(_) => String::new(),
             _ => unwritten(&self.mine_now(setting)),
         });
+        self.tail = 0;
+    }
+
+    /// Whether this row takes typed text: a number, a piece of text, or a
+    /// name of one's own. A tick, a choice and a page have nothing to type.
+    pub fn takes_text(&self) -> bool {
+        self.pane == Pane::Settings
+            && self.here().is_some_and(|s| !matches!(s.kind, Kind::Tick | Kind::Pick(_) | Kind::Page))
+    }
+
+    /// The caret, as a count of characters from the start of the text.
+    pub fn caret(&self) -> usize {
+        let many = self.typing.as_ref().map_or(0, |t| t.chars().count());
+        many - self.tail.min(many)
+    }
+
+    /// The byte where the caret stands in the text being typed.
+    fn caret_byte(&self) -> usize {
+        let at = self.caret();
+        let typed = self.typing.as_deref().unwrap_or("");
+        typed.char_indices().nth(at).map_or(typed.len(), |(i, _)| i)
+    }
+
+    /// A character typed at the caret.
+    pub fn type_char(&mut self, c: char) {
+        let at = self.caret_byte();
+        self.tail = self.tail.min(self.typing.as_ref().map_or(0, |t| t.chars().count()));
+        if let Some(typed) = self.typing.as_mut() {
+            typed.insert(at, c);
+        }
+    }
+
+    /// `Backspace`: the character before the caret.
+    pub fn delete_back(&mut self) {
+        let at = self.caret();
+        if at == 0 {
+            return;
+        }
+        self.tail = self.typing.as_ref().map_or(0, |t| t.chars().count()) - at;
+        if let Some(typed) = self.typing.as_mut() {
+            let (i, _) = typed.char_indices().nth(at - 1).expect("a character before the caret");
+            typed.remove(i);
+        }
+    }
+
+    /// `Delete`: the character after the caret.
+    pub fn delete_forward(&mut self) {
+        let at = self.caret_byte();
+        let typed = self.typing.as_deref().unwrap_or("");
+        if at >= typed.len() {
+            return;
+        }
+        self.tail = typed[at..].chars().count() - 1;
+        if let Some(typed) = self.typing.as_mut() {
+            typed.remove(at);
+        }
+    }
+
+    /// `←` / `→`, one character; `Home` / `End`, the whole way.
+    pub fn move_caret(&mut self, to: usize) {
+        let many = self.typing.as_ref().map_or(0, |t| t.chars().count());
+        self.tail = many - to.min(many);
+    }
+
+    /// **Text arriving whole** (2026-11-08): a paste from the terminal, or a
+    /// register by `p` / `P`. Typing, it lands at the caret. Not typing, on
+    /// a row that takes text, the row opens as `i` opens it, and the text
+    /// goes after the value (`p`), before it (`P`), or in place of it (a
+    /// paste, which in Normal mode replaces what is selected, and the value
+    /// is drawn selected). The row stays open, so `Enter` keeps what it
+    /// shows and `Esc` leaves the value as it was.
+    ///
+    /// The value is one line. **A line break becomes one space**, with the
+    /// spaces either side of it, and the breaks at either end go: a font
+    /// list or a page copied over two lines reads `a, b`, and a whole line
+    /// copied with its break (what an editor puts on the clipboard for a
+    /// copy with nothing selected) is the line. Other control characters
+    /// go, as they do from a paste into the `:` line.
+    ///
+    /// Gives how many characters went in, or `None` when there is nowhere
+    /// for them to go: a tick, a choice, a page, the group list.
+    pub fn paste(&mut self, text: &str, how: Pasting) -> Option<usize> {
+        if self.typing.is_none() {
+            if !self.takes_text() {
+                return None;
+            }
+            self.begin_typing();
+            match how {
+                Pasting::Replace => {
+                    self.typing = Some(String::new());
+                    self.tail = 0;
+                }
+                Pasting::After => self.tail = 0,
+                Pasting::Before => self.move_caret(0),
+            }
+        }
+        let text = one_line(text);
+        for c in text.chars() {
+            self.type_char(c);
+        }
+        Some(text.chars().count())
     }
 
     /// 打完了 —— `Enter`。打的不是個數就原樣不動。
@@ -694,21 +839,38 @@ impl Panel {
     /// `Esc` —— 不改了。
     pub fn cancel_typing(&mut self) {
         self.typing = None;
+        self.tail = 0;
     }
 
     /// `d` —— 把這一項從**切着的那一份**裏撤掉，回去跟下面那一層。
-    pub fn drop_here(&mut self) {
-        let Some(setting) = self.here().filter(|s| s.kind != Kind::Page) else { return };
-        let path = setting.path();
+    ///
+    /// Gives whether anything was there to drop (2026-11-08). On a row this
+    /// file does not set, the row already follows the layer below and `d`
+    /// has nothing to do — the front end says so, rather than leaving a key
+    /// the hint line names to do nothing on screen. Not on the group list:
+    /// no row is chosen there, and the one `here()` gives is only the
+    /// group's first.
+    pub fn drop_here(&mut self) -> Option<bool> {
+        if self.pane != Pane::Settings {
+            return None;
+        }
+        let setting = self.here().filter(|s| s.kind != Kind::Page)?;
+        Some(self.drop_path(setting.path()))
+    }
+
+    /// Drop `path` from the file switched to: whether that changed anything.
+    fn drop_path(&mut self, path: String) -> bool {
         let sheet = self.sheet_mut();
+        let was = sheet.edits.get(&path).cloned();
         // Warning: **問的是「檔裏寫了没有」，不是「這一份此刻說什麽」。** 後者把還没存
         // 的改動也算進去，於是「改了一項，又按 `d` 反悔」會攢下一條刪一個根本不
         // 存在的鍵的指令——面板頂上從此寫着「改了還没存」，而其實什麽都不用存。
         // 2026-09-24 拍圖看出來的。
         match sheet.declared.contains_key(&path) {
-            true => sheet.edits.insert(path, Change::Drop),
+            true => sheet.edits.insert(path.clone(), Change::Drop),
             false => sheet.edits.remove(&path),
         };
+        was != sheet.edits.get(&path).cloned()
     }
 
     // ---- The flavour's page (2026-11-02) ---------------------------------
@@ -907,25 +1069,17 @@ impl Panel {
         }
     }
 
-    /// `d` on the page.
-    pub fn page_drop(&mut self) {
-        let path = match self.subpage() {
-            Some(Subpage::Flavor) => match self.flavor_here() {
-                Some(FlavorRow::Level) => "keys.flavor".to_string(),
-                Some(FlavorRow::Item(item)) => Self::item_path(item),
-                None => return,
+    /// `d` on the page: whether anything was there to drop, as
+    /// [`Panel::drop_here`].
+    pub fn page_drop(&mut self) -> Option<bool> {
+        let path = match self.subpage()? {
+            Subpage::Flavor => match self.flavor_here()? {
+                FlavorRow::Level => "keys.flavor".to_string(),
+                FlavorRow::Item(item) => Self::item_path(item),
             },
-            Some(Subpage::Annotation) => match self.annotation_here() {
-                Some(row) => Self::field_path(&row),
-                None => return,
-            },
-            None => return,
+            Subpage::Annotation => Self::field_path(&self.annotation_here()?),
         };
-        let sheet = self.sheet_mut();
-        match sheet.declared.contains_key(&path) {
-            true => sheet.edits.insert(path, Change::Drop),
-            false => sheet.edits.remove(&path),
-        };
+        Some(self.drop_path(path))
     }
 
     /// **A tick on a page flips.** Flipped to what the layers below give,
@@ -1686,5 +1840,50 @@ mod tests {
         let config = crate::Config::from_toml(&text);
         assert_eq!(config.keys.flavor.items.get(&FlavorItem::Tables), Some(&false), "{text}");
         assert_eq!(config.keys.flavor.items.get(&FlavorItem::MoveLines), Some(&false), "{text}");
+    }
+
+    /// **A font list with quotes in it is written to the file and read back
+    /// as it was typed** (2026-11-08): typed, pasted over two lines into the
+    /// middle, saved, and read by the config and by a new panel.
+    #[test]
+    fn a_font_list_typed_and_pasted_is_saved_and_read_back_whole() {
+        let dir = std::env::temp_dir().join(format!("yumete-setfont-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        let mut p = Panel::open(Some(path.clone()), None);
+        p.pane = Pane::Settings;
+        p.group = GROUPS.iter().position(|n| n.group == crate::settings_ui::Group::Files).unwrap();
+        p.row = p.rows().iter().position(|s| s.table == "export" && s.key == "font_family").unwrap();
+        p.begin_typing();
+        p.typing = Some("\"Iowan Old Style\", serif".into());
+        p.move_caret("\"Iowan Old Style\", ".chars().count());
+        assert_eq!(p.paste("'Songti SC',\n\t\"Noto \\ Serif\",\n", Pasting::After), Some(28));
+        p.type_char(' ');
+        let typed = "\"Iowan Old Style\", 'Songti SC', \"Noto \\ Serif\", serif";
+        assert_eq!(p.typing.as_deref(), Some(typed));
+        p.finish_typing();
+        p.save().expect("saved");
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(crate::Config::from_toml(&text).export.font_family, typed, "{text}");
+        let again = Panel::open(Some(path.clone()), None);
+        let setting = p.here().unwrap();
+        assert_eq!(unwritten(&again.shown(setting).value), typed);
+        assert!(!again.dirty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Pasted text made one line: a break is one space, with the spaces
+    /// beside it, and a break at either end goes, with the spaces beside it.
+    #[test]
+    fn a_paste_is_made_one_line() {
+        assert_eq!(one_line("a,\n  b"), "a, b");
+        assert_eq!(one_line("a5\n"), "a5");
+        assert_eq!(one_line("a5\r"), "a5");
+        assert_eq!(one_line("\r\n a, \r\n\r\n b \n"), "a, b");
+        assert_eq!(one_line("  a"), "  a");
+        assert_eq!(one_line("a\tb\u{7}"), "a b");
+        assert_eq!(one_line(""), "");
     }
 }

@@ -1247,6 +1247,12 @@ zhs = "尚不存在，保存时创建"
 en = "not there yet; created on save"
 
 [[message]]
+# 设置面板：按 d，而当前这一层的文件没有设这一项（草稿）
+key = "settings.nothing-to-drop"
+zhs = "本层没有设这一项，已在跟随下一层"
+en = "this layer does not set it; it already follows the layer below"
+
+[[message]]
 # 設置面板：没有改動
 key = "settings.nothing-to-save"
 zhs = "没有改动"
@@ -1311,6 +1317,12 @@ en = "rounded corners"
 key = "settings.panel.rounded.hint"
 zhs = "面板的四个角是圆的还是方的"
 en = "whether panel corners are round or square"
+
+[[message]]
+# 设置面板：粘贴或按 p，而光标不在一个可以输入文字的值上（草稿）
+key = "settings.paste-nowhere"
+zhs = "这里没有可以输入文字的值，未粘贴"
+en = "nothing here takes text; nothing was pasted"
 
 [[message]]
 # 設置面板：底下那一行——還没選中哪一項

@@ -1717,6 +1717,13 @@ impl Editor {
         self.register_text(self.pending_register)
     }
 
+    /// What `p` would paste from register `name` (the unnamed one for
+    /// `None`), for a front end's own one-line fields: the settings panel's
+    /// `p` and `"ap` (2026-11-08).
+    pub fn register_contents(&self, name: Option<char>) -> String {
+        self.register_text(name)
+    }
+
     fn register_text(&self, name: Option<char>) -> String {
         match name {
             // **`#` 是選區的序號**（#405 Phase 3，helix 也是這個名字）。它不是一個存東
