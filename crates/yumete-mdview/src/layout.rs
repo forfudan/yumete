@@ -19,6 +19,7 @@ use vello_cpu::kurbo::Rect;
 use vello_cpu::Pixmap;
 
 use crate::parse::{Align, Block, BlockKind, Callout, Inline, InlineKind, Item as ListItem, Marks};
+use crate::fonts::{families, Families, Han};
 use crate::theme::{Rgba, Theme};
 use crate::Formulas;
 
@@ -79,30 +80,6 @@ pub(crate) struct Laid {
     pub right: f32,
 }
 
-#[cfg(target_os = "macos")]
-const SANS: &str = "system-ui, 'PingFang SC', 'Hiragino Sans GB', 'Apple Color Emoji', sans-serif";
-#[cfg(target_os = "macos")]
-const CJK_FIRST: &str = "'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif";
-#[cfg(target_os = "macos")]
-const EMPHASIS: &str = "system-ui, 'Kaiti SC', STKaiti, KaiTi, 'LXGW WenKai GB', 'LXGW WenKai', 'PingFang SC', 'Apple Color Emoji', sans-serif";
-#[cfg(target_os = "windows")]
-const CJK_FIRST: &str = "'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI', sans-serif";
-#[cfg(target_os = "windows")]
-const EMPHASIS: &str = "'Segoe UI', KaiTi, 'LXGW WenKai', 'Microsoft YaHei', sans-serif";
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-const CJK_FIRST: &str = "'Noto Sans CJK SC', 'Source Han Sans SC', 'WenQuanYi Micro Hei', sans-serif";
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-const EMPHASIS: &str = "system-ui, 'AR PL UKai CN', 'LXGW WenKai', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', sans-serif";
-#[cfg(target_os = "macos")]
-const MONO: &str = "'SF Mono', Menlo, Monaco, 'PingFang SC', 'Apple Color Emoji', monospace";
-#[cfg(target_os = "windows")]
-const SANS: &str = "'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', 'Segoe UI Emoji', sans-serif";
-#[cfg(target_os = "windows")]
-const MONO: &str = "'Cascadia Mono', Consolas, 'Microsoft YaHei', 'Segoe UI Emoji', monospace";
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-const SANS: &str = "system-ui, 'Noto Sans', 'DejaVu Sans', 'Noto Sans CJK SC', 'Source Han Sans SC', 'WenQuanYi Micro Hei', 'Noto Color Emoji', sans-serif";
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-const MONO: &str = "'DejaVu Sans Mono', 'Noto Sans Mono', 'Liberation Mono', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei', monospace";
 
 /// A text style.
 #[derive(Clone, Copy, Debug)]
@@ -148,6 +125,9 @@ pub(crate) struct Engine {
     /// Where relative image paths start.
     pub base_dir: PathBuf,
     pub formulas: Box<dyn Formulas>,
+    /// The document's writing system, and the faces of each.
+    pub han: Han,
+    families: [Arc<Families>; 3],
     formula_cache: HashMap<(String, bool, Rgba, u32), Option<FormulaPic>>,
     images: HashMap<String, Option<Arc<image::RgbaImage>>>,
     scaled: HashMap<(String, u32), Pix>,
@@ -162,6 +142,8 @@ impl Engine {
             scale,
             base_dir,
             formulas,
+            han: Han::default(),
+            families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h))),
             formula_cache: HashMap::new(),
             images: HashMap::new(),
             scaled: HashMap::new(),
@@ -329,9 +311,13 @@ impl Engine {
         if src.is_empty() {
             src.push((0, 0));
         }
-        let family = if st.mono { MONO } else { SANS };
+        let doc = self.families[self.han.index()].clone();
+        let all = self.families.clone();
+        let fam_of = |lang: u8| -> &Families { if lang == 0 { &doc } else { &all[(lang as usize - 1).min(2)] } };
+        let family = if st.mono { doc.mono.as_str() } else { doc.sans.as_str() };
         let mut b = self.lcx.ranged_builder(&mut self.fonts, &text, 1.0, true);
         b.push_default(StyleProperty::FontFamily(FontFamily::from(family)));
+        b.push_default(StyleProperty::Locale(parley::Language::parse(self.han.tag()).ok()));
         b.push_default(StyleProperty::FontSize(st.size));
         b.push_default(StyleProperty::FontWeight(FontWeight::new(st.weight)));
         b.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(st.line_height)));
@@ -382,11 +368,11 @@ impl Engine {
                 // Latin in italics; 漢字, which have none, in a 楷體.
                 b.push(StyleProperty::FontStyle(FontStyle::Italic), r.clone());
                 if !(marks.code || marks.kbd || st.mono) {
-                    b.push(StyleProperty::FontFamily(FontFamily::from(EMPHASIS)), r.clone());
+                    b.push(StyleProperty::FontFamily(FontFamily::from(fam_of(marks.lang).emphasis.as_str())), r.clone());
                 }
             }
             if (marks.code || marks.kbd) && !st.mono {
-                b.push(StyleProperty::FontFamily(FontFamily::from(MONO)), r.clone());
+                b.push(StyleProperty::FontFamily(FontFamily::from(fam_of(marks.lang).mono.as_str())), r.clone());
                 b.push(StyleProperty::FontSize(st.size * 0.85), r.clone());
                 b.push(StyleProperty::WhiteSpaceCollapse(WhiteSpaceCollapse::Preserve), r.clone());
             }
@@ -414,7 +400,8 @@ impl Engine {
                 let before = chars[..k].iter().rev().map(|p| p.1).find(|c| !cjk_punctuation(*c) && !c.is_whitespace());
                 let after = chars[k + 1..].iter().map(|p| p.1).find(|c| !cjk_punctuation(*c) && !c.is_whitespace());
                 if before.is_some_and(wide) || after.is_some_and(wide) {
-                    b.push(StyleProperty::FontFamily(FontFamily::from(CJK_FIRST)), at..at + c.len_utf8());
+                    let lang = ranges.iter().find(|(r, ..)| r.contains(&at)).map_or(0, |(_, m, _, _)| m.lang);
+                    b.push(StyleProperty::FontFamily(FontFamily::from(fam_of(lang).cjk_first.as_str())), at..at + c.len_utf8());
                 }
             }
         }
@@ -711,7 +698,8 @@ impl Engine {
             src.push((0, first));
         }
         let mut b = self.lcx.ranged_builder(&mut self.fonts, &text, 1.0, true);
-        b.push_default(StyleProperty::FontFamily(FontFamily::from(MONO)));
+        let mono = self.families[self.han.index()].mono.clone();
+        b.push_default(StyleProperty::FontFamily(FontFamily::from(mono.as_str())));
         b.push_default(StyleProperty::FontSize(st.size));
         b.push_default(StyleProperty::LineHeight(LineHeight::FontSizeRelative(st.line_height)));
         b.push_default(StyleProperty::WhiteSpaceCollapse(WhiteSpaceCollapse::Preserve));

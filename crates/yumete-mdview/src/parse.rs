@@ -155,6 +155,9 @@ pub struct Marks {
     pub sup: bool,
     pub sub: bool,
     pub underline: bool,
+    /// A `<span lang="…">` over it: 0 for the document's own, else 1 more
+    /// than [`crate::fonts::Han`]'s index.
+    pub lang: u8,
 }
 
 /// **Read `text`** into blocks. The footnotes, if any, come last, as one
@@ -878,11 +881,13 @@ impl Reader {
             ] {
                 *on |= html_on;
             }
+            m.lang = html.lang;
             m.link |= url;
             m
         };
         let mut out: Vec<Inline> = Vec::new();
         let mut html = Marks::default();
+        let mut spans_open: Vec<u8> = Vec::new();
         let mut i = 0;
         while i < chars.len() {
             let line = line_at(i);
@@ -952,7 +957,7 @@ impl Reader {
                     }
                     SpanKind::Html => {
                         let tag: String = chars[span.start..span.end].iter().collect();
-                        html_tag(&tag, &mut html, line, &mut out);
+                        html_tag(&tag, &mut html, &mut spans_open, line, &mut out);
                         i = span.end;
                     }
                     _ => i += 1,
@@ -994,7 +999,7 @@ fn add_mark(m: &mut Marks, kind: SpanKind) {
 
 /// An HTML tag in the run of the text: `<br>` breaks, `<img>` is a picture,
 /// the phrase tags mark, anything else comes off.
-fn html_tag(tag: &str, html: &mut Marks, line: usize, out: &mut Vec<Inline>) {
+fn html_tag(tag: &str, html: &mut Marks, spans_open: &mut Vec<u8>, line: usize, out: &mut Vec<Inline>) {
     let lower = tag.to_ascii_lowercase();
     let closing = lower.starts_with("</");
     let name: String = lower.trim_start_matches("</").trim_start_matches('<').chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
@@ -1015,6 +1020,14 @@ fn html_tag(tag: &str, html: &mut Marks, line: usize, out: &mut Vec<Inline>) {
         "u" | "ins" => html.underline = on,
         "s" | "del" => html.strike = on,
         "code" | "samp" => html.code = on,
+        // `<span lang="ja">`: the run is set in that writing system's face.
+        "span" if on => {
+            spans_open.push(html.lang);
+            if let Some(han) = attribute(tag, "lang").and_then(|l| crate::fonts::Han::from_tag(&l)) {
+                html.lang = han.index() as u8 + 1;
+            }
+        }
+        "span" => html.lang = spans_open.pop().unwrap_or(0),
         _ => {}
     }
 }

@@ -21,6 +21,7 @@
 //! yumete's is `yumete_tui::tex`, RaTeX, and this crate does not depend on it
 //! so its tests and its other users need not carry it.
 
+pub mod fonts;
 pub mod parse;
 pub mod theme;
 
@@ -121,6 +122,8 @@ pub struct Preview {
     painter: paint::Painter,
     width: u32,
     blocks: Vec<Block>,
+    /// A writing system the reader chose, over what the document says.
+    han_override: Option<fonts::Han>,
     parse_cache: parse::Cache,
     cache: HashMap<u64, Arc<Laid>>,
     placed: Vec<Placed>,
@@ -136,6 +139,7 @@ impl Preview {
             painter: paint::Painter::new(),
             width: options.width.max(64),
             blocks: Vec::new(),
+            han_override: None,
             parse_cache: parse::Cache::default(),
             cache: HashMap::new(),
             placed: Vec::new(),
@@ -149,6 +153,20 @@ impl Preview {
     pub fn set_text(&mut self, text: &str) -> Stats {
         let t = Instant::now();
         self.blocks = parse::parse_with(text, &mut self.parse_cache);
+        // The writing system: the front matter's `lang` if it gives one,
+        // else what the text itself is written in.
+        let declared = self.blocks.first().and_then(|b| match &b.kind {
+            parse::BlockKind::FrontMatter(lines) => lines.iter().find_map(|l| {
+                let (key, value) = l.split_once(':')?;
+                matches!(key.trim(), "lang" | "language" | "locale").then(|| fonts::Han::from_tag(value)).flatten()
+            }),
+            _ => None,
+        });
+        let han = self.han_override.or(declared).unwrap_or_else(|| fonts::han_of(text));
+        if han != self.engine.han {
+            self.engine.han = han;
+            self.cache.clear();
+        }
         let parse_ms = t.elapsed().as_secs_f64() * 1000.0;
         let mut stats = self.relayout();
         stats.parse_ms = parse_ms;
@@ -171,6 +189,17 @@ impl Preview {
     /// The page's width and height, in device pixels.
     pub fn size(&self) -> (u32, f32) {
         (self.width, self.height)
+    }
+
+    /// Set every document in `han` (or, with `None`, in its own again);
+    /// takes effect at the next [`set_text`](Preview::set_text).
+    pub fn set_han(&mut self, han: Option<fonts::Han>) {
+        self.han_override = han;
+    }
+
+    /// The writing system the document is set in.
+    pub fn han(&self) -> fonts::Han {
+        self.engine.han
     }
 
     /// The blocks read last.

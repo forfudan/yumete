@@ -6,7 +6,8 @@
 //! ```text
 //! ye --md-render <file.md> [--width 1000] [--scale 2] [--height 1400]
 //!                [--theme light|dark] [--palette ink|github|<theme>]
-//!                [--screens 3 | --all] [--at-line N] [--out DIR] [--bench]
+//!                [--han sc|tc|ja] [--screens 3 | --all] [--at-line N]
+//!                [--out DIR] [--bench]
 //! ```
 //!
 //! `--palette` names an editor theme (`ink`, 墨香, the default, or any name
@@ -35,6 +36,7 @@ pub fn run(args: &[String]) -> ExitCode {
     let (mut dark, mut screens, mut all, mut bench) = (false, 3usize, false, false);
     let mut at_line: Option<usize> = None;
     let mut palette = String::from("ink");
+    let mut han: Option<yumete_mdview::fonts::Han> = None;
     let mut out = PathBuf::from(".");
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -54,6 +56,14 @@ pub fn run(args: &[String]) -> ExitCode {
             "--out" => out = value("--out").map(PathBuf::from).unwrap_or(out),
             "--theme" => dark = value("--theme").is_some_and(|v| v == "dark"),
             "--palette" => palette = value("--palette").unwrap_or(palette),
+            "--han" => {
+                han = value("--han").and_then(|v| match v.as_str() {
+                    "sc" => Some(yumete_mdview::fonts::Han::Simplified),
+                    "tc" => Some(yumete_mdview::fonts::Han::Traditional),
+                    "ja" => Some(yumete_mdview::fonts::Han::Japanese),
+                    _ => None,
+                })
+            }
             "--all" => all = true,
             "--bench" => bench = true,
             other if !other.starts_with("--") && file.is_none() => file = Some(PathBuf::from(other)),
@@ -64,7 +74,7 @@ pub fn run(args: &[String]) -> ExitCode {
         }
     }
     let Some(file) = file else {
-        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--screens N | --all] [--at-line N] [--out DIR] [--bench]");
+        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--han sc|tc|ja] [--screens N | --all] [--at-line N] [--out DIR] [--bench]");
         return ExitCode::from(2);
     };
     let text = match std::fs::read_to_string(&file) {
@@ -95,14 +105,16 @@ pub fn run(args: &[String]) -> ExitCode {
 
     let t = Instant::now();
     let mut preview = Preview::new(options.clone(), Box::new(Tex));
+    preview.set_han(han);
     let t_new = ms(t);
     let t = Instant::now();
     let stats = preview.set_text(&text);
     let t_cold = ms(t);
     let (_, total) = preview.size();
     println!(
-        "{}: {} lines, {} blocks, page {}x{:.0} px; parse {:.1} ms, cold layout {:.1} ms (font context {:.1} ms)",
+        "{} ({:?}): {} lines, {} blocks, page {}x{:.0} px; parse {:.1} ms, cold layout {:.1} ms (font context {:.1} ms)",
         file.display(),
+        preview.han(),
         text.lines().count(),
         stats.blocks,
         width,

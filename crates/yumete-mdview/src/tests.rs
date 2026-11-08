@@ -242,6 +242,28 @@ fn every_block_kind_lays_out_and_draws() {
     assert_eq!(pic.height, h.ceil() as u32);
 }
 
+#[test]
+fn a_document_is_set_in_its_own_hand() {
+    use crate::fonts::Han;
+    assert_eq!(preview("這是一份繁體的說明，爲了測試。\n", 400).han(), Han::Traditional);
+    assert_eq!(preview("这是一份简体的说明，为了测试。\n", 400).han(), Han::Simplified);
+    // The front matter's `lang` wins over the text.
+    assert_eq!(preview("---\nlang: ja\n---\n\n这是简体。\n", 400).han(), Han::Japanese);
+    // A span says what its own words are.
+    let blocks = parse::parse("中文 <span lang=\"ja\">日本語</span> 中文\n");
+    let BlockKind::Paragraph(runs) = &blocks[0].kind else { panic!() };
+    let lang_of = |w: &str| {
+        runs.iter()
+            .find_map(|r| match &r.kind {
+                parse::InlineKind::Text { text, marks } if text.contains(w) => Some(marks.lang),
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert_eq!(lang_of("日本語"), Han::Japanese.index() as u8 + 1);
+    assert_eq!(lang_of("中文"), 0);
+}
+
 /// **A preview may be moved to another thread**: the front end can lay out
 /// and draw away from the one that reads keys.
 #[test]
