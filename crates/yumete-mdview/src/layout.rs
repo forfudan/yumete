@@ -128,6 +128,8 @@ pub(crate) struct Engine {
     /// The document's writing system, and the faces of each.
     pub han: Han,
     families: [Arc<Families>; 3],
+    /// Whether adjacent full-width marks are squeezed.
+    pub squeeze: bool,
     formula_cache: HashMap<(String, bool, Rgba, u32), Option<FormulaPic>>,
     images: HashMap<String, Option<Arc<image::RgbaImage>>>,
     scaled: HashMap<(String, u32), Pix>,
@@ -143,6 +145,7 @@ impl Engine {
             base_dir,
             formulas,
             han: Han::default(),
+            squeeze: true,
             families: [Han::Simplified, Han::Traditional, Han::Japanese].map(|h| Arc::new(families(h))),
             formula_cache: HashMap::new(),
             images: HashMap::new(),
@@ -386,6 +389,31 @@ impl Engine {
             }
             if ink != (Ink { color: st.color, ..Ink::default() }) {
                 b.push(StyleProperty::Brush(ink), r.clone());
+            }
+        }
+        // **Two full-width marks side by side give up the blank half between
+        // them** (clreq's 標點擠壓): 「。」」, 「」，」, 「）「」 each take one and a
+        // half ems, not two. A closing mark's blank is its right half, an
+        // opening mark's its left; the squeeze is a negative letter spacing on
+        // the first of the two, which pulls the second back by half an em.
+        // 繁體 centres 、。，；：！？ in the em, so there only the brackets
+        // squeeze; Japanese centres ：； too; ！？ never give theirs up.
+        if !st.mono && self.squeeze {
+            let chars: Vec<(usize, char)> = text.char_indices().collect();
+            let han_at = |at: usize| -> Han {
+                match ranges.iter().find(|(r, ..)| r.contains(&at)).map_or(0, |(_, m, _, _)| m.lang) {
+                    0 => self.han,
+                    n => [Han::Simplified, Han::Traditional, Han::Japanese][(n as usize - 1).min(2)],
+                }
+            };
+            let plain = |at: usize| !ranges.iter().any(|(r, m, _, sup)| r.contains(&at) && (m.code || m.kbd || m.sup || m.sub || *sup));
+            for pair in chars.windows(2) {
+                let ((at, first), (_, second)) = (pair[0], pair[1]);
+                let han = han_at(at);
+                let squeeze = (closing_mark(first, han) && (closing_mark(second, han) || opening_mark(second))) || (opening_mark(first) && opening_mark(second));
+                if squeeze && plain(at) {
+                    b.push(StyleProperty::LetterSpacing(-0.5 * st.size), at..at + first.len_utf8());
+                }
             }
         }
         // Quotes, dashes and ellipses between 漢字 are set in the CJK face:
@@ -912,6 +940,23 @@ impl Engine {
             return;
         }
     }
+}
+
+/// A full-width closing mark whose right half is blank in `han`'s faces.
+fn closing_mark(c: char, han: Han) -> bool {
+    match c {
+        '」' | '』' | '）' | '》' | '〉' | '】' | '〕' | '〗' | '］' | '｝' | '\u{201D}' | '\u{2019}' => true,
+        '，' | '。' | '、' => han != Han::Traditional,
+        // ！ and ？ keep their em, as the 開明 style keeps them: half-width
+        // they read as Latin marks.
+        '；' | '：' => han == Han::Simplified,
+        _ => false,
+    }
+}
+
+/// A full-width opening mark, whose left half is blank.
+fn opening_mark(c: char) -> bool {
+    matches!(c, '「' | '『' | '（' | '《' | '〈' | '【' | '〔' | '〖' | '［' | '｛' | '\u{201C}' | '\u{2018}')
 }
 
 /// Punctuation that Chinese and Latin share, drawn differently by each.

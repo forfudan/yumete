@@ -242,6 +242,34 @@ fn every_block_kind_lays_out_and_draws() {
     assert_eq!(pic.height, h.ceil() as u32);
 }
 
+/// The width of the first text drawn in the last block of `text`.
+fn width_of(text: &str) -> f32 {
+    let p = preview(text, 600);
+    let laid = &p.placed.last().unwrap().laid;
+    laid.items
+        .iter()
+        .find_map(|it| match it {
+            Item::Text { text, .. } => Some(text.layout.width()),
+            _ => None,
+        })
+        .unwrap()
+}
+
+#[test]
+fn adjacent_full_width_marks_give_up_their_blank_halves() {
+    // 16 px type: a mark is 16 px, a squeezed pair 24.
+    let squeezed = width_of("。「\n");
+    let kept = width_of("「。\n");
+    assert!((kept - squeezed - 8.0).abs() < 1.5, "kept {kept}, squeezed {squeezed}");
+    assert!((width_of("（「\n") - squeezed).abs() < 1.5);
+    assert!((width_of("」，\n") - squeezed).abs() < 1.5);
+    // In 繁體, 。 sits in the middle of its em and keeps it.
+    let tc = width_of("---\nlang: zh-Hant\n---\n\n。「\n");
+    assert!((tc - kept).abs() < 1.5, "{tc} vs {kept}");
+    // Code is not touched.
+    assert!((width_of("`。「`\n") - width_of("`「。`\n")).abs() < 0.5);
+}
+
 #[test]
 fn a_document_is_set_in_its_own_hand() {
     use crate::fonts::Han;

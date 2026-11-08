@@ -6,7 +6,7 @@
 //! ```text
 //! ye --md-render <file.md> [--width 1000] [--scale 2] [--height 1400]
 //!                [--theme light|dark] [--palette ink|github|<theme>]
-//!                [--han sc|tc|ja] [--screens 3 | --all] [--at-line N]
+//!                [--han sc|tc|ja] [--no-squeeze] [--screens 3 | --all] [--at-line N]
 //!                [--out DIR] [--bench]
 //! ```
 //!
@@ -37,6 +37,7 @@ pub fn run(args: &[String]) -> ExitCode {
     let mut at_line: Option<usize> = None;
     let mut palette = String::from("ink");
     let mut han: Option<yumete_mdview::fonts::Han> = None;
+    let mut squeeze = true;
     let mut out = PathBuf::from(".");
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -65,6 +66,7 @@ pub fn run(args: &[String]) -> ExitCode {
                 })
             }
             "--all" => all = true,
+            "--no-squeeze" => squeeze = false,
             "--bench" => bench = true,
             other if !other.starts_with("--") && file.is_none() => file = Some(PathBuf::from(other)),
             other => {
@@ -106,6 +108,9 @@ pub fn run(args: &[String]) -> ExitCode {
     let t = Instant::now();
     let mut preview = Preview::new(options.clone(), Box::new(Tex));
     preview.set_han(han);
+    if !squeeze {
+        preview.set_squeeze(false);
+    }
     let t_new = ms(t);
     let t = Instant::now();
     let stats = preview.set_text(&text);

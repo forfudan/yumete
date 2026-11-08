@@ -197,6 +197,14 @@ impl Preview {
         self.han_override = han;
     }
 
+    /// Whether adjacent full-width marks give up their blank halves (on
+    /// unless turned off): every block is laid out again.
+    pub fn set_squeeze(&mut self, on: bool) -> Stats {
+        self.engine.squeeze = on;
+        self.cache.clear();
+        self.relayout()
+    }
+
     /// The writing system the document is set in.
     pub fn han(&self) -> fonts::Han {
         self.engine.han
