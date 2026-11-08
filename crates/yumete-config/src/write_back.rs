@@ -17,26 +17,11 @@
 //!
 //! # 不認得的鍵
 //!
-//! `RawConfig` 是 `#[serde(deny_unknown_fields)]`，所以**一個打錯的鍵名會扔掉整
-//! 份配置**。實測（2026-09-23）：
-//!
-//! ```toml
-//! [editor]
-//! line_numbers = "absolute"
-//! nosuchkey = 42
-//! soft_wrap = true
-//! ```
-//!
-//! stderr 上報一行，而同一個檔裏那兩條對的設定**一條都没生效**。
-//!
-//! 所以存盤要管這件事。2026-09-23 定的是「移除」，商量之後改成**註釋掉**：
-//!
-//! ```toml
-//! # nosuchkey = 42    # yumete 不認得這個名字
-//! ```
-//!
-//! 三個理由：**什麽都没丟**（那可能是從新版文檔抄來的）、**檔當場能用了**、
-//! **看得見發生過什麽**（刪掉是無聲的）。
+//! **原樣留着**（2026-11-08）。從前存盤會把面板不認得的鍵註釋掉、挪到表頭底下，
+//! 理由是 `deny_unknown_fields` 讓一個打錯的鍵名作廢整份配置；可那是改了使用者没
+//! 叫改的行——他只改了 `scrolloff`，存完 `typo_key` 被註釋掉、次序也變了。現在
+//! 一份讀不進去的檔面板頂上就說出來，`:w` 不寫它，要改請 `e` 打開那個檔
+//! （[`crate::panel::Panel::save`]）。
 
 use toml_edit::{DocumentMut, Item, Value};
 
@@ -56,26 +41,6 @@ pub enum Change {
     Drop,
 }
 
-/// 寫回之後，有話說的那幾句。
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct Said {
-    /// 註釋掉了的那些鍵（`表.鍵`）。
-    pub commented_out: Vec<String>,
-    /// **面板開着的時候，被外面改過的那幾個檔。**
-    ///
-    /// 不是錯——存盤照舊落地，而且落在**磁碟上此刻那一份**上（見
-    /// [`crate::panel::Panel::save`]）。說出來是因為畫面上那幾個值可能已經不是
-    /// 檔裏寫的了，該按一下 `:reload-config` 或者重開一次面板。
-    pub changed_underneath: Vec<String>,
-}
-
-/// **一份 toml，改幾處，字節級別地不動別的。**
-///
-/// `text` 是檔裏原樣的那一份（空字串 ＝ 還没有這個檔）。`changes` 是
-/// `("表.鍵", 怎麽改)`。回來的是新的正文與有話說的那幾句。
-///
-/// Warning: **不認得的鍵在這裏一併註釋掉**，因為它們和「存盤」是同一件事：面板存完盤
-/// 之後那個檔必須是**讀得進去的**，否則使用者按了保存而設定一條都没生效。
 /// The table `tables` names, one inside the next, if the file has it.
 fn table_at<'a>(doc: &'a mut DocumentMut, tables: &[&str]) -> Option<&'a mut toml_edit::Table> {
     let mut t = doc.get_mut(tables.first()?)?.as_table_mut()?;
@@ -96,13 +61,12 @@ fn unfold(t: &mut toml_edit::Table, name: &str) {
     }
 }
 
-pub fn rewrite(
-    text: &str,
-    changes: &[(String, Change)],
-    known: &dyn Fn(&str, &str) -> bool,
-) -> Result<(String, Said), String> {
+/// **一份 toml，改幾處，字節級別地不動別的。**
+///
+/// `text` 是檔裏原樣的那一份（空字串 ＝ 還没有這個檔）。`changes` 是
+/// `("表.鍵", 怎麽改)`。回來的是新的正文；檔讀不通就回解析器的話，一個字不寫。
+pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, String> {
     let mut doc: DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
-    let mut said = Said::default();
 
     for (path, change) in changes {
         // `表.鍵`, or `表.子表.鍵` for a table inside a table (2026-11-02:
@@ -119,13 +83,22 @@ pub fn rewrite(
                 // A table inside a table that has nothing left goes too, from
                 // the innermost out: an empty `[keys.flavor_items]` or
                 // `[ime.annotation_modes.double]` says nothing.
+                let mut emptied = true;
                 for depth in (1..tables.len()).rev() {
-                    let Some(outer) = table_at(&mut doc, &tables[..depth]) else { break };
+                    let Some(outer) = table_at(&mut doc, &tables[..depth]) else {
+                        emptied = false;
+                        break;
+                    };
                     let empty = matches!(outer.get(tables[depth]), Some(Item::Table(inner)) if inner.is_empty());
                     if !empty {
+                        emptied = false;
                         break;
                     }
                     outer.remove(tables[depth]);
+                }
+                // …and so does the outermost one.
+                if emptied {
+                    drop_if_empty(&mut doc, tables[0]);
                 }
             }
             _ => {
@@ -172,126 +145,46 @@ pub fn rewrite(
             }
         }
     }
-
-    // **不認得的表頭：整節註釋掉，並說出來**（2026-10-09 審出來的）。
-    //
-    // Warning: **一個打錯的表頭比一個打錯的鍵名更狠。** `RawConfig` 是
-    // `deny_unknown_fields`，所以 `[editr]` 一行就讓**整份**配置讀不進去；而下面那
-    // 一支只掃六張認得的表**裏面的鍵**，表頭自己從來没人掃。實測：配置寫
-    // `[editr]`，面板上改一項存下去，狀態欄說「設置存進…」，而下次啓動是
-    // 「unknown field `editr`」——舊設置和剛改的那一項一起作廢，而這扇面板存在的
-    // 全部理由就是「一個打錯的名字不該讓整份配置作廢」。
-    //
-    // 這十個名字是 `RawConfig` 的全部欄位。其中 `syntax`／`sidebar`／`language`／
-    // `lsp` 的鍵是使用者自己取的（擴展名、語言名…），所以下面那一支不掃它們裏面，
-    // 可表頭本身照樣是認得的。
-    const TABLES: [&str; 10] = [
-        "editor", "theme", "panel", "ime", "syntax", "sidebar", "keys", "export", "language",
-        "lsp",
-    ];
-    let strangers: Vec<String> = doc
-        .iter()
-        .map(|(name, _)| name.to_string())
-        .filter(|name| !TABLES.contains(&name.as_str()))
-        .collect();
-    for name in strangers {
-        let Some(item) = doc.get(&name) else { continue };
-        // 整節連表頭一起拿出來渲染，所以跨行的值與使用者自己的註釋都在裏面。
-        let mut lone = DocumentMut::new();
-        lone.insert(&name, item.clone());
-        // Warning: **每一行都要那個 `#`**，同下面那一支——漏一行整份 toml 就讀不進去。
-        // 本來就是註釋的那幾行會變成 `# # …`，照舊是註釋。
-        let body: String = lone
-            .to_string()
-            .lines()
-            .map(|one| match one.trim().is_empty() {
-                true => String::new(),
-                false => format!("# {one}"),
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        doc.remove(&name);
-        said.commented_out.push(name.clone());
-        // Warning: **挪到檔尾**：鍵有它的表頭可以掛，表頭没有上一層。位置變了，字一個
-        // 不少——同下面那一支的那筆賬（「挪一行註釋掉的字比為了位置精確而動別人的行
-        // 便宜」）。
-        let had = doc.trailing().as_str().unwrap_or("").to_string();
-        doc.set_trailing(format!("{had}\n{body}    # {STRANGER}\n"));
-    }
-
-    // 不認得的鍵：註釋掉，並說出來。
-    for table in ["editor", "theme", "panel", "ime", "keys", "export"] {
-        let Some(Item::Table(t)) = doc.get_mut(table) else { continue };
-        let strangers: Vec<String> = t
-            .iter()
-            .map(|(k, _)| k.to_string())
-            .filter(|k| !known(table, k))
-            .collect();
-        for key in strangers {
-            let Some(item) = t.get(&key) else { continue };
-            let line = match item.as_value() {
-                Some(v) => format!("{key} ={}", v.to_string().trim_end()),
-                None => continue,
-            };
-            // Warning: **每一行都要那個 `#`，不是只有第一行。** 值可以跨行——多行數組、
-            // `"""…"""` ——而只註釋掉頭一行，後面幾行就**裸着留在檔裏**，整份
-            // toml 從此讀不進去。實測（2026-09-24 審出來的）：
-            //
-            // ```toml
-            // [editor]
-            // # nosuchkey = [
-            //   "a",
-            //   "b",
-            // ]    # yumete does not know this name
-            // ```
-            //
-            // 「Expected '=' after a key」——而這扇面板存在的**全部理由**就是
-            // 「一個打錯的鍵名不該讓整份配置作廢」。它親手造出了那件事。
-            let line = line
-                .lines()
-                .map(|one| format!("# {one}"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            t.remove(&key);
-            said.commented_out.push(format!("{table}.{key}"));
-            // Warning: **掛在表頭那一行的後綴上**，所以它畫出來是在 `[editor]` **下面
-            // 一行**，而不是原來那個位置。留在本節裏就夠了——挪一行註釋掉的字比
-            // 「為了位置精確而動別人的行」便宜。
-            //
-            // Warning: 連帶一件事：它會擠在上一行註釋和它注的那一行中間。實測
-            // （2026-09-24）：
-            //
-            // ```toml
-            // [editor]
-            // # nosuchkey = 42    # yumete does not know this name
-            // # 竪排
-            // layout = "vertical"
-            // ```
-            let decor = t.decor_mut();
-            let had = decor.suffix().and_then(|s| s.as_str()).unwrap_or("").to_string();
-            decor.set_suffix(format!("{had}\n{line}    # {STRANGER}"));
-        }
-    }
-
-    Ok((doc.to_string(), said))
+    Ok(doc.to_string())
 }
 
-/// 註釋掉那一行後面跟的那句話。
-///
-/// Warning: **不走 `say!`。** 它寫進使用者的檔裏，而那個檔明天可能被另一種語言的
-/// yumete 讀到；一句跟着界面語言變的註釋會讓同一個檔在兩臺機器上長得不一樣。
-const STRANGER: &str = "yumete does not know this name";
+/// **A top-level table with nothing left in it goes, header and all**
+/// (2026-11-08, reported: dropping the only key of a project file left
+/// `[editor]` alone in it). The comment lines above its header are the
+/// writer's and stay: they move to the table after it, or to the end of the
+/// file when it was the last.
+fn drop_if_empty(doc: &mut DocumentMut, name: &str) {
+    let Some(Item::Table(t)) = doc.get(name) else { return };
+    if !t.is_empty() {
+        return;
+    }
+    let said = t.decor().prefix().and_then(|p| p.as_str()).unwrap_or("").to_string();
+    let at = t.position();
+    doc.remove(name);
+    if said.trim().is_empty() {
+        return;
+    }
+    let next = doc
+        .iter()
+        .filter_map(|(key, item)| item.as_table().and_then(|t| t.position()).map(|p| (p, key.to_string())))
+        .filter(|(p, _)| at.is_none_or(|at| *p > at))
+        .min()
+        .map(|(_, key)| key);
+    match next.and_then(|key| doc.get_mut(&key)).and_then(Item::as_table_mut) {
+        Some(after) => {
+            let had = after.decor().prefix().and_then(|p| p.as_str()).unwrap_or("").to_string();
+            after.decor_mut().set_prefix(format!("{said}{had}"));
+        }
+        None => {
+            let had = doc.trailing().as_str().unwrap_or("").to_string();
+            doc.set_trailing(format!("{had}{said}"));
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn known(table: &str, key: &str) -> bool {
-        matches!(
-            (table, key),
-            ("editor", "line_numbers") | ("editor", "soft_wrap") | ("editor", "indent")
-        )
-    }
 
     /// **這一條是整件事的理由**：使用者寫的東西一個字都不許掉。
     #[test]
@@ -304,8 +197,7 @@ line_numbers = \"absolute\"
 
 soft_wrap = true    # 行尾這一句也是我寫的
 ";
-        let (after, said) =
-            rewrite(before, &[("editor.indent".into(), Change::Count(2))], &known).unwrap();
+        let after = rewrite(before, &[("editor.indent".into(), Change::Count(2))]).unwrap();
         for kept in [
             "# 這是我自己寫的，別動",
             "# 行號要絕對的",
@@ -315,15 +207,13 @@ soft_wrap = true    # 行尾這一句也是我寫的
             assert!(after.contains(kept), "掉了 {kept:?}：\n{after}");
         }
         assert!(after.contains("indent = 2"), "新的那一項寫進去了：\n{after}");
-        assert!(said.commented_out.is_empty());
     }
 
     /// 改一個已經在的鍵，**行尾那句註釋要留着**。
     #[test]
     fn changing_a_value_keeps_the_note_beside_it() {
         let before = "[editor]\nindent = 2    # 中文慣例\n";
-        let (after, _) =
-            rewrite(before, &[("editor.indent".into(), Change::Count(4))], &known).unwrap();
+        let after = rewrite(before, &[("editor.indent".into(), Change::Count(4))]).unwrap();
         assert!(after.contains("indent = 4"), "{after}");
         assert!(after.contains("# 中文慣例"), "行尾那句没了：\n{after}");
     }
@@ -332,76 +222,65 @@ soft_wrap = true    # 行尾這一句也是我寫的
     #[test]
     fn dropping_a_key_leaves_its_neighbours_alone() {
         let before = "[editor]\n# 上面這一句\nline_numbers = \"absolute\"\nsoft_wrap = true\n";
-        let (after, _) =
-            rewrite(before, &[("editor.soft_wrap".into(), Change::Drop)], &known).unwrap();
+        let after = rewrite(before, &[("editor.soft_wrap".into(), Change::Drop)]).unwrap();
         assert!(!after.contains("soft_wrap"), "撤掉了：\n{after}");
         assert!(after.contains("# 上面這一句"), "{after}");
         assert!(after.contains("line_numbers"), "{after}");
     }
 
-    /// **不認得的鍵註釋掉，而不是刪掉**（2026-09-23 定）。
-    ///
-    /// Warning: 留着它，`deny_unknown_fields` 會讓**整份**配置作廢——同一個檔裏那兩條
-    /// 對的設定一條都不生效。所以這不是破壞，是修復。
+    /// **A key yumete does not know stays where it is, as it is**
+    /// (2026-11-08, reported: changing `scrolloff` commented `typo_key` out
+    /// and moved it). Changing a neighbour is a byte-for-byte edit of that
+    /// one line; everything else, order and comments included, is the file's.
     #[test]
-    fn a_name_yumete_does_not_know_is_commented_out_not_deleted() {
-        let before = "[editor]\nline_numbers = \"absolute\"\nnosuchkey = 42\nsoft_wrap = true\n";
-        let (after, said) = rewrite(before, &[], &known).unwrap();
-        assert_eq!(said.commented_out, vec!["editor.nosuchkey"]);
-        assert!(!after.contains("\nnosuchkey"), "不再是一個活的鍵：\n{after}");
-        assert!(after.contains("# nosuchkey = 42"), "但字還在：\n{after}");
-        assert!(after.contains(STRANGER), "而且說了為什麽：\n{after}");
-        // 那兩條對的照舊。
-        assert!(after.contains("line_numbers = \"absolute\""), "{after}");
-        assert!(after.contains("soft_wrap = true"), "{after}");
+    fn a_key_the_panel_does_not_know_is_left_as_it_is() {
+        let before = "\
+# my config
+[editor]
+scrolloff = 8  # I like 8
+typo_key = true
+
+[keys.normal]
+\"C-s\" = \":w\"
+
+[editr]
+indent = 4
+
+[theme]
+name = \"paper\"
+";
+        let after = rewrite(before, &[("editor.scrolloff".into(), Change::Count(9))]).unwrap();
+        assert_eq!(after, before.replace("scrolloff = 8", "scrolloff = 9"), "only that value moved");
     }
 
-    /// **不認得的表頭也註釋掉**（2026-10-09 審出來的）。
-    ///
-    /// Warning: 表頭比鍵名更狠：`[editr]` 一行就讓**整份**配置讀不進去，而面板那頭
-    /// 照舊說「設置存進…」。整節連使用者自己的註釋一起搬到檔尾，字一個不少。
+    /// **The only key of a table dropped, the header goes too** (2026-11-08,
+    /// reported: `[editor]` was left alone in `.yumete/config.toml`), and the
+    /// comment above it stays, on the table after it or at the end.
     #[test]
-    fn a_table_yumete_does_not_know_is_commented_out_too() {
-        let before = "\
-# 我自己寫的
-[editr]
-# 為什麽這麽設
-indent = 4
-things = [
-  \"a\",
-  \"b\",
-]
+    fn dropping_the_last_key_of_a_table_drops_its_header() {
+        let after = rewrite("[editor]\nscrolloff = 8\n", &[("editor.scrolloff".into(), Change::Drop)]).unwrap();
+        assert_eq!(after.trim(), "", "nothing left: {after:?}");
 
-[editor]
-line_numbers = \"absolute\"
-";
-        let (after, said) = rewrite(before, &[], &known).unwrap();
-        assert_eq!(said.commented_out, vec!["editr"]);
-        // 活的表頭只剩認得的那一張。
-        let alive: Vec<&str> = after.lines().filter(|l| l.trim_start().starts_with('[')).collect();
-        assert_eq!(alive, vec!["[editor]"], "剩下的活表頭：\n{after}");
-        // 字一個不少，而且每一行都帶上了 `#`（漏一行整份 toml 就讀不進去）。
-        for had in ["[editr]", "indent = 4", "things = [", "\"a\",", "]", "# 為什麽這麽設"] {
-            assert!(after.contains(had), "{had} 不見了：\n{after}");
-        }
-        for line in after.lines() {
-            let t = line.trim();
-            let known_live = t.is_empty()
-                || t.starts_with('#')
-                || t == "[editor]"
-                || t.starts_with("line_numbers");
-            assert!(known_live, "這一行裸着留下了：{line}\n{after}");
-        }
-        assert!(after.contains(STRANGER), "而且說了為什麽：\n{after}");
-        // 而且重讀得進去。
-        let _: DocumentMut = after.parse().unwrap_or_else(|e| panic!("讀不進去：{e}\n{after}"));
+        let before = "# why\n[editor]\nscrolloff = 8\n\n[theme]\nname = \"bw\"\n";
+        let after = rewrite(before, &[("editor.scrolloff".into(), Change::Drop)]).unwrap();
+        assert!(!after.contains("[editor]"), "{after}");
+        assert!(after.contains("# why") && after.contains("[theme]\nname = \"bw\""), "{after}");
+
+        let before = "[theme]\nname = \"bw\"\n\n# why\n[editor]\nscrolloff = 8\n";
+        let after = rewrite(before, &[("editor.scrolloff".into(), Change::Drop)]).unwrap();
+        assert!(!after.contains("[editor]") && after.contains("# why"), "{after}");
+        let _: DocumentMut = after.parse().expect("still TOML");
+
+        // A table that still holds a table of its own stays.
+        let before = "[keys]\nflavor = \"full\"\n\n[keys.normal]\n\"C-s\" = \":w\"\n";
+        let after = rewrite(before, &[("keys.flavor".into(), Change::Drop)]).unwrap();
+        assert!(after.contains("[keys.normal]"), "{after}");
     }
 
     /// 檔裏還没有這一張表，就補一張。
     #[test]
     fn a_table_that_is_not_there_yet_is_written() {
-        let (after, _) =
-            rewrite("", &[("editor.soft_wrap".into(), Change::Tick(true))], &known).unwrap();
+        let after = rewrite("", &[("editor.soft_wrap".into(), Change::Tick(true))]).unwrap();
         assert!(after.contains("[editor]"), "{after}");
         assert!(after.contains("soft_wrap = true"), "{after}");
     }
@@ -409,26 +288,24 @@ line_numbers = \"absolute\"
     /// 寫回去的東西要**讀得回來** —— 這一條是整條路的驗收。
     #[test]
     fn what_goes_out_parses_back_in() {
-        let before = "# 頭上一句\n[editor]\nnosuchkey = 1\nindent = 2\n";
-        let (after, _) = rewrite(
+        let before = "# 頭上一句\n[editor]\nindent = 2\n";
+        let after = rewrite(
             before,
             &[
                 ("editor.indent".into(), Change::Count(4)),
                 ("editor.soft_wrap".into(), Change::Tick(false)),
             ],
-            &known,
         )
         .unwrap();
         let back: toml::Value = toml::from_str(&after).expect("讀得回來");
         let editor = back.get("editor").and_then(|t| t.as_table()).expect("[editor]");
         assert_eq!(editor.get("indent").and_then(|v| v.as_integer()), Some(4));
         assert_eq!(editor.get("soft_wrap").and_then(|v| v.as_bool()), Some(false));
-        assert!(editor.get("nosuchkey").is_none(), "那個名字不再是一個鍵");
     }
 
     /// 壞掉的 toml 不許被「修」成別的東西——原樣報錯，一個字不寫。
     #[test]
     fn a_broken_file_is_refused_rather_than_rewritten() {
-        assert!(rewrite("[editor\nindent = 2\n", &[], &known).is_err());
+        assert!(rewrite("[editor\nindent = 2\n", &[]).is_err());
     }
 }

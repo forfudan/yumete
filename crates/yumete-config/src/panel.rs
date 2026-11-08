@@ -31,9 +31,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use crate::settings_ui::{Kind, Setting, GROUPS, LATER, NOT_IN_THE_PANEL, SETTINGS};
+use crate::settings_ui::{Kind, Setting, GROUPS, SETTINGS};
 use yumete_cjk::{Flavor, FlavorItem, FlavorLevel, KeyPreset};
-use crate::write_back::{rewrite, Change, Said};
+use crate::write_back::{rewrite, Change};
 
 /// 一個值是從哪一層來的。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +133,12 @@ pub struct Sheet {
     /// 從 [`text`](Self::text) 算出來的，開面板時算一次。Warning: **不是每一幀重算**：
     /// 一幀要問幾十次，而 toml 解析一次是幾十微秒——乘起來就是打字時看得見的頓。
     declared: BTreeMap<String, String>,
+    /// **The loader cannot read this file** (2026-11-08): the line, 0 起算,
+    /// and the parser's message. A TOML error, or a name or a type the
+    /// config does not take — either way yumete runs as if the file were not
+    /// there, so what it says is not in force and the panel does not show it
+    /// as if it were; `:w` will not write it.
+    pub unread: Option<(usize, String)>,
 }
 
 impl Sheet {
@@ -141,8 +147,19 @@ impl Sheet {
         let read = path.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
         let there = read.is_some();
         let text = read.unwrap_or_default();
+        Sheet::of_text(path, there, text)
+    }
+
+    /// A sheet of `text`, as if read from `path`.
+    pub fn of_text(path: Option<PathBuf>, there: bool, text: String) -> Sheet {
+        let unread = crate::faults::unread(&text);
         Sheet {
-            declared: declared_in(&text),
+            // What a file the loader does not read says is not in force.
+            declared: match unread {
+                Some(_) => BTreeMap::new(),
+                None => declared_in(&text),
+            },
+            unread,
             path,
             there,
             text,
@@ -159,9 +176,20 @@ impl Sheet {
         }
     }
 
+    /// What the file on disk says of `path`, unsaved edits left out.
+    pub fn declared(&self, path: &str) -> Option<&String> {
+        self.declared.get(path)
+    }
+
     /// 這一份有没有改了還没存的東西。
     pub fn dirty(&self) -> bool {
         !self.edits.is_empty()
+    }
+
+    /// Whether `path`, or a key under it (a page's row), has an unsaved edit.
+    pub fn edited(&self, path: &str) -> bool {
+        let under = format!("{path}.");
+        self.edits.keys().any(|k| k == path || k.starts_with(&under))
     }
 }
 
@@ -341,12 +369,78 @@ pub struct Panel {
     /// where `i` puts it. A paste lands at the caret, and `P` puts it
     /// before the value.
     pub tail: usize,
-    /// 上一次存盤說的話（哪幾個鍵被註釋掉了）。
-    pub said: Option<Said>,
     /// **A page is open**, on this row of it (2026-11-02). Which page is the
     /// row it was opened from ([`Panel::subpage`]). `None` is the ordinary
     /// list.
     pub page: Option<usize>,
+    /// **Why the value typed was not taken** (2026-11-08): `Enter` on a value
+    /// the config would refuse leaves it in the field, and this is drawn
+    /// under the row.
+    pub refusal: Option<Refusal>,
+    /// The schemes there are, from the input method, which this crate cannot
+    /// see: `None` takes any name.
+    pub schemes: Option<Names>,
+}
+
+/// **Names a row takes that only the front end knows**: the schemes.
+#[derive(Debug, Clone)]
+pub struct Names {
+    /// Whether a name is one of them, as the input method reads a name
+    /// (`靈明` is `lingming`).
+    pub takes: fn(&str) -> bool,
+    /// Them, to say.
+    pub names: Vec<String>,
+}
+
+/// **Why a value cannot be set** — the config's own rules, checked on
+/// `Enter` (2026-11-08). Reported: `nosuch` as a theme and `ZZZ` as a page
+/// were saved and said to be in force, and only the next start said they
+/// were not; `99` became `64` and `abc` vanished without a word.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refusal {
+    /// Not a number. The domain is `low` to `high`, and `0` beside it when
+    /// `zero` (0 means something of its own, outside the range).
+    NotANumber { low: usize, high: usize, zero: bool },
+    /// A number outside the domain.
+    OutOfRange { low: usize, high: usize, zero: bool },
+    /// Empty where a value is needed; the names it takes, when it takes names.
+    Empty { names: Vec<String> },
+    /// Not one of the names it takes.
+    NotOneOf { word: String, names: Vec<String> },
+    /// What the config loader says of the value, in the language it speaks.
+    Loader(String),
+}
+
+/// **What `:w` did** (2026-11-08): every file it wrote, and which of them
+/// had been changed outside while the panel was open.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Saved {
+    pub wrote: Vec<PathBuf>,
+    pub changed_underneath: Vec<PathBuf>,
+}
+
+/// **Why `:w` wrote nothing.**
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SaveError {
+    /// The file is one the loader cannot read (a TOML error, or a name it
+    /// does not take): saving over it would claim settings that are not in
+    /// force. The line is 0 起算; the message is the parser's.
+    Unread { path: PathBuf, line: usize, said: String },
+    /// The disk said no.
+    Io(String),
+}
+
+/// **Where the panel stands**, to tell whether a key moved anything
+/// (2026-11-08): a message about a row goes stale when this changes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Spot {
+    pane: Pane,
+    group: usize,
+    row: usize,
+    page: Option<usize>,
+    into: Which,
+    typing: Option<String>,
+    edits: (BTreeMap<String, Change>, BTreeMap<String, Change>),
 }
 
 /// The pages a row can open.
@@ -417,9 +511,37 @@ impl Panel {
             row: 0,
             typing: None,
             tail: 0,
-            said: None,
             page: None,
+            refusal: None,
+            schemes: None,
         }
+    }
+
+    /// Where the panel stands now: see [`Spot`].
+    pub fn spot(&self) -> Spot {
+        Spot {
+            pane: self.pane,
+            group: self.group,
+            row: self.row,
+            page: self.page,
+            into: self.into,
+            typing: self.typing.clone(),
+            edits: (self.global.edits.clone(), self.local.edits.clone()),
+        }
+    }
+
+    /// Whether `path` has an unsaved edit in either file: the row gets a mark.
+    pub fn edited(&self, path: &str) -> bool {
+        self.global.edited(path) || self.local.edited(path)
+    }
+
+    /// The files that cannot be read, global first: the panel says so at the
+    /// top.
+    pub fn unread(&self) -> Vec<(Which, &(usize, String))> {
+        [(Which::Global, &self.global), (Which::Local, &self.local)]
+            .into_iter()
+            .filter_map(|(which, sheet)| sheet.unread.as_ref().map(|u| (which, u)))
+            .collect()
     }
 
     /// 這一組底下的那些項，畫出來的次序就是 [`SETTINGS`] 的次序。
@@ -433,6 +555,14 @@ impl Panel {
     /// 光標此刻站的那一項。
     pub fn here(&self) -> Option<&'static Setting> {
         self.rows().get(self.row).copied()
+    }
+
+    /// **The row a change goes to: none on the group list** (2026-11-08).
+    /// There no row is highlighted, and [`Panel::here`] is only the group's
+    /// first: reported, `i` on 版面 flipped 排版方向 unseen and `c` opened a
+    /// field nobody could see, its Enter setting 光標邊距.
+    fn chosen(&self) -> Option<&'static Setting> {
+        self.here().filter(|_| self.pane == Pane::Settings)
     }
 
     /// 一項此刻長什麽樣。
@@ -607,7 +737,7 @@ impl Panel {
     /// Warning: **空的那一組進不去**：七組還没填，`l` 進去會停在一張空表上，而那一刻
     /// `j`/`k`/空格全部没有反應——看起來像面板卡住了。
     pub fn across(&mut self, right: bool) {
-        self.typing = None;
+        self.cancel_typing();
         self.pane = match (right, self.rows().is_empty()) {
             (true, false) => Pane::Settings,
             (true, true) => Pane::Groups,
@@ -617,7 +747,7 @@ impl Panel {
 
     /// `Tab` —— 換存到哪一份。
     pub fn flip_into(&mut self) {
-        self.typing = None;
+        self.cancel_typing();
         self.into = self.into.other();
     }
 
@@ -627,7 +757,7 @@ impl Panel {
     ///
     /// Warning: **一段自己打的字没有「下一個」**，空格對它就是 `i`。
     pub fn press(&mut self) {
-        let Some(setting) = self.here() else { return };
+        let Some(setting) = self.chosen() else { return };
         if setting.kind == Kind::Page {
             return self.open_page();
         }
@@ -685,7 +815,7 @@ impl Panel {
     /// 原話：「the way to use it is a little bit fuzzy」。兩個鍵都留着，`Enter` 是
     /// 那個不必先判斷種類的。
     pub fn change_here(&mut self) {
-        let Some(setting) = self.here() else { return };
+        let Some(setting) = self.chosen() else { return };
         match setting.kind {
             // 撥得動的：撥一格。
             Kind::Tick | Kind::Pick(_) | Kind::Page => self.press(),
@@ -701,7 +831,7 @@ impl Panel {
     }
 
     pub fn begin_typing(&mut self) {
-        let Some(setting) = self.here() else { return };
+        let Some(setting) = self.chosen() else { return };
         // **`PickOr` 不在這裏**：它收得下表外的名字，而 `i` 就是打那個名字用的。
         if matches!(setting.kind, Kind::Tick | Kind::Pick(_) | Kind::Page) {
             return;
@@ -818,28 +948,90 @@ impl Panel {
         Some(text.chars().count())
     }
 
-    /// 打完了 —— `Enter`。打的不是個數就原樣不動。
-    pub fn finish_typing(&mut self) {
-        let Some(typed) = self.typing.take() else { return };
-        let Some(setting) = self.here() else { return };
-        let change = match setting.kind {
-            Kind::Count { low, high, zero } => match typed.trim().parse::<usize>() {
-                // `0` 是域外那一檔的時候，它是合法的，不鉗到 `low`。
-                Ok(0) if zero.is_some() && low > 0 => Change::Count(0),
-                Ok(n) => Change::Count(n.clamp(low, high) as i64),
-                // Warning: **打了個不是數的東西就當没改**，不寫一個 0 進去：使用者敲錯
-                // 一個鍵而設定被撥成 0，比什麽都没發生壞得多。
-                Err(_) => return,
-            },
-            _ => Change::Text(typed),
+    /// 打完了 —— `Enter`。
+    ///
+    /// **A value the config would refuse is not taken** (2026-11-08): it
+    /// stays in the field, and [`Panel::refusal`] says why, naming what is
+    /// taken. A number out of range is refused, not pulled into it — the
+    /// one typed is not the one that would be saved — and a word that is
+    /// not a number is refused, not dropped. Gives whether it was taken.
+    pub fn finish_typing(&mut self) -> bool {
+        let Some(typed) = self.typing.clone() else { return false };
+        let Some(setting) = self.chosen() else { return false };
+        let change = match self.check(setting, &typed) {
+            Ok(change) => change,
+            Err(refusal) => {
+                self.refusal = Some(refusal);
+                return false;
+            }
         };
+        self.cancel_typing();
         self.settle(setting, change);
+        true
+    }
+
+    /// **The value `typed` would be for `setting`, by the config's rules** —
+    /// the domain a number declares (the one `into_config` holds it to),
+    /// the names a theme, a scheme or an annotation mode takes, and for a
+    /// piece of text what the loader itself says of it.
+    pub fn check(&self, setting: &Setting, typed: &str) -> Result<Change, Refusal> {
+        let word = typed.trim();
+        match setting.kind {
+            Kind::Count { low, high, zero } => {
+                let apart = zero.is_some() && low > 0;
+                let Ok(n) = word.parse::<i64>() else {
+                    return Err(Refusal::NotANumber { low, high, zero: apart });
+                };
+                let inside = (n >= low as i64 && n <= high as i64) || (apart && n == 0);
+                match inside {
+                    true => Ok(Change::Count(n)),
+                    false => Err(Refusal::OutOfRange { low, high, zero: apart }),
+                }
+            }
+            Kind::PickOr(choices) => {
+                let mut names: Vec<String> = choices.iter().map(|c| c.word.to_string()).collect();
+                let takes = match setting.path().as_str() {
+                    "theme.name" => crate::ThemeConfig::named(word).is_some(),
+                    "ime.scheme" => match &self.schemes {
+                        Some(schemes) => {
+                            names = schemes.names.clone();
+                            (schemes.takes)(word)
+                        }
+                        None => true,
+                    },
+                    "ime.annotation" => {
+                        names = std::iter::once("off".to_string()).chain(self.annotation_modes()).collect();
+                        names.iter().any(|n| n == word)
+                    }
+                    _ => true,
+                };
+                match (word.is_empty(), takes) {
+                    (true, _) => Err(Refusal::Empty { names }),
+                    (false, false) => Err(Refusal::NotOneOf { word: word.to_string(), names }),
+                    (false, true) => Ok(Change::Text(word.to_string())),
+                }
+            }
+            _ => {
+                // An empty list the loader quietly takes as no list at all,
+                // the factory one standing: setting it would change nothing.
+                let wants_some = matches!(setting.path().as_str(), "export.font_family" | "panel.markers");
+                if wants_some && word.is_empty() {
+                    return Err(Refusal::Empty { names: Vec::new() });
+                }
+                let said = crate::faults::said_of(setting.table, setting.key, &toml_edit::Value::from(typed));
+                match said.into_iter().next() {
+                    Some(said) => Err(Refusal::Loader(said)),
+                    None => Ok(Change::Text(typed.to_string())),
+                }
+            }
+        }
     }
 
     /// `Esc` —— 不改了。
     pub fn cancel_typing(&mut self) {
         self.typing = None;
         self.tail = 0;
+        self.refusal = None;
     }
 
     /// `d` —— 把這一項從**切着的那一份**裏撤掉，回去跟下面那一層。
@@ -1040,7 +1232,7 @@ impl Panel {
 
     /// Go in (`l`, Space, Enter, `i` on the entry row).
     pub fn open_page(&mut self) {
-        self.typing = None;
+        self.cancel_typing();
         self.page = Some(0);
     }
 
@@ -1225,22 +1417,23 @@ impl Panel {
 
     /// **`:w`** —— 兩份各寫各的，寫完把改動清掉。
     ///
-    /// 回來的是「有話說的那幾句」：不認得的鍵被註釋掉了哪幾個。
-    pub fn save(&mut self) -> Result<Said, String> {
-        let mut said = Said::default();
+    /// 回來的是寫了哪幾個檔，和其中哪幾個在面板開着的時候被外面改過。
+    ///
+    /// Warning: **A file the loader cannot read is not written** (2026-11-08),
+    /// and then nothing is: both are asked before either is touched. Saving
+    /// into it would leave it as unread as before and say the settings were
+    /// in force (reported: a TOML error came back as a raw, truncated
+    /// English line inside the Chinese panel).
+    pub fn save(&mut self) -> Result<Saved, SaveError> {
+        let mut plan = Vec::new();
         for which in [Which::Global, Which::Local] {
-            let sheet = match which {
-                Which::Global => &mut self.global,
-                Which::Local => &mut self.local,
-            };
+            let sheet = self.sheet_of(which);
             if sheet.edits.is_empty() {
                 continue;
             }
             let Some(path) = sheet.path.clone() else {
-                return Err(format!("{:?} 那一層没有檔", which));
+                return Err(SaveError::Io(format!("{which:?}")));
             };
-            let changes: Vec<(String, Change)> =
-                sheet.edits.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             // Warning: **照磁碟上此刻那一份改，不是照開面板那一刻那一份。**
             //
             // `sheet.text` 是開面板時讀的。面板開着的這段時間裏那個檔可能被外面
@@ -1251,23 +1444,34 @@ impl Panel {
             // Warning: 讀不到就用手上這一份（檔剛被刪掉/權限没了）：那時 `write_atomically`
             // 自己會報，不必在這裏先攔一道。
             let now = std::fs::read_to_string(&path).unwrap_or_else(|_| sheet.text.clone());
-            let moved = now != sheet.text;
-            let (fresh, mut spoke) = rewrite(&now, &changes, &known)?;
-            if moved {
-                said.changed_underneath.push(path.display().to_string());
+            if let Some((line, said)) = crate::faults::unread(&now) {
+                return Err(SaveError::Unread { path, line, said });
             }
+            let changes: Vec<(String, Change)> =
+                sheet.edits.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let fresh = rewrite(&now, &changes).map_err(SaveError::Io)?;
+            plan.push((which, path, now != sheet.text, fresh));
+        }
+        let mut saved = Saved::default();
+        for (which, path, moved, fresh) in plan {
             if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+                std::fs::create_dir_all(parent).map_err(|e| SaveError::Io(format!("{}: {e}", parent.display())))?;
             }
-            write_atomically(&path, &fresh).map_err(|e| format!("{}: {e}", path.display()))?;
+            write_atomically(&path, &fresh).map_err(|e| SaveError::Io(format!("{}: {e}", path.display())))?;
+            let sheet = match which {
+                Which::Global => &mut self.global,
+                Which::Local => &mut self.local,
+            };
             sheet.text = fresh;
             sheet.declared = declared_in(&sheet.text);
+            sheet.there = true;
             sheet.edits.clear();
-            said.commented_out.append(&mut spoke.commented_out);
-            said.changed_underneath.append(&mut spoke.changed_underneath);
+            if moved {
+                saved.changed_underneath.push(path.clone());
+            }
+            saved.wrote.push(path);
         }
-        self.said = Some(said.clone());
-        Ok(said)
+        Ok(saved)
     }
 }
 
@@ -1336,38 +1540,14 @@ fn write_atomically(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// yumete 認得這個鍵嗎 —— [`rewrite`] 拿它決定要不要註釋掉一行。
-///
-/// Warning: **三張表的並集，不是只有 [`SETTINGS`]。** 只問畫在面板上的那些，會把
-/// `[editor] screenshot`（有理由不進面板）和七十多個還没輪到的鍵在存盤那一下
-/// 全部註釋掉——使用者按了一下保存，配置被改了一半。
-fn known(table: &str, key: &str) -> bool {
-    let path = format!("{table}.{key}");
-    SETTINGS.iter().any(|s| s.path() == path)
-        || LATER.contains(&path.as_str())
-        || NOT_IN_THE_PANEL.contains(&path.as_str())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn panel(global: &str, local: &str) -> Panel {
         let mut p = Panel::open(None, None);
-        p.global = Sheet {
-            path: Some(PathBuf::from("/nowhere/config.toml")),
-            there: true,
-            text: global.to_string(),
-            edits: BTreeMap::new(),
-            declared: declared_in(global),
-        };
-        p.local = Sheet {
-            path: Some(PathBuf::from("/nowhere/.yumete/config.toml")),
-            there: true,
-            text: local.to_string(),
-            edits: BTreeMap::new(),
-            declared: declared_in(local),
-        };
+        p.global = Sheet::of_text(Some(PathBuf::from("/nowhere/config.toml")), true, global.to_string());
+        p.local = Sheet::of_text(Some(PathBuf::from("/nowhere/.yumete/config.toml")), true, local.to_string());
         p
     }
 
@@ -1628,29 +1808,198 @@ mod tests {
         assert!(!p.dirty(), "空的改動表：{:?}", p.local.edits);
     }
 
-    /// 打了個不是數的東西 —— **當没改**，不是撥成 0。
+    /// 打了個不是數的東西 —— **不收，留在框裏說為什麽**（2026-11-08；從前是
+    /// 一聲不吭地當没改），不是撥成 0。
     #[test]
-    fn typing_something_that_is_not_a_number_changes_nothing() {
+    fn typing_something_that_is_not_a_number_is_refused_and_kept() {
         let mut p = panel("[editor]\nindent = 4\n", "");
         p.pane = Pane::Settings;
         p.row = p.rows().iter().position(|s| s.key == "indent").unwrap();
         p.begin_typing();
         p.typing = Some("兩格".to_string());
-        p.finish_typing();
+        assert!(!p.finish_typing());
         assert!(!p.dirty());
+        assert_eq!(p.typing.as_deref(), Some("兩格"), "still in the field");
+        assert_eq!(p.refusal, Some(Refusal::NotANumber { low: 0, high: 8, zero: false }));
         assert_eq!(p.shown(find("editor.indent")).value, "4");
+        // Empty is not a number either.
+        p.typing = Some(String::new());
+        assert!(!p.finish_typing());
+        // Fixed, it is taken, and the word goes.
+        p.typing = Some("2".to_string());
+        assert!(p.finish_typing());
+        assert_eq!((p.typing.as_deref(), p.refusal.as_ref()), (None, None));
+        assert_eq!(p.shown(find("editor.indent")).value, "2");
     }
 
-    /// 打出範圍的數鉗回來。
+    /// **A number out of range is refused, not pulled in** (2026-11-08,
+    /// reported: `99` became `64` without a word) — and a `0` that means
+    /// something of its own is taken.
     #[test]
-    fn a_number_out_of_range_is_pulled_back_in() {
+    fn a_number_out_of_range_is_refused_not_pulled_in() {
         let mut p = panel("", "");
         p.pane = Pane::Settings;
         p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
         p.begin_typing();
         p.typing = Some("99".to_string());
-        p.finish_typing();
-        assert_eq!(p.shown(find("editor.pages_vertical")).value, "4");
+        assert!(!p.finish_typing());
+        assert_eq!(p.refusal, Some(Refusal::OutOfRange { low: 1, high: 4, zero: false }));
+        assert_eq!(p.shown(find("editor.pages_vertical")).value, "1", "nothing set");
+        p.typing = Some("-1".to_string());
+        assert!(!p.finish_typing());
+        assert!(matches!(p.refusal, Some(Refusal::OutOfRange { .. })), "a number, out of range");
+        p.cancel_typing();
+        assert_eq!(p.refusal, None, "Esc takes the word away with the field");
+
+        p.row = p.rows().iter().position(|s| s.key == "zong_length").unwrap();
+        for (typed, ok) in [("0", true), ("4", false), ("8", true), ("64", true), ("65", false)] {
+            p.begin_typing();
+            p.typing = Some(typed.to_string());
+            assert_eq!(p.finish_typing(), ok, "{typed}");
+            p.cancel_typing();
+        }
+        assert_eq!(
+            p.check(find("editor.zong_length"), "4"),
+            Err(Refusal::OutOfRange { low: 8, high: 64, zero: true })
+        );
+    }
+
+    /// **A name is one the config takes** (2026-11-08, reported: `nosuch`
+    /// as a theme was saved and said to be in force). Empty is no name; a
+    /// scheme is asked of the front end when it says which there are.
+    #[test]
+    fn a_theme_a_scheme_and_an_annotation_mode_must_be_ones_there_are() {
+        let mut p = panel("[ime.annotation_modes.mine]\nunicode = true\n", "");
+        let theme = find("theme.name");
+        assert_eq!(p.check(theme, "bw"), Ok(Change::Text("bw".into())));
+        assert_eq!(p.check(theme, "墨香"), Ok(Change::Text("墨香".into())), "the loader takes it");
+        assert!(matches!(p.check(theme, "nosuch"), Err(Refusal::NotOneOf { ref word, ref names }) if word == "nosuch" && names.contains(&"ink".to_string())));
+        assert!(matches!(p.check(theme, "  "), Err(Refusal::Empty { .. })));
+
+        let scheme = find("ime.scheme");
+        assert!(p.check(scheme, "custom").is_ok(), "no list, any name");
+        assert!(matches!(p.check(scheme, ""), Err(Refusal::Empty { .. })));
+        p.schemes = Some(Names { takes: |w| w == "lingming", names: vec!["lingming".into()] });
+        assert!(p.check(scheme, "lingming").is_ok());
+        assert!(matches!(p.check(scheme, "custom"), Err(Refusal::NotOneOf { ref names, .. }) if names == &["lingming"]));
+
+        let annotation = find("ime.annotation");
+        assert!(p.check(annotation, "mine").is_ok(), "a mode the file adds");
+        assert!(p.check(annotation, "off").is_ok());
+        assert!(matches!(p.check(annotation, "nosuch"), Err(Refusal::NotOneOf { .. })));
+    }
+
+    /// **A piece of text is what the loader takes** (2026-11-08, reported:
+    /// a page of `ZZZ` and an empty one were saved): the loader's own
+    /// sentence is the reason, and an empty font list — which the loader
+    /// takes as no list — is refused.
+    #[test]
+    fn a_piece_of_text_is_checked_by_the_loader_itself() {
+        let p = panel("", "");
+        let page = find("export.page");
+        assert!(p.check(page, "a5").is_ok());
+        assert!(p.check(page, "137x195").is_ok());
+        for bad in ["ZZZ", ""] {
+            match p.check(page, bad) {
+                Err(Refusal::Loader(said)) => assert!(said.contains("a4") && said.contains("[export] page"), "{said}"),
+                other => panic!("{bad:?}: {other:?}"),
+            }
+        }
+        assert!(matches!(p.check(find("export.font_family"), " "), Err(Refusal::Empty { .. })));
+        assert!(matches!(p.check(find("panel.markers"), "ABC"), Err(Refusal::Loader(_))));
+        assert!(p.check(find("panel.markers"), "１２３４５６７８９").is_ok());
+        assert!(matches!(p.check(find("editor.which_wrap"), "bs"), Err(Refusal::Loader(_))));
+        assert!(p.check(find("editor.which_wrap"), "").is_ok(), "no key wraps: a setting of its own");
+        assert!(matches!(p.check(find("editor.language_key"), "C-"), Err(Refusal::Loader(_))));
+    }
+
+    /// **On the group list nothing is edited** (2026-11-08, reported: `i` on
+    /// 版面 flipped 排版方向, which was not highlighted).
+    #[test]
+    fn nothing_is_changed_from_the_group_list() {
+        let mut p = panel("", "");
+        assert_eq!(p.pane, Pane::Groups);
+        p.press();
+        p.change_here();
+        p.begin_typing();
+        assert!(p.typing.is_none() && !p.dirty(), "{:?}", p.global.edits);
+        assert_eq!(p.drop_here(), None);
+    }
+
+    /// **A file the loader cannot read**: what it says is not shown as in
+    /// force, `:w` writes nothing and says why — a TOML error, or a name the
+    /// config does not take (2026-11-08).
+    #[test]
+    fn a_file_the_loader_cannot_read_is_not_written() {
+        let dir = std::env::temp_dir().join(format!("yumete-set-unread-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let global = dir.join("config.toml");
+        let local = dir.join("local.toml");
+        for (text, line) in [("[editor]\nscrolloff = 8\nindent 2\n", 2), ("[editor]\nscrolloff = 8\ntypo_key = true\n", 2)] {
+            std::fs::write(&global, text).unwrap();
+            std::fs::write(&local, "").unwrap();
+            let mut p = Panel::open(Some(global.clone()), Some(local.clone()));
+            let unread = p.unread();
+            assert_eq!(unread.len(), 1, "{text}");
+            assert_eq!(unread[0].1 .0, line, "{:?}", unread[0]);
+            assert_eq!(p.shown(find("editor.scrolloff")).from, Layer::Factory, "not in force");
+            // An edit to the other file goes in, and the unread one blocks
+            // the save of both.
+            p.into = Which::Local;
+            p.pane = Pane::Settings;
+            p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
+            p.press();
+            p.into = Which::Global;
+            p.press();
+            match p.save() {
+                Err(SaveError::Unread { path, line: at, said }) => {
+                    assert_eq!((path, at), (global.clone(), line));
+                    assert!(!said.is_empty());
+                }
+                other => panic!("{other:?}"),
+            }
+            assert_eq!(std::fs::read_to_string(&global).unwrap(), text, "not touched");
+            assert_eq!(std::fs::read_to_string(&local).unwrap(), "", "nor the other one");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`:w` names every file it wrote** (2026-11-08, reported: it wrote
+    /// both and named one).
+    #[test]
+    fn saving_names_every_file_it_wrote() {
+        let dir = std::env::temp_dir().join(format!("yumete-set-both-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let global = dir.join("config.toml");
+        let local = dir.join("p").join(".yumete").join("config.toml");
+        let mut p = Panel::open(Some(global.clone()), Some(local.clone()));
+        p.pane = Pane::Settings;
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
+        p.press();
+        p.flip_into();
+        p.press();
+        let saved = p.save().expect("saved");
+        assert_eq!(saved.wrote, vec![global.clone(), local.clone()]);
+        assert!(saved.changed_underneath.is_empty());
+        assert!(p.local.there, "the file is there now");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **The state a stale message is measured against** moves with the
+    /// cursor and with the values, and not otherwise.
+    #[test]
+    fn the_spot_moves_with_the_cursor_and_the_values() {
+        let mut p = panel("", "");
+        let here = p.spot();
+        assert_eq!(p.spot(), here);
+        p.across(true);
+        assert_ne!(p.spot(), here);
+        let here = p.spot();
+        p.press();
+        assert_ne!(p.spot(), here, "a value moved");
+        assert!(p.edited("editor.layout") && !p.edited("editor.zong_length"));
     }
 
     /// **空的那一組進不去。**
@@ -1700,18 +2049,6 @@ mod tests {
         p.across(false);
         p.step(true);
         assert_eq!(p.row, 0);
-    }
-
-    /// `known` 認的是**三張表的並集**。
-    ///
-    /// Warning: 只認畫在面板上的那些，存盤那一下會把七十多個還没輪到的鍵和
-    /// `screenshot` 一起註釋掉——按了一下保存，配置被改了一半。
-    #[test]
-    fn saving_does_not_comment_out_a_key_the_panel_has_not_got_to_yet() {
-        assert!(known("editor", "indent"), "面板上的");
-        assert!(known("editor", "tab_width"), "還没輪到的");
-        assert!(known("editor", "screenshot"), "有理由不進面板的");
-        assert!(!known("editor", "nosuchkey"), "真不認得的");
     }
 
     /// **The flavour's page** (2026-11-02): a tick written into
@@ -1831,10 +2168,9 @@ mod tests {
         assert_eq!(p.item_shown(FlavorItem::Tables), (false, ItemFrom::Layer(Layer::Global)));
         let p = panel("[keys.flavor_items]\ntables = false # off for now\n", "");
         assert_eq!(p.item_shown(FlavorItem::Tables), (false, ItemFrom::Layer(Layer::Global)));
-        let (text, _) = rewrite(
+        let text = rewrite(
             "[keys]\nflavor_items = { tables = false }\n",
             &[("keys.flavor_items.move_lines".to_string(), Change::Tick(false))],
-            &|_, _| true,
         )
         .expect("an inline table takes a key");
         let config = crate::Config::from_toml(&text);

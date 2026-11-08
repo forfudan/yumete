@@ -63,6 +63,18 @@ zhs = "无法保存：{0}"
 en = "cannot save: {0}"
 
 [[message]]
+# 设置面板：按 :w，而要写的那份配置文件读不进来，什么都没写。{0} 是文件，{1} 是行号，{2} 是解析器的话（草稿）
+key = "settings.cannot-save-unread"
+zhs = "没有保存：{0} 读不进来（第 {1} 行：{2}），先在文件里改好它"
+en = "not saved: {0} cannot be read (line {1}: {2}); fix it in the file first"
+
+[[message]]
+# 设置面板开着时在 : 行上打了面板以外的命令，没有执行。{0} 是打的那一行（草稿）
+key = "settings.command-refused"
+zhs = "设置面板开着，:{0} 没有执行：这里只认 :w、:q、:wq、:x。先 :q 关闭设置"
+en = ":{0} was not run: the settings panel takes only :w, :q, :wq and :x; close it with :q first"
+
+[[message]]
 # 設置：歧义宽度
 key = "settings.editor.ambiguous-width"
 zhs = "歧义宽度"
@@ -1193,6 +1205,12 @@ zhs = "本项目"
 en = "project"
 
 [[message]]
+# 设置面板底下那一块：这一层的文件读不进来，不知道它说了什么（草稿）
+key = "settings.layer.unknown"
+zhs = "未知（文件读不进来）"
+en = "unknown (the file cannot be read)"
+
+[[message]]
 # 設置面板底下那一塊：這一層沒有說話
 key = "settings.layer.unset"
 zhs = "未设置"
@@ -1211,10 +1229,16 @@ zhs = "竖排"
 en = "vertical"
 
 [[message]]
-# 設置面板：走的時候還有没存的
+# 設置面板：打 :q 要关掉面板，而还有没存的改动；再打一次 :q 就不存而关掉（草稿）
 key = "settings.leaving-unsaved"
-zhs = "有未保存的改动。:w 保存，再按 q 不保存并退出"
-en = "unsaved changes: :w saves; q again quits without saving"
+zhs = "有未保存的改动：:w 保存；再输一次 :q（或 :q!）不保存并关闭设置"
+en = "unsaved changes: :w saves; :q again (or :q!) closes the settings without saving"
+
+[[message]]
+# 设置面板：按 e 要打开配置文件，而还有没存的改动；再按一次 e 就不存而打开（草稿）
+key = "settings.leaving-unsaved-open"
+zhs = "有未保存的改动：:w 保存；再按一次 e 不保存并打开文件"
+en = "unsaved changes: :w saves; e again opens the file without saving"
 
 [[message]]
 # 設置：邊欄——总是
@@ -1239,6 +1263,18 @@ en = "when loose"
 key = "settings.margin.never"
 zhs = "从不"
 en = "never"
+
+[[message]]
+# 设置面板：一组的项太多画不下，上面还有几项。{0} 是项数（草稿）
+key = "settings.more-above"
+zhs = "↑ 上面还有 {0} 项"
+en = "↑ {0} more above"
+
+[[message]]
+# 设置面板：一组的项太多画不下，下面还有几项。{0} 是项数（草稿）
+key = "settings.more-below"
+zhs = "↓ 还有 {0} 项"
+en = "↓ {0} more"
 
 [[message]]
 # 設置面板：這一層還没有那個檔(存盤時建)
@@ -1741,6 +1777,48 @@ zhs = "不同底色"
 en = "tint"
 
 [[message]]
+# 设置面板：一个数字项可取的范围，{0} 到 {1}（草稿）
+key = "settings.range"
+zhs = "{0} 到 {1}"
+en = "{0} to {1}"
+
+[[message]]
+# 设置面板：一个数字项可取的范围，0 另有意思，此外是 {0} 到 {1}（草稿）
+key = "settings.range-or-zero"
+zhs = "0，或 {0} 到 {1}"
+en = "0, or {0} to {1}"
+
+[[message]]
+# 设置面板：在一项上按 Enter 而什么都没打，这一项不能空着（草稿）
+key = "settings.refused.empty"
+zhs = "不能为空"
+en = "cannot be empty"
+
+[[message]]
+# 设置面板：在主题、方案这类名字项上按 Enter 而什么都没打。{0} 是可取的名字（草稿）
+key = "settings.refused.empty-names"
+zhs = "不能为空，只能是 {0}"
+en = "cannot be empty; only {0}"
+
+[[message]]
+# 设置面板：在数字项上按 Enter，打的不是数字。{0} 是打的字，{1} 是可取的范围（草稿）
+key = "settings.refused.not-a-number"
+zhs = "「{0}」不是数字，只能是 {1}"
+en = "{0} is not a number; only {1}"
+
+[[message]]
+# 设置面板：在主题、方案这类名字项上按 Enter，打的不是其中之一。{0} 是打的字，{1} 是可取的名字（草稿）
+key = "settings.refused.not-one-of"
+zhs = "没有「{0}」，只能是 {1}"
+en = "{0} is not one of them; only {1}"
+
+[[message]]
+# 设置面板：在数字项上按 Enter，数字超出范围。{0} 是打的数，{1} 是可取的范围（草稿）
+key = "settings.refused.out-of-range"
+zhs = "{0} 超出范围，只能是 {1}"
+en = "{0} is out of range; only {1}"
+
+[[message]]
 # 設置面板：存好了({0} ＝ 檔名)
 key = "settings.saved"
 zhs = "设置已保存到 {0} 并生效"
@@ -1751,12 +1829,6 @@ en = "settings saved to {0} and applied"
 key = "settings.saved-moved"
 zhs = "设置已保存到 {0}。警告：期间该文件被外部修改，当前页面可能已过时，请用 :settings 重新打开"
 en = "saved to {0}. Warning: it was changed outside meanwhile, so this page may be stale; reopen with :settings"
-
-[[message]]
-# 設置面板：存好了，而有幾個鍵被註釋掉了({0} 檔名，{1} 鍵)
-key = "settings.saved-said"
-zhs = "设置已保存到 {0}。以下设置名 yumete 无法识别，已注释掉：{1}"
-en = "saved to {0}. Unknown names were commented out: {1}"
 
 [[message]]
 # 設置面板：改的那一層被上面蓋着，眼前那個值不會動
@@ -1853,6 +1925,12 @@ en = "whether the two bottom lines look sunken or raised"
 key = "settings.title"
 zhs = "设置"
 en = "settings"
+
+[[message]]
+# 设置面板顶上：一份配置文件读不进来（TOML 写坏了，或者有不认识的名字）。{0} 是哪一层（全局/本项目），{1} 是行号，{2} 是解析器的话（草稿）
+key = "settings.unread"
+zhs = "{0}配置文件读不进来（第 {1} 行：{2}），其中的设置都没有生效，:w 不会写入它"
+en = "the {0} config file cannot be read (line {1}: {2}): none of its settings is in force, and :w will not write it"
 
 [[message]]
 # 設置面板：改了還没存

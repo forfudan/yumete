@@ -1966,6 +1966,24 @@ pub fn run(
                     editor.paste_text(&text);
                 }
             }
+            // **The settings panel takes the mouse while it is open**
+            // (2026-11-08, reported: a click moved the caret in the document
+            // behind it, a drag left a selection there, the wheel scrolled
+            // it). A click picks a row, the wheel walks the list, and nothing
+            // reaches the document — the `:` line over the panel included.
+            Ok(Event::Mouse(mouse)) if settings.open() => {
+                let pointer = match mouse.kind {
+                    MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                        let notches = 1 + drain_the_flick(mouse.kind, &events, &mut inbox);
+                        Some(settings_page::Pointer::Wheel { back: mouse.kind == MouseEventKind::ScrollUp, notches })
+                    }
+                    MouseEventKind::Down(MouseButton::Left) => Some(settings_page::Pointer::Click),
+                    _ => None,
+                };
+                if let Some(pointer) = pointer.filter(|_| editor.mode() != yumete_core::input::Mode::Command) {
+                    settings.mouse(editor, pointer, mouse.column, mouse.row);
+                }
+            }
             Ok(Event::Mouse(mouse)) => match mouse.kind {
                 // A notch moves `[editor] wheel_step` 縱 — three by default,
                 // the three lines a terminal scrolls by, counted in the unit

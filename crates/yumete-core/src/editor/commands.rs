@@ -29,6 +29,29 @@ impl Editor {
         self.set_cursor(0);
     }
 
+    /// **Whether a `:` line is one the settings panel answers itself**
+    /// (2026-11-08): the saves and the quits, which `execute` turns to the
+    /// panel while it is open, and an empty line. Anything else would run
+    /// behind the panel, out of sight.
+    pub(super) fn the_panels_own(line: &str) -> bool {
+        if line.trim().is_empty() {
+            return true;
+        }
+        matches!(
+            command::parse(line),
+            Ok(Command::Write(_)
+                | Command::WriteForce(_)
+                | Command::Update
+                | Command::Quit { .. }
+                | Command::QuitAll { .. }
+                | Command::WriteQuit { .. }
+                | Command::Exit(_)
+                | Command::WriteQuitAll { .. }
+                | Command::WriteAll
+                | Command::Settings)
+        )
+    }
+
     /// Run a `:` command line.
     ///
     /// Returns [`CommandOutcome::Quit`] when a `:q` / `:q!` should end the

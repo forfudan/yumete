@@ -584,6 +584,17 @@ impl Editor {
                 // 翻出來的那一行也是一行：`:theme 墨香` 從歷史裏翻上來，照樣先畫。
                 self.ask_for_a_trial();
             }
+            // **On the settings panel only its own commands run** (2026-11-08,
+            // reported: `:e c.md` and `:help` opened buffers behind it, and
+            // nothing on the screen moved). The rest are refused, said on the
+            // row the panel shows, and a theme being tried goes back.
+            PlaceCmd::Confirm if self.settings_open && !Self::the_panels_own(&self.command_line) => {
+                self.end_a_trial(crate::editor::Trial::Undo);
+                let line = std::mem::take(&mut self.command_line);
+                self.command_caret = 0;
+                self.mode = Mode::Normal;
+                self.status = say!("settings.command-refused", line.trim());
+            }
             PlaceCmd::Confirm => {
                 // 按下了：預覽成真，記下的舊樣子不必再留（`PromptEvent::Validate`）。
                 self.end_a_trial(crate::editor::Trial::Keep);

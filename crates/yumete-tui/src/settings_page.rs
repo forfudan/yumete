@@ -22,7 +22,9 @@ use ratatui::style::Modifier;
 use ratatui::widgets::Clear;
 use ratatui::Frame;
 
-use yumete_config::panel::{FlavorRow, FlavorSection, ItemFrom, Layer, Pane, Panel, Pasting, Subpage};
+use yumete_config::panel::{
+    FlavorRow, FlavorSection, ItemFrom, Layer, Pane, Panel, Pasting, Refusal, SaveError, Subpage,
+};
 use yumete_config::settings_ui::{Kind, Setting, GROUPS};
 use yumete_config::Config;
 use yumete_core::input::Key;
@@ -132,8 +134,16 @@ impl Columns {
         };
         // 名字和值之間至少空兩格，不然長名字和值黏在一起。
         let want_name = widest(&mut rows.iter().map(|s| said(s.label))) + 2;
-        let want_value =
-            widest(&mut rows.iter().map(|s| row_value(panel, s, &panel.shown(s).value)));
+        // **Measured on what the files and the factory say, not on what is
+        // being changed** (2026-11-08, reported: the value column of the whole
+        // group jumped from 44 to 26 when the long factory font list was
+        // replaced by a short one). An edit does not move the columns; a
+        // saved value may.
+        let want_value = widest(&mut rows.iter().flat_map(|s| {
+            let path = s.path();
+            let said = [Some(s.factory.to_string()), panel.global.declared(&path).cloned(), panel.local.declared(&path).cloned()];
+            said.into_iter().flatten().map(move |v| row_value(panel, s, &v))
+        }));
         let name_wide = match want_name + want_value <= room {
             // 兩欄都擺得下：名字就是它要的那麽寬，剩下的全是值的。
             true => want_name,
@@ -176,7 +186,9 @@ fn answer(panel: &mut Panel, key: Key) -> (bool, Option<String>) {
     // and `P` puts it before the value, so it is not always at the end.
     if panel.typing.is_some() {
         match key {
-            Key::Enter => panel.finish_typing(),
+            Key::Enter => {
+                panel.finish_typing();
+            }
             Key::Esc => panel.cancel_typing(),
             Key::Backspace => panel.delete_back(),
             Key::Delete => panel.delete_forward(),
@@ -292,6 +304,54 @@ fn answer(panel: &mut Panel, key: Key) -> (bool, Option<String>) {
 }
 
 
+/// Which way out the last warning was about: the second press of that one
+/// leaves; the other way warns first, as it names itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Leaving {
+    /// `:q`, closing the panel.
+    Close,
+    /// `e`, opening the file.
+    Open,
+}
+
+/// What the mouse did, as the panel takes it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pointer {
+    /// The left button went down.
+    Click,
+    /// The wheel turned, so many notches, up (`back`) or down.
+    Wheel { back: bool, notches: usize },
+}
+
+/// What a cell of the last panel drawn was.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Hit {
+    Group(usize),
+    Row(usize),
+    PageRow(usize),
+}
+
+thread_local! {
+    /// **Where the last panel drawn put each line it can be clicked on**:
+    /// `(y, from x, to x, what)`. The layout is worked out while drawing
+    /// (heights, scrolling, the blocks that give way), so the click asks
+    /// what was drawn rather than working it out a second time.
+    static HITS: std::cell::RefCell<Vec<(u16, u16, u16, Hit)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn hit(y: u16, from: u16, to: u16, what: Hit) {
+    HITS.with(|hits| hits.borrow_mut().push((y, from, to, what)));
+}
+
+fn hit_at(x: u16, y: u16) -> Option<Hit> {
+    HITS.with(|hits| {
+        hits.borrow()
+            .iter()
+            .find(|(at, from, to, _)| *at == y && (*from..*to).contains(&x))
+            .map(|(_, _, _, what)| *what)
+    })
+}
+
 /// **那扇面板在前端的一個座位** —— 開、收鍵、存、關，一整圈。
 ///
 /// Warning: **這一支存在的理由是「別寫兩遍」。** 主循環（`run`）與 `--keys`
@@ -306,13 +366,16 @@ pub struct Seat {
     /// 開着的那一扇；`None` ＝ 沒開。
     pub panel: Option<Panel>,
     /// 有改動沒存時按過一次「走」——再按一次纔算數。
-    warned: bool,
+    warned: Option<Leaving>,
     /// **`"` and the register it named**, for the `p` after it, as in the
     /// editor (2026-11-08): `Some(None)` is a `"` waiting for its name.
     register: Option<Option<char>>,
     /// Where `"+p` reads the system clipboard from; `None` is the machine's
     /// own (`pbpaste` and its kin). A test hands in its own.
     pub clipboard: Option<fn() -> Option<String>>,
+    /// The status line holds what the panel said about a row: it goes when
+    /// the cursor or a value moves ([`Seat::say`]).
+    row_said: bool,
 }
 
 impl Seat {
@@ -329,10 +392,41 @@ impl Seat {
     }
 
     pub fn took(&mut self, editor: &mut Editor, key: Option<Key>) -> bool {
-        let Some(page) = self.panel.as_mut() else { return false };
+        let Some(page) = self.panel.as_ref() else { return false };
         if editor.mode() == yumete_core::input::Mode::Command {
             return false;
         }
+        let before = page.spot();
+        let (took, said) = self.take(editor, key);
+        self.say(editor, before, said);
+        took
+    }
+
+    /// **What a key said, or the stale line taken away** (2026-11-08,
+    /// reported: 「本層没有設這一項」 stayed through `i`, typing and `h`,
+    /// and after the row was set it was false). A line the panel said about
+    /// a row lasts until the cursor or a value moves.
+    fn say(&mut self, editor: &mut Editor, before: yumete_config::panel::Spot, said: Option<String>) {
+        let Some(page) = self.panel.as_ref() else {
+            self.row_said = false;
+            return;
+        };
+        match said {
+            Some(said) => {
+                editor.set_status(said);
+                self.row_said = true;
+            }
+            None if self.row_said && page.spot() != before => {
+                editor.set_status(String::new());
+                self.row_said = false;
+            }
+            None => {}
+        }
+    }
+
+    /// [`Seat::took`], and what the status line is to say.
+    fn take(&mut self, editor: &mut Editor, key: Option<Key>) -> (bool, Option<String>) {
+        let Some(page) = self.panel.as_mut() else { return (false, None) };
         // Warning: **打字的時候 `:` 是一個字**（2026-10-09 作者報的那一族）。這道門
         // 從前排在打字那一支前面，於是站在主題上按 `i`、打 `bw`、再打 `:w`：那個 `:`
         // 溜到命令行上**而框還開着**，`w` 和 `q` 跟着被當成字母吃進去，框裏成了
@@ -340,7 +434,7 @@ impl Seat {
         // 還被告知沒有東西要存。這個檔自己早有這條規矩，測試就叫
         // `while_typing_q_is_a_letter`；只是 `:` 不在它管的範圍裏。
         if key == Some(Key::Char(':')) && page.typing.is_none() {
-            return false;
+            return (false, None);
         }
         // **`e` 開的是這一頁寫進去的那個檔**（2026-10-20 作者定，§5.155 ①）。
         //
@@ -357,20 +451,21 @@ impl Seat {
             if let Some(path) = path {
                 // 攢着没存的改動就先攔一下，同 `:q`——那一頁的值和檔裏的字此刻
                 // 不是同一回事，而開出來的是檔裏那一份。
-                if dirty && !self.warned {
-                    self.warned = true;
-                    editor.set_status(say!("settings.leaving-unsaved"));
-                    return true;
+                // The second `e` is the one that discards, so the line names
+                // it (2026-11-08: it named `q`, which was taken away).
+                if dirty && self.warned != Some(Leaving::Open) {
+                    self.warned = Some(Leaving::Open);
+                    return (true, Some(say!("settings.leaving-unsaved-open")));
                 }
                 self.leave(editor, false);
                 if let Err(why) = editor.open_file(&path) {
                     editor.set_status(say!("buffer.cannot-open", shorten(&path), why));
                 }
             }
-            return true;
+            return (true, None);
         }
         // Warning: **認不出的鍵也算收下了**：面板開着的時候一個 F13 不該掉進正文。
-        let Some(key) = key else { return true };
+        let Some(key) = key else { return (true, None) };
         // **`p` / `P` paste a register into the value, and `"x` names it**
         // (2026-11-08), the editor's own keys for it; `"+p` is the system
         // clipboard, as there. They need the editor's registers, so they
@@ -379,40 +474,38 @@ impl Seat {
             match (self.register, key) {
                 (Some(None), Key::Char(name)) => {
                     self.register = Some(Some(name));
-                    return true;
+                    return (true, None);
                 }
                 (_, Key::Char('"')) => {
                     self.register = Some(None);
-                    return true;
+                    return (true, None);
                 }
                 (named, Key::Char(c @ ('p' | 'P'))) => {
                     self.register = None;
-                    self.warned = false;
+                    self.warned = None;
                     let how = match c {
                         'p' => Pasting::After,
                         _ => Pasting::Before,
                     };
-                    let said = self.paste_register(editor, named.flatten(), how);
-                    editor.set_status(said);
-                    return true;
+                    return (true, Some(self.paste_register(editor, named.flatten(), how)));
                 }
                 _ => self.register = None,
             }
         }
-        let Some(page) = self.panel.as_mut() else { return true };
+        let Some(page) = self.panel.as_mut() else { return (true, None) };
         let dirty = page.dirty();
         match answer(page, key) {
             (true, said) => {
-                self.warned = false;
-                if let Some(said) = said {
-                    editor.set_status(said);
-                }
+                self.warned = None;
+                (true, said)
             }
             // Warning: **有改動沒存就不許一下走掉**：面板上攢的東西一個鍵都沒落到磁碟
             // 上，走了就是全丟。第一下說一句，第二下纔算數。
-            (false, _) => self.leave(editor, dirty),
+            (false, _) => {
+                self.leave(editor, dirty);
+                (true, None)
+            }
         }
-        true
     }
 
     /// `p` / `P`: the register into the value, and what to say about it.
@@ -457,11 +550,59 @@ impl Seat {
             return false;
         }
         self.register = None;
-        self.warned = false;
-        editor.set_status(match page.paste(text, Pasting::Replace) {
+        self.warned = None;
+        let before = page.spot();
+        let said = match page.paste(text, Pasting::Replace) {
             Some(n) => say!("edit.pasted-characters", n),
             None => say!("settings.paste-nowhere"),
-        });
+        };
+        self.say(editor, before, Some(said));
+        true
+    }
+
+    /// **The mouse, while the panel is open** (2026-11-08): it used to go on
+    /// to the document behind the panel, where a click moved the caret, a
+    /// drag selected and the wheel scrolled, none of it seen. A click on a
+    /// group or a row goes to it, the wheel walks the list the cursor is
+    /// in, and anything else is taken and does nothing. Gives whether it was
+    /// the panel's.
+    pub fn mouse(&mut self, editor: &mut Editor, pointer: Pointer, x: u16, y: u16) -> bool {
+        let Some(page) = self.panel.as_mut() else { return false };
+        let before = page.spot();
+        match pointer {
+            Pointer::Click => match hit_at(x, y) {
+                Some(Hit::Group(i)) => {
+                    page.close_page();
+                    page.cancel_typing();
+                    if i != page.group {
+                        page.group = i;
+                        page.row = 0;
+                    }
+                    page.pane = Pane::Groups;
+                }
+                Some(Hit::Row(i)) => {
+                    if page.pane != Pane::Settings || page.row != i {
+                        page.cancel_typing();
+                    }
+                    page.pane = Pane::Settings;
+                    page.row = i;
+                }
+                Some(Hit::PageRow(i)) => page.page = Some(i),
+                None => {}
+            },
+            Pointer::Wheel { back, notches } if page.typing.is_none() => {
+                for _ in 0..notches.min(64) {
+                    match page.page.is_some() {
+                        true => page.page_step(!back),
+                        false => page.step(!back),
+                    }
+                }
+            }
+            Pointer::Wheel { .. } => {}
+        }
+        self.register = None;
+        self.warned = None;
+        self.say(editor, before, None);
         true
     }
 
@@ -472,22 +613,20 @@ impl Seat {
         if editor.take_settings_request() && self.panel.is_none() {
             // 同 `lib.rs` 那一處：本項目那一頁跟着工作路徑走（2026-10-01）。
             let local = Some(yumete_config::panel::local_sheet_path(&editor.root()));
-            self.panel = Some(Panel::open(
-                Some(yumete_config::config_dir().join("config.toml")),
-                local,
-            ));
-            self.warned = false;
+            let mut page = Panel::open(Some(yumete_config::config_dir().join("config.toml")), local);
+            // The schemes there are, as the input method reads a name.
+            page.schemes = Some(yumete_config::panel::Names {
+                takes: |name| yumete_ime::Scheme::from_tag(name).is_some(),
+                names: yumete_ime::Scheme::all().into_iter().map(|s| s.tag().to_string()).collect(),
+            });
+            self.panel = Some(page);
+            self.warned = None;
+            self.row_said = false;
             editor.set_settings_open(true);
             editor.set_status(String::new());
         }
         if editor.take_settings_save() {
             if let Some(page) = self.panel.as_mut() {
-                let named = page
-                    .sheet()
-                    .path
-                    .clone()
-                    .map(|p| shorten(&p))
-                    .unwrap_or_default();
                 let said = match page.dirty() {
                     false => Ok(None),
                     true => page.save().map(Some),
@@ -495,25 +634,29 @@ impl Seat {
                 // **存完要讓編輯器重讀一遍**（2026-10-09，見 `Editor::set_config_reload`）。
                 // 沒有這一下，存盤只是把字寫進檔裏，眼前這一頁照舊按舊設置畫。
                 let wrote = matches!(said, Ok(Some(_)));
+                // Every file written is named (2026-11-08: both were written
+                // and one was named).
+                let names = |paths: &[std::path::PathBuf]| {
+                    paths.iter().map(|p| shorten(p)).collect::<Vec<_>>().join(&say!("label.comma"))
+                };
                 editor.set_status(match said {
                     Ok(None) => say!("settings.nothing-to-save"),
-                    // 這期間那個檔被外面改過 —— 說一句，那比「有幾個鍵註釋掉了」
-                    // 要緊：眼前這一頁的值可能已經不是檔裏寫的了。
-                    Ok(Some(spoke)) if !spoke.changed_underneath.is_empty() => {
-                        say!("settings.saved-moved", named)
+                    // 這期間那個檔被外面改過 —— 說一句：眼前這一頁的值可能已經
+                    // 不是檔裏寫的了。
+                    Ok(Some(saved)) if !saved.changed_underneath.is_empty() => {
+                        say!("settings.saved-moved", names(&saved.wrote))
                     }
-                    Ok(Some(spoke)) if spoke.commented_out.is_empty() => say!("settings.saved", named),
-                    Ok(Some(spoke)) => say!(
-                        "settings.saved-said",
-                        named,
-                        spoke.commented_out.join(&say!("label.comma"))
-                    ),
-                    Err(why) => say!("settings.cannot-save", why),
+                    Ok(Some(saved)) => say!("settings.saved", names(&saved.wrote)),
+                    Err(SaveError::Unread { path, line, said }) => {
+                        say!("settings.cannot-save-unread", shorten(&path), line + 1, said)
+                    }
+                    Err(SaveError::Io(why)) => say!("settings.cannot-save", why),
                 });
                 if wrote {
                     editor.set_config_reload();
                 }
-                self.warned = false;
+                self.warned = None;
+                self.row_said = false;
             }
         }
         // `force` ＝ 打了 `!`（`:q!`），那時不問「有改動沒存」。
@@ -525,14 +668,14 @@ impl Seat {
 
     /// 走 —— 有沒存的東西就先說一句，第二下纔真的走。
     fn leave(&mut self, editor: &mut Editor, dirty: bool) {
-        match dirty && !self.warned {
+        match dirty && self.warned != Some(Leaving::Close) {
             true => {
-                self.warned = true;
+                self.warned = Some(Leaving::Close);
                 editor.set_status(say!("settings.leaving-unsaved"));
             }
             false => {
                 self.panel = None;
-                self.warned = false;
+                self.warned = None;
                 editor.set_settings_open(false);
                 editor.set_status(String::new());
             }
@@ -551,9 +694,14 @@ impl Seat {
 /// 寫的是「墨香：黑墨、白金墨、金墨、紅墨，其餘的色階都算出來」——那是給 `:theme`
 /// 的菜單寫的，那裏一行一個詞，整句放得下。值那一格放不下，撥一格就只換了半句話
 /// 的開頭。冒號前面那一截就是名字，而這十條都是那個形狀；沒有冒號的原樣不動。
+///
+/// **English writes the colon `: `** (2026-11-08, reported: the English
+/// theme value was the whole sentence, `[moxiang: black, white-gold, …]`),
+/// so the name is cut at whichever comes first.
 fn name_of(label: String) -> String {
-    match label.split_once('：') {
-        Some((name, _)) => name.to_string(),
+    let cut = [label.find('：'), label.find(": ")].into_iter().flatten().min();
+    match cut {
+        Some(at) => label[..at].to_string(),
         None => label,
     }
 }
@@ -646,6 +794,7 @@ pub fn draw(
     let changed = ground.fg(ink.mark());
 
     frame.render_widget(Clear, area);
+    HITS.with(|hits| hits.borrow_mut().clear());
     let rows = panel.rows();
     let col = Columns::of(area, &rows, panel);
     let right = col.right;
@@ -679,30 +828,25 @@ pub fn draw(
         (Some(p), false) => format!("{}+", shorten(p)),
         (None, _) => say!("settings.no-file"),
     };
-    let dirty = match panel.dirty() {
-        true => format!("{}  {where_to}", say!("settings.unsaved")),
-        false => where_to,
-    };
     // Warning: **撞上標題就縮**。從前它只 `saturating_sub`，於是 40 欄的窗口上那條路徑
-    // 直接蓋掉「設置」兩個字（`設置全局] ~/.config/…`）。先丟路徑只留 `[全局]`，
-    // 再丟不下就整條不畫——標題不許被吃掉。2026-09-24 審出來的。
+    // 直接蓋掉「設置」兩個字（`設置全局] ~/.config/…`）。標題不許被吃掉。
+    // 2026-09-24 審出來的。
     let title_ends = area.x + 1 + yumete_cjk::str_width(&title) as u16 + 2;
-    let short = match (&sheet.path, sheet.there) {
-        (Some(p), false) => format!("{}+", shorten(p)),
-        _ => String::new(),
-    };
-    // Warning: **「改了還沒存」是最後纔丟的那一個。** 從前這裏只有兩檔——完整那一行，
-    // 或者光一個 `[全局]`——於是 74 欄以下**改了東西沒有任何提示**，而那正是這一
-    // 行存在的理由。中間插一檔：徽章 ＋ `[全局]`，路徑先丟。2026-09-24 審出來的。
-    let badge = match panel.dirty() {
-        true => format!("{}  {short}", say!("settings.unsaved")),
-        false => short.clone(),
-    };
-    let line = match right.saturating_sub(title_ends) as usize {
-        room if room > yumete_cjk::str_width(&dirty) => Some(dirty),
-        room if room > yumete_cjk::str_width(&badge) => Some(badge),
-        room if !short.is_empty() && room > yumete_cjk::str_width(&short) => Some(short),
-        _ => None,
+    // Warning: **「改了還沒存」從不讓位**（2026-11-08 報的：本項目那一份路徑一長，
+    // 徽章連同路徑整條不畫了，140 欄上也是）。路徑從左邊截，前面一個 `…`，
+    // 留着的是檔名那一頭；擠到連徽章都放不下纔不畫。
+    let room = right.saturating_sub(title_ends) as usize;
+    let line = match panel.dirty() {
+        true => {
+            let badge = say!("settings.unsaved");
+            let left = room.saturating_sub(yumete_cjk::str_width(&badge) + 2 + 1);
+            match (room > yumete_cjk::str_width(&badge), left >= 4) {
+                (true, true) => Some(format!("{badge}  {}", crate::elide_head(&where_to, left))),
+                (true, false) => Some(badge),
+                (false, _) => None,
+            }
+        }
+        false => (room > 4).then(|| crate::elide_head(&where_to, room - 1)),
     };
     if let Some(line) = line {
         let wide = yumete_cjk::str_width(&line) as u16;
@@ -803,6 +947,26 @@ pub fn draw(
         }
     }
 
+    // ---- A file that cannot be read, said at the top (2026-11-08) ----------
+    //
+    // Reported: a TOML error showed 「未設置」 for keys the file has, and the
+    // first word of it was `:w` failing with a raw English line, cut off.
+    let banner: Vec<String> = panel
+        .unread()
+        .iter()
+        .flat_map(|(which, (line, why))| {
+            fold(&say!("settings.unread", said(which.layer().label()), line + 1, why), note_wide)
+        })
+        .collect();
+    let top = (area.y + 2 + banner.len() as u16).min(list_ends);
+    for (i, row) in banner.iter().enumerate() {
+        let y = area.y + 2 + i as u16;
+        if y >= list_ends {
+            break;
+        }
+        put_text(buf, split + 2, y, right, row, changed);
+    }
+
     // ---- 左邊：八組 --------------------------------------------------------
     // **這一欄也要跟着光標滾**（2026-10-09）。右邊那一欄當天早些時候修過同一個毛病，
     // 左邊漏了：十行高的窗口上按七下 `j`，右欄畫的是「鍵盤」那一組的項，而左欄停在
@@ -828,16 +992,25 @@ pub fn draw(
         let name = said(named.label);
         let pad = (GROUPS_WIDE as usize).saturating_sub(yumete_cjk::str_width(&name) + 2);
         put_text(buf, area.x, y, split, &format!("  {name}{}", " ".repeat(pad)), style);
+        hit(y, area.x, split, Hit::Group(i));
     }
 
     // ---- 右邊：這一組的那些項 ----------------------------------------------
     let mut caret = None;
     let from = col.name;
-    if panel.page.is_some() {
-        match panel.subpage() {
-            Some(Subpage::Annotation) => draw_annotation_page(buf, panel, &ink, ground, from, right, area.y + 2, list_ends),
-            _ => draw_flavor_page(buf, panel, &ink, ground, from, right, area.y + 2, list_ends),
+    // A row changed and not saved has a mark in the gap before its name
+    // (2026-11-08, reported: saved and unsaved rows were drawn alike).
+    let unsaved = |buf: &mut ratatui::buffer::Buffer, y: u16, path: &str| {
+        if panel.edited(path) {
+            put_text(buf, from.saturating_sub(1), y, from, "*", changed);
         }
+    };
+    if panel.page.is_some() {
+        let (above, below) = match panel.subpage() {
+            Some(Subpage::Annotation) => draw_annotation_page(buf, panel, &ink, ground, from, right, top, list_ends),
+            _ => draw_flavor_page(buf, panel, &ink, ground, from, right, top, list_ends),
+        };
+        more_marks(buf, from, right, (area.y + 1, list_ends), (above, below), quiet, bottom);
         if block_high > 0 {
             draw_flavor_block(buf, panel, &ink, ground, split + 3, right, note_at, &note_rows, layers_at, foot);
         }
@@ -851,7 +1024,7 @@ pub fn draw(
         return None;
     }
     if rows.is_empty() {
-        put_text(buf, from, area.y + 2, right, &say!("settings.group.not-yet"), quiet);
+        put_text(buf, from, top, right, &say!("settings.group.not-yet"), quiet);
     }
     // **光標走到哪，那一行就跳進畫面**（2026-10-09 作者定）。
     //
@@ -862,17 +1035,29 @@ pub fn draw(
     // 沒有記下滾到哪，是故意的：由 `panel.row` 現算，所以撥組、換窗口大小、存完重畫
     // 都不會留下一個對不上的偏移。往下走的時候光標貼着下邊沿，往上走貼着上邊沿——
     // 和 vim 的 `scrolloff` 開到最大同一種手感。
-    let room = list_ends.saturating_sub(area.y + 2) as usize;
-    let first = match room {
-        0 => 0,
-        _ => panel.row.saturating_sub(room - 1),
+    //
+    // **A value refused has its reason on the line under it** (2026-11-08),
+    // and the rows below move down one; that line is kept in sight too.
+    let refused = match (&panel.refusal, panel.typing.is_some(), panel.pane) {
+        (Some(why), true, Pane::Settings) => Some(refusal_said(why, panel.typing.as_deref().unwrap_or(""))),
+        _ => None,
     };
+    let room = list_ends.saturating_sub(top) as usize;
+    let used = room.saturating_sub(refused.is_some() as usize);
+    let first = match used {
+        0 => panel.row,
+        _ => panel.row.saturating_sub(used - 1),
+    };
+    let mut y = top;
+    let mut last = first;
     for (i, setting) in rows.iter().enumerate().skip(first) {
-        let y = area.y + 2 + (i - first) as u16;
         if y >= list_ends {
             break;
         }
+        last = i + 1;
         let here = i == panel.row && panel.pane == Pane::Settings;
+        hit(y, from, right, Hit::Row(i));
+        unsaved(buf, y, &setting.path());
         let shown = panel.shown(setting);
         let label = said(setting.label);
         // **整行鋪底**，同左邊那一欄（它上面那一段的理由：只有字那麽寬的高亮「讀起來
@@ -952,7 +1137,16 @@ pub fn draw(
             caret =
                 Some(ratatui::layout::Position { x: at.min(col.value_ends().saturating_sub(1)), y });
         }
+        y += 1;
+        if let (true, Some(why)) = (here, refused.as_ref()) {
+            if y < list_ends {
+                let why = crate::elide(why, right.saturating_sub(from + 3) as usize);
+                put_text(buf, from + 2, y, right, &why, changed);
+                y += 1;
+            }
+        }
     }
+    more_marks(buf, from, right, (area.y + 1, list_ends), (first, rows.len().saturating_sub(last)), quiet, bottom);
 
     // ---- 右半邊底下那一塊：當前這一行的三層 ----------------------------------
     //
@@ -969,9 +1163,22 @@ pub fn draw(
                 if y >= foot {
                     break;
                 }
-                let value = match said_value {
-                    Some(v) => drawn(setting, v),
-                    None => say!("settings.layer.unset"),
+                let sheet = match layer {
+                    Layer::Factory => None,
+                    Layer::Global => Some(&panel.global),
+                    Layer::Local => Some(&panel.local),
+                };
+                // A file that cannot be read says nothing anyone knows, which
+                // is not the same as not setting it (2026-11-08); a value not
+                // saved yet has the row's mark.
+                let value = match (said_value, sheet.is_some_and(|s| s.unread.is_some())) {
+                    (Some(v), _) => drawn(setting, v),
+                    (None, true) => say!("settings.layer.unknown"),
+                    (None, false) => say!("settings.layer.unset"),
+                };
+                let value = match sheet.is_some_and(|s| s.edited(&setting.path())) {
+                    true => format!("{value} *"),
+                    false => value,
                 };
                 let name = said(layer.label());
                 let pad = 8usize.saturating_sub(yumete_cjk::str_width(&name));
@@ -984,6 +1191,8 @@ pub fn draw(
                 {
                     line.push_str(&mark);
                 }
+                // A long value ends with `…`, not cut mid-word (2026-11-08).
+                let line = crate::elide(&line, room);
                 put_text(
                     buf,
                     split + 3,
@@ -1039,7 +1248,7 @@ fn draw_annotation_page(
     right: u16,
     top: u16,
     ends: u16,
-) {
+) -> (usize, usize) {
     let text = ground.fg(ink.text());
     let quiet = ground.fg(ink.quiet());
     // One line each, headings among them: (row index, heading or field).
@@ -1065,6 +1274,11 @@ fn draw_annotation_page(
         0 => 0,
         _ => at.saturating_sub(room - 1),
     };
+    let shown = (ends.saturating_sub(top) as usize).min(lines.len().saturating_sub(first));
+    let rows_in = |part: &[(Option<usize>, String, Option<yumete_config::panel::AnnotationRow>)]| {
+        part.iter().filter(|(i, _, _)| i.is_some()).count()
+    };
+    let out_of_sight = (rows_in(&lines[..first]), rows_in(&lines[first + shown..]));
     for (n, (index, head, row)) in lines.iter().enumerate().skip(first) {
         let y = top + (n - first) as u16;
         if y >= ends {
@@ -1074,6 +1288,12 @@ fn draw_annotation_page(
             put_text(buf, from, y, right, head, quiet);
             continue;
         };
+        if let Some(i) = index {
+            hit(y, from, right, Hit::PageRow(*i));
+        }
+        if panel.edited(&format!("ime.annotation_modes.{}.{}", row.mode, row.field)) {
+            put_text(buf, from.saturating_sub(1), y, from, "*", ground.fg(ink.mark()));
+        }
         let on_it = *index == Some(here);
         let band = match on_it {
             true => ink.ground(yumete_config::rung::HEAD),
@@ -1116,6 +1336,7 @@ fn draw_annotation_page(
             put_text(buf, note_at, y, right, &note, lit(ground.fg(ink.azure())));
         }
     }
+    out_of_sight
 }
 
 /// The level row's own hint, shown on the page as on the list.
@@ -1140,7 +1361,7 @@ fn draw_flavor_page(
     right: u16,
     top: u16,
     ends: u16,
-) {
+) -> (usize, usize) {
     let text = ground.fg(ink.text());
     let quiet = ground.fg(ink.quiet());
     let keymap = panel.flavor_keymap();
@@ -1170,6 +1391,9 @@ fn draw_flavor_page(
         .max()
         .unwrap_or(0)
         .min(14) as u16;
+    let shown = (ends.saturating_sub(top) as usize).min(lines.len().saturating_sub(first));
+    let rows_in = |part: &[PageLine]| part.iter().filter(|l| matches!(l, PageLine::Row(..))).count();
+    let out_of_sight = (rows_in(&lines[..first]), rows_in(&lines[first + shown..]));
     for (n, line) in lines.iter().enumerate().skip(first) {
         let y = top + (n - first) as u16;
         if y >= ends {
@@ -1180,6 +1404,14 @@ fn draw_flavor_page(
                 put_text(buf, from, y, right, name, quiet);
             }
             PageLine::Row(i, row) => {
+                hit(y, from, right, Hit::PageRow(*i));
+                let path = match row {
+                    FlavorRow::Level => "keys.flavor".to_string(),
+                    FlavorRow::Item(item) => format!("keys.flavor_items.{}", item.id()),
+                };
+                if panel.edited(&path) {
+                    put_text(buf, from.saturating_sub(1), y, from, "*", ground.fg(ink.mark()));
+                }
                 let on_it = *i == here;
                 let band = match on_it {
                     true => ink.ground(yumete_config::rung::HEAD),
@@ -1267,6 +1499,7 @@ fn draw_flavor_page(
             }
         }
     }
+    out_of_sight
 }
 
 /// The page's note and layers: what the item does and what its key does
@@ -1349,6 +1582,49 @@ fn draw_tick_layers(
             (false, _) => ground.fg(ink.quiet()),
         };
         put_text(buf, x, y, right, &line, style);
+    }
+}
+
+/// **How many rows are out of sight, said on the rules above and below the
+/// list** (2026-11-08, reported: at 80×24 half of 標記 was cut off with no
+/// sign of it).
+#[allow(clippy::too_many_arguments)]
+fn more_marks(
+    buf: &mut ratatui::buffer::Buffer,
+    from: u16,
+    right: u16,
+    (up, down): (u16, u16),
+    (above, below): (usize, usize),
+    style: ratatui::style::Style,
+    bottom: u16,
+) {
+    if above > 0 {
+        put_text(buf, from, up, right, &format!(" {} ", say!("settings.more-above", above)), style);
+    }
+    if below > 0 && down < bottom && down > up {
+        put_text(buf, from, down, right, &format!(" {} ", say!("settings.more-below", below)), style);
+    }
+}
+
+/// Why a value was not taken, as the line under its row says it: what is
+/// taken, by name or by range.
+fn refusal_said(why: &Refusal, typed: &str) -> String {
+    let range = |low: usize, high: usize, zero: bool| match zero {
+        true => say!("settings.range-or-zero", low, high),
+        false => say!("settings.range", low, high),
+    };
+    let names = |names: &[String]| names.join(&say!("label.comma"));
+    match why {
+        Refusal::NotANumber { low, high, zero } => {
+            say!("settings.refused.not-a-number", typed.trim(), range(*low, *high, *zero))
+        }
+        Refusal::OutOfRange { low, high, zero } => {
+            say!("settings.refused.out-of-range", typed.trim(), range(*low, *high, *zero))
+        }
+        Refusal::Empty { names: list } if list.is_empty() => say!("settings.refused.empty"),
+        Refusal::Empty { names: list } => say!("settings.refused.empty-names", names(list)),
+        Refusal::NotOneOf { word, names: list } => say!("settings.refused.not-one-of", word, names(list)),
+        Refusal::Loader(said) => said.clone(),
     }
 }
 
@@ -1859,10 +2135,10 @@ mod tests {
 
         // The group list: the group's first row is not touched.
         let page = seat.panel.as_mut().unwrap();
-        page.row = 0;
+        page.row = page.rows().iter().position(|s| s.key == "page").unwrap();
         page.begin_typing();
         page.typing = Some("b6".into());
-        page.finish_typing();
+        assert!(page.finish_typing());
         page.across(false);
         assert!(page.dirty());
         feed(&mut seat, &mut ed, "d");
@@ -2001,5 +2277,278 @@ mod tests {
         press(&mut p, Key::End);
         press(&mut p, Key::Backspace);
         assert_eq!(p.typing.as_deref().map(|t| t.starts_with("apple") && t.ends_with("sans-seri")), Some(true));
+    }
+
+    /// Where `text` is on the last frame drawn by [`shot`]: `(x, y)`.
+    fn find_on(page: &str, text: &str) -> (u16, u16) {
+        for (y, line) in page.lines().enumerate() {
+            if let Some(at) = line.find(text) {
+                return (yumete_cjk::str_width(&line[..at]) as u16, y as u16);
+            }
+        }
+        panic!("no {text:?} on:\n{page}")
+    }
+
+    /// **The mouse is the panel's** (2026-11-08, reported: a click moved the
+    /// document's caret behind it, a drag selected there, the wheel scrolled
+    /// it): a click picks a group or a row, the wheel walks the list, and
+    /// the document does not move.
+    #[test]
+    fn the_mouse_picks_rows_and_never_reaches_the_document() {
+        let (mut ed, mut seat) = seated(Panel::open(None, None));
+        let caret = ed.cursor();
+        let page = shot(seat.panel.as_ref().unwrap(), 110, 30);
+        // A row of the first group, by its name.
+        let (x, y) = find_on(&page, "每縱字數");
+        assert!(seat.mouse(&mut ed, Pointer::Click, x, y));
+        let p = seat.panel.as_ref().unwrap();
+        assert_eq!((p.pane, p.here().map(|s| s.key)), (Pane::Settings, Some("zong_length")));
+        // A group.
+        let interface = said(GROUPS[2].label);
+        let (x, y) = find_on(&page, &interface);
+        assert!(seat.mouse(&mut ed, Pointer::Click, x + 1, y));
+        let p = seat.panel.as_ref().unwrap();
+        assert_eq!((p.pane, p.group, p.row), (Pane::Groups, 2, 0));
+        // The wheel walks the groups here, and the rows once in them.
+        assert!(seat.mouse(&mut ed, Pointer::Wheel { back: false, notches: 2 }, 0, 0));
+        assert_eq!(seat.panel.as_ref().unwrap().group, 4);
+        seat.panel.as_mut().unwrap().across(true);
+        assert!(seat.mouse(&mut ed, Pointer::Wheel { back: false, notches: 3 }, 0, 0));
+        assert!(seat.mouse(&mut ed, Pointer::Wheel { back: true, notches: 1 }, 0, 0));
+        assert_eq!(seat.panel.as_ref().unwrap().row, 2);
+        // Off every line: taken, nothing happens.
+        assert!(seat.mouse(&mut ed, Pointer::Click, 109, 0));
+        assert_eq!(ed.cursor(), caret, "the document's caret did not move");
+        // With no panel the mouse is not its.
+        let mut empty = Seat::default();
+        assert!(!empty.mouse(&mut ed, Pointer::Click, x, y));
+    }
+
+    /// **On the panel's `:` line only its own commands run** (2026-11-08,
+    /// reported: `:e c.md` opened a buffer behind the panel, unseen); the
+    /// rest are refused, said, and the document is where it was.
+    #[test]
+    fn a_command_not_the_panels_is_refused_with_a_word() {
+        let (mut ed, mut seat) = seated(Panel::open(None, None));
+        let buffers = ed.buffer_count();
+        for line in ["e c.md", "help", "theme bw"] {
+            ed.on_key(Key::Char(':'));
+            for c in line.chars() {
+                ed.on_key(Key::Char(c));
+            }
+            ed.on_key(Key::Enter);
+            assert_eq!(ed.status(), say!("settings.command-refused", line), "{line}");
+        }
+        assert_eq!(ed.buffer_count(), buffers, "nothing opened behind the panel");
+        // Its own still run.
+        ed.on_key(Key::Char(':'));
+        ed.on_key(Key::Char('q'));
+        ed.on_key(Key::Enter);
+        seat.settle(&mut ed);
+        assert!(seat.panel.is_none(), ":q closed it");
+    }
+
+    /// **A line about a row goes when the cursor or a value moves**
+    /// (2026-11-08, reported: 「本層没有設這一項」 stayed through `i`, typing,
+    /// Esc and `h`), and stays while nothing moves.
+    #[test]
+    fn a_line_about_a_row_goes_when_the_row_changes() {
+        let (mut ed, mut seat) = seated(on_export_row("font_family"));
+        feed(&mut seat, &mut ed, "d");
+        assert_eq!(ed.status(), say!("settings.nothing-to-drop"));
+        feed(&mut seat, &mut ed, "\"");
+        assert_eq!(ed.status(), say!("settings.nothing-to-drop"), "nothing moved yet");
+        assert!(seat.took(&mut ed, Some(Key::Esc)));
+        feed(&mut seat, &mut ed, "j");
+        assert_eq!(ed.status(), "", "the cursor moved");
+
+        // A paste said, then Esc leaves the value as it was: the line goes.
+        let (mut ed, mut seat) = seated(on_export_row("page"));
+        assert!(seat.pasted(&mut ed, "b6"));
+        assert_eq!(ed.status(), say!("edit.pasted-characters", 2));
+        assert!(seat.took(&mut ed, Some(Key::Esc)));
+        assert_eq!(ed.status(), "");
+    }
+
+    /// **The second `e` discards, and the warning says so** (2026-11-08: it
+    /// named `q`, which is gone); `:q` says `:q`.
+    #[test]
+    fn the_leave_warnings_name_the_keys_that_leave() {
+        let mut page = on_export_row("page");
+        page.begin_typing();
+        page.typing = Some("b6".into());
+        page.finish_typing();
+        page.global.path = Some(std::path::PathBuf::from("/nowhere/config.toml"));
+        let (mut ed, mut seat) = seated(page);
+        feed(&mut seat, &mut ed, "e");
+        assert_eq!(ed.status(), say!("settings.leaving-unsaved-open"));
+        assert!(ed.status().contains('e') && !ed.status().contains(" q "));
+        assert!(ed.execute(":q").is_ok());
+        seat.settle(&mut ed);
+        assert_eq!(ed.status(), say!("settings.leaving-unsaved"));
+        assert!(ed.status().contains(":q"));
+        assert!(seat.panel.is_some());
+    }
+
+    /// **「未保存」 stays however long the path** (2026-11-08, reported: on a
+    /// deep project path the badge went with the path, at 140 columns too):
+    /// the path is cut from the left.
+    #[test]
+    fn the_unsaved_badge_outlives_a_long_path() {
+        let deep = "/nowhere/".to_string() + &"一個很深的目錄/".repeat(12) + ".yumete/config.toml";
+        let mut p = Panel::open(None, Some(std::path::PathBuf::from(&deep)));
+        p.flip_into();
+        p.across(true);
+        p.press();
+        for width in [60, 100, 140] {
+            let page = shot(&p, width, 24);
+            let top = page.lines().next().unwrap();
+            assert!(top.contains(&say!("settings.unsaved")), "{width}: {top}");
+            assert!(top.contains('…') && top.contains("config.toml+"), "{width}: {top}");
+        }
+    }
+
+    /// **A row changed and not saved has a mark**, saved ones do not
+    /// (2026-11-08), and so has its layer below.
+    #[test]
+    fn an_unsaved_row_is_marked() {
+        let mut p = Panel::open(None, None);
+        p.across(true);
+        let clean = shot(&p, 110, 30);
+        assert!(!clean.contains('*'), "{clean}");
+        p.row = p.rows().iter().position(|s| s.key == "soft_wrap").unwrap();
+        p.press();
+        let page = shot(&p, 110, 30);
+        let line = page.lines().find(|l| l.contains(&say!("settings.editor.soft-wrap"))).unwrap();
+        assert!(line.contains('*'), "{line}");
+        assert!(page.contains("[ ] *"), "the layer that holds it:\n{page}");
+    }
+
+    /// **A refused value is drawn with its reason under it**, and the row
+    /// keeps what was typed (2026-11-08).
+    #[test]
+    fn a_refused_value_says_why_under_its_row() {
+        let mut p = Panel::open(None, None);
+        p.across(true);
+        p.row = p.rows().iter().position(|s| s.key == "pages_vertical").unwrap();
+        press(&mut p, Key::Char('c'));
+        for c in "99".chars() {
+            press(&mut p, Key::Char(c));
+        }
+        press(&mut p, Key::Enter);
+        assert_eq!(p.typing.as_deref(), Some("99"));
+        let page = shot(&p, 110, 30);
+        let why = say!("settings.refused.out-of-range", "99", say!("settings.range", 1, 4));
+        let (_, at) = find_on(&page, &why);
+        let (_, row) = find_on(&page, &say!("settings.editor.pages-vertical"));
+        assert_eq!(at, row + 1, "on the line under the row:\n{page}");
+        // The theme: the names it takes.
+        let mut p = Panel::open(None, None);
+        p.group = GROUPS.iter().position(|g| g.group == yumete_config::settings_ui::Group::Colours).unwrap();
+        p.across(true);
+        press(&mut p, Key::Char('i'));
+        for c in "nosuch".chars() {
+            press(&mut p, Key::Char(c));
+        }
+        press(&mut p, Key::Enter);
+        let page = shot(&p, 140, 30);
+        assert!(page.contains("nosuch") && page.contains("one-dark"), "{page}");
+        assert!(!p.dirty());
+    }
+
+    /// **A file that cannot be read is said at the top**, its layer is
+    /// unknown rather than unset, and `:w` writes nothing and says why
+    /// (2026-11-08).
+    #[test]
+    fn an_unreadable_file_is_said_and_not_written() {
+        let dir = std::env::temp_dir().join(format!("yumete-set-broken-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let global = dir.join("config.toml");
+        std::fs::write(&global, "[editor]\nscrolloff = 8\nlayout = \n").unwrap();
+        let mut p = Panel::open(Some(global.clone()), None);
+        p.across(true);
+        let page = shot(&p, 140, 30);
+        let line = 3;
+        assert!(page.contains(&format!("第 {line} 行")), "{page}");
+        assert!(page.contains(&say!("settings.layer.unknown")), "{page}");
+        p.press();
+        let mut ed = Editor::new();
+        ed.set_settings_open(true);
+        let mut seat = Seat { panel: Some(p), ..Default::default() };
+        ed.execute(":w").unwrap();
+        seat.settle(&mut ed);
+        let said = ed.status().to_string();
+        assert!(said.contains("config.toml") && said.contains(&format!("第 {line} 行")), "{said}");
+        assert!(!said.contains(&say!("settings.saved", "")), "{said}");
+        assert_eq!(std::fs::read_to_string(&global).unwrap(), "[editor]\nscrolloff = 8\nlayout = \n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`:w` names each file it wrote** (2026-11-08).
+    #[test]
+    fn saving_names_both_files_when_it_writes_both() {
+        let dir = std::env::temp_dir().join(format!("yumete-set-two-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut p = Panel::open(Some(dir.join("config.toml")), Some(dir.join("local.toml")));
+        p.across(true);
+        p.press();
+        p.flip_into();
+        p.row = 1;
+        p.press();
+        let mut ed = Editor::new();
+        ed.set_settings_open(true);
+        let mut seat = Seat { panel: Some(p), ..Default::default() };
+        ed.execute(":w").unwrap();
+        seat.settle(&mut ed);
+        assert!(ed.status().contains("config.toml") && ed.status().contains("local.toml"), "{}", ed.status());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A group cut off says how many rows are out of sight** (2026-11-08,
+    /// reported at 80×24: half of 標記 hidden with no mark).
+    #[test]
+    fn a_group_cut_off_says_how_many_more() {
+        let mut p = Panel::open(None, None);
+        p.group = GROUPS.iter().position(|g| g.group == yumete_config::settings_ui::Group::Marks).unwrap();
+        p.across(true);
+        let many = p.rows().len();
+        let page = shot(&p, 80, 24);
+        assert!(page.contains('↓'), "{page}");
+        assert!(!page.contains('↑'), "nothing above yet:\n{page}");
+        p.row = many - 1;
+        let page = shot(&p, 80, 24);
+        assert!(page.contains('↑') && !page.contains('↓'), "{page}");
+        let big = shot(&p, 110, 60);
+        assert!(!big.contains('↑') && !big.contains('↓'), "all in sight:\n{big}");
+    }
+
+    /// **The value column stays put while a value is changed** (2026-11-08,
+    /// reported: replacing the long factory font list by a short one moved
+    /// the column of the whole group from 44 to 26).
+    #[test]
+    fn the_value_column_does_not_move_with_an_edit() {
+        let mut p = on_export_row("font_family");
+        let column = |p: &Panel| {
+            let page = shot(p, 120, 34);
+            let line = page.lines().find(|l| l.contains(&say!("settings.export.page"))).unwrap().to_string();
+            line.find("a5").map(|at| yumete_cjk::str_width(&line[..at]))
+        };
+        let before = column(&p);
+        p.begin_typing();
+        p.typing = Some("serif".into());
+        p.finish_typing();
+        assert_eq!(column(&p), before);
+    }
+
+    /// **A theme's value is its name in English too** (2026-11-08, reported:
+    /// `[moxiang: black, white-gold, …]`).
+    #[test]
+    fn a_name_is_cut_at_either_colon() {
+        assert_eq!(name_of("墨香：黑、白金".into()), "墨香");
+        assert_eq!(name_of("moxiang: black, white-gold, gold and red ink; every other shade computed".into()), "moxiang");
+        assert_eq!(name_of("Tokyo Night：柔和".into()), "Tokyo Night");
+        assert_eq!(name_of("横排".into()), "横排");
     }
 }
