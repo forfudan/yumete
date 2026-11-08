@@ -28,6 +28,9 @@ pub mod theme;
 
 mod layout;
 mod paint;
+mod vertical;
+
+pub use vertical::Vertical;
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -128,9 +131,15 @@ pub struct Preview {
     parse_cache: parse::Cache,
     cache: HashMap<u64, Arc<Laid>>,
     placed: Vec<Placed>,
-    /// Every visual line's top and the source line it shows, top to bottom.
+    /// Every visual line's top and the source line it shows, top to bottom;
+    /// down a vertical page, every column's distance from the page's right
+    /// edge.
     marks: Vec<(f32, usize)>,
+    /// How long the page is along the way it scrolls: down, or to the left
+    /// when it is vertical.
     height: f32,
+    /// The window's height, which a vertical page's columns fill.
+    view_height: u32,
 }
 
 impl Preview {
@@ -146,6 +155,7 @@ impl Preview {
             placed: Vec::new(),
             marks: Vec::new(),
             height: 0.0,
+            view_height: 0,
         }
     }
 
@@ -187,9 +197,41 @@ impl Preview {
         self.relayout()
     }
 
-    /// The page's width and height, in device pixels.
+    /// The page's width, and how long it is along the way it scrolls, in
+    /// device pixels: its height, or how far it reaches to the left when it
+    /// is vertical.
     pub fn size(&self) -> (u32, f32) {
         (self.width, self.height)
+    }
+
+    /// **Set the page vertically** (2026-11-08), or across with `None`:
+    /// columns read right to left, the page going on to the left. Every
+    /// block is laid out again.
+    pub fn set_vertical(&mut self, vertical: Option<Vertical>) -> Stats {
+        if self.engine.vertical == vertical {
+            return Stats::default();
+        }
+        self.engine.vertical = vertical;
+        self.cache.clear();
+        self.relayout()
+    }
+
+    /// Whether the page is set vertically.
+    pub fn vertical(&self) -> bool {
+        self.engine.vertical.is_some()
+    }
+
+    /// **The window's height** (2026-11-08), which a vertical page's columns
+    /// fill: a new one lays a vertical page out again.
+    pub fn set_height(&mut self, height: u32) -> Stats {
+        if self.view_height == height {
+            return Stats::default();
+        }
+        self.view_height = height;
+        match self.vertical() {
+            true => self.relayout(),
+            false => Stats::default(),
+        }
     }
 
     /// **The ruby spellings read** (2026-11-08): `[export] ruby_html`,
@@ -247,6 +289,9 @@ impl Preview {
     }
 
     fn relayout(&mut self) -> Stats {
+        if self.vertical() {
+            return self.relayout_vertical();
+        }
         let t = Instant::now();
         let (side, top, bottom) = self.padding();
         let column = self.width as f32 - 2.0 * side;
@@ -294,8 +339,85 @@ impl Preview {
         stats
     }
 
+    /// **A vertical page laid out**: each top-level block from the right
+    /// edge leftwards, its columns filling the window's height; a table's
+    /// caption goes with the table.
+    fn relayout_vertical(&mut self) -> Stats {
+        let t = Instant::now();
+        let s = self.engine.scale;
+        let (side, top, bottom) = (26.0 * s, 20.0 * s, 24.0 * s);
+        let height = if self.view_height == 0 { self.width * 7 / 5 } else { self.view_height } as f32;
+        let page = vertical::Page { top, len: (height - top - bottom).max(4.0 * self.engine.base()), width: self.width as f32 };
+        let key_of_page = (page.len.to_bits(), page.width.to_bits(), s.to_bits(), self.engine.vertical.map_or(0, |v| v.key()));
+        let mut fresh: HashMap<u64, Arc<Laid>> = HashMap::with_capacity(self.blocks.len());
+        let mut stats = Stats { blocks: self.blocks.len(), ..Stats::default() };
+        self.placed.clear();
+        self.marks.clear();
+        let mut u = side;
+        let mut after = 0.0f32;
+        let mut k = 0;
+        let mut first = true;
+        while k < self.blocks.len() {
+            // A table and the caption paragraph just before or after it.
+            let block = &self.blocks[k];
+            let is_table = |b: Option<&Block>| matches!(b.map(|b| &b.kind), Some(parse::BlockKind::Table { .. }));
+            let (main, caption, span) = match vertical::caption_of(block) {
+                Some(c) if is_table(self.blocks.get(k + 1)) => (k + 1, Some(c), (k, k + 1)),
+                _ if is_table(Some(block)) => match self.blocks.get(k + 1).and_then(vertical::caption_of) {
+                    Some(c) if !is_table(self.blocks.get(k + 2)) => (k, Some(c), (k, k + 1)),
+                    _ => (k, None, (k, k)),
+                },
+                _ => (k, None, (k, k)),
+            };
+            let block = &self.blocks[main];
+            let moved = rebased(block, block.lines.0);
+            // The caption is counted as the table's first line, so a table
+            // that only moved keeps its layout.
+            let caption: Option<Vec<parse::Inline>> = caption.map(|c| c.into_iter().map(|r| parse::Inline { line: 0, ..r }).collect());
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            moved.hash(&mut h);
+            caption.hash(&mut h);
+            key_of_page.hash(&mut h);
+            for src in parse::images(&moved) {
+                self.engine.image_stamp(src).hash(&mut h);
+            }
+            let key = h.finish();
+            let lines = (self.blocks[span.0].lines.0, self.blocks[span.1].lines.1);
+            let laid = match self.cache.get(&key).or_else(|| fresh.get(&key)) {
+                Some(l) => {
+                    stats.reused += 1;
+                    l.clone()
+                }
+                None => {
+                    stats.laid += 1;
+                    Arc::new(self.engine.vtop(&moved, caption.as_deref(), page))
+                }
+            };
+            if !first {
+                u += after.max(laid.top);
+            }
+            first = false;
+            let shift = block.lines.0;
+            for &(mu, line) in &laid.marks {
+                self.marks.push((u + mu, shift + line));
+            }
+            self.placed.push(Placed { y: u, lines, laid: laid.clone() });
+            u += laid.height;
+            after = laid.bottom;
+            fresh.insert(key, laid);
+            k = span.1 + 1;
+        }
+        self.marks.sort_by(|a, b| a.0.total_cmp(&b.0));
+        self.cache = fresh;
+        self.height = u + side;
+        stats.layout_ms = t.elapsed().as_secs_f64() * 1000.0;
+        stats
+    }
+
     /// **The height at which source line `line` is shown**: the top of the
-    /// visual line that holds it, or of the nearest line before it.
+    /// visual line that holds it, or of the nearest line before it. Down a
+    /// vertical page, how far from the page's right edge the column that
+    /// holds it begins.
     pub fn y_for_line(&self, line: usize) -> f32 {
         let mut best: Option<(usize, f32)> = None;
         for &(y, l) in &self.marks {
@@ -324,8 +446,21 @@ impl Preview {
 
     /// **The words drawn between `top` and `top + height`**, block by block:
     /// for a reader of the screen, a search in the preview, and the tests.
+    /// Down a vertical page, `top` and `height` are along the page, from
+    /// its right edge, and each column is a line.
     pub fn visible_text(&self, top: f32, height: f32) -> String {
         let mut out = String::new();
+        if self.vertical() {
+            for p in self.placed.iter().filter(|p| p.y + p.laid.height >= top && p.y <= top + height) {
+                for (at, words) in &p.laid.cols {
+                    if p.y + at >= top - 1.0 && p.y + at <= top + height {
+                        out.push_str(words);
+                        out.push('\n');
+                    }
+                }
+            }
+            return out;
+        }
         for p in self.placed.iter().filter(|p| p.y + p.laid.height >= top && p.y <= top + height) {
             for item in &p.laid.items {
                 if let layout::Item::Text { y, text, .. } = item {
@@ -347,15 +482,27 @@ impl Preview {
     }
 
     /// **Draw the viewport** from `top` down, `height` device pixels tall,
-    /// the page's width wide.
+    /// the page's width wide. Down a vertical page, `top` is how far left
+    /// of the page's right edge the window's right edge stands.
     pub fn render(&mut self, top: f32, height: u32) -> Picture {
         let h = height.clamp(1, u16::MAX as u32) as u16;
         let w = self.width.min(u16::MAX as u32) as u16;
+        let along = if self.vertical() { w as f32 } else { h as f32 };
         let first = self.placed.partition_point(|p| p.y + p.laid.height < top - 64.0);
-        let bottom = top + h as f32 + 64.0;
-        let shown: Vec<(f32, &Laid)> =
-            self.placed[first..].iter().take_while(|p| p.y <= bottom).map(|p| (p.y, p.laid.as_ref())).collect();
-        let rgba = self.painter.paint(&shown, self.engine.theme.background, top, w, h);
+        let end = top + along + 64.0;
+        let vertical = self.vertical();
+        let shown: Vec<(vello_cpu::kurbo::Vec2, &Laid)> = self.placed[first..]
+            .iter()
+            .take_while(|p| p.y <= end)
+            .map(|p| {
+                let off = match vertical {
+                    true => vello_cpu::kurbo::Vec2::new((w as f32 - p.y + top) as f64, 0.0),
+                    false => vello_cpu::kurbo::Vec2::new(0.0, (p.y - top) as f64),
+                };
+                (off, p.laid.as_ref())
+            })
+            .collect();
+        let rgba = self.painter.paint(&shown, self.engine.theme.background, w, h);
         Picture { width: w as u32, height: h as u32, rgba }
     }
 }

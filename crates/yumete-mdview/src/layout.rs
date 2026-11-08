@@ -65,6 +65,23 @@ pub(crate) enum Item {
     Pic { r: Rect, pix: Pix },
     /// A stroked polyline: a task's tick.
     Lines { points: Vec<(f32, f32)>, color: Rgba, width: f32 },
+    /// Glyphs placed by hand: a vertical page's characters.
+    Glyphs(Box<Run>),
+    /// A picture turned a quarter turn clockwise into `r`: a formula down a
+    /// vertical page.
+    Turned { r: Rect, pix: Pix },
+}
+
+/// **Glyphs of one face, size and colour**, drawn through `transform`.
+pub(crate) struct Run {
+    pub font: parley::FontData,
+    pub size: f32,
+    pub coords: Vec<i16>,
+    pub color: Rgba,
+    pub transform: vello_cpu::kurbo::Affine,
+    pub glyphs: Vec<vello_cpu::Glyph>,
+    /// Where they fall, in the block's coordinates.
+    pub bounds: Rect,
 }
 
 /// **A top-level block, laid out**: what it draws, how tall it is, the
@@ -78,6 +95,9 @@ pub(crate) struct Laid {
     pub marks: Vec<(f32, usize)>,
     /// The widest anything reaches, from the page's left.
     pub right: f32,
+    /// A vertical page's columns: how far from the block's right edge each
+    /// begins, and its words.
+    pub cols: Vec<(f32, String)>,
 }
 
 
@@ -96,15 +116,15 @@ pub(crate) struct Style {
 
 /// Where a block is being laid: inherited by what is inside it.
 #[derive(Clone, Copy)]
-struct Ctx {
+pub(crate) struct Ctx {
     /// The ink of plain text here.
-    color: Rgba,
+    pub color: Rgba,
     /// How deep in lists.
-    depth: u8,
+    pub depth: u8,
     /// In a tight list: paragraphs take no margin.
-    tight: bool,
+    pub tight: bool,
     /// The body type size, device pixels (smaller in the footnotes).
-    size: f32,
+    pub size: f32,
 }
 
 /// How many formulas are kept drawn.
@@ -150,6 +170,12 @@ pub(crate) struct Engine {
     /// pictures scaled to the column: each kept to a budget in bytes.
     images: Lru<String, (Stamp, Option<Arc<image::RgbaImage>>)>,
     scaled: Lru<(String, u32, Stamp), Pix>,
+    /// Set vertically, and how (`:view-preview-vertical`).
+    pub vertical: Option<crate::vertical::Vertical>,
+    /// Characters shaped down a column, by face: each one's glyph, advance
+    /// and offsets, in ems.
+    pub(crate) upright: std::collections::HashMap<(u64, u32, char), Option<crate::vertical::UpGlyph>>,
+    pub(crate) shapers: std::collections::HashMap<(u64, u32), harfrust::ShaperData>,
 }
 
 impl Engine {
@@ -168,6 +194,9 @@ impl Engine {
             formula_cache: Lru::new(FORMULAS_KEPT),
             images: Lru::new(IMAGE_BYTES_KEPT / 3 * 2),
             scaled: Lru::new(IMAGE_BYTES_KEPT / 3),
+            vertical: None,
+            upright: std::collections::HashMap::new(),
+            shapers: std::collections::HashMap::new(),
         }
     }
 
@@ -191,14 +220,14 @@ impl Engine {
         16.0 * self.scale
     }
 
-    fn body(&self, cx: &Ctx) -> Style {
+    pub(crate) fn body(&self, cx: &Ctx) -> Style {
         Style { size: cx.size, weight: 400.0, color: cx.color, mono: false, line_height: 1.6, italic: false, anywhere: false }
     }
 
     // ── Pictures ────────────────────────────────────────────────────────────
 
     /// The formula `tex`, drawn at `size` in `ink`.
-    fn formula(&mut self, tex: &str, display: bool, ink: Rgba, size: f32) -> Option<FormulaPic> {
+    pub(crate) fn formula(&mut self, tex: &str, display: bool, ink: Rgba, size: f32) -> Option<FormulaPic> {
         let key = (tex.to_string(), display, ink, (size * 10.0) as u32);
         if let Some(made) = self.formula_cache.get(&key) {
             return made;
@@ -214,7 +243,7 @@ impl Engine {
 
     /// The picture at `src`, at most `room` wide: drawn at its own size (a
     /// CSS pixel a pixel), smaller to fit.
-    fn image(&mut self, src: &str, room: f32) -> Option<Pix> {
+    pub(crate) fn image(&mut self, src: &str, room: f32) -> Option<Pix> {
         if src.contains("://") || src.is_empty() {
             return None;
         }
@@ -379,56 +408,12 @@ impl Engine {
             b.push_default(StyleProperty::OverflowWrap(parley::OverflowWrap::Anywhere));
         }
         b.push_default(StyleProperty::Brush(Ink { color: st.color, ..Ink::default() }));
-        let theme_ink = |marks: &Marks, color: Rgba| {
-            let mut ink = Ink { color, ..Ink::default() };
-            // Bold and italic take the theme's colours in the writing only:
-            // a heading or a quotation keeps its own.
-            if color == self.theme.text {
-                if let (true, Some(c)) = (marks.emph, self.theme.emphasis) {
-                    ink.color = c;
-                }
-                if let (true, Some(c)) = (marks.strong, self.theme.strong) {
-                    ink.color = c;
-                }
-            }
-            if marks.code || marks.kbd {
-                ink.ground = Some(self.theme.code_inline);
-                if color == self.theme.text {
-                    ink.color = self.theme.code_text;
-                }
-            }
-            if marks.link || marks.wiki {
-                ink.color = self.theme.link;
-            }
-            ink.frame = marks.kbd;
-            if marks.highlight {
-                ink.ground = Some(self.theme.highlight);
-            }
-            ink.underline = marks.underline || marks.wiki;
-            ink.strike = marks.strike;
-            ink.mono = (marks.code || marks.kbd) && !st.mono;
-            ink
-        };
         for (r, marks, color, sup) in &ranges {
-            let mut ink = theme_ink(marks, st.color);
+            let mut ink = ink_of(&self.theme, marks, st.color, st.mono);
             if let Some(c) = color {
                 ink.color = *c;
             }
-            if marks.strong {
-                b.push(StyleProperty::FontWeight(FontWeight::new(if st.weight >= 600.0 { 800.0 } else { 600.0 })), r.clone());
-            }
-            if marks.emph {
-                // Latin in italics; 漢字, which have none, in a 楷體.
-                b.push(StyleProperty::FontStyle(FontStyle::Italic), r.clone());
-                if !(marks.code || marks.kbd || st.mono) {
-                    b.push(StyleProperty::FontFamily(FontFamily::from(fam_of(marks.lang).emphasis.as_str())), r.clone());
-                }
-            }
-            if (marks.code || marks.kbd) && !st.mono {
-                b.push(StyleProperty::FontFamily(FontFamily::from(fam_of(marks.lang).mono.as_str())), r.clone());
-                b.push(StyleProperty::FontSize(st.size * 0.85), r.clone());
-                b.push(StyleProperty::WhiteSpaceCollapse(WhiteSpaceCollapse::Preserve), r.clone());
-            }
+            push_marks(&mut b, r.clone(), marks, st, fam_of(marks.lang));
             if *sup || marks.sup {
                 b.push(StyleProperty::VerticalAlign(VerticalAlign::SUPER), r.clone());
                 b.push(StyleProperty::FontSize(st.size * 0.75), r.clone());
@@ -492,6 +477,12 @@ impl Engine {
         Text { layout, attach, src, string: text }
     }
 
+    /// The faces of each writing system: the document's, and the three a
+    /// `<span lang>` may name.
+    pub(crate) fn faces(&self) -> (Arc<Families>, [Arc<Families>; 3]) {
+        (self.families[self.han.index()].clone(), self.families.clone())
+    }
+
     /// Plain words in a style.
     fn words(&mut self, words: &str, st: Style, width: Option<f32>, align: Alignment) -> Text {
         let run = [Inline { line: 0, kind: InlineKind::Text { text: words.to_string(), marks: Marks::default() } }];
@@ -503,12 +494,12 @@ impl Engine {
     /// **Lay a top-level block out** in a column `width` wide from `x`.
     pub(crate) fn top(&mut self, block: &Block, x: f32, width: f32) -> Laid {
         let cx = Ctx { color: self.theme.text, depth: 0, tight: false, size: self.base() };
-        let mut out = Out { items: Vec::new(), marks: Vec::new() };
+        let mut out = Out::default();
         let mut y = 0.0;
         self.block(block, x, width, &mut y, &mut out, cx);
         let (top, bottom) = self.margins(block, cx);
         let right = out.items.iter().map(item_right).fold(x + width, f32::max);
-        Laid { items: out.items, height: y, top, bottom, marks: out.marks, right }
+        Laid { items: out.items, height: y, top, bottom, marks: out.marks, right, cols: Vec::new() }
     }
 
     /// The margins a block asks for above and below it.
@@ -551,7 +542,7 @@ impl Engine {
         h
     }
 
-    fn block(&mut self, block: &Block, x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
+    pub(crate) fn block(&mut self, block: &Block, x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
         let px = self.px();
         let first = block.lines.0;
         match &block.kind {
@@ -720,7 +711,7 @@ impl Engine {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn code(&mut self, info: &str, lines: &[String], span: (usize, usize), x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
+    pub(crate) fn code(&mut self, info: &str, lines: &[String], span: (usize, usize), x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) {
         let px = self.px();
         let pad = 16.0 * px;
         let st = Style { size: cx.size * 0.85, weight: 400.0, color: self.theme.text, mono: true, line_height: 1.45, italic: false, anywhere: false };
@@ -1004,8 +995,61 @@ impl Engine {
     }
 }
 
+/// **The brush of a run with `marks`** over writing in `color`, in `theme`;
+/// `mono` when the whole text is set in the monospace face.
+pub(crate) fn ink_of(theme: &Theme, marks: &Marks, color: Rgba, mono: bool) -> Ink {
+    let mut ink = Ink { color, ..Ink::default() };
+    // Bold and italic take the theme's colours in the writing only: a
+    // heading or a quotation keeps its own.
+    if color == theme.text {
+        if let (true, Some(c)) = (marks.emph, theme.emphasis) {
+            ink.color = c;
+        }
+        if let (true, Some(c)) = (marks.strong, theme.strong) {
+            ink.color = c;
+        }
+    }
+    if marks.code || marks.kbd {
+        ink.ground = Some(theme.code_inline);
+        if color == theme.text {
+            ink.color = theme.code_text;
+        }
+    }
+    if marks.link || marks.wiki {
+        ink.color = theme.link;
+    }
+    ink.frame = marks.kbd;
+    if marks.highlight {
+        ink.ground = Some(theme.highlight);
+    }
+    ink.underline = marks.underline || marks.wiki;
+    ink.strike = marks.strike;
+    ink.mono = (marks.code || marks.kbd) && !mono;
+    ink
+}
+
+/// **The weight, face and size `marks` give a run** in style `st`: bold
+/// heavier, emphasis in italics (漢字 in a 楷體), code in the monospace face.
+pub(crate) fn push_marks(b: &mut parley::RangedBuilder<'_, Ink>, r: std::ops::Range<usize>, marks: &Marks, st: Style, faces: &Families) {
+    if marks.strong {
+        b.push(StyleProperty::FontWeight(FontWeight::new(if st.weight >= 600.0 { 800.0 } else { 600.0 })), r.clone());
+    }
+    if marks.emph {
+        // Latin in italics; 漢字, which have none, in a 楷體.
+        b.push(StyleProperty::FontStyle(FontStyle::Italic), r.clone());
+        if !(marks.code || marks.kbd || st.mono) {
+            b.push(StyleProperty::FontFamily(FontFamily::from(faces.emphasis.as_str())), r.clone());
+        }
+    }
+    if (marks.code || marks.kbd) && !st.mono {
+        b.push(StyleProperty::FontFamily(FontFamily::from(faces.mono.as_str())), r.clone());
+        b.push(StyleProperty::FontSize(st.size * 0.85), r.clone());
+        b.push(StyleProperty::WhiteSpaceCollapse(WhiteSpaceCollapse::Preserve), r);
+    }
+}
+
 /// A full-width closing mark whose right half is blank in `han`'s faces.
-fn closing_mark(c: char, han: Han) -> bool {
+pub(crate) fn closing_mark(c: char, han: Han) -> bool {
     match c {
         '」' | '』' | '）' | '》' | '〉' | '】' | '〕' | '〗' | '］' | '｝' | '\u{201D}' | '\u{2019}' => true,
         '，' | '。' | '、' => han != Han::Traditional,
@@ -1017,7 +1061,7 @@ fn closing_mark(c: char, han: Han) -> bool {
 }
 
 /// A full-width opening mark, whose left half is blank.
-fn opening_mark(c: char) -> bool {
+pub(crate) fn opening_mark(c: char) -> bool {
     matches!(c, '「' | '『' | '（' | '《' | '〈' | '【' | '〔' | '〖' | '［' | '｛' | '\u{201C}' | '\u{2018}')
 }
 
@@ -1027,9 +1071,12 @@ fn cjk_punctuation(c: char) -> bool {
 }
 
 /// What a block is laying into.
-struct Out {
-    items: Vec<Item>,
-    marks: Vec<(f32, usize)>,
+#[derive(Default)]
+pub(crate) struct Out {
+    pub items: Vec<Item>,
+    pub marks: Vec<(f32, usize)>,
+    /// A vertical page's columns: where each begins and its words.
+    pub cols: Vec<(f32, String)>,
 }
 
 /// The baseline of the first text in `items`, from the block's top.
@@ -1046,6 +1093,8 @@ fn item_right(item: &Item) -> f32 {
         Item::Text { x, text, .. } => x + text.layout.width(),
         Item::Rect { r, .. } | Item::Frame { r, .. } | Item::Pic { r, .. } => r.x1 as f32,
         Item::Lines { points, .. } => points.iter().map(|p| p.0).fold(0.0, f32::max),
+        Item::Turned { r, .. } => r.x1 as f32,
+        Item::Glyphs(run) => run.bounds.x1 as f32,
     }
 }
 

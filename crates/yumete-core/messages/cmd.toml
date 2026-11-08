@@ -2055,6 +2055,13 @@ en = "draw the preview's page in the theme's colours, the paper as the backgroun
 find = "預覽 预览 主題 主题 配色 顏色 颜色 深色 theme colour color dark"
 
 [[message]]
+# : 命令菜单里 view-preview-vertical 那一项的说明（草稿）
+key = "cmd.view.preview-vertical"
+zhs = "文字窗口竖排时，Markdown 预览也竖排：从右往左一列一列，像竖排导出那样"
+en = "set the Markdown preview vertically while the text window is vertical: columns from the right, as the vertical export sets them"
+find = "預覽 预览 豎排 竖排 縱 纵 直排 vertical tategaki"
+
+[[message]]
 # : 命令菜单里 view-preview-window 那一项的说明（草稿）
 key = "cmd.view.preview-window"
 zhs = "在旁边的窗口中显示排好的页面，跟随光标(需要 tinymist，以及 Ghostty 或 kitty)"

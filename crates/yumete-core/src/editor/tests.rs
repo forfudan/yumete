@@ -38634,6 +38634,27 @@ fn the_preview_theme_is_a_switch() {
     assert!(ed.execute(":view-preview-theme dark").is_err());
 }
 
+/// **`:view-preview-vertical` is a switch** (2026-11-08), on at first; the
+/// Markdown preview is vertical only while it is on and the page is.
+#[test]
+fn the_vertical_preview_is_a_switch_and_follows_the_page() {
+    let mut ed = Editor::new();
+    assert!(ed.preview_vertical(), "on at first");
+    assert!(!ed.markdown_preview_vertical(), "the page runs across");
+    ed.execute(":vertical").unwrap();
+    assert!(ed.markdown_preview_vertical(), "the page runs down, and so does the preview");
+    ed.execute(":view-preview-vertical").unwrap();
+    assert!(!ed.preview_vertical());
+    assert_eq!(ed.status(), say!("preview.vertical-off"));
+    assert!(!ed.markdown_preview_vertical(), "switched off, the preview runs across");
+    ed.execute(":view-preview-vertical on").unwrap();
+    assert_eq!(ed.status(), say!("preview.vertical-on"));
+    assert!(ed.markdown_preview_vertical());
+    ed.execute(":horizontal").unwrap();
+    assert!(!ed.markdown_preview_vertical());
+    assert!(ed.execute(":view-preview-vertical sideways").is_err());
+}
+
 /// **A session keeps the preview tabs** (2026-11-08), and which window
 /// showed one; the page is made again when it is shown.
 #[test]

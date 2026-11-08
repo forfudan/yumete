@@ -214,6 +214,60 @@ fn the_markdown_previews_leave_a_typst_one_alone() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **A vertical text, a vertical preview** (2026-11-08): while the page is
+/// vertical the preview is asked for in columns from the right, as the
+/// export's settings say; following the cursor goes left; `j` and `h` step
+/// a column on, to the left; switched off, it runs across again.
+#[test]
+fn a_vertical_text_has_a_vertical_preview() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("yumete-md-window-vertical-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let main = a_long_note(&dir);
+    let mut editor = Editor::new();
+    editor.open_file(&main).unwrap();
+    let config = Config::default();
+    let mut md = MdPreviews::default();
+    let page = editor.open_page_window_of(main.clone(), PreviewKind::Markdown).expect("room");
+    let preview = editor.preview_in(page).unwrap();
+    graphics::set_support(Support::Kitty);
+    until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some());
+    assert_eq!(md.sent(preview).and_then(|w| w.vertical), None, "across while the text is");
+
+    editor.execute(":vertical").unwrap();
+    until(&mut editor, &config, &mut md, |m| m.sent(preview).is_some_and(|w| w.vertical.is_some()));
+    let want = md.sent(preview).unwrap();
+    assert_eq!(want.vertical, Some(yumete_mdview::Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
+    until(&mut editor, &config, &mut md, |_| md_window::shot_of(preview).is_some_and(|s| s.page > 0.0 && s.top == 0.0));
+    editor.execute(":100").unwrap();
+    until(&mut editor, &config, &mut md, |_| top_of(preview).is_some_and(|t| t > 0.0));
+
+    // Its keys: a column on is about two cells to the left.
+    editor.on_key(yumete_core::input::Key::Ctrl('w'));
+    editor.on_key(yumete_core::input::Key::Char('w'));
+    assert!(editor.page_window_has_the_keys());
+    until(&mut editor, &config, &mut md, |m| m.sent(preview).is_some_and(|w| matches!(w.top, Top::Line(_))) && md_window::shot_of(preview).is_some());
+    let at = top_of(preview).unwrap();
+    let cell = graphics::cell_pixels();
+    editor.on_key(Key::Char('j'));
+    md.follow(&mut editor, &config);
+    assert_eq!(md.sent(preview).map(|w| w.top), Some(Top::At((at + 2.0 * cell.0 as f32) as i64)));
+    editor.on_key(Key::Char('h'));
+    md.follow(&mut editor, &config);
+    assert_eq!(md.sent(preview).map(|w| w.top), Some(Top::At((at + 4.0 * cell.0 as f32) as i64)), "`h` goes on to the left");
+    editor.on_key(Key::Char('l'));
+    md.follow(&mut editor, &config);
+    assert_eq!(md.sent(preview).map(|w| w.top), Some(Top::At((at + 2.0 * cell.0 as f32) as i64)), "`l` comes back");
+
+    editor.execute(":view-preview-vertical off").unwrap();
+    md.follow(&mut editor, &config);
+    assert_eq!(md.sent(preview).and_then(|w| w.vertical), None);
+    md_window::clear();
+    graphics::drop_pages();
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 fn png_size(png: &[u8]) -> (u32, u32) {
     let w = u32::from_be_bytes([png[16], png[17], png[18], png[19]]);
     let h = u32::from_be_bytes([png[20], png[21], png[22], png[23]]);

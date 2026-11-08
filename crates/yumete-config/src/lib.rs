@@ -143,6 +143,11 @@ pub struct EditorConfig {
     /// paper as the background, black as the text colour. Off: the page as
     /// printed. `:view-preview-theme` sets it for the session.
     pub preview_theme: bool,
+    /// **The Markdown preview set vertically when the text is** (2026-11-08):
+    /// while the text window's page is vertical (`:vertical`), the preview
+    /// runs in columns from the right as the vertical export does. On.
+    /// `:view-preview-vertical` sets it for the session.
+    pub preview_vertical: bool,
     /// **What a yank copied, lit for a moment** (2026-11-07): nvim's
     /// `vim.hl.on_yank`, 150 ms on the selection's ground. Off, as nvim has
     /// it; `--import lazyvim` turns it on, as LazyVim does. Under vim `yap`
@@ -505,6 +510,7 @@ impl Default for EditorConfig {
             maths_preview: true,
             preview_fit: "width".to_string(),
             preview_theme: false,
+            preview_vertical: true,
             yank_flash: false,
             indent_guides: false,
             indent_guides_character: "│".to_string(),
@@ -4723,6 +4729,7 @@ struct RawEditor {
     maths_preview: Option<bool>,
     preview_fit: Option<String>,
     preview_theme: Option<bool>,
+    preview_vertical: Option<bool>,
     yank_flash: Option<bool>,
     indent_guides: Option<bool>,
     indent_guides_character: Option<String>,
@@ -4951,6 +4958,9 @@ impl RawConfig {
         }
         if other.editor.preview_theme.is_some() {
             self.editor.preview_theme = other.editor.preview_theme;
+        }
+        if other.editor.preview_vertical.is_some() {
+            self.editor.preview_vertical = other.editor.preview_vertical;
         }
         if other.editor.screenshot.is_some() {
             self.editor.screenshot = other.editor.screenshot.clone();
@@ -5396,6 +5406,9 @@ impl RawConfig {
         }
         if let Some(on) = self.editor.preview_theme {
             config.editor.preview_theme = on;
+        }
+        if let Some(on) = self.editor.preview_vertical {
+            config.editor.preview_vertical = on;
         }
         if let Some(line) = self.editor.screenshot {
             config.editor.screenshot = line;

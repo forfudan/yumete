@@ -485,6 +485,18 @@ zhs = "预览页面的纸用背景色、黑字用文字色，深色主题下也�
 en = "the preview's paper in the background colour and its black in the text colour, in dark themes too; off, the page as printed"
 
 [[message]]
+# 设置面板：Markdown 预览跟着竖排（草稿）
+key = "settings.editor.preview-vertical"
+zhs = "预览跟着竖排"
+en = "vertical preview"
+
+[[message]]
+# 设置面板：Markdown 预览跟着竖排——一句话（草稿）
+key = "settings.editor.preview-vertical.hint"
+zhs = "文字窗口竖排时，Markdown 预览也从右往左竖排，拉丁字母和数字按导出的设置"
+en = "while the text window is vertical, the Markdown preview runs in columns from the right, its Latin letters and digits set as the export sets them"
+
+[[message]]
 # 設置面板：盤上那一份變了就讀回來
 key = "settings.editor.reload-auto"
 zhs = "自动重载"

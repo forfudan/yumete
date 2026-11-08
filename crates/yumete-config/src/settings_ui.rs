@@ -634,6 +634,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "preview_vertical",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.preview-vertical",
+        hint: "settings.editor.preview-vertical.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "editor",
         key: "yank_flash",
         group: Group::Marks,
         kind: Kind::Tick,

@@ -7,8 +7,14 @@
 //! ye --md-render <file.md> [--width 1000] [--scale 2] [--height 1400]
 //!                [--theme light|dark] [--palette ink|github|<theme>]
 //!                [--han sc|tc|ja] [--no-squeeze] [--screens 3 | --all] [--at-line N]
+//!                [--vertical [--latin turn|jlreq] [--hanging]]
 //!                [--out DIR] [--bench]
 //! ```
+//!
+//! `--vertical` sets the page as the preview of a vertical text window does
+//! (`:view-preview-vertical`): columns from the right, a screen the window's
+//! width further left each time; `--latin` and `--hanging` are `[export]
+//! vertical_latin` and `[export] hanging`.
 //!
 //! `--palette` names an editor theme (`ink`, 墨香, the default, or any name
 //! `[theme] name` takes) whose colours the page is drawn in, in the mood
@@ -38,6 +44,9 @@ pub fn run(args: &[String]) -> ExitCode {
     let mut palette = String::from("ink");
     let mut han: Option<yumete_mdview::fonts::Han> = None;
     let mut squeeze = true;
+    let mut vertical = false;
+    let mut latin = yumete_core::export::Latin::Turn;
+    let mut hanging = false;
     let mut out = PathBuf::from(".");
     let mut it = args.iter();
     while let Some(arg) = it.next() {
@@ -66,6 +75,14 @@ pub fn run(args: &[String]) -> ExitCode {
                 })
             }
             "--all" => all = true,
+            "--vertical" => vertical = true,
+            "--hanging" => hanging = true,
+            "--latin" => {
+                latin = match value("--latin").as_deref() {
+                    Some("jlreq") => yumete_core::export::Latin::Jlreq,
+                    _ => yumete_core::export::Latin::Turn,
+                }
+            }
             "--no-squeeze" => squeeze = false,
             "--bench" => bench = true,
             other if !other.starts_with("--") && file.is_none() => file = Some(PathBuf::from(other)),
@@ -76,7 +93,7 @@ pub fn run(args: &[String]) -> ExitCode {
         }
     }
     let Some(file) = file else {
-        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--han sc|tc|ja] [--screens N | --all] [--at-line N] [--out DIR] [--bench]");
+        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--han sc|tc|ja] [--screens N | --all] [--at-line N] [--vertical [--latin turn|jlreq] [--hanging]] [--out DIR] [--bench]");
         return ExitCode::from(2);
     };
     let text = match std::fs::read_to_string(&file) {
@@ -111,6 +128,12 @@ pub fn run(args: &[String]) -> ExitCode {
     if !squeeze {
         preview.set_squeeze(false);
     }
+    let shape = yumete_mdview::Vertical { latin, hanging };
+    if vertical {
+        preview.set_height(height);
+        preview.set_vertical(Some(shape));
+    }
+    let along = if vertical { width } else { height };
     let t_new = ms(t);
     let t = Instant::now();
     let stats = preview.set_text(&text);
@@ -142,19 +165,23 @@ pub fn run(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
         println!("{} (from y {:.0}, line {}): {:.1} ms", path.display(), y, preview.line_for_y(y), t_paint);
-        y += height as f32;
+        y += along as f32;
         n += 1;
     }
 
     if bench {
         // A full layout with the fonts warm but nothing kept.
         let mut fresh = Preview::new(options.clone(), Box::new(Tex));
+        if vertical {
+            fresh.set_height(height);
+            fresh.set_vertical(Some(shape));
+        }
         let _ = fresh.set_text("warm the fonts: 漢字 English `code` **bold**");
         let t = Instant::now();
         let s = fresh.set_text(&text);
         println!("full layout, fonts warm, nothing kept: {:.1} ms (parse {:.1} ms)", ms(t), s.parse_ms);
         // Screens: at the top, in the middle, at the end.
-        for (name, at) in [("top", 0.0), ("middle", total / 2.0), ("end", (total - height as f32).max(0.0))] {
+        for (name, at) in [("top", 0.0), ("middle", total / 2.0), ("end", (total - along as f32).max(0.0))] {
             let mut best = f64::MAX;
             for _ in 0..5 {
                 let t = Instant::now();

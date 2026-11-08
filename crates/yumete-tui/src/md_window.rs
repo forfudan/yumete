@@ -65,12 +65,23 @@ pub struct Want {
     pub fonts: String,
     /// `[export] ruby_*`: the ruby spellings the export reads.
     pub ruby: yumete_core::ruby::Dialects,
+    /// **Set vertically** (2026-11-08) while the text window is and
+    /// `:view-preview-vertical` is on, as `[export] vertical_latin` and
+    /// `[export] hanging` say.
+    pub vertical: Option<yumete_mdview::Vertical>,
 }
 
 impl Want {
     /// The picture's size in pixels.
     pub fn pixels(&self) -> (u32, u32) {
         (self.columns as u32 * self.cell.0.max(1) as u32, self.rows as u32 * self.cell.1.max(1) as u32)
+    }
+
+    /// How far the picture reaches along the page: its height, or its width
+    /// down a vertical page, which goes on to the left.
+    pub fn along(&self) -> f32 {
+        let (w, h) = self.pixels();
+        if self.vertical.is_some() { w as f32 } else { h as f32 }
     }
 
     /// Device pixels to a CSS pixel: a cell 20 pixels tall sets the body at
@@ -184,6 +195,7 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
     let mut theme: Option<Theme> = None;
     let mut fonts: Option<String> = None;
     let mut ruby: Option<yumete_core::ruby::Dialects> = None;
+    let mut vertical: Option<Option<yumete_mdview::Vertical>> = None;
     let mut width = 0u32;
     let mut text: Arc<String> = Arc::new(String::new());
     let mut base_dir = PathBuf::new();
@@ -210,6 +222,7 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
             theme = Some(want.theme.clone());
             fonts = None;
             ruby = None;
+            vertical = None;
             width = w;
             relay = true;
         }
@@ -231,15 +244,22 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
             width = w;
             p.set_width(w);
         }
+        // A vertical page's columns are as long as the window is tall.
+        p.set_height(h);
+        if vertical != Some(want.vertical) {
+            vertical = Some(want.vertical);
+            p.set_vertical(want.vertical);
+        }
         if relay {
             p.set_text(&text);
         }
         let page = p.size().1;
+        let along = want.along();
         let top = match want.top {
-            Top::Line(line) => p.y_for_line(line) - h as f32 / 3.0,
+            Top::Line(line) => p.y_for_line(line) - along / 3.0,
             Top::At(y) => y as f32,
         };
-        let top = top.clamp(0.0, (page - h as f32).max(0.0)).round();
+        let top = top.clamp(0.0, (page - along).max(0.0)).round();
         let picture = p.render(top, h);
         let png = picture.png();
         let hash = {
@@ -341,13 +361,23 @@ impl MdPreviews {
                 (None, Some(line @ Top::Line(_))) => line,
                 (None, _) => Top::At(tab.top as i64),
             };
+            let vertical = match editor.markdown_preview_vertical() {
+                true => Some(yumete_mdview::Vertical { latin: editor.export_settings().latin, hanging: editor.export_settings().hanging }),
+                false => None,
+            };
             if keys == Some(id) && !steps.is_empty() {
-                let row = cell.1.max(1) as f32;
-                let screen = rows as f32 * row;
+                // Down a vertical page a step is a column, about two cells
+                // wide, and a screen the window's width, leftwards.
+                let (row, screen) = match vertical {
+                    Some(_) => (2.0 * cell.0.max(1) as f32, columns as f32 * cell.0.max(1) as f32),
+                    None => (cell.1.max(1) as f32, rows as f32 * cell.1.max(1) as f32),
+                };
                 let mut y = tab.top;
                 for step in &steps {
                     y = match *step {
                         PageStep::Rows(n) => y + n as f32 * row,
+                        PageStep::Across(n) if vertical.is_some() => y + n as f32 * row,
+                        PageStep::Across(_) => y,
                         PageStep::Halves(n) => y + n as f32 * (screen / 2.0).max(row),
                         PageStep::Screens(n) => y + n as f32 * screen,
                         PageStep::Top => 0.0,
@@ -360,7 +390,16 @@ impl MdPreviews {
                 tab.top = y.clamp(0.0, (tab.page - screen).max(0.0)).round();
                 top = Top::At(tab.top as i64);
             }
-            let want = Want { columns, rows, cell, theme: theme.clone(), top, fonts: config.export.font_family.clone(), ruby: editor.export_settings().dialects() };
+            let want = Want {
+                columns,
+                rows,
+                cell,
+                theme: theme.clone(),
+                top,
+                fonts: config.export.font_family.clone(),
+                ruby: editor.export_settings().dialects(),
+                vertical,
+            };
             if text.is_some() || tab.sent.as_ref() != Some(&want) {
                 let base_dir = tab.main.parent().map(PathBuf::from).unwrap_or_default();
                 if tab.jobs.send(Job { text, base_dir, want: want.clone() }).is_ok() {

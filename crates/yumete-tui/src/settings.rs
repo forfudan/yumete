@@ -320,6 +320,7 @@ fn view_lines(editor: &Editor) -> Vec<String> {
         },
         format!("view-preview-fit {}", editor.preview_fit().name()),
         format!("view-preview-theme {}", on(editor.preview_theme())),
+        format!("view-preview-vertical {}", on(editor.preview_vertical())),
     ]
 }
 
@@ -588,6 +589,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         editor.set_preview_fit(fit);
     }
     editor.set_preview_theme(config.editor.preview_theme);
+    editor.set_preview_vertical(config.editor.preview_vertical);
     editor.set_usage_groups(config.editor.usage_groups.clone());
 }
 

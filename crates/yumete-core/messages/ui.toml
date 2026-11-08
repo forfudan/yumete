@@ -624,6 +624,18 @@ en = "preview: tinymist starting…"
 # ── problem ──────────────────────────────────────────
 
 [[message]]
+# :view-preview-vertical 关闭之后：Markdown 预览总是横排（草稿）
+key = "preview.vertical-off"
+zhs = "Markdown 预览：总是横排"
+en = "Markdown preview: always across"
+
+[[message]]
+# :view-preview-vertical 打开之后：文字窗口竖排时 Markdown 预览也竖排（草稿）
+key = "preview.vertical-on"
+zhs = "Markdown 预览：文字竖排时也竖排"
+en = "Markdown preview: vertical while the text is"
+
+[[message]]
 # :view-preview off、:view-preview-window off，或在预览标签上 :bc，关掉了这份文件的预览标签（草稿）
 key = "preview.window-closed"
 zhs = "已关闭预览"
