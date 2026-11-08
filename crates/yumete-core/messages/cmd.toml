@@ -1945,6 +1945,13 @@ en = "how big the page window draws the page: as wide as the window, or whole"
 find = "預覽 预览 頁寬 页宽 整頁 整页 fit width page"
 
 [[message]]
+# : 命令菜单里 view-preview-theme 那一项的说明（草稿）
+key = "cmd.view.preview-theme"
+zhs = "用主题配色显示预览页面：纸为背景色，黑字为文字色；关闭则按印刷原样"
+en = "draw the preview's page in the theme's colours, the paper as the background and black as the text colour, or as printed"
+find = "預覽 预览 主題 主题 配色 顏色 颜色 深色 theme colour color dark"
+
+[[message]]
 # : 命令菜单里 view-preview-window 那一项的说明（草稿）
 key = "cmd.view.preview-window"
 zhs = "在旁边的窗口中显示排好的页面，跟随光标(需要 tinymist，以及 Ghostty 或 kitty)"

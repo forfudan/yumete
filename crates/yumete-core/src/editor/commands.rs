@@ -1267,6 +1267,14 @@ impl Editor {
                 }
                 Ok(CommandOutcome::Continue)
             }
+            Command::PreviewTheme(how) => {
+                self.preview_theme = how.over(self.preview_theme);
+                self.status = match self.preview_theme {
+                    true => say!("preview.theme-on"),
+                    false => say!("preview.theme-off"),
+                };
+                Ok(CommandOutcome::Continue)
+            }
             Command::PreviewFit(fit) => {
                 if let Some(fit) = fit {
                     self.preview_fit = fit;

@@ -404,6 +404,16 @@ impl Editor {
         self.preview_fit = fit;
     }
 
+    /// Whether the page is drawn in the theme's colours rather than as
+    /// printed (`:view-preview-theme`).
+    pub fn preview_theme(&self) -> bool {
+        self.preview_theme
+    }
+
+    pub fn set_preview_theme(&mut self, on: bool) {
+        self.preview_theme = on;
+    }
+
     /// **A key in a preview**: the scroll keys move the page, `:`, `C-w`,
     /// `Space`, `C-o` and `C-i` go on to the command line, the key groups
     /// and the jump list, and nothing else does anything — there is no text

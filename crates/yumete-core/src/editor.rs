@@ -3388,6 +3388,9 @@ pub struct Editor {
     preview_at: Option<String>,
     /// How big a page window draws the page (`:view-preview-fit`).
     preview_fit: PreviewFit,
+    /// Whether the page is drawn in the theme's colours rather than as
+    /// printed (`:view-preview-theme`, `[editor] preview_theme`).
+    preview_theme: bool,
     /// The scroll keys pressed in a page window, for the front end.
     page_steps: Vec<PageStep>,
     /// A count typed in a page window, for `G` and `gg` (`5G`).
@@ -4627,6 +4630,7 @@ impl Editor {
             open_request: None,
             preview_at: None,
             preview_fit: PreviewFit::default(),
+            preview_theme: false,
             page_steps: Vec::new(),
             page_count: None,
             page_g: false,

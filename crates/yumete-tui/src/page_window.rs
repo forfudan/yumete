@@ -75,6 +75,72 @@ impl Page {
     }
 }
 
+/// **One pixel of the page in the theme's colours** (2026-11-08,
+/// `:view-preview-theme`): its lightness, from black ink to white paper,
+/// taken from the theme's text colour to its background, and whatever
+/// colour it had over its grey carried across, so a red heading stays red
+/// and a blue link blue in light themes and dark alike.
+pub fn recolour(pixel: [u8; 3], paper: [u8; 3], ink: [u8; 3]) -> [u8; 3] {
+    let [r, g, b] = pixel.map(f32::from);
+    let grey = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    let light = grey / 255.0;
+    let mut out = [0u8; 3];
+    for (i, channel) in out.iter_mut().enumerate() {
+        let mapped = f32::from(ink[i]) + light * (f32::from(paper[i]) - f32::from(ink[i]));
+        *channel = (mapped + f32::from(pixel[i]) - grey).round().clamp(0.0, 255.0) as u8;
+    }
+    out
+}
+
+/// **A page's PNG in the theme's colours** ([`recolour`], each pixel), an
+/// opaque RGB PNG; what was transparent is paper. `None` for bytes that are
+/// not a PNG.
+pub fn recolour_png(png: &[u8], paper: [u8; 3], ink: [u8; 3]) -> Option<Vec<u8>> {
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(png));
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = decoder.read_info().ok()?;
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut buf).ok()?;
+    let (colour, _) = reader.output_color_type();
+    let channels = match colour {
+        png::ColorType::Grayscale => 1,
+        png::ColorType::GrayscaleAlpha => 2,
+        png::ColorType::Rgb => 3,
+        png::ColorType::Rgba => 4,
+        png::ColorType::Indexed => return None,
+    };
+    let pixels = &buf[..frame.buffer_size()];
+    let mut rgb = Vec::with_capacity(pixels.len() / channels * 3);
+    // Pages are mostly paper and a few inks: each colour worked out once.
+    let mut seen: HashMap<[u8; 3], [u8; 3]> = HashMap::new();
+    for pixel in pixels.chunks_exact(channels) {
+        let (colour, alpha) = match channels {
+            1 => ([pixel[0]; 3], 255),
+            2 => ([pixel[0]; 3], pixel[1]),
+            3 => ([pixel[0], pixel[1], pixel[2]], 255),
+            _ => ([pixel[0], pixel[1], pixel[2]], pixel[3]),
+        };
+        // Over white, as the page would print.
+        let over = colour.map(|c| ((u32::from(c) * u32::from(alpha) + 255 * (255 - u32::from(alpha))) / 255) as u8);
+        let made = *seen.entry(over).or_insert_with(|| recolour(over, paper, ink));
+        rgb.extend_from_slice(&made);
+    }
+    let mut out = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut out, frame.width, frame.height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.set_compression(png::Compression::Fast);
+        let mut writer = encoder.write_header().ok()?;
+        writer.write_image_data(&rgb).ok()?;
+    }
+    Some(out)
+}
+
+/// What a page in the theme's colours was made from: the page's hash, the
+/// paper and the ink.
+type Tint = (u64, [u8; 3], [u8; 3]);
+
 /// **What a preview's window draws**, shared by the loop that fetches it
 /// and the frame that draws it — the frame is drawn from places that know
 /// nothing of the loop (`--shot`, the tests), as the formula float's is.
@@ -97,6 +163,29 @@ struct Board {
     base: i32,
     /// The window's picture area in cells, when last drawn.
     cells: Option<(u16, u16)>,
+    /// The page in the theme's colours, made once from the page whose hash
+    /// it names, in the paper and ink it names (`:view-preview-theme`).
+    tinted: Option<(Tint, Arc<Page>)>,
+}
+
+impl Board {
+    /// **The page in the theme's `paper` and `ink`**, made the first time it
+    /// is asked for and kept until the page or the colours change; the page
+    /// as it is when it cannot be read.
+    fn tinted(&mut self, page: &Arc<Page>, paper: [u8; 3], ink: [u8; 3]) -> Arc<Page> {
+        let key = (page.hash, paper, ink);
+        if let Some((made_for, made)) = &self.tinted {
+            if *made_for == key {
+                return made.clone();
+            }
+        }
+        let made = recolour_png(&page.png, paper, ink)
+            .and_then(|png| Page::from_png(png, page.ppi, page.number, page.total))
+            .map(Arc::new)
+            .unwrap_or_else(|| page.clone());
+        self.tinted = Some((key, made.clone()));
+        made
+    }
 }
 
 /// **Every preview's board**, by its tab's id (2026-11-08: one a preview,
@@ -673,6 +762,15 @@ pub fn draw(frame: &mut ratatui::Frame, editor: &Editor, config: &yumete_config:
     board.cells = Some((room.width, room.height));
     let can = crate::graphics::support() != crate::graphics::Support::None;
     let page = board.page.clone().filter(|_| can);
+    // **In the theme's colours** (2026-11-08): the paper the page's ground
+    // and the ink its writing, made once a page.
+    let page = match page {
+        Some(page) if editor.preview_theme() => {
+            let (paper, text) = (ink.paper_bytes(), ink.caret());
+            Some(board.tinted(&page, [paper.0, paper.1, paper.2], [text.0, text.1, text.2]))
+        }
+        page => page,
+    };
     let quiet = ink.page().fg(ink.quiet());
     let Some(page) = page else {
         let said = match can {
@@ -953,6 +1051,81 @@ mod tests {
         servers.stop();
         std::fs::remove_dir_all(&dir).ok();
         std::fs::remove_dir_all(&elsewhere).ok();
+    }
+
+    /// **The page in the theme's colours** (2026-11-08): white paper becomes
+    /// the background and black ink the text colour, a grey falls between,
+    /// and a colour keeps its hue — in a light theme and a dark one.
+    #[test]
+    fn the_page_takes_the_theme_s_paper_and_ink() {
+        let light = ([0xF7, 0xF5, 0xEE], [0x26, 0x2A, 0x27]);
+        let dark = ([0x1C, 0x1E, 0x1D], [0xE0, 0xDE, 0xD6]);
+        for (paper, ink) in [light, dark] {
+            assert_eq!(recolour([255, 255, 255], paper, ink), paper, "paper");
+            assert_eq!(recolour([0, 0, 0], paper, ink), ink, "ink");
+            let mid = recolour([128, 128, 128], paper, ink);
+            for i in 0..3 {
+                let (lo, hi) = (paper[i].min(ink[i]), paper[i].max(ink[i]));
+                assert!((lo..=hi).contains(&mid[i]), "a grey falls between: {mid:?}");
+            }
+            let red = recolour([200, 30, 30], paper, ink);
+            assert!(red[0] > red[1] + 60 && red[0] > red[2] + 60, "red stays red: {red:?}");
+            let blue = recolour([20, 60, 200], paper, ink);
+            assert!(blue[2] > blue[0] + 60, "blue stays blue: {blue:?}");
+        }
+        // Dark: the paper is dark and the ink light.
+        let (paper, ink) = dark;
+        assert!(recolour([250, 250, 250], paper, ink)[0] < 60);
+        assert!(recolour([10, 10, 10], paper, ink)[0] > 200);
+    }
+
+    /// **A whole PNG**, decoded, mapped and written again: its size kept,
+    /// transparent as paper.
+    #[test]
+    fn a_png_comes_back_in_the_theme_s_colours() {
+        let (paper, ink) = ([0x1C, 0x1E, 0x1D], [0xE0, 0xDE, 0xD6]);
+        // 2 × 2 RGBA: white, black, transparent, half-transparent black.
+        let pixels = [255, 255, 255, 255, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 128];
+        let mut made = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut made, 2, 2);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.write_header().unwrap().write_image_data(&pixels).unwrap();
+        }
+        let out = recolour_png(&made, paper, ink).expect("a PNG");
+        assert_eq!(crate::graphics::png_size(&out), Some((2, 2)));
+        let mut reader = png::Decoder::new(std::io::Cursor::new(&out)).read_info().unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let frame = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(frame.color_type, png::ColorType::Rgb);
+        let px: Vec<[u8; 3]> = buf[..frame.buffer_size()].chunks(3).map(|c| [c[0], c[1], c[2]]).collect();
+        assert_eq!(px[0], paper);
+        assert_eq!(px[1], ink);
+        assert_eq!(px[2], paper, "transparent is paper");
+        assert!(px[3][0] > paper[0] && px[3][0] < ink[0], "half ink is between: {:?}", px[3]);
+        assert!(recolour_png(b"not a png", paper, ink).is_none());
+    }
+
+    /// **Made once a page**: the same page and colours give the same
+    /// picture back without making it again; another colour makes another.
+    #[test]
+    fn the_tinted_page_is_made_once() {
+        let mut made = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut made, 1, 1);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.write_header().unwrap().write_image_data(&[255, 255, 255]).unwrap();
+        }
+        let page = Arc::new(Page::from_png(made, 72, 1, Some(1)).unwrap());
+        let mut board = Board::default();
+        let one = board.tinted(&page, [0, 0, 0], [255, 255, 255]);
+        let again = board.tinted(&page, [0, 0, 0], [255, 255, 255]);
+        assert!(Arc::ptr_eq(&one, &again), "kept");
+        assert_ne!(one.hash, page.hash);
+        let other = board.tinted(&page, [10, 10, 10], [255, 255, 255]);
+        assert!(!Arc::ptr_eq(&one, &other));
     }
 
     /// **`J`, `K` and `5G` turn pages** (2026-11-07): never before the first,

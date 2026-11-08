@@ -561,6 +561,18 @@ zhs = "预览 {0}"
 en = "Preview {0}"
 
 [[message]]
+# :view-preview-theme 关闭之后：预览页面按印刷原样（草稿）
+key = "preview.theme-off"
+zhs = "页面窗口：按印刷原样"
+en = "page window: as printed"
+
+[[message]]
+# :view-preview-theme 打开之后：预览页面用主题配色（草稿）
+key = "preview.theme-on"
+zhs = "页面窗口：使用主题配色"
+en = "page window: in the theme's colours"
+
+[[message]]
 # 打不开页面窗口的原因之一：tinymist 版本太旧(低于 0.13.30 或不报版本)。{0} 是 tinymist 及其版本号（草稿）
 key = "preview.tinymist-too-old"
 zhs = "{0} 太旧，无法显示页面窗口；把 tinymist 升级到 0.13.30 或更新即可"

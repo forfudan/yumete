@@ -620,6 +620,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "editor",
+        key: "preview_theme",
+        group: Group::Marks,
+        kind: Kind::Tick,
+        label: "settings.editor.preview-theme",
+        hint: "settings.editor.preview-theme.hint",
+        factory: "false",
+    },
+    Setting {
+        table: "editor",
         key: "yank_flash",
         group: Group::Marks,
         kind: Kind::Tick,

@@ -552,6 +552,9 @@ pub enum Command {
     /// `:view-preview-fit width|page` — how big the page window draws the
     /// page; bare, which it is.
     PreviewFit(Option<crate::editor::PreviewFit>),
+    /// `:view-preview-theme [on|off]` — the page in the theme's colours, or
+    /// as printed (2026-11-08).
+    PreviewTheme(Switch),
     /// `:w!` — write over a file that changed on disk since it was read.
     WriteForce(Option<String>),
     /// `:reload` / `:reload!` — read the file again. The `!` throws away
@@ -4563,6 +4566,14 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::PreviewFit(p.arg(0).and_then(crate::editor::PreviewFit::parse)))),
     },
     Entry {
+        name: "view-preview-theme",
+        aliases: &[],
+        help: "cmd.view.preview-theme",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::PreviewTheme(switched(p)))),
+    },
+    Entry {
         name: "render",
         aliases: &[],
         help: "cmd.commands.render",
@@ -7751,7 +7762,7 @@ mod tests {
         // A family with no head of its own keeps the hyphen, which is what
         // says it is a family and not a command, and nothing else: `view-w` is
         // `view-wrap`'s spelling, not the thirteen's.
-        assert_eq!(row("", "view-"), ":view- +23");
+        assert_eq!(row("", "view-"), ":view- +24");
         assert_eq!(row("", "check-"), ":check- +6");
         // …and a stem is a stem however many are under it.
         assert_eq!(row("", "markdown-"), ":markdown- +2");

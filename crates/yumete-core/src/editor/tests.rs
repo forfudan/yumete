@@ -38512,6 +38512,26 @@ fn two_documents_have_two_previews() {
     std::fs::remove_dir_all(&dir_b).ok();
 }
 
+/// **`:view-preview-theme` is a switch** (2026-11-08): the page in the
+/// theme's colours or as printed; bare flips it, and each says which.
+#[test]
+fn the_preview_theme_is_a_switch() {
+    let mut ed = Editor::new();
+    assert!(!ed.preview_theme(), "as printed at first");
+    ed.execute(":view-preview-theme").unwrap();
+    assert!(ed.preview_theme());
+    assert_eq!(ed.status(), say!("preview.theme-on"));
+    ed.execute(":view-preview-theme").unwrap();
+    assert!(!ed.preview_theme());
+    assert_eq!(ed.status(), say!("preview.theme-off"));
+    ed.execute(":view-preview-theme on").unwrap();
+    ed.execute(":view-preview-theme on").unwrap();
+    assert!(ed.preview_theme(), "`on` stays on");
+    ed.execute(":view-preview-theme off").unwrap();
+    assert!(!ed.preview_theme());
+    assert!(ed.execute(":view-preview-theme dark").is_err());
+}
+
 /// **A session keeps the preview tabs** (2026-11-08), and which window
 /// showed one; the page is made again when it is shown.
 #[test]

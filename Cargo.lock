@@ -2525,6 +2525,7 @@ name = "yumete-tui"
 version = "0.20.0"
 dependencies = [
  "libc",
+ "png",
  "ratatui",
  "ratex-layout",
  "ratex-parser",
