@@ -2126,6 +2126,256 @@ pub mod typst {
         })
     }
 
+    /// What a line of Typst is inside when it begins: one entry per bracket
+    /// still open above it, innermost last, and the `#` that opened them.
+    ///
+    /// **Typst's modes, switched where Typst switches them** (2026-11-08). In
+    /// a `{` or a `(` every line is code until it closes, blank lines and all;
+    /// a `[` inside code is writing again; a `#` inside writing is code again.
+    /// The scanner used to count brackets in any order, strings and comments
+    /// included, and gave up at the first blank line — so the body of
+    /// `#let style(body) = { … }` came out as one flat purple down to its
+    /// first blank line and as plain writing after it, and only the
+    /// `[#box(…)]` inside it, which the line scan sees for itself, was drawn
+    /// as code.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Frame {
+        /// `{`: a code block.
+        Brace,
+        /// `(`: arguments, a group, an array or a dictionary — code.
+        Paren,
+        /// `[` opened in code: content, which is writing.
+        Bracket,
+        /// A `[` written in writing, which Typst keeps in step with the `]`s
+        /// so that only an unmatched one closes the content around it.
+        Text,
+        /// A `/*` that code leaves open. One left open in writing is carried
+        /// by the editor's note scan instead ([`comment_left_open`]), which
+        /// is never shown the lines of a code body.
+        Note,
+        /// `#let`, `#set`, `#show`, `#import`, `#include` or `#context` in
+        /// writing: code to the end of its line, or to a `;`.
+        Statement,
+        /// `#name` in writing: code for as long as a bracket or a `.field`
+        /// follows it.
+        Call,
+        /// `#if`, `#for` or `#while` in writing: code up to its block, and on
+        /// past an `else`; `true` once a block has opened.
+        Head(bool),
+    }
+
+    /// Whether the scan is in writing when `frames` are open.
+    fn writing(frames: &[Frame]) -> bool {
+        matches!(frames.last(), None | Some(Frame::Bracket | Frame::Text))
+    }
+
+    /// What one character of a line is, as [`walk`] reads it.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum Piece {
+        Code,
+        Comment,
+        Writing,
+    }
+
+    /// Read one line from inside `frames`, and leave them as the line leaves
+    /// them: what each character is.
+    ///
+    /// Writing is only walked through here — its runs are [`scan`]'s — but
+    /// the things in it that hide a `#` or a `]` are stepped over whole, the
+    /// way `scan` reads them: an escape, a link, a comment, a raw span, maths.
+    /// Code skips its strings and comments, so the `(` in `"(甲)"` or in
+    /// `// (說明` opens nothing.
+    fn walk(chars: &[char], frames: &mut Vec<Frame>) -> Vec<Piece> {
+        let n = chars.len();
+        let mut out = vec![Piece::Writing; n];
+        let word_end = |from: usize| {
+            (from..n).find(|&i| !(chars[i].is_alphanumeric() || chars[i] == '_')).unwrap_or(n)
+        };
+        let mut at = 0usize;
+        while at < n {
+            let c = chars[at];
+            let next = chars.get(at + 1).copied();
+            let top = frames.last().copied();
+            let mut piece = Piece::Code;
+            let mut end = at + 1;
+            match top {
+                // Inside a `/*`: to its `*/`. Typst's comments nest.
+                Some(Frame::Note) => {
+                    piece = Piece::Comment;
+                    if c == '*' && next == Some('/') {
+                        frames.pop();
+                        end = at + 2;
+                    } else if c == '/' && next == Some('*') {
+                        frames.push(Frame::Note);
+                        end = at + 2;
+                    }
+                }
+                // After `#name`, `#name(…)` or `#name[…]`: another bracket or
+                // a `.field` goes on with it, and anything else ends it.
+                Some(Frame::Call) => match c {
+                    '(' => frames.push(Frame::Paren),
+                    '[' => frames.push(Frame::Bracket),
+                    '{' => frames.push(Frame::Brace),
+                    '.' if next.is_some_and(|d| d.is_alphabetic() || d == '_') => end = word_end(at + 1),
+                    _ => {
+                        frames.pop();
+                        continue;
+                    }
+                },
+                // After `#if x [甲]`: an `else` goes on with it.
+                Some(Frame::Head(true)) => {
+                    let word = (at..n).find(|&i| chars[i] != ' ').unwrap_or(n);
+                    let word_ends = word_end(word);
+                    if chars[word..word_ends].iter().copied().eq("else".chars()) {
+                        if let Some(head) = frames.last_mut() {
+                            *head = Frame::Head(false);
+                        }
+                        end = word_ends;
+                    } else {
+                        frames.pop();
+                        continue;
+                    }
+                }
+                None | Some(Frame::Bracket | Frame::Text) => {
+                    piece = Piece::Writing;
+                    if c == '\\' && next.is_some_and(super::escapable) {
+                        end = at + 2;
+                    } else if (at == 0 || !chars[at - 1].is_alphanumeric())
+                        && ["https://", "http://"].iter().any(|p| chars[at..].starts_with(&p.chars().collect::<Vec<_>>()))
+                    {
+                        end = (at..n).find(|&i| chars[i].is_whitespace()).unwrap_or(n);
+                    } else if c == '/' && next == Some('/') {
+                        end = n;
+                    } else if c == '/' && next == Some('*') {
+                        end = block_comment_end(chars, at + 2).unwrap_or(n);
+                    } else if c == '`' {
+                        end = super::code_span(chars, at).map_or(at + 1, |(_, _, e)| e);
+                    } else if c == '$' {
+                        end = (at + 1..n).find(|&i| chars[i] == '$').map_or(at + 1, |close| close + 1);
+                    } else if c == '#' && next.is_some_and(|d| d.is_alphabetic() || matches!(d, '(' | '{' | '[')) {
+                        piece = Piece::Code;
+                        end = word_end(at + 1);
+                        let word: String = chars[at + 1..end].iter().collect();
+                        frames.push(match word.as_str() {
+                            "let" | "set" | "show" | "import" | "include" | "context" => Frame::Statement,
+                            "if" | "for" | "while" => Frame::Head(false),
+                            _ => Frame::Call,
+                        });
+                    } else if c == '[' && top.is_some() {
+                        frames.push(Frame::Text);
+                    } else if c == ']' && top == Some(Frame::Text) {
+                        frames.pop();
+                    } else if c == ']' && top == Some(Frame::Bracket) {
+                        piece = Piece::Code;
+                        frames.pop();
+                    }
+                }
+                // Code: a `{` or `(` body, a statement, or the head of an `if`.
+                Some(_) => {
+                    if c == '"' {
+                        end = at + 1;
+                        while end < n && chars[end] != '"' {
+                            end += if chars[end] == '\\' { 2 } else { 1 };
+                        }
+                        end = (end + 1).min(n);
+                    } else if c == '/' && next == Some('/') {
+                        piece = Piece::Comment;
+                        end = n;
+                    } else if c == '/' && next == Some('*') {
+                        piece = Piece::Comment;
+                        frames.push(Frame::Note);
+                        end = at + 2;
+                    } else if c == '`' {
+                        end = super::code_span(chars, at).map_or(at + 1, |(_, _, e)| e);
+                    } else if matches!(c, '{' | '[' | '(') {
+                        // An `if`'s head ends at its block.
+                        if c != '(' && top == Some(Frame::Head(false)) {
+                            if let Some(head) = frames.last_mut() {
+                                *head = Frame::Head(true);
+                            }
+                        }
+                        frames.push(match c {
+                            '{' => Frame::Brace,
+                            '[' => Frame::Bracket,
+                            _ => Frame::Paren,
+                        });
+                    } else if let Some(opener) = match c {
+                        '}' => Some(Frame::Brace),
+                        ')' => Some(Frame::Paren),
+                        ']' => Some(Frame::Bracket),
+                        _ => None,
+                    } {
+                        close(frames, opener);
+                    } else if c == ';' && top == Some(Frame::Statement) {
+                        frames.pop();
+                    }
+                }
+            }
+            let end = end.clamp(at + 1, n);
+            for slot in &mut out[at..end] {
+                *slot = piece;
+            }
+            at = end;
+        }
+        // A `#` expression in writing ends with its line; a bracket does not.
+        while matches!(frames.last(), Some(Frame::Statement | Frame::Call | Frame::Head(_))) {
+            frames.pop();
+        }
+        out
+    }
+
+    /// Close the innermost `opener`, and whatever code was left open inside
+    /// it. A closer with writing between it and its opener is a stray, and
+    /// closes nothing.
+    fn close(frames: &mut Vec<Frame>, opener: Frame) {
+        for i in (0..frames.len()).rev() {
+            if frames[i] == opener {
+                frames.truncate(i);
+                return;
+            }
+            if matches!(frames[i], Frame::Bracket | Frame::Text) {
+                return;
+            }
+        }
+    }
+
+    /// The marked-up runs of a line of Typst that begins inside `frames` —
+    /// what [`BlockScanner::frames`] said just before it was fed the line.
+    ///
+    /// Code is [`Kind::Code2`], whose tokens the screen colours; a comment in
+    /// it is a comment; writing is read by [`scan`], as any other. On a line
+    /// that begins in code the writing also takes a plain token, so the `　`
+    /// in `[　]` is drawn in the page's ink rather than the code block's.
+    pub fn spans_from(line: &str, frames: &[Frame]) -> Vec<Span> {
+        if frames.is_empty() {
+            return spans(line);
+        }
+        let chars: Vec<char> = line.chars().collect();
+        let pieces = walk(&chars, &mut frames.to_vec());
+        let code = !writing(frames);
+        let mut out = Vec::new();
+        let mut construct = 1usize;
+        let mut at = 0usize;
+        while at < chars.len() {
+            let piece = pieces[at];
+            let end = (at..chars.len()).find(|&i| pieces[i] != piece).unwrap_or(chars.len());
+            match piece {
+                Piece::Code => push(&mut out, at, end, Kind::Code2, construct),
+                Piece::Comment => push(&mut out, at, end, Kind::Comment, construct),
+                Piece::Writing => {
+                    if code {
+                        push(&mut out, at, end, Kind::Token(crate::code::Token::Plain), construct);
+                    }
+                    construct += 1;
+                    graft(&mut out, scan(&chars[at..end], at == 0, 0), at, &mut construct);
+                }
+            }
+            construct += 1;
+            at = end;
+        }
+        out
+    }
+
     /// Which block a line of Typst belongs to.
     ///
     /// Far less state than Markdown's: Typst has no `:::` and its raw blocks
@@ -2133,16 +2383,15 @@ pub mod typst {
     #[derive(Debug, Default)]
     pub struct BlockScanner {
         in_raw: bool,
-        /// The `{`, `(` and `[` the scan is inside, innermost last.
+        /// What the scan is inside, innermost last ([`Frame`]).
         ///
         /// Typst code runs across lines — `#show heading: it => block({` opens
         /// a body that closes several lines later — and every one of those
-        /// lines is code, not writing. Counting brackets is not parsing Typst,
-        /// but it is enough to tell a template apart from a manuscript.
-        ///
-        /// Which bracket matters: a `[` is content, so the lines of
-        /// `#if x [` … `]` are writing, where those of `{` … `}` are code.
-        open: Vec<char>,
+        /// lines is code, not writing. The lines inside a `[` are writing.
+        frames: Vec<Frame>,
+        /// A blank line has gone by inside a code body, and the next line
+        /// decides whether the body goes on.
+        blank: bool,
     }
 
     impl BlockScanner {
@@ -2150,52 +2399,76 @@ pub mod typst {
             BlockScanner::default()
         }
 
+        /// What the next line begins inside: hand it to [`spans_from`].
+        pub fn frames(&self) -> &[Frame] {
+            &self.frames
+        }
+
+        /// [`Self::feed_line`], with nothing but the line's opening at hand:
+        /// a line longer than that is not walked.
         pub fn feed(&mut self, prefix: &str, len: usize) -> Block {
+            self.feed_line(prefix, len, || None)
+        }
+
+        /// The block of the next line, from its first [`super::PREFIX`]
+        /// characters (`prefix`) and its length; `whole` hands over the whole
+        /// line when the opening is not all of it and the line has to be
+        /// walked — the first line of a body, or one inside it.
+        pub fn feed_line(&mut self, prefix: &str, len: usize, whole: impl FnOnce() -> Option<String>) -> Block {
             let line = prefix.trim_end_matches(['\n', '\r']);
             let trimmed = line.trim_start();
             if trimmed.starts_with("```") {
                 self.in_raw = !self.in_raw;
-                self.open.clear();
+                self.frames.clear();
+                self.blank = false;
                 return Block::Code { inside: None };
             }
             if self.in_raw {
                 return Block::Code { inside: None };
             }
-            // Inside a code body that opened on an earlier line.
-            let was_open = !self.open.is_empty();
-            // Inside a `[` the line is markup, but for the `]` that ends it.
-            let content = self.open.last() == Some(&'[') && !trimmed.starts_with(']');
-            // **A blank line closes it.** The bracket count is a guess, and a
-            // guess that has gone wrong must not run to the end of the file —
-            // one line used to be able to tint an entire manuscript. The cost
-            // is a `#show` body with a blank line in it, which loses its shade
-            // from there on: a shade, against a whole novel.
             if trimmed.is_empty() {
-                self.open.clear();
+                self.blank = !self.frames.is_empty();
                 return Block::Prose;
             }
+            // **A blank line, then a line that is not indented, closes a code
+            // body** (2026-11-08). The count is a guess, and a guess that has
+            // gone wrong must not run to the end of the file — one line used
+            // to be able to tint an entire manuscript. It used to be any blank
+            // line, which cut every template's `#let style(body) = { … }` in
+            // two at the first one; a body's lines are indented, the writing
+            // after a stray `(` is not. A full-width `　　` is a paragraph's
+            // indent, not code's, so only ASCII counts.
+            if std::mem::take(&mut self.blank)
+                && matches!(self.frames.last(), Some(Frame::Brace | Frame::Paren))
+                && !line.starts_with([' ', '\t'])
+                && !trimmed.starts_with(['}', ')', ']'])
+            {
+                self.frames.clear();
+            }
+            let code = !writing(&self.frames);
+            // Inside a `[` the line is writing, but for the `]` that ends it.
+            let closes = !self.frames.is_empty() && trimmed.starts_with(']');
             // **Only a line seen whole may be counted.** The caller hands over
             // the first [`PREFIX`] characters, not the line — so
             // `#set par(first-line-indent: (amount: 2em, all: true), …)` had
             // its closing `)` cut off, left `depth` at 1, and made every line
-            // after it code, blank ones included (2026-09-08). Markdown's
-            // scanner asks the same question one field along; this one took
-            // the length and threw it away. A body whose opening line is
-            // longer than that simply never opens: one block loses its shade,
-            // where miscounting lost the rest of the manuscript.
-            let whole = len <= super::PREFIX;
-            if whole && (was_open || trimmed.starts_with('#')) {
-                for c in line.chars() {
-                    match c {
-                        '{' | '(' | '[' => self.open.push(c),
-                        '}' | ')' | ']' => {
-                            self.open.pop();
-                        }
-                        _ => {}
+            // after it code, blank ones included (2026-09-08). A long line is
+            // walked only when `whole` can hand it over; otherwise it opens
+            // and closes nothing.
+            if !self.frames.is_empty() || trimmed.starts_with('#') {
+                let owned;
+                let text = match len <= super::PREFIX {
+                    true => Some(line),
+                    false => {
+                        owned = whole();
+                        owned.as_deref().map(|l| l.trim_end_matches(['\n', '\r']))
                     }
+                };
+                if let Some(text) = text {
+                    walk(&text.chars().collect::<Vec<_>>(), &mut self.frames);
                 }
             }
-            if was_open && !content {
+            if code || closes {
                 return Block::Code { inside: None };
             }
             let equals = trimmed.chars().take_while(|&c| c == '=').count();
@@ -2626,6 +2899,146 @@ mod typst_tests {
             })
             .collect();
         assert_eq!(walk, ".``....", "{walk}");
+    }
+
+    /// Each line of `text` as the editor reads it: its block (`` ` `` code,
+    /// `.` anything else), then its runs from the brackets it begins inside —
+    /// `#` code, `%` a comment, `w` writing on a code line, `B` strong, and a
+    /// space for nothing at all.
+    fn walked(text: &str) -> Vec<String> {
+        let mut scanner = BlockScanner::new();
+        text.lines()
+            .map(|line| {
+                let frames = scanner.frames().to_vec();
+                let len = line.chars().count();
+                let prefix: String = line.chars().take(crate::markdown::PREFIX).collect();
+                let block = match scanner.feed_line(&prefix, len, || Some(line.to_string())) {
+                    Block::Code { .. } => '`',
+                    _ => '.',
+                };
+                let mut out = vec![' '; len];
+                for span in spans_from(line, &frames) {
+                    let mark = match span.kind {
+                        Kind::Code2 => '#',
+                        Kind::Comment => '%',
+                        Kind::Strong => 'B',
+                        Kind::Marker => '.',
+                        Kind::Token(_) => 'w',
+                        _ => '?',
+                    };
+                    for slot in out.iter_mut().take(span.end.min(len)).skip(span.start) {
+                        *slot = mark;
+                    }
+                }
+                std::iter::once(block).chain(out).collect()
+            })
+            .collect()
+    }
+
+    /// **A template's code block is code from its `{` to its `}`**
+    /// (2026-11-08): blank lines, `set` and `show` rules, closures, comments
+    /// and all. Its lines used to be one flat colour down to the first blank
+    /// line and plain writing after it.
+    #[test]
+    fn a_code_block_is_code_down_to_its_closing_brace() {
+        let text = "\
+#import \"@preview/tablex:0.0.8\": tablex, cellx
+
+#let chapter(title, body) = {
+  set page(paper: \"a5\", margin: (x: 2cm, y: 10pt))
+  // set par(leading: 1em, justify: true)
+  set text(font: \"思源宋體 Heavy\", size: 10.5pt) // 正文字體
+
+  show heading.where(level: 1): it => {
+    pagebreak(weak: true)
+    block(above: 0.5em, [第 #counter(heading).display() 章])
+  }
+  show \"(註)\": set text(fill: gray)
+  if title == none { [無題] } else {
+    heading(title)
+  }
+
+  body
+}
+那年冬天，*雪*下得早。";
+        let got = walked(text);
+        let line = |n: usize| got[n].as_str();
+        let width = |n: usize| text.lines().nth(n).map_or(0, |l| l.chars().count());
+        assert_eq!(line(0), format!(".{}", "#".repeat(width(0))), "an import is code to its end");
+        assert_eq!(line(2), format!(".{}", "#".repeat(width(2))), "the opening line is the line scan's");
+        for (n, shape) in got.iter().enumerate().take(18).skip(3) {
+            let blank = text.lines().nth(n).is_some_and(|l| l.trim().is_empty());
+            assert_eq!(shape.starts_with('`'), !blank, "line {n} is code: {got:#?}");
+        }
+        assert_eq!(line(3), format!("`{}", "#".repeat(width(3))), "a set rule is code, every character");
+        assert_eq!(line(4), format!("`##{}", "%".repeat(width(4) - 2)), "a comment in a code block is a comment");
+        assert_eq!(&line(5)[..3], "`##", "{}", line(5));
+        assert!(line(5).ends_with("#%%%%%%%"), "the comment after a rule: {}", line(5));
+        assert!(!line(5)[..line(5).len() - 7].contains('%'), "the font name is a string: {}", line(5));
+        assert_eq!(line(7), format!("`{}", "#".repeat(width(7))), "after a blank line, still code");
+        // The writing in `[…]` is writing, and the `#` in it code again.
+        let content: String = text.lines().nth(9).unwrap().chars().zip(line(9).chars().skip(1)).filter(|&(_, m)| m == 'w').map(|(c, _)| c).collect();
+        assert_eq!(content, "第  章", "{}", line(9));
+        // A `(` in a string opens nothing: the lines after it are code still.
+        assert!(line(12).starts_with('`'), "{}", line(12));
+        let content: String = text.lines().nth(12).unwrap().chars().zip(line(12).chars().skip(1)).filter(|&(_, m)| m == 'w').map(|(c, _)| c).collect();
+        assert_eq!(content, "無題");
+        assert_eq!(line(17), "`#", "the closing brace");
+        assert_eq!(line(18), ".     .B.    ", "and the writing after the block is writing");
+    }
+
+    /// An argument list over several lines, with a note after each argument:
+    /// the bracket in a comment closes nothing.
+    #[test]
+    fn an_argument_list_is_code_and_its_comments_are_comments() {
+        let got = walked("#let ruby = get-ruby(\n  size: 0.5em, // 註音字號（(大小\n  dy: 0pt,\n)\n那年");
+        assert_eq!(got[1], "`###############%%%%%%%%%%%");
+        assert_eq!(got[2], "`##########");
+        assert_eq!(got[3], "`#");
+        assert_eq!(got[4], ".  ", "the list closed at its `)`");
+    }
+
+    /// Content opened in code is writing on every line until its `]`, which
+    /// is code again.
+    #[test]
+    fn content_over_several_lines_is_writing() {
+        let got = walked("#let note = [\n這是*重點*\n]\n#let n = 1");
+        assert_eq!(got[1], ".  .BB.", "writing, read as writing");
+        assert_eq!(got[2], "`#", "its `]` is code");
+        assert_eq!(got[3], ".##########", "and the brackets are all closed");
+    }
+
+    /// `#if` in writing goes on past its block to an `else`, and stops
+    /// after it.
+    #[test]
+    fn an_if_in_writing_runs_through_its_else() {
+        let mut scanner = BlockScanner::new();
+        scanner.feed("#if x [甲] else [乙] 丙", 18);
+        assert!(scanner.frames().is_empty(), "{:?}", scanner.frames());
+        let got = walked("#if x {\n  a\n} else {\n  b\n}\n丙");
+        assert_eq!(got.iter().map(|l| l.chars().next().unwrap()).collect::<String>(), ".````.");
+        assert_eq!(got[5], ". ");
+    }
+
+    /// A blank line still ends a body when the line after it is not
+    /// indented — a paragraph's full-width indent included — so a stray
+    /// bracket cannot tint the rest of a manuscript.
+    #[test]
+    fn a_stray_bracket_stops_at_a_blank_line_and_writing() {
+        let got = walked("#emph(那年\n\n　　冬天雪下得早。\n");
+        assert!(got[2].starts_with('.'), "{got:?}");
+        let got = walked("#let f(x) = {\n  x\n\n  x\n}\n");
+        assert_eq!(got.iter().map(|l| l.chars().next().unwrap()).collect::<String>(), ".`.``");
+    }
+
+    /// A line longer than the opening the scanner is handed is walked whole
+    /// when the caller can hand it over.
+    #[test]
+    fn a_long_opening_line_is_walked_whole() {
+        let long = "#let style(body) = { // the style every chapter of the book shares";
+        assert!(long.chars().count() > crate::markdown::PREFIX, "the case is the truncation");
+        let got = walked(&format!("{long}\n  set text(size: 10pt)\n}}\n那年"));
+        assert_eq!(got.iter().map(|l| l.chars().next().unwrap()).collect::<String>(), ".``.");
     }
 
     /// `/* … */` is a comment, as `//` is (2026-11-05): its `*` opened a

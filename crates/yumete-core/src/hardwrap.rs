@@ -448,7 +448,7 @@ fn classify_typst(lines: &[String]) -> Vec<Line> {
     let mut maths = false;
     for line in lines {
         let prefix: String = line.chars().take(crate::markdown::PREFIX).collect();
-        let block = scanner.feed(&prefix, line.chars().count());
+        let block = scanner.feed_line(&prefix, line.chars().count(), || Some(line.clone()));
         let trimmed = line.trim();
         if comment {
             out.push(Line::Keep(line.clone()));
