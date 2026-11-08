@@ -14,6 +14,9 @@ yumete-cjk = {path = "../yumete-cjk"}
 yumete-config = {path = "../yumete-config"}
 yumete-core = {path = "../yumete-core"}
 yumete-ime = {path = "../yumete-ime"}
+# The rendered Markdown preview (2026-11-08): its colours come from the
+# editor's palette (`preview_theme`) and its formulas from `tex`.
+yumete-mdview = {path = "../yumete-mdview"}
 
 # **TeX formulas as pictures** (2026-11-08): KaTeX's layout in Rust, with
 # KaTeX's fonts built in (`embed-fonts`), for Markdown's formulas in the

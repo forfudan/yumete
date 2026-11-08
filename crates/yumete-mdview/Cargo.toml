@@ -1,0 +1,27 @@
+[package]
+description = "Markdown (YFM) laid out with proportional fonts and drawn as pictures, for yumete's preview."
+edition.workspace = true
+license.workspace = true
+name = "yumete-mdview"
+repository.workspace = true
+version.workspace = true
+
+[dependencies]
+# **Text layout with the system's own fonts** (2026-11-08): parley shapes,
+# breaks lines (ICU4X's UAX #14, strict, so no 「，」 at a line's start) and
+# finds fonts through fontique, which reads the fonts the system already has:
+# nothing is embedded. Apache-2.0 / MIT.
+parley = "0.12"
+# **Drawing on the CPU**: glyphs, rectangles and pictures into an RGBA buffer,
+# no GPU and no window. Its default features bring `png` (the formulas come as
+# PNG) and `text` (glyphs, colour emoji included). Apache-2.0 / MIT.
+vello_cpu = "0.3"
+# **Nothing on standard error**, which is the editor's screen: a debug build
+# of ICU4X (under parley) prints a missing-data warning for every CJK
+# paragraph with `eprintln!` unless its `logging` feature sends it to the
+# `log` crate, where no logger is set. Only the feature is wanted.
+icu_provider = { version = "2", default-features = false, features = ["logging"] }
+# Local pictures in a document: PNG and JPEG only.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+yumete-cjk = {path = "../yumete-cjk"}
+yumete-core = {path = "../yumete-core"}

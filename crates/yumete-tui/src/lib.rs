@@ -20,6 +20,7 @@ pub mod backend;
 pub mod graphics;
 pub mod maths;
 pub mod page_window;
+pub mod preview_theme;
 pub mod tex;
 pub mod server;
 pub mod settings;

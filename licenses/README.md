@@ -20,3 +20,9 @@ The formula float draws TeX formulas with [RaTeX](https://github.com/erweixin/Ra
 | File | Project | What is used |
 | --- | --- | --- |
 | `katex-fonts.LICENSE` | [KaTeX](https://github.com/KaTeX/KaTeX) fonts, by way of `ratex-katex-fonts` 0.1.15 (`fonts/OFL.txt`) | the `KaTeX_*.ttf` fonts RaTeX sets formulas in, embedded in the binary |
+
+The rendered Markdown preview (`crates/yumete-mdview`) draws in the colours and spacing of GitHub's Markdown stylesheet, which VS Code's Markdown preview also follows. It embeds no fonts: text is set in the fonts the system already has.
+
+| File | Project | What is used |
+| --- | --- | --- |
+| `github-markdown-css.LICENSE` | [github-markdown-css](https://github.com/sindresorhus/github-markdown-css) | the light and dark colours, sizes and margins of `Theme::light`, `Theme::dark` and `layout.rs` |
