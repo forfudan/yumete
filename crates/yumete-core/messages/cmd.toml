@@ -224,8 +224,8 @@ find = "改過纔存 改过才存 存了再退 退出 exit x xit"
 [[message]]
 # : 命令選單裏 export 那一項的説明(commands 組)
 key = "cmd.commands.export"
-zhs = "导出为 html 或 typst，保留排版"
-en = "export as html or typst, keeping the layout"
+zhs = "导出为 html、typst 或 epub"
+en = "export as html, typst or epub"
 find = "導出 导出 輸出 输出 html typst 排版"
 
 [[message]]
