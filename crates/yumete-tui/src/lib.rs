@@ -1010,6 +1010,9 @@ pub fn run(
             // **背景那一趟交回來的，每一幀收一批**（§5.93）。收完就畫，所以名單
             // 是在長的，而右上角那個「N+」跟着跳。
             editor.collect_search_results();
+            // `:export-as-preview` on a Typst file: the PDF typeset on a
+            // thread, collected here.
+            editor.collect_typesetting();
             // Diagnostics follow what was edited since the last frame: a
             // paste, a formatter, a rename in another file.
             editor.move_the_problems();
@@ -1414,6 +1417,8 @@ pub fn run(
                 editor.disk_due_in(),
                 // 搜索在旁邊跑的時候要醒過來收（同上面那幾個鬧鐘）。
                 editor.searching_due_in(),
+                // The PDF of `:export-as-preview`, typeset on a thread.
+                editor.typesetting_due_in(),
                 // 挑選器的走查在旁邊跑的時候同理。四十毫秒比轉圈那一格（八十）還
                 // 密，所以腳注那個圈靠它就轉得起來，不必另加一個鬧鐘。
                 editor.filling_due_in(),

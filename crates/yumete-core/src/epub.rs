@@ -418,6 +418,7 @@ mod tests {
             source: crate::syntax::Syntax::Markdown,
             base: None,
             painter: None,
+            look: None,
         }
     }
 
@@ -490,7 +491,7 @@ mod tests {
     /// own, listed in the package.
     #[test]
     fn a_horizontal_book_with_a_formula() {
-        fn drawn(_: &str, _: bool, _: bool) -> Result<crate::export::Formula, String> {
+        fn drawn(_: &str, _: bool, _: bool, _: [u8; 3]) -> Result<crate::export::Formula, String> {
             Ok(crate::export::Formula { png: vec![1, 2, 3], width: 2.0, height: 1.0, depth: 0.2 })
         }
         let mut s = style();

@@ -117,7 +117,7 @@ fn cjk(han: Han) -> &'static str {
 
 /// The 楷體 faces of a writing system; Japanese has no habit of setting
 /// emphasis in one, so it keeps its gothic.
-fn kai(han: Han) -> &'static str {
+pub(crate) fn kai(han: Han) -> &'static str {
     match han {
         Han::Simplified => "'Kaiti SC', STKaiti, KaiTi, 'AR PL UKai CN', 'LXGW WenKai GB', 'LXGW WenKai', ",
         Han::Traditional => "'Kaiti TC', BiauKai, DFKai-SB, 'AR PL UKai TW', 'LXGW WenKai TC', 'Kaiti SC', STKaiti, KaiTi, ",

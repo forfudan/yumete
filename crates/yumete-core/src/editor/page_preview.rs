@@ -272,6 +272,31 @@ impl Editor {
         })
     }
 
+    /// **The Typst file the preview of this document typesets**
+    /// (2026-11-08), for `:export-as-preview`: the main file of the preview
+    /// tab that typesets this file or the book it is a chapter of; else the
+    /// open file that includes this one, as a new preview would take it;
+    /// else this file. `None` for a buffer never saved.
+    pub(super) fn typst_main_here(&self) -> Option<PathBuf> {
+        if let Some(i) = self.preview_here() {
+            let b = &self.buffers[i];
+            if b.preview_kind() == Some(crate::buffer::PreviewKind::Typst) {
+                return b.preview_main().map(Path::to_path_buf);
+            }
+        }
+        self.includer_of_here().or_else(|| self.current_buffer().path().map(|p| self.real(p)))
+    }
+
+    /// **The open files of the book `main` typesets with unsaved changes**
+    /// (2026-11-08): the `typst` compiler reads the files on disk, where the
+    /// preview reads the buffers.
+    pub(super) fn unsaved_in_the_book(&self, main: &Path) -> usize {
+        self.buffers
+            .iter()
+            .filter(|b| b.is_modified() && b.path().is_some_and(|p| in_the_book(main, &self.real(p), b.syntax())))
+            .count()
+    }
+
     /// Whether the preview of this document is on the screen.
     pub(super) fn preview_here_on_screen(&self) -> bool {
         self.preview_here().is_some_and(|i| self.preview_on_screen(self.buffers[i].id()))

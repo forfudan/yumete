@@ -281,6 +281,8 @@ fn work(inbox: mpsc::Receiver<Job>, out: mpsc::Sender<Shot>) {
 #[derive(Default)]
 pub struct MdPreviews {
     tabs: HashMap<u64, Tab>,
+    /// The palette last handed to the editor for `:export-as-preview`.
+    looked: Option<Theme>,
 }
 
 impl MdPreviews {
@@ -312,6 +314,14 @@ impl MdPreviews {
         let now = Instant::now();
         let cell = crate::graphics::cell_pixels();
         let theme = crate::preview_theme::theme(crate::theme::Palette::of(config));
+        // **`:export-as-preview` writes the page in these colours**
+        // (2026-11-08): handed over whenever they change — a theme, or the
+        // mood — so the page is the preview as it is drawn now.
+        if self.looked.as_ref() != Some(&theme) {
+            self.looked = Some(theme.clone());
+            let palette = theme.clone();
+            editor.set_preview_look(Arc::new(move |text: &str, fonts: &str| yumete_mdview::look::look(&palette, fonts, text)));
+        }
         for (id, main) in previews {
             let shown = editor.preview_on_screen(id);
             let tab = self.tabs.entry(id).or_insert_with(|| Tab::start(main.clone()));

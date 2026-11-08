@@ -69,8 +69,9 @@ pub(crate) struct UpGlyph {
     dy: f32,
 }
 
-/// Column pitch, in ems of the type: a column and the gap beside it.
-const PITCH: f32 = 1.75;
+/// Column pitch, in ems of the type: a column and the gap beside it — the
+/// line height `:export-as-preview` writes into a vertical page.
+const PITCH: f32 = yumete_core::as_preview::COLUMN_PITCH;
 
 // ── What stands in a column ─────────────────────────────────────────────────
 
@@ -1101,7 +1102,7 @@ pub(crate) fn caption_of(block: &Block) -> Option<Vec<Inline>> {
 }
 
 /// A paragraph that is one picture and nothing else: its source and alt.
-fn figure_of(runs: &[Inline]) -> Option<(&str, &str)> {
+pub(crate) fn figure_of(runs: &[Inline]) -> Option<(&str, &str)> {
     let mut found = None;
     for run in runs {
         match &run.kind {
@@ -1186,15 +1187,9 @@ impl Engine {
         let first = block.lines.0;
         match &block.kind {
             BlockKind::Heading { level, text } => {
-                let k = match level {
-                    1 => 1.75,
-                    2 => 1.45,
-                    3 => 1.25,
-                    4 => 1.0,
-                    5 => 0.875,
-                    _ => 0.85,
-                };
-                let color = self.theme.headings[(*level as usize).clamp(1, 6) - 1];
+                let n = (*level as usize).clamp(1, 6) - 1;
+                let k = yumete_core::as_preview::VERTICAL_HEADING_SIZES[n];
+                let color = self.theme.headings[n];
                 let st = Style { size: cx.size * k, weight: 600.0, color, mono: false, line_height: 1.25, italic: false, anywhere: false };
                 // A chapter's title stands two squares in, a section's one.
                 let indent = match level {
@@ -1203,7 +1198,7 @@ impl Engine {
                     _ => 0.0,
                 };
                 let vt = self.vtext(text, st, len, indent, indent, false);
-                *u += self.put(&vt, -*u, top, 1.4 * st.size, out, first);
+                *u += self.put(&vt, -*u, top, yumete_core::as_preview::VERTICAL_HEADING_PITCH * st.size, out, first);
                 if *level <= 2 {
                     *u += 0.2 * st.size;
                     out.items.push(Item::Rect { r: rect(-*u - px, top, px, len), fill: self.theme.border, radius: 0.0 });

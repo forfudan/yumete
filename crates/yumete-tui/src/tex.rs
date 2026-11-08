@@ -102,7 +102,8 @@ pub fn render_on_baseline(tex: &str, display: bool, ink: Ink, size: f32) -> Resu
     Ok((Picture { png, width, height }, baseline))
 }
 
-/// **A formula for `:export html`** (2026-11-08): black on clear, drawn at
+/// **A formula for `:export html`** (2026-11-08): in `ink` on clear — black
+/// for a printed page, the preview's writing for `:export-as-preview` — drawn at
 /// three times a 40-pixel em so it stays sharp when printed, and measured in
 /// `em` of the text around it — 1.1 of it, a little larger than the text as
 /// KaTeX sets it (1.21), since a CJK line is already a full square tall.
@@ -113,11 +114,11 @@ pub fn render_on_baseline(tex: &str, display: bool, ink: Ink, size: f32) -> Resu
 /// it is then shown — as wide as it was tall and as tall as it was wide —
 /// so the page shows an ordinary picture and turns nothing itself, which
 /// every browser and reader app does alike.
-pub fn for_export(tex: &str, display: bool, turned: bool) -> Result<yumete_core::export::Formula, String> {
+pub fn for_export(tex: &str, display: bool, turned: bool, ink: [u8; 3]) -> Result<yumete_core::export::Formula, String> {
     const SIZE: f32 = 40.0;
     const PAD: f32 = 1.0;
     const SCALE: f64 = 1.1;
-    let (png, [width, height, depth]) = draw(tex, display, (0, 0, 0), SIZE, PAD, 3.0)?;
+    let (png, [width, height, depth]) = draw(tex, display, (ink[0], ink[1], ink[2]), SIZE, PAD, 3.0)?;
     let pad = f64::from(PAD / SIZE);
     let (width, height, depth) = ((width + 2.0 * pad) * SCALE, (height + depth + 2.0 * pad) * SCALE, (depth + pad) * SCALE);
     Ok(match turned {
@@ -461,16 +462,16 @@ mod tests {
     /// for a fraction, and drawn three times finer than it is shown.
     #[test]
     fn a_formula_for_a_page_is_measured_in_em() {
-        let x = for_export(r"x^2", false, false).expect("x^2");
+        let x = for_export(r"x^2", false, false, [0, 0, 0]).expect("x^2");
         assert!(x.height > 0.8 && x.height < 1.6, "{}", x.height);
         assert!(x.depth >= 0.0 && x.depth < x.height, "{}", x.depth);
         let (_, tall) = crate::graphics::png_size(&x.png).expect("a PNG");
         // 1.1 of an em of text is one em of the 40-pixel drawing, three times.
         let shown = x.height / 1.1 * 40.0 * 3.0;
         assert!((f64::from(tall) - shown).abs() <= 2.0, "{tall} pixels for {shown}");
-        let frac = for_export(r"\frac{a}{b}", true, false).unwrap();
+        let frac = for_export(r"\frac{a}{b}", true, false, [0, 0, 0]).unwrap();
         assert!(frac.height > x.height && frac.depth > x.depth);
-        assert!(for_export(r"\frac{a", false, false).is_err());
+        assert!(for_export(r"\frac{a", false, false, [0, 0, 0]).is_err());
     }
 
     /// **A formula turned for a vertical page** (2026-11-08) is turned in
@@ -478,8 +479,8 @@ mod tests {
     /// and what was its top row its right-hand column.
     #[test]
     fn a_formula_for_a_vertical_page_is_turned_in_the_bitmap() {
-        let up = for_export(r"x^2+y^2", false, false).unwrap();
-        let down = for_export(r"x^2+y^2", false, true).unwrap();
+        let up = for_export(r"x^2+y^2", false, false, [0, 0, 0]).unwrap();
+        let down = for_export(r"x^2+y^2", false, true, [0, 0, 0]).unwrap();
         assert_eq!((down.width, down.height), (up.height, up.width));
         let (w, h) = crate::graphics::png_size(&up.png).unwrap();
         assert_eq!(crate::graphics::png_size(&down.png), Some((h, w)));

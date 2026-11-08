@@ -232,12 +232,13 @@ fn images_are_drawn_scaled_to_the_column() {
     image::RgbaImage::from_pixel(800, 400, image::Rgba([200, 30, 30, 255])).save(dir.join("wide.png")).unwrap();
     let mut p = Preview::new(Options { base_dir: dir.clone(), ..options(500) }, Box::new(NoFormulas));
     p.set_text("![寬圖](wide.png)\n\n![沒有](missing.png)\n");
+    // A picture alone in its paragraph is a figure (2026-11-08).
     let laid = &p.placed[0].laid;
     let pic = laid.items.iter().find_map(|it| match it {
-        Item::Text { text, .. } => text.layout.inline_boxes().next().map(|b| (b.width, b.height)),
+        Item::Pic { r, .. } => Some((r.width() as f32, r.height() as f32)),
         _ => None,
     });
-    let (w, h) = pic.expect("the image is a box");
+    let (w, h) = pic.expect("the image is a picture");
     assert!(w <= 500.0 && (w / h - 2.0).abs() < 0.05, "{w}×{h}");
     // A missing picture is its words.
     assert!(visual_lines(&p.placed[1].laid).iter().any(|l| l.contains("沒有")));
@@ -255,7 +256,7 @@ fn a_picture_changed_on_disk_is_drawn_again() {
     p.set_text(text);
     let size = |p: &Preview| {
         p.placed[0].laid.items.iter().find_map(|it| match it {
-            Item::Text { text, .. } => text.layout.inline_boxes().next().map(|b| (b.width, b.height)),
+            Item::Pic { r, .. } => Some((r.width() as f32, r.height() as f32)),
             _ => None,
         })
     };
@@ -380,4 +381,24 @@ fn code_keeps_its_indent_and_its_lines() {
     let (a, b, c) = (p.y_for_line(1), p.y_for_line(2), p.y_for_line(3));
     assert!(a < b && b < c, "{a} {b} {c}");
     assert_eq!(p.line_for_y(b + 1.0), 2);
+}
+
+/// **Across the page a table has its caption and a picture alone in its
+/// paragraph is a figure** (2026-11-08), as the vertical page and the export
+/// set them: the caption's words over the table, the picture's text under it.
+#[test]
+fn across_the_page_a_caption_heads_its_table_and_a_figure_has_its_text() {
+    let dir = std::env::temp_dir().join(format!("yumete-mdview-fig-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    image::RgbaImage::from_pixel(40, 20, image::Rgba([10, 20, 30, 255])).save(dir.join("a.png")).unwrap();
+    let options = crate::Options { width: 800, scale: 1.0, theme: crate::Theme::light(), base_dir: dir.clone() };
+    let mut p = crate::Preview::new(options, Box::new(crate::NoFormulas));
+    p.set_text("Table: 兩座城\n\n| 城 | 人 |\n| --- | --- |\n| 甲 | 1 |\n\n![一張圖的說明](a.png)\n");
+    let words = p.visible_text(0.0, p.size().1);
+    assert!(words.contains("兩座城") && !words.contains("Table:"), "{words}");
+    assert!(words.find("兩座城").unwrap() < words.find("甲").unwrap(), "the caption over the table: {words}");
+    assert!(words.contains("一張圖的說明"), "the figure's text under it: {words}");
+    // The caption and its table are one block: a line in either is in it.
+    assert_eq!(p.block_at(p.y_for_line(2) + 1.0), Some((0, 4)));
+    std::fs::remove_dir_all(&dir).ok();
 }

@@ -733,6 +733,7 @@ impl Editor {
             }
             Command::CloseBuffer { force } => self.close_buffer(force),
             Command::Export { format, words, force } => self.export(&format, &words, force),
+            Command::ExportAsPreview { words, force } => self.export_as_preview(&words, force),
             Command::Conflicts => {
                 self.list_conflicts();
                 Ok(CommandOutcome::Continue)

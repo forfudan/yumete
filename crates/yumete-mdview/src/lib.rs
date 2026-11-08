@@ -23,6 +23,7 @@
 
 mod cache;
 pub mod fonts;
+pub mod look;
 pub mod parse;
 pub mod theme;
 
@@ -166,14 +167,7 @@ impl Preview {
         self.blocks = parse::parse_with(text, &mut self.parse_cache);
         // The writing system: the front matter's `lang` if it gives one,
         // else what the text itself is written in.
-        let declared = self.blocks.first().and_then(|b| match &b.kind {
-            parse::BlockKind::FrontMatter(lines) => lines.iter().find_map(|l| {
-                let (key, value) = l.split_once(':')?;
-                matches!(key.trim(), "lang" | "language" | "locale").then(|| fonts::Han::from_tag(value)).flatten()
-            }),
-            _ => None,
-        });
-        let han = self.han_override.or(declared).unwrap_or_else(|| fonts::han_of(text));
+        let han = self.han_override.or_else(|| declared_han(&self.blocks)).unwrap_or_else(|| fonts::han_of(text));
         if han != self.engine.han {
             self.engine.han = han;
             self.cache.clear();
@@ -301,10 +295,18 @@ impl Preview {
         self.marks.clear();
         let mut y = top;
         let mut below = 0.0f32;
-        for (k, block) in self.blocks.iter().enumerate() {
+        let mut k = 0;
+        while k < self.blocks.len() {
+            // A table and the caption paragraph just before or after it,
+            // laid out together as the vertical page lays them (2026-11-08).
+            let (main, caption, span) = self.captioned(k);
+            let block = &self.blocks[main];
+            let lines = (self.blocks[span.0].lines.0, self.blocks[span.1].lines.1);
             let moved = rebased(block, block.lines.0);
+            let caption: Option<Vec<parse::Inline>> = caption.map(|c| c.into_iter().map(|r| parse::Inline { line: 0, ..r }).collect());
             let mut h = std::collections::hash_map::DefaultHasher::new();
             moved.hash(&mut h);
+            caption.hash(&mut h);
             (column.to_bits(), self.engine.scale.to_bits()).hash(&mut h);
             // A picture changed on disk lays its block out again.
             for src in parse::images(&moved) {
@@ -318,25 +320,43 @@ impl Preview {
                 }
                 None => {
                     stats.laid += 1;
-                    Arc::new(self.engine.top(&moved, side, column))
+                    Arc::new(self.engine.top(&moved, caption.as_deref(), side, column))
                 }
             };
-            if k > 0 {
+            if span.0 > 0 {
                 y += below.max(laid.top);
             }
+            let shift = block.lines.0;
             for &(my, line) in &laid.marks {
-                self.marks.push((y + my, block.lines.0 + line));
+                self.marks.push((y + my, shift + line));
             }
-            self.placed.push(Placed { y, lines: block.lines, laid: laid.clone() });
+            self.placed.push(Placed { y, lines, laid: laid.clone() });
             y += laid.height;
             below = laid.bottom;
             fresh.insert(key, laid);
+            k = span.1 + 1;
         }
         self.marks.sort_by(|a, b| a.0.total_cmp(&b.0));
         self.cache = fresh;
         self.height = y + bottom;
         stats.layout_ms = t.elapsed().as_secs_f64() * 1000.0;
         stats
+    }
+
+    /// **Block `k`, or the table it is the caption of**: the block to lay
+    /// out, the caption that goes with it (Pandoc's `Table: …` or `: …`
+    /// paragraph just before or after a table), and the blocks the two span.
+    fn captioned(&self, k: usize) -> (usize, Option<Vec<parse::Inline>>, (usize, usize)) {
+        let block = &self.blocks[k];
+        let is_table = |b: Option<&Block>| matches!(b.map(|b| &b.kind), Some(parse::BlockKind::Table { .. }));
+        match vertical::caption_of(block) {
+            Some(c) if is_table(self.blocks.get(k + 1)) => (k + 1, Some(c), (k, k + 1)),
+            _ if is_table(Some(block)) => match self.blocks.get(k + 1).and_then(vertical::caption_of) {
+                Some(c) if !is_table(self.blocks.get(k + 2)) => (k, Some(c), (k, k + 1)),
+                _ => (k, None, (k, k)),
+            },
+            _ => (k, None, (k, k)),
+        }
     }
 
     /// **A vertical page laid out**: each top-level block from the right
@@ -359,16 +379,7 @@ impl Preview {
         let mut first = true;
         while k < self.blocks.len() {
             // A table and the caption paragraph just before or after it.
-            let block = &self.blocks[k];
-            let is_table = |b: Option<&Block>| matches!(b.map(|b| &b.kind), Some(parse::BlockKind::Table { .. }));
-            let (main, caption, span) = match vertical::caption_of(block) {
-                Some(c) if is_table(self.blocks.get(k + 1)) => (k + 1, Some(c), (k, k + 1)),
-                _ if is_table(Some(block)) => match self.blocks.get(k + 1).and_then(vertical::caption_of) {
-                    Some(c) if !is_table(self.blocks.get(k + 2)) => (k, Some(c), (k, k + 1)),
-                    _ => (k, None, (k, k)),
-                },
-                _ => (k, None, (k, k)),
-            };
+            let (main, caption, span) = self.captioned(k);
             let block = &self.blocks[main];
             let moved = rebased(block, block.lines.0);
             // The caption is counted as the table's first line, so a table
@@ -505,6 +516,18 @@ impl Preview {
         let rgba = self.painter.paint(&shown, self.engine.theme.background, w, h);
         Picture { width: w as u32, height: h as u32, rgba }
     }
+}
+
+/// **The writing system a document's front matter declares**, its `lang`
+/// (or `language`, `locale`), if it has one.
+pub(crate) fn declared_han(blocks: &[Block]) -> Option<fonts::Han> {
+    blocks.first().and_then(|b| match &b.kind {
+        parse::BlockKind::FrontMatter(lines) => lines.iter().find_map(|l| {
+            let (key, value) = l.split_once(':')?;
+            matches!(key.trim(), "lang" | "language" | "locale").then(|| fonts::Han::from_tag(value)).flatten()
+        }),
+        _ => None,
+    })
 }
 
 #[cfg(test)]

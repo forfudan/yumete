@@ -6,6 +6,16 @@
 
 use super::*;
 
+/// **A PDF being typeset for `:export-as-preview`** (2026-11-08): the
+/// compiler's answer to come, the file it writes, the one that file becomes,
+/// and how many open files of the book had unsaved changes when it began.
+pub(super) struct Typesetting {
+    answer: std::sync::mpsc::Receiver<Result<(), String>>,
+    draft: PathBuf,
+    target: PathBuf,
+    unsaved: usize,
+}
+
 /// **拆注音只拆得動一本書**（2026-10-13）。拆是逐行的，而注音是稿子裏的東西——一份
 /// 語料檔裏偶爾出現的兩行 `<ruby` 不值那一趟。
 const BIGGEST_TO_COUNT_RUBY: usize = 16 * 1024 * 1024;
@@ -475,6 +485,12 @@ impl Editor {
         let Some(dir) = self.current_buffer().path().and_then(|p| p.parent()) else {
             return self.project_root();
         };
+        self.lsp_root_of(dir)
+    }
+
+    /// [`Self::lsp_root`] of a file in `dir`: the root a language server
+    /// would be started on for it.
+    pub(super) fn lsp_root_of(&self, dir: &Path) -> PathBuf {
         // **語言自己的根記號先問**（2026-10-11，照 helix 的 `roots`）。
         //
         // `book_root` 只認 `.yumete` 和 `.git`——那是**這本書**的根，而服務器要的
@@ -1824,6 +1840,12 @@ impl Editor {
     /// `:shot`. They used to ask it in three byte-identical copies (#227 made
     /// the third), which is three places for the next fix to miss two of.
     fn refuse_to_overwrite(&mut self, target: &Path, force: bool) -> bool {
+        self.refuse_to_overwrite_as(target, force, "export")
+    }
+
+    /// [`Self::refuse_to_overwrite`], naming `command` as the one whose `!`
+    /// overwrites.
+    fn refuse_to_overwrite_as(&mut self, target: &Path, force: bool, command: &str) -> bool {
         if let Some(which) = self.buffer_holding(target) {
             self.status = match which == self.current {
                 true => say!("export.same-as-the-manuscript"),
@@ -1832,7 +1854,10 @@ impl Editor {
             return true;
         }
         if !force && target.exists() {
-            self.status = say!("export.target-exists", target.display());
+            self.status = match command {
+                "export" => say!("export.target-exists", target.display()),
+                command => say!("export.target-exists-for", target.display(), command),
+            };
             return true;
         }
         false
@@ -1900,6 +1925,7 @@ impl Editor {
             source: self.current_buffer().syntax(),
             base: self.current_buffer().path().and_then(|p| p.parent()).map(std::path::Path::to_path_buf),
             painter: self.formula_painter,
+            look: None,
         };
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
@@ -1909,6 +1935,221 @@ impl Editor {
         crate::buffer::write_binary_atomically(&target, &written).map_err(EditorError::Io)?;
         self.status = say!("export.wrote", target.display());
         Ok(CommandOutcome::Continue)
+    }
+
+    /// **`:export-as-preview [FORMAT] [PATH]`** (2026-11-08): the file the
+    /// way its preview draws it — see what you get. A Markdown file as the
+    /// HTML page of its preview ([`crate::as_preview`]), a Typst file as the
+    /// PDF of the document its preview typesets. The format is the one this
+    /// kind of preview has when it is left off; the path, the rules and the
+    /// messages are `:export`'s.
+    pub(super) fn export_as_preview(&mut self, words: &str, force: bool) -> Result<CommandOutcome, EditorError> {
+        use crate::as_preview::Format;
+        use crate::buffer::PreviewKind;
+        if self.refuse_readonly() {
+            return Ok(CommandOutcome::Continue);
+        }
+        let (format, path) = match crate::as_preview::read_line(words) {
+            Ok(read) => read,
+            Err(why) => {
+                self.status = why;
+                return Ok(CommandOutcome::Continue);
+            }
+        };
+        // The document: this file, or the one the preview tab the keys are
+        // in shows.
+        let here = self.current_buffer();
+        let kind = match (here.preview_kind(), here.syntax()) {
+            (Some(kind), _) => kind,
+            (None, crate::syntax::Syntax::Markdown) => PreviewKind::Markdown,
+            (None, crate::syntax::Syntax::Typst) => PreviewKind::Typst,
+            _ => {
+                self.status = say!("export.as-preview-no-preview");
+                return Ok(CommandOutcome::Continue);
+            }
+        };
+        let available = Format::for_preview(kind);
+        let names = available.iter().map(|f| f.name()).collect::<Vec<_>>().join(", ");
+        let format = match format {
+            None => available[0],
+            Some(word) => match Format::parse(&word) {
+                Some(format) if available.contains(&format) => format,
+                Some(_) => {
+                    self.status = say!("export.as-preview-not-this-kind", word, names);
+                    return Ok(CommandOutcome::Continue);
+                }
+                None => {
+                    self.status = say!("export.as-preview-no-such-format", word, names);
+                    return Ok(CommandOutcome::Continue);
+                }
+            },
+        };
+        match format {
+            Format::Html => self.export_markdown_as_preview(path.as_deref(), force),
+            Format::Pdf => self.export_typst_as_preview(path.as_deref(), force),
+        }
+    }
+
+    /// The Markdown preview as an HTML page: the export's page, in the
+    /// preview's look — its fonts and colours as the front end says they are
+    /// now, vertical when the preview is.
+    fn export_markdown_as_preview(&mut self, path: Option<&str>, force: bool) -> Result<CommandOutcome, EditorError> {
+        let Some(looker) = self.preview_look.clone() else {
+            self.status = say!("export.as-preview-no-look");
+            return Ok(CommandOutcome::Continue);
+        };
+        let here = self.current_buffer();
+        let (source, text) = match here.preview_main() {
+            Some(main) => {
+                let main = main.to_path_buf();
+                let text = match self.text_of(&main) {
+                    Some((_, _, text)) => text,
+                    None => std::fs::read_to_string(&main).map_err(EditorError::Io)?,
+                };
+                (Some(main), text)
+            }
+            None => (here.path().map(Path::to_path_buf), here.text()),
+        };
+        let target = match (path, &source) {
+            (Some(path), _) => self.here_path(path),
+            (None, Some(source)) => source.with_extension(crate::as_preview::Format::Html.extension()),
+            (None, None) => return Err(EditorError::NoFileName),
+        };
+        if self.refuse_to_overwrite_as(&target, force, "export-as-preview") {
+            return Ok(CommandOutcome::Continue);
+        }
+        let mut settings = self.export.clone();
+        // Vertical exactly when the preview is; 標點旁置 is drawn only down
+        // a vertical page.
+        settings.vertical = self.markdown_preview_vertical();
+        settings.hanging = settings.vertical && settings.hanging;
+        let look = looker(&text, &settings.fonts);
+        let title = match source.as_deref().and_then(Path::file_name) {
+            Some(name) => name.to_string_lossy().into_owned(),
+            None => self.current_buffer().display_name(),
+        };
+        let style = crate::export::Style {
+            settings,
+            title,
+            source: crate::syntax::Syntax::Markdown,
+            base: source.as_deref().and_then(Path::parent).map(Path::to_path_buf),
+            painter: self.formula_painter,
+            look: Some(look),
+        };
+        let written = crate::as_preview::html(&text, &style);
+        crate::buffer::write_binary_atomically(&target, written.as_bytes()).map_err(EditorError::Io)?;
+        self.status = say!("export.wrote", target.display());
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// The Typst preview's document as a PDF: the file the preview typesets
+    /// (for a chapter, the book that includes it), compiled by `typst` on
+    /// the root a language server would be started on for it, as tinymist
+    /// typesets it. Without `typst`, nothing is written.
+    ///
+    /// **In the background** (2026-11-08): a book takes seconds to typeset,
+    /// and the editor goes on meanwhile. The compiler runs on a thread of its
+    /// own, its input, output and errors its own and never the terminal's;
+    /// the status line says it is typesetting, and the loop collects the
+    /// answer ([`Editor::collect_typesetting`]). One at a time.
+    fn export_typst_as_preview(&mut self, path: Option<&str>, force: bool) -> Result<CommandOutcome, EditorError> {
+        let Some(main) = self.typst_main_here() else {
+            return Err(EditorError::NoFileName);
+        };
+        if let Some(running) = &self.typesetting {
+            self.status = say!("export.typesetting-busy", running.target.display());
+            return Ok(CommandOutcome::Continue);
+        }
+        if !crate::export::typst_is_installed() {
+            self.status = say!("export.no-typst");
+            return Ok(CommandOutcome::Continue);
+        }
+        let target = match path {
+            Some(path) => self.here_path(path),
+            None => main.with_extension(crate::as_preview::Format::Pdf.extension()),
+        };
+        if self.refuse_to_overwrite_as(&target, force, "export-as-preview") {
+            return Ok(CommandOutcome::Continue);
+        }
+        let (root, mut command) = self.typst_compile(&main);
+        // Written whole or not at all: into a file beside the target, then
+        // renamed over it.
+        let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let draft = target.with_file_name(format!(".{name}.yumete-{}.pdf", std::process::id()));
+        command
+            .arg(&draft)
+            .current_dir(&root)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let (tell, answer) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new().name("typst-export".to_string()).spawn(move || {
+            let said = match command.output() {
+                Ok(out) if out.status.success() => Ok(()),
+                Ok(out) => {
+                    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+                    Err(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string())
+                }
+                Err(err) => Err(err.to_string()),
+            };
+            let _ = tell.send(said);
+        });
+        if let Err(err) = spawned {
+            return Err(EditorError::Io(err));
+        }
+        self.status = say!("export.typesetting", main.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
+        self.typesetting = Some(Typesetting { answer, draft, target, unsaved: self.unsaved_in_the_book(&main) });
+        Ok(CommandOutcome::Continue)
+    }
+
+    /// **Take the PDF the compiler made, if it is done** (2026-11-08):
+    /// renamed over the target, or the compiler's first line of complaint
+    /// on the status line. Asked every frame; `true` when something was
+    /// said.
+    pub fn collect_typesetting(&mut self) -> bool {
+        let Some(running) = &self.typesetting else {
+            return false;
+        };
+        let said = match running.answer.try_recv() {
+            Ok(said) => said,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(String::new()),
+        };
+        let Some(done) = self.typesetting.take() else {
+            return false;
+        };
+        let renamed = said.and_then(|()| std::fs::rename(&done.draft, &done.target).map_err(|e| e.to_string()));
+        self.status = match renamed {
+            Ok(()) if done.unsaved == 0 => say!("export.wrote", done.target.display()),
+            Ok(()) => say!("export.wrote-from-disk", done.target.display(), done.unsaved),
+            Err(why) => {
+                let _ = std::fs::remove_file(&done.draft);
+                say!("export.typst-failed", why)
+            }
+        };
+        true
+    }
+
+    /// How soon the loop should look for the compiler's answer: while one
+    /// runs, ten times a second.
+    pub fn typesetting_due_in(&self) -> Option<std::time::Duration> {
+        self.typesetting.as_ref().map(|_| std::time::Duration::from_millis(100))
+    }
+
+    /// Whether a PDF is being typeset for `:export-as-preview`.
+    pub fn typesetting(&self) -> bool {
+        self.typesetting.is_some()
+    }
+
+    /// **How `main` is compiled as the preview typesets it**: the root a
+    /// language server is started on for it, which is where tinymist reads
+    /// the book from, and `typst compile --root <it> <main>`, the output
+    /// still to be added.
+    pub(super) fn typst_compile(&self, main: &Path) -> (PathBuf, std::process::Command) {
+        let root = self.lsp_root_of(main.parent().unwrap_or(Path::new(".")));
+        let mut command = crate::export::typst_command();
+        command.arg("compile").arg("--root").arg(&root).arg(main);
+        (root, command)
     }
 
     /// `:shot` — a picture of the page or of the screen (#189).
@@ -2168,5 +2409,179 @@ impl Editor {
         self.remember_encoding(path, None);
         self.status = say!("encoding.forgot", path.display(), crate::encoding::name(encoding));
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A folder of its own under the system's temporary one.
+    fn folder(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("yumete-eap-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::canonicalize(&dir).unwrap()
+    }
+
+    /// The ink the last formula was drawn in.
+    static INK: std::sync::Mutex<Option<[u8; 3]>> = std::sync::Mutex::new(None);
+
+    fn painter(_: &str, _: bool, _: bool, ink: [u8; 3]) -> Result<crate::export::Formula, String> {
+        *INK.lock().unwrap() = Some(ink);
+        Ok(crate::export::Formula { png: vec![1, 2, 3], width: 2.0, height: 1.0, depth: 0.2 })
+    }
+
+    fn editor_on(path: &Path) -> Editor {
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", path.display())).unwrap();
+        ed.set_preview_look(std::sync::Arc::new(|_: &str, _: &str| crate::as_preview::test_look()));
+        ed.set_formula_painter(painter);
+        ed
+    }
+
+    /// **`:export-as-preview` writes the preview's look** (2026-11-08): the
+    /// colours and faces the front end says the preview is drawn in, a
+    /// formula in the preview's ink, beside the file as `.html`; and it is
+    /// refused over an existing file as `:export` is, naming its own `!`.
+    #[test]
+    fn the_page_carries_the_preview_s_colours_fonts_and_ink() {
+        let dir = folder("look");
+        let path = dir.join("樣張.md");
+        std::fs::write(&path, "# 一章\n\n圓的面積是 $\\pi r^2$。\n").unwrap();
+        let mut ed = editor_on(&path);
+        ed.execute(":export-as-preview").unwrap();
+        let out = std::fs::read_to_string(dir.join("樣張.html")).unwrap();
+        assert!(out.contains("background: #123456") && out.contains("'Test Sans'"), "{out}");
+        assert!(out.contains("<h1>一章</h1>") && out.contains("img class=\"math\""), "{out}");
+        assert_eq!(*INK.lock().unwrap(), Some([0xfe, 0xdc, 0xba]), "a formula in the writing's ink");
+        assert_eq!(ed.status(), say!("export.wrote", dir.join("樣張.html").display()));
+        ed.execute(":export-as-preview html").unwrap();
+        assert_eq!(ed.status(), say!("export.target-exists-for", dir.join("樣張.html").display(), "export-as-preview"));
+        ed.execute(":export-as-preview! html").unwrap();
+        assert_eq!(ed.status(), say!("export.wrote", dir.join("樣張.html").display()));
+        ed.execute(&format!(":export-as-preview \"{}\"", dir.join("另一 頁.html").display())).unwrap();
+        assert!(dir.join("另一 頁.html").is_file(), "{}", ed.status());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **Vertical by the preview's rule, not by `[export] vertical`**: the
+    /// page is vertical exactly when the text window is and
+    /// `[editor] preview_vertical` is on.
+    #[test]
+    fn vertical_follows_the_preview_not_the_export_setting() {
+        let dir = folder("vertical");
+        let path = dir.join("章.md");
+        std::fs::write(&path, "一段話。\n").unwrap();
+        let mut ed = editor_on(&path);
+        let mut settings = ed.export_settings().clone();
+        settings.vertical = true;
+        settings.hanging = true;
+        ed.set_export_settings(settings);
+        let page = |ed: &mut Editor| {
+            ed.execute(":export-as-preview!").unwrap();
+            std::fs::read_to_string(dir.join("章.html")).unwrap()
+        };
+        let out = page(&mut ed);
+        assert!(!out.contains("writing-mode: vertical-rl"), "the text window is horizontal: {out}");
+        assert!(!out.contains("hanging-punctuation"), "{out}");
+        ed.set_layout(crate::zong::Layout::Vertical);
+        let out = page(&mut ed);
+        assert!(out.contains("writing-mode: vertical-rl") && out.contains("hanging-punctuation"), "{out}");
+        ed.set_preview_vertical(false);
+        let out = page(&mut ed);
+        assert!(!out.contains("writing-mode: vertical-rl"), "preview_vertical is off: {out}");
+        // And `[export] vertical` off changes nothing while the preview is vertical.
+        ed.set_preview_vertical(true);
+        let mut settings = ed.export_settings().clone();
+        settings.vertical = false;
+        ed.set_export_settings(settings);
+        assert!(page(&mut ed).contains("writing-mode: vertical-rl"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **A format word the file's preview does not have is said so**, with
+    /// the ones it has; a word that is no format at all is said so too; a
+    /// file with no preview has nothing to export this way.
+    #[test]
+    fn a_format_the_preview_does_not_have_is_said_so() {
+        let dir = folder("formats");
+        let md = dir.join("a.md");
+        let typ = dir.join("b.typ");
+        let txt = dir.join("c.txt");
+        std::fs::write(&md, "話。\n").unwrap();
+        std::fs::write(&typ, "話。\n").unwrap();
+        std::fs::write(&txt, "話。\n").unwrap();
+        let mut ed = editor_on(&md);
+        ed.execute(":export-as-preview pdf").unwrap();
+        assert_eq!(ed.status(), say!("export.as-preview-not-this-kind", "pdf", "html"));
+        ed.execute(":export-as-preview docx").unwrap();
+        assert_eq!(ed.status(), say!("export.as-preview-no-such-format", "docx", "html"));
+        ed.execute(&format!(":open {}", typ.display())).unwrap();
+        ed.execute(":export-as-preview html").unwrap();
+        assert_eq!(ed.status(), say!("export.as-preview-not-this-kind", "html", "pdf"));
+        ed.execute(&format!(":open {}", txt.display())).unwrap();
+        ed.execute(":export-as-preview").unwrap();
+        assert_eq!(ed.status(), say!("export.as-preview-no-preview"));
+        // Without the front end's word on the look, nothing is written.
+        let mut bare = Editor::new();
+        bare.execute(&format!(":open {}", md.display())).unwrap();
+        bare.execute(":export-as-preview").unwrap();
+        assert_eq!(bare.status(), say!("export.as-preview-no-look"));
+        assert!(!dir.join("a.html").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **A chapter exports the book its preview typesets**: the open file
+    /// that includes it, or the main file of the preview tab open on its
+    /// book; a file nobody includes is its own main file. With `typst` on
+    /// the `PATH`, the PDF is the book's, beside it.
+    #[test]
+    fn a_chapter_exports_the_book_its_preview_typesets() {
+        let dir = folder("typst");
+        let book = dir.join("book.typ");
+        let chapter = dir.join("chapters").join("one.typ");
+        std::fs::create_dir_all(chapter.parent().unwrap()).unwrap();
+        std::fs::write(&book, "#set page(width: 10cm, height: 10cm)\n#include \"chapters/one.typ\"\n").unwrap();
+        std::fs::write(&chapter, "= 第一章\n\n一段話。\n").unwrap();
+        let lone = dir.join("lone.typ");
+        std::fs::write(&lone, "獨自一頁。\n").unwrap();
+
+        let mut ed = Editor::new();
+        ed.execute(&format!(":open {}", lone.display())).unwrap();
+        assert_eq!(ed.typst_main_here(), Some(lone.clone()));
+        ed.execute(&format!(":open {}", book.display())).unwrap();
+        ed.execute(&format!(":open {}", chapter.display())).unwrap();
+        assert_eq!(ed.typst_main_here(), Some(book.clone()), "the open file that includes it");
+        // A preview tab open on another main file of the book wins.
+        let other = dir.join("other.typ");
+        std::fs::write(&other, "#include \"chapters/one.typ\"\n").unwrap();
+        ed.add_preview_tab(other.clone());
+        assert_eq!(ed.typst_main_here(), Some(other.clone()), "the preview tab's main file");
+        ed.close_preview(ed.preview_of(&other).unwrap());
+
+        if crate::export::typst_is_installed() {
+            ed.execute(":export-as-preview").unwrap();
+            // In the background: the status says so, a second one waits.
+            assert_eq!(ed.status(), say!("export.typesetting", "book.typ"));
+            assert!(ed.typesetting());
+            ed.execute(":export-as-preview! other.pdf").unwrap();
+            assert_eq!(ed.status(), say!("export.typesetting-busy", book.with_extension("pdf").display()));
+            for _ in 0..600 {
+                if ed.collect_typesetting() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            assert!(!ed.typesetting(), "typst answered");
+            assert_eq!(ed.status(), say!("export.wrote", book.with_extension("pdf").display()));
+            assert!(!dir.join("other.pdf").exists());
+            let pdf = std::fs::read(book.with_extension("pdf")).unwrap();
+            assert!(pdf.starts_with(b"%PDF"), "a PDF");
+            assert!(!chapter.with_extension("pdf").exists(), "the book, not the chapter");
+            ed.execute(":export-as-preview pdf").unwrap();
+            assert_eq!(ed.status(), say!("export.target-exists-for", book.with_extension("pdf").display(), "export-as-preview"));
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
