@@ -3386,6 +3386,10 @@ pub struct Editor {
     /// there so it can say so on the status bar, hand the address back when
     /// asked, and refuse to start a second one.
     preview_at: Option<String>,
+    /// **What draws a TeX formula for `:export html`** (2026-11-08), handed
+    /// over by the front end, where RaTeX lives. `None` leaves `$…$` as
+    /// written.
+    formula_painter: Option<crate::export::Painter>,
     /// **The windows that show a page instead of text** (2026-11-07), and
     /// what each follows ([`PageWindow`]). See `editor/page_preview.rs`.
     page_windows: std::collections::HashMap<crate::window::WindowId, PageWindow>,
@@ -4629,6 +4633,7 @@ impl Editor {
             preview_request: None,
             open_request: None,
             preview_at: None,
+            formula_painter: None,
             page_windows: std::collections::HashMap::new(),
             preview_fit: PreviewFit::default(),
             page_steps: Vec::new(),
@@ -4872,6 +4877,14 @@ impl Editor {
     /// The front end owns the process, so it is the front end that knows.
     pub fn set_preview_at(&mut self, url: Option<String>) {
         self.preview_at = url;
+    }
+
+    /// Say what draws a TeX formula when a page is exported to HTML.
+    ///
+    /// The front end owns the renderer, so it is the front end that hands it
+    /// over; this crate does not carry KaTeX's fonts.
+    pub fn set_formula_painter(&mut self, painter: crate::export::Painter) {
+        self.formula_painter = Some(painter);
     }
 
     /// The running typesetter's address, for the status bar and for `:view-preview`.

@@ -1877,6 +1877,8 @@ impl Editor {
             paper: self.paper,
             // Warning: **讀的是這一份稿子的語法**，不是要寫成的格式（2026-09-28）。
             source: self.current_buffer().syntax(),
+            tatechuyoko: self.tatechuyoko,
+            painter: self.formula_painter,
         };
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);

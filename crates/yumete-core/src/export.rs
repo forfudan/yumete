@@ -160,7 +160,39 @@ pub struct Style {
     /// `*粗*`、`$a+b$`、`@引用` 一個都認不出來，原樣（並且轉義）寫進導出的檔。
     /// `Format` 說的是**寫成什麼**，這一格說的是**讀的是什麼**，兩件事。
     pub source: crate::syntax::Syntax,
+    /// **The `tatechuyoko` setting** (2026-11-08): how long a run of half-width
+    /// letters and digits the page sets across in one slot, `0` for none. A
+    /// vertical HTML page wraps the same runs in `text-combine-upright`, up to
+    /// four — see [`TCY_MAX`].
+    pub tatechuyoko: usize,
+    /// **What draws a TeX formula** (2026-11-08), or `None` to leave Markdown's
+    /// `$…$` as written. The front end hands it over: RaTeX lives there, so
+    /// that this crate and its tests do not carry KaTeX's fonts.
+    pub painter: Option<Painter>,
 }
+
+/// A TeX formula drawn for a page: a PNG, and how big to show it, in `em` of
+/// the text around it.
+#[derive(Debug, Clone)]
+pub struct Formula {
+    pub png: Vec<u8>,
+    /// From the top of the picture to its foot.
+    pub height: f64,
+    /// How far the picture reaches below the baseline.
+    pub depth: f64,
+}
+
+/// Draws `tex`, on its own line when the flag says so (`$$…$$`), or says what
+/// was wrong with it.
+pub type Painter = fn(&str, bool) -> Result<Formula, String>;
+
+/// **The longest run a browser sets across** (2026-11-08). CSS writes the
+/// automatic form as `digits <integer [2,4]>`, and `text-combine-upright: all`
+/// squeezes whatever it is given into one `em` — eight digits there are an
+/// eighth of a character each. The terminal lets a longer group hang into the
+/// 行間 instead, which a browser cannot be asked to do; past four the run is
+/// turned on its side with the Latin around it, as print sets a long number.
+pub const TCY_MAX: usize = 4;
 
 /// Write `text` out as `format`.
 pub fn export(text: &str, format: Format, style: &Style) -> String {
@@ -190,6 +222,11 @@ enum Block {
     List { ordered: bool, start: usize, items: Vec<Vec<Block>> },
     /// A pipe table: its heading row, how each column aligns, its rows.
     Table { head: Vec<String>, align: Vec<crate::mdtable::Align>, rows: Vec<Vec<String>> },
+    /// **A display formula on lines of its own** (2026-11-08): Markdown's
+    /// `$$`, the formula, `$$`, delimiters and all. Read as a paragraph, the
+    /// three lines came out joined by spaces and no line could be drawn: each
+    /// held a piece of the formula.
+    Math(Vec<String>),
 }
 
 /// A footnote's name and the lines of its text, `[^1]: …`.
@@ -252,6 +289,13 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
             flush(&mut para, &mut out);
             i += 1;
             continue;
+        }
+        if markdown && para.is_empty() {
+            if let Some(end) = display_maths_end(lines, i) {
+                out.push(Block::Math(lines[i..=end].iter().map(|l| l.trim().to_string()).collect()));
+                i = end + 1;
+                continue;
+            }
         }
         if markdown && indent == 0 {
             if let Some((name, first)) = note_opening(body) {
@@ -389,6 +433,28 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>)
     out
 }
 
+/// **The last line of a display formula opened at `lines[at]`**: a line that
+/// opens with `$$` and does not close it, then the line that ends with `$$`,
+/// with no blank line between (Pandoc's rule). `None` when `lines[at]` opens
+/// none, or nothing closes it.
+fn display_maths_end(lines: &[String], at: usize) -> Option<usize> {
+    let first = lines[at].trim();
+    let rest = first.strip_prefix("$$")?;
+    if rest.trim_end().ends_with("$$") {
+        return None;
+    }
+    for (k, line) in lines.iter().enumerate().skip(at + 1) {
+        let line = line.trim();
+        if line.is_empty() {
+            return None;
+        }
+        if line.ends_with("$$") {
+            return Some(k);
+        }
+    }
+    None
+}
+
 /// `[^name]: text` — a footnote's name and the start of its text.
 fn note_opening(line: &str) -> Option<(&str, &str)> {
     let rest = line.strip_prefix("[^")?;
@@ -473,18 +539,28 @@ fn line_into(
     dialect: Dialect,
     escape: fn(&str) -> String,
     source: crate::syntax::Syntax,
+    painter: Option<Painter>,
 ) -> String {
+    use crate::syntax::Syntax;
     let chars: Vec<char> = line.chars().collect();
     let groups = ruby::groups(&chars, dialects);
+    // A formula is drawn only where it is TeX — Markdown's — and only into a
+    // page that can show a picture; Typst's `$…$` is Typst's maths.
+    let paint = match (dialect, source) {
+        (Dialect::Html, Syntax::Typst | Syntax::Text) => None,
+        (Dialect::Html, _) => painter,
+        (Dialect::Typst, _) => None,
+    };
     // Warning: **讀的是源檔的語法，不是要寫成的格式**（2026-09-28）。從前這裏寫死
     // `markdown::spans`，於是一份 Typst 稿子導出去，`*粗*` 是四個字符、`$a+b$` 被
     // 轉義成 `\$a + b\$`。
     let marks = match source {
-        crate::syntax::Syntax::Typst => crate::markdown::typst::spans(line),
-        crate::syntax::Syntax::Text => Vec::new(),
+        Syntax::Typst => crate::markdown::typst::spans(line),
+        Syntax::Text => Vec::new(),
+        _ if paint.is_some() => crate::markdown::spans(line),
         _ => without_maths(crate::markdown::spans(line)),
     };
-    render(&chars, &groups, &marks, None, 0, chars.len(), dialect, escape)
+    render(&chars, &groups, &marks, None, 0, chars.len(), dialect, escape, paint)
 }
 
 /// One run of `chars`, with whatever is marked **inside** it marked too.
@@ -515,6 +591,8 @@ fn render(
     to: usize,
     dialect: Dialect,
     escape: fn(&str) -> String,
+    // Set only for Markdown going to HTML: what draws its TeX.
+    paint: Option<Painter>,
 ) -> String {
     use crate::markdown::Kind;
     let mut out = String::new();
@@ -566,6 +644,22 @@ fn render(
                 out.push_str(&escape(&std::mem::take(&mut plain)));
                 let start = at.max(span.start);
                 let end = span.end.min(to);
+                if let (Kind::Math, Some(paint)) = (span.kind, paint) {
+                    let tex: String = chars[start..end].iter().collect();
+                    // `$$` on both sides is a formula set on its own line.
+                    let display = start >= 2 && chars[start - 2..start] == ['$', '$'];
+                    out.push_str(&match paint(&tex, display) {
+                        Ok(drawn) => formula_img(&drawn, &tex, display),
+                        // What will not draw is left as it was written, `$`s
+                        // and all, which is what a reader of the source sees.
+                        Err(_) => {
+                            let fence = if display { "$$" } else { "$" };
+                            format!("{fence}{}{fence}", escape(&tex))
+                        }
+                    });
+                    at = end.max(at + 1);
+                    continue;
+                }
                 // **這三種不往裏走。** 代碼與批注裏寫的就是字面（`spans()` 本來
                 // 也不往它們裏面遞），而分隔符自己没有內容。
                 let leaf = matches!(span.kind, Kind::Code | Kind::Comment | Kind::Marker | Kind::Math | Kind::Html);
@@ -583,7 +677,7 @@ fn render(
                         }
                     }
                     false => {
-                        render(chars, groups, marks, Some(i), start, end, dialect, escape)
+                        render(chars, groups, marks, Some(i), start, end, dialect, escape, paint)
                     }
                 };
                 out.push_str(&marked(span.kind, &body, dialect));
@@ -658,6 +752,132 @@ fn marked(kind: crate::markdown::Kind, text: &str, dialect: Dialect) -> String {
     }
 }
 
+/// **A drawn formula as an `<img>`** (2026-11-08): the PNG inline, so the page
+/// stays one file; the TeX as its `alt`, for a screen reader and for whatever
+/// copies the picture's text; and its size in `em`, so it grows and shrinks
+/// with the text — the print stylesheet changes the type size, and a size in
+/// pixels would not follow it. `--depth` puts its baseline on the line's
+/// across the page; down a 縱 it is centred instead (see [`html`]).
+fn formula_img(drawn: &Formula, tex: &str, display: bool) -> String {
+    let class = if display { "math display" } else { "math" };
+    format!(
+        "<img class=\"{class}\" alt=\"{}\" style=\"height: {:.3}em; --depth: {:.3}em\" src=\"data:image/png;base64,{}\">",
+        escape_html(tex).replace('"', "&quot;"),
+        drawn.height,
+        -drawn.depth,
+        crate::preview::base64(&drawn.png),
+    )
+}
+
+/// **What a vertical page does to its text that CSS cannot be asked to**
+/// (2026-11-08), done to the HTML `body` once it is written.
+///
+/// - **縱中橫.** The runs the terminal page packs into one slot
+///   ([`crate::zong::packed_runs`]) are wrapped in `<span class="tcy">`, up to
+///   [`TCY_MAX`] long: `1997` stands upright in one square instead of lying on
+///   its side. Longer runs are left to `text-orientation: mixed`.
+/// - **Curly quotes become corner brackets**, `“”` as `『』` and `‘’` as
+///   `「」`, when `quotes` — the page is Chinese. That is what the terminal's
+///   `:render full` draws, and an export is the page with its markup taken
+///   off, which is what `full` means. A font's own vertical forms cannot be
+///   relied on for these: Songti and PingFang leave `“` lying flat, KingHwa
+///   OldSong swaps the double and single pairs, and a page cannot know which
+///   font the reader has. The brackets are real characters every CJK font
+///   turns, so a copy is still Chinese. The other marks — `，。：（）——……` —
+///   stay as written: CJK fonts turn those themselves, and their presentation
+///   forms (U+FE10…) would break copying and searching for no gain. A single
+///   quote between two Latin letters is an apostrophe and is left alone.
+///
+/// Nothing inside a tag is touched, nor what is in `<code>`, `<pre>`, a
+/// reading (`<rt>`), a table — set across, so it has no 縱 — or a script.
+fn vertical_text(body: &str, tatechuyoko: usize, quotes: bool) -> String {
+    const SKIP: &[&str] = &["code", "pre", "rt", "rp", "table", "script", "style", "svg", "math", "kbd", "samp"];
+    let at_most = tatechuyoko.min(TCY_MAX);
+    let mut out = String::with_capacity(body.len() + body.len() / 8);
+    let mut skipping: Vec<String> = Vec::new();
+    let mut text = String::new();
+    let mut rest = body;
+    while let Some(c) = rest.chars().next() {
+        let tag = match c {
+            '<' => rest.find('>').map(|end| &rest[..=end]),
+            _ => None,
+        };
+        let Some(tag) = tag else {
+            text.push(c);
+            rest = &rest[c.len_utf8()..];
+            continue;
+        };
+        let held = std::mem::take(&mut text);
+        out.push_str(&match skipping.is_empty() {
+            true => turned(&held, at_most, quotes),
+            false => held,
+        });
+        out.push_str(tag);
+        let inner = tag[1..tag.len() - 1].trim();
+        let name = inner
+            .trim_start_matches('/')
+            .chars()
+            .take_while(char::is_ascii_alphanumeric)
+            .collect::<String>()
+            .to_ascii_lowercase();
+        if inner.starts_with('/') {
+            if skipping.last() == Some(&name) {
+                skipping.pop();
+            }
+        } else if SKIP.contains(&name.as_str()) && !inner.ends_with('/') {
+            skipping.push(name);
+        }
+        rest = &rest[tag.len()..];
+    }
+    out.push_str(&match skipping.is_empty() {
+        true => turned(&text, at_most, quotes),
+        false => text,
+    });
+    out
+}
+
+/// One run of text between tags, done as [`vertical_text`] says. An entity
+/// (`&amp;`) is passed over whole: its letters are not a word.
+fn turned(text: &str, at_most: usize, quotes: bool) -> String {
+    let latin = |c: Option<&char>| c.is_some_and(|&c| c.is_alphanumeric() && yumete_cjk::char_width(c) == 1);
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while !rest.is_empty() {
+        let entity = rest
+            .find('&')
+            .and_then(|at| rest[at..].find(';').filter(|&n| n <= 12).map(|n| (at, at + n + 1)));
+        let (plain, entity) = match entity {
+            Some((from, to)) => (&rest[..from], &rest[from..to]),
+            None => (rest, ""),
+        };
+        let typed: Vec<char> = plain.chars().collect();
+        let chars: Vec<char> = (0..typed.len())
+            .map(|k| {
+                let apostrophe = latin(k.checked_sub(1).and_then(|b| typed.get(b))) && latin(typed.get(k + 1));
+                match typed[k] {
+                    '“' if quotes => '『',
+                    '”' if quotes => '』',
+                    '‘' if quotes && !apostrophe => '「',
+                    '’' if quotes && !apostrophe => '」',
+                    c => c,
+                }
+            })
+            .collect();
+        let mut at = 0;
+        for run in crate::zong::packed_runs(&chars.iter().collect::<String>(), at_most) {
+            out.extend(&chars[at..run.start]);
+            out.push_str("<span class=\"tcy\">");
+            out.extend(&chars[run.clone()]);
+            out.push_str("</span>");
+            at = run.end;
+        }
+        out.extend(&chars[at..]);
+        out.push_str(entity);
+        rest = &rest[plain.len() + entity.len()..];
+    }
+    out
+}
+
 /// `&`, `<` and `>` as a browser needs them.
 fn escape_html(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -687,18 +907,48 @@ fn escape_typst(text: &str) -> String {
     out
 }
 
+/// **The fonts a Chinese page asks for, in order** (2026-11-08).
+///
+/// A serif first, and only faces that turn punctuation for a vertical page —
+/// an OpenType `vert` table, or (Songti, STSong) Apple's own `morx` — so
+/// `，` sits in the corner of its square and `（` turns, whichever is the one
+/// installed: Source Han and Noto Serif CJK anywhere, KingHwa OldSong and
+/// Songti on a Mac, SimSun on Windows, AR PL UMing on Linux. Then the others
+/// that do the same, LXGW WenKai, Hiragino Sans GB, MiSans, Microsoft YaHei,
+/// WenQuanYi. The generic `serif` comes last because it may be a Latin face:
+/// `——` taken from Times is two short dashes with a gap between.
+const CJK_FONTS: &str = "\"Source Han Serif SC\", \"Source Han Serif TC\", \"Source Han Serif\", \
+     \"Noto Serif CJK SC\", \"Noto Serif CJK TC\", \"Noto Serif CJK\", \"KingHwa_OldSong\", \
+     \"Songti SC\", \"STSong\", \"SimSun\", \"AR PL UMing CN\", \"LXGW WenKai GB\", \"LXGW WenKai\", \
+     \"Hiragino Sans GB\", \"MiSans\", \"Microsoft YaHei\", \"WenQuanYi Micro Hei\", serif";
+
+/// The same for a Japanese page: its own 明朝 first, then the Chinese faces.
+const JA_FONTS: &str = "\"Source Han Serif JP\", \"Noto Serif CJK JP\", \"Hiragino Mincho ProN\", \
+     \"YuMincho\", \"Yu Mincho\", \"MS Mincho\"";
+
 /// A standalone HTML page — the export that reproduces what is on screen.
 fn html(text: &str, style: &Style) -> String {
-    let mut out = String::new();
     let text = crate::markdown::strip_comments(text);
     let lang = language_of(&text);
-    let cjk = lang != "en";
+    let mut out = String::new();
     out.push_str(&format!("<!doctype html>\n<html lang=\"{lang}\">\n<meta charset=\"utf-8\">\n"));
     out.push_str(&format!("<title>{}</title>\n", escape_html(&style.title)));
     out.push_str("<style>\n");
-    let fonts = match cjk {
-        true => "\"Source Han Serif\", \"Noto Serif CJK\", serif",
-        false => "Georgia, \"Times New Roman\", serif",
+    out.push_str(&stylesheet(style, lang));
+    out.push_str(&print_rules(style));
+    out.push_str("</style>\n");
+    out.push_str(&html_body(&text, style, lang));
+    out
+}
+
+/// The page's stylesheet, but for what only a printer sees.
+fn stylesheet(style: &Style, lang: &str) -> String {
+    let mut out = String::new();
+    let cjk = lang != "en";
+    let fonts = match lang {
+        "en" => "Georgia, \"Times New Roman\", serif".to_string(),
+        "ja" => format!("{JA_FONTS}, {CJK_FONTS}"),
+        _ => CJK_FONTS.to_string(),
     };
     out.push_str(&format!(
         "body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; margin: 4rem auto; }}\n"
@@ -710,8 +960,11 @@ fn html(text: &str, style: &Style) -> String {
             // `mixed`, not `upright`: upright sets every Latin letter on its
             // own row, so a pinyin reading comes out one letter at a time and a
             // year comes out as four. `mixed` is what 縱書 means — 漢字 upright,
-            // Latin turned — and it is the property's own default.
-            "body {{ writing-mode: vertical-rl; text-orientation: mixed; \
+            // Latin turned — and it is the property's own default. The short
+            // runs the page sets across are wrapped in `.tcy` (see
+            // `vertical_text`); `line-break: strict` is 禁則, as the
+            // terminal page keeps it.
+            "body {{ writing-mode: vertical-rl; text-orientation: mixed; line-break: strict; \
              max-block-size: {}em; block-size: {}em; }}\n",
             style.zong_len, style.zong_len
         ));
@@ -736,32 +989,58 @@ fn html(text: &str, style: &Style) -> String {
         "blockquote { margin: 1em 2em; }\n\
          table { border-collapse: collapse; margin: 1em 0; }\n\
          th, td { border: 1px solid #999; padding: 0.2em 0.6em; }\n\
-         .footnotes { font-size: 0.9em; }\n",
+         .footnotes { font-size: 0.9em; }\n\
+         img.math { vertical-align: var(--depth); }\n\
+         img.math.display { display: block; margin-block: 0.5em; margin-inline: auto; }\n\
+         p.math { text-indent: 0; }\n",
     );
-    out.push_str(&print_rules(style));
-    out.push_str("</style>\n");
-
-    let (blocks, notes) = blocks(&text, style.source);
-    let mut body = String::new();
-    html_blocks(&blocks, style, &mut body);
-    let (body, order) = number_the_notes(&body, &notes, |n, _| {
-        format!("<sup class=\"fn\"><a href=\"#fn-{n}\" id=\"fnref-{n}\">{n}</a></sup>")
-    });
-    out.push_str(&body);
-    if !order.is_empty() {
-        out.push_str("<section class=\"footnotes\">\n<hr>\n<ol>\n");
-        for (n, lines) in order.iter().enumerate() {
-            let n = n + 1;
-            out.push_str(&format!("<li id=\"fn-{n}\">{}</li>\n", html_lines(lines, style)));
-        }
-        out.push_str("</ol>\n</section>\n");
+    if style.vertical {
+        // **A table and a code block stay across** (2026-11-08): a grid turned
+        // on its side reads its rows as columns, and code is indented and read
+        // line by line — the terminal page keeps a program file horizontal for
+        // the same reason. A formula stands upright, centred on its 縱, as a
+        // picture of something written across.
+        out.push_str(
+            ".tcy { -webkit-text-combine: horizontal; text-combine-upright: all; }\n\
+             table, pre { writing-mode: horizontal-tb; }\n\
+             table { margin: 0 1em; }\n\
+             pre { margin: 0 1em; max-block-size: 100%; overflow: auto; }\n\
+             img.math { vertical-align: middle; }\n\
+             sup.fn a { text-decoration: none; }\n",
+        );
     }
     out
 }
 
+/// The page's text: the blocks, the footnotes after them, and on a vertical
+/// Chinese or Japanese page what [`vertical_text`] does to both. An English
+/// page set down the page keeps its words whole and turned: 縱中橫 is for the
+/// odd number in a CJK line, and every short word of an English one would be
+/// squeezed into a square.
+fn html_body(text: &str, style: &Style, lang: &str) -> String {
+    let (blocks, notes) = blocks(text, style.source);
+    let mut body = String::new();
+    html_blocks(&blocks, style, &mut body);
+    let (mut body, order) = number_the_notes(&body, &notes, |n, _| {
+        format!("<sup class=\"fn\"><a href=\"#fn-{n}\" id=\"fnref-{n}\">{n}</a></sup>")
+    });
+    if !order.is_empty() {
+        body.push_str("<section class=\"footnotes\">\n<hr>\n<ol>\n");
+        for (n, lines) in order.iter().enumerate() {
+            let n = n + 1;
+            body.push_str(&format!("<li id=\"fn-{n}\">{}</li>\n", html_lines(lines, style)));
+        }
+        body.push_str("</ol>\n</section>\n");
+    }
+    match style.vertical && lang != "en" {
+        true => vertical_text(&body, style.tatechuyoko, lang == "zh"),
+        false => body,
+    }
+}
+
 /// The blocks as HTML.
 fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.dialects, Dialect::Html, escape_html, style.source);
+    let line = |text: &str| line_into(text, style.dialects, Dialect::Html, escape_html, style.source, style.painter);
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -781,6 +1060,17 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             }
             Block::Paragraph(lines) => {
                 out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style)));
+            }
+            Block::Math(lines) => {
+                let tex = lines.join("\n");
+                let tex = tex.trim().trim_start_matches("$$").trim_end_matches("$$").trim();
+                let tex_source = !matches!(style.source, crate::syntax::Syntax::Typst | crate::syntax::Syntax::Text);
+                match style.painter.filter(|_| tex_source).map(|paint| paint(tex, true)) {
+                    Some(Ok(drawn)) => {
+                        out.push_str(&format!("<p class=\"math\">{}</p>\n", formula_img(&drawn, tex, true)));
+                    }
+                    _ => out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style))),
+                }
             }
             Block::Rule => out.push_str("<hr>\n"),
             Block::Quote(inner) => {
@@ -854,7 +1144,7 @@ fn html_lines(lines: &[String], style: &Style) -> String {
                 false => "<br>\n",
             });
         }
-        out.push_str(&line_into(raw.trim(), style.dialects, Dialect::Html, escape_html, style.source));
+        out.push_str(&line_into(raw.trim(), style.dialects, Dialect::Html, escape_html, style.source, style.painter));
     }
     out
 }
@@ -982,7 +1272,8 @@ fn print_rules(style: &Style) -> String {
          h1, h2 {{ break-before: page; }}\n  \
          body > :first-child {{ break-before: auto; }}\n  \
          h1, h2, h3, h4, h5, h6 {{ break-after: avoid; }}\n  \
-         p {{ orphans: 2; widows: 2; }}\n\
+         p {{ orphans: 2; widows: 2; }}\n  \
+         table, pre, img.math {{ break-inside: avoid; }}\n\
          }}\n"
     ));
     out
@@ -1027,7 +1318,7 @@ fn typst(text: &str, style: &Style) -> String {
     let (body, _) = number_the_notes(&body, &notes, |_, text| {
         let lines: Vec<String> = text
             .iter()
-            .map(|l| line_into(l, style.dialects, Dialect::Typst, escape_typst, style.source))
+            .map(|l| line_into(l, style.dialects, Dialect::Typst, escape_typst, style.source, None))
             .collect();
         format!("#footnote[{}]", lines.join(" "))
     });
@@ -1037,7 +1328,7 @@ fn typst(text: &str, style: &Style) -> String {
 
 /// The blocks as Typst markup.
 fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.dialects, Dialect::Typst, escape_typst, style.source);
+    let line = |text: &str| line_into(text, style.dialects, Dialect::Typst, escape_typst, style.source, None);
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -1053,7 +1344,9 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 }
                 out.push('\n');
             }
-            Block::Paragraph(lines) => {
+            // A display formula is TeX, which Typst cannot read: its lines go
+            // over as text, as they did when they were read as a paragraph.
+            Block::Paragraph(lines) | Block::Math(lines) => {
                 for text in lines {
                     out.push_str(&line(text.trim()));
                     out.push('\n');
@@ -1131,6 +1424,8 @@ mod tests {
             title: "第一章".to_string(),
             paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
+            tatechuyoko: 4,
+            painter: None,
         }
     }
 
@@ -1275,6 +1570,8 @@ mod tests {
             title: "t".to_string(),
             paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
+            tatechuyoko: 4,
+            painter: None,
         };
         let out = export("他**很好**，%%這裏要改%%不過還行。\n", Format::Html, &style);
         assert!(out.contains("<strong>很好</strong>"), "{out}");
@@ -1305,6 +1602,8 @@ mod tests {
             title: "t".to_string(),
             paper: Paper::A5,
             source,
+            tatechuyoko: 4,
+            painter: None,
         };
         let md = style(crate::syntax::Syntax::Markdown);
         // 只看正文那一段——整份輸出裏還有 CSS，裏頭本來就有星號。
@@ -1361,12 +1660,14 @@ mod tests {
             title: "t".to_string(),
             paper: Paper::A5,
             source: crate::syntax::Syntax::Markdown,
+            tatechuyoko: 4,
+            painter: None,
         };
         let out = export("一二三\n", Format::Html, &style);
         // `upright` sets every Latin letter on its own row — a pinyin reading
         // one letter at a time, a year as four.
         assert!(out.contains("text-orientation: mixed"), "{out}");
-        assert!(!out.contains("upright"), "{out}");
+        assert!(!out.contains("text-orientation: upright"), "{out}");
         // `last` narrows the hang to the block's final line, which is not what
         // 標點旁置 means.
         assert!(out.contains("hanging-punctuation: allow-end;"), "{out}");
@@ -1492,7 +1793,7 @@ mod tests {
         let mut s = style();
         s.dialects = Dialects::NONE;
         let out = export("他說「a < b」。\n", Format::Html, &s);
-        assert!(out.contains("a &lt; b"), "{out}");
+        assert!(out.contains(" &lt; "), "{out}");
     }
 
     #[test]
@@ -1618,5 +1919,152 @@ mod tests {
         assert!(out.contains(r"Vec\<String\> and a\<b and c\>d"), "{out}");
         let out = export("Vec<String> and a<b and c>d\n", Format::Html, &md);
         assert!(out.contains("Vec&lt;String&gt; and a&lt;b and c&gt;d"), "{out}");
+    }
+
+    /// A formula that always draws: three bytes, a size anyone can check.
+    fn drawn(_: &str, _: bool) -> Result<Formula, String> {
+        Ok(Formula { png: vec![1, 2, 3], height: 1.5, depth: 0.25 })
+    }
+
+    fn refused(_: &str, _: bool) -> Result<Formula, String> {
+        Err("no".to_string())
+    }
+
+    /// **縱中橫 on the vertical page** (2026-11-08): the runs the terminal
+    /// packs into one slot stand upright in one square, by the same rule —
+    /// a whole run of half-width letters and digits, a lone one included.
+    #[test]
+    fn a_vertical_page_sets_short_runs_across() {
+        let out = export("1997年3月12日，A股。\n", Format::Html, &style());
+        assert!(
+            out.contains("<span class=\"tcy\">1997</span>年<span class=\"tcy\">3</span>月<span class=\"tcy\">12</span>日，<span class=\"tcy\">A</span>股"),
+            "{out}"
+        );
+        assert!(out.contains("text-combine-upright: all"), "{out}");
+    }
+
+    /// Past the setting, and past four whatever the setting, a run is turned
+    /// with the Latin around it: `all` would squeeze eight digits into one
+    /// square.
+    #[test]
+    fn a_long_run_is_turned_and_the_setting_is_followed() {
+        let mut s = style();
+        s.tatechuyoko = 8;
+        let out = export("12345年，Python。\n", Format::Html, &s);
+        assert!(!out.contains("<span class=\"tcy\">12345</span>"), "{out}");
+        assert!(!out.contains("<span class=\"tcy\">Python</span>"), "{out}");
+        s.tatechuyoko = 2;
+        let out = export("1997年12月\n", Format::Html, &s);
+        assert!(out.contains("1997年<span class=\"tcy\">12</span>月"), "{out}");
+        s.tatechuyoko = 0;
+        let out = export("1997年12月\n", Format::Html, &s);
+        assert!(!out.contains("class=\"tcy\""), "{out}");
+        // Across the page nothing is set across.
+        let mut flat = style();
+        flat.vertical = false;
+        let out = export("1997年12月\n", Format::Html, &flat);
+        assert!(!out.contains("class=\"tcy\""), "{out}");
+        assert!(!out.contains("text-combine-upright"), "{out}");
+    }
+
+    /// Only the text is touched: not a tag, not an entity's letters, and not
+    /// code, a reading or a table, which is set across.
+    #[test]
+    fn what_is_not_running_text_is_left_alone() {
+        let text = "那年冬天镇上下了一场很长的雨。甲 `x12` 乙 <ruby>漢<rt>han4</rt></ruby> a&b <span title=\"12\">丙</span>\n\n| 年 |\n| --- |\n| 1997 |\n";
+        let out = export(text, Format::Html, &style());
+        assert!(out.contains("<code>x12</code>"), "{out}");
+        assert!(out.contains("<rt>han4</rt>"), "{out}");
+        assert!(out.contains("<span class=\"tcy\">a</span>&amp;<span class=\"tcy\">b</span>"), "{out}");
+        assert!(out.contains("<span title=\"12\">丙</span>"), "{out}");
+        assert!(out.contains("<td>1997</td>"), "{out}");
+    }
+
+    /// **Curly quotes become corner brackets down a Chinese 縱** (2026-11-08):
+    /// what `:render full` draws. An apostrophe stays one, and a page across
+    /// or in English keeps the writer's quotes.
+    #[test]
+    fn curly_quotes_turn_into_corner_brackets_down_the_page() {
+        let out = export("他说：“走吧，‘快’。”\n", Format::Html, &style());
+        assert!(out.contains("他说：『走吧，「快」。』"), "{out}");
+        let out = export("他说 don’t 了。\n", Format::Html, &style());
+        assert!(out.contains("don</span>’<span") && !out.contains("」"), "{out}");
+        let mut flat = style();
+        flat.vertical = false;
+        let out = export("他说：“走吧。”\n", Format::Html, &flat);
+        assert!(out.contains("“走吧。”"), "{out}");
+        let out = export("He said “go” and ‘stay’, the end of it.\n", Format::Html, &style());
+        // Nor are its words squeezed into squares.
+        assert!(out.contains("He said “go” and ‘stay’"), "{out}");
+    }
+
+    /// **A table and a code block stay across on a vertical page**, and a
+    /// printer does not cut one in two.
+    #[test]
+    fn tables_stay_across_and_whole() {
+        let out = export("| 年 |\n| --- |\n| 1997 |\n", Format::Html, &style());
+        assert!(out.contains("table, pre { writing-mode: horizontal-tb; }"), "{out}");
+        assert!(out.contains("table, pre, img.math { break-inside: avoid; }"), "{out}");
+        let mut flat = style();
+        flat.vertical = false;
+        let out = export("| 年 |\n| --- |\n| 1997 |\n", Format::Html, &flat);
+        assert!(!out.contains("horizontal-tb"), "{out}");
+    }
+
+    /// The fonts: Source Han and Noto first, then faces that turn punctuation
+    /// for a vertical page, and the generic serif last.
+    #[test]
+    fn the_fonts_turn_punctuation_and_serif_comes_last() {
+        let out = export("中文。\n", Format::Html, &style());
+        let at = |name: &str| out.find(name).unwrap_or_else(|| panic!("{name} missing: {out}"));
+        assert!(at("\"Source Han Serif SC\"") < at("\"Noto Serif CJK SC\""));
+        assert!(at("\"Noto Serif CJK SC\"") < at("\"Songti SC\""));
+        assert!(at("\"Songti SC\"") < at("\"LXGW WenKai GB\""));
+        assert!(at("\"LXGW WenKai GB\"") < at("\"Hiragino Sans GB\""));
+        assert!(out.contains("\"WenQuanYi Micro Hei\", serif;"), "{out}");
+        let out = export("かなの文。\n", Format::Html, &style());
+        assert!(out.contains("font-family: \"Source Han Serif JP\""), "{out}");
+        let out = export("Plain English words only here.\n", Format::Html, &style());
+        assert!(out.contains("font-family: Georgia"), "{out}");
+    }
+
+    /// **A TeX formula is drawn** when the front end hands over a painter
+    /// (2026-11-08): a PNG inline, the TeX as its `alt`, and its size in `em`.
+    #[test]
+    fn a_formula_is_drawn_into_the_page() {
+        let mut s = style();
+        s.painter = Some(drawn);
+        let out = export("从 $x^2 + y^2 = 1$ 起。\n", Format::Html, &s);
+        assert!(
+            out.contains("从 <img class=\"math\" alt=\"x^2 + y^2 = 1\" style=\"height: 1.500em; --depth: -0.250em\" src=\"data:image/png;base64,AQID\"> 起。"),
+            "{out}"
+        );
+        // Not a `tcy` inside the picture's attributes either.
+        assert!(!out.contains("alt=\"x^<span"), "{out}");
+        assert!(out.contains("img.math { vertical-align: middle; }"), "{out}");
+        let out = export("写下：\n\n$$\n\\frac{a}{b}\n$$\n\n完。\n", Format::Html, &s);
+        assert!(out.contains("<p class=\"math\"><img class=\"math display\" alt=\"\\frac{a}{b}\""), "{out}");
+        let out = export("写下 $$E=mc^2$$ 完。\n", Format::Html, &s);
+        assert!(out.contains("<img class=\"math display\" alt=\"E=mc^2\""), "{out}");
+    }
+
+    /// What does not draw stays as written, and nothing is drawn where the
+    /// formula is not TeX, or the page cannot show a picture.
+    #[test]
+    fn a_formula_that_cannot_be_drawn_stays_as_written() {
+        let mut s = style();
+        s.vertical = false;
+        s.painter = Some(refused);
+        let out = export("Area $\\frac{a}{b}$ and $$E=mc^2$$\n", Format::Html, &s);
+        assert!(out.contains(r"Area $\frac{a}{b}$ and $$E=mc^2$$"), "{out}");
+        let out = export("写下：\n\n$$\nx < y\n$$\n", Format::Html, &s);
+        assert!(out.contains("<p>$$ x &lt; y $$</p>"), "{out}");
+        s.painter = Some(drawn);
+        s.source = crate::syntax::Syntax::Typst;
+        let out = export("面積 $a + b$。\n", Format::Html, &s);
+        assert!(!out.contains("<img"), "{out}");
+        s.source = crate::syntax::Syntax::Markdown;
+        let out = export("写下：\n\n$$\nx_1\n$$\n", Format::Typst, &s);
+        assert!(out.contains("\\$\\$\nx\\_1\n\\$\\$"), "{out}");
     }
 }
