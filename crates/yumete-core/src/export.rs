@@ -1559,9 +1559,8 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
         // cell keeps its line (`.short`): Chrome sizes a vertical table's
         // cells as though anything could break, and wrapped `甲城` into two
         // lines with room to spare; a long cell may wrap, so the table is
-        // never longer than the 縱. Code stays across, read line by line —
-        // the terminal page keeps a program file horizontal for the same
-        // reason.
+        // never longer than the 縱. Code is turned whole
+        // ([`vertical_code_css`]).
         //
         // **A formula on a line of its own** is turned, as JLREQ §3.7.4 sets
         // one, and stands two squares in from the head of its line rather
@@ -1573,12 +1572,12 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
              .tcy { -epub-text-combine: horizontal; -webkit-text-combine: horizontal; text-combine-upright: all; }\n\
              table { margin: 0 1em; }\n\
              .short { white-space: nowrap; }\n\
-             pre { writing-mode: horizontal-tb; margin: 0 1em; max-block-size: 100%; overflow: auto; }\n\
              img.math { vertical-align: middle; }\n\
              img.math.display { margin-block: 0.5em; margin-inline: 2em 0; max-inline-size: calc(100% - 2em); }\n\
              figure { margin: 0 1em; }\n\
              sup.fn a { text-decoration: none; }\n",
         );
+        out.push_str(&vertical_code_css());
     }
     out
 }
@@ -1626,6 +1625,67 @@ fn short_cell(length: f64, longest: f64) -> bool {
     length <= (longest / 2.0).clamp(6.0, 12.0)
 }
 
+/// **The hook in a wrapped code line's hang** (2026-11-08), ↳ as it is
+/// across: down from the line before, then on along this one to an
+/// arrowhead. Two strokes of three points each, in the hang's width and the
+/// line's height from their top left. The preview draws the same.
+pub const CODE_HOOK: [(f32, f32); 6] = [(0.25, 0.2), (0.25, 0.52), (0.72, 0.52), (0.6, 0.42), (0.72, 0.52), (0.6, 0.62)];
+
+/// How far a wrapped code line goes on from the line's start, in cells: a
+/// whole number, so its characters keep their columns.
+pub const CODE_HANG: u8 = 2;
+
+/// A code line's height, in ems of the code.
+const CODE_LINE: f64 = 1.45;
+
+/// **Code on a vertical page** (2026-11-08): turned whole, a block and a
+/// span alike — `sideways`, not `mixed`, so 漢字 in it turn with the line:
+/// code is verbatim, and its columns line up only if nothing in it stands
+/// up. Each line of a block runs down the page, the next on its left.
+///
+/// A line longer than the 縱 wraps at its foot wherever that falls
+/// (`line-break: anywhere`), as a terminal wraps, and goes on [`CODE_HANG`]
+/// cells in, with [`CODE_HOOK`] in the hang. The page has no length of its
+/// own — a 縱 is as long as the window is tall — so the wrap and the hook are
+/// CSS alone: each source line is a block whose first line is pulled back
+/// over its hang, and the hook is a mask repeated a line apart down the
+/// rest of it. The physical sides are a vertical page's: the line's start is
+/// its top, the next line is on its left.
+fn vertical_code_css() -> String {
+    // The hook's tile, turned as the line is: a line's pitch wide, the hang
+    // tall, in hundredths of an em of a face whose cell is 0.6 em.
+    let (wide, tall) = (CODE_LINE * 100.0, f64::from(CODE_HANG) * 60.0);
+    let at = |(a, b): (f32, f32)| format!("{:.0} {:.0}", (1.0 - f64::from(b)) * wide, f64::from(a) * tall);
+    let h = CODE_HOOK.map(at);
+    let svg = format!(
+        "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 {wide:.0} {tall:.0}' preserveAspectRatio='none'%3E\
+         %3Cpath d='M{}L{}L{}M{}L{}L{}' fill='none' stroke='%23000' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E\")",
+        h[0], h[1], h[2], h[3], h[4], h[5]
+    );
+    let hang = CODE_HANG;
+    let line = CODE_LINE;
+    format!(
+        "pre, code {{ -webkit-text-orientation: sideways; text-orientation: sideways; }}\n\
+         pre {{ margin: 0 1em; line-height: {line}; white-space: pre-wrap; line-break: anywhere; word-break: break-all; overflow-wrap: anywhere; }}\n\
+         pre .l {{ display: inline-block; vertical-align: top; box-sizing: border-box; inline-size: 100%; position: relative; padding-top: {hang}ch; text-indent: -{hang}ch; }}\n\
+         pre .l::after {{ content: \"\"; position: absolute; top: 0; right: {line}em; left: 0; height: {hang}ch; background: currentColor; opacity: 0.45; \
+         -webkit-mask-image: {svg}; mask-image: {svg}; -webkit-mask-size: {line}em {hang}ch; mask-size: {line}em {hang}ch; \
+         -webkit-mask-repeat: repeat-x; mask-repeat: repeat-x; -webkit-mask-position: right top; mask-position: right top; }}\n"
+    )
+}
+
+/// **A fenced code block as HTML**, its fence lines left out. On a vertical
+/// page each line is a block of its own, so that a line wrapped at the foot
+/// of the 縱 hangs and carries its hook ([`vertical_code_css`]); its newline
+/// stays in it, so the text copied is the text written.
+fn code_block_html(lines: &[String], vertical: bool) -> String {
+    let body = lines.iter().skip(1).take(lines.len().saturating_sub(2)).map(|l| escape_html(l));
+    match vertical {
+        false => format!("<pre><code>{}</code></pre>\n", body.collect::<Vec<_>>().join("\n")),
+        true => format!("<pre><code>{}</code></pre>\n", body.map(|l| format!("<span class=\"l\">{l}\n</span>")).collect::<String>()),
+    }
+}
+
 /// The blocks as HTML.
 fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
     let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style));
@@ -1637,15 +1697,7 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             // The fence lines are markup, the rest is verbatim: `<pre>` keeps
             // its own whitespace, and the only thing owed to it is HTML's own
             // escaping — no Markdown is read inside a code block (#386).
-            Block::Code(lines) => {
-                let body: Vec<String> = lines
-                    .iter()
-                    .skip(1)
-                    .take(lines.len().saturating_sub(2))
-                    .map(|l| escape_html(l))
-                    .collect();
-                out.push_str(&format!("<pre><code>{}</code></pre>\n", body.join("\n")));
-            }
+            Block::Code(lines) => out.push_str(&code_block_html(lines, style.settings.vertical)),
             Block::Paragraph(lines) => {
                 out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style)));
             }
@@ -2292,6 +2344,31 @@ mod tests {
         let out = export(text, Format::Html, &style());
         assert!(out.contains("<pre><code>"), "{out}");
         assert!(out.contains("fn main() { let x_y = 1; }"), "{out}");
+    }
+
+    /// **Code down the page is turned whole** (2026-11-08), a block and a
+    /// span alike, 漢字 in it too, under `turn` and `jlreq`: it is verbatim,
+    /// never upright, never 縱中橫. A block's lines are boxes of their own,
+    /// each keeping its newline, so a line too long for the 縱 wraps, hangs
+    /// and carries the hook, and what is copied is what was written.
+    #[test]
+    fn code_down_the_page_is_turned_whole() {
+        let text = "行内 `取值(x, 12)` 收尾。\n\n```\nfn 主() {}\n\n```\n";
+        for s in [style(), jlreq()] {
+            let out = export(text, Format::Html, &s);
+            assert!(out.contains("pre, code { -webkit-text-orientation: sideways; text-orientation: sideways; }"), "{out}");
+            assert!(out.contains("<code>取值(x, 12)</code>"), "nothing in a span is wrapped: {out}");
+            assert!(out.contains("<pre><code><span class=\"l\">fn 主() {}\n</span><span class=\"l\">\n</span></code></pre>"), "{out}");
+            assert!(out.contains("white-space: pre-wrap; line-break: anywhere;"), "{out}");
+            assert!(out.contains("pre .l::after") && out.contains("mask-image: url(\"data:image/svg+xml,"), "{out}");
+            assert!(!out.contains("horizontal-tb"), "{out}");
+        }
+        // Across the page a block is as it was.
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let out = export(text, Format::Html, &flat);
+        assert!(out.contains("<pre><code>fn 主() {}\n</code></pre>"), "{out}");
+        assert!(!out.contains("class=\"l\"") && !out.contains("sideways"), "{out}");
     }
 
     /// **Typst's backticks hold raw text, so nothing inside them is escaped.**
