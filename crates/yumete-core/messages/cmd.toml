@@ -999,8 +999,8 @@ en = "horizontal"
 [[message]]
 # : 命令選單裏 html 那一項的説明(export 組)
 key = "cmd.export.html"
-zhs = "单页 HTML，竖排文件仍为竖排"
-en = "a single HTML page; vertical text stays vertical"
+zhs = "单页 HTML"
+en = "a single HTML page"
 
 [[message]]
 # : 命令選單裏 jlreq 那一項的説明(export 組)（草稿）
