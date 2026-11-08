@@ -2512,6 +2512,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-typst"
+version = "0.1.1"
+source = "git+https://github.com/forfudan/tree-sitter-typst?tag=v0.1.1#44e5546c8038e37dc55e142ee76d7b6d8df93516"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-yaml"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3054,6 +3063,7 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-toml-ng",
  "tree-sitter-typescript",
+ "tree-sitter-typst",
  "tree-sitter-yaml",
  "windows-sys 0.59.0",
  "yumete-cjk",

@@ -50,6 +50,11 @@ tree-sitter-json = "0.24"
 # 從零寫起而不是 fork `tree-sitter-python`。v0.4.0 (2026-11-04) reads Mojo 1.2:
 # 99.77% of the real Mojo in Modular's 1.2 sources, 99.75% of 1.1's.
 tree-sitter-mojo = { git = "https://github.com/forfudan/tree-sitter-mojo", tag = "v0.4.0" }
+# **Ours as well** (2026-11-08): `forfudan/tree-sitter-typst`, written from
+# Typst's own lexer and parser and Apache-2.0 like this repository. It colours
+# the tokens of a Typst manuscript; telling prose from code stays with the
+# block scanner in `markdown::typst`.
+tree-sitter-typst = { git = "https://github.com/forfudan/tree-sitter-typst", tag = "v0.1.1" }
 tree-sitter-python = "0.25"
 tree-sitter-rust = "0.24"
 tree-sitter-toml-ng = "0.7"

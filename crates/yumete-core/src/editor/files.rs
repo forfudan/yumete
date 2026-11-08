@@ -1060,6 +1060,13 @@ impl Editor {
             buffer.read_modelines();
         }
         self.add_buffer(buffer);
+        // **Its grammar's queries compile on a thread now** (2026-11-08), so
+        // the first page does not wait for them.
+        match self.current_buffer().syntax() {
+            crate::syntax::Syntax::Typst => crate::code::warm(crate::code::Language::Typst),
+            crate::syntax::Syntax::Code(language) => crate::code::warm(language),
+            _ => {}
+        }
         // **回到上次停的那一行**（2026-10-05 定）。不知道就不動。
         //
         // Warning: **擺在這裏，所以誰都蓋得過它**：會話還原、`:open 檔:30`、`:replace`

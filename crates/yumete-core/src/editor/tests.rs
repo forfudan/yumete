@@ -39047,3 +39047,91 @@ fn a_session_keeps_the_side_of_a_split() {
     assert_eq!(window_columns(&old), [(leaves[0], 0), (leaves[1], 41)]);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A Typst manuscript's colours come from its tree, reparsed on each edit**
+/// (2026-11-08), and only its colours: the runs the page hides and shows are
+/// the block scanner's, as before.
+#[test]
+fn a_typst_manuscript_is_coloured_by_its_tree() {
+    use crate::markdown::Kind;
+    let mut ed = Editor::new();
+    ed.current_buffer_mut()
+        .insert(0, "= 第一章\n\n那年冬天很冷。\n\n#let n = 1 // 註\n")
+        .expect("the fixture buffer is writable");
+    ed.set_syntax(crate::syntax::Syntax::Typst);
+    let kinds = |ed: &Editor, line: usize| -> Vec<Kind> {
+        ed.typst_colours(line).expect("a tree for it").into_iter().map(|s| s.kind).collect()
+    };
+    assert!(kinds(&ed, 0).contains(&Kind::Heading));
+    assert!(kinds(&ed, 2).is_empty(), "prose has no runs");
+    assert!(kinds(&ed, 4).contains(&Kind::Token(crate::code::Token::Comment)));
+    // A keystroke: `很冷` made strong. The tree is the edited one.
+    let at = ed.current_buffer().rope().line_to_char(2) + 4;
+    ed.current_buffer_mut().insert(at, "*").unwrap();
+    ed.current_buffer_mut().insert(at + 3, "*").unwrap();
+    assert!(kinds(&ed, 2).contains(&Kind::Strong), "{:?}", kinds(&ed, 2));
+    assert!(
+        ed.markup_line(2).iter().any(|s| s.kind == Kind::Strong),
+        "and the scanner still reads it, for what the page hides"
+    );
+    // Where the tree does not speak, the runs colour the line.
+    ed.set_code_colours(false);
+    assert!(ed.typst_colours(2).is_none(), ":view-code off");
+    ed.set_code_colours(true);
+    ed.set_syntax(crate::syntax::Syntax::Markdown);
+    assert!(ed.typst_colours(0).is_none(), "not Typst");
+}
+
+/// **A manuscript read in pieces is coloured as it would be read whole**
+/// (2026-11-08), before and after edits — one in a piece, one opening a raw
+/// block across pieces and closing it again, one deleting across pieces.
+#[test]
+fn a_typst_manuscript_in_pieces_is_coloured_as_it_would_be_whole() {
+    let mut text = String::new();
+    for n in 0..700 {
+        text.push_str(&format!(
+            "= 第{n}章 <c{n}>\n\n那年*冬天*很冷，#emph[雪]下得早，見 @c{n} 與 $x^{n} + pi$。\n\n\
+             #let f{n}(x) = {{\n  let y = x\n\n  y + {n}\n}}\n\n\
+             ```rust\nfn main() {{\n\n    let s = \"字\";\n}}\n```\n\n\
+             /* 註\n\n   還是註 */\n#figure[\n  圖\n\n  說明\n]\n\n- 一項\n\n  接着說\n\n"
+        ));
+    }
+    let mut ed = Editor::new();
+    ed.current_buffer_mut().insert(0, &text).expect("the fixture buffer is writable");
+    ed.set_syntax(crate::syntax::Syntax::Typst);
+    let whole = |ed: &Editor| -> Vec<Vec<crate::markdown::Span>> {
+        let source = ed.current_buffer().rope().to_string();
+        let tree = crate::code::parse(crate::code::Language::Typst, &source, None).unwrap();
+        let starts = crate::code::line_starts(&source);
+        crate::code::paint_typst(&source, &tree, &starts, 0..starts.len())
+    };
+    // Where each run is and what it is; `construct` counts from the piece.
+    let runs = |spans: &[crate::markdown::Span]| -> Vec<(usize, usize, crate::markdown::Kind)> {
+        spans.iter().map(|s| (s.start, s.end, s.kind)).collect()
+    };
+    let check = |ed: &Editor, when: &str| {
+        let want = whole(ed);
+        for (line, want) in want.iter().enumerate() {
+            let got = ed.typst_colours(line).expect("a tree for it");
+            assert_eq!(runs(&got), runs(want), "{when}: line {line}: {:?}", ed.current_buffer().rope().line(line));
+        }
+    };
+    check(&ed, "as opened");
+    let pieces = ed.typst_pieces();
+    assert!(pieces >= 3, "cut into pieces: {pieces}");
+    // A word made strong in the middle.
+    let at = ed.current_buffer().rope().line_to_char(4001) + 2;
+    ed.current_buffer_mut().insert(at, "*重*").unwrap();
+    check(&ed, "after a word in a piece");
+    // A raw block opened above a cut and left open, then closed further down.
+    let at = ed.current_buffer().rope().line_to_char(3000);
+    ed.current_buffer_mut().insert(at, "```\n").unwrap();
+    check(&ed, "with a raw block left open");
+    let at = ed.current_buffer().rope().line_to_char(5200);
+    ed.current_buffer_mut().insert(at, "```\n").unwrap();
+    check(&ed, "with it closed");
+    // A stretch deleted across pieces.
+    let (from, to) = (ed.current_buffer().rope().line_to_char(1000), ed.current_buffer().rope().line_to_char(2600));
+    ed.current_buffer_mut().remove(from..to).unwrap();
+    check(&ed, "after a deletion across pieces");
+}
