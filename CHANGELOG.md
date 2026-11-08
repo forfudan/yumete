@@ -43,6 +43,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Switching the layout no longer moves windows.** With a preview open on the right, `:vertical` in the text put the text on the right and the preview on the left, and `:horizontal` put them back. A window now stays on the side where it was opened, and `C-w h` and `C-w l` go to the window drawn there. A preview always opens on the right, on a vertical page too; another split opened from a vertical page still puts the new window on the left, and keeps it there. Sessions keep the side.
 - **The preview window no longer shakes.** On some page sizes and window widths (an A5 book, for one) it asked tinymist for the page at two sizes in turn without end, and the page jumped between them.
 - **`A-h` in the `Space e` explorer keeps it the explorer.** It used to turn the explorer into the project's file picker; it now lists the same folder again, and what it skips lasts as you move between folders and in the preview.
 - **The browser preview follows the caret again.** tinymist 0.15.2 stopped reading the message yumete sent; it now sends the one tinymist scrolls by.

@@ -745,8 +745,10 @@ impl Editor {
     /// sidebars are open. Nothing to keep — one window, no sidebar — is an
     /// empty list.
     ///
-    /// One line a node, first half first: `below` or `beside` for a split,
-    /// then its two halves; `window⇥path⇥cursor⇥anchor` for a window, the
+    /// One line a node, first half first: `below` or `beside` for a split
+    /// (`beside⇥rtl` for one laid out from the right; a session from before
+    /// 2026-11-08 has none, and its splits read left to right), then its
+    /// two halves; `window⇥path⇥cursor⇥anchor` for a window, the
     /// path empty for a buffer with no file, and `⇥preview` after it for a
     /// window showing the preview of that file. Then `keys⇥n` (the n-th
     /// window) or `keys⇥left`/`keys⇥right`, and `sidebar⇥panel` for each
@@ -762,8 +764,9 @@ impl Editor {
         let mut out = Vec::new();
         for step in windows.steps() {
             match step {
-                Step::Split(Split::Below) => out.push("below".to_string()),
-                Step::Split(Split::Beside) => out.push("beside".to_string()),
+                Step::Split(Split::Below, _) => out.push("below".to_string()),
+                Step::Split(Split::Beside, false) => out.push("beside".to_string()),
+                Step::Split(Split::Beside, true) => out.push("beside\trtl".to_string()),
                 Step::Window(id) => {
                     let (buffer, cursor, anchor) = match id == self.live {
                         true => (Some(self.current_buffer()), self.sel.head(), self.sel.anchor()),
@@ -1015,7 +1018,7 @@ impl Editor {
     /// each window with what it is to show.
     fn grow(&mut self, at: crate::window::WindowId, shape: Shape, out: &mut Vec<(crate::window::WindowId, Leaf)>) {
         match shape {
-            Shape::Split(how, first, second) => match self.windows.split(at, how) {
+            Shape::Split(how, rtl, first, second) => match self.windows.split_on(at, how, false, rtl) {
                 Some(fresh) => {
                     self.grow(at, *first, out);
                     self.grow(fresh, *second, out);
@@ -1695,7 +1698,8 @@ impl TableChoice {
 
 /// A kept window tree, read back ([`Editor::restore_windows`]).
 enum Shape {
-    Split(crate::window::Split, Box<Shape>, Box<Shape>),
+    /// How the halves lie, and whether from the right.
+    Split(crate::window::Split, bool, Box<Shape>, Box<Shape>),
     Leaf(Leaf),
 }
 
@@ -1719,11 +1723,11 @@ impl Shape {
         use crate::window::Split;
         let line = lines.next()?;
         match line {
-            "below" | "beside" => {
+            "below" | "beside" | "beside\trtl" => {
                 let how = if line == "below" { Split::Below } else { Split::Beside };
                 let first = Shape::read(lines)?;
                 let second = Shape::read(lines)?;
-                Some(Shape::Split(how, Box::new(first), Box::new(second)))
+                Some(Shape::Split(how, line == "beside\trtl", Box::new(first), Box::new(second)))
             }
             _ => {
                 let mut parts = line.strip_prefix("window\t")?.split('\t');
@@ -1746,7 +1750,7 @@ impl Shape {
     /// Mark the `n`-th window, counting first halves first.
     fn mark(&mut self, n: usize, seen: &mut usize) {
         match self {
-            Shape::Split(_, first, second) => {
+            Shape::Split(_, _, first, second) => {
                 first.mark(n, seen);
                 second.mark(n, seen);
             }
@@ -1762,7 +1766,7 @@ impl Shape {
     /// left out.
     fn paths(&self) -> Vec<(PathBuf, bool)> {
         match self {
-            Shape::Split(_, first, second) => [first.paths(), second.paths()].concat(),
+            Shape::Split(_, _, first, second) => [first.paths(), second.paths()].concat(),
             Shape::Leaf(leaf) if leaf.path.as_os_str().is_empty() => Vec::new(),
             Shape::Leaf(leaf) => vec![(leaf.path.clone(), leaf.preview)],
         }
@@ -1772,8 +1776,8 @@ impl Shape {
     /// loses one half becomes the other.
     fn prune(self, kept: &dyn Fn(&Leaf) -> bool) -> Option<Shape> {
         match self {
-            Shape::Split(how, first, second) => match (first.prune(kept), second.prune(kept)) {
-                (Some(a), Some(b)) => Some(Shape::Split(how, Box::new(a), Box::new(b))),
+            Shape::Split(how, rtl, first, second) => match (first.prune(kept), second.prune(kept)) {
+                (Some(a), Some(b)) => Some(Shape::Split(how, rtl, Box::new(a), Box::new(b))),
                 (one, other) => one.or(other),
             },
             Shape::Leaf(leaf) => kept(&leaf).then_some(Shape::Leaf(leaf)),

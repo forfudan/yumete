@@ -1010,9 +1010,13 @@ impl Editor {
         }
     }
 
-    /// Whether the second half of a **beside** split goes on the left: on a
-    /// 縱書 page, where reading runs right to left.
-    pub fn splits_right_to_left(&self) -> bool {
+    /// Whether a **beside** split opened from here is laid out from the
+    /// right, its second half on the left: on a 縱書 page, where reading
+    /// runs right to left. **Asked only when a split is made**, which then
+    /// keeps the answer (2026-11-08): asked at draw time it mirrored every
+    /// window on the screen as the keys went between a 縱書 page and a
+    /// 橫排 one, and `:vertical` swapped a file and its preview.
+    pub(super) fn splits_right_to_left(&self) -> bool {
         self.default_split() == crate::window::Split::Beside
     }
 
@@ -1056,7 +1060,7 @@ impl Editor {
                 self.panes.insert(window, pane);
             }
             None => {
-                if let Some(fresh) = self.windows.split(self.live, how) {
+                if let Some(fresh) = self.windows.split_on(self.live, how, false, self.splits_right_to_left()) {
                     self.panes.insert(fresh, pane);
                 }
             }
@@ -1091,11 +1095,11 @@ impl Editor {
         // refused, so the keys never go into a window that is not drawn.
         // Under the vim keymap it opens above or to the left, as vim's does
         // (2026-11-04); helix's opens below or to the right.
-        let before = self.vim_keymap();
+        let (before, rtl) = (self.vim_keymap(), self.splits_right_to_left());
         if let Some(area) = self.text_area.get() {
             let mut tried = self.windows.clone();
-            let room = tried.split_on(self.live, how, before).is_some_and(|fresh| {
-                let (placed, _) = tried.place(area, self.splits_right_to_left());
+            let room = tried.split_on(self.live, how, before, rtl).is_some_and(|fresh| {
+                let (placed, _) = tried.place(area);
                 placed
                     .iter()
                     .filter(|p| p.id == fresh || p.id == self.live)
@@ -1123,7 +1127,7 @@ impl Editor {
             preview: false,
             half_page: None,
         };
-        let Some(fresh) = self.windows.split_on(self.live, how, before) else {
+        let Some(fresh) = self.windows.split_on(self.live, how, before, rtl) else {
             return false;
         };
         self.panes.insert(fresh, here);
@@ -1167,7 +1171,7 @@ impl Editor {
     /// half of turns, beside to below and back, when the halves still fit.
     pub(super) fn transpose_window(&mut self) {
         let mut tried = self.windows.clone();
-        if tried.transpose(self.live) {
+        if tried.transpose(self.live, self.splits_right_to_left()) {
             self.lay_out_if_it_fits(tried);
         }
     }
@@ -1176,7 +1180,7 @@ impl Editor {
     /// enough to draw; otherwise say there is no room.
     fn lay_out_if_it_fits(&mut self, tried: crate::window::Windows) {
         if let Some(area) = self.text_area.get() {
-            let (placed, _) = tried.place(area, self.splits_right_to_left());
+            let (placed, _) = tried.place(area);
             if placed.iter().any(|p| p.area.height < Self::WINDOW_MIN_ROWS || p.area.width < Self::WINDOW_MIN_COLUMNS) {
                 self.status = say!("pane.no-room");
                 return;

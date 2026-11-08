@@ -27,7 +27,9 @@ pub type WindowId = u64;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Split {
     /// Side by side: the second half to the right of the first — or to its
-    /// left on a 縱書 page, where reading runs right to left.
+    /// left when the split was opened from the right, as one opened from a
+    /// 縱書 page is. Which of the two is the split's own, kept from when it
+    /// was made (2026-11-08): switching the layout moves no window.
     Beside,
     /// One above the other: the second half under the first.
     Below,
@@ -55,7 +57,10 @@ impl Area {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Node {
     Window(WindowId),
-    Split { how: Split, first: Box<Node>, second: Box<Node> },
+    /// `rtl`: a **beside** split laid out from the right, its first half on
+    /// the right. Always `false` below, so a column is one column however
+    /// its splits were made.
+    Split { how: Split, rtl: bool, first: Box<Node>, second: Box<Node> },
 }
 
 /// The tree of windows.
@@ -135,16 +140,18 @@ impl Windows {
     }
 
     /// Split window `at` and hand back the new window, which takes the
-    /// second half. `None` when `at` is no window.
+    /// second half — below, or to the right. `None` when `at` is no window.
     pub fn split(&mut self, at: WindowId, how: Split) -> Option<WindowId> {
-        self.split_on(at, how, false)
+        self.split_on(at, how, false, false)
     }
 
     /// [`Self::split`], the new window going `before` `at` — above it or
     /// to its left, as vim's `:split` and `:vsplit` open one
-    /// (`nosplitbelow`, `nosplitright`; measured in nvim 2026-11-04).
-    pub fn split_on(&mut self, at: WindowId, how: Split, before: bool) -> Option<WindowId> {
-        fn go(node: &mut Node, at: WindowId, how: Split, fresh: WindowId, before: bool) -> bool {
+    /// (`nosplitbelow`, `nosplitright`; measured in nvim 2026-11-04). `rtl`
+    /// lays a **beside** split out from the right, its first half on the
+    /// right, as one opened from a 縱書 page is; the split keeps it.
+    pub fn split_on(&mut self, at: WindowId, how: Split, before: bool, rtl: bool) -> Option<WindowId> {
+        fn go(node: &mut Node, at: WindowId, how: Split, rtl: bool, fresh: WindowId, before: bool) -> bool {
             match node {
                 Node::Window(id) if *id == at => {
                     let (first, second) = match before {
@@ -153,17 +160,20 @@ impl Windows {
                     };
                     *node = Node::Split {
                         how,
+                        rtl,
                         first: Box::new(Node::Window(first)),
                         second: Box::new(Node::Window(second)),
                     };
                     true
                 }
                 Node::Window(_) => false,
-                Node::Split { first, second, .. } => go(first, at, how, fresh, before) || go(second, at, how, fresh, before),
+                Node::Split { first, second, .. } => {
+                    go(first, at, how, rtl, fresh, before) || go(second, at, how, rtl, fresh, before)
+                }
             }
         }
         let fresh = self.next;
-        if !go(&mut self.root, at, how, fresh, before) {
+        if !go(&mut self.root, at, how, rtl && how == Split::Beside, fresh, before) {
             return None;
         }
         self.next += 1;
@@ -223,22 +233,22 @@ impl Windows {
         if !path(&self.root, id, &mut above) {
             return Vec::new();
         }
-        let Some(how) = above.last().and_then(|node| how_of(node)) else { return Vec::new() };
-        let Some(top) = above.iter().rev().take_while(|node| how_of(node) == Some(how)).last() else { return Vec::new() };
+        let Some(lie) = above.last().and_then(|node| lie_of(node)) else { return Vec::new() };
+        let Some(top) = above.iter().rev().take_while(|node| lie_of(node) == Some(lie)).last() else { return Vec::new() };
         let mut out = Vec::new();
-        children(top, how, &mut out);
+        children(top, lie, &mut out);
         out
     }
 
     /// The tree written out first-half-first: a split, then its two halves.
-    /// What a session keeps; [`Self::split`] read along the same order
+    /// What a session keeps; [`Self::split_on`] read along the same order
     /// builds it again.
     pub fn steps(&self) -> Vec<Step> {
         fn walk(node: &Node, out: &mut Vec<Step>) {
             match node {
                 Node::Window(id) => out.push(Step::Window(*id)),
-                Node::Split { how, first, second } => {
-                    out.push(Step::Split(*how));
+                Node::Split { how, rtl, first, second } => {
+                    out.push(Step::Split(*how, *rtl));
                     walk(first, out);
                     walk(second, out);
                 }
@@ -259,21 +269,22 @@ impl Windows {
     }
 
     /// **helix's `C-w t` (`transpose_view`)**: the split `id` is a half of
-    /// turns, beside to below and below to beside. `false` when `id` is the
-    /// only window.
-    pub fn transpose(&mut self, id: WindowId) -> bool {
-        fn go(node: &mut Node, id: WindowId) -> bool {
-            let Node::Split { how, first, second } = node else { return false };
+    /// turns, beside to below and below to beside — beside laid out from
+    /// the right when `rtl`, as a split made there would be. `false` when
+    /// `id` is the only window.
+    pub fn transpose(&mut self, id: WindowId, rtl: bool) -> bool {
+        fn go(node: &mut Node, id: WindowId, to_rtl: bool) -> bool {
+            let Node::Split { how, rtl, first, second } = node else { return false };
             if matches!(**first, Node::Window(w) if w == id) || matches!(**second, Node::Window(w) if w == id) {
-                *how = match how {
-                    Split::Beside => Split::Below,
-                    Split::Below => Split::Beside,
+                (*how, *rtl) = match how {
+                    Split::Beside => (Split::Below, false),
+                    Split::Below => (Split::Beside, to_rtl),
                 };
                 return true;
             }
-            go(first, id) || go(second, id)
+            go(first, id, to_rtl) || go(second, id, to_rtl)
         }
-        go(&mut self.root, id)
+        go(&mut self.root, id, rtl)
     }
 
     /// **helix's `C-w H` `J` `K` `L` (`swap_view_*`)**: two windows trade
@@ -357,19 +368,23 @@ impl Windows {
 
     /// **vim's `C-w H` `J` `K` `L`**: `id` leaves its place and takes the
     /// whole of that edge of the screen, the rest keeping the other half.
-    /// `rtl` is a 縱書 page, where the second half of a beside split is the
-    /// left one. `false` when `id` is the only window.
+    /// `rtl` makes the new beside split one laid out from the right, as on
+    /// a 縱書 page, where the second half is the left one; the window lands
+    /// on the edge asked for either way. `false` when `id` is the only
+    /// window.
     pub fn to_edge(&mut self, id: WindowId, edge: Direction, rtl: bool) -> bool {
         if self.len() < 2 || !self.close(id) {
             return false;
         }
         let rest = Box::new(self.root.clone());
         let one = Box::new(Node::Window(id));
+        let beside = |first, second| Node::Split { how: Split::Beside, rtl, first, second };
+        let below = |first, second| Node::Split { how: Split::Below, rtl: false, first, second };
         self.root = match (edge, rtl) {
-            (Direction::Left, false) | (Direction::Right, true) => Node::Split { how: Split::Beside, first: one, second: rest },
-            (Direction::Right, false) | (Direction::Left, true) => Node::Split { how: Split::Beside, first: rest, second: one },
-            (Direction::Up, _) => Node::Split { how: Split::Below, first: one, second: rest },
-            (Direction::Down, _) => Node::Split { how: Split::Below, first: rest, second: one },
+            (Direction::Left, false) | (Direction::Right, true) => beside(one, rest),
+            (Direction::Right, false) | (Direction::Left, true) => beside(rest, one),
+            (Direction::Up, _) => below(one, rest),
+            (Direction::Down, _) => below(rest, one),
         };
         true
     }
@@ -377,18 +392,19 @@ impl Windows {
     /// The windows laid into `area`, with the rules between them. The
     /// windows of a row or column share its room equally less the rules,
     /// as vim's (`equalalways`) and helix's do; what does not divide goes
-    /// to the last. `rtl` lays a **beside** row out from the right, as a
-    /// 縱書 page reads.
-    pub fn place(&self, area: Area, rtl: bool) -> (Vec<Placed>, Vec<Rule>) {
-        fn go(node: &Node, area: Area, rtl: bool, out: &mut Vec<Placed>, rules: &mut Vec<Rule>) {
-            let Some(how) = how_of(node) else {
+    /// to the last. A **beside** row opened from the right is laid out
+    /// from the right, as a 縱書 page reads — each split by its own order,
+    /// never by the page the keys are on now.
+    pub fn place(&self, area: Area) -> (Vec<Placed>, Vec<Rule>) {
+        fn go(node: &Node, area: Area, out: &mut Vec<Placed>, rules: &mut Vec<Rule>) {
+            let Some((how, rtl)) = lie_of(node) else {
                 if let Node::Window(id) = node {
                     out.push(Placed { id: *id, area });
                 }
                 return;
             };
             let mut row = Vec::new();
-            children(node, how, &mut row);
+            children(node, (how, rtl), &mut row);
             let n = row.len() as u16;
             let length = match how {
                 Split::Below => area.height,
@@ -419,7 +435,7 @@ impl Windows {
                         (Area::new(x, area.y, size, area.height), Area::new(rule_x, area.y, 1, area.height))
                     }
                 };
-                go(child, part, rtl, out, rules);
+                go(child, part, out, rules);
                 if !last {
                     rules.push(Rule { area: rule, how, first: last_leaf(child), second: first_leaf(row[i + 1]) });
                 }
@@ -428,15 +444,15 @@ impl Windows {
         }
         let mut out = Vec::new();
         let mut rules = Vec::new();
-        go(&self.root, area, rtl, &mut out, &mut rules);
+        go(&self.root, area, &mut out, &mut rules);
         (out, rules)
     }
 
     /// The window in `direction` from `id` on a screen laid out as `area`:
     /// the one whose area the step from `id`'s edge lands in, nearest to the
     /// middle of that edge. `None` at the screen's edge.
-    pub fn neighbour(&self, id: WindowId, direction: Direction, area: Area, rtl: bool) -> Option<WindowId> {
-        let (placed, _) = self.place(area, rtl);
+    pub fn neighbour(&self, id: WindowId, direction: Direction, area: Area) -> Option<WindowId> {
+        let (placed, _) = self.place(area);
         let me = placed.iter().find(|p| p.id == id)?.area;
         let (x, y) = match direction {
             Direction::Left => (me.x.checked_sub(2)?, me.y + me.height / 2),
@@ -448,20 +464,22 @@ impl Windows {
     }
 }
 
-fn how_of(node: &Node) -> Option<Split> {
+/// How a split lies, and whether from the right: a run of splits that lie
+/// alike is one row.
+fn lie_of(node: &Node) -> Option<(Split, bool)> {
     match node {
-        Node::Split { how, .. } => Some(*how),
+        Node::Split { how, rtl, .. } => Some((*how, *rtl)),
         Node::Window(_) => None,
     }
 }
 
-/// The halves under `node` that lie `how`, a run of such splits read as one
+/// The halves under `node` that lie `lie`, a run of such splits read as one
 /// row.
-fn children<'a>(node: &'a Node, how: Split, out: &mut Vec<&'a Node>) {
+fn children<'a>(node: &'a Node, lie: (Split, bool), out: &mut Vec<&'a Node>) {
     match node {
-        Node::Split { how: h, first, second } if *h == how => {
-            children(first, how, out);
-            children(second, how, out);
+        Node::Split { first, second, .. } if lie_of(node) == Some(lie) => {
+            children(first, lie, out);
+            children(second, lie, out);
         }
         _ => out.push(node),
     }
@@ -484,7 +502,8 @@ fn last_leaf(node: &Node) -> WindowId {
 /// One node of the tree in [`Windows::steps`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
-    Split(Split),
+    /// A split, and whether it is laid out from the right.
+    Split(Split, bool),
     Window(WindowId),
 }
 
@@ -540,7 +559,10 @@ mod tests {
         // `C-w L`: the whole right edge; `C-w K` the top.
         let mut w = three();
         assert!(w.to_edge(1, Direction::Right, false));
-        assert_eq!(w.steps(), [Step::Split(Split::Beside), Step::Split(Split::Below), Step::Window(2), Step::Window(3), Step::Window(1)]);
+        assert_eq!(
+            w.steps(),
+            [Step::Split(Split::Beside, false), Step::Split(Split::Below, false), Step::Window(2), Step::Window(3), Step::Window(1)]
+        );
         let mut w = three();
         assert!(w.to_edge(2, Direction::Up, false));
         assert_eq!(w.leaves(), [2, 1, 3]);
@@ -575,9 +597,16 @@ mod tests {
         w.split(2, Split::Below);
         let area = Area::new(0, 0, 81, 25);
         // 1 | 2 over 3. Turning 3's split puts 2 beside 3.
-        assert!(w.transpose(3));
-        assert_eq!(w.neighbour(2, Direction::Right, area, false), Some(3));
-        assert!(!Windows::one().transpose(1), "one window has no split to turn");
+        assert!(w.transpose(3, false));
+        assert_eq!(w.neighbour(2, Direction::Right, area), Some(3));
+        assert!(!Windows::one().transpose(1, false), "one window has no split to turn");
+        // Turned from the right, 3 goes left of 2; turned back, it is below.
+        assert!(w.transpose(3, true));
+        assert!(w.transpose(3, true));
+        assert_eq!(w.neighbour(2, Direction::Left, area), Some(3));
+        assert!(w.transpose(3, true));
+        assert_eq!(w.neighbour(2, Direction::Down, area), Some(3));
+        assert!(w.transpose(3, false));
         // 1 and 3 trade places: 3 is on the left now, and the ids stay.
         assert!(w.swap(1, 3));
         assert_eq!(w.leaves(), [3, 2, 1]);
@@ -586,24 +615,55 @@ mod tests {
     }
 
     #[test]
-    fn placing_matches_the_old_two_halves_and_reads_right_to_left_when_asked() {
+    fn placing_matches_the_old_two_halves_and_reads_right_to_left_when_opened_so() {
         let mut w = Windows::one();
         w.split(1, Split::Below);
-        let (placed, rules) = w.place(Area::new(0, 0, 80, 24), false);
+        let (placed, rules) = w.place(Area::new(0, 0, 80, 24));
         assert_eq!(placed[0].area, Area::new(0, 0, 80, 11));
         assert_eq!(rules[0].area, Area::new(0, 11, 80, 1));
         assert_eq!(placed[1].area, Area::new(0, 12, 80, 12));
         assert_eq!((rules[0].first, rules[0].second), (1, 2));
 
         let mut w = Windows::one();
-        w.split(1, Split::Beside);
-        let (placed, rules) = w.place(Area::new(0, 0, 81, 24), true);
+        w.split_on(1, Split::Beside, false, true);
+        let (placed, rules) = w.place(Area::new(0, 0, 81, 24));
         assert_eq!(placed[0].area, Area::new(41, 0, 40, 24), "縱書: the first half on the right");
         assert_eq!(rules[0].area, Area::new(40, 0, 1, 24));
         assert_eq!(placed[1].area, Area::new(0, 0, 40, 24));
-        let (placed, _) = w.place(Area::new(0, 0, 81, 24), false);
+        assert_eq!(w.steps()[0], Step::Split(Split::Beside, true), "the split keeps its order");
+        let mut w = Windows::one();
+        w.split(1, Split::Beside);
+        let (placed, _) = w.place(Area::new(0, 0, 81, 24));
         assert_eq!(placed[0].area, Area::new(0, 0, 40, 24));
         assert_eq!(placed[1].area, Area::new(41, 0, 40, 24));
+        // Below never reads from the right: a column is one column.
+        let mut w = Windows::one();
+        let two = w.split_on(1, Split::Below, false, true).unwrap();
+        w.split(two, Split::Below);
+        assert_eq!(w.steps()[0], Step::Split(Split::Below, false));
+        assert_eq!(w.row_of(1).len(), 3);
+    }
+
+    /// Splits laid out each its own way share a screen (2026-11-08): a
+    /// preview opened to the right of a window whose row was opened from the
+    /// right stays to its right, and the row stays as it was.
+    #[test]
+    fn each_split_keeps_its_own_order() {
+        // 2 opened from the right of 1, then 3 to the right of 2.
+        let mut w = Windows::one();
+        let two = w.split_on(1, Split::Beside, false, true).unwrap();
+        let three = w.split_on(two, Split::Beside, false, false).unwrap();
+        let area = Area::new(0, 0, 92, 10);
+        let (placed, _) = w.place(area);
+        let xs: Vec<_> = placed.iter().map(|p| (p.id, p.area.x)).collect();
+        assert_eq!(xs, [(1, 47), (two, 0), (three, 23)]);
+        assert_eq!(w.neighbour(two, Direction::Right, area), Some(three));
+        assert_eq!(w.neighbour(three, Direction::Right, area), Some(1));
+        assert_eq!(w.neighbour(1, Direction::Left, area), Some(three));
+        assert_eq!(w.neighbour(two, Direction::Left, area), None);
+        // Two rows, not one: 3 is no window of 1's row.
+        assert_eq!(w.row_of(1), [Some(1), None]);
+        assert_eq!(w.row_of(three), [Some(two), Some(three)]);
     }
 
     /// A row shares its room equally, however its splits were made, as
@@ -614,7 +674,7 @@ mod tests {
         let mut w = Windows::one();
         let two = w.split(1, Split::Below).unwrap();
         w.split(two, Split::Below);
-        let (placed, rules) = w.place(Area::new(0, 0, 80, 40), false);
+        let (placed, rules) = w.place(Area::new(0, 0, 80, 40));
         let heights: Vec<_> = placed.iter().map(|p| p.area.height).collect();
         assert_eq!(heights, [12, 12, 14]);
         assert_eq!(rules.len(), 2);
@@ -622,8 +682,8 @@ mod tests {
         assert_eq!(rules[1].area.y, 25);
         // vim's new window goes first: the tree is (3 / 2) / 1.
         let mut w = Windows::one();
-        let two = w.split_on(1, Split::Below, true).unwrap();
-        let three = w.split_on(two, Split::Below, true).unwrap();
+        let two = w.split_on(1, Split::Below, true, false).unwrap();
+        let three = w.split_on(two, Split::Below, true, false).unwrap();
         assert_eq!(w.leaves(), [three, two, 1]);
         assert_eq!(w.row_of(1), [Some(three), Some(two), Some(1)]);
         assert_eq!(w.heir(two), Some(1), "the middle's goes below");
@@ -633,11 +693,15 @@ mod tests {
         let two = w.split(1, Split::Beside).unwrap();
         w.split(two, Split::Beside);
         assert!(w.to_edge(1, Direction::Right, false));
-        let (placed, _) = w.place(Area::new(0, 0, 92, 10), false);
+        let (placed, _) = w.place(Area::new(0, 0, 92, 10));
         let widths: Vec<_> = placed.iter().map(|p| (p.id, p.area.x, p.area.width)).collect();
         assert_eq!(widths, [(2, 0, 30), (3, 31, 30), (1, 62, 30)]);
-        // 縱書 lays the row out from the right.
-        let (placed, rules) = w.place(Area::new(0, 0, 92, 10), true);
+        // 縱書 lays the row out from the right, `C-w L` included.
+        let mut w = Windows::one();
+        let two = w.split_on(1, Split::Beside, false, true).unwrap();
+        w.split_on(two, Split::Beside, false, true);
+        assert!(w.to_edge(1, Direction::Left, true));
+        let (placed, rules) = w.place(Area::new(0, 0, 92, 10));
         let widths: Vec<_> = placed.iter().map(|p| (p.id, p.area.x, p.area.width)).collect();
         assert_eq!(widths, [(2, 62, 30), (3, 31, 30), (1, 0, 30)]);
         assert_eq!((rules[0].area.x, rules[1].area.x), (61, 30));
@@ -670,12 +734,15 @@ mod tests {
         let area = Area::new(0, 0, 81, 24);
         // From 1's middle row the step lands in the lower of the two on the
         // right; the cursor's own row will refine this (stage 2).
-        assert_eq!(w.neighbour(1, Direction::Right, area, false), Some(three));
-        assert_eq!(w.neighbour(1, Direction::Left, area, false), None);
-        assert_eq!(w.neighbour(two, Direction::Down, area, false), Some(three));
-        assert_eq!(w.neighbour(three, Direction::Up, area, false), Some(two));
-        assert_eq!(w.neighbour(three, Direction::Left, area, false), Some(1));
-        assert_eq!(w.neighbour(1, Direction::Left, area, true), Some(three), "縱書 puts the second half on the left");
-        assert_eq!(w.neighbour(1, Direction::Right, area, true), None);
+        assert_eq!(w.neighbour(1, Direction::Right, area), Some(three));
+        assert_eq!(w.neighbour(1, Direction::Left, area), None);
+        assert_eq!(w.neighbour(two, Direction::Down, area), Some(three));
+        assert_eq!(w.neighbour(three, Direction::Up, area), Some(two));
+        assert_eq!(w.neighbour(three, Direction::Left, area), Some(1));
+        let mut w = Windows::one();
+        let two = w.split_on(1, Split::Beside, false, true).unwrap();
+        let three = w.split(two, Split::Below).unwrap();
+        assert_eq!(w.neighbour(1, Direction::Left, area), Some(three), "縱書 puts the second half on the left");
+        assert_eq!(w.neighbour(1, Direction::Right, area), None);
     }
 }
