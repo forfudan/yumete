@@ -50,6 +50,9 @@ pub struct Faces {
     pub mono: String,
     pub emphasis: String,
     pub cjk_first: String,
+    /// The 楷體 faces alone, which emphasised 漢字 are set in while its
+    /// Latin keeps the writing's face in italics.
+    pub han_emphasis: String,
 }
 
 /// **The colours the preview is drawn in**, one for each of its palette's
@@ -91,6 +94,95 @@ pub struct Look {
     pub lang: String,
     pub faces: Faces,
     pub colours: Colours,
+}
+
+/// **Every kind of code token**, in the order the preview's palette holds
+/// their colours (`yumete_mdview::Theme::syntax`).
+pub const TOKENS: [Token; 17] = [
+    Token::Plain,
+    Token::Keyword,
+    Token::Builtin,
+    Token::Function,
+    Token::BuiltinFunction,
+    Token::Type,
+    Token::Property,
+    Token::Tag,
+    Token::Attribute,
+    Token::String,
+    Token::Escape,
+    Token::Constant,
+    Token::Number,
+    Token::Parameter,
+    Token::Comment,
+    Token::Operator,
+    Token::Punctuation,
+];
+
+/// `c` laid over `ground` at `alpha` (0 to 1): a tint that stays opaque.
+pub fn tint(c: Rgba, ground: Rgba, alpha: f32) -> Rgba {
+    let mix = |a: u8, b: u8| (a as f32 * alpha + b as f32 * (1.0 - alpha)).round() as u8;
+    [mix(c[0], ground[0]), mix(c[1], ground[1]), mix(c[2], ground[2]), 0xff]
+}
+
+impl Colours {
+    /// **GitHub's light Markdown colours** (`github-markdown-css`), with
+    /// GitHub's light code colours: the preview's own light palette
+    /// (`yumete_mdview::Theme::light`), and the colours `:export html` and
+    /// `:export epub` print callouts and code in.
+    pub fn github_light() -> Colours {
+        let text = [0x1f, 0x23, 0x28, 0xff];
+        let muted = [0x59, 0x63, 0x6e, 0xff];
+        let background = [0xff, 0xff, 0xff, 0xff];
+        let callouts = [[0x09, 0x69, 0xda, 0xff], [0x1a, 0x7f, 0x37, 0xff], [0x82, 0x50, 0xdf, 0xff], [0x9a, 0x67, 0x00, 0xff], [0xd1, 0x24, 0x2f, 0xff]];
+        let [keyword, function, kind, string, constant, tag] = [
+            [0xcf, 0x22, 0x2e, 0xff],
+            [0x82, 0x50, 0xdf, 0xff],
+            [0x95, 0x38, 0x00, 0xff],
+            [0x0a, 0x30, 0x69, 0xff],
+            [0x05, 0x50, 0xae, 0xff],
+            [0x11, 0x63, 0x29, 0xff],
+        ];
+        let syntax = TOKENS
+            .iter()
+            .map(|&t| {
+                let colour = match t {
+                    Token::Plain | Token::Parameter | Token::Punctuation => text,
+                    Token::Keyword | Token::Operator => keyword,
+                    Token::Function | Token::BuiltinFunction => function,
+                    Token::Type | Token::Builtin => kind,
+                    Token::String => string,
+                    Token::Escape | Token::Constant | Token::Number | Token::Property | Token::Attribute => constant,
+                    Token::Comment => muted,
+                    Token::Tag => tag,
+                };
+                (t, colour)
+            })
+            .collect();
+        Colours {
+            background,
+            text,
+            muted,
+            headings: [text, text, text, text, text, muted],
+            strong: None,
+            emphasis: None,
+            link: [0x09, 0x69, 0xda, 0xff],
+            footnote: [0x09, 0x69, 0xda, 0xff],
+            code_text: text,
+            code_inline: [0xef, 0xf1, 0xf3, 0xff],
+            code_block: [0xf6, 0xf8, 0xfa, 0xff],
+            quote: muted,
+            quote_bar: [0xd1, 0xd9, 0xe0, 0xff],
+            border: [0xd1, 0xd9, 0xe0, 0xff],
+            stripe: [0xf6, 0xf8, 0xfa, 0xff],
+            table_head: text,
+            highlight: [0xff, 0xf8, 0xc5, 0xff],
+            list_marker: text,
+            callouts,
+            callout_grounds: callouts.map(|c| tint(c, background, 0.10)),
+            error: [0xd1, 0x24, 0x2f, 0xff],
+            syntax,
+        }
+    }
 }
 
 /// **What the front end answers when asked how the preview would draw a
@@ -287,7 +379,27 @@ pub fn stylesheet(look: &Look, vertical: bool, hanging: bool) -> String {
     }
     out.push_str(&format!("h1, h2 {{ padding-block-end: 0.3em; border-block-end: 1px solid {}; }}\n", css(c.border)));
     out.push_str("strong, b { font-weight: 600; }\n:is(h1, h2, h3, h4, h5, h6) :is(strong, b) { font-weight: 800; }\n");
-    out.push_str(&format!("em, i {{ font-style: italic; font-family: {}; }}\n", fonts(&f.emphasis)));
+    // **Emphasised 漢字 in a 楷體, its Latin in italics** (2026-11-08), as
+    // the preview sets them. A browser's `system-ui` brings its own CJK face,
+    // so a list that begins with it never reaches the 楷體 after it: the
+    // 楷體 faces are named for the CJK characters alone, by `unicode-range`.
+    let kai: Vec<String> = fonts(&f.han_emphasis)
+        .split(',')
+        .map(|name| name.trim().trim_matches(['\'', '"']).to_string())
+        .filter(|name| !name.is_empty())
+        .collect();
+    let emphasis = match kai.is_empty() {
+        true => fonts(&f.emphasis),
+        false => {
+            let src: Vec<String> = kai.iter().flat_map(|name| [format!("local(\"{name}\")"), format!("local(\"{name} Regular\")")]).collect();
+            out.push_str(&format!(
+                "@font-face {{ font-family: \"Han Emphasis\"; src: {}; unicode-range: U+2E80-2FDF, U+3005-3007, U+3021-3029, U+3038-303B, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+20000-3134F; }}\n",
+                src.join(", ")
+            ));
+            format!("\"Han Emphasis\", {}", fonts(&f.emphasis))
+        }
+    };
+    out.push_str(&format!("em, i {{ font-style: italic; font-family: {emphasis}; }}\n"));
     // Bold and italic take the theme's colours in the writing only.
     let set_off = ":is(h1, h2, h3, h4, h5, h6, blockquote, .footnotes, .callout-title, th)";
     if let Some(strong) = c.strong {
@@ -311,11 +423,6 @@ pub fn stylesheet(look: &Look, vertical: bool, hanging: bool) -> String {
         block = css(c.code_block),
         text = css(c.text),
     ));
-    for (token, colour) in &c.syntax {
-        if *colour != c.text {
-            out.push_str(&format!(".t-{} {{ color: {}; }}\n", token_class(*token), css(*colour)));
-        }
-    }
     out.push_str(&format!(
         "mark {{ background: {g}; color: inherit; border-radius: 0.1em; box-shadow: 0.05em 0 0 {g}, -0.05em 0 0 {g}; }}\n",
         g = css(c.highlight)
@@ -363,11 +470,42 @@ pub fn stylesheet(look: &Look, vertical: bool, hanging: bool) -> String {
          img.math.display { display: block; margin-block: 0; margin-inline: auto; }\n\
          p.math { text-indent: 0; }\n",
     );
+    out.push_str(&structure_rules(c));
+    out.push_str(
+        "figure { margin-block: 0 16px; margin-inline: 0; }\n\
+         figure img { display: block; }\n\
+         caption { caption-side: top; text-align: start; font-size: 0.9em; padding: 0; padding-block-end: 0.25em; }\n",
+    );
+    out.push_str(&format!(
+        "figcaption {{ font-size: 0.875em; color: {}; padding-block-start: 0.4em; }}\n",
+        css(c.muted)
+    ));
+    // Quotes, dashes and ellipses between 漢字, in the CJK face.
+    out.push_str(&format!(".cjk {{ font-family: {}; }}\n", fonts(&f.cjk_first)));
+    if vertical {
+        out.push_str(&vertical_rules(look, hanging));
+    }
+    out
+}
+
+/// **What a page's structure looks like, in `c`** (2026-11-08): GitHub's
+/// alerts and VitePress's `:::` containers, front matter in a frame, code
+/// in its colours, and a task's box where a bullet would be. The same
+/// rules for `:export html` (in GitHub's light colours) and for
+/// `:export-as-preview` (in the preview's).
+pub(crate) fn structure_rules(c: &Colours) -> String {
+    let mut out = String::new();
+    for (token, colour) in &c.syntax {
+        if *colour != c.text {
+            out.push_str(&format!(".t-{} {{ color: {}; }}\n", token_class(*token), css(*colour)));
+        }
+    }
     // Callouts: GitHub's alert, a bar in its colour and the title in it; a
     // `:::` container, VitePress's tinted box.
     out.push_str(
         ".callout { margin-block: 0 16px; margin-inline: 0; padding-block: 8px; padding-inline-start: 1em; border-inline-start: 0.25em solid var(--callout); }\n\
          .callout-title { margin-block: 0 8px; margin-inline: 0; font-weight: 600; color: var(--callout); text-indent: 0; }\n\
+         .callout > :last-child { margin-block-end: 0; }\n\
          .callout.fenced { border: 0; padding: 16px; border-radius: 8px; background: var(--ground); font-size: 0.95em; }\n\
          .callout.details .callout-title { color: inherit; }\n",
     );
@@ -383,11 +521,19 @@ pub fn stylesheet(look: &Look, vertical: bool, hanging: bool) -> String {
         css(c.border),
         css(c.muted),
     ));
-    // Quotes, dashes and ellipses between 漢字, in the CJK face.
-    out.push_str(&format!(".cjk {{ font-family: {}; }}\n", fonts(&f.cjk_first)));
-    if vertical {
-        out.push_str(&vertical_rules(look, hanging));
-    }
+    // A task's box, drawn as the preview draws it: a frame, or filled in
+    // the link's colour with a tick in the page's.
+    let [r, g, b, _] = c.background;
+    let tick = format!(
+        "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2.2 5.2L4.2 7.2L7.8 3' fill='none' stroke='%23{r:02x}{g:02x}{b:02x}' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")"
+    );
+    out.push_str(&format!(
+        "li.task {{ list-style-type: none; }}\n\
+         li.task > input, li.task > p > input {{ -webkit-appearance: none; appearance: none; box-sizing: border-box; inline-size: 0.9em; block-size: 0.9em; margin-block: 0; margin-inline: -1.35em 0.45em; vertical-align: -0.1em; font-size: inherit; border: 1.2px solid {muted}; border-radius: 3px; background: none; }}\n\
+         li.task > input:checked, li.task > p > input:checked {{ border-color: {link}; background: {link} {tick} center / 100% no-repeat; }}\n",
+        muted = css(c.muted),
+        link = css(c.link),
+    ));
     out
 }
 
@@ -517,6 +663,7 @@ pub(crate) fn test_look() -> Look {
             mono: "'Test Mono', monospace".to_string(),
             emphasis: "'Test Kai', 'Test CJK', sans-serif".to_string(),
             cjk_first: "'Test CJK', 'Test Sans', sans-serif".to_string(),
+            han_emphasis: "'Test Kai'".to_string(),
         },
         colours: Colours {
             background: [0x12, 0x34, 0x56, 255],
@@ -570,7 +717,7 @@ mod tests {
 一段**粗的**話，“引號”在這裏。
 ", &style(false));
         assert!(out.starts_with("<!doctype html>\n<html lang=\"zh-Hans\">"), "{out}");
-        for found in ["background: #123456", "color: #fedcba", "h1 { font-size: 2em; color: #a10101; }", "strong, b { color: #b20202; }", "font-family: 'Test Sans', 'Test CJK', sans-serif", "font-family: 'Test Kai'", "font-family: 'Test Mono'"] {
+        for found in ["background: #123456", "color: #fedcba", "h1 { font-size: 2em; color: #a10101; }", "strong, b { color: #b20202; }", "font-family: 'Test Sans', 'Test CJK', sans-serif", "src: local(\"Test Kai\"), local(\"Test Kai Regular\")", "font-family: \"Han Emphasis\", 'Test Kai'", "font-family: 'Test Mono'"] {
             assert!(out.contains(found), "{found} in {out}");
         }
         assert!(out.contains("<span class=\"cjk\">“</span>引號<span class=\"cjk\">”</span>"), "{out}");
@@ -580,7 +727,7 @@ mod tests {
 
     /// **YFM as the preview reads it**: an alert and a container are
     /// callouts in their colours, front matter a frame, code in colour, a
-    /// link a link; across the page a table's caption is the paragraph it is.
+    /// link a link; a table's caption heads it, across the page and down.
     #[test]
     fn callouts_code_links_and_captions_as_the_preview_draws_them() {
         let text = "---\ntitle: 樣張\n---\n\n> [!NOTE]\n> 留意這一句。\n\n::: tip 小提示\n容器裏的話。\n:::\n\n看[這裏](https://example.com/a \"題\")。\n\n```rust\nfn main() {}\n```\n\nTable: 兩座城\n\n| 城 | 人 |\n| --- | --- |\n| 甲 | 1 |\n";
@@ -592,7 +739,8 @@ mod tests {
         assert!(out.contains("<a href=\"https://example.com/a\">這裏</a>"), "{out}");
         assert!(out.contains("<span class=\"t-keyword\">fn</span>"), "{out}");
         assert!(out.contains(".t-keyword { color: #d40404; }") && !out.contains(".t-plain"), "{out}");
-        assert!(out.contains("<p>Table: 兩座城</p>\n<table>") && !out.contains("<caption>"), "{out}");
+        assert!(out.contains("<table>\n<caption>兩座城</caption>") && !out.contains("Table:"), "{out}");
+        assert!(out.contains("caption { caption-side: top; text-align: start; font-size: 0.9em;"), "{out}");
         // Down the page the caption runs beside the table, as the preview sets it.
         let out = html(text, &style(true));
         assert!(out.contains("<caption>兩座城</caption>"), "{out}");
@@ -600,13 +748,50 @@ mod tests {
         assert!(out.contains(&format!("line-height: {COLUMN_PITCH}")), "{out}");
     }
 
-    /// `:export html` reads none of it: no look, no callouts.
+    /// **`:export html` has the same structure** (2026-11-08): callouts,
+    /// front matter, code in colour, links and task boxes, in GitHub's light
+    /// colours and the export's own fonts and sizes; only the look differs.
     #[test]
-    fn the_plain_export_is_left_as_it_was() {
+    fn the_plain_export_has_the_same_structure_in_print_colours() {
+        let text = "---\ntitle: 樣張\n---\n\n> [!NOTE]\n> 一句。\n\n::: warning\n小心。\n:::\n\n[這裏](https://example.com)\n\n- [x] 做完的事\n- [ ] 沒做的事\n- 平常的一項\n\n```rust\nlet a = 1;\n```\n";
         let mut plain = style(false);
         plain.look = None;
-        let out = crate::export::export("> [!NOTE]\n> 一句。\n\n[這裏](https://example.com)\n", crate::export::Format::Html, &plain);
-        assert!(out.contains("<blockquote>") && !out.contains("callout") && !out.contains("<a href"), "{out}");
+        let page = crate::export::export(text, crate::export::Format::Html, &plain);
+        let preview = html(text, &style(false));
+        let body = |page: &str| page[page.find("</style>").unwrap()..].replace("<span class=\"cjk\">", "").replace("</span>", "");
+        assert_eq!(body(&page), body(&preview), "one structure, two looks");
+        for found in [
+            "<pre class=\"front-matter\">title: 樣張</pre>",
+            "<div class=\"callout note\">",
+            "<div class=\"callout fenced warning\">\n<p class=\"callout-title\">WARNING</p>",
+            "<a href=\"https://example.com\">這裏</a>",
+            "<li class=\"task\"><input type=\"checkbox\" disabled=\"disabled\" checked=\"checked\">做完的事</li>",
+            "<li class=\"task\"><input type=\"checkbox\" disabled=\"disabled\">沒做的事</li>",
+            "<li>平常的一項</li>",
+            "<span class=\"t-keyword\">let</span>",
+            ".callout.note { --callout: #0969da;",
+            "li.task { list-style-type: none; }",
+        ] {
+            assert!(page.contains(found), "{found} in {page}");
+        }
+        assert!(!page.contains("#123456"), "no colour of the look's: {page}");
+    }
+
+    /// **A formula is in the ink of where it stands**: a quotation's, a
+    /// note's, the writing's elsewhere, as the preview draws them.
+    #[test]
+    fn a_formula_takes_the_ink_of_its_quote() {
+        static INKS: std::sync::Mutex<Vec<[u8; 3]>> = std::sync::Mutex::new(Vec::new());
+        fn painter(_: &str, _: bool, _: bool, ink: [u8; 3]) -> Result<crate::export::Formula, String> {
+            INKS.lock().unwrap().push(ink);
+            Ok(crate::export::Formula { png: vec![1], width: 1.0, height: 1.0, depth: 0.0 })
+        }
+        let mut s = style(false);
+        s.painter = Some(painter);
+        html("正文 $a$。\n\n> 引文 $b$。\n\n注[^1]。\n\n[^1]: 腳注 $c$。\n", &s);
+        let c = test_look().colours;
+        let rgb = |x: Rgba| [x[0], x[1], x[2]];
+        assert_eq!(*INKS.lock().unwrap(), vec![rgb(c.text), rgb(c.quote), rgb(c.muted)]);
     }
 
     #[test]

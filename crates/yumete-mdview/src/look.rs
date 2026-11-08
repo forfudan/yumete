@@ -15,7 +15,13 @@ pub fn look(theme: &Theme, font_list: &str, text: &str) -> Look {
     let families = fonts::families(han, font_list);
     Look {
         lang: han.tag().to_string(),
-        faces: Faces { sans: families.sans, mono: families.mono, emphasis: families.emphasis, cjk_first: families.cjk_first },
+        faces: Faces {
+            sans: families.sans,
+            mono: families.mono,
+            emphasis: families.emphasis,
+            cjk_first: families.cjk_first,
+            han_emphasis: fonts::kai(han).trim_end_matches([',', ' ']).to_string(),
+        },
         colours: colours(theme),
     }
 }
@@ -54,6 +60,36 @@ pub fn colours(t: &Theme) -> Colours {
     }
 }
 
+/// **A palette from its colours**, the other way: a token the colours do
+/// not name is drawn in the writing's ink.
+pub fn theme_of(c: &Colours) -> Theme {
+    let token = |t| c.syntax.iter().find(|(k, _)| *k == t).map_or(c.text, |(_, colour)| *colour);
+    Theme {
+        background: c.background,
+        text: c.text,
+        muted: c.muted,
+        headings: c.headings,
+        strong: c.strong,
+        emphasis: c.emphasis,
+        link: c.link,
+        footnote: c.footnote,
+        code_text: c.code_text,
+        code_inline: c.code_inline,
+        code_block: c.code_block,
+        quote: c.quote,
+        quote_bar: c.quote_bar,
+        border: c.border,
+        stripe: c.stripe,
+        table_head: c.table_head,
+        highlight: c.highlight,
+        list_marker: c.list_marker,
+        callouts: c.callouts,
+        callout_grounds: c.callout_grounds,
+        error: c.error,
+        syntax: TOKENS.map(token),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -70,6 +106,8 @@ mod tests {
         assert_eq!(look.colours.syntax.len(), TOKENS.len());
         assert!(look.faces.sans.starts_with("'Avenir Next', "), "{}", look.faces.sans);
         assert_eq!(look.faces.sans, fonts::families(Han::Traditional, "'Avenir Next', serif").sans);
+        // The palette and its colours go both ways.
+        assert_eq!(theme_of(&colours(&theme)), theme);
         // Front matter says which hand, over the text.
         assert_eq!(han_of_document("---\nlang: ja\n---\n这是简体的字。"), Han::Japanese);
     }

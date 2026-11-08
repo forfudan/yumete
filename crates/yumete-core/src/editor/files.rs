@@ -6,6 +6,16 @@
 
 use super::*;
 
+/// **A PDF being typeset for `:export-as-preview`** (2026-11-08): the
+/// compiler's answer to come, the file it writes, the one that file becomes,
+/// and how many open files of the book had unsaved changes when it began.
+pub(super) struct Typesetting {
+    answer: std::sync::mpsc::Receiver<Result<(), String>>,
+    draft: PathBuf,
+    target: PathBuf,
+    unsaved: usize,
+}
+
 /// **拆注音只拆得動一本書**（2026-10-13）。拆是逐行的，而注音是稿子裏的東西——一份
 /// 語料檔裏偶爾出現的兩行 `<ruby` 不值那一趟。
 const BIGGEST_TO_COUNT_RUBY: usize = 16 * 1024 * 1024;
@@ -2036,10 +2046,20 @@ impl Editor {
     /// (for a chapter, the book that includes it), compiled by `typst` on
     /// the root a language server would be started on for it, as tinymist
     /// typesets it. Without `typst`, nothing is written.
+    ///
+    /// **In the background** (2026-11-08): a book takes seconds to typeset,
+    /// and the editor goes on meanwhile. The compiler runs on a thread of its
+    /// own, its input, output and errors its own and never the terminal's;
+    /// the status line says it is typesetting, and the loop collects the
+    /// answer ([`Editor::collect_typesetting`]). One at a time.
     fn export_typst_as_preview(&mut self, path: Option<&str>, force: bool) -> Result<CommandOutcome, EditorError> {
         let Some(main) = self.typst_main_here() else {
             return Err(EditorError::NoFileName);
         };
+        if let Some(running) = &self.typesetting {
+            self.status = say!("export.typesetting-busy", running.target.display());
+            return Ok(CommandOutcome::Continue);
+        }
         if !crate::export::typst_is_installed() {
             self.status = say!("export.no-typst");
             return Ok(CommandOutcome::Continue);
@@ -2056,29 +2076,69 @@ impl Editor {
         // renamed over it.
         let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let draft = target.with_file_name(format!(".{name}.yumete-{}.pdf", std::process::id()));
-        command.arg(&draft).current_dir(&root);
-        let said = match command.output() {
-            Ok(out) if out.status.success() => None,
-            Ok(out) => {
-                let err = String::from_utf8_lossy(&out.stderr).into_owned();
-                Some(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string())
-            }
-            Err(err) => Some(err.to_string()),
-        };
-        if let Some(why) = said {
-            let _ = std::fs::remove_file(&draft);
-            self.status = say!("export.typst-failed", why);
-            return Ok(CommandOutcome::Continue);
-        }
-        if let Err(err) = std::fs::rename(&draft, &target) {
-            let _ = std::fs::remove_file(&draft);
+        command
+            .arg(&draft)
+            .current_dir(&root)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let (tell, answer) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new().name("typst-export".to_string()).spawn(move || {
+            let said = match command.output() {
+                Ok(out) if out.status.success() => Ok(()),
+                Ok(out) => {
+                    let err = String::from_utf8_lossy(&out.stderr).into_owned();
+                    Err(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string())
+                }
+                Err(err) => Err(err.to_string()),
+            };
+            let _ = tell.send(said);
+        });
+        if let Err(err) = spawned {
             return Err(EditorError::Io(err));
         }
-        self.status = match self.unsaved_in_the_book(&main) {
-            0 => say!("export.wrote", target.display()),
-            n => say!("export.wrote-from-disk", target.display(), n),
-        };
+        self.status = say!("export.typesetting", main.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
+        self.typesetting = Some(Typesetting { answer, draft, target, unsaved: self.unsaved_in_the_book(&main) });
         Ok(CommandOutcome::Continue)
+    }
+
+    /// **Take the PDF the compiler made, if it is done** (2026-11-08):
+    /// renamed over the target, or the compiler's first line of complaint
+    /// on the status line. Asked every frame; `true` when something was
+    /// said.
+    pub fn collect_typesetting(&mut self) -> bool {
+        let Some(running) = &self.typesetting else {
+            return false;
+        };
+        let said = match running.answer.try_recv() {
+            Ok(said) => said,
+            Err(std::sync::mpsc::TryRecvError::Empty) => return false,
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => Err(String::new()),
+        };
+        let Some(done) = self.typesetting.take() else {
+            return false;
+        };
+        let renamed = said.and_then(|()| std::fs::rename(&done.draft, &done.target).map_err(|e| e.to_string()));
+        self.status = match renamed {
+            Ok(()) if done.unsaved == 0 => say!("export.wrote", done.target.display()),
+            Ok(()) => say!("export.wrote-from-disk", done.target.display(), done.unsaved),
+            Err(why) => {
+                let _ = std::fs::remove_file(&done.draft);
+                say!("export.typst-failed", why)
+            }
+        };
+        true
+    }
+
+    /// How soon the loop should look for the compiler's answer: while one
+    /// runs, ten times a second.
+    pub fn typesetting_due_in(&self) -> Option<std::time::Duration> {
+        self.typesetting.as_ref().map(|_| std::time::Duration::from_millis(100))
+    }
+
+    /// Whether a PDF is being typeset for `:export-as-preview`.
+    pub fn typesetting(&self) -> bool {
+        self.typesetting.is_some()
     }
 
     /// **How `main` is compiled as the preview typesets it**: the root a
@@ -2502,7 +2562,20 @@ mod tests {
 
         if crate::export::typst_is_installed() {
             ed.execute(":export-as-preview").unwrap();
+            // In the background: the status says so, a second one waits.
+            assert_eq!(ed.status(), say!("export.typesetting", "book.typ"));
+            assert!(ed.typesetting());
+            ed.execute(":export-as-preview! other.pdf").unwrap();
+            assert_eq!(ed.status(), say!("export.typesetting-busy", book.with_extension("pdf").display()));
+            for _ in 0..600 {
+                if ed.collect_typesetting() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            assert!(!ed.typesetting(), "typst answered");
             assert_eq!(ed.status(), say!("export.wrote", book.with_extension("pdf").display()));
+            assert!(!dir.join("other.pdf").exists());
             let pdf = std::fs::read(book.with_extension("pdf")).unwrap();
             assert!(pdf.starts_with(b"%PDF"), "a PDF");
             assert!(!chapter.with_extension("pdf").exists(), "the book, not the chapter");

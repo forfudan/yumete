@@ -503,6 +503,24 @@ impl Drawing {
     }
 }
 
+/// **`style`, its ink the one `pick` chooses** (2026-11-08): a formula in
+/// a quotation is in the quotation's colour, in a note in the notes', as
+/// the preview draws them. Only the ink of what is written inside changes;
+/// without a look the ink is black throughout.
+fn with_ink(style: &Style, pick: fn(&crate::as_preview::Colours) -> crate::as_preview::Rgba) -> std::borrow::Cow<'_, Style> {
+    match &style.look {
+        None => std::borrow::Cow::Borrowed(style),
+        Some(look) => {
+            let mut inked = style.clone();
+            let ink = pick(&look.colours);
+            if let Some(look) = inked.look.as_mut() {
+                look.colours.text = ink;
+            }
+            std::borrow::Cow::Owned(inked)
+        }
+    }
+}
+
 /// **The ink a formula is drawn in**: the preview's writing for
 /// `:export-as-preview`, black on a printed page.
 fn ink_of(style: &Style) -> [u8; 3] {
@@ -562,22 +580,13 @@ enum Block {
     Rule,
     /// The `>` lines, read again as blocks of their own.
     Quote(Vec<Block>),
-    /// Items with one kind of marker, each item blocks of its own.
-    List { ordered: bool, start: usize, items: Vec<Vec<Block>> },
+    /// Items with one kind of marker, each item blocks of its own, and
+    /// whether it is a task and done (`- [x]`) or not (`- [ ]`).
+    List { ordered: bool, start: usize, items: Vec<(Option<bool>, Vec<Block>)> },
     /// A pipe table: its heading row, how each column aligns, its rows, and
     /// its caption — Pandoc's `Table: …` (or `: …`) paragraph just above or
     /// below it (2026-11-08).
-    ///
-    /// `written` is the caption's paragraph as it stands in the source, and
-    /// whether it stands below the table: the horizontal Markdown preview
-    /// draws it as the paragraph it is.
-    Table {
-        head: Vec<String>,
-        align: Vec<crate::mdtable::Align>,
-        rows: Vec<Vec<String>>,
-        caption: Option<String>,
-        written: Option<(String, bool)>,
-    },
+    Table { head: Vec<String>, align: Vec<crate::mdtable::Align>, rows: Vec<Vec<String>>, caption: Option<String> },
     /// **A picture alone in its paragraph** (2026-11-08), `![說明](a.png)`:
     /// a figure, its text the caption, as Pandoc reads it.
     Figure { caption: String, src: String },
@@ -586,13 +595,13 @@ enum Block {
     /// three lines came out joined by spaces and no line could be drawn: each
     /// held a piece of the formula.
     Math(Vec<String>),
-    /// **A callout** (2026-11-08), read only for `:export-as-preview`, as
-    /// the Markdown preview reads YFM: a `:::` container (`fenced`) or a
+    /// **A callout** (2026-11-08), read for a page as the Markdown preview
+    /// reads YFM: a `:::` container (`fenced`) or a
     /// GitHub alert, `> [!NOTE]`. Its kind ([`CALLOUTS`]), the word it was
     /// written with, the title written after it, and its blocks.
     Callout { kind: usize, name: String, title: Option<String>, fenced: bool, body: Vec<Block> },
     /// **Front matter** (2026-11-08), the `---` lines heading the file,
-    /// read only for `:export-as-preview`: the preview shows it in a frame.
+    /// read for a page: the preview shows it in a frame.
     FrontMatter(Vec<String>),
 }
 
@@ -619,8 +628,8 @@ type Note = (String, Vec<String>);
 
 /// The manuscript as blocks, and its footnotes' texts taken out of the flow.
 ///
-/// `yfm` reads what only the Markdown preview reads, for
-/// `:export-as-preview`: callouts and front matter.
+/// `yfm` reads YFM as the Markdown preview reads it, for the HTML and EPUB
+/// exports: callouts and front matter. Task lists are read everywhere.
 fn blocks(text: &str, source: crate::syntax::Syntax, yfm: bool) -> (Vec<Block>, Vec<Note>) {
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();
     let mut notes = Vec::new();
@@ -808,11 +817,9 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
             }
             // The caption: the paragraph just above, if it was one, or the
             // one just below, a blank line between or not.
-            let mut written = None;
             let mut caption = match out.last() {
                 Some(Block::Paragraph(held)) if caption_of(&held.join(" ")).is_some() => {
                     let Some(Block::Paragraph(held)) = out.pop() else { unreachable!() };
-                    written = Some((held.join(" "), false));
                     caption_of(&held.join(" ")).map(str::to_string)
                 }
                 _ => None,
@@ -827,10 +834,9 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
                         i += 1;
                     }
                     caption = Some(held.join(" "));
-                    written = Some((lines[at..i].iter().map(|l| l.trim()).collect::<Vec<_>>().join(" "), true));
                 }
             }
-            out.push(Block::Table { head, align, rows, caption, written });
+            out.push(Block::Table { head, align, rows, caption });
             continue;
         }
         if markdown && para.is_empty() && indent < 4 && lines.get(i + 1).is_none_or(|l| l.trim().is_empty()) {
@@ -880,7 +886,7 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
                     }
                     i += 1;
                 }
-                items.push(parse(&held, source, notes, yfm));
+                items.push((item.task, parse(&held, source, notes, yfm)));
                 // The next item, when it is a sibling: the same kind of marker
                 // at the same indent, with at most a blank line between.
                 let mut at = i;
@@ -970,8 +976,10 @@ struct Item {
     /// Where the item's text begins, in bytes: a line indented this far
     /// belongs to the item.
     width: usize,
-    /// The same, for the first line's text.
+    /// The same, for the first line's text: past a task's box.
     text: usize,
+    /// **A task** (2026-11-08), GFM's `- [ ]` and `- [x]`: done or not.
+    task: Option<bool>,
 }
 
 /// The list item `line` opens, if it opens one: `-`, `*` or `+` and a space,
@@ -999,7 +1007,20 @@ fn list_item(line: &str, source: crate::syntax::Syntax) -> Option<Item> {
         return None;
     }
     let width = indent + marker + gap.clamp(1, 4);
-    Some(Item { indent, ordered, start, width, text: indent + marker + gap })
+    let text = indent + marker + gap;
+    // A task's box: `[ ]`, `[x]` or `[X]`, then a space or the line's end.
+    let rest = &line[text..];
+    let task = match (typst, rest.get(..3)) {
+        (false, Some("[ ]")) => Some(false),
+        (false, Some("[x]" | "[X]")) => Some(true),
+        _ => None,
+    }
+    .filter(|_| rest[3..].is_empty() || rest[3..].starts_with(' '));
+    let text = match task {
+        Some(_) => text + 3 + usize::from(rest[3..].starts_with(' ')),
+        None => text,
+    };
+    Some(Item { indent, ordered, start, width, text, task })
 }
 
 /// **How far a line is indented, in bytes of spaces and tabs** (2026-10-30).
@@ -1031,7 +1052,6 @@ fn line_into(
     escape: fn(&str) -> String,
     source: crate::syntax::Syntax,
     painter: Option<Drawing>,
-    links: bool,
 ) -> String {
     use crate::syntax::Syntax;
     let chars: Vec<char> = line.chars().collect();
@@ -1058,7 +1078,7 @@ fn line_into(
         _ if paint.is_some() => crate::markdown::spans(line),
         _ => without_maths(crate::markdown::spans(line)),
     };
-    render(&chars, &groups, &marks, None, 0, chars.len(), dialect, escape, paint, links)
+    render(&chars, &groups, &marks, None, 0, chars.len(), dialect, escape, paint)
 }
 
 /// One run of `chars`, with whatever is marked **inside** it marked too.
@@ -1091,9 +1111,6 @@ fn render(
     escape: fn(&str) -> String,
     // Set only for Markdown going to HTML: what draws its TeX.
     paint: Option<Drawing>,
-    // A link written as a link (`<a href>`), as the preview's page has it,
-    // rather than as its words.
-    links: bool,
 ) -> String {
     use crate::markdown::Kind;
     let mut out = String::new();
@@ -1177,11 +1194,15 @@ fn render(
                         }
                     }
                     false => {
-                        render(chars, groups, marks, Some(i), start, end, dialect, escape, paint, links)
+                        render(chars, groups, marks, Some(i), start, end, dialect, escape, paint)
                     }
                 };
-                let target = match (span.kind, links, dialect) {
-                    (Kind::Link, true, Dialect::Html) => link_target(chars, span.start, span.end),
+                // **A link is a link on a web page** (2026-11-08): its words
+                // in an `<a href>`, as the Markdown preview shows them. In
+                // Typst the target is the manuscript's scaffolding and only
+                // the words go over.
+                let target = match (span.kind, dialect) {
+                    (Kind::Link, Dialect::Html) => link_target(chars, span.start, span.end),
                     _ => None,
                 };
                 match target {
@@ -1692,6 +1713,9 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
         false => out.push_str("p { margin: 0 0 1em; }\n"),
     }
     out.push_str("rt { font-size: 0.5em; }\n");
+    // Callouts, front matter, code in colour and task boxes, in GitHub's
+    // light colours: the structure the preview's page has, in print.
+    out.push_str(&crate::as_preview::structure_rules(&crate::as_preview::Colours::github_light()));
     out.push_str(
         "blockquote { margin: 1em 2em; }\n\
          table { border-collapse: collapse; margin: 1em 0; }\n\
@@ -1753,7 +1777,7 @@ pub(crate) const LATIN_RULES: &str = ".yoko { -webkit-text-orientation: sideways
 /// odd number in a CJK line, and every short word of an English one would be
 /// squeezed into a square.
 pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
-    let (blocks, notes) = blocks(text, style.source, style.look.is_some());
+    let (blocks, notes) = blocks(text, style.source, true);
     let mut body = String::new();
     html_blocks(&blocks, style, &mut body);
     let (mut body, order) = number_the_notes(&body, &notes, |n, _| {
@@ -1763,7 +1787,9 @@ pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
         body.push_str("<section class=\"footnotes\">\n<hr>\n<ol>\n");
         for (n, lines) in order.iter().enumerate() {
             let n = n + 1;
-            body.push_str(&format!("<li id=\"fn-{n}\">{}</li>\n", html_lines(lines, style)));
+            // A formula in a note is in the notes' ink, as the preview sets it.
+            let inked = with_ink(style, |c| c.muted);
+            body.push_str(&format!("<li id=\"fn-{n}\">{}</li>\n", html_lines(lines, &inked)));
         }
         body.push_str("</ol>\n</section>\n");
     }
@@ -1868,7 +1894,7 @@ fn painted_code(lines: &[String]) -> Option<Vec<String>> {
 
 /// The blocks as HTML.
 fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style), style.look.is_some());
+    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style));
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -1877,12 +1903,8 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             // The fence lines are markup, the rest is verbatim: `<pre>` keeps
             // its own whitespace, and the only thing owed to it is HTML's own
             // escaping — no Markdown is read inside a code block (#386).
-            // In the preview's look, code is in its colours, as the preview
-            // draws it.
-            Block::Code(lines) => {
-                let painted = style.look.as_ref().and_then(|_| painted_code(lines));
-                out.push_str(&code_block_html(lines, style.settings.vertical, painted))
-            }
+            // Code in its colours, as the preview draws it.
+            Block::Code(lines) => out.push_str(&code_block_html(lines, style.settings.vertical, painted_code(lines))),
             Block::Paragraph(lines) => {
                 out.push_str(&format!("<p>{}</p>\n", html_lines(lines, style)));
             }
@@ -1900,7 +1922,8 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             Block::Rule => out.push_str("<hr>\n"),
             Block::Quote(inner) => {
                 out.push_str("<blockquote>\n");
-                html_blocks(inner, style, out);
+                // A formula in a quotation is in the quotation's ink.
+                html_blocks(inner, &with_ink(style, |c| c.quote), out);
                 out.push_str("</blockquote>\n");
             }
             Block::List { ordered, start, items } => {
@@ -1911,30 +1934,34 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                 };
                 out.push_str(&open);
                 out.push('\n');
-                for item in items {
+                for (task, item) in items {
+                    // A task's box, before its words: `- [ ]` and `- [x]`.
+                    let (open, tick) = match task {
+                        Some(done) => {
+                            let checked = if *done { " checked=\"checked\"" } else { "" };
+                            ("<li class=\"task\">", format!("<input type=\"checkbox\" disabled=\"disabled\"{checked}>"))
+                        }
+                        None => ("<li>", String::new()),
+                    };
                     // A one-paragraph item is set tight, as a list is read.
                     match item.as_slice() {
                         [Block::Paragraph(lines)] => {
-                            out.push_str(&format!("<li>{}</li>\n", html_lines(lines, style)));
+                            out.push_str(&format!("{open}{tick}{}</li>\n", html_lines(lines, style)));
                         }
                         _ => {
-                            out.push_str("<li>\n");
-                            html_blocks(item, style, out);
-                            out.push_str("</li>\n");
+                            let mut held = String::new();
+                            html_blocks(item, style, &mut held);
+                            let held = match held.strip_prefix("<p>") {
+                                Some(rest) => format!("<p>{tick}{rest}"),
+                                None => format!("{tick}{held}"),
+                            };
+                            out.push_str(&format!("{open}\n{held}</li>\n"));
                         }
                     }
                 }
                 out.push_str(if *ordered { "</ol>\n" } else { "</ul>\n" });
             }
-            Block::Table { head, align, rows, caption, written } => {
-                // **Across the page the preview draws a caption as the
-                // paragraph it is**, above or below the table, `Table:` and
-                // all; down the page it runs beside the table, as here.
-                let as_written = written.as_ref().filter(|_| style.look.is_some() && !style.settings.vertical);
-                let caption = caption.as_ref().filter(|_| as_written.is_none());
-                if let Some((text, false)) = as_written {
-                    out.push_str(&format!("<p>{}</p>\n", line(text)));
-                }
+            Block::Table { head, align, rows, caption } => {
                 // Down the page, a short cell keeps its line (see
                 // `stylesheet` and `short_cell`).
                 let longest = std::iter::once(head).chain(rows).flatten().map(|c| cell_length(c)).fold(0.0, f64::max);
@@ -1967,9 +1994,6 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
                     out.push_str("</tr>\n");
                 }
                 out.push_str("</tbody>\n</table>\n");
-                if let Some((text, true)) = as_written {
-                    out.push_str(&format!("<p>{}</p>\n", line(text)));
-                }
             }
             // The path as written: the page is written beside its source, so
             // it finds the picture where the source does. An EPUB takes the
@@ -1977,12 +2001,6 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             Block::Figure { caption, src } => {
                 let alt = escape_html(caption).replace('"', "&quot;");
                 let src = escape_html(src).replace('"', "&quot;");
-                // Across the page the preview draws the picture alone in its
-                // paragraph, its text unshown.
-                if style.look.is_some() && !style.settings.vertical {
-                    out.push_str(&format!("<p><img src=\"{src}\" alt=\"{alt}\"></p>\n"));
-                    continue;
-                }
                 out.push_str(&format!("<figure>\n<img class=\"figure\" src=\"{src}\" alt=\"{alt}\">\n"));
                 if !caption.trim().is_empty() {
                     out.push_str(&format!("<figcaption>{}</figcaption>\n", line(caption)));
@@ -2026,7 +2044,7 @@ fn html_lines(lines: &[String], style: &Style) -> String {
                 false => "<br>\n",
             });
         }
-        out.push_str(&line_into(raw.trim(), style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style), style.look.is_some()));
+        out.push_str(&line_into(raw.trim(), style.settings.dialects(), Dialect::Html, escape_html, style.source, Drawing::of(style)));
     }
     out
 }
@@ -2195,7 +2213,7 @@ fn typst(text: &str, style: &Style) -> String {
     let (body, _) = number_the_notes(&body, &notes, |_, text| {
         let lines: Vec<String> = text
             .iter()
-            .map(|l| line_into(l, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None, false))
+            .map(|l| line_into(l, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None))
             .collect();
         format!("#footnote[{}]", lines.join(" "))
     });
@@ -2205,7 +2223,7 @@ fn typst(text: &str, style: &Style) -> String {
 
 /// The blocks as Typst markup.
 fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
-    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None, false);
+    let line = |text: &str| line_into(text, style.settings.dialects(), Dialect::Typst, escape_typst, style.source, None);
     for block in blocks {
         match block {
             Block::Heading(depth, title) => {
@@ -2239,12 +2257,18 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             // Typst's own list markup: `-` an item, `3.` a numbered one, and
             // what belongs to an item indented under it.
             Block::List { ordered, start, items } => {
-                for (n, item) in items.iter().enumerate() {
+                for (n, (task, item)) in items.iter().enumerate() {
                     let mut held = String::new();
                     typst_blocks(item, style, &mut held);
+                    // A task's box goes with its marker.
+                    let tick = match task {
+                        Some(true) => "☑ ",
+                        Some(false) => "☐ ",
+                        None => "",
+                    };
                     let marker = match ordered {
-                        true => format!("{}. ", start + n),
-                        false => "- ".to_string(),
+                        true => format!("{}. {tick}", start + n),
+                        false => format!("- {tick}"),
                     };
                     // An empty item still takes its marker, or the numbers
                     // after it shift (2026-10-30: `1.` alone vanished).
@@ -2566,10 +2590,29 @@ mod tests {
         assert!(!out.contains("\\`"), "no escaped backtick anywhere: {out}");
         assert!(!out.contains("x\\_y"), "nothing inside it is markup: {out}");
 
-        // HTML wants its own wrapper, and its own escaping inside it.
-        let out = export(text, Format::Html, &style());
+        // HTML wants its own wrapper, and its own escaping inside it; the
+        // code is in its colours (2026-11-08), its words as written.
+        let mut across = style();
+        across.settings.vertical = false;
+        let out = export(text, Format::Html, &across);
         assert!(out.contains("<pre><code>"), "{out}");
-        assert!(out.contains("fn main() { let x_y = 1; }"), "{out}");
+        assert!(out.contains("<span class=\"t-keyword\">fn</span>") && out.contains("x_y"), "{out}");
+    }
+
+    /// **Task lists** (2026-11-08), GFM's `- [ ]` and `- [x]`: a box before
+    /// the item's words, ticked or not, in HTML and in Typst; `[ ]` that is
+    /// not followed by a space or the line's end is the item's words.
+    #[test]
+    fn a_task_list_has_its_boxes() {
+        let text = "- [ ] 買菜\n- [x] 洗衣\n- [ ]\n- [x]真的字\n";
+        let mut across = style();
+        across.settings.vertical = false;
+        let out = export(text, Format::Html, &across);
+        assert!(out.contains("<li class=\"task\"><input type=\"checkbox\" disabled=\"disabled\">買菜</li>"), "{out}");
+        assert!(out.contains("<li class=\"task\"><input type=\"checkbox\" disabled=\"disabled\" checked=\"checked\">洗衣</li>"), "{out}");
+        assert!(out.contains("<li>[x]真的字</li>"), "{out}");
+        let out = export(text, Format::Typst, &across);
+        assert!(out.contains("- ☐ 買菜\n- ☑ 洗衣\n"), "{out}");
     }
 
     /// **Code down the page is turned whole** (2026-11-08), a block and a

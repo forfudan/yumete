@@ -56,25 +56,7 @@ pub struct Theme {
 }
 
 /// Every token kind, in the order [`Theme::syntax`] holds their colours.
-pub const TOKENS: [Token; 17] = [
-    Token::Plain,
-    Token::Keyword,
-    Token::Builtin,
-    Token::Function,
-    Token::BuiltinFunction,
-    Token::Type,
-    Token::Property,
-    Token::Tag,
-    Token::Attribute,
-    Token::String,
-    Token::Escape,
-    Token::Constant,
-    Token::Number,
-    Token::Parameter,
-    Token::Comment,
-    Token::Operator,
-    Token::Punctuation,
-];
+pub const TOKENS: [Token; 17] = yumete_core::as_preview::TOKENS;
 
 /// GitHub's code colours, keyword to punctuation, as [`TOKENS`] orders them.
 fn github_syntax(text: Rgba, [keyword, function, kind, string, constant, comment, tag]: [Rgba; 7]) -> [Rgba; 17] {
@@ -96,47 +78,10 @@ fn github_syntax(text: Rgba, [keyword, function, kind, string, constant, comment
 
 impl Theme {
     /// GitHub's light colours (`github-markdown-css`), with GitHub's light
-    /// code colours.
+    /// code colours: [`yumete_core::as_preview::Colours::github_light`], the
+    /// palette `:export html` prints callouts and code in.
     pub fn light() -> Theme {
-        let text = [0x1f, 0x23, 0x28, 0xff];
-        let muted = [0x59, 0x63, 0x6e, 0xff];
-        let background = [0xff, 0xff, 0xff, 0xff];
-        let callouts = [[0x09, 0x69, 0xda, 0xff], [0x1a, 0x7f, 0x37, 0xff], [0x82, 0x50, 0xdf, 0xff], [0x9a, 0x67, 0x00, 0xff], [0xd1, 0x24, 0x2f, 0xff]];
-        Theme {
-            background,
-            text,
-            muted,
-            headings: [text, text, text, text, text, muted],
-            strong: None,
-            emphasis: None,
-            link: [0x09, 0x69, 0xda, 0xff],
-            footnote: [0x09, 0x69, 0xda, 0xff],
-            code_text: text,
-            code_inline: [0xef, 0xf1, 0xf3, 0xff],
-            code_block: [0xf6, 0xf8, 0xfa, 0xff],
-            quote: muted,
-            quote_bar: [0xd1, 0xd9, 0xe0, 0xff],
-            border: [0xd1, 0xd9, 0xe0, 0xff],
-            stripe: [0xf6, 0xf8, 0xfa, 0xff],
-            table_head: text,
-            highlight: [0xff, 0xf8, 0xc5, 0xff],
-            list_marker: text,
-            callouts,
-            callout_grounds: callouts.map(|c| tint(c, background, 0.10)),
-            error: [0xd1, 0x24, 0x2f, 0xff],
-            syntax: github_syntax(
-                text,
-                [
-                    [0xcf, 0x22, 0x2e, 0xff],
-                    [0x82, 0x50, 0xdf, 0xff],
-                    [0x95, 0x38, 0x00, 0xff],
-                    [0x0a, 0x30, 0x69, 0xff],
-                    [0x05, 0x50, 0xae, 0xff],
-                    muted,
-                    [0x11, 0x63, 0x29, 0xff],
-                ],
-            ),
-        }
+        crate::look::theme_of(&yumete_core::as_preview::Colours::github_light())
     }
 
     /// GitHub's dark colours.
@@ -215,8 +160,4 @@ impl Theme {
     }
 }
 
-/// `c` laid over `ground` at `alpha` (0 to 1): a tint that stays opaque.
-pub fn tint(c: Rgba, ground: Rgba, alpha: f32) -> Rgba {
-    let mix = |a: u8, b: u8| (a as f32 * alpha + b as f32 * (1.0 - alpha)).round() as u8;
-    [mix(c[0], ground[0]), mix(c[1], ground[1]), mix(c[2], ground[2]), 0xff]
-}
+pub use yumete_core::as_preview::tint;

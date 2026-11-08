@@ -1102,7 +1102,7 @@ pub(crate) fn caption_of(block: &Block) -> Option<Vec<Inline>> {
 }
 
 /// A paragraph that is one picture and nothing else: its source and alt.
-fn figure_of(runs: &[Inline]) -> Option<(&str, &str)> {
+pub(crate) fn figure_of(runs: &[Inline]) -> Option<(&str, &str)> {
     let mut found = None;
     for run in runs {
         match &run.kind {

@@ -379,6 +379,18 @@ zhs = "{0} 已打开，导出会覆盖它，请换个文件名"
 en = "{0} is open; an export would overwrite it, so pick another name"
 
 [[message]]
+# :export-as-preview 開始在背景用 typst 排版 PDF，{0} 是排的那個主檔（草稿）
+key = "export.typesetting"
+zhs = "正在排版 {0}…"
+en = "typesetting {0}…"
+
+[[message]]
+# :export-as-preview 排版還沒完又要了一次，{0} 是正在寫的那個 PDF（草稿）
+key = "export.typesetting-busy"
+zhs = "还在排版 {0}，等它完成"
+en = "still typesetting {0}; wait for it to finish"
+
+[[message]]
 # :export-as-preview 编译 PDF 时 typst 报了错，{0} 是它说的第一行（草稿）
 key = "export.typst-failed"
 zhs = "typst 编译失败，没有导出：{0}"

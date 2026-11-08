@@ -3396,6 +3396,9 @@ pub struct Editor {
     /// `:export-as-preview`: handed over by the front end, which owns the
     /// theme and the preview's fonts. `None` until it is.
     preview_look: Option<crate::as_preview::Looker>,
+    /// **A PDF being typeset for `:export-as-preview`** (2026-11-08), on a
+    /// thread of its own.
+    typesetting: Option<files::Typesetting>,
     /// How big a page window draws the page (`:view-preview-fit`).
     preview_fit: PreviewFit,
     /// Whether the page is drawn in the theme's colours rather than as
@@ -4655,6 +4658,7 @@ impl Editor {
             preview_at: None,
             formula_painter: None,
             preview_look: None,
+            typesetting: None,
             preview_fit: PreviewFit::default(),
             preview_theme: false,
             preview_vertical: true,

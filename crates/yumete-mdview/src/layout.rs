@@ -500,11 +500,19 @@ impl Engine {
 
     // ── Blocks ──────────────────────────────────────────────────────────────
 
-    /// **Lay a top-level block out** in a column `width` wide from `x`.
-    pub(crate) fn top(&mut self, block: &Block, x: f32, width: f32) -> Laid {
+    /// **Lay a top-level block out** in a column `width` wide from `x`,
+    /// with the caption a table takes over it (2026-11-08), in the type the
+    /// vertical page sets one in.
+    pub(crate) fn top(&mut self, block: &Block, caption: Option<&[Inline]>, x: f32, width: f32) -> Laid {
         let cx = Ctx { color: self.theme.text, depth: 0, tight: false, size: self.base() };
         let mut out = Out::default();
         let mut y = 0.0;
+        if let Some(caption) = caption.filter(|_| matches!(block.kind, BlockKind::Table { .. })) {
+            let st = Style { size: cx.size * 0.9, ..self.body(&cx) };
+            let t = self.text(caption, st, Some(width), Alignment::Start);
+            y += self.put_text(t, x, y, &mut out, block.lines.0);
+            y += 0.25 * cx.size;
+        }
         self.block(block, x, width, &mut y, &mut out, cx);
         let (top, bottom) = self.margins(block, cx);
         let right = out.items.iter().map(item_right).fold(x + width, f32::max);
@@ -571,6 +579,14 @@ impl Engine {
                 }
             }
             BlockKind::Paragraph(runs) => {
+                // A picture alone in its paragraph is a figure, its text the
+                // caption under it, as the vertical page and the export set
+                // one (2026-11-08).
+                if let Some((src, alt)) = crate::vertical::figure_of(runs) {
+                    if self.figure(src, alt, first, x, w, y, out, cx) {
+                        return;
+                    }
+                }
                 let t = self.text(runs, self.body(&cx), Some(w), Alignment::Start);
                 *y += self.put_text(t, x, *y, out, first);
             }
@@ -653,6 +669,25 @@ impl Engine {
                 }
             }
         }
+    }
+
+    /// **A figure across the page**: its picture as large as it is and no
+    /// wider than the column, its caption under it in the notes' size and
+    /// ink. `false` when the picture cannot be read.
+    #[allow(clippy::too_many_arguments)]
+    fn figure(&mut self, src: &str, alt: &str, line: usize, x: f32, w: f32, y: &mut f32, out: &mut Out, cx: Ctx) -> bool {
+        let Some(pix) = self.image(src, w.max(1.0)) else { return false };
+        let (pw, ph) = (pix.width() as f32, pix.height() as f32);
+        out.marks.push((*y, line));
+        out.items.push(Item::Pic { r: rect(x.round(), y.round(), pw, ph), pix });
+        *y += ph;
+        if !alt.trim().is_empty() {
+            *y += 0.4 * cx.size;
+            let st = Style { size: cx.size * 0.875, color: self.theme.muted, ..self.body(&cx) };
+            let t = self.words(alt, st, Some(w), Alignment::Start);
+            *y += self.put_text(t, x, *y, out, line);
+        }
+        true
     }
 
     /// A list marker `text` set right against `right`, on the baseline of the
