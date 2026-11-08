@@ -27,6 +27,7 @@ pub mod server;
 pub mod settings;
 pub mod settings_page;
 pub mod system_ime;
+pub mod terminal_window;
 pub mod typed_ahead;
 
 use std::io::{self, stdout, Write as _};
@@ -1092,6 +1093,11 @@ pub fn run(
         // command line across it.
         if let Some(job) = wants_picture {
             let drawn = drawn.take().unwrap_or_default();
+            // **Drawn again whole afterwards**: the command's own output is
+            // kept off the screen, but a program is free to open the window
+            // system's prompts or `/dev/tty` itself, and a cell ratatui does
+            // not know was overwritten stays wrong under every later frame.
+            let repaint = shot_runs_a_program(&job);
             let said = match job {
                 ShotJob::Screen => photograph_the_screen(config, None, &editor.working_dir()),
                 // Not the frame: the same program `:shot` uses, told where to
@@ -1119,6 +1125,9 @@ pub fn run(
                 }
             };
             editor.set_status(said);
+            if repaint {
+                terminal.clear()?;
+            }
             continue;
         }
         // The page is up; now the 14 MB. Between these two lines is the whole
@@ -3066,49 +3075,143 @@ pub fn set_theme(
     say!("theme.set", crate::theme::name(config), mood)
 }
 
-/// Photograph the screen — onto the clipboard (`:shot`), or into `dest`
-/// (`:shot png`).
+/// Photograph the terminal's window — onto the clipboard (`:shot`), or into
+/// `dest` (`:shot png`).
 ///
 /// The window system's job, so it is a shell line in the config rather than
 /// something built in here — and it is run **without** giving up the terminal,
 /// because handing the screen over is exactly what would spoil the picture.
 ///
-/// This photographs the **window**: its title bar, its tab strip and whatever
-/// is in front of it. `:shot html` draws the page instead (#189), which is the
-/// one a review or a bug report about the *text* wants.
+/// This photographs the **window**, title bar and tab strip included. `:shot
+/// html` draws the page instead (#189), which is the one a review or a bug
+/// report about the *text* wants.
 ///
-/// **One config line does both**, because they are one decision — where the
-/// window is and how to crop to it — and a second line would be the same
-/// `osascript` with a different tail, kept in step by hand. Where the picture
-/// goes is passed in the environment as `$YUMETE_SHOT`, which the shipped line
-/// spends as `"${YUMETE_SHOT:--c}"`: a path when there is one, and
-/// `screencapture`'s own 「onto the clipboard」 flag when there is not. A line
-/// somebody wrote themselves before `:shot png` existed does not know that
-/// name, so the file is looked for afterwards and its absence is said out
-/// loud rather than reported as a picture that was never written.
+/// **One config line does both**, because they are one decision — which
+/// window, and how to take it. Where the picture goes is passed in the
+/// environment as `$YUMETE_SHOT`, which the shipped line spends as
+/// `"${YUMETE_SHOT:--c}"`: a path when there is one, and `screencapture`'s own
+/// 「onto the clipboard」 flag when there is not. Which window is passed too,
+/// as `$YUMETE_WINDOW` (its `CGWindowID`) and `$YUMETE_WINDOW_RECT`
+/// (`x,y,w,h` in points) — see [`terminal_window`]. A line somebody wrote
+/// themselves before `:shot png` existed does not know `$YUMETE_SHOT`, so the
+/// file is looked for afterwards and its absence is said out loud rather than
+/// reported as a picture that was never written.
+///
+/// Warning: **nothing the command says may reach the screen** (2026-11-08).
+/// The editor's picture of the terminal is ratatui's, and it redraws only the
+/// cells it believes changed: a line `osascript` wrote across the bottom rows
+/// stayed there under every later frame, mixed with old status-line pieces,
+/// until something forced a full redraw. So the command gets no terminal at
+/// all — see [`photograph_command`] — and what it complained of comes back as
+/// one line on the status bar.
 fn photograph_the_screen(
     config: &Config,
     dest: Option<&std::path::Path>,
     in_dir: &std::path::Path,
 ) -> String {
-    let line = config.editor.screenshot.trim();
+    let window = terminal_window::find();
+    let mut command = match photograph_command(
+        &config.editor.screenshot,
+        dest,
+        in_dir,
+        window.as_ref(),
+        terminal_window::may_record_the_screen(),
+    ) {
+        Ok(command) => command,
+        Err(refused) => return refused,
+    };
+    match command.output() {
+        Ok(out) if out.status.success() => match dest {
+            None => say!("ui.screenshot-taken"),
+            Some(path) if path.exists() => say!("ui.shot-photographed", path.display()),
+            Some(_) => say!("ui.shot-kept-the-clipboard"),
+        },
+        Ok(out) => say!(
+            "ui.screenshot-failed",
+            first_complaint(&out.stderr)
+                .or_else(|| first_complaint(&out.stdout))
+                .unwrap_or_else(|| out.status.to_string())
+        ),
+        Err(err) => say!("ui.screenshot-failed", err),
+    }
+}
+
+/// The screenshot command, ready to run — or why it must not run at all.
+///
+/// Split from [`photograph_the_screen`] so the refusals can be tested without
+/// a window server: **no window, no `screencapture`** (a line that crops to
+/// `$YUMETE_WINDOW` with nothing in it photographs nothing, and the old line's
+/// `-R ""` was exactly that), and **no Screen Recording, no `screencapture`**
+/// (it would hand back a picture of the wallpaper, or fail without saying
+/// why).
+///
+/// Warning: **stdin, stdout and stderr are never the terminal**, and on Unix
+/// the command starts a session of its own, so it has no controlling terminal
+/// to open `/dev/tty` on either.
+fn photograph_command(
+    line: &str,
+    dest: Option<&std::path::Path>,
+    in_dir: &std::path::Path,
+    window: Option<&terminal_window::Window>,
+    may_record: bool,
+) -> Result<std::process::Command, String> {
+    let line = line.trim();
     if line.is_empty() {
-        return say!("ui.no-screenshot-command");
+        return Err(say!("ui.no-screenshot-command"));
+    }
+    if window.is_none() && line.contains("YUMETE_WINDOW") {
+        return Err(say!("ui.shot-no-window"));
+    }
+    if !may_record && line.contains("screencapture") {
+        let app = window.map(|w| w.owner.as_str()).filter(|o| !o.is_empty()).unwrap_or("the terminal");
+        return Err(say!("ui.shot-needs-screen-recording", app));
     }
     let mut command = shell_command(line, in_dir);
     match dest {
         Some(path) => command.env("YUMETE_SHOT", path),
         None => command.env_remove("YUMETE_SHOT"),
     };
-    match command.status() {
-        Ok(status) if status.success() => match dest {
-            None => say!("ui.screenshot-taken"),
-            Some(path) if path.exists() => say!("ui.shot-photographed", path.display()),
-            Some(_) => say!("ui.shot-kept-the-clipboard"),
-        },
-        Ok(status) => say!("ui.screenshot-failed", status),
-        Err(err) => say!("ui.screenshot-failed", err),
+    match window {
+        Some(window) => command
+            .env("YUMETE_WINDOW", window.id.to_string())
+            .env("YUMETE_WINDOW_RECT", window.rect()),
+        None => command.env_remove("YUMETE_WINDOW").env_remove("YUMETE_WINDOW_RECT"),
+    };
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Safety: `setsid` is async-signal-safe, and between fork and exec is
+        // where it belongs.
+        unsafe {
+            command.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
     }
+    Ok(command)
+}
+
+/// The first thing worth saying in what a command printed, without the
+/// coordinates `osascript` puts in front (`142:158: execution error: `).
+fn first_complaint(said: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(said);
+    let line = text.lines().map(str::trim).find(|l| !l.is_empty())?;
+    let line = match line.split_once(": execution error: ") {
+        Some((at, rest)) if at.chars().all(|c| c.is_ascii_digit() || c == ':') => rest,
+        _ => line,
+    };
+    Some(line.to_string())
+}
+
+/// Whether a `:shot` runs a program that might have written to the terminal
+/// behind ratatui's back — after which the whole screen is drawn again.
+fn shot_runs_a_program(job: &ShotJob) -> bool {
+    !matches!(job, ShotJob::Page { .. })
 }
 
 /// A command that runs `line` through the shell.
@@ -3343,8 +3446,11 @@ impl Job {
     /// is therefore a program with arguments, never a line somebody can hide a
     /// second command in.
     fn server(program: &str, args: &[String], file: &std::path::Path) -> Result<Job, String> {
+        // Not the terminal's stdin: the editor's reader thread owns that, and
+        // a server reading it would take keystrokes.
         let mut child = std::process::Command::new(program)
             .args(args)
+            .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -3836,8 +3942,12 @@ fn show(target: &str) {
     } else {
         "xdg-open"
     };
+    // Warning: **no terminal at all**, stdin included: the opener runs while
+    // the editor holds the screen, and anything it printed would sit under
+    // later frames (see `photograph_command`).
     let _ = std::process::Command::new(opener)
         .arg(target)
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
@@ -29689,5 +29799,85 @@ mod window_title_tests {
         assert_eq!(window_title("note.md", true, Some("proj")), "note.md [+] — proj — yumete");
         assert_eq!(window_title("note.md", false, None), "note.md — yumete", "no project, no folder");
         assert_eq!(window_title("a\x1b]0;x\x07b", false, None), "a]0;xb — yumete", "a file's own escapes never reach the title");
+    }
+}
+
+#[cfg(test)]
+mod shot_tests {
+    use super::*;
+    use crate::terminal_window::Window;
+
+    fn ghostty() -> Window {
+        Window { id: 187, pid: 20, owner: "Ghostty".to_string(), layer: 0, bounds: (10, 40, 800, 600) }
+    }
+
+    fn here() -> std::path::PathBuf {
+        std::env::temp_dir()
+    }
+
+    /// The old line's failure in two shapes: no window must mean no
+    /// `screencapture`, not `screencapture -R ""`.
+    #[test]
+    fn no_window_means_nothing_runs() {
+        let line = "screencapture -x -o -l\"$YUMETE_WINDOW\" \"${YUMETE_SHOT:--c}\"";
+        let refused = photograph_command(line, None, &here(), None, true).err();
+        assert_eq!(refused, Some(say!("ui.shot-no-window")));
+        // A line of somebody's own that never asks which window still runs.
+        assert!(photograph_command("true", None, &here(), None, true).is_ok());
+        assert_eq!(photograph_command("  ", None, &here(), None, true).err(), Some(say!("ui.no-screenshot-command")));
+    }
+
+    #[test]
+    fn a_missing_permission_is_named_with_the_terminal_and_nothing_runs() {
+        let line = "screencapture -x -o -l\"$YUMETE_WINDOW\" \"${YUMETE_SHOT:--c}\"";
+        let refused = photograph_command(line, None, &here(), Some(&ghostty()), false).err();
+        assert_eq!(refused, Some(say!("ui.shot-needs-screen-recording", "Ghostty")));
+        assert!(photograph_command(line, None, &here(), Some(&ghostty()), true).is_ok());
+    }
+
+    /// Everything the command prints comes back to the editor — none of it
+    /// reaches the terminal — and it is told which window and where to.
+    #[cfg(unix)]
+    #[test]
+    fn the_command_prints_to_the_editor_not_the_terminal() {
+        let line = "echo \"$YUMETE_WINDOW $YUMETE_WINDOW_RECT $YUMETE_SHOT\"; echo complaint >&2; \
+                    if (: </dev/tty) 2>/dev/null; then echo has-a-tty >&2; fi; exit 3";
+        let dest = std::path::Path::new("/tmp/a.png");
+        let out = photograph_command(line, Some(dest), &here(), Some(&ghostty()), true)
+            .expect("a command")
+            .output()
+            .expect("it runs");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "187 10,40,800,600 /tmp/a.png\n");
+        assert_eq!(String::from_utf8_lossy(&out.stderr), "complaint\n", "and no controlling terminal");
+        assert_eq!(out.status.code(), Some(3));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failure_is_one_line_on_the_status_bar() {
+        let mut config = Config::default();
+        config.editor.screenshot = "echo first >&2; echo second >&2; exit 1".to_string();
+        assert_eq!(photograph_the_screen(&config, None, &here()), say!("ui.screenshot-failed", "first"));
+    }
+
+    #[test]
+    fn osascript_s_coordinates_are_left_out() {
+        let said = b"142:158: execution error: System Events got an error: osascript is not allowed assistive access. (-25211)\n";
+        assert_eq!(
+            first_complaint(said).as_deref(),
+            Some("System Events got an error: osascript is not allowed assistive access. (-25211)")
+        );
+        assert_eq!(
+            first_complaint(b"\n screencapture: -R requires a valid rect (x,y,w,h)\n").as_deref(),
+            Some("screencapture: -R requires a valid rect (x,y,w,h)")
+        );
+        assert_eq!(first_complaint(b"  \n"), None);
+    }
+
+    #[test]
+    fn the_screen_is_drawn_whole_after_a_program_ran() {
+        assert!(shot_runs_a_program(&ShotJob::Screen));
+        assert!(shot_runs_a_program(&ShotJob::Png { target: "a.png".into() }));
+        assert!(!shot_runs_a_program(&ShotJob::Page { target: "a.html".into(), text: false }));
     }
 }

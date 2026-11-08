@@ -1003,6 +1003,18 @@ zhs = "`[editor] screenshot` 命令未处理 $YUMETE_SHOT，截图仍在剪贴�
 en = "the `[editor] screenshot` command ignored $YUMETE_SHOT; the picture is on the clipboard"
 
 [[message]]
+# `:shot` 或 `:shot png`：终端没有录屏权限，没有截图。{0} 是终端程序的名字（草稿）
+key = "ui.shot-needs-screen-recording"
+zhs = "截图需要 {0} 的录屏权限：系统设置 › 隐私与安全性 › 录屏与系统录音"
+en = "a screenshot needs Screen Recording for {0}: System Settings › Privacy & Security › Screen & System Audio Recording"
+
+[[message]]
+# `:shot` 或 `:shot png`：找不到本终端的窗口，没有截图（草稿）
+key = "ui.shot-no-window"
+zhs = "找不到本终端的窗口，未截图；可用 `:shot html` 导出本页"
+en = "cannot find this terminal's window, so nothing was photographed; `:shot html` saves the page instead"
+
+[[message]]
 # `:shot png` 把視窗拍成檔案了
 key = "ui.shot-photographed"
 zhs = "窗口截图已保存为 {0}"
