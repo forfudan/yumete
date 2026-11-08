@@ -23,7 +23,7 @@
 //! [`Reader::blocks`] (or one in [`InlineKind`] read in [`Reader::inlines`]),
 //! and its picture in `layout.rs`.
 
-use yumete_core::markdown::{self, Kind as SpanKind, Span};
+use yumete_core::markdown::{self, Kind as SpanKind};
 use yumete_core::mdtable;
 
 /// A line of the file: its number (from 0) and its text.
@@ -160,8 +160,22 @@ pub struct Marks {
 /// **Read `text`** into blocks. The footnotes, if any, come last, as one
 /// [`BlockKind::Footnotes`].
 pub fn parse(text: &str) -> Vec<Block> {
+    parse_with(text, &mut Cache::default())
+}
+
+/// **What a parse keeps for the next one**: the runs of every paragraph read,
+/// by its text, so an edit reads again only the paragraph it changed (the
+/// inline reading is most of a parse). A paragraph that cites a footnote is
+/// not kept: its numbers depend on what comes before it.
+#[derive(Default)]
+pub struct Cache {
+    runs: std::collections::HashMap<u64, Vec<Inline>>,
+}
+
+/// [`parse`], keeping what can be kept in `cache` for the next time.
+pub fn parse_with(text: &str, cache: &mut Cache) -> Vec<Block> {
     let lines = prepare(text);
-    let mut reader = Reader::default();
+    let mut reader = Reader { old: std::mem::take(&mut cache.runs), ..Reader::default() };
     let mut blocks = Vec::new();
     // Front matter: `---` on the first line, `key: value` under it, to a `---`.
     let mut from = 0;
@@ -194,6 +208,7 @@ pub fn parse(text: &str) -> Vec<Block> {
         let last = notes.iter().map(|n| n.lines.1).max().unwrap_or(first);
         blocks.push(Block { lines: (first, last), kind: BlockKind::Footnotes(notes) });
     }
+    cache.runs = reader.new;
     blocks
 }
 
@@ -226,7 +241,8 @@ fn prepare(text: &str) -> Vec<Line> {
             out.push((at, line.to_string()));
             continue;
         }
-        let open = markdown::comment_left_open(line).and_then(|closer| {
+        let may_open = line.contains("<!--") || line.contains("%%");
+        let open = may_open.then(|| markdown::comment_left_open(line)).flatten().and_then(|closer| {
             let close = (i..all.len()).find_map(|k| markdown::comment_closes(all[k], closer).map(|c| (k, c)))?;
             Some((closer, close))
         });
@@ -262,8 +278,16 @@ fn lead(line: &str) -> usize {
 
 /// `---`, `***` or `___`, spaced or not: three or more of one, alone.
 fn is_rule(body: &str) -> bool {
-    let marks: Vec<char> = body.chars().filter(|c| !c.is_whitespace()).collect();
-    marks.len() >= 3 && matches!(marks[0], '-' | '*' | '_') && marks.iter().all(|&c| c == marks[0])
+    let mut marks = body.chars().filter(|c| !c.is_whitespace());
+    let Some(first) = marks.next().filter(|c| matches!(c, '-' | '*' | '_')) else { return false };
+    let mut n = 1;
+    for c in marks {
+        if c != first {
+            return false;
+        }
+        n += 1;
+    }
+    n >= 3
 }
 
 /// `[^name]: text`: the name and the start of the text.
@@ -363,6 +387,9 @@ fn wrapper_line(body: &str) -> bool {
 struct Reader {
     cited: Vec<String>,
     notes: Vec<Note>,
+    /// The runs kept from the last parse, and those kept for the next.
+    old: std::collections::HashMap<u64, Vec<Inline>>,
+    new: std::collections::HashMap<u64, Vec<Inline>>,
 }
 
 impl Reader {
@@ -657,7 +684,7 @@ impl Reader {
                 continue;
             }
             let rowish = |l: &str| mdtable::is_row(l) || mdtable::has_bar(l);
-            let align = match rowish(line) && para.is_empty() {
+            let align = match para.is_empty() && line.contains('|') && rowish(line) {
                 true => lines.get(i + 1).and_then(|l| mdtable::rule_of(&l.1)),
                 false => None,
             };
@@ -765,6 +792,35 @@ impl Reader {
     /// **The runs of a paragraph's lines.** The lines are read as one text,
     /// so emphasis may run from one line to the next.
     fn inlines(&mut self, lines: &[Line]) -> Vec<Inline> {
+        use std::hash::{Hash, Hasher};
+        let Some(base) = lines.first().map(|l| l.0) else { return Vec::new() };
+        if lines.iter().any(|l| l.1.contains("[^")) {
+            return self.read_inlines(lines);
+        }
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for (no, text) in lines {
+            (no - base, text).hash(&mut h);
+        }
+        let key = h.finish();
+        let mut runs = match self.old.remove(&key).or_else(|| self.new.get(&key).cloned()) {
+            Some(kept) => kept,
+            None => {
+                let mut read = self.read_inlines(lines);
+                for r in &mut read {
+                    r.line -= base;
+                }
+                read
+            }
+        };
+        self.new.insert(key, runs.clone());
+        for r in &mut runs {
+            r.line += base;
+        }
+        runs
+    }
+
+    /// The runs of `lines`, read.
+    fn read_inlines(&mut self, lines: &[Line]) -> Vec<Inline> {
         // The text, a `\n` between two lines, and where each line starts.
         let mut text = String::new();
         let mut starts: Vec<(usize, usize, bool)> = Vec::new(); // char start, line, hard break after
@@ -791,7 +847,40 @@ impl Reader {
             let k = starts.partition_point(|s| s.0 <= i).saturating_sub(1);
             starts.get(k).map_or(0, |s| s.1)
         };
-        let urls = bare_urls(&chars, &spans);
+        // What covers each character, worked out once: the marks over it,
+        // the innermost construct that hides it, whether it is code.
+        let mut covered = vec![false; chars.len() + 1];
+        let mut span_marks = vec![Marks::default(); chars.len() + 1];
+        let mut hides: Vec<Option<usize>> = vec![None; chars.len() + 1];
+        for (k, s) in spans.iter().enumerate() {
+            let hidden = matches!(s.kind, SpanKind::Marker | SpanKind::HeadingMark | SpanKind::Comment | SpanKind::Html | SpanKind::Math | SpanKind::Footnote);
+            for i in s.start..s.end.min(chars.len()) {
+                covered[i] = true;
+                add_mark(&mut span_marks[i], s.kind);
+                if hidden {
+                    hides[i] = Some(k);
+                }
+            }
+        }
+        let urls = bare_urls(&chars, &covered);
+        let marks_at = |i: usize, html: Marks, url: bool| -> Marks {
+            let mut m = span_marks[i];
+            for (on, html_on) in [
+                (&mut m.strong, html.strong),
+                (&mut m.emph, html.emph),
+                (&mut m.code, html.code),
+                (&mut m.strike, html.strike),
+                (&mut m.highlight, html.highlight),
+                (&mut m.kbd, html.kbd),
+                (&mut m.sup, html.sup),
+                (&mut m.sub, html.sub),
+                (&mut m.underline, html.underline),
+            ] {
+                *on |= html_on;
+            }
+            m.link |= url;
+            m
+        };
         let mut out: Vec<Inline> = Vec::new();
         let mut html = Marks::default();
         let mut i = 0;
@@ -800,33 +889,29 @@ impl Reader {
             if let Some(group) = groups.iter().find(|g| g.start == i) {
                 let base = group.dialect.unescape(&group.base_text(&chars).iter().collect::<String>());
                 let reading = group.dialect.unescape(&group.reading_text(&chars).iter().collect::<String>());
-                let marks = marks_at(&spans, i, html, false);
+                let marks = marks_at(i, html, false);
                 out.push(Inline { line, kind: InlineKind::Ruby { base, reading, marks } });
                 i = group.end.max(i + 1);
                 continue;
             }
-            let covering: Vec<&Span> = spans.iter().filter(|s| s.start <= i && i < s.end).collect();
             let owner = |construct: usize, kind: SpanKind| spans.iter().find(|s| s.construct == construct && s.kind == kind);
             let last_marker = |construct: usize| spans.iter().rfind(|s| s.construct == construct && s.kind == SpanKind::Marker);
-            let hidden = covering.iter().rev().find(|s| {
-                matches!(s.kind, SpanKind::Marker | SpanKind::HeadingMark | SpanKind::Comment | SpanKind::Html | SpanKind::Math | SpanKind::Footnote)
-            });
-            match hidden {
+            match hides[i].map(|k| &spans[k]) {
                 None => {
                     let c = chars[i];
                     if c == '\n' {
-                        let in_code = covering.iter().any(|s| s.kind == SpanKind::Code);
+                        let in_code = span_marks[i].code;
                         let k = starts.partition_point(|s| s.0 <= i).saturating_sub(1);
                         let hard = starts.get(k).is_some_and(|s| s.2);
                         let latin = |c: Option<&char>| c.is_some_and(|&c| yumete_cjk::char_width(c) == 1);
                         if in_code || (!hard && latin(chars.get(i.wrapping_sub(1))) && latin(chars.get(i + 1))) {
-                            push_text(&mut out, line, " ", marks_at(&spans, i, html, urls[i]));
+                            push_text(&mut out, line, " ", marks_at(i, html, urls[i]));
                         } else {
                             out.push(Inline { line, kind: InlineKind::Break });
                         }
                     } else {
                         let mut buf = [0u8; 4];
-                        push_text(&mut out, line, c.encode_utf8(&mut buf), marks_at(&spans, i, html, urls[i]));
+                        push_text(&mut out, line, c.encode_utf8(&mut buf), marks_at(i, html, urls[i]));
                     }
                     i += 1;
                 }
@@ -893,24 +978,18 @@ fn push_text(out: &mut Vec<Inline>, line: usize, s: &str, marks: Marks) {
     out.push(Inline { line, kind: InlineKind::Text { text: s.to_string(), marks } });
 }
 
-/// The marks over char `i`: the spans covering it, the HTML tags open, a
-/// bare URL.
-fn marks_at(spans: &[Span], i: usize, html: Marks, url: bool) -> Marks {
-    let mut m = html;
-    for s in spans.iter().filter(|s| s.start <= i && i < s.end) {
-        match s.kind {
-            SpanKind::Strong => m.strong = true,
-            SpanKind::Emphasis => m.emph = true,
-            SpanKind::Code => m.code = true,
-            SpanKind::Strike => m.strike = true,
-            SpanKind::Highlight => m.highlight = true,
-            SpanKind::Link => m.link = true,
-            SpanKind::WikiLink => m.wiki = true,
-            _ => {}
-        }
+/// The mark a span of `kind` puts on what it covers.
+fn add_mark(m: &mut Marks, kind: SpanKind) {
+    match kind {
+        SpanKind::Strong => m.strong = true,
+        SpanKind::Emphasis => m.emph = true,
+        SpanKind::Code => m.code = true,
+        SpanKind::Strike => m.strike = true,
+        SpanKind::Highlight => m.highlight = true,
+        SpanKind::Link => m.link = true,
+        SpanKind::WikiLink => m.wiki = true,
+        _ => {}
     }
-    m.link |= url;
-    m
 }
 
 /// An HTML tag in the run of the text: `<br>` breaks, `<img>` is a picture,
@@ -975,9 +1054,9 @@ fn image_source(closing: &str) -> String {
 /// **Bare URLs** (GFM's extended autolinks): `https://…`, `http://…` and
 /// `www.…` outside any markup, to the first space or 漢字, without the
 /// punctuation that ends a sentence.
-fn bare_urls(chars: &[char], spans: &[Span]) -> Vec<bool> {
+fn bare_urls(chars: &[char], covered: &[bool]) -> Vec<bool> {
     let mut out = vec![false; chars.len() + 1];
-    let covered = |i: usize| spans.iter().any(|s| s.start <= i && i < s.end);
+    let covered = |i: usize| covered[i];
     let starts_with = |i: usize, s: &str| s.chars().enumerate().all(|(k, c)| chars.get(i + k) == Some(&c));
     let mut i = 0;
     while i < chars.len() {
@@ -1247,6 +1326,21 @@ mod tests {
         assert!(matches!(&blocks[2].kind, BlockKind::Paragraph(r) if plain(r) == "裏"));
         assert!(matches!(&blocks[3].kind, BlockKind::Html(h) if h.starts_with("<CharPlot")));
         assert_eq!(blocks.len(), 4);
+    }
+
+    /// **What a parse keeps changes nothing it reads**: a second parse, one
+    /// after an edit, one after lines were put in above, all read as a parse
+    /// from nothing does.
+    #[test]
+    fn the_kept_runs_read_as_new_ones() {
+        let text = "# 題\n\n甲 **乙**\n丙\n\n- 一 `碼`\n- 二[^n]\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\n[^n]: 注\n";
+        let mut cache = Cache::default();
+        assert_eq!(parse_with(text, &mut cache), parse(text));
+        assert_eq!(parse_with(text, &mut cache), parse(text));
+        let edited = text.replace("丙", "丙丁");
+        assert_eq!(parse_with(&edited, &mut cache), parse(&edited));
+        let moved = format!("\n\n{edited}");
+        assert_eq!(parse_with(&moved, &mut cache), parse(&moved));
     }
 
     #[test]

@@ -121,6 +121,7 @@ pub struct Preview {
     painter: paint::Painter,
     width: u32,
     blocks: Vec<Block>,
+    parse_cache: parse::Cache,
     cache: HashMap<u64, Arc<Laid>>,
     placed: Vec<Placed>,
     /// Every visual line's top and the source line it shows, top to bottom.
@@ -135,6 +136,7 @@ impl Preview {
             painter: paint::Painter::new(),
             width: options.width.max(64),
             blocks: Vec::new(),
+            parse_cache: parse::Cache::default(),
             cache: HashMap::new(),
             placed: Vec::new(),
             marks: Vec::new(),
@@ -146,7 +148,7 @@ impl Preview {
     /// whose text did not change.
     pub fn set_text(&mut self, text: &str) -> Stats {
         let t = Instant::now();
-        self.blocks = parse::parse(text);
+        self.blocks = parse::parse_with(text, &mut self.parse_cache);
         let parse_ms = t.elapsed().as_secs_f64() * 1000.0;
         let mut stats = self.relayout();
         stats.parse_ms = parse_ms;
