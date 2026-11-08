@@ -20,6 +20,7 @@ pub mod backend;
 pub mod graphics;
 pub mod maths;
 pub mod page_window;
+pub mod md_window;
 pub mod preview_theme;
 pub mod tex;
 pub mod server;
@@ -768,6 +769,10 @@ pub fn run(
     // bell for where the cursor is on the page.
     let mut pages = crate::page_window::PagePreview::default();
     crate::page_window::ring_on_news(doorbell.clone());
+    // **The Markdown preview** (2026-11-08): a worker a tab, which rings the
+    // same bell when a picture is ready.
+    let mut markdown = crate::md_window::MdPreviews::default();
+    crate::md_window::ring_on_news(doorbell.clone());
     servers.ring_on_answers(doorbell);
     // **配置檔開着的時候，現查現說**（2026-10-20 作者定）。和上面那一行一樣是
     // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
@@ -1317,6 +1322,9 @@ pub fn run(
         // **The page window** (2026-11-07): after `collect`, where tinymist's
         // answers land. A window that cannot be drawn after all, opened by
         // `:view-preview`, becomes the browser's preview.
+        if markdown.follow(editor, config) {
+            server_said_something = true;
+        }
         match pages.follow(editor, &mut servers, config) {
             crate::page_window::Outcome::Nothing => {}
             crate::page_window::Outcome::Redraw => server_said_something = true,
@@ -1408,6 +1416,8 @@ pub fn run(
                 // The page window: the typing still long enough, the cursor
                 // settled long enough to be followed.
                 pages.due_in(),
+                // The Markdown preview: the typing still long enough.
+                markdown.due_in(),
                 // 轉圈那八個點：不給這個數，它畫一格就睡着了，於是那八個點成
                 // 了一個不動的點（同上面那幾個鬧鐘）。
                 spinner::due_in(editor.server_busy_since()),
@@ -1679,10 +1689,18 @@ pub fn run(
                     // browser's preview instead.
                     let (want, why) = match want {
                         Preview::Window { path, syntax, fallback } => {
-                            match crate::page_window::why_not(syntax, &servers, config, editor) {
+                            // A Markdown file's own preview (2026-11-08):
+                            // drawn here, so only the terminal can refuse it.
+                            let markdown = syntax == yumete_core::syntax::Syntax::Markdown;
+                            let why = match markdown {
+                                true => crate::md_window::why_not(),
+                                false => crate::page_window::why_not(syntax, &servers, config, editor),
+                            };
+                            match why {
                                 None => {
                                     let main = crate::page_window::absolute(&path);
-                                    if editor.open_page_window(main.clone()).is_some() {
+                                    let kind = yumete_core::buffer::PreviewKind::for_syntax(syntax);
+                                    if editor.open_page_window_of(main.clone(), kind).is_some() && !markdown {
                                         if let Some(id) = editor.preview_of(&main) {
                                             pages.opened(id, fallback);
                                         }
@@ -1690,8 +1708,8 @@ pub fn run(
                                     continue;
                                 }
                                 Some(why) if fallback => {
-                                    let why = (syntax == yumete_core::syntax::Syntax::Typst).then_some(why);
-                                    (Preview::Start { path, syntax }, why)
+                                    let said = matches!(syntax, yumete_core::syntax::Syntax::Typst | yumete_core::syntax::Syntax::Markdown);
+                                    (Preview::Start { path, syntax }, said.then_some(why))
                                 }
                                 Some(why) => {
                                     editor.set_status(say!("preview.or-the-browser", why));
@@ -5600,7 +5618,11 @@ fn draw(
         // **A window showing a preview draws the page, not text**
         // (2026-11-07).
         if let Some(&id) = leaves.get(which).filter(|&&id| editor.is_page_window(id)) {
-            crate::page_window::draw(frame, editor, config, *rect, id);
+            let kind = editor.preview_in(id).and_then(|p| editor.preview_kind_of(p));
+            match kind {
+                Some(yumete_core::buffer::PreviewKind::Markdown) => crate::md_window::draw(frame, editor, config, *rect, id),
+                _ => crate::page_window::draw(frame, editor, config, *rect, id),
+            }
             if which == live {
                 cursor = (rect.x, rect.y);
             }

@@ -338,7 +338,9 @@ impl PagePreview {
     /// the screen start its task, take the answers, follow the cursor, ask
     /// for the page when it is due. Never waits.
     pub fn follow(&mut self, editor: &mut Editor, servers: &mut Servers, config: &yumete_config::Config) -> Outcome {
-        let previews = editor.previews();
+        // Typst's only: a Markdown preview is [`crate::md_window`]'s.
+        let typst = |editor: &Editor, id: u64| editor.preview_kind_of(id) == Some(yumete_core::buffer::PreviewKind::Typst);
+        let previews: Vec<(u64, PathBuf)> = editor.previews().into_iter().filter(|(id, _)| typst(editor, *id)).collect();
         let mut redraw = false;
         let gone: Vec<u64> = self.talks.keys().copied().filter(|id| !previews.iter().any(|(p, _)| p == id)).collect();
         for id in gone {
@@ -352,8 +354,12 @@ impl PagePreview {
             redraw = true;
         }
         // The scroll keys move the preview the keys are in.
-        let steps = editor.take_page_steps();
-        if let Some(id) = editor.preview_with_the_keys().filter(|_| !steps.is_empty()) {
+        let keys = editor.preview_with_the_keys().filter(|&id| typst(editor, id));
+        let steps = match keys {
+            Some(_) => editor.take_page_steps(),
+            None => Vec::new(),
+        };
+        if let Some(id) = keys.filter(|_| !steps.is_empty()) {
             with_board(id, |board| {
                 let rows = board.cells.map_or(1, |(_, rows)| rows.max(1) as i32);
                 for step in steps {
