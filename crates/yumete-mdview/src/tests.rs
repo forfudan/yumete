@@ -241,3 +241,37 @@ fn every_block_kind_lays_out_and_draws() {
     let pic = p.render(0.0, h.ceil() as u32);
     assert_eq!(pic.height, h.ceil() as u32);
 }
+
+/// **A preview may be moved to another thread**: the front end can lay out
+/// and draw away from the one that reads keys.
+#[test]
+fn a_preview_can_go_to_another_thread() {
+    fn send<T: Send>() {}
+    send::<Preview>();
+    let mut p = preview("# 題\n\n文。\n", 300);
+    let h = std::thread::spawn(move || p.render(0.0, 40).height).join().unwrap();
+    assert_eq!(h, 40);
+}
+
+#[test]
+fn a_footnote_s_lines_are_at_the_end_of_the_page() {
+    let text = "甲[^a]。\n\n乙。\n\n[^a]: 注的文字。\n";
+    let p = preview(text, 400);
+    let note = p.y_for_line(4);
+    assert!(note > p.y_for_line(2), "the note is drawn after the text: {note}");
+    assert_eq!(p.line_for_y(note + 1.0), 4);
+    // The cited text still maps back to its own line.
+    assert_eq!(p.line_for_y(p.y_for_line(0) + 1.0), 0);
+}
+
+#[test]
+fn code_keeps_its_indent_and_its_lines() {
+    let text = "```rust\nfn main() {\n\tlet x = 1;\n}\n```\n";
+    let p = preview(text, 600);
+    let lines = visual_lines(&p.placed[0].laid);
+    assert_eq!(lines, ["fn main() {", "    let x = 1;", "}"]);
+    // Each code line maps to its own source line.
+    let (a, b, c) = (p.y_for_line(1), p.y_for_line(2), p.y_for_line(3));
+    assert!(a < b && b < c, "{a} {b} {c}");
+    assert_eq!(p.line_for_y(b + 1.0), 2);
+}

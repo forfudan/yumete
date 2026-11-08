@@ -654,22 +654,26 @@ impl Engine {
         let mut runs = Vec::new();
         for (k, line) in lines.iter().enumerate() {
             let chars: Vec<char> = line.chars().collect();
+            // A tab is four spaces: parley's tab is one space wide.
+            let untab = |a: usize, b: usize| -> String {
+                chars[a.min(chars.len())..b.min(chars.len())].iter().map(|&c| if c == '\t' { "    ".to_string() } else { c.to_string() }).collect()
+            };
             let mut at = 0;
             if let Some(spans) = painted.as_ref().and_then(|p| p.get(k)) {
                 for s in spans {
                     if s.start > at {
-                        runs.push((k, chars[at..s.start].iter().collect::<String>(), None));
+                        runs.push((k, untab(at, s.start), None));
                     }
                     let token = match s.kind {
                         yumete_core::markdown::Kind::Token(t) => Some(t),
                         _ => None,
                     };
-                    runs.push((k, chars[s.start.min(chars.len())..s.end.min(chars.len())].iter().collect(), token));
-                    at = s.end.min(chars.len());
+                    runs.push((k, untab(s.start, s.end), token));
+                    at = at.max(s.end.min(chars.len()));
                 }
             }
             if at < chars.len() {
-                runs.push((k, chars[at..].iter().collect(), None));
+                runs.push((k, untab(at, chars.len()), None));
             }
             if k + 1 < lines.len() {
                 runs.push((k, "\n".to_string(), None));
