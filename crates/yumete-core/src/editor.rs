@@ -3392,6 +3392,10 @@ pub struct Editor {
     /// over by the front end, where RaTeX lives. `None` leaves `$…$` as
     /// written.
     formula_painter: Option<crate::export::Painter>,
+    /// **How the Markdown preview draws a text** (2026-11-08), for
+    /// `:export-as-preview`: handed over by the front end, which owns the
+    /// theme and the preview's fonts. `None` until it is.
+    preview_look: Option<crate::as_preview::Looker>,
     /// How big a page window draws the page (`:view-preview-fit`).
     preview_fit: PreviewFit,
     /// Whether the page is drawn in the theme's colours rather than as
@@ -4650,6 +4654,7 @@ impl Editor {
             open_request: None,
             preview_at: None,
             formula_painter: None,
+            preview_look: None,
             preview_fit: PreviewFit::default(),
             preview_theme: false,
             preview_vertical: true,
@@ -4905,6 +4910,14 @@ impl Editor {
     /// over; this crate does not carry KaTeX's fonts.
     pub fn set_formula_painter(&mut self, painter: crate::export::Painter) {
         self.formula_painter = Some(painter);
+    }
+
+    /// **Say how the Markdown preview draws a text** (2026-11-08): its
+    /// fonts and the theme's colours in the mood shown, which
+    /// `:export-as-preview` writes into the page. The front end hands it
+    /// over again whenever the theme or the mood changes.
+    pub fn set_preview_look(&mut self, looker: crate::as_preview::Looker) {
+        self.preview_look = Some(looker);
     }
 
     /// The running typesetter's address, for the status bar and for `:view-preview`.

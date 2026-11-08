@@ -295,6 +295,30 @@ zhs = "无法确定 {0} 的编码，可能是 {1}"
 en = "cannot tell the encoding of {0}; it could be {1}"
 
 [[message]]
+# :export-as-preview 要导出 Markdown，前端还没交来预览的样式（草稿）
+key = "export.as-preview-no-look"
+zhs = "还不知道预览是什么样子，没有导出"
+en = "the preview's look is not known yet, so nothing was exported"
+
+[[message]]
+# :export-as-preview 用在既不是 Markdown 也不是 Typst 的文件上（草稿）
+key = "export.as-preview-no-preview"
+zhs = "只有 Markdown 和 Typst 文件有预览可以导出"
+en = "only a Markdown or Typst file has a preview to export"
+
+[[message]]
+# :export-as-preview 给了不认得的格式；{1} 是这种文件可用的格式（草稿）
+key = "export.as-preview-no-such-format"
+zhs = "没有「{0}」格式：这个文件的预览可导出为 {1}"
+en = "no format '{0}': this file's preview exports as {1}"
+
+[[message]]
+# :export-as-preview 给的格式是另一种文件的，比如 Typst 文件用 html；{1} 是可用的格式（草稿）
+key = "export.as-preview-not-this-kind"
+zhs = "这个文件的预览不能导出为 {0}，可用 {1}"
+en = "this file's preview does not export as {0}; it exports as {1}"
+
+[[message]]
 # :export 的 font= 后面是空的（草稿）
 key = "export.no-fonts"
 zhs = "font= 后面要写字体，例如 font='Songti SC', serif"
@@ -319,6 +343,12 @@ zhs = "不认得「{0}」：可用 vertical、horizontal、hanging、no-hanging�
 en = "no such word '{0}': vertical, horizontal, hanging, no-hanging, ruby-html, no-ruby-html, ruby-typst, no-ruby-typst, turn, jlreq, page= or font=; for a file, write ./{0}"
 
 [[message]]
+# :export-as-preview 要用 typst 命令编译 PDF，而这台机器上没有 typst（草稿）
+key = "export.no-typst"
+zhs = "没有找到 typst 命令，没有导出：可从 https://github.com/typst/typst/releases 获取，或 brew install typst"
+en = "typst is not installed, so nothing was exported: get it from https://github.com/typst/typst/releases, or brew install typst"
+
+[[message]]
 # :export 的一行里有个引号没有收尾（草稿）
 key = "export.open-quote"
 zhs = "引号没有收尾：{0}"
@@ -337,10 +367,22 @@ zhs = "{0} 已存在，用 `:export!` 覆盖"
 en = "{0} already exists; `:export!` overwrites it"
 
 [[message]]
+# 导出的目标已经存在，要用 {1} 这个命令加 ! 才覆盖（草稿）
+key = "export.target-exists-for"
+zhs = "{0} 已存在，用 `:{1}!` 覆盖"
+en = "{0} already exists; `:{1}!` overwrites it"
+
+[[message]]
 # 導出的目標檔案正開着
 key = "export.target-is-open"
 zhs = "{0} 已打开，导出会覆盖它，请换个文件名"
 en = "{0} is open; an export would overwrite it, so pick another name"
+
+[[message]]
+# :export-as-preview 编译 PDF 时 typst 报了错，{0} 是它说的第一行（草稿）
+key = "export.typst-failed"
+zhs = "typst 编译失败，没有导出：{0}"
+en = "typst could not compile it, so nothing was exported: {0}"
 
 [[message]]
 # :export 的路径后面还有别的词（草稿）
@@ -356,6 +398,12 @@ en = "exported {0}"
 
 
 # ── find ──────────────────────────────────────────────────────────────
+
+[[message]]
+# :export-as-preview 写好了 PDF，但书里有 {1} 个打开的文件改动未保存，PDF 用的是磁盘上的（草稿）
+key = "export.wrote-from-disk"
+zhs = "已导出 {0}，用的是磁盘上的文件：有 {1} 个打开的文件改动未保存"
+en = "exported {0} from the files on disk: {1} open files have unsaved changes"
 
 [[message]]
 # :info：字數(不含空白，也不含標記——同 :count)

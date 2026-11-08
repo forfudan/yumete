@@ -225,11 +225,12 @@ impl Engine {
 
     /// The body text size.
     pub fn base(&self) -> f32 {
-        16.0 * self.scale
+        yumete_core::as_preview::BODY_PX * self.scale
     }
 
     pub(crate) fn body(&self, cx: &Ctx) -> Style {
-        Style { size: cx.size, weight: 400.0, color: cx.color, mono: false, line_height: 1.6, italic: false, anywhere: false }
+        let line_height = yumete_core::as_preview::LINE_HEIGHT;
+        Style { size: cx.size, weight: 400.0, color: cx.color, mono: false, line_height, italic: false, anywhere: false }
     }
 
     // ── Pictures ────────────────────────────────────────────────────────────
@@ -555,16 +556,12 @@ impl Engine {
         let first = block.lines.0;
         match &block.kind {
             BlockKind::Heading { level, text } => {
-                let (k, rule) = match level {
-                    1 => (2.0, true),
-                    2 => (1.5, true),
-                    3 => (1.25, false),
-                    4 => (1.0, false),
-                    5 => (0.875, false),
-                    _ => (0.85, false),
-                };
-                let color = self.theme.headings[(*level as usize).clamp(1, 6) - 1];
-                let st = Style { size: cx.size * k, weight: 600.0, color, mono: false, line_height: 1.25, italic: false, anywhere: false };
+                // The sizes `:export-as-preview` writes into its page.
+                let n = (*level as usize).clamp(1, 6) - 1;
+                let (k, rule) = (yumete_core::as_preview::HEADING_SIZES[n], n < 2);
+                let color = self.theme.headings[n];
+                let line_height = yumete_core::as_preview::HEADING_LINE_HEIGHT;
+                let st = Style { size: cx.size * k, weight: 600.0, color, mono: false, line_height, italic: false, anywhere: false };
                 let t = self.text(text, st, Some(w), Alignment::Start);
                 *y += self.put_text(t, x, *y, out, first);
                 if rule {

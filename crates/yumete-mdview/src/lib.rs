@@ -23,6 +23,7 @@
 
 mod cache;
 pub mod fonts;
+pub mod look;
 pub mod parse;
 pub mod theme;
 
@@ -166,14 +167,7 @@ impl Preview {
         self.blocks = parse::parse_with(text, &mut self.parse_cache);
         // The writing system: the front matter's `lang` if it gives one,
         // else what the text itself is written in.
-        let declared = self.blocks.first().and_then(|b| match &b.kind {
-            parse::BlockKind::FrontMatter(lines) => lines.iter().find_map(|l| {
-                let (key, value) = l.split_once(':')?;
-                matches!(key.trim(), "lang" | "language" | "locale").then(|| fonts::Han::from_tag(value)).flatten()
-            }),
-            _ => None,
-        });
-        let han = self.han_override.or(declared).unwrap_or_else(|| fonts::han_of(text));
+        let han = self.han_override.or_else(|| declared_han(&self.blocks)).unwrap_or_else(|| fonts::han_of(text));
         if han != self.engine.han {
             self.engine.han = han;
             self.cache.clear();
@@ -505,6 +499,18 @@ impl Preview {
         let rgba = self.painter.paint(&shown, self.engine.theme.background, w, h);
         Picture { width: w as u32, height: h as u32, rgba }
     }
+}
+
+/// **The writing system a document's front matter declares**, its `lang`
+/// (or `language`, `locale`), if it has one.
+pub(crate) fn declared_han(blocks: &[Block]) -> Option<fonts::Han> {
+    blocks.first().and_then(|b| match &b.kind {
+        parse::BlockKind::FrontMatter(lines) => lines.iter().find_map(|l| {
+            let (key, value) = l.split_once(':')?;
+            matches!(key.trim(), "lang" | "language" | "locale").then(|| fonts::Han::from_tag(value)).flatten()
+        }),
+        _ => None,
+    })
 }
 
 #[cfg(test)]

@@ -229,6 +229,13 @@ en = "export as html, typst or epub"
 find = "導出 导出 輸出 输出 html typst 排版"
 
 [[message]]
+# : 命令選單裏 export-as-preview 那一項的説明(commands 組)（草稿）
+key = "cmd.commands.export-as-preview"
+zhs = "照预览的样子导出：Markdown 为 html，Typst 为 pdf"
+en = "export as the preview draws it: html for Markdown, pdf for Typst"
+find = "導出 导出 預覽 预览 所見即所得 所见即所得 html pdf"
+
+[[message]]
 # :info ——這份文檔是什麼
 key = "cmd.commands.file-info"
 zhs = "文件信息：路径、大小、行数字数、语言、关联的语言服务器"
@@ -965,6 +972,18 @@ en = "Shift-JIS"
 key = "cmd.encodings.utf-8"
 zhs = "UTF-8"
 en = "UTF-8"
+
+[[message]]
+# : 命令選單裏 html 那一項的説明(export-as-preview 組)（草稿）
+key = "cmd.export-as-preview.html"
+zhs = "Markdown 预览，单页 HTML"
+en = "the Markdown preview, as one HTML page"
+
+[[message]]
+# : 命令選單裏 pdf 那一項的説明(export-as-preview 組)（草稿）
+key = "cmd.export-as-preview.pdf"
+zhs = "Typst 预览排出的文档，PDF"
+en = "the document the Typst preview typesets, as a PDF"
 
 [[message]]
 # : 命令選單裏 csv 那一項的説明(export 組)

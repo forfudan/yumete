@@ -8,7 +8,7 @@
 //!                [--theme light|dark] [--palette ink|github|<theme>]
 //!                [--han sc|tc|ja] [--no-squeeze] [--screens 3 | --all] [--at-line N]
 //!                [--vertical [--latin turn|jlreq] [--hanging]]
-//!                [--out DIR] [--bench]
+//!                [--out DIR] [--bench] [--export-html PAGE.html]
 //! ```
 //!
 //! `--vertical` sets the page as the preview of a vertical text window does
@@ -19,6 +19,10 @@
 //! `--palette` names an editor theme (`ink`, 墨香, the default, or any name
 //! `[theme] name` takes) whose colours the page is drawn in, in the mood
 //! `--theme` says; `github` is GitHub's own Markdown colours.
+//!
+//! `--export-html` also writes the page `:export-as-preview` makes of the
+//! file in the same colours, direction and Latin setting, to lay beside the
+//! pictures (2026-11-08).
 //!
 //! `--width` and `--height` are the picture's, in device pixels; `--scale`
 //! is device pixels to a CSS pixel. `--at-line` starts the first screen at
@@ -48,6 +52,7 @@ pub fn run(args: &[String]) -> ExitCode {
     let mut latin = yumete_core::export::Latin::Turn;
     let mut hanging = false;
     let mut out = PathBuf::from(".");
+    let mut page: Option<PathBuf> = None;
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         let mut value = |name: &str| -> Option<String> {
@@ -64,6 +69,7 @@ pub fn run(args: &[String]) -> ExitCode {
             "--screens" => screens = value("--screens").and_then(|v| v.parse().ok()).unwrap_or(screens),
             "--at-line" => at_line = value("--at-line").and_then(|v| v.parse().ok()),
             "--out" => out = value("--out").map(PathBuf::from).unwrap_or(out),
+            "--export-html" => page = value("--export-html").map(PathBuf::from),
             "--theme" => dark = value("--theme").is_some_and(|v| v == "dark"),
             "--palette" => palette = value("--palette").unwrap_or(palette),
             "--han" => {
@@ -93,7 +99,7 @@ pub fn run(args: &[String]) -> ExitCode {
         }
     }
     let Some(file) = file else {
-        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--han sc|tc|ja] [--screens N | --all] [--at-line N] [--vertical [--latin turn|jlreq] [--hanging]] [--out DIR] [--bench]");
+        eprintln!("usage: ye --md-render <file.md> [--width N] [--scale S] [--height N] [--theme light|dark] [--palette ink|github|<theme>] [--han sc|tc|ja] [--screens N | --all] [--at-line N] [--vertical [--latin turn|jlreq] [--hanging]] [--out DIR] [--bench] [--export-html PAGE.html]");
         return ExitCode::from(2);
     };
     let text = match std::fs::read_to_string(&file) {
@@ -120,6 +126,23 @@ pub fn run(args: &[String]) -> ExitCode {
         },
     };
     let base_dir = std::fs::canonicalize(&file).ok().and_then(|p| p.parent().map(|d| d.to_path_buf())).unwrap_or_default();
+    if let Some(page) = &page {
+        let settings = yumete_core::export::Settings { vertical, hanging: vertical && hanging, latin, ..Default::default() };
+        let look = yumete_mdview::look::look(&theme, &settings.fonts, &text);
+        let style = yumete_core::export::Style {
+            settings,
+            title: file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            source: yumete_core::syntax::Syntax::Markdown,
+            base: Some(base_dir.clone()),
+            painter: Some(yumete_tui::tex::for_export),
+            look: Some(look),
+        };
+        if let Err(e) = std::fs::write(page, yumete_core::as_preview::html(&text, &style)) {
+            eprintln!("yumete: --md-render: {}: {e}", page.display());
+            return ExitCode::FAILURE;
+        }
+        println!("{}", page.display());
+    }
     let options = Options { width, scale, theme, base_dir };
 
     let t = Instant::now();

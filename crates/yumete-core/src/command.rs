@@ -750,6 +750,14 @@ pub enum Command {
         words: String,
         force: bool,
     },
+    /// `:export-as-preview [html|pdf] [path]`, and `!` over a file that is
+    /// already there — the file the way its preview draws it (2026-11-08).
+    ExportAsPreview {
+        /// The format and the path, as typed, read by
+        /// [`crate::as_preview::read_line`].
+        words: String,
+        force: bool,
+    },
     /// `:ruby-auto` — write the readings in by word; `rare` keeps only the
     /// words holding a character outside 通用規範漢字表 (Feature #234).
     AutoRuby {
@@ -1774,6 +1782,7 @@ const FORCEABLE: &[&str] = &[
     "reload!",
     "quit!",
     "export!",
+    "export-as-preview!",
     // All four spellings of the panel, because the bang is the panel's
     // permission and not one command's: `:replace-project!` means over all
     // those files what `:replace!` means in this one.
@@ -2856,6 +2865,14 @@ const EXPORT_WORDS: &[Word] = &[
     Word { name: "jlreq", help: "cmd.export.jlreq", needs: &[] },
     Word { name: "page=", help: "cmd.export.page", needs: &[] },
     Word { name: "font=", help: "cmd.export.font", needs: &[] },
+];
+
+/// **What `:export-as-preview` writes** (2026-11-08): the Markdown
+/// preview as a page, the Typst preview's document as a PDF
+/// ([`crate::as_preview::Format`]).
+const PREVIEW_FORMATS: &[Word] = &[
+    Word { name: "html", help: "cmd.export-as-preview.html", needs: &[] },
+    Word { name: "pdf", help: "cmd.export-as-preview.pdf", needs: &[] },
 ];
 
 const MOODS: &[Word] = &[
@@ -5603,6 +5620,14 @@ pub const COMMANDS: &[Entry] = &[
                 force: p.force,
             })
         }),
+    },
+    Entry {
+        name: "export-as-preview",
+        aliases: &[],
+        help: "cmd.commands.export-as-preview",
+        needs: &[],
+        params: &[Param::Options(PREVIEW_FORMATS)],
+        build: Some(|p| Ok(Command::ExportAsPreview { words: p.arg(0).unwrap_or("").to_string(), force: p.force })),
     },
     Entry {
         name: "diff",
@@ -8531,7 +8556,8 @@ mod tests {
             ("hanging", "`:view-hanging` `:export hanging`"),
             // Two owners since 2026-10-16: `preview` is also the word that
             // puts the first candidate in the text.
-            ("preview", "`:yume-inline-preedit preview` `:view-preview`"),
+            // Three since 2026-11-08: `:export-as-preview` ends in it too.
+            ("preview", "`:yume-inline-preedit preview` `:view-preview` `:export-as-preview`"),
             ("progress", "`:count-progress`"),
             ("merge", "`:check-merge`"),
         ] {
