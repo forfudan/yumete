@@ -170,8 +170,13 @@ pub struct EditorConfig {
     /// A command rather than a built-in: what「截圖」 means is the window
     /// system's business, not the editor's, and every desktop answers it
     /// differently (`screencapture` on macOS, `grim` on Wayland, `import` on
-    /// X11). The default is macOS's, and it takes the *frontmost window* —
-    /// which, while the editor is running, is the terminal it is running in.
+    /// X11). The default is macOS's, and it takes the terminal's window.
+    ///
+    /// **`$YUMETE_WINDOW` says which window** (2026-11-08): its `CGWindowID`,
+    /// found by the editor from the window server's list (the window an
+    /// ancestor process owns), and `$YUMETE_WINDOW_RECT` the same window as
+    /// `x,y,w,h` for a line that would rather crop the screen. Unset when no
+    /// window was found, and then a line that names it is not run at all.
     ///
     /// **`$YUMETE_SHOT` says where the picture goes.** `:shot` leaves it
     /// unset and wants the clipboard; `:shot png` sets it to a path and wants
@@ -461,10 +466,18 @@ pub struct EditorConfig {
 /// Warning: **The whole screen, not the window.** X11 needs `xdotool` to be told
 /// where a window is and Wayland will not say at all; `:shot html` is the way
 /// to get exactly one page.
+///
+/// Warning: **macOS: by window id, not through `System Events`** (2026-11-08).
+/// The line used to ask `osascript` for the frontmost window's position and
+/// size, which is Accessibility — a permission a terminal is rarely given —
+/// and its failure went into `| tr`, whose success let `screencapture -R ""`
+/// run anyway. The editor now finds the window itself, with no permission,
+/// and hands its id over; `-l` takes that one window, so what is in front of
+/// it is not in the picture either. Screen Recording for the terminal is all
+/// that is left to grant, and the editor names it when it is missing.
 fn screenshot_command() -> String {
     if cfg!(target_os = "macos") {
-        return "b=$(osascript -e 'tell application \"System Events\" to tell                      (first application process whose frontmost is true) to get                      {position, size} of front window' | tr -d ' ') &&                      screencapture -x -o -R\"$b\" \"${YUMETE_SHOT:--c}\""
-            .to_string();
+        return "screencapture -x -o -l\"$YUMETE_WINDOW\" \"${YUMETE_SHOT:--c}\"".to_string();
     }
     if !cfg!(target_os = "linux") {
         return String::new();

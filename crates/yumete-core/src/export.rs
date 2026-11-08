@@ -42,6 +42,7 @@ pub fn typst_command() -> std::process::Command {
 pub fn typst_is_installed() -> bool {
     typst_command()
         .arg("--version")
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
