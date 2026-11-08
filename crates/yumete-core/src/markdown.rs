@@ -1361,21 +1361,24 @@ fn escaped(chars: &[char], at: usize) -> bool {
 /// for the same thing — a note that is not part of the book. An unclosed one
 /// runs to the end of the line, because a half-typed note is still a note.
 fn comment(chars: &[char], at: usize) -> Option<(usize, usize, usize)> {
+    // Warning: **asked at every character of every line drawn** (2026-11-08):
+    // the scan in [`spans`] tries a comment first, everywhere. It built two
+    // `Vec<char>` each time — the openers and, through [`run`], the closer —
+    // and that was most of what reading a line cost. Nothing here allocates.
     for (open, close) in [("%%", "%%"), ("<!--", "-->")] {
-        let open: Vec<char> = open.chars().collect();
-        if chars[at..].starts_with(&open) {
-            let end = run(chars, at + open.len(), close)
-                .map(|i| i + close.chars().count())
-                .unwrap_or(chars.len());
-            let closed = end < chars.len() || run(chars, at + open.len(), close).is_some();
-            return Some((
-                open.len(),
-                if closed { close.chars().count() } else { 0 },
-                end,
-            ));
+        if starts_at(chars, at, open) {
+            // Both markers are ASCII: a byte is a char.
+            let found = run(chars, at + open.len(), close);
+            let end = found.map_or(chars.len(), |i| i + close.len());
+            return Some((open.len(), if found.is_some() { close.len() } else { 0 }, end));
         }
     }
     None
+}
+
+/// Whether `text` stands in `chars` at `at`.
+fn starts_at(chars: &[char], at: usize, text: &str) -> bool {
+    (at..).zip(text.chars()).all(|(k, c)| chars.get(k) == Some(&c))
 }
 
 /// The closer of a `<!--` or `%%` that `line` opens and does not close, if it
@@ -1505,8 +1508,9 @@ pub fn strip_comments(text: &str) -> String {
 
 /// Where `text` next occurs at or after `from`.
 fn run(chars: &[char], from: usize, text: &str) -> Option<usize> {
-    let want: Vec<char> = text.chars().collect();
-    (from..chars.len().saturating_sub(want.len() - 1)).find(|&i| chars[i..].starts_with(&want))
+    // No `Vec` of `text`'s chars: this is asked once a character of a line.
+    let n = text.chars().count();
+    (from..chars.len().saturating_sub(n.saturating_sub(1))).find(|&i| starts_at(chars, i, text))
 }
 
 /// **An inline code span, counted in backticks** (2026-09-19).
@@ -2789,6 +2793,26 @@ mod list_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **A comment found without allocating reads as it always did**
+    /// (2026-11-08): opened and closed, opened only, closed at once, at the
+    /// end of the line, and a closer that is only half there.
+    #[test]
+    fn comments_are_found_where_they_were() {
+        let at = |line: &str, k: usize| comment(&line.chars().collect::<Vec<_>>(), k);
+        assert_eq!(at("a %%note%% b", 2), Some((2, 2, 10)));
+        assert_eq!(at("a %%note", 2), Some((2, 0, 8)));
+        assert_eq!(at("%%%%", 0), Some((2, 2, 4)));
+        assert_eq!(at("x <!-- 註 --> y", 2), Some((4, 3, 12)));
+        assert_eq!(at("x <!-- 註 --", 2), Some((4, 0, 11)));
+        assert_eq!(at("<!-", 0), None);
+        assert_eq!(at("%", 0), None);
+        assert_eq!(run(&['a', ']', ']'], 0, "]]"), Some(1));
+        assert_eq!(run(&['a', ']'], 0, "]]"), None);
+        assert_eq!(comment_left_open("正文 %%寫給自己"), Some("%%"));
+        assert_eq!(comment_left_open("正文 <!-- 一則 --> 正文"), None);
+        assert_eq!(comment_closes("還在寫 --> 後面", "-->"), Some(4));
+    }
 
     /// Every path that ends a table resets its row counter (#467).
     ///
