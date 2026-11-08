@@ -12,6 +12,12 @@ version.workspace = true
 # finds fonts through fontique, which reads the fonts the system already has:
 # nothing is embedded. Apache-2.0 / MIT.
 parley = "0.12"
+# **Fontconfig opened at run time on Linux** (2026-11-08): fontique links
+# libfontconfig at build time by default, which a build machine without its
+# headers cannot do, and a binary linked to it will not start where it is
+# missing. Opened when first asked for, a system without it only has no
+# fonts to find. This line exists for its feature; parley pulls fontique in.
+fontique = { version = "0.12", features = ["fontconfig-dlopen"] }
 # **Drawing on the CPU**: glyphs, rectangles and pictures into an RGBA buffer,
 # no GPU and no window. Its default features bring `png` (the formulas come as
 # PNG) and `text` (glyphs, colour emoji included). Apache-2.0 / MIT.
