@@ -1030,17 +1030,7 @@ fn slot_offsets(text: &str, at_most: usize) -> Vec<usize> {
     let mut offsets = Vec::with_capacity(all.len() + 1);
     let mut chars = 0usize;
     let mut i = 0;
-    // A run of half-width *alphanumerics* may share a slot; anything else —
-    // full-width, punctuation, a space — stands on its own. 緃中横 is for
-    // numbers and short Latin, and packing a comma in beside a letter would
-    // only look like a mistake.
-    let narrow = |g: &str| grapheme_width(g) == 1 && g.chars().all(char::is_alphanumeric);
-    // One character is no group: 「pack a run of one」 is what the page already
-    // does, so anything under two is off.
-    let at_most = match at_most >= TATECHUYOKO_CLASSIC {
-        true => at_most.min(TATECHUYOKO_MAX),
-        false => 0,
-    };
+    let at_most = group_limit(at_most);
     while i < all.len() {
         if at_most == 0 || !narrow(all[i]) {
             offsets.push(chars);
@@ -1070,6 +1060,59 @@ fn slot_offsets(text: &str, at_most: usize) -> Vec<usize> {
     }
     offsets.push(chars);
     offsets
+}
+
+/// Whether a grapheme may share a slot with its neighbours: a run of
+/// half-width *alphanumerics* may; anything else — full-width, punctuation, a
+/// space — stands on its own. 緃中横 is for numbers and short Latin, and
+/// packing a comma in beside a letter would only look like a mistake.
+fn narrow(g: &str) -> bool {
+    grapheme_width(g) == 1 && g.chars().all(char::is_alphanumeric)
+}
+
+/// The `tatechuyoko` setting as the page reads it. One character is no group:
+/// 「pack a run of one」 is what the page already does, so anything under two
+/// is off, and anything over [`TATECHUYOKO_MAX`] is that.
+fn group_limit(at_most: usize) -> usize {
+    match at_most >= TATECHUYOKO_CLASSIC {
+        true => at_most.min(TATECHUYOKO_MAX),
+        false => 0,
+    }
+}
+
+/// **The runs of `text` the page sets across, one to a slot** (緃中横), as char
+/// ranges: every whole run of half-width alphanumerics no longer than
+/// `at_most`, a lone digit or letter included. Empty when the setting is off.
+///
+/// The same rule [`slot_offsets`] packs by, for what sets the page somewhere
+/// other than the terminal — `:export html` wraps these in
+/// `text-combine-upright` (2026-11-08) — so the two cannot come to disagree
+/// about which runs are a 縱中橫.
+pub fn packed_runs(text: &str, at_most: usize) -> Vec<std::ops::Range<usize>> {
+    let at_most = group_limit(at_most);
+    let mut out = Vec::new();
+    if at_most == 0 {
+        return out;
+    }
+    let all: Vec<&str> = graphemes(text).collect();
+    let (mut i, mut chars) = (0, 0usize);
+    while i < all.len() {
+        if !narrow(all[i]) {
+            chars += all[i].chars().count();
+            i += 1;
+            continue;
+        }
+        let (from, mut run) = (chars, i);
+        while run < all.len() && narrow(all[run]) {
+            chars += all[run].chars().count();
+            run += 1;
+        }
+        if run - i <= at_most {
+            out.push(from..chars);
+        }
+        i = run;
+    }
+    out
 }
 
 /// Where each 縱 of a line begins, counted in slots.
@@ -3333,5 +3376,26 @@ mod forms_tests {
         assert_eq!(texts(Forms::Source), ["他", "说", "：", "“", "走", "。", "”"]);
         assert_eq!(texts(Forms::Marks), ["他", "说", "︓", "“", "走", "︒", "”"]);
         assert_eq!(texts(Forms::Quotes), ["他", "说", "︓", "﹃", "走", "︒", "﹄"]);
+    }
+
+    /// **The runs the page packs are the runs an export sets across**
+    /// (2026-11-08): `packed_runs` names exactly the slots `slot_text` makes
+    /// of more than one character, and the lone ones beside them.
+    #[test]
+    fn packed_runs_are_the_slots_the_page_packs() {
+        let runs = |text: &str, at_most| -> Vec<String> {
+            let chars: Vec<char> = text.chars().collect();
+            packed_runs(text, at_most).into_iter().map(|r| chars[r].iter().collect()).collect()
+        };
+        assert_eq!(runs("第12章1997年", 4), ["12", "1997"]);
+        assert_eq!(runs("第12章1997年", 2), ["12"]);
+        assert_eq!(runs("A股跌了5%", 4), ["A", "5"]);
+        assert_eq!(runs("第12章", 1), Vec::<String>::new());
+        assert_eq!(runs("第12章", 0), Vec::<String>::new());
+        for (text, at_most) in [("第12章1997年", 4), ("Old Books 12", 4), ("x1y2z3w", 8)] {
+            let packed: Vec<String> = slot_text(text, at_most).into_iter().filter(|s| s.chars().count() > 1).collect();
+            let named: Vec<String> = runs(text, at_most).into_iter().filter(|s| s.chars().count() > 1).collect();
+            assert_eq!(packed, named, "{text}");
+        }
     }
 }
