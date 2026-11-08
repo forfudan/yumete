@@ -406,6 +406,7 @@ impl Editor {
                 &self.command_line,
             )),
             Mode::Ruby => Some(("注", &self.command_line)),
+            Mode::Value => Some(("", &self.command_line)),
             _ => None,
         }
     }
@@ -442,6 +443,7 @@ impl Editor {
                 _ => say!("ui.prompt-remove"),
             },
             Mode::Ruby => say!("ui.prompt-ruby"),
+            Mode::Value => self.value_label.clone(),
             Mode::Search => match (self.search_forward, self.search.wild) {
                 (true, false) => say!("ui.prompt-search"),
                 (true, true) => say!("ui.prompt-search-wild"),

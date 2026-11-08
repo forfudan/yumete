@@ -45,6 +45,30 @@ zhs = "此行导致整个配置未生效，正在使用默认设置"
 en = "this line stops the whole file from applying; defaults are in use"
 
 [[message]]
+# 设置面板底下的说明：这一项是几选一，{0} 是可选的值，{1} 是出厂的值（草稿）
+key = "settings.about.choice"
+zhs = "可选：{0}；出厂 {1}"
+en = "one of {0}; factory {1}"
+
+[[message]]
+# 设置面板底下的说明：这一项是数字，{0} 是可取的范围，{1} 是出厂的值（草稿）
+key = "settings.about.count"
+zhs = "数字，{0}；出厂 {1}"
+en = "a number, {0}; factory {1}"
+
+[[message]]
+# 设置面板底下的说明：这一项是一段文字，{0} 是出厂的值（草稿）
+key = "settings.about.text"
+zhs = "文字；出厂 {0}"
+en = "text; factory {0}"
+
+[[message]]
+# 设置面板底下的说明：这一项是开关，{0} 是出厂的值（草稿）
+key = "settings.about.tick"
+zhs = "开关；出厂 {0}"
+en = "a switch; factory {0}"
+
+[[message]]
 # 設置面板：注解模式那一行的值，有幾個模式
 key = "settings.annotation-modes.count"
 zhs = "{0} 个模式"
@@ -61,6 +85,12 @@ en = "nothing ticked; / skips it"
 key = "settings.cannot-save"
 zhs = "无法保存：{0}"
 en = "cannot save: {0}"
+
+[[message]]
+# 设置面板：按 :w，而要写的那份配置文件读不进来，什么都没写。{0} 是文件，{1} 是行号，{2} 是解析器的话（草稿）
+key = "settings.cannot-save-unread"
+zhs = "没有保存：{0} 读不进来（第 {1} 行：{2}），先在文件里改好它"
+en = "not saved: {0} cannot be read (line {1}: {2}); fix it in the file first"
 
 [[message]]
 # 設置：歧义宽度
@@ -929,6 +959,12 @@ zhs = "{0} 已被 {1} 占用"
 en = "{0} taken by {1}"
 
 [[message]]
+# 设置面板一行的右端：值来自 {0} 这一层，而 {1} 那一层也设了（草稿）
+key = "settings.from-both"
+zhs = "{0}（{1}也设了）"
+en = "{0} ({1} too)"
+
+[[message]]
 # 設置面板：組——配色
 key = "settings.group.colours"
 zhs = "配色"
@@ -975,12 +1011,6 @@ en = "layout"
 key = "settings.group.marks"
 zhs = "标记"
 en = "marks"
-
-[[message]]
-# 設置面板：這一組還没填
-key = "settings.group.not-yet"
-zhs = "这一组还没有内容，暂时请在 config.toml 中设置"
-en = "nothing here yet; set it in config.toml for now"
 
 [[message]]
 # 設置：候選旁的注解
@@ -1091,28 +1121,46 @@ zhs = "Normal 模式下请系统输入法让开，以免按键被它拦截"
 en = "while yumete reads the keys itself (Normal mode, the command line), ask the system's input method to step aside, so it does not eat them"
 
 [[message]]
-# 設置面板：底下那一行鍵
+# 设置面板：列表里能按的键（草稿）
 key = "settings.keys"
-zhs = "hl 换栏, jk 上下, ␣ 切换, i 编辑, c 重输, d 清除本层, e 打开文件, Tab 全局/项目, :w 保存, :q 退出"
-en = "hl left/right, jk move, Space toggle, i edit, c retype, d drop, e open file, Tab global/project, :w save, :q quit"
+zhs = "jk 上下, / 搜索, Enter 修改, ␣ 切换, r 重置, u 撤销, C-r 重做, p 粘贴, y 复制, Tab 全局/项目, e 打开文件, q 关闭"
+en = "jk move, / search, Enter change, Space toggle, r reset, u undo, C-r redo, p paste, y copy, Tab global/project, e open file, q close"
 
 [[message]]
-# 設置面板：注解模式那一頁底下的鍵
+# 设置面板：注解模式那一页能按的键（草稿）
 key = "settings.keys-annotation-page"
-zhs = "jk 上下, ␣ 切换, d 跟随下一层, h 返回, Tab 全局/项目, :w 保存, :q 退出"
-en = "jk move, Space toggle, d follow the layer below, h back, Tab global/project, :w save, :q quit"
+zhs = "jk 上下, Enter 切换, r 重置, u 撤销, C-r 重做, Tab 全局/项目, e 打开文件, Esc 返回, q 关闭"
+en = "jk move, Enter toggle, r reset, u undo, C-r redo, Tab global/project, e open file, Esc back, q close"
 
 [[message]]
-# 設置面板：風味各項那一頁的按鍵
+# 设置面板：在底下那一行输入一项的值时能按的键（草稿）
+key = "settings.keys-editing"
+zhs = "Enter 确定, Esc 取消, ←→ Home End 移动, C-w 删词, C-u 清空, C-^ 中/英"
+en = "Enter confirm, Esc cancel, ←→ Home End move, C-w delete a word, C-u clear, C-^ Chinese/English"
+
+[[message]]
+# 设置面板：风味各项那一页能按的键（草稿）
 key = "settings.keys-flavor-page"
-zhs = "jk 上下, ␣ 切换, d 跟随档位, h 返回, Tab 全局/项目, :w 保存, :q 退出"
-en = "jk move, Space toggle, d follow the level, h back, Tab global/project, :w save, :q quit"
+zhs = "jk 上下, Enter 切换, r 跟随档位, u 撤销, C-r 重做, Tab 全局/项目, e 打开文件, Esc 返回, q 关闭"
+en = "jk move, Enter toggle, r follow the level, u undo, C-r redo, Tab global/project, e open file, Esc back, q close"
 
 [[message]]
-# 設置面板正在改一項的值時的鍵位行
-key = "settings.keys-typing"
-zhs = "Enter 确定, Esc 放弃, Backspace 删字"
-en = "Enter confirm, Esc discard, Backspace delete"
+# 设置面板：选项弹出的列表里能按的键（草稿）
+key = "settings.keys-list"
+zhs = "jk 选择, Enter 确定, Esc 取消"
+en = "jk choose, Enter take it, Esc cancel"
+
+[[message]]
+# 设置面板：在底下那一行输入搜索时能按的键（草稿）
+key = "settings.keys-search"
+zhs = "输入就筛选, Enter 确定, Esc 清除"
+en = "type to narrow, Enter keep, Esc clear"
+
+[[message]]
+# 设置面板：搜索之后的列表里能按的键，Esc 清掉搜索（草稿）
+key = "settings.keys-searched"
+zhs = "jk 上下, / 再搜, Enter 修改, ␣ 切换, r 重置, u 撤销, C-r 重做, Tab 全局/项目, Esc 清除搜索, q 关闭"
+en = "jk move, / search again, Enter change, Space toggle, r reset, u undo, C-r redo, Tab global/project, Esc clear the search, q close"
 
 [[message]]
 # 設置：Yumete 鍵位風味
@@ -1193,6 +1241,12 @@ zhs = "本项目"
 en = "project"
 
 [[message]]
+# 设置面板底下那一块：这一层的文件读不进来，不知道它说了什么（草稿）
+key = "settings.layer.unknown"
+zhs = "未知（文件读不进来）"
+en = "unknown (the file cannot be read)"
+
+[[message]]
 # 設置面板底下那一塊：這一層沒有說話
 key = "settings.layer.unset"
 zhs = "未设置"
@@ -1209,12 +1263,6 @@ en = "horizontal"
 key = "settings.layout.vertical"
 zhs = "竖排"
 en = "vertical"
-
-[[message]]
-# 設置面板：走的時候還有没存的
-key = "settings.leaving-unsaved"
-zhs = "有未保存的改动。:w 保存，再按 q 不保存并退出"
-en = "unsaved changes: :w saves; q again quits without saving"
 
 [[message]]
 # 設置：邊欄——总是
@@ -1241,10 +1289,40 @@ zhs = "从不"
 en = "never"
 
 [[message]]
+# 设置面板：一组的项太多画不下，上面还有几项。{0} 是项数（草稿）
+key = "settings.more-above"
+zhs = "↑ 上面还有 {0} 项"
+en = "↑ {0} more above"
+
+[[message]]
+# 设置面板：一组的项太多画不下，下面还有几项。{0} 是项数（草稿）
+key = "settings.more-below"
+zhs = "↓ 还有 {0} 项"
+en = "↓ {0} more"
+
+[[message]]
+# 设置面板开着时按了 :，面板不接受命令（草稿）
+key = "settings.no-commands"
+zhs = "设置面板不接受命令，按 q 关闭"
+en = "the settings panel takes no commands; q closes it"
+
+[[message]]
 # 設置面板：這一層還没有那個檔(存盤時建)
 key = "settings.no-file"
 zhs = "尚不存在，保存时创建"
 en = "not there yet; created on save"
+
+[[message]]
+# 设置面板：搜索没有找到任何一项。{0} 是搜的字（草稿）
+key = "settings.no-match"
+zhs = "没有符合「{0}」的设置"
+en = "no setting matches {0}"
+
+[[message]]
+# 打了 :settings 名字，而没有这一项设置。{0} 是打的名字（草稿）
+key = "settings.no-such-setting"
+zhs = "没有叫「{0}」的设置"
+en = "no setting called {0}"
 
 [[message]]
 # 设置面板：按 d，而当前这一层的文件没有设这一项（草稿）
@@ -1253,10 +1331,16 @@ zhs = "本层没有设这一项，已在跟随下一层"
 en = "this layer does not set it; it already follows the layer below"
 
 [[message]]
-# 設置面板：没有改動
-key = "settings.nothing-to-save"
-zhs = "没有改动"
-en = "nothing changed"
+# 设置面板：按 C-r，而没有可以重做的改动（草稿）
+key = "settings.nothing-to-redo"
+zhs = "没有可以重做的改动"
+en = "nothing to redo"
+
+[[message]]
+# 设置面板：按 u，而没有可以撤销的改动（草稿）
+key = "settings.nothing-to-undo"
+zhs = "没有可以撤销的改动"
+en = "nothing to undo"
 
 [[message]]
 # 設置：候选怎么画
@@ -1323,12 +1407,6 @@ en = "whether panel corners are round or square"
 key = "settings.paste-nowhere"
 zhs = "这里没有可以输入文字的值，未粘贴"
 en = "nothing here takes text; nothing was pasted"
-
-[[message]]
-# 設置面板：底下那一行——還没選中哪一項
-key = "settings.pick-a-group"
-zhs = "l 或 ␣ 进入右栏"
-en = "l or Space goes into the settings"
 
 [[message]]
 # 設置：歧义宽度——问终端
@@ -1741,22 +1819,64 @@ zhs = "不同底色"
 en = "tint"
 
 [[message]]
-# 設置面板：存好了({0} ＝ 檔名)
+# 设置面板：一个数字项可取的范围，{0} 到 {1}（草稿）
+key = "settings.range"
+zhs = "{0} 到 {1}"
+en = "{0} to {1}"
+
+[[message]]
+# 设置面板：一个数字项可取的范围，0 另有意思，此外是 {0} 到 {1}（草稿）
+key = "settings.range-or-zero"
+zhs = "0，或 {0} 到 {1}"
+en = "0, or {0} to {1}"
+
+[[message]]
+# 设置面板：按 C-r 重做了一步，写进了文件。{0} 是写了的文件（草稿）
+key = "settings.redone"
+zhs = "已重做，已写入 {0}"
+en = "redone; written to {0}"
+
+[[message]]
+# 设置面板：在一项上按 Enter 而什么都没打，这一项不能空着（草稿）
+key = "settings.refused.empty"
+zhs = "不能为空"
+en = "cannot be empty"
+
+[[message]]
+# 设置面板：在主题、方案这类名字项上按 Enter 而什么都没打。{0} 是可取的名字（草稿）
+key = "settings.refused.empty-names"
+zhs = "不能为空，只能是 {0}"
+en = "cannot be empty; only {0}"
+
+[[message]]
+# 设置面板：在数字项上按 Enter，打的不是数字。{0} 是可取的范围（草稿）
+key = "settings.refused.not-a-number"
+zhs = "不是数字，只能是 {0}"
+en = "not a number; only {0}"
+
+[[message]]
+# 设置面板：在主题、方案这类名字项上按 Enter，打的不是其中之一。{0} 是打的字，{1} 是可取的名字（草稿）
+key = "settings.refused.not-one-of"
+zhs = "没有「{0}」，只能是 {1}"
+en = "{0} is not one of them; only {1}"
+
+[[message]]
+# 设置面板：在数字项上按 Enter，数字超出范围。{0} 是可取的范围（草稿）
+key = "settings.refused.out-of-range"
+zhs = "超出范围，只能是 {0}"
+en = "out of range; only {0}"
+
+[[message]]
+# 设置面板：一项改动写进了文件并生效。{0} 是写了的文件（草稿）
 key = "settings.saved"
-zhs = "设置已保存到 {0} 并生效"
-en = "settings saved to {0} and applied"
+zhs = "已写入 {0}，已生效"
+en = "written to {0}, in force"
 
 [[message]]
 # 設置面板：存好了，而這期間那個檔被外面改過({0} 檔名)
 key = "settings.saved-moved"
 zhs = "设置已保存到 {0}。警告：期间该文件被外部修改，当前页面可能已过时，请用 :settings 重新打开"
 en = "saved to {0}. Warning: it was changed outside meanwhile, so this page may be stale; reopen with :settings"
-
-[[message]]
-# 設置面板：存好了，而有幾個鍵被註釋掉了({0} 檔名，{1} 鍵)
-key = "settings.saved-said"
-zhs = "设置已保存到 {0}。以下设置名 yumete 无法识别，已注释掉：{1}"
-en = "saved to {0}. Unknown names were commented out: {1}"
 
 [[message]]
 # 設置面板：改的那一層被上面蓋着，眼前那個值不會動
@@ -1855,10 +1975,22 @@ zhs = "设置"
 en = "settings"
 
 [[message]]
-# 設置面板：改了還没存
-key = "settings.unsaved"
-zhs = "未保存"
-en = "unsaved"
+# 设置面板：按 u 撤销了一步，写回了文件。{0} 是写了的文件（草稿）
+key = "settings.undone"
+zhs = "已撤销，已写入 {0}"
+en = "undone; written to {0}"
+
+[[message]]
+# 设置面板顶上：一份配置文件读不进来（TOML 写坏了，或者有不认识的名字）。{0} 是哪一层（全局/本项目），{1} 是行号，{2} 是解析器的话（草稿）
+key = "settings.unread"
+zhs = "{0}配置文件读不进来（第 {1} 行：{2}），其中的设置都没有生效，面板不会写入它"
+en = "the {0} config file cannot be read (line {1}: {2}): none of its settings is in force, and the panel will not write it"
+
+[[message]]
+# 设置面板：按 y 复制了这一项的值。{0} 是值（草稿）
+key = "settings.yanked"
+zhs = "已复制 {0}"
+en = "copied {0}"
 
 [[message]]
 # 設置：0 的意思——窗口有多高就多長

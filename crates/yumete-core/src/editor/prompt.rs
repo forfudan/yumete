@@ -1022,6 +1022,84 @@ impl Editor {
             other => self.edit_prompt(other),
         }
     }
+
+    /// **Open the command row for a value a front end asks for** (2026-11-08):
+    /// the settings panel's one-line editor and its search. The same line as
+    /// `:` — its keys, the IME, a paste at the caret — with `label` before
+    /// it; Enter and Esc hand back ([`Editor::take_value_answer`]).
+    pub fn open_value_line(&mut self, label: &str, text: &str) {
+        self.value_label = label.to_string();
+        self.command_line = text.to_string();
+        self.command_caret = self.command_line.chars().count();
+        self.value_answer = None;
+        self.completion = None;
+        self.mode = Mode::Value;
+    }
+
+    /// What was typed on the value line: `Some(text)` after Enter, `None`
+    /// after Esc; nothing until one of them.
+    pub fn take_value_answer(&mut self) -> Option<Option<String>> {
+        self.value_answer.take()
+    }
+
+    /// The text on an open value line, as typed so far.
+    pub fn value_typed(&self) -> Option<&str> {
+        (self.mode == Mode::Value).then_some(self.command_line.as_str())
+    }
+
+    /// Close the value line without an answer, when what it was for goes.
+    pub fn close_value_line(&mut self) {
+        if self.mode == Mode::Value {
+            self.command_line.clear();
+            self.command_caret = 0;
+            self.mode = Mode::Normal;
+        }
+    }
+
+    /// `text` into the prompt at its caret.
+    pub(super) fn insert_committed_now_in_prompt(&mut self, text: &str) {
+        let len = self.command_line.chars().count();
+        self.command_caret = self.command_caret.min(len);
+        let at = self
+            .command_line
+            .char_indices()
+            .nth(self.command_caret)
+            .map_or(self.command_line.len(), |(i, _)| i);
+        self.command_line.insert_str(at, text);
+        self.command_caret += text.chars().count();
+    }
+
+    pub(super) fn on_value_key(&mut self, key: Key) {
+        let place = yumete_cjk::actions::Place::Prompt;
+        match self.commands_in(place, key) {
+            Some(commands) => self.run_in_place(place, &commands, |e, name| e.value_command(name)),
+            None => {
+                if let Key::Char(c) = key {
+                    self.type_into_prompt(c);
+                }
+            }
+        }
+    }
+
+    /// One of a prompt's commands, on the value line.
+    fn value_command(&mut self, name: PlaceCmd) {
+        match name {
+            PlaceCmd::NormalMode => {
+                self.close_value_line();
+                self.value_answer = Some(None);
+            }
+            // An empty value is one to hand back (the check says whether it
+            // may be), so backspacing to empty does not leave; Esc does.
+            PlaceCmd::DeleteCharBackward if self.command_line.is_empty() => {}
+            PlaceCmd::Confirm => {
+                let text = std::mem::take(&mut self.command_line);
+                self.command_caret = 0;
+                self.mode = Mode::Normal;
+                self.value_answer = Some(Some(text));
+            }
+            other => self.edit_prompt(other),
+        }
+    }
 }
 
 /// **Where `C-w` cuts back to** in `head`, the text before the caret: the

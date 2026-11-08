@@ -696,9 +696,11 @@ pub enum Command {
     /// > 這樣的話用戶（特別是寫小説的），不需要面對 toml 和一堆 key 發呆不知道
     /// > 他們都是幹啥的。
     ///
-    /// Warning: **不收參數。** 進去哪一組是用走的，不是用打的——一個命令記得住的是它
-    /// 自己的名字，記不住八個組名。
-    Settings,
+    /// **A setting's name opens the panel on it** (2026-11-08): `:settings
+    /// editor.scrolloff`, completed from the panel's own list. Groups are
+    /// still walked, not typed: a command remembers its own name, not eight
+    /// group names.
+    Settings(Option<String>),
     /// `:tutor` — a lesson, written into a file of the reader's own.
     Tutor,
     /// **`:resume` — take up this directory's last session** (2026-10-18 作者定).
@@ -1142,6 +1144,10 @@ pub enum Param {
     Options(&'static [Word]),
     /// One of the input schemes — **whichever ones are installed** (#169).
     Schemes,
+    /// A setting of the settings panel, by its TOML path (2026-11-08):
+    /// the front end hands the list over ([`set_setting_names`]). Anything
+    /// else is taken too, for the panel to answer.
+    Settings,
     /// Anything at all; the string is the placeholder to show while typing.
     /// Takes the whole of what is left, so it may hold spaces.
     Free(&'static str),
@@ -1159,6 +1165,7 @@ impl Param {
         match self {
             Param::Words { of, .. } | Param::WordsOr { of, .. } | Param::Options(of) => Some(of),
             Param::Schemes => Some(schemes()),
+            Param::Settings => Some(setting_names()),
             _ => None,
         }
     }
@@ -1179,11 +1186,15 @@ impl Param {
     /// Whether a word this parameter does not list is still taken — the
     /// text of a `WordsOr`, the path after an `Options`.
     fn takes_others(&self) -> bool {
-        matches!(self, Param::WordsOr { .. } | Param::Options(_))
+        matches!(self, Param::WordsOr { .. } | Param::Options(_) | Param::Settings)
     }
 
     /// What may follow, for a listing: `<檔名>`, `on|off`, or a placeholder.
     pub fn hint(&self) -> String {
+        // A hundred names do not make a hint.
+        if let Param::Settings = self {
+            return say!("cmd.arg.setting");
+        }
         if let Param::Options(of) = self {
             let mut out: String = of.iter().map(|w| w.name).collect::<Vec<_>>().join("｜");
             out.push('｜');
@@ -1290,6 +1301,29 @@ pub fn set_schemes(found: &[(&str, &str)]) {
 /// The schemes `:yume-scheme` offers: what was found, else the built-in five.
 pub fn schemes() -> &'static [Word] {
     FOUND_SCHEMES.get().copied().unwrap_or(SCHEMES)
+}
+
+/// The settings panel's settings, by TOML path, or nothing until the front
+/// end has said (2026-11-08).
+static SETTING_NAMES: std::sync::OnceLock<&'static [Word]> = std::sync::OnceLock::new();
+
+/// Tell the command table what settings `:settings` completes: each a TOML
+/// path and the message tag of its name, which the `:` menu shows beside it.
+/// Called once, at start-up; a second call is ignored, as [`set_schemes`].
+pub fn set_setting_names(names: &[(&str, &'static str)]) {
+    if names.is_empty() || SETTING_NAMES.get().is_some() {
+        return;
+    }
+    let words: Vec<Word> = names
+        .iter()
+        .map(|(path, label)| Word { name: Box::leak(path.to_string().into_boxed_str()), help: label, needs: &[] })
+        .collect();
+    let _ = SETTING_NAMES.set(Box::leak(words.into_boxed_slice()));
+}
+
+/// The settings `:settings` offers.
+pub fn setting_names() -> &'static [Word] {
+    SETTING_NAMES.get().copied().unwrap_or(&[])
 }
 
 /// The note that goes beside a word of `args`, when there is one (#291).
@@ -1544,7 +1578,7 @@ fn read_params(
             args.push(param.default().unwrap_or("").to_string());
             continue;
         }
-        match (param.words(), matches!(param, Param::WordsOr { .. })) {
+        match (param.words(), matches!(param, Param::WordsOr { .. } | Param::Settings)) {
             // **The prefix rule is the walk's, not the parser's.** The menu
             // prints the shortest unambiguous spelling of every word; that
             // parenthesis is a promise, and this is where it is kept.
@@ -4325,7 +4359,7 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| {
             let options = format!("{} {}", p.arg(0).unwrap_or(""), p.rest).trim().to_string();
             Ok(match options.is_empty() {
-                true => Command::Settings,
+                true => Command::Settings(None),
                 false => Command::VimSet(options),
             })
         }),
@@ -5548,8 +5582,8 @@ pub const COMMANDS: &[Entry] = &[
         aliases: &[],
         help: "cmd.commands.settings",
         needs: &[],
-        params: &[],
-        build: Some(|_| Ok(Command::Settings)),
+        params: &[Param::Settings],
+        build: Some(|p| Ok(Command::Settings(p.arg(0).map(str::to_string)))),
     },
     Entry {
         name: "resume",
@@ -8438,6 +8472,7 @@ mod tests {
                     }
                     Param::Path => "a.md".to_string(),
                     Param::Schemes => "lingming".to_string(),
+                    Param::Settings => String::new(),
                     // A word only this command knows the shape of.
                     Param::Free(_) => match name {
                         "grep" | "run" | "pipe" | "sh" | "replace" => "x",

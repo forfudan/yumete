@@ -2921,6 +2921,8 @@ pub struct Editor {
     /// Warning: **那扇面板的狀態不在核心裏**（它讀 `yumete_config::settings_ui` 那張表，
     /// 而核心不依賴 `yumete-config`），所以這裏只是一張條子。
     settings_request: bool,
+    /// The setting `:settings <name>` named, for the panel to open on.
+    settings_target: Option<String>,
     /// 那扇面板此刻開着 —— 前端進出時說一聲。
     ///
     /// 核心要知道，是因為 `:w` 與 `:q` 在它開着的時候說的是**它**：面板上按 `:w`
@@ -3604,6 +3606,10 @@ pub struct Editor {
     key_index: RefCell<Option<KeyIndex>>,
     /// What Ruby mode is editing the reading of.
     ruby_target: Option<RubyTarget>,
+    /// What the command row says before a value being typed (`Mode::Value`).
+    value_label: String,
+    /// The value typed, handed back: `Some(text)` on Enter, `None` on Esc.
+    value_answer: Option<Option<String>>,
     /// How many half-width characters share a slot in vertical layout (緃中横);
     /// `0` for none.
     tatechuyoko: usize,
@@ -4534,6 +4540,7 @@ impl Editor {
             config_back: false,
             config_check: false,
             settings_request: false,
+            settings_target: None,
             settings_open: false,
             settings_save: false,
             settings_close: None,
@@ -4706,6 +4713,8 @@ impl Editor {
             walking_jumps: false,
             key_index: RefCell::new(None),
             ruby_target: None,
+            value_label: String::new(),
+            value_answer: None,
             completion: None,
             reference: None,
             tatechuyoko: 0,

@@ -231,6 +231,7 @@ impl Editor {
                 Mode::Normal => self.on_normal_key(key),
                 Mode::Insert => self.insert_typed(key),
                 Mode::Field => self.on_field_key(key),
+                Mode::Value => self.on_value_key(key),
             }
         }
         self.expanding_alias = outer;

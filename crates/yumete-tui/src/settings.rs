@@ -405,6 +405,26 @@ pub fn apply(
     apply_to_editor(config, editor, layout);
 }
 
+thread_local! {
+    /// The language `--lang` asked for, kept for the reloads that come later
+    /// and pass none. Per thread, so a test that passes one does not reach
+    /// the tests after it.
+    static HELD_LANGUAGE: std::cell::Cell<Option<yumete_core::messages::Language>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// The language asked for on the command line: this one, kept, or the one
+/// kept from an earlier call when none is asked now.
+fn held(asked: Option<yumete_core::messages::Language>) -> Option<yumete_core::messages::Language> {
+    match asked {
+        Some(language) => {
+            HELD_LANGUAGE.with(|held| held.set(Some(language)));
+            Some(language)
+        }
+        None => HELD_LANGUAGE.with(std::cell::Cell::get),
+    }
+}
+
 /// The settings that belong to the process rather than to one editor.
 fn apply_to_the_process(config: &Config, language: Option<yumete_core::messages::Language>) {
     // 進程級的那幾個：不屬於某一個 editor，但同樣是配置說了算。
@@ -424,6 +444,11 @@ fn apply_to_the_process(config: &Config, language: Option<yumete_core::messages:
             crate::ambiguous::ask_the_terminal_about_width().unwrap_or(false)
         }
     });
+    // **`--lang` holds for the whole run** (2026-11-08, reported: with
+    // `--lang=zh`, `:w` in the settings panel reloaded the config and the
+    // whole screen turned English, the locale's). The flag was typed for this
+    // run; a reload is part of the run.
+    let language = held(language);
     // **`auto` is the locale's** (2026-10-29): an English system starts in
     // English, a Chinese one in its own script.
     let language = language.or_else(|| yumete_core::messages::Language::parse(&config.editor.language));
@@ -661,6 +686,23 @@ mod every_setting_is_pushed_here {
         for needle in ["set_ambiguous_wide", "messages::set_language", "set_commit_strategy", "set_charsets"] {
             assert!(here.contains(needle), "{needle} 要在這個檔裏也推一遍");
         }
+    }
+}
+
+/// **`--lang` outlives a reload** (2026-11-08, reported: `:w` in the
+/// settings panel turned a `--lang=zh` session English). Asked of `held`
+/// rather than of the process's language, which the tests share.
+#[cfg(test)]
+mod held_language_tests {
+    use yumete_core::messages::Language;
+
+    #[test]
+    fn a_language_asked_for_is_kept_for_the_reloads_after_it() {
+        assert_eq!(super::held(None), None, "nothing asked, nothing kept");
+        assert_eq!(super::held(Some(Language::Simplified)), Some(Language::Simplified));
+        assert_eq!(super::held(None), Some(Language::Simplified), "a reload passes none");
+        assert_eq!(super::held(Some(Language::English)), Some(Language::English));
+        assert_eq!(super::held(None), Some(Language::English));
     }
 }
 

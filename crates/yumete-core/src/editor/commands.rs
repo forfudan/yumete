@@ -215,7 +215,8 @@ impl Editor {
                 self.write_current(path.as_deref())?;
                 Ok(CommandOutcome::Continue)
             }
-            Command::Settings => {
+            Command::Settings(target) => {
+                self.settings_target = target;
                 // 核心只記一筆；那扇面板歸前端（它讀得到設置表）。
                 self.settings_request = true;
                 Ok(CommandOutcome::Continue)

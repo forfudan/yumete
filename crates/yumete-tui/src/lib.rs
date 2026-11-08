@@ -1502,10 +1502,10 @@ pub fn run(
                     continue;
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
-                // 設置面板開着：鍵歸它（`:` 除外——那是命令行）。
-                if settings.took(editor, map_key(code, mods)) {
-                    continue;
-                }
+                // 設置面板開着：鍵歸它；它打字的時候（一項的值、搜索）鍵還給命令行。
+                // **Not `continue`** (2026-11-08): a key the panel takes may write a
+                // change, and the reload below has to run for it to take effect.
+                let taken = settings.took(editor, map_key(code, mods));
                 // The stand-in for a Shift this terminal cannot report (#339).
                 // It asks yume the same question the tap does, so a rebound
                 // Shift is rebound here too; outside a place that composes
@@ -1518,7 +1518,7 @@ pub fn run(
                     && editor.key_preset() == yumete_core::KeyPreset::Vim
                     && mods.contains(KeyModifiers::CONTROL)
                     && matches!(code, KeyCode::Char('^' | '6'));
-                if ime.available()
+                if !taken && ime.available()
                     && ime.engaged()
                     && !vims_own
                     && language_key(config).is_some_and(|k| is_language_key(k, code, mods))
@@ -1534,11 +1534,11 @@ pub fn run(
                     }
                     continue;
                 }
-                let consumed = composes_here(editor)
+                let consumed = !taken && composes_here(editor)
                     && ime.available()
                     && ime.engaged()
                     && ime_handle(ime, editor, code, mods);
-                if !consumed {
+                if !consumed && !taken {
                     if let Some(k) = map_key(code, mods) {
                         // Kept for the crash report, and for nothing else: a
                         // push of a `Copy` enum into a ring of 64 (#300).
@@ -1822,41 +1822,7 @@ pub fn run(
                 //
                 // Warning: **`layout` 傳 `None`**：`-v` 是這一趟啓動的答案，重載說了
                 // 不算——這時候配置說什麼就是什麼。
-                let back = editor.take_config_back();
-                if editor.take_config_reload() {
-                    // 項目配置從**工作路徑**往上找，同啓動那一趟（2026-10-01）。
-                    let (fresh, said) = Config::load_reporting_from(&editor.root());
-                    settings::apply(&fresh, editor, None, None);
-                    if back {
-                        settings::view_back_to_config(editor, &fresh);
-                    }
-                    settings::apply_ime(&fresh, ime);
-                    system_ime.set_others(fresh.ime.others);
-                    *config = fresh;
-                    // Back to the saved settings means the saved theme too: what
-                    // `:theme` chose would otherwise stay on (2026-10-28).
-                    if back {
-                        crate::theme::forget_choices();
-                    }
-                    // 主題是進程級的一格，要重新問一次，否則配色改了畫面不動。
-                    crate::theme::settle(config, crate::theme::terminal_answer());
-                    // Warning: **存完那一句不許被蓋掉**（2026-10-09）。設置面板存完會自己
-                    // 要求重載，而讀者要看見的是「存進哪一份」——「配置重新載入了」是
-                    // `:reload-config` 自己按下去的時候纔有人在等的答案。
-                    //
-                    // 報錯那一路照說不誤，而且蓋過存盤那一句：打錯的設定要出聲，那比
-                    // 存進哪一份要緊（同 `lib.rs` 載入那一支的規矩）。
-                    match said.is_empty() {
-                        false => editor
-                            .set_status(say!("config.reload-said", said.join(&say!("label.comma")))),
-                        true if editor.status().is_empty() => {
-                            editor.set_status(say!("config.reloaded"))
-                        }
-                        true => {}
-                    }
-                }
-                // 那扇設置面板（`:settings`）：開、存、關。
-                settings.settle(editor);
+                reload_and_settle(editor, config, ime, &mut system_ime, &mut settings, &mut was_themed);
                 if let Some(tag) = editor.take_scheme_request() {
                     // `:yume` **is** an answer
                     // about the language, typed on the command line that
@@ -1964,6 +1930,29 @@ pub fn run(
             Ok(Event::Paste(text)) => {
                 if !settings.pasted(editor, &text) {
                     editor.paste_text(&text);
+                    // A paste into the panel's search narrows it too.
+                    settings.settle(editor);
+                }
+            }
+            // **The settings panel takes the mouse while it is open**
+            // (2026-11-08, reported: a click moved the caret in the document
+            // behind it, a drag left a selection there, the wheel scrolled
+            // it). A click picks a row, the wheel walks the list, and nothing
+            // reaches the document — the `:` line over the panel included.
+            Ok(Event::Mouse(mouse)) if settings.open() => {
+                let pointer = match mouse.kind {
+                    MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
+                        let notches = 1 + drain_the_flick(mouse.kind, &events, &mut inbox);
+                        Some(settings_page::Pointer::Wheel { back: mouse.kind == MouseEventKind::ScrollUp, notches })
+                    }
+                    MouseEventKind::Down(MouseButton::Left) => Some(settings_page::Pointer::Click),
+                    _ => None,
+                };
+                if let Some(pointer) = pointer {
+                    settings.mouse(editor, pointer, mouse.column, mouse.row);
+                    // A click on a value in a choice's list writes it, and the
+                    // wheel there tries a theme.
+                    reload_and_settle(editor, config, ime, &mut system_ime, &mut settings, &mut was_themed);
                 }
             }
             Ok(Event::Mouse(mouse)) => match mouse.kind {
@@ -2085,6 +2074,87 @@ pub fn run(
     std::mem::forget(terminal);
     let _ = ratatui::try_restore();
     result
+}
+
+/// **`:reload-config`, and the settings panel's answers** — after a key
+/// (and after a click, which can write a value too, 2026-11-08).
+///
+/// Warning: **同一支 `apply`，啓動叫的那一支。** 換一份 `Config` 只讓前端**畫**得
+/// 不一樣；推進 `Editor` 的那一批要再推一遍。`layout` 傳 `None`：`-v` 是這一趟
+/// 啓動的答案，重載說了不算。
+fn reload_and_settle(
+    editor: &mut Editor,
+    config: &mut Config,
+    ime: &mut ImeSession,
+    system_ime: &mut crate::system_ime::SystemIme,
+    settings: &mut crate::settings_page::Seat,
+    was_themed: &mut Option<Option<yumete_config::ThemeConfig>>,
+) {
+    // 那扇設置面板（`:settings`）：開，和命令行交回來的那一段字——**先於重讀**：
+    // 一個值在那裏寫下去，下面這一下就讓它生效。
+    settings.settle(editor);
+    let back = editor.take_config_back();
+    if editor.take_config_reload() {
+        // 項目配置從**工作路徑**往上找，同啓動那一趟（2026-10-01）。
+        let (fresh, said) = Config::load_reporting_from(&editor.root());
+        // **What was said before stays** (2026-11-08): pushing a setting can
+        // say something of its own (「夾行：按視覺縱」), and it covered the
+        // settings panel's 「已寫入 …」 on every change.
+        let was = editor.status().to_string();
+        settings::apply(&fresh, editor, None, None);
+        editor.set_status(was);
+        if back {
+            settings::view_back_to_config(editor, &fresh);
+        }
+        settings::apply_ime(&fresh, ime);
+        system_ime.set_others(fresh.ime.others);
+        *config = fresh;
+        // Back to the saved settings means the saved theme too: what
+        // `:theme` chose would otherwise stay on (2026-10-28).
+        if back {
+            crate::theme::forget_choices();
+        }
+        // 主題是進程級的一格，要重新問一次，否則配色改了畫面不動。
+        crate::theme::settle(config, crate::theme::terminal_answer());
+        // Warning: **存完那一句不許被蓋掉**（2026-10-09）。設置面板存完會自己
+        // 要求重載，而讀者要看見的是「存進哪一份」——「配置重新載入了」是
+        // `:reload-config` 自己按下去的時候纔有人在等的答案。
+        //
+        // 報錯那一路照說不誤，而且蓋過存盤那一句：打錯的設定要出聲，那比
+        // 存進哪一份要緊（同 `lib.rs` 載入那一支的規矩）。
+        match said.is_empty() {
+            false => editor
+                .set_status(say!("config.reload-said", said.join(&say!("label.comma")))),
+            true if editor.status().is_empty() => {
+                editor.set_status(say!("config.reloaded"))
+            }
+            true => {}
+        }
+    }
+    // **A theme tried in the panel's list** (2026-11-08): drawn as
+    // the cursor walks the list, put back on Esc. Kept, the file
+    // now names it and the reload has drawn it, so the try is let
+    // go and the config rules again.
+    if let Some(preview) = settings.take_preview() {
+        match preview {
+            settings_page::Preview::Show(name) => {
+                if was_themed.is_none() {
+                    *was_themed = Some(crate::theme::snapshot());
+                }
+                let _ = set_theme(config, Some(name), None);
+            }
+            settings_page::Preview::Undo => {
+                if let Some(was) = was_themed.take() {
+                    crate::theme::put_back(was);
+                }
+            }
+            settings_page::Preview::Keep => {
+                *was_themed = None;
+                crate::theme::forget_choices();
+                crate::theme::settle(config, crate::theme::terminal_answer());
+            }
+        }
+    }
 }
 
 /// Put the terminal back after a panic tore the loop down (#300).
@@ -16511,7 +16581,7 @@ fn squeezed(text: &str) -> String {
         // **Two rows at the foot** (2026-10-31): the last is the command row,
         // blank while nothing is said, and the page's keys stand above it.
         assert!(last.trim().is_empty(), "the command row is blank: {last:?}");
-        assert!((2..5).any(|up| row(h - up).contains("hl")), "the keys above it");
+        assert!((2..5).any(|up| row(h - up).contains("jk")), "the keys above it");
 
         // A message goes on the command row and leaves the keys alone.
         let mut ed = ed;
@@ -16524,7 +16594,7 @@ fn squeezed(text: &str) -> String {
             (0..w).filter_map(|x| buf.cell((x, y)).map(|c| c.symbol().to_string())).collect()
         };
         assert!(row(h - 1).contains("saved"), "{:?}", row(h - 1));
-        assert!((2..5).any(|up| row(h - up).contains("hl")), "the keys are still there");
+        assert!((2..5).any(|up| row(h - up).contains("jk")), "the keys are still there");
     }
 
     /// 那份測試文檔叫什麼——`editor_with` 開的是一個沒有名字的草稿。

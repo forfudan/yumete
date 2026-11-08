@@ -984,6 +984,11 @@ fn main() -> ExitCode {
             .collect();
         yumete_core::command::set_schemes(&found);
     }
+    // `:settings <name>` completes the panel's settings by their TOML paths
+    // (2026-11-08); the core cannot read the table, so it is handed over.
+    let settings: Vec<(String, &'static str)> =
+        yumete_config::panel::all_rows().iter().map(|s| (s.path(), s.label)).collect();
+    yumete_core::command::set_setting_names(&settings.iter().map(|(p, l)| (p.as_str(), *l)).collect::<Vec<_>>());
     mark("方案", &mut marks);
     let wanted = Scheme::from_tag(&config.ime.scheme).unwrap_or_else(Scheme::first);
     let page_size = config.panel.page_size;

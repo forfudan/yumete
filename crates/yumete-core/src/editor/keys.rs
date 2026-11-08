@@ -321,6 +321,10 @@ impl Editor {
                 self.on_field_key(key);
                 KeyOutcome::Continue
             }
+            Mode::Value => {
+                self.on_value_key(key);
+                KeyOutcome::Continue
+            }
         };
         if watching {
             self.finish_watching();

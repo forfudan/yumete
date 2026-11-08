@@ -68,6 +68,42 @@ pub fn faults_in(text: &str) -> Vec<Fault> {
     }
 }
 
+/// **Why the loader cannot read this file at all**, if it cannot: the line
+/// (0 起算) and the parser's whole message, its lines joined (2026-11-08,
+/// for the settings panel, which says it at the top and will not write
+/// such a file). `None` when the file is read, warnings or not.
+pub fn unread(text: &str) -> Option<(usize, String)> {
+    let err = toml::from_str::<RawConfig>(text).err()?;
+    let line = err.span().map_or(0, |at| line_at(text, at.start));
+    let said: Vec<&str> = err.message().lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    Some((line, said.join("; ")))
+}
+
+/// The complaints of the loader about one key, `[table] key`, in a file
+/// that holds that key alone: what the loader would say of that value
+/// (2026-11-08, for the settings panel's check on `Enter`).
+pub fn said_of(table: &str, key: &str, value: &toml_edit::Value) -> Vec<String> {
+    let mut doc = toml_edit::DocumentMut::new();
+    let mut parts = table.split('.');
+    let Some(first) = parts.next() else { return Vec::new() };
+    let mut t = doc.entry(first).or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+    for part in parts {
+        let Some(inner) = t.as_table_mut() else { return Vec::new() };
+        t = inner.entry(part).or_insert_with(|| toml_edit::Item::Table(toml_edit::Table::new()));
+    }
+    let Some(inner) = t.as_table_mut() else { return Vec::new() };
+    inner.insert(key, toml_edit::Item::Value(value.clone()));
+    let text = doc.to_string();
+    if let Some((_, said)) = unread(&text) {
+        return vec![said];
+    }
+    faults_in(&text)
+        .into_iter()
+        .map(|f| f.said)
+        .filter(|said| addressed(said).is_some_and(|(t, k)| t == table && k == key))
+        .collect()
+}
+
 /// **Which line a complaint is about**, by the key it opens with.
 ///
 /// Public because the four checks that need `yumete-core`'s parsers live in
