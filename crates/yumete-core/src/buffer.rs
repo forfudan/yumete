@@ -2576,7 +2576,12 @@ impl TextStore for Buffer {
 /// which truncates first: a failure in the middle left a half file where a
 /// chapter had been.
 pub fn write_file_atomically(path: &Path, text: &str) -> io::Result<()> {
-    write_bytes_atomically(path, |file| file.write_all(text.as_bytes()))
+    write_binary_atomically(path, text.as_bytes())
+}
+
+/// The same for bytes that are not text: an EPUB is a zip (2026-11-08).
+pub fn write_binary_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
+    write_bytes_atomically(path, |file| file.write_all(bytes))
 }
 
 /// [`write_bytes_atomically`], taking the new file's permissions from `like`

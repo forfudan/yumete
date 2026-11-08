@@ -295,10 +295,10 @@ zhs = "无法确定 {0} 的编码，可能是 {1}"
 en = "cannot tell the encoding of {0}; it could be {1}"
 
 [[message]]
-# :export 給了不認得的格式
+# :export 給了不認得的格式（草稿：加了 epub）
 key = "export.no-such-format"
-zhs = "没有「{0}」格式：可用 html、typst，或 csv、tsv(光标所在表格)"
-en = "no format '{0}': html, typst, or csv/tsv for the table under the cursor"
+zhs = "没有「{0}」格式：可用 html、typst、epub，或 csv、tsv(光标所在表格)"
+en = "no format '{0}': html, typst, epub, or csv/tsv for the table under the cursor"
 
 [[message]]
 # 導出的檔名就是稿子本身

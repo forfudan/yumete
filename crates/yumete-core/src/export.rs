@@ -54,6 +54,10 @@ pub enum Format {
     Html,
     /// A Typst source file, horizontal.
     Typst,
+    /// **An EPUB 3 book** (2026-11-08): the HTML page's text and stylesheet
+    /// in a zip a reader app opens, vertical and turning right to left when
+    /// the editor is. See [`crate::epub`].
+    Epub,
 }
 
 impl Format {
@@ -62,6 +66,7 @@ impl Format {
         match name.trim().to_ascii_lowercase().as_str() {
             "html" | "htm" => Some(Format::Html),
             "typst" | "typ" => Some(Format::Typst),
+            "epub" => Some(Format::Epub),
             _ => None,
         }
     }
@@ -71,6 +76,7 @@ impl Format {
         match self {
             Format::Html => "html",
             Format::Typst => "typ",
+            Format::Epub => "epub",
         }
     }
 }
@@ -194,11 +200,22 @@ pub type Painter = fn(&str, bool) -> Result<Formula, String>;
 /// turned on its side with the Latin around it, as print sets a long number.
 pub const TCY_MAX: usize = 4;
 
-/// Write `text` out as `format`.
+/// Write `text` out as `format`. An EPUB is a zip, so what comes back for one
+/// is the book's text alone, the XHTML page inside it; [`export_file`] is the
+/// whole file.
 pub fn export(text: &str, format: Format, style: &Style) -> String {
     match format {
         Format::Html => html(text, style),
         Format::Typst => typst(text, style),
+        Format::Epub => crate::epub::chapter(text, style).0,
+    }
+}
+
+/// The bytes of the file `format` is written as.
+pub fn export_file(text: &str, format: Format, style: &Style) -> Vec<u8> {
+    match format {
+        Format::Epub => crate::epub::book(text, style),
+        _ => export(text, format, style).into_bytes(),
     }
 }
 
@@ -934,7 +951,7 @@ fn html(text: &str, style: &Style) -> String {
     out.push_str(&format!("<!doctype html>\n<html lang=\"{lang}\">\n<meta charset=\"utf-8\">\n"));
     out.push_str(&format!("<title>{}</title>\n", escape_html(&style.title)));
     out.push_str("<style>\n");
-    out.push_str(&stylesheet(style, lang));
+    out.push_str(&stylesheet(style, lang, false));
     out.push_str(&print_rules(style));
     out.push_str("</style>\n");
     out.push_str(&html_body(&text, style, lang));
@@ -942,7 +959,12 @@ fn html(text: &str, style: &Style) -> String {
 }
 
 /// The page's stylesheet, but for what only a printer sees.
-fn stylesheet(style: &Style, lang: &str) -> String {
+///
+/// A `book` is an EPUB's: a reader app sets the page, so there is no measure
+/// to pin and no margin to leave, the writing mode goes on `html` (where
+/// Apple Books reads it, under its `-epub-` name as well), and a chapter
+/// opens a page there as it does on paper.
+pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
     let mut out = String::new();
     let cjk = lang != "en";
     let fonts = match lang {
@@ -950,10 +972,21 @@ fn stylesheet(style: &Style, lang: &str) -> String {
         "ja" => format!("{JA_FONTS}, {CJK_FONTS}"),
         _ => CJK_FONTS.to_string(),
     };
-    out.push_str(&format!(
-        "body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; margin: 4rem auto; }}\n"
-    ));
-    if style.vertical {
+    if book {
+        out.push_str(&format!("body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; }}\n"));
+        if style.vertical {
+            out.push_str(
+                "html { -epub-writing-mode: vertical-rl; -webkit-writing-mode: vertical-rl; writing-mode: vertical-rl; }\n\
+                 body { -epub-text-orientation: mixed; text-orientation: mixed; line-break: strict; }\n",
+            );
+        }
+        out.push_str("h1, h2 { break-before: page; }\nbody > :first-child { break-before: auto; }\n");
+    } else {
+        out.push_str(&format!(
+            "body {{ font-family: {fonts}; line-height: {LINE_HEIGHT}; margin: 4rem auto; }}\n"
+        ));
+    }
+    if style.vertical && !book {
         // The one place outside a terminal where 縱書 costs a line of CSS. The
         // measure is the 縱 length, so a page here holds what a page there did.
         out.push_str(&format!(
@@ -968,7 +1001,7 @@ fn stylesheet(style: &Style, lang: &str) -> String {
              max-block-size: {}em; block-size: {}em; }}\n",
             style.zong_len, style.zong_len
         ));
-    } else {
+    } else if !book {
         out.push_str("body { max-width: 32em; }\n");
     }
     if style.hanging {
@@ -1001,7 +1034,7 @@ fn stylesheet(style: &Style, lang: &str) -> String {
         // the same reason. A formula stands upright, centred on its 縱, as a
         // picture of something written across.
         out.push_str(
-            ".tcy { -webkit-text-combine: horizontal; text-combine-upright: all; }\n\
+            ".tcy { -epub-text-combine: horizontal; -webkit-text-combine: horizontal; text-combine-upright: all; }\n\
              table, pre { writing-mode: horizontal-tb; }\n\
              table { margin: 0 1em; }\n\
              pre { margin: 0 1em; max-block-size: 100%; overflow: auto; }\n\
@@ -1017,7 +1050,7 @@ fn stylesheet(style: &Style, lang: &str) -> String {
 /// page set down the page keeps its words whole and turned: 縱中橫 is for the
 /// odd number in a CJK line, and every short word of an English one would be
 /// squeezed into a square.
-fn html_body(text: &str, style: &Style, lang: &str) -> String {
+pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
     let (blocks, notes) = blocks(text, style.source);
     let mut body = String::new();
     html_blocks(&blocks, style, &mut body);
@@ -1200,7 +1233,7 @@ fn number_the_notes(
 
 /// The page's language, from what it is written in: kana makes it Japanese,
 /// more 漢字 than Latin words Chinese, and otherwise English.
-fn language_of(text: &str) -> &'static str {
+pub(crate) fn language_of(text: &str) -> &'static str {
     let (mut han, mut kana, mut words, mut in_word) = (0usize, 0usize, 0usize, false);
     for c in text.chars() {
         if yumete_cjk::is_han(c) {

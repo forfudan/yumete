@@ -142,8 +142,8 @@ fn main() -> ExitCode {
     // `--encoding=big5`: what the files named are written in, for files that
     // cannot be told (2026-11-04), as `:open ++enc=big5` says it inside.
     let mut force_encoding: Option<String> = None;
-    // `--export FMT`: write the files named out as html, typst, csv, tsv or
-    // pdf and exit — the editor's own `:export`, with `typst compile` for the
+    // `--export FMT`: write the files named out as html, typst, epub, csv, tsv
+    // or pdf and exit — the editor's own `:export`, with `typst compile` for the
     // last (2026-10-30). `--out` is where; one file only, then.
     let mut export: Option<String> = None;
     let mut out: Option<String> = None;
@@ -1966,9 +1966,9 @@ fn run_export(
     guess: Option<&'static yumete_core::encoding::Encoding>,
 ) -> ExitCode {
     let format = format.trim().to_ascii_lowercase();
-    let known = ["html", "htm", "typst", "typ", "csv", "tsv", "pdf"];
+    let known = ["html", "htm", "typst", "typ", "epub", "csv", "tsv", "pdf"];
     if !known.contains(&format.as_str()) {
-        eprintln!("yumete: --export takes html, typst, csv, tsv or pdf, not '{format}'");
+        eprintln!("yumete: --export takes html, typst, epub, csv, tsv or pdf, not '{format}'");
         return ExitCode::from(2);
     }
     if files.is_empty() {
@@ -2595,12 +2595,13 @@ SEARCHING FROM THE SHELL:
                      Several directories may be named, and a FILE may be named
                      instead of a directory.
 
-        --export FMT Write each FILE out as html, typst, csv, tsv or pdf and
-                     exit: beside the file with the new extension, or at
-                     --out PATH when one file is named. An existing file is
-                     written over, as a compiler's would be. The paper, layout
-                     and ruby settings of your config apply, as with :export
-                     in the editor; csv and tsv take the file's table.
+        --export FMT Write each FILE out as html, typst, epub, csv, tsv or
+                     pdf and exit: beside the file with the new extension,
+                     or at --out PATH when one file is named. An existing
+                     file is written over, as a compiler's would be. The
+                     paper, layout and ruby settings of your config apply, as
+                     with :export in the editor; csv and tsv take the file's
+                     table.
 
                      pdf needs the `typst` compiler on the PATH (brew install
                      typst). A .typ file is compiled as it is, #include and
@@ -2759,7 +2760,7 @@ KEYS (Normal mode, Helix-style):
               :recover         use or drop a crash-recovery draft
               :buffer  :buffer-next  :buffer-previous  :buffer-close
               :search-project  :outline  across the project / this file's headings
-              :export html|typst|csv|tsv   write it out
+              :export html|typst|epub|csv|tsv   write it out
               :vertical  :horizontal    :view-margin [never|dense|loose|always]
               :yume-annotation  the annotation beside candidates:
                               off, next, or a mode (multi, double)

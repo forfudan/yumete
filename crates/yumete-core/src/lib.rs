@@ -33,6 +33,7 @@ pub mod discover;
 pub mod drawn;
 pub mod editor;
 pub mod encoding;
+pub mod epub;
 pub mod export;
 pub mod fold;
 pub mod glyphs;

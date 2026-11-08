@@ -43,6 +43,30 @@ fn html_and_typst_land_beside_the_file_and_the_path_is_printed() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// **`--export epub` writes a book** (2026-11-08): a zip whose first entry is
+/// the stored `mimetype`, and a vertical one that turns right to left; and
+/// the HTML of a vertical page draws its formula with RaTeX.
+#[test]
+fn epub_is_a_book_and_html_draws_formulas() {
+    let root = fixture("epub");
+    let md = root.join("ch1.md");
+    std::fs::write(&md, "# 第一章\n\n1997年，从 $x^2$ 起。\n").unwrap();
+    let out = ye().args(["--vertical", "--export", "epub"]).arg(&md).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let book = std::fs::read(md.with_extension("epub")).unwrap();
+    assert_eq!(&book[..4], b"PK\x03\x04");
+    assert_eq!(&book[30..58], b"mimetypeapplication/epub+zip");
+    let text = String::from_utf8_lossy(&book);
+    assert!(text.contains("page-progression-direction=\"rtl\""));
+    assert!(text.contains("images/f1.png"));
+    let out = ye().args(["--vertical", "--export", "html"]).arg(&md).output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let page = std::fs::read_to_string(md.with_extension("html")).unwrap();
+    assert!(page.contains("<span class=\"tcy\">1997</span>年"), "{page}");
+    assert!(page.contains("<img class=\"math\" alt=\"x^2\""), "{page}");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn a_table_file_exports_as_tsv() {
     let root = fixture("tsv");

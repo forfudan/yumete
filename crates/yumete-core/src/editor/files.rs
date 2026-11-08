@@ -1883,9 +1883,9 @@ impl Editor {
         if self.refuse_to_overwrite(&target, force) {
             return Ok(CommandOutcome::Continue);
         }
-        let written = crate::export::export(&self.current_buffer().text(), format, &style);
+        let written = crate::export::export_file(&self.current_buffer().text(), format, &style);
         // Written the way a save is written: whole, or not at all.
-        crate::buffer::write_file_atomically(&target, &written).map_err(EditorError::Io)?;
+        crate::buffer::write_binary_atomically(&target, &written).map_err(EditorError::Io)?;
         self.status = say!("export.wrote", target.display());
         Ok(CommandOutcome::Continue)
     }
