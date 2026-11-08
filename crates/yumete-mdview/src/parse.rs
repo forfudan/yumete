@@ -173,12 +173,34 @@ pub fn parse(text: &str) -> Vec<Block> {
 #[derive(Default)]
 pub struct Cache {
     runs: std::collections::HashMap<u64, Vec<Inline>>,
+    /// The ruby spellings read, or `None` for all three.
+    ruby: Option<yumete_core::ruby::Dialects>,
+}
+
+impl Cache {
+    /// **Which ruby spellings are read** (2026-11-08): `[export] ruby_html`,
+    /// `ruby_typst` and `ruby_markdown`, the preview being publication as an
+    /// export is. A change reads every paragraph again.
+    pub fn set_ruby(&mut self, ruby: yumete_core::ruby::Dialects) {
+        if self.ruby != Some(ruby) {
+            self.ruby = Some(ruby);
+            self.runs.clear();
+        }
+    }
+}
+
+/// All three ruby spellings.
+fn every_ruby() -> yumete_core::ruby::Dialects {
+    let mut all = yumete_core::ruby::Dialects::NONE;
+    yumete_core::ruby::Dialect::ALL.into_iter().for_each(|d| all.insert(d));
+    all
 }
 
 /// [`parse`], keeping what can be kept in `cache` for the next time.
 pub fn parse_with(text: &str, cache: &mut Cache) -> Vec<Block> {
     let lines = prepare(text);
-    let mut reader = Reader { old: std::mem::take(&mut cache.runs), refs: link_definitions(&lines), ..Reader::default() };
+    let ruby = cache.ruby.unwrap_or_else(every_ruby);
+    let mut reader = Reader { old: std::mem::take(&mut cache.runs), refs: link_definitions(&lines), ruby, ..Reader::default() };
     let mut blocks = Vec::new();
     // Front matter: `---` on the first line, `key: value` under it, to a `---`.
     let mut from = 0;
@@ -514,6 +536,8 @@ struct Reader {
     /// The runs kept from the last parse, and those kept for the next.
     old: std::collections::HashMap<u64, Vec<Inline>>,
     new: std::collections::HashMap<u64, Vec<Inline>>,
+    /// The ruby spellings read.
+    ruby: yumete_core::ruby::Dialects,
 }
 
 impl Reader {
@@ -970,7 +994,7 @@ impl Reader {
         }
         let chars: Vec<char> = text.chars().collect();
         let spans = markdown::spans(&text);
-        let groups = yumete_core::ruby::groups(&chars, yumete_core::ruby::Dialects::only(yumete_core::ruby::Dialect::Html));
+        let groups = yumete_core::ruby::groups(&chars, self.ruby);
         let line_at = |i: usize| -> usize {
             let k = starts.partition_point(|s| s.0 <= i).saturating_sub(1);
             starts.get(k).map_or(0, |s| s.1)
@@ -1017,10 +1041,21 @@ impl Reader {
         while i < chars.len() {
             let line = line_at(i);
             if let Some(group) = groups.iter().find(|g| g.start == i) {
-                let base = group.dialect.unescape(&group.base_text(&chars).iter().collect::<String>());
-                let reading = group.dialect.unescape(&group.reading_text(&chars).iter().collect::<String>());
+                let base = group.base_of(&chars);
+                let reading = group.reading_of(&chars);
                 let marks = marks_at(i, html, false);
-                out.push(Inline { line, kind: InlineKind::Ruby { base, reading, marks } });
+                // A reading per character (`{气象|qì|xiàng}`) is one group
+                // a character, as `<ruby>` writes it.
+                let parts: Vec<&str> = reading.split(yumete_core::ruby::SPLIT).collect();
+                match parts.len() > 1 && parts.len() == base.chars().count() {
+                    true => {
+                        for (c, part) in base.chars().zip(parts) {
+                            let (base, reading) = (c.to_string(), part.to_string());
+                            out.push(Inline { line, kind: InlineKind::Ruby { base, reading, marks } });
+                        }
+                    }
+                    false => out.push(Inline { line, kind: InlineKind::Ruby { base, reading, marks } }),
+                }
                 i = group.end.max(i + 1);
                 continue;
             }
@@ -1339,6 +1374,20 @@ mod tests {
             BlockKind::Paragraph(runs) => runs,
             other => panic!("not a paragraph: {other:?}"),
         }
+    }
+
+    /// **The brace form is ruby too** (2026-11-08), one group a character
+    /// where the bars give a reading each, and not in a code span; and the
+    /// spellings read are the export's.
+    #[test]
+    fn the_brace_form_is_ruby() {
+        assert_eq!(plain(&para("山顶的{气象站|qìxiàngzhàn}。")), "山顶的气象站(qìxiàngzhàn)。");
+        assert_eq!(plain(&para("{气象|qì|xiàng}站")), "气(qì)象(xiàng)站");
+        assert_eq!(plain(&para("写 `{雨|yǔ}` 即可")), "写 {雨|yǔ} 即可");
+        let mut cache = Cache::default();
+        cache.set_ruby(yumete_core::ruby::Dialects::only(yumete_core::ruby::Dialect::Html));
+        let blocks = parse_with("{雨|yǔ}", &mut cache);
+        assert!(matches!(&blocks[0].kind, BlockKind::Paragraph(r) if plain(r) == "{雨|yǔ}"), "{blocks:?}");
     }
 
     fn marks_of(runs: &[Inline], word: &str) -> Marks {

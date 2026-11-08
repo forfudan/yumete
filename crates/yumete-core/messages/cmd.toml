@@ -1021,6 +1021,12 @@ zhs = "不读 <ruby> 注音"
 en = "leave <ruby> as written"
 
 [[message]]
+# : 命令選單裏 no-ruby-markdown 那一項的説明(export 組)（草稿）
+key = "cmd.export.no-ruby-markdown"
+zhs = "不读 {{这些|zhèxiē}} 注音"
+en = "leave {{漢字|かんじ}} as written"
+
+[[message]]
 # : 命令選單裏 no-ruby-typst 那一項的説明(export 組)（草稿）
 key = "cmd.export.no-ruby-typst"
 zhs = "不读 #ruby 注音"
@@ -1037,6 +1043,12 @@ en = "the paper, as page=A5 or page=130x184"
 key = "cmd.export.ruby-html"
 zhs = "读 <ruby> 注音"
 en = "read <ruby> as ruby"
+
+[[message]]
+# : 命令選單裏 ruby-markdown 那一項的説明(export 組)（草稿）
+key = "cmd.export.ruby-markdown"
+zhs = "读 {{这些|zhèxiē}} 注音"
+en = "read {{漢字|かんじ}} as ruby"
 
 [[message]]
 # : 命令選單裏 ruby-typst 那一項的説明(export 組)（草稿）
@@ -1502,6 +1514,12 @@ zhs = "改写成 `<ruby>`"
 en = "rewrite as `<ruby>`"
 
 [[message]]
+# : 命令選單裏 markdown 那一項的説明(ruby.format 組)（草稿）
+key = "cmd.ruby.format.markdown"
+zhs = "改写成 `{{这些|zhèxiē}}`"
+en = "rewrite as `{{漢字|かんじ}}`"
+
+[[message]]
 # : 命令選單裏 typst 那一項的説明(ruby.format 組)
 key = "cmd.ruby.format.typst"
 zhs = "改写成 `#ruby(…)`"
@@ -1520,6 +1538,13 @@ key = "cmd.ruby.html"
 zhs = "识别 `<ruby>`"
 en = "recognise `<ruby>`"
 find = "注音 拼音 html ruby"
+
+[[message]]
+# : 命令選單裏 markdown 那一項的説明(ruby 組)（草稿）
+key = "cmd.ruby.markdown"
+zhs = "识别 `{{这些|zhèxiē}}`"
+en = "recognise `{{漢字|かんじ}}`"
+find = "注音 拼音 markdown 大括号"
 
 [[message]]
 # : 命令選單裏 off 那一項的説明(ruby 組)

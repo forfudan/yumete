@@ -176,6 +176,9 @@ pub struct Settings {
     pub ruby_html: bool,
     /// Whether Typst's `#ruby` in the source is read as ruby.
     pub ruby_typst: bool,
+    /// Whether the brace form, `{漢字|かんじ}`, is read as ruby in a Markdown
+    /// source.
+    pub ruby_markdown: bool,
     /// How half-width letters and digits are set down a vertical page.
     pub latin: Latin,
     /// The paper a printed copy is set on.
@@ -192,6 +195,7 @@ impl Default for Settings {
             hanging: false,
             ruby_html: true,
             ruby_typst: true,
+            ruby_markdown: true,
             latin: Latin::Turn,
             paper: Paper::A5,
             fonts: DEFAULT_FONTS.to_string(),
@@ -203,7 +207,7 @@ impl Default for Settings {
 /// setting of the same name for one export. `page=` and `font=` take a value.
 pub const WORDS: &[&str] = &[
     "vertical", "horizontal", "hanging", "no-hanging", "ruby-html", "no-ruby-html", "ruby-typst", "no-ruby-typst",
-    "turn", "jlreq", "page=", "font=",
+    "ruby-markdown", "no-ruby-markdown", "turn", "jlreq", "page=", "font=",
 ];
 
 impl Settings {
@@ -215,6 +219,9 @@ impl Settings {
         }
         if self.ruby_typst {
             set.insert(Dialect::Typst);
+        }
+        if self.ruby_markdown {
+            set.insert(Dialect::Markdown);
         }
         set
     }
@@ -237,6 +244,8 @@ impl Settings {
             "no-ruby-html" => set(&mut self.ruby_html, false),
             "ruby-typst" => set(&mut self.ruby_typst, true),
             "no-ruby-typst" => set(&mut self.ruby_typst, false),
+            "ruby-markdown" => set(&mut self.ruby_markdown, true),
+            "no-ruby-markdown" => set(&mut self.ruby_markdown, false),
             "turn" => {
                 self.latin = Latin::Turn;
                 Some(Ok(()))
@@ -909,13 +918,19 @@ fn line_into(
 ) -> String {
     use crate::syntax::Syntax;
     let chars: Vec<char> = line.chars().collect();
+    // The brace form is Markdown's (YFM): in a Typst or a plain file a
+    // `{a|b}` is the writer's own braces.
+    let mut dialects = dialects;
+    if source != Syntax::Markdown {
+        dialects.remove(Dialect::Markdown);
+    }
     let groups = ruby::groups(&chars, dialects);
     // A formula is drawn only where it is TeX — Markdown's — and only into a
     // page that can show a picture; Typst's `$…$` is Typst's maths.
     let paint = match (dialect, source) {
         (Dialect::Html, Syntax::Typst | Syntax::Text) => None,
         (Dialect::Html, _) => painter,
-        (Dialect::Typst, _) => None,
+        (Dialect::Typst | Dialect::Markdown, _) => None,
     };
     // Warning: **讀的是源檔的語法，不是要寫成的格式**（2026-09-28）。從前這裏寫死
     // `markdown::spans`，於是一份 Typst 稿子導出去，`*粗*` 是四個字符、`$a+b$` 被
@@ -969,11 +984,9 @@ fn render(
         // characters the Markdown scan would read as delimiters.
         if let Some(group) = groups.iter().find(|g| g.start == at && g.end <= to) {
             out.push_str(&escape(&std::mem::take(&mut plain)));
-            let base: String = group.base_text(chars).iter().collect();
-            let reading: String = group.reading_text(chars).iter().collect();
             // Read out of the dialect it was written in first (#332).
-            let base = group.dialect.unescape(&base);
-            let reading = group.dialect.unescape(&reading);
+            let base = group.base_of(chars);
+            let reading = group.reading_of(chars);
             // The text inside the markup is the writer's, so it is escaped —
             // but **by the rule of the place it lands in**. Typst's call takes
             // two string literals, where `escape` (which escapes Typst
@@ -982,7 +995,7 @@ fn render(
             // and does it; here the target is markup only for HTML.
             let (base, reading) = match dialect {
                 Dialect::Html => (escape(&base), escape(&reading)),
-                Dialect::Typst => (base, reading),
+                Dialect::Typst | Dialect::Markdown => (base, reading),
             };
             let base: Vec<char> = base.chars().collect();
             out.push_str(&ruby::markup(&base, &reading, dialect));
@@ -2624,6 +2637,27 @@ mod tests {
         assert_eq!(out.matches("<img class=\"math turned\"").count(), 2, "{out}");
         let out = export("写下：\n\n$$\nx\n$$\n", Format::Html, &j);
         assert!(out.contains("<img class=\"math display turned\""), "{out}");
+    }
+
+    /// **The brace form goes out as ruby** (2026-11-08): `<ruby>` in HTML, a
+    /// reading a character where the bars give one, `#ruby` in Typst; left
+    /// as written with `no-ruby-markdown`, and never read in a Typst source.
+    #[test]
+    fn the_brace_form_goes_out_as_ruby() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let out = export("山顶的{气象站|qìxiàngzhàn}，{雨量|yǔ|liàng}。\n", Format::Html, &s);
+        assert!(out.contains("山顶的<ruby>气象站<rt>qìxiàngzhàn</rt></ruby>，<ruby>雨<rt>yǔ</rt></ruby><ruby>量<rt>liàng</rt></ruby>。"), "{out}");
+        let typ = export("{雨量|yǔ|liàng}\n", Format::Typst, &s);
+        assert!(typ.contains("#ruby(\"雨\", \"yǔ\")#ruby(\"量\", \"liàng\")"), "{typ}");
+        s.settings.ruby_markdown = false;
+        assert!(export("{雨|yǔ}\n", Format::Html, &s).contains("{雨|yǔ}"));
+        s.settings.ruby_markdown = true;
+        s.source = crate::syntax::Syntax::Typst;
+        assert!(!export("{雨|yǔ}\n", Format::Html, &s).contains("<ruby>"));
+        let mut words = Settings::default();
+        assert_eq!(words.read_line("no-ruby-markdown").unwrap(), None);
+        assert!(!words.ruby_markdown && !words.dialects().contains(Dialect::Markdown));
     }
 
     /// **The words of an `:export` line** (2026-11-08): any order, the path

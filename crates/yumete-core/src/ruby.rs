@@ -4,7 +4,9 @@
 //! *how* is a property of the document, not of yumete. A Markdown file wants
 //! HTML ruby, which is what the Yuhao documentation is already written in and
 //! what a browser renders unchanged; a Typst file wants Typst's call, which its
-//! own compiler will typeset. So the markup is a [`Dialect`], the editor renders
+//! own compiler will typeset; and since 2026-11-08 a Markdown file may also
+//! use the brace form Denden Markdown, VFM and markdown-it-ruby share,
+//! `{漢字|かんじ}`. So the markup is a [`Dialect`], the editor renders
 //! whichever ones a file uses — several at once, if it mixes them — and
 //! [`markup`] writes the one it is told to.
 //!
@@ -19,25 +21,37 @@ pub enum Dialect {
     Html,
     /// `#ruby("漢字", "hàn zì")` — Typst, which compiles it straight to type.
     Typst,
+    /// **`{漢字|hàn zì}` and `{漢字|hàn|zì}`** (2026-11-08) — the brace form of
+    /// Denden Markdown, VFM and markdown-it-ruby, part of YFM. One reading
+    /// over the whole base, or one per character when the bars split it into
+    /// exactly as many readings as the base has characters; with any other
+    /// count it is one reading over the whole base (Denden's rule: 「一致しない
+    /// 場合にはグループルビになります」), the parts run together. A backslash
+    /// escapes a brace or a bar, and `{|` opens nothing, so
+    /// `foo{|bar| bar.buz}` is not ruby. Not read in a code span or a
+    /// formula.
+    Markdown,
 }
 
 impl Dialect {
     /// Every dialect, in the order they are searched.
-    pub const ALL: [Dialect; 2] = [Dialect::Html, Dialect::Typst];
+    pub const ALL: [Dialect; 3] = [Dialect::Html, Dialect::Typst, Dialect::Markdown];
 
     /// The name used in commands and config (`html`, `typst`).
     pub fn name(self) -> &'static str {
         match self {
             Dialect::Html => "html",
             Dialect::Typst => "typst",
+            Dialect::Markdown => "markdown",
         }
     }
 
     /// Parse a dialect name, as a `:render-ruby-…` command or a config value.
     pub fn parse_name(value: &str) -> Option<Dialect> {
         match value.trim().to_ascii_lowercase().as_str() {
-            "html" | "markdown" | "md" => Some(Dialect::Html),
+            "html" => Some(Dialect::Html),
             "typst" | "typ" => Some(Dialect::Typst),
+            "markdown" | "md" => Some(Dialect::Markdown),
             _ => None,
         }
     }
@@ -61,6 +75,7 @@ impl Dialect {
         match self {
             Dialect::Html => ("<ruby>", "<rt>", "</rt></ruby>"),
             Dialect::Typst => ("#ruby(\"", "\", \"", "\")"),
+            Dialect::Markdown => ("{", "|", "}"),
         }
     }
 
@@ -86,6 +101,18 @@ impl Dialect {
     pub fn escape(self, text: &str) -> String {
         match self {
             Dialect::Html => text.to_string(),
+            // A brace or a bar in the text would end the base or the
+            // reading; a backslash would escape what follows it.
+            Dialect::Markdown => {
+                let mut out = String::with_capacity(text.len());
+                for c in text.chars() {
+                    if matches!(c, '\\' | '{' | '}' | '|') {
+                        out.push('\\');
+                    }
+                    out.push(c);
+                }
+                out
+            }
             Dialect::Typst => {
                 let mut out = String::with_capacity(text.len());
                 for c in text.chars() {
@@ -111,11 +138,15 @@ impl Dialect {
         if self == Dialect::Html || !text.contains('\\') {
             return text.to_string();
         }
+        let escaped = |c: &char| match self {
+            Dialect::Markdown => matches!(c, '\\' | '{' | '}' | '|'),
+            _ => matches!(c, '"' | '\\'),
+        };
         let mut out = String::with_capacity(text.len());
         let mut chars = text.chars().peekable();
         while let Some(c) = chars.next() {
             match (c, chars.peek()) {
-                ('\\', Some('"' | '\\')) => out.push(chars.next().expect("peeked")),
+                ('\\', Some(next)) if escaped(next) => out.push(chars.next().expect("peeked")),
                 _ => out.push(c),
             }
         }
@@ -136,7 +167,50 @@ impl Dialect {
         match self {
             Dialect::Html => self.html_element(chars, from),
             Dialect::Typst => self.call(chars, from).into_iter().collect(),
+            Dialect::Markdown => self.braces(chars, from).into_iter().collect(),
         }
+    }
+
+    /// One `{base|reading}`, the whole of it as one group: a reading split
+    /// per character stays in it, bars and all, as [`markup`] writes one
+    /// (`漢|字` read `かん|じ`), and [`Ruby::reading_of`] says which it is.
+    fn braces(self, chars: &[char], from: usize) -> Option<Ruby> {
+        let quiet = code_or_maths(chars);
+        let plain = |i: usize, c: char| chars[i] == c && !escaped(chars, i) && !quiet[i];
+        let mut i = from;
+        'open: while i < chars.len() {
+            if !plain(i, '{') {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            let mut bar = None;
+            let mut k = start + 1;
+            while k < chars.len() {
+                match chars[k] {
+                    // Another brace before this one is done: start again there.
+                    '{' if plain(k, '{') => {
+                        i = k;
+                        continue 'open;
+                    }
+                    '}' if plain(k, '}') => break,
+                    // A group is written on one line.
+                    '\n' => break,
+                    '|' if bar.is_none() && plain(k, '|') => bar = Some(k),
+                    _ if quiet[k] => break,
+                    _ => {}
+                }
+                k += 1;
+            }
+            match bar {
+                // `{|` is not a base, and a reading cannot be empty.
+                Some(bar) if bar > start + 1 && k < chars.len() && chars[k] == '}' && k > bar + 1 => {
+                    return Some(Ruby { dialect: self, start, end: k + 1, base: (start + 1, bar), reading: (bar + 1, k) });
+                }
+                _ => i = start + 1,
+            }
+        }
+        None
     }
 
     /// One `<ruby>…</ruby>`, as the pairs inside it.
@@ -270,6 +344,43 @@ impl Dialect {
 
 }
 
+/// Whether the character at `at` is escaped: an odd run of backslashes before
+/// it.
+fn escaped(chars: &[char], at: usize) -> bool {
+    chars[..at].iter().rev().take_while(|&&c| c == '\\').count() % 2 == 1
+}
+
+/// **Which characters of a line are in a code span or a formula**, where the
+/// brace form is not read: `` `{a|b}` `` and `$\{x|y\}$` are the writer's
+/// code and maths. A run of backticks closes at the next run as long; a `$`
+/// or `$$` closes at the next one like it.
+fn code_or_maths(chars: &[char]) -> Vec<bool> {
+    let mut quiet = vec![false; chars.len()];
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if (c != '`' && c != '$') || escaped(chars, i) {
+            i += 1;
+            continue;
+        }
+        let run = chars[i..].iter().take_while(|&&d| d == c).count();
+        let run = if c == '$' { run.min(2) } else { run };
+        let close = (i + run..chars.len()).find(|&k| {
+            chars[k..].iter().take_while(|&&d| d == c).count() >= run
+                && !escaped(chars, k)
+                && (c != '`' || chars[k..].iter().take_while(|&&d| d == c).count() == run)
+        });
+        match close {
+            Some(k) => {
+                quiet[i..k + run].iter_mut().for_each(|q| *q = true);
+                i = k + run;
+            }
+            None => i += run,
+        }
+    }
+    quiet
+}
+
 /// Where the string opened at `from` closes: the index of its `"`.
 ///
 /// `\` escapes the next character, so `\"` is a quote in the string and not
@@ -400,6 +511,37 @@ impl Ruby {
     pub fn reading_text<'a>(&self, chars: &'a [char]) -> &'a [char] {
         &chars[self.reading.0..self.reading.1]
     }
+
+    /// **The base as it reads**, its dialect's escaping taken off.
+    pub fn base_of(&self, chars: &[char]) -> String {
+        self.dialect.unescape(&self.base_text(chars).iter().collect::<String>())
+    }
+
+    /// **The reading as it reads**, its dialect's escaping taken off. A
+    /// reading split per character is written with [`SPLIT`] between, as
+    /// [`markup`] takes it (`かん|じ` over 漢字). For the brace form that is
+    /// how it is written when the count matches the base; with any other
+    /// count the parts run together, one reading over the whole base, as
+    /// Denden Markdown reads it.
+    pub fn reading_of(&self, chars: &[char]) -> String {
+        if self.dialect != Dialect::Markdown {
+            return self.dialect.unescape(&self.reading_text(chars).iter().collect::<String>());
+        }
+        let raw = self.reading_text(chars);
+        let mut parts: Vec<String> = vec![String::new()];
+        for (k, &c) in raw.iter().enumerate() {
+            match c == SPLIT && !escaped(raw, k) {
+                true => parts.push(String::new()),
+                false => parts.last_mut().expect("one part at least").push(c),
+            }
+        }
+        let parts: Vec<String> = parts.iter().map(|p| self.dialect.unescape(p)).collect();
+        let base = self.base_of(chars).chars().count();
+        match parts.len() > 1 && parts.len() == base {
+            true => parts.join(&SPLIT.to_string()),
+            false => parts.concat(),
+        }
+    }
 }
 
 /// Every well-formed group of any enabled dialect, in order and non-overlapping.
@@ -438,10 +580,13 @@ pub fn groups(chars: &[char], dialects: Dialects) -> Vec<Ruby> {
 /// right answer, since guessing at them is how #330 wrote 字 into a reading —
 /// and this is the sentence that says so.
 pub fn unread(text: &str, into: Dialect) -> usize {
-    let other = match into {
-        Dialect::Html => Dialect::Typst,
-        Dialect::Typst => Dialect::Html,
-    };
+    // The brace form leaves nothing half-read to count: a brace that opens
+    // no group is a brace.
+    [Dialect::Html, Dialect::Typst].into_iter().filter(|&other| other != into).map(|other| unread_of(text, other)).sum()
+}
+
+/// How many openings of `other` in `text` no group of it covers.
+fn unread_of(text: &str, other: Dialect) -> usize {
     let chars: Vec<char> = text.chars().collect();
     let read = groups(&chars, Dialects::only(other));
     let opens = match other {
@@ -463,6 +608,7 @@ pub fn unread(text: &str, into: Dialect) -> usize {
             }
             found
         }
+        Dialect::Markdown => Vec::new(),
     };
     opens
         .into_iter()
@@ -505,6 +651,12 @@ pub const SPLIT: char = '|';
 /// single group over the whole base.
 pub fn markup(base: &[char], reading: &str, dialect: Dialect) -> String {
     let parts: Vec<&str> = reading.split(SPLIT).collect();
+    // The brace form says per character in one group: `{漢字|かん|じ}`.
+    if dialect == Dialect::Markdown && parts.len() > 1 && parts.len() == base.len() {
+        let base: String = base.iter().collect();
+        let parts: Vec<String> = parts.iter().map(|p| dialect.escape(p)).collect();
+        return format!("{{{}|{}}}", dialect.escape(&base), parts.join("|"));
+    }
     if parts.len() > 1 && parts.len() == base.len() {
         return base
             .iter()
@@ -520,9 +672,10 @@ pub fn markup(base: &[char], reading: &str, dialect: Dialect) -> String {
 ///
 /// Returns `None` when nothing would change, so a no-op `:format-ruby-…` does
 /// not push an undo step.
-pub fn reformat(text: &str, dialect: Dialect) -> Option<String> {
+/// `from` is the spellings read: the brace form only where it is a reading.
+pub fn reformat(text: &str, dialect: Dialect, from: Dialects) -> Option<String> {
     let chars: Vec<char> = text.chars().collect();
-    let groups = all_groups(&chars);
+    let groups = groups(&chars, from);
     if groups.iter().all(|g| g.dialect == dialect) {
         return None;
     }
@@ -533,10 +686,8 @@ pub fn reformat(text: &str, dialect: Dialect) -> Option<String> {
         // Off with the dialect it was written in, on with the one it is going
         // into: `#ruby("say \"hi\"", …)` becomes `<ruby>say "hi"<rt>…`, and
         // back again (#332).
-        let base: String = group.base_text(&chars).iter().collect();
-        let reading: String = group.reading_text(&chars).iter().collect();
-        let (base, reading) = (group.dialect.unescape(&base), group.dialect.unescape(&reading));
-        out.push_str(&dialect.write(&base, &reading));
+        let base: Vec<char> = group.base_of(&chars).chars().collect();
+        out.push_str(&markup(&base, &group.reading_of(&chars), dialect));
         at = group.end;
     }
     out.extend(&chars[at..]);
@@ -560,6 +711,7 @@ fn find(chars: &[char], needle: &str, from: usize) -> Option<usize> {
 pub fn might_be_in(text: &str, dialects: Dialects) -> bool {
     (dialects.contains(Dialect::Html) && text.contains("<ruby"))
         || (dialects.contains(Dialect::Typst) && text.contains("#ruby("))
+        || (dialects.contains(Dialect::Markdown) && text.contains('{') && text.contains('|'))
 }
 
 fn starts_with(chars: &[char], needle: &str, at: usize) -> bool {
@@ -581,6 +733,62 @@ mod tests {
 
     /// Most of these read HTML, the dialect the Yuhao documents use.
     const HTML: Dialects = Dialects(1 << (Dialect::Html as u8));
+    /// Every spelling.
+    const EVERY: Dialects = Dialects(0b111);
+    const BRACES: Dialects = Dialects(1 << (Dialect::Markdown as u8));
+
+    /// The brace groups of `text`: base and reading as they read.
+    fn braces(text: &str) -> Vec<(String, String)> {
+        let chars: Vec<char> = text.chars().collect();
+        groups(&chars, BRACES).iter().map(|g| (g.base_of(&chars), g.reading_of(&chars))).collect()
+    }
+
+    /// **The brace form** (2026-11-08), as Denden Markdown reads it: one
+    /// reading over the base, one per character when the count matches, one
+    /// over the base run together when it does not.
+    #[test]
+    fn reads_the_brace_form() {
+        let pair = |b: &str, r: &str| (b.to_string(), r.to_string());
+        assert_eq!(braces("山上{气象站|qìxiàngzhàn}的灯"), [pair("气象站", "qìxiàngzhàn")]);
+        assert_eq!(braces("{气象|qì|xiàng}站"), [pair("气象", "qì|xiàng")]);
+        assert_eq!(braces("{气象站|qì|xiàngzhàn}"), [pair("气象站", "qìxiàngzhàn")]);
+        // Two in a row, and the second after plain text.
+        assert_eq!(braces("{雨|yǔ}与{雪|xuě}"), [pair("雨", "yǔ"), pair("雪", "xuě")]);
+        // `{|` opens nothing, an empty reading is none, and a brace that never
+        // closes is a brace.
+        assert!(braces("foo{|bar| bar.buz}").is_empty());
+        assert!(braces("{雨|}").is_empty() && braces("{雨|yǔ").is_empty() && braces("{雨}").is_empty());
+        // Escaped, a brace or a bar is text, in the base or out of it.
+        assert!(braces(r"\{雨|yǔ}").is_empty() && braces(r"{雨\|yǔ}").is_empty());
+        assert_eq!(braces(r"{a\|b|c}"), [pair("a|b", "c")]);
+        // Not in a code span, not in a formula.
+        assert!(braces("写成 `{雨|yǔ}` 就行").is_empty());
+        assert!(braces("集合 $\\{x|x>0\\}$ 里").is_empty());
+        assert_eq!(braces("`代码` 之后 {雨|yǔ}"), [pair("雨", "yǔ")]);
+        // A group is written on one line.
+        assert!(braces("{雨|y\nǔ}").is_empty());
+    }
+
+    /// The brace form is written as Denden writes it, and every spelling
+    /// rewrites into it and back out of it.
+    #[test]
+    fn writes_and_rewrites_the_brace_form() {
+        let base: Vec<char> = "气象".chars().collect();
+        assert_eq!(markup(&base, "qìxiàng", Dialect::Markdown), "{气象|qìxiàng}");
+        assert_eq!(markup(&base, "qì|xiàng", Dialect::Markdown), "{气象|qì|xiàng}");
+        assert_eq!(Dialect::Markdown.write("a|b", "c}"), r"{a\|b|c\}}");
+        let html = "看<ruby>气<rt>qì</rt></ruby><ruby>象<rt>xiàng</rt></ruby>";
+        assert_eq!(reformat(html, Dialect::Markdown, EVERY).as_deref(), Some("看{气|qì}{象|xiàng}"));
+        assert_eq!(
+            reformat("看{气象|qì|xiàng}", Dialect::Html, EVERY).as_deref(),
+            Some("看<ruby>气<rt>qì</rt></ruby><ruby>象<rt>xiàng</rt></ruby>")
+        );
+        assert_eq!(reformat("看{气象|qìxiàng}", Dialect::Typst, EVERY).as_deref(), Some("看#ruby(\"气象\", \"qìxiàng\")"));
+        // Where the brace form is not read, a brace is left alone.
+        assert_eq!(reformat("看{气象|qìxiàng}", Dialect::Typst, HTML), None);
+        assert_eq!(Dialect::parse_name("markdown"), Some(Dialect::Markdown));
+        assert_eq!(Dialect::parse_name("html"), Some(Dialect::Html));
+    }
 
     fn parse(text: &str) -> Vec<(String, String)> {
         let chars: Vec<char> = text.chars().collect();
@@ -716,11 +924,11 @@ mod tests {
     fn reformat_rewrites_between_dialects() {
         let html = "讀<ruby>漢<rt>hàn</rt></ruby>";
         let typst = "讀#ruby(\"漢\", \"hàn\")";
-        assert_eq!(reformat(html, Dialect::Typst).as_deref(), Some(typst));
-        assert_eq!(reformat(typst, Dialect::Html).as_deref(), Some(html));
+        assert_eq!(reformat(html, Dialect::Typst, EVERY).as_deref(), Some(typst));
+        assert_eq!(reformat(typst, Dialect::Html, EVERY).as_deref(), Some(html));
         // Nothing to change reports nothing to change.
-        assert_eq!(reformat(html, Dialect::Html), None);
-        assert_eq!(reformat("no ruby here", Dialect::Html), None);
+        assert_eq!(reformat(html, Dialect::Html, EVERY), None);
+        assert_eq!(reformat("no ruby here", Dialect::Html, EVERY), None);
     }
 
     /// #332: a quote in an English annotation used to write a Typst file
@@ -761,8 +969,8 @@ mod tests {
         // Between dialects, off with one and on with the other.
         let html = r#"<ruby>桜<rt>say "hi"</rt></ruby>"#;
         let typst = r#"#ruby("桜", "say \"hi\"")"#;
-        assert_eq!(reformat(html, Dialect::Typst).as_deref(), Some(typst));
-        assert_eq!(reformat(typst, Dialect::Html).as_deref(), Some(html));
+        assert_eq!(reformat(html, Dialect::Typst, EVERY).as_deref(), Some(typst));
+        assert_eq!(reformat(typst, Dialect::Html, EVERY).as_deref(), Some(html));
 
         // An unterminated string is not a group, and does not eat the line
         // after it looking for its quote.

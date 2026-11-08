@@ -14692,9 +14692,12 @@ fn reading_line(
         // can see and correct for; a missing one is a reading they will never
         // know was there.
         let mut want = want.max(col + usize::from(col > 0));
-        let reading: String = text[group.reading.0.min(text.len())..group.reading.1.min(text.len())]
-            .iter()
-            .collect();
+        // As it reads: a reading per character (`qì|xiàng` in the brace
+        // form) is drawn with a space where the bar is.
+        let reading: String = match group.reading.1 <= text.len() {
+            true => group.reading_of(&text).replace(yumete_core::ruby::SPLIT, " "),
+            false => String::new(),
+        };
         if reading.is_empty() {
             continue;
         }

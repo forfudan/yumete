@@ -3418,6 +3418,9 @@ pub struct ExportConfig {
     pub ruby_html: bool,
     /// Whether Typst ruby in the source (`#ruby[漢][han]`) is read as ruby.
     pub ruby_typst: bool,
+    /// Whether the brace form, `{漢字|かんじ}`, is read as ruby in a Markdown
+    /// source (2026-11-08).
+    pub ruby_markdown: bool,
     /// The paper a printed copy is set on, in whole millimetres — the trim the
     /// `@media print` half of an HTML export is written for. 開本 is decided
     /// once for a book, so this is a configuration line and not a command.
@@ -3443,6 +3446,7 @@ impl Default for ExportConfig {
             hanging: false,
             ruby_html: true,
             ruby_typst: true,
+            ruby_markdown: true,
             page: (148, 210),
             vertical_latin: VerticalLatin::default(),
             font_family: DEFAULT_FONT_FAMILY.to_string(),
@@ -4654,6 +4658,7 @@ struct RawExport {
     hanging: Option<bool>,
     ruby_html: Option<bool>,
     ruby_typst: Option<bool>,
+    ruby_markdown: Option<bool>,
     page: Option<String>,
     vertical_latin: Option<String>,
     font_family: Option<String>,
@@ -5174,6 +5179,7 @@ impl RawConfig {
             (&mut self.export.hanging, other.export.hanging),
             (&mut self.export.ruby_html, other.export.ruby_html),
             (&mut self.export.ruby_typst, other.export.ruby_typst),
+            (&mut self.export.ruby_markdown, other.export.ruby_markdown),
         ] {
             if theirs.is_some() {
                 *mine = theirs;
@@ -5835,6 +5841,7 @@ impl RawConfig {
             (&mut export.hanging, self.export.hanging),
             (&mut export.ruby_html, self.export.ruby_html),
             (&mut export.ruby_typst, self.export.ruby_typst),
+            (&mut export.ruby_markdown, self.export.ruby_markdown),
         ] {
             if let Some(on) = from {
                 *to = on;

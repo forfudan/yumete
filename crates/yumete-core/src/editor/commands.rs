@@ -446,7 +446,7 @@ impl Editor {
                 // for: at 中階 nothing is drawn, so the toggle shows it.
                 self.render_ruby(dialect, on.over(self.ruby().contains(dialect)));
                 let listed_names: Vec<String> =
-                    self.ruby.iter().map(|d| d.name().to_string()).collect();
+                    self.ruby_configured().iter().map(|d| d.name().to_string()).collect();
                 self.status = if listed_names.is_empty() {
                     say!("ruby.layout-off")
                 } else {

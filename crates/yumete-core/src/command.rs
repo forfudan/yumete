@@ -2847,6 +2847,8 @@ const EXPORT_WORDS: &[Word] = &[
     Word { name: "no-ruby-html", help: "cmd.export.no-ruby-html", needs: &[] },
     Word { name: "ruby-typst", help: "cmd.export.ruby-typst", needs: &[] },
     Word { name: "no-ruby-typst", help: "cmd.export.no-ruby-typst", needs: &[] },
+    Word { name: "ruby-markdown", help: "cmd.export.ruby-markdown", needs: &[] },
+    Word { name: "no-ruby-markdown", help: "cmd.export.no-ruby-markdown", needs: &[] },
     Word { name: "turn", help: "cmd.export.turn", needs: &[] },
     Word { name: "jlreq", help: "cmd.export.jlreq", needs: &[] },
     Word { name: "page=", help: "cmd.export.page", needs: &[] },
@@ -2915,6 +2917,7 @@ const RUBY_LEVELS: &[Word] = &[
 const DIALECTS: &[Word] = &[
     Word { name: "html", help: "cmd.ruby.format.html", needs: &[] },
     Word { name: "typst", help: "cmd.ruby.format.typst", needs: &[] },
+    Word { name: "markdown", help: "cmd.ruby.format.markdown", needs: &[] },
 ];
 
 /// What `:word-mark` may be given: `off` and the four ways (2026-10-25).
@@ -5696,6 +5699,14 @@ pub const COMMANDS: &[Entry] = &[
         build: Some(|p| Ok(Command::RenderRuby { dialect: Dialect::Typst, on: switched(p) })),
     },
     Entry {
+        name: "ruby-markdown",
+        aliases: &[],
+        help: "cmd.ruby.markdown",
+        needs: &[],
+        params: &[Param::Words { of: SWITCH, default: None }],
+        build: Some(|p| Ok(Command::RenderRuby { dialect: Dialect::Markdown, on: switched(p) })),
+    },
+    Entry {
         name: "ruby-format",
         aliases: &[],
         help: "cmd.ruby.format",
@@ -7961,6 +7972,7 @@ mod tests {
                 "ruby-auto-rare",
                 "ruby-html",
                 "ruby-typst",
+                "ruby-markdown",
                 "ruby-format"
             ]
         );
@@ -7981,12 +7993,13 @@ mod tests {
                 "ruby-auto-rare",
                 "ruby-html",
                 "ruby-typst",
+                "ruby-markdown",
                 "ruby-format"
             ]
         );
         // The words a finished command takes, under the command itself.
         let format: Vec<String> = complete("ruby-format").iter().map(Choice::written).collect();
-        assert_eq!(format, ["ruby-format", "ruby-format html", "ruby-format typst"]);
+        assert_eq!(format, ["ruby-format", "ruby-format html", "ruby-format typst", "ruby-format markdown"]);
         // **An alias is another name, not a shortcut** (#363) — and once a
         // command's name is one word, that is all a short spelling has to be
         // (#368): `bc` is `buffer-close`'s declared alias, exactly as `wq` is

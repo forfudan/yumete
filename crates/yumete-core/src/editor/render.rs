@@ -324,6 +324,9 @@ impl Editor {
         // *and* drew them, so the tags came off while the status line said
         // 「標記留在畫面上」.
         self.ruby_drawn = how == Render::Full;
+        // The level is assigned outright, and the brace form goes back to
+        // following the file.
+        self.ruby_markdown = None;
     }
 
     /// Which of the three levels the reading dimension is on (#283).

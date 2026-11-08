@@ -228,6 +228,8 @@ enum RubyTarget {
     Existing {
         span: (usize, usize),
         base: (usize, usize),
+        /// The spelling it is written in, which a corrected reading keeps.
+        dialect: Dialect,
     },
     /// A stretch of plain text to wrap in new markup.
     New { span: (usize, usize) },
@@ -3794,6 +3796,10 @@ pub struct Editor {
     /// Drawing it means taking the tags off the page, and that is replacing,
     /// which 中階 does not do.
     ruby_drawn: bool,
+    /// **Whether the brace form is read** (`:ruby-markdown`, 2026-11-08):
+    /// `None` until the writer says, which reads it in a Markdown file and
+    /// not elsewhere — a `{a|b}` in a Typst file is the writer's braces.
+    ruby_markdown: Option<bool>,
     /// **Which way the reader asked for the text to run** (Feature #61).
     ///
     /// Warning: **Not necessarily how it is drawn.** A program file is always drawn
@@ -4726,6 +4732,7 @@ impl Editor {
             candidate: Vec::new(),
             ruby: Dialects::only(crate::ruby::Dialect::Html),
             ruby_drawn: true,
+            ruby_markdown: None,
             layout_wanted: Layout::default(),
             vertical_keys: yumete_cjk::VerticalKeys::default(),
             zong_length: DEFAULT_ZONG_LENGTH,

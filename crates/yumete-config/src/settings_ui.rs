@@ -1173,6 +1173,15 @@ pub const SETTINGS: &[Setting] = &[
     },
     Setting {
         table: "export",
+        key: "ruby_markdown",
+        group: Group::Files,
+        kind: Kind::Tick,
+        label: "settings.export.ruby-markdown",
+        hint: "settings.export.ruby-markdown.hint",
+        factory: "true",
+    },
+    Setting {
+        table: "export",
         key: "page",
         group: Group::Files,
         kind: Kind::Text,

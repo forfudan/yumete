@@ -607,12 +607,25 @@ impl Editor {
         if !self.ruby_drawn {
             return Dialects::NONE;
         }
-        self.ruby
+        self.ruby_configured()
     }
 
     /// The dialects the writer asked for, whatever the page is doing with them.
+    ///
+    /// The brace form ([`crate::ruby::Dialect::Markdown`]) is in it where
+    /// `:ruby-markdown` put it, and otherwise in a Markdown file only.
     pub fn ruby_configured(&self) -> Dialects {
-        self.ruby
+        let mut set = self.ruby;
+        if !self.reads_braces() {
+            set.remove(crate::ruby::Dialect::Markdown);
+        }
+        set
+    }
+
+    /// Whether the brace form is a reading in this buffer: as `:ruby-markdown`
+    /// said, or else in a Markdown file.
+    pub(crate) fn reads_braces(&self) -> bool {
+        self.ruby_markdown.unwrap_or(self.current_buffer().syntax() == crate::syntax::Syntax::Markdown)
     }
 
     /// Replace the set of dialects being laid out.
@@ -622,6 +635,9 @@ impl Editor {
 
     /// Start laying out one more dialect, keeping the others.
     pub fn render_ruby(&mut self, dialect: crate::ruby::Dialect, on: bool) {
+        if dialect == crate::ruby::Dialect::Markdown {
+            self.ruby_markdown = Some(on);
+        }
         if on {
             self.ruby.insert(dialect);
             // Naming a spelling is asking to see it. `:ruby-typst` on a page

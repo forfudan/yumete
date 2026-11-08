@@ -845,6 +845,18 @@ zhs = "稿子里的 <ruby> 注音导出为注音"
 en = "<ruby> in the source is exported as ruby"
 
 [[message]]
+# 設置：导出时读 Markdown 注音（草稿）
+key = "settings.export.ruby-markdown"
+zhs = "导出 Markdown 注音"
+en = "Markdown ruby in export"
+
+[[message]]
+# 設置：导出时读 Markdown 注音——一句话（草稿）
+key = "settings.export.ruby-markdown.hint"
+zhs = "Markdown 稿子里的 {{这些|zhèxiē}} 导出为注音"
+en = "{{漢字|かんじ}} in a Markdown source is exported as ruby"
+
+[[message]]
 # 設置：导出时读 Typst 注音（草稿）
 key = "settings.export.ruby-typst"
 zhs = "导出 Typst 注音"

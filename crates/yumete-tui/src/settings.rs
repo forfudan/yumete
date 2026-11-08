@@ -530,6 +530,7 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
         hanging: export.hanging,
         ruby_html: export.ruby_html,
         ruby_typst: export.ruby_typst,
+        ruby_markdown: export.ruby_markdown,
         latin: match export.vertical_latin {
             yumete_config::VerticalLatin::Turn => yumete_core::export::Latin::Turn,
             yumete_config::VerticalLatin::Jlreq => yumete_core::export::Latin::Jlreq,

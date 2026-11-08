@@ -6,8 +6,15 @@ use yumete_cjk::actions::PlaceCmd;
 impl Editor {
     // ---- Ruby mode (Feature #65) ------------------------------------------
 
-    /// The dialect this buffer is written in, from its file extension.
+    /// The dialect this buffer is written in, from its file extension — and
+    /// the brace form in a Markdown file where it is the only spelling read
+    /// (2026-11-08): a writer who turned the others off writes `{…|…}`.
     fn file_dialect(&self) -> Dialect {
+        let read = self.ruby_configured();
+        let markdown = self.current_buffer().syntax() == crate::syntax::Syntax::Markdown;
+        if markdown && read == Dialects::only(Dialect::Markdown) {
+            return Dialect::Markdown;
+        }
         self.current_buffer()
             .path()
             .and_then(|p| p.extension())
@@ -164,7 +171,13 @@ impl Editor {
             return;
         }
         let text = self.current_buffer().text();
-        let Some((formatted, left)) = reformat_prose(&text, &self.lines_of_code(), dialect) else {
+        let mut from = Dialects::NONE;
+        for each in Dialect::ALL {
+            if each != Dialect::Markdown || self.reads_braces() || dialect == Dialect::Markdown {
+                from.insert(each);
+            }
+        }
+        let Some((formatted, left)) = reformat_prose(&text, &self.lines_of_code(), dialect, from) else {
             self.status = say!("ruby.already-in-that-form", dialect.name());
             return;
         };
@@ -249,11 +262,14 @@ impl Editor {
         let col = self.sel.head() - line_start;
 
         if let Some(group) = crate::ruby::group_at(&chars, col) {
-            self.command_line = group.reading_text(&chars).iter().collect();
+            // As it reads, a reading per character with bars between: what
+            // [`crate::ruby::markup`] takes back.
+            self.command_line = group.reading_of(&chars);
             self.command_caret = self.command_line.chars().count();
             self.ruby_target = Some(RubyTarget::Existing {
                 span: (line_start + group.start, line_start + group.end),
                 base: (line_start + group.base.0, line_start + group.base.1),
+                dialect: group.dialect,
             });
             self.mode = Mode::Ruby;
             return;
@@ -320,21 +336,23 @@ impl Editor {
         if self.refuse_readonly() {
             return;
         }
-        let (span, base) = match target {
-            RubyTarget::Existing { span, base } => (span, base),
-            RubyTarget::New { span } => (span, span),
+        let (span, base, dialect) = match target {
+            RubyTarget::Existing { span, base, dialect } => (span, base, Some(dialect)),
+            RubyTarget::New { span } => (span, span, None),
         };
         let rope = self.current_buffer().rope();
         if base.1 > rope.len_chars() || span.1 > rope.len_chars() {
             return;
         }
-        let base_chars: Vec<char> = rope.slice(base.0..base.1).chars().collect();
+        // The base as it reads: written again, it is escaped again.
+        let raw: String = rope.slice(base.0..base.1).chars().collect();
+        let base_chars: Vec<char> = dialect.map_or(raw.clone(), |d| d.unescape(&raw)).chars().collect();
         // An empty reading is how an annotation is removed: what is left is the
         // base, with the markup gone.
         let text = if reading.is_empty() {
             base_chars.iter().collect()
         } else {
-            crate::ruby::markup(&base_chars, reading, self.ruby.writer())
+            crate::ruby::markup(&base_chars, reading, dialect.unwrap_or_else(|| self.ruby_configured().writer()))
         };
 
         // A reading is text, and text going into a row obeys the row's rule:
@@ -447,7 +465,7 @@ impl Editor {
 /// the document into single lines would hide it from the parser. The cut is
 /// made only where prose meets code, which is the one place a group cannot
 /// reach across.
-fn reformat_prose(text: &str, code: &[bool], dialect: Dialect) -> Option<(String, usize)> {
+fn reformat_prose(text: &str, code: &[bool], dialect: Dialect, from: Dialects) -> Option<(String, usize)> {
     let mut runs: Vec<(bool, String)> = Vec::new();
     for (line, written) in text.split_inclusive('\n').enumerate() {
         let is_code = code.get(line).copied().unwrap_or(false);
@@ -464,7 +482,7 @@ fn reformat_prose(text: &str, code: &[bool], dialect: Dialect) -> Option<(String
             out.push_str(run);
             continue;
         }
-        let run = match crate::ruby::reformat(run, dialect) {
+        let run = match crate::ruby::reformat(run, dialect, from) {
             Some(rewritten) => {
                 changed = true;
                 rewritten
@@ -475,4 +493,57 @@ fn reformat_prose(text: &str, code: &[bool], dialect: Dialect) -> Option<(String
         out.push_str(&run);
     }
     changed.then_some((out, left))
+}
+
+#[cfg(test)]
+mod brace_tests {
+    use super::*;
+
+    fn with(text: &str, syntax: crate::syntax::Syntax) -> Editor {
+        let mut ed = Editor::new();
+        ed.current_buffer_mut().set_syntax_by_hand(syntax);
+        let _ = ed.current_buffer_mut().replace(0..0, text);
+        ed.execute(":ruby-render full").unwrap();
+        ed
+    }
+
+    /// **The brace form is read in a Markdown file, and elsewhere when asked**
+    /// (2026-11-08): `:ruby-markdown` on, off, and bare to flip.
+    #[test]
+    fn the_brace_form_is_read_in_markdown_and_where_asked() {
+        let mut ed = with("山顶的{气象站|qìxiàngzhàn}。", crate::syntax::Syntax::Markdown);
+        let found = ed.readings_on_line(0);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].dialect, Dialect::Markdown);
+        ed.execute(":ruby-markdown off").unwrap();
+        assert!(ed.readings_on_line(0).is_empty());
+        ed.execute(":ruby-markdown").unwrap();
+        assert_eq!(ed.readings_on_line(0).len(), 1, "{}", ed.status());
+
+        let mut ed = with("let f = {a|b};", crate::syntax::Syntax::Typst);
+        assert!(ed.readings_on_line(0).is_empty(), "a Typst file's braces are its own");
+        ed.execute(":ruby-markdown on").unwrap();
+        assert_eq!(ed.readings_on_line(0).len(), 1);
+        // The level, assigned outright, gives the file its own say back.
+        ed.execute(":ruby-render full").unwrap();
+        assert!(ed.readings_on_line(0).is_empty());
+    }
+
+    /// `:ruby-format markdown` writes every reading as braces, and back; the
+    /// reading under the cursor opens as it reads.
+    #[test]
+    fn readings_are_rewritten_into_braces_and_edited_there() {
+        let mut ed = with("看<ruby>雨<rt>yǔ</rt></ruby>和#ruby(\"雪\", \"xuě\")", crate::syntax::Syntax::Markdown);
+        ed.execute(":ruby-format markdown").unwrap();
+        assert_eq!(ed.current_buffer().text(), "看{雨|yǔ}和{雪|xuě}");
+        ed.execute(":ruby-format html").unwrap();
+        assert_eq!(ed.current_buffer().text(), "看<ruby>雨<rt>yǔ</rt></ruby>和<ruby>雪<rt>xuě</rt></ruby>");
+
+        let mut ed = with("{气象|qì|xiàng}站", crate::syntax::Syntax::Markdown);
+        ed.execute(":ruby").unwrap();
+        assert_eq!(ed.command_line, "qì|xiàng");
+        ed.command_line = "qì|xiāng".to_string();
+        ed.on_key(Key::Enter);
+        assert_eq!(ed.current_buffer().text(), "{气象|qì|xiāng}站", "the spelling it was written in");
+    }
 }

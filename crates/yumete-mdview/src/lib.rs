@@ -192,6 +192,13 @@ impl Preview {
         (self.width, self.height)
     }
 
+    /// **The ruby spellings read** (2026-11-08): `[export] ruby_html`,
+    /// `ruby_typst` and `ruby_markdown`; takes effect at the next
+    /// [`set_text`](Preview::set_text).
+    pub fn set_ruby(&mut self, ruby: yumete_core::ruby::Dialects) {
+        self.parse_cache.set_ruby(ruby);
+    }
+
     /// **The fonts the writing is set in** (2026-11-08): `[export]
     /// font_family`, the list the HTML and EPUB exports ask for, so the
     /// preview and the page agree. A new list lays every block out again.

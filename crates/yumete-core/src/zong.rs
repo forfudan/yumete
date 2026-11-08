@@ -836,8 +836,10 @@ fn push_ruby(
     let base = group.base_text(chars);
     // No margin, no reading: the group is its base, laid out like any text,
     // and the tags come off the page all the same.
+    // As it reads: a reading per character (`qì|xiàng` in the brace form)
+    // is drawn with a space where the bar is.
     let reading: Vec<char> = match grid.readings {
-        true => group.reading_text(chars).to_vec(),
+        true => group.reading_of(chars).replace(crate::ruby::SPLIT, " ").chars().collect(),
         false => Vec::new(),
     };
     let is_hidden = |at: usize| hidden.iter().any(|&(a, b)| at >= a && at < b);
