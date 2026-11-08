@@ -43,6 +43,7 @@ in `docs/development.md` §5.2.
 
 ### Fixed
 
+- **Code in a Typst template is coloured as code on every line.** Inside a code block such as `#let style(body) = { … }`, `set` and `show` rules, calls, strings, numbers and comments now take their own colours down to the closing brace, past blank lines, and the writing inside a `[…]` there is drawn as writing. The body used to be one colour down to its first blank line and plain text after it, and a bracket inside a string or a comment could throw the count off.
 - **The preview window no longer shakes.** On some page sizes and window widths (an A5 book, for one) it asked tinymist for the page at two sizes in turn without end, and the page jumped between them.
 - **`A-h` in the `Space e` explorer keeps it the explorer.** It used to turn the explorer into the project's file picker; it now lists the same folder again, and what it skips lasts as you move between folders and in the preview.
 - **The browser preview follows the caret again.** tinymist 0.15.2 stopped reading the message yumete sent; it now sends the one tinymist scrolls by.

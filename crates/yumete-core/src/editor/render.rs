@@ -154,6 +154,7 @@ impl Editor {
         let mut note: Option<&'static str> = None;
         let mut markdown = crate::markdown::BlockScanner::new();
         let mut typst_scanner = crate::markdown::typst::BlockScanner::new();
+        let mut frames: Vec<(usize, std::rc::Rc<[crate::markdown::typst::Frame]>)> = Vec::new();
         let mut blocks = Vec::with_capacity(lines);
         // The four markers are settled by the same opening characters, so a
         // merge conflict costs this walk nothing but the rare line it finds.
@@ -204,7 +205,20 @@ impl Editor {
             blocks.push(if code {
                 crate::markdown::Block::Prose
             } else if typst {
-                typst_scanner.feed(head, len)
+                // What the line begins inside, for its runs to start from
+                // ([`Self::typst_frames`]). Consecutive lines inside the same
+                // brackets share one copy; a raw block's fence is not code.
+                let open = typst_scanner.frames();
+                if !open.is_empty() && !head.trim_start().starts_with("```") {
+                    let shared = match frames.last() {
+                        Some((_, last)) if **last == *open => last.clone(),
+                        _ => open.into(),
+                    };
+                    frames.push((line, shared));
+                }
+                // A line whose opening is not all of it is copied only when
+                // the scanner has to walk it: a body's, never a paragraph's.
+                typst_scanner.feed_line(head, len, || Some(text.to_string()))
             } else {
                 markdown.feed(head, len)
             });
@@ -282,6 +296,24 @@ impl Editor {
             }
         }
         *self.block_cache.borrow_mut() = Some((key, blocks, conflicts));
+        *self.typst_frames.borrow_mut() = frames;
+    }
+
+    /// What a line of Typst begins inside — the brackets still open above it
+    /// — or `None` for a line that begins in plain writing (2026-11-08).
+    ///
+    /// A line's runs are worked out one line at a time, and a line inside
+    /// `#let style(body) = { … }` reads as writing on its own: `set page(…)`
+    /// says nothing about being code. The block scan has walked every line
+    /// above it in order, so it says.
+    pub(super) fn typst_frames(&self, line: usize) -> Option<std::rc::Rc<[crate::markdown::typst::Frame]>> {
+        if self.current_buffer().syntax() != crate::syntax::Syntax::Typst {
+            return None;
+        }
+        self.scan_blocks();
+        let frames = self.typst_frames.borrow();
+        let at = frames.binary_search_by_key(&line, |(l, _)| *l).ok()?;
+        Some(frames[at].1.clone())
     }
 
     /// Whether the markup is taken off the page (所見即所得).
@@ -1401,6 +1433,9 @@ impl Editor {
         block: crate::markdown::Block,
     ) -> Vec<crate::markdown::Span> {
         match block {
+            // A line of a Typst code body is Typst, read from the brackets it
+            // begins inside (2026-11-08); a raw block is a listing.
+            crate::markdown::Block::Code { .. } if self.typst_frames(line).is_some() => self.markup_line(line),
             // Not markup either — the code's own grammar, in colour (#420).
             crate::markdown::Block::Code { .. } => self.code_line(line),
             // Inside a note that opened lines above (#288): the note up to its
@@ -1522,7 +1557,10 @@ impl Editor {
                 }
                 match self.current_buffer().syntax() {
                     crate::syntax::Syntax::Markdown => crate::markdown::spans(&text),
-                    crate::syntax::Syntax::Typst => crate::markdown::typst::spans(&text),
+                    crate::syntax::Syntax::Typst => match self.typst_frames(line) {
+                        Some(frames) => crate::markdown::typst::spans_from(&text, &frames),
+                        None => crate::markdown::typst::spans(&text),
+                    },
                     // Nothing in the file means anything but itself.
                     crate::syntax::Syntax::Text => Vec::new(),
                     crate::syntax::Syntax::Diff => crate::diff::spans(&text),

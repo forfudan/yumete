@@ -128,8 +128,14 @@ impl Editor {
         }
         match self.block_scanned(line) {
             Block::Math { .. } => true,
-            // A code body over several lines, but not a raw ``` block, which
-            // is a listing in whatever language it names.
+            // A code body over several lines, but for the writing in its
+            // `[…]` (2026-11-08), which the runs above have marked plain.
+            Block::Code { .. } if self.typst_frames(line).is_some() => {
+                let plain = Kind::Token(crate::code::Token::Plain);
+                !self.markup_runs(line).iter().any(|s| s.kind == plain && on(s))
+            }
+            // Not a raw ``` block, which is a listing in whatever language it
+            // names.
             Block::Code { .. } => !self.in_a_raw_block(line),
             _ => false,
         }

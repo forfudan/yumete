@@ -3692,6 +3692,10 @@ pub struct Editor {
     /// The block of every line, against the buffer it was worked out for and
     /// that buffer's revision.
     block_cache: RefCell<Option<BlockCache>>,
+    /// The lines of a Typst file that begin inside an open bracket, and what
+    /// they begin inside, in line order — written by the same walk as
+    /// `block_cache` and good for as long as it is (2026-11-08).
+    typst_frames: RefCell<Vec<(usize, std::rc::Rc<[crate::markdown::typst::Frame]>)>>,
     /// Whether fenced code is coloured by its own grammar (#420, `:view-code`).
     code_colours: bool,
     /// **一行長過多少字就不上色**（`:view-long-line`，2026-10-08）。
@@ -4717,6 +4721,7 @@ impl Editor {
             markup_memo: memo::LineMemo::default(),
             ruby_memo: memo::LineMemo::default(),
             block_cache: RefCell::new(None),
+            typst_frames: RefCell::new(Vec::new()),
             code_colours: true,
             long_line: Some(Self::LONG_LINE),
             code_cache: RefCell::default(),

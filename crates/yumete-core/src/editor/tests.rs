@@ -38868,3 +38868,33 @@ fn a_markdown_preview_reads_the_open_buffer() {
     assert!(ed.text_of(&dir.join("other.md")).is_none());
     std::fs::remove_dir_all(&dir).ok();
 }
+
+/// **A template's `#let style(body) = { … }` is code on every line**
+/// (2026-11-08), past its blank lines, each line read from the brackets it
+/// begins inside: a rule is code, a note in it a comment, and the writing in
+/// its `[…]` writing. The body was one purple down to the first blank line
+/// and plain text after it. The same text as Markdown has no code in it.
+#[test]
+fn a_typst_code_block_is_coloured_as_code_on_every_line() {
+    use crate::markdown::{Block, Kind};
+    let text = "#let style(body) = {\n  set text(font: \"宋體\", size: 10pt)\n\n  // 標題\n  show heading: it => [第 #it.body 章]\n  body\n}\n那年*冬*天\n";
+    let mut ed = typed(text);
+    ed.execute(":syntax typst").unwrap();
+    let kinds = |ed: &Editor, line: usize| -> Vec<Kind> {
+        ed.markup_line_in(line, ed.block_of(line)).iter().map(|s| s.kind).collect()
+    };
+    assert_eq!(ed.block_of(1), Block::Code { inside: None });
+    assert_eq!(kinds(&ed, 1), [Kind::Code2], "a rule is code");
+    assert_eq!(ed.block_of(3), Block::Code { inside: None }, "past the blank line");
+    assert_eq!(kinds(&ed, 3), [Kind::Code2, Kind::Comment], "the indent, then the note");
+    let show = kinds(&ed, 4);
+    assert!(show.contains(&Kind::Token(crate::code::Token::Plain)), "the writing in [] is writing: {show:?}");
+    assert_eq!(kinds(&ed, 5), [Kind::Code2], "after the content, code again");
+    assert_eq!(kinds(&ed, 6), [Kind::Code2], "the closing brace");
+    assert_eq!(ed.block_of(7), Block::Prose);
+    assert!(kinds(&ed, 7).contains(&Kind::Strong), "and the writing after it is writing");
+
+    ed.execute(":syntax markdown").unwrap();
+    assert!(!kinds(&ed, 1).contains(&Kind::Code2), "Markdown has no Typst code: {:?}", kinds(&ed, 1));
+    assert_eq!(ed.block_of(3), Block::Prose);
+}
