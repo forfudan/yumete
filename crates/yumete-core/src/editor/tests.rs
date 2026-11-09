@@ -38257,6 +38257,24 @@ fn a_file_opened_in_a_preview_window_shows_there() {
 /// with one file open the keys go back to it, never into a preview
 /// following nothing. **A preview is a window**: `:q` and `␣wq` beside one
 /// close only the window they are in, and leave only from the last window.
+/// **`:bc` goes back to what this window showed before**, not to the tab
+/// beside it in the list, which may be the preview open in the next window.
+#[test]
+fn bc_goes_back_to_this_windows_last_tab() {
+    let (mut ed, dir) = a_typst_book("bc-back");
+    let main = dir.join("main.typ");
+    let text = ed.live_window();
+    ed.open_page_window(main.clone()).unwrap();
+    assert_eq!(ed.live_window(), text);
+    ed.execute(":keymap-actions").unwrap();
+    assert_ne!(ed.current_buffer().path(), Some(main.as_path()));
+    ed.execute(":bc").unwrap();
+    assert_eq!(ed.live_window(), text);
+    assert!(!ed.current_buffer().is_preview(), "not the preview of the next window");
+    assert_eq!(ed.current_buffer().path(), Some(main.as_path()), "the tab this window showed before");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
 #[test]
 fn bc_closes_the_preview_and_q_closes_its_window() {
     let (mut ed, dir) = a_typst_book("close");

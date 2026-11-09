@@ -1218,8 +1218,19 @@ impl Editor {
             self.status = say!("buffer.closed");
             return Ok(CommandOutcome::Continue);
         }
+        // **The window goes back to the tab it showed before** (helix's
+        // `docs_access_history`); with none left in its history, to the tab
+        // beside it in the list, a text rather than a preview where there is one.
+        let closing = self.buffers[self.current].id();
         let closed = self.buffers.remove(self.current).display_name();
-        self.current = self.current.min(self.buffers.len() - 1);
+        let back = self.seen_here.iter().rev().copied().find(|&b| b != closing).and_then(|b| self.buffer_with(b));
+        let beside = self.current.min(self.buffers.len() - 1);
+        self.current = back.unwrap_or_else(|| {
+            (beside..self.buffers.len())
+                .chain((0..beside).rev())
+                .find(|&i| !self.buffers[i].is_preview())
+                .unwrap_or(beside)
+        });
         let restored = self.current_buffer().saved_cursor();
         self.set_cursor(restored);
         self.forget_the_document();
