@@ -2434,6 +2434,15 @@ pub mod typst {
                         end = at + 2;
                     } else if c == '`' {
                         (end, open.raw) = raw_at(chars, at);
+                    } else if c == '$' {
+                        // An equation in code, `let x = $a ` b$`: Typst's
+                        // lexer reads maths to its `$` here as in writing, so
+                        // a backtick in it is a symbol and its brackets open
+                        // and close nothing of the code around it.
+                        (end, open.math) = match math_end(chars, at + 1) {
+                            Some(close) => (close, false),
+                            None => (n, true),
+                        };
                     } else if matches!(c, '{' | '[' | '(') {
                         // An `if`'s head ends at its block.
                         if c != '(' && top == Some(Frame::Head(false)) {
@@ -2464,8 +2473,10 @@ pub mod typst {
             }
             at = end;
         }
-        // A `#` expression in writing ends with its line; a bracket does not.
-        while matches!(frames.last(), Some(Frame::Statement | Frame::Call | Frame::Head(_))) {
+        // A `#` expression in writing ends with its line; a bracket does not,
+        // nor does an equation it opened (`#let x = $a` on one line, `b$` on
+        // the next): the expression goes on past the `$` that closes it.
+        while !open.math && matches!(frames.last(), Some(Frame::Statement | Frame::Call | Frame::Head(_))) {
             frames.pop();
         }
         out
@@ -2618,13 +2629,17 @@ pub mod typst {
             // Inside an equation: to its `$`. The line is maths, not a
             // heading or an item, whatever it begins with.
             if self.open.math {
+                let code = !writing(&self.frames);
                 if let Some(chars) = text(line) {
                     if let Some(end) = math_end(&chars, 0) {
                         self.open.math = false;
                         self.walk_rest(&chars[end..]);
                     }
                 }
-                return Block::Prose;
+                return match code {
+                    true => Block::Code { inside: None },
+                    false => Block::Prose,
+                };
             }
             let fence = trimmed.starts_with("```");
             if trimmed.is_empty() {
@@ -3160,6 +3175,27 @@ mod typst_tests {
         assert_eq!(raw_and_maths("$ a \"$\" b\n\\$ /* $ */ c\nd $\n甲"), ".$$.");
         // And a backtick inside it is a symbol.
         assert_eq!(raw_and_maths("$ a\n` b $\n甲"), ".$.");
+    }
+
+    /// **An equation written in code is maths too** (review, 2026-11-09),
+    /// as Typst's lexer reads `$` in code: a backtick in it is a symbol, not
+    /// raw text, and its brackets open and close nothing of the code.
+    #[test]
+    fn a_typst_equation_in_code_hides_its_backticks_and_brackets() {
+        // On one line: no raw is left open.
+        assert_eq!(raw_and_maths("#let x = $a ` b$\n甲"), "..");
+        // Over lines, from a statement: the line after is maths, the
+        // statement goes on past the `$`, and the writing after is writing.
+        assert_eq!(raw_and_maths("#let x = $a `\nb$ + 1\n甲"), ".$.");
+        // In a code body: the body's lines stay code, and a `(` or a `}` in
+        // the maths does not open or close the body.
+        assert_eq!(raw_and_maths("#let f() = {\n  let y = $ ( } `\n  b $\n  y\n}\n甲"), ".`$``.");
+        let mut scanner = BlockScanner::new();
+        for line in ["#let f() = {", "  let y = $ ( } `", "  b $"] {
+            scanner.feed_line(line, line.chars().count(), || Some(line.to_string()));
+        }
+        assert_eq!(scanner.frames(), &[Frame::Statement, Frame::Brace]);
+        assert!(!scanner.in_raw() && !scanner.in_math());
     }
 
     /// Each line of `text` as the editor reads it: its block (`` ` `` code,
