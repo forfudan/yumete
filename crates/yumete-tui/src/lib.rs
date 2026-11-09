@@ -99,15 +99,14 @@ pub type Deferred = Box<dyn FnOnce(&mut ImeSession) -> String>;
 /// The dictionary that decides where one word ends and the next begins.
 ///
 /// **Best first**, and one copy of the answer: the start-up path and
-/// `:word-list reload` used to be two, and only one of them knew about the
-/// language model.
+/// `:word-list reload` both ask here, so both know about the language model.
 ///
 /// 1. Yume's own language model — over a million weighted entries in both
 ///    scripts, already loaded with the IME and shared by reference. The
 ///    binary carries it, so this is the answer everywhere but in a build
 ///    that could not fetch the tables.
 /// 2. A `segmentation.txt` the reader wrote, in the data directory.
-/// 3. One 漢字 at a time (the compact bundled list is gone, 2026-11-04).
+/// 3. One 漢字 at a time (there is no compact bundled list).
 ///
 /// `level` is `:word-level`, applied to whichever of the three it settled on.
 pub fn choose_words(ime: &ImeSession, level: yumete_cjk::WordLevel) -> Box<dyn Segmenter> {
@@ -273,10 +272,9 @@ fn frame_to(
     // edge and the shot shows a book with no second line in it. The 縱 length
     // is the same question asked the other way round.
     // …and 字典 gets its answer, the same way the loop answers it (see `run`).
-    // Warning: **Leaving this out made `空格 d` and `空格 D` unphotographable**: the
-    // panel came out saying 「查着……」 for ever, which reads exactly like a
+    // Warning: **Without this `空格 d` and `空格 D` are unphotographable**: the
+    // panel comes out saying 「查着……」 for ever, which reads exactly like a
     // broken feature — and a picture is how this repo reviews the front end.
-    // 2026-09-23 審出來的。
     //
     // Warning: **而且要在量這一頁**之前**答。** 側欄有多寬是按字典**已經查到的那幾行**
     // 算的（`sidebar_columns`），答在後面，這一支就用「空字典」的寬度算折行、用
@@ -289,7 +287,6 @@ fn frame_to(
     //
     // 真的編輯器裏不會：那邊字典是**上一輪**答的，量和畫用的是同一個寬度。只有
     // 這一支是一幀一趟。而這個倉審前端就是靠拍照，一張會吞字的照片比沒有照片壞。
-    // 2026-09-24 審出來的。
     if let Some(ch) = editor.take_dictionary_query() {
         let found = ime.glosses(&ch);
         editor.set_dictionary(&ch, yumete_core::editor::Found {
@@ -305,21 +302,21 @@ fn frame_to(
     // whose header says 「正在找…」, so the seconds spent walking a book are
     // visible. A still picture has no second frame, so the interesting one is
     // the one with the results in it — and without this line
-    // `--shot --keys=':s…'` on any scope but 本文件 photographs 「正在找…」 for
-    // ever, which reads exactly like a hung editor (2026-09-27).
+    // `--shot --keys=':s…'` on any scope but 本文件 would photograph 「正在找…」
+    // for ever, which reads exactly like a hung editor.
     if editor.take_owed_search() {
         editor.run_owed_search();
-        // **而且等它跑完**（§5.93，2026-10-06）。走查現在跑在旁邊，主循環每一幀
+        // **而且等它跑完**（§5.93）。走查跑在旁邊，主循環每一幀
         // 收一批——而一張靜照没有第二幀。不等就拍到一張空名單。
         editor.wait_for_the_search();
     }
-    // …and the picker's own walk, which moved off this thread three days after
-    // the search did (2026-10-09). `press` waits for it; this one did not, so
+    // …and the picker's own walk, which runs off this thread too. `press`
+    // waits for it, and so must this: otherwise
     // `ye --files PAT --open --shot` — the picker opened by the command line
-    // rather than by a key — photographed 「没有符合的」 and `0/0+` with the
+    // rather than by a key — photographs 「没有符合的」 and `0/0+` with the
     // spinner still turning, on a tree the pipe walks in eleven milliseconds.
     // The same family as the two waits above: the loop collects a batch per
-    // frame, and a still picture has no second frame (2026-10-18).
+    // frame, and a still picture has no second frame.
     editor.wait_for_the_picker();
     editor.refresh_the_edited_file();
     let areas = page_areas(editor, config, Rect::new(0, 0, width, height), 0);
@@ -340,17 +337,15 @@ fn frame_to(
     settle_inline_candidate(editor, ime);
     // …和那扇設置面板。Warning: **不接這一句，`--shot --keys=':settings\\n'` 拍到的是
     // 正文**——面板住在主循環裏，而這一支不是主循環。看起來像 `:settings` 沒做，
-    // 而這個倉審前端就是靠拍照（字典那一格 2026-09-23 剛因為同一個缺口被審出來）。
+    // 而這個倉審前端就是靠拍照（同字典那一格）。
     // Warning: 呼叫方沒給就自己開一扇：`--keys` 那條路把它交過來（那一頭走得動面板），
-    // 而別的呼叫方只按了 `:settings` 就直接畫。不接這一句，`--shot` 拍到的是正文
-    // ——看起來像 `:settings` 沒做，而這個倉審前端就是靠拍照。
+    // 而別的呼叫方只按了 `:settings` 就直接畫。
     let mine = editor.take_settings_request().then(|| {
         editor.set_settings_open(true);
         yumete_config::panel::Panel::open(
             Some(yumete_config::config_dir().join("config.toml")),
-            // 本項目那一頁跟着**工作路徑**走，同啓動那一趟與 `:reload-config`
-            // （2026-10-01）。從前它問進程的 cwd，於是面板改的是另一個項目的
-            // `config.toml`。
+            // 本項目那一頁跟着**工作路徑**走，同啓動那一趟與 `:reload-config`。
+            // 問進程的 cwd 的話，面板改的會是另一個項目的 `config.toml`。
             Some(yumete_config::panel::local_sheet_path(&editor.root())),
         )
     });
@@ -443,7 +438,7 @@ fn settle_the_wrap(editor: &mut Editor, config: &Config, page: Rect) {
 }
 
 /// **The width a horizontal row folds at, and how much a page holds**, with
-/// `:view-pages-horizontal` in it (2026-10-28): one page's width, wrapping
+/// `:view-pages-horizontal` in it: one page's width, wrapping
 /// even with wrap off, and every page's rows for `C-f`/`C-d`.
 fn settle_the_pages(editor: &mut Editor, config: &Config, page: Rect) {
     let lines = editor.current_buffer().line_count();
@@ -464,7 +459,7 @@ pub fn fit_the_page(
     width: u16,
     height: u16,
 ) {
-    // **窗口有多大，編輯器也要知道一點**（2026-10-03）：不是視口，只夠答「這扇面板
+    // **窗口有多大，編輯器也要知道一點**：不是視口，只夠答「這扇面板
     // 擺得下嗎」。搭在這一支上是因為它已經是「每一幀一次、離屏那一支在按鍵之前一
     // 次」的那個鉤子，而窄窗口下的行為同樣要 `--shot` 看得見。
     editor.note_window(width, height);
@@ -478,15 +473,15 @@ pub fn fit_the_page(
     let room = areas.status.y.saturating_sub(area.y).max(1);
     PANEL_ROOM.store(usize::from(room), std::sync::atomic::Ordering::Relaxed);
     let fits = page_for_window(wish, room);
-    // **行在哪裏斷，也要在按鍵之前答**（2026-10-13）。從前只有真畫那一步答
-    // （[`frame_to`]），而離屏這一支的 `--keys` 跑在任何一幀**之前**——於是動作
-    // 用的是出廠的縱長 32、畫面用的是窗口算出來的那個，竪排的 `h` 在折了兩縱的
-    // 段落上量到的落點與照片對不上（`gj` 同理，橫排那一側是 `wrap_width` 為
-    // `None`，於是「視覺行」與「行文行」在離屏下根本分不出來）。同一條「算出
-    // 來，别畫出來」——所以這裏只答折行，**不碰 `set_page`**：視口是另一件事，
-    // 按鍵之前給了它會讓動作落在别處（見 `main.rs` 這一支的呼叫處）。
+    // **行在哪裏斷，也要在按鍵之前答。** 只有真畫那一步答（[`frame_to`]）的話，
+    // 離屏這一支的 `--keys` 跑在任何一幀**之前**——動作用的是出廠的縱長 32、畫面
+    // 用的是窗口算出來的那個，竪排的 `h` 在折了兩縱的段落上量到的落點與照片對不上
+    // （`gj` 同理，橫排那一側是 `wrap_width` 為 `None`，於是「視覺行」與「行文行」
+    // 在離屏下根本分不出來）。同一條「算出來，别畫出來」——所以這裏只答折行，
+    // **不碰 `set_page`**：視口是另一件事，按鍵之前給了它會讓動作落在别處（見
+    // `main.rs` 這一支的呼叫處）。
     settle_the_wrap(editor, config, areas.panes[editor.live_pane()]);
-    // **挑選器擺不下就不許開着**（2026-10-19，見 [`picker_box`]）。問在這裏，是
+    // **挑選器擺不下就不許開着**（見 [`picker_box`]）。問在這裏，是
     // 因為這一支是「每一幀一次、離屏那一支在按鍵之前一次」的那個鉤子——窄窗口
     // 下的行為要 `--shot` 也看得見。
     let for_a_picker = Rect::new(0, 0, width, areas.status.y.saturating_sub(area.y).max(1));
@@ -501,7 +496,7 @@ pub fn fit_the_page(
     let shape = candidate_shape(editor, ime);
     let pane = areas.panes[editor.live_pane()];
     ime.set_panel_has_room(shape.is_a_strip() || usize::from(room) > 3);
-    // **帶子按長度縮，框按高度縮**（2026-10-16）。長度要量真的候選，所以先把頁
+    // **帶子按長度縮，框按高度縮。** 長度要量真的候選，所以先把頁
     // 開到使用者要的那麼大，問一次，再縮——縮過的頁讀不回原來要的是幾個，同
     // `PAGE_WISH` 那一段。沒在打字就不必問，省掉每一幀一次的候選複製。
     let fits = match shape.is_a_strip() && ime.is_composing() {
@@ -532,21 +527,20 @@ pub fn fit_the_page(
     }
 }
 
-/// **行中那一條在竪排下是豎着的**（2026-10-16，原話：「For vertical layout, it
-/// is just vertical」）。底行那一條不是：它是窗飾，窗飾一律橫着。
+/// **行中那一條在竪排下是豎着的。** 底行那一條不是：它是窗飾，窗飾一律橫着。
 fn strip_runs_down(shape: PanelDisplay, layout: WritingLayout) -> bool {
     shape == PanelDisplay::Inline && layout == WritingLayout::Vertical
 }
 
 /// **How many candidates a page may hold in a window this tall.**
 ///
-/// Warning: **一頁不許比畫得下的多**（#516，2026-10-02 定「把頁縮到畫得下」）。
-/// 面板是 2 行框 ＋ 1 行編碼 ＋ 候選，整個夾在 `room` 裏；從前頁是 6 個而窗口矮
-/// 的時候只畫得出 1 個，而那道閘問的是「這一頁有沒有第 n 個」——六行的窗口上按
-/// `3` 上屏的是一個**從沒畫出來過的字**（實測：`wo` 之後按 3 得到 `𠂎`）。
+/// Warning: **一頁不許比畫得下的多**（#516：把頁縮到畫得下）。
+/// 面板是 2 行框 ＋ 1 行編碼 ＋ 候選，整個夾在 `room` 裏；頁是 6 個而窗口矮
+/// 的時候只畫得出 1 個的話，問「這一頁有沒有第 n 個」的那道閘會讓六行的窗口上按
+/// `3` 上屏一個**從沒畫出來過的字**（`wo` 之後按 3 得到 `𠂎`）。
 ///
 /// 縮了頁，`=`/`-` 一樣翻得到後面的，所以一個候選都不會變成夠不着的。使用者設
-/// 的 `[panel] page_size` 從此是**上限**，不是定數。
+/// 的 `[panel] page_size` 是**上限**，不是定數。
 fn page_for_window(wish: usize, room: u16) -> usize {
     wish.min(usize::from(room).saturating_sub(3)).max(1)
 }
@@ -608,7 +602,7 @@ pub fn run(
     // alternate screen, because the question is put to the terminal and read
     // back off the descriptor.
     crate::theme::settle_at_startup(config);
-    // The theme a resumed session kept (2026-10-28) is a request left by the
+    // The theme a resumed session kept is a request left by the
     // replay, answered here before the first frame rather than at the first key.
     editor.take_theme_replayed();
     if let Some((name, mood)) = editor.take_theme_request() {
@@ -621,7 +615,7 @@ pub fn run(
     // that undoes both — and then a terminal of our own over it, so a wiki
     // name can be underlined with dots (#287, `backend.rs`).
     //
-    // **Not `ratatui::init`** (2026-10-30): its panic hook restores with
+    // **Not `ratatui::init`**: its panic hook restores with
     // `restore()`, which prints any failure with `eprintln!` — and when the
     // window has closed, stderr is gone, that print panics inside the hook and
     // the process aborts before a single recovery copy is written. The same
@@ -655,10 +649,10 @@ pub fn run(
     //
     // **And it is the only flag that reports a bare Shift** ("Additionally,
     // with this mode, events for pressing modifier keys are reported" — the
-    // protocol says it of that flag and of no other), so leaving it out cost
-    // the lone-Shift tap, silently, from #271 until #290. It is now pushed and
-    // popped in the loop, held exactly while yume has the keyboard, which is
-    // exactly when the system's input method is not composing anyway.
+    // protocol says it of that flag and of no other), so leaving it out
+    // costs the lone-Shift tap, silently (#290). It is pushed and popped in
+    // the loop, held exactly while yume has the keyboard, which is exactly
+    // when the system's input method is not composing anyway.
     let enhanced = matches!(supports_keyboard_enhancement(), Ok(true));
     if enhanced {
         let _ = execute!(
@@ -696,7 +690,7 @@ pub fn run(
     let mut all_keys = false;
     // What Insert's 中/英 was when a prompt borrowed it (#225). See [`Borrow`].
     let mut borrowed = Borrow::default();
-    // **預覽開始之前主題是什麼樣**（2026-10-07）。外面那一層是「有沒有預覽在場」，
+    // **預覽開始之前主題是什麼樣。** 外面那一層是「有沒有預覽在場」，
     // 裏面那一層是「開始的時候選着誰」——誰都沒選過也要記得，放回去纔放得準。
     let mut was_themed: Option<Option<yumete_config::ThemeConfig>> = None;
     // A typesetter started with `:preview`, if one is running — and one left
@@ -706,7 +700,7 @@ pub fn run(
     // **那扇設置面板**（`:settings`），開着的時候鍵歸它。它住在前端而不是核心，
     // 因為它讀 `yumete_config::settings_ui` 那張表，而核心不依賴 `yumete-config`。
     // Warning: 開、收鍵、存、關那一整圈在 `settings_page::Seat` 裏，**`--keys` 走的是
-    // 同一支**：兩份抄本 2026-09-24 當天就分岔過一次。
+    // 同一支**：兩份抄本會分岔。
     let mut settings = crate::settings_page::Seat::default();
     if let Some(said) = adopt_an_orphan() {
         editor.set_status(said);
@@ -762,25 +756,25 @@ pub fn run(
     // that has one is really opened, and everything it says arrives through
     // `collect` below without anything here ever waiting on it.
     let mut servers = crate::server::Servers::default();
-    // **公式浮窗**（2026-11-06）: the same bell, rung when a picture lands;
+    // **公式浮窗**: the same bell, rung when a picture lands;
     // and whether this terminal can show one at all, asked once.
     crate::maths::ring_on_answers(doorbell.clone());
     crate::graphics::set_support(crate::graphics::detect());
-    // **The page window** (2026-11-07): its talk with tinymist, and the same
+    // **The page window**: its talk with tinymist, and the same
     // bell for where the cursor is on the page.
     let mut pages = crate::page_window::PagePreview::default();
     crate::page_window::ring_on_news(doorbell.clone());
-    // **The Markdown preview** (2026-11-08): a worker a tab, which rings the
+    // **The Markdown preview**: a worker a tab, which rings the
     // same bell when a picture is ready.
     let mut markdown = crate::md_window::MdPreviews::default();
     crate::md_window::ring_on_news(doorbell.clone());
     servers.ring_on_answers(doorbell);
-    // **配置檔開着的時候，現查現說**（2026-10-20 作者定）。和上面那一行一樣是
+    // **配置檔開着的時候，現查現說。** 和上面那一行一樣是
     // 「一轉問一次」，只是它問的是 yumete 自己的設定檔，而且不開進程。
     let mut config_watch = crate::settings::ConfigWatch::default();
 
     let result = loop {
-        // **Extend is a mode as far as the cursor is concerned** (2026-09-12).
+        // **Extend is a mode as far as the cursor is concerned.**
         // helix's `[editor.cursor-shape]` has three slots — normal, insert and
         // **select** — and its default theme paints the select cursor its own
         // colour (`ui.cursor.primary.select`). yumete's ladder cannot spare a
@@ -791,12 +785,12 @@ pub fn run(
         // Warning: **The terminal's cursor is not painted by the palette** (#493).
         // Horizontally the caret *is* the terminal's own — we only choose its
         // shape — and its colour comes from the reader's terminal profile,
-        // which does not know the page turned light: 「浅色模式肉眼很难找到光标
-        // 的位置」. A white block on cream is invisible, and it is invisible
-        // exactly where the reader is typing. So the page says what colour its
-        // caret is (OSC 12), the way it already says what is on the clipboard
-        // (OSC 52) — and puts the profile's own colour back on the way out
-        // (OSC 112), because the cursor outlives the process.
+        // which does not know the page turned light. A white block on cream is
+        // invisible, and it is invisible exactly where the reader is typing.
+        // So the page says what colour its caret is (OSC 12), the way it
+        // already says what is on the clipboard (OSC 52) — and puts the
+        // profile's own colour back on the way out (OSC 112), because the
+        // cursor outlives the process.
         //
         // 縱書 does not need this: there the block is drawn *into* the page
         // with `REVERSED`, which takes its two colours from the cell it covers
@@ -805,14 +799,14 @@ pub fn run(
         // Warning: **And the page has to say its own two colours as well** (#502).
         // A terminal draws the character *under* a block cursor in its own
         // configured background, not in the cell's — so a dark profile under a
-        // light page gave a black block with a black character in it, and the
-        // 字 the caret was standing on could not be read at all: 「Light 的光标
-        // 是墨色的，但至少字应该是纸色吧。。。不然怎么看？？」 There is no
-        // per-cell control over that, and no need for one: OSC 10 and 11 tell
-        // the terminal what this page's ink and paper *are*, and then every
-        // answer it works out for itself — the character under the cursor, the
-        // padding round the grid — agrees with the page. Put back on the way
-        // out (110/111/112), because all three outlive the process.
+        // light page would give a black block with a black character in it,
+        // and the 字 the caret is standing on could not be read at all: an ink
+        // caret needs a paper character. There is no per-cell control over
+        // that, and no need for one: OSC 10 and 11 tell the terminal what this
+        // page's ink and paper *are*, and then every answer it works out for
+        // itself — the character under the cursor, the padding round the grid
+        // — agrees with the page. Put back on the way out (110/111/112),
+        // because all three outlive the process.
         let ink = crate::theme::Palette::of(config);
         let colours = (ink.caret(), ink.paper_bytes());
         if last_caret != Some(colours) {
@@ -844,18 +838,16 @@ pub fn run(
         // this: the preedit, the candidate panel and the lone-Shift tap light
         // up together with it, and now so does this.
         let yume_has_the_keys = ime.holding_the_keys();
-        // **Normal 下按過 Esc 而它没別的事可做**：把挂起再說一遍（2026-09-22）。
+        // **Normal 下按過 Esc 而它没別的事可做**：把挂起再說一遍。
         // 抹掉信念，下面那一句自己會重發——它本來就是冪等的。
         if editor.take_say_it_again() {
             system_ime.say_it_again();
         }
         system_ime.want(!composes_here(editor) || yume_has_the_keys);
-        // Warning: **挑選器從前有兩層，那一層也要進這個元組**（2026-10-02 修，
-        // 2026-10-08 隨着那一層一起去掉）。現在它只有打字這一層，走的是
-        // `is_prompt()` 那條路，豎線是對的。
-        // **Typing a value in the settings panel is typing** (2026-10-31): the
-        // editor stays in Normal behind the panel, so its mode alone left a
-        // block over the value being typed.
+        // 挑選器只有打字這一層，走的是 `is_prompt()` 那條路，豎線是對的。
+        // **Typing a value in the settings panel is typing**: the
+        // editor stays in Normal behind the panel, so its mode alone would
+        // leave a block over the value being typed.
         let typing_a_setting = settings.panel.as_ref().is_some_and(|p| p.typing.is_some());
         let (shown, shape) = caret_now(editor, typing_a_setting);
         if last_mode != Some(shown) {
@@ -866,19 +858,19 @@ pub fn run(
             let _ = execute!(stdout(), shape);
 
             // Leaving the command line gives Insert its 中/英 back (#225) —
-            // *its* state, not 中文 unconditionally. Forcing 中文 back on put
-            // the borrow only one way round: a command line opened from 英,
-            // during which something turned 中 on, handed Insert a language it
-            // never had.
+            // *its* state, not 中文 unconditionally. Forcing 中文 back on would
+            // put the borrow only one way round: a command line opened from 英,
+            // during which something turned 中 on, would hand Insert a language
+            // it never had.
             // `:` and `::` are one prompt for this purpose (#224): stepping
             // between them is not leaving the command line, and handing Insert
             // its language back on the way *in* to `::` would put 中文 on a
             // line that is about to be typed in 英.
             // **Asked, not listed** (#351). `/`, the ruby reading and the
-            // picker are prompt lines too, and the list that used to be
-            // written out here left all three of them out (#340): `/` typed
-            // straight after a 中文 name kept the composition running, and
-            // gave nothing back on the way out either.
+            // picker are prompt lines too, and a list written out here would
+            // leave some out (#340): `/` typed straight after a 中文 name
+            // would keep the composition running, and give nothing back on
+            // the way out either.
             if ime.available() {
                 let door = borrowed.crossing(last_mode.map(|(m, _)| m), mode, ime.is_chinese());
                 if door.escape && ime.is_composing() {
@@ -909,7 +901,7 @@ pub fn run(
             // the screen, and this is the only place that knows which those
             // are. Last frame's, necessarily — it is settled while drawing.
             editor.set_page_top(viewport[editor.live_pane()].top.line);
-            // **挑選器的「一頁」也是這裏量的**（2026-10-07）：那扇窗的高度只有
+            // **挑選器的「一頁」也是這裏量的**：那扇窗的高度只有
             // 畫的那一支算得出來，而 `PageUp`/`PageDown` 跑在核心裏。同上一句，
             // 上一幀的答案——窗口沒改大小的話兩幀一樣。
             editor.note_picker_rows(picker_depth(picker_height(Rect {
@@ -969,7 +961,7 @@ pub fn run(
         take_what_arrived(&events, &mut inbox);
         // **The flag, not the message**: the one wake-up the watcher sends
         // can be swallowed while the loop is busy (a save, a shell command),
-        // and then a SIGTERM went unheard for the rest of the run (2026-10-30).
+        // and then a SIGTERM would go unheard for the rest of the run.
         if hung_up() {
             break Ok(());
         }
@@ -984,9 +976,9 @@ pub fn run(
         // skipping it hands `:shot` a blank page.
         // What the last frame cost, and how long that buys the backlog.
         let floor = (last_frame * FRAME_SLACK).clamp(FRAME_FLOOR, FRAME_CEILING);
-        // Warning: **一批替換做完的那一刻不許跳過這一幀**（2026-10-03 一輪審查報來的）。
+        // Warning: **一批替換做完的那一刻不許跳過這一幀。**
         // 一批是 80 毫秒，而 `FRAME_FLOOR` 是 100——所以每做完一批，`painted` 纔走了
-        // 80 毫秒，沒到那道閘。只要收件箱裏躺着一個鍵（`waiting`），這一整塊就被跳
+        // 80 毫秒，沒到那道閘。只要收件箱裏躺着一個鍵（`waiting`），這一整塊就會被跳
         // 過：**那一批不往前走，而鍵落到了下面**，而此刻 `self.current` 是
         // `buffer_for` 剛為了改某一章打開的那一份——`x` 會砍進一個你沒打開過的檔。
         if wants_picture.is_some()
@@ -994,8 +986,8 @@ pub fn run(
             || painted.elapsed() >= floor
             || editor.replacing_a_batch()
         {
-            // **正文改過的話，把改過的那一份重搜一遍，就在畫之前**（2026-09-29
-            // 定）。Warning: **不能放在畫完之後**：那樣這一幀畫的還是舊名單，讀者要等
+            // **正文改過的話，把改過的那一份重搜一遍，就在畫之前。**
+            // Warning: **不能放在畫完之後**：那樣這一幀畫的還是舊名單，讀者要等
             // 到下一次按鍵纔看得見側欄跟上。指紋對得上它立刻回來，所以每一幀問
             // 一次不花什麼。
             editor.refresh_the_edited_file();
@@ -1016,13 +1008,13 @@ pub fn run(
             // Diagnostics follow what was edited since the last frame: a
             // paste, a formatter, a rename in another file.
             editor.move_the_problems();
-            // **挑選器的名單也是長出來的**（2026-10-09）：`空格 f` 的走查跑在旁邊，
-            // 每一幀收一批，所以面板立刻就開得出來，不再凍最多五秒。
+            // **挑選器的名單也是長出來的**：`空格 f` 的走查跑在旁邊，
+            // 每一幀收一批，所以面板立刻就開得出來，不凍着等走完。
             editor.collect_picker_items();
             // 雙鏈: the project's links, read on a thread, land here.
             editor.collect_links_index();
             // How big a cell is in pixels, for the formula float — asked
-            // every frame, so a font made bigger is followed (2026-11-06).
+            // every frame, so a font made bigger is followed.
             if crate::graphics::support() != crate::graphics::Support::None {
                 if let Ok(window) = ratatui::backend::Backend::window_size(terminal.backend_mut()) {
                     crate::graphics::note_window(
@@ -1042,15 +1034,15 @@ pub fn run(
             };
             last_frame = began.elapsed();
             painted = std::time::Instant::now();
-            // **The page as just drawn, for the keys that come next** (review,
-            // 2026-11-03). Said only before the draw, it was the frame before
-            // this one: `C-e C-e` scrolled once and `Z jjjj` skipped steps.
+            // **The page as just drawn, for the keys that come next.** Said
+            // only before the draw, it would be the frame before this one:
+            // `C-e C-e` would scroll once and `Z jjjj` skip steps.
             if let Some((a, b)) = viewport[editor.live_pane()].drawn_span {
                 editor.set_page_span(a, b);
             }
             drawn = wants_picture.is_some().then(|| completed.buffer.clone());
-            // **欠着的那一趟搜索，畫完這一幀再跑**（2026-09-27 報的：掃描期間屏
-            // 幕完全靜止）。剛畫的那一幀表頭寫着「正在找…」，所以走一本書的那幾
+            // **欠着的那一趟搜索，畫完這一幀再跑**，掃描期間屏幕不許完全靜止。
+            // 剛畫的那一幀表頭寫着「正在找…」，所以走一本書的那幾
             // 秒裏，屏幕上說得出它在幹什麼。跑完 `continue` 回去再畫一幀，那一幀
             // 上是結果。
             //
@@ -1060,11 +1052,11 @@ pub fn run(
                 editor.run_owed_search();
                 continue;
             }
-            // **全部替換一批一批地做**（2026-10-03 定：「不給取消，只給進度」）。
+            // **全部替換一批一批地做**：不給取消，只給進度。
             // 同一個辦法：剛畫的那一幀寫着「正在替換… 1200/3000 個檔」，然後做
-            // 八十毫秒，再回來畫一幀。三千個檔那一趟從前是十幾秒的死屏。
+            // 八十毫秒，再回來畫一幀。一口氣做完的話，三千個檔是十幾秒的死屏。
             if editor.replacing_a_batch() {
-                // **Esc 從隊列裏挑出來，別的鍵照舊排着**（2026-10-11 定）。一批
+                // **Esc 從隊列裏挑出來，別的鍵照舊排着。** 一批
                 // 做完就 `continue`，所以替換期間鍵一個都沒派出去——攢到做完纔
                 // 一起落下。中止是唯一一件「現在就要」的事，所以只挑它一個。
                 match take_an_escape(&mut inbox) {
@@ -1133,8 +1125,8 @@ pub fn run(
             }
             continue;
         }
-        // The page is up; now the 14 MB. Between these two lines is the whole
-        // of what a cold start used to spend before showing anything.
+        // The page is up; now the 14 MB. Nothing between these two lines is
+        // spent before showing something.
         if let Some(load) = deferred.take() {
             let said = load(ime);
             if !said.is_empty() {
@@ -1156,9 +1148,9 @@ pub fn run(
         }
         // **`:reload-auto` needs a clock, not a keystroke.** `event::read`
         // blocks, so the case the setting is for — alt-tab away, run a script,
-        // come back and look — produced nothing at all until a key was pressed
-        // (Feature #214). Only while it is on: an editor that wakes up twice a
-        // second for nobody is an editor that flattens a battery.
+        // come back and look — would produce nothing at all until a key was
+        // pressed (Feature #214). Only while it is on: an editor that wakes up
+        // twice a second for nobody is an editor that flattens a battery.
         // **The flag that reports a bare Shift is held exactly while yume has
         // the keyboard** (#290). It is the same flag that stops the *system's*
         // input method from composing (#271), so it cannot simply stay on; and
@@ -1166,9 +1158,8 @@ pub fn run(
         // Engagement is the line between those two, which is the whole reason
         // 「ABC」 and 「關」 are two states and not one.
         //
-        // **Crossing that line is a command, not a gesture** — settled
-        // 2026-09-08: 「空格快捷键太宝贵了……我建议还是做成 command。」 A chord
-        // was tried and taken back out: `C-Space` is spent twice over by
+        // **Crossing that line is a command, not a gesture**: a space chord is
+        // too precious. No chord either: `C-Space` is spent twice over by
         // macOS, and `Shift+Space` is 全/半角 in most system input methods,
         // which are the ones holding the keyboard while yume is 關 —
         // so the one direction that matters most is the one it could not
@@ -1226,8 +1217,7 @@ pub fn run(
                 detected = Some((name, std::time::Instant::now()));
                 let tx = found_tx.clone();
                 // 宇浩's own word list, shared by reference: the thread reads
-                // it and touches nothing else the editor owns (2026-11-04; it
-                // was the compact bundled list, built on the thread).
+                // it and touches nothing else the editor owns.
                 let seg = ime.segmenter();
                 std::thread::spawn(move || {
                     // Warning: **The flag is cleared by this guard, not by the
@@ -1246,9 +1236,9 @@ pub fn run(
                     // and its longer ones absorb this file's — measured, 「宇夢」
                     // goes from 8th of 60 to gone. The words of the chapter
                     // being written are the ones the writer is looking at.
-                    // **物化在這條執行緒上，而且只在真的要掃的時候**（2026-10-13）。
-                    // 請求裏帶的是一棵 `Rope`（共享，近乎免費）；從前帶的是
-                    // `String`，於是開一個檔就複製一份整本書，不管這一趟掃不掃。
+                    // **物化在這條執行緒上，而且只在真的要掃的時候。**
+                    // 請求裏帶的是一棵 `Rope`（共享，近乎免費）；帶 `String`
+                    // 的話，開一個檔就複製一份整本書，不管這一趟掃不掃。
                     let text = ask.text.to_string();
                     let mine = yumete_core::discover::han_count(&text);
                     let mut out = yumete_core::discover::words(&text, &joins);
@@ -1292,7 +1282,7 @@ pub fn run(
         // 查的規矩本來就在手上，畫的地方（槽邊的標記、診斷面板）也是現成的。
         config_watch.follow(editor);
         crate::settings::answer_config_check(editor);
-        // **`:info`：這份檔案是什麼**（2026-10-08）。核心把那張表排好，這一頭只填
+        // **`:info`：這份檔案是什麼。** 核心把那張表排好，這一頭只填
         // 「哪幾個服務器在看着它」那一行——同 `:yume-where`，答案是一頁，而那一
         // 行只有前端知道。擺在 `follow` 後面：剛打開的那一份要先起得了服務器，
         // 這一行纔不是空的。
@@ -1323,11 +1313,11 @@ pub fn run(
         servers.ask_signature(editor, config);
         servers.ask_next(editor, config);
         let mut server_said_something = servers.collect(editor);
-        // **回退那一句要在同一趡發出去**（2026-10-08）。`collect` 才是「服務器說沒有
+        // **回退那一句要在同一趡發出去。** `collect` 才是「服務器說沒有
         // 簽名」落地的地方（`show_signature(None)`），而排在它前面的話那一句要等下一輪
         // 循環——下一輪往往是下一次按鍵，而那時候正文已經改了。
         servers.ask_signature_doc(editor, config);
-        // **The page window** (2026-11-07): after `collect`, where tinymist's
+        // **The page window**: after `collect`, where tinymist's
         // answers land. A window that cannot be drawn after all, opened by
         // `:preview`, becomes the browser's preview.
         if markdown.follow(editor, config) {
@@ -1354,16 +1344,15 @@ pub fn run(
         }
         if let Some(word) = servers.says.take() {
             editor.set_status(word);
-            // **這一句也要當場畫出來**（2026-09-29 報的：打開 `.py` 收不到那句
-            // 「找不到 ty、ruff…」，要按一下鍵纔冒出來）。
+            // **這一句也要當場畫出來**：打開 `.py` 就要收到那句「找不到 ty、ruff…」，
+            // 不必按一下鍵纔冒出來。
             //
-            // Warning: **同一族的第三次了。** `follow`/`ask_*`/`collect` 全排在
-            // 畫之後，所以它們寫進狀態欄的任何一句都要等下一次按鍵。`collect`
-            // 那一半今天早上修過，而 `says` 是**另一條路**——它由 `follow` 寫，
-            // `collect` 回 `false` 的那些輪次照樣有話說。
+            // Warning: **同一族。** `follow`/`ask_*`/`collect` 全排在
+            // 畫之後，所以它們寫進狀態欄的任何一句都要等下一次按鍵。`says` 是
+            // **另一條路**——它由 `follow` 寫，`collect` 回 `false` 的那些輪次照樣有話說。
             server_said_something = true;
         }
-        // **服務器說了話就回頭再畫一幀**（2026-09-29 報的）。
+        // **服務器說了話就回頭再畫一幀。**
         //
         // Warning: **這一輪的畫早就畫完了**：畫在上面（`Stage::Drawing`），問答在這
         // 裏，順序是死的。答案落進編輯器的時候屏幕上是問之前那一幀，而答案一
@@ -1371,9 +1360,9 @@ pub fn run(
         // 等，等到下一次按鍵纔畫。症狀：`空格 k` 按下去定義不出來，隨手挪一下
         // 光標再挪回來它纔出來（挪回來那一下正好把光標送回問的那一格）。
         //
-        // `collect` 一直都回「這一輪有沒有東西來」，只是從前沒人接。
-        // Warning: 同一族 2026-09-23 修過一半（`server.rs` 的 `waiting` 那段註釋）：
-        // 那次修的是「循環醒不醒」，沒修「畫在問之前」。
+        // `collect` 回的是「這一輪有沒有東西來」，這裏接住它。
+        // Warning: 同一族還有「循環醒不醒」（`server.rs` 的 `waiting` 那段註釋），那是
+        // 另一半。
         if server_said_something {
             continue;
         }
@@ -1385,13 +1374,13 @@ pub fn run(
             // writing the recovery copy does not have — so an idle editor with
             // nothing unsaved still blocks forever and costs nothing, and one
             // that has just been typed in wakes once, writes, and goes back to
-            // blocking. That one wake is the trailing edge the throttle never
-            // had (#383): the last few seconds of typing used to be written
-            // only by the *next* keystroke, and pausing to think meant there
-            // was no next keystroke.
+            // blocking. That one wake is the throttle's trailing edge (#383):
+            // without it the last few seconds of typing would be written only
+            // by the *next* keystroke, and pausing to think means there is no
+            // next keystroke.
             //
-            // **The 改動條 owes one too** (2026-09-19). It is compared against
-            // the *buffer* now, so it has to be worked out again after an edit
+            // **The 改動條 owes one too.** It is compared against
+            // the *buffer*, so it has to be worked out again after an edit
             // — and 「after」 is 「when the typing stops」: any key restarts this
             // wait, so a 300 ms deadline is a debounce with no clock of its own
             // to keep. Whichever deadline is nearer wins; both ticks are asked
@@ -1408,11 +1397,10 @@ pub fn run(
                 editor.signature_due_in(),
                 // The settings panel's files, changed outside while it is open.
                 settings.due_in(),
-                // Warning: **磁碟那一眼是鬧鐘之一，不是它自己一條路**（2026-10-11
-                // 報的：即時文檔要等三到五秒纔出來）。從前自動重載在這一段**之
-                // 前**自己 `recv_timeout(兩秒)` 然後 `continue`，於是它一開——而
-                // 它是出廠默認——底下這張鬧鐘表整個算不到：跟着光標那一問的三百
-                // 毫秒要等到兩秒那一跳纔發得出去，答案再等下一跳纔收得到。
+                // Warning: **磁碟那一眼是鬧鐘之一，不是它自己一條路。** 自動重載若在這一段
+                // **之前**自己 `recv_timeout(兩秒)` 然後 `continue`，它一開——而它是出廠
+                // 默認——底下這張鬧鐘表整個算不到：跟着光標那一問的三百毫秒要等到兩秒
+                // 那一跳纔發得出去，答案再等下一跳纔收得到，即時文檔要等三到五秒。
                 editor.disk_due_in(),
                 // 搜索在旁邊跑的時候要醒過來收（同上面那幾個鬧鐘）。
                 editor.searching_due_in(),
@@ -1452,9 +1440,8 @@ pub fn run(
                         editor.autosave_tick();
                         editor.status_tick();
                         editor.yank_flash_tick();
-                        // 自動重載那一眼從前在這一段上面自己睡自己醒；現在它和
-                        // 別的鬧鐘一起排隊，所以也要在這裏問一句。自己節流，
-                        // 所以不到兩秒按幾次都不花什麽。
+                        // 自動重載那一眼和別的鬧鐘一起排隊，所以也要在這裏問一句。
+                        // 自己節流，所以不到兩秒按幾次都不花什麽。
                         editor.disk_tick();
                         settings.watch(editor);
                         // One frame is redrawn on the way round — the loop
@@ -1503,14 +1490,14 @@ pub fn run(
                 }
                 let (code, mods) = normalize_shift(key.code, key.modifiers);
                 // 設置面板開着：鍵歸它；它打字的時候（一項的值、搜索）鍵還給命令行。
-                // **Not `continue`** (2026-11-08): a key the panel takes may write a
+                // **Not `continue`**: a key the panel takes may write a
                 // change, and the reload below has to run for it to take effect.
                 let taken = settings.took(editor, map_key(code, mods));
                 // The stand-in for a Shift this terminal cannot report (#339).
                 // It asks yume the same question the tap does, so a rebound
                 // Shift is rebound here too; outside a place that composes
                 // there is nothing to commit, so it is only the switch.
-                // Warning: **not in vim's Normal mode** (2026-11-01): there `C-^` is
+                // Warning: **not in vim's Normal mode**: there `C-^` is
                 // vim's previous file, and the key goes to the keymap. While
                 // typing it is vim's own `i_CTRL-^`, the language switch.
                 let vims_own = !composes_here(editor)
@@ -1571,7 +1558,7 @@ pub fn run(
                 }
                 // …and reading it needs the platform, because almost every
                 // terminal refuses an OSC 52 read.
-                // **粘貼面板開了：讀一次剪貼板給它畫**（2026-10-11 報的）。
+                // **粘貼面板開了：讀一次剪貼板給它畫。**
                 // 讀不着就交 `None`，那一格照舊空着——一句「讀不了」擺在狀態欄上
                 // 是錯的，開那扇面板的人問的不是剪貼板。
                 if editor.take_clipboard_peek() {
@@ -1690,13 +1677,13 @@ pub fn run(
                 }
                 if let Some(want) = editor.take_preview_request() {
                     use yumete_core::editor::Preview;
-                    // **The page window** (2026-11-07): opened when this
+                    // **The page window**: opened when this
                     // terminal draws pictures and tinymist is new enough;
                     // otherwise said why, or, from `:preview`, the
                     // browser's preview instead.
                     let (want, why) = match want {
                         Preview::Window { path, syntax, fallback } => {
-                            // A Markdown file's own preview (2026-11-08):
+                            // A Markdown file's own preview:
                             // drawn here, so only the terminal can refuse it.
                             let markdown = syntax == yumete_core::syntax::Syntax::Markdown;
                             let why = match markdown {
@@ -1747,7 +1734,7 @@ pub fn run(
                         instead_in_the_browser(editor, config, &mut job, &path, syntax, why);
                     }
                 }
-                // **關掉那個檔案，預覽也跟着停**（2026-09-22）。判準是「這個檔案
+                // **關掉那個檔案，預覽也跟着停。** 判準是「這個檔案
                 // 不再開着」，不是「不在眼前」——切走多半還會切回來，而起一次要
                 // 幾秒。
                 if job.as_ref().is_some_and(|running| !editor.holds_file(&running.file)) {
@@ -1769,8 +1756,8 @@ pub fn run(
                             editor.set_preview_at(Some(url.clone()));
                             editor.set_status(say!("preview.running", url));
                         }
-                        // **這一下之後，正文就不必存盤也看得見了**
-                        // （2026-09-23 報的）。見 `Job::listen_in`。
+                        // **這一下之後，正文就不必存盤也看得見了。**
+                        // 見 `Job::listen_in`。
                         if let Some(at) = said.control {
                             running.listen_in(&at);
                         }
@@ -1793,8 +1780,8 @@ pub fn run(
                         if book.is_some_and(|root| here.starts_with(root)) {
                             let version = (buffer.id(), buffer.revision());
                             // Warning: **問在造字串之前。** `rope().to_string()` 把整
-                            // 份稿子複製一遍，而九成九的幀正文沒動——從前那一句
-                            // 無條件跑，一章三百 KB 就是每一幀三百 KB。
+                            // 份稿子複製一遍，而九成九的幀正文沒動——無條件跑的話，
+                            // 一章三百 KB 就是每一幀三百 KB。
                             if running.wants(version) {
                                 let text = buffer.rope().to_string();
                                 running.push(&here, &text, version);
@@ -1808,8 +1795,8 @@ pub fn run(
                         }
                     }
                 }
-                // **`:reload-config`：重讀設定檔，推一遍**（2026-09-23 定：
-                // 「下次啓動生效或者一個應用（重載）設置命令來生效」）。
+                // **`:reload-config`：重讀設定檔，推一遍**：設置在下次啓動時生效，
+                // 或者用這一個命令當場生效。
                 //
                 // Warning: **同一支 `apply`，啓動叫的那一支。** 換一份 `Config` 只讓
                 // 前端**畫**得不一樣（配色、邊欄寬、行號那一族是每一幀直接讀它
@@ -1873,11 +1860,11 @@ pub fn run(
                 // Throttled inside, so this is a clock check on most keys.
                 editor.autosave_tick();
                 // …and ask the disk whether the file moved under us
-                // (Feature #214). Throttled inside too, and **on by default**
-                // since 2026-10-11. Also asked on the idle path above, which
-                // is where it matters.
+                // (Feature #214). Throttled inside too, and **on by default**.
+                // Also asked on the idle path above, which is where it
+                // matters.
                 editor.disk_tick();
-                // **預覽：打到一半就照它畫**（2026-10-07，helix 的三個 prompt 事件）。
+                // **預覽：打到一半就照它畫**（helix 的三個 prompt 事件）。
                 //
                 // 記下的舊樣子歸這裏管，不歸命令管——命令只說「照這個畫」，
                 // 放回去是命令行的事（`prompt.rs` 的 `end_a_trial`）。
@@ -1922,7 +1909,7 @@ pub fn run(
             }
             // Text arriving whole, from the system clipboard by way of the
             // terminal. It is inserted as writing, never run as keys.
-            // **…unless the settings panel is open** (2026-11-08): then it
+            // **…unless the settings panel is open**: then it
             // is the panel's, and the document behind it is not touched.
             Ok(Event::Paste(text)) => {
                 if !settings.pasted(editor, &text) {
@@ -1931,11 +1918,10 @@ pub fn run(
                     settings.settle(editor);
                 }
             }
-            // **The settings panel takes the mouse while it is open**
-            // (2026-11-08, reported: a click moved the caret in the document
-            // behind it, a drag left a selection there, the wheel scrolled
-            // it). A click picks a row, the wheel walks the list, and nothing
-            // reaches the document — the `:` line over the panel included.
+            // **The settings panel takes the mouse while it is open**: a click
+            // picks a row, the wheel walks the list, and nothing reaches the
+            // document behind it — no caret moved, no selection left, no
+            // scroll — the `:` line over the panel included.
             Ok(Event::Mouse(mouse)) if settings.open() => {
                 let pointer = match mouse.kind {
                     MouseEventKind::ScrollDown | MouseEventKind::ScrollUp => {
@@ -2003,7 +1989,7 @@ pub fn run(
                     }
                 }
                 // Dragging picks out a range — the thing the terminal's own
-                // selection used to do, given back inside the editor, where it
+                // selection does, given back inside the editor, where it
                 // can become a yank, an edit, or the system clipboard.
                 MouseEventKind::Drag(MouseButton::Left) => {
                     if let Some(at) =
@@ -2052,7 +2038,7 @@ pub fn run(
     // outlive the process, so a page that set them and did not put them back
     // leaves the reader's shell wearing yumete's ink and paper.
     let _ = write!(stdout(), "\x1b]110\x07\x1b]111\x07\x1b]112\x07");
-    // …and the formulas it was shown (2026-11-06): a picture stays in the
+    // …and the formulas it was shown: a picture stays in the
     // terminal until it is freed.
     let _ = stdout().write_all(&crate::graphics::release_all());
     if enhanced {
@@ -2063,8 +2049,8 @@ pub fn run(
     }
     // `try_restore`, not `restore`: the latter prints its failure with
     // `eprintln!`, which panics when the terminal is gone (the window closed),
-    // and a panic here ran the restore hook again and aborted, before any
-    // recovery copy was written (2026-10-30). For the same reason the
+    // and a panic here would run the restore hook again and abort, before any
+    // recovery copy was written. For the same reason the
     // terminal is not dropped: its `Drop` shows the cursor and prints when it
     // cannot. The cursor is shown here, quietly.
     let _ = terminal.show_cursor();
@@ -2074,7 +2060,7 @@ pub fn run(
 }
 
 /// **`:reload-config`, and the settings panel's answers** — after a key
-/// (and after a click, which can write a value too, 2026-11-08).
+/// (and after a click, which can write a value too).
 ///
 /// Warning: **同一支 `apply`，啓動叫的那一支。** 換一份 `Config` 只讓前端**畫**得
 /// 不一樣；推進 `Editor` 的那一批要再推一遍。`layout` 傳 `None`：`-v` 是這一趟
@@ -2092,11 +2078,11 @@ fn reload_and_settle(
     settings.settle(editor);
     let back = editor.take_config_back();
     if editor.take_config_reload() {
-        // 項目配置從**工作路徑**往上找，同啓動那一趟（2026-10-01）。
+        // 項目配置從**工作路徑**往上找，同啓動那一趟。
         let (fresh, said) = Config::load_reporting_from(&editor.root());
-        // **What was said before stays** (2026-11-08): pushing a setting can
-        // say something of its own (「夾行：按視覺縱」), and it covered the
-        // settings panel's 「已寫入 …」 on every change.
+        // **What was said before stays**: pushing a setting can
+        // say something of its own (「夾行：按視覺縱」), and it must not cover
+        // the settings panel's 「已寫入 …」 on every change.
         let was = editor.status().to_string();
         settings::apply(&fresh, editor, None, None);
         editor.set_status(was);
@@ -2107,13 +2093,13 @@ fn reload_and_settle(
         system_ime.set_others(fresh.ime.others);
         *config = fresh;
         // Back to the saved settings means the saved theme too: what
-        // `:theme` chose would otherwise stay on (2026-10-28).
+        // `:theme` chose would otherwise stay on.
         if back {
             crate::theme::forget_choices();
         }
         // 主題是進程級的一格，要重新問一次，否則配色改了畫面不動。
         crate::theme::settle(config, crate::theme::terminal_answer());
-        // Warning: **存完那一句不許被蓋掉**（2026-10-09）。設置面板存完會自己
+        // Warning: **存完那一句不許被蓋掉。** 設置面板存完會自己
         // 要求重載，而讀者要看見的是「存進哪一份」——「配置重新載入了」是
         // `:reload-config` 自己按下去的時候纔有人在等的答案。
         //
@@ -2128,7 +2114,7 @@ fn reload_and_settle(
             true => {}
         }
     }
-    // **A theme tried in the panel's list** (2026-11-08): drawn as
+    // **A theme tried in the panel's list**: drawn as
     // the cursor walks the list, put back on Esc. Kept, the file
     // now names it and the reload has drawn it, so the try is let
     // go and the config rules again.
@@ -2177,15 +2163,15 @@ pub fn restore_terminal() {
 /// left it. Without a ceiling the page would stay on the frame the flick
 /// started at until the terminal's buffer ran dry.
 ///
-/// **A count was the wrong unit** (2026-09-09). The ceiling used to be 64
-/// notches, and a notch costs about 20 µs — so it bounded the work at 1.3 ms
-/// while a hard flick queues *thousands* of events, which came back as three
-/// hundred turns of the loop, each drawing a frame, long after the finger had
-/// stopped. Measured on this project's own roadmap (`the_cost_of_a_flick`):
-/// 1,024 notches is 20 ms of scrolling and 2 ms of drawing, so the work was
-/// never the problem — the number of frames was. A time box bounds what
-/// matters instead: spend at most this long swallowing what has arrived, then
-/// act on all of it at once. Events are unbounded, latency is not.
+/// **A count is the wrong unit.** A notch costs about 20 µs, so a ceiling of
+/// 64 notches bounds the work at 1.3 ms while a hard flick queues
+/// *thousands* of events, which come back as hundreds of turns of the loop,
+/// each drawing a frame, long after the finger has stopped. Measured on this
+/// project's own roadmap (`the_cost_of_a_flick`): 1,024 notches is 20 ms of
+/// scrolling and 2 ms of drawing, so the work is not the problem — the
+/// number of frames is. A time box bounds what matters instead: spend at
+/// most this long swallowing what has arrived, then act on all of it at
+/// once. Events are unbounded, latency is not.
 const WHEEL_DRAIN: std::time::Duration = std::time::Duration::from_millis(12);
 
 /// Read the terminal on a thread of its own, and hand the events over.
@@ -2215,10 +2201,10 @@ fn spawn_reader() -> (std::sync::mpsc::Receiver<Arrival>, crate::server::Doorbel
         let _ = bell.send(Arrival::Answer);
     });
     // **What the reader typed before the editor was on screen goes first.**
-    // The two start-up probes read the descriptor directly and used to throw
-    // away everything that was not the terminal's reply — which is the first
-    // four tenths of a second of the session. See [`crate::typed_ahead`] for
-    // what is kept and what is deliberately not.
+    // The two start-up probes read the descriptor directly, and throwing away
+    // everything that is not the terminal's reply would lose the first four
+    // tenths of a second of the session. See [`crate::typed_ahead`] for what
+    // is kept and what is deliberately not.
     for c in crate::typed_ahead::take() {
         let code = match c {
             '\r' | '\n' => KeyCode::Enter,
@@ -2263,11 +2249,11 @@ enum Arrival {
     HungUp,
 }
 
-/// **The terminal closed or the editor was told to stop** (2026-10-30).
+/// **The terminal closed or the editor was told to stop.**
 ///
 /// Closing a terminal window sends SIGHUP, a shutdown sends SIGTERM, and
-/// either used to end the process on the spot: whatever was typed since the
-/// last recovery copy (up to five seconds of it) was lost. The handler only
+/// either would end the process on the spot, losing whatever was typed since
+/// the last recovery copy (up to five seconds of it). The handler only
 /// sets this flag, which is all a signal handler may safely do; a thread
 /// watching it wakes the loop, and `main` writes the copies.
 static HUNG_UP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -2293,7 +2279,7 @@ fn catch_hang_ups() {
 }
 
 /// Move everything the reader has ready into the inbox, without waiting.
-/// **把隊列裏的一個 `Esc` 挑走**，有就回 `true`（2026-10-11）。
+/// **把隊列裏的一個 `Esc` 挑走**，有就回 `true`。
 ///
 /// 替換那一趟每做完一批就 `continue`，鍵全排在收件箱裏等着——而「停」這一件
 /// 等不得。別的鍵原樣留在隊列裏，次序也不動：挑走的只有 `Esc`。
@@ -2395,25 +2381,24 @@ const FRAME_CEILING: std::time::Duration = std::time::Duration::from_millis(500)
 
 /// Whether the IME may run for what is being typed **right now** (#225).
 ///
-/// Warning: **The command line is ASCII from `:` to the end** (2026-09-16),
-/// arguments included. It used to permit 中文 once the caret had walked past
-/// the command's name — `:e 第三章.md` — and that was two things at once: a
-/// rule the writer had to hold in their head, and a boundary the caret crossed
-/// back and forth over, which with 模態掛起 means the system's input method is
-/// told to stand down and stand up again with every step of `←`. One line, one
-/// answer: 「命令模式完全不允許中文最好，這樣我們的 yume mode 也更加乾淨」.
+/// Whether the IME may run for what is being typed **right now** (#225).
+///
+/// Warning: **The command line is ASCII from `:` to the end**, arguments
+/// included. Permitting 中文 once the caret has walked past the command's
+/// name — `:e 第三章.md` — would be two things at once: a rule the writer
+/// has to hold in their head, and a boundary the caret crosses back and
+/// forth over, which with 模態掛起 means the system's input method is told to
+/// stand down and stand up again with every step of `←`. One line, one
+/// answer: no 中文 anywhere in command mode keeps yume mode clean.
 ///
 /// Nothing is lost that has nowhere else to go: `::` (命令搜索) takes 中文 and
 /// finds the command **by what it does**, the picker (`空格 f`) takes 中文 and
 /// finds the file, and `/` takes 中文 and finds the words. Those are the three
 /// places a Chinese name is actually typed.
 fn composes_here(editor: &Editor) -> bool {
-    // Warning: **挑選器從前有兩層，只有一層打字**（2026-09-17 加的那道閘）。鍵在列表
-    // 那一層的時候把 `j` 交給引擎就成了一個碼：「我按了 space f 進入 picker，按
-    // jk 他開始輸入」。2026-10-08 那一層去掉了——`Mode::Picker` 只有打字這一個
-    // 狀態，`composes()` 本來就說它收中文，那道閘隨之刪了。
+    // `Mode::Picker` 只有打字這一個狀態，`composes()` 本來就說它收中文。
     // The settings panel's `:` line is a command, as the editor's own `:`
-    // is: no composing there (2026-11-09).
+    // is: no composing there.
     if editor.value_line_is_plain() {
         return false;
     }
@@ -2513,12 +2498,12 @@ impl Borrow {
     }
 }
 
-/// **A lone-Shift tap answers 中/ABC, in every mode** (2026-10-12).
+/// **A lone-Shift tap answers 中/ABC, in every mode.**
 ///
 /// Returns whether the tap was answered. 中 and ABC decide what the next
 /// letter means, and that answer is wanted before entering Insert as much as
 /// inside it: `i` lands in whichever one is standing. The stand-in key (#339)
-/// has worked in every mode all along — this is the same question asked with
+/// works in every mode — this is the same question asked with
 /// the hand instead, so it gives the same answer.
 ///
 /// Warning: **the settings panel is the one place left out.** That page takes
@@ -2584,8 +2569,8 @@ struct Viewport {
     /// with `:view-wrap` (off) a paragraph is one row of any length, and without this
     /// the page could only ever show its first screenful (Feature #221).
     left: usize,
-    /// **The sideways offset of each page after the first**, as last drawn
-    /// (2026-10-29): a page the caret is on slides to it, and a click on
+    /// **The sideways offset of each page after the first**, as last drawn:
+    /// a page the caret is on slides to it, and a click on
     /// that page must read the cells the way they were drawn. Index `k - 1`
     /// for page `k`.
     page_left: Vec<usize>,
@@ -2610,7 +2595,7 @@ struct Viewport {
 #[derive(Default)]
 struct Seats {
     /// One per window, in the tree's order (`Windows::leaves`); a window
-    /// past the end gets a fresh one on first use (2026-10-30).
+    /// past the end gets a fresh one on first use.
     panes: Vec<Viewport>,
     /// Which window each of [`Self::panes`] belongs to, so a split or a
     /// close that shifts the order moves the scroll with its window
@@ -2621,25 +2606,23 @@ struct Seats {
     /// **兩扇邊欄各自捲到了第幾行**（左、右），跨幀記着。
     ///
     /// Warning: **不記就只能從選中那一行倒推**，而倒推不出來：「往上走到頂了纔翻頁」
-    /// 是一件跟歷史有關的事。從前的算法是 `selected - 可見行數 + 1`，也就是把
-    /// 選中那一行**釘在最底下**——往上按 `k`，亮條一動不動，整張單子在它上面
-    /// 滑，滑到頭了亮條纔開始走（2026-09-29 報的）。
+    /// 是一件跟歷史有關的事。`selected - 可見行數 + 1` 會把選中那一行**釘在最
+    /// 底下**——往上按 `k`，亮條一動不動，整張單子在它上面滑，滑到頭了亮條纔開始走。
     ///
     /// 一側只畫一扇面板，所以一格就夠；換了面板這個數是舊的，而它每一幀都先
     /// 夾一次、再讓選中那一行拉回來（[`window_start`]），下一幀就對了。
     listed: [usize; 2],
 }
 
-/// **一張捲動的單子，這一幀從第幾行畫起**——2026-09-29。
+/// **一張捲動的單子，這一幀從第幾行畫起。**
 ///
-/// 規矩只有兩條，而且就是使用者說的那兩條：
+/// 規矩只有兩條：
 ///
 /// * 選中的那一行**在窗口上方之外**——把窗口往上挪到剛好含住它。
 /// * 選中的那一行**在窗口下方之外**——往下挪到剛好含住它。
 ///
-/// 剩下的時候窗口一動不動，所以亮條在窗口裏自己走，走到邊上纔帶着窗口走。
-/// 原話：「向上移动的时候（k），这个光标一直在最下一行，直到上方没有可以滚动的
-/// 才往上走。我觉得应该是优先往上走直到顶头才往上翻？」
+/// 剩下的時候窗口一動不動，所以亮條在窗口裏自己走，走到邊上纔帶着窗口走：
+/// 往上按 `k` 是先往上走到頂，再往上翻。
 fn window_start(stored: usize, selected: usize, room: usize, rows: usize) -> usize {
     if room == 0 {
         return 0;
@@ -2761,11 +2744,11 @@ enum ShiftResult {
 /// **The state machine is yume's** ([`ModifierTap`]), not a fourth copy of it.
 /// This is only the part that is genuinely terminal: turning crossterm's
 /// `KeyEvent` into the three questions upstream asks — which modifier, down or
-/// up, and were any *other* real modifiers held at that moment. Two things fell
-/// out of adopting it: left and right Shift are tracked apart (one shared
-/// `down` flag let `LeftShift↓ RightShift↓ RightShift↑` fire a toggle with the
-/// left one still held), and losing a release — ⌘-Tab away with Shift down —
-/// is recoverable, because upstream gives a [`ModifierTap::reset`] for exactly
+/// up, and were any *other* real modifiers held at that moment. Left and
+/// right Shift are tracked apart (one shared `down` flag would let
+/// `LeftShift↓ RightShift↓ RightShift↑` fire a toggle with the left one still
+/// held), and losing a release — ⌘-Tab away with Shift down — is
+/// recoverable, because upstream gives a [`ModifierTap::reset`] for exactly
 /// that and the loop calls it on `FocusLost`.
 ///
 /// Requires the Kitty keyboard protocol so bare modifier presses and releases
@@ -2907,7 +2890,7 @@ impl Ran {
     }
 }
 
-/// **跑一條命令，`C-c` 只打中它，不打中編輯器**（2026-10-05 一個用的人報的）。
+/// **跑一條命令，`C-c` 只打中它，不打中編輯器。**
 ///
 /// Warning: **`:!` 是把終端整個還回去的**（見 [`hand_over`]），於是命令和 yumete 在同一
 /// 個前台進程組裏——`C-c` 發給整個組，兩個一起死，而死的那一個手上還握着沒存的稿子。
@@ -2989,7 +2972,7 @@ fn run_in_the_terminal(line: &str, in_dir: &std::path::Path) -> io::Result<std::
     status
 }
 
-/// **`C-z`: stop until `fg`** (helix's `suspend`, 2026-11-02). Everything
+/// **`C-z`: stop until `fg`** (helix's `suspend`). Everything
 /// the terminal was asked for is put back first, as on the way out (the
 /// keyboard's flags, the mouse, the three colours), and asked for again
 /// after. `false` where there is no job control to stop for.
@@ -3027,7 +3010,7 @@ fn suspend_to_the_shell<B: ratatui::backend::Backend + io::Write>(
     }
     ratatui::crossterm::terminal::enable_raw_mode()?;
     execute!(terminal.backend_mut(), ratatui::crossterm::terminal::EnterAlternateScreen)?;
-    // The pictures may have gone with the screen; upload again (2026-11-06).
+    // The pictures may have gone with the screen; upload again.
     crate::graphics::forget();
     let _ = execute!(stdout(), EnableMouseCapture, EnableBracketedPaste, EnableFocusChange);
     if enhanced {
@@ -3099,7 +3082,7 @@ fn hand_over<B: ratatui::backend::Backend + io::Write>(
         terminal.backend_mut(),
         ratatui::crossterm::terminal::EnterAlternateScreen
     )?;
-    // The pictures may have gone with the screen; upload again (2026-11-06).
+    // The pictures may have gone with the screen; upload again.
     crate::graphics::forget();
     let _ = execute!(
         stdout(),
@@ -3145,14 +3128,14 @@ pub fn set_theme(
             ),
         }
     }
-    // Warning: **說出來之前先把明暗定下來**（2026-10-09 審出來的）。這一句問
+    // Warning: **說出來之前先把明暗定下來。** 這一句問
     // `dark()`，而那一格在還沒 settle 過的時候交的是預設值——離屏那條路
-    // （`--shot`）正是這樣：`:theme bw` 之後狀態欄寫「（淺色）」，而 `frame_to` 隨後
-    // settle 出來的是深色，於是**同一幀裏話和畫對不上**。`settle` 對「有人明說過
+    // （`--shot`）正是這樣：`:theme bw` 之後狀態欄會寫「（淺色）」，而 `frame_to` 隨後
+    // settle 出來的是深色，**同一幀裏話和畫對不上**。`settle` 對「有人明說過
     // 明暗」是空操作（`CHOSEN_MOOD`），所以上面那一段剛選過的不會被它蓋掉。
     crate::theme::settle(config, crate::theme::terminal_answer());
-    // **A theme with no light half is drawn dark whatever the mood says**
-    // (2026-10-25), so that is what is reported — and a light mood asked for
+    // **A theme with no light half is drawn dark whatever the mood says**,
+    // so that is what the status line says — and a light mood asked for
     // out loud is answered, not quietly ignored.
     let dark_only = crate::theme::dark_only(config);
     if dark_only && matches!(mood, Some(Mood::Light)) {
@@ -3187,13 +3170,13 @@ pub fn set_theme(
 /// file is looked for afterwards and its absence is said out loud rather than
 /// reported as a picture that was never written.
 ///
-/// Warning: **nothing the command says may reach the screen** (2026-11-08).
+/// Warning: **nothing the command says may reach the screen.**
 /// The editor's picture of the terminal is ratatui's, and it redraws only the
 /// cells it believes changed: a line `osascript` wrote across the bottom rows
-/// stayed there under every later frame, mixed with old status-line pieces,
-/// until something forced a full redraw. So the command gets no terminal at
-/// all — see [`photograph_command`] — and what it complained of comes back as
-/// one line on the status bar.
+/// would stay there under every later frame, mixed with old status-line
+/// pieces, until something forced a full redraw. So the command gets no
+/// terminal at all — see [`photograph_command`] — and what it complained of
+/// comes back as one line on the status bar.
 fn photograph_the_screen(
     config: &Config,
     dest: Option<&std::path::Path>,
@@ -3313,10 +3296,10 @@ fn shot_runs_a_program(job: &ShotJob) -> bool {
 ///
 /// `$SHELL` on Unix, `%ComSpec%` on Windows — what the machine says it uses,
 /// falling back to what it is certain to have.
-/// Warning: **跑在[工作路徑][`yumete_core::editor::Editor::working_dir`]上**
-/// （2026-10-01）。從前它不設 `current_dir`，於是外部命令繼承的是**進程的
-/// cwd**——`:cd` 改了也沒用，而 vim 的 `:help current-directory` 明寫着那一條
-/// 「It also makes a difference for executing external commands, e.g. `:!ls`」。
+/// Warning: **跑在[工作路徑][`yumete_core::editor::Editor::working_dir`]上。**
+/// 不設 `current_dir` 的話，外部命令繼承的是**進程的 cwd**——`:cd` 改了也沒用，
+/// 而 vim 的 `:help current-directory` 明寫着那一條「It also makes a difference
+/// for executing external commands, e.g. `:!ls`」。
 fn shell_command(line: &str, in_dir: &std::path::Path) -> std::process::Command {
     #[cfg(windows)]
     {
@@ -3359,12 +3342,12 @@ struct Job {
     child: std::process::Child,
     /// The addresses it printed, once it has printed them.
     said: std::sync::mpsc::Receiver<Addresses>,
-    /// **The file it is previewing** (2026-09-22), so that closing that file
+    /// **The file it is previewing**, so that closing that file
     /// stops it.
     ///
-    /// 2026-09-22 提的：「我覺得 tinymist 有可能開很多預覽而我們完全意識不
-    /// 到。」同一次會話裏攢不起來——起一個新的先殺掉舊的，這裏只有一個位子——
-    /// 但**關掉那個檔案之後它照樣活着**，而屏幕上再没有任何東西提起它。
+    /// 同一次會話裏攢不起來——起一個新的先殺掉舊的，這裏只有一個位子——但
+    /// **關掉那個檔案之後它不許照樣活着**：屏幕上再没有任何東西提起它，預覽可以
+    /// 開了很多而沒人意識到。
     ///
     /// Warning: **切走不停。** 去隔壁一章改一句話再切回來是常事，而預覽服務器起一次
     /// 要幾秒；停的判準是「這個檔案不再開着」，不是「不在眼前」。
@@ -3385,8 +3368,8 @@ struct Job {
     control: Option<std::net::TcpStream>,
     /// **控制面在哪** —— 記着它纔接得回來。
     ///
-    /// Warning: 從前只有那個 socket：一斷就**這一場都沒有了**，而排版器還好好地跑着，
-    /// 於是預覽從某一刻起悄悄不再跟着按鍵走，沒有任何跡象。2026-09-24 補。
+    /// Warning: 只有那個 socket 的話，一斷就**這一場都沒有了**，而排版器還好好地跑着，
+    /// 於是預覽從某一刻起悄悄不再跟着按鍵走，沒有任何跡象。
     control_at: Option<String>,
     /// 下一次可以重撥的時刻 —— 斷了不許每一幀撥一次。
     redial: Option<std::time::Instant>,
@@ -3401,7 +3384,7 @@ struct Job {
     /// a buffer whose path is `s.typ`, and `updateMemoryFiles` carrying that
     /// name is read, matched against nothing, and dropped without a word — the
     /// pushes go out, the preview never moves, and both sides look healthy.
-    /// 2026-09-23 踩到，而 `preview.rs` 的註釋當時就寫着這一條。
+    /// `preview.rs` says the same.
     named: std::path::PathBuf,
 }
 
@@ -3425,11 +3408,10 @@ fn whose() -> String {
 ///
 /// **The name goes in beside the pid.** Adoption has to check that the pid is
 /// still the program we started — a pid is reused, and killing whatever
-/// inherited it would be far worse than leaving a server running — and the
-/// check used to compare against the literal string `tinymist`. A preview
-/// server declared in a project's own config (`[language.markdown] preview`)
-/// was therefore never adopted: it is exactly the orphan nobody would think to
-/// look for.
+/// inherited it would be far worse than leaving a server running — and a
+/// check against the literal string `tinymist` would never adopt a preview
+/// server declared in a project's own config (`[language.markdown]
+/// preview`): exactly the orphan nobody would think to look for.
 ///
 /// **Written without following a symlink.** The path is predictable and lives
 /// in a directory anyone can write to, so the plain `fs::write` would happily
