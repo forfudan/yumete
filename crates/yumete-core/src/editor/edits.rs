@@ -1797,10 +1797,13 @@ impl Editor {
         let range = (start, motion::next_grapheme(self.current_buffer().rope(), last));
         // **vim never takes the file's last line break** (measured against
         // nvim 2026-11-07): charwise Visual may stand on a break, and on the
-        // last line `v$d` leaves `abcd\n`, not `abcd`. Yanking it is fine;
-        // linewise operators keep their own rule.
+        // last line `v$d` leaves `abcd\n`, not `abcd`. Linewise operators
+        // keep their own rule.
+        //
+        // Warning: **A yank does not take it either**: on the last line nvim's
+        // `v$y` holds `last one`, not `last one\n`, so `p` puts no empty line
+        // after it.
         let range = match op {
-            motion::Operator::Yank => range,
             _ if self.as_vim() && self.extend && !self.vim_lines && !self.lines_at_key => {
                 let rope = self.current_buffer().rope();
                 let len = rope.len_chars();

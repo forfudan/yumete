@@ -1001,16 +1001,53 @@ impl Editor {
             // `d50%` from line 1 takes lines 1 to 4, `Gd50%` lines 5 to 9,
             // and from line 5 itself nothing. Not `d{line}G`, which takes
             // both ends.
+            //
+            // Warning: **It is an exclusive motion to the column wanted, not a
+            // linewise one** (measured against nvim 0.12).
+            // The lines-short-of-the-far-one above is vim's exclusive-linewise
+            // rule (`:h exclusive-linewise`): the far end in column 0, the
+            // near one in the indent. Anywhere else it is charwise — `d50%`
+            // from line 1's `t` of `text` keeps `line 1 ` and joins `text`
+            // of line 5 on — and onto the line itself it is an empty span,
+            // which `c` still enters Insert on. After the linewise case the
+            // cursor goes to the first non-blank (vim's `end_adjusted` skips
+            // the 'nostartofline' column).
             self.settle_alias_count();
             if let Some(n) = self.count.take() {
                 self.alias_count = None;
                 let Some(line) = self.percent_line(n) else { return };
-                let here = self.current_buffer().rope().char_to_line(self.sel.head());
-                let to = line - 1;
-                if here == to {
+                let rope = self.current_buffer().rope();
+                let here = self.sel.head();
+                let far = self.char_at_line_column(line - 1, self.column_wanted());
+                let (start, end) = (here.min(far), here.max(far));
+                if start == end {
+                    if op == 'c' && !self.refuse_readonly() {
+                        self.snapshot();
+                        self.enter_insert();
+                    }
                     return;
                 }
-                return self.do_vim_lines(op, here.min(to), here.max(to) - 1);
+                let (first, last) = (rope.char_to_line(start), rope.char_to_line(end));
+                if end != rope.line_to_char(last) {
+                    return self.do_vim(op, motion::Span::Over { anchor: start, head: end - 1 });
+                }
+                let in_indent = rope.slice(rope.line_to_char(first)..start).chars().all(|c| c == ' ' || c == '\t');
+                if !in_indent {
+                    // Up to the last character of the line before, not its break.
+                    let stop = motion::line_end(rope, rope.line_to_char(last - 1));
+                    return match stop > start {
+                        true => self.do_vim(op, motion::Span::Over { anchor: start, head: stop - 1 }),
+                        false => self.do_vim(op, motion::Span::Over { anchor: start, head: start }),
+                    };
+                }
+                self.do_vim_lines(op, first, last - 1);
+                if op == 'd' {
+                    let rope = self.current_buffer().rope();
+                    let at = motion::line_first_non_blank(rope, self.sel.head());
+                    self.move_head(at);
+                    self.sel.set_goal(None);
+                }
+                return;
             }
             self.count = None;
             self.alias_count = None;

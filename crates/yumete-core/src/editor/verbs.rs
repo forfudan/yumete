@@ -407,7 +407,8 @@ impl Editor {
         self.clamp_cursor();
     }
 
-    /// **vim's `gq`**: the selected lines filled to vim's width (see
+    /// **vim's `gq`**: the selected lines filled to vim's width, or this
+    /// file's `tw` (see
     /// [`crate::reflow::fill_like_vim`]), and the cursor on the first non-blank
     /// of the last line written, where vim leaves it. The caller has taken the
     /// undo point.
@@ -420,7 +421,10 @@ impl Editor {
         let first = rope.char_to_line(start);
         let last = rope.char_to_line(end.saturating_sub(1).max(start));
         let lines: Vec<String> = (first..=last).map(|n| motion::line_text(rope, n)).collect();
-        let filled = crate::reflow::fill_like_vim(&lines, VIM_TEXT_WIDTH, self.writes_code());
+        // **This file's `tw` is vim's `textwidth`**: a modeline's or `:set`'s
+        // width, and 0 is vim's 0, the factory width.
+        let width = self.current_buffer().local().text_width.filter(|w| *w > 0).unwrap_or(VIM_TEXT_WIDTH);
+        let filled = crate::reflow::fill_like_vim(&lines, width, self.writes_code());
         let from = rope.line_to_char(first);
         let to = motion::line_end(rope, rope.line_to_char(last));
         let text = filled.join(self.current_buffer().ending());
@@ -647,6 +651,11 @@ impl Editor {
             .filter_map(|(line, at)| at.map(|(a, _)| yumete_cjk::str_width(line[..a].trim_end())))
             .max()
             .unwrap_or(0);
+        // **A full-width sign takes no spaces**: Chinese puts none around
+        // its own punctuation, and the padding is in full-width spaces, as
+        // `姓　　名：` is lined up by hand; a half column left over is one
+        // ASCII space.
+        let wide = sign.chars().all(|c| yumete_cjk::str_width(c.encode_utf8(&mut [0; 4])) == 2);
         let mut out = String::new();
         for (line, at) in lines.iter().zip(&found) {
             match *at {
@@ -655,10 +664,18 @@ impl Editor {
                     let pad = width - yumete_cjk::str_width(left);
                     let rest = line[b..].trim_start_matches([' ', '\t']);
                     out.push_str(left);
-                    out.push_str(&" ".repeat(pad));
-                    out.push(' ');
+                    match wide {
+                        true => {
+                            out.push_str(&"\u{3000}".repeat(pad / 2));
+                            out.push_str(&" ".repeat(pad % 2));
+                        }
+                        false => {
+                            out.push_str(&" ".repeat(pad));
+                            out.push(' ');
+                        }
+                    }
                     out.push_str(&line[a..b]);
-                    if !rest.is_empty() && !rest.starts_with(['\n', '\r']) {
+                    if !wide && !rest.is_empty() && !rest.starts_with(['\n', '\r']) {
                         out.push(' ');
                     }
                     out.push_str(rest);

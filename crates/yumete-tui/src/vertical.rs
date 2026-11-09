@@ -1725,6 +1725,11 @@ pub fn draw(
 
             if has_selection && at < sel_end && at + len > sel_start {
                 style = style.patch(sel_style);
+                // A flash over the selection, reversed, as the horizontal
+                // page draws it.
+                if flashed.iter().any(|&(from, to)| at < to.min(sel_end) && at + len > from.max(sel_start)) {
+                    style = ink.reversed(style);
+                }
             }
 
             // …和配對的那一半，一格金。擺在最後，同橫排那一頭：它只改墨色，上面

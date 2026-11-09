@@ -27980,12 +27980,41 @@ fn vims_set_setf_ene_and_tabnew() {
     assert!(ed.status().contains("nu"), "says what it does not take: {}", ed.status());
     ed.execute(":se tw=60").unwrap();
     assert_eq!(ed.current_buffer().local().text_width, Some(60));
+    // …and `gq` fills to it, as vim's does (nvim gives these three lines on
+    // `:set tw=20` and `gqq`).
+    let mut tw = typed_vim("the quick brown fox jumps over the lazy dog again\n");
+    tw.execute(":set tw=20").unwrap();
+    press(&mut tw, "gqq");
+    assert_eq!(tw.current_buffer().text(), "the quick brown fox\njumps over the lazy\ndog again\n");
+    tw.execute(":set tw=0").unwrap();
+    press(&mut tw, "gqip");
+    assert_eq!(tw.current_buffer().text(), "the quick brown fox jumps over the lazy dog again\n", "0 is the factory 79");
 
+    // A question is answered, and a wrong value is said to be one.
+    ed.execute(":set ts? sw et?").unwrap();
+    assert_eq!(ed.status(), "ts=2 sw=2 et");
+    ed.execute(":set ft").unwrap();
+    assert_eq!(ed.status(), "ft=rust");
+    ed.execute(":set ft=nosuchlang").unwrap();
+    assert_eq!(ed.status(), say!("render.no-such-markup", "nosuchlang"));
+    assert_eq!(ed.syntax().name(), "rust", "nothing changed");
+    ed.execute(":setf").unwrap();
+    assert_eq!(ed.status(), say!("render.markup-is", "rust"));
+    ed.execute(":set ts=4 tw?").unwrap();
+    assert_eq!(ed.status(), format!("{} tw=60", say!("cmd.set-took", "ts=4")));
+    let Err(said) = ed.execute(":ene other.txt") else { panic!(":ene takes nothing") };
+    assert!(said.to_string().starts_with(&say!("cmd.takes-nothing-after-it", "ene", "other.txt")), "{said}");
     let tabs = ed.buffer_count();
     ed.execute(":tabnew").unwrap();
     assert_eq!(ed.buffer_count(), tabs + 1, ":tabnew");
     ed.execute(":ene").unwrap();
     assert_eq!(ed.buffer_count(), tabs + 2, ":ene");
+    // `:tabn` is vim's `:tabnext`, not a prefix of `:tabnew`: it opens
+    // nothing and says where the walk is.
+    for word in [":tabn", ":tabnext", ":tabne"] {
+        assert!(ed.execute(word).is_err(), "{word}");
+        assert_eq!(ed.buffer_count(), tabs + 2, "{word} opened nothing");
+    }
 }
 
 /// **vim's `{count}%`** (2026-11-07, measured in vim 9.1 and nvim 0.12 on
@@ -28012,6 +28041,31 @@ fn vims_count_percent_goes_that_far_down_the_file() {
     assert_eq!(left("v50%d"), "ine 5,6,7,8,9,10", "Visual: charwise, to line 5");
 }
 
+/// **`{count}%` under an operator is exclusive, to the column wanted**
+/// (each case measured against nvim 0.12 on indented lines): from the indent
+/// it takes the lines short of the far one and lands on the first non-blank;
+/// past the indent it is charwise; onto its own line `c` still enters Insert.
+#[test]
+fn vims_count_percent_under_an_operator_is_exclusive() {
+    let ten: String = (1..=10).map(|n| format!("  line {n} text\n")).collect();
+    let run = |keys: &str| {
+        let mut ed = typed_vim(&ten);
+        press(&mut ed, keys);
+        ed
+    };
+    let first = |ed: &Editor| ed.current_buffer().text().lines().next().unwrap_or("").to_string();
+    let ed = run("0d50%x");
+    assert_eq!(first(&ed), "  ine 5 text", "lines 1 to 4, then the first non-blank");
+    let ed = run("0llllllld50%x");
+    assert_eq!(first(&ed), "  line  text", "charwise: `  line ` and line 5's `5 text`, the cursor on the `5`");
+    assert_eq!(ed.current_buffer().text().lines().count(), 6);
+    let mut ed = run("4j0llc50%X");
+    ed.on_key(Key::Esc);
+    assert_eq!(ed.current_buffer().text().lines().nth(4), Some("  Xline 5 text"), "an empty change still types");
+    let ed = run("G0lllllld50%x");
+    assert_eq!(ed.current_buffer().text().lines().nth(4), Some("  line10 text"), "upward, charwise");
+}
+
 /// **vim's charwise Visual reaches the line break** (2026-11-07, measured
 /// against nvim): `v$` and `l` stand on it, `d` joins the next line, a copy
 /// that ends in a break pastes inside the line, and the file's last break is
@@ -28035,6 +28089,10 @@ fn vims_visual_dollar_takes_the_line_break() {
     let mut ed = typed_vim("abcdef\nxyz\n");
     press(&mut ed, "jlv$d");
     assert_eq!(text(&ed), "abcdef\nx\n", "the last break stays");
+    // …and is not yanked (nvim gives `abcdefyz\nxyz\n`).
+    let mut ed = typed_vim("abcdef\nxyz\n");
+    press(&mut ed, "jlv$ygg$p");
+    assert_eq!(text(&ed), "abcdefyz\nxyz\n", "the last break is not copied");
     // Normal mode's `$` and `l` still stop on the last character.
     let mut ed = typed_vim("abcdef\nxyz\n");
     press(&mut ed, "$x");
@@ -28093,6 +28151,15 @@ fn align_lines_up_the_selected_lines_on_a_sign() {
     press(&mut ed, "%");
     ed.execute(":align :").unwrap();
     assert_eq!(ed.current_buffer().text(), "a      : 1\nlonger : 2\n");
+    // A full-width sign takes no spaces, and the padding is full-width.
+    let mut ed = typed("甲：一\n乙乙乙：二\nab：三\n");
+    press(&mut ed, "%");
+    ed.execute(":align ：").unwrap();
+    assert_eq!(ed.current_buffer().text(), "甲\u{3000}\u{3000}：一\n乙乙乙：二\nab\u{3000}\u{3000}：三\n");
+    let mut ed = typed("a：一\n乙乙：二\n");
+    press(&mut ed, "%");
+    ed.execute(":align ：").unwrap();
+    assert_eq!(ed.current_buffer().text(), "a\u{3000} ：一\n乙乙：二\n", "a half column left over");
     let mut ed = typed("a = 1\nb\n");
     press(&mut ed, "%");
     ed.execute(":align").unwrap();

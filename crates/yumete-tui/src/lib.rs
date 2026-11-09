@@ -13739,6 +13739,19 @@ fn draw_horizontal(
             if ends_line && sel_end > row.start + row_len {
                 break_cell = " ";
             }
+            // **A flash over the selection is drawn reversed**: helix's `y`
+            // leaves the text selected, and the selection's ground over the
+            // selection's ground would show nothing.
+            for &(from, to) in &flashed {
+                let (from, to) = (from.max(sel_start), to.min(sel_end));
+                if from < to && to > row.start && from < reach {
+                    let a = from.saturating_sub(row.start).min(row_len);
+                    let b = (to - row.start).min(row_len);
+                    for style in styles.iter_mut().take(b).skip(a) {
+                        *style = ink.reversed(*style);
+                    }
+                }
+            }
         }
 
         // The reading goes above the row it reads — pushed after the row's
@@ -20217,6 +20230,23 @@ fn squeezed(text: &str) -> String {
         };
         assert!(lit(true), "lit with the setting on");
         assert!(!lit(false), "dark with it off");
+
+        // Under helix's keys the copy stays selected, so the flash is drawn
+        // reversed over it.
+        let mut editor = editor_with("alpha beta\n");
+        for c in "xy".chars() {
+            editor.on_key(Key::Char(c));
+        }
+        let mut config = Config::default();
+        let ground = |config: &Config| {
+            let buffer = render_with(&editor, config, no_ime(), 40, 6);
+            let x = row_text(&buffer, 0).find("beta").expect("drawn") as u16 + 2;
+            buffer[(x, 0)].style().bg
+        };
+        let selected = ground(&config);
+        assert_eq!(selected, Some(ink(&config).selection()), "selected, flash off");
+        config.editor.yank_flash = true;
+        assert_ne!(ground(&config), selected, "the flash is seen over the selection");
     }
 
     /// **A float drawn whole gives `C-d` back to the text** (2026-11-07 report:

@@ -23,7 +23,7 @@
 //! 一份讀不進去的檔面板頂上就說出來，`:w` 不寫它，要改請 `e` 打開那個檔
 //! （[`crate::panel::Panel::save`]）。
 
-use toml_edit::{DocumentMut, Item, Value};
+use toml_edit::{DocumentMut, InlineTable, Item, Table, TableLike, Value};
 
 /// 一次寫回要做的事。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,22 +45,52 @@ pub enum Change {
     Written(String),
 }
 
-/// The table `tables` names, one inside the next, if the file has it.
-fn table_at<'a>(doc: &'a mut DocumentMut, tables: &[&str]) -> Option<&'a mut toml_edit::Table> {
-    let mut t = doc.get_mut(tables.first()?)?.as_table_mut()?;
+/// The table `tables` names, one inside the next, if the file has it —
+/// written as a `[表]` of its own lines or inline as `表 = { … }`.
+///
+/// Warning: **An inline table is written into where it stands.** Turned
+/// into a table of its own lines it would move to the end of the file and
+/// lose the comment after it.
+fn table_at<'a>(doc: &'a mut DocumentMut, tables: &[&str]) -> Option<&'a mut dyn TableLike> {
+    let mut t = doc.get_mut(tables.first()?)?.as_table_like_mut()?;
     for name in &tables[1..] {
-        unfold(t, name);
-        t = t.get_mut(name)?.as_table_mut()?;
+        t = t.get_mut(name)?.as_table_like_mut()?;
     }
     Some(t)
 }
 
-/// A table written inline (`flavor_items = { tables = false }`) becomes a
-/// table of its own lines, so a key can be set in it or taken out of it.
-fn unfold(t: &mut toml_edit::Table, name: &str) {
-    if let Some(item) = t.get_mut(name) {
-        if let Some(inline) = item.as_inline_table() {
-            *item = Item::Table(inline.clone().into_table());
+/// **How the file ends its lines and whether it opens with a BOM**:
+/// `toml_edit` reads both and writes neither, and a one-value change from
+/// the panel must not be a whole-file diff of a Windows config.
+struct Shape {
+    bom: bool,
+    crlf: bool,
+}
+
+impl Shape {
+    /// The shape of `text`, and the text to hand the parser: no BOM, and
+    /// `\n` for `\r\n` when the file ends its lines that way — judged by
+    /// its first line, the way an editor does.
+    fn of(text: &str) -> (Shape, String) {
+        let bom = text.starts_with('\u{feff}');
+        let text = text.trim_start_matches('\u{feff}');
+        let crlf = text.find('\n').is_some_and(|at| text[..at].ends_with('\r'));
+        let plain = match crlf {
+            true => text.replace("\r\n", "\n"),
+            false => text.to_string(),
+        };
+        (Shape { bom, crlf }, plain)
+    }
+
+    /// `text`, written back in this shape.
+    fn put(&self, text: String) -> String {
+        let text = match self.crlf {
+            true => text.replace("\r\n", "\n").replace('\n', "\r\n"),
+            false => text,
+        };
+        match self.bom {
+            true => format!("\u{feff}{text}"),
+            false => text,
         }
     }
 }
@@ -70,6 +100,7 @@ fn unfold(t: &mut toml_edit::Table, name: &str) {
 /// `text` 是檔裏原樣的那一份（空字串 ＝ 還没有這個檔）。`changes` 是
 /// `("表.鍵", 怎麽改)`。回來的是新的正文；檔讀不通就回解析器的話，一個字不寫。
 pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, String> {
+    let (shape, text) = Shape::of(text);
     let mut doc: DocumentMut = text.parse().map_err(|e| format!("{e}"))?;
 
     for (path, change) in changes {
@@ -81,8 +112,12 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
         let tables: Vec<&str> = tables.split('.').collect();
         match change {
             Change::Drop => {
+                let mut said = String::new();
                 if let Some(t) = table_at(&mut doc, &tables) {
-                    t.remove(key);
+                    said = remove_keeping_comments(t, key);
+                }
+                if !said.is_empty() {
+                    put_after_table(&mut doc, &tables, &said);
                 }
                 // A table inside a table that has nothing left goes too, from
                 // the innermost out: an empty `[keys.flavor_items]` or
@@ -93,7 +128,10 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
                         emptied = false;
                         break;
                     };
-                    let empty = matches!(outer.get(tables[depth]), Some(Item::Table(inner)) if inner.is_empty());
+                    let empty = outer
+                        .get(tables[depth])
+                        .and_then(Item::as_table_like)
+                        .is_some_and(|inner| inner.is_empty());
                     if !empty {
                         emptied = false;
                         break;
@@ -110,19 +148,31 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
                 // 而那正是我們要的：檔裏没有 `[editor]` 的時候補一個出來。一張只為
                 // 裝子表而補出來的外層表是 implicit 的，不另寫一行空的 `[keys]`。
                 let fresh_outer = doc.get(tables[0]).is_none();
-                let entry = doc
-                    .entry(tables[0])
-                    .or_insert_with(|| Item::Table(toml_edit::Table::new()));
-                let Some(mut t) = entry.as_table_mut() else {
-                    return Err(format!("{} 不是一張表", tables[0]));
-                };
-                if fresh_outer && tables.len() > 1 {
+                let entry = doc.entry(tables[0]).or_insert_with(|| Item::Table(Table::new()));
+                if let (true, true, Some(t)) = (fresh_outer, tables.len() > 1, entry.as_table_mut()) {
                     t.set_implicit(true);
                 }
+                let mut inline = entry.is_inline_table();
+                let Some(mut t) = entry.as_table_like_mut() else {
+                    return Err(format!("{} 不是一張表", tables[0]));
+                };
                 for name in &tables[1..] {
-                    unfold(t, name);
-                    let inner = t.entry(name).or_insert_with(|| Item::Table(toml_edit::Table::new()));
-                    let Some(inner) = inner.as_table_mut() else {
+                    // A table that is not there yet is written the way the
+                    // table holding it is: inside an inline one, inline too.
+                    if !t.contains_key(name) {
+                        t.insert(
+                            name,
+                            match inline {
+                                true => Item::Value(Value::InlineTable(InlineTable::new())),
+                                false => Item::Table(Table::new()),
+                            },
+                        );
+                    }
+                    let Some(item) = t.get_mut(name) else {
+                        return Err(format!("{name} 不是一張表"));
+                    };
+                    inline |= item.is_inline_table();
+                    let Some(inner) = item.as_table_like_mut() else {
                         return Err(format!("{name} 不是一張表"));
                     };
                     t = inner;
@@ -144,13 +194,108 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
                         *old = fresh;
                     }
                     _ => {
+                        let mut value = value;
+                        // The space before an inline table's `}` belongs to its
+                        // last value; it moves to the one added after it.
+                        let last = t.iter().last().map(|(k, _)| k.to_string());
+                        if let (true, Some(Item::Value(last))) = (inline, last.and_then(|k| t.get_mut(&k))) {
+                            let space = last.decor().suffix().and_then(|s| s.as_str()).unwrap_or("").to_string();
+                            if space.trim().is_empty() {
+                                last.decor_mut().set_suffix("");
+                                value.decor_mut().set_prefix(" ");
+                                value.decor_mut().set_suffix(space);
+                            }
+                        }
                         t.insert(key, Item::Value(value));
                     }
                 }
             }
         }
     }
-    Ok(doc.to_string())
+    Ok(shape.put(doc.to_string()))
+}
+
+/// **Take `key` out of `t`, and keep the comment lines above it.** They
+/// are the writer's and say something about the table, not only about the
+/// value: they go onto the key after it. Returned when no key follows, for
+/// [`put_after_table`] to place.
+fn remove_keeping_comments(t: &mut dyn TableLike, key: &str) -> String {
+    let said = t
+        .key(key)
+        .and_then(|k| k.leaf_decor().prefix())
+        .and_then(|p| p.as_str())
+        .map(comment_lines)
+        .unwrap_or_default();
+    let next = {
+        let mut keys = t.iter().filter(|(_, item)| item.is_value()).map(|(k, _)| k.to_string());
+        keys.by_ref().find(|k| k == key);
+        keys.next()
+    };
+    t.remove(key);
+    if said.is_empty() {
+        return said;
+    }
+    match next.as_deref().and_then(|next| t.key_mut(next)) {
+        Some(mut next) => {
+            let decor = next.leaf_decor_mut();
+            let had = decor.prefix().and_then(|p| p.as_str()).unwrap_or("").to_string();
+            decor.set_prefix(format!("{said}{had}"));
+            String::new()
+        }
+        None => said,
+    }
+}
+
+/// The whole lines of a key's prefix, if any of them is a comment: what is
+/// above the key, without the indent of the key's own line.
+fn comment_lines(prefix: &str) -> String {
+    match (prefix.contains('#'), prefix.rfind('\n')) {
+        (true, Some(end)) => prefix[..=end].to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Comment lines from the end of the table `tables` names, put before the
+/// table that comes after it in the file, or at the end of the file.
+fn put_after_table(doc: &mut DocumentMut, tables: &[&str], said: &str) {
+    let at = tables
+        .iter()
+        .try_fold(doc.as_table(), |t, name| t.get(name)?.as_table())
+        .and_then(Table::position);
+    let mut all = Vec::new();
+    positions(doc.as_table(), &mut Vec::new(), &mut all);
+    let next = all.into_iter().filter(|(p, _)| at.is_some_and(|at| *p > at)).min().map(|(_, path)| path);
+    let target = next.and_then(|path| {
+        let mut t = doc.as_table_mut();
+        for name in &path {
+            t = t.get_mut(name)?.as_table_mut()?;
+        }
+        Some(t)
+    });
+    match target {
+        Some(after) => {
+            let had = after.decor().prefix().and_then(|p| p.as_str()).unwrap_or("").to_string();
+            after.decor_mut().set_prefix(format!("{said}{had}"));
+        }
+        None => {
+            let had = doc.trailing().as_str().unwrap_or("").to_string();
+            doc.set_trailing(format!("{had}{said}"));
+        }
+    }
+}
+
+/// Every table written with a header, by where it stands in the file.
+fn positions(t: &Table, at: &mut Vec<String>, out: &mut Vec<(usize, Vec<String>)>) {
+    for (key, item) in t.iter() {
+        if let Some(inner) = item.as_table() {
+            at.push(key.to_string());
+            if let (Some(p), false) = (inner.position(), inner.is_implicit()) {
+                out.push((p, at.clone()));
+            }
+            positions(inner, at, out);
+            at.pop();
+        }
+    }
 }
 
 /// **A top-level table with nothing left in it goes, header and all**
@@ -280,6 +425,61 @@ name = \"paper\"
         let before = "[keys]\nflavor = \"full\"\n\n[keys.normal]\n\"C-s\" = \":w\"\n";
         let after = rewrite(before, &[("keys.flavor".into(), Change::Drop)]).unwrap();
         assert!(after.contains("[keys.normal]"), "{after}");
+    }
+
+    /// **A CRLF file stays CRLF, and its BOM stays**: one value changed from
+    /// the panel is one line changed.
+    #[test]
+    fn the_line_endings_and_the_bom_are_the_files() {
+        let before = "\u{feff}# mine\r\n[editor]\r\nscrolloff = 8\r\nsoft_wrap = true # yes\r\n";
+        let after = rewrite(before, &[("editor.scrolloff".into(), Change::Count(9))]).unwrap();
+        assert_eq!(after, before.replace("scrolloff = 8", "scrolloff = 9"));
+        let after = rewrite(before, &[("editor.indent".into(), Change::Count(2))]).unwrap();
+        assert!(after.starts_with('\u{feff}'), "{after:?}");
+        assert!(!after.replace("\r\n", "").contains('\n'), "a new line is CRLF too: {after:?}");
+        let after = rewrite("[editor]\nscrolloff = 8\n", &[("editor.scrolloff".into(), Change::Count(9))]).unwrap();
+        assert_eq!(after, "[editor]\nscrolloff = 9\n", "LF stays LF, no BOM is added");
+    }
+
+    /// **`r` takes the key, not the comment over it**: the comment goes onto
+    /// what follows — the next key, the next table, or the end of the file.
+    #[test]
+    fn dropping_a_key_keeps_the_comment_above_it() {
+        let drop = |before: &str| rewrite(before, &[("editor.soft_wrap".into(), Change::Drop)]).unwrap();
+        assert_eq!(
+            drop("[editor]\n# about wrapping\nsoft_wrap = true\nindent = 2\n"),
+            "[editor]\n# about wrapping\nindent = 2\n"
+        );
+        assert_eq!(
+            drop("[editor]\nindent = 2\n# about wrapping\nsoft_wrap = true\n\n[theme]\nname = \"bw\"\n"),
+            "[editor]\nindent = 2\n# about wrapping\n\n[theme]\nname = \"bw\"\n"
+        );
+        assert_eq!(
+            drop("[editor]\nindent = 2\n# about wrapping\nsoft_wrap = true\n"),
+            "[editor]\nindent = 2\n# about wrapping\n"
+        );
+        let after = drop("[editor]\n# about wrapping\nsoft_wrap = true\n");
+        assert!(after.contains("# about wrapping") && !after.contains("soft_wrap"), "{after:?}");
+    }
+
+    /// **An inline table is written where it stands**, its comment kept, and
+    /// a top-level `editor = { … }` can be saved into.
+    #[test]
+    fn an_inline_table_is_written_where_it_stands() {
+        let before = "[keys]\nflavor_items = { tables = false } # trying this\npreset = \"vim\"\n\n[theme]\nname = \"bw\"\n";
+        let after = rewrite(before, &[("keys.flavor_items.tables".into(), Change::Tick(true))]).unwrap();
+        assert_eq!(after, before.replace("tables = false", "tables = true"));
+        let after = rewrite(before, &[("keys.flavor_items.lists".into(), Change::Tick(false))]).unwrap();
+        assert_eq!(after, before.replace("tables = false", "tables = false, lists = false"));
+        let after = rewrite(before, &[("keys.flavor_items.tables".into(), Change::Drop)]).unwrap();
+        assert_eq!(after, "[keys]\npreset = \"vim\"\n\n[theme]\nname = \"bw\"\n", "emptied, it goes");
+
+        let before = "editor = { scrolloff = 3 }\n";
+        let after = rewrite(before, &[("editor.scrolloff".into(), Change::Count(4))]).unwrap();
+        assert_eq!(after, "editor = { scrolloff = 4 }\n");
+        let after = rewrite(before, &[("editor.indent".into(), Change::Count(2))]).unwrap();
+        let back: toml::Value = toml::from_str(&after).expect("TOML");
+        assert_eq!(back["editor"]["indent"].as_integer(), Some(2), "{after}");
     }
 
     /// 檔裏還没有這一張表，就補一張。
