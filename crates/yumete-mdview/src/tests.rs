@@ -412,11 +412,12 @@ fn quotes_follow_the_language_when_the_page_turns_vertical() {
     p.set_height(600);
     p.set_text("这一段是中文，引用了“走吧”。\n");
     p.set_vertical(Some(Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
-    let all: String = p.visible_text(0.0, p.size().1);
+    let all: String = p.visible_text(0.0, p.size().1).replace('\n', "");
     assert!(all.contains("『走吧』"), "{all}");
     p.set_vertical(None);
     p.set_text("This essay is mostly written in English words, and it quotes “走吧” once, then goes on.\n");
     p.set_vertical(Some(Vertical { latin: yumete_core::export::Latin::Turn, hanging: false }));
-    let all: String = p.visible_text(0.0, p.size().1);
+    // A narrow font can break the line inside the quote.
+    let all: String = p.visible_text(0.0, p.size().1).replace('\n', "");
     assert!(all.contains("“走吧”") && !all.contains('『'), "{all}");
 }
