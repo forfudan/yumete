@@ -93,6 +93,12 @@ zhs = "无法保存：{0}"
 en = "cannot save: {0}"
 
 [[message]]
+# 设置面板：按 :w，而配置文件是一个符号链接，它指向的文件已不存在，什么都没写。{0} 是文件（草稿）
+key = "settings.cannot-save-link-to-nothing"
+zhs = "没有保存：{0} 是符号链接，但目标已不存在；先恢复目标，或删掉这个链接"
+en = "not saved: {0} is a link to something that no longer exists; restore it, or remove the link"
+
+[[message]]
 # 设置面板：按 :w，而要写的那份配置文件读不进来，什么都没写。{0} 是文件，{1} 是行号，{2} 是解析器的话（草稿）
 key = "settings.cannot-save-unread"
 zhs = "没有保存：{0} 读不进来（第 {1} 行：{2}），先在文件里改好它"

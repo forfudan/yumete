@@ -163,6 +163,14 @@ fn read_disk(path: &std::path::Path) -> Result<Option<String>, SaveError> {
 fn put(path: &std::path::Path, text: Option<&str>) -> Result<(), SaveError> {
     match text {
         Some(text) => {
+            // A link to nothing — its dotfiles volume not mounted — is said, not
+            // written over: `write_atomically` goes through a link only when
+            // it can be resolved (同 `yumete-core` 存稿子那一支).
+            if std::fs::canonicalize(path).is_err()
+                && std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+            {
+                return Err(SaveError::LinkToNothing(path.to_path_buf()));
+            }
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| SaveError::Io(format!("{}: {e}", parent.display())))?;
             }
@@ -250,8 +258,12 @@ fn declared_in(text: &str) -> BTreeMap<String, String> {
         return out;
     };
     for (table, item) in doc.iter() {
-        if let Some(t) = item.as_table() {
-            declare(&mut out, table, t);
+        match (item.as_table(), item.as_inline_table()) {
+            (Some(t), _) => declare(&mut out, table, t),
+            // `editor = { scrolloff = 3 }` is `[editor]` on one line, and the
+            // loader takes it (2026-11-09, review: the panel showed none of it).
+            (_, Some(inline)) => declare(&mut out, table, &inline.clone().into_table()),
+            _ => {}
         }
     }
     out
@@ -502,6 +514,10 @@ pub enum SaveError {
     Unread { path: PathBuf, line: usize, said: String },
     /// The disk said no.
     Io(String),
+    /// The config path is a link whose target is not there (2026-11-09,
+    /// review): saving would replace the link with a file of its own, and the
+    /// dotfiles copy it pointed at would never hear of it.
+    LinkToNothing(PathBuf),
 }
 
 /// **Where the panel stands**, to tell whether a key moved anything
@@ -2315,6 +2331,40 @@ mod tests {
         let config = crate::Config::from_toml(&text);
         assert_eq!(config.keys.flavor.items.get(&FlavorItem::Tables), Some(&false), "{text}");
         assert_eq!(config.keys.flavor.items.get(&FlavorItem::MoveLines), Some(&false), "{text}");
+    }
+
+    /// **A top-level inline table is read and written** (2026-11-09, review:
+    /// `editor = { scrolloff = 3 }` was invisible, and saving into it failed
+    /// with 「editor 不是一張表」).
+    #[test]
+    fn a_top_level_inline_table_is_read_and_written() {
+        let p = panel("editor = { indent = 3 }\n", "");
+        let shown = p.shown(find("editor.indent"));
+        assert_eq!((shown.value.as_str(), shown.from), ("3", Layer::Global));
+        let dir = scratch("inline");
+        let path = dir.join("config.toml");
+        std::fs::write(&path, "editor = { indent = 3 } # mine\n").unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.indent");
+        assert!(p.commit_value("4"));
+        p.flush().unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "editor = { indent = 4 } # mine\n");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **A link to nothing is not replaced by a file** (2026-11-09, review):
+    /// the save is refused and the link stays, as `:w` does with a chapter.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_nothing_is_refused_not_replaced() {
+        let dir = scratch("dangling");
+        let path = dir.join("config.toml");
+        std::os::unix::fs::symlink(dir.join("dotfiles/config.toml"), &path).unwrap();
+        let mut p = on(Panel::open(Some(path.clone()), None), "editor.indent");
+        assert!(p.commit_value("4"));
+        assert_eq!(p.flush(), Err(SaveError::LinkToNothing(path.clone())));
+        assert!(std::fs::symlink_metadata(&path).unwrap().file_type().is_symlink(), "still a link");
+        assert!(!dir.join("dotfiles").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **A font list with quotes in it is written and read back as typed.**

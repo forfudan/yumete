@@ -785,6 +785,7 @@ fn said_of_a_write(editor: &mut Editor, wrote: Result<Option<Saved>, SaveError>,
         }
         Err(SaveError::Unread { path, line, said }) => Some(say!("settings.cannot-save-unread", shorten(&path), line + 1, said)),
         Err(SaveError::Io(why)) => Some(say!("settings.cannot-save", why)),
+        Err(SaveError::LinkToNothing(path)) => Some(say!("settings.cannot-save-link-to-nothing", shorten(&path))),
     }
 }
 
