@@ -1,11 +1,9 @@
-//! **Which layer of a grid the keys are in** — the model settled 2026-10-21.
+//! **Which layer of a grid the keys are in.**
 //!
-//! A grid has two units and one keyboard, and for a year `hjkl` tried to owe
-//! both: in a table they walked cells, in the same table a key away they
-//! walked characters, and which one you got depended on a toggle with no mark
-//! on the screen. Every table bug reported so far has been that one question
-//! asked twice — 「is this a line or a record, a character or a cell?」 Layers
-//! answer it once: at the top there are only cells, inside a cell there are
+//! A grid has two units and one keyboard, and `hjkl` cannot owe both: walking
+//! cells in a table and characters in the same table a key away, depending on
+//! a toggle with no mark on the screen, asks one question twice — 「is this a
+//! line or a record, a character or a cell?」 Layers answer it once: at the top there are only cells, inside a cell there are
 //! only characters, and a key is pressed to cross between them.
 //!
 //! **This module is the model and nothing else.** It holds no buffer, touches
@@ -54,17 +52,15 @@ pub enum Claim {
     /// **Take a whole thing as the selection.** A key that selects means
     /// something different where the unit is the cell: `x` takes a record
     /// rather than a line of the file, and `%` takes this table rather than
-    /// the document it is sitting in (2026-10-21 作者定: 「`x` 选整条记录 is
-    /// a must have feature. Also nice if users want to copy the whole
-    /// table.」).
+    /// the document it is sitting in, so a whole record or the whole table can be
+    /// copied.
     Take(Whole),
     /// Cross into another layer.
     Cross(Layer),
     /// **The table's command group, as though `␣t` had been pressed.**
     ///
-    /// `t` at the top layer and nowhere else (2026-10-20 作者定: 「now we have a
-    /// TAB mode and we can use the short cut `t` as an alias of `_t`, as
-    /// "till" is not useful in the TAB mode … `_t` can be kept」). There is no
+    /// `t` at the top layer and nowhere else, an alias of `␣t`, which stays.
+    /// There is no
     /// character to stop before when the whole cell is the unit, so the key is
     /// free there; inside a cell `t` is vi's till again, and so it is
     /// everywhere outside the grid.
@@ -118,20 +114,15 @@ pub enum Whole {
 /// costs the cell no width (#407). **Only the two vertical edges exist**: a
 /// row has nothing to spend on a horizontal rule but its own characters.
 ///
-/// **One mark, in all three layers** (2026-10-22 作者定: 「the CEL mode, the
-/// highlighted border can use the same style as NOR mode (dashed and
-/// golden). It does not need to be normal line. This makes the border style
-/// consistent in all three layers.」). Where the grid draws its own rule the
+/// **One mark, in all three layers**: the border is dashed and 金 in every
+/// layer, so its style does not change between them. Where the grid draws its own rule the
 /// seam keeps that rule and merely turns 金; these two glyphs are what stands
 /// there when it draws none (`:table-rules off`, `colour`).
 ///
-/// It went half-block → one stroke → the grid's own rule in two days, and
-/// each step had the same reason: the mark started out as the only thing
-/// saying 「the whole cell is the unit」 and had to be loud enough to say it
-/// alone. The 金 ground says it now, so the edge is free to be drawn in the
-/// weight the rest of the grid is — and a cell's border changing shape as the
-/// caret goes in and out of it was one answer too many to 「does this grid
-/// draw rules」.
+/// The edge does not have to say 「the whole cell is the unit」 alone: the 金
+/// ground says it, so the edge is free to be drawn in the weight the rest of
+/// the grid is — and a cell's border changing shape as the caret goes in and
+/// out of it would be one answer too many to 「does this grid draw rules」.
 ///
 /// The two are mirrored because they are ink pushed to one side of a cell,
 /// and the side that faces the text is a different side on the left and on
@@ -151,9 +142,8 @@ impl Layer {
     /// a selection grows by whole cells at the top and by
     /// characters inside, and one word `CEL.SEL` named both; the hint row
     /// already called the two 表格 and 格內. The top layer at rest is
-    /// `TBL.NOR`: `hjkl` walk it as they walk the text, a cell at a time
-    /// (2026-11-01; it was a bare `CEL`, read as 「the keys are the layer's
-    /// own」). Typing always happens in a cell, so `INS` and `REP` are `CEL.`
+    /// `TBL.NOR`: `hjkl` walk it as they walk the text, a cell at a time (a
+    /// bare `CEL` would read as 「the keys are the layer's own」). Typing always happens in a cell, so `INS` and `REP` are `CEL.`
     /// from either layer.
     ///
     /// The dotted spelling is the one this editor already uses for 「where the
@@ -178,10 +168,8 @@ impl Layer {
     /// at [`Layer::Whole`] on purpose — that is the whole of 「`Esc` goes back
     /// to the layer you came from」 ([`Layer::step`]) — so the mark has to ask
     /// the mode too, or `i` from the top layer would leave the page looking
-    /// like a cell was selected while characters were going into it
-    /// (2026-10-21 作者報的:「Using `i` from CEL -> INS remains the golden
-    /// thick borders. So it looks differently from using `i` from NOR -> INS.
-    /// This is a bug.」).
+    /// like a cell was selected while characters were going into it — `i` from
+    /// either layer must look the same.
     pub fn the_cell_is_the_unit(self, mode: Mode) -> bool {
         self == Layer::Whole && mode == Mode::Normal
     }
@@ -534,10 +522,9 @@ mod tests {
     /// **One moment, one answer, and the two marks never disagree.** Typing
     /// has a caret wherever it happens and no 金 ground wherever it happens;
     /// a page that washed a cell round a caret would be saying two things at
-    /// once (2026-10-21 作者報的).
+    /// once.
     ///
-    /// The second mark used to be the edge, and is not any more:
-    /// the two seams are 金 in either layer, so the ground is
+    /// The edge is not the second mark: the two seams are 金 in either layer, so the ground is
     /// the whole of the difference. A ground is the terminal's to draw, so
     /// that it follows this answer is asserted over there, in
     /// `yumete_tui::tests::the_top_layer_washes_its_cell_and_draws_no_caret`.

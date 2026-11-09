@@ -57,12 +57,12 @@ const BREAK: &str = "⏎";
 
 /// **One row of one draft** — half of a 「before and after」 pair.
 ///
-/// 原話：「It first list the paragraph before and after, than mark the words
-/// changed in brighter colors.」
+/// The paragraph is listed before and after, and the words that changed are
+/// marked in brighter colours.
 ///
 /// **一份，三處畫**：`空格 x` 的浮窗、`空格 X` 的邊欄、`:git-diff` 的報告。三
-/// 處從前各算各的，於是行號、記號、底色的響度和折不折行四樣都不一樣（作者
-/// 2026-10-16 逐條報來）。所以算在這裏，畫在那三處，差別只剩「怎麽畫」。
+/// 處各算各的話，行號、記號、底色的響度和折不折行四樣都會不一樣。所以算在這裏，
+/// 畫在那三處，差別只剩「怎麽畫」。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftRow {
     /// 1-based line number **in its own draft** — the old file's for a `gone`
@@ -70,7 +70,7 @@ pub struct DraftRow {
     ///
     /// 兩個號都留着，因為它們本來就不是一個數：一段往下挪過四行，`537` 與
     /// `533` 之差正是那四行。跳轉不照這個號走，照「這一處改動現在在哪」走
-    /// （`gf`，2026-10-16 定，同 magit／fugitive 那一族）。
+    /// （`gf`，同 magit／fugitive 那一族）。
     pub line: usize,
     /// The old draft's row (`-`) rather than the new one's (`+`).
     pub gone: bool,
@@ -86,17 +86,16 @@ pub struct DraftRow {
 ///
 /// Two passes. The first is Myers over **lines**, which is cheap: `D` counted
 /// in lines is tens even for an afternoon that rewrote every paragraph, where
-/// `D` counted in words ran past [`MAX_D`] and the whole command answered
-/// 「差得太遠」 (reported 2026-10-16: 「I cannot see the git diff when the diff
-/// is many? That is very inconvienent.」). The second is Myers over the
+/// `D` counted in words runs past [`MAX_D`] and the whole command would answer
+/// 「差得太遠」 and show nothing. The second is Myers over the
 /// **words** of one paired line, where `D` cannot exceed the line.
 ///
 /// Rows come back in reading order, a pair at a time: the old row then the new
 /// one. A line that was only added or only taken away is one row, not two.
 ///
-/// Warning: **一段切成兩段，從前讀成一筆插入，現在讀成一行改寫加一行新增。** 詞流那
-/// 一套把換行也當一個詞，所以看得出「這裏多了一個換行」；配行先走就看不出了。
-/// 這是這一刀的代價，作者 2026-10-16 選的。
+/// Warning: **一段切成兩段，讀成一行改寫加一行新增，不是一筆插入。** 詞流那一套把
+/// 換行也當一個詞，所以看得出「這裏多了一個換行」；配行先走就看不出了。這是這一刀
+/// 有意付的代價。
 ///
 /// `old_at`/`new_at` are the 1-based numbers of each side's first line — `1`
 /// for a whole file, the hunk's own start for `空格 x`.
@@ -276,8 +275,7 @@ pub fn spans(line: &str) -> Vec<crate::markdown::Span> {
     });
     if let Some((mark, kind)) = row {
         // Warning: **`-`/`+` 本身是畫出來的，不是記號。** 它和號碼一起，就是
-        // `空格 x` 那一扇裏的同一截（2026-10-16 作者更正：「in yumete, `space
-        // x` put + and - before the paragraph」）。畫不出來的只有 `[-`／`{+`
+        // `空格 x` 那一扇裏的同一截：`+` 和 `-` 畫在段落前面。畫不出來的只有 `[-`／`{+`
         // 那四個——它們是這一支一分鐘前寫下去的腳手架，而顏色說得更好。
         //
         // 底色從行頭鋪到行尾，號碼和記號也在上面：一整行是一稿。
@@ -711,7 +709,7 @@ mod spans_tests {
         assert!(kinds("{+没關上").is_empty());
     }
 
-    /// 換行畫成 `⏎`，而它也要進着色的那一段（2026-09-15：「留着，带颜色」）。
+    /// 換行畫成 `⏎`，而它也要進着色的那一段。
     ///
     /// 看不見的變動正是最需要畫出來的那一種。
     #[test]

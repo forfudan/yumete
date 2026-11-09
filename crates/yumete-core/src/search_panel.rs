@@ -677,7 +677,7 @@ impl Search {
 
     /// **站着的是第幾處**，從 1 數起；没站在命中上就是 `None`。
     ///
-    /// 2026-09-27 報的：表頭只寫「11 處」，走到第幾條一個字都不說。跨檔的時候
+    /// 表頭不能只寫「11 處」而不說走到第幾條。跨檔的時候
     /// 名單裏夾着檔名那幾行，所以數的是**命中**，不是行。
     pub fn nth_hit(&self) -> Option<usize> {
         match self.row()? {
@@ -773,8 +773,8 @@ impl Search {
     /// 光標停在末尾（没壓着字）就什麼都不做：那裏没有東西可刪，而「往回刪一個」
     /// 是 `Backspace` 說的另一件事。
     pub fn delete_here(&mut self) {
-        // Warning: **光標停在末尾那個空位上的時候，刪的是它前面那一個**
-        // （2026-09-27 兩個試用的人都報「`d` 按了什麼都不發生」）。框裏的光標走
+        // Warning: **光標停在末尾那個空位上的時候，刪的是它前面那一個**，
+        // 不是什麼都不發生。框裏的光標走
         // 得到文字後面那一格（打字要從那裏接着打），而 `Esc` 出來之後它多半就停
         // 在那裏——於是「刪光標壓着的那一個」壓着的是空氣，鍵位行上明明寫着
         // 「d 刪」。按的人想刪的是看得見的最後那個字。
@@ -809,12 +809,11 @@ impl Search {
 
     /// **從光標刪到行尾**——框裏的 `D`。
     ///
-    /// Warning: **末尾那個空位上照樣刪得掉最後一個字**（2026-10-02 補，同
-    /// [`Search::delete_here`] 2026-09-27 那條）。從前這一支在那裏是 `truncate(len)`
-    /// ＝什麼都不做，而同一個位置上 `d` 刪得掉——**兩個鍵對同一個光標位置給出
-    /// 兩種答案**，而屏幕上那一行寫着「dD 刪除」。
+    /// Warning: **末尾那個空位上照樣刪得掉最後一個字**（同 [`Search::delete_here`]）。
+    /// 在那裏 `truncate(len)` ＝什麼都不做，而同一個位置上 `d` 刪得掉——**兩個鍵對
+    /// 同一個光標位置不許給出兩種答案**，屏幕上那一行寫着「dD 刪除」。
     ///
-    /// 道理是 `d` 那一條的原話：框裏的光標走得到文字後面那一格（打字要從那裏接
+    /// 道理同 `d` 那一條：框裏的光標走得到文字後面那一格（打字要從那裏接
     /// 着打），`Esc` 出來多半就停在那裏，而按的人想刪的是看得見的最後那個字。
     /// vi 的 Normal 態根本没有「末尾後面那一格」，`D` 停在最後一個字上就是刪掉它。
     pub fn delete_to_end(&mut self) {
@@ -872,7 +871,7 @@ impl Search {
     /// Warning: **One caret serves every box**, so walking off 搜 (caret at 3) on to
     /// an empty 換 would leave the block cursor sitting three cells past the
     /// end of a box with nothing in it. The caret is the *current* box's, and
-    /// changing which box that is has to move it (2026-09-25, when `h`/`l`
+    /// changing which box that is has to move it (when `h`/`l`
     /// started meaning 「走字」 and the caret became something a reader can see).
     pub fn stand_on(&mut self, field: Field) {
         self.field = field;

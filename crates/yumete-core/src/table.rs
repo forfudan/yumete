@@ -167,7 +167,7 @@ pub struct Schema {
 }
 
 /// The file a table's description lives in, beside the data: a Frictionless
-/// Data Package (2026-10-30, as decided). One per folder, listing each table
+/// Data Package. One per folder, listing each table
 /// file as a resource with its `schema` (fields, `primaryKey`) and `dialect`
 /// (delimiter, header). Nothing of yumete's own goes in it.
 pub const DATAPACKAGE: &str = "datapackage.json";
@@ -349,10 +349,10 @@ pub fn schema_for(path: &Path) -> Option<(PathBuf, Schema)> {
 
 /// The same, and what went wrong with the schemas that did not work.
 ///
-/// A schema with a typo in it used to be dropped on the floor: the file opened
-/// with the twenty-eight labels, both computed fields and the whole link
-/// silently missing, and the only clue was that the status line said 「照首行」
-/// where it should have said the schema's name. The parser has a good message
+/// A schema with a typo in it must not be dropped on the floor: the file would
+/// open with its labels, computed fields and links silently missing, and the
+/// only clue would be the status line saying 「照首行」 where it should say the
+/// schema's name. The parser has a good message
 /// for every one of these; this is how it reaches a person.
 pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<String>) {
     let mut problems = Vec::new();
@@ -375,17 +375,17 @@ pub fn schema_for_reporting(path: &Path) -> (Option<(PathBuf, Schema)>, Vec<Stri
     (found, problems)
 }
 
-/// **The old format is no longer read, and says so**: a
+/// **The old format is not read, and says so**: a
 /// `.yumete/tables/*.toml` up the tree that names this file would be silently
 /// ignored otherwise, and its writer would see the header row and wonder
 /// where their column names went.
 ///
-/// Warning: **a notice, never a problem**. It used to travel in
-/// [`schema_for_reporting`]'s problems, which mean 「the schema meant for this
-/// file is broken」 and stop every way into the grid — so a `.csv` with an
-/// old TOML beside it opened as plain text and `␣tt` refused it, the one file
-/// table mode was made for. Nothing reads the old file now, so there is
-/// nothing broken: the file opens as any `.csv` does, and this is said.
+/// Warning: **a notice, never a problem**. [`schema_for_reporting`]'s problems
+/// mean 「the schema meant for this file is broken」 and stop every way into
+/// the grid — a `.csv` with an old TOML beside it would open as plain text and
+/// `␣tt` would refuse it, the one file table mode was made for. Nothing reads
+/// the old file, so there is nothing broken: the file opens as any `.csv`
+/// does, and this is said.
 pub fn old_schemas_naming(path: &Path) -> Vec<String> {
     let mut notices = Vec::new();
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
@@ -514,9 +514,9 @@ pub fn datapackage_with(existing: Option<&str>, folder: &str, file: &str, schema
 ///
 /// One pass, and the only place the quoting rule is written down. Everything
 /// that has to agree about where a cell begins reads it from here: the cell
-/// spans, the record that runs on, and the grid the reader sees. They used to
-/// disagree — the grid counted every comma in the line, so 「"Smith, John"」
-/// was drawn as two cells in a file the parser read as one (#391).
+/// spans, the record that runs on, and the grid the reader sees. A grid that
+/// counted every comma in the line would draw 「"Smith, John"」 as two cells in
+/// a file the parser reads as one (#391).
 fn scan(line: &str, delimiter: char) -> (Vec<usize>, bool) {
     let line = line.trim_end_matches(['\n', '\r']);
     let mut walls = Vec::new();
@@ -596,7 +596,7 @@ pub fn field_runs_on(line: &str, delimiter: char) -> bool {
     scan(line, delimiter).1
 }
 
-/// **How many lines the record starting here spans** (2026-10-20 作者定).
+/// **How many lines the record starting here spans.**
 ///
 /// `lines` is this record's first line and the ones after it, each **with** its
 /// line break — `rope.lines_at(first)`, in other words. The answer is 1 for
@@ -683,7 +683,7 @@ pub const BLOCK_GUESSES: [char; 4] = ['\t', ',', ';', '&'];
 /// The three above, in that order of confidence: a file cut by tabs usually
 /// has spaces inside its fields, so the stronger mark has to be tried first.
 ///
-/// **No space** (2026-10-30, as decided). A shopping list whose lines all
+/// **No space**. A shopping list whose lines all
 /// hold two spaces was read as a three-column grid, and `:w` then wrote
 /// quotes around a cell nobody had quoted: `call mum "tonight and dad"`. A
 /// space-separated table is asked for by name (`:table space`, `-t`).
@@ -788,12 +788,11 @@ pub fn delimiter_named(word: &str) -> Option<char> {
         "comma" => Some(','),
         "semicolon" => Some(';'),
         "\" \"" | "' '" => Some(' '),
-        // Warning: **一個字母不是分隔符，是打了一半的名字**（2026-10-10 報的）。
+        // Warning: **一個字母不是分隔符，是打了一半的名字**。
         // 上面每一個名字都以字母開頭，所以打 `p` 的人想的是 `pipe`、打 `c` 的人想
-        // 的是 `csv`（還是 `comma`？兩個都對，正是不許猜的理由）。從前這裏照單收
-        // 下，於是 `:convert-table p` **當場把那張表改寫成 `甲p乙`**，而狀態欄說
-        // 「用「p」分欄」，看着像成功。兩個字母早就是拒的（`pi` → 「不認得」），
-        // 漏的只有一個字母這一格。
+        // 的是 `csv`（還是 `comma`？兩個都對，正是不許猜的理由）。照單收下的話，
+        // `:convert-table p` **當場把那張表改寫成 `甲p乙`**，而狀態欄說
+        // 「用「p」分欄」，看着像成功。兩個字母也拒（`pi` → 「不認得」）。
         //
         // 別的單個字符照舊收：`;`、`|`、`#`、`、` 這些真的是分隔符，而且沒有一個
         // 名字叫它們。
@@ -821,14 +820,12 @@ pub fn shape_of(lines: &[String]) -> Option<Shape> {
 
 /// **同一張表，換一種寫法。**
 ///
-/// **轉換不會失敗**（2026-10-03 改）。從前目標的分隔符出現在格子裏就交
-/// `Err((行, 欄))`，理由是「不替人加引號」；而按欄位決定加不加引號正是 RFC 4180
-/// 的規矩，`:export` 那一邊也早就這麼做了——兩邊從前不一致。見
-/// [`crate::mdtable::to_delimited`]。
+/// **轉換不會失敗**。目標的分隔符出現在格子裏，就按欄位加引號——這正是 RFC 4180
+/// 的規矩，`:export` 那一邊也這麼做，兩邊一致。見 [`crate::mdtable::to_delimited`]。
 ///
 /// Warning: **轉成 `|` 表格會丟掉格子兩邊的空白**，轉到另一個分隔符不會：`|` 表格
-/// 存不下那幾個空格（讀的時候兩邊一律去掉），分隔文本存得下。2026-10-02 定的，
-/// 理由記在 `mdtable::from_delimited`。
+/// 存不下那幾個空格（讀的時候兩邊一律去掉），分隔文本存得下。理由記在
+/// `mdtable::from_delimited`。
 pub fn recast(lines: &[String], from: Shape, to: Shape) -> Vec<String> {
     match (from, to) {
         (Shape::Pipe, Shape::Pipe) => lines.to_vec(),
@@ -1040,9 +1037,9 @@ mod tests {
         assert_eq!(of(""), None);
     }
 
-    /// **一個字母是打了一半的名字，不是分隔符**（2026-10-10 報的）。
+    /// **一個字母是打了一半的名字，不是分隔符**。
     ///
-    /// `:convert-table p` 從前當場把表改寫成 `甲p乙` 並報「用「p」分欄」。
+    /// `:convert-table p` 不許把表改寫成 `甲p乙` 並報「用「p」分欄」。
     #[test]
     fn one_letter_is_half_a_name_and_not_a_delimiter() {
         for half in ["p", "c", "t", "s", "P", "z"] {
