@@ -7,13 +7,60 @@
 use super::*;
 
 /// **A PDF being typeset for `:export-as-preview`** (2026-11-08): the
-/// compiler's answer to come, the file it writes, the one that file becomes,
-/// and how many open files of the book had unsaved changes when it began.
+/// compiler's answer to come, the compiler itself, the file it writes, the
+/// one that file becomes, and how many open files of the book had unsaved
+/// changes when it began.
 pub(super) struct Typesetting {
     answer: std::sync::mpsc::Receiver<Result<(), String>>,
+    child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
     draft: PathBuf,
     target: PathBuf,
     unsaved: usize,
+}
+
+/// **A typesetting given up ends with nothing left behind** (2026-11-09):
+/// the compiler stopped, if it still runs, and the file it was writing
+/// removed. Quitting mid-typeset left `typst` running on its own and a
+/// hidden `.book.pdf.yumete-<pid>.pdf` that nobody would rename or delete.
+/// Once the answer is taken the draft is the target already, and removing
+/// it finds nothing.
+impl Drop for Typesetting {
+    fn drop(&mut self) {
+        if let Ok(mut child) = self.child.lock() {
+            if matches!(child.try_wait(), Ok(None)) {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        let _ = std::fs::remove_file(&self.draft);
+    }
+}
+
+/// **The draft a typesetting writes**, `.<name>.yumete-<pid>.pdf` beside
+/// the target, and whose it is: the pid in its name.
+fn draft_of(target: &Path, pid: u32) -> PathBuf {
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    target.with_file_name(format!(".{name}.yumete-{pid}.pdf"))
+}
+
+/// **Drafts of `target` that a yumete no longer running left** (2026-11-09):
+/// one that crashed or was killed mid-typeset never removed its draft. The
+/// next export to the same file removes those whose pid is gone; one
+/// another yumete is still writing is left to it.
+fn remove_abandoned_drafts(target: &Path) {
+    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let prefix = format!(".{name}.yumete-");
+    let folder = target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let Ok(entries) = std::fs::read_dir(folder) else { return };
+    for entry in entries.flatten() {
+        let file = entry.file_name().to_string_lossy().into_owned();
+        let pid = file.strip_prefix(&prefix).and_then(|rest| rest.strip_suffix(".pdf")).and_then(|pid| pid.parse::<u32>().ok());
+        if let Some(pid) = pid {
+            if pid != std::process::id() && !crate::buffer::pid_is_running(pid) {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
 }
 
 /// **拆注音只拆得動一本書**（2026-10-13）。拆是逐行的，而注音是稿子裏的東西——一份
@@ -2081,32 +2128,58 @@ impl Editor {
         let (root, mut command) = self.typst_compile(&main);
         // Written whole or not at all: into a file beside the target, then
         // renamed over it.
-        let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let draft = target.with_file_name(format!(".{name}.yumete-{}.pdf", std::process::id()));
+        remove_abandoned_drafts(&target);
+        let draft = draft_of(&target, std::process::id());
         command
             .arg(&draft)
             .current_dir(&root)
             .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped());
+        // The compiler is held here, not by its thread, so that quitting can
+        // stop it ([`Typesetting`]'s drop); the thread reads what it says
+        // and waits for it.
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(err) => {
+                self.status = say!("export.typst-failed", err.to_string());
+                return Ok(CommandOutcome::Continue);
+            }
+        };
+        let stderr = child.stderr.take();
+        let child = std::sync::Arc::new(std::sync::Mutex::new(child));
+        let held = std::sync::Arc::clone(&child);
         let (tell, answer) = std::sync::mpsc::channel();
         let spawned = std::thread::Builder::new().name("typst-export".to_string()).spawn(move || {
-            let said = match command.output() {
-                Ok(out) if out.status.success() => Ok(()),
-                Ok(out) => {
-                    let err = String::from_utf8_lossy(&out.stderr).into_owned();
-                    Err(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string())
-                }
-                Err(err) => Err(err.to_string()),
+            let mut err = String::new();
+            if let Some(mut stderr) = stderr {
+                let _ = std::io::Read::read_to_string(&mut stderr, &mut err);
+            }
+            let status = held.lock().map_err(|_| String::new()).and_then(|mut child| child.wait().map_err(|e| e.to_string()));
+            let said = match status {
+                Ok(status) if status.success() => Ok(()),
+                Ok(_) => Err(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string()),
+                Err(err) => Err(err),
             };
             let _ = tell.send(said);
         });
         if let Err(err) = spawned {
+            if let Ok(mut child) = child.lock() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
             return Err(EditorError::Io(err));
         }
         self.status = say!("export.typesetting", main.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
-        self.typesetting = Some(Typesetting { answer, draft, target, unsaved: self.unsaved_in_the_book(&main) });
+        self.typesetting = Some(Typesetting { answer, child, draft, target, unsaved: self.unsaved_in_the_book(&main) });
         Ok(CommandOutcome::Continue)
+    }
+
+    /// **Give up the PDF being typeset, if one is** (2026-11-09): the
+    /// compiler stopped and its draft removed. Called on the way out, so
+    /// quitting mid-typeset leaves neither behind.
+    pub fn stop_typesetting(&mut self) {
+        self.typesetting = None;
     }
 
     /// **Take the PDF the compiler made, if it is done** (2026-11-08):
@@ -2588,6 +2661,51 @@ mod tests {
             assert!(!chapter.with_extension("pdf").exists(), "the book, not the chapter");
             ed.execute(":export-as-preview pdf").unwrap();
             assert_eq!(ed.status(), say!("export.target-exists-for", book.with_extension("pdf").display(), "export-as-preview"));
+        }
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// **Quitting mid-typeset leaves nothing behind** (2026-11-09): the
+    /// compiler is stopped and its draft removed; and a draft a yumete that
+    /// is gone left is removed by the next export to the same file, while
+    /// one of a running yumete's is left.
+    #[test]
+    fn a_typesetting_given_up_leaves_no_compiler_and_no_draft() {
+        let dir = folder("typst-quit");
+        let book = dir.join("book.typ");
+        let target = book.with_extension("pdf");
+        // A draft a crash left: the pid of a process that has ended.
+        let mut ended = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--list")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let dead = ended.id();
+        ended.wait().unwrap();
+        let left = draft_of(&target, dead);
+        std::fs::write(&left, b"%PDF half").unwrap();
+        let mine = draft_of(&target, std::process::id());
+        std::fs::write(&mine, b"%PDF mine").unwrap();
+        remove_abandoned_drafts(&target);
+        assert!(!left.exists(), "the draft of a yumete that is gone");
+        assert!(mine.exists(), "a running yumete's draft is its own");
+        std::fs::remove_file(&mine).unwrap();
+
+        if crate::export::typst_is_installed() {
+            std::fs::write(&book, "#for n in range(6000) [第 #n 段，写得长一些，好让排版花一点时间。\\ ]\n").unwrap();
+            let mut ed = Editor::new();
+            ed.execute(&format!(":open {}", book.display())).unwrap();
+            std::fs::write(&left, b"%PDF half").unwrap();
+            ed.execute(":export-as-preview").unwrap();
+            assert!(ed.typesetting(), "{}", ed.status());
+            assert!(!left.exists(), "the export cleared what a crash left");
+            let pid = ed.typesetting.as_ref().unwrap().child.lock().unwrap().id();
+            ed.stop_typesetting();
+            assert!(!ed.typesetting());
+            assert!(!crate::buffer::pid_is_running(pid), "typst was stopped");
+            assert!(!mine.exists(), "its draft is gone");
+            assert!(!target.exists(), "and nothing was written");
         }
         std::fs::remove_dir_all(&dir).ok();
     }

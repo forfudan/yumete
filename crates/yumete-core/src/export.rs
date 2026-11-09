@@ -227,11 +227,21 @@ impl Settings {
         set
     }
 
-    /// **Take one word** — `vertical`, `jlreq`, `page=A5`, `font="Songti SC",
-    /// serif` — into these settings. `None` when `word` is none of
-    /// [`WORDS`], so the caller can take it for a path; `Some(Err(why))` when
-    /// it is one of them with a value that is not.
+    /// **Take one word** — `vertical`, `jlreq`, `page=A5`,
+    /// `font='"Songti SC", serif'` — into these settings. `None` when `word`
+    /// is none of [`WORDS`], so the caller can take it for a path;
+    /// `Some(Err(why))` when it is one of them with a value that is not, or
+    /// when it ends in a comma.
+    ///
+    /// **A comma does not carry a word on** (2026-11-09): `font=Songti, b.html`
+    /// once read as the font list `Songti, b.html` and wrote the page to the
+    /// last file named. A word runs to the next space; a font list with a
+    /// space or a comma in it is quoted. A word left ending in a comma is a
+    /// list cut short, said so rather than taken for a font or a path.
     pub fn take(&mut self, word: &str) -> Option<Result<(), String>> {
+        if word.ends_with(',') {
+            return Some(Err(say!("export.trailing-comma", word)));
+        }
         let set = |flag: &mut bool, on: bool| {
             *flag = on;
             Some(Ok(()))
@@ -267,8 +277,11 @@ impl Settings {
                 }
                 let list = word.strip_prefix("font=")?;
                 // `font='"A B", serif'`: the list inside single quotes, as a
-                // shell would want it written.
-                let list = match list.len() > 1 && list.starts_with('\'') && list.ends_with('\'') {
+                // shell would want it written. `font="A B, serif"` is a list
+                // in double quotes, which CSS would read as one name; `"A B"`
+                // alone is one name, quotes and all.
+                let wrapped = |q: char| list.len() > 1 && list.starts_with(q) && list.ends_with(q) && !list[1..list.len() - 1].contains(q);
+                let list = match wrapped('\'') || (wrapped('"') && list.contains(',')) {
                     true => &list[1..list.len() - 1],
                     false => list,
                 };
@@ -287,8 +300,9 @@ impl Settings {
     /// (2026-11-08): `vertical jlreq page=A5 out/book.epub`. The words come
     /// in any order and the path last, if there is one.
     ///
-    /// A word is split at a space, except inside quotes and after a comma, so
-    /// a font list holds its spaces: `font="PingFang SC", serif` is one word.
+    /// A word is split at a space, except inside quotes, so a font list
+    /// holds its spaces when it is quoted: `font='"PingFang SC", serif'` is
+    /// one word.
     /// What is not a word is a path when it looks like one — a `/`, an
     /// extension, a quote — and otherwise a word misspelt, said so rather
     /// than written to a file of that name: a file really called `vertical`
@@ -313,9 +327,9 @@ impl Settings {
     }
 }
 
-/// `line` cut into words: at a space, except inside `"…"` or `'…'` and after
-/// a comma (a font list goes on). A backslash keeps the next character
-/// (`a\ b.md`) where the system's paths do not use it themselves.
+/// `line` cut into words: at a space, except inside `"…"` or `'…'`. A
+/// backslash keeps the next character (`a\ b.md`) where the system's paths
+/// do not use it themselves.
 pub(crate) fn split_words(line: &str) -> Result<Vec<String>, String> {
     let mut out: Vec<String> = Vec::new();
     let mut word = String::new();
@@ -339,11 +353,7 @@ pub(crate) fn split_words(line: &str) -> Result<Vec<String>, String> {
                 }
             }
             (None, c) if c.is_whitespace() => {
-                if word.trim_end().ends_with(',') {
-                    if !word.ends_with(' ') {
-                        word.push(' ');
-                    }
-                } else if !word.is_empty() {
+                if !word.is_empty() {
                     out.push(std::mem::take(&mut word));
                 }
             }
@@ -679,17 +689,24 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
         let body = line.trim_start();
         let indent = line.len() - body.len();
         // Inside a fence nothing is markup — not a blank line, not a `#`, not
-        // a backtick. The fence is over when a line of its own opens with
-        // three backticks again; one nobody closed still comes out, since the
-        // writer's text is the writer's, half-written or not.
-        if body.starts_with("```") {
+        // a backtick. One nobody closed still comes out, since the writer's
+        // text is the writer's, half-written or not.
+        //
+        // **The fence is read as the Markdown preview reads it**
+        // (2026-11-09), CommonMark's rule: three or more backticks or tildes
+        // open it, and a line of the same character, at least as many and
+        // nothing after them, closes it. It used to be three backticks and
+        // the next line opening with three: a `~~~` block's `# 注释` came out
+        // a heading, and a ```` ```` ```` fence ended at the ```` ``` ```` it
+        // was there to show.
+        if let Some((mark, run)) = fence_of(body).filter(|_| indent < 4) {
             flush(&mut para, &mut out);
             let mut held = vec![lines[i].clone()];
             i += 1;
             while i < lines.len() {
                 held.push(lines[i].clone());
                 i += 1;
-                if lines[i - 1].trim().starts_with("```") {
+                if closes_fence(&lines[i - 1], mark, run) {
                     break;
                 }
             }
@@ -915,6 +932,22 @@ fn parse(lines: &[String], source: crate::syntax::Syntax, notes: &mut Vec<Note>,
     out
 }
 
+/// **The fence `body` opens**, if it opens one: its character, a backtick
+/// or a tilde, and how many of it, three or more — the Markdown preview's
+/// rule, and CommonMark's.
+pub(crate) fn fence_of(body: &str) -> Option<(char, usize)> {
+    let c = body.chars().next().filter(|c| matches!(c, '`' | '~'))?;
+    let n = body.chars().take_while(|&d| d == c).count();
+    (n >= 3).then_some((c, n))
+}
+
+/// Whether `line` closes a fence of `run` × `mark`: the same character, at
+/// least as many of it, and nothing else on the line.
+fn closes_fence(line: &str, mark: char, run: usize) -> bool {
+    let body = line.trim();
+    fence_of(body).is_some_and(|(c, n)| c == mark && n >= run) && body.trim_start_matches(mark).is_empty()
+}
+
 /// **The last line of a display formula opened at `lines[at]`**: a line that
 /// opens with `$$` and does not close it, then the line that ends with `$$`,
 /// with no blank line between (Pandoc's rule). `None` when `lines[at]` opens
@@ -945,12 +978,21 @@ fn caption_of(line: &str) -> Option<&str> {
 
 /// A line that is one picture and nothing else, `![caption](src "title")`:
 /// its caption and where the picture is.
+///
+/// **One picture** (2026-11-09): the caption holds no `]`, so
+/// `![两张](a.png) 和 ![图](b.png)` is two pictures in a line of text, as
+/// the preview reads it, and not one figure captioned `两张](a.png) 和 ![图`.
+/// A path in angle brackets may hold spaces, `![图](<my pic.png>)`.
 fn figure_of(line: &str) -> Option<(&str, &str)> {
     static FIGURE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let found = FIGURE
-        .get_or_init(|| regex::Regex::new(r#"^!\[(.*)\]\(\s*<?([^\s>]+)>?(?:\s+"[^"]*")?\s*\)$"#).expect("a pattern"))
+        .get_or_init(|| {
+            regex::Regex::new(r#"^!\[([^\]]*)\]\(\s*(?:<([^<>\n]*)>|([^\s<>]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^()]*\)))?\s*\)$"#)
+                .expect("a pattern")
+        })
         .captures(line)?;
-    Some((found.get(1)?.as_str(), found.get(2)?.as_str()))
+    let src = found.get(2).or_else(|| found.get(3))?.as_str();
+    (!src.is_empty()).then_some((found.get(1)?.as_str(), src))
 }
 
 /// `[^name]: text` — a footnote's name and the start of its text.
@@ -1206,8 +1248,17 @@ fn render(
                     (Kind::Link, Dialect::Html) => link_target(chars, span.start, span.end),
                     _ => None,
                 };
+                // **A picture in a line is a picture** (2026-11-09), as the
+                // preview draws it: `![小图](a.png)` among words was a link
+                // to the file, which in an EPUB pointed out of the book.
+                let picture = span.start >= 2 && chars[span.start - 2] == '!' && chars[span.start - 1] == '[';
                 match target {
-                    Some(href) => out.push_str(&format!("<a href=\"{}\">{body}</a>", escape_html(&href).replace('"', "&quot;"))),
+                    Some(src) if picture => {
+                        let alt: String = chars[span.start..span.end].iter().collect();
+                        let alt = escape_html(&alt).replace('"', "&quot;");
+                        out.push_str(&format!("<img class=\"inline\" src=\"{}\" alt=\"{alt}\">", url_attribute(&src)));
+                    }
+                    Some(href) => out.push_str(&format!("<a href=\"{}\">{body}</a>", url_attribute(&href))),
                     None => out.push_str(&marked(span.kind, &body, dialect)),
                 }
                 at = end.max(at + 1);
@@ -1242,10 +1293,22 @@ fn link_target(chars: &[char], start: usize, end: usize) -> Option<String> {
         }
         target.push(c);
     }
+    // **`<…>` first** (2026-11-09): a target in angle brackets may hold
+    // spaces, as CommonMark has it, and `[文字](<a b.html>)` was cut at its
+    // space into `<a`. Otherwise the target ends at a space, where a title
+    // may follow.
     let target = target.trim();
-    let target = target.split_once(char::is_whitespace).map_or(target, |(t, _)| t);
-    let target = target.strip_prefix('<').and_then(|t| t.strip_suffix('>')).unwrap_or(target);
+    let target = match target.strip_prefix('<') {
+        Some(inside) => inside.split('>').next().unwrap_or_default(),
+        None => target.split_once(char::is_whitespace).map_or(target, |(t, _)| t),
+    };
     (!target.is_empty()).then(|| target.to_string())
+}
+
+/// **A path as a page's `src` or `href` takes it**: escaped, and its spaces
+/// written `%20`, as a URL holds them (`<my pic.png>` in the source).
+fn url_attribute(path: &str) -> String {
+    escape_html(&path.replace(' ', "%20")).replace('"', "&quot;")
 }
 
 /// **Markdown's maths is LaTeX**, which Typst cannot read (`\frac` stops
@@ -1364,7 +1427,75 @@ fn formula_img(drawn: &Formula, tex: &str, display: bool, turn: bool) -> String 
 /// reading (`<rt>`) or a script. A table's cells are running text: a table
 /// down the page is a vertical one (see [`stylesheet`]).
 fn vertical_text(body: &str, latin: Latin, quotes: bool) -> String {
-    text_between_tags(body, |text| turned(text, latin, quotes))
+    let body = match quotes {
+        true => std::borrow::Cow::Owned(quotes_cornered(body)),
+        false => std::borrow::Cow::Borrowed(body),
+    };
+    text_between_tags(&body, |text| turned(text, latin))
+}
+
+/// **`body` with its curly quotes as corner brackets** where
+/// [`corner_quotes`] says, each block's text read whole (2026-11-09): a pair
+/// is told Chinese or not by what it holds, and `“<strong>走</strong>”` holds
+/// its words in another run between tags. A paragraph, a heading, a cell or
+/// an item is a block; what is not touched in [`text_between_tags`] is not
+/// touched here. A quote and its bracket are three bytes each, so each is
+/// put in the other's place.
+fn quotes_cornered(body: &str) -> String {
+    const SKIP: &[&str] = &["code", "pre", "rt", "rp", "script", "style", "svg", "math", "kbd", "samp"];
+    const BLOCKS: &[&str] = &[
+        "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "td", "th", "caption", "figcaption", "blockquote", "div", "section", "br", "hr",
+        "table", "tr", "ul", "ol", "figure",
+    ];
+    let mut bytes = body.as_bytes().to_vec();
+    // The block's text: where each character is, and the character it is.
+    let mut held: Vec<(usize, char)> = Vec::new();
+    let flush = |held: &mut Vec<(usize, char)>, bytes: &mut Vec<u8>| {
+        let chars: Vec<char> = held.iter().map(|&(_, c)| c).collect();
+        for ((at, was), now) in held.iter().zip(corner_quotes(&chars)) {
+            if now != *was && now.len_utf8() == was.len_utf8() {
+                now.encode_utf8(&mut bytes[*at..*at + now.len_utf8()]);
+            }
+        }
+        held.clear();
+    };
+    let mut skipping: Vec<String> = Vec::new();
+    let mut at = 0;
+    while let Some(c) = body[at..].chars().next() {
+        let tag = match c {
+            '<' => body[at..].find('>').map(|end| &body[at..=at + end]),
+            _ => None,
+        };
+        let Some(tag) = tag else {
+            if skipping.is_empty() {
+                // An entity is one character, as `turned` reads it.
+                let entity = match c {
+                    '&' => body[at..].find(';').filter(|&n| (2..=12).contains(&n)),
+                    _ => None,
+                };
+                held.push((at, if entity.is_some() { '&' } else { c }));
+                at += entity.map_or(c.len_utf8(), |n| n + 1);
+            } else {
+                at += c.len_utf8();
+            }
+            continue;
+        };
+        let inner = tag[1..tag.len() - 1].trim();
+        let name = inner.trim_start_matches('/').chars().take_while(char::is_ascii_alphanumeric).collect::<String>().to_ascii_lowercase();
+        if BLOCKS.contains(&name.as_str()) {
+            flush(&mut held, &mut bytes);
+        }
+        if inner.starts_with('/') {
+            if skipping.last() == Some(&name) {
+                skipping.pop();
+            }
+        } else if SKIP.contains(&name.as_str()) && !inner.ends_with('/') {
+            skipping.push(name);
+        }
+        at += tag.len();
+    }
+    flush(&mut held, &mut bytes);
+    String::from_utf8(bytes).unwrap_or_else(|_| body.to_string())
 }
 
 /// **`body` with each run of text between its tags done as `f` says**
@@ -1455,6 +1586,8 @@ impl Orientation {
 
 /// **How one run of Latin is set under [`Latin::Jlreq`]** (2026-11-08).
 ///
+/// - A single letter, a capital or a small one: upright (2026-11-09: a small
+///   one was turned, while `$x$` beside it stood).
 /// - A phrase (it holds a space) or a word with a small letter in it: turned.
 /// - Digits alone: one upright, two across in one square, more turned.
 /// - Capitals, with digits or not: upright, one to a square (`A`, `NHK`,
@@ -1469,6 +1602,9 @@ fn jlreq_orientation(run: &[char]) -> Orientation {
     let letters = run.iter().filter(|c| c.is_alphabetic()).count();
     let digits = run.iter().filter(|c| c.is_numeric()).count();
     let marks = run.len() - letters - digits;
+    if run.len() == 1 && letters == 1 {
+        return Upright;
+    }
     if run.contains(&' ') || run.iter().any(|c| c.is_lowercase()) {
         return Turned;
     }
@@ -1487,18 +1623,65 @@ fn jlreq_orientation(run: &[char]) -> Orientation {
 /// **Curly quotes as corner brackets** (2026-11-08), `“”` as `『』` and `‘’`
 /// as `「」`, the way a vertical Chinese page sets them; a single quote
 /// between two Latin letters is an apostrophe and is left alone.
+///
+/// **Only round Chinese** (2026-11-09): a pair of quotes round Western text
+/// keeps its own marks, as clreq has quoted Western text keep them — `他说
+/// “go”` keeps `“go”`, and an English sentence keeps every quote it has. A
+/// pair is Chinese when what it holds has a CJK character in it; a quote
+/// with no partner (a quotation running on over paragraphs opens each one)
+/// goes by the character on its inner side.
 pub fn corner_quotes(chars: &[char]) -> Vec<char> {
     let latin_at = |k: Option<usize>| k.and_then(|k| chars.get(k)).is_some_and(|&c| latin_letter(c));
     let apostrophe = |k: usize| latin_at(k.checked_sub(1)) && latin_at(Some(k + 1));
+    let cjk = |c: &char| (*c as u32) >= 0x2E80 && !c.is_whitespace() && !matches!(c, '“' | '”' | '‘' | '’');
+    // Each quote's partner, the quotes nested as they are written.
+    let mut partner: Vec<Option<usize>> = vec![None; chars.len()];
+    let mut open: Vec<usize> = Vec::new();
+    for k in 0..chars.len() {
+        let closing = match chars[k] {
+            '“' | '‘' if !apostrophe(k) => {
+                open.push(k);
+                continue;
+            }
+            '”' if !apostrophe(k) => '“',
+            '’' if !apostrophe(k) => '‘',
+            _ => continue,
+        };
+        if let Some(at) = open.iter().rposition(|&o| chars[o] == closing) {
+            let o = open[at];
+            open.truncate(at);
+            partner[o] = Some(k);
+            partner[k] = Some(o);
+        }
+    }
+    let chinese = |k: usize| match partner[k] {
+        Some(other) => chars[k.min(other) + 1..k.max(other)].iter().any(cjk),
+        None => {
+            let inner = match chars[k] {
+                '“' | '‘' => chars[k + 1..].iter().find(|c| !c.is_whitespace()),
+                _ => chars[..k].iter().rev().find(|c| !c.is_whitespace()),
+            };
+            inner.is_some_and(cjk)
+        }
+    };
     (0..chars.len())
         .map(|k| match chars[k] {
-            '“' => '『',
-            '”' => '』',
-            '‘' if !apostrophe(k) => '「',
-            '’' if !apostrophe(k) => '」',
+            '“' if chinese(k) => '『',
+            '”' if chinese(k) => '』',
+            '‘' if !apostrophe(k) && chinese(k) => '「',
+            '’' if !apostrophe(k) && chinese(k) => '」',
             c => c,
         })
         .collect()
+}
+
+/// **A half-width mark that stands upright down a vertical page**
+/// (2026-11-09): those UAX #50 gives orientation U, `§ © ® ± ¼ ½ ¾ × ÷`
+/// and two tone marks, which `text-orientation: mixed` leaves standing. On
+/// its own, out of a run of Latin, such a mark stands in the export, and the
+/// preview stands it too; any other half-width mark on its own is turned.
+pub fn upright_mark(c: char) -> bool {
+    matches!(c as u32, 0xA7 | 0xA9 | 0xAE | 0xB1 | 0xBC..=0xBE | 0xD7 | 0xF7 | 0x2EA..=0x2EB)
 }
 
 /// **The runs of Latin in `chars` and how each stands** (2026-11-08): runs
@@ -1548,7 +1731,8 @@ pub fn latin_runs(chars: &[char], latin: Latin) -> Vec<(std::ops::Range<usize>, 
 
 /// One run of text between tags, done as [`vertical_text`] says. An entity
 /// (`&amp;`) is one character, the one it stands for: `R&amp;D` is one run.
-fn turned(text: &str, latin: Latin, quotes: bool) -> String {
+/// Its quotes are already what they will be ([`quotes_cornered`]).
+fn turned(text: &str, latin: Latin) -> String {
     // What each piece is written as, and the character it stands for.
     let mut written: Vec<&str> = Vec::new();
     let mut typed: Vec<char> = Vec::new();
@@ -1571,16 +1755,8 @@ fn turned(text: &str, latin: Latin, quotes: bool) -> String {
         written.push(piece);
         rest = &rest[piece.len()..];
     }
-    let chars = match quotes {
-        true => corner_quotes(&typed),
-        false => typed.clone(),
-    };
-    let piece = |k: usize| -> String {
-        match chars[k] == typed[k] {
-            true => written[k].to_string(),
-            false => chars[k].to_string(),
-        }
-    };
+    let chars = typed;
+    let piece = |k: usize| written[k].to_string();
     let runs = latin_runs(&chars, latin);
     let mut out = String::with_capacity(text.len() + runs.len() * 28);
     let mut at = 0;
@@ -1724,6 +1900,7 @@ pub(crate) fn stylesheet(style: &Style, lang: &str, book: bool) -> String {
          caption { padding: 0.3em; }\n\
          figure { margin: 1em 0; }\n\
          figure img { display: block; max-inline-size: 100%; }\n\
+         img.inline { max-inline-size: 100%; }\n\
          figcaption { font-size: 0.9em; }\n\
          .footnotes { font-size: 0.9em; }\n\
          img.math { vertical-align: var(--depth); }\n\
@@ -1778,7 +1955,8 @@ pub(crate) const LATIN_RULES: &str = ".yoko { -webkit-text-orientation: sideways
 /// odd number in a CJK line, and every short word of an English one would be
 /// squeezed into a square.
 pub(crate) fn html_body(text: &str, style: &Style, lang: &str) -> String {
-    let (blocks, notes) = blocks(text, style.source, true);
+    let text = legal_text(text);
+    let (blocks, notes) = blocks(&text, style.source, true);
     let mut body = String::new();
     html_blocks(&blocks, style, &mut body);
     let (mut body, order) = number_the_notes(&body, &notes, |n, _| {
@@ -1874,7 +2052,7 @@ pub(crate) fn vertical_code_css() -> String {
 /// `painted` is its lines in colour ([`painted_code`]), when its language is
 /// known.
 fn code_block_html(lines: &[String], vertical: bool, painted: Option<Vec<String>>) -> String {
-    let escaped = || lines.iter().skip(1).take(lines.len().saturating_sub(2)).map(|l| escape_html(l)).collect::<Vec<_>>();
+    let escaped = || code_inside(lines).iter().map(|l| escape_html(l)).collect::<Vec<_>>();
     let body = painted.unwrap_or_else(escaped).into_iter();
     match vertical {
         false => format!("<pre><code>{}</code></pre>\n", body.collect::<Vec<_>>().join("\n")),
@@ -1889,8 +2067,16 @@ fn code_block_html(lines: &[String], vertical: bool, painted: Option<Vec<String>
 fn painted_code(lines: &[String]) -> Option<Vec<String>> {
     let info = lines.first()?.trim_start().trim_start_matches(['`', '~']).trim();
     let language = crate::code::Language::from_info(info.split_whitespace().next()?)?;
-    let code: Vec<String> = lines.iter().skip(1).take(lines.len().saturating_sub(2)).cloned().collect();
-    Some(crate::as_preview::painted_code(language, &code))
+    Some(crate::as_preview::painted_code(language, code_inside(lines)))
+}
+
+/// **A fenced block's code**: its lines but the fence that opens it and the
+/// one that closes it, if one does — a block left open has no closing
+/// fence, and its last line is code.
+fn code_inside(lines: &[String]) -> &[String] {
+    let Some((first, rest)) = lines.split_first() else { return lines };
+    let closed = fence_of(first.trim_start()).is_some_and(|(c, n)| rest.last().is_some_and(|last| closes_fence(last, c, n)));
+    &rest[..rest.len() - usize::from(closed)]
 }
 
 /// The blocks as HTML.
@@ -2001,7 +2187,7 @@ fn html_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             // picture in (`epub::pictures_in`).
             Block::Figure { caption, src } => {
                 let alt = escape_html(caption).replace('"', "&quot;");
-                let src = escape_html(src).replace('"', "&quot;");
+                let src = url_attribute(src);
                 out.push_str(&format!("<figure>\n<img class=\"figure\" src=\"{src}\" alt=\"{alt}\">\n"));
                 if !caption.trim().is_empty() {
                     out.push_str(&format!("<figcaption>{}</figcaption>\n", line(caption)));
@@ -2101,9 +2287,14 @@ fn number_the_notes(
 
 /// The page's language, from what it is written in: kana makes it Japanese,
 /// more 漢字 than Latin words Chinese, and otherwise English.
+///
+/// **Only the prose is counted** (2026-11-09): code, in a block or a span,
+/// and addresses — a link's target, a bare URL — are left out. Counted, they
+/// made a Chinese note with a page of code in it an English one.
 pub(crate) fn language_of(text: &str) -> &'static str {
+    let prose = prose_of(text);
     let (mut han, mut kana, mut words, mut in_word) = (0usize, 0usize, 0usize, false);
-    for c in text.chars() {
+    for c in prose.chars() {
         if yumete_cjk::is_han(c) {
             han += 1;
             in_word = false;
@@ -2122,6 +2313,79 @@ pub(crate) fn language_of(text: &str) -> &'static str {
         (_, h, w) if h >= w => "zh",
         _ => "en",
     }
+}
+
+/// **`text` without its code and its addresses**, for [`language_of`]: the
+/// lines inside a fence, each code span, each link's target and each bare
+/// URL taken out.
+fn prose_of(text: &str) -> String {
+    static ADDRESS: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"\]\([^)]*\)|<[A-Za-z][A-Za-z0-9+.-]*:[^>\s]*>|(?:https?://|www\.)\S+").expect("a pattern")
+    });
+    let mut out = String::with_capacity(text.len());
+    let mut fence: Option<(char, usize)> = None;
+    for line in text.lines() {
+        match fence {
+            Some((c, n)) => {
+                if closes_fence(line, c, n) {
+                    fence = None;
+                }
+                continue;
+            }
+            None => {
+                if let Some(open) = fence_of(line.trim_start()) {
+                    fence = Some(open);
+                    continue;
+                }
+            }
+        }
+        // A code span: a run of backticks to the next run of as many.
+        let mut kept = String::with_capacity(line.len());
+        let mut rest = line;
+        while let Some(at) = rest.find('`') {
+            kept.push_str(&rest[..at]);
+            let run = rest[at..].len() - rest[at..].trim_start_matches('`').len();
+            let after = &rest[at + run..];
+            let mut close = None;
+            let mut k = 0;
+            while let Some(p) = after[k..].find('`') {
+                let n = after[k + p..].len() - after[k + p..].trim_start_matches('`').len();
+                if n == run {
+                    close = Some(k + p);
+                    break;
+                }
+                k += p + n;
+            }
+            rest = match close {
+                Some(k) => &after[k + run..],
+                None => after,
+            };
+        }
+        kept.push_str(rest);
+        out.push_str(&ADDRESS.replace_all(&kept, " "));
+        out.push('\n');
+    }
+    out
+}
+
+/// **`text` with nothing in it an XML page may not hold** (2026-11-09): the
+/// control characters other than a tab and the line ends — a form feed or a
+/// vertical tab as a space, the rest gone — and U+FFFE and U+FFFF. An EPUB's
+/// page is XML, and one form feed made it a page a strict reader refuses.
+pub(crate) fn legal_text(text: &str) -> std::borrow::Cow<'_, str> {
+    let illegal = |c: char| (c < ' ' && !matches!(c, '\t' | '\n' | '\r')) || matches!(c, '\u{FFFE}' | '\u{FFFF}');
+    if !text.chars().any(illegal) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let out = text
+        .chars()
+        .filter_map(|c| match c {
+            '\u{0B}' | '\u{0C}' => Some(' '),
+            c if illegal(c) => None,
+            c => Some(c),
+        })
+        .collect();
+    std::borrow::Cow::Owned(out)
 }
 
 /// The half of the stylesheet that only a printer sees.
@@ -2233,9 +2497,29 @@ fn typst_blocks(blocks: &[Block], style: &Style, out: &mut String) {
             // **Straight through.** Typst spells a raw block with the same
             // three backticks Markdown does, so the writer's fence is already
             // Typst — reading anything inside it is the whole of #386.
+            //
+            // Typst has backticks only: a `~~~` fence, or a short one round
+            // a longer run of backticks, goes over as backticks enough to
+            // hold what is inside.
             Block::Code(lines) => {
-                for text in lines {
-                    out.push_str(text);
+                let opening = lines[0].trim_start();
+                let (mark, run) = fence_of(opening).unwrap_or(('`', 3));
+                let inner = code_inside(lines);
+                let longest = inner.iter().flat_map(|l| l.split(|c| c != '`')).map(str::len).max().unwrap_or(0);
+                if mark == '`' && run > longest {
+                    for text in lines {
+                        out.push_str(text);
+                        out.push('\n');
+                    }
+                } else {
+                    let fence = "`".repeat(longest.max(2) + 1);
+                    let info = opening.trim_start_matches(mark).trim();
+                    out.push_str(&format!("{fence}{info}\n"));
+                    for text in inner {
+                        out.push_str(text);
+                        out.push('\n');
+                    }
+                    out.push_str(&fence);
                     out.push('\n');
                 }
                 out.push('\n');
@@ -3074,8 +3358,16 @@ mod tests {
         assert!(s.vertical && s.hanging && s.ruby_html && !s.ruby_typst && s.latin == Latin::Jlreq);
         assert_eq!(s.paper, Paper { width: 130, height: 184 });
         let mut s = Settings::default();
-        assert_eq!(s.read_line(r#"font="PingFang SC", "Noto Sans CJK SC", sans-serif turn"#).unwrap(), None);
+        assert_eq!(s.read_line(r#"font='"PingFang SC", "Noto Sans CJK SC", sans-serif' turn"#).unwrap(), None);
         assert_eq!(s.fonts, r#""PingFang SC", "Noto Sans CJK SC", sans-serif"#);
+        assert_eq!(s.read_line(r#"font="Songti SC, serif""#).unwrap(), None);
+        assert_eq!(s.fonts, "Songti SC, serif", "a list in double quotes is a list");
+        assert_eq!(s.read_line("font='Songti SC, serif' turn").unwrap(), None);
+        assert_eq!(s.fonts, "Songti SC, serif", "as the messages show it");
+        assert_eq!(s.read_line(r#"font="Songti SC""#).unwrap(), None);
+        assert_eq!(s.fonts, r#""Songti SC""#, "one name keeps its quotes");
+        assert_eq!(s.read_line("font=Songti,serif").unwrap(), None);
+        assert_eq!(s.fonts, "Songti,serif", "an unquoted list runs to the space");
         assert_eq!(s.read_line(r#"font='"Songti SC", serif' "my book.html""#).unwrap().as_deref(), Some("my book.html"));
         assert_eq!(s.fonts, r#""Songti SC", serif"#);
         let mut s = Settings::default();
@@ -3086,6 +3378,13 @@ mod tests {
         assert_eq!(s.read_line("page=quarto").unwrap_err(), say!("export.no-such-page", "quarto"));
         assert!(s.read_line("font=").is_err() && s.read_line(r#"font="Songti"#).is_err());
         assert_eq!(s, Settings::default(), "nothing is taken from a line that is refused");
+        // A comma does not carry a word on past a space (2026-11-09): the
+        // file named after it was once read into the font list.
+        assert_eq!(s.read_line("font=Songti, b.html").unwrap_err(), say!("export.trailing-comma", "font=Songti,"));
+        assert_eq!(s.read_line(r#"font="PingFang SC", serif"#).unwrap_err(), say!("export.trailing-comma", r#"font="PingFang SC","#));
+        assert_eq!(s.read_line("vertical, c.html").unwrap_err(), say!("export.trailing-comma", "vertical,"));
+        assert_eq!(s.read_line("c.html,").unwrap_err(), say!("export.trailing-comma", "c.html,"));
+        assert_eq!(s.read_line("'odd,'").unwrap().as_deref(), Some("odd,"), "a quoted path may end in a comma");
         // The menu's short spellings are written out by the parser, and a
         // quoted path is left alone.
         let parsed = crate::command::parse(r#":export html v jl "my v.html""#).unwrap();
@@ -3110,5 +3409,113 @@ mod tests {
         s.source = crate::syntax::Syntax::Markdown;
         let out = export("写下：\n\n$$\nx_1\n$$\n", Format::Typst, &s);
         assert!(out.contains("\\$\\$\nx\\_1\n\\$\\$"), "{out}");
+    }
+
+    /// **A fence is read as the preview reads it** (2026-11-09): tildes as
+    /// well as backticks, and closed only by a line of the same character, at
+    /// least as long.
+    #[test]
+    fn a_fence_of_tildes_or_of_four_is_read_as_the_preview_reads_it() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let out = export("前文。\n\n~~~python\n# 注释 *不是标题*\nx = 1\n~~~\n\n后文。\n", Format::Html, &s);
+        assert!(!out.contains("<h1") && out.contains("# 注释 *不是标题*") && !out.contains("<em>"), "{out}");
+        assert!(out.contains("<p>后文。</p>"), "{out}");
+        let out = export("````\n```\ninner\n```\n````\n\n后文。\n", Format::Html, &s);
+        assert!(out.contains("<pre><code>```\ninner\n```</code></pre>"), "{out}");
+        assert!(out.contains("<p>后文。</p>") && !out.contains("````"), "{out}");
+        // A shorter fence does not close a longer one, nor `~~~` a backtick one.
+        let out = export("````\n```\n~~~~\n````\n", Format::Html, &s);
+        assert!(out.contains("<pre><code>```\n~~~~</code></pre>"), "{out}");
+        // Left open, the last line is still code.
+        let out = export("```\nlast line\n", Format::Html, &s);
+        assert!(out.contains("<pre><code>last line</code></pre>"), "{out}");
+        // Typst has backticks only: a `~~~` block goes over in them, enough
+        // of them to hold what is inside.
+        let out = export("~~~rust\nlet a = 1;\n~~~\n", Format::Typst, &s);
+        assert!(out.contains("```rust\nlet a = 1;\n```\n"), "{out}");
+        let out = export("````md\n```\ninner\n```\n````\n", Format::Typst, &s);
+        assert!(out.contains("````md\n```\ninner\n```\n````\n"), "{out}");
+        let out = export("~~~\n```\n~~~\n", Format::Typst, &s);
+        assert!(out.contains("````\n```\n````\n"), "{out}");
+    }
+
+    /// **A picture in a line is a picture** (2026-11-09), as the preview
+    /// draws it, and two on one line are two such pictures, not a figure; a
+    /// target in angle brackets may hold a space.
+    #[test]
+    fn a_picture_in_a_line_is_a_picture_and_two_are_not_a_figure() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let out = export("文中有图 ![小图](a.png) 在此。\n", Format::Html, &s);
+        assert!(out.contains("文中有图 <img class=\"inline\" src=\"a.png\" alt=\"小图\"> 在此。"), "{out}");
+        assert!(!out.contains("<a href=\"a.png\""), "{out}");
+        assert!(out.contains("img.inline { max-inline-size: 100%; }"), "{out}");
+        let out = export("![两张](a.png) 和 ![图](b.png)\n", Format::Html, &s);
+        assert!(!out.contains("<figure>"), "{out}");
+        assert!(out.contains("<img class=\"inline\" src=\"a.png\" alt=\"两张\"> 和 <img class=\"inline\" src=\"b.png\" alt=\"图\">"), "{out}");
+        // Angle brackets: the space is the target's, written as a URL writes it.
+        let out = export("[文字](<a b.html>) 与 [普通](x.html \"标题\")\n", Format::Html, &s);
+        assert!(out.contains("<a href=\"a%20b.html\">文字</a> 与 <a href=\"x.html\">普通</a>"), "{out}");
+        let out = export("![尖括号](<my pic.png>)\n", Format::Html, &s);
+        assert!(out.contains("<img class=\"figure\" src=\"my%20pic.png\" alt=\"尖括号\">"), "{out}");
+        let out = export("看 ![x](<my pic.png> 'title') 了\n", Format::Html, &s);
+        assert!(out.contains("<img class=\"inline\" src=\"my%20pic.png\" alt=\"x\">"), "{out}");
+        assert_eq!(figure_of("![图](<my pic.png> \"t\")"), Some(("图", "my pic.png")));
+        assert_eq!(figure_of("![图](a(1).png)"), Some(("图", "a(1).png")));
+        assert_eq!(figure_of("![两张](a.png) 和 ![图](b.png)"), None);
+        // In Typst a picture is its words, as before.
+        let out = export("文中有图 ![小图](a.png) 在此。\n", Format::Typst, &s);
+        assert!(out.contains("文中有图 小图 在此。"), "{out}");
+    }
+
+    /// **The page's language is its prose's** (2026-11-09): code and
+    /// addresses are not counted, so a Chinese note full of code is Chinese.
+    #[test]
+    fn the_language_is_read_from_the_prose_alone() {
+        let code = "这是一段说明。\n\n```rust\nfn main() { let value = compute_the_answer(); println!(\"{value}\"); }\n```\n\n用 `let mut counter = make_a_counter()` 计数，见 https://example.com/some/long/path/with/words 与 [文档](https://example.com/docs/and/more/words)。\n";
+        assert_eq!(language_of(code), "zh");
+        assert_eq!(language_of("~~~\nmany english words in here and here\n~~~\n短文。\n"), "zh");
+        assert_eq!(language_of("An English essay about things, set down the page.\n"), "en");
+        assert_eq!(language_of("ひらがなとカタカナ。漢字。\n"), "ja");
+    }
+
+    /// **Nothing XML refuses reaches a page** (2026-11-09): a control
+    /// character other than a tab or a line end goes, a form feed as a space.
+    #[test]
+    fn control_characters_do_not_reach_the_page() {
+        let mut s = style();
+        s.settings.vertical = false;
+        let out = export("甲\u{0C}乙\u{01}丙\u{FFFF}丁\t戊\n", Format::Html, &s);
+        assert!(out.contains("<p>甲 乙丙丁\t戊</p>"), "{out}");
+        assert_eq!(legal_text("tab\tand\nline"), "tab\tand\nline");
+        assert!(matches!(legal_text("plain"), std::borrow::Cow::Borrowed(_)));
+    }
+
+    /// **Under jlreq a single letter stands upright** (2026-11-09), a small
+    /// one as a capital does and as `$x$` does beside it; a word of small
+    /// letters is still turned.
+    #[test]
+    fn under_jlreq_a_single_letter_stands_upright() {
+        let set = |text: &str| vertical_text(text, Latin::Jlreq, true);
+        assert_eq!(set("变量 x 和 A"), "变量 <span class=\"tate\">x</span> 和 <span class=\"tate\">A</span>");
+        assert_eq!(set("用 xy 写"), "用 <span class=\"yoko\">xy</span> 写");
+        assert_eq!(jlreq_orientation(&['x']), Orientation::Upright);
+        assert!(stands_upright("x"), "and the formula $x$ stands as the letter does");
+    }
+
+    /// **Corner brackets only round Chinese** (2026-11-09): quotes round
+    /// Western words keep their marks, as clreq has them, on a Chinese page
+    /// too; a pair holding Chinese turns, its words in other tags or not.
+    #[test]
+    fn quotes_round_western_words_stay_curly() {
+        let out = export("他说“go”，又说“走”，还有‘stay’与‘留’。\n", Format::Html, &style());
+        assert!(out.contains("他说“<span class=\"yoko\">go</span>”，又说『走』，还有‘<span class=\"yoko\">stay</span>’与「留」。"), "{out}");
+        let out = export("他说：“**走吧**，‘快’。”\n", Format::Html, &style());
+        assert!(out.contains("他说：『<strong>走吧</strong>，「快」。』"), "{out}");
+        // A quotation running on over paragraphs opens each, and closes once.
+        let out = export("“第一段。\n\n“第二段。”\n", Format::Html, &style());
+        assert!(out.contains("<p>『第一段。</p>") && out.contains("<p>『第二段。』</p>"), "{out}");
+        assert_eq!(corner_quotes(&"“go” “走” it’s".chars().collect::<Vec<_>>()).iter().collect::<String>(), "“go” 『走』 it’s");
     }
 }

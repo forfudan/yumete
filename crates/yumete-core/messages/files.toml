@@ -319,10 +319,10 @@ zhs = "这个文件的预览不能导出为 {0}，可用 {1}"
 en = "this file's preview does not export as {0}; it exports as {1}"
 
 [[message]]
-# :export 的 font= 后面是空的（草稿）
+# :export 的 font= 后面是空的（草稿：教加引号）
 key = "export.no-fonts"
-zhs = "font= 后面要写字体，例如 font='Songti SC', serif"
-en = "font= wants a font list, such as font='Songti SC', serif"
+zhs = "font= 后面要写字体，例如 font=Songti；含空格或逗号的字体列表要加引号，例如 font='Songti SC, serif'"
+en = "font= wants a font list, such as font=Songti; quote a list with a space or a comma in it, such as font='Songti SC, serif'"
 
 [[message]]
 # :export 給了不認得的格式（草稿：加了 epub）
@@ -337,10 +337,10 @@ zhs = "page=「{0}」不是纸张：可用 a4 a5 a6 b5 b6 letter 16开 32开 大
 en = "page='{0}' is not a paper size: a4 a5 a6 b5 b6 letter 16開 32開 大32開, or millimetres such as 130x184"
 
 [[message]]
-# :export 后面有一个既不是选项、也不像文件名的词（草稿）
+# :export 后面有一个既不是选项、也不像文件名的词（草稿：加了 ruby-markdown）
 key = "export.no-such-word"
-zhs = "不认得「{0}」：可用 vertical、horizontal、hanging、no-hanging、ruby-html、no-ruby-html、ruby-typst、no-ruby-typst、turn、jlreq、page=、font=；文件名请写成 ./{0}"
-en = "no such word '{0}': vertical, horizontal, hanging, no-hanging, ruby-html, no-ruby-html, ruby-typst, no-ruby-typst, turn, jlreq, page= or font=; for a file, write ./{0}"
+zhs = "不认得「{0}」：可用 vertical、horizontal、hanging、no-hanging、ruby-html、no-ruby-html、ruby-typst、no-ruby-typst、ruby-markdown、no-ruby-markdown、turn、jlreq、page=、font=；文件名请写成 ./{0}"
+en = "no such word '{0}': vertical, horizontal, hanging, no-hanging, ruby-html, no-ruby-html, ruby-typst, no-ruby-typst, ruby-markdown, no-ruby-markdown, turn, jlreq, page= or font=; for a file, write ./{0}"
 
 [[message]]
 # :export-as-preview 要用 typst 命令编译 PDF，而这台机器上没有 typst（草稿）
@@ -377,6 +377,12 @@ en = "{0} already exists; `:{1}!` overwrites it"
 key = "export.target-is-open"
 zhs = "{0} 已打开，导出会覆盖它，请换个文件名"
 en = "{0} is open; an export would overwrite it, so pick another name"
+
+[[message]]
+# :export 的一個詞以逗號結尾：字體列表含空格或逗號要加引號（草稿）
+key = "export.trailing-comma"
+zhs = "「{0}」以逗号结尾：含空格或逗号的字体列表要加引号，例如 font='Songti SC, serif'"
+en = "'{0}' ends in a comma: quote a font list with a space or a comma in it, such as font='Songti SC, serif'"
 
 [[message]]
 # :export-as-preview 開始在背景用 typst 排版 PDF，{0} 是排的那個主檔（草稿）

@@ -1004,10 +1004,10 @@ zhs = "EPUB 电子书"
 en = "an EPUB book"
 
 [[message]]
-# : 命令選單裏 font 那一項的説明(export 組)（草稿）
+# : 命令選單裏 font 那一項的説明(export 組)（草稿：列表加引號）
 key = "cmd.export.font"
-zhs = "字体，如 font='Songti SC', serif"
-en = "fonts, as font='Songti SC', serif"
+zhs = "字体，如 font=Songti 或 font='Songti SC, serif'"
+en = "fonts, as font=Songti or font='Songti SC, serif'"
 
 [[message]]
 # : 命令選單裏 hanging 那一項的説明(export 組)（草稿）

@@ -16,9 +16,9 @@
 //!   pages the way a Chinese book turns;
 //! - `OEBPS/nav.xhtml`, the table of contents, from the headings;
 //! - `OEBPS/text.xhtml` and `OEBPS/style.css`, the page;
-//! - `OEBPS/images/`, each drawn formula and each figure's picture as a
-//!   file of its own: a data URL is not a resource a package can list, and a
-//!   book cannot reach outside itself for a picture.
+//! - `OEBPS/images/`, each drawn formula and each picture, a figure's or one
+//!   in a line, as a file of its own: a data URL is not a resource a package
+//!   can list, and a book cannot reach outside itself for a picture.
 //!
 //! Everything is stored, not deflated: the formulas are PNGs already, a
 //! chapter is a few tens of kilobytes, and a zip writer with no compressor is
@@ -49,7 +49,10 @@ pub fn book(text: &str, style: &Style) -> Vec<u8> {
         let kind = media_type(name).unwrap_or("image/png");
         let _ = writeln!(manifest, "<item id=\"f{}\" href=\"{name}\" media-type=\"{kind}\"/>", n + 1);
     }
-    let (direction, mode) = match style.settings.vertical && lang != "en" {
+    // **Right to left exactly when the page is vertical** (2026-11-09), as
+    // the stylesheet sets it: a vertical page read as English set its lines
+    // from the right and turned its pages from the left.
+    let (direction, mode) = match style.settings.vertical {
         true => (" page-progression-direction=\"rtl\"", "\n<meta name=\"primary-writing-mode\" content=\"vertical-rl\"/>"),
         false => ("", ""),
     };
@@ -150,38 +153,52 @@ fn media_type(name: &str) -> Option<&'static str> {
     PICTURES.iter().find(|(e, _)| extension.eq_ignore_ascii_case(e)).map(|(_, kind)| *kind)
 }
 
-/// **Each figure's picture taken into the book** (2026-11-08): read from
-/// beside the source and written into the page as a `data:` URL, for
-/// [`pictures_out`] to file. A picture that cannot be read — not there, on
-/// the web, of a type a book does not hold, or a buffer never saved — is
-/// left out, its caption kept: a book that points outside itself does not
-/// open in a reader that checks.
+/// **Each picture taken into the book** (2026-11-08), a figure's and
+/// (2026-11-09) one in a line: read from beside the source, its path
+/// percent-decoded as the preview reads it (`my%20pic.png`), and written
+/// into the page as a `data:` URL, for [`pictures_out`] to file. A picture
+/// that cannot be read — not there, on the web, of a type a book does not
+/// hold, or a buffer never saved — is left out: a figure keeps its caption,
+/// a picture in a line its text, since a book that points outside itself
+/// does not open in a reader that checks.
 fn pictures_in(body: &str, base: Option<&std::path::Path>) -> String {
-    const FIGURE: &str = "<img class=\"figure\" src=\"";
+    const TAGS: [&str; 2] = ["<img class=\"figure\" src=\"", "<img class=\"inline\" src=\""];
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
-    while let Some(at) = rest.find(FIGURE) {
+    while let Some((at, open)) = TAGS.iter().filter_map(|p| rest.find(p).map(|at| (at, *p))).min() {
         out.push_str(&rest[..at]);
-        let after = &rest[at + FIGURE.len()..];
+        let after = &rest[at + open.len()..];
         let (Some(end), Some(close)) = (after.find('"'), after.find('>')) else {
             out.push_str(&rest[at..]);
             return out;
         };
-        let src = after[..end].replace("&amp;", "&").replace("&quot;", "\"");
+        let src = after[..end].replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
+        let src = crate::markdown::percent_decoded(&src);
         let read = base
             .filter(|_| !src.contains("://"))
             .and_then(|base| Some((media_type(&src)?, std::fs::read(base.join(&src)).ok()?)));
         if let Some((kind, bytes)) = &read {
-            let _ = write!(out, "{FIGURE}data:{kind};base64,{}{}", crate::preview::base64(bytes), &after[end..=close]);
+            let _ = write!(out, "{open}data:{kind};base64,{}{}", crate::preview::base64(bytes), &after[end..=close]);
         }
+        let tag = &after[..=close];
         rest = &after[close + 1..];
-        // The line the picture stood on goes with it.
-        if read.is_none() {
-            rest = rest.strip_prefix('\n').unwrap_or(rest);
+        match (read.is_some(), open == TAGS[0]) {
+            (true, _) => {}
+            // The line a figure's picture stood on goes with it.
+            (false, true) => rest = rest.strip_prefix('\n').unwrap_or(rest),
+            // A picture in a line leaves its words, as the preview shows
+            // them when it has no picture.
+            (false, false) => out.push_str(&alt_of(tag)),
         }
     }
     out.push_str(rest);
     out
+}
+
+/// The `alt` of an `<img>` tag, as it was written into the tag: escaped
+/// already, and so text for the page as it is.
+fn alt_of(tag: &str) -> String {
+    tag.split_once(" alt=\"").and_then(|(_, after)| after.split_once('"')).map(|(alt, _)| alt.to_string()).unwrap_or_default()
 }
 
 /// Each `data:` picture — a drawn formula, a figure taken in — written out
@@ -218,16 +235,18 @@ fn pictures_out(body: &str) -> (String, Vec<(String, Vec<u8>)>) {
     (out, images)
 }
 
-/// HTML made XML: the void elements closed (`<br>` as `<br/>`) and the one
-/// named entity HTML has that XML lacks, `&nbsp;`, written as a number.
-/// Inline HTML the writer typed passes through as it did into the HTML page,
-/// so a tag left open there is still open here.
+/// HTML made XML: the void elements closed (`<br>` as `<br/>`), the one
+/// named entity HTML has that XML lacks, `&nbsp;`, written as a number, and
+/// no character XML refuses ([`crate::export::legal_text`]). Inline HTML the
+/// writer typed passes through as it did into the HTML page, so a tag left
+/// open there is still open here.
 fn xhtml(body: &str) -> String {
     use std::sync::LazyLock;
     static VOID: LazyLock<regex::Regex> = LazyLock::new(|| {
         regex::Regex::new(r"<(area|br|col|embed|hr|img|input|source|track|wbr)\b([^>]*?)\s*/?>").expect("a pattern")
     });
-    VOID.replace_all(body, "<${1}${2}/>").replace("&nbsp;", "&#160;")
+    let body = crate::export::legal_text(body);
+    VOID.replace_all(&body, "<${1}${2}/>").replace("&nbsp;", "&#160;")
 }
 
 /// Every `<h1>`–`<h3>` given an `id`, and the list of them with their words
@@ -281,9 +300,9 @@ fn plain(markup: &str) -> String {
     out.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&amp;", "&")
 }
 
-/// `&`, `<` and `>` escaped for XML text.
+/// `&`, `<` and `>` escaped for XML text, and nothing in it XML refuses.
 fn xml_text(text: &str) -> String {
-    text.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    crate::export::legal_text(text).replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
 /// A UUID made from the text and its title, so the same manuscript exported
@@ -527,5 +546,61 @@ mod tests {
         assert!(page.contains("<img class=\"figure\" src=\"images/f1.jpg\" alt=\"一棵树\"/>"), "{page}");
         assert!(!page.contains("gone.png") && page.contains("<figcaption>不在</figcaption>"), "{page}");
         assert!(files.contains(&("OEBPS/images/f1.jpg".to_string(), vec![9, 8, 7])));
+    }
+
+    /// **A vertical book turns from the right whatever its language**
+    /// (2026-11-09): the stylesheet sets it vertical-rl when the export is
+    /// vertical, and the spine says so with it; across, neither does.
+    #[test]
+    fn a_vertical_book_turns_from_the_right_in_any_language() {
+        let files = entries(&book("An English essay about things, set down the page.\n", &style()));
+        let opf = String::from_utf8(files[2].1.clone()).unwrap();
+        assert!(opf.contains("<dc:language>en</dc:language>"), "{opf}");
+        assert!(opf.contains("<spine page-progression-direction=\"rtl\">"), "{opf}");
+        assert!(String::from_utf8(files[5].1.clone()).unwrap().contains("writing-mode: vertical-rl"));
+        let mut flat = style();
+        flat.settings.vertical = false;
+        let files = entries(&book("竖排之外的一页。\n", &flat));
+        let opf = String::from_utf8(files[2].1.clone()).unwrap();
+        assert!(opf.contains("<spine>") && !opf.contains("vertical-rl"), "{opf}");
+    }
+
+    /// **A book's page is well-formed XML** (2026-11-09): a form feed or
+    /// another control character in the text, or in a heading, is not
+    /// carried into it.
+    #[test]
+    fn control_characters_do_not_reach_the_book() {
+        let files = entries(&book("# 标题\u{01}一\n\n甲\u{0C}乙\u{1B}丙。\n", &style()));
+        for (name, data) in &files {
+            let text = String::from_utf8_lossy(data);
+            assert!(!text.chars().any(|c| c < ' ' && !matches!(c, '\t' | '\n' | '\r')), "{name}: {text}");
+        }
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("甲 乙丙。") && page.contains(">标题一</h1>"), "{page}");
+    }
+
+    /// **A picture in a line goes into the book as a figure's does**
+    /// (2026-11-09), and a path written as a URL writes it is read as the
+    /// preview reads it, `%20` a space; a picture in a line that cannot be
+    /// read leaves its words.
+    #[test]
+    fn pictures_in_a_line_and_encoded_paths_go_into_the_book() {
+        let dir = std::env::temp_dir().join(format!("yumete-epub-inline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("a.png"), [1u8, 2, 3]).unwrap();
+        std::fs::write(dir.join("my pic.png"), [4u8, 5, 6]).unwrap();
+        let mut s = style();
+        s.base = Some(dir.clone());
+        let text = "文中有图 ![小图](a.png) 在此，又 ![不在](gone.png) 了。\n\n![有空格的图](my%20pic.png)\n\n![尖括号](<my pic.png>)\n";
+        let files = entries(&book(text, &s));
+        let _ = std::fs::remove_dir_all(&dir);
+        let page = String::from_utf8(files[4].1.clone()).unwrap();
+        assert!(page.contains("文中有图 <img class=\"inline\" src=\"images/f1.png\" alt=\"小图\"/> 在此"), "{page}");
+        assert!(page.contains("又 不在 了。") && !page.contains("gone.png"), "{page}");
+        assert!(page.contains("<img class=\"figure\" src=\"images/f2.png\" alt=\"有空格的图\"/>"), "{page}");
+        assert!(page.contains("<img class=\"figure\" src=\"images/f3.png\" alt=\"尖括号\"/>"), "{page}");
+        assert!(files.contains(&("OEBPS/images/f1.png".to_string(), vec![1, 2, 3])));
+        assert!(files.contains(&("OEBPS/images/f2.png".to_string(), vec![4, 5, 6])));
+        assert!(files.contains(&("OEBPS/images/f3.png".to_string(), vec![4, 5, 6])));
     }
 }

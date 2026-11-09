@@ -3011,7 +3011,7 @@ fn owner_pid(draft: &std::path::Path) -> Option<u32> {
 /// `kill(pid, 0)` 不發信號，只問「這個號還在不在、我夠不夠格發」：回 0 是在，
 /// `EPERM` 是在而不歸我管（照樣算在），`ESRCH` 纔是不在。
 #[cfg(unix)]
-fn pid_is_running(pid: u32) -> bool {
+pub(crate) fn pid_is_running(pid: u32) -> bool {
     // SAFETY: `kill` with signal 0 reads the process table and sends nothing.
     match unsafe { libc::kill(pid as i32, 0) } {
         0 => true,
@@ -3034,7 +3034,7 @@ fn pid_is_running(pid: u32) -> bool {
 /// Warning: **`STILL_ACTIVE` 是 259，而一個進程也可以拿 259 退出。** 真撞上就是多
 /// 留一份草稿——與上面 pid 重用那一條同一個方向，而那是安全的那一邊。
 #[cfg(windows)]
-fn pid_is_running(pid: u32) -> bool {
+pub(crate) fn pid_is_running(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
     use windows_sys::Win32::System::Threading::{
         OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -3057,7 +3057,7 @@ fn pid_is_running(pid: u32) -> bool {
 
 /// 別的平臺問不出來，照舊當作「主人走了」。
 #[cfg(not(any(unix, windows)))]
-fn pid_is_running(_pid: u32) -> bool {
+pub(crate) fn pid_is_running(_pid: u32) -> bool {
     false
 }
 

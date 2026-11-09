@@ -1451,6 +1451,7 @@ fn main() -> ExitCode {
         Ok(outcome) => outcome,
         Err(_) => {
             yumete_tui::restore_terminal();
+            editor.stop_typesetting();
             let saved = editor.rescue_drafts();
             editor.save_session();
             let log = yumete_core::diag::path()
@@ -1466,6 +1467,10 @@ fn main() -> ExitCode {
     if yumete_tui::hung_up() || outcome.is_err() {
         editor.rescue_drafts();
     }
+    // A PDF still being typeset for `:export-as-preview` is given up, its
+    // compiler stopped and its draft removed (2026-11-09): `空格 o p` below
+    // replaces this process without dropping anything.
+    editor.stop_typesetting();
     // Written on the way out, whichever way out it was: an editor that only
     // remembered a clean exit would forget the session you most wanted back.
     // The view only on a clean one: after a panic the state it would be read
@@ -2645,9 +2650,11 @@ SEARCHING FROM THE SHELL:
                      The words :export takes go among the files, each over
                      its setting for this run: vertical, horizontal, hanging,
                      no-hanging, ruby-html, no-ruby-html, ruby-typst,
-                     no-ruby-typst, turn, jlreq, page=A5 (or page=130x184)
-                     and font='\"Songti SC\", serif'. A file with no
-                     extension is written ./name.
+                     no-ruby-typst, ruby-markdown, no-ruby-markdown, turn,
+                     jlreq, page=A5 (or page=130x184) and font=Songti, or
+                     font='\"Songti SC\", serif' for a list with a space or
+                     a comma in it, quoted whole. A file with no extension
+                     is written ./name.
 
                          ye --export epub vertical jlreq page=A5 book.md
 
