@@ -4373,8 +4373,7 @@ fn d_and_alt_d_take_the_rest_of_the_line() {
 fn a_macro_records_and_replays() {
     let mut ed = typed("一二三四五六");
     press(&mut ed, "gg");
-    // Warning: **`Q` records, `q` replays** — Helix's way round, and ours since
-    // 2026-09-12 (#404). It was the other way until then.
+    // Warning: **`Q` records, `q` replays** — Helix's way round (#404).
     press(&mut ed, "Q"); // record: replace one character, step on
     press(&mut ed, "r");
     ed.on_key(Key::Char('〇'));
@@ -4497,8 +4496,8 @@ fn join_omits_the_space_between_two_wide_characters() {
     press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "one two");
 
-    // **行尾的空白也吞掉**（#326，2026-10-01）。從前它留着，而接縫又補了一個
-    // 空格，於是 `"  \n漢字"` 合成 `"   漢字"`——三個空格。
+    // **行尾的空白也吞掉**（#326）：接縫自己補一個空格，留着行尾的空白，
+    // `"  \n漢字"` 就會合成 `"   漢字"`——三個空格。
     let mut ed = typed("上山  \n下海");
     press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "上山下海", "行尾空白不算字");
@@ -4521,9 +4520,9 @@ fn join_omits_the_space_between_two_wide_characters() {
 
 /// `gJ` 合幾行，三種說法（#518）。
 ///
-/// Warning: 兩處是修好的，不是新加的：**選區從前只合頭兩行**（選一整段按下去，看起來像做完了
-/// 其實只動了一對），而 **`g3J` 完全没反應**——它讀的是 `g` *之前*打的數字，而那個 `3`
-/// 打在 `g` 之後，進的是序列自己的參數。隔壁 `g30g` 一直是對的。
+/// Warning: **選區合的是選中的每一行**，不是頭兩行（只動一對看起來也像做完了）；
+/// 序列内的數字（`g3J` 裏 `g` 之後那個 `3`）是序列自己的參數，不是 `g` *之前*
+/// 打的那個數。隔壁 `g30g` 也是這樣讀的。
 #[test]
 fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     let five = "一\n二\n三\n四\n五\n";
@@ -4534,11 +4533,11 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n", "選三行合成一行");
 
-    // **數字說的是「幾行併成一行」**（2026-09-19 定），vi 的規矩：`3J`
-    // 把三行焊成一行，也就是兩次併。
+    // **數字說的是「幾行併成一行」**，vi 的規矩：`3J` 把三行焊成一行，也就是兩
+    // 次併。
     //
-    // Warning: **`g3J` 那一種没有了**（2026-10-06）：`J` 自己就是合併行，`gJ` 連
-    // 同它那個序列内的數字一起撤了。vi 的 `3J` 一直都在，下面這一條就是。
+    // Warning: **没有 `g3J` 那一種**：`J` 自己就是合併行，`gJ` 連同序列内的數字
+    // 都不綁。vi 的 `3J` 在，下面這一條就是。
     let mut ed = typed(five);
     press(&mut ed, "3J");
     assert_eq!(ed.current_buffer().text(), "一二三\n四\n五\n");
@@ -4553,17 +4552,17 @@ fn join_takes_the_selection_the_sequence_count_or_the_vi_count() {
     press(&mut ed, "J");
     assert_eq!(ed.current_buffer().text(), "一二\n三\n四\n五\n");
 
-    // Joining upwards is `k` then `J`, which is how vim and helix both say it:
-    // `gK` was taken out on 2026-10-14 for being in neither of them.
+    // Joining upwards is `k` then `J`, which is how vim and helix both say it;
+    // there is no `gK`, being in neither of them.
     let mut ed = typed(five);
     ed.goto_line(3);
     press(&mut ed, "k2J");
     assert_eq!(ed.current_buffer().text(), "一\n二三\n四\n五\n", "{}", ed.current_buffer().text());
 
-    // **From the line break itself, with Latin text** (2026-10-30, reported as
-    // 「4J only joins one line」): a join puts a space where the `\n` was and
-    // leaves the cursor on the seam, so the count's early stop — 「nothing
-    // moved」 — used to read the first join as a no-op.
+    // **From the line break itself, with Latin text** (`4J` joins four lines,
+    // not one): a join puts a space where the `\n` was and leaves the cursor
+    // on the seam, so the count's early stop — 「nothing moved」 — must not
+    // read the first join as a no-op.
     let mut ed = typed("aa\nbb\ncc\ndd\nee\n");
     press(&mut ed, "ll");
     press(&mut ed, "4J");
@@ -4604,8 +4603,8 @@ fn indent_adds_and_removes_a_level() {
 
 /// helix's rule under the helix keymap: only a selection that is a number,
 /// whole, which then covers the new one (helix 25.07.1). vim's reaches ahead.
-/// **Auto-pairs** (2026-10-29): helix's rules, measured on 25.07.1, at three
-/// levels; the input method's commits pair as keys do under `full`.
+/// **Auto-pairs**: helix's rules, measured on 25.07.1, at three levels; the
+/// input method's commits pair as keys do under `full`.
 #[test]
 fn brackets_and_quotes_close_themselves() {
     use crate::editor::AutoPairs;
@@ -4675,9 +4674,8 @@ fn brackets_and_quotes_close_themselves() {
     assert_eq!(text(&ed), "正文[^注]。[^注]X\n\n[^注]: 一\n", "the caret steps past the closer");
 }
 
-/// **Undo and redo after the review of the fixes** (2026-10-29), against
-/// helix 25.07.1: `u` keeps every cursor, and redo after `r` comes back to
-/// the change.
+/// **Undo and redo**, against helix 25.07.1: `u` keeps every cursor, and
+/// redo after `r` comes back to the change.
 #[test]
 fn undo_keeps_every_cursor_and_redo_finds_the_change() {
     let marked = |ed: &mut Editor| {
@@ -4700,8 +4698,8 @@ fn undo_keeps_every_cursor_and_redo_finds_the_change() {
     assert_eq!(marked(&mut ed), "aZx\ncd\nef\n");
 }
 
-/// **What the review of the dates, blocks and completion found** (2026-10-29),
-/// each against helix 25.07.1 or nvim 0.12.5.
+/// **Dates, blocks and completion**, each against helix 25.07.1 or nvim
+/// 0.12.5.
 #[test]
 fn counts_blocks_and_pinyin_after_the_review() {
     use yumete_cjk::KeyPreset;
@@ -4755,8 +4753,7 @@ fn counts_blocks_and_pinyin_after_the_review() {
     assert_eq!(labels(&ed), ["xuexiing", "學習"]);
 }
 
-/// **What the auto-pairs review found** (2026-10-29), each against helix
-/// 25.07.1 or vim.
+/// **Auto-pairs**, each against helix 25.07.1 or vim.
 #[test]
 fn auto_pairs_after_the_review() {
     use crate::editor::AutoPairs;
@@ -4876,17 +4873,16 @@ fn surround_adds_deletes_and_replaces() {
     press(&mut ed, "gg2l");
     press(&mut ed, "mr「《");
     assert_eq!(ed.current_buffer().text(), "《你好》");
-    // `md` 等一個字符說拆哪一種（2026-10-06 跟 helix 對齊）；`m` 就是最內層那一對。
+    // `md` 等一個字符說拆哪一種（跟 helix 對齊）；`m` 就是最內層那一對。
     press(&mut ed, "mdm");
     assert_eq!(ed.current_buffer().text(), "你好");
 }
 
-/// **`md`/`mr` 吃一個字符說拆哪一種**（2026-10-06，十三條的第六條）。
+/// **`md`/`mr` 吃一個字符說拆哪一種**。
 ///
-/// helix 的 `surround_delete` 一直是吃的（`commands.rs`：`Some('m') => None,
-/// // m selects the closest surround pair`），我們從前直接拆最內層——同一個鍵
-/// 在兩個編輯器裏不是同一件事。定：「不管是 vim 还是 helix，都和他们的行为
-/// 对齐就好了，不要让用户有意外。」
+/// helix 的 `surround_delete` 是吃的（`commands.rs`：`Some('m') => None,
+/// // m selects the closest surround pair`），同一個鍵在兩個編輯器裏是同一件事。
+/// 不管是 vim 還是 helix，都與它們的行為對齊，不讓使用者意外。
 #[test]
 fn md_and_mr_are_told_which_pair() {
     let run = |steps: &str| {
@@ -4903,7 +4899,7 @@ fn md_and_mr_are_told_which_pair() {
     assert_eq!(run("mr（《"), "《甲「乙」丙》\n", "mr 指名外層");
 }
 
-/// **vim-surround 的三個拼法**（2026-10-06，十三條的第六條）。
+/// **vim-surround 的三個拼法**。
 ///
 /// `ys{動作}{括號}`、`ds{括號}`、`cs{舊}{新}`，外加 `yss` 整行。`s` 不在
 /// [`yumete_cjk::VIM_MOTIONS`] 上，所以這三條和在原生 vim 裏一樣没人佔。
@@ -4930,7 +4926,7 @@ fn vim_keys_spell_surround_the_way_vim_surround_does() {
     assert_ne!(ed.current_buffer().text(), "甲乙\n", "helix 鍵位下不認 ds");
 }
 
-/// **vim 鍵位下 `m` 是設標記**（2026-10-06，十三條的第六條）。
+/// **vim 鍵位下 `m` 是設標記**。
 ///
 /// 讓得出來是因為 match 那一族在 vim 鍵位下另有拼法：`%` 跳配對、`di(`/`vi(`
 /// 走算子加對象、`ys`/`ds`/`cs` 加去換括號。
@@ -4948,14 +4944,12 @@ fn vim_m_sets_a_mark_and_percent_still_jumps() {
     assert_eq!(ed.sel.head(), 4, "% 仍跳到配對的那一半");
 }
 
-/// **`md k` 去得掉 markdown 的標記**（2026-10-04 定；2026-10-27 從 `md m` 挪到 `md k`）。
+/// **`md k` 去得掉 markdown 的標記**。
 ///
-/// 起因是那一問：「我只想删掉 `**`，最快怎麼辦」。從前最快是四步八鍵——`mim` 複製、
-/// `mam` 選中、`R` 貼回去——因為 `md` 查的是 `PAIRS`，那張表裏只有括號和引號，
-/// 没有 `*`/`_`/`~`，而且它寫死了每邊刪**一個**字，`**` 是兩個。
-///
-/// 在一部以 markdown 為主的編輯器裏，這件事該是三個鍵。`m` 從前在括號與標記之間取
-/// 近的那一個；照 helix，`m` 現在只管最近的一對括號或引號，標記歸 `k`。
+/// 「只想刪掉 `**`，最快怎麼辦」：在一部以 markdown 為主的編輯器裏，這件事該是三
+/// 個鍵，不是 `mim` 複製、`mam` 選中、`R` 貼回去那四步八鍵。所以 `md` 不只查
+/// `PAIRS`（那張表裏只有括號和引號，没有 `*`/`_`/`~`），也不寫死每邊刪**一個**
+/// 字——`**` 是兩個。照 helix，`m` 只管最近的一對括號或引號，標記歸 `k`。
 #[test]
 fn md_takes_off_markdown_marks_too() {
     let off = |text: &str, steps: &str, keys: &str| {
@@ -4998,8 +4992,8 @@ fn md_takes_off_markdown_marks_too() {
     }
 }
 
-/// **Each step of `m` lists what it takes** (2026-10-27), as helix's do —
-/// not a line saying 「type a bracket」.
+/// **Each step of `m` lists what it takes**, as helix's do — not a line
+/// saying 「type a bracket」.
 #[test]
 fn every_step_of_m_lists_its_choices() {
     let keys_after = |pressed: &str| -> Vec<String> {
@@ -5043,7 +5037,7 @@ fn every_step_of_m_lists_its_choices() {
 }
 
 /// Under the vim keymap `dik`/`dak` are the Markdown marks and `dim` the
-/// nearest pair, the same letters as `mi` (2026-10-27).
+/// nearest pair, the same letters as `mi`.
 #[test]
 fn vim_objects_follow_the_m_and_k_split() {
     let vim = |steps: &str| {
@@ -5066,7 +5060,7 @@ fn vim_objects_follow_the_m_and_k_split() {
 }
 
 /// **Any character is a pair of itself** in `ms`, `md`, `mr` and, when it is
-/// not a letter or a digit, in `mi`/`ma` (2026-10-27, helix's `m` group).
+/// not a letter or a digit, in `mi`/`ma` (helix's `m` group).
 #[test]
 fn any_character_acts_as_a_pair() {
     let run = |text: &str, keys: &str| {
@@ -5089,9 +5083,9 @@ fn any_character_acts_as_a_pair() {
     assert_eq!(ed.selection(), (2, 3), "the selection is where `fx;` left it");
 }
 
-/// **`ms`, `md`, `mr` and `mi` act on every selection** (2026-10-27, helix's
-/// `m` group); `md`/`mr` refuse the whole command when a cursor has no pair
-/// or two share one, as helix's do.
+/// **`ms`, `md`, `mr` and `mi` act on every selection** (helix's `m`
+/// group); `md`/`mr` refuse the whole command when a cursor has no pair or
+/// two share one, as helix's do.
 #[test]
 fn the_m_group_acts_on_every_selection() {
     // A cursor on the first line's `b` (`fb;`), copied to the line below (`C`).
@@ -5127,9 +5121,9 @@ fn the_m_group_acts_on_every_selection() {
     assert_eq!(ed.status, say!("edit.one-pair-for-two-cursors"));
 }
 
-/// **Counts in the `m` group are pairs out** (2026-10-27, each measured
-/// against helix 25.07.1 on the same text): `2mi(`, `2md(`, `2mr([`, and with
-/// `m` the count-th pair of any kind. Too few pairs: nothing changes.
+/// **Counts in the `m` group are pairs out** (each measured against helix
+/// 25.07.1 on the same text): `2mi(`, `2md(`, `2mr([`, and with `m` the
+/// count-th pair of any kind. Too few pairs: nothing changes.
 #[test]
 fn a_count_in_the_m_group_is_that_many_pairs_out() {
     let run = |text: &str, keys: &str| {
@@ -5149,8 +5143,8 @@ fn a_count_in_the_m_group_is_that_many_pairs_out() {
 }
 
 /// **Outside any pair, `mi(`/`ma(` jump ahead under the vim keymap only**
-/// (2026-10-27, measured: vim 9.1 and nvim 0.12.5 take the next `(…)`,
-/// helix 25.07.1 selects nothing).
+/// (measured: vim 9.1 and nvim 0.12.5 take the next `(…)`, helix 25.07.1
+/// selects nothing).
 #[test]
 fn only_the_vim_keymap_reaches_ahead_for_a_pair() {
     let mut ed = typed("ab (cd) ef\n");
@@ -5165,9 +5159,9 @@ fn only_the_vim_keymap_reaches_ahead_for_a_pair() {
     assert_eq!(ed.current_buffer().text(), "ab  ef\n", "vim: the next pair");
 }
 
-/// **`mr` shows the pair it found before the second key** (2026-10-27,
-/// helix's `surround_replace`): the selection is the two brackets, and the
-/// next key — the new pair, or `Esc` — puts the reader's selection back.
+/// **`mr` shows the pair it found before the second key** (helix's
+/// `surround_replace`): the selection is the two brackets, and the next key
+/// — the new pair, or `Esc` — puts the reader's selection back.
 #[test]
 fn mr_shows_the_pair_before_it_changes_it() {
     let mut ed = typed("a (bc) d\n");
@@ -5207,8 +5201,8 @@ fn mr_shows_the_pair_before_it_changes_it() {
     assert!(!ed.status.is_empty());
 }
 
-/// **`ms` then `Enter` puts the selection on lines of its own** (2026-10-27,
-/// helix's `surround_add`; measured there: `x` `ms` `Enter` on `foo` gives
+/// **`ms` then `Enter` puts the selection on lines of its own** (helix's
+/// `surround_add`; measured there: `x` `ms` `Enter` on `foo` gives
 /// `\nfoo\n\n`). The selection takes in both breaks.
 #[test]
 fn ms_enter_surrounds_with_line_breaks() {
@@ -5234,8 +5228,8 @@ fn ms_enter_surrounds_with_line_breaks() {
 }
 
 /// **`mi g` / `ma g` select the change around the caret**, whole lines
-/// (2026-10-27, helix's `g`); a line in no change, and a file git does not
-/// track, leave the selection where it was and say why.
+/// (helix's `g`); a line in no change, and a file git does not track, leave
+/// the selection where it was and say why.
 #[test]
 fn mig_selects_the_change_around_the_caret() {
     let dir = tmp().join(format!("yumete-mig-{}", std::process::id()));
@@ -5285,8 +5279,8 @@ fn mig_selects_the_change_around_the_caret() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`mi f` / `mi a` / `mi c` reach into the code fence the caret is in**
-/// (2026-10-27): a Markdown file has code in its fences.
+/// **`mi f` / `mi a` / `mi c` reach into the code fence the caret is in**:
+/// a Markdown file has code in its fences.
 #[test]
 fn code_objects_reach_into_a_markdown_fence() {
     let doc = "说明。\n\n```rust\n// 两数相加\nfn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n```\n";
@@ -5309,8 +5303,8 @@ fn code_objects_reach_into_a_markdown_fence() {
     assert_eq!(took("mif"), "说", "the selection stays");
 }
 
-/// **`mi T`, `mi e`, `mi x`** (2026-10-27, helix's `T` `e` `x`) through real
-/// files: a test function, a key with its value, an HTML element.
+/// **`mi T`, `mi e`, `mi x`** (helix's `T` `e` `x`) through real files: a
+/// test function, a key with its value, an HTML element.
 #[test]
 fn mi_takes_a_test_an_entry_and_an_element() {
     let dir = tmp().join(format!("yumete-tex-{}", std::process::id()));
@@ -5340,7 +5334,7 @@ fn mi_takes_a_test_an_entry_and_an_element() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// `mi m` is the nearest pair, whichever kind (2026-10-27, helix's `m`).
+/// `mi m` is the nearest pair, whichever kind (helix's `m`).
 #[test]
 fn mim_takes_the_nearest_pair_of_any_kind() {
     let mut ed = typed("他說：「今天（星期三）下雨。」\n");
@@ -5418,15 +5412,15 @@ impl Segmenter for Counting {
 
 /// 標點不是詞，一個都不許塗（#446）。
 ///
-/// 報來的原話：「`w`（按詞移動）高亮了 `` `( `` 这两个标点符号，还有 `` )、` ``
-/// 这样的標點符號組。反而反引号形成的 verbatim 却没有被高亮，让人觉得是 verbatim
-/// 出现了错位。」病根在那道「兩邊都看得見就不塗」的閘上：它從前問的是
-/// `char::is_alphanumeric`，而拉丁字母也算 alphanumeric，於是
+/// `w`（按詞移動）不塗 `` `( `` 與 `` )、` `` 這樣的標點組，而反引號中間的
+/// verbatim 照塗——塗反了會讓人以為 verbatim 錯了位。那道「兩邊都看得見就不塗」
+/// 的閘問的是 `is_segmentable`，不是 `char::is_alphanumeric`：拉丁字母也算
+/// alphanumeric，問後者的話
 ///
 /// * `` `（ `` 前面是字母 `w`，不算邊界 → **塗了**；
 /// * 反引號中間那個 `w` 兩邊都是反引號，都算邊界 → **没塗**。
 ///
-/// 塗出來的恰好是反的。現在兩件事都問 `is_segmentable`。
+/// 塗出來的恰好是反的。所以兩件事都問 `is_segmentable`。
 #[test]
 fn punctuation_is_never_a_word_to_paint() {
     let line = "`w`（按詞移動）、`f`";
@@ -5495,8 +5489,8 @@ fn the_overlay_segments_a_paragraph_once_until_it_changes() {
 
 /// **進度那個數字是按行數出來的，而且和一次抄一整份數出來的一樣**（#343）。
 ///
-/// Warning: 從前每一次存檔把整個 rope 抄成 `String` 再抄成 `Vec<char>`——八 MB 的稿
-/// 子每存一次多四十 MB 的拷貝。改成按行走之後，要驗的是**答案没變**：注音標記
+/// Warning: 存檔不把整個 rope 抄成 `String` 再抄成 `Vec<char>`——八 MB 的稿子每存
+/// 一次會多四十 MB 的拷貝。按行走，要驗的是**答案與整份抄出來的一樣**：注音標記
 /// 只算它底下那幾個字，跨行也不許把行首行尾算漏。
 #[test]
 fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
@@ -5523,13 +5517,13 @@ fn the_ledger_counts_off_the_rope_and_gets_the_same_number() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **撕開的表，十個結構鍵一個都不許重排它**（2026-10-02 一輪掃查報來的，會改壞表）。
+/// **撕開的表，十個結構鍵一個都不許重排它**。
 ///
 /// `mdtable::format` 攔着兩種表（撕開的 #328、跑飛的 #292），註釋寫着「Every door
 /// into this module passes here … so the guard cannot be walked around by an
-/// edit」。可 `md_write` 直接叫 `compose`，於是排序、加行、加列、刪列、挪列和三個
-/// 對齊鍵全從旁邊繞過去了：一格裏打了個裸的 `|`，按一下排序，**每一行都多出一格空
-/// 的、標題多出一個没名字的欄**——而排序一行字都不該動。
+/// edit」。Warning: `md_write` 不許直接叫 `compose`，否則排序、加行、加列、刪列、
+/// 挪列和三個對齊鍵全從旁邊繞過去：一格裏打了個裸的 `|`，按一下排序，**每一行都
+/// 多出一格空的、標題多出一個没名字的欄**——而排序一行字都不該動。
 #[test]
 fn a_torn_table_is_left_alone_by_every_key_that_rewrites_it() {
     // 第 3 行有 3 格，標題只有 2 格——`y|z` 裏那個裸的 `|`。
@@ -5559,15 +5553,13 @@ fn a_torn_table_is_left_alone_by_every_key_that_rewrites_it() {
     );
 }
 
-/// **挑選器的框和搜索面板的框，同一個鍵一個答案**（2026-10-02 自查出來的）。
+/// **挑選器的框和搜索面板的框，同一個鍵一個答案**。
 ///
-/// 同一天的兩輪審查把兩扇面板的刪字鍵改向了相反的方向：搜索面板改成「末尾那一格
-/// 上刪掉看得見的最後一個字」（照 2026-09-27 那條定論），挑選器改成「末尾就什麼
-/// 都別動」。兩扇都自洽，合起來不是一條規矩。
+/// 兩扇面板的刪字鍵是同一條規矩：末尾那一格上刪掉看得見的最後一個字，不是「末尾
+/// 就什麼都別動」。各自自洽而合起來不是一條規矩，是這一條要攔的。
 ///
-/// Warning: **從前這一支連 `D` 一起驗**（`Picker::delete_to_end`）。2026-10-08 挑選器只剩
-/// 一層，`D` 和框裏那一整套 vim 編輯鍵都成了查詢詞裏的字母，那一支隨之刪了；
-/// 留下的 `Delete` 這一個還在，規矩也還是這一條。
+/// Warning: 挑選器只有一層，`D` 和 vim 的那一整套編輯鍵在框裏都是查詢詞裏的字母；
+/// 這一條驗的是 `Delete`。
 #[test]
 fn the_picker_box_and_the_panel_box_answer_d_the_same_way() {
     use crate::picker::Picker;
@@ -5585,11 +5577,12 @@ fn the_picker_box_and_the_panel_box_answer_d_the_same_way() {
     assert_eq!(p.query(), "");
 }
 
-/// **抄一欄再貼回原處，那一欄一個字都不該變**（2026-10-02 一輪掃查報來的）。
+/// **抄一欄再貼回原處，那一欄一個字都不該變**。
 ///
-/// `column_values` 交出來的是**檔裏的拼法**（`木\|水`，連反斜杠），而 `put_column`
-/// 收到之後再轉義一遍，於是那一格成了 `木\\\|水`——本來是「木|水」，貼完成了
-/// 「木\|水」。抄出去那一份的用處是「貼進表格軟件」，那邊要的也是字不是拼法。
+/// `column_values` 交出來的是**檔裏的拼法**（`木\|水`，連反斜杠），所以
+/// `put_column` 收到之後不能再轉義一遍，否則那一格成了 `木\\\|水`——本來是「木|
+/// 水」，貼完成了「木\|水」。抄出去那一份的用處是「貼進表格軟件」，那邊要的也是字
+/// 不是拼法。
 #[test]
 fn yanking_a_column_and_putting_it_back_changes_nothing() {
     let mut ed = typed("| a | b |\n| --- | --- |\n| 木\\|水 | x |\n| 火 | y |\n");
@@ -5601,10 +5594,10 @@ fn yanking_a_column_and_putting_it_back_changes_nothing() {
     assert!(after.contains("| 火"), "{after}");
 }
 
-/// **CSV 排序按欄位的字排，不按引號**（2026-10-02 一輪掃查報來的）。
+/// **CSV 排序按欄位的字排，不按引號**。
 ///
-/// 取格子的那一支交的是原樣的那一段，引號在內——於是 `"Smith, John"` 按 `"`
-/// （0x22）排，落在 `Amy` 前面。排序排的是人看得見的那幾個字。
+/// 取格子的那一支交的是原樣的那一段，引號在內——拿它排，`"Smith, John"` 就按
+/// `"`（0x22）排，落在 `Amy` 前面。排序排的是人看得見的那幾個字。
 #[test]
 fn a_quoted_field_sorts_by_its_text_not_its_quote() {
     let dir = tmp().join(format!("yumete-csvsort-{}", std::process::id()));
@@ -5623,11 +5616,11 @@ fn a_quoted_field_sorts_by_its_text_not_its_quote() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **上屏也要落在每一段選區上——`r` 和 `f` 那兩支漏了**（2026-10-02 一輪審查報來的）。
+/// **上屏也要落在每一段選區上——`r` 和 `f` 那兩支也是**。
 ///
-/// #405 Phase 4 把插入那一支接進了 `edit_each`，可 `insert_committed` 裏兩個早退的
-/// 分支没接：三個光標按 `r` 再打一個「好」，只有主選區換掉了；同樣三個光標按 `r` 再
-/// 敲一個字母，三段全換。**同一個鍵，中文和西文兩種答案。**
+/// #405 Phase 4 把插入接進了 `edit_each`，`insert_committed` 裏兩個早退的分支也
+/// 要接：三個光標按 `r` 再打一個「好」，三段全換，與按 `r` 再敲一個字母一樣。
+/// **同一個鍵，中文和西文一個答案。**
 #[test]
 fn a_commit_under_many_cursors_reaches_every_one_of_them() {
     // ① `r` ＋ 上屏：三段全換，和 `r` ＋ 敲一個字母同一個結果形狀。
@@ -5658,11 +5651,11 @@ fn a_commit_under_many_cursors_reaches_every_one_of_them() {
     assert_eq!(ed.secondary_selections().len(), keyed, "兩條路同樣多段動了");
 }
 
-/// **衝突標記底下那七格，光標站上去要露出來**（2026-10-02 一輪掃查報來的）。
+/// **衝突標記底下那七格，光標站上去要露出來**。
 ///
-/// 這是整支 `hidden_on_line` 裏唯一不問光標的一處。不問的後果不是看着怪，是**寫錯
-/// 地方**：光標畫在 `ours` 的 `o` 上，按 `i!`，稿子裏出來的是 `!<<<<<<< ours`，而屏
-/// 幕上從來没有過那七個尖括號。
+/// 整支 `hidden_on_line` 裏每一處都問光標。不問的後果不是看着怪，是**寫錯地方**：
+/// 光標畫在 `ours` 的 `o` 上，按 `i!`，稿子裏出來的是 `!<<<<<<< ours`，而屏幕上
+/// 從來没有過那七個尖括號。
 #[test]
 fn a_conflict_marker_shows_itself_when_the_caret_is_in_it() {
     let text = "before\n<<<<<<< ours\nmine\n=======\ntheirs\n>>>>>>> theirs\nafter\n";
@@ -5683,11 +5676,12 @@ fn a_conflict_marker_shows_itself_when_the_caret_is_in_it() {
     );
 }
 
-/// **狀態欄的列號不許超過那一行畫出來的長度**（2026-10-02 一輪掃查報來的）。
+/// **狀態欄的列號不許超過那一行畫出來的長度**。
 ///
-/// `cursor_visual_column` 加了畫出來的（註號、補齊的格寬），卻從來没減過藏起來的
-/// （`**`、`(url)`、`[^1]` 的本體）。`:render off`/`basic` 下什麼都没藏，所以一直
-/// 對；`:render full` 底下五百七十三個光標位置裏有四十九個報得比那一行還長。
+/// `cursor_visual_column` 加了畫出來的（註號、補齊的格寬），也要減藏起來的
+/// （`**`、`(url)`、`[^1]` 的本體）。`:render off`/`basic` 下什麼都没藏，所以看不
+/// 出差別；`:render full` 底下少減一處，五百七十三個光標位置裏有四十九個報得比那
+/// 一行還長。
 #[test]
 fn the_column_never_points_past_the_end_of_the_drawn_row() {
     let text = "An image ![img](http://i.com/a.png) and a note[^1] here.\n";
@@ -5729,11 +5723,11 @@ fn the_column_never_points_past_the_end_of_the_drawn_row() {
     }
 }
 
-/// **整行只有一種分隔符，那是一條線，不是強調**（2026-10-02 一輪掃查報來的）。
+/// **整行只有一種分隔符，那是一條線，不是強調**。
 ///
-/// 十四個 `=` 自己一行，從前被當成反覆的 `==高亮==` 一對一對吃掉：畫出來只剩六個，
-/// 而且光標走過去的時候那一行在 6/10/14 格之間變來變去。setext 標題的下劃線和散文
-/// 裏的 `*****` 分隔線都中。
+/// 十四個 `=` 自己一行，不許被當成反覆的 `==高亮==` 一對一對吃掉：那樣畫出來只
+/// 剩六個，而且光標走過去的時候那一行在 6/10/14 格之間變來變去。setext 標題的下
+/// 劃線和散文裏的 `*****` 分隔線同理。
 #[test]
 fn a_line_of_nothing_but_delimiters_is_a_rule_not_emphasis() {
     for line in ["==============", "*****", "~~~~", "____"] {
@@ -5752,11 +5746,11 @@ fn a_line_of_nothing_but_delimiters_is_a_rule_not_emphasis() {
     assert!(!ed.hidden_on_line(0).is_empty(), "真的高亮還要認得");
 }
 
-/// **寫出去的那幾個命令也按工作路徑算**（2026-10-02 一輪掃查報來的）。
+/// **寫出去的那幾個命令也按工作路徑算**。
 ///
-/// `:open` 2026-10-01 就改對了（從前它原樣交給作業系統，按**進程的 cwd** 解），可寫
-/// 出去的那幾個從來没改：`:cd sub` 之後 `:write-as z.md` 把檔存進了上一層，而狀態欄
-/// 說「存了 z.md」。同一個會話裏讀和寫對「相對於哪裏」給出兩種答案。
+/// `:open` 按工作路徑解相對路徑，不交給作業系統按**進程的 cwd** 解；寫出去的那幾
+/// 個也一樣：`:cd sub` 之後 `:write-as z.md` 把檔存進 `sub`，不是上一層。同一個
+/// 會話裏讀和寫對「相對於哪裏」只有一種答案。
 #[test]
 fn a_path_typed_into_a_write_command_is_reckoned_from_the_working_directory() {
     let dir = tmp().join(format!("yumete-writepath-{}", std::process::id()));
@@ -5786,12 +5780,12 @@ fn a_path_typed_into_a_write_command_is_reckoned_from_the_working_directory() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`:help` 教的鍵要和真的綁法一致**（2026-10-02 一輪掃查報來的）。
+/// **`:help` 教的鍵要和真的綁法一致**。
 ///
-/// 那張表是按**位置**讀的（`u U` 撤銷/重做），而巨集那一行寫的是 `q Q` ——
-/// 於是它教人用 `q` 開錄，而真的是 `Q` 錄、`q` 放。那兩個鍵自己的註釋寫着「調換了
-/// 的一對是最糟的那一種分歧：按錯了不是没反應，它開始錄，蓋掉你本來要放的那一段」。
-/// 表格那一組同理：2026-09-21 搬進了空格選單，而這一頁還寫着 `t r`、`t s`。
+/// 那張表是按**位置**讀的（`u U` 撤銷/重做），所以巨集那一行寫 `Q q`：`Q` 錄、
+/// `q` 放。那兩個鍵自己的註釋寫着「調換了的一對是最糟的那一種分歧：按錯了不是没
+/// 反應，它開始錄，蓋掉你本來要放的那一段」。表格那一組同理：它在空格選單裏，這一
+/// 頁不寫 `t r`、`t s`。
 #[test]
 fn the_help_page_names_keys_that_are_really_bound() {
     let mut ed = typed("那年冬天\n");
@@ -5810,12 +5804,12 @@ fn the_help_page_names_keys_that_are_really_bound() {
     assert!(page.contains("␣t"), "{page}");
 }
 
-/// **每一張值表都答得出「我現在是哪一檔」**（2026-10-02 一輪掃查報來的）。
+/// **每一張值表都答得出「我現在是哪一檔」**。
 ///
 /// `Param::Words` 自己的註釋寫着一張值表「幾乎總該」有個缺省，理由是「a setting
-/// that cannot answer 「which am I now」 is a setting with a hole in it」。全表只有
-/// `:indent-hint` 没有：光打它答的是「不認得「」」——問的人連問了什麼都没說，而編輯
-/// 器怪他說錯了。
+/// that cannot answer 「which am I now」 is a setting with a hole in it」。
+/// `:indent-hint` 也一樣：光打它不許答「不認得「」」——問的人連問了什麼都没說，
+/// 編輯器不該怪他說錯了。
 #[test]
 fn a_bare_setting_command_answers_which_one_it_is_now() {
     let mut ed = typed("那年冬天\n");
@@ -5836,15 +5830,16 @@ fn a_bare_setting_command_answers_which_one_it_is_now() {
     assert!(ed.execute(":indent-hint nope").is_err());
 }
 
-/// **全是空白的那一行，`gs` 回行首；全角空格也算空白**（2026-10-02 照 helix 比出來的）。
+/// **全是空白的那一行，`gs` 回行首；全角空格也算空白**（照 helix 比出來的）。
 ///
-/// `line_first_non_blank` 的註釋一直寫着「or the line start if the line is all
-/// blanks or empty」，而代碼走完所有空白就停——在只有空白的行上那是**換行符**。
-/// 站在換行符上 `selection()` 會把下一個字素也算進來，於是 `x` 選中兩行、`xd` 把下
-/// 面那一行一起刪了。helix 的 `goto_first_nonwhitespace_impl` 在那一行上原地不動。
+/// `line_first_non_blank` 的註釋寫着「or the line start if the line is all
+/// blanks or empty」。Warning: 走完所有空白就停，在只有空白的行上停的是**換行
+/// 符**——站在換行符上 `selection()` 會把下一個字素也算進來，於是 `x` 選中兩行、
+/// `xd` 把下面那一行一起刪了。helix 的 `goto_first_nonwhitespace_impl` 在那一行
+/// 上原地不動。
 ///
-/// 第二半：從前只認 ASCII 的空格和製表符，而這是寫中文稿子的編輯器——`　` 縮進的
-/// 那一行和空格縮進的那一行，同一個鍵兩種答案。
+/// 第二半：這是寫中文稿子的編輯器，不只認 ASCII 的空格和製表符——`　` 縮進的那一
+/// 行和空格縮進的那一行，同一個鍵一個答案。
 #[test]
 fn the_first_non_blank_of_a_blank_line_is_the_line_start() {
     use crate::motion::line_first_non_blank;
@@ -5873,15 +5868,15 @@ fn the_first_non_blank_of_a_blank_line_is_the_line_start() {
 }
 
 /// **vim 那一套：第 1 欄按 `db` 不許焊行，檔首按 `db` 什麼都不做**
-/// （2026-10-02 拿這臺機器上的 nvim 量出來的）。
+/// （拿 nvim 量出來的）。
 ///
-/// `prev_grapheme(start)` 在第 1 欄上**就是那個換行**，於是 `j0db` 把兩行焊成一行
-/// ——這是「`dw` 不跨行」（§5.11 B3）的鏡像，往前那一支早就擋了，往回這一支没有。
-/// vim 把它寫成通則（`:h exclusive`）：排他的動作停在第 1 欄，終點就退到上一行的
-/// 末尾，動作變成包含的。
+/// `prev_grapheme(start)` 在第 1 欄上**就是那個換行**，不擋的話 `j0db` 把兩行焊
+/// 成一行——這是「`dw` 不跨行」（§5.11 B3）的鏡像，往前那一支擋，往回這一支也
+/// 擋。vim 把它寫成通則（`:h exclusive`）：排他的動作停在第 1 欄，終點就退到上一
+/// 行的末尾，動作變成包含的。
 ///
-/// 第二條：檔首按 `db`，`prev_word_start` 回 0（它從不 `Missed`），從前做出一格的
-/// 跨度，於是刪掉一個字；nvim 在那裏整個動作失敗。
+/// 第二條：檔首按 `db`，`prev_word_start` 回 0（它從不 `Missed`），不許做出一格
+/// 的跨度刪掉一個字；nvim 在那裏整個動作失敗。
 #[test]
 fn vims_backward_delete_neither_welds_lines_nor_eats_a_character() {
     let vim = |text: &str, keys: &str| {
@@ -5901,7 +5896,7 @@ fn vims_backward_delete_neither_welds_lines_nor_eats_a_character() {
         vim("alpha beta gamma\nsecond line here\n", "db"),
         "alpha beta gamma\nsecond line here\n"
     );
-    // 本來就對的那幾個不許變。
+    // 本該對的那幾個不許變。
     assert_eq!(
         vim("alpha beta gamma\nsecond line here\n", "jwdb"),
         "alpha beta gamma\nline here\n"
@@ -5914,11 +5909,11 @@ fn vims_backward_delete_neither_welds_lines_nor_eats_a_character() {
 }
 
 /// **`f`/`t` 的數目是「第 n 個」，重複要往前挪一個，不夠就整個不動**
-/// （2026-10-02 拿這臺機器上的 nvim 量出來的）。
+/// （拿 nvim 量出來的）。
 ///
-/// 三件事從前都是靠「把這一支叫 n 遍」做的，而那對 `f`/`t` 一件都不對：每一趟都
-/// 從上一個落點重新下錨（`2f,` 選的是第一個逗號到第二個）；`t` 落在目標前一格，再
-/// 叫一遍又配上同一個目標（`;` 永遠不前進，`tdtd` 的第二下把第一下選中的收成一點）；
+/// 三件事都不能靠「把這一支叫 n 遍」做，那對 `f`/`t` 一件都不對：每一趟都從上一
+/// 個落點重新下錨（`2f,` 選的會是第一個逗號到第二個）；`t` 落在目標前一格，再叫
+/// 一遍又配上同一個目標（`;` 永遠不前進，`tdtd` 的第二下把第一下選中的收成一點）；
 /// 數目超出的時候留下走成的那幾跳（`d9f,` 默默吃掉三十二個字）。
 #[test]
 fn a_count_on_find_is_the_nth_and_a_repeat_moves_on() {
@@ -5928,8 +5923,8 @@ fn a_count_on_find_is_the_nth_and_a_repeat_moves_on() {
         ed.sel.head()
     };
     // 0 起算；逗號在 1、3、5、7。Under the helix keymap `t` steps off the
-    // comma right next to it, as helix's does (measured 2026-10-27: 2, 4, 6);
-    // vim's stays put, and the vim half is below.
+    // comma right next to it, as helix's does (measured: 2, 4, 6); vim's
+    // stays put, and the vim half is below.
     assert_eq!(col("t,"), 2, "t,");
     assert_eq!(col("2t,"), 4, "2t,");
     assert_eq!(col("3t,"), 6, "3t,");
@@ -5966,13 +5961,13 @@ fn a_count_on_find_is_the_nth_and_a_repeat_moves_on() {
     assert_eq!(vim("d9f,"), "a,b,c,d,e\n", "數目不夠就一個字都不許動");
 }
 
-/// **別處的檔不進這本書的進度賬**（2026-10-02 查出來的）。
+/// **別處的檔不進這本書的進度賬**。
 ///
-/// `note_progress` 從前只問「有没有這本賬」，不問「這一份在不在這本書裏」——於是
-/// 書開着的時候隨手存一個別處的檔，那個檔名就進了寫稿人的寫作進度。這個倉自己就中
-/// 着：`cargo test` 在 `$TMPDIR` 裏存臨時檔，而測試進程的 cwd 在倉裏，`root()` 於
-/// 是算成這個倉，`.yumete/progress.tsv` 攢了一百多行 `yumete-editor-write-<pid>.md`，
-/// 混在真的章節中間——而「目標 2000」那個數就是照這本賬算的。
+/// `note_progress` 不只問「有没有這本賬」，也問「這一份在不在這本書裏」——否則書
+/// 開着的時候隨手存一個別處的檔，那個檔名就進了寫稿人的寫作進度，而「目標 2000」
+/// 那個數就是照這本賬算的。這個倉自己就是例子：`cargo test` 在 `$TMPDIR` 裏存臨時
+/// 檔，而測試進程的 cwd 在倉裏，`root()` 算成這個倉，`yumete-editor-write-<pid>.md`
+/// 不許混進 `.yumete/progress.tsv` 的章節中間。
 #[test]
 fn a_file_from_somewhere_else_does_not_enter_this_book_s_ledger() {
     let dir = tmp().join(format!("yumete-ledger-{}", std::process::id()));
@@ -6007,13 +6002,11 @@ fn a_file_from_somewhere_else_does_not_enter_this_book_s_ledger() {
     let _ = std::fs::remove_dir_all(&away);
 }
 
-/// **換一個檔就換一套顏色**（2026-10-01 報的）。
+/// **換一個檔就換一套顏色**。
 ///
-/// Warning: 從前 `by_chunk` 只按「第幾塊」記，**不記是哪個檔**。於是先開一份
-/// Rust 再從 picker 開一份 Python，第 0 塊早就在那張表裏了，Python 那一份拿到的
-/// 是**上一個檔的顏色**——而且 `hold_the_tree` 連叫都没叫到，那一格永遠不清。
-/// 原話：「open a rust file first and then open a python file via picker, the
-/// coloring of the python file is incorrect. And vice verse.」
+/// Warning: `by_chunk` 要記**是哪個檔**，不只記「第幾塊」。否則先開一份 Rust 再從
+/// picker 開一份 Python（或反過來），第 0 塊早就在那張表裏了，Python 那一份拿到
+/// 的是**上一個檔的顏色**——而且 `hold_the_tree` 連叫都叫不到，那一格永遠不清。
 #[test]
 fn a_second_buffer_gets_its_own_colours_not_the_first_ones() {
     use crate::code::Language;
@@ -6172,12 +6165,11 @@ fn a_selection_says_which_lines_the_table_is_made_of() {
     assert!(text.ends_with("| 丙 | 丁 |\n那年冬天。\n"), "{text:?}");
 }
 
-/// **格子裏有分隔符就加引號**（2026-10-03 改；從前這一支叫
-/// `a_conversion_that_would_lose_a_cell_is_refused`，驗的是那一句拒絕）。
+/// **格子裏有分隔符就加引號**。
 ///
-/// 按欄位決定加不加引號是 RFC 4180 的規矩，而 `:export` 那一邊早就這麼做了。
-/// 這一改之前，同一個倉裏兩種答案：`:export tsv` 脫引號，`:convert-table csv tsv`
-/// 把引號當成值的一部分搬過去，於是 csv→pipe→csv 是**單程**。
+/// 按欄位決定加不加引號是 RFC 4180 的規矩，`:export` 那一邊也這麼做。同一個倉裏
+/// 只有一種答案：`:export tsv` 脫引號，`:convert-table csv tsv` 也不把引號當成值
+/// 的一部分搬過去，所以 csv→pipe→csv 是**來回**的。
 #[test]
 fn a_conversion_quotes_the_cell_that_holds_the_delimiter() {
     let mut ed = typed(
@@ -6329,9 +6321,8 @@ fn a_table_exports_as_a_file_without_being_converted_in_place() {
     );
 
     // …and a cell that already holds the delimiter being written is
-    // **quoted**, not refused (#311). It used to be refused, because the
-    // reader could not have read the quotes back — now it can, so the
-    // conversion is one a `.csv` reader gets right.
+    // **quoted**, not refused (#311): the reader reads the quotes back, so
+    // the conversion is one a `.csv` reader gets right.
     let tsv = dir.join("表二.tsv");
     std::fs::write(&tsv, "字\t讀音\n永\tㄩㄥˇ\n之\t一, 二\n").unwrap();
     let mut ed = Editor::new();
@@ -6383,8 +6374,8 @@ fn a_shot_names_a_file_and_waits_for_the_frame_it_is_a_picture_of() {
     assert!(when.chars().all(|c| c.is_ascii_digit()), "{name}");
     assert!(!dir.join("chapter.shot.html").exists());
 
-    // **The word says the format**, not the extension — this is the one
-    // that used to be reachable only by spelling out a path.
+    // **The word says the format**, not the extension — no path has to be
+    // spelled out to reach it.
     ed.execute(":shot txt").unwrap();
     let Some(ShotJob::Page { target, text }) = ed.take_screenshot_request() else {
         panic!("no page parked: {}", ed.status());
@@ -6405,8 +6396,8 @@ fn a_shot_names_a_file_and_waits_for_the_frame_it_is_a_picture_of() {
     assert_eq!(target.parent(), Some(downloads_dir().as_path()));
 
     // A name given is a name kept — and a **relative** one is reckoned from the
-    // working directory, like every other path typed into a command
-    // （2026-10-02 改，從前它原樣交出去、由作業系統按**進程的 cwd** 解）。
+    // working directory, like every other path typed into a command, not
+    // handed to the operating system to resolve against **the process's cwd**.
     ed.execute(":shot txt page.txt").unwrap();
     assert_eq!(
         ed.take_screenshot_request(),
@@ -6497,8 +6488,7 @@ fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
     ed.execute(":export html").unwrap();
 
     // Named after the chapter, not after the format — and set by the
-    // export's settings, not by how the editing window shows the draft
-    // (2026-11-08).
+    // export's settings, not by how the editing window shows the draft.
     let out = std::fs::read_to_string(dir.join("chapter.html")).unwrap();
     assert!(!out.contains("writing-mode: vertical-rl"), "{out}");
     assert!(!out.contains("hanging-punctuation"), "{out}");
@@ -6519,10 +6509,10 @@ fn export_names_the_file_after_the_chapter_and_carries_the_layout() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **鎖住的那一趟一個檔都不寫，導出也算**（2026-10-02 定）。
+/// **鎖住的那一趟一個檔都不寫，導出也算**。
 ///
 /// `--help` 上寫着「Open locked: nothing this run opens can be typed into」，
-/// 而 `:export!` 從前在 `--readonly` 的會話裏照樣把一個**不相干**的檔整個蓋掉。
+/// 所以 `:export!` 在 `--readonly` 的會話裏也不許把一個**不相干**的檔整個蓋掉。
 #[test]
 fn a_locked_session_does_not_export_either() {
     let dir = tmp().join(format!("yumete-exro-{}", std::process::id()));
@@ -6609,9 +6599,9 @@ fn the_outline_is_the_hashes_a_writer_already_types() {
 
 #[test]
 fn a_novel_with_no_markup_still_has_chapters() {
-    // 資治通鑑 is a `.txt` with 700 chapters in it and not one `#`. The
-    // outline used to be empty for exactly the file where 「go to chapter
-    // 412」 is worth a key.
+    // 資治通鑑 is a `.txt` with 700 chapters in it and not one `#`. This is
+    // exactly the file where 「go to chapter 412」 is worth a key, so the
+    // outline must not be empty.
     let dir = tmp().join(format!("yumete-toc-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -6903,10 +6893,9 @@ fn the_chords_turn_the_page() {
     ed.set_page(20, 10);
     press(&mut ed, "gg");
 
-    // Warning: **`J`/`K` turned the page until 2026-10-06** and are helix's join
-    // and keep-selections since — six chords still turn it: `C-d`/`C-u` (half),
-    // `C-n`/`C-p` (two thirds), `C-f`/`C-b` (whole). `H`/`L` were the
-    // whole-page pair until 2026-09-12 and are a sentence apiece since (#404).
+    // Warning: **`J`/`K` are helix's join and keep-selections**, not paging —
+    // six chords turn the page: `C-d`/`C-u` (half), `C-n`/`C-p` (two thirds),
+    // `C-f`/`C-b` (whole). `H`/`L` are a sentence apiece (#404).
     ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cursor_line(), 10, "half of twenty lines");
     ed.on_key(Key::Ctrl('d'));
@@ -6966,11 +6955,11 @@ fn a_file_a_schema_names_is_read_as_a_grid() {
 
 #[test]
 fn a_grid_without_a_schema_is_split_on_what_its_lines_agree_about() {
-    // The header-row fallback used to split on a comma and nothing else,
-    // so a tab-separated file — which `:export tsv` in this very editor
-    // writes — came back 「不是表格」 while a page of prose whose lines
-    // happen to hold one comma each still came back a grid. Both are the
-    // sniffer's question, so both are asked of the sniffer.
+    // The header-row fallback asks the sniffer, not 「is there a comma」: a
+    // tab-separated file — which `:export tsv` in this very editor writes —
+    // must not come back 「不是表格」, nor a page of prose whose lines happen
+    // to hold one comma each come back a grid. Both are the sniffer's
+    // question, so both are asked of the sniffer.
     let dir = tmp().join(format!("yumete-grid-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -7027,9 +7016,9 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
     );
 
     // A value that holds the delimiter is refused by row and column, the
-    // way `:convert-table csv` refuses one — it used to have the commas quietly
-    // filtered out of it, and 「長, 久」 went in as 「長 久」. Refused
-    // before anything is written, so there is nothing to undo.
+    // way `:convert-table csv` refuses one — never with the commas quietly
+    // filtered out of it, 「長, 久」 going in as 「長 久」. Refused before
+    // anything is written, so there is nothing to undo.
     let before = ed.current_buffer().text();
     ed.store("部\n水\n\n長, 久\n".to_string());
     press(&mut ed, " tv");
@@ -7048,12 +7037,12 @@ fn a_column_goes_back_on_the_rows_it_was_taken_from() {
 fn a_cell_pasted_into_a_pipe_table_keeps_its_backslashes() {
     // `\|` is the escape, so a backslash is doubled with it: a cell whose
     // own text is `C:\` written as `C:\` would read back as an escape
-    // waiting for the pipe that follows. The paste used to replace the
-    // pipe alone, which is `escape`'s job and half of it.
+    // waiting for the pipe that follows. Replacing the pipe alone is
+    // `escape`'s job and half of it.
     let mut ed = typed("| 字 | 註 |\n| -- | -- |\n| 永 | 水 |\n");
     ed.execute(":3").unwrap();
     ed.enter_table();
-    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    // 格子的事歸表格界面：`t b` 是文檔，那裏的字母鍵是頁面的。
     press(&mut ed, " tt");
     press(&mut ed, "l");
     ed.store("註\nC:\\ 與 |\n".to_string());
@@ -7109,14 +7098,14 @@ fn hjkl_walk_cells_when_the_file_is_a_grid() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A cell holds the delimiter and a line break now — and the row keeps its
-/// shape** (2026-10-21 作者定: 「格子裏打什麽都行，引號歸編輯器管」).
+/// **A cell holds the delimiter and a line break — and the row keeps its
+/// shape**: anything can be typed into a cell, and the quotes are the
+/// editor's business.
 ///
-/// The guard this test was written for refused those two characters outright,
-/// because an unquoted field cannot hold either. What refuses them now is only
-/// the *unquoted* state: the keystroke that needs quoting puts the quotes
-/// there first ([`Editor::quote_the_cell`]), and what may never change — the
-/// number of cells the row comes apart into — is what is asserted here.
+/// An unquoted field cannot hold either character, so what refuses them is
+/// only the *unquoted* state: the keystroke that needs quoting puts the
+/// quotes there first ([`Editor::quote_the_cell`]), and what may never change
+/// — the number of cells the row comes apart into — is what is asserted here.
 #[test]
 fn a_cell_cannot_be_typed_out_of() {
     let (dir, csv) = a_table("guard");
@@ -7224,13 +7213,13 @@ fn gd_goes_gw_shows_and_a_missing_note_gets_written() {
     );
 }
 
-/// **`g` is the document's group and `t` is the table's** (2026-09-12).
+/// **`g` is the document's group and `t` is the table's.**
 ///
-/// `gd` used to mean something else inside a grid — 「which row has this in
-/// the key column」 — so a `[^1]` written into a table cell searched the
-/// grid instead of going to its note, which is the one thing `gd` is named
-/// for. A key whose meaning turns over depending on what the cursor happens
-/// to be standing in cannot be relied on.
+/// `gd` means the same inside a grid as outside it: a `[^1]` written into a
+/// table cell goes to its note, which is the one thing `gd` is named for,
+/// rather than searching the grid for 「which row has this in the key
+/// column」. A key whose meaning turns over depending on what the cursor
+/// happens to be standing in cannot be relied on.
 #[test]
 fn a_note_written_into_a_table_still_goes_to_its_note() {
     // ⚠ Counted, not 「press until」: at the top layer `l` walks cells, so a
@@ -7250,7 +7239,7 @@ fn a_note_written_into_a_table_still_goes_to_its_note() {
     ed.goto_line(3);
     assert!(ed.enter_table(), "{}", ed.status());
     // On the reference, inside a cell of the grid — which is the middle layer,
-    // one `Enter` down (2026-10-21).
+    // one `Enter` down.
     ed.on_key(Key::Enter);
     to_the_caret(&mut ed);
     press(&mut ed, "gd");
@@ -7315,13 +7304,13 @@ fn both_layouts_ask_the_same_page() {
 
 #[test]
 fn a_repeat_can_never_repeat_itself() {
-    // `d`, `3`, `.`, `.` used to abort the process — a stack overflow,
-    // which does not unwind, so every unsaved buffer went with it. Two
-    // causes, both here: a count made `.` the *second* key of its own
-    // definition, and nothing stopped a repeat from re-entering.
+    // `d`, `3`, `.`, `.` must not abort the process — a stack overflow does
+    // not unwind, so every unsaved buffer would go with it. Two guards, both
+    // here: a count must not make `.` the *second* key of its own definition,
+    // and a repeat must not re-enter.
     //
-    // Since #413 (2026-10-29) helix's `.` repeats the last insert, so the
-    // change is an `iX`; helix 25.07.1 gives the same six `X`.
+    // helix's `.` repeats the last insert (#413), so the change is an `iX`;
+    // helix 25.07.1 gives the same six `X`.
     let mut ed = typed("一二三四五六七八九十\n");
     ed.execute("1").unwrap();
     ed.on_key(Key::Char('i'));
@@ -7479,8 +7468,8 @@ fn the_detail_panel_says_what_the_whole_row_is() {
     ed.goto_line(2);
 
     let d = ed.detail().expect("a row has fields");
-    // **標題一律是行號**（2026-09-30 定：「我建议都用行号数字，不要用主键
-    // 的值（主键的值可能很长）」）。這張表有主鍵 `字`，從前標題寫的是「一」。
+    // **標題一律是行號**，不用主鍵的值（主鍵的值可能很長）。這張表有主鍵 `字`，
+    // 標題仍寫行號，不寫「一」。
     assert_eq!(d.title, "1", "titled by its row number");
     // Numbered exactly as the rows are, or the panel can never find the
     // field the cursor is in — which is how it came to scroll to the top
@@ -7678,9 +7667,8 @@ fn a_dash_spans_and_a_comma_pairs() {
     assert!(ed.status().contains("t20,20g"), "{}", ed.status());
 }
 
-/// A row number a table does not have lands **in the table anyway**
-/// (2026-09-07: 「markdown 表格中按 t1g，会跑到整个文档的第一行而
-/// 不是表格的第一行」).
+/// A row number a table does not have lands **in the table anyway**: `t1g`
+/// in a Markdown table goes to the table's first row, not the document's.
 ///
 /// The number is the gutter's, which is what makes it the same key in a
 /// `.csv` and in a chapter — but a table key that walks the cursor three
@@ -7745,8 +7733,7 @@ fn a_sort_names_the_column_it_sorts_by() {
     assert_eq!(years(&ed), ["1900", "200", "19"], "{}", ed.status());
     // **Both columns are named.** A sort by two columns that reported only
     // the first would hide the tiebreaker that decided every row where the
-    // first ties — and the Markdown path used to, because it was written
-    // before a keyboard sequence could name two.
+    // first ties — the Markdown path included.
     assert!(ed.status().contains('事'), "{}", ed.status());
     assert!(ed.status().contains('年'), "{}", ed.status());
     // One column keeps the long sentence, which is where the comparison
@@ -7762,13 +7749,12 @@ fn a_sort_names_the_column_it_sorts_by() {
     assert!(!ed.status().is_empty());
 }
 
-/// **一章正文當中的那一塊，排得了序**（2026-10-03 定）。
+/// **一章正文當中的那一塊，排得了序**。
 ///
-/// 原話：「如果是我，我会先在逗号上按 _tt 进入表格模式，然后 _t1s 来排序。再 _tq
-/// 回到正文。」從前 `␣t1s` 在那一塊上一聲不響地落到兜底那一句（`s` 根本不在那一
-/// 層的鍵表裏），而命令那一路答「文中的表格區塊只讀不改寫」——那句話說的是當時
-/// 的做法：排序把整份檔案按表格自己的行重建一遍，而一塊只是幾行，重建就等於改寫
-/// 整章。
+/// 在逗號上按 `␣tt` 進表格模式，`␣t1s` 排序，`␣tq` 回到正文——這一路走得通：`s`
+/// 在那一層的鍵表裏，不落到兜底那一句，命令那一路也不答「文中的表格區塊只讀不改
+/// 寫」。Warning: 排序不許把整份檔案按表格自己的行重建一遍——一塊只是幾行，重建
+/// 就等於改寫整章。
 #[test]
 fn a_delimited_block_in_a_chapter_sorts_without_touching_the_chapter() {
     let mut ed = typed("第三章\n\n那年冬天。\n\n乙,2\n甲,1\n丙,3\n\n後來又下了一場。\n");
@@ -7789,10 +7775,10 @@ fn a_delimited_block_in_a_chapter_sorts_without_touching_the_chapter() {
 
 /// Sorting a table does not put the table away.
 ///
-/// 「bug：表格排序 t1s 會直接回到源碼視圖。」 A sort rewrites the *text*,
-/// and the old code answered that by forgetting the whole document —
-/// which re-asks 「is this a table?」 from scratch, and a `.csv` with no
-/// schema beside it has only the answer the reader gave it by hand.
+/// `t1s` must not drop back to the source view. A sort rewrites the *text*,
+/// and forgetting the whole document re-asks 「is this a table?」 from
+/// scratch — and a `.csv` with no schema beside it has only the answer the
+/// reader gave it by hand.
 #[test]
 fn sorting_keeps_the_table_open() {
     let dir = tmp().join(format!("yumete-sortview-{}", std::process::id()));
@@ -8034,12 +8020,11 @@ fn a_cell_is_entered_three_ways_and_typing_stays_inside_it() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **`空格 t` 單子上寫着的每一個鍵，按下去都真的有事發生**（2026-10-01）。
+/// **`空格 t` 單子上寫着的每一個鍵，按下去都真的有事發生**。
 ///
-/// Warning: **這一族的錯出過不止一次**：單子上寫了一個鍵，而那一支 `match` 裏没
-/// 有它，於是按下去落到最後那個兜底，回的是「`t` 之後可以按這些」——等於編輯
-/// 器自己說了一遍那張單子，卻没做事。同一天 `T` 從頂層搬進這一組的時候也差點
-/// 再來一次。
+/// Warning: **這一族的錯容易犯**：單子上寫了一個鍵，而那一支 `match` 裏没有它，
+/// 於是按下去落到最後那個兜底，回的是「`t` 之後可以按這些」——等於編輯器自己說了
+/// 一遍那張單子，卻没做事。往這一組搬鍵（如 `T`）時最容易漏。
 ///
 /// 判準就是那個兜底：按完之後狀態欄**不許**是 `table_keys_say(那一檔)`。別的
 /// 任何一句都算數——包括「這一招在這種表上做不了」，那是一個真的回答。
@@ -8073,8 +8058,8 @@ fn every_key_the_table_group_lists_does_something() {
         ed
     };
 
-    // **第四檔就是全窗表格**（2026-10-22 補）：`.csv` 開起來窗口本來就是它的，
-    // 所以 `␣t w` 從那天起只在這一張單子上，而這一條測試一直走得到它。
+    // **第四檔就是全窗表格**：`.csv` 開起來窗口本來就是它的，所以 `␣t w` 只在
+    // 這一張單子上，而這一條測試走得到它。
     // 一檔：在哪一種表格裏、窗口是不是這張表的、怎麽造出來。
     type Case<'a> = (Option<Bounds>, bool, &'a dyn Fn() -> Editor);
     let cases: [Case; 4] = [
@@ -8099,9 +8084,8 @@ fn every_key_the_table_group_lists_does_something() {
                 let mut ed = make();
                 press(&mut ed, " t");
                 press(&mut ed, token);
-                // **開出一層菜單也算做了事**（2026-10-02，`␣t x` 加進來時補的）。
-                // 那一類鍵不動狀態欄，它把下一問擺出來——`pending_menu` 有東西
-                // 就是它做到了。
+                // **開出一層菜單也算做了事**（如 `␣t x`）。那一類鍵不動狀態欄，
+                // 它把下一問擺出來——`pending_menu` 有東西就是它做到了。
                 let opened = ed.pending_menu().is_some();
                 assert!(
                     opened || !dead.contains(&ed.status().to_string()),
@@ -8114,9 +8098,8 @@ fn every_key_the_table_group_lists_does_something() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// **`x` takes a record, `%` takes the table** (2026-10-21 作者定: 「`x` 选整条
-/// 记录 is a must have feature. Also nice if users want to copy the whole
-/// table.」).
+/// **`x` takes a record, `%` takes the table**: selecting a whole record is a
+/// must, and copying the whole table is the other thing a reader wants.
 ///
 /// The point of saying 「record」 rather than 「line」 is the fixture's second
 /// row: a field holding a line break is two lines of the file and one row of
@@ -8160,13 +8143,12 @@ fn x_takes_a_record_and_percent_takes_this_table() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **`v` grows by whole cells along the row** (2026-10-21 作者定: 「something
-/// good if users want to pick some cells of a line and paste/replace into
-/// another row」).
+/// **`v` grows by whole cells along the row**, for picking some cells of a
+/// line to paste over another row.
 ///
 /// The motions land the caret on a cell's first character, so a selection
 /// that simply stopped there would be 「these two cells and the first 字 of
-/// the third」. What the reader asked for is cells.
+/// the third」. What the reader wants is cells.
 #[test]
 fn v_grows_by_whole_cells_along_the_row() {
     let dir = tmp().join(format!("yumete-vcells-{}", std::process::id()));
@@ -8205,9 +8187,8 @@ fn v_grows_by_whole_cells_along_the_row() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **A run of cells copies and is written over another row's cells**
-/// (2026-10-21 作者定: 「users want to pick some cells of a line and
-/// paste/replace into another row」).
+/// **A run of cells copies and is written over another row's cells**, for
+/// picking some cells of a line and pasting them over another row.
 ///
 /// One for one, left to right, and the row keeps every delimiter it had —
 /// what is being replaced is contents. The key is `R`, not `p`: a row's cell
@@ -8257,8 +8238,8 @@ fn a_run_of_cells_goes_over_another_rows_cells() {
         ed.status()
     );
 
-    // **Doesn't fit, nothing moves** (2026-10-21 作者定). Two cells in the
-    // register, and the cursor on the last column.
+    // **Doesn't fit, nothing moves.** Two cells in the register, and the
+    // cursor on the last column.
     ed.goto_line(3);
     for _ in 0..3 {
         ed.on_key(Key::Tab);
@@ -8270,12 +8251,12 @@ fn a_run_of_cells_goes_over_another_rows_cells() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// **An empty column does not stop a selection growing** (2026-10-21 作者報的:
-/// 「`v l l` … Not good, it stucks at empty cells.」).
+/// **An empty column does not stop a selection growing**: `v l l` goes on
+/// past empty cells.
 ///
 /// A cell with nothing in it is one position wide, so stepping back from its
-/// end landed on the padding, which belongs to no cell — and the next `l` then
-/// read the cell *before* it and walked back.
+/// end would land on the padding, which belongs to no cell — and the next `l`
+/// would then read the cell *before* it and walk back.
 #[test]
 fn an_empty_cell_does_not_stop_the_selection_growing() {
     let mut ed = typed("| 名 | 說明 | 數 |\n| --- | --- | --- |\n| 甲 |  | 12 |\n");
@@ -8290,13 +8271,14 @@ fn an_empty_cell_does_not_stop_the_selection_growing() {
     assert_eq!(ed.status(), say!("table.yanked-cells", 3));
 }
 
-/// **`y` over whole records takes records** (2026-10-21 作者報的: 「y … For
-/// multiple rows selection, this is not working」).
+/// **`y` over whole records takes records**, however many rows are
+/// selected.
 ///
-/// It measured the far end of the selection against the *near* record's cells,
-/// the subtraction saturated to zero, and so `x y` reported 「取了一格」 and
-/// took one. What `x` and `%` leave standing is records, and a record is a
-/// line — which is the one thing `p` can put into a grid.
+/// The far end of the selection is measured against its own record, not the
+/// *near* record's cells — that subtraction would saturate to zero, and `x y`
+/// would say 「取了一格」 and take one. What `x` and `%` leave standing is
+/// records, and a record is a line — which is the one thing `p` can put into a
+/// grid.
 #[test]
 fn y_over_whole_records_takes_records() {
     let mut ed = typed("| 名 | 數 |\n| --- | --- |\n| 甲 | 12 |\n| 乙 | 34 |\n");
@@ -8318,7 +8300,7 @@ fn y_over_whole_records_takes_records() {
 }
 
 /// **`R` writes the register's records over the records here** — the other
-/// half of 「`p` puts in, `R` writes over」 (2026-10-21 作者定).
+/// half of 「`p` puts in, `R` writes over」.
 ///
 /// Warning: **the guard has to be told this is whole rows going in.** Asked without
 /// a position it reads the row's own `|` as delimiters being typed into a cell,
@@ -8341,13 +8323,12 @@ fn r_writes_a_record_over_another_record() {
 }
 
 /// **Both keymaps' spelling of 「this line's two ends」 walks cells at the top
-/// layer** (2026-10-21 作者報的: 「in CEL mode, `gh` and `gl` does not work in
-/// helix mode」).
+/// layer**: `gh` and `gl` work in the cell layer under the helix keymap too.
 ///
 /// `0`/`$`/`Home`/`End` are claimed by the layer model; `g h`/`g l`/`g s` are a
-/// `g` sequence and never reach it, so the helix hand could not reach a motion
-/// the vim hand could — and what it got instead was the cell's own two ends,
-/// which at the top layer is where the cursor already was.
+/// `g` sequence and must be claimed as well, or the helix hand cannot reach a
+/// motion the vim hand can — and gets the cell's own two ends instead, which
+/// at the top layer is where the cursor already is.
 #[test]
 fn the_rows_two_ends_answer_to_either_spelling() {
     let mut ed = typed("| 名 | 說明 | 數 |\n| --- | --- | --- |\n| 甲 | 第一條 | 12 |\n");
@@ -8398,13 +8379,13 @@ fn percent_in_a_document_takes_the_table_and_stops() {
     assert!(!took.contains("前文") && !took.contains("後文"), "不碰散文：{took:?}");
 }
 
-/// **A grid opens on cells, and one key goes inside one** (2026-10-21).
+/// **A grid opens on cells, and one key goes inside one.**
 ///
 /// The reverse of what #356 settled, and deliberately: that decision —
 /// 「the cell is not what a writer mostly wants — the characters in it are」
-/// — was taken when reaching the characters meant a toggle with no mark on
-/// the screen. Going down is now one key with a word on the status line, so
-/// the cheap default is the one that reads a table rather than edits it.
+/// — holds when reaching the characters means a toggle with no mark on the
+/// screen. Going down is one key with a word on the status line, so the cheap
+/// default is the one that reads a table rather than edits it.
 #[test]
 fn a_grid_opens_on_cells_and_one_key_goes_inside_one() {
     let dir = tmp().join(format!("yumete-layer-{}", std::process::id()));
@@ -8440,9 +8421,8 @@ fn a_grid_opens_on_cells_and_one_key_goes_inside_one() {
     // …and the status line still names nothing but the column the cursor is
     // in, which by now is the second one (#496).
     assert_eq!(ed.table_status().as_deref(), Some("ids_y"), "still just the column");
-    // …and the hint row no longer says a word about it（2026-09-30 定：
-    // 「因为 T 按格移动被折叠到 _t 中了，所以这个提示也就不需要了」）。三格裏
-    // 最貴的一格不花在單子上已經有的東西上。
+    // …and the hint row says nothing about it: moving by cell is folded into
+    // `␣t`, so the hint is not needed. 三格裏最貴的一格不花在單子上已經有的東西上。
     ed.status.clear();
     let Hint::Keys(_, keys) = ed.hint() else { panic!("still in a grid") };
     assert!(!keys.iter().any(|(k, _)| *k == "T"), "{keys:?}");
@@ -8451,14 +8431,13 @@ fn a_grid_opens_on_cells_and_one_key_goes_inside_one() {
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('目'));
 
-    // **And at the cell's edge `l` steps into the one next door** (2026-10-22
-    // 作者定:「往上對齊:h/l 也跨」). 「相」 is the whole of the first cell, so
-    // the first press is already at its edge.
+    // **And at the cell's edge `l` steps into the one next door** (aligned
+    // upward: h/l cross too). 「相」 is the whole of the first cell, so the
+    // first press is already at its edge.
     //
-    // 2026-10-21 had it stop there — the cell as the document, crossing by
-    // `Tab` — and the arrows in Insert crossed all along (#376). A direction
-    // means the same thing in either mode, which is the rule 「typing does not
-    // change what a direction means」 that `j`/`k` and the arrows already keep.
+    // The arrows in Insert cross too (#376). A direction means the same thing
+    // in either mode, which is the rule 「typing does not change what a
+    // direction means」 that `j`/`k` and the arrows already keep.
     ed.goto_line(2);
     press(&mut ed, "l");
     assert_eq!(ed.char_at_cursor(), Some('⿰'), "`l` crosses at the cell's edge");
@@ -8519,8 +8498,8 @@ fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
     .unwrap();
     let mut ed = Editor::new();
     ed.open_file(&csv).unwrap();
-    // Warning: **不抱怨那份 schema**——它寫的是別的文件。狀態欄現在說的是「表格畫好
-    // 了」（`.csv` 打開就進表格，2026-09-22），那是另一件事。
+    // Warning: **不抱怨那份 schema**——它寫的是別的文件。狀態欄說的是「表格畫好
+    // 了」（`.csv` 打開就進表格），那是另一件事。
     for complaint in ["datapackage", "no fields", "not a field"] {
         assert!(!ed.status().contains(complaint), "{}", ed.status());
     }
@@ -8532,7 +8511,7 @@ fn a_schema_with_a_typo_in_it_says_so_instead_of_vanishing() {
 
 #[test]
 fn enter_asks_who_uses_this_when_the_cell_is_not_a_link() {
-    // Standing on 卵 in the key column, `Enter` used to say 「這一格不指向
+    // Standing on 卵 in the key column, `Enter` does not stop at 「這一格不指向
     // 任何一行」 — true, and useless. The question a 拆分表 is corrected by
     // is the other way round: *who uses this?*
     let dir = tmp().join(format!("yumete-who-{}", std::process::id()));
@@ -8656,7 +8635,7 @@ fn a_file_nobody_changed_is_not_written_again() {
         crate::command::parse(":xit"),
         Ok(crate::command::Command::Exit(None))
     );
-    // `:x` is no longer `:wq`, which stays unconditional.
+    // `:x` is not `:wq`, which stays unconditional.
     assert_eq!(
         crate::command::parse(":wq"),
         Ok(crate::command::Command::WriteQuit { path: None, force: false })
@@ -8674,7 +8653,7 @@ fn a_file_nobody_changed_is_not_written_again() {
 fn a_file_changed_underneath_is_not_written_over() {
     // The one silent way to lose a day's work: a file open here and changed
     // out there — by git, a sync folder, `:!sed -i`, or the same file open
-    // in another editor — used to be overwritten without a word.
+    // in another editor — overwritten without a word. So it is not.
     let dir = tmp().join(format!("yumete-stamp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -8840,13 +8819,13 @@ fn a_quoted_table_is_not_padded() {
     }
 }
 
-/// 2026-09-19: a table forty lines down a 竪排 page was squared up against a
-/// window measured in **rows**, and a screenful of 縱 is not a screenful of
-/// rows — the 縱 run across the page, so there are far more lines on a 竪排
-/// screen than it is tall. The whole table was on the screen and all but its
-/// header fell outside the window, so only the header was padded and it stood
-/// beside a body squared up to nothing (「表頭還是計算錯誤没對齊…光標繼續往下，
-/// 表格到了頁面右側的時候又突然對齊了」).
+/// A table forty lines down a 竪排 page is squared up against a window that
+/// is not measured in **rows**: a screenful of 縱 is not a screenful of rows
+/// — the 縱 run across the page, so there are far more lines on a 竪排 screen
+/// than it is tall. Measured in rows, the whole table would be on the screen
+/// and all but its header outside the window, so only the header would be
+/// padded and it would stand beside a body squared up to nothing — misaligned
+/// until the table reached the right side of the page.
 #[test]
 fn a_vertical_table_is_measured_against_the_zong_on_the_screen() {
     let mut text = String::new();
@@ -8873,10 +8852,10 @@ fn a_vertical_table_is_measured_against_the_zong_on_the_screen() {
     assert_eq!(depth(42), depth(43), "the rows agree with each other too");
 }
 
-/// 2026-09-19，同一族的第二個：**窗口塌成一行**。`measured_window` 的第一支算的是
-/// `[top, top + 一屏]`，而表格在 `top + 一屏` **下面**的時候，那一段與表格的交集只剩
-/// `first` 一行——偏偏被問到的就是 `first`（表頭）那一行，於是它被拿自己量了一遍、
-/// 自己跟自己對齊，而它下面每一行都是跟彼此對齊的。畫出來就是「表頭和表身對不上」。
+/// 同一族的第二個：**窗口不許塌成一行**。`measured_window` 的第一支算的是
+/// `[top, top + 一屏]`，表格在 `top + 一屏` **下面**的時候，那一段與表格的交集只剩
+/// `first` 一行——偏偏被問到的就是 `first`（表頭）那一行，它若被拿自己量一遍、自己
+/// 跟自己對齊，而它下面每一行跟彼此對齊，畫出來就是「表頭和表身對不上」。
 #[test]
 fn a_table_below_the_window_is_not_measured_against_itself_alone() {
     let mut text = String::new();
@@ -8913,13 +8892,11 @@ fn the_padding_goes_away_when_the_page_is_the_file() {
     ed.execute("render basic").unwrap();
     assert!(!ed.drawn_on_line(0).is_empty());
 
-    // **竪排 squares a table up too, since 2026-09-19** — counted in slots
-    // rather than cells (`mdtable::Measure`). It used to be barred there,
-    // and rightly so while a table stood on end was nonsense: the rows were
-    // wrapped and the `|` were loose pipes down a column. Now a row is one 縱
-    // and the walls turn with it, so the grid wants squaring up exactly as
-    // the flat one does — and 甲 (one slot) against 一二三 (three) is ragged
-    // without it, though in *cells* the two are 2 and 6.
+    // **竪排 squares a table up too** — counted in slots rather than cells
+    // (`mdtable::Measure`). A row is one 縱 and the walls turn with it, so the
+    // grid wants squaring up exactly as the flat one does — and 甲 (one slot)
+    // against 一二三 (three) is ragged without it, though in *cells* the two
+    // are 2 and 6.
     ed.set_layout(Layout::Vertical);
     assert!(!ed.drawn_on_line(0).is_empty(), "{:?}", ed.drawn_on_line(0));
     // …and it is the **slot** count that decides. What that buys is the only
@@ -9127,17 +9104,17 @@ fn a_locked_buffer_refuses_every_way_in() {
     );
 }
 
-/// §5.2.2 fault 4: the `.md` grid keys reported success on a locked file.
+/// §5.2.2 fault 4: the `.md` grid keys do not report success on a locked file.
 ///
-/// The text was never in danger — `Buffer::insert` does not move a locked
-/// rope — so what the writer lost was only the truth: 「加了一行」 over a
-/// grid that had not changed, while the `.csv` half of the same `t` menu
-/// refused properly.
+/// The text is never in danger — `Buffer::insert` does not move a locked
+/// rope — so what is at stake is only the truth: 「加了一行」 over a grid
+/// that has not changed, while the `.csv` half of the same `t` menu refuses
+/// properly.
 /// §5.2.2 fault 2, driven: the switch the menu offers, twice in a row.
 ///
-/// `:view-hanging` declared `Args::Words(ON_OFF)` and ignored the word, so the
-/// second `:view-hanging off` turned 標點旁置 **on** — and the status line said
-/// so, which is how it survived: it was never silent, only wrong.
+/// `:view-hanging` reads its word: the second `:view-hanging off` must not
+/// turn 標點旁置 **on** — a status line that says so is not silent, only
+/// wrong.
 #[test]
 fn hanging_punctuation_listens_to_the_word_it_is_given() {
     let mut ed = typed("「春」。\n");
@@ -9147,8 +9124,8 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
     // reason.
     assert!(ed.execute("vertical").is_ok());
     assert!(ed.execute("view-margin dense").is_ok());
-    // **A switch** (2026-11-07): each bare word turns it round, and the
-    // status line says which way it went.
+    // **A switch**: each bare word turns it round, and the status line says
+    // which way it went.
     assert!(!ed.hanging);
     assert!(ed.execute("view-hanging").is_ok());
     assert!(ed.hanging, "{}", ed.status());
@@ -9176,7 +9153,7 @@ fn hanging_punctuation_listens_to_the_word_it_is_given() {
 fn the_markdown_grid_keys_say_so_on_a_locked_file() {
     let mut ed = typed("| 甲 | 乙 |\n| --- | --- |\n| 一 | 二 |\n");
     press(&mut ed, " tt");
-    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字。
     ed.on_key(Key::Enter);
     ed.goto_line(3);
     assert!(ed.execute("readonly").is_ok());
@@ -9198,9 +9175,9 @@ fn the_markdown_grid_keys_say_so_on_a_locked_file() {
 /// #213: `o` on a file whose last line has no newline of its own.
 ///
 /// The refusal returns early, so everything the caller worked out about
-/// where the new line would be is now about a line that does not exist.
-/// This is the shape that used to put the cursor one past the end and
-/// panic on the next frame.
+/// where the new line would be is about a line that does not exist. This is
+/// the shape that can put the cursor one past the end and panic on the next
+/// frame.
 #[test]
 fn a_locked_buffer_refuses_the_line_that_would_have_been_added() {
     for text in ["一二三", "一二三\n"] {
@@ -9217,8 +9194,8 @@ fn a_locked_buffer_refuses_the_line_that_would_have_been_added() {
                 ed.cursor(),
                 ed.current_buffer().char_count()
             );
-            // The frame is drawn from the cursor, so this is where the
-            // panic used to land.
+            // The frame is drawn from the cursor, so this is where a panic
+            // would land.
             let _ = ed.render();
         }
     }
@@ -9263,8 +9240,8 @@ fn a_locked_buffer_keeps_the_draft_it_cannot_open() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
-/// #213: `:readonly` is a switch (2026-11-07): bare turns it round, `on` and
-/// `off` name the state, and it says which way it went.
+/// #213: `:readonly` is a switch: bare turns it round, `on` and `off` name
+/// the state, and it says which way it went.
 #[test]
 fn readonly_says_which_way_it_is() {
     let mut ed = Editor::new();
@@ -9283,11 +9260,10 @@ fn readonly_says_which_way_it_is() {
 
 /// §5.2.3 ⑤: a refused edit does not move the state around the text.
 ///
-/// `d` on a locked buffer used to collapse the selection onto its start —
-/// the rope was untouched, the highlight was gone, and the reader had lost
-/// their selection to an edit that never happened. The silent early return
-/// in `Buffer::remove` could not prevent that, and is why the gate now
-/// answers.
+/// `d` on a locked buffer must not collapse the selection onto its start —
+/// the rope untouched, the highlight gone, the reader's selection lost to an
+/// edit that never happened. A silent early return in `Buffer::remove`
+/// cannot prevent that, which is why the gate answers.
 #[test]
 fn a_refused_delete_leaves_the_selection_where_it_was() {
     let mut ed = Editor::new();
@@ -9404,9 +9380,9 @@ fn reload_stops_at_unsaved_changes_and_the_bang_does_not() {
     assert!(ed.execute("edit!").is_err());
     assert!(ed.execute("open!").is_err());
     // **Not even with an argument.** `e` and `o` are `open`'s own aliases,
-    // and the walk over the six commands that take a bang used to skip
-    // `open` — which takes none — and land on `export`, so `:e! 第三章.md`
-    // typed by a hand meaning「re-read it」 wrote an export over it.
+    // and the walk over the six commands that take a bang must not skip
+    // `open` — which takes none — and land on `export`, or `:e! 第三章.md`
+    // typed by a hand meaning「re-read it」 writes an export over it.
     assert!(ed.execute("e! 第三章.md").is_err());
     assert!(ed.execute("o! 第三章.md").is_err());
     assert!(!dir.join("第三章.md").exists(), "nothing was written");
@@ -9424,9 +9400,9 @@ fn auto_reload_takes_a_clean_buffer_and_only_warns_about_a_dirty_one() {
 
     let mut ed = Editor::new();
     ed.open_file(&file).unwrap();
-    // **出廠開着**（2026-10-11 定）。vim 的 `autoread` 出廠是關的，而那是 1978 年
-    // 的判斷：那時「檔在你底下變了」多半是共享機器上另一個人動的。今天幾乎全是
-    // 自己幹的——切分支、格式化、另一個窗口。危險的那一半由下面三條閘守着。
+    // **出廠開着**。vim 的 `autoread` 出廠是關的，而那是 1978 年的判斷：那時「檔
+    // 在你底下變了」多半是共享機器上另一個人動的。今天幾乎全是自己幹的——切分支、
+    // 格式化、另一個窗口。危險的那一半由下面三條閘守着。
     std::fs::write(&file, "第二版\n").unwrap();
     ed.disk_tick();
     assert_eq!(ed.current_buffer().text(), "第二版\n", "on by default, and the buffer is clean");
@@ -9500,12 +9476,10 @@ fn with_lined_up_md_table() -> Editor {
 
 /// A document whose second table has a cell far wider than the cap, and a
 /// first table with different columns — so a test can tell the two apart.
-/// **格子裏哪一個進寄存器，和正文同一條規矩**（#492；2026-10-07 把這兩個鍵換了過
-/// 來）。
+/// **格子裏哪一個進寄存器，和正文同一條規矩**（#492）。
 ///
-/// 從前格子裏是「`d` 不進、`D` 進」，而正文 2026-09-28 起是「`d` 進、`A-d` 不進」
-/// ——同一個大寫鍵在散文裏和表格裏意思相反。定的是「一個編輯器一條規矩」；格子裏
-/// 没有 `A-d`，所以不進寄存器的那一個是 `D`。
+/// 正文是「`d` 進、`A-d` 不進」，格子裏也是——同一個鍵在散文裏和表格裏意思不許相
+/// 反：一個編輯器一條規矩。
 ///
 /// 填表是這條規矩最值錢的地方：複製一個值，路上順手清掉兩格再貼，那個值不許没了。
 #[test]
@@ -9514,8 +9488,8 @@ fn clearing_a_cell_keeps_the_register_under_the_same_rule_as_prose() {
     let cleared_with = |key: &str| -> Editor {
         let mut ed = typed(table);
         ed.goto_line(3);
-        // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏 `y`／`d` 是
-        // 頁面的鍵，不是「這一格」。
+        // 格子的事歸表格界面：`t b` 是文檔，那裏 `y`／`d` 是頁面的鍵，不是「這一
+        // 格」。
         press(&mut ed, " tt");
         press(&mut ed, "l");
         press(&mut ed, "y"); // 三十 進寄存器
@@ -9529,8 +9503,7 @@ fn clearing_a_cell_keeps_the_register_under_the_same_rule_as_prose() {
     assert!(ed.current_buffer().text().contains("|  | 三十"), "{}", ed.current_buffer().text());
     assert_eq!(ed.paste_menu()[0].1, "甲", "`d` 剪，所以寄存器上是那一格");
 
-    // `A-d`：同樣清掉，而剛複製好的那個「三十」原封不動。格子裏從前這一個是
-    // `D`；2026-10-08 接上了 `A-d`，`D` 就刪了——不留別名。
+    // `A-d`：同樣清掉，而剛複製好的那個「三十」原封不動。`D` 不是它的別名。
     let mut ed = typed(table);
     ed.goto_line(3);
     press(&mut ed, " tt");
@@ -9556,10 +9529,9 @@ fn with_two_md_tables() -> Editor {
     ))
 }
 
-/// **全窗表格 is bounded**: `gg`, `G` and `:120` do not walk out of it
-/// (2026-09-07: 「衹能通過 tq/tf/tb 離開回到其他模式，或者 t[ t]
-/// 去下一個表格」), and the gutter numbers this table's own rows, so
-/// `t1g` is its first row.
+/// **全窗表格 is bounded**: `gg`, `G` and `:120` do not walk out of it — only
+/// `tq`/`tf`/`tb` leave it for another mode, or `t[ t]` go to another table
+/// — and the gutter numbers this table's own rows, so `t1g` is its first row.
 #[test]
 fn the_window_holds_the_table_it_was_opened_on() {
     let mut ed = typed(
@@ -9586,11 +9558,10 @@ fn the_window_holds_the_table_it_was_opened_on() {
     assert_eq!(ed.table_row_base(), first, "the window counts from its first row");
 
     // `gg` is the table's first row, not the file's first line, and `ge` its
-    // last. Warning: **they mean that outright now** (2026-10-17) rather than
-    // running off the file and being dragged back by 「窗子拉得住你」 — so
-    // they no longer say it, and `ge` lands in a cell instead of on the last
-    // row's trailing `|`. The message is still there for the keys that really
-    // do try to leave.
+    // last. Warning: **they mean that outright**, rather than running off the
+    // file and being dragged back by 「窗子拉得住你」 — so they do not say it,
+    // and `ge` lands in a cell instead of on the last row's trailing `|`. The
+    // message is for the keys that really do try to leave.
     press(&mut ed, "gg");
     assert_eq!(ed.cursor_line(), first, "{}", ed.status());
     assert_eq!(ed.table_row_number(), 1, "and it is row 1 in the window");
@@ -9601,7 +9572,7 @@ fn the_window_holds_the_table_it_was_opened_on() {
 
     // **`<n>G` counts the rows the gutter draws**, not the file's lines — the
     // table starts on line 6 here, so `2G` is the second row and not the
-    // blank line above the table (2026-10-17 作者定).
+    // blank line above the table.
     press(&mut ed, "2G");
     assert_eq!(ed.cursor_line(), first + 1, "{}", ed.status());
     press(&mut ed, "1G");
@@ -9665,12 +9636,12 @@ fn t_i_reads_a_markdown_row_by_the_columns_of_its_own_table() {
     let mut ed = with_two_md_tables();
     ed.goto_line(9);
     press(&mut ed, " tt");
-    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字。
     ed.on_key(Key::Enter);
-    // **Asked for** (#495). It opened by itself until 2026-09-15; on a page of
-    // prose the fifth of the width it takes rewraps the paragraphs around the
-    // table, so now only `tt` opens it unasked. This test is about `t i`
-    // reaching the *row* panel in Markdown at all, which is unchanged.
+    // **Asked for** (#495). On a page of prose the fifth of the width it
+    // takes rewraps the paragraphs around the table, so only `tt` opens it
+    // unasked. This test is about `t i` reaching the *row* panel in Markdown
+    // at all.
     press(&mut ed, " ti");
     assert!(ed.detail_visible(), "the panel opens where it is asked for");
     let panel = ed.detail().expect("a row of a Markdown table answers");
@@ -9707,15 +9678,15 @@ fn with_a_narrow_and_a_wide_table() -> Editor {
 }
 
 /// #283, the last of it. Everything that counts columns counts **this**
-/// table's: the view carries the schema of whichever table was entered,
-/// and walking to a wider one used to leave every question answered by the
+/// table's: the view carries the schema of whichever table was entered, so
+/// walking to a wider one does not leave every question answered by the
 /// narrower one.
 #[test]
 fn the_second_table_is_measured_by_its_own_width() {
     let mut ed = with_a_narrow_and_a_wide_table();
     ed.goto_line(11);
     press(&mut ed, " tt");
-    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字。
     ed.on_key(Key::Enter);
 
     // The panel: five fields, not the first table's two.
@@ -9724,9 +9695,9 @@ fn the_second_table_is_measured_by_its_own_width() {
     assert!(panel.rows[4].0.ends_with('E'), "{:?}", panel.rows[4]);
 
     // `t5/` looks in the fifth column. Clamped to the narrow table's two,
-    // the fifth column of a five-column table was not there — and the
-    // refusal named the wrong width, which is the shape of the bug that is
-    // hardest to disbelieve: a wrong answer with a number on it.
+    // the fifth column of a five-column table would not be there — and the
+    // refusal would name the wrong width, the shape of bug that is hardest
+    // to disbelieve: a wrong answer with a number on it.
     press(&mut ed, " t5/");
     assert!(!ed.status().contains("没有"), "column five is there: {}", ed.status());
     press(&mut ed, " t6/");
@@ -9750,15 +9721,15 @@ fn a_block_table_reads_by_its_own_numbered_columns() {
     let mut ed = typed("一段話。\n\n木\tmu\t一\n林\tlin\t二\n森\tsen\t三\n");
     ed.goto_line(4);
     press(&mut ed, " tt");
-    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字（2026-10-21）。
+    // 下到格內：全窗開在頂層，而這一條問的是格子裏的字。
     ed.on_key(Key::Enter);
     let panel = ed.detail().expect("a row of a block table answers");
     assert_eq!(panel.rows.len(), 3, "{:?}", panel.rows);
     assert_eq!(panel.rows[1].1.as_deref(), Some("lin"), "{:?}", panel.rows);
 }
 
-/// The first table's columns are not the second table's. `t y` reported
-/// the first table's name from anywhere in the file and was believed.
+/// The first table's columns are not the second table's. `t y` names the
+/// table the cursor is in, not the first table from anywhere in the file.
 #[test]
 fn a_column_is_named_by_the_table_the_cursor_is_in() {
     let mut ed = with_two_md_tables();
@@ -9775,11 +9746,11 @@ fn a_pipe_table_is_a_grid_wherever_it_is() {
     let mut ed = with_md_table();
     let before = ed.current_buffer().text();
     assert!(ed.enter_table(), "{}", ed.status());
-    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    // 格子的事歸表格界面：`t b` 是文檔，那裏的字母鍵是頁面的。
     press(&mut ed, " tt");
-    // **Looking does not rewrite.** Entering used to lay the whole region
-    // out, which marks a file modified for having been read — 45 lines of
-    // this project's own `development.md`, and `:table-render off` does not undo it.
+    // **Looking does not rewrite.** Entering must not lay the whole region
+    // out, which marks a file modified for having been read — and
+    // `:table-render off` does not undo it.
     assert_eq!(ed.current_buffer().text(), before, "entering changed nothing");
     // `t f` is the tidy-up, said out loud: the columns line up on the
     // terminal, which is what a Markdown table is supposed to look like.
@@ -9817,12 +9788,12 @@ fn the_grid_is_only_where_the_table_is() {
 
 #[test]
 fn moving_down_a_column_steps_over_the_rule_and_walks_out_the_far_side() {
-    // 「ti, ta 這兩個模式應該允許光標上下離開表格回到正文中（現在不可以）」
-    // — 2026-09-05. A table drawn *in* a document is part of
-    // it, so the row after the last one is the paragraph under the table.
-    // The rule row is a stop of its own (2026-10-17): it owns a line of the
-    // page at this level, so a motion may stand on it. `t t` is the one place
-    // it stays skipped, because the pane does not draw it.
+    // `ti` and `ta` let the cursor leave the table up and down, back into
+    // the prose. A table drawn *in* a document is part of it, so the row
+    // after the last one is the paragraph under the table.
+    // The rule row is a stop of its own: it owns a line of the page at this
+    // level, so a motion may stand on it. `t t` is the one place it stays
+    // skipped, because the pane does not draw it.
     let mut ed = with_md_table();
     assert!(ed.enter_table());
     ed.goto_line(2);
@@ -9854,12 +9825,12 @@ fn paging_a_column_stops_at_the_table_edge_even_though_a_step_does_not() {
     ed.set_page(80, 40);
     ed.goto_line(2);
     assert!(ed.enter_table(), "{}", ed.status());
-    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    // 格子的事歸表格界面：`t b` 是文檔，那裏的字母鍵是頁面的。
     press(&mut ed, " tt");
     // 進全窗那一下把光標帶進**第一條記錄**（標題凍在窗口頂上，不是走得上去的
-    // 一行），所以上下兩頭就是數據行的兩頭（2026-10-21）。
+    // 一行），所以上下兩頭就是數據行的兩頭。
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(3), "{}", ed.status());
-    // 翻頁是六個 Ctrl 鍵，不是 `J`/`K`（2026-10-17，見 `table_motion`）。
+    // 翻頁是六個 Ctrl 鍵，不是 `J`/`K`（見 `table_motion`）。
     ed.on_key(Key::Ctrl('d'));
     assert_eq!(ed.cell_position().map(|(l, _)| l), Some(4), "{}", ed.status());
     ed.on_key(Key::Ctrl('u'));
@@ -9957,7 +9928,7 @@ fn t_moves_a_row_and_a_column_with_the_cursor_on_it() {
 fn alignment_is_a_keystroke_and_shows_in_the_source() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    // 第二欄：跨格是 `Tab` 的事，`t b` 裏 `l` 走的是字（2026-10-21）。
+    // 第二欄：跨格是 `Tab` 的事，`t b` 裏 `l` 走的是字。
     ed.on_key(Key::Tab);
     press(&mut ed, " t>");
     assert!(
@@ -10000,7 +9971,7 @@ fn tab_at_the_end_of_the_last_row_opens_another() {
     let mut ed = typed("| a | b |\n| --- | --- |\n| x | y |\n");
     ed.goto_line(3);
     assert!(ed.enter_table());
-    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    // 格子的事歸表格界面：`t b` 是文檔，那裏的字母鍵是頁面的。
     press(&mut ed, " tt");
     press(&mut ed, "l");
     press(&mut ed, "i");
@@ -10099,8 +10070,8 @@ fn an_indented_table_stays_in_its_list_item() {
 
 #[test]
 fn prose_with_a_comma_in_it_is_not_a_table() {
-    // The header-row fallback used to take any first line with a comma,
-    // so `:table` on a manuscript turned the chapter into a grid.
+    // The header-row fallback does not take any first line with a comma, or
+    // `:table` on a manuscript would turn the chapter into a grid.
     let dir = tmp().join(format!("yumete-prose-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("章.md");
@@ -10175,7 +10146,7 @@ fn a_cell_may_hold_an_escaped_pipe() {
     // The manual says so: 「`|` 打不進格子…要用寫 `\|`」. It was not true.
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    // 格子的事歸表格界面：`t b` 是文檔，那裏的字母鍵是頁面的。
     press(&mut ed, " tt");
     press(&mut ed, "c");
     press(&mut ed, r"a\|b");
@@ -10204,9 +10175,9 @@ fn a_cell_may_hold_an_escaped_pipe() {
 fn a_row_pasted_on_the_header_lands_under_the_rule() {
     let mut ed = with_md_table();
     assert!(ed.enter_table());
-    // 整行整格的鍵歸表格界面（2026-10-21）：`t b` 是文檔，那裏 `Y`／`p` 是
-    // 頁面的。進全窗那一下自己把光標帶進第一條記錄，這一條問的正是「貼進去
-    // 之後規則行還在不在它那一行上」。
+    // 整行整格的鍵歸表格界面：`t b` 是文檔，那裏 `Y`／`p` 是頁面的。進全窗那一
+    // 下自己把光標帶進第一條記錄，這一條問的正是「貼進去之後規則行還在不在它那一
+    // 行上」。
     press(&mut ed, " tt");
     press(&mut ed, "Y");
     press(&mut ed, "p");
@@ -10347,12 +10318,11 @@ fn d_on_a_grid_means_the_cell() {
     assert_eq!(ed.cell_text(1, 0), "", "{}", ed.status());
     assert_eq!(ed.row_cells(1).len(), ed.row_cells(0).len(), "the row kept its shape");
     // Warning: **`d` cuts the cell into the register, `A-d` leaves it alone** —
-    // prose's rule, and the grid follows it key for key since 2026-10-08. It
-    // used to be the other way round here (`d` quiet, `D` cutting), which made
-    // one capital letter mean opposite things in prose and in a table.
+    // prose's rule, and the grid follows it key for key, so one key never
+    // means opposite things in prose and in a table.
     //
-    // **`R` 把它蓋回去，不是 `p`**（2026-10-21 作者定）：一格插不進一行裏去，
-    // 所以「寫到已經有東西的地方」是 `R`。
+    // **`R` 把它蓋回去，不是 `p`**：一格插不進一行裏去，所以「寫到已經有東西的
+    // 地方」是 `R`。
     press(&mut ed, "R");
     assert_eq!(ed.cell_text(1, 0), cell, "what `d` cut can be put back");
     ed.on_key(Key::Alt('d'));
@@ -10392,9 +10362,8 @@ fn row_goes_straight_to_the_row_a_character_names() {
 
 #[test]
 fn a_filter_over_whole_rows_is_a_table_operation() {
-    // The manual's own example is `LC_ALL=C sort` over a table, and the
-    // grid used to refuse it — after spawning the command and reading its
-    // output. What matters is that every row that comes back has a row's
+    // The manual's own example is `LC_ALL=C sort` over a table, so the grid
+    // takes it. What matters is that every row that comes back has a row's
     // shape, not that no delimiter moved.
     let (dir, csv) = a_table("pipe");
     let mut ed = Editor::new();
@@ -10440,8 +10409,8 @@ fn a_hidden_column_is_read_and_written_but_not_walked() {
     // Two of the 拆分表's twenty-eight columns are empty in all 123,380
     // rows and cost eight cells each across the whole page. `:table-hide`
     // is for those — the file still has them, this reader does not care.
-    // **A way of looking, kept in the data directory** (2026-10-30, as
-    // decided): nothing about it goes beside the data.
+    // **A way of looking, kept in the data directory**: nothing about it
+    // goes beside the data.
     let dir = tmp().join(format!("yumete-hide-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -10509,10 +10478,10 @@ fn table_check_answers_the_four_questions_nobody_can_answer_by_eye() {
     ed.open_file(&csv).unwrap();
     assert!(ed.execute("table-check").is_ok());
     let out = ed.current_buffer().text();
-    // **檔名不在行上**（2026-10-16）：整份報告說的就是這一個檔，緩衝區的名字
-    // 已經寫着。行頭那個號就是去處，`gf` 讀它。
-    // No column is declared a link any more (2026-10-30), so a component
-    // with no row is not a finding: the list opens on the wrong-width row.
+    // **檔名不在行上**：整份報告說的就是這一個檔，緩衝區的名字已經寫着。行頭那
+    // 個號就是去處，`gf` 讀它。
+    // No column is declared a link, so a component with no row is not a
+    // finding: the list opens on the wrong-width row.
     assert!(!out.contains("卵"), "{out}");
     assert!(out.starts_with("3: ") && out.contains(&say!("chaifen.wrong-column-count", 3, 3, 2)), "{out}");
     assert!(out.contains("\n5: ") && out.contains(&say!("chaifen.duplicate-row-name", 5, "木", 4)), "{out}");
@@ -10539,8 +10508,8 @@ fn check_usage_lists_the_slips_and_says_when_it_stopped_listing() {
     assert!(out.starts_with("3: ") && out.contains('裡') && out.contains('裏'), "{out}");
     assert!(ed.status().contains('1'), "{}", ed.status());
 
-    // Past `LISTING_LIMIT` the buffer holds the first five hundred and the
-    // status line used to name a number nothing on screen could reach.
+    // Past `LISTING_LIMIT` the buffer holds the first five hundred, and the
+    // status line names no number nothing on screen can reach.
     let mut text = "那裏。\n".repeat(LISTING_LIMIT + 200);
     text.push_str(&"那裡。\n".repeat(LISTING_LIMIT + 1));
     let mut ed = typed(&text);
@@ -10605,10 +10574,10 @@ fn check_charset_reports_each_character_once() {
 /// The block name is not the tags, however many hyphens it has.
 ///
 /// A character in no 字集 carries a field that is nothing but its block —
-/// `CJK-B`, `CJK-A`, `假名擴展-A` — and the check used to take everything
-/// before the first `-` as the 字集 marks. `CJK` is not empty, so every such
-/// character was passed over: a page of 擴展A came back 「每個字都在字集裏」,
-/// which is the one answer `:check-charset` exists to disprove.
+/// `CJK-B`, `CJK-A`, `假名擴展-A` — so the check must not take everything
+/// before the first `-` as the 字集 marks: `CJK` is not empty, every such
+/// character would be passed over, and a page of 擴展A would come back
+/// 「每個字都在字集裏」, the one answer `:check-charset` exists to disprove.
 #[test]
 fn a_hyphen_in_the_block_name_is_not_a_charset_mark() {
     let mut ed = with_toy_reader("𠮷
@@ -10663,8 +10632,8 @@ fn a_quoted_table_stays_a_quotation_even_when_walked_into() {
     // Walk into the fence the way a search would.
     ed.goto_line(8);
     assert!(ed.md_region().is_none(), "a quotation is not a table");
-    // The structural keys are the ones that used to rewrite it. `t` here
-    // is vi's till-motion again, and `o` opens an ordinary line.
+    // The structural keys are the ones that would rewrite it. `t` here is
+    // vi's till-motion again, and `o` opens an ordinary line.
     press(&mut ed, " tt");
     assert_eq!(ed.current_buffer().text(), before, "{}", ed.status());
     assert!(
@@ -10680,9 +10649,9 @@ fn a_quoted_table_stays_a_quotation_even_when_walked_into() {
 
 #[test]
 fn dot_repeats_the_change_and_the_count_it_was_given() {
-    // `3x` deletes three; `.` used to delete one, because the digit key
-    // started a fresh recording and threw the count away. vim's `.` (helix's
-    // repeats only inserts, #413); nvim gives `de` / `ij` too.
+    // `3x` deletes three, and `.` three again: the digit key does not start a
+    // fresh recording and throw the count away. vim's `.` (helix's repeats
+    // only inserts, #413); nvim gives `de` / `ij` too.
     let mut ed = typed("abcde\nfghij\n");
     ed.set_key_preset(yumete_cjk::KeyPreset::Vim);
     ed.goto_line(1);
@@ -10736,12 +10705,12 @@ fn a_block_from_a_spreadsheet_goes_in_as_cells() {
     let mut ed = typed("| 字 | 音 |\n| --- | --- |\n| a | b |\n");
     ed.goto_line(1);
     assert!(ed.enter_table(), "{}", ed.status());
-    // 格子的事歸表格界面（2026-10-21）：`t b` 是文檔，那裏的字母鍵是頁面的。
+    // 格子的事歸表格界面：`t b` 是文檔，那裏的字母鍵是頁面的。
     press(&mut ed, " tt");
     ed.goto_line(3);
     ed.set_register_for_test("木\tmu\n目\tmu\n禾\the\n");
-    // **`R` writes over, `p` puts in** (2026-10-21 作者定): a block fills the
-    // cells it lands on, so it is the first key and not the second.
+    // **`R` writes over, `p` puts in**: a block fills the cells it lands on,
+    // so it is the first key and not the second.
     press(&mut ed, "R");
     assert_eq!(
         ed.current_buffer().text(),
