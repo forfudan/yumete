@@ -967,8 +967,8 @@ pub fn parse(input: &str) -> Result<Command, CommandError> {
     // the families that have not been moved over yet.
     if let Some(entry) = entry_named(word) {
         if let Some(answer) = read_params(entry, rest, word.ends_with('!')) {
-            // **Said under the spelling typed** (2026-11-09, review: `:ene
-            // other.txt` answered that `new` takes no argument).
+            // **Said under the spelling typed**: `:ene other.txt` names `ene`,
+            // the word the reader wrote, not `new`.
             return match answer {
                 Err(CommandError::TakesNoArgument { command, value }) => Err(CommandError::TakesNoArgument {
                     command: entry.aliases.iter().copied().find(|a| *a == word).unwrap_or(command),
@@ -5903,8 +5903,8 @@ const RENAMED: &[(&str, &str)] = &[
     ("sav", "write-as"),
     ("saveas", "write-as"),
     ("source", "render"),
-    // **vim's tab walk is the buffer walk here** (2026-11-09, review): a tab
-    // is a file, and `:tabn` reached `:tabnew` by prefix and opened a scratch.
+    // **vim's tab walk is the buffer walk here**: a tab is a file. Without
+    // these `:tabn` would reach `:tabnew` by prefix and open a scratch.
     ("tabn", "buffer-next"),
     ("tabne", "buffer-next"),
     ("tabnext", "buffer-next"),

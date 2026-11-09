@@ -48,11 +48,9 @@ pub enum Change {
 /// The table `tables` names, one inside the next, if the file has it —
 /// written as a `[表]` of its own lines or inline as `表 = { … }`.
 ///
-/// Warning: **An inline table is written into where it stands** (2026-11-09,
-/// review). It used to be turned into a table of its own lines first, which
-/// moved it to the end of the file as `[keys.flavor_items ]`, stray space
-/// and all, and dropped the comment after it; and a top-level
-/// `editor = { … }` could not be saved into at all.
+/// Warning: **An inline table is written into where it stands.** Turned
+/// into a table of its own lines it would move to the end of the file and
+/// lose the comment after it.
 fn table_at<'a>(doc: &'a mut DocumentMut, tables: &[&str]) -> Option<&'a mut dyn TableLike> {
     let mut t = doc.get_mut(tables.first()?)?.as_table_like_mut()?;
     for name in &tables[1..] {
@@ -61,10 +59,9 @@ fn table_at<'a>(doc: &'a mut DocumentMut, tables: &[&str]) -> Option<&'a mut dyn
     Some(t)
 }
 
-/// **How the file ends its lines and whether it opens with a BOM**
-/// (2026-11-09, review): `toml_edit` reads both and writes neither, so a
-/// one-value change from the panel became a whole-file diff of a Windows
-/// config (`%APPDATA%`), every line's `\r` gone and the BOM with it.
+/// **How the file ends its lines and whether it opens with a BOM**:
+/// `toml_edit` reads both and writes neither, and a one-value change from
+/// the panel must not be a whole-file diff of a Windows config.
 struct Shape {
     bom: bool,
     crlf: bool,
@@ -218,11 +215,10 @@ pub fn rewrite(text: &str, changes: &[(String, Change)]) -> Result<String, Strin
     Ok(shape.put(doc.to_string()))
 }
 
-/// **Take `key` out of `t`, and keep the comment lines above it**
-/// (2026-11-09, review: `r` on a key took the writer's comment over it with
-/// it). They are the writer's and say something about the table, not only
-/// about the value: they go onto the key after it. Returned when no key
-/// follows, for [`put_after_table`] to place.
+/// **Take `key` out of `t`, and keep the comment lines above it.** They
+/// are the writer's and say something about the table, not only about the
+/// value: they go onto the key after it. Returned when no key follows, for
+/// [`put_after_table`] to place.
 fn remove_keeping_comments(t: &mut dyn TableLike, key: &str) -> String {
     let said = t
         .key(key)
@@ -431,8 +427,8 @@ name = \"paper\"
         assert!(after.contains("[keys.normal]"), "{after}");
     }
 
-    /// **A CRLF file stays CRLF, and its BOM stays** (2026-11-09, review: one
-    /// value changed from the panel rewrote every line of a Windows config).
+    /// **A CRLF file stays CRLF, and its BOM stays**: one value changed from
+    /// the panel is one line changed.
     #[test]
     fn the_line_endings_and_the_bom_are_the_files() {
         let before = "\u{feff}# mine\r\n[editor]\r\nscrolloff = 8\r\nsoft_wrap = true # yes\r\n";
@@ -445,9 +441,8 @@ name = \"paper\"
         assert_eq!(after, "[editor]\nscrolloff = 9\n", "LF stays LF, no BOM is added");
     }
 
-    /// **`r` takes the key, not the comment over it** (2026-11-09, review):
-    /// the comment goes onto what follows — the next key, the next table, or
-    /// the end of the file.
+    /// **`r` takes the key, not the comment over it**: the comment goes onto
+    /// what follows — the next key, the next table, or the end of the file.
     #[test]
     fn dropping_a_key_keeps_the_comment_above_it() {
         let drop = |before: &str| rewrite(before, &[("editor.soft_wrap".into(), Change::Drop)]).unwrap();
@@ -467,8 +462,7 @@ name = \"paper\"
         assert!(after.contains("# about wrapping") && !after.contains("soft_wrap"), "{after:?}");
     }
 
-    /// **An inline table is written where it stands** (2026-11-09, review: it
-    /// moved to the end as `[keys.flavor_items ]` and lost its comment), and
+    /// **An inline table is written where it stands**, its comment kept, and
     /// a top-level `editor = { … }` can be saved into.
     #[test]
     fn an_inline_table_is_written_where_it_stands() {

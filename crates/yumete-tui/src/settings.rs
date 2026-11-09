@@ -524,12 +524,10 @@ fn apply_to_editor(config: &Config, editor: &mut Editor, layout: Option<yumete_c
     editor.set_place_inheritance(config.keys.inherit);
     editor.set_which_wrap(config.editor.which_wrap.clone());
     editor.set_layout(layout.unwrap_or(config.editor.layout));
-    // **0 is a value here, not 「unset」** (2026-11-09, review: `measure` set to
-    // 0 in the panel, or `editor.indent` reset with `r`, was written to the
-    // file and the old width stayed until a restart). The factory values in
-    // `Editor` are the config's own 0 — no indent, the window's width — so
-    // pushing the 0 is pushing the factory value; a guard only kept the last
-    // number alive across the reload that was meant to drop it.
+    // **0 is a value here, not 「unset」**: the factory values in `Editor` are
+    // the config's own 0 — no indent, the window's width — so pushing the 0
+    // is pushing the factory value, and a 0 saved from the panel, or a reset
+    // with `r`, takes effect on the reload that follows.
     editor.set_indent(config.editor.indent);
     // Warning: **1 is a page count now, not 「unset」** (2026-10-29, review: set
     // back to 1 in the panel, two pages stayed).
@@ -856,8 +854,8 @@ mod config_watch_tests {
         assert!(view(&ed).is_empty(), "{:?}", view(&ed));
     }
 
-    /// **A 0 is applied by the reload** (2026-11-09, review): the panel wrote
-    /// `measure = 0` and `indent = 0`, and the 40 and the 2 stayed on screen.
+    /// **A 0 is applied by the reload**: `measure = 0` and `indent = 0`
+    /// written by the panel put the window's width and no indent back.
     #[test]
     fn a_zero_in_the_config_is_applied_by_the_reload() {
         let mut config = yumete_config::Config::default();

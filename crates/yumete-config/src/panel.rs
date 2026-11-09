@@ -261,7 +261,7 @@ fn declared_in(text: &str) -> BTreeMap<String, String> {
         match (item.as_table(), item.as_inline_table()) {
             (Some(t), _) => declare(&mut out, table, t),
             // `editor = { scrolloff = 3 }` is `[editor]` on one line, and the
-            // loader takes it (2026-11-09, review: the panel showed none of it).
+            // loader takes it, so the panel reads it too.
             (_, Some(inline)) => declare(&mut out, table, &inline.clone().into_table()),
             _ => {}
         }
@@ -514,9 +514,9 @@ pub enum SaveError {
     Unread { path: PathBuf, line: usize, said: String },
     /// The disk said no.
     Io(String),
-    /// The config path is a link whose target is not there (2026-11-09,
-    /// review): saving would replace the link with a file of its own, and the
-    /// dotfiles copy it pointed at would never hear of it.
+    /// The config path is a link whose target is not there: saving would
+    /// replace the link with a file of its own, and the dotfiles copy it
+    /// points at would never hear of it.
     LinkToNothing(PathBuf),
 }
 
@@ -671,10 +671,10 @@ impl Panel {
             .unwrap_or(0);
     }
 
-    /// **A search's rows, the cursor on the best of them** (2026-11-09,
-    /// review: `/theme` left it on 「page window in theme colours」, the first
-    /// in list order, and the next Enter flipped that one and wrote it).
-    /// `best` is an index into [`all_rows`]; without one, [`Self::narrow`].
+    /// **A search's rows, the cursor on the best of them**: the next Enter
+    /// acts on that row, so it is the setting the search names rather than
+    /// the first match in list order. `best` is an index into [`all_rows`];
+    /// without one, [`Self::narrow`].
     pub fn narrow_to(&mut self, found: Option<Vec<usize>>, best: Option<usize>) {
         self.narrow(found);
         let all = all_rows();
@@ -2345,9 +2345,8 @@ mod tests {
         assert_eq!(config.keys.flavor.items.get(&FlavorItem::MoveLines), Some(&false), "{text}");
     }
 
-    /// **A top-level inline table is read and written** (2026-11-09, review:
-    /// `editor = { scrolloff = 3 }` was invisible, and saving into it failed
-    /// with 「editor 不是一張表」).
+    /// **A top-level inline table is read and written**: `editor = {
+    /// scrolloff = 3 }` shows in the panel, and a save goes into it.
     #[test]
     fn a_top_level_inline_table_is_read_and_written() {
         let p = panel("editor = { indent = 3 }\n", "");
@@ -2363,8 +2362,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **A link to nothing is not replaced by a file** (2026-11-09, review):
-    /// the save is refused and the link stays, as `:w` does with a chapter.
+    /// **A link to nothing is not replaced by a file**: the save is refused
+    /// and the link stays, as `:w` does with a chapter.
     #[cfg(unix)]
     #[test]
     fn a_link_to_nothing_is_refused_not_replaced() {

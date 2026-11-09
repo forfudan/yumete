@@ -1800,10 +1800,9 @@ impl Editor {
         // last line `v$d` leaves `abcd\n`, not `abcd`. Linewise operators
         // keep their own rule.
         //
-        // Warning: **A yank does not take it either** (2026-11-09, review: a
-        // regression against 0.20). It was let through here, so `Gv$y` held
-        // `last one\n` and `p` put an empty line after it; nvim yanks
-        // `last one`, a break that is not there being nothing to copy.
+        // Warning: **A yank does not take it either**: on the last line nvim's
+        // `v$y` holds `last one`, not `last one\n`, so `p` puts no empty line
+        // after it.
         let range = match op {
             _ if self.as_vim() && self.extend && !self.vim_lines && !self.lines_at_key => {
                 let rope = self.current_buffer().rope();

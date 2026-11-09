@@ -994,7 +994,7 @@ impl Editor {
             // a modeline takes (`ft`, `ts`, `sw`, `et`, `tw`) into this
             // buffer, and the file type as one set by hand.
             //
-            // **A question is answered** (2026-11-09, review): `:set ts?`, and
+            // **A question is answered**: `:set ts?`, and
             // `:set ts` bare for an option with a value, says `ts=4`, as vim
             // does. A file type nobody knows is said to be one, not an option
             // `:set` does not take, and `:setf` with nothing after it says

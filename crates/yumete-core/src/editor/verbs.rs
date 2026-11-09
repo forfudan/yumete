@@ -421,9 +421,8 @@ impl Editor {
         let first = rope.char_to_line(start);
         let last = rope.char_to_line(end.saturating_sub(1).max(start));
         let lines: Vec<String> = (first..=last).map(|n| motion::line_text(rope, n)).collect();
-        // **This file's `tw` is vim's `textwidth`** (2026-11-09, review:
-        // `:set tw=20` was accepted and `gq` went on filling to 79). A modeline's
-        // or `:set`'s width, and 0 is vim's 0: the factory width.
+        // **This file's `tw` is vim's `textwidth`**: a modeline's or `:set`'s
+        // width, and 0 is vim's 0, the factory width.
         let width = self.current_buffer().local().text_width.filter(|w| *w > 0).unwrap_or(VIM_TEXT_WIDTH);
         let filled = crate::reflow::fill_like_vim(&lines, width, self.writes_code());
         let from = rope.line_to_char(first);
@@ -652,9 +651,8 @@ impl Editor {
             .filter_map(|(line, at)| at.map(|(a, _)| yumete_cjk::str_width(line[..a].trim_end())))
             .max()
             .unwrap_or(0);
-        // **A full-width sign takes no spaces** (2026-11-09, review: `：`
-        // came out as `甲     ： 一`). Chinese puts none around its own
-        // punctuation, and the padding is in full-width spaces, as
+        // **A full-width sign takes no spaces**: Chinese puts none around
+        // its own punctuation, and the padding is in full-width spaces, as
         // `姓　　名：` is lined up by hand; a half column left over is one
         // ASCII space.
         let wide = sign.chars().all(|c| yumete_cjk::str_width(c.encode_utf8(&mut [0; 4])) == 2);

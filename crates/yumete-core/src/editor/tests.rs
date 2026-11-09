@@ -27950,8 +27950,8 @@ fn vims_set_setf_ene_and_tabnew() {
     assert!(ed.status().contains("nu"), "says what it does not take: {}", ed.status());
     ed.execute(":se tw=60").unwrap();
     assert_eq!(ed.current_buffer().local().text_width, Some(60));
-    // …and `gq` fills to it, as vim's does (2026-11-09, review; nvim gives
-    // these three lines on `:set tw=20` and `gqq`).
+    // …and `gq` fills to it, as vim's does (nvim gives these three lines on
+    // `:set tw=20` and `gqq`).
     let mut tw = typed_vim("the quick brown fox jumps over the lazy dog again\n");
     tw.execute(":set tw=20").unwrap();
     press(&mut tw, "gqq");
@@ -27960,8 +27960,7 @@ fn vims_set_setf_ene_and_tabnew() {
     press(&mut tw, "gqip");
     assert_eq!(tw.current_buffer().text(), "the quick brown fox jumps over the lazy dog again\n", "0 is the factory 79");
 
-    // A question is answered, and a wrong value is said to be one
-    // (2026-11-09, review).
+    // A question is answered, and a wrong value is said to be one.
     ed.execute(":set ts? sw et?").unwrap();
     assert_eq!(ed.status(), "ts=2 sw=2 et");
     ed.execute(":set ft").unwrap();
@@ -27980,8 +27979,8 @@ fn vims_set_setf_ene_and_tabnew() {
     assert_eq!(ed.buffer_count(), tabs + 1, ":tabnew");
     ed.execute(":ene").unwrap();
     assert_eq!(ed.buffer_count(), tabs + 2, ":ene");
-    // `:tabn` is vim's `:tabnext`, not a prefix of `:tabnew` (2026-11-09,
-    // review): it opens nothing and says where the walk is.
+    // `:tabn` is vim's `:tabnext`, not a prefix of `:tabnew`: it opens
+    // nothing and says where the walk is.
     for word in [":tabn", ":tabnext", ":tabne"] {
         assert!(ed.execute(word).is_err(), "{word}");
         assert_eq!(ed.buffer_count(), tabs + 2, "{word} opened nothing");
@@ -28013,10 +28012,9 @@ fn vims_count_percent_goes_that_far_down_the_file() {
 }
 
 /// **`{count}%` under an operator is exclusive, to the column wanted**
-/// (2026-11-09, review, each case measured against nvim 0.12 on indented
-/// lines): from the indent it takes the lines short of the far one and lands
-/// on the first non-blank; past the indent it is charwise; onto its own
-/// line `c` still enters Insert.
+/// (each case measured against nvim 0.12 on indented lines): from the indent
+/// it takes the lines short of the far one and lands on the first non-blank;
+/// past the indent it is charwise; onto its own line `c` still enters Insert.
 #[test]
 fn vims_count_percent_under_an_operator_is_exclusive() {
     let ten: String = (1..=10).map(|n| format!("  line {n} text\n")).collect();
@@ -28061,7 +28059,7 @@ fn vims_visual_dollar_takes_the_line_break() {
     let mut ed = typed_vim("abcdef\nxyz\n");
     press(&mut ed, "jlv$d");
     assert_eq!(text(&ed), "abcdef\nx\n", "the last break stays");
-    // …and is not yanked (2026-11-09, review: nvim gives `abcdefyz\nxyz\n`).
+    // …and is not yanked (nvim gives `abcdefyz\nxyz\n`).
     let mut ed = typed_vim("abcdef\nxyz\n");
     press(&mut ed, "jlv$ygg$p");
     assert_eq!(text(&ed), "abcdefyz\nxyz\n", "the last break is not copied");
@@ -28123,8 +28121,7 @@ fn align_lines_up_the_selected_lines_on_a_sign() {
     press(&mut ed, "%");
     ed.execute(":align :").unwrap();
     assert_eq!(ed.current_buffer().text(), "a      : 1\nlonger : 2\n");
-    // A full-width sign takes no spaces, and the padding is full-width
-    // (2026-11-09, review).
+    // A full-width sign takes no spaces, and the padding is full-width.
     let mut ed = typed("甲：一\n乙乙乙：二\nab：三\n");
     press(&mut ed, "%");
     ed.execute(":align ：").unwrap();

@@ -81,9 +81,8 @@ const GROUPS_WIDE: u16 = 14;
 /// 中文可以在任何一個字之間斷，所以貪心地裝滿一行就斷；可是**空格那一種斷點更好
 /// 讀**——鍵那一行是一組一組的，斷在組裏面會把一組拆成兩半。所以裝滿之後往回找最
 /// 近的那個空格（只找這一行的後四分之一），找得到就斷在那裏。
-/// **The key row folded between its pairs** (2026-11-09, review: `Tab` was
-/// left at the end of one row and `global/project` began the next). The
-/// pairs are the ones `, ` stands between; a pair wider than the row is
+/// **The key row folded between its pairs**, so a key never ends one row
+/// with what it does beginning the next. The pairs are the ones `, ` stands between; a pair wider than the row is
 /// folded as text is.
 fn fold_pairs(text: &str, wide: usize) -> Vec<String> {
     let mut rows: Vec<String> = Vec::new();
@@ -857,7 +856,7 @@ fn found(text: &str) -> Option<Vec<usize>> {
     )
 }
 
-/// **The row a search lands on** (2026-11-09, review): the setting the text
+/// **The row a search lands on**: the setting the text
 /// names — its name as drawn, or its key — then the first of the table it
 /// names, then one whose name begins with it, then the first in list order.
 fn best_found(text: &str, found: Option<&[usize]>) -> Option<usize> {
@@ -2172,9 +2171,8 @@ mod tests {
         }
     }
 
-    /// **A search lands on the setting it names** (2026-11-09, review:
-    /// `/theme` Enter Enter flipped 「page window in theme colours」, the first
-    /// match in list order, and wrote it).
+    /// **A search lands on the setting it names**: `/theme` Enter Enter opens
+    /// the theme, not the first match in list order.
     #[test]
     fn a_search_lands_on_the_setting_it_names() {
         let dir = scratch("search-best");

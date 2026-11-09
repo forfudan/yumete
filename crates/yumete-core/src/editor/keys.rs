@@ -1003,7 +1003,7 @@ impl Editor {
             // both ends.
             //
             // Warning: **It is an exclusive motion to the column wanted, not a
-            // linewise one** (2026-11-09, review, measured against nvim 0.12).
+            // linewise one** (measured against nvim 0.12).
             // The lines-short-of-the-far-one above is vim's exclusive-linewise
             // rule (`:h exclusive-linewise`): the far end in column 0, the
             // near one in the indent. Anywhere else it is charwise — `d50%`

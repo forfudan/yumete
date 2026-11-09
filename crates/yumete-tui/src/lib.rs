@@ -13739,9 +13739,9 @@ fn draw_horizontal(
             if ends_line && sel_end > row.start + row_len {
                 break_cell = " ";
             }
-            // **A flash over the selection is drawn reversed** (2026-11-09,
-            // review: helix's `y` leaves the text selected, so the flash
-            // wore the ground it already had and nothing was seen).
+            // **A flash over the selection is drawn reversed**: helix's `y`
+            // leaves the text selected, and the selection's ground over the
+            // selection's ground would show nothing.
             for &(from, to) in &flashed {
                 let (from, to) = (from.max(sel_start), to.min(sel_end));
                 if from < to && to > row.start && from < reach {
@@ -20232,7 +20232,7 @@ fn squeezed(text: &str) -> String {
         assert!(!lit(false), "dark with it off");
 
         // Under helix's keys the copy stays selected, so the flash is drawn
-        // reversed over it (2026-11-09, review: nothing was seen).
+        // reversed over it.
         let mut editor = editor_with("alpha beta\n");
         for c in "xy".chars() {
             editor.on_key(Key::Char(c));
